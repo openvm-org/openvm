@@ -22,7 +22,8 @@ use crate::{
         SelectorCount,
         bus::{
             BatchConstraintConductorBus, BatchConstraintConductorMessage,
-            BatchConstraintInnerMessageType, EqZeroNBus, EqZeroNMessage,
+            BatchConstraintInnerMessageType, EqNOuterBus, EqNOuterMessage, EqZeroNBus,
+            EqZeroNMessage,
         },
     },
     bus::{SelHypercubeBus, SelHypercubeBusMessage, XiRandomnessBus, XiRandomnessMessage},
@@ -69,6 +70,10 @@ pub struct EqNsColumns<T> {
     eq: [T; D_EF],
     eq_sharp: [T; D_EF],
 
+    /// The number of traces whose `n_lift` equals `local.n`.
+    /// Note that it cannot be derived from `xi_mult` because
+    /// `xi_mult` counts interactions, not AIRs with interactions.
+    num_traces: T,
     xi_mult: T,
     sel_first_count: T,
     sel_last_and_trans_count: T,
@@ -79,6 +84,7 @@ pub struct EqNsAir {
     pub xi_bus: XiRandomnessBus,
     pub r_xi_bus: BatchConstraintConductorBus,
     pub sel_hypercube_bus: SelHypercubeBus,
+    pub eq_n_outer_bus: EqNOuterBus,
 
     pub l_skip: usize,
 }
@@ -280,6 +286,18 @@ where
             },
             local.n_less_than_n_max,
         );
+
+        // The number of traces with n_lift == next.n
+        self.eq_n_outer_bus.send(
+            builder,
+            next.proof_idx,
+            EqNOuterMessage {
+                is_sharp: AB::Expr::ZERO,
+                n: next.n.into(),
+                value: next.eq.map(Into::into),
+            },
+            next.is_valid * next.num_traces,
+        );
     }
 }
 
@@ -391,21 +409,31 @@ pub(crate) fn generate_eq_ns_trace(
                 cols.sel_last_and_trans_count =
                     F::from_canonical_usize(record.sel_last_and_trans_count);
             });
-        let mut num_n_lift = vec![0; preflights[pidx].proof_shape.n_logup + 1];
+        let mut num_n_lift_int = vec![0; preflights[pidx].proof_shape.n_logup + 1];
+        let mut num_n_lift_con = vec![0; preflights[pidx].proof_shape.n_max + 1];
         for (air_idx, vdata) in preflights[pidx].proof_shape.sorted_trace_vdata.iter() {
             let num_interactions = vk.inner.per_air[*air_idx].num_interactions();
+            let n_lift = vdata.log_height.saturating_sub(l_skip);
+            num_n_lift_con[n_lift] += 1;
             if num_interactions > 0 {
-                num_n_lift[vdata.log_height.saturating_sub(l_skip)] += num_interactions;
+                num_n_lift_int[n_lift] += num_interactions;
             }
         }
         let mut xi_mult = 0;
         for (chunk, cnt) in trace[cur_height * width..]
             .chunks_mut(width)
-            .zip(num_n_lift.into_iter())
+            .zip(num_n_lift_int.into_iter())
         {
             xi_mult += cnt;
             let cols: &mut EqNsColumns<_> = chunk.borrow_mut();
             cols.xi_mult = F::from_canonical_usize(xi_mult);
+        }
+        for (chunk, cnt) in trace[cur_height * width..]
+            .chunks_mut(width)
+            .zip(num_n_lift_con.into_iter())
+        {
+            let cols: &mut EqNsColumns<_> = chunk.borrow_mut();
+            cols.num_traces = F::from_canonical_usize(cnt);
         }
         cur_height += rows.len();
     }
