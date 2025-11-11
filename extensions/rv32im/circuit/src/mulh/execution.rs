@@ -129,8 +129,8 @@ where
             result of hi bits are always stored in `edx`
             can't use REG_C_W, because it is edx, and it gets overridden
         */
-        let(_, delta_str_b) = &xmm_to_gpr((b / 4) as u8, "eax", true);
-        let(gpr_reg_c, delta_str_c) = &xmm_to_gpr((c / 4) as u8, REG_A_W, false);
+        let (_, delta_str_b) = &xmm_to_gpr((b / 4) as u8, "eax", true);
+        let (gpr_reg_c, delta_str_c) = &xmm_to_gpr((c / 4) as u8, REG_A_W, false);
         asm += &delta_str_b;
         asm += &delta_str_c;
         match opcode {
@@ -138,7 +138,8 @@ where
                 asm += &format!("   imul {gpr_reg_c}\n");
                 asm += &gpr_to_xmm("edx", (a / 4) as u8);
             }
-            MulHOpcode::MULHSU => { // free to modify edx:eax, since mul and imul operations modify anyways
+            MulHOpcode::MULHSU => {
+                // free to modify edx:eax, since mul and imul operations modify anyways
                 asm += &format!("   mov {REG_B_W}, eax\n");
                 asm += &format!("   imul {gpr_reg_c}\n");
                 asm += "   mov eax, edx\n";
