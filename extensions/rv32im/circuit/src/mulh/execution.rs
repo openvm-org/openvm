@@ -124,7 +124,7 @@ where
         let opcode = MulHOpcode::from_usize(inst.opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
 
         let mut asm = String::new();
-        const REG_A_W: &str = "eax";
+        const REG_A_W: &str = "eax"; // need to modify and fix this, so use common.rs ...
         const REG_B_W: &str = "ecx";
         const REG_TMP_W: &str = "r8d";
 
