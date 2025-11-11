@@ -180,16 +180,13 @@ where
             &mut builder.when(local.is_valid * is_last_eval.clone()),
             local.suffix_product,
         );
-        // s = s' * ((d - i) - r)
+        // s = s' * (i + 1 - r)
         assert_array_eq(
             &mut builder.when(local.is_valid * (AB::Expr::ONE - is_last_eval.clone())),
             local.suffix_product,
             ext_field_multiply(
                 next.suffix_product,
-                scalar_subtract_ext_field(
-                    AB::Expr::from_canonical_usize(s_deg) - local.eval_idx,
-                    local.r,
-                ),
+                scalar_subtract_ext_field(local.eval_idx + AB::Expr::ONE, local.r),
             ),
         );
 
@@ -279,9 +276,7 @@ where
                 round: local.round_idx + AB::Expr::ONE,
                 value: local.cur_sum.map(Into::into),
             },
-            local.is_valid * is_last_eval.clone()
-            // TODO(ayush): remove this when there's an air that can receive the final sumcheck claim
-            * local.nested_for_loop_aux_cols.is_transition[0],
+            local.is_valid * is_last_eval.clone(),
         );
         self.randomness_bus.send(
             builder,

@@ -45,6 +45,7 @@ use crate::{
         EqNegBaseRandBus, EqNegResultBus, HyperdimBus, PublicValuesBus, SelHypercubeBus, SelUniBus,
         StackingModuleBus, TranscriptBus, UnivariateSumcheckInputBus, XiRandomnessBus,
     },
+    primitives::{bus::PowerCheckerBus, pow::PowerCheckerTraceGenerator},
     system::{
         AirModule, BatchConstraintPreflight, BusIndexManager, BusInventory, GlobalCtxCpu,
         Preflight, TraceGenModule,
@@ -90,6 +91,8 @@ pub struct BatchConstraintModule {
     expression_claim_bus: ExpressionClaimBus,
     interactions_folding_bus: InteractionsFoldingBus,
     constraints_folding_bus: ConstraintsFoldingBus,
+    power_checker_bus: PowerCheckerBus,
+    pow_checker: Arc<PowerCheckerTraceGenerator<2, 32>>,
 
     l_skip: usize,
     max_constraint_degree: usize,
@@ -104,6 +107,7 @@ impl BatchConstraintModule {
         b: &mut BusIndexManager,
         bus_inventory: BusInventory,
         max_num_proofs: usize,
+        pow_checker: Arc<PowerCheckerTraceGenerator<2, 32>>,
     ) -> Self {
         let l_skip = child_vk.inner.params.l_skip;
         let max_constraint_degree = child_vk.inner.max_constraint_degree;
@@ -140,6 +144,8 @@ impl BatchConstraintModule {
             expression_claim_bus: ExpressionClaimBus::new(b.new_bus_idx()),
             interactions_folding_bus: InteractionsFoldingBus::new(b.new_bus_idx()),
             constraints_folding_bus: ConstraintsFoldingBus::new(b.new_bus_idx()),
+            power_checker_bus: bus_inventory.power_checker_bus,
+            pow_checker,
             l_skip,
             max_constraint_degree,
             widths,
@@ -243,6 +249,19 @@ impl BatchConstraintModule {
             eq_sharp_ns.push(eq_sharp);
         }
 
+        let mut r_rev_prod = sumcheck_rnd[preflight.proof_shape.n_max];
+        let mut eq_ns_frontloaded = Vec::with_capacity(preflight.proof_shape.n_max + 1);
+        let mut eq_sharp_ns_frontloaded = Vec::with_capacity(preflight.proof_shape.n_max + 1);
+        // Product with r_i's to account for \hat{f} vs \tilde{f} for different n's in front-loaded
+        // batch sumcheck.
+        for i in (0..preflight.proof_shape.n_max).rev() {
+            eq_ns_frontloaded.push(eq_ns[i] * r_rev_prod);
+            eq_sharp_ns_frontloaded.push(eq_sharp_ns[i] * r_rev_prod);
+            r_rev_prod *= sumcheck_rnd[i];
+        }
+        eq_ns_frontloaded.push(eq_ns[preflight.proof_shape.n_max]);
+        eq_sharp_ns_frontloaded.push(eq_sharp_ns[preflight.proof_shape.n_max]);
+
         preflight.batch_constraint = BatchConstraintPreflight {
             lambda_tidx,
             tidx_before_univariate,
@@ -253,6 +272,8 @@ impl BatchConstraintModule {
             sumcheck_rnd,
             eq_ns,
             eq_sharp_ns,
+            eq_ns_frontloaded,
+            eq_sharp_ns_frontloaded,
         }
     }
 }
@@ -338,8 +359,12 @@ impl AirModule for BatchConstraintModule {
             cnt_proofs: self.max_num_proofs,
         };
         let expression_claim_air = ExpressionClaimAir {
-            claim_bus: self.expression_claim_bus,
+            expr_claim_bus: self.expression_claim_bus,
             mu_bus: self.batch_constraint_conductor_bus,
+            sumcheck_claim_bus: self.sumcheck_bus,
+            eq_n_outer_bus: self.eq_n_outer_bus,
+            pow_checker_bus: self.power_checker_bus,
+            hyperdim_bus: self.hyperdim_bus,
         };
         let interactions_folding_air = InteractionsFoldingAir {
             transcript_bus: self.transcript_bus,
@@ -624,7 +649,12 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
             transpose(eq_airs::generate_eq_uni_trace(child_vk, proofs, preflights)),
             symbolic_expr_ctx,
             transpose(expression_claim::generate_trace(
-                child_vk, &cf_blob, &if_blob, preflights,
+                child_vk,
+                &cf_blob,
+                &if_blob,
+                proofs,
+                preflights,
+                self.pow_checker.as_ref(),
             )),
             transpose(expr_eval::generate_interactions_folding_trace(
                 child_vk,

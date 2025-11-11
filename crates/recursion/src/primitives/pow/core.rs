@@ -58,6 +58,29 @@ impl<const BASE: usize, const N: usize> PowerCheckerCpuTraceGenerator<BASE, N> {
         self.count_range[value].fetch_add(1, Ordering::Relaxed);
     }
 
+    pub fn add_pow_count(&self, log: usize, count: u32) {
+        debug_assert!(log < self.count_pow.len());
+        if count != 0 {
+            self.count_pow[log].fetch_add(count, Ordering::Relaxed);
+        }
+    }
+
+    pub fn add_range_count(&self, value: usize, count: u32) {
+        debug_assert!(value < self.count_range.len());
+        if count != 0 {
+            self.count_range[value].fetch_add(count, Ordering::Relaxed);
+        }
+    }
+
+    pub fn reset(&self) {
+        for counter in &self.count_pow {
+            counter.store(0, Ordering::Relaxed);
+        }
+        for counter in &self.count_range {
+            counter.store(0, Ordering::Relaxed);
+        }
+    }
+
     pub fn generate_trace_row_major(&self) -> RowMajorMatrix<F> {
         let mut current_pow = F::ONE;
         let trace = self
