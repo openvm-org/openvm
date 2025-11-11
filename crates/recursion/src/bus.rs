@@ -163,6 +163,17 @@ define_typed_per_proof_permutation_bus!(BatchConstraintModuleBus, BatchConstrain
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
+pub struct BatchConstraintTidxBetweenSumchecksMessage<T> {
+    pub tidx: T,
+}
+
+define_typed_per_proof_permutation_bus!(
+    BatchConstraintTidxBetweenSumchecksBus,
+    BatchConstraintTidxBetweenSumchecksMessage
+);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct UnivariateSumcheckInputMessage<T> {
     pub is_n_max_zero: T,
 }
@@ -327,8 +338,6 @@ define_typed_lookup_bus!(Poseidon2Bus, Poseidon2BusMessage);
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum AirShapeProperty {
     AirId,
-    // HasPreprocessed,
-    // NumMainParts,
     NumInteractions,
 }
 
@@ -368,10 +377,6 @@ pub struct AirShapeBusMessage<T> {
     pub sort_idx: T,
     /// The property this message encodes.
     /// See associated enum [AirShapeProperty].
-    /// - 0 means `air_id`,
-    /// - 1 means `has_preprocessed`,
-    /// - 2 means `num_main_parts`,
-    /// - 3 means `num_interactions`.
     pub property_idx: T,
     /// The value of the corresponding property.
     pub value: T,
@@ -390,16 +395,6 @@ pub struct HyperdimBusMessage<T> {
 }
 
 define_typed_per_proof_permutation_bus!(HyperdimBus, HyperdimBusMessage);
-
-#[repr(C)]
-#[derive(AlignedBorrow, Debug, Clone)]
-pub struct AirPartShapeBusMessage<T> {
-    pub idx: T,
-    pub part: T,
-    pub width: T,
-}
-
-define_typed_per_proof_permutation_bus!(AirPartShapeBus, AirPartShapeBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]

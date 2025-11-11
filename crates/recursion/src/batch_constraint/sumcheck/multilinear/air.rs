@@ -17,6 +17,7 @@ use crate::{
         BatchConstraintInnerMessageType, SumcheckClaimBus, SumcheckClaimMessage,
     },
     bus::{
+        BatchConstraintTidxBetweenSumchecksBus, BatchConstraintTidxBetweenSumchecksMessage,
         ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus, StackingModuleBus,
         StackingModuleMessage, TranscriptBus,
     },
@@ -62,6 +63,7 @@ pub struct MultilinearSumcheckAir {
     pub randomness_bus: ConstraintSumcheckRandomnessBus,
     pub batch_constraint_conductor_bus: BatchConstraintConductorBus,
     pub stacking_module_bus: StackingModuleBus,
+    pub tidx_between_sumchecks_bus: BatchConstraintTidxBetweenSumchecksBus,
 }
 
 impl<F> BaseAirWithPublicValues<F> for MultilinearSumcheckAir {}
@@ -296,6 +298,13 @@ where
                 value: local.r.map(|x| x.into()),
             },
             local.is_valid * local.is_first_eval,
+        );
+
+        self.tidx_between_sumchecks_bus.receive(
+            builder,
+            local.proof_idx,
+            BatchConstraintTidxBetweenSumchecksMessage { tidx: local.tidx },
+            local.is_valid * local.is_round_start,
         );
     }
 }

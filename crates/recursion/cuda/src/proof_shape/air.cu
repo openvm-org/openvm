@@ -47,9 +47,6 @@ template <typename T, size_t MAX_CACHED> struct ProofShapeCols {
     T log_height;
     T n_sign_bit;
 
-    T part_common_main_mult;
-    T part_preprocessed_mult;
-
     T starting_tidx;
     T starting_cidx;
 
@@ -67,7 +64,6 @@ template <typename T, size_t MAX_CACHED> struct ProofShapeCols {
     T num_air_id_lookups;
 
     // T idx_flags[IDX_FLAGS];
-    T part_cached_mult[MAX_CACHED];
     T cached_commits[MAX_CACHED][DIGEST_SIZE];
 };
 
@@ -90,7 +86,7 @@ __device__ __forceinline__ void fill_present_row(
     TraceMetadata &trace_data,
     Digest *cached_commits,
     size_t l_skip,
-    size_t part_cached_mult_idx,
+    size_t cached_commits_idx,
     size_t min_cached_idx,
     RangeChecker &range_checker,
     PowerChecker<32> &pow_checker
@@ -101,16 +97,6 @@ __device__ __forceinline__ void fill_present_row(
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, n_sign_bit, n < 0 ? 1 : 0);
 
     COL_WRITE_VALUE(
-        row, typename Cols<MAX_CACHED>::template Type, part_common_main_mult, Fp::one()
-    );
-    COL_WRITE_VALUE(
-        row,
-        typename Cols<MAX_CACHED>::template Type,
-        part_preprocessed_mult,
-        air_data.has_preprocessed
-    );
-
-    COL_WRITE_VALUE(
         row, typename Cols<MAX_CACHED>::template Type, starting_cidx, trace_data.starting_cidx
     );
 
@@ -118,7 +104,12 @@ __device__ __forceinline__ void fill_present_row(
     size_t lifted_height = max(height, (size_t)(1 << l_skip));
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_present, Fp::one());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, height, height);
-    COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, num_air_id_lookups, trace_data.num_air_id_lookups);
+    COL_WRITE_VALUE(
+        row,
+        typename Cols<MAX_CACHED>::template Type,
+        num_air_id_lookups,
+        trace_data.num_air_id_lookups
+    );
 
     Decomp lifted_height_decomp, num_interactions_decomp, total_interactions_decomp;
     decompose(lifted_height_decomp, lifted_height);
@@ -183,13 +174,10 @@ __device__ __forceinline__ void fill_present_row(
 
 #pragma unroll
     for (size_t i = 0; i < MAX_CACHED; i++) {
-        size_t part_idx = part_cached_mult_idx + i;
-        size_t commit_idx = part_cached_mult_idx + MAX_CACHED + DIGEST_SIZE * i;
+        size_t commit_idx = cached_commits_idx + DIGEST_SIZE * i;
         if (i < air_data.num_cached) {
-            row.write(part_idx, Fp::one());
             row.write_array(commit_idx, DIGEST_SIZE, cached_commits[trace_data.cached_idx + i]);
         } else {
-            row.write(part_idx, Fp::zero());
             if (i + 1 != MAX_CACHED || min_cached_idx != trace_data.air_idx) {
                 row.fill_zero(commit_idx, DIGEST_SIZE);
             }
@@ -202,17 +190,11 @@ __device__ __forceinline__ void fill_non_present_row(
     RowSlice row,
     size_t final_cidx,
     size_t final_total_interactions,
-    size_t part_cached_mult_idx,
+    size_t cached_commits_idx,
     RangeChecker &range_checker
 ) {
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, log_height, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, n_sign_bit, Fp::zero());
-    COL_WRITE_VALUE(
-        row, typename Cols<MAX_CACHED>::template Type, part_common_main_mult, Fp::zero()
-    );
-    COL_WRITE_VALUE(
-        row, typename Cols<MAX_CACHED>::template Type, part_preprocessed_mult, Fp::zero()
-    );
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, starting_cidx, final_cidx);
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_present, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, height, Fp::zero());
@@ -222,8 +204,7 @@ __device__ __forceinline__ void fill_non_present_row(
     row.fill_zero(
         COL_INDEX(typename Cols<MAX_CACHED>::template Type, num_interactions_limbs), NUM_LIMBS
     );
-    row.fill_zero(part_cached_mult_idx, MAX_CACHED);
-    row.fill_zero(part_cached_mult_idx + MAX_CACHED, MAX_CACHED * DIGEST_SIZE);
+    row.fill_zero(cached_commits_idx, MAX_CACHED * DIGEST_SIZE);
 
     Decomp total_interactions;
     decompose(total_interactions, final_total_interactions);
@@ -246,7 +227,7 @@ template <size_t MAX_CACHED>
 __device__ __forceinline__ void fill_summary_row(
     RowSlice row,
     size_t final_total_interactions,
-    size_t part_cached_mult_idx,
+    size_t cached_commits_idx,
     size_t n_max,
     size_t n_logup,
     Digest &pre_hash,
@@ -257,17 +238,10 @@ __device__ __forceinline__ void fill_summary_row(
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_last, Fp::one());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, idx, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, sorted_idx, Fp::zero());
-    COL_WRITE_VALUE(
-        row, typename Cols<MAX_CACHED>::template Type, part_common_main_mult, Fp::zero()
-    );
-    COL_WRITE_VALUE(
-        row, typename Cols<MAX_CACHED>::template Type, part_preprocessed_mult, Fp::zero()
-    );
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_present, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, n_sign_bit, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, num_air_id_lookups, Fp::zero());
-    row.fill_zero(part_cached_mult_idx, MAX_CACHED);
-    row.fill_zero(part_cached_mult_idx + MAX_CACHED, MAX_CACHED * DIGEST_SIZE);
+    row.fill_zero(cached_commits_idx, MAX_CACHED * DIGEST_SIZE);
 
     Decomp interaction_decomp, max_interaction_decomp;
     decompose(interaction_decomp, final_total_interactions);
@@ -327,9 +301,7 @@ __device__ __forceinline__ void fill_summary_row(
     pow_checker.add_pow_count(msb_limb_zero_bits);
     pow_checker.add_range_count(n_max > n_logup ? n_max - n_logup : n_logup - n_max);
 
-    row.write_array(
-        part_cached_mult_idx + MAX_CACHED + DIGEST_SIZE * (MAX_CACHED - 1), DIGEST_SIZE, pre_hash
-    );
+    row.write_array(cached_commits_idx + DIGEST_SIZE * (MAX_CACHED - 1), DIGEST_SIZE, pre_hash);
 }
 
 template <size_t NUM_PROOFS, size_t MAX_CACHED>
@@ -360,8 +332,8 @@ __global__ void proof_shape_tracegen(
 
         Encoder encoder(inputs.num_airs, 2, true);
         size_t encoder_flags_idx =
-            COL_INDEX(typename Cols<MAX_CACHED>::template Type, part_cached_mult);
-        size_t part_cached_mult_idx = encoder_flags_idx + encoder.width();
+            COL_INDEX(typename Cols<MAX_CACHED>::template Type, cached_commits);
+        size_t cached_commits_idx = encoder_flags_idx + encoder.width();
 
         RangeChecker range_checker(inputs.range_checker_8_ptr, LIMB_BITS);
         PowerChecker<32> pow_checker(inputs.pow_checker_ptr, inputs.range_checker_5_ptr);
@@ -376,7 +348,7 @@ __global__ void proof_shape_tracegen(
             fill_summary_row<MAX_CACHED>(
                 row,
                 proof_data.final_total_interactions,
-                part_cached_mult_idx,
+                cached_commits_idx,
                 proof_data.n_max,
                 proof_data.n_logup,
                 inputs.pre_hash,
@@ -407,7 +379,7 @@ __global__ void proof_shape_tracegen(
 
             if (inputs.min_cached_idx == trace_data.air_idx) {
                 row.write_array(
-                    part_cached_mult_idx + MAX_CACHED + DIGEST_SIZE * (MAX_CACHED - 1),
+                    cached_commits_idx + DIGEST_SIZE * (MAX_CACHED - 1),
                     DIGEST_SIZE,
                     proof_data.main_commit
                 );
@@ -431,7 +403,7 @@ __global__ void proof_shape_tracegen(
                     trace_data,
                     cached_commits[proof_idx],
                     inputs.l_skip,
-                    part_cached_mult_idx,
+                    cached_commits_idx,
                     inputs.min_cached_idx,
                     range_checker,
                     pow_checker
@@ -441,7 +413,7 @@ __global__ void proof_shape_tracegen(
                     row,
                     proof_data.final_cidx,
                     proof_data.final_total_interactions,
-                    part_cached_mult_idx,
+                    cached_commits_idx,
                     range_checker
                 );
             }

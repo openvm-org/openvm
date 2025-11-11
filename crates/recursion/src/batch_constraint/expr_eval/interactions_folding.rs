@@ -188,8 +188,6 @@ where
             local.value,
         );
 
-        // TODO: constrain that sort_idx and air_idx match
-
         self.expression_claim_bus.send(
             builder,
             local.proof_idx,
