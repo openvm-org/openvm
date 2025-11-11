@@ -24,9 +24,10 @@ use crate::{
     batch_constraint::{BatchConstraintModule, LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX},
     bus::{
         AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus, CommitmentsBus,
-        ConstraintSumcheckRandomnessBus, ExpBitsLenBus, GkrModuleBus, HyperdimBus,
-        LiftedHeightsBus, MerkleVerifyBus, Poseidon2Bus, PublicValuesBus, StackingIndicesBus,
-        StackingModuleBus, TranscriptBus, WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
+        ConstraintSumcheckRandomnessBus, EqNegBaseRandBus, EqNegResultBus, ExpBitsLenBus,
+        GkrModuleBus, HyperdimBus, LiftedHeightsBus, MerkleVerifyBus, Poseidon2Bus,
+        PublicValuesBus, SelUniBus, StackingIndicesBus, StackingModuleBus, TranscriptBus,
+        WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::exp_bits_len::ExpBitsLenAir,
@@ -135,17 +136,18 @@ pub struct BusInventory {
     pub stacking_indices_bus: StackingIndicesBus,
     pub commitments_bus: CommitmentsBus,
     pub public_values_bus: PublicValuesBus,
+    pub column_claims_bus: ColumnClaimsBus,
 
     // Randomness buses
     pub xi_randomness_bus: XiRandomnessBus,
     pub constraint_randomness_bus: ConstraintSumcheckRandomnessBus,
     pub whir_opening_point_bus: WhirOpeningPointBus,
 
-    // Claims buses
-    pub column_claims_bus: ColumnClaimsBus,
-
-    // Exp bits length bus
+    // Compute buses
     pub exp_bits_len_bus: ExpBitsLenBus,
+    pub sel_uni_bus: SelUniBus,
+    pub eq_neg_result_bus: EqNegResultBus,
+    pub eq_neg_base_rand_bus: EqNegBaseRandBus,
 }
 
 /// The records from global recursion preflight on CPU for verifying a single proof.
@@ -262,6 +264,7 @@ impl BusInventory {
             stacking_indices_bus: StackingIndicesBus::new(b.new_bus_idx()),
             commitments_bus: CommitmentsBus::new(b.new_bus_idx()),
             public_values_bus: PublicValuesBus::new(b.new_bus_idx()),
+            sel_uni_bus: SelUniBus::new(b.new_bus_idx()),
 
             // Randomness buses
             xi_randomness_bus: XiRandomnessBus::new(b.new_bus_idx()),
@@ -272,7 +275,8 @@ impl BusInventory {
             column_claims_bus: ColumnClaimsBus::new(b.new_bus_idx()),
 
             exp_bits_len_bus: ExpBitsLenBus::new(b.new_bus_idx()),
-            // Stacking module internal buses
+            eq_neg_base_rand_bus: EqNegBaseRandBus::new(b.new_bus_idx()),
+            eq_neg_result_bus: EqNegResultBus::new(b.new_bus_idx()),
         }
     }
 }
