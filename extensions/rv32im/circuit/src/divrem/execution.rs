@@ -122,8 +122,6 @@ where
         let c_reg = c.as_canonical_u32() / 4;
 
         // Calculate the result. Inputs: eax, ecx. Outputs: edx.
-
-        // JHEEEZZZ need to rewrite all this..
         asm_str += &rv32_register_to_gpr(b_reg as u8, "eax");
         asm_str += &rv32_register_to_gpr(c_reg as u8, "ecx");
         asm_str += "   mov edx, 0\n";

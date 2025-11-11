@@ -127,7 +127,7 @@ where
         /*
             for implicit multiplication, we need to load the multiplicand into `eax`
             result of hi bits are always stored in `edx`
-            cant use REG_C_W, because it is edx, and it gets overridden
+            can't use REG_C_W, because it is edx, and it gets overridden
         */
         let(_, delta_str_b) = &xmm_to_gpr((b / 4) as u8, "eax", true);
         let(gpr_reg_c, delta_str_c) = &xmm_to_gpr((c / 4) as u8, REG_A_W, false);
