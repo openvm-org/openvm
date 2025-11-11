@@ -15,6 +15,7 @@ pub struct GkrInputRecord {
     pub n_max: usize,
     pub logup_pow_witness: F,
     pub logup_pow_sample: F,
+    pub alpha_logup: EF,
     pub input_layer_claim: [EF; 2],
 }
 
@@ -61,6 +62,7 @@ pub fn generate_trace(gkr_input_records: &[GkrInputRecord], q0_claims: &[EF]) ->
             cols.logup_pow_sample = record.logup_pow_sample;
 
             cols.q0_claim = q0_claim.as_base_slice().try_into().unwrap();
+            cols.alpha_logup = record.alpha_logup.as_base_slice().try_into().unwrap();
             cols.input_layer_claim = [
                 record.input_layer_claim[0]
                     .as_base_slice()

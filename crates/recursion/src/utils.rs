@@ -117,7 +117,6 @@ where
     ext_field_add(one_minus_x_plus_y, two_xy)
 }
 
-// TODO(ayush): move to a custom air builder
 pub fn assert_zeros<AB, const N: usize>(builder: &mut AB, array: [impl Into<AB::Expr>; N])
 where
     AB: AirBuilder,

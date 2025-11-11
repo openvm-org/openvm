@@ -15,10 +15,11 @@ use crate::{
     batch_constraint::bus::{
         BatchConstraintConductorBus, BatchConstraintConductorMessage,
         BatchConstraintInnerMessageType, SumcheckClaimBus, SumcheckClaimMessage,
+        UnivariateSumcheckInputBus, UnivariateSumcheckInputMessage,
     },
     bus::{BatchConstraintModuleBus, BatchConstraintModuleMessage, TranscriptBus},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
-    utils::{ext_field_add, ext_field_multiply, ext_field_subtract},
+    utils::{ext_field_add, ext_field_multiply},
 };
 
 #[derive(AlignedBorrow, Clone, Copy, Debug)]
@@ -30,10 +31,7 @@ pub struct FractionsFolderCols<T> {
 
     pub air_idx: T,
 
-    // TODO(ayush): probably don't need all 3
     pub tidx: T,
-    pub tidx_alpha_beta: T,
-    pub gkr_post_tidx: T, // TODO: this number of tids is really annoying
 
     pub sum_claim_p: [T; D_EF],
     pub sum_claim_q: [T; D_EF],
@@ -44,7 +42,9 @@ pub struct FractionsFolderCols<T> {
 }
 
 pub struct FractionsFolderAir {
+    pub num_airs: usize,
     pub transcript_bus: TranscriptBus,
+    pub univariate_sumcheck_input_bus: UnivariateSumcheckInputBus,
     pub sumcheck_bus: SumcheckClaimBus,
     pub mu_bus: BatchConstraintConductorBus,
     pub gkr_claim_bus: BatchConstraintModuleBus,
@@ -100,16 +100,16 @@ where
         let is_last = LoopSubAir::local_is_last(next.is_valid, next.is_first);
         let is_transition = AB::Expr::ONE - is_last.clone();
 
-        // TODO(ayush): do i need to constrain that air_idx starts at a particular value?
-        // builder
-        //     .when(local.is_first)
-        //     .assert_zero(local.air_idx);
-
+        // Air index starts at num_airs - 1
+        builder.when(local.is_first).assert_eq(
+            local.air_idx,
+            AB::Expr::from_canonical_usize(self.num_airs - 1),
+        );
         // Air index decrements by 1
         builder
             .when(local.is_valid * is_transition.clone())
             .assert_eq(next.air_idx, local.air_idx - AB::Expr::ONE);
-
+        // Air index ends at 0
         builder.when(is_last.clone()).assert_zero(local.air_idx);
 
         ///////////////////////////////////////////////////////////////////////
@@ -183,31 +183,23 @@ where
         self.transcript_bus.sample_ext(
             builder,
             local.proof_idx,
-            local.tidx + AB::Expr::from_canonical_usize(D_EF),
+            local.tidx + AB::Expr::from_canonical_usize(2 * D_EF),
             local.mu,
             local.is_valid * local.is_first,
         );
         self.transcript_bus.observe_ext(
             builder,
             local.proof_idx,
-            local.tidx,
+            local.tidx + AB::Expr::from_canonical_usize(D_EF),
             local.sum_claim_q,
             local.is_valid,
         );
         self.transcript_bus.observe_ext(
             builder,
             local.proof_idx,
-            local.tidx - AB::Expr::from_canonical_usize(D_EF),
+            local.tidx,
             local.sum_claim_p,
             local.is_valid,
-        );
-        // Sample alpha
-        self.transcript_bus.sample_ext(
-            builder,
-            local.proof_idx,
-            local.tidx_alpha_beta,
-            ext_field_subtract(local.cur_q_sum, local.sum_claim_q),
-            local.is_valid * local.is_first,
         );
 
         self.sumcheck_bus.send(
@@ -220,18 +212,29 @@ where
             local.is_valid * is_last.clone(),
         );
 
+        // Receive initial tidx and input layer claim from gkr module
         self.gkr_claim_bus.receive(
             builder,
             local.proof_idx,
             BatchConstraintModuleMessage {
-                tidx_alpha_beta: local.tidx_alpha_beta.into(),
-                tidx: local.gkr_post_tidx.into(),
+                // Skip lambda
+                tidx: local.tidx - AB::Expr::from_canonical_usize(D_EF),
                 gkr_input_layer_claim: [
                     local.cur_p_sum.map(Into::into),
                     local.cur_q_sum.map(Into::into),
                 ],
             },
             local.is_valid * is_last,
+        );
+        // Send final tidx value to univariate sumcheck
+        self.univariate_sumcheck_input_bus.send(
+            builder,
+            local.proof_idx,
+            UnivariateSumcheckInputMessage {
+                // Skip mu
+                tidx: local.tidx + AB::Expr::from_canonical_usize(3 * D_EF),
+            },
+            local.is_valid * local.is_first,
         );
 
         self.mu_bus.send(

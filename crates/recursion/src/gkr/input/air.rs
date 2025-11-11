@@ -3,7 +3,7 @@ use core::borrow::Borrow;
 use openvm_circuit_primitives::{
     SubAir,
     is_zero::{IsZeroAuxCols, IsZeroIo, IsZeroSubAir},
-    utils::or,
+    utils::{assert_array_eq, not, or},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -18,13 +18,14 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 use crate::{
     bus::{
         BatchConstraintModuleBus, BatchConstraintModuleMessage, ExpBitsLenBus, ExpBitsLenMessage,
-        GkrModuleBus, GkrModuleMessage, TranscriptBus, TranscriptBusMessage,
+        GkrModuleBus, GkrModuleMessage, TranscriptBus,
     },
     gkr::bus::{
         GkrLayerInputBus, GkrLayerInputMessage, GkrLayerOutputBus, GkrLayerOutputMessage,
         GkrXiSamplerBus, GkrXiSamplerMessage,
     },
     subairs::proof_idx::{ProofIdxIoCols, ProofIdxSubAir},
+    utils::assert_zeros,
 };
 
 #[repr(C)]
@@ -38,9 +39,8 @@ pub struct GkrInputCols<T> {
     pub n_logup: T,
     pub n_max: T,
 
-    // TODO(ayush): n_logup can be 0 if total_interaction_wt is 0 or 1
-    // in the case of 1, the verifier does seem to call verify_gkr
-    // check if this case is properly handled in the air
+    /// Flag indicating whether there are any interactions
+    /// n_logup = 0 <=> total_interactions = 0
     pub is_n_logup_zero: T,
     pub is_n_logup_zero_aux: IsZeroAuxCols<T>,
 
@@ -51,6 +51,8 @@ pub struct GkrInputCols<T> {
 
     /// Root denominator claim
     pub q0_claim: [T; D_EF],
+
+    pub alpha_logup: [T; D_EF],
 
     pub input_layer_claim: [[T; D_EF]; 2],
 
@@ -132,10 +134,25 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
         );
 
         ///////////////////////////////////////////////////////////////////////
-        // Module Interactions
+        // Output Constraints
         ///////////////////////////////////////////////////////////////////////
 
         let has_interactions = AB::Expr::ONE - local.is_n_logup_zero;
+        // Input layer claim is [0, \alpha] when no interactions
+        assert_zeros(
+            &mut builder.when(not::<AB::Expr>(has_interactions.clone())),
+            local.input_layer_claim[0],
+        );
+        assert_array_eq(
+            &mut builder.when(not::<AB::Expr>(has_interactions.clone())),
+            local.input_layer_claim[1],
+            local.alpha_logup,
+        );
+
+        ///////////////////////////////////////////////////////////////////////
+        // Module Interactions
+        ///////////////////////////////////////////////////////////////////////
+
         let num_layers = local.n_logup + AB::Expr::from_canonical_usize(self.l_skip);
 
         let needs_challenges = or(local.is_n_max_greater_than_n_logup, local.is_n_logup_zero);
@@ -172,7 +189,6 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
         );
         // 2. GkrLayerOutputBus
         // 2a. Receive input layer claim from GkrLayerAir
-        // TODO(ayush): input_layer_claim to [0, \alpha] when no interactions
         self.layer_output_bus.receive(
             builder,
             local.proof_idx,
@@ -225,28 +241,30 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
 
         // 2. TranscriptBus
         // 2a. Observe pow witness
-        self.transcript_bus.receive(
+        self.transcript_bus.observe(
             builder,
             local.proof_idx,
-            TranscriptBusMessage {
-                tidx: local.tidx.into(),
-                value: local.logup_pow_witness.into(),
-                is_sample: AB::Expr::ZERO,
-            },
+            local.tidx.into(),
+            local.logup_pow_witness.into(),
             local.is_enabled,
         );
         // 2b. Sample pow challenge
-        self.transcript_bus.receive(
+        self.transcript_bus.sample(
             builder,
             local.proof_idx,
-            TranscriptBusMessage {
-                tidx: local.tidx.into() + AB::Expr::ONE,
-                value: local.logup_pow_sample.into(),
-                is_sample: AB::Expr::ONE,
-            },
+            local.tidx.into() + AB::Expr::ONE,
+            local.logup_pow_sample.into(),
             local.is_enabled,
         );
-        // 2c. Observe `q0_claim` claim
+        // 2c. Sample alpha_logup challenge
+        self.transcript_bus.sample_ext(
+            builder,
+            local.proof_idx,
+            local.tidx.into() + AB::Expr::TWO,
+            local.alpha_logup.map(Into::into),
+            local.is_enabled,
+        );
+        // 2d. Observe `q0_claim` claim
         self.transcript_bus.observe_ext(
             builder,
             local.proof_idx,
@@ -261,8 +279,6 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
             builder,
             local.proof_idx,
             BatchConstraintModuleMessage {
-                // Skip grinding nonce observation and grinding challenge sampling
-                tidx_alpha_beta: local.tidx.into() + AB::Expr::TWO,
                 tidx: tidx_end,
                 gkr_input_layer_claim: local.input_layer_claim.map(|claim| claim.map(Into::into)),
             },
