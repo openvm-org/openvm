@@ -3,8 +3,11 @@ use std::{
     mem::size_of,
 };
 
+#[cfg(feature = "aot")]
+use openvm_circuit::arch::aot::common::convert_x86_reg;
+
 use openvm_circuit::{
-    arch::{aot::common::convert_x86_reg, *},
+    arch::*,
     system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
@@ -18,6 +21,7 @@ use openvm_rv32im_transpiler::LessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::LessThanExecutor;
+#[cfg(feature = "aot")]
 use crate::less_than::execution::aot::common::Width;
 #[allow(unused_imports)]
 use crate::{adapters::imm_to_bytes, common::*};
