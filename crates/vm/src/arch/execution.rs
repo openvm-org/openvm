@@ -28,6 +28,8 @@ use crate::{
         program::ProgramBus,
     },
 };
+#[cfg(feature = "aot")]
+use crate::arch::SystemConfig;
 
 #[derive(Error, Debug)]
 pub enum ExecutionError {
@@ -238,7 +240,7 @@ pub trait AotMeteredExecutor<F> {
         false
     }
 
-    fn generate_x86_metered_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError>{
+    fn generate_x86_metered_asm(&self, inst: &Instruction<F>, pc: u32, config: &SystemConfig) -> Result<String, AotError>{
         unimplemented!()
     }
 }

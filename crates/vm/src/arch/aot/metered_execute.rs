@@ -163,7 +163,7 @@ where
             asm_str += &Self::rv32_regs_to_xmm();
             asm_str += &format!("    jnz asm_run_end_{pc}\n");            
 
-            
+
             if instruction.opcode.as_usize() == 0 {
                 // terminal opcode has no associated executor, so can handle with default fallback
                 asm_str += &Self::xmm_to_rv32_regs();
@@ -202,7 +202,7 @@ where
             if executor.is_aot_metered_supported(&instruction) {
                 let segment =
                     executor
-                        .generate_x86_metered_asm(&instruction, pc)
+                        .generate_x86_metered_asm(&instruction, pc, inventory.config())
                         .map_err(|err| match err {
                             AotError::InvalidInstruction => {
                                 StaticProgramError::InvalidInstruction(pc)
