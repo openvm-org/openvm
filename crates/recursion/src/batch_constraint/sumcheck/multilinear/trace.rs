@@ -8,6 +8,7 @@ use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, pro
 use super::MultilinearSumcheckCols;
 use crate::system::Preflight;
 
+#[tracing::instrument(name = "generate_trace(MultilinearSumcheckAir)", skip_all)]
 pub(crate) fn generate_trace(
     vk: &MultiStarkVerifyingKeyV2,
     proofs: &[Proof],

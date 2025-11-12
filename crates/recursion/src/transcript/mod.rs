@@ -80,6 +80,7 @@ impl AirModule for TranscriptModule {
 impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
     type ModuleSpecificCtx = ();
 
+    #[tracing::instrument(name = "generate_proving_ctxs(TranscriptModule)", skip_all)]
     fn generate_proving_ctxs(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,

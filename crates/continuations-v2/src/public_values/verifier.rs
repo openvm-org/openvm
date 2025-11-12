@@ -1,26 +1,26 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    sync::Arc,
-};
+use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::system::{connector::VmConnectorPvs, memory::merkle::MemoryMerklePvs};
+use openvm_circuit::system::{
+    connector::{DEFAULT_SUSPEND_EXIT_CODE, VmConnectorPvs},
+    memory::merkle::MemoryMerklePvs,
+};
 use openvm_circuit_primitives::utils::{and, assert_array_eq, not};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    prover::types::AirProofRawInput,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::FieldAlgebra;
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{DIGEST_SIZE, F, proof::Proof};
+use recursion_circuit::{bus::PublicValuesBus, utils::assert_zeros};
+use stark_backend_v2::{
+    DIGEST_SIZE, F,
+    proof::Proof,
+    prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
+};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use crate::{
-    bus::PublicValuesBus,
-    public_values::{NonRootVerifierPvs, app::*},
-    utils::assert_zeros,
-};
+use crate::public_values::{NonRootVerifierPvs, app::*};
 
 pub const VERIFIER_PVS_AIR_ID: usize = 0;
 pub const CONSTRAINT_EVAL_AIR_ID: usize = 6;
@@ -43,10 +43,10 @@ pub enum VerifierChildLevel {
     InternalRecursive,
 }
 
-pub fn generate_proving_input(
+pub fn generate_proving_ctx(
     proofs: &[Proof],
     user_pv_commit: Option<[F; DIGEST_SIZE]>,
-) -> AirProofRawInput<F> {
+) -> AirProvingContextV2<CpuBackendV2> {
     let num_proofs = proofs.len();
     let height = num_proofs.next_power_of_two();
     let width = VerifierPvsCols::<u8>::width();
@@ -104,8 +104,13 @@ pub fn generate_proving_input(
         }
     }
 
+    let last_row: &VerifierPvsCols<F> =
+        trace[(proofs.len() - 1) * width..proofs.len() * width].borrow();
+    let mut pvs = last_row.child_pvs;
+
     let first_row: &VerifierPvsCols<F> = trace[..width].borrow();
-    let mut pvs = first_row.child_pvs;
+    pvs.initial_pc = first_row.child_pvs.initial_pc;
+    pvs.initial_root = first_row.child_pvs.initial_root;
 
     match child_level {
         VerifierChildLevel::App => {}
@@ -129,9 +134,9 @@ pub fn generate_proving_input(
         }
     }
 
-    AirProofRawInput {
+    AirProvingContextV2 {
         cached_mains: vec![],
-        common_main: Some(Arc::new(RowMajorMatrix::new(trace, width))),
+        common_main: ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width)),
         public_values: pvs.to_vec(),
     }
 }
@@ -169,7 +174,10 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
         builder.assert_bool(local.is_valid);
         builder.when_first_row().assert_zero(local.proof_idx);
         builder
-            .when(and(local.is_valid, next.is_valid))
+            .when(and::<AB::Expr>(
+                and(local.is_valid, next.is_valid),
+                not(local.is_last),
+            ))
             .assert_eq(local.proof_idx + AB::F::ONE, next.proof_idx);
 
         // constrain is_last, note proof_idx on the first row is 0
@@ -184,11 +192,15 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
         builder
             .when(local.child_pvs.is_terminate)
             .assert_one(local.is_last);
+        builder
+            .when(local.child_pvs.is_terminate)
+            .assert_zero(local.child_pvs.exit_code);
 
         // constrain that non-terminal segments exited successfully
-        builder
-            .when(not(local.child_pvs.is_terminate))
-            .assert_zero(local.child_pvs.exit_code);
+        builder.when(not(local.child_pvs.is_terminate)).assert_eq(
+            local.child_pvs.exit_code,
+            AB::F::from_canonical_u32(DEFAULT_SUSPEND_EXIT_CODE),
+        );
 
         // when local and next are valid, constrain increasing proof_idx and adjacency
         let mut when_both = builder.when(and(local.is_valid, not(local.is_last)));
