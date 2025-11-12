@@ -221,8 +221,8 @@ asm_execute:
     mov rax, {metered_extern_handler_ptr}
     call rax
     cmp rax, 1          
-    mov r13, rax        
     je asm_run_end      
+    mov r13, rax        
     jmp asm_execute     
 
 asm_run_end:
