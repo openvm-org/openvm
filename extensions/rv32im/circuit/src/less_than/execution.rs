@@ -5,11 +5,7 @@ use std::{
 
 #[cfg(feature = "aot")]
 use openvm_circuit::arch::aot::common::convert_x86_reg;
-
-use openvm_circuit::{
-    arch::*,
-    system::memory::online::GuestMemory,
-};
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
