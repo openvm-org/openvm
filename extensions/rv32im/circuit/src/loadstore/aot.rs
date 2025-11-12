@@ -1,5 +1,7 @@
-use openvm_circuit::arch::{AotError, AotExecutor};
-use openvm_circuit::arch::aot::common::{convert_x86_reg, Width, RISCV_TO_X86_OVERRIDE_MAP};
+use openvm_circuit::arch::{
+    aot::common::{convert_x86_reg, Width, RISCV_TO_X86_OVERRIDE_MAP},
+    AotError, AotExecutor,
+};
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
@@ -8,13 +10,12 @@ use openvm_instructions::{
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
+#[allow(unused_imports)]
+use crate::{adapters::imm_to_bytes, common::*, BaseAluExecutor};
 use crate::{
     common::{address_space_start_to_gpr, gpr_to_rv32_register},
     LoadStoreExecutor,
 };
-
-#[allow(unused_imports)]
-use crate::{adapters::imm_to_bytes, common::*, BaseAluExecutor};
 
 impl<F, A, const NUM_CELLS: usize> AotExecutor<F> for LoadStoreExecutor<A, NUM_CELLS>
 where
@@ -82,20 +83,21 @@ where
         // REG_B_W = ptr = [b:4]_1 + imm_extended
         asm_str += &format!("   add {gpr_reg}, {imm_extended}\n");
 
-        let gpr_reg_w64 = convert_x86_reg(&gpr_reg, Width::W64).ok_or(AotError::InvalidInstruction)?;
+        let gpr_reg_w64 =
+            convert_x86_reg(&gpr_reg, Width::W64).ok_or(AotError::InvalidInstruction)?;
         // REG_A = <start of destination address space>
         asm_str += &address_space_start_to_gpr(e_u32, REG_A);
         // REG_B = REG_B + REG_A = <memory address in host memory>
         asm_str += &format!("   lea {gpr_reg_w64}, [{gpr_reg_w64} + {REG_A}]\n");
-        
+
         match local_opcode {
             Rv32LoadStoreOpcode::LOADW => {
                 let str_reg_a = if RISCV_TO_X86_OVERRIDE_MAP[a_reg as usize].is_some() {
                     RISCV_TO_X86_OVERRIDE_MAP[a_reg as usize].unwrap()
                 } else {
-                    REG_B_W 
+                    REG_B_W
                 };
-                
+
                 asm_str += &format!("   mov {str_reg_a}, [{gpr_reg_w64}]\n");
                 asm_str += &gpr_to_xmm(str_reg_a, a_reg);
             }
@@ -103,7 +105,7 @@ where
                 let str_reg_a = if RISCV_TO_X86_OVERRIDE_MAP[a_reg as usize].is_some() {
                     RISCV_TO_X86_OVERRIDE_MAP[a_reg as usize].unwrap()
                 } else {
-                    REG_B_W 
+                    REG_B_W
                 };
 
                 asm_str += &format!("   movzx {str_reg_a}, word ptr [{gpr_reg_w64}]\n");

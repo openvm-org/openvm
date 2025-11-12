@@ -87,7 +87,13 @@ pub fn sync_gpr_to_xmm() -> String {
 }
 
 #[derive(Copy, Clone)]
-pub enum Width { W64, W32, W16, W8L, W8H }
+pub enum Width {
+    W64,
+    W32,
+    W16,
+    W8L,
+    W8H,
+}
 
 pub fn convert_x86_reg(any: &str, to: Width) -> Option<&'static str> {
     #[rustfmt::skip]
@@ -123,7 +129,7 @@ pub fn convert_x86_reg(any: &str, to: Width) -> Option<&'static str> {
 
     let key = any.to_ascii_lowercase();
     for row in T {
-        if [row.0,row.1,row.2,row.3].iter().any(|&n| n==key) || row.4==Some(key.as_str()) {
+        if [row.0, row.1, row.2, row.3].iter().any(|&n| n == key) || row.4 == Some(key.as_str()) {
             return pick(row, to);
         }
     }
