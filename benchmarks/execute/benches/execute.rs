@@ -69,16 +69,20 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
 
 const APP_PROGRAMS: &[&str] = &[
-    // "fibonacci_recursive",
+    "fibonacci_recursive",
     "fibonacci_iterative",
-    // "quicksort",
-    // "bubblesort",
+    "quicksort",
+    "bubblesort",
+    "factorial_iterative_u256",
     "revm_snailtracer",
-    // "keccak256",
-    // "sha256",
+    "keccak256",
+    "keccak256_iter",
+    "sha256",
+    "sha256_iter",
     "revm_transfer",
     "pairing",
 ];
+
 #[allow(dead_code)]
 const LEAF_VERIFIER_PROGRAMS: &[&str] = &["kitchen-sink"];
 #[allow(dead_code)]
