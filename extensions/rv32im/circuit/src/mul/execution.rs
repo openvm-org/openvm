@@ -131,6 +131,7 @@ where
             asm_str += &delta_str_b;
             asm_str += &format!("   imul {gpr_reg_b}, {gpr_reg_c}\n");
             asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
+            asm_str += "xor rax, rax\n";
         } else {
             let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 4) as u8, str_reg_a, true);
             asm_str += &delta_str_b; // data is now in gpr_reg_b
@@ -138,6 +139,7 @@ where
             asm_str += &delta_str_c; // have to get a return value here, since it modifies further registers too
             asm_str += &format!("   imul {gpr_reg_b}, {gpr_reg_c}\n");
             asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
+            asm_str += "xor rax, rax\n";
         }
         Ok(asm_str)
     }
