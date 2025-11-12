@@ -3,10 +3,9 @@ use std::{
     mem::size_of,
 };
 
-use openvm_circuit::{
-    arch::{aot::common::REG_A, *},
-    system::memory::online::GuestMemory,
-};
+#[cfg(feature = "aot")]
+use openvm_circuit::arch::aot::common::REG_A;
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -18,6 +17,7 @@ use openvm_rv32im_transpiler::DivRemOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::DivRemExecutor;
+#[cfg(feature = "aot")]
 use crate::common::xmm_to_gpr;
 
 #[derive(AlignedBytesBorrow, Clone)]
