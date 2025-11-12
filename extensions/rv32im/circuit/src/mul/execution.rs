@@ -96,8 +96,7 @@ where
     F: PrimeField32,
 {
     fn is_aot_supported(&self, inst: &Instruction<F>) -> bool {
-        // inst.opcode == MulOpcode::MUL.global_opcode()
-        false
+        inst.opcode == MulOpcode::MUL.global_opcode()
     }
 
     fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
@@ -116,11 +115,30 @@ where
 
         let mut asm_str = String::new();
 
-        asm_str += &rv32_register_to_gpr((b / 4) as u8, REG_B_W);
-        asm_str += &rv32_register_to_gpr((c / 4) as u8, REG_A_W);
-        asm_str += &format!("   imul {REG_A_W}, {REG_B_W}\n");
-        asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
+        let str_reg_a = if RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].is_some() {
+            RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].unwrap()
+        } else {
+            REG_A_W
+        };
 
+        let mut asm_opcode = String::new();
+
+        if a == c {
+            // a = b * c; commutative, so don't need to write to tmp, but should copy c to a first
+            let (gpr_reg_c, delta_str_c) = xmm_to_gpr((c / 4) as u8, str_reg_a, true);
+            asm_str += &delta_str_c;
+            let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 4) as u8, REG_C_W, false);
+            asm_str += &delta_str_b;
+            asm_str += &format!("   imul {gpr_reg_b}, {gpr_reg_c}\n");
+            asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
+        } else {
+            let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 4) as u8, str_reg_a, true);
+            asm_str += &delta_str_b; // data is now in gpr_reg_b
+            let (gpr_reg_c, delta_str_c) = xmm_to_gpr((c / 4) as u8, REG_C_W, false); // data is in gpr_reg_c now
+            asm_str += &delta_str_c; // have to get a return value here, since it modifies further registers too
+            asm_str += &format!("   imul {gpr_reg_b}, {gpr_reg_c}\n");
+            asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
+        }
         Ok(asm_str)
     }
 }
