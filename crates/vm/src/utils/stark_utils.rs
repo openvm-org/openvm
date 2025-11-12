@@ -106,29 +106,69 @@ where
     /*
     Assertions for Pure Execution AOT
     */
-    let interp_state_pure = vm
-        .naive_interpreter(exe)?
-        .execute(input.clone(), None)
-        .expect("Failed to execute");
+    {
+        let interp_state_pure = vm
+            .naive_interpreter(exe)?
+            .execute(input.clone(), None)
+            .expect("Failed to execute");
 
-    let aot_state_pure = vm
-        .get_aot_instance(exe)?
-        .execute(input.clone(), None)
-        .expect("Failed to execute");
+        let aot_state_pure = vm
+            .get_aot_instance(exe)?
+            .execute(input.clone(), None)
+            .expect("Failed to execute");
 
-    let system_config: &SystemConfig = config.as_ref();
-    let addr_spaces = &system_config.memory_config.addr_spaces;
-    let assert_vm_state_eq = |lhs: &VmState<Val<E::SC>, GuestMemory>,
-                              rhs: &VmState<Val<E::SC>, GuestMemory>| {
-        assert_eq!(lhs.pc(), rhs.pc());
-        for r in 0..addr_spaces[1].num_cells {
-            let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
-            let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
-            assert_eq!(a, b);
+        let system_config: &SystemConfig = config.as_ref();
+        let addr_spaces = &system_config.memory_config.addr_spaces;
+        let assert_vm_state_eq = |lhs: &VmState<Val<E::SC>, GuestMemory>,
+                                rhs: &VmState<Val<E::SC>, GuestMemory>| {
+            assert_eq!(lhs.pc(), rhs.pc());
+            for r in 0..addr_spaces[1].num_cells {
+                let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
+                let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
+                assert_eq!(a, b);
+            }
+        };
+        assert_vm_state_eq(&interp_state_pure, &aot_state_pure);
+    }
+
+
+    /*
+    Assertions for Metered AOT
+    */
+    println!("Checking metered AOT equivalence");
+    {
+        let metered_ctx = vm.build_metered_ctx(&exe);
+        let (aot_segments, aot_state_metered) = vm
+            .get_metered_aot_instance(&exe)?
+            .execute_metered(input.clone(), metered_ctx.clone())?;
+
+        let (segments, interp_state_metered) = vm
+            .naive_metered_interpreter(&exe)?
+            .execute_metered(input.clone(), metered_ctx.clone())?;
+
+        assert_eq!(interp_state_metered.pc(), aot_state_metered.pc()); // hmmmmm; aot_state_metered not executing enough?
+
+        let system_config: &SystemConfig = config.as_ref();
+        let addr_spaces = &system_config.memory_config.addr_spaces; 
+
+        for r in 0..addr_spaces[1].num_cells  {
+            let interp = unsafe {
+                interp_state_metered.memory.read::<u8, 1>(1, r as u32)
+            };
+            let aot_interp = unsafe {
+                aot_state_metered.memory.read::<u8, 1>(1, r as u32)
+            };
+            assert_eq!(interp, aot_interp);
         }
-    };
-    assert_vm_state_eq(&interp_state_pure, &aot_state_pure);
 
+        assert_eq!(segments.len(), aot_segments.len());
+        for i in 0..segments.len() {
+            assert_eq!(segments[i].instret_start, aot_segments[i].instret_start);
+            assert_eq!(segments[i].num_insns, aot_segments[i].num_insns);
+            assert_eq!(segments[i].trace_heights, aot_segments[i].trace_heights);
+        }
+    }
+    
     Ok(())
 }
 

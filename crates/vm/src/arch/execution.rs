@@ -234,11 +234,11 @@ pub trait InterpreterMeteredExecutor<F> {
 
 #[cfg(feature = "aot")]
 pub trait AotMeteredExecutor<F> {
-    fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
+    fn is_aot_metered_supported(&self, _inst: &Instruction<F>) -> bool {
         false
     }
 
-    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError>{
+    fn generate_x86_metered_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError>{
         unimplemented!()
     }
 }

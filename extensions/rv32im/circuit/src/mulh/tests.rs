@@ -53,6 +53,14 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::rngs::StdRng;
 #[cfg(feature = "aot")]
 use rand::Rng;
+#[cfg(feature = "aot")]
+use openvm_circuit::arch::VirtualMachine;
+#[cfg(feature = "aot")]
+use openvm_stark_sdk::config::FriParameters;
+#[cfg(feature = "aot")]
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine;
+#[cfg(feature = "aot")]
+use openvm_stark_sdk::engine::StarkFriEngine;
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
@@ -65,7 +73,7 @@ use {
 
 use super::core::run_mulh;
 #[cfg(feature = "aot")]
-use crate::Rv32ImConfig;
+use crate::{Rv32ImBuilder, Rv32ImConfig};
 use crate::{
     adapters::{
         Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller, RV32_CELL_BITS,
@@ -540,6 +548,36 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>
     let tree2 = MerkleTree::from_memory(&aot_state.memory.memory, &memory_dimensions, &hasher);
     assert_eq!(tree1.root(), tree2.root(), "Memory states differ");
 
+    // Also test metered execution (interpreter and AOT) produce identical final state
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(3));
+    let (vm, _) =
+        VirtualMachine::new_with_keygen(engine, Rv32ImBuilder, config.clone()).expect("vm init");
+    let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+    let metered_ctx = vm.build_metered_ctx(&exe);
+
+    let metered_interp = vm
+        .executor()
+        .metered_interpreter_instance(&exe, &executor_idx_to_air_idx)
+        .expect("metered interpreter build must succeed");
+    let (_, metered_interp_state) = metered_interp
+        .execute_metered(vec![], metered_ctx.clone())
+        .expect("metered interpreter execution must succeed");
+
+    let metered_aot = vm
+        .executor()
+        .metered_aot_instance(&exe, &executor_idx_to_air_idx)
+        .expect("metered AOT build must succeed");
+    let (_, metered_aot_state) = metered_aot
+        .execute_metered(vec![], metered_ctx.clone())
+        .expect("metered AOT execution must succeed");
+    println!("interp_state.pc(): {}, metered_interp_state.pc(): {}", interp_state.pc(), metered_interp_state.pc());
+    assert_eq!(metered_aot_state.pc(), metered_interp_state.pc());
+    let tree_mi =
+        MerkleTree::from_memory(&metered_interp_state.memory.memory, &memory_dimensions, &hasher);
+    let tree_ma =
+        MerkleTree::from_memory(&metered_aot_state.memory.memory, &memory_dimensions, &hasher);
+    
+    assert_eq!(tree_ma.root(), tree_mi.root(), "Metered interpreter memory differs");
     (interp_state, aot_state)
 }
 
