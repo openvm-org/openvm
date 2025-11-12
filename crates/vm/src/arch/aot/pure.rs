@@ -88,7 +88,7 @@ where
 
         asm_str += &Self::pop_internal_registers();
 
-        asm_str += &Self::rv32_regs_to_xmm();
+        asm_str += &Self::initialize_xmm_regs();
 
         asm_str += &format!("   lea {REG_D}, [rip + map_pc_base]\n");
         asm_str += &format!("   movsxd {REG_PC}, [{REG_D} + {REG_PC}]\n");
