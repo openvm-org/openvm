@@ -172,75 +172,6 @@ pub trait AotExecutor<F> {
     }
 
     /*
-    Function: Sets up parameters for the extern_handler call in the appropriate registers, and then calls extern_handler
-
-    Preconditions:
-    x86 Registers: rbx = vm_exec_state_ptr, rbp = pre_compute_insns_ptr, r13 = cur_pc
-
-    Postcondition: rax = return value of AOT's extern_handler
-    */
-    fn call_extern_handler(&self, pc: u32) -> String {
-        use crate::arch::execution_mode::ExecutionCtx;
-
-        let extern_handler_ptr = format!(
-            "{:p}",
-            crate::arch::aot::extern_handler::<F, ExecutionCtx, true> as *const ()
-        );
-        let mut asm_str = String::new();
-
-        asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
-        asm_str += &format!("   mov {REG_SECOND_ARG}, {REG_INSNS_PTR}\n");
-        asm_str += &format!("    mov rdx, {pc}\n");
-        asm_str += &format!("    mov rax, {extern_handler_ptr}\n");
-        asm_str += "    call rax\n";
-        asm_str
-    }
-
-    /*
-    Function: Fallback to interpreter execution
-
-    Preconditions:
-    x86 Registers: rbx = vm_exec_state_ptr, rbp = pre_compute_insns_ptr, r13 = cur_pc
-    - push_internal_registers_str: pushes the internal registers onto the stack, as deemed necessary by `AotState`
-    - pop_internal_registers_str: pops the internal registers from the stack, as deemed necessary by `AotState`
-    - rv32_regs_to_xmm_str: reads the memory from the memory location of the RV32 registers in `GuestMemory` registers, to the appropriate XMM registers, as deemed necessary by `AotState`
-
-    Postcondition:
-    - pc (r13) is set to the return value of the extern_handler
-    - XMM x86 registers are synced with the vm_exec_state
-    - base_address of the next instruction is loaded into rcx, and x86 PC is set to the label of the next RV32 instruction, and then jumps to the next instruction
-    */
-    fn fallback_to_interpreter(
-        &self,
-        push_internal_registers_str: &str,
-        pop_internal_registers_str: &str,
-        rv32_regs_to_xmm_str: &str,
-        _inst: &Instruction<F>,
-        pc: u32,
-    ) -> String {
-        let mut asm_str = String::new();
-
-        asm_str += push_internal_registers_str;
-        asm_str += &self.call_extern_handler(pc);
-
-        asm_str += "    mov r13, rax\n"; // move the return value of the extern_handler into r13
-        asm_str += "    AND rax, 1\n"; // check if the return value is 1
-        asm_str += "    cmp rax, 1\n"; // compare the return value with 1
-        asm_str += pop_internal_registers_str; // pop the internal registers from the stack
-
-        asm_str += rv32_regs_to_xmm_str; // read the memory from the memory location of the RV32 registers in `GuestMemory`
-                                         // registers, to the appropriate XMM registers
-        asm_str += &format!("   je asm_run_end_{pc}\n");
-
-        asm_str += "    lea rdx, [rip + map_pc_base]\n"; // load the base address of the map_pc_base section
-        asm_str += "    movsxd r13, [rdx + r13]\n"; // load the offset of the next instruction (r13 is the next pc)
-        asm_str += "    add r13, rdx\n"; // add the base address and the offset
-        asm_str += "    jmp r13\n"; // jump to the next instruction (rcx is the next instruction)
-        asm_str += "\n";
-        asm_str
-    }
-
-    /*
     Function: Generate x86 assembly for the given RV32 instruction, update the Rv32 PC (r13), and transfer control to the next RV32 instruction
 
     Preconditions:
@@ -252,7 +183,7 @@ pub trait AotExecutor<F> {
     - x86's PC should be set to the label of the next RV32 instruction, and transfers control to the next instruction
     */
     fn generate_x86_asm(&self, _inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
-        Ok(String::new())
+        unimplemented!()
     }
     // TODO: add air_idx:usize parameter to the function, for AotMeteredExecutor::generate_x86_asm
 }

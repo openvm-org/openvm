@@ -342,28 +342,6 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
                         self.0.is_aot_supported(inst)
                     }
 
-                    #[inline(always)]
-                    fn call_extern_handler(&self, pc: u32) -> ::std::string::String {
-                        self.0.call_extern_handler(pc)
-                    }
-
-                    fn fallback_to_interpreter(
-                        &self,
-                        push_internal_registers_str: &str,
-                        pop_internal_registers_str: &str,
-                        rv32_regs_to_xmm_str: &str,
-                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
-                        pc: u32,
-                    ) -> ::std::string::String {
-                        self.0.fallback_to_interpreter(
-                            push_internal_registers_str,
-                            pop_internal_registers_str,
-                            rv32_regs_to_xmm_str,
-                            inst,
-                            pc,
-                        )
-                    }
-
                     fn generate_x86_asm(
                         &self,
                         inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
@@ -406,28 +384,13 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
                 });
             let (
                 is_aot_supported_arms,
-                call_extern_handler_arms,
-                fallback_to_interpreter_arms,
                 generate_x86_asm_arms,
                 where_predicates,
-            ): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(
+            ): (Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(
                 |(variant_name, field)| {
                     let field_ty = &field.ty;
                     let is_aot_supported_arm = quote! {
                         #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotExecutor<#first_ty_generic>>::is_aot_supported(x, inst)
-                    };
-                    let call_extern_handler_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotExecutor<#first_ty_generic>>::call_extern_handler(x, pc)
-                    };
-                    let fallback_to_interpreter_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotExecutor<#first_ty_generic>>::fallback_to_interpreter(
-                            x,
-                            push_internal_registers_str,
-                            pop_internal_registers_str,
-                            rv32_regs_to_xmm_str,
-                            inst,
-                            pc,
-                        )
                     };
                     let generate_x86_asm_arm = quote! {
                         #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotExecutor<#first_ty_generic>>::generate_x86_asm(
@@ -440,8 +403,6 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
                         syn::parse_quote! { #field_ty: ::openvm_circuit::arch::AotExecutor<#first_ty_generic> };
                     (
                         is_aot_supported_arm,
-                        call_extern_handler_arm,
-                        fallback_to_interpreter_arm,
                         generate_x86_asm_arm,
                         where_predicate,
                     )
@@ -460,26 +421,6 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
                     fn is_aot_supported(&self, inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>) -> bool {
                         match self {
                             #(#is_aot_supported_arms,)*
-                        }
-                    }
-
-                    #[inline(always)]
-                    fn call_extern_handler(&self, pc: u32) -> ::std::string::String {
-                        match self {
-                            #(#call_extern_handler_arms,)*
-                        }
-                    }
-
-                    fn fallback_to_interpreter(
-                        &self,
-                        push_internal_registers_str: &str,
-                        pop_internal_registers_str: &str,
-                        rv32_regs_to_xmm_str: &str,
-                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
-                        pc: u32,
-                    ) -> ::std::string::String {
-                        match self {
-                            #(#fallback_to_interpreter_arms,)*
                         }
                     }
 
