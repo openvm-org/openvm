@@ -17,7 +17,10 @@ use crate::{
         BatchConstraintInnerMessageType, SumcheckClaimBus, SumcheckClaimMessage,
         UnivariateSumcheckInputBus, UnivariateSumcheckInputMessage,
     },
-    bus::{BatchConstraintModuleBus, BatchConstraintModuleMessage, TranscriptBus},
+    bus::{
+        BatchConstraintModuleBus, BatchConstraintModuleMessage, FractionFolderInputBus,
+        FractionFolderInputMessage, TranscriptBus,
+    },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{ext_field_add, ext_field_multiply},
 };
@@ -42,8 +45,8 @@ pub struct FractionsFolderCols<T> {
 }
 
 pub struct FractionsFolderAir {
-    pub num_airs: usize,
     pub transcript_bus: TranscriptBus,
+    pub fraction_folder_input_bus: FractionFolderInputBus,
     pub univariate_sumcheck_input_bus: UnivariateSumcheckInputBus,
     pub sumcheck_bus: SumcheckClaimBus,
     pub mu_bus: BatchConstraintConductorBus,
@@ -104,11 +107,6 @@ where
 
         let is_first_and_valid = local.is_first * local.is_valid;
 
-        // Air index starts at num_airs - 1
-        builder.when(local.is_first).assert_eq(
-            local.air_idx,
-            AB::Expr::from_canonical_usize(self.num_airs - 1),
-        );
         // Air index decrements by 1
         builder
             .when(is_transition.clone())
@@ -180,6 +178,16 @@ where
         ///////////////////////////////////////////////////////////////////////
         // Interactions
         ///////////////////////////////////////////////////////////////////////
+
+        // Air index starts at num_present_airs - 1
+        self.fraction_folder_input_bus.receive(
+            builder,
+            local.proof_idx,
+            FractionFolderInputMessage {
+                num_present_airs: local.air_idx + AB::Expr::ONE,
+            },
+            local.is_valid * local.is_first,
+        );
 
         // Sample mu
         self.transcript_bus.sample_ext(

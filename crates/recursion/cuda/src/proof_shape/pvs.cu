@@ -16,8 +16,6 @@ template <typename T> struct PublicValuesCols {
     T pv_idx;
     T is_first_in_proof;
     T is_first_in_air;
-    T is_same_proof;
-    T is_same_air;
     T tidx;
     T value;
 };
@@ -38,22 +36,12 @@ __global__ void public_values_tracegen(
         PublicValueData pv_data = pvs_data[proof_idx][record_idx];
         size_t starting_tidx = pvs_tidx[proof_idx][pv_data.air_idx];
 
-        bool is_same_air = pv_data.pv_idx + 1 < pv_data.air_num_pvs;
-        bool is_same_proof = is_same_air || (pv_data.air_idx + 1 < pv_data.num_airs);
-
         COL_WRITE_VALUE(row, PublicValuesCols, is_valid, Fp::one());
         COL_WRITE_VALUE(row, PublicValuesCols, proof_idx, proof_idx);
         COL_WRITE_VALUE(row, PublicValuesCols, air_idx, pv_data.air_idx);
         COL_WRITE_VALUE(row, PublicValuesCols, pv_idx, pv_data.pv_idx);
-        COL_WRITE_VALUE(
-            row,
-            PublicValuesCols,
-            is_first_in_proof,
-            pv_data.pv_idx == 0 && pv_data.air_idx == 0
-        );
+        COL_WRITE_VALUE(row, PublicValuesCols, is_first_in_proof, record_idx == 0);
         COL_WRITE_VALUE(row, PublicValuesCols, is_first_in_air, pv_data.pv_idx == 0);
-        COL_WRITE_VALUE(row, PublicValuesCols, is_same_proof, is_same_proof);
-        COL_WRITE_VALUE(row, PublicValuesCols, is_same_air, is_same_air);
         COL_WRITE_VALUE(row, PublicValuesCols, tidx, starting_tidx + pv_data.pv_idx);
         COL_WRITE_VALUE(row, PublicValuesCols, value, pv_data.value);
     } else {

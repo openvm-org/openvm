@@ -17,18 +17,15 @@ use openvm_stark_backend::{
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{Field, FieldAlgebra, PrimeField32};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{
-    DIGEST_SIZE, F,
-    keygen::types::MultiStarkVerifyingKeyV2,
-    proof::{Proof, TraceVData},
-};
+use stark_backend_v2::{DIGEST_SIZE, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
         AirShapeBus, AirShapeBusMessage, AirShapeProperty, CommitmentsBus, CommitmentsBusMessage,
-        ExpressionClaimNMaxBus, ExpressionClaimNMaxMessage, GkrModuleBus, GkrModuleMessage,
-        HyperdimBus, HyperdimBusMessage, LiftedHeightsBus, LiftedHeightsBusMessage, TranscriptBus,
+        ExpressionClaimNMaxBus, ExpressionClaimNMaxMessage, FractionFolderInputBus,
+        FractionFolderInputMessage, GkrModuleBus, GkrModuleMessage, HyperdimBus,
+        HyperdimBusMessage, LiftedHeightsBus, LiftedHeightsBusMessage, TranscriptBus,
         TranscriptBusMessage,
     },
     primitives::{
@@ -71,10 +68,14 @@ pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
     // Columns that may be read from the transcript. Note that cached_commits is also read
     // from the transcript.
     pub is_present: F,
+
     /// Will be constrained to be `2^log_height` when `is_present`.
     ///
     /// Has a special use on summary row (when `is_last`).
     pub height: F,
+
+    // Number of present AIRs so far
+    pub num_present: F,
 
     // The total number of interactions over all traces needs to fit in a single field element,
     // so we assume that it only requires INTERACTIONS_LIMBS (4) limbs to store.
@@ -112,22 +113,21 @@ pub struct ProofShapeVarColsMut<'a, F> {
     pub cached_commits: &'a mut [[F; DIGEST_SIZE]], // [[F; DIGEST_SIZE]; MAX_CACHED]
 }
 
-pub(crate) fn compute_air_shape_lookup_counts(
-    child_vk: &MultiStarkVerifyingKeyV2,
-    sorted_trace_vdata: &[(usize, TraceVData)],
-    l_skip: usize,
-    n_max: usize,
-) -> Vec<usize> {
-    let mut counts = vec![0usize; l_skip + n_max + 1];
-    for (air_idx, vdata) in sorted_trace_vdata {
-        let vk = &child_vk.inner.per_air[*air_idx];
-        let dag = &vk.symbolic_constraints;
-        counts[vdata.log_height] += dag.constraints.nodes.len() + vk.unused_variables.len();
-        for interaction in &dag.interactions {
-            counts[vdata.log_height] += interaction.message.len() + 1;
-        }
-    }
-    counts
+pub(crate) fn compute_air_shape_lookup_counts(child_vk: &MultiStarkVerifyingKeyV2) -> Vec<usize> {
+    child_vk
+        .inner
+        .per_air
+        .iter()
+        .map(|avk| {
+            let dag = &avk.symbolic_constraints;
+            dag.constraints.nodes.len()
+                + avk.unused_variables.len()
+                + dag
+                    .interactions
+                    .iter()
+                    .fold(0, |acc, interaction| acc + interaction.message.len() + 1)
+        })
+        .collect::<Vec<_>>()
 }
 
 #[derive(derive_new::new)]
@@ -140,6 +140,7 @@ pub(in crate::proof_shape) struct ProofShapeChip<const NUM_LIMBS: usize, const L
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, LIMB_BITS> {
+    #[tracing::instrument(name = "generate_trace(ProofShapeAir)", skip_all)]
     pub(in crate::proof_shape) fn generate_trace(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -166,13 +167,9 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
             let mut sorted_idx = 0usize;
             let mut total_interactions = 0usize;
             let mut cidx = 1usize;
+            let mut num_present = 0usize;
 
-            let bc_air_shape_lookups = compute_air_shape_lookup_counts(
-                child_vk,
-                &preflight.proof_shape.sorted_trace_vdata,
-                l_skip,
-                preflight.proof_shape.n_max,
-            );
+            let bc_air_shape_lookups = compute_air_shape_lookup_counts(child_vk);
 
             // Present AIRs
             for (idx, vdata) in &preflight.proof_shape.sorted_trace_vdata {
@@ -181,6 +178,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 let log_height = vdata.log_height;
                 let height = 1 << log_height;
                 let n = log_height as isize - l_skip as isize;
+                num_present += 1;
 
                 cols.proof_idx = F::from_canonical_usize(proof_idx);
                 cols.is_valid = F::ONE;
@@ -200,6 +198,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
 
                 cols.is_present = F::ONE;
                 cols.height = F::from_canonical_usize(height);
+                cols.num_present = F::from_canonical_usize(num_present);
 
                 let lifted_height = height.max(1 << l_skip);
                 let num_interactions_per_row = child_vk.inner.per_air[*idx].num_interactions();
@@ -214,7 +213,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 total_interactions += num_interactions;
 
                 cols.n_max = F::from_canonical_usize(preflight.proof_shape.n_max);
-                cols.num_air_id_lookups = F::from_canonical_usize(bc_air_shape_lookups[log_height]);
+                cols.num_air_id_lookups = F::from_canonical_usize(bc_air_shape_lookups[*idx]);
 
                 let vcols: &mut ProofShapeVarColsMut<'_, F> = &mut borrow_var_cols_mut(
                     &mut chunk[cols_width..],
@@ -281,6 +280,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
             let total_interactions_f = decompose_f::<F, NUM_LIMBS, LIMB_BITS>(total_interactions);
             let total_interactions_usize =
                 decompose_usize::<NUM_LIMBS, LIMB_BITS>(total_interactions);
+            let num_present = F::from_canonical_usize(num_present);
 
             // Non-present AIRs
             for idx in (0..num_airs).filter(|idx| proof.trace_vdata[*idx].is_none()) {
@@ -294,6 +294,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 cols.idx = F::from_canonical_usize(idx);
                 cols.sorted_idx = F::from_canonical_usize(sorted_idx);
                 sorted_idx += 1;
+
+                cols.num_present = num_present;
 
                 cols.starting_tidx =
                     F::from_canonical_usize(preflight.proof_shape.starting_tidx[idx]);
@@ -341,6 +343,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 cols.proof_idx = F::from_canonical_usize(proof_idx);
                 cols.is_last = F::ONE;
                 cols.starting_tidx = F::from_canonical_usize(preflight.proof_shape.post_tidx);
+                cols.num_present = num_present;
 
                 let n_logup = preflight.proof_shape.n_logup;
                 debug_assert_eq!(
@@ -448,6 +451,7 @@ pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub gkr_module_bus: GkrModuleBus,
     pub air_shape_bus: AirShapeBus,
     pub expression_claim_n_max_bus: ExpressionClaimNMaxBus,
+    pub fraction_folder_input_bus: FractionFolderInputBus,
     pub hyperdim_bus: HyperdimBus,
     pub lifted_heights_bus: LiftedHeightsBus,
     pub commitments_bus: CommitmentsBus,
@@ -517,6 +521,14 @@ where
 
         builder.assert_bool(local.is_present);
         builder.when(local.is_present).assert_one(local.is_valid);
+
+        builder
+            .when(local.is_first)
+            .assert_eq(local.is_present, local.num_present);
+        builder.when(local.is_valid).assert_eq(
+            local.num_present + next.is_present * next.is_valid,
+            next.num_present,
+        );
 
         ///////////////////////////////////////////////////////////////////////////////////////////
         // PERMUTATION AND SORTING
@@ -808,6 +820,7 @@ where
             },
             local.is_present,
         );
+
         self.hyperdim_bus.send(
             builder,
             local.proof_idx,
@@ -816,18 +829,7 @@ where
                 n_abs: n_abs.clone(),
                 n_sign_bit: local.n_sign_bit.into(),
             },
-            local.is_present * local.num_air_id_lookups,
-        );
-        // For expression claim
-        self.hyperdim_bus.send(
-            builder,
-            local.proof_idx,
-            HyperdimBusMessage {
-                sort_idx: local.sorted_idx.into(),
-                n_abs: n_abs.clone(),
-                n_sign_bit: local.n_sign_bit.into(),
-            },
-            local.is_present,
+            local.is_present * (local.num_air_id_lookups + AB::F::ONE),
         );
 
         ///////////////////////////////////////////////////////////////////////////////////////////
@@ -1163,6 +1165,16 @@ where
             local.proof_idx,
             ExpressionClaimNMaxMessage {
                 n_max: local.n_max.into(),
+            },
+            local.is_last,
+        );
+
+        // Send count of present airs to fraction folder air
+        self.fraction_folder_input_bus.send(
+            builder,
+            local.proof_idx,
+            FractionFolderInputMessage {
+                num_present_airs: local.num_present,
             },
             local.is_last,
         );

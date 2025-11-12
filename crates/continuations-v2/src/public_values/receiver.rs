@@ -1,25 +1,23 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    sync::Arc,
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    prover::types::AirProofRawInput,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::FieldAlgebra;
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{F, proof::Proof};
+use recursion_circuit::bus::{PublicValuesBus, PublicValuesBusMessage};
+use stark_backend_v2::{
+    F,
+    proof::Proof,
+    prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
+};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use crate::{
-    bus::{PublicValuesBus, PublicValuesBusMessage},
-    public_values::{
-        app::*,
-        verifier::{CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID},
-    },
+use crate::public_values::{
+    app::*,
+    verifier::{CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID},
 };
 
 #[repr(C)]
@@ -30,7 +28,10 @@ pub struct UserPvsReceiverCols<F> {
     pub pv_bus_msg: PublicValuesBusMessage<F>,
 }
 
-pub fn generate_proving_input(proofs: &[Proof], app_child: bool) -> AirProofRawInput<F> {
+pub fn generate_proving_ctx(
+    proofs: &[Proof],
+    app_child: bool,
+) -> AirProvingContextV2<CpuBackendV2> {
     const APP_RESERVED_IDX: [usize; 3] = [PROGRAM_AIR_ID, CONNECTOR_AIR_ID, MERKLE_AIR_ID];
     const VERIFIER_RESERVED_IDX: [usize; 2] = [VERIFIER_PVS_AIR_ID, CONSTRAINT_EVAL_AIR_ID];
 
@@ -40,7 +41,6 @@ pub fn generate_proving_input(proofs: &[Proof], app_child: bool) -> AirProofRawI
         VERIFIER_RESERVED_IDX.as_slice()
     };
 
-    debug_assert!(proofs.len() > 1);
     let num_pvs = proofs[0]
         .public_values
         .iter()
@@ -77,11 +77,9 @@ pub fn generate_proving_input(proofs: &[Proof], app_child: bool) -> AirProofRawI
         }
     }
 
-    AirProofRawInput {
-        cached_mains: vec![],
-        common_main: Some(Arc::new(RowMajorMatrix::new(trace, width))),
-        public_values: vec![],
-    }
+    AirProvingContextV2::simple_no_pis(ColMajorMatrix::from_row_major(&RowMajorMatrix::new(
+        trace, width,
+    )))
 }
 
 pub struct UserPvsReceiverAir {

@@ -52,6 +52,7 @@ template <typename T, size_t MAX_CACHED> struct ProofShapeCols {
 
     T is_present;
     T height;
+    T num_present;
 
     T lifted_height_limbs[NUM_LIMBS];
     T num_interactions_limbs[NUM_LIMBS];
@@ -341,6 +342,9 @@ __global__ void proof_shape_tracegen(
                 starting_tidx,
                 per_row_tidx[proof_idx][record_idx]
             );
+            COL_WRITE_VALUE(
+                row, typename Cols<MAX_CACHED>::template Type, num_present, proof_data.num_present
+            );
             fill_summary_row<MAX_CACHED>(
                 row,
                 proof_data.final_total_interactions,
@@ -393,6 +397,9 @@ __global__ void proof_shape_tracegen(
             }
 
             if (record_idx < proof_data.num_present) {
+                COL_WRITE_VALUE(
+                    row, typename Cols<MAX_CACHED>::template Type, num_present, record_idx + 1
+                );
                 fill_present_row<MAX_CACHED>(
                     row,
                     air_data[trace_data.air_idx],
@@ -405,6 +412,12 @@ __global__ void proof_shape_tracegen(
                     pow_checker
                 );
             } else {
+                COL_WRITE_VALUE(
+                    row,
+                    typename Cols<MAX_CACHED>::template Type,
+                    num_present,
+                    proof_data.num_present
+                );
                 fill_non_present_row<MAX_CACHED>(
                     row,
                     proof_data.final_cidx,

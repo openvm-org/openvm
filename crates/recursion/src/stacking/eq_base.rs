@@ -91,6 +91,7 @@ pub struct EqBaseCols<F> {
 pub struct EqBaseTraceGenerator;
 
 impl EqBaseTraceGenerator {
+    #[tracing::instrument(name = "generate_trace(EqBaseAir)", skip_all)]
     pub fn generate_trace(
         vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],

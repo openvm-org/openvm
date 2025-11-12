@@ -262,6 +262,7 @@ fn compute_cum_sum<T>(values: &[T], f: impl Fn(&T) -> usize) -> Vec<usize> {
         .collect()
 }
 
+#[tracing::instrument(name = "generate_trace(MerkleVerifyAir)", skip_all)]
 pub fn generate_trace(
     mvk: &MultiStarkVerifyingKeyV2,
     proofs: &[Proof],

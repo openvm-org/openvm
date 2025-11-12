@@ -49,15 +49,28 @@ struct InteractionsFoldingCols<T> {
     has_interactions: T,
 
     is_first_in_air: T,
+    /// It's true for the num row, which doesn't need to be beta folded.
     is_first_in_message: T, // aka "is_mult"
+    // the second in message is the first denom, and it's cur_sum is the folded denom
+    is_second_in_message: T,
+    is_bus_index: T,
 
     loop_aux: NestedForLoopAuxCols<T, 2>,
 
     idx_in_message: T,
     value: [T; D_EF],
+    /// Current sum for doing beta folding. This is the value for one interaction.
+    /// When local.is_first_in_message, next.cur_sum should be the folded denom.
+    /// (because local row is for the num row, which doesn't need to be beta folded)
+    /// It doesn't multiply with eq_3b yet.
     cur_sum: [T; D_EF],
     beta: [T; D_EF],
     eq_3b: [T; D_EF],
+
+    /// The summed num and denom for all interactions.
+    /// It's summed over all the interactions in the AIR: cur_sum * eq_3b when is_first_in_message
+    final_acc_num: [T; D_EF],
+    final_acc_denom: [T; D_EF],
 }
 
 pub struct InteractionsFoldingAir {
@@ -171,6 +184,45 @@ where
         // TODO: receive something from the symbolic expr air to check that it's indeed the bus
         // index TODO: otherwise receive the value by node_idx
 
+        // final_acc_num only changes when it's first in message
+        assert_array_eq(
+            &mut builder
+                .when(not(local.is_first_in_message) * local.is_valid * not(next.is_first_in_air)),
+            local.final_acc_num,
+            next.final_acc_num,
+        );
+        assert_array_eq(
+            &mut builder.when(local.is_first_in_message * local.is_valid),
+            local.final_acc_num,
+            ext_field_add(
+                next.final_acc_num,
+                ext_field_multiply(local.cur_sum, local.eq_3b),
+            ),
+        );
+        // final_acc_denom only changes when it's second in message
+        assert_array_eq(
+            &mut builder
+                .when(not(local.is_second_in_message) * local.is_valid * not(next.is_first_in_air)),
+            local.final_acc_denom,
+            next.final_acc_denom,
+        );
+        assert_array_eq(
+            &mut builder.when(local.is_second_in_message * local.is_valid),
+            local.final_acc_denom,
+            ext_field_add(
+                next.final_acc_denom,
+                ext_field_multiply(local.cur_sum, local.eq_3b),
+            ),
+        );
+        // Constraint is_second_in_message
+        builder.assert_bool(local.is_second_in_message);
+        builder
+            .when(local.is_first_in_message * local.has_interactions)
+            .assert_one(next.is_second_in_message);
+        builder
+            .when(next.is_second_in_message)
+            .assert_one(local.is_first_in_message);
+
         // ======================== beta and cur sum consistency ============================
         assert_array_eq(&mut builder.when(not(next.is_first)), local.beta, next.beta);
         assert_array_eq(
@@ -194,9 +246,10 @@ where
             ExpressionClaimMessage {
                 is_interaction: AB::Expr::ONE,
                 idx: local.sort_idx * AB::Expr::TWO,
-                value: ext_field_multiply(local.cur_sum, local.eq_3b),
+                // value: ext_field_multiply(local.cur_sum, local.eq_3b),
+                value: local.final_acc_num.map(Into::into),
             },
-            local.is_first_in_message * local.is_valid,
+            local.is_first_in_air * local.is_valid,
         );
         self.expression_claim_bus.send(
             builder,
@@ -204,9 +257,10 @@ where
             ExpressionClaimMessage {
                 is_interaction: AB::Expr::ONE,
                 idx: local.sort_idx * AB::Expr::TWO + AB::Expr::ONE,
-                value: ext_field_multiply(next.cur_sum, next.eq_3b),
+                // value: ext_field_multiply(next.cur_sum, next.eq_3b),
+                value: next.final_acc_denom.map(Into::into),
             },
-            local.is_first_in_message * local.is_valid,
+            local.is_first_in_air * local.is_valid,
         );
         self.interaction_bus.receive(
             builder,
@@ -215,10 +269,12 @@ where
                 air_idx: local.air_idx.into(),
                 interaction_idx: local.interaction_idx.into(),
                 is_mult: AB::Expr::ZERO,
-                idx_in_message: next.idx_in_message.into(),
-                value: next.value.map(Into::into),
+                idx_in_message: local.idx_in_message.into(),
+                value: local.value.map(Into::into),
             },
-            local.is_first_in_message * local.has_interactions, // TODO(AG) only first in message? wtf
+            local.has_interactions
+                * (AB::Expr::ONE - local.is_first_in_message)
+                * (AB::Expr::ONE - local.is_bus_index),
         );
         self.interaction_bus.receive(
             builder,
@@ -332,6 +388,8 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_blob(
                     is_bus_index: false,
                 });
             } else {
+                // `cur_interactions_evals` in rust verifier are the list of evaluated node_claims
+                // After multiplying with eq_3b and sum together we get the `num` and `denom` in rust verifier.
                 for (interaction_idx, inter) in inters.iter().enumerate() {
                     let eq_3b = eq_3bs[cur_eq3b_idx].eq_mle(
                         &preflight.batch_constraint.xi,
@@ -392,6 +450,7 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_blob(
                     denom_sum += cur_sum * eq_3b;
                 }
             }
+            // Finally, this should be `interactions_evals`, minus norm_factor and eq_sharp_ns.
             folded.push((n, num_sum));
             folded.push((n, denom_sum));
         }
@@ -404,6 +463,7 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_blob(
     }
 }
 
+#[tracing::instrument(name = "generate_trace(InteractionsFoldingAir)", skip_all)]
 pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
     vk: &MultiStarkVerifyingKeyV2,
     expr_blob: &BatchConstraintBlobCpu,
@@ -426,7 +486,9 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
 
         let node_claims = &expr_blob.expr_evals[pidx];
 
+        let mut is_first_in_message_indices = vec![];
         let mut cur_eq3b_idx = 0;
+        let mut was_first_interaction_in_message = false;
         trace[cur_height * width..(cur_height + records.len()) * width]
             .chunks_exact_mut(width)
             .enumerate()
@@ -444,6 +506,9 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
                 cols.has_interactions = F::from_bool(record.has_interactions);
                 cols.is_first_in_air = F::from_bool(record.is_first_in_air);
                 cols.is_first_in_message = F::from_bool(record.is_mult || !record.has_interactions);
+                cols.is_second_in_message = F::from_bool(was_first_interaction_in_message);
+                was_first_interaction_in_message = record.is_mult;
+                cols.is_bus_index = F::from_bool(record.is_bus_index);
                 cols.idx_in_message = F::from_canonical_usize(record.idx_in_message);
                 cols.loop_aux.is_transition[0] = F::ONE;
                 cols.loop_aux.is_transition[1] = F::from_bool(!record.is_last_in_air);
@@ -469,22 +534,65 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
                             .as_base_slice(),
                     );
                 }
+
+                if cols.is_first_in_message == F::ONE {
+                    is_first_in_message_indices.push(i);
+                }
             });
 
-        // Setting `cur_sum`
+        // Setting `cur_sum` and final acc
         let mut cur_sum = EF::ZERO;
         let beta = EF::from_base_slice(beta_slice);
+        let mut cur_acc_num = EF::ZERO;
+        let mut cur_acc_denom = EF::ZERO;
         trace[cur_height * width..(cur_height + records.len()) * width]
             .chunks_exact_mut(width)
+            .enumerate()
             .rev()
-            .for_each(|chunk| {
+            .for_each(|(i, chunk)| {
                 let cols: &mut InteractionsFoldingCols<_> = chunk.borrow_mut();
+                // Handling cur_sum
                 if cols.is_first_in_message == F::ONE {
                     cols.cur_sum.copy_from_slice(&cols.value);
                     cur_sum = EF::ZERO;
                 } else {
                     cur_sum = cur_sum * beta + EF::from_base_slice(&cols.value);
                     cols.cur_sum.copy_from_slice(cur_sum.as_base_slice());
+                }
+
+                // Adding to the final acc
+                if cols.is_first_in_message == F::ONE {
+                    // Case 1: first in message, only accumulate the num
+                    cur_acc_num +=
+                        EF::from_base_slice(&cols.cur_sum) * EF::from_base_slice(&cols.eq_3b);
+                    cols.final_acc_num
+                        .copy_from_slice(cur_acc_num.as_base_slice());
+
+                    // denom remains the same
+                    cols.final_acc_denom
+                        .copy_from_slice(cur_acc_denom.as_base_slice());
+                } else if is_first_in_message_indices.contains(&(i - 1)) {
+                    // Case 2: second in message, accumulate the denom
+                    cur_acc_denom +=
+                        EF::from_base_slice(&cols.cur_sum) * EF::from_base_slice(&cols.eq_3b);
+                    cols.final_acc_denom
+                        .copy_from_slice(cur_acc_denom.as_base_slice());
+
+                    // num remains the same
+                    cols.final_acc_num
+                        .copy_from_slice(cur_acc_num.as_base_slice());
+                } else {
+                    // Case 3: others, both acc remain the same
+                    cols.final_acc_num
+                        .copy_from_slice(cur_acc_num.as_base_slice());
+                    cols.final_acc_denom
+                        .copy_from_slice(cur_acc_denom.as_base_slice());
+                }
+
+                // Reset per AIR
+                if cols.is_first_in_air == F::ONE {
+                    cur_acc_num = EF::ZERO;
+                    cur_acc_denom = EF::ZERO;
                 }
             });
 

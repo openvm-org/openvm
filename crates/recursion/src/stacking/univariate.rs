@@ -63,6 +63,7 @@ pub struct UnivariateRoundCols<F> {
 pub struct UnivariateRoundTraceGenerator;
 
 impl UnivariateRoundTraceGenerator {
+    #[tracing::instrument(name = "generate_trace(UnivariateRoundAir)", skip_all)]
     pub fn generate_trace(
         vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],

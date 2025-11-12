@@ -39,6 +39,7 @@ impl ExpBitsLenCpuTraceGenerator {
         self.requests.lock().unwrap().push(request);
     }
 
+    #[tracing::instrument(name = "generate_trace(ExpBitsLenAir)", skip_all)]
     pub fn generate_trace_row_major(&self) -> RowMajorMatrix<F> {
         let requests = self.requests.lock().unwrap();
         let width = ExpBitsLenCols::<F>::width();

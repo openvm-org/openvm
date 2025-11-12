@@ -31,6 +31,7 @@ fn generate_expression_claim_blob(
     ExpressionClaimBlob { claims }
 }
 
+#[tracing::instrument(name = "generate_trace(ExpressionClaimAir)", skip_all)]
 pub(in crate::batch_constraint) fn generate_trace(
     _vk: &MultiStarkVerifyingKeyV2,
     cf_blob: &ConstraintsFoldingBlob,

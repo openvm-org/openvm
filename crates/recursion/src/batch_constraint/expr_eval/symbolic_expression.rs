@@ -340,6 +340,7 @@ where
 }
 
 /// Returns the common main trace.
+#[tracing::instrument(name = "generate_trace(SymbolicExpressionAir)", skip_all)]
 pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
     child_vk: &MultiStarkVerifyingKeyV2,
     proofs: &[Proof],
@@ -393,15 +394,15 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
 
             // TODO: don't do any pushes at all for absent traces
             if expr_evals.is_empty() {
-                for _ in 0..constraints.nodes.len() {
-                    records.push(None);
-                }
-                for interaction in &vk.symbolic_constraints.interactions {
-                    records.push(None);
-                    for _ in 0..interaction.message.len() {
-                        records.push(None);
-                    }
-                }
+                let n = constraints.nodes.len()
+                    + vk.symbolic_constraints
+                        .interactions
+                        .iter()
+                        .map(|i| 1 + i.message.len())
+                        .sum::<usize>()
+                    + vk.unused_variables.len();
+
+                records.resize_with(records.len() + n, || None);
                 continue;
             }
 
@@ -453,17 +454,7 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
                                 .as_base_slice(),
                         );
                     }
-                    SymbolicExpressionNode::IsLastRow => {
-                        record.args[..D_EF].copy_from_slice(
-                            is_last_uni_by_log_height[min(log_height, params.l_skip)]
-                                .as_base_slice(),
-                        );
-                        record.args[D_EF..2 * D_EF].copy_from_slice(
-                            is_last_mle_by_n[log_height.saturating_sub(params.l_skip)]
-                                .as_base_slice(),
-                        );
-                    }
-                    SymbolicExpressionNode::IsTransition => {
+                    SymbolicExpressionNode::IsLastRow | SymbolicExpressionNode::IsTransition => {
                         record.args[..D_EF].copy_from_slice(
                             is_last_uni_by_log_height[min(log_height, params.l_skip)]
                                 .as_base_slice(),
@@ -636,6 +627,7 @@ enum NodeKind {
 }
 
 /// Returns the cached trace
+#[tracing::instrument(name = "generate_cached_trace(SymbolicExpressionAir)", skip_all)]
 pub(crate) fn generate_symbolic_expr_cached_trace(
     child_vk: &MultiStarkVerifyingKeyV2,
 ) -> RowMajorMatrix<F> {

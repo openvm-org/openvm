@@ -6,6 +6,7 @@ use openvm_circuit_primitives::encoder::Encoder;
 use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::FieldAlgebra;
+#[cfg(not(debug_assertions))]
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
     Digest, F,
@@ -229,6 +230,7 @@ impl AirModule for ProofShapeModule {
             permutation_bus: self.permutation_bus,
             starting_tidx_bus: self.starting_tidx_bus,
             num_pvs_bus: self.num_pvs_bus,
+            fraction_folder_input_bus: self.bus_inventory.fraction_folder_input_bus,
             expression_claim_n_max_bus: self.bus_inventory.expression_claim_n_max_bus,
             gkr_module_bus: self.bus_inventory.gkr_module_bus,
             air_shape_bus: self.bus_inventory.air_shape_bus,
@@ -259,6 +261,7 @@ struct ProofShapeBlob;
 impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for ProofShapeModule {
     type ModuleSpecificCtx = ();
 
+    #[tracing::instrument(name = "generate_proving_ctxs(ProofShapeModule)", skip_all)]
     fn generate_proving_ctxs(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -275,14 +278,17 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for ProofShapeModule {
         );
         let blob = ProofShapeBlob;
         let mut ctxs = Vec::with_capacity(3);
+        let chips = [
+            ProofShapeModuleChip::ProofShape(proof_shape),
+            ProofShapeModuleChip::PublicValues,
+        ];
+        #[cfg(debug_assertions)]
+        let iter = chips.iter();
+        #[cfg(not(debug_assertions))]
+        let iter = chips.par_iter();
         ctxs.extend(
-            [
-                ProofShapeModuleChip::ProofShape(proof_shape),
-                ProofShapeModuleChip::PublicValues,
-            ]
-            .par_iter()
-            .map(|chip| chip.generate_trace(child_vk, proofs, preflights, &blob))
-            .collect::<Vec<_>>(),
+            iter.map(|chip| chip.generate_trace(child_vk, proofs, preflights, &blob))
+                .collect::<Vec<_>>(),
         );
         ctxs.push(ColMajorMatrix::from_row_major(
             &self.range_checker.generate_trace_row_major(),
