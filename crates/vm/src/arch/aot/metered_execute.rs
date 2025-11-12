@@ -40,7 +40,7 @@ where
     where
         E: MeteredExecutor<F>,
     {
-        // do we have access to the system config here?
+        let start = std::time::Instant::now();
         let asm_source = Self::create_metered_asm(exe, inventory)?;
         let lib = asm_to_lib(&asm_source)?;
 
@@ -57,7 +57,10 @@ where
         )?;
 
         let init_memory = exe.init_memory.clone();
-
+        tracing::trace!(
+            "Time taken to initialize AotInstance metered execution: {}ms",
+            start.elapsed().as_millis()
+        );
         Ok(Self {
             system_config: inventory.config().clone(),
             pre_compute_buf,
