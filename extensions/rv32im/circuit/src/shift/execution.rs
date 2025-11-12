@@ -175,7 +175,7 @@ where
             let (reg_b, delta_str_b) = &xmm_to_gpr((b / 4) as u8, REG_B_W, false);
             // after this force write, we set [a:4]_1 <- [b:4]_1
             asm_str += delta_str_b;
-            
+
             let (reg_c, delta_str_c) = &xmm_to_gpr((c / 4) as u8, REG_C_W, false);
             asm_str += delta_str_c;
 
