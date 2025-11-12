@@ -1,0 +1,721 @@
+
+running 18 tests
+test tests::test_heap_overflow ... ok
+[1;32mINFO    [0m ｉ [info]: Max constraint (excluding logup constraints) degree across all AIRs: 3
+[1;32mINFO    [0m ｉ [info]: Max constraint (excluding logup constraints) degree across all AIRs: 3
+[1;32mINFO    [0m ｉ [info]: ProgramAir           | Quotient Deg = 1  | Prep Cols = 0  | Main Cols = [9, 1]   | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VmConnectorAir       | Quotient Deg = 2  | Prep Cols = 1  | Main Cols = [5]      | Perm Cols = [16] |   11 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: PersistentBoundaryAir<8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [12] |    7 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: MemoryMerkleAir<8>   | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [16] |   39 Constraints |   4 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<2>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [11]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<4>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [13]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<8>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [17]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<16> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [25]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<32> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: Rv32HintStoreAir     | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [44] |   28 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [28] |   14 Constraints |  12 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [28]     | Perm Cols = [36] |   20 Constraints |  16 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [18]     | Perm Cols = [28] |   18 Constraints |  10 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [32] |   35 Constraints |  13 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [26]     | Perm Cols = [28] |   20 Constraints |  11 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   33 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [52] |   40 Constraints |  17 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [53]     | Perm Cols = [52] |   91 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [37]     | Perm Cols = [40] |   40 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   37 Constraints |  20 Interactions
+[1;32mINFO    [0m ｉ [info]: BitwiseOperationLookupAir<8> | Quotient Deg = 2  | Prep Cols = 3  | Main Cols = [2]      | Perm Cols = [8]  |    4 Constraints |   2 Interactions
+[1;32mINFO    [0m ｉ [info]: PhantomAir           | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [6]      | Perm Cols = [12] |    5 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: Poseidon2PeripheryAir<BabyBearParameters>, 1> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [300]    | Perm Cols = [8]  |  286 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VariableRangeCheckerAir | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: pre-vkey: 51352 bytes
+[1;32mINFO    [0m ｉ [info]: ProgramAir           | Quotient Deg = 1  | Prep Cols = 0  | Main Cols = [9, 1]   | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VmConnectorAir       | Quotient Deg = 2  | Prep Cols = 1  | Main Cols = [5]      | Perm Cols = [16] |   11 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: PersistentBoundaryAir<8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [12] |    7 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: MemoryMerkleAir<8>   | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [16] |   39 Constraints |   4 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<2>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [11]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<4>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [13]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<8>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [17]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<16> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [25]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<32> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [59]     | Perm Cols = [72] |   84 Constraints |  25 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [39]     | Perm Cols = [72] |   31 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [31]     | Perm Cols = [52] |   19 Constraints |  19 Interactions
+[1;32mINFO    [0m ｉ [info]: RangeTupleCheckerAir<2> | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: Rv32HintStoreAir     | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [44] |   28 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [28] |   14 Constraints |  12 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [28]     | Perm Cols = [36] |   20 Constraints |  16 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [18]     | Perm Cols = [28] |   18 Constraints |  10 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [32] |   35 Constraints |  13 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [26]     | Perm Cols = [28] |   20 Constraints |  11 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   33 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [52] |   40 Constraints |  17 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [53]     | Perm Cols = [52] |   91 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [37]     | Perm Cols = [40] |   40 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   37 Constraints |  20 Interactions
+[1;32mINFO    [0m ｉ [info]: BitwiseOperationLookupAir<8> | Quotient Deg = 2  | Prep Cols = 3  | Main Cols = [2]      | Perm Cols = [8]  |    4 Constraints |   2 Interactions
+[1;32mINFO    [0m ｉ [info]: PhantomAir           | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [6]      | Perm Cols = [12] |    5 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: Poseidon2PeripheryAir<BabyBearParameters>, 1> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [300]    | Perm Cols = [8]  |  286 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VariableRangeCheckerAir | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: pre-vkey: 61678 bytes
+[1;32mINFO    [0m execute_e1 [ 16.4µs | 100.00% ]
+[1;32mINFO    [0m execute_e1 [ 87.7µs | 100.00% ]
+[1;32mINFO    [0m ｉ [info]: Max constraint (excluding logup constraints) degree across all AIRs: 3
+[1;32mINFO    [0m ｉ [info]: ProgramAir           | Quotient Deg = 1  | Prep Cols = 0  | Main Cols = [9, 1]   | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VmConnectorAir       | Quotient Deg = 2  | Prep Cols = 1  | Main Cols = [5]      | Perm Cols = [16] |   11 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: PersistentBoundaryAir<8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [12] |    7 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: MemoryMerkleAir<8>   | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [16] |   39 Constraints |   4 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<2>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [11]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<4>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [13]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<8>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [17]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<16> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [25]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<32> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [59]     | Perm Cols = [72] |   84 Constraints |  25 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [39]     | Perm Cols = [72] |   31 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [31]     | Perm Cols = [52] |   19 Constraints |  19 Interactions
+[1;32mINFO    [0m ｉ [info]: RangeTupleCheckerAir<2> | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: Rv32HintStoreAir     | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [44] |   28 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [28] |   14 Constraints |  12 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [28]     | Perm Cols = [36] |   20 Constraints |  16 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [18]     | Perm Cols = [28] |   18 Constraints |  10 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [32] |   35 Constraints |  13 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [26]     | Perm Cols = [28] |   20 Constraints |  11 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   33 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [52] |   40 Constraints |  17 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [53]     | Perm Cols = [52] |   91 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [37]     | Perm Cols = [40] |   40 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   37 Constraints |  20 Interactions
+[1;32mINFO    [0m ｉ [info]: BitwiseOperationLookupAir<8> | Quotient Deg = 2  | Prep Cols = 3  | Main Cols = [2]      | Perm Cols = [8]  |    4 Constraints |   2 Interactions
+[1;32mINFO    [0m ｉ [info]: PhantomAir           | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [6]      | Perm Cols = [12] |    5 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: Poseidon2PeripheryAir<BabyBearParameters>, 1> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [300]    | Perm Cols = [8]  |  286 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VariableRangeCheckerAir | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: pre-vkey: 61678 bytes
+[1;32mINFO    [0m execute_e1 [ 6.35µs | 100.00% ]
+[1;32mINFO    [0m compute_user_public_values_proof [ 1.48s | 97.14% / 100.00% ]
+[1;32mINFO    [0m ┕━ memory_to_vec_partition [ 42.4ms | 2.86% ]
+test tests::test_reveal ... ok
+[1;32mINFO    [0m ｉ [info]: Max constraint (excluding logup constraints) degree across all AIRs: 3
+[1;32mINFO    [0m ｉ [info]: Max constraint (excluding logup constraints) degree across all AIRs: 3
+[1;32mINFO    [0m ｉ [info]: ProgramAir           | Quotient Deg = 1  | Prep Cols = 0  | Main Cols = [9, 1]   | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VmConnectorAir       | Quotient Deg = 2  | Prep Cols = 1  | Main Cols = [5]      | Perm Cols = [16] |   11 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: PersistentBoundaryAir<8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [12] |    7 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: MemoryMerkleAir<8>   | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [16] |   39 Constraints |   4 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<2>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [11]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<4>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [13]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<8>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [17]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<16> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [25]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<32> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [59]     | Perm Cols = [72] |   84 Constraints |  25 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [39]     | Perm Cols = [72] |   31 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [31]     | Perm Cols = [52] |   19 Constraints |  19 Interactions
+[1;32mINFO    [0m ｉ [info]: RangeTupleCheckerAir<2> | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: Rv32HintStoreAir     | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [44] |   28 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [28] |   14 Constraints |  12 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [28]     | Perm Cols = [36] |   20 Constraints |  16 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [18]     | Perm Cols = [28] |   18 Constraints |  10 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [32] |   35 Constraints |  13 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [26]     | Perm Cols = [28] |   20 Constraints |  11 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   33 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [52] |   40 Constraints |  17 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [53]     | Perm Cols = [52] |   91 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [37]     | Perm Cols = [40] |   40 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   37 Constraints |  20 Interactions
+[1;32mINFO    [0m ｉ [info]: BitwiseOperationLookupAir<8> | Quotient Deg = 2  | Prep Cols = 3  | Main Cols = [2]      | Perm Cols = [8]  |    4 Constraints |   2 Interactions
+[1;32mINFO    [0m ｉ [info]: PhantomAir           | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [6]      | Perm Cols = [12] |    5 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: Poseidon2PeripheryAir<BabyBearParameters>, 1> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [300]    | Perm Cols = [8]  |  286 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VariableRangeCheckerAir | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: pre-vkey: 61678 bytes
+[1;32mINFO    [0m ｉ [info]: ProgramAir           | Quotient Deg = 1  | Prep Cols = 0  | Main Cols = [9, 1]   | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VmConnectorAir       | Quotient Deg = 2  | Prep Cols = 1  | Main Cols = [5]      | Perm Cols = [16] |   11 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: PersistentBoundaryAir<8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [12] |    7 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: MemoryMerkleAir<8>   | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [16] |   39 Constraints |   4 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<2>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [11]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<4>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [13]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<8>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [17]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<16> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [25]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<32> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [59]     | Perm Cols = [72] |   84 Constraints |  25 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [39]     | Perm Cols = [72] |   31 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [31]     | Perm Cols = [52] |   19 Constraints |  19 Interactions
+[1;32mINFO    [0m ｉ [info]: RangeTupleCheckerAir<2> | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: Rv32HintStoreAir     | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [44] |   28 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [28] |   14 Constraints |  12 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [28]     | Perm Cols = [36] |   20 Constraints |  16 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [18]     | Perm Cols = [28] |   18 Constraints |  10 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [32] |   35 Constraints |  13 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [26]     | Perm Cols = [28] |   20 Constraints |  11 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   33 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [52] |   40 Constraints |  17 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [53]     | Perm Cols = [52] |   91 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [37]     | Perm Cols = [40] |   40 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   37 Constraints |  20 Interactions
+[1;32mINFO    [0m ｉ [info]: BitwiseOperationLookupAir<8> | Quotient Deg = 2  | Prep Cols = 3  | Main Cols = [2]      | Perm Cols = [8]  |    4 Constraints |   2 Interactions
+[1;32mINFO    [0m ｉ [info]: PhantomAir           | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [6]      | Perm Cols = [12] |    5 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: Poseidon2PeripheryAir<BabyBearParameters>, 1> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [300]    | Perm Cols = [8]  |  286 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VariableRangeCheckerAir | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: pre-vkey: 61678 bytes
+[1;32mINFO    [0m execute_e1 [ 6.52µs | 100.00% ]
+[1;32mINFO    [0m execute_e1 [ 86.4µs | 100.00% ]
+[1;32mINFO    [0m ｉ [info]: Max constraint (excluding logup constraints) degree across all AIRs: 3
+[1;32mINFO    [0m ｉ [info]: ProgramAir           | Quotient Deg = 1  | Prep Cols = 0  | Main Cols = [9, 1]   | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VmConnectorAir       | Quotient Deg = 2  | Prep Cols = 1  | Main Cols = [5]      | Perm Cols = [16] |   11 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: PersistentBoundaryAir<8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [12] |    7 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: MemoryMerkleAir<8>   | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [16] |   39 Constraints |   4 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<2>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [11]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<4>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [13]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<8>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [17]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<16> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [25]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<32> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [59]     | Perm Cols = [72] |   84 Constraints |  25 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [39]     | Perm Cols = [72] |   31 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [31]     | Perm Cols = [52] |   19 Constraints |  19 Interactions
+[1;32mINFO    [0m ｉ [info]: RangeTupleCheckerAir<2> | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: Rv32HintStoreAir     | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [44] |   28 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [28] |   14 Constraints |  12 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [28]     | Perm Cols = [36] |   20 Constraints |  16 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [18]     | Perm Cols = [28] |   18 Constraints |  10 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [32] |   35 Constraints |  13 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [26]     | Perm Cols = [28] |   20 Constraints |  11 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   33 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [52] |   40 Constraints |  17 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [53]     | Perm Cols = [52] |   91 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [37]     | Perm Cols = [40] |   40 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   37 Constraints |  20 Interactions
+[1;32mINFO    [0m ｉ [info]: BitwiseOperationLookupAir<8> | Quotient Deg = 2  | Prep Cols = 3  | Main Cols = [2]      | Perm Cols = [8]  |    4 Constraints |   2 Interactions
+[1;32mINFO    [0m ｉ [info]: PhantomAir           | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [6]      | Perm Cols = [12] |    5 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: Poseidon2PeripheryAir<BabyBearParameters>, 1> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [300]    | Perm Cols = [8]  |  286 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VariableRangeCheckerAir | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: pre-vkey: 61678 bytes
+[1;32mINFO    [0m execute_e1 [ 11.9µs | 100.00% ]
+[1;32mINFO    [0m ｉ [info]: Max constraint (excluding logup constraints) degree across all AIRs: 3
+[1;32mINFO    [0m ｉ [info]: ProgramAir           | Quotient Deg = 1  | Prep Cols = 0  | Main Cols = [9, 1]   | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VmConnectorAir       | Quotient Deg = 2  | Prep Cols = 1  | Main Cols = [5]      | Perm Cols = [16] |   11 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: PersistentBoundaryAir<8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [12] |    7 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: MemoryMerkleAir<8>   | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [16] |   39 Constraints |   4 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<2>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [11]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<4>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [13]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<8>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [17]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<16> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [25]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<32> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [59]     | Perm Cols = [72] |   84 Constraints |  25 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [39]     | Perm Cols = [72] |   31 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [31]     | Perm Cols = [52] |   19 Constraints |  19 Interactions
+[1;32mINFO    [0m ｉ [info]: RangeTupleCheckerAir<2> | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: Rv32HintStoreAir     | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [44] |   28 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [28] |   14 Constraints |  12 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [28]     | Perm Cols = [36] |   20 Constraints |  16 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [18]     | Perm Cols = [28] |   18 Constraints |  10 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [32] |   35 Constraints |  13 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [26]     | Perm Cols = [28] |   20 Constraints |  11 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   33 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [52] |   40 Constraints |  17 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [53]     | Perm Cols = [52] |   91 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [37]     | Perm Cols = [40] |   40 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   37 Constraints |  20 Interactions
+[1;32mINFO    [0m ｉ [info]: BitwiseOperationLookupAir<8> | Quotient Deg = 2  | Prep Cols = 3  | Main Cols = [2]      | Perm Cols = [8]  |    4 Constraints |   2 Interactions
+[1;32mINFO    [0m ｉ [info]: PhantomAir           | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [6]      | Perm Cols = [12] |    5 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: Poseidon2PeripheryAir<BabyBearParameters>, 1> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [300]    | Perm Cols = [8]  |  286 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VariableRangeCheckerAir | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: pre-vkey: 61678 bytes
+[1;32mINFO    [0m ｉ [info]: Max constraint (excluding logup constraints) degree across all AIRs: 3
+[1;32mINFO    [0m ｉ [info]: ProgramAir           | Quotient Deg = 1  | Prep Cols = 0  | Main Cols = [9, 1]   | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VmConnectorAir       | Quotient Deg = 2  | Prep Cols = 1  | Main Cols = [5]      | Perm Cols = [16] |   11 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: PersistentBoundaryAir<8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [12] |    7 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: MemoryMerkleAir<8>   | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [16] |   39 Constraints |   4 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<2>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [11]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<4>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [13]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<8>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [17]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<16> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [25]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<32> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [59]     | Perm Cols = [72] |   84 Constraints |  25 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [39]     | Perm Cols = [72] |   31 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [31]     | Perm Cols = [52] |   19 Constraints |  19 Interactions
+[1;32mINFO    [0m ｉ [info]: RangeTupleCheckerAir<2> | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: Rv32HintStoreAir     | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [44] |   28 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [28] |   14 Constraints |  12 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [28]     | Perm Cols = [36] |   20 Constraints |  16 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [18]     | Perm Cols = [28] |   18 Constraints |  10 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [32] |   35 Constraints |  13 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [26]     | Perm Cols = [28] |   20 Constraints |  11 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   33 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [52] |   40 Constraints |  17 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [53]     | Perm Cols = [52] |   91 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [37]     | Perm Cols = [40] |   40 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   37 Constraints |  20 Interactions
+[1;32mINFO    [0m ｉ [info]: BitwiseOperationLookupAir<8> | Quotient Deg = 2  | Prep Cols = 3  | Main Cols = [2]      | Perm Cols = [8]  |    4 Constraints |   2 Interactions
+[1;32mINFO    [0m ｉ [info]: PhantomAir           | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [6]      | Perm Cols = [12] |    5 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: Poseidon2PeripheryAir<BabyBearParameters>, 1> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [300]    | Perm Cols = [8]  |  286 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VariableRangeCheckerAir | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: pre-vkey: 61678 bytes
+[1;32mINFO    [0m ｉ [info]: Max constraint (excluding logup constraints) degree across all AIRs: 3
+[1;32mINFO    [0m ｉ [info]: ProgramAir           | Quotient Deg = 1  | Prep Cols = 0  | Main Cols = [9, 1]   | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VmConnectorAir       | Quotient Deg = 2  | Prep Cols = 1  | Main Cols = [5]      | Perm Cols = [16] |   11 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: PersistentBoundaryAir<8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [12] |    7 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: MemoryMerkleAir<8>   | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [16] |   39 Constraints |   4 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<2>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [11]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<4>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [13]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<8>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [17]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<16> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [25]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<32> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [59]     | Perm Cols = [72] |   84 Constraints |  25 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [39]     | Perm Cols = [72] |   31 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [31]     | Perm Cols = [52] |   19 Constraints |  19 Interactions
+[1;32mINFO    [0m ｉ [info]: RangeTupleCheckerAir<2> | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: Rv32HintStoreAir     | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [44] |   28 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [28] |   14 Constraints |  12 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [28]     | Perm Cols = [36] |   20 Constraints |  16 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [18]     | Perm Cols = [28] |   18 Constraints |  10 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [32] |   35 Constraints |  13 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [26]     | Perm Cols = [28] |   20 Constraints |  11 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   33 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [52] |   40 Constraints |  17 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [53]     | Perm Cols = [52] |   91 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [37]     | Perm Cols = [40] |   40 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   37 Constraints |  20 Interactions
+[1;32mINFO    [0m ｉ [info]: BitwiseOperationLookupAir<8> | Quotient Deg = 2  | Prep Cols = 3  | Main Cols = [2]      | Perm Cols = [8]  |    4 Constraints |   2 Interactions
+[1;32mINFO    [0m ｉ [info]: PhantomAir           | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [6]      | Perm Cols = [12] |    5 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: Poseidon2PeripheryAir<BabyBearParameters>, 1> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [300]    | Perm Cols = [8]  |  286 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VariableRangeCheckerAir | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: pre-vkey: 61678 bytes
+[1;32mINFO    [0m ｉ [info]: Max constraint (excluding logup constraints) degree across all AIRs: 3
+[1;32mINFO    [0m execute_e1 [ 7.91µs | 100.00% ]
+[1;32mINFO    [0m ｉ [info]: ProgramAir           | Quotient Deg = 1  | Prep Cols = 0  | Main Cols = [9, 1]   | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VmConnectorAir       | Quotient Deg = 2  | Prep Cols = 1  | Main Cols = [5]      | Perm Cols = [16] |   11 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: PersistentBoundaryAir<8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [12] |    7 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: MemoryMerkleAir<8>   | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [16] |   39 Constraints |   4 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<2>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [11]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<4>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [13]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<8>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [17]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<16> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [25]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<32> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [59]     | Perm Cols = [72] |   84 Constraints |  25 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [39]     | Perm Cols = [72] |   31 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [31]     | Perm Cols = [52] |   19 Constraints |  19 Interactions
+[1;32mINFO    [0m ｉ [info]: RangeTupleCheckerAir<2> | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: Rv32HintStoreAir     | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [44] |   28 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [28] |   14 Constraints |  12 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [28]     | Perm Cols = [36] |   20 Constraints |  16 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [18]     | Perm Cols = [28] |   18 Constraints |  10 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [32] |   35 Constraints |  13 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [26]     | Perm Cols = [28] |   20 Constraints |  11 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   33 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [52] |   40 Constraints |  17 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [53]     | Perm Cols = [52] |   91 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [37]     | Perm Cols = [40] |   40 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   37 Constraints |  20 Interactions
+[1;32mINFO    [0m ｉ [info]: BitwiseOperationLookupAir<8> | Quotient Deg = 2  | Prep Cols = 3  | Main Cols = [2]      | Perm Cols = [8]  |    4 Constraints |   2 Interactions
+[1;32mINFO    [0m ｉ [info]: PhantomAir           | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [6]      | Perm Cols = [12] |    5 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: Poseidon2PeripheryAir<BabyBearParameters>, 1> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [300]    | Perm Cols = [8]  |  286 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VariableRangeCheckerAir | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: pre-vkey: 61678 bytes
+[1;32mINFO    [0m execute_e1 [ 16.3µs | 100.00% ]
+[1;32mINFO    [0m execute_e1 [ 30.6µs | 100.00% ]
+[1;32mINFO    [0m execute_e1 [ 7.78µs | 100.00% ]
+[1;32mINFO    [0m execute_metered [ 23.9µs | 100.00% ]
+[1;32mINFO    [0m ┕━ ｉ [info]: Segment   0 | instret          0 |       11 instructions |    9894197 cells |     922752 interactions |   524288 max height (RangeTupleCheckerAir<2>) [TERMINATED]
+[1;32mINFO    [0m execute_metered [ 107µs | 100.00% ]
+[1;32mINFO    [0m ┕━ ｉ [info]: Segment   0 | instret          0 |     5140 instructions |    5304276 cells |     496085 interactions |   262144 max height (VariableRangeCheckerAir) [TERMINATED]
+test tests::test_rv32i::_fibonacci_1_expects ... FAILED
+test tests::test_getrandom_unsupported::_getrandom_v02_vec_getrandom_v02_custom_expects ... FAILED
+[1;32mINFO    [0m execute_metered [ 30.6µs | 100.00% ]
+[1;32mINFO    [0m ┕━ ｉ [info]: Segment   0 | instret          0 |      179 instructions |   10020785 cells |     929719 interactions |   524288 max height (RangeTupleCheckerAir<2>) [TERMINATED]
+test tests::test_read ... FAILED
+[1;32mINFO    [0m execute_metered [ 18.4µs | 100.00% ]
+[1;32mINFO    [0m ┕━ ｉ [info]: Segment   0 | instret          0 |       11 instructions |    9894197 cells |     922752 interactions |   524288 max height (RangeTupleCheckerAir<2>) [TERMINATED]
+test tests::test_getrandom_unsupported::_getrandom_vec_getrandom_expects ... FAILED
+[1;32mINFO    [0m execute_metered [ 39.7µs | 100.00% ]
+[1;32mINFO    [0m ┕━ ｉ [info]: Segment   0 | instret          0 |       91 instructions |    9901827 cells |     925209 interactions |   524288 max height (RangeTupleCheckerAir<2>) [TERMINATED]
+test tests::test_read_vec ... FAILED
+[1;32mINFO    [0m execute_metered [ 28.7µs | 100.00% ]
+[1;32mINFO    [0m ┕━ ｉ [info]: Segment   0 | instret          0 |       11 instructions |    9894197 cells |     922752 interactions |   524288 max height (RangeTupleCheckerAir<2>) [TERMINATED]
+[1;32mINFO    [0m execute_metered [ 19.9µs | 100.00% ]
+[1;32mINFO    [0m ┕━ ｉ [info]: Segment   0 | instret          0 |       11 instructions |    9894197 cells |     922752 interactions |   524288 max height (RangeTupleCheckerAir<2>) [TERMINATED]
+test tests::test_getrandom_unsupported::_getrandom_v02_vec_getrandom_v02_getrandom_unsupported_expects ... FAILED
+test tests::test_getrandom_unsupported::_getrandom_vec_getrandom_getrandom_unsupported_expects ... FAILED
+[1;32mINFO    [0m execute_metered [ 46.4µs | 100.00% ]
+[1;32mINFO    [0m ┕━ ｉ [info]: Segment   0 | instret          0 |      163 instructions |    9931943 cells |     927342 interactions |   524288 max height (RangeTupleCheckerAir<2>) [TERMINATED]
+test tests::test_hint_load_by_key ... FAILED
+[1;32mINFO    [0m execute_metered [ 24.0µs | 100.00% ]
+[1;32mINFO    [0m ┕━ ｉ [info]: Segment   0 | instret          0 |       12 instructions |    9723864 cells |     921789 interactions |   524288 max height (RangeTupleCheckerAir<2>) [TERMINATED]
+test tests::test_print ... FAILED
+[1;32mINFO    [0m execute_metered [ 115µs | 100.00% ]
+[1;32mINFO    [0m ┕━ ｉ [info]: Segment   0 | instret          0 |     2828 instructions |   10731292 cells |     986277 interactions |   524288 max height (RangeTupleCheckerAir<2>) [TERMINATED]
+test tests::test_hashmap ... FAILED
+[1;32mINFO    [0m ｉ [info]: Max constraint (excluding logup constraints) degree across all AIRs: 3
+[1;32mINFO    [0m ｉ [info]: ProgramAir           | Quotient Deg = 1  | Prep Cols = 0  | Main Cols = [9, 1]   | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VmConnectorAir       | Quotient Deg = 2  | Prep Cols = 1  | Main Cols = [5]      | Perm Cols = [16] |   11 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: PersistentBoundaryAir<8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [12] |    7 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: MemoryMerkleAir<8>   | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [16] |   39 Constraints |   4 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<2>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [11]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<4>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [13]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<8>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [17]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<16> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [25]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<32> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [59]     | Perm Cols = [72] |   84 Constraints |  25 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [39]     | Perm Cols = [72] |   31 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [31]     | Perm Cols = [52] |   19 Constraints |  19 Interactions
+[1;32mINFO    [0m ｉ [info]: RangeTupleCheckerAir<2> | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: Rv32HintStoreAir     | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [44] |   28 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [28] |   14 Constraints |  12 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [28]     | Perm Cols = [36] |   20 Constraints |  16 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [18]     | Perm Cols = [28] |   18 Constraints |  10 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [32] |   35 Constraints |  13 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [26]     | Perm Cols = [28] |   20 Constraints |  11 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   33 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [52] |   40 Constraints |  17 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [53]     | Perm Cols = [52] |   91 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [37]     | Perm Cols = [40] |   40 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   37 Constraints |  20 Interactions
+[1;32mINFO    [0m ｉ [info]: BitwiseOperationLookupAir<8> | Quotient Deg = 2  | Prep Cols = 3  | Main Cols = [2]      | Perm Cols = [8]  |    4 Constraints |   2 Interactions
+[1;32mINFO    [0m ｉ [info]: PhantomAir           | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [6]      | Perm Cols = [12] |    5 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: Poseidon2PeripheryAir<BabyBearParameters>, 1> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [300]    | Perm Cols = [8]  |  286 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VariableRangeCheckerAir | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: pre-vkey: 61678 bytes
+[1;32mINFO    [0m execute_e1 [ 56.1µs | 100.00% ]
+[1;32mINFO    [0m ｉ [info]: Max constraint (excluding logup constraints) degree across all AIRs: 3
+[1;32mINFO    [0m ｉ [info]: ProgramAir           | Quotient Deg = 1  | Prep Cols = 0  | Main Cols = [9, 1]   | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VmConnectorAir       | Quotient Deg = 2  | Prep Cols = 1  | Main Cols = [5]      | Perm Cols = [16] |   11 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: PersistentBoundaryAir<8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [12] |    7 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: MemoryMerkleAir<8>   | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [16] |   39 Constraints |   4 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<2>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [11]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<4>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [13]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<8>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [17]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<16> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [25]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<32> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [59]     | Perm Cols = [72] |   84 Constraints |  25 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [39]     | Perm Cols = [72] |   31 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [31]     | Perm Cols = [52] |   19 Constraints |  19 Interactions
+[1;32mINFO    [0m ｉ [info]: RangeTupleCheckerAir<2> | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: Rv32HintStoreAir     | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [44] |   28 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [28] |   14 Constraints |  12 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [28]     | Perm Cols = [36] |   20 Constraints |  16 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [18]     | Perm Cols = [28] |   18 Constraints |  10 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [32] |   35 Constraints |  13 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [26]     | Perm Cols = [28] |   20 Constraints |  11 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   33 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [52] |   40 Constraints |  17 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [53]     | Perm Cols = [52] |   91 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [37]     | Perm Cols = [40] |   40 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   37 Constraints |  20 Interactions
+[1;32mINFO    [0m ｉ [info]: BitwiseOperationLookupAir<8> | Quotient Deg = 2  | Prep Cols = 3  | Main Cols = [2]      | Perm Cols = [8]  |    4 Constraints |   2 Interactions
+[1;32mINFO    [0m ｉ [info]: PhantomAir           | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [6]      | Perm Cols = [12] |    5 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: Poseidon2PeripheryAir<BabyBearParameters>, 1> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [300]    | Perm Cols = [8]  |  286 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VariableRangeCheckerAir | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: pre-vkey: 61678 bytes
+[1;32mINFO    [0m execute_e1 [ 63.5µs | 100.00% ]
+[1;32mINFO    [0m execute_metered [ 94.0µs | 100.00% ]
+[1;32mINFO    [0m ┕━ ｉ [info]: Segment   0 | instret          0 |     4085 instructions |   10710500 cells |     996605 interactions |   524288 max height (RangeTupleCheckerAir<2>) [TERMINATED]
+test tests::test_rv32im::_collatz_1_expects ... FAILED
+[1;32mINFO    [0m execute_metered [ 119µs | 100.00% ]
+[1;32mINFO    [0m ┕━ ｉ [info]: Segment   0 | instret          0 |     5140 instructions |   11022617 cells |    1020382 interactions |   524288 max height (RangeTupleCheckerAir<2>) [TERMINATED]
+test tests::test_rv32im::_fibonacci_1_expects ... FAILED
+[1;32mINFO    [0m ｉ [info]: Max constraint (excluding logup constraints) degree across all AIRs: 3
+[1;32mINFO    [0m ｉ [info]: Max constraint (excluding logup constraints) degree across all AIRs: 3
+[1;32mINFO    [0m ｉ [info]: Max constraint (excluding logup constraints) degree across all AIRs: 3
+[1;32mINFO    [0m ｉ [info]: ProgramAir           | Quotient Deg = 1  | Prep Cols = 0  | Main Cols = [9, 1]   | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VmConnectorAir       | Quotient Deg = 2  | Prep Cols = 1  | Main Cols = [5]      | Perm Cols = [16] |   11 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: PersistentBoundaryAir<8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [12] |    7 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: MemoryMerkleAir<8>   | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [16] |   39 Constraints |   4 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<2>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [11]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<4>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [13]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<8>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [17]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<16> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [25]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<32> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [59]     | Perm Cols = [72] |   84 Constraints |  25 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [39]     | Perm Cols = [72] |   31 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [31]     | Perm Cols = [52] |   19 Constraints |  19 Interactions
+[1;32mINFO    [0m ｉ [info]: RangeTupleCheckerAir<2> | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: Rv32HintStoreAir     | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [44] |   28 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [28] |   14 Constraints |  12 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [28]     | Perm Cols = [36] |   20 Constraints |  16 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [18]     | Perm Cols = [28] |   18 Constraints |  10 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [32] |   35 Constraints |  13 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [26]     | Perm Cols = [28] |   20 Constraints |  11 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   33 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [52] |   40 Constraints |  17 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [53]     | Perm Cols = [52] |   91 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [37]     | Perm Cols = [40] |   40 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   37 Constraints |  20 Interactions
+[1;32mINFO    [0m ｉ [info]: BitwiseOperationLookupAir<8> | Quotient Deg = 2  | Prep Cols = 3  | Main Cols = [2]      | Perm Cols = [8]  |    4 Constraints |   2 Interactions
+[1;32mINFO    [0m ｉ [info]: PhantomAir           | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [6]      | Perm Cols = [12] |    5 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: Poseidon2PeripheryAir<BabyBearParameters>, 1> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [300]    | Perm Cols = [8]  |  286 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VariableRangeCheckerAir | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: ProgramAir           | Quotient Deg = 1  | Prep Cols = 0  | Main Cols = [9, 1]   | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VmConnectorAir       | Quotient Deg = 2  | Prep Cols = 1  | Main Cols = [5]      | Perm Cols = [16] |   11 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: PersistentBoundaryAir<8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [12] |    7 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: MemoryMerkleAir<8>   | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [16] |   39 Constraints |   4 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<2>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [11]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<4>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [13]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<8>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [17]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<16> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [25]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<32> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [59]     | Perm Cols = [72] |   84 Constraints |  25 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [39]     | Perm Cols = [72] |   31 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [31]     | Perm Cols = [52] |   19 Constraints |  19 Interactions
+[1;32mINFO    [0m ｉ [info]: RangeTupleCheckerAir<2> | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: Rv32HintStoreAir     | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [44] |   28 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [28] |   14 Constraints |  12 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [28]     | Perm Cols = [36] |   20 Constraints |  16 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [18]     | Perm Cols = [28] |   18 Constraints |  10 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [32] |   35 Constraints |  13 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [26]     | Perm Cols = [28] |   20 Constraints |  11 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   33 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [52] |   40 Constraints |  17 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [53]     | Perm Cols = [52] |   91 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [37]     | Perm Cols = [40] |   40 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   37 Constraints |  20 Interactions
+[1;32mINFO    [0m ｉ [info]: BitwiseOperationLookupAir<8> | Quotient Deg = 2  | Prep Cols = 3  | Main Cols = [2]      | Perm Cols = [8]  |    4 Constraints |   2 Interactions
+[1;32mINFO    [0m ｉ [info]: PhantomAir           | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [6]      | Perm Cols = [12] |    5 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: Poseidon2PeripheryAir<BabyBearParameters>, 1> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [300]    | Perm Cols = [8]  |  286 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VariableRangeCheckerAir | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: pre-vkey: 61678 bytes
+[1;32mINFO    [0m ｉ [info]: ProgramAir           | Quotient Deg = 1  | Prep Cols = 0  | Main Cols = [9, 1]   | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VmConnectorAir       | Quotient Deg = 2  | Prep Cols = 1  | Main Cols = [5]      | Perm Cols = [16] |   11 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: PersistentBoundaryAir<8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [12] |    7 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: MemoryMerkleAir<8>   | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [16] |   39 Constraints |   4 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<2>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [11]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<4>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [13]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<8>  | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [17]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<16> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [25]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: AccessAdapterAir<32> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [16] |   12 Constraints |   5 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [59]     | Perm Cols = [72] |   84 Constraints |  25 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [39]     | Perm Cols = [72] |   31 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [31]     | Perm Cols = [52] |   19 Constraints |  19 Interactions
+[1;32mINFO    [0m ｉ [info]: RangeTupleCheckerAir<2> | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: Rv32HintStoreAir     | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [44] |   28 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [20]     | Perm Cols = [28] |   14 Constraints |  12 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [28]     | Perm Cols = [36] |   20 Constraints |  16 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [18]     | Perm Cols = [28] |   18 Constraints |  10 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [32]     | Perm Cols = [32] |   35 Constraints |  13 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [26]     | Perm Cols = [28] |   20 Constraints |  11 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   33 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [41]     | Perm Cols = [52] |   40 Constraints |  17 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [53]     | Perm Cols = [52] |   91 Constraints |  24 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [37]     | Perm Cols = [40] |   40 Constraints |  18 Interactions
+[1;32mINFO    [0m ｉ [info]: VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [36]     | Perm Cols = [52] |   37 Constraints |  20 Interactions
+[1;32mINFO    [0m ｉ [info]: BitwiseOperationLookupAir<8> | Quotient Deg = 2  | Prep Cols = 3  | Main Cols = [2]      | Perm Cols = [8]  |    4 Constraints |   2 Interactions
+[1;32mINFO    [0m ｉ [info]: PhantomAir           | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [6]      | Perm Cols = [12] |    5 Constraints |   3 Interactions
+[1;32mINFO    [0m ｉ [info]: Poseidon2PeripheryAir<BabyBearParameters>, 1> | Quotient Deg = 2  | Prep Cols = 0  | Main Cols = [300]    | Perm Cols = [8]  |  286 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: VariableRangeCheckerAir | Quotient Deg = 1  | Prep Cols = 2  | Main Cols = [1]      | Perm Cols = [8]  |    4 Constraints |   1 Interactions
+[1;32mINFO    [0m ｉ [info]: pre-vkey: 61678 bytes
+[1;32mINFO    [0m ｉ [info]: pre-vkey: 61678 bytes
+[1;32mINFO    [0m execute_e1 [ 65.7µs | 100.00% ]
+[1;32mINFO    [0m execute_e1 [ 40.8µs | 100.00% ]
+[1;32mINFO    [0m execute_e1 [ 43.1µs | 100.00% ]
+test tests::test_suspend ... ok
+[1;32mINFO    [0m execute_metered [ 65.7µs | 100.00% ]
+[1;32mINFO    [0m ┕━ ｉ [info]: Segment   0 | instret          0 |     3513 instructions |   10748321 cells |     988379 interactions |   524288 max height (RangeTupleCheckerAir<2>) [TERMINATED]
+test tests::test_tiny_mem_test ... FAILED
+[1;32mINFO    [0m execute_metered [ 80.1µs | 100.00% ]
+[1;32mINFO    [0m ┕━ ｉ [info]: Segment   0 | instret          0 |     5283 instructions |   11195927 cells |    1027192 interactions |   524288 max height (RangeTupleCheckerAir<2>) [TERMINATED]
+test tests::test_rv32im_std::_fibonacci_1_expects ... FAILED
+[1;32mINFO    [0m execute_metered [ 56.7µs | 100.00% ]
+[1;32mINFO    [0m ┕━ ｉ [info]: Segment   0 | instret          0 |     4228 instructions |   10853038 cells |    1004379 interactions |   524288 max height (RangeTupleCheckerAir<2>) [TERMINATED]
+test tests::test_rv32im_std::_collatz_1_expects ... FAILED
+
+failures:
+
+---- tests::test_rv32i::_fibonacci_1_expects stdout ----
+cargo:rerun-if-env-changed=OPENVM_SKIP_BUILD
+Using rustc: /home/ubuntu/.rustup/toolchains/nightly-2025-08-02-x86_64-unknown-linux-gnu/bin/rustc
+Building guest package: cargo +nightly-2025-08-02 build --target riscv32im-risc0-zkvm-elf -Z build-std=alloc,core,proc_macro,panic_abort,std -Z build-std-features=compiler-builtins-mem
+Checking metered AOT equivalence
+E2 AOT METERED CALLLLEDDD
+
+thread 'tests::test_rv32i::_fibonacci_1_expects' panicked at /home/ubuntu/william/openvm/crates/vm/src/utils/stark_utils.rs:149:9:
+assertion `left == right` failed
+  left: 2103432
+ right: 2103072
+
+---- tests::test_getrandom_unsupported::_getrandom_v02_vec_getrandom_v02_custom_expects stdout ----
+cargo:rerun-if-env-changed=OPENVM_SKIP_BUILD
+Using rustc: /home/ubuntu/.rustup/toolchains/nightly-2025-08-02-x86_64-unknown-linux-gnu/bin/rustc
+Building guest package: cargo +nightly-2025-08-02 build --target riscv32im-risc0-zkvm-elf -Z build-std=alloc,core,proc_macro,panic_abort,std -Z build-std-features=compiler-builtins-mem
+Checking metered AOT equivalence
+E2 AOT METERED CALLLLEDDD
+
+thread 'tests::test_getrandom_unsupported::_getrandom_v02_vec_getrandom_v02_custom_expects' panicked at /home/ubuntu/william/openvm/crates/vm/src/utils/stark_utils.rs:149:9:
+assertion `left == right` failed
+  left: 2103252
+ right: 2102896
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- tests::test_read stdout ----
+cargo:rerun-if-env-changed=OPENVM_SKIP_BUILD
+Using rustc: /home/ubuntu/.rustup/toolchains/nightly-2025-08-02-x86_64-unknown-linux-gnu/bin/rustc
+Building guest package: cargo +nightly-2025-08-02 build --target riscv32im-risc0-zkvm-elf -Z build-std=alloc,core,proc_macro,panic_abort,std -Z build-std-features=compiler-builtins-mem
+Checking metered AOT equivalence
+E2 AOT METERED CALLLLEDDD
+
+thread 'tests::test_read' panicked at /home/ubuntu/william/openvm/crates/vm/src/utils/stark_utils.rs:149:9:
+assertion `left == right` failed
+  left: 2114604
+ right: 2113332
+
+---- tests::test_getrandom_unsupported::_getrandom_vec_getrandom_expects stdout ----
+cargo:rerun-if-env-changed=OPENVM_SKIP_BUILD
+Using rustc: /home/ubuntu/.rustup/toolchains/nightly-2025-08-02-x86_64-unknown-linux-gnu/bin/rustc
+Building guest package: cargo +nightly-2025-08-02 build --target riscv32im-risc0-zkvm-elf -Z build-std=alloc,core,proc_macro,panic_abort,std -Z build-std-features=compiler-builtins-mem
+Checking metered AOT equivalence
+E2 AOT METERED CALLLLEDDD
+
+thread 'tests::test_getrandom_unsupported::_getrandom_vec_getrandom_expects' panicked at /home/ubuntu/william/openvm/crates/vm/src/utils/stark_utils.rs:149:9:
+assertion `left == right` failed
+  left: 2103252
+ right: 2102896
+
+---- tests::test_read_vec stdout ----
+cargo:rerun-if-env-changed=OPENVM_SKIP_BUILD
+Using rustc: /home/ubuntu/.rustup/toolchains/nightly-2025-08-02-x86_64-unknown-linux-gnu/bin/rustc
+Building guest package: cargo +nightly-2025-08-02 build --target riscv32im-risc0-zkvm-elf -Z build-std=alloc,core,proc_macro,panic_abort,std -Z build-std-features=compiler-builtins-mem
+Checking metered AOT equivalence
+E2 AOT METERED CALLLLEDDD
+
+thread 'tests::test_read_vec' panicked at /home/ubuntu/william/openvm/crates/vm/src/utils/stark_utils.rs:149:9:
+assertion `left == right` failed
+  left: 2104136
+ right: 2103432
+
+---- tests::test_getrandom_unsupported::_getrandom_v02_vec_getrandom_v02_getrandom_unsupported_expects stdout ----
+cargo:rerun-if-env-changed=OPENVM_SKIP_BUILD
+Using rustc: /home/ubuntu/.rustup/toolchains/nightly-2025-08-02-x86_64-unknown-linux-gnu/bin/rustc
+Building guest package: cargo +nightly-2025-08-02 build --target riscv32im-risc0-zkvm-elf -Z build-std=alloc,core,proc_macro,panic_abort,std -Z build-std-features=compiler-builtins-mem
+Checking metered AOT equivalence
+E2 AOT METERED CALLLLEDDD
+
+thread 'tests::test_getrandom_unsupported::_getrandom_v02_vec_getrandom_v02_getrandom_unsupported_expects' panicked at /home/ubuntu/william/openvm/crates/vm/src/utils/stark_utils.rs:149:9:
+assertion `left == right` failed
+  left: 2103252
+ right: 2102896
+
+---- tests::test_getrandom_unsupported::_getrandom_vec_getrandom_getrandom_unsupported_expects stdout ----
+cargo:rerun-if-env-changed=OPENVM_SKIP_BUILD
+Using rustc: /home/ubuntu/.rustup/toolchains/nightly-2025-08-02-x86_64-unknown-linux-gnu/bin/rustc
+Building guest package: cargo +nightly-2025-08-02 build --target riscv32im-risc0-zkvm-elf -Z build-std=alloc,core,proc_macro,panic_abort,std -Z build-std-features=compiler-builtins-mem
+Checking metered AOT equivalence
+E2 AOT METERED CALLLLEDDD
+
+thread 'tests::test_getrandom_unsupported::_getrandom_vec_getrandom_getrandom_unsupported_expects' panicked at /home/ubuntu/william/openvm/crates/vm/src/utils/stark_utils.rs:149:9:
+assertion `left == right` failed
+  left: 2103252
+ right: 2102896
+
+---- tests::test_hint_load_by_key stdout ----
+cargo:rerun-if-env-changed=OPENVM_SKIP_BUILD
+Using rustc: /home/ubuntu/.rustup/toolchains/nightly-2025-08-02-x86_64-unknown-linux-gnu/bin/rustc
+Building guest package: cargo +nightly-2025-08-02 build --target riscv32im-risc0-zkvm-elf -Z build-std=alloc,core,proc_macro,panic_abort,std -Z build-std-features=compiler-builtins-mem
+Checking metered AOT equivalence
+E2 AOT METERED CALLLLEDDD
+
+thread 'tests::test_hint_load_by_key' panicked at /home/ubuntu/william/openvm/crates/vm/src/utils/stark_utils.rs:149:9:
+assertion `left == right` failed
+  left: 2104260
+ right: 2103556
+
+---- tests::test_print stdout ----
+cargo:rerun-if-env-changed=OPENVM_SKIP_BUILD
+Using rustc: /home/ubuntu/.rustup/toolchains/nightly-2025-08-02-x86_64-unknown-linux-gnu/bin/rustc
+Building guest package: cargo +nightly-2025-08-02 build --target riscv32im-risc0-zkvm-elf -Z build-std=alloc,core,proc_macro,panic_abort,std -Z build-std-features=compiler-builtins-mem
+Hello, world!Hello, world!Checking metered AOT equivalence
+E2 AOT METERED CALLLLEDDD
+Hello, world!
+thread 'tests::test_print' panicked at /home/ubuntu/william/openvm/crates/vm/src/utils/stark_utils.rs:149:9:
+assertion `left == right` failed
+  left: 2103256
+ right: 2102896
+
+---- tests::test_hashmap stdout ----
+cargo:rerun-if-env-changed=OPENVM_SKIP_BUILD
+Using rustc: /home/ubuntu/.rustup/toolchains/nightly-2025-08-02-x86_64-unknown-linux-gnu/bin/rustc
+Building guest package: cargo +nightly-2025-08-02 build --target riscv32im-risc0-zkvm-elf -Z build-std=alloc,core,proc_macro,panic_abort,std -Z build-std-features=compiler-builtins-mem
+WARNING: Using fixed-seed RNG for deterministic randomness. Consider security implications for your use case.
+2
+2
+Checking metered AOT equivalence
+E2 AOT METERED CALLLLEDDD
+2
+
+thread 'tests::test_hashmap' panicked at /home/ubuntu/william/openvm/crates/vm/src/utils/stark_utils.rs:149:9:
+assertion `left == right` failed
+  left: 2114476
+ right: 2113948
+
+---- tests::test_rv32im::_collatz_1_expects stdout ----
+cargo:rerun-if-env-changed=OPENVM_SKIP_BUILD
+Using rustc: /home/ubuntu/.rustup/toolchains/nightly-2025-08-02-x86_64-unknown-linux-gnu/bin/rustc
+Building guest package: cargo +nightly-2025-08-02 build --target riscv32im-risc0-zkvm-elf -Z build-std=alloc,core,proc_macro,panic_abort,std -Z build-std-features=compiler-builtins-mem
+Checking metered AOT equivalence
+E2 AOT METERED CALLLLEDDD
+
+thread 'tests::test_rv32im::_collatz_1_expects' panicked at /home/ubuntu/william/openvm/crates/vm/src/utils/stark_utils.rs:149:9:
+assertion `left == right` failed
+  left: 2103372
+ right: 2103012
+
+---- tests::test_rv32im::_fibonacci_1_expects stdout ----
+cargo:rerun-if-env-changed=OPENVM_SKIP_BUILD
+Using rustc: /home/ubuntu/.rustup/toolchains/nightly-2025-08-02-x86_64-unknown-linux-gnu/bin/rustc
+Building guest package: cargo +nightly-2025-08-02 build --target riscv32im-risc0-zkvm-elf -Z build-std=alloc,core,proc_macro,panic_abort,std -Z build-std-features=compiler-builtins-mem
+Checking metered AOT equivalence
+E2 AOT METERED CALLLLEDDD
+
+thread 'tests::test_rv32im::_fibonacci_1_expects' panicked at /home/ubuntu/william/openvm/crates/vm/src/utils/stark_utils.rs:149:9:
+assertion `left == right` failed
+  left: 2103432
+ right: 2103072
+
+---- tests::test_tiny_mem_test stdout ----
+cargo:rerun-if-env-changed=OPENVM_SKIP_BUILD
+Using rustc: /home/ubuntu/.rustup/toolchains/nightly-2025-08-02-x86_64-unknown-linux-gnu/bin/rustc
+Building guest package: cargo +nightly-2025-08-02 build --target riscv32im-risc0-zkvm-elf -Z build-std=alloc,core,proc_macro,panic_abort,std -Z build-std-features=compiler-builtins-mem
+Checking metered AOT equivalence
+E2 AOT METERED CALLLLEDDD
+
+thread 'tests::test_tiny_mem_test' panicked at /home/ubuntu/william/openvm/crates/vm/src/utils/stark_utils.rs:149:9:
+assertion `left == right` failed
+  left: 2107864
+ right: 2107496
+
+---- tests::test_rv32im_std::_fibonacci_1_expects stdout ----
+cargo:rerun-if-env-changed=OPENVM_SKIP_BUILD
+Using rustc: /home/ubuntu/.rustup/toolchains/nightly-2025-08-02-x86_64-unknown-linux-gnu/bin/rustc
+Building guest package: cargo +nightly-2025-08-02 build --target riscv32im-risc0-zkvm-elf -Z build-std=alloc,core,proc_macro,panic_abort,std -Z build-std-features=compiler-builtins-mem
+Checking metered AOT equivalence
+E2 AOT METERED CALLLLEDDD
+
+thread 'tests::test_rv32im_std::_fibonacci_1_expects' panicked at /home/ubuntu/william/openvm/crates/vm/src/utils/stark_utils.rs:149:9:
+assertion `left == right` failed
+  left: 2105564
+ right: 2105056
+
+---- tests::test_rv32im_std::_collatz_1_expects stdout ----
+cargo:rerun-if-env-changed=OPENVM_SKIP_BUILD
+Using rustc: /home/ubuntu/.rustup/toolchains/nightly-2025-08-02-x86_64-unknown-linux-gnu/bin/rustc
+Building guest package: cargo +nightly-2025-08-02 build --target riscv32im-risc0-zkvm-elf -Z build-std=alloc,core,proc_macro,panic_abort,std -Z build-std-features=compiler-builtins-mem
+Checking metered AOT equivalence
+E2 AOT METERED CALLLLEDDD
+
+thread 'tests::test_rv32im_std::_collatz_1_expects' panicked at /home/ubuntu/william/openvm/crates/vm/src/utils/stark_utils.rs:149:9:
+assertion `left == right` failed
+  left: 2105520
+ right: 2105012
+
+
+failures:
+    tests::test_getrandom_unsupported::_getrandom_v02_vec_getrandom_v02_custom_expects
+    tests::test_getrandom_unsupported::_getrandom_v02_vec_getrandom_v02_getrandom_unsupported_expects
+    tests::test_getrandom_unsupported::_getrandom_vec_getrandom_expects
+    tests::test_getrandom_unsupported::_getrandom_vec_getrandom_getrandom_unsupported_expects
+    tests::test_hashmap
+    tests::test_hint_load_by_key
+    tests::test_print
+    tests::test_read
+    tests::test_read_vec
+    tests::test_rv32i::_fibonacci_1_expects
+    tests::test_rv32im::_collatz_1_expects
+    tests::test_rv32im::_fibonacci_1_expects
+    tests::test_rv32im_std::_collatz_1_expects
+    tests::test_rv32im_std::_fibonacci_1_expects
+    tests::test_tiny_mem_test
+
+test result: FAILED. 3 passed; 15 failed; 0 ignored; 0 measured; 0 filtered out; finished in 65.21s
+
