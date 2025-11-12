@@ -446,7 +446,7 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
 
 
 #[proc_macro_derive(AotMeteredExecutor)]
-pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
+pub fn aot_metered_executor_derive(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
 
     let name = &ast.ident;
