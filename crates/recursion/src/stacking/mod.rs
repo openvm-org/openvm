@@ -204,11 +204,14 @@ impl AirModule for StackingModule {
 }
 
 impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for StackingModule {
+    type ModuleSpecificCtx = ();
+
     fn generate_proving_ctxs(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
         preflights: &[Preflight],
+        _ctx: (),
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         // TODO: parallelize
         let traces = [
@@ -237,11 +240,14 @@ mod cuda_tracegen {
     };
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for StackingModule {
+        type ModuleSpecificCtx = ();
+
         fn generate_proving_ctxs(
             &self,
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
+            module_ctx: (),
         ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
             // default hybrid implementation:
             let ctxs_cpu = TraceGenModule::<GlobalCtxCpu, CpuBackendV2>::generate_proving_ctxs(
@@ -252,6 +258,7 @@ mod cuda_tracegen {
                     .iter()
                     .map(|preflight| preflight.cpu.clone())
                     .collect_vec(),
+                module_ctx,
             );
             ctxs_cpu
                 .into_iter()

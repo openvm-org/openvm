@@ -24,15 +24,15 @@ use crate::{
     batch_constraint::{BatchConstraintModule, LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX},
     bus::{
         AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus, CommitmentsBus,
-        ConstraintSumcheckRandomnessBus, EqNegBaseRandBus, EqNegResultBus, ExpBitsLenBus,
-        ExpressionClaimNMaxBus, GkrModuleBus, HyperdimBus, LiftedHeightsBus, MerkleVerifyBus,
-        Poseidon2Bus, PublicValuesBus, SelUniBus, StackingIndicesBus, StackingModuleBus,
-        TranscriptBus, WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
+        ConstraintSumcheckRandomnessBus, EqNegBaseRandBus, EqNegResultBus, ExpressionClaimNMaxBus,
+        GkrModuleBus, HyperdimBus, LiftedHeightsBus, MerkleVerifyBus, Poseidon2Bus,
+        PublicValuesBus, SelUniBus, StackingIndicesBus, StackingModuleBus, TranscriptBus,
+        WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::{
-        bus::{PowerCheckerBus, RangeCheckerBus},
-        exp_bits_len::ExpBitsLenAir,
+        bus::{ExpBitsLenBus, PowerCheckerBus, RangeCheckerBus},
+        exp_bits_len::{ExpBitsLenAir, ExpBitsLenTraceGenerator},
         pow::{PowerCheckerAir, PowerCheckerTraceGenerator},
     },
     proof_shape::ProofShapeModule,
@@ -43,6 +43,8 @@ use crate::{
 
 mod dummy;
 pub(crate) mod frame;
+
+const BATCH_CONSTRAINT_MOD_IDX: usize = 3;
 
 // TODO[jpw]: make this generic in <SC: StarkGenericConfig>
 pub trait AirModule {
@@ -67,11 +69,14 @@ pub trait GlobalTraceGenCtx {
 ///
 /// This function should be expected to be called in parallel, one logical thread per module.
 pub trait TraceGenModule<GC: GlobalTraceGenCtx, PB: ProverBackendV2>: Send + Sync {
+    type ModuleSpecificCtx;
+
     fn generate_proving_ctxs(
         &self,
         child_vk: &GC::ChildVerifyingKey,
         proofs: &GC::MultiProof,
         preflights: &GC::PreflightRecords,
+        ctx: Self::ModuleSpecificCtx,
     ) -> Vec<AirProvingContextV2<PB>>;
 }
 
@@ -291,10 +296,53 @@ impl BusInventory {
     }
 }
 
+#[derive(Clone, Copy)]
+enum TraceModuleRef<'a> {
+    Transcript(&'a TranscriptModule),
+    ProofShape(&'a ProofShapeModule),
+    Gkr(&'a GkrModule),
+    BatchConstraint(&'a BatchConstraintModule),
+    Stacking(&'a StackingModule),
+    Whir(&'a WhirModule),
+}
+
+impl<'a> TraceModuleRef<'a> {
+    fn generate_cpu_ctxs(
+        self,
+        child_vk: &MultiStarkVerifyingKeyV2,
+        proofs: &[Proof],
+        preflights: &[Preflight],
+        exp_bits_len_gen: &Arc<ExpBitsLenTraceGenerator>,
+    ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
+        match self {
+            TraceModuleRef::Transcript(module) => {
+                module.generate_proving_ctxs(child_vk, proofs, preflights, ())
+            }
+            TraceModuleRef::ProofShape(module) => {
+                module.generate_proving_ctxs(child_vk, proofs, preflights, ())
+            }
+            TraceModuleRef::Gkr(module) => {
+                module.generate_proving_ctxs(child_vk, proofs, preflights, exp_bits_len_gen.clone())
+            }
+            TraceModuleRef::BatchConstraint(module) => {
+                module.generate_proving_ctxs(child_vk, proofs, preflights, ())
+            }
+            TraceModuleRef::Stacking(module) => {
+                module.generate_proving_ctxs(child_vk, proofs, preflights, ())
+            }
+            TraceModuleRef::Whir(module) => {
+                module.generate_proving_ctxs(child_vk, proofs, preflights, exp_bits_len_gen.clone())
+            }
+        }
+    }
+}
+
 /// The recursive verifier sub-circuit consists of multiple chips, grouped into **modules**.
 ///
 /// This struct is stateful.
 pub struct VerifierSubCircuit<const MAX_NUM_PROOFS: usize> {
+    bus_inventory: BusInventory,
+
     transcript: TranscriptModule,
     proof_shape: ProofShapeModule,
     gkr: GkrModule,
@@ -304,14 +352,12 @@ pub struct VerifierSubCircuit<const MAX_NUM_PROOFS: usize> {
 
     power_checker_air: Arc<PowerCheckerAir<2, 32>>,
     power_checker_trace: Arc<PowerCheckerTraceGenerator<2, 32>>,
-    exp_bits_len_air: Arc<ExpBitsLenAir>,
 }
 
 impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
     pub fn new(child_mvk: Arc<MultiStarkVerifyingKeyV2>) -> Self {
         let mut b = BusIndexManager::new();
         let bus_inventory = BusInventory::new(&mut b);
-        let exp_bits_len_air = Arc::new(ExpBitsLenAir::new(bus_inventory.exp_bits_len_bus));
         let power_checker_trace = Arc::new(PowerCheckerTraceGenerator::<2, 32>::default());
         let power_checker_air = Arc::new(PowerCheckerAir::<2, 32> {
             pow_bus: bus_inventory.power_checker_bus,
@@ -326,12 +372,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             bus_inventory.clone(),
             power_checker_trace.clone(),
         );
-        let gkr = GkrModule::new(
-            &child_mvk,
-            &mut b,
-            bus_inventory.clone(),
-            exp_bits_len_air.clone(),
-        );
+        let gkr = GkrModule::new(&child_mvk, &mut b, bus_inventory.clone());
         let batch_constraint = BatchConstraintModule::new(
             &child_mvk,
             &mut b,
@@ -340,14 +381,10 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             power_checker_trace.clone(),
         );
         let stacking = StackingModule::new(&child_mvk, &mut b, bus_inventory.clone());
-        let whir = WhirModule::new(
-            &child_mvk,
-            &mut b,
-            bus_inventory.clone(),
-            exp_bits_len_air.clone(),
-        );
+        let whir = WhirModule::new(&child_mvk, &mut b, bus_inventory.clone());
 
         VerifierSubCircuit {
+            bus_inventory,
             transcript,
             proof_shape,
             gkr,
@@ -356,11 +393,12 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             whir,
             power_checker_air,
             power_checker_trace,
-            exp_bits_len_air,
         }
     }
 
     pub fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
+        let exp_bits_len_air = ExpBitsLenAir::new(self.bus_inventory.exp_bits_len_bus);
+
         iter::empty()
             .chain(self.transcript.airs())
             .chain(self.proof_shape.airs())
@@ -370,7 +408,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             .chain(self.whir.airs())
             .chain([
                 self.power_checker_air.clone() as AirRef<_>,
-                self.exp_bits_len_air.clone() as AirRef<_>,
+                Arc::new(exp_bits_len_air) as AirRef<_>,
             ])
             .collect()
     }
@@ -437,19 +475,21 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             .collect::<Vec<_>>();
 
         self.power_checker_trace.reset();
+        let exp_bits_len_gen = Arc::new(ExpBitsLenTraceGenerator::default());
 
-        const BATCH_CONSTRAINT_MOD_IDX: usize = 3;
         let modules = vec![
-            &self.transcript as &dyn TraceGenModule<GlobalCtxCpu, CpuBackendV2>,
-            &self.proof_shape as &dyn TraceGenModule<_, _>,
-            &self.gkr as &dyn TraceGenModule<_, _>,
-            &self.batch_constraint as &dyn TraceGenModule<_, _>,
-            &self.stacking as &dyn TraceGenModule<_, _>,
-            &self.whir as &dyn TraceGenModule<_, _>,
+            TraceModuleRef::Transcript(&self.transcript),
+            TraceModuleRef::ProofShape(&self.proof_shape),
+            TraceModuleRef::Gkr(&self.gkr),
+            TraceModuleRef::BatchConstraint(&self.batch_constraint),
+            TraceModuleRef::Stacking(&self.stacking),
+            TraceModuleRef::Whir(&self.whir),
         ];
         let mut ctxs_by_module = modules
             .into_par_iter()
-            .map(|module| module.generate_proving_ctxs(child_vk, proofs, &preflights))
+            .map(|module| {
+                module.generate_cpu_ctxs(child_vk, proofs, &preflights, &exp_bits_len_gen)
+            })
             .collect::<Vec<_>>();
         ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX].cached_mains =
             vec![child_vk_pcs_data];
@@ -459,16 +499,10 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             ColMajorMatrix::from_row_major(&self.power_checker_trace.generate_trace_row_major()),
         ));
         ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
-            ColMajorMatrix::from_row_major(&self.exp_bits_len_air.generate_trace_row_major()),
+            ColMajorMatrix::from_row_major(&exp_bits_len_gen.generate_trace_row_major()),
         ));
-        self.clear();
 
         ctx_per_trace
-    }
-
-    // TODO[jpw]: remove this, Circuit should not be stateful. INT-5366
-    pub(crate) fn clear(&self) {
-        self.exp_bits_len_air.requests.lock().unwrap().clear();
     }
 }
 
@@ -481,9 +515,44 @@ pub mod cuda_tracegen {
     };
 
     use super::*;
-    use crate::cuda::{
-        GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu,
-    };
+    use crate::cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu};
+
+    impl<'a> TraceModuleRef<'a> {
+        fn generate_gpu_ctxs(
+            self,
+            child_vk: &VerifyingKeyGpu,
+            proofs: &[ProofGpu],
+            preflights: &[PreflightGpu],
+            exp_bits_len_gen: &Arc<ExpBitsLenTraceGenerator>,
+        ) -> Vec<AirProvingContextV2<cuda_backend_v2::GpuBackendV2>> {
+            match self {
+                TraceModuleRef::Transcript(module) => {
+                    module.generate_proving_ctxs(child_vk, proofs, preflights, ())
+                }
+                TraceModuleRef::ProofShape(module) => {
+                    module.generate_proving_ctxs(child_vk, proofs, preflights, ())
+                }
+                TraceModuleRef::Gkr(module) => module.generate_proving_ctxs(
+                    child_vk,
+                    proofs,
+                    preflights,
+                    exp_bits_len_gen.clone(),
+                ),
+                TraceModuleRef::BatchConstraint(module) => {
+                    module.generate_proving_ctxs(child_vk, proofs, preflights, ())
+                }
+                TraceModuleRef::Stacking(module) => {
+                    module.generate_proving_ctxs(child_vk, proofs, preflights, ())
+                }
+                TraceModuleRef::Whir(module) => module.generate_proving_ctxs(
+                    child_vk,
+                    proofs,
+                    preflights,
+                    exp_bits_len_gen.clone(),
+                ),
+            }
+        }
+    }
 
     impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         pub fn commit_child_vk_gpu(
@@ -524,6 +593,7 @@ pub mod cuda_tracegen {
                 })
                 .collect::<Vec<_>>();
 
+            let exp_bits_len_gen = Arc::new(ExpBitsLenTraceGenerator::default());
             self.power_checker_trace.reset();
 
             // NOTE: avoid par_iter for now so H2D transfer all happens on same stream to avoid sync
@@ -531,14 +601,13 @@ pub mod cuda_tracegen {
             let preflights_gpu = zip(proofs, preflights_cpu)
                 .map(|(proof, preflight_cpu)| PreflightGpu::new(child_vk, proof, &preflight_cpu))
                 .collect::<Vec<_>>();
-            const BATCH_CONSTRAINT_MOD_IDX: usize = 3;
             let modules = vec![
-                &self.transcript as &dyn TraceGenModule<GlobalCtxGpu, GpuBackendV2>,
-                &self.proof_shape as &dyn TraceGenModule<_, _>,
-                &self.gkr as &dyn TraceGenModule<_, _>,
-                &self.batch_constraint as &dyn TraceGenModule<_, _>,
-                &self.stacking as &dyn TraceGenModule<_, _>,
-                &self.whir as &dyn TraceGenModule<_, _>,
+                TraceModuleRef::Transcript(&self.transcript),
+                TraceModuleRef::ProofShape(&self.proof_shape),
+                TraceModuleRef::Gkr(&self.gkr),
+                TraceModuleRef::BatchConstraint(&self.batch_constraint),
+                TraceModuleRef::Stacking(&self.stacking),
+                TraceModuleRef::Whir(&self.whir),
             ];
             // PERF[jpw]: we avoid par_iter so that kernel launches occur on the same stream.
             // This can be parallelized to separate streams for more CUDA stream parallelism, but it
@@ -547,7 +616,12 @@ pub mod cuda_tracegen {
             let mut ctxs_by_module = modules
                 .into_iter()
                 .map(|module| {
-                    module.generate_proving_ctxs(&child_vk_gpu, &proofs_gpu, &preflights_gpu)
+                    module.generate_gpu_ctxs(
+                        &child_vk_gpu,
+                        &proofs_gpu,
+                        &preflights_gpu,
+                        &exp_bits_len_gen,
+                    )
                 })
                 .collect::<Vec<_>>();
             ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
@@ -563,11 +637,10 @@ pub mod cuda_tracegen {
             ));
 
             let exp_bits_trace =
-                ColMajorMatrix::from_row_major(&self.exp_bits_len_air.generate_trace_row_major());
+                ColMajorMatrix::from_row_major(&exp_bits_len_gen.generate_trace_row_major());
             ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
                 transport_matrix_h2d_col_major(&exp_bits_trace).unwrap(),
             ));
-            self.clear();
 
             ctx_per_trace
         }

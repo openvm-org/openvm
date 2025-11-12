@@ -603,6 +603,8 @@ impl BatchConstraintModule {
 }
 
 impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
+    type ModuleSpecificCtx = ();
+
     /// **Note**: This generates all common main traces but leaves the cached trace for
     /// `SymbolicExpressionAir` unset. The cached trace must be loaded **after** calling this
     /// function.
@@ -611,6 +613,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
         child_vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
         preflights: &[Preflight],
+        _ctx: (),
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         let blob = self.generate_blob(child_vk, proofs, preflights);
 
@@ -700,11 +703,10 @@ impl BatchConstraintModule {
 #[cfg(feature = "cuda")]
 pub mod cuda_tracegen {
     use cuda_backend_v2::{
-        BabyBearPoseidon2GpuEngineV2, GpuBackendV2, GpuDeviceV2, stacked_pcs::StackedPcsDataGpu,
+        BabyBearPoseidon2GpuEngineV2, GpuBackendV2, stacked_pcs::StackedPcsDataGpu,
         transport_matrix_h2d_col_major,
     };
     use itertools::Itertools;
-    use p3_matrix::Matrix;
 
     use super::*;
     use crate::cuda::{
@@ -712,11 +714,14 @@ pub mod cuda_tracegen {
     };
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for BatchConstraintModule {
+        type ModuleSpecificCtx = ();
+
         fn generate_proving_ctxs(
             &self,
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
+            module_ctx: (),
         ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
             // default hybrid implementation:
             let ctxs_cpu = TraceGenModule::<GlobalCtxCpu, CpuBackendV2>::generate_proving_ctxs(
@@ -727,6 +732,7 @@ pub mod cuda_tracegen {
                     .iter()
                     .map(|preflight| preflight.cpu.clone())
                     .collect_vec(),
+                module_ctx,
             );
             ctxs_cpu
                 .into_iter()

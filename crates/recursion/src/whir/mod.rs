@@ -20,7 +20,7 @@ use stark_backend_v2::{
 };
 
 use crate::{
-    primitives::exp_bits_len::ExpBitsLenAir,
+    primitives::exp_bits_len::ExpBitsLenTraceGenerator,
     system::{
         AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, MerkleVerifyLog, Preflight,
         TraceGenModule, WhirPreflight,
@@ -57,7 +57,6 @@ mod whir_round;
 pub struct WhirModule {
     params: SystemParams,
     bus_inventory: BusInventory,
-    exp_bits_len_air: Arc<ExpBitsLenAir>,
 
     // "execution" buses
     sumcheck_bus: WhirSumcheckBus,
@@ -81,7 +80,6 @@ impl WhirModule {
         child_vk: &MultiStarkVerifyingKeyV2,
         b: &mut BusIndexManager,
         bus_inventory: BusInventory,
-        exp_bits_len_air: Arc<ExpBitsLenAir>,
     ) -> Self {
         let sumcheck_bus = WhirSumcheckBus::new(b.new_bus_idx());
         let alpha_bus = WhirAlphaBus::new(b.new_bus_idx());
@@ -98,7 +96,6 @@ impl WhirModule {
         Self {
             params: child_vk.inner.params,
             bus_inventory,
-            exp_bits_len_air,
             sumcheck_bus,
             verify_queries_bus,
             verify_query_bus,
@@ -140,7 +137,6 @@ impl WhirModule {
             k_whir,
             num_whir_queries,
             log_blowup,
-            whir_pow_bits,
             ..
         } = self.params;
 
@@ -222,9 +218,6 @@ impl WhirModule {
             let pow_sample = ts.sample();
             pow_samples.push(pow_sample);
 
-            self.exp_bits_len_air
-                .add_exp_bits_len(F::GENERATOR, pow_sample, whir_pow_bits);
-
             query_tidx_per_round.push(ts.len());
             let mut round_queries = vec![];
             for _ in 0..num_whir_queries {
@@ -249,8 +242,6 @@ impl WhirModule {
             for (query_idx, sample) in round_queries.into_iter().enumerate() {
                 let index = sample.as_canonical_u32() & ((1 << (log_rs_domain_size - k_whir)) - 1);
                 let zj_root = omega.exp_u64(index as u64);
-                self.exp_bits_len_air
-                    .add_exp_bits_len(omega, sample, log_rs_domain_size - k_whir);
 
                 let zj = zj_root.exp_power_of_2(k_whir);
 
@@ -484,16 +475,18 @@ impl WhirModule {
         child_vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
         preflights: &[Preflight],
+        exp_bits_len_gen: Arc<ExpBitsLenTraceGenerator>,
     ) -> WhirBlobCpu {
         // TODO: Move more stuff here. (Out of preflight and redundant logic in generate_trace
         // functions.)
         let SystemParams {
-            l_skip: _,
-            n_stack: _,
+            l_skip,
+            n_stack,
             k_whir,
             num_whir_queries,
+            log_blowup,
             log_final_poly_len: _,
-            whir_pow_bits: _,
+            whir_pow_bits,
             ..
         } = child_vk.inner.params;
         let perm = poseidon2_perm();
@@ -503,6 +496,25 @@ impl WhirModule {
 
         for (proof_idx, (proof, preflight)) in zip(proofs, preflights).enumerate() {
             let mu = preflight.stacking.stacking_batching_challenge;
+
+            preflight.whir.pow_samples.iter().for_each(|&pow_sample| {
+                exp_bits_len_gen.add_exp_bits_len(F::GENERATOR, pow_sample, whir_pow_bits);
+            });
+
+            let mut log_rs_domain_size = l_skip + n_stack + log_blowup;
+            let num_whir_rounds = preflight.whir.pow_samples.len();
+            for round_queries in preflight
+                .whir
+                .queries
+                .chunks(num_whir_queries)
+                .take(num_whir_rounds)
+            {
+                let omega = F::two_adic_generator(log_rs_domain_size);
+                for &sample in round_queries {
+                    exp_bits_len_gen.add_exp_bits_len(omega, sample, log_rs_domain_size - k_whir);
+                }
+                log_rs_domain_size -= 1;
+            }
 
             let num_total_stacking_cols: usize = proof
                 .stacking_proof
@@ -569,13 +581,16 @@ impl WhirModule {
 }
 
 impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for WhirModule {
+    type ModuleSpecificCtx = Arc<ExpBitsLenTraceGenerator>;
+
     fn generate_proving_ctxs(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
         preflights: &[Preflight],
+        exp_bits_len_gen: Arc<ExpBitsLenTraceGenerator>,
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
-        let blob = self.generate_blob(child_vk, proofs, preflights);
+        let blob = self.generate_blob(child_vk, proofs, preflights, exp_bits_len_gen);
 
         [
             WhirModuleChip::WhirRound,
@@ -712,11 +727,14 @@ mod cuda_tracegen {
     };
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for WhirModule {
+        type ModuleSpecificCtx = Arc<ExpBitsLenTraceGenerator>;
+
         fn generate_proving_ctxs(
             &self,
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
+            exp_bits_len_gen: Arc<ExpBitsLenTraceGenerator>,
         ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
             // default hybrid implementation:
             let ctxs_cpu = TraceGenModule::<GlobalCtxCpu, CpuBackendV2>::generate_proving_ctxs(
@@ -727,6 +745,7 @@ mod cuda_tracegen {
                     .iter()
                     .map(|preflight| preflight.cpu.clone())
                     .collect_vec(),
+                exp_bits_len_gen,
             );
             ctxs_cpu
                 .into_iter()
