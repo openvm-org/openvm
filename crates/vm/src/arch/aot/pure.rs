@@ -136,17 +136,8 @@ where
 
                 asm_str += &Self::pop_internal_registers();
                 asm_str += &Self::pop_address_space_start();
-                asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
-                asm_str += &format!("   mov {REG_SECOND_ARG}, {pc}\n");
-                asm_str += &format!("   mov {REG_D}, {set_pc_ptr}\n");
-                asm_str += &format!("   call {REG_D}\n");
-                asm_str += &format!(
-                    "   mov {REG_RETURN_VAL}, {}\n",
-                    instruction.c.as_canonical_u32()
-                );
-                asm_str += &Self::pop_external_registers();
-                asm_str += "    ret\n";
 
+                asm_str += &format!("   je asm_run_end_{pc}\n");
                 continue;
             }
 
