@@ -96,7 +96,7 @@ where
     F: PrimeField32,
 {
     fn is_aot_supported(&self, inst: &Instruction<F>) -> bool {
-        false
+        inst.opcode == MulOpcode::MUL.global_opcode()
     }
 
     fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
