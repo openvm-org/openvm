@@ -22,19 +22,20 @@ where
     F: PrimeField32,
 {
     fn is_aot_supported(&self, inst: &openvm_instructions::instruction::Instruction<F>) -> bool {
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(
-            inst.opcode
-                .local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
-        );
-        let e_u32 = inst.e.as_canonical_u32();
-        let is_native_store = e_u32 == NATIVE_AS;
-        // Writing into native address space is not supported in AOT.
-        match local_opcode {
-            Rv32LoadStoreOpcode::STOREW
-            | Rv32LoadStoreOpcode::STOREH
-            | Rv32LoadStoreOpcode::STOREB => !is_native_store,
-            _ => true,
-        }
+        // let local_opcode = Rv32LoadStoreOpcode::from_usize(
+        //     inst.opcode
+        //         .local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
+        // );
+        // let e_u32 = inst.e.as_canonical_u32();
+        // let is_native_store = e_u32 == NATIVE_AS;
+        // // Writing into native address space is not supported in AOT.
+        // match local_opcode {
+        //     Rv32LoadStoreOpcode::STOREW
+        //     | Rv32LoadStoreOpcode::STOREH
+        //     | Rv32LoadStoreOpcode::STOREB => !is_native_store,
+        //     _ => true,
+        // }
+        false
     }
 
     fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
