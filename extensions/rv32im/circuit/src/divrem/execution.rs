@@ -3,6 +3,8 @@ use std::{
     mem::size_of,
 };
 
+#[cfg(feature = "aot")]
+use openvm_circuit::arch::aot::common::REG_A_W;
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
@@ -15,6 +17,8 @@ use openvm_rv32im_transpiler::DivRemOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::DivRemExecutor;
+#[cfg(feature = "aot")]
+use crate::common::{gpr_to_xmm, xmm_to_gpr};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -122,8 +126,12 @@ where
         let c_reg = c.as_canonical_u32() / 4;
 
         // Calculate the result. Inputs: eax, ecx. Outputs: edx.
-        asm_str += &rv32_register_to_gpr(b_reg as u8, "eax");
-        asm_str += &rv32_register_to_gpr(c_reg as u8, "ecx");
+        // Note that for div/rem we are tied to eax/edx because of idiv requirements
+
+        let (_, delta_str_b) = &xmm_to_gpr(b_reg as u8, "eax", true);
+        asm_str += delta_str_b;
+        let (reg_c, delta_str_c) = &xmm_to_gpr(c_reg as u8, REG_A_W, false);
+        asm_str += delta_str_c;
         asm_str += "   mov edx, 0\n";
 
         let label_prefix = format!(
@@ -143,11 +151,11 @@ where
         let normal_label = format!("{label_prefix}__normal");
         match local_opcode {
             DivRemOpcode::DIV => {
-                asm_str += "   test ecx, ecx\n";
+                asm_str += &format!("   test {reg_c}, {reg_c}\n");
                 asm_str += &format!("   je {zero_label}\n");
                 asm_str += "   cmp eax, 0x80000000\n";
                 asm_str += &format!("   jne {normal_label}\n");
-                asm_str += "   cmp ecx, -1\n";
+                asm_str += &format!("   cmp {reg_c}, -1\n");
                 asm_str += &format!("   jne {normal_label}\n");
                 asm_str += &format!("   jmp {overflow_label}\n");
 
@@ -155,7 +163,7 @@ where
                 // sign-extend EAX into EDX:EAX
                 asm_str += "   cdq\n";
                 // eax = eax / ecx, edx = eax % ecx
-                asm_str += "   idiv ecx\n";
+                asm_str += &format!("   idiv {reg_c}\n");
                 asm_str += "   mov edx, eax\n";
                 asm_str += &format!("   jmp {done_label}\n");
 
@@ -167,10 +175,10 @@ where
                 asm_str += "   mov edx, eax\n";
             }
             DivRemOpcode::DIVU => {
-                asm_str += "   test ecx, ecx\n";
+                asm_str += &format!("   test {reg_c}, {reg_c}\n");
                 asm_str += &format!("   je {zero_label}\n");
                 // eax = eax / ecx, edx = eax % ecx
-                asm_str += "   div ecx\n";
+                asm_str += &format!("   div {reg_c}\n");
                 asm_str += "   mov edx, eax\n";
                 asm_str += &format!("   jmp {done_label}\n");
 
@@ -178,11 +186,11 @@ where
                 asm_str += "   mov edx, -1\n";
             }
             DivRemOpcode::REM => {
-                asm_str += "   test ecx, ecx\n";
+                asm_str += &format!("   test {reg_c}, {reg_c}\n");
                 asm_str += &format!("   je {zero_label}\n");
                 asm_str += "   cmp eax, 0x80000000\n";
                 asm_str += &format!("   jne {normal_label}\n");
-                asm_str += "   cmp ecx, -1\n";
+                asm_str += &format!("   cmp {reg_c}, -1\n");
                 asm_str += &format!("   jne {normal_label}\n");
                 asm_str += "   mov edx, 0\n";
                 asm_str += &format!("   jmp {done_label}\n");
@@ -191,17 +199,17 @@ where
                 // sign-extend EAX into EDX:EAX
                 asm_str += "   cdq\n";
                 // eax = eax / ecx, edx = eax % ecx
-                asm_str += "   idiv ecx\n";
+                asm_str += &format!("   idiv {reg_c}\n");
                 asm_str += &format!("   jmp {done_label}\n");
 
                 asm_str += &format!("{zero_label}:\n");
                 asm_str += "   mov edx, eax\n";
             }
             DivRemOpcode::REMU => {
-                asm_str += "   test ecx, ecx\n";
+                asm_str += &format!("   test {reg_c}, {reg_c}\n");
                 asm_str += &format!("   je {zero_label}\n");
                 // eax = eax / ecx, edx = eax % ecx
-                asm_str += "   div ecx\n";
+                asm_str += &format!("   div {reg_c}\n");
                 asm_str += &format!("   jmp {done_label}\n");
 
                 asm_str += &format!("{zero_label}:\n");
@@ -209,14 +217,13 @@ where
             }
         }
         asm_str += &format!("{done_label}:\n");
-        asm_str += &gpr_to_rv32_register("edx", a_reg as u8);
+        asm_str += &gpr_to_xmm("edx", a_reg as u8);
 
         Ok(asm_str)
     }
 
     fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
-        // true
-        false
+        true
     }
 }
 
