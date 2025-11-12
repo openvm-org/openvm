@@ -205,8 +205,8 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
             builder,
             local.proof_idx,
             GkrXiSamplerMessage {
-                idx: needs_challenges.clone() * has_interactions.clone() * num_layers,
-                tidx: needs_challenges.clone() * tidx_after_gkr_layers,
+                idx: has_interactions.clone() * num_layers,
+                tidx: tidx_after_gkr_layers,
             },
             local.is_enabled * needs_challenges.clone(),
         );

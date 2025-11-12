@@ -31,7 +31,7 @@ pub struct GkrLayerCols<T> {
     /// Whether the current row is enabled (i.e. not padding)
     pub is_enabled: T,
     pub proof_idx: T,
-    pub is_first_layer: T,
+    pub is_first: T,
 
     /// An enabled row which is not involved in any interactions
     /// but should satisfy air constraints
@@ -100,6 +100,12 @@ where
         let next: &GkrLayerCols<AB::Var> = (*next).borrow();
 
         ///////////////////////////////////////////////////////////////////////
+        // Boolean Constraints
+        ///////////////////////////////////////////////////////////////////////
+
+        builder.assert_bool(local.is_dummy);
+
+        ///////////////////////////////////////////////////////////////////////
         // Proof Index and Loop Constraints
         ///////////////////////////////////////////////////////////////////////
 
@@ -116,13 +122,13 @@ where
                     NestedForLoopIoCols {
                         is_enabled: local.is_enabled,
                         counter: [local.proof_idx],
-                        is_first: [local.is_first_layer],
+                        is_first: [local.is_first],
                     }
                     .map_into(),
                     NestedForLoopIoCols {
                         is_enabled: next.is_enabled,
                         counter: [next.proof_idx],
-                        is_first: [next.is_first_layer],
+                        is_first: [next.is_first],
                     }
                     .map_into(),
                 ),
@@ -130,16 +136,16 @@ where
             ),
         );
 
-        let is_last_layer = LoopSubAir::local_is_last(next.is_enabled, next.is_first_layer);
+        let is_transition = LoopSubAir::local_is_transition(next.is_enabled, next.is_first);
+        let is_last = local.is_enabled - is_transition.clone();
+
+        let is_first_and_enabled = local.is_first * local.is_enabled;
 
         // Layer index starts from 0
-        builder
-            .when(local.is_first_layer)
-            .assert_zero(local.layer_idx);
-
+        builder.when(local.is_first).assert_zero(local.layer_idx);
         // Layer index increments by 1
         builder
-            .when(AB::Expr::ONE - is_last_layer.clone())
+            .when(is_transition.clone())
             .assert_eq(next.layer_idx, local.layer_idx + AB::Expr::ONE);
 
         ///////////////////////////////////////////////////////////////////////
@@ -152,14 +158,11 @@ where
             compute_recursive_relations(local.p_xi_0, local.q_xi_0, local.p_xi_1, local.q_xi_1);
 
         // Zero-check: verify p_cross = 0 at root layer
-        assert_zeros(
-            &mut builder.when(local.is_first_layer),
-            p_cross_term.clone(),
-        );
+        assert_zeros(&mut builder.when(local.is_first), p_cross_term.clone());
 
         // Root consistency check: verify q_cross = q0_claim
         assert_array_eq(
-            &mut builder.when(local.is_first_layer),
+            &mut builder.when(local.is_first),
             q_cross_term.clone(),
             local.sumcheck_claim_in,
         );
@@ -169,6 +172,8 @@ where
         ///////////////////////////////////////////////////////////////////////
 
         // Reduce to single evaluation
+        // `numer_claim = (p_xi_1 - p_xi_0) * mu + p_xi_0`
+        // `denom_claim = (q_xi_1 - q_xi_0) * mu + q_xi_0`
         let (numer_claim, denom_claim) = reduce_to_single_evaluation(
             local.p_xi_0,
             local.p_xi_1,
@@ -185,7 +190,7 @@ where
 
         // Next layer claim is RLC of previous layer numer_claim and denom_claim
         assert_array_eq(
-            &mut builder.when(local.is_enabled * (AB::Expr::ONE - is_last_layer.clone())),
+            &mut builder.when(is_transition.clone()),
             next.sumcheck_claim_in,
             ext_field_add::<AB::Expr>(
                 local.numer_claim,
@@ -196,11 +201,11 @@ where
         // Transcript index increment
         let tidx_after_sumcheck = local.tidx
             // Sample lambda on non-root layer
-            + (AB::Expr::ONE - local.is_first_layer) * AB::Expr::from_canonical_usize(D_EF)
+            + (AB::Expr::ONE - local.is_first) * AB::Expr::from_canonical_usize(D_EF)
             + local.layer_idx * AB::Expr::from_canonical_usize(4 * D_EF);
         let tidx_end = tidx_after_sumcheck.clone() + AB::Expr::from_canonical_usize(5 * D_EF);
         builder
-            .when(local.is_enabled * (AB::Expr::ONE - is_last_layer.clone()))
+            .when(is_transition.clone())
             .assert_eq(next.tidx, tidx_end.clone());
 
         ///////////////////////////////////////////////////////////////////////
@@ -208,6 +213,7 @@ where
         ///////////////////////////////////////////////////////////////////////
 
         let is_not_dummy = AB::Expr::ONE - local.is_dummy;
+        let is_non_root_layer = local.is_enabled * (AB::Expr::ONE - local.is_first);
 
         // 1. GkrLayerInputBus
         // 1a. Receive GKR layers input
@@ -218,7 +224,7 @@ where
                 tidx: local.tidx,
                 q0_claim: local.sumcheck_claim_in,
             },
-            local.is_enabled * local.is_first_layer * is_not_dummy.clone(),
+            is_first_and_enabled.clone() * is_not_dummy.clone(),
         );
         // 2. GkrLayerOutputBus
         // 2a. Send GKR input layer claims back
@@ -233,17 +239,16 @@ where
                     local.denom_claim.map(Into::into),
                 ],
             },
-            local.is_enabled * is_last_layer.clone() * is_not_dummy.clone(),
+            is_last.clone() * is_not_dummy.clone(),
         );
         // 3. GkrSumcheckInputBus
         // 3a. Send claim to sumcheck
-        let is_non_root_layer = local.is_enabled * (AB::Expr::ONE - local.is_first_layer);
         self.sumcheck_input_bus.send(
             builder,
             local.proof_idx,
             GkrSumcheckInputMessage {
                 layer_idx: local.layer_idx.into(),
-                is_last_layer: is_last_layer.clone(),
+                is_last_layer: is_last.clone(),
                 tidx: local.tidx + AB::Expr::from_canonical_usize(D_EF),
                 claim: local.sumcheck_claim_in.map(Into::into),
             },
@@ -267,7 +272,7 @@ where
                 claim_out: sumcheck_claim_out.map(Into::into),
                 eq_at_r_prime: local.eq_at_r_prime.map(Into::into),
             },
-            is_non_root_layer * is_not_dummy.clone(),
+            is_non_root_layer.clone() * is_not_dummy.clone(),
         );
         // 4. GkrSumcheckChallengeBus
         // 4a. Send challenge mu
@@ -279,7 +284,7 @@ where
                 sumcheck_round: AB::Expr::ZERO,
                 challenge: local.mu.map(Into::into),
             },
-            local.is_enabled * (AB::Expr::ONE - is_last_layer.clone()) * is_not_dummy.clone(),
+            is_transition.clone() * is_not_dummy.clone(),
         );
 
         ///////////////////////////////////////////////////////////////////////
@@ -293,7 +298,7 @@ where
             local.proof_idx,
             local.tidx,
             local.lambda,
-            local.is_enabled * (AB::Expr::ONE - local.is_first_layer) * is_not_dummy.clone(),
+            is_non_root_layer.clone() * is_not_dummy.clone(),
         );
         // 1b. Observe layer claims
         let mut tidx = tidx_after_sumcheck;
@@ -325,7 +330,7 @@ where
                 idx: AB::Expr::ZERO,
                 xi: local.mu.map(Into::into),
             },
-            local.is_enabled * is_last_layer * is_not_dummy.clone(),
+            is_last * is_not_dummy.clone(),
         );
     }
 }

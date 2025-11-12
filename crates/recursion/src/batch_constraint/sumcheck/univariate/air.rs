@@ -112,8 +112,12 @@ where
             ),
         );
 
-        let is_last = LoopSubAir::local_is_last(next.is_valid, next.is_first);
-        let is_transition = AB::Expr::ONE - is_last.clone();
+        let is_transition = LoopSubAir::local_is_transition(next.is_valid, next.is_first);
+        // Since local.is_valid = 0 => next.is_valid = 0 => is_transition = 0
+        // is_last = local.is_valid * (1 - is_transition) <=> local.is_valid - is_transition
+        let is_last = local.is_valid - is_transition.clone();
+
+        let is_first_and_valid = local.is_first * local.is_valid;
 
         // Coeff index starts at univariate degree
         builder.when(local.is_first).assert_eq(
@@ -137,7 +141,7 @@ where
 
         // Omega power ends at 1
         builder
-            .when(local.is_valid * is_last.clone())
+            .when(is_last.clone())
             .assert_one(local.omega_skip_power);
         // Powers of omega are calculated properly
         builder
@@ -227,7 +231,7 @@ where
             local.proof_idx,
             local.tidx + AB::Expr::from_canonical_usize(D_EF),
             local.r,
-            local.is_valid * local.is_first,
+            is_first_and_valid.clone(),
         );
         // Observe coefficients
         self.transcript_bus.observe_ext(
@@ -243,7 +247,7 @@ where
             builder,
             local.proof_idx,
             UnivariateSumcheckInputMessage { tidx: local.tidx },
-            local.is_valid * is_last.clone(),
+            is_last.clone(),
         );
         // Send tidx when there are no multilinear rounds
         self.stacking_module_bus.send(
@@ -253,7 +257,7 @@ where
                 // Skip r
                 tidx: local.tidx + AB::Expr::from_canonical_usize(2 * D_EF),
             },
-            local.is_valid * local.is_first,
+            is_first_and_valid.clone(),
         );
 
         self.claim_bus.receive(
@@ -263,7 +267,7 @@ where
                 round: AB::Expr::ZERO,
                 value: local.sum_at_roots.map(Into::into),
             },
-            local.is_valid * is_last.clone(),
+            is_last.clone(),
         );
         self.claim_bus.send(
             builder,
@@ -272,7 +276,7 @@ where
                 round: AB::Expr::ZERO,
                 value: local.value_at_r.map(Into::into),
             },
-            local.is_valid * is_last,
+            is_last,
         );
         self.randomness_bus.send(
             builder,
@@ -281,7 +285,7 @@ where
                 idx: AB::Expr::ZERO,
                 challenge: local.r.map(Into::into),
             },
-            local.is_valid * local.is_first,
+            is_first_and_valid,
         );
 
         self.batch_constraint_conductor_bus.send(
@@ -292,7 +296,7 @@ where
                 idx: AB::Expr::ZERO,
                 value: local.r.map(Into::into),
             },
-            local.is_first * AB::Expr::TWO,
+            local.is_valid * local.is_first * AB::Expr::TWO,
         );
     }
 }
