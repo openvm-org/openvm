@@ -97,8 +97,12 @@ where
             ),
         );
 
-        let is_last = LoopSubAir::local_is_last(next.is_valid, next.is_first);
-        let is_transition = AB::Expr::ONE - is_last.clone();
+        let is_transition = LoopSubAir::local_is_transition(next.is_valid, next.is_first);
+        // Since local.is_valid = 0 => next.is_valid = 0 => is_transition = 0
+        // is_last = local.is_valid * (1 - is_transition) <=> local.is_valid - is_transition
+        let is_last = local.is_valid - is_transition.clone();
+
+        let is_first_and_valid = local.is_first * local.is_valid;
 
         // Air index starts at num_airs - 1
         builder.when(local.is_first).assert_eq(
@@ -107,7 +111,7 @@ where
         );
         // Air index decrements by 1
         builder
-            .when(local.is_valid * is_transition.clone())
+            .when(is_transition.clone())
             .assert_eq(next.air_idx, local.air_idx - AB::Expr::ONE);
         // Air index ends at 0
         builder.when(is_last.clone()).assert_zero(local.air_idx);
@@ -115,8 +119,6 @@ where
         ///////////////////////////////////////////////////////////////////////
         // Transition Constraints
         ///////////////////////////////////////////////////////////////////////
-
-        let is_transition = AB::Expr::ONE - is_last.clone();
 
         assert_array_eq(&mut builder.when(is_transition.clone()), local.mu, next.mu);
 
@@ -185,7 +187,7 @@ where
             local.proof_idx,
             local.tidx + AB::Expr::from_canonical_usize(2 * D_EF),
             local.mu,
-            local.is_valid * local.is_first,
+            is_first_and_valid.clone(),
         );
         self.transcript_bus.observe_ext(
             builder,
@@ -209,7 +211,7 @@ where
                 round: AB::Expr::ZERO,
                 value: local.cur_hash.map(Into::into),
             },
-            local.is_valid * is_last.clone(),
+            is_last.clone(),
         );
 
         // Receive initial tidx and input layer claim from gkr module
@@ -224,7 +226,7 @@ where
                     local.cur_q_sum.map(Into::into),
                 ],
             },
-            local.is_valid * is_last,
+            is_last,
         );
         // Send final tidx value to univariate sumcheck
         self.univariate_sumcheck_input_bus.send(
@@ -234,7 +236,7 @@ where
                 // Skip mu
                 tidx: local.tidx + AB::Expr::from_canonical_usize(3 * D_EF),
             },
-            local.is_valid * local.is_first,
+            is_first_and_valid.clone(),
         );
 
         self.mu_bus.send(
@@ -245,7 +247,7 @@ where
                 idx: AB::Expr::ZERO,
                 value: local.mu.map(Into::into),
             },
-            local.is_first * local.is_valid,
+            is_first_and_valid,
         );
     }
 }

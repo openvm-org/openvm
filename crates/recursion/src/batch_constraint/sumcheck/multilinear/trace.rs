@@ -69,9 +69,10 @@ pub(crate) fn generate_trace(
                 cols.proof_idx = F::from_canonical_usize(pidx);
                 cols.is_proof_start = F::ONE;
                 cols.is_first_eval = F::ONE;
-                cols.prefix_product.copy_from_slice(EF::ONE.as_base_slice());
-                cols.suffix_product.copy_from_slice(EF::ONE.as_base_slice());
+                cols.prefix_product[0] = F::ONE;
+                cols.suffix_product[0] = F::ONE;
                 cols.denom_inv = denom_inv[0];
+                cols.lagrange_coeff[0] = denom_inv[0];
 
                 return;
             }
@@ -135,17 +136,20 @@ pub(crate) fn generate_trace(
                     let eval_ext = evals[eval_idx];
                     let prefix = prefix_products[eval_idx];
                     let suffix = suffix_products[eval_idx];
-                    let denom = denom_inv[eval_idx];
+                    let denom_inv = denom_inv[eval_idx];
 
-                    round_sum += eval_ext * prefix * suffix * denom;
+                    let lagrange_coeff = prefix * suffix * denom_inv;
+                    round_sum += eval_ext * lagrange_coeff;
 
                     let chunk = row_iter.next().unwrap();
                     let cols: &mut MultilinearSumcheckCols<F> = chunk.borrow_mut();
                     cols.eval.copy_from_slice(eval_ext.as_base_slice());
                     cols.prefix_product.copy_from_slice(prefix.as_base_slice());
                     cols.suffix_product.copy_from_slice(suffix.as_base_slice());
+                    cols.denom_inv = denom_inv;
+                    cols.lagrange_coeff
+                        .copy_from_slice(lagrange_coeff.as_base_slice());
                     cols.r.copy_from_slice(r.as_base_slice());
-                    cols.denom_inv = denom;
                     cols.cur_sum.copy_from_slice(round_sum.as_base_slice());
                 }
 
