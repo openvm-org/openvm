@@ -1,18 +1,16 @@
 [package]
-name = "recursion-circuit"
+name = "continuations"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Recursion circuit for v2"
+description = "Continuation AIRs and utilities for v2"
 
 [dependencies]
-p3-maybe-rayon.workspace = true
 p3-air = { workspace = true }
-p3-baby-bear = { workspace = true }
 p3-field = { workspace = true }
 p3-matrix = { workspace = true }
-p3-symmetric = { workspace = true }
 stark-backend-v2 = { workspace = true }
+recursion-circuit = { workspace = true }
 stark-recursion-circuit-derive = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true }
@@ -24,8 +22,6 @@ itertools.workspace = true
 tracing.workspace = true
 eyre.workspace = true
 derive-new.workspace = true
-strum.workspace = true
-strum_macros.workspace = true
 
 openvm-cuda-common = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
@@ -33,14 +29,18 @@ cuda-backend-v2 = { workspace = true, optional = true }
 
 [dev-dependencies]
 stark-backend-v2 = { workspace = true, features = ["test-utils"] }
-test-case.workspace = true
+openvm-rv32im-circuit = { workspace = true, features = ["test-utils"] }
+openvm-rv32im-transpiler = { workspace = true }
+openvm-toolchain-tests = { workspace = true }
+openvm-transpiler = { workspace = true }
+test-case = { workspace = true }
 
 [build-dependencies]
 openvm-cuda-builder = { workspace = true, optional = true }
 
 [features]
 default = ["parallel"]
-parallel = ["stark-backend-v2/parallel", "openvm-circuit/parallel"]
+parallel = ["stark-backend-v2/parallel", "recursion-circuit/parallel"]
 
 cuda = [
     "dep:openvm-cuda-builder",
@@ -49,4 +49,5 @@ cuda = [
     "dep:cuda-backend-v2",
     "openvm-circuit-primitives/cuda",
     "openvm-circuit/cuda",
+    "recursion-circuit/cuda",
 ]

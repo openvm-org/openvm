@@ -7,6 +7,7 @@ use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, pro
 
 use crate::{batch_constraint::fractions_folder::FractionsFolderCols, system::Preflight};
 
+#[tracing::instrument(name = "generate_trace(FractionsFolderAir)", skip_all)]
 pub(crate) fn generate_trace(
     _vk: &MultiStarkVerifyingKeyV2,
     proofs: &[Proof],

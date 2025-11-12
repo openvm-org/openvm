@@ -292,6 +292,7 @@ where
     }
 }
 
+#[tracing::instrument(name = "generate_trace(WhirRoundAir)", skip_all)]
 pub(crate) fn generate_trace(
     mvk: &MultiStarkVerifyingKeyV2,
     proofs: &[Proof],

@@ -203,19 +203,20 @@ where
             }
 
             builder
-                .when(AB::Expr::ONE - local.flags[i])
-                .assert_zero(local.pre_state[i]);
+                .when(local.is_same_commit)
+                .when(AB::Expr::ONE - next.flags[i])
+                .assert_eq(local.post_state[i], next.pre_state[i]);
 
             // !local.flags[i] => pre_state[i] == 0, so this leaves the
             // accumulator unchanged on invalid rows.
             codeword_value_slice_acc = ext_field_add(
                 codeword_value_slice_acc,
-                ext_field_multiply_scalar(local.mu_pows[i], local.pre_state[i]),
+                ext_field_multiply_scalar(local.mu_pows[i], local.pre_state[i] * local.flags[i]),
             );
 
             builder
                 .when(local.is_first_in_commit)
-                .assert_zero(next.pre_state[CHUNK + i]);
+                .assert_zero(local.pre_state[CHUNK + i]);
             builder
                 .when(local.is_same_commit)
                 .assert_eq(next.pre_state[CHUNK + i], local.post_state[CHUNK + i]);
@@ -329,6 +330,7 @@ pub(in crate::whir) struct InitialOpenedValueRecord {
     pub post_state: [F; WIDTH],
 }
 
+#[tracing::instrument(name = "generate_trace(InitialOpenedValuesAir)", skip_all)]
 pub(crate) fn generate_trace(
     params: SystemParams,
     proofs: &[Proof],
