@@ -15,7 +15,8 @@ use stark_backend_v2::{D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::{ExpBitsLenBus, ExpBitsLenMessage, TranscriptBus},
+    bus::TranscriptBus,
+    primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     utils::{ext_field_add, ext_field_multiply},
