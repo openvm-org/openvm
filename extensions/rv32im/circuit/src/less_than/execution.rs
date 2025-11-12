@@ -3,6 +3,8 @@ use std::{
     mem::size_of,
 };
 
+#[cfg(feature = "aot")]
+use openvm_circuit::arch::aot::common::convert_x86_reg;
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
@@ -15,6 +17,8 @@ use openvm_rv32im_transpiler::LessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::LessThanExecutor;
+#[cfg(feature = "aot")]
+use crate::less_than::execution::aot::common::Width;
 #[allow(unused_imports)]
 use crate::{adapters::imm_to_bytes, common::*};
 
@@ -123,8 +127,7 @@ where
     F: PrimeField32,
 {
     fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
-        // true
-        false
+        true
     }
     fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
         let to_i16 = |c: F| -> i16 {
@@ -140,28 +143,54 @@ where
         assert!(a % 4 == 0, "instruction.a must be a multiple of 4");
         assert!(b % 4 == 0, "instruction.b must be a multiple of 4");
 
-        asm_str += &rv32_register_to_gpr((b / 4) as u8, REG_A_W);
-
         let mut asm_opcode = String::new();
         if inst.opcode == LessThanOpcode::SLT.global_opcode() {
-            asm_opcode += "setl";
+            asm_opcode += "SETL";
         } else if inst.opcode == LessThanOpcode::SLTU.global_opcode() {
-            asm_opcode += "setb";
+            asm_opcode += "SETB";
         }
 
         if e == 0 {
-            asm_str += &format!("   cmp {REG_A_W}, {c}\n");
+            let (reg_b, delta_str_b) = &xmm_to_gpr((b / 4) as u8, REG_B_W, false);
+            asm_str += &delta_str_b;
+
+            let reg_a = if RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].is_some() {
+                RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].unwrap()
+            } else {
+                REG_A_W
+            };
+
+            let reg_a_w8l =
+                convert_x86_reg(reg_a, Width::W8L).ok_or(AotError::InvalidInstruction)?;
+
+            asm_str += &format!("   CMP {reg_b}, {c}\n");
+            asm_str += &format!("   {asm_opcode} {reg_a_w8l}\n");
+            asm_str += &format!("   MOVZX {reg_a}, {reg_a_w8l}\n");
+
+            asm_str += &gpr_to_xmm(reg_a, (a / 4) as u8);
         } else {
-            // [a:4]_1 <- [a:4]_1 + [c:4]_1
-            asm_str += &rv32_register_to_gpr((c / 4) as u8, REG_C_W);
-            asm_str += &format!("   cmp {REG_A_W}, {REG_C_W}\n");
+            let (reg_b, delta_str_b) = &xmm_to_gpr((b / 4) as u8, REG_B_W, false);
+            asm_str += &delta_str_b;
+
+            let (reg_c, delta_str_c) = &xmm_to_gpr((c / 4) as u8, REG_C_W, false);
+            asm_str += &delta_str_c;
+
+            let reg_a = if RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].is_some() {
+                RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].unwrap()
+            } else {
+                REG_A_W
+            };
+
+            let reg_a_w8l =
+                convert_x86_reg(reg_a, Width::W8L).ok_or(AotError::InvalidInstruction)?;
+
+            asm_str += &format!("   CMP {reg_b}, {reg_c}\n");
+            asm_str += &format!("   {asm_opcode} {reg_a_w8l}\n");
+            asm_str += &format!("   MOVZX {reg_a}, {reg_a_w8l}\n");
+
+            asm_str += &gpr_to_xmm(reg_a, (a / 4) as u8);
         }
 
-        // Set REG_A to 1 if less than (signed), 0 otherwise
-        asm_str += &format!("   {asm_opcode} cl\n"); // setl cl or setb cl
-        asm_str += &format!("   movzx {REG_A_W}, cl\n"); // zero-extend to 32-bit
-
-        asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
         // let it fall to the next instruction
         Ok(asm_str)
     }

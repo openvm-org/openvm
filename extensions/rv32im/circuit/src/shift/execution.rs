@@ -119,8 +119,7 @@ where
     F: PrimeField32,
 {
     fn is_aot_supported(&self, _instruction: &Instruction<F>) -> bool {
-        // true
-        false
+        true
     }
     fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
         let to_i16 = |c: F| -> i16 {
@@ -140,30 +139,51 @@ where
         // it is a hardware requirement that cl is used as the shift value
         // and we don't want to override the written [b:4]_1
         // [a:4]_1 <- [b:4]_1
-        asm_str += &rv32_register_to_gpr((b / 4) as u8, REG_B_W);
 
-        let mut asm_opcode = String::new();
-        if inst.opcode == ShiftOpcode::SLL.global_opcode() {
-            asm_opcode += "shl";
-        } else if inst.opcode == ShiftOpcode::SRL.global_opcode() {
-            asm_opcode += "shr";
-        } else if inst.opcode == ShiftOpcode::SRA.global_opcode() {
-            asm_opcode += "sar";
-        }
+        let str_reg_a = if RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].is_some() {
+            RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].unwrap()
+        } else {
+            REG_A_W
+        };
 
         if e == 0 {
-            // [b:4]_1 <- [b:4]_1 (shift) c
-            asm_str += &format!("   {asm_opcode} {REG_B_W}, {c}\n");
+            // [a:4]_1 <- [b:4]_1 (shift) c
+            let mut asm_opcode = String::new();
+            if inst.opcode == ShiftOpcode::SLL.global_opcode() {
+                asm_opcode += "shl";
+            } else if inst.opcode == ShiftOpcode::SRL.global_opcode() {
+                asm_opcode += "shr";
+            } else if inst.opcode == ShiftOpcode::SRA.global_opcode() {
+                asm_opcode += "sar";
+            }
+
+            let (reg_b, delta_str_b) = &xmm_to_gpr((b / 4) as u8, str_reg_a, true);
+            asm_str += delta_str_b;
+            asm_str += &format!("   {asm_opcode} {reg_b}, {c}\n");
+            asm_str += &gpr_to_xmm(reg_b, (a / 4) as u8);
         } else {
             // [b:4]_1 <- [b:4]_1 (shift) [c:4]_1
+            let mut asm_opcode = String::new();
+            if inst.opcode == ShiftOpcode::SLL.global_opcode() {
+                asm_opcode += "shlx";
+            } else if inst.opcode == ShiftOpcode::SRL.global_opcode() {
+                asm_opcode += "shrx";
+            } else if inst.opcode == ShiftOpcode::SRA.global_opcode() {
+                asm_opcode += "sarx";
+            }
 
-            asm_str += &rv32_register_to_gpr((c / 4) as u8, REG_C_W);
-            asm_str += &format!("   mov cl, {REG_C_B}\n");
-            // reg_a = reg_a << c
-            asm_str += &format!("   {asm_opcode} {REG_B_W}, cl\n");
+            let (reg_b, delta_str_b) = &xmm_to_gpr((b / 4) as u8, REG_B_W, false);
+            // after this force write, we set [a:4]_1 <- [b:4]_1
+            asm_str += delta_str_b;
+
+            let (reg_c, delta_str_c) = &xmm_to_gpr((c / 4) as u8, REG_C_W, false);
+            asm_str += delta_str_c;
+
+            asm_str += &format!("   {asm_opcode} {str_reg_a}, {reg_b}, {reg_c}\n");
+
+            asm_str += &gpr_to_xmm(str_reg_a, (a / 4) as u8);
         }
-        // General Register -> XMM
-        asm_str += &gpr_to_rv32_register(REG_B_W, (a / 4) as u8);
+
         // let it fall to the next instruction
         Ok(asm_str)
     }
