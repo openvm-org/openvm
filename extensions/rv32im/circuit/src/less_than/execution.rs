@@ -163,9 +163,9 @@ where
             let reg_a_w8l =
                 convert_x86_reg(reg_a, Width::W8L).ok_or(AotError::InvalidInstruction)?;
 
-            asm_str += &format!("   XOR {reg_a}, {reg_a}\n");
             asm_str += &format!("   CMP {reg_b}, {c}\n");
             asm_str += &format!("   {asm_opcode} {reg_a_w8l}\n");
+            asm_str += &format!("   MOVZX {reg_a}, {reg_a_w8l}\n");
 
             asm_str += &gpr_to_xmm(reg_a, (a / 4) as u8);
         } else {
@@ -184,9 +184,9 @@ where
             let reg_a_w8l =
                 convert_x86_reg(reg_a, Width::W8L).ok_or(AotError::InvalidInstruction)?;
 
-            asm_str += &format!("   XOR {reg_a}, {reg_a}\n");
             asm_str += &format!("   CMP {reg_b}, {reg_c}\n");
             asm_str += &format!("   {asm_opcode} {reg_a_w8l}\n");
+            asm_str += &format!("   MOVZX {reg_a}, {reg_a_w8l}\n");
 
             asm_str += &gpr_to_xmm(reg_a, (a / 4) as u8);
         }
