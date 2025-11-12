@@ -98,6 +98,7 @@ pub struct OpeningClaimsCols<F> {
 pub struct OpeningClaimsTraceGenerator;
 
 impl OpeningClaimsTraceGenerator {
+    #[tracing::instrument(name = "generate_trace(OpeningClaimsAir)", skip_all)]
     pub fn generate_trace(
         vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
