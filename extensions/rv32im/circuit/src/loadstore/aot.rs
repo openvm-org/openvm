@@ -155,8 +155,7 @@ where
         Ok(asm_str)
     }
 }
-impl<F, A, const NUM_CELLS: usize> AotMeteredExecutor<F> for LoadStoreExecutor<A, NUM_CELLS>
-where
-    F: PrimeField32,
+impl<F, A, const NUM_CELLS: usize> AotMeteredExecutor<F> for LoadStoreExecutor<A, NUM_CELLS> where
+    F: PrimeField32
 {
 }

@@ -185,11 +185,7 @@ where
 }
 
 #[cfg(feature = "aot")]
-impl<F, A> AotMeteredExecutor<F> for Rv32JalrExecutor<A>
-where
-    F: PrimeField32,
-{
-}
+impl<F, A> AotMeteredExecutor<F> for Rv32JalrExecutor<A> where F: PrimeField32 {}
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLED: bool>(
     pre_compute: &JalrPreCompute,

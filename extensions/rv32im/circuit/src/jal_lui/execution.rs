@@ -183,12 +183,7 @@ where
 }
 
 #[cfg(feature = "aot")]
-impl<F, A> AotMeteredExecutor<F> for Rv32JalLuiExecutor<A>
-where
-    F: PrimeField32,
-{
-
-}
+impl<F, A> AotMeteredExecutor<F> for Rv32JalLuiExecutor<A> where F: PrimeField32 {}
 
 #[inline(always)]
 unsafe fn execute_e12_impl<

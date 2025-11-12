@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use std::{borrow::BorrowMut, sync::Arc};
 
 #[cfg(feature = "aot")]
+use openvm_circuit::arch::VirtualMachine;
+#[cfg(feature = "aot")]
 use openvm_circuit::arch::{VmExecutor, VmState};
 #[cfg(feature = "aot")]
 use openvm_circuit::{
@@ -49,18 +51,16 @@ use openvm_stark_backend::{
     },
     utils::disable_debug_builder,
 };
+#[cfg(feature = "aot")]
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine;
+#[cfg(feature = "aot")]
+use openvm_stark_sdk::config::FriParameters;
+#[cfg(feature = "aot")]
+use openvm_stark_sdk::engine::StarkFriEngine;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::rngs::StdRng;
 #[cfg(feature = "aot")]
 use rand::Rng;
-#[cfg(feature = "aot")]
-use openvm_circuit::arch::VirtualMachine;
-#[cfg(feature = "aot")]
-use openvm_stark_sdk::config::FriParameters;
-#[cfg(feature = "aot")]
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine;
-#[cfg(feature = "aot")]
-use openvm_stark_sdk::engine::StarkFriEngine;
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
@@ -72,8 +72,6 @@ use {
 };
 
 use super::core::run_mulh;
-#[cfg(feature = "aot")]
-use crate::{Rv32ImBuilder, Rv32ImConfig};
 use crate::{
     adapters::{
         Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller, RV32_CELL_BITS,
@@ -83,6 +81,8 @@ use crate::{
     test_utils::get_verification_error,
     MulHCoreAir, MulHFiller, Rv32MulHAir, Rv32MulHExecutor,
 };
+#[cfg(feature = "aot")]
+use crate::{Rv32ImBuilder, Rv32ImConfig};
 
 const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
@@ -570,14 +570,28 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>
     let (_, metered_aot_state) = metered_aot
         .execute_metered(vec![], metered_ctx.clone())
         .expect("metered AOT execution must succeed");
-    println!("interp_state.pc(): {}, metered_interp_state.pc(): {}", interp_state.pc(), metered_interp_state.pc());
+    println!(
+        "interp_state.pc(): {}, metered_interp_state.pc(): {}",
+        interp_state.pc(),
+        metered_interp_state.pc()
+    );
     assert_eq!(metered_aot_state.pc(), metered_interp_state.pc());
-    let tree_mi =
-        MerkleTree::from_memory(&metered_interp_state.memory.memory, &memory_dimensions, &hasher);
-    let tree_ma =
-        MerkleTree::from_memory(&metered_aot_state.memory.memory, &memory_dimensions, &hasher);
-    
-    assert_eq!(tree_ma.root(), tree_mi.root(), "Metered interpreter memory differs");
+    let tree_mi = MerkleTree::from_memory(
+        &metered_interp_state.memory.memory,
+        &memory_dimensions,
+        &hasher,
+    );
+    let tree_ma = MerkleTree::from_memory(
+        &metered_aot_state.memory.memory,
+        &memory_dimensions,
+        &hasher,
+    );
+
+    assert_eq!(
+        tree_ma.root(),
+        tree_mi.root(),
+        "Metered interpreter memory differs"
+    );
     (interp_state, aot_state)
 }
 

@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use derive_more::derive::From;
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
 #[cfg(feature = "aot")]
 use openvm_circuit_derive::{AotExecutor, AotMeteredExecutor};
-use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus,
     VariableRangeCheckerChip,

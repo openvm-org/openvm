@@ -229,7 +229,6 @@ where
     }
 }
 
-
 #[cfg(feature = "aot")]
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AotMeteredExecutor<F>
     for ShiftExecutor<A, NUM_LIMBS, LIMB_BITS>

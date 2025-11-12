@@ -444,8 +444,6 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
     }
 }
 
-
-
 #[proc_macro_derive(MeteredExecutor)]
 pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
@@ -646,9 +644,9 @@ pub fn aot_metered_executor_derive(input: TokenStream) -> TokenStream {
             };
             let mut new_generics = generics.clone();
             let where_clause = new_generics.make_where_clause();
-            where_clause
-                .predicates
-                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::AotMeteredExecutor<F> });
+            where_clause.predicates.push(
+                syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::AotMeteredExecutor<F> },
+            );
             let (impl_generics, _, where_clause) = new_generics.split_for_impl();
 
             quote! {

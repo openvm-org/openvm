@@ -162,7 +162,8 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize> InterpreterMeteredExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS>
+impl<F, A, const NUM_LIMBS: usize> InterpreterMeteredExecutor<F>
+    for BranchEqualExecutor<A, NUM_LIMBS>
 where
     F: PrimeField32,
 {
@@ -205,9 +206,8 @@ where
     }
 }
 #[cfg(feature = "aot")]
-impl<F, A, const NUM_LIMBS: usize> AotMeteredExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS>
-where
-    F: PrimeField32,
+impl<F, A, const NUM_LIMBS: usize> AotMeteredExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS> where
+    F: PrimeField32
 {
 }
 

@@ -19,6 +19,8 @@ use crate::arch::aot::common::{
 };
 #[cfg(feature = "tco")]
 use crate::arch::interpreter::InterpretedInstance;
+#[cfg(feature = "aot")]
+use crate::arch::SystemConfig;
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
@@ -28,8 +30,6 @@ use crate::{
         program::ProgramBus,
     },
 };
-#[cfg(feature = "aot")]
-use crate::arch::SystemConfig;
 
 #[derive(Error, Debug)]
 pub enum ExecutionError {
@@ -240,11 +240,15 @@ pub trait AotMeteredExecutor<F> {
         false
     }
 
-    fn generate_x86_metered_asm(&self, inst: &Instruction<F>, pc: u32, config: &SystemConfig) -> Result<String, AotError>{
+    fn generate_x86_metered_asm(
+        &self,
+        inst: &Instruction<F>,
+        pc: u32,
+        config: &SystemConfig,
+    ) -> Result<String, AotError> {
         unimplemented!()
     }
 }
-
 
 #[cfg(feature = "aot")]
 pub trait MeteredExecutor<F>: InterpreterMeteredExecutor<F> + AotMeteredExecutor<F> {}

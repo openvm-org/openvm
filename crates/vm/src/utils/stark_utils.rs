@@ -119,18 +119,17 @@ where
 
         let system_config: &SystemConfig = config.as_ref();
         let addr_spaces = &system_config.memory_config.addr_spaces;
-        let assert_vm_state_eq = |lhs: &VmState<Val<E::SC>, GuestMemory>,
-                                rhs: &VmState<Val<E::SC>, GuestMemory>| {
-            assert_eq!(lhs.pc(), rhs.pc());
-            for r in 0..addr_spaces[1].num_cells {
-                let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
-                let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
-                assert_eq!(a, b);
-            }
-        };
+        let assert_vm_state_eq =
+            |lhs: &VmState<Val<E::SC>, GuestMemory>, rhs: &VmState<Val<E::SC>, GuestMemory>| {
+                assert_eq!(lhs.pc(), rhs.pc());
+                for r in 0..addr_spaces[1].num_cells {
+                    let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
+                    let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
+                    assert_eq!(a, b);
+                }
+            };
         assert_vm_state_eq(&interp_state_pure, &aot_state_pure);
     }
-
 
     /*
     Assertions for Metered AOT
@@ -149,15 +148,11 @@ where
         assert_eq!(interp_state_metered.pc(), aot_state_metered.pc()); // hmmmmm; aot_state_metered not executing enough?
 
         let system_config: &SystemConfig = config.as_ref();
-        let addr_spaces = &system_config.memory_config.addr_spaces; 
+        let addr_spaces = &system_config.memory_config.addr_spaces;
 
-        for r in 0..addr_spaces[1].num_cells  {
-            let interp = unsafe {
-                interp_state_metered.memory.read::<u8, 1>(1, r as u32)
-            };
-            let aot_interp = unsafe {
-                aot_state_metered.memory.read::<u8, 1>(1, r as u32)
-            };
+        for r in 0..addr_spaces[1].num_cells {
+            let interp = unsafe { interp_state_metered.memory.read::<u8, 1>(1, r as u32) };
+            let aot_interp = unsafe { aot_state_metered.memory.read::<u8, 1>(1, r as u32) };
             assert_eq!(interp, aot_interp);
         }
 
@@ -168,7 +163,7 @@ where
             assert_eq!(segments[i].trace_heights, aot_segments[i].trace_heights);
         }
     }
-    
+
     Ok(())
 }
 

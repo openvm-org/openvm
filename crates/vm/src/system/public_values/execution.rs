@@ -10,17 +10,18 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::PublicValuesExecutor;
-#[cfg(feature = "aot")]
-use crate::arch::{AotExecutor, AotMeteredExecutor};
 #[cfg(not(feature = "tco"))]
 use crate::arch::ExecuteFunc;
 #[cfg(feature = "tco")]
 use crate::arch::Handler;
+#[cfg(feature = "aot")]
+use crate::arch::{AotExecutor, AotMeteredExecutor};
 use crate::{
     arch::{
         create_handler,
         execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait},
-        E2PreCompute, InterpreterExecutor, InterpreterMeteredExecutor, StaticProgramError, VmExecState,
+        E2PreCompute, InterpreterExecutor, InterpreterMeteredExecutor, StaticProgramError,
+        VmExecState,
     },
     system::memory::online::GuestMemory,
     utils::{transmute_field_to_u32, transmute_u32_to_field},

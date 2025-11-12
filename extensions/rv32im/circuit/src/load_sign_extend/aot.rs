@@ -112,7 +112,6 @@ where
     }
 }
 
-
 impl<F, A, const LIMB_BITS: usize> AotMeteredExecutor<F>
     for LoadSignExtendExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where

@@ -120,7 +120,6 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv32BranchEqual256Execut
     }
 }
 
-
 #[cfg(feature = "aot")]
 impl<F: PrimeField32> AotMeteredExecutor<F> for Rv32BranchEqual256Executor {}
 

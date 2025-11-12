@@ -202,7 +202,6 @@ where
     }
 }
 
-
 #[cfg(feature = "aot")]
 impl<F, A, const LIMB_BITS: usize> AotMeteredExecutor<F>
     for MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>

@@ -208,7 +208,6 @@ where
     }
 }
 
-
 #[cfg(feature = "aot")]
 impl<F> AotMeteredExecutor<F> for JalRangeCheckExecutor where F: PrimeField32 {}
 

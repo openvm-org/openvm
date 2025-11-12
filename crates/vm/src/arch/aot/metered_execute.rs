@@ -10,10 +10,11 @@ use super::{
     },
     AotInstance, AsmRunFn,
 };
-
 use crate::{
     arch::{
-        aot::{asm_to_lib, extern_handler, get_vm_address_space_addr, set_pc_shim, should_suspend_shim},
+        aot::{
+            asm_to_lib, extern_handler, get_vm_address_space_addr, set_pc_shim, should_suspend_shim,
+        },
         execution_mode::{ExecutionCtx, MeteredCtx, Segment},
         interpreter::{
             alloc_pre_compute_buf, get_metered_pre_compute_instructions,
@@ -149,7 +150,7 @@ where
             format!("{:p}", extern_handler::<F, MeteredCtx, true> as *const ());
         let set_pc_ptr = format!("{:p}", set_pc_shim::<F, MeteredCtx> as *const ());
         let should_suspend_ptr = format!("{:p}", should_suspend_shim::<F, MeteredCtx> as *const ()); //needs state_ptr
-        // need to pass in config: SystemConfig
+                                                                                                     // need to pass in config: SystemConfig
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
             /* Preprocessing step, to check if we should suspend or not */
             asm_str += &format!("asm_execute_pc_{pc}:\n");
@@ -164,8 +165,7 @@ where
             asm_str += &Self::pop_internal_registers();
             asm_str += &Self::pop_address_space_start();
             asm_str += &Self::rv32_regs_to_xmm();
-            asm_str += &format!("    jnz asm_run_end_{pc}\n");            
-
+            asm_str += &format!("    jnz asm_run_end_{pc}\n");
 
             if instruction.opcode.as_usize() == 0 {
                 // terminal opcode has no associated executor, so can handle with default fallback
@@ -203,22 +203,19 @@ where
                 .expect("executor not found for opcode");
 
             if executor.is_aot_metered_supported(&instruction) {
-                let segment =
-                    executor
-                        .generate_x86_metered_asm(&instruction, pc, inventory.config())
-                        .map_err(|err| match err {
-                            AotError::InvalidInstruction => {
-                                StaticProgramError::InvalidInstruction(pc)
-                            }
-                            AotError::NotSupported => StaticProgramError::DisabledOperation {
-                                pc,
-                                opcode: instruction.opcode,
-                            },
-                            AotError::NoExecutorFound(opcode) => {
-                                StaticProgramError::ExecutorNotFound { opcode }
-                            }
-                            AotError::Other(_message) => StaticProgramError::InvalidInstruction(pc),
-                        })?;
+                let segment = executor
+                    .generate_x86_metered_asm(&instruction, pc, inventory.config())
+                    .map_err(|err| match err {
+                        AotError::InvalidInstruction => StaticProgramError::InvalidInstruction(pc),
+                        AotError::NotSupported => StaticProgramError::DisabledOperation {
+                            pc,
+                            opcode: instruction.opcode,
+                        },
+                        AotError::NoExecutorFound(opcode) => {
+                            StaticProgramError::ExecutorNotFound { opcode }
+                        }
+                        AotError::Other(_message) => StaticProgramError::InvalidInstruction(pc),
+                    })?;
                 asm_str += &segment;
             } else {
                 asm_str += &Self::xmm_to_rv32_regs();
