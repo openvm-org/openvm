@@ -5,7 +5,6 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 #[cfg(feature = "aot")]
 use crate::common::{xmm_to_gpr, REG_A_W, REG_B_W};
-
 use crate::BranchLessThanExecutor;
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AotExecutor<F>
