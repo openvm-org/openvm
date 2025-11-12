@@ -127,7 +127,7 @@ where
     F: PrimeField32,
 {
     fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
-        false
+        true
     }
     fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
         let to_i16 = |c: F| -> i16 {
