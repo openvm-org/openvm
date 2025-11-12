@@ -40,6 +40,7 @@ where
     where
         E: MeteredExecutor<F>,
     {
+        // do we have access to the system config here?
         let asm_source = Self::create_metered_asm(exe, inventory)?;
         let lib = asm_to_lib(&asm_source)?;
 
@@ -54,7 +55,7 @@ where
             executor_idx_to_air_idx,
             &mut split_pre_compute_buf,
         )?;
-        
+
         let init_memory = exe.init_memory.clone();
 
         Ok(Self {
@@ -145,32 +146,24 @@ where
             format!("{:p}", extern_handler::<F, MeteredCtx, true> as *const ());
         let set_pc_ptr = format!("{:p}", set_pc_shim::<F, MeteredCtx> as *const ());
         let should_suspend_ptr = format!("{:p}", should_suspend_shim::<F, MeteredCtx> as *const ()); //needs state_ptr
+        // need to pass in config: SystemConfig
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
             /* Preprocessing step, to check if we should suspend or not */
             asm_str += &format!("asm_execute_pc_{pc}:\n");
 
-            // Check if we should suspend or not
-
-            // replace this with the call to the shim?
             asm_str += &Self::xmm_to_rv32_regs();
             asm_str += &Self::push_address_space_start();
             asm_str += &Self::push_internal_registers();
-
-            /* If your shim expects args, load them here (example: rdi = exec state) */
-            // asm_str += "    mov rdi, rbx\n"; // uncomment if needed
-
-            /* Call should_suspend_shim() -> bool (in AL) */
             asm_str += &format!("    movabs {REG_D}, {should_suspend_ptr}\n");
             asm_str += &format!("    mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
             asm_str += &format!("    call {REG_D}\n");
-            asm_str += &format!("    test al, al\n");                   // non-zero? -> suspend
-            asm_str += &format!("    jnz asm_run_end_{pc}\n");
-
-            /* Restore guest state after the call */
+            asm_str += &format!("    test al, al\n");
             asm_str += &Self::pop_internal_registers();
             asm_str += &Self::pop_address_space_start();
             asm_str += &Self::rv32_regs_to_xmm();
+            asm_str += &format!("    jnz asm_run_end_{pc}\n");            
 
+            
             if instruction.opcode.as_usize() == 0 {
                 // terminal opcode has no associated executor, so can handle with default fallback
                 asm_str += &Self::xmm_to_rv32_regs();
