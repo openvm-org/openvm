@@ -119,7 +119,7 @@ where
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Keccak256;
 
-#[derive(Clone, Copy, From, AnyEnum, Executor, InterpreterMeteredExecutor, PreflightExecutor)]
+#[derive(Clone, Copy, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 #[cfg_attr(feature = "aot", derive(openvm_circuit_derive::AotExecutor, openvm_circuit_derive::AotMeteredExecutor))]
 pub enum Keccak256Executor {
     Keccak256(KeccakVmExecutor),

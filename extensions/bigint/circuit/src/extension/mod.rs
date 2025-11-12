@@ -71,7 +71,7 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
     [1 << 8, 32 * (1 << 8)]
 }
 
-#[derive(Clone, From, AnyEnum, Executor, InterpreterMeteredExecutor, PreflightExecutor)]
+#[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 #[cfg_attr(feature = "aot", derive(openvm_circuit_derive::AotExecutor, openvm_circuit_derive::AotMeteredExecutor))]
 pub enum Int256Executor {
     BaseAlu256(Rv32BaseAlu256Executor),

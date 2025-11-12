@@ -92,7 +92,7 @@ impl WeierstrassExtension {
     }
 }
 
-#[derive(Clone, AnyEnum, Executor, InterpreterMeteredExecutor, PreflightExecutor)]
+#[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 #[cfg_attr(feature = "aot", derive(openvm_circuit_derive::AotExecutor, openvm_circuit_derive::AotMeteredExecutor))]
 pub enum WeierstrassExtensionExecutor {
     // 32 limbs prime

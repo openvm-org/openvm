@@ -3,7 +3,7 @@ use std::sync::Arc;
 use derive_more::derive::From;
 #[cfg(feature = "aot")]
 use openvm_circuit_derive::{AotExecutor, AotMeteredExecutor};
-use openvm_circuit_derive::{AnyEnum, Executor, InterpreterMeteredExecutor, PreflightExecutor};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus,
     VariableRangeCheckerChip,
@@ -139,7 +139,7 @@ pub enum TouchedMemory<F> {
     Volatile(TimestampedEquipartition<F, 1>),
 }
 
-#[derive(Clone, AnyEnum, Executor, InterpreterMeteredExecutor, PreflightExecutor, From)]
+#[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor, From)]
 #[cfg_attr(feature = "aot", derive(AotExecutor, AotMeteredExecutor))]
 pub enum SystemExecutor<F: Field> {
     PublicValues(PublicValuesExecutor<F>),

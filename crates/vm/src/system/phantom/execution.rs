@@ -11,7 +11,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use rand::rngs::StdRng;
 
 #[cfg(feature = "aot")]
-use crate::arch::AotExecutor;
+use crate::arch::{AotExecutor, AotMeteredExecutor};
 #[cfg(not(feature = "tco"))]
 use crate::arch::ExecuteFunc;
 #[cfg(feature = "tco")]
@@ -20,7 +20,7 @@ use crate::{
     arch::{
         create_handler,
         execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait},
-        E2PreCompute, ExecutionError, InterpreterExecutor, MeteredExecutor, PhantomSubExecutor,
+        E2PreCompute, ExecutionError, InterpreterExecutor, InterpreterMeteredExecutor, PhantomSubExecutor,
         StaticProgramError, Streams, VmExecState,
     },
     system::{memory::online::GuestMemory, phantom::PhantomExecutor},
