@@ -5,6 +5,8 @@ use std::{borrow::BorrowMut, sync::Arc};
 #[cfg(feature = "aot")]
 use openvm_circuit::arch::VirtualMachine;
 #[cfg(feature = "aot")]
+use openvm_circuit::arch::VirtualMachine;
+#[cfg(feature = "aot")]
 use openvm_circuit::arch::{VmExecutor, VmState};
 #[cfg(feature = "aot")]
 use openvm_circuit::{
@@ -54,7 +56,13 @@ use openvm_stark_backend::{
 #[cfg(feature = "aot")]
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine;
 #[cfg(feature = "aot")]
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine;
+#[cfg(feature = "aot")]
 use openvm_stark_sdk::config::FriParameters;
+#[cfg(feature = "aot")]
+use openvm_stark_sdk::config::FriParameters;
+#[cfg(feature = "aot")]
+use openvm_stark_sdk::engine::StarkFriEngine;
 #[cfg(feature = "aot")]
 use openvm_stark_sdk::engine::StarkFriEngine;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
