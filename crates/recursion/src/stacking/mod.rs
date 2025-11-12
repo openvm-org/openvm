@@ -206,6 +206,7 @@ impl AirModule for StackingModule {
 impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for StackingModule {
     type ModuleSpecificCtx = ();
 
+    #[tracing::instrument(name = "generate_proving_ctxs(StackingModule)", skip_all)]
     fn generate_proving_ctxs(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,

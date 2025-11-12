@@ -101,6 +101,27 @@ fn test_recursion_circuit_single_fib(
     debug(&circuit.airs(), &pk.per_air, &ctxs);
 }
 
+#[test]
+fn test_recursion_circuit_many_fib_airs() {
+    let l_skip = 3;
+    let n_stack = 5;
+    let k_whir = 3;
+    let log_trace_degree = 8;
+
+    if log_trace_degree > l_skip + n_stack {
+        return;
+    }
+    let params = test_system_params_small(l_skip, n_stack, k_whir);
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let fib = FibFixture::new_with_num_airs(0, 1, 1 << log_trace_degree, 9);
+    let (vk, proof) = fib.keygen_and_prove(&engine);
+
+    let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
+    let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
+    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
+    debug(&circuit.airs(), &pk.per_air, &ctxs);
+}
+
 #[test_case(2, 8, 3)]
 #[test_case(5, 5, 4)]
 #[test_case(5, 6, 4)]

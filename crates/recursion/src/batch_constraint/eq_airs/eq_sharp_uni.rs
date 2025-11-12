@@ -477,6 +477,10 @@ fn generate_eq_sharp_uni_blob(
 }
 
 /// Generate traces for `EqSharpUniAir` and `EqSharpUniReceiverAir`
+#[tracing::instrument(
+    name = "generate_trace(EqSharpUniAir + EqSharpUniReceiverAir)",
+    skip_all
+)]
 pub(crate) fn generate_eq_sharp_uni_traces(
     vk: &MultiStarkVerifyingKeyV2,
     _proofs: &[Proof],

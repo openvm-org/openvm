@@ -57,6 +57,7 @@ impl GkrSumcheckRecord {
     }
 }
 
+#[tracing::instrument(name = "generate_trace(GkrLayerSumcheckAir)", skip_all)]
 pub fn generate_trace(
     gkr_sumcheck_records: &[GkrSumcheckRecord],
     mus: &[Vec<EF>],

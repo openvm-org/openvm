@@ -5,6 +5,7 @@ use itertools::{Itertools, izip};
 use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdicField};
+#[cfg(not(debug_assertions))]
 use p3_maybe_rayon::prelude::*;
 use p3_symmetric::Permutation;
 use stark_backend_v2::{
@@ -566,7 +567,7 @@ impl WhirModule {
                             });
 
                             for (offset, &val) in opened_chunk.iter().enumerate() {
-                                *codeword_val += mu_pows[base + chunk_idx + offset] * val;
+                                *codeword_val += mu_pows[base + chunk_start + offset] * val;
                             }
                         }
                         base += width;
@@ -583,6 +584,7 @@ impl WhirModule {
 impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for WhirModule {
     type ModuleSpecificCtx = Arc<ExpBitsLenTraceGenerator>;
 
+    #[tracing::instrument(name = "generate_proving_ctxs(WhirModule)", skip_all)]
     fn generate_proving_ctxs(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -592,7 +594,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for WhirModule {
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         let blob = self.generate_blob(child_vk, proofs, preflights, exp_bits_len_gen);
 
-        [
+        let chips = [
             WhirModuleChip::WhirRound,
             WhirModuleChip::Sumcheck,
             WhirModuleChip::Query,
@@ -601,11 +603,14 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for WhirModule {
             WhirModuleChip::Folding,
             WhirModuleChip::FinalPolyMleEval,
             WhirModuleChip::FinalPolyQueryEval,
-        ]
-        .par_iter()
-        .map(|chip| chip.generate_trace(child_vk, proofs, preflights, &blob))
-        .map(AirProvingContextV2::simple_no_pis)
-        .collect()
+        ];
+        #[cfg(debug_assertions)]
+        let iter = chips.iter();
+        #[cfg(not(debug_assertions))]
+        let iter = chips.par_iter();
+        iter.map(|chip| chip.generate_trace(child_vk, proofs, preflights, &blob))
+            .map(AirProvingContextV2::simple_no_pis)
+            .collect()
     }
 }
 

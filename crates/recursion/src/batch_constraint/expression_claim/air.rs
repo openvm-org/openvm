@@ -39,6 +39,7 @@ pub struct ExpressionClaimCols<T> {
     pub idx_parity: T,
     pub trace_idx: T,
     /// The received evaluation claim. Note that for interactions, this is without norm_factor and eq_sharp_ns.
+    /// These are interactions_evals (without norm_factor and eq_sharp_ns) and constraint_evals in the rust verifier.
     pub value: [T; D_EF],
     /// Receive from eq_ns AIR
     pub eq_sharp_ns: [T; D_EF],

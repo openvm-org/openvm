@@ -511,6 +511,7 @@ impl GkrModule {
 impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for GkrModule {
     type ModuleSpecificCtx = Arc<ExpBitsLenTraceGenerator>;
 
+    #[tracing::instrument(name = "generate_proving_ctxs(GkrModule)", skip_all)]
     fn generate_proving_ctxs(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -520,16 +521,19 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for GkrModule {
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         let blob = self.generate_blob(child_vk, proofs, preflights, exp_bits_len_gen);
 
-        [
+        let chips = [
             GkrModuleChip::Input,
             GkrModuleChip::Layer,
             GkrModuleChip::LayerSumcheck,
             GkrModuleChip::XiSampler,
-        ]
-        .par_iter()
-        .map(|chip| chip.generate_trace(child_vk, proofs, preflights, &blob))
-        .map(AirProvingContextV2::simple_no_pis)
-        .collect()
+        ];
+        #[cfg(debug_assertions)]
+        let iter = chips.iter();
+        #[cfg(not(debug_assertions))]
+        let iter = chips.par_iter();
+        iter.map(|chip| chip.generate_trace(child_vk, proofs, preflights, &blob))
+            .map(AirProvingContextV2::simple_no_pis)
+            .collect()
     }
 }
 

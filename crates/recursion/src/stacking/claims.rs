@@ -72,6 +72,7 @@ pub struct StackingClaimsCols<F> {
 pub struct StackingClaimsTraceGenerator;
 
 impl StackingClaimsTraceGenerator {
+    #[tracing::instrument(name = "generate_trace(StackingClaimsAir)", skip_all)]
     pub fn generate_trace(
         vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],

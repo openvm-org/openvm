@@ -43,8 +43,9 @@ use crate::{
     },
     bus::{
         AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus, ConstraintSumcheckRandomnessBus,
-        EqNegBaseRandBus, EqNegResultBus, ExpressionClaimNMaxBus, HyperdimBus, PublicValuesBus,
-        SelHypercubeBus, SelUniBus, StackingModuleBus, TranscriptBus, XiRandomnessBus,
+        EqNegBaseRandBus, EqNegResultBus, ExpressionClaimNMaxBus, FractionFolderInputBus,
+        HyperdimBus, PublicValuesBus, SelHypercubeBus, SelUniBus, StackingModuleBus, TranscriptBus,
+        XiRandomnessBus,
     },
     primitives::{bus::PowerCheckerBus, pow::PowerCheckerTraceGenerator},
     system::{
@@ -68,6 +69,7 @@ pub struct BatchConstraintModule {
     constraint_sumcheck_randomness_bus: ConstraintSumcheckRandomnessBus,
     xi_randomness_bus: XiRandomnessBus,
     gkr_claim_bus: BatchConstraintModuleBus,
+    fraction_folder_input_bus: FractionFolderInputBus,
     univariate_sumcheck_input_bus: UnivariateSumcheckInputBus,
     stacking_module_bus: StackingModuleBus,
     column_opening_bus: ColumnClaimsBus,
@@ -124,6 +126,7 @@ impl BatchConstraintModule {
             constraint_sumcheck_randomness_bus: bus_inventory.constraint_randomness_bus,
             xi_randomness_bus: bus_inventory.xi_randomness_bus,
             gkr_claim_bus: bus_inventory.bc_module_bus,
+            fraction_folder_input_bus: bus_inventory.fraction_folder_input_bus,
             stacking_module_bus: bus_inventory.stacking_module_bus,
             column_opening_bus: bus_inventory.column_claims_bus,
             air_shape_bus: bus_inventory.air_shape_bus,
@@ -263,6 +266,8 @@ impl BatchConstraintModule {
             eq_sharp_ns_frontloaded.push(eq_sharp_ns[i] * r_rev_prod);
             r_rev_prod *= sumcheck_rnd[i];
         }
+        eq_ns_frontloaded.reverse();
+        eq_sharp_ns_frontloaded.reverse();
         eq_ns_frontloaded.push(eq_ns[preflight.proof_shape.n_max]);
         eq_sharp_ns_frontloaded.push(eq_sharp_ns[preflight.proof_shape.n_max]);
 
@@ -287,9 +292,9 @@ impl AirModule for BatchConstraintModule {
         let l_skip = self.l_skip;
 
         let fraction_folder_air = FractionsFolderAir {
-            num_airs: self.widths.len(),
             transcript_bus: self.transcript_bus,
             univariate_sumcheck_input_bus: self.univariate_sumcheck_input_bus,
+            fraction_folder_input_bus: self.fraction_folder_input_bus,
             sumcheck_bus: self.sumcheck_bus,
             mu_bus: self.batch_constraint_conductor_bus,
             gkr_claim_bus: self.gkr_claim_bus,
@@ -608,6 +613,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
     /// **Note**: This generates all common main traces but leaves the cached trace for
     /// `SymbolicExpressionAir` unset. The cached trace must be loaded **after** calling this
     /// function.
+    #[tracing::instrument(name = "generate_proving_ctxs(BatchConstraintModule)", skip_all)]
     fn generate_proving_ctxs(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,

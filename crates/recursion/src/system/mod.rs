@@ -25,9 +25,9 @@ use crate::{
     bus::{
         AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus, CommitmentsBus,
         ConstraintSumcheckRandomnessBus, EqNegBaseRandBus, EqNegResultBus, ExpressionClaimNMaxBus,
-        GkrModuleBus, HyperdimBus, LiftedHeightsBus, MerkleVerifyBus, Poseidon2Bus,
-        PublicValuesBus, SelUniBus, StackingIndicesBus, StackingModuleBus, TranscriptBus,
-        WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
+        FractionFolderInputBus, GkrModuleBus, HyperdimBus, LiftedHeightsBus, MerkleVerifyBus,
+        Poseidon2Bus, PublicValuesBus, SelUniBus, StackingIndicesBus, StackingModuleBus,
+        TranscriptBus, WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::{
@@ -148,6 +148,7 @@ pub struct BusInventory {
     pub range_checker_bus: RangeCheckerBus,
     pub power_checker_bus: PowerCheckerBus,
     pub expression_claim_n_max_bus: ExpressionClaimNMaxBus,
+    pub fraction_folder_input_bus: FractionFolderInputBus,
 
     // Randomness buses
     pub xi_randomness_bus: XiRandomnessBus,
@@ -280,6 +281,7 @@ impl BusInventory {
             range_checker_bus: RangeCheckerBus::new(b.new_bus_idx()),
             power_checker_bus: PowerCheckerBus::new(b.new_bus_idx()),
             expression_claim_n_max_bus: ExpressionClaimNMaxBus::new(b.new_bus_idx()),
+            fraction_folder_input_bus: FractionFolderInputBus::new(b.new_bus_idx()),
 
             // Randomness buses
             xi_randomness_bus: XiRandomnessBus::new(b.new_bus_idx()),
@@ -341,7 +343,7 @@ impl<'a> TraceModuleRef<'a> {
 ///
 /// This struct is stateful.
 pub struct VerifierSubCircuit<const MAX_NUM_PROOFS: usize> {
-    bus_inventory: BusInventory,
+    pub bus_inventory: BusInventory,
 
     transcript: TranscriptModule,
     proof_shape: ProofShapeModule,
@@ -456,6 +458,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
 
     /// The generic `TS` allows using different transcript implementations for debugging purposes.
     /// The default type is use is `DuplexSpongeRecorder`.
+    #[tracing::instrument(skip_all)]
     pub fn generate_proving_ctxs<TS>(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -485,8 +488,11 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             TraceModuleRef::Stacking(&self.stacking),
             TraceModuleRef::Whir(&self.whir),
         ];
-        let mut ctxs_by_module = modules
-            .into_par_iter()
+        #[cfg(debug_assertions)]
+        let modules_iter = modules.into_iter();
+        #[cfg(not(debug_assertions))]
+        let modules_iter = modules.into_par_iter();
+        let mut ctxs_by_module = modules_iter
             .map(|module| {
                 module.generate_cpu_ctxs(child_vk, proofs, &preflights, &exp_bits_len_gen)
             })

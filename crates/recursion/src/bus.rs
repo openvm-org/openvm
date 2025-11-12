@@ -152,6 +152,14 @@ define_typed_per_proof_permutation_bus!(GkrModuleBus, GkrModuleMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
+pub struct FractionFolderInputMessage<T> {
+    pub num_present_airs: T,
+}
+
+define_typed_per_proof_permutation_bus!(FractionFolderInputBus, FractionFolderInputMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct ExpressionClaimNMaxMessage<T> {
     pub n_max: T,
 }

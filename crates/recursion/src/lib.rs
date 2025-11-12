@@ -1,4 +1,3 @@
-pub mod aggregation;
 pub mod batch_constraint;
 pub mod bus;
 #[cfg(feature = "cuda")]
@@ -6,7 +5,6 @@ pub mod cuda;
 pub mod gkr;
 pub mod primitives;
 pub mod proof_shape;
-pub mod public_values;
 pub mod stacking;
 pub mod subairs;
 pub mod system;

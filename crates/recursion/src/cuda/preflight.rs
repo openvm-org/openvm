@@ -97,12 +97,7 @@ impl PreflightGpu {
         let mut total_interactions = 0;
         let l_skip = vk.inner.params.l_skip;
 
-        let bc_air_shape_lookups = compute_air_shape_lookup_counts(
-            vk,
-            &preflight.proof_shape.sorted_trace_vdata,
-            l_skip,
-            preflight.proof_shape.n_max,
-        );
+        let bc_air_shape_lookups = compute_air_shape_lookup_counts(vk);
 
         let sorted_trace_vdata = preflight
             .proof_shape
@@ -115,7 +110,7 @@ impl PreflightGpu {
                     cached_idx: sorted_cached_commits.len(),
                     starting_cidx: cidx,
                     total_interactions,
-                    num_air_id_lookups: bc_air_shape_lookups[vdata.log_height],
+                    num_air_id_lookups: bc_air_shape_lookups[*air_idx],
                 };
                 cidx += vdata.cached_commitments.len()
                     + vk.inner.per_air[*air_idx].preprocessed_data.is_some() as usize;

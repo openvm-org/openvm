@@ -317,6 +317,7 @@ where
     }
 }
 
+#[tracing::instrument(name = "generate_trace(EqNsAir)", skip_all)]
 pub(crate) fn generate_eq_ns_trace(
     vk: &MultiStarkVerifyingKeyV2,
     _proofs: &[Proof],
