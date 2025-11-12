@@ -82,7 +82,7 @@ use crate::{
         sumcheck::{GkrLayerSumcheckAir, GkrSumcheckRecord},
         xi_sampler::{GkrXiSamplerAir, GkrXiSamplerRecord},
     },
-    primitives::exp_bits_len::ExpBitsLenAir,
+    primitives::exp_bits_len::ExpBitsLenTraceGenerator,
     system::{
         AirModule, BusIndexManager, BusInventory, GkrPreflight, GlobalCtxCpu, ModuleChip,
         Preflight, TraceGenModule,
@@ -108,7 +108,6 @@ pub struct GkrModule {
     logup_pow_bits: usize,
     // Global bus inventory
     bus_inventory: BusInventory,
-    exp_bits_len_air: Arc<ExpBitsLenAir>,
     // Module buses
     xi_sampler_bus: GkrXiSamplerBus,
     layer_input_bus: GkrLayerInputBus,
@@ -132,13 +131,11 @@ impl GkrModule {
         mvk: &MultiStarkVerifyingKeyV2,
         b: &mut BusIndexManager,
         bus_inventory: BusInventory,
-        exp_bits_len_air: Arc<ExpBitsLenAir>,
     ) -> Self {
         GkrModule {
             l_skip: mvk.inner.params.l_skip,
             logup_pow_bits: mvk.inner.params.logup_pow_bits,
             bus_inventory,
-            exp_bits_len_air,
             layer_input_bus: GkrLayerInputBus::new(b.new_bus_idx()),
             layer_output_bus: GkrLayerOutputBus::new(b.new_bus_idx()),
             sumcheck_input_bus: GkrSumcheckInputBus::new(b.new_bus_idx()),
@@ -160,11 +157,7 @@ impl GkrModule {
         } = &proof.gkr_proof;
 
         ts.observe(*logup_pow_witness);
-        let logup_pow_sample = ts.sample();
-
-        self.exp_bits_len_air
-            .add_exp_bits_len(F::GENERATOR, logup_pow_sample, self.logup_pow_bits);
-
+        let _logup_pow_sample = ts.sample();
         let _alpha_logup = ts.sample_ext();
         let _beta_logup = ts.sample_ext();
 
@@ -309,6 +302,7 @@ impl GkrModule {
         _child_vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
         preflights: &[Preflight],
+        exp_bits_len_gen: Arc<ExpBitsLenTraceGenerator>,
     ) -> GkrBlobCpu {
         debug_assert_eq!(proofs.len(), preflights.len());
 
@@ -331,6 +325,13 @@ impl GkrModule {
 
                 ts.observe(*logup_pow_witness);
                 let logup_pow_sample = ts.sample();
+
+                exp_bits_len_gen.add_exp_bits_len(
+                    F::GENERATOR,
+                    logup_pow_sample,
+                    self.logup_pow_bits,
+                );
+
                 let alpha_logup = ts.sample_ext();
                 let _beta_logup = ts.sample_ext();
 
@@ -508,13 +509,16 @@ impl GkrModule {
 }
 
 impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for GkrModule {
+    type ModuleSpecificCtx = Arc<ExpBitsLenTraceGenerator>;
+
     fn generate_proving_ctxs(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
         preflights: &[Preflight],
+        exp_bits_len_gen: Arc<ExpBitsLenTraceGenerator>,
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
-        let blob = self.generate_blob(child_vk, proofs, preflights);
+        let blob = self.generate_blob(child_vk, proofs, preflights, exp_bits_len_gen);
 
         [
             GkrModuleChip::Input,
@@ -570,11 +574,14 @@ mod cuda_tracegen {
     };
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for GkrModule {
+        type ModuleSpecificCtx = Arc<ExpBitsLenTraceGenerator>;
+
         fn generate_proving_ctxs(
             &self,
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
+            exp_bits_len_gen: Arc<ExpBitsLenTraceGenerator>,
         ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
             // default hybrid implementation:
             let ctxs_cpu = TraceGenModule::<GlobalCtxCpu, CpuBackendV2>::generate_proving_ctxs(
@@ -585,6 +592,7 @@ mod cuda_tracegen {
                     .iter()
                     .map(|preflight| preflight.cpu.clone())
                     .collect_vec(),
+                exp_bits_len_gen,
             );
             ctxs_cpu
                 .into_iter()
