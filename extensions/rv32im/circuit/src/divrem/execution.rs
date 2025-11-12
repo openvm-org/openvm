@@ -128,7 +128,7 @@ where
         // Calculate the result. Inputs: eax, ecx. Outputs: edx.
         // Note that for div/rem we are tied to eax/edx because of idiv requirements
         asm_str += &rv32_register_to_gpr(b_reg as u8, "eax");
-        let (reg_c, delta_str_c) = &xmm_to_gpr(c_reg as u8, REG_A, false);
+        let (reg_c, delta_str_c) = &xmm_to_gpr(c_reg as u8, REG_A_W, false);
         asm_str += delta_str_c;
         asm_str += "   mov edx, 0\n";
 
