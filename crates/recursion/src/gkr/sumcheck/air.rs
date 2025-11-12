@@ -19,8 +19,8 @@ use crate::{
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{
-        assert_one_ext, base_to_ext, ext_field_add, ext_field_multiply, ext_field_one_minus,
-        ext_field_subtract,
+        assert_one_ext, ext_field_add, ext_field_multiply, ext_field_multiply_scalar,
+        ext_field_one_minus, ext_field_subtract,
     },
 };
 
@@ -119,6 +119,12 @@ where
         let next: &GkrLayerSumcheckCols<AB::Var> = (*next).borrow();
 
         ///////////////////////////////////////////////////////////////////////
+        // Boolean Constraints
+        ///////////////////////////////////////////////////////////////////////
+
+        builder.assert_bool(local.is_dummy);
+
+        ///////////////////////////////////////////////////////////////////////
         // Proof Index and Loop Constraints
         ///////////////////////////////////////////////////////////////////////
 
@@ -144,19 +150,21 @@ where
             ),
         );
 
-        let is_last_round = LoopSubAir::local_is_last(next.is_enabled, next.is_first_round);
+        let is_transition_round =
+            LoopSubAir::local_is_transition(next.is_enabled, next.is_first_round);
+        let is_last_round = local.is_enabled - is_transition_round.clone();
+
+        let is_first_round_and_enabled = local.is_first_round * local.is_enabled;
 
         // Sumcheck round flag starts at 0
         builder.when(local.is_first_round).assert_zero(local.round);
-
         // Sumcheck round flag increments by 1
         builder
-            .when(AB::Expr::ONE - is_last_round.clone())
+            .when(is_transition_round.clone())
             .assert_eq(next.round, local.round + AB::Expr::ONE);
-
         // Sumcheck round flag end
         builder
-            .when(local.is_enabled * is_last_round.clone())
+            .when(is_last_round.clone())
             .assert_eq(local.round, local.layer_idx - AB::Expr::ONE);
 
         ///////////////////////////////////////////////////////////////////////
@@ -173,7 +181,7 @@ where
 
         // Eq propagation
         assert_array_eq(
-            &mut builder.when(local.is_enabled * (AB::Expr::ONE - is_last_round.clone())),
+            &mut builder.when(is_transition_round.clone()),
             local.eq_out,
             next.eq_in,
         );
@@ -184,26 +192,20 @@ where
         // Cubic interpolation: compute claim_out from polynomial evals at 0,1,2,3
         let claim_out: [AB::Expr; D_EF] =
             interpolate_cubic_at_0123(ev0, local.ev1, local.ev2, local.ev3, local.challenge);
-        assert_array_eq(
-            &mut builder.when(local.is_enabled),
-            local.claim_out,
-            claim_out,
-        );
+        assert_array_eq(builder, local.claim_out, claim_out);
 
         // Claim propagation
         assert_array_eq(
-            &mut builder.when(local.is_enabled * (AB::Expr::ONE - is_last_round.clone())),
+            &mut builder.when(is_transition_round.clone()),
             local.claim_out,
             next.claim_in,
         );
 
         // Transcript index increment
-        builder
-            .when(local.is_enabled * (AB::Expr::ONE - is_last_round.clone()))
-            .assert_eq(
-                next.tidx,
-                local.tidx.into() + AB::Expr::from_canonical_usize(4 * D_EF),
-            );
+        builder.when(is_transition_round.clone()).assert_eq(
+            next.tidx,
+            local.tidx.into() + AB::Expr::from_canonical_usize(4 * D_EF),
+        );
 
         ///////////////////////////////////////////////////////////////////////
         // Module Interactions
@@ -222,7 +224,7 @@ where
                 tidx: local.tidx,
                 claim: local.claim_in,
             },
-            local.is_enabled * local.is_first_round * is_not_dummy.clone(),
+            is_first_round_and_enabled.clone() * is_not_dummy.clone(),
         );
         // 2. GkrSumcheckOutputBus
         // 2a. Send output back to GkrLayerAir on final round
@@ -235,7 +237,7 @@ where
                 claim_out: local.claim_out.map(Into::into),
                 eq_at_r_prime: local.eq_out.map(Into::into),
             },
-            local.is_enabled * is_last_round * is_not_dummy.clone(),
+            is_last_round.clone() * is_not_dummy.clone(),
         );
 
         // 3. GkrSumcheckChallengeBus
@@ -318,9 +320,9 @@ where
     FA: FieldAlgebra,
     FA::F: BinomiallyExtendable<D_EF>,
 {
-    let three: [FA; D_EF] = base_to_ext(FA::from_canonical_usize(3));
-    let inv2: [FA; D_EF] = base_to_ext(FA::from_f(FA::F::from_canonical_usize(2).inverse()));
-    let inv6: [FA; D_EF] = base_to_ext(FA::from_f(FA::F::from_canonical_usize(6).inverse()));
+    let three: FA = FA::from_canonical_usize(3);
+    let inv2: FA = FA::from_f(FA::F::from_canonical_usize(2).inverse());
+    let inv6: FA = FA::from_f(FA::F::from_canonical_usize(6).inverse());
 
     // s1 = ev1 - ev0
     let s1: [FA; D_EF] = ext_field_subtract(ev1, ev0.clone());
@@ -332,15 +334,15 @@ where
     // d3 = s3 - (s2 - s1) * 3
     let d3: [FA; D_EF] = ext_field_subtract::<FA>(
         s3,
-        ext_field_multiply::<FA>(ext_field_subtract::<FA>(s2.clone(), s1.clone()), three),
+        ext_field_multiply_scalar::<FA>(ext_field_subtract::<FA>(s2.clone(), s1.clone()), three),
     );
 
     // p = d3 / 6
-    let p: [FA; D_EF] = ext_field_multiply(d3.clone(), inv6);
+    let p: [FA; D_EF] = ext_field_multiply_scalar(d3.clone(), inv6);
 
     // q = (s2 - d3) / 2 - s1
     let q: [FA; D_EF] = ext_field_subtract::<FA>(
-        ext_field_multiply::<FA>(ext_field_subtract::<FA>(s2, d3), inv2),
+        ext_field_multiply_scalar::<FA>(ext_field_subtract::<FA>(s2, d3), inv2),
         s1.clone(),
     );
 

@@ -47,12 +47,15 @@ pub struct MultilinearSumcheckCols<T> {
     pub cur_sum: [T; D_EF],
     pub eval: [T; D_EF],
 
+    pub prefix_product: [T; D_EF],
+    pub suffix_product: [T; D_EF],
     // perf(ayush): can be preprocessed cols
     // 1 / i!(d - i)!
     pub denom_inv: T,
 
-    pub prefix_product: [T; D_EF],
-    pub suffix_product: [T; D_EF],
+    // Lagrange coefficients for the interpolated polynomial
+    // prefix_product * suffix_product * denom_inv
+    pub lagrange_coeff: [T; D_EF],
 
     pub r: [T; D_EF],
 
@@ -91,6 +94,12 @@ where
         let s_deg = self.max_constraint_degree + 1;
 
         ///////////////////////////////////////////////////////////////////////
+        // Boolean Constraints
+        ///////////////////////////////////////////////////////////////////////
+
+        builder.assert_bool(local.is_dummy);
+
+        ///////////////////////////////////////////////////////////////////////
         // Loop Constraints
         ///////////////////////////////////////////////////////////////////////
 
@@ -116,8 +125,16 @@ where
             ),
         );
 
-        let is_proof_end = LoopSubAir::local_is_last(next.is_valid, next.is_proof_start);
-        let is_last_eval = LoopSubAir::local_is_last(next.is_valid, next.is_first_eval);
+        let is_first_eval_and_valid = local.is_valid * local.is_first_eval;
+        let is_proof_start_and_valid = local.is_valid * local.is_proof_start;
+
+        let is_transition_eval = LoopSubAir::local_is_transition(next.is_valid, next.is_first_eval);
+        // Since local.is_valid = 0 => next.is_valid = 0 => is_transition_eval = 0
+        // is_last_eval = local.is_valid * (1 - is_transition_eval) <=> local.is_valid - is_transition_eval
+        let is_last_eval = local.is_valid - is_transition_eval.clone();
+
+        let is_proof_end = AB::Expr::ONE - local.nested_for_loop_aux_cols.is_transition[0];
+        let is_proof_end_and_valid = local.is_valid + is_proof_end.clone() - AB::Expr::ONE;
 
         let is_not_dummy = AB::Expr::ONE - local.is_dummy;
 
@@ -132,11 +149,11 @@ where
             .assert_zero(local.eval_idx);
         // Eval idx increments by 1
         builder
-            .when(AB::Expr::ONE - is_last_eval.clone())
+            .when(is_transition_eval.clone())
             .assert_eq(next.eval_idx, local.eval_idx + AB::Expr::ONE);
         // Eval idx ends at s_deg if not dummy
         builder
-            .when(local.is_valid * is_last_eval.clone() * is_not_dummy.clone())
+            .when(is_last_eval.clone() * is_not_dummy.clone())
             .assert_eq(local.eval_idx, AB::Expr::from_canonical_usize(s_deg));
 
         ///////////////////////////////////////////////////////////////////////
@@ -148,22 +165,20 @@ where
         );
         // Starts at d!
         builder
-            .when(local.is_valid * local.is_first_eval)
+            .when(is_first_eval_and_valid.clone())
             .assert_eq(local.denom_inv, d_factorial_inv);
         // 1 / (i + 1)!(d - i - 1)!  (i + 1) = 1 / i!(d - i)! * (d - i)
-        builder
-            .when(local.is_valid * (AB::Expr::ONE - is_last_eval.clone()))
-            .assert_eq(
-                next.denom_inv * next.eval_idx,
-                local.denom_inv * (AB::Expr::from_canonical_usize(s_deg) - local.eval_idx),
-            );
+        builder.when(is_transition_eval.clone()).assert_eq(
+            next.denom_inv * next.eval_idx,
+            local.denom_inv * (AB::Expr::from_canonical_usize(s_deg) - local.eval_idx),
+        );
 
         ///////////////////////////////////////////////////////////////////////
         // Prefix/Suffix Product Constraints
         ///////////////////////////////////////////////////////////////////////
 
         assert_array_eq(
-            &mut builder.when(local.is_valid * (AB::Expr::ONE - is_last_eval.clone())),
+            &mut builder.when(is_transition_eval.clone()),
             next.r,
             local.r,
         );
@@ -171,12 +186,12 @@ where
         // Prefix Product
         // Starts at 1
         assert_one_ext(
-            &mut builder.when(local.is_valid * local.is_first_eval),
+            &mut builder.when(is_first_eval_and_valid.clone()),
             local.prefix_product,
         );
         // p' = p * (r - i)
         assert_array_eq(
-            &mut builder.when(local.is_valid * (AB::Expr::ONE - is_last_eval.clone())),
+            &mut builder.when(is_transition_eval.clone()),
             next.prefix_product,
             ext_field_multiply(
                 local.prefix_product,
@@ -187,12 +202,12 @@ where
         // Suffix Product
         // Ends at 1
         assert_one_ext(
-            &mut builder.when(local.is_valid * is_last_eval.clone()),
+            &mut builder.when(is_last_eval.clone()),
             local.suffix_product,
         );
         // s = s' * (i + 1 - r)
         assert_array_eq(
-            &mut builder.when(local.is_valid * (AB::Expr::ONE - is_last_eval.clone())),
+            &mut builder.when(is_transition_eval.clone()),
             local.suffix_product,
             ext_field_multiply(
                 next.suffix_product,
@@ -204,30 +219,30 @@ where
         // Sumcheck evaluation constraints
         ///////////////////////////////////////////////////////////////////////
 
+        // Lagrange coefficient
         assert_array_eq(
-            &mut builder.when(local.is_valid * local.is_first_eval),
-            local.cur_sum,
-            ext_field_multiply(
-                local.eval,
-                ext_field_multiply_scalar(
-                    ext_field_multiply(local.prefix_product, local.suffix_product),
-                    local.denom_inv,
-                ),
+            &mut builder.when(local.is_valid),
+            local.lagrange_coeff,
+            ext_field_multiply_scalar(
+                ext_field_multiply(local.prefix_product, local.suffix_product),
+                local.denom_inv,
             ),
         );
 
+        // Initialize at first evaluation
         assert_array_eq(
-            &mut builder.when(local.is_valid * (AB::Expr::ONE - is_last_eval.clone())),
+            &mut builder.when(is_first_eval_and_valid.clone()),
+            local.cur_sum,
+            ext_field_multiply(local.eval, local.lagrange_coeff),
+        );
+
+        // Cumulative sum
+        assert_array_eq(
+            &mut builder.when(is_transition_eval.clone()),
             next.cur_sum,
             ext_field_add(
                 local.cur_sum,
-                ext_field_multiply(
-                    next.eval,
-                    ext_field_multiply_scalar(
-                        ext_field_multiply(next.prefix_product, next.suffix_product),
-                        next.denom_inv,
-                    ),
-                ),
+                ext_field_multiply(next.eval, next.lagrange_coeff),
             ),
         );
 
@@ -236,7 +251,7 @@ where
         ///////////////////////////////////////////////////////////////////////
 
         builder
-            .when(local.is_valid * (AB::Expr::ONE - is_last_eval.clone()))
+            .when(is_transition_eval.clone())
             .assert_eq(next.tidx, local.tidx + AB::Expr::from_canonical_usize(D_EF));
 
         ///////////////////////////////////////////////////////////////////////
@@ -249,7 +264,7 @@ where
             local.proof_idx,
             local.tidx,
             next.eval,
-            local.is_valid * (AB::Expr::ONE - is_last_eval.clone()) * is_not_dummy.clone(),
+            is_transition_eval.clone() * is_not_dummy.clone(),
         );
         // Sample challenge r
         self.transcript_bus.sample_ext(
@@ -257,7 +272,7 @@ where
             local.proof_idx,
             local.tidx,
             local.r,
-            local.is_valid * is_last_eval.clone() * is_not_dummy.clone(),
+            is_last_eval.clone() * is_not_dummy.clone(),
         );
 
         // Receive tidx from univariate sumcheck and send it to stacking module
@@ -265,7 +280,7 @@ where
             builder,
             local.proof_idx,
             StackingModuleMessage { tidx: local.tidx },
-            local.is_valid * local.is_proof_start * is_not_dummy.clone(),
+            is_proof_start_and_valid * is_not_dummy.clone(),
         );
         self.stacking_module_bus.send(
             builder,
@@ -273,7 +288,7 @@ where
             StackingModuleMessage {
                 tidx: local.tidx + AB::Expr::from_canonical_usize(D_EF),
             },
-            local.is_valid * is_proof_end.clone() * is_not_dummy.clone(),
+            is_proof_end_and_valid.clone() * is_not_dummy.clone(),
         );
 
         self.claim_bus.receive(
@@ -283,7 +298,7 @@ where
                 round: local.round_idx.into(),
                 value: ext_field_add(local.eval, next.eval),
             },
-            local.is_valid * local.is_first_eval * is_not_dummy.clone(),
+            is_first_eval_and_valid.clone() * is_not_dummy.clone(),
         );
         self.claim_bus.send(
             builder,
@@ -292,7 +307,7 @@ where
                 round: local.round_idx + AB::Expr::ONE,
                 value: local.cur_sum.map(Into::into),
             },
-            local.is_valid * is_last_eval.clone() * is_not_dummy.clone(),
+            is_last_eval.clone() * is_not_dummy.clone(),
         );
         self.randomness_bus.send(
             builder,
@@ -301,7 +316,7 @@ where
                 idx: local.round_idx + AB::Expr::ONE,
                 challenge: local.r.map(|x| x.into()),
             },
-            local.is_valid * local.is_first_eval * is_not_dummy.clone(),
+            is_first_eval_and_valid.clone() * is_not_dummy.clone(),
         );
         self.batch_constraint_conductor_bus.send(
             builder,
@@ -311,7 +326,7 @@ where
                 idx: local.round_idx + AB::Expr::ONE,
                 value: local.r.map(|x| x.into()),
             },
-            local.is_valid * local.is_first_eval * is_not_dummy,
+            is_first_eval_and_valid * is_not_dummy,
         );
     }
 }

@@ -110,7 +110,7 @@ pub fn generate_trace(
                     let cols: &mut GkrLayerCols<F> = row_data.borrow_mut();
                     cols.is_enabled = F::ONE;
                     cols.proof_idx = F::from_canonical_usize(proof_idx);
-                    cols.is_first_layer = F::ONE;
+                    cols.is_first = F::ONE;
                     cols.is_dummy = F::ONE;
                     cols.sumcheck_claim_in = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
                     cols.q_xi_0 = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
@@ -130,7 +130,7 @@ pub fn generate_trace(
                         let cols: &mut GkrLayerCols<F> = row_data.borrow_mut();
                         cols.proof_idx = F::from_canonical_usize(proof_idx);
                         cols.is_enabled = F::ONE;
-                        cols.is_first_layer = F::from_bool(layer_idx == 0);
+                        cols.is_first = F::from_bool(layer_idx == 0);
                         cols.layer_idx = F::from_canonical_usize(layer_idx);
                         cols.tidx = F::from_canonical_usize(record.layer_tidx(layer_idx));
 

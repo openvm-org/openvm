@@ -68,6 +68,12 @@ where
         let next: &GkrXiSamplerCols<AB::Var> = (*next).borrow();
 
         ///////////////////////////////////////////////////////////////////////
+        // Boolean Constraints
+        ///////////////////////////////////////////////////////////////////////
+
+        builder.assert_bool(local.is_dummy);
+
+        ///////////////////////////////////////////////////////////////////////
         // Proof Index and Loop Constraints
         ///////////////////////////////////////////////////////////////////////
 
@@ -93,11 +99,15 @@ where
             ),
         );
 
-        let is_last_challenge = LoopSubAir::local_is_last(next.is_enabled, next.is_first_challenge);
+        let is_transition_challenge =
+            LoopSubAir::local_is_transition(next.is_enabled, next.is_first_challenge);
+        let is_last_challenge = local.is_enabled - is_transition_challenge.clone();
+
+        let is_first_challenge_and_enabled = local.is_first_challenge * local.is_enabled;
 
         // Challenge index increments by 1
         builder
-            .when(local.is_enabled * (AB::Expr::ONE - is_last_challenge.clone()))
+            .when(is_transition_challenge.clone())
             .assert_eq(next.idx, local.idx + AB::Expr::ONE);
 
         ///////////////////////////////////////////////////////////////////////
@@ -105,7 +115,7 @@ where
         ///////////////////////////////////////////////////////////////////////
 
         builder
-            .when(local.is_enabled * (AB::Expr::ONE - is_last_challenge.clone()))
+            .when(is_transition_challenge.clone())
             .assert_eq(next.tidx, local.tidx + AB::Expr::from_canonical_usize(D_EF));
 
         ///////////////////////////////////////////////////////////////////////
@@ -123,7 +133,7 @@ where
                 idx: local.idx.into(),
                 tidx: local.tidx.into(),
             },
-            local.is_enabled * local.is_first_challenge * is_not_dummy.clone(),
+            is_first_challenge_and_enabled.clone() * is_not_dummy.clone(),
         );
         // 1b. Send output to GkrInputAir
         let tidx_end = local.tidx + AB::Expr::from_canonical_usize(D_EF);
@@ -134,7 +144,7 @@ where
                 idx: local.idx.into(),
                 tidx: tidx_end,
             },
-            local.is_enabled * is_last_challenge * is_not_dummy.clone(),
+            is_last_challenge.clone() * is_not_dummy.clone(),
         );
 
         ///////////////////////////////////////////////////////////////////////
