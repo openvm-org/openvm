@@ -145,6 +145,7 @@ where
                     instruction.c.as_canonical_u32()
                 );
                 asm_str += &Self::pop_external_registers();
+                asm_str += &format!("    xor {REG_RETURN_VAL}, {REG_RETURN_VAL}\n");
                 asm_str += "    ret\n";
 
                 continue;
