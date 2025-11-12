@@ -12,6 +12,7 @@ use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::BranchEqualExecutor;
+#[cfg(feature = "aot")]
 use crate::common::{xmm_to_gpr, REG_A_W, REG_B_W, REG_PC};
 
 #[derive(AlignedBytesBorrow, Clone)]
