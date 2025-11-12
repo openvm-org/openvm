@@ -21,6 +21,8 @@ use crate::arch::aot::common::{
 use crate::arch::interpreter::InterpretedInstance;
 #[cfg(feature = "aot")]
 use crate::arch::SystemConfig;
+#[cfg(feature = "aot")]
+use crate::arch::SystemConfig;
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
