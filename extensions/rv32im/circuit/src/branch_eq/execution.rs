@@ -162,7 +162,7 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize> MeteredExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS>
+impl<F, A, const NUM_LIMBS: usize> InterpreterMeteredExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS>
 where
     F: PrimeField32,
 {
@@ -203,6 +203,12 @@ where
         let is_bne = self.pre_compute_impl(pc, inst, &mut data.data)?;
         dispatch!(execute_e2_handler, is_bne)
     }
+}
+#[cfg(feature = "aot")]
+impl<F, A, const NUM_LIMBS: usize> AotMeteredExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS>
+where
+    F: PrimeField32,
+{
 }
 
 #[inline(always)]

@@ -103,7 +103,7 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> MeteredExecutor<F>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
     for BranchLessThanExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,

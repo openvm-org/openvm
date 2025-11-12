@@ -140,7 +140,7 @@ where
 #[cfg(feature = "aot")]
 impl<F> AotExecutor<F> for JalRangeCheckExecutor where F: PrimeField32 {}
 
-impl<F> MeteredExecutor<F> for JalRangeCheckExecutor
+impl<F> InterpreterMeteredExecutor<F> for JalRangeCheckExecutor
 where
     F: PrimeField32,
 {
@@ -207,6 +207,10 @@ where
         }
     }
 }
+
+
+#[cfg(feature = "aot")]
+impl<F> AotMeteredExecutor<F> for JalRangeCheckExecutor where F: PrimeField32 {}
 
 #[inline(always)]
 unsafe fn execute_jal_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(

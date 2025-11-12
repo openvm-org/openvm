@@ -83,8 +83,8 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 
 /// RISC-V 32-bit Base (RV32I) Instruction Executors
 // ITS THIS DERIVES FAULT; not supporting aot traits?
-#[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
-#[cfg_attr(feature = "aot", derive(openvm_circuit_derive::AotExecutor))]
+#[derive(Clone, From, AnyEnum, Executor, InterpreterMeteredExecutor, PreflightExecutor)]
+#[cfg_attr(feature = "aot", derive(openvm_circuit_derive::AotExecutor, openvm_circuit_derive::AotMeteredExecutor))]
 pub enum Rv32IExecutor {
     // Rv32 (for standard 32-bit integers):
     BaseAlu(Rv32BaseAluExecutor),
@@ -100,8 +100,8 @@ pub enum Rv32IExecutor {
 }
 
 /// RISC-V 32-bit Multiplication Extension (RV32M) Instruction Executors
-#[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
-#[cfg_attr(feature = "aot", derive(openvm_circuit_derive::AotExecutor))]
+#[derive(Clone, From, AnyEnum, Executor, InterpreterMeteredExecutor, PreflightExecutor)]
+#[cfg_attr(feature = "aot", derive(openvm_circuit_derive::AotExecutor, openvm_circuit_derive::AotMeteredExecutor))]
 pub enum Rv32MExecutor {
     Multiplication(Rv32MultiplicationExecutor),
     MultiplicationHigh(Rv32MulHExecutor),
@@ -109,8 +109,8 @@ pub enum Rv32MExecutor {
 }
 
 /// RISC-V 32-bit Io Instruction Executors
-#[derive(Clone, Copy, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
-#[cfg_attr(feature = "aot", derive(openvm_circuit_derive::AotExecutor))]
+#[derive(Clone, Copy, From, AnyEnum, Executor, InterpreterMeteredExecutor, PreflightExecutor)]
+#[cfg_attr(feature = "aot", derive(openvm_circuit_derive::AotExecutor, openvm_circuit_derive::AotMeteredExecutor))]
 pub enum Rv32IoExecutor {
     HintStore(Rv32HintStoreExecutor),
 }

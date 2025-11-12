@@ -41,8 +41,8 @@ cfg_if::cfg_if! {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Sha256;
 
-#[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
-#[cfg_attr(feature = "aot", derive(openvm_circuit_derive::AotExecutor))]
+#[derive(Clone, From, AnyEnum, Executor, InterpreterMeteredExecutor, PreflightExecutor)]
+#[cfg_attr(feature = "aot", derive(openvm_circuit_derive::AotExecutor, openvm_circuit_derive::AotMeteredExecutor))]
 pub enum Sha256Executor {
     Sha256(Sha256VmExecutor),
 }

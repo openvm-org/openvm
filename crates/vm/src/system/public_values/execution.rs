@@ -124,7 +124,7 @@ where
 #[cfg(feature = "aot")]
 impl<F, A> AotExecutor<F> for PublicValuesExecutor<F, A> where F: PrimeField32 {}
 
-impl<F, A> MeteredExecutor<F> for PublicValuesExecutor<F, A>
+impl<F, A> InterpreterMeteredExecutor<F> for PublicValuesExecutor<F, A>
 where
     F: PrimeField32,
 {
@@ -168,6 +168,9 @@ where
         dispatch!(execute_e2_handler, b_is_imm, c_is_imm)
     }
 }
+
+#[cfg(feature = "aot")]
+impl<F, A> AotMeteredExecutor<F> for PublicValuesExecutor<F, A> where F: PrimeField32 {}
 
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(

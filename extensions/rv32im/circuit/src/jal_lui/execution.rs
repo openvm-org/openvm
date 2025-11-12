@@ -139,7 +139,7 @@ where
     }
 }
 
-impl<F, A> MeteredExecutor<F> for Rv32JalLuiExecutor<A>
+impl<F, A> InterpreterMeteredExecutor<F> for Rv32JalLuiExecutor<A>
 where
     F: PrimeField32,
 {
@@ -180,6 +180,14 @@ where
         let (is_jal, enabled) = self.pre_compute_impl(inst, &mut data.data)?;
         dispatch!(execute_e2_handler, is_jal, enabled)
     }
+}
+
+#[cfg(feature = "aot")]
+impl<F, A> AotMeteredExecutor<F> for Rv32JalLuiExecutor<A>
+where
+    F: PrimeField32,
+{
+
 }
 
 #[inline(always)]

@@ -183,6 +183,9 @@ where
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F, A> AotMeteredExecutor<F> for NativeBranchEqualExecutor<A> where F: PrimeField32 {}
+
 #[inline(always)]
 unsafe fn execute_e12_impl<
     F: PrimeField32,

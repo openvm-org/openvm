@@ -113,7 +113,7 @@ where
     }
 }
 
-impl<F> MeteredExecutor<F> for PhantomExecutor<F>
+impl<F> InterpreterMeteredExecutor<F> for PhantomExecutor<F>
 where
     F: PrimeField32,
 {
@@ -155,6 +155,9 @@ where
         Ok(execute_e2_handler)
     }
 }
+
+#[cfg(feature = "aot")]
+impl<F> AotMeteredExecutor<F> for PhantomExecutor<F> where F: PrimeField32 {}
 
 #[inline(always)]
 fn execute_impl<F>(

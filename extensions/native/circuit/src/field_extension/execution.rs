@@ -115,7 +115,7 @@ where
 #[cfg(feature = "aot")]
 impl<F, A> AotExecutor<F> for FieldExtensionCoreExecutor<A> where F: PrimeField32 {}
 
-impl<F, A> MeteredExecutor<F> for FieldExtensionCoreExecutor<A>
+impl<F, A> InterpreterMeteredExecutor<F> for FieldExtensionCoreExecutor<A>
 where
     F: PrimeField32,
 {
@@ -157,6 +157,9 @@ where
         dispatch!(execute_e2_handler, opcode)
     }
 }
+
+#[cfg(feature = "aot")]
+impl<F, A> AotMeteredExecutor<F> for FieldExtensionCoreExecutor<A> where F: PrimeField32 {}
 
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const OPCODE: u8>(

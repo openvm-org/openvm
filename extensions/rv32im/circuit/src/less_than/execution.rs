@@ -196,7 +196,7 @@ where
     }
 }
 
-impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>
+impl<F, A, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
     for LessThanExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
@@ -238,6 +238,13 @@ where
         let (is_imm, is_sltu) = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
         dispatch!(execute_e2_handler, is_imm, is_sltu)
     }
+}
+#[cfg(feature = "aot")]
+impl<F, A, const LIMB_BITS: usize> AotMeteredExecutor<F>
+    for LessThanExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+where
+    F: PrimeField32,
+{
 }
 
 #[inline(always)]

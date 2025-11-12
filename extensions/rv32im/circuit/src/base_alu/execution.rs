@@ -121,7 +121,7 @@ where
     }
 }
 
-impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>
+impl<F, A, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
     for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
@@ -236,6 +236,14 @@ where
 
         Ok(asm_str)
     }
+}
+
+#[cfg(feature = "aot")]
+impl<F, A, const LIMB_BITS: usize> AotMeteredExecutor<F>
+    for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+where
+    F: PrimeField32,
+{
 }
 
 #[inline(always)]
