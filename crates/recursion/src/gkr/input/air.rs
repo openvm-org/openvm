@@ -17,13 +17,14 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        BatchConstraintModuleBus, BatchConstraintModuleMessage, ExpBitsLenBus, ExpBitsLenMessage,
-        GkrModuleBus, GkrModuleMessage, TranscriptBus,
+        BatchConstraintModuleBus, BatchConstraintModuleMessage, GkrModuleBus, GkrModuleMessage,
+        TranscriptBus,
     },
     gkr::bus::{
         GkrLayerInputBus, GkrLayerInputMessage, GkrLayerOutputBus, GkrLayerOutputMessage,
         GkrXiSamplerBus, GkrXiSamplerMessage,
     },
+    primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage},
     subairs::proof_idx::{ProofIdxIoCols, ProofIdxSubAir},
     utils::assert_zeros,
 };

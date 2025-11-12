@@ -15,10 +15,8 @@ use stark_backend_v2::{
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::{
-        CommitmentsBus, CommitmentsBusMessage, ExpBitsLenBus, ExpBitsLenMessage, TranscriptBus,
-        WhirModuleBus, WhirModuleMessage,
-    },
+    bus::{CommitmentsBus, CommitmentsBusMessage, TranscriptBus, WhirModuleBus, WhirModuleMessage},
+    primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     utils::{ext_field_add, ext_field_multiply, ext_field_subtract},

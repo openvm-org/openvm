@@ -257,11 +257,14 @@ impl AirModule for ProofShapeModule {
 struct ProofShapeBlob;
 
 impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for ProofShapeModule {
+    type ModuleSpecificCtx = ();
+
     fn generate_proving_ctxs(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
         preflights: &[Preflight],
+        _ctx: (),
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         let proof_shape = proof_shape::ProofShapeChip::<4, 8>::new(
             self.idx_encoder.clone(),
@@ -332,11 +335,14 @@ mod cuda_tracegen {
     };
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for ProofShapeModule {
+        type ModuleSpecificCtx = ();
+
         fn generate_proving_ctxs(
             &self,
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
+            _ctx: (),
         ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
             let range_checker_gpu = Arc::new(RangeCheckerGpuTraceGenerator::<8>::default());
             let pow_checker_gpu = Arc::new(PowerCheckerGpuTraceGenerator::<2, 32>::default());
