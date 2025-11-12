@@ -3,6 +3,7 @@ pub const REG_FOURTH_ARG: &str = "rcx";
 pub const REG_C: &str = "rdx";
 pub const REG_C_W: &str = "edx";
 pub const REG_C_B: &str = "dx";
+pub const REG_C_LB: &str = "dl";
 pub const REG_THIRD_ARG: &str = "rdx";
 
 pub const REG_B: &str = "rsi";
@@ -15,6 +16,7 @@ pub const REG_FIRST_ARG: &str = "rdi";
 
 pub const REG_RETURN_VAL: &str = "rax";
 pub const REG_D: &str = "rax";
+pub const REG_D_W: &str = "eax";
 pub const REG_INSTRET_END: &str = "r12";
 
 pub const REG_EXEC_STATE_PTR: &str = "rbx";
@@ -82,4 +84,54 @@ pub fn sync_gpr_to_xmm() -> String {
         }
     }
     asm_str
+}
+
+#[derive(Copy, Clone)]
+pub enum Width {
+    W64,
+    W32,
+    W16,
+    W8L,
+    W8H,
+}
+
+pub fn convert_x86_reg(any: &str, to: Width) -> Option<&'static str> {
+    #[rustfmt::skip]
+    const T: [(&str,&str,&str,&str,Option<&str>); 16] = [
+        ("rax","eax","ax","al",Some("ah")), ("rbx","ebx","bx","bl",Some("bh")),
+        ("rcx","ecx","cx","cl",Some("ch")), ("rdx","edx","dx","dl",Some("dh")),
+        ("rsi","esi","si","sil",None),      ("rdi","edi","di","dil",None),
+        ("rbp","ebp","bp","bpl",None),      ("rsp","esp","sp","spl",None),
+        ("r8","r8d","r8w","r8b",None),      ("r9","r9d","r9w","r9b",None),
+        ("r10","r10d","r10w","r10b",None),  ("r11","r11d","r11w","r11b",None),
+        ("r12","r12d","r12w","r12b",None),  ("r13","r13d","r13w","r13b",None),
+        ("r14","r14d","r14w","r14b",None),  ("r15","r15d","r15w","r15b",None),
+    ];
+
+    fn pick(
+        row: (
+            &'static str,
+            &'static str,
+            &'static str,
+            &'static str,
+            Option<&'static str>,
+        ),
+        w: Width,
+    ) -> Option<&'static str> {
+        match w {
+            Width::W64 => Some(row.0),
+            Width::W32 => Some(row.1),
+            Width::W16 => Some(row.2),
+            Width::W8L => Some(row.3),
+            Width::W8H => row.4,
+        }
+    }
+
+    let key = any.to_ascii_lowercase();
+    for row in T {
+        if [row.0, row.1, row.2, row.3].iter().any(|&n| n == key) || row.4 == Some(key.as_str()) {
+            return pick(row, to);
+        }
+    }
+    None
 }

@@ -12,6 +12,8 @@ use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::BranchEqualExecutor;
+#[cfg(feature = "aot")]
+use crate::common::{xmm_to_gpr, REG_A_W, REG_B_W, REG_PC};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -132,19 +134,21 @@ where
         let b_reg = b / 4;
 
         // Calculate the result. Inputs: eax, ecx. Outputs: edx.
-        asm_str += &rv32_register_to_gpr(a_reg, "eax");
-        asm_str += &rv32_register_to_gpr(b_reg, "ecx");
-        asm_str += "   cmp eax, ecx\n";
+        let (reg_a, delta_str_a) = &xmm_to_gpr(a_reg, REG_A_W, false);
+        asm_str += delta_str_a;
+        let (reg_b, delta_str_b) = &xmm_to_gpr(b_reg, REG_B_W, false);
+        asm_str += delta_str_b;
+        asm_str += &format!("   cmp {reg_a}, {reg_b}\n");
         let not_jump_label = format!(".asm_execute_pc_{pc}_not_jump");
         match local_opcode {
             BranchEqualOpcode::BEQ => {
                 asm_str += &format!("   jne {not_jump_label}\n");
-                asm_str += &format!("   mov r13, {next_pc}\n");
+                asm_str += &format!("   mov {REG_PC}, {next_pc}\n");
                 asm_str += &format!("   jmp asm_execute_pc_{next_pc}\n");
             }
             BranchEqualOpcode::BNE => {
                 asm_str += &format!("   je {not_jump_label}\n");
-                asm_str += &format!("   mov r13, {next_pc}\n");
+                asm_str += &format!("   mov {REG_PC}, {next_pc}\n");
                 asm_str += &format!("   jmp asm_execute_pc_{next_pc}\n");
             }
         }
@@ -154,8 +158,7 @@ where
     }
 
     fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
-        // true
-        false
+        true
     }
 }
 
