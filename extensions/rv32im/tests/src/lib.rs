@@ -68,8 +68,10 @@ mod tests {
         let executor = VmExecutor::new(config)?;
         let instance = executor.instance(&exe)?;
         let state = instance.execute(vec![], Some(10))?;
+        let state = instance.execute_from_state(state, Some(10))?;
         let end_state1 = instance.execute_from_state(state, None)?;
         let end_state2 = instance.execute(vec![], None)?;
+        assert_eq!(end_state1.pc(), end_state2.pc());
         for addr_space in 1..end_state1.memory.memory.mem.len() {
             assert_eq!(
                 end_state1.memory.memory.mem[addr_space].size(),

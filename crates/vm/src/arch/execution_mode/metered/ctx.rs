@@ -132,7 +132,6 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     pub fn check_and_segment(&mut self) -> bool {
         // We track the segmentation check by instrets_until_check instead of instret in order to
         // save a register in AOT mode.
-        self.segmentation_ctx.instrets_until_check -= 1;
         if self.segmentation_ctx.instrets_until_check > 0 {
             return false;
         }
@@ -205,7 +204,12 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
         // If `segment_suspend` is set, suspend when a segment is determined (but the VM state might
         // be after the segment boundary because the segment happens in the previous checkpoint).
         // Otherwise, execute until termination.
-        exec_state.ctx.check_and_segment() && exec_state.ctx.suspend_on_segment
+        if exec_state.ctx.check_and_segment() && exec_state.ctx.suspend_on_segment {
+            true
+        } else {
+            exec_state.ctx.segmentation_ctx.instrets_until_check -= 1;
+            false
+        }
     }
 
     #[inline(always)]

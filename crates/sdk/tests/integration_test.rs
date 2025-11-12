@@ -166,6 +166,7 @@ fn test_public_values_and_leaf_verification() -> eyre::Result<()> {
     let mut app_proof = app_prover.prove(StdIn::default())?;
 
     assert!(app_proof.per_segment.len() > 2);
+    verify_app_proof(&app_pk.get_app_vk(), &app_proof)?;
     let app_last_proof = app_proof.per_segment.pop().unwrap();
 
     let expected_app_commit: [F; DIGEST_SIZE] = app_prover.app_program_commit().into();
@@ -268,7 +269,7 @@ fn test_public_values_and_leaf_verification() -> eyre::Result<()> {
 }
 
 #[test]
-fn test_metered_execution_suspension() -> eyre::Result<()> {
+fn test_execution_suspension() -> eyre::Result<()> {
     setup_tracing();
     let app_log_blowup = 1;
     let app_config = small_test_app_config(app_log_blowup);
@@ -289,6 +290,10 @@ fn test_metered_execution_suspension() -> eyre::Result<()> {
         "Execution exits with an error: {:?}",
         vm_exec_state.exit_code
     );
+    let metered_instret = vm_exec_state.ctx.segmentation_ctx.instret;
+    let pure_interpreter = vm.executor().instance(&exe)?;
+    let pure_vm_state = pure_interpreter.execute(vec![], Some(metered_instret))?;
+    assert_eq!(pure_vm_state.pc(), vm_exec_state.vm_state.pc());
 
     // Benchmark VmExecState clone.
     unsafe {
