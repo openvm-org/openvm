@@ -253,6 +253,8 @@ pub trait AotMeteredExecutor<F> {
 #[cfg(feature = "aot")]
 pub trait MeteredExecutor<F>: InterpreterMeteredExecutor<F> + AotMeteredExecutor<F> {}
 #[cfg(feature = "aot")]
+pub trait MeteredExecutor<F>: InterpreterMeteredExecutor<F> + AotMeteredExecutor<F> {}
+#[cfg(feature = "aot")]
 impl<F, T> MeteredExecutor<F> for T where T: InterpreterMeteredExecutor<F> + AotMeteredExecutor<F> {}
 
 #[cfg(not(feature = "aot"))]
