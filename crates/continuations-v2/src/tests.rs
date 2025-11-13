@@ -20,7 +20,7 @@ use stark_backend_v2::{
 use test_case::test_case;
 use tracing::Level;
 
-use crate::aggregation::NonRootVerifier;
+use crate::aggregation::{AggregationProver, NonRootAggregationProver};
 
 const LOG_MAX_TRACE_HEIGHT: usize = 20;
 
@@ -79,13 +79,15 @@ fn test_leaf_aggregation(log_fib_height: usize) -> Result<()> {
     let mut instance = VmInstance::new(vm, exe.into(), cached_program_trace)?;
     let app_proof = instance.prove(vec![input])?;
 
-    let leaf_verifier = NonRootVerifier::<2>::new(Arc::new(app_pk.get_vk()), LEAF_SYSTEM_PARAMS);
-    let leaf_proof = leaf_verifier.verify(
+    let leaf_prover =
+        NonRootAggregationProver::<2>::new(Arc::new(app_pk.get_vk()), LEAF_SYSTEM_PARAMS);
+    let leaf_proof = leaf_prover.agg_prove(
         &app_proof.per_segment,
         Some(app_proof.user_public_values.public_values_commit),
     )?;
 
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(leaf_verifier.vk.inner.params);
-    engine.verify(&leaf_verifier.vk, &leaf_proof)?;
+    let leaf_vk = leaf_prover.get_vk();
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(leaf_vk.inner.params);
+    engine.verify(&leaf_vk, &leaf_proof)?;
     Ok(())
 }

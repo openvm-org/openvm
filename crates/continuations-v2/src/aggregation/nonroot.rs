@@ -2,165 +2,136 @@ use std::sync::Arc;
 
 use eyre::Result;
 use itertools::Itertools;
-use openvm_stark_backend::{
-    AirRef,
-    prover::{MatrixDimensions, types::AirProofRawInput},
-};
-use openvm_stark_sdk::{
-    config::{
-        FriParameters,
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-    },
-    engine::{StarkEngine, StarkFriEngine},
-};
+use openvm_stark_backend::AirRef;
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use recursion_circuit::system::VerifierSubCircuit;
 use stark_backend_v2::{
     BabyBearPoseidon2CpuEngineV2, DIGEST_SIZE, F, StarkEngineV2, SystemParams,
     keygen::types::{MultiStarkProvingKeyV2, MultiStarkVerifyingKeyV2},
     poseidon2::sponge::{DuplexSponge, DuplexSpongeRecorder},
     proof::Proof,
-    prover::{
-        AirProvingContextV2, CommittedTraceDataV2, CpuBackendV2, DeviceDataTransporterV2,
-        ProvingContextV2, StridedColMajorMatrixView,
-    },
+    prover::{CommittedTraceDataV2, CpuBackendV2, DeviceDataTransporterV2, ProvingContextV2},
 };
 
 use crate::{
-    aggregation::MAX_NUM_PROOFS,
+    aggregation::{
+        AggregationCircuit, AggregationProver, MAX_NUM_PROOFS, trace_heights_tracing_info,
+    },
     public_values::{
         receiver::{self, UserPvsReceiverAir},
         verifier::{self, VerifierPvsAir},
     },
 };
 
-pub struct NonRootVerifier<const NUM_CHILDREN: usize> {
-    pub pk: Arc<MultiStarkProvingKeyV2>,
-    pub vk: Arc<MultiStarkVerifyingKeyV2>,
-
-    pub child_vk: Arc<MultiStarkVerifyingKeyV2>,
-    child_vk_pcs_data: CommittedTraceDataV2<CpuBackendV2>,
-
-    verifier_circuit: VerifierSubCircuit<MAX_NUM_PROOFS>,
-    engine: BabyBearPoseidon2CpuEngineV2<DuplexSponge>,
+/*
+ * Stateless struct to generate the AIRs of the aggregation circuit
+ */
+#[derive(derive_new::new, Clone)]
+pub struct NonRootAggregationCircuit {
+    verifier_circuit: Arc<VerifierSubCircuit<MAX_NUM_PROOFS>>,
 }
 
-impl<const NUM_CHILDREN: usize> NonRootVerifier<NUM_CHILDREN> {
-    pub fn new(child_vk: Arc<MultiStarkVerifyingKeyV2>, system_params: SystemParams) -> Self {
-        let verifier_circuit = VerifierSubCircuit::new(child_vk.clone());
-        let airs = airs(&verifier_circuit);
+impl AggregationCircuit for NonRootAggregationCircuit {
+    fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
+        airs(&self.verifier_circuit)
+    }
+}
 
+/*
+ * Struct to generate an aggregation proof
+ */
+pub struct NonRootAggregationProver<const NUM_CHILDREN: usize> {
+    pk: Arc<MultiStarkProvingKeyV2>,
+    vk: Arc<MultiStarkVerifyingKeyV2>,
+
+    // TODO: tracegen currently requires storing these, we should revisit this
+    child_vk: Arc<MultiStarkVerifyingKeyV2>,
+    child_vk_pcs_data: CommittedTraceDataV2<CpuBackendV2>,
+    circuit: Arc<NonRootAggregationCircuit>,
+}
+
+impl<const NUM_CHILDREN: usize> AggregationProver<CpuBackendV2>
+    for NonRootAggregationProver<NUM_CHILDREN>
+{
+    fn get_vk(&self) -> Arc<MultiStarkVerifyingKeyV2> {
+        self.vk.clone()
+    }
+
+    fn generate_proving_ctx(
+        &self,
+        proofs: &[Proof],
+        user_pv_commit: Option<[F; DIGEST_SIZE]>,
+    ) -> ProvingContextV2<CpuBackendV2> {
+        assert!(proofs.len() <= NUM_CHILDREN);
+        ProvingContextV2 {
+            per_trace: vec![verifier::generate_proving_ctx(proofs, user_pv_commit)]
+                .into_iter()
+                .chain(
+                    self.circuit
+                        .verifier_circuit
+                        .generate_proving_ctxs::<DuplexSpongeRecorder>(
+                            &self.child_vk,
+                            self.child_vk_pcs_data.clone(),
+                            proofs,
+                        ),
+                )
+                .chain([receiver::generate_proving_ctx(
+                    proofs,
+                    user_pv_commit.is_some(),
+                )])
+                .enumerate()
+                .collect_vec(),
+        }
+    }
+
+    fn agg_prove(
+        &self,
+        proofs: &[Proof],
+        user_pv_commit: Option<[F; DIGEST_SIZE]>,
+    ) -> Result<Proof> {
+        let ctx = self.generate_proving_ctx(proofs, user_pv_commit);
+        if tracing::enabled!(tracing::Level::INFO) {
+            trace_heights_tracing_info(&ctx.per_trace, &airs(&self.circuit.verifier_circuit));
+        }
+        let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(self.pk.params);
+        Ok(engine.prove(
+            &engine.device().transport_pk_to_device(self.pk.as_ref()),
+            ctx,
+        ))
+    }
+}
+
+impl<const NUM_CHILDREN: usize> NonRootAggregationProver<NUM_CHILDREN> {
+    pub fn new(child_vk: Arc<MultiStarkVerifyingKeyV2>, system_params: SystemParams) -> Self {
+        let verifier_circuit =
+            VerifierSubCircuit::new_with_set_continuations(child_vk.clone(), true);
         let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(system_params);
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
-        let (pk, vk) = engine.keygen(&airs);
-
+        let (pk, vk) = engine.keygen(&airs(&verifier_circuit));
         Self {
             pk: Arc::new(pk),
             vk: Arc::new(vk),
             child_vk,
             child_vk_pcs_data,
-            verifier_circuit,
-            engine,
+            circuit: Arc::new(NonRootAggregationCircuit::new(Arc::new(verifier_circuit))),
         }
     }
 
-    pub fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
-        airs(&self.verifier_circuit)
+    pub fn get_circuit(&self) -> Arc<NonRootAggregationCircuit> {
+        self.circuit.clone()
     }
-
-    pub fn generate_proving_ctx(
-        &self,
-        proofs: &[Proof],
-        user_pv_commit: Option<[F; DIGEST_SIZE]>,
-    ) -> Vec<(usize, AirProvingContextV2<CpuBackendV2>)> {
-        assert!(proofs.len() <= NUM_CHILDREN);
-        vec![
-            verifier::generate_proving_ctx(proofs, user_pv_commit),
-            receiver::generate_proving_ctx(proofs, user_pv_commit.is_some()),
-        ]
-        .into_iter()
-        .chain(
-            self.verifier_circuit
-                .generate_proving_ctxs::<DuplexSpongeRecorder>(
-                    &self.child_vk,
-                    self.child_vk_pcs_data.clone(),
-                    proofs,
-                ),
-        )
-        .enumerate()
-        .collect_vec()
-    }
-
-    pub fn verify(
-        &self,
-        proofs: &[Proof],
-        user_pv_commit: Option<[F; DIGEST_SIZE]>,
-    ) -> Result<Proof> {
-        let per_trace = self.generate_proving_ctx(proofs, user_pv_commit);
-        trace_heights_tracing_info(&per_trace, &self.airs());
-        let proof = self.engine.prove(
-            &self
-                .engine
-                .device()
-                .transport_pk_to_device(self.pk.as_ref()),
-            ProvingContextV2::new(per_trace),
-        );
-        Ok(proof)
-    }
-}
-
-pub fn debug<const NUM_CHILDREN: usize>(
-    verifier: NonRootVerifier<NUM_CHILDREN>,
-    proofs: &[Proof],
-    user_pv_commit: Option<[F; DIGEST_SIZE]>,
-) {
-    let ctxs = verifier.generate_proving_ctx(proofs, user_pv_commit);
-    let transpose = |mat: StridedColMajorMatrixView<F>| Arc::new(mat.to_row_major_matrix());
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let inputs = ctxs
-        .iter()
-        .map(|(_, ctx)| AirProofRawInput {
-            cached_mains: ctx
-                .cached_mains
-                .iter()
-                .map(|cd| transpose(cd.data.mat_view(0)))
-                .collect_vec(),
-            common_main: Some(transpose(ctx.common_main.as_view().into())),
-            public_values: ctx.public_values.clone(),
-        })
-        .collect_vec();
-    let mut keygen_builder = engine.keygen_builder();
-    let airs = verifier.airs();
-    for air in &airs {
-        keygen_builder.add_air(air.clone());
-    }
-    trace_heights_tracing_info(&ctxs, &airs);
-    engine.debug(&airs, &keygen_builder.generate_pk().per_air, &inputs);
 }
 
 fn airs(
     verifier_circuit: &VerifierSubCircuit<MAX_NUM_PROOFS>,
 ) -> Vec<AirRef<BabyBearPoseidon2Config>> {
     let public_values_bus = verifier_circuit.bus_inventory.public_values_bus;
-    vec![
-        Arc::new(VerifierPvsAir { public_values_bus }) as AirRef<BabyBearPoseidon2Config>,
-        Arc::new(UserPvsReceiverAir { public_values_bus }) as AirRef<BabyBearPoseidon2Config>,
-    ]
+    [Arc::new(VerifierPvsAir {
+        public_values_bus,
+        cached_commit_bus: verifier_circuit.bus_inventory.cached_commit_bus,
+    }) as AirRef<BabyBearPoseidon2Config>]
     .into_iter()
     .chain(verifier_circuit.airs())
+    .chain([Arc::new(UserPvsReceiverAir { public_values_bus }) as AirRef<BabyBearPoseidon2Config>])
     .collect_vec()
-}
-
-fn trace_heights_tracing_info(
-    ctxs: &[(usize, AirProvingContextV2<CpuBackendV2>)],
-    airs: &[AirRef<BabyBearPoseidon2Config>],
-) {
-    if tracing::enabled!(tracing::Level::INFO) {
-        for ((_, ctx), air) in ctxs.iter().zip(airs) {
-            tracing::info!(
-                "{:<40} | Height: {:>8}",
-                air.name(),
-                ctx.common_main.height()
-            );
-        }
-    }
 }

@@ -22,10 +22,10 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        AirShapeBus, AirShapeBusMessage, AirShapeProperty, CommitmentsBus, CommitmentsBusMessage,
-        ExpressionClaimNMaxBus, ExpressionClaimNMaxMessage, FractionFolderInputBus,
-        FractionFolderInputMessage, GkrModuleBus, GkrModuleMessage, HyperdimBus,
-        HyperdimBusMessage, LiftedHeightsBus, LiftedHeightsBusMessage, TranscriptBus,
+        AirShapeBus, AirShapeBusMessage, AirShapeProperty, CachedCommitBus, CachedCommitBusMessage,
+        CommitmentsBus, CommitmentsBusMessage, ExpressionClaimNMaxBus, ExpressionClaimNMaxMessage,
+        FractionFolderInputBus, FractionFolderInputMessage, GkrModuleBus, GkrModuleMessage,
+        HyperdimBus, HyperdimBusMessage, LiftedHeightsBus, LiftedHeightsBusMessage, TranscriptBus,
         TranscriptBusMessage,
     },
     primitives::{
@@ -456,6 +456,10 @@ pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub lifted_heights_bus: LiftedHeightsBus,
     pub commitments_bus: CommitmentsBus,
     pub transcript_bus: TranscriptBus,
+
+    // For continuations
+    pub cached_commit_bus: CachedCommitBus,
+    pub continuations_enabled: bool,
 }
 
 impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
@@ -927,6 +931,19 @@ where
                     * AB::Expr::from_canonical_usize(self.commit_mult),
             );
             cidx_offset += cached_present[cached_idx].clone();
+
+            self.cached_commit_bus.send(
+                builder,
+                local.proof_idx,
+                CachedCommitBusMessage {
+                    air_idx: local.idx.into(),
+                    cached_idx: AB::Expr::from_canonical_usize(cached_idx),
+                    cached_commit: localv.cached_commits[cached_idx].map(Into::into),
+                },
+                cached_present[cached_idx].clone()
+                    * local.is_valid
+                    * AB::Expr::from_bool(self.continuations_enabled),
+            );
         });
 
         builder
