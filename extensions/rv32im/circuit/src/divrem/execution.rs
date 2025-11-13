@@ -18,7 +18,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::DivRemExecutor;
 #[cfg(feature = "aot")]
-use crate::common::xmm_to_gpr;
+use crate::common::{gpr_to_xmm, xmm_to_gpr};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -127,7 +127,9 @@ where
 
         // Calculate the result. Inputs: eax, ecx. Outputs: edx.
         // Note that for div/rem we are tied to eax/edx because of idiv requirements
-        asm_str += &rv32_register_to_gpr(b_reg as u8, "eax");
+
+        let (_, delta_str_b) = &xmm_to_gpr(b_reg as u8, "eax", true);
+        asm_str += delta_str_b;
         let (reg_c, delta_str_c) = &xmm_to_gpr(c_reg as u8, REG_A_W, false);
         asm_str += delta_str_c;
         asm_str += "   mov edx, 0\n";
@@ -215,7 +217,7 @@ where
             }
         }
         asm_str += &format!("{done_label}:\n");
-        asm_str += &gpr_to_rv32_register("edx", a_reg as u8);
+        asm_str += &gpr_to_xmm("edx", a_reg as u8);
 
         Ok(asm_str)
     }

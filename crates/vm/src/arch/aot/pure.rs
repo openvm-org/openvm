@@ -130,9 +130,9 @@ where
                 asm_str += &format!("   mov {REG_THIRD_ARG}, {pc}\n");
                 asm_str += &format!("   mov {REG_D}, {extern_handler_ptr}\n");
                 asm_str += &format!("   call {REG_D}\n");
-                asm_str += &format!("   mov {REG_PC}, {REG_D}\n");
-                asm_str += &format!("   AND {REG_D}, 1\n");
-                asm_str += &format!("   cmp {REG_D}, 1\n");
+                asm_str += &format!("   mov {REG_PC}, {REG_RETURN_VAL}\n");
+                asm_str += &format!("   AND {REG_RETURN_VAL}, 1\n");
+                asm_str += &format!("   cmp {REG_RETURN_VAL}, 1\n");
 
                 asm_str += &Self::pop_internal_registers();
                 asm_str += &Self::pop_address_space_start();
@@ -140,10 +140,7 @@ where
                 asm_str += &format!("   mov {REG_SECOND_ARG}, {pc}\n");
                 asm_str += &format!("   mov {REG_D}, {set_pc_ptr}\n");
                 asm_str += &format!("   call {REG_D}\n");
-                asm_str += &format!(
-                    "   mov {REG_RETURN_VAL}, {}\n",
-                    instruction.c.as_canonical_u32()
-                );
+                asm_str += &format!("   xor {REG_RETURN_VAL}, {REG_RETURN_VAL}\n");
                 asm_str += &Self::pop_external_registers();
                 asm_str += "    ret\n";
 
