@@ -175,19 +175,8 @@ where
             asm_str += &format!("    cmp {REG_INSTRET_END}, 0\n");
             asm_str += &format!("    jne instret_positive_{pc}\n"); // if instret > 0, skip slow path
 
-            asm_str += &Self::xmm_to_rv32_regs();
-            asm_str += &Self::push_address_space_start();
-            asm_str += &Self::push_internal_registers();
-            asm_str += &sync_reg_to_instret_until_end();
-            asm_str += &format!("    movabs {REG_D}, {should_suspend_ptr}\n");
-            asm_str += &format!("    mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
-            asm_str += &format!("    call {REG_D}\n");
+            asm_str += "    call asm_handle_segment_check\n";
             asm_str += &format!("    test al, al\n");
-
-            asm_str += &Self::pop_internal_registers();
-            asm_str += &Self::pop_address_space_start();
-            asm_str += &sync_instret_until_end_to_reg();
-            asm_str += &Self::rv32_regs_to_xmm();
             asm_str += &format!("    jnz asm_run_end_{pc}\n");
             asm_str += &format!("    jmp execute_instruction_{pc}\n");
 
@@ -275,6 +264,22 @@ where
                 asm_str += "\n";
             }
         }
+
+        asm_str += "asm_handle_segment_check:\n";
+        asm_str += "    sub rsp, 8\n";
+        asm_str += &Self::xmm_to_rv32_regs();
+        asm_str += &Self::push_address_space_start();
+        asm_str += &Self::push_internal_registers();
+        asm_str += &sync_reg_to_instret_until_end();
+        asm_str += &format!("    movabs {REG_D}, {should_suspend_ptr}\n");
+        asm_str += &format!("    mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
+        asm_str += &format!("    call {REG_D}\n");
+        asm_str += &Self::pop_internal_registers();
+        asm_str += &Self::pop_address_space_start();
+        asm_str += &sync_instret_until_end_to_reg();
+        asm_str += &Self::rv32_regs_to_xmm();
+        asm_str += "    add rsp, 8\n";
+        asm_str += "    ret\n";
 
         // asm_run_end part
         for (pc, _instruction, _) in exe.program.enumerate_by_pc() {
