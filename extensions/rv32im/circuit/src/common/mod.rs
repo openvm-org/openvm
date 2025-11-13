@@ -8,7 +8,7 @@ mod aot {
     };
     pub use openvm_circuit::arch::aot::common::{
         DEFAULT_PC_OFFSET, REG_A, REG_A_W, REG_B, REG_B_W, REG_C, REG_C_B, REG_C_LB, REG_C_W,
-        REG_D, REG_D_W, REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_GUEST_MEM_PTR, REG_INSNS_PTR,
+        REG_D, REG_D_W, REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_AS2_PTR, REG_INSNS_PTR,
         REG_PC, REG_PC_W, REG_RETURN_VAL, REG_SECOND_ARG, REG_THIRD_ARG,
     };
 
@@ -31,7 +31,7 @@ mod aot {
     }
 
     pub(crate) fn address_space_start_to_gpr(address_space: u32, gpr: &str) -> String {
-        if address_space == 1 {
+        if address_space == 2 {
             if "r15" != gpr {
                 return format!("    mov {gpr}, r15\n");
             }
@@ -39,7 +39,7 @@ mod aot {
         }
 
         let xmm_map_reg = match address_space {
-            2 => "xmm0",
+            1 => "xmm0",
             3 => "xmm1",
             4 => "xmm2",
             _ => unreachable!("Only address space 1, 2, 3, 4 is supported"),

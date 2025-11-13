@@ -66,13 +66,13 @@ where
         // Temporarily use r14 as the pointer to get_vm_address_space_addr
         asm_str += &format!("    mov r14, {get_vm_address_space_addr_ptr}\n");
         asm_str += "    mov rdi, rbx\n";
-        asm_str += "    mov rsi, 1\n";
-        asm_str += "    call r14\n";
-        // Store the start of register address space in r15
-        asm_str += "    mov r15, rax\n";
-        // Store the start of address space 2 in high 64 bits of xmm0
-        asm_str += "    mov rdi, rbx\n";
         asm_str += "    mov rsi, 2\n";
+        asm_str += "    call r14\n";
+        // Store the start of address space 2 in r15
+        asm_str += "    mov r15, rax\n";
+        // Store the start of register address space in high 64 bits of xmm0
+        asm_str += "    mov rdi, rbx\n";
+        asm_str += "    mov rsi, 1\n";
         asm_str += "    call r14\n";
         asm_str += "    pinsrq  xmm0, rax, 1\n";
         // Store the start of address space 3 in high 64 bits of xmm1
