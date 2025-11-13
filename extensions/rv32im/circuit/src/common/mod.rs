@@ -3,6 +3,8 @@ pub use aot::*;
 
 #[cfg(feature = "aot")]
 mod aot {
+    use std::mem::offset_of;
+
     pub(crate) use openvm_circuit::arch::aot::common::{
         sync_gpr_to_xmm, sync_xmm_to_gpr, RISCV_TO_X86_OVERRIDE_MAP,
     };
@@ -11,6 +13,13 @@ mod aot {
         REG_C_W, REG_D, REG_D_W, REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_INSNS_PTR, REG_PC,
         REG_PC_W, REG_RETURN_VAL, REG_SECOND_ARG, REG_THIRD_ARG,
     };
+    use openvm_circuit::{
+        arch::{
+            ADDR_SPACE_OFFSET, AotError, SystemConfig, VmExecState, execution_mode::{MeteredCtx, metered::memory_ctx::MemoryCtx}
+        },
+        system::memory::{CHUNK, merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory},
+    };
+    use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
 
     /// The minimum block size is 4, but RISC-V `lb` only requires alignment of 1 and `lh` only requires
     /// alignment of 2 because the instructions are implemented by doing an access of block size 4.
