@@ -35,7 +35,6 @@ struct WhirRoundCols<T> {
     proof_idx: T,
     whir_round: T,
     is_first_in_proof: T,
-    is_same_proof: T,
     tidx: T,
     z0: [T; D_EF],
     y0: [T; D_EF],
@@ -94,34 +93,39 @@ where
         let local: &WhirRoundCols<AB::Var> = (*local).borrow();
         let next: &WhirRoundCols<AB::Var> = (*next).borrow();
 
-        NestedForLoopSubAir::<2, 1>.eval(
-            builder,
-            (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.is_enabled.into(),
-                        counter: [local.proof_idx.into(), local.whir_round.into()],
-                        is_first: [local.is_first_in_proof.into(), AB::Expr::ONE],
-                    },
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_enabled.into(),
-                        counter: [next.proof_idx.into(), next.whir_round.into()],
-                        is_first: [next.is_first_in_proof.into(), AB::Expr::ONE],
-                    },
-                ),
-                NestedForLoopAuxCols {
-                    is_transition: [local.is_same_proof.into()],
-                },
-            ),
-        );
-
         let proof_idx = local.proof_idx;
         let is_enabled = local.is_enabled;
         let is_proof_start = local.is_first_in_proof;
         builder.assert_bool(is_enabled);
+        builder.when(is_proof_start).assert_one(is_enabled);
+
+        let is_same_proof = next.is_enabled - next.is_first_in_proof;
+
+        NestedForLoopSubAir.eval(
+            builder,
+            (
+                (
+                    NestedForLoopIoCols {
+                        is_enabled,
+                        counter: [local.proof_idx, local.whir_round],
+                        is_first: [local.is_first_in_proof, is_enabled],
+                    }
+                    .map_into(),
+                    NestedForLoopIoCols {
+                        is_enabled: next.is_enabled,
+                        counter: [next.proof_idx, next.whir_round],
+                        is_first: [next.is_first_in_proof, next.is_enabled],
+                    }
+                    .map_into(),
+                ),
+                NestedForLoopAuxCols {
+                    is_transition: [is_same_proof.clone()],
+                },
+            ),
+        );
 
         builder
-            .when(local.is_enabled - local.is_same_proof)
+            .when(local.is_enabled - is_same_proof.clone())
             .assert_eq(
                 local.whir_round,
                 AB::Expr::from_canonical_usize(self.num_rounds - 1),
@@ -145,7 +149,7 @@ where
                 minor_idx: AB::Expr::ZERO,
                 commitment: local.commit.map(Into::into),
             },
-            local.is_same_proof * AB::Expr::from_canonical_usize(self.num_queries),
+            is_same_proof.clone() * AB::Expr::from_canonical_usize(self.num_queries),
         );
 
         self.sumcheck_bus.send(
@@ -168,7 +172,7 @@ where
             proof_idx,
             local.tidx + AB::Expr::from_canonical_usize(non_final_round_offset),
             local.commit,
-            local.is_same_proof,
+            is_same_proof.clone(),
         );
         non_final_round_offset += DIGEST_SIZE;
 
@@ -177,7 +181,7 @@ where
             proof_idx,
             local.tidx + AB::Expr::from_canonical_usize(non_final_round_offset),
             local.z0,
-            local.is_same_proof,
+            is_same_proof.clone(),
         );
         non_final_round_offset += D_EF;
         self.transcript_bus.observe_ext(
@@ -185,16 +189,19 @@ where
             proof_idx,
             local.tidx + AB::Expr::from_canonical_usize(non_final_round_offset),
             local.y0,
-            local.is_same_proof,
+            is_same_proof.clone(),
         );
         non_final_round_offset += D_EF;
+        let is_same_proof_for_query = is_same_proof.clone();
         self.query_bus.send(
             builder,
             proof_idx,
             WhirQueryBusMessage {
                 whir_round: local.whir_round.into(),
                 query_idx: AB::Expr::ZERO,
-                value: local.z0.map(|z0_i| z0_i * local.is_same_proof),
+                value: local
+                    .z0
+                    .map(|z0_i| z0_i * is_same_proof_for_query.clone()),
             },
             is_enabled,
         );
@@ -206,7 +213,7 @@ where
                 num_whir_rounds: local.whir_round + AB::Expr::ONE,
                 value: local.final_poly_mle_eval.map(Into::into),
             },
-            local.is_enabled - local.is_same_proof,
+            local.is_enabled - is_same_proof.clone(),
         );
         self.final_poly_query_eval_bus.send(
             builder,
@@ -215,14 +222,14 @@ where
                 last_whir_round: local.whir_round + AB::Expr::ONE,
                 value: ext_field_subtract(local.next_claim, local.final_poly_mle_eval),
             },
-            local.is_enabled - local.is_same_proof,
+            local.is_enabled - is_same_proof.clone(),
         );
 
         let final_round_offset = post_sumcheck_offset + D_EF * self.final_poly_len;
         let pow_tidx = local.tidx
-            + (local.is_enabled - local.is_same_proof)
+            + (local.is_enabled - is_same_proof.clone())
                 * AB::Expr::from_canonical_usize(final_round_offset)
-            + local.is_same_proof * AB::Expr::from_canonical_usize(non_final_round_offset);
+            + is_same_proof.clone() * AB::Expr::from_canonical_usize(non_final_round_offset);
 
         self.transcript_bus.observe(
             builder,
@@ -276,7 +283,7 @@ where
             local.gamma,
             is_enabled,
         );
-        builder.when(local.is_same_proof).assert_eq(
+        builder.when(is_same_proof).assert_eq(
             next.tidx,
             pow_tidx.clone() + AB::Expr::from_canonical_usize(2 + D_EF + self.num_queries),
         );
@@ -330,7 +337,6 @@ pub(crate) fn generate_trace(
             cols.is_enabled = F::ONE;
             cols.proof_idx = F::from_canonical_usize(proof_idx);
             cols.is_first_in_proof = F::from_bool(i == 0);
-            cols.is_same_proof = F::from_bool(i < rows_per_proof - 1);
             cols.whir_round = F::from_canonical_usize(i);
             cols.tidx = F::from_canonical_usize(whir.tidx_per_round[i]);
             cols.mu.copy_from_slice(
