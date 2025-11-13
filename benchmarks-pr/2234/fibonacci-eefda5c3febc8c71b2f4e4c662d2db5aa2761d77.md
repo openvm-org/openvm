@@ -1,29 +1,29 @@
 | Summary | Proof Time (s) | Parallel Proof Time (s) |
 |:---|---:|---:|
-| Total |  1 |  0.57 |
-| fibonacci_program |  0.99 |  0.56 |
+| Total |  0.98 |  0.56 |
+| fibonacci_program |  0.97 |  0.55 |
 
 
 | fibonacci_program |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` |  496 |  992 |  556 |  436 |
+| `total_proof_time_ms ` |  484.50 |  969 |  550 |  419 |
 | `main_cells_used     ` |  1,050,201 |  2,100,402 |  1,064,416 |  1,035,986 |
 | `total_cells_used    ` |  9,692,939 |  19,385,878 |  9,708,170 |  9,677,708 |
 | `execute_metered_time_ms` |  13 | -          | -          | -          |
-| `execute_metered_insn_mi/s` |  114.82 | -          |  114.82 |  114.82 |
+| `execute_metered_insn_mi/s` |  111.71 | -          |  111.71 |  111.71 |
 | `execute_preflight_insns` |  750,104.50 |  1,500,209 |  873,000 |  627,209 |
 | `execute_preflight_time_ms` |  29.50 |  59 |  34 |  25 |
-| `execute_preflight_insn_mi/s` |  37.88 | -          |  40.06 |  35.70 |
-| `trace_gen_time_ms   ` |  193.50 |  387 |  197 |  190 |
+| `execute_preflight_insn_mi/s` |  37.05 | -          |  38.05 |  36.06 |
+| `trace_gen_time_ms   ` |  188 |  376 |  194 |  182 |
 | `memory_finalize_time_ms` |  0 |  0 |  0 |  0 |
-| `stark_prove_excluding_trace_time_ms` |  178.50 |  357 |  187 |  170 |
-| `main_trace_commit_time_ms` |  31 |  62 |  33 |  29 |
+| `stark_prove_excluding_trace_time_ms` |  174.50 |  349 |  188 |  161 |
+| `main_trace_commit_time_ms` |  30.50 |  61 |  33 |  28 |
 | `generate_perm_trace_time_ms` |  15 |  30 |  18 |  12 |
-| `perm_trace_commit_time_ms` |  42.12 |  84.25 |  45.65 |  38.60 |
-| `quotient_poly_compute_time_ms` |  31.76 |  63.52 |  31.80 |  31.72 |
-| `quotient_poly_commit_time_ms` |  12.17 |  24.35 |  12.28 |  12.07 |
-| `pcs_opening_time_ms ` |  44.50 |  89 |  45 |  44 |
+| `perm_trace_commit_time_ms` |  41.79 |  83.57 |  44.86 |  38.71 |
+| `quotient_poly_compute_time_ms` |  31.01 |  62.02 |  34.34 |  27.68 |
+| `quotient_poly_commit_time_ms` |  11.94 |  23.89 |  12.20 |  11.69 |
+| `pcs_opening_time_ms ` |  42.50 |  85 |  44 |  41 |
 
 
 
@@ -32,11 +32,11 @@
 
 |  | keygen_time_ms | app_prove_time_ms |
 | --- | --- |
-|  | 340 | 1,150 | 
+|  | 339 | 1,152 | 
 
 | group | prove_segment_time_ms | memory_to_vec_partition_time_ms | fri.log_blowup | execute_metered_time_ms | execute_metered_insns | execute_metered_insn_mi/s | compute_user_public_values_proof_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| fibonacci_program | 436 | 40 | 1 | 13 | 1,500,209 | 114.82 | 140 | 
+| fibonacci_program | 419 | 65 | 1 | 13 | 1,500,209 | 111.71 | 164 | 
 
 | group | air_name | quotient_deg | interactions | constraints |
 | --- | --- | --- | --- | --- |
@@ -110,8 +110,8 @@
 
 | group | segment | trace_gen_time_ms | total_proof_time_ms | total_cells_used | total_cells | system_trace_gen_time_ms | stark_prove_excluding_trace_time_ms | single_trace_gen_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | query phase_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | partially_prove_time_ms | open_time_ms | memory_finalize_time_ms | main_trace_commit_time_ms | main_cells_used | generate_perm_trace_time_ms | execute_preflight_time_ms | execute_preflight_insns | execute_preflight_insn_mi/s | evaluate matrix_time_ms | eval_and_commit_quotient_time_ms | build fri inputs_time_ms | OpeningProverGpu::open_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| fibonacci_program | 0 | 197 | 556 | 9,677,708 | 84,395,212 | 197 | 187 | 0 | 31.80 | 12.07 | 5 | 45.65 | 44 | 64 | 44 | 0 | 33 | 1,035,986 | 18 | 25 | 873,000 | 35.70 | 14 | 44 | 0 | 44 | 
-| fibonacci_program | 1 | 190 | 436 | 9,708,170 | 74,305,770 | 190 | 170 | 1 | 31.72 | 12.28 | 4 | 38.60 | 45 | 51 | 45 | 0 | 29 | 1,064,416 | 12 | 34 | 627,209 | 40.06 | 11 | 44 | 0 | 45 | 
+| fibonacci_program | 0 | 194 | 550 | 9,677,708 | 84,395,212 | 194 | 188 | 0 | 34.34 | 12.20 | 4 | 44.86 | 44 | 63 | 44 | 0 | 33 | 1,035,986 | 18 | 25 | 873,000 | 36.06 | 14 | 47 | 0 | 44 | 
+| fibonacci_program | 1 | 182 | 419 | 9,708,170 | 74,305,770 | 182 | 161 | 1 | 27.68 | 11.69 | 4 | 38.71 | 41 | 51 | 41 | 0 | 28 | 1,064,416 | 12 | 34 | 627,209 | 38.05 | 11 | 39 | 0 | 41 | 
 
 | group | segment | trace_height_constraint | weighted_sum | threshold |
 | --- | --- | --- | --- | --- |
@@ -145,4 +145,4 @@ Instance Type: g6.2xlarge
 
 Memory Allocator: jemalloc
 
-[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/19343074506)
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/19345234879)

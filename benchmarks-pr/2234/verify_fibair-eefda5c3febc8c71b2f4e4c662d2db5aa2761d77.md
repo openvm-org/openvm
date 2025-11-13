@@ -1,27 +1,27 @@
 | Summary | Proof Time (s) | Parallel Proof Time (s) |
 |:---|---:|---:|
-| Total |  0.23 |  0.23 |
-| verify_fibair |  0.23 |  0.23 |
+| Total |  0.22 |  0.22 |
+| verify_fibair |  0.22 |  0.22 |
 
 
 | verify_fibair |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` |  226 |  226 |  226 |  226 |
+| `total_proof_time_ms ` |  224 |  224 |  224 |  224 |
 | `main_cells_used     ` |  2,058,654 |  2,058,654 |  2,058,654 |  2,058,654 |
 | `total_cells_used    ` |  7,255,892 |  7,255,892 |  7,255,892 |  7,255,892 |
-| `execute_preflight_insns` |  322,610 |  322,610 |  322,610 |  322,610 |
+| `execute_preflight_insns` |  322,658 |  322,658 |  322,658 |  322,658 |
 | `execute_preflight_time_ms` |  74 |  74 |  74 |  74 |
-| `execute_preflight_insn_mi/s` |  4.56 | -          |  4.56 |  4.56 |
+| `execute_preflight_insn_mi/s` |  4.61 | -          |  4.61 |  4.61 |
 | `trace_gen_time_ms   ` |  22 |  22 |  22 |  22 |
 | `memory_finalize_time_ms` |  2 |  2 |  2 |  2 |
-| `stark_prove_excluding_trace_time_ms` |  128 |  128 |  128 |  128 |
+| `stark_prove_excluding_trace_time_ms` |  127 |  127 |  127 |  127 |
 | `main_trace_commit_time_ms` |  24 |  24 |  24 |  24 |
-| `generate_perm_trace_time_ms` |  15 |  15 |  15 |  15 |
-| `perm_trace_commit_time_ms` |  26.74 |  26.74 |  26.74 |  26.74 |
-| `quotient_poly_compute_time_ms` |  22.41 |  22.41 |  22.41 |  22.41 |
-| `quotient_poly_commit_time_ms` |  7.82 |  7.82 |  7.82 |  7.82 |
-| `pcs_opening_time_ms ` |  30 |  30 |  30 |  30 |
+| `generate_perm_trace_time_ms` |  10 |  10 |  10 |  10 |
+| `perm_trace_commit_time_ms` |  27.13 |  27.13 |  27.13 |  27.13 |
+| `quotient_poly_compute_time_ms` |  23.87 |  23.87 |  23.87 |  23.87 |
+| `quotient_poly_commit_time_ms` |  8.02 |  8.02 |  8.02 |  8.02 |
+| `pcs_opening_time_ms ` |  32 |  32 |  32 |  32 |
 
 
 
@@ -30,7 +30,7 @@
 
 |  | verify_program_compile_ms | verify_fibair_time_ms | total_cells | stark_prove_excluding_trace_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | query phase_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | partially_prove_time_ms | open_time_ms | main_trace_commit_time_ms | generate_perm_trace_time_ms | evaluate matrix_time_ms | eval_and_commit_quotient_time_ms | build fri inputs_time_ms | OpeningProverGpu::open_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-|  | 9 | 226 | 65,536 | 23 | 0.14 | 0.72 | 1 | 0 | 19 | 0 | 19 | 3 | 0 | 1 | 0 | 0 | 19 | 
+|  | 10 | 224 | 65,536 | 16 | 0.13 | 0.72 | 1 | 0 | 11 | 0 | 11 | 3 | 0 | 1 | 0 | 0 | 11 | 
 
 | air_name | rows | quotient_deg | main_cols | interactions | constraints | cells |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -55,7 +55,7 @@
 
 | group | trace_gen_time_ms | total_proof_time_ms | total_cells_used | total_cells | system_trace_gen_time_ms | stark_prove_excluding_trace_time_ms | single_trace_gen_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | query phase_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | partially_prove_time_ms | open_time_ms | memory_finalize_time_ms | main_trace_commit_time_ms | main_cells_used | generate_perm_trace_time_ms | fri.log_blowup | execute_preflight_time_ms | execute_preflight_insns | execute_preflight_insn_mi/s | evaluate matrix_time_ms | eval_and_commit_quotient_time_ms | build fri inputs_time_ms | OpeningProverGpu::open_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| verify_fibair | 22 | 226 | 7,255,892 | 62,474,410 | 22 | 128 | 0 | 22.41 | 7.82 | 4 | 26.74 | 30 | 42 | 30 | 2 | 24 | 2,058,654 | 15 | 1 | 74 | 322,610 | 4.56 | 11 | 30 | 0 | 30 | 
+| verify_fibair | 22 | 224 | 7,255,892 | 62,474,410 | 22 | 127 | 0 | 23.87 | 8.02 | 4 | 27.13 | 32 | 38 | 31 | 2 | 24 | 2,058,654 | 10 | 1 | 74 | 322,658 | 4.61 | 11 | 32 | 0 | 31 | 
 
 | group | air_name | rows | prep_cols | perm_cols | main_cols | cells |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -100,4 +100,4 @@ Instance Type: g6.2xlarge
 
 Memory Allocator: jemalloc
 
-[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/19343074506)
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/19345234879)

@@ -1,29 +1,29 @@
 | Summary | Proof Time (s) | Parallel Proof Time (s) |
 |:---|---:|---:|
-| Total |  0.75 |  0.75 |
-| ecrecover_program |  0.75 |  0.75 |
+| Total |  0.72 |  0.72 |
+| ecrecover_program |  0.72 |  0.72 |
 
 
 | ecrecover_program |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` |  745 |  745 |  745 |  745 |
+| `total_proof_time_ms ` |  717 |  717 |  717 |  717 |
 | `main_cells_used     ` |  2,262,718 |  2,262,718 |  2,262,718 |  2,262,718 |
 | `total_cells_used    ` |  11,343,864 |  11,343,864 |  11,343,864 |  11,343,864 |
 | `execute_metered_time_ms` |  6 | -          | -          | -          |
-| `execute_metered_insn_mi/s` |  19.78 | -          |  19.78 |  19.78 |
+| `execute_metered_insn_mi/s` |  19.68 | -          |  19.68 |  19.68 |
 | `execute_preflight_insns` |  122,859 |  122,859 |  122,859 |  122,859 |
-| `execute_preflight_time_ms` |  64 |  64 |  64 |  64 |
-| `execute_preflight_insn_mi/s` |  2.09 | -          |  2.09 |  2.09 |
-| `trace_gen_time_ms   ` |  211 |  211 |  211 |  211 |
+| `execute_preflight_time_ms` |  61 |  61 |  61 |  61 |
+| `execute_preflight_insn_mi/s` |  2.14 | -          |  2.14 |  2.14 |
+| `trace_gen_time_ms   ` |  210 |  210 |  210 |  210 |
 | `memory_finalize_time_ms` |  0 |  0 |  0 |  0 |
-| `stark_prove_excluding_trace_time_ms` |  319 |  319 |  319 |  319 |
+| `stark_prove_excluding_trace_time_ms` |  301 |  301 |  301 |  301 |
 | `main_trace_commit_time_ms` |  37 |  37 |  37 |  37 |
-| `generate_perm_trace_time_ms` |  49 |  49 |  49 |  49 |
-| `perm_trace_commit_time_ms` |  34.10 |  34.10 |  34.10 |  34.10 |
-| `quotient_poly_compute_time_ms` |  102.01 |  102.01 |  102.01 |  102.01 |
+| `generate_perm_trace_time_ms` |  48 |  48 |  48 |  48 |
+| `perm_trace_commit_time_ms` |  34.14 |  34.14 |  34.14 |  34.14 |
+| `quotient_poly_compute_time_ms` |  101.87 |  101.87 |  101.87 |  101.87 |
 | `quotient_poly_commit_time_ms` |  9.16 |  9.16 |  9.16 |  9.16 |
-| `pcs_opening_time_ms ` |  78 |  78 |  78 |  78 |
+| `pcs_opening_time_ms ` |  62 |  62 |  62 |  62 |
 
 
 
@@ -32,11 +32,11 @@
 
 |  | keygen_time_ms | app_prove_time_ms |
 | --- | --- |
-|  | 1,050 | 941 | 
+|  | 1,000 | 897 | 
 
 | group | prove_segment_time_ms | memory_to_vec_partition_time_ms | fri.log_blowup | execute_metered_time_ms | execute_metered_insns | execute_metered_insn_mi/s | compute_user_public_values_proof_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| ecrecover_program | 745 | 68 | 1 | 6 | 122,859 | 19.78 | 182 | 
+| ecrecover_program | 717 | 67 | 1 | 6 | 122,859 | 19.68 | 169 | 
 
 | group | air_name | quotient_deg | interactions | constraints |
 | --- | --- | --- | --- | --- |
@@ -109,7 +109,7 @@
 
 | group | segment | trace_gen_time_ms | total_proof_time_ms | total_cells_used | total_cells | system_trace_gen_time_ms | stark_prove_excluding_trace_time_ms | single_trace_gen_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | query phase_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | partially_prove_time_ms | open_time_ms | memory_finalize_time_ms | main_trace_commit_time_ms | main_cells_used | generate_perm_trace_time_ms | execute_preflight_time_ms | execute_preflight_insns | execute_preflight_insn_mi/s | evaluate matrix_time_ms | eval_and_commit_quotient_time_ms | build fri inputs_time_ms | OpeningProverGpu::open_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ecrecover_program | 0 | 211 | 745 | 11,343,864 | 31,789,298 | 211 | 319 | 0 | 102.01 | 9.16 | 8 | 34.10 | 78 | 92 | 78 | 0 | 37 | 2,262,718 | 49 | 64 | 122,859 | 2.09 | 22 | 111 | 2 | 78 | 
+| ecrecover_program | 0 | 210 | 717 | 11,343,864 | 31,789,298 | 210 | 301 | 0 | 101.87 | 9.16 | 7 | 34.14 | 62 | 89 | 62 | 0 | 37 | 2,262,718 | 48 | 61 | 122,859 | 2.14 | 21 | 111 | 2 | 62 | 
 
 | group | segment | trace_height_constraint | weighted_sum | threshold |
 | --- | --- | --- | --- | --- |
@@ -134,4 +134,4 @@ Instance Type: g6.2xlarge
 
 Memory Allocator: jemalloc
 
-[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/19343074506)
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/19345234879)

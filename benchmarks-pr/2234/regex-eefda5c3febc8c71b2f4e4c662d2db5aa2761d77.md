@@ -7,23 +7,23 @@
 | regex_program |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` |  590.25 |  2,361 |  745 |  536 |
+| `total_proof_time_ms ` |  590 |  2,360 |  745 |  527 |
 | `main_cells_used     ` |  4,423,804 |  17,695,216 |  10,899,170 |  2,177,334 |
 | `total_cells_used    ` |  14,619,340 |  58,477,360 |  23,446,148 |  11,579,064 |
-| `execute_metered_time_ms` |  39 | -          | -          | -          |
-| `execute_metered_insn_mi/s` |  104.54 | -          |  104.54 |  104.54 |
+| `execute_metered_time_ms` |  35 | -          | -          | -          |
+| `execute_metered_insn_mi/s` |  115.12 | -          |  115.12 |  115.12 |
 | `execute_preflight_insns` |  1,034,375.50 |  4,137,502 |  1,104,000 |  826,502 |
-| `execute_preflight_time_ms` |  53.75 |  215 |  67 |  45 |
-| `execute_preflight_insn_mi/s` |  31.73 | -          |  32.94 |  28.78 |
-| `trace_gen_time_ms   ` |  177.50 |  710 |  210 |  154 |
+| `execute_preflight_time_ms` |  52 |  208 |  63 |  44 |
+| `execute_preflight_insn_mi/s` |  31.91 | -          |  33.49 |  28.82 |
+| `trace_gen_time_ms   ` |  181.25 |  725 |  214 |  158 |
 | `memory_finalize_time_ms` |  1 |  4 |  4 |  0 |
-| `stark_prove_excluding_trace_time_ms` |  291.25 |  1,165 |  345 |  265 |
-| `main_trace_commit_time_ms` |  51.50 |  206 |  57 |  48 |
-| `generate_perm_trace_time_ms` |  33.75 |  135 |  55 |  18 |
-| `perm_trace_commit_time_ms` |  64.41 |  257.65 |  70.82 |  55.27 |
-| `quotient_poly_compute_time_ms` |  57.79 |  231.18 |  68.76 |  51.59 |
-| `quotient_poly_commit_time_ms` |  15.08 |  60.31 |  16.75 |  12.55 |
-| `pcs_opening_time_ms ` |  65.25 |  261 |  83 |  57 |
+| `stark_prove_excluding_trace_time_ms` |  288.75 |  1,155 |  342 |  261 |
+| `main_trace_commit_time_ms` |  51.75 |  207 |  57 |  49 |
+| `generate_perm_trace_time_ms` |  34 |  136 |  55 |  18 |
+| `perm_trace_commit_time_ms` |  64.56 |  258.26 |  70.39 |  55.80 |
+| `quotient_poly_compute_time_ms` |  59.16 |  236.62 |  69.96 |  53.05 |
+| `quotient_poly_commit_time_ms` |  14.94 |  59.75 |  18.05 |  12.52 |
+| `pcs_opening_time_ms ` |  61.25 |  245 |  78 |  49 |
 
 
 
@@ -32,11 +32,11 @@
 
 |  | keygen_time_ms | app_prove_time_ms |
 | --- | --- |
-|  | 623 | 2,587 | 
+|  | 621 | 2,578 | 
 
 | group | prove_segment_time_ms | memory_to_vec_partition_time_ms | fri.log_blowup | execute_metered_time_ms | execute_metered_insns | execute_metered_insn_mi/s | compute_user_public_values_proof_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| regex_program | 536 | 41 | 1 | 39 | 4,137,502 | 104.54 | 170 | 
+| regex_program | 539 | 40 | 1 | 35 | 4,137,502 | 115.12 | 167 | 
 
 | group | air_name | quotient_deg | interactions | constraints |
 | --- | --- | --- | --- | --- |
@@ -158,10 +158,10 @@
 
 | group | segment | trace_gen_time_ms | total_proof_time_ms | total_cells_used | total_cells | system_trace_gen_time_ms | stark_prove_excluding_trace_time_ms | single_trace_gen_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | query phase_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | partially_prove_time_ms | open_time_ms | memory_finalize_time_ms | main_trace_commit_time_ms | main_cells_used | generate_perm_trace_time_ms | execute_preflight_time_ms | execute_preflight_insns | execute_preflight_insn_mi/s | evaluate matrix_time_ms | eval_and_commit_quotient_time_ms | build fri inputs_time_ms | OpeningProverGpu::open_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| regex_program | 0 | 210 | 745 | 23,446,148 | 150,778,428 | 210 | 345 | 0 | 58.38 | 16.75 | 5 | 70.82 | 83 | 127 | 83 | 4 | 57 | 10,899,170 | 55 | 45 | 1,103,000 | 28.78 | 21 | 75 | 1 | 83 | 
-| regex_program | 1 | 154 | 543 | 11,598,276 | 128,513,066 | 154 | 280 | 1 | 52.44 | 15.61 | 4 | 65.80 | 59 | 101 | 58 | 0 | 51 | 2,196,106 | 35 | 67 | 1,104,000 | 32.60 | 16 | 68 | 0 | 58 | 
-| regex_program | 2 | 163 | 537 | 11,579,064 | 128,513,066 | 163 | 275 | 1 | 51.59 | 15.40 | 4 | 65.76 | 62 | 94 | 62 | 0 | 50 | 2,177,334 | 27 | 58 | 1,104,000 | 32.59 | 17 | 67 | 0 | 62 | 
-| regex_program | 3 | 183 | 536 | 11,853,872 | 103,456,394 | 183 | 265 | 0 | 68.76 | 12.55 | 5 | 55.27 | 57 | 76 | 57 | 0 | 48 | 2,422,606 | 18 | 45 | 826,502 | 32.94 | 18 | 82 | 1 | 57 | 
+| regex_program | 0 | 214 | 745 | 23,446,148 | 150,778,428 | 214 | 342 | 0 | 60.42 | 18.05 | 5 | 70.39 | 78 | 126 | 78 | 4 | 57 | 10,899,170 | 55 | 44 | 1,103,000 | 28.82 | 21 | 79 | 1 | 78 | 
+| regex_program | 1 | 158 | 549 | 11,598,276 | 128,513,066 | 158 | 285 | 1 | 53.19 | 14.62 | 4 | 65.73 | 62 | 104 | 62 | 0 | 50 | 2,196,106 | 38 | 63 | 1,104,000 | 33.49 | 16 | 68 | 0 | 62 | 
+| regex_program | 2 | 167 | 527 | 11,579,064 | 128,513,066 | 167 | 261 | 1 | 53.05 | 14.56 | 4 | 66.33 | 49 | 91 | 49 | 0 | 51 | 2,177,334 | 25 | 57 | 1,104,000 | 33.06 | 16 | 68 | 0 | 49 | 
+| regex_program | 3 | 186 | 539 | 11,853,872 | 103,456,394 | 186 | 267 | 0 | 69.96 | 12.52 | 5 | 55.80 | 56 | 77 | 56 | 0 | 49 | 2,422,606 | 18 | 44 | 826,502 | 32.28 | 18 | 83 | 1 | 56 | 
 
 | group | segment | trace_height_constraint | weighted_sum | threshold |
 | --- | --- | --- | --- | --- |
@@ -213,4 +213,4 @@ Instance Type: g6.2xlarge
 
 Memory Allocator: jemalloc
 
-[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/19343074506)
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/19345234879)
