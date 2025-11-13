@@ -1419,9 +1419,7 @@ mod vm_metrics {
                 .collect();
             // If there are any constant trace heights, set them
             for (pk, height) in zip(&self.pk.per_air, &mut heights) {
-                if let Some(constant_height) =
-                    pk.preprocessed_data.as_ref().map(|pd| pd.trace.height())
-                {
+                if let Some(constant_height) = pk.preprocessed_data.as_ref().map(|pd| pd.height) {
                     *height = constant_height;
                 }
             }
