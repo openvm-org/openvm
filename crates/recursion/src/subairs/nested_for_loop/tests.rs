@@ -481,7 +481,8 @@ fn test_nested_max_constraint_degree() {
 #[test]
 fn test_three_loops_single_iteration_each() {
     // for i in 0..1 { for j in 0..1 { for k in 0..1 { ... }}}
-    // [enabled, counter[0]=i, counter[1]=j, is_first[0]=j_is_first, is_first[1]=k_is_first, is_transition[0]=j_is_transition]
+    // [enabled, counter[0]=i, counter[1]=j, is_first[0]=j_is_first, is_first[1]=k_is_first,
+    // is_transition[0]=j_is_transition]
     let trace = generate_trace::<_, 2, 1, { width::<2, 1>() }>(vec![[1, 0, 0, 1, 1, 0]]);
     prove_and_verify_test_air::<2, 1>(trace);
 }
@@ -490,7 +491,8 @@ fn test_three_loops_single_iteration_each() {
 fn test_three_loops_multiple_middle_iterations() {
     // for i in 0..1 { for j in 0..3 { for k in 0..M { ... }}}
     // Note: traces show 3 iterations of middle loop (j) with continuation rows
-    // [enabled, counter[0]=i, counter[1]=j, is_first[0]=j_is_first, is_first[1]=k_is_first, is_transition[0]=j_is_transition]
+    // [enabled, counter[0]=i, counter[1]=j, is_first[0]=j_is_first, is_first[1]=k_is_first,
+    // is_transition[0]=j_is_transition]
     let trace = generate_trace::<_, 2, 1, { width::<2, 1>() }>(vec![
         [1, 0, 0, 1, 1, 1], // i=0, j=0 start, k start
         [1, 0, 0, 0, 0, 1], // i=0, j=0 continue, k continue
@@ -504,7 +506,8 @@ fn test_three_loops_multiple_middle_iterations() {
 #[test]
 fn test_three_loops_multiple_outer_iterations() {
     // for i in 0..2 { for j in 0..1 { for k in 0..1 { ... }}}
-    // [enabled, counter[0]=i, counter[1]=j, is_first[0]=j_is_first, is_first[1]=k_is_first, is_transition[0]=j_is_transition]
+    // [enabled, counter[0]=i, counter[1]=j, is_first[0]=j_is_first, is_first[1]=k_is_first,
+    // is_transition[0]=j_is_transition]
     let trace = generate_trace::<_, 2, 1, { width::<2, 1>() }>(vec![
         [1, 0, 0, 1, 1, 0], // i=0, j=0 start, k start
         [1, 1, 0, 1, 1, 0], // i=1, j=0 start, k start
@@ -516,7 +519,8 @@ fn test_three_loops_multiple_outer_iterations() {
 fn test_three_loops_2x2_iterations() {
     // for i in 0..2 { for j in 0..2 { for k in 0..M { ... }}}
     // With continuation rows within each middle loop iteration
-    // [enabled, counter[0]=i, counter[1]=j, is_first[0]=j_is_first, is_first[1]=k_is_first, is_transition[0]=j_is_transition]
+    // [enabled, counter[0]=i, counter[1]=j, is_first[0]=j_is_first, is_first[1]=k_is_first,
+    // is_transition[0]=j_is_transition]
     let trace = generate_trace::<_, 2, 1, { width::<2, 1>() }>(vec![
         [1, 0, 0, 1, 1, 1], // i=0, j=0 start, k start
         [1, 0, 0, 0, 0, 1], // i=0, j=0 continue, k continue
@@ -533,7 +537,8 @@ fn test_three_loops_2x2_iterations() {
 fn test_three_loops_with_disabled_padding() {
     // for i in 0..1 { for j in 0..2 { for k in 0..M { ... }}}
     // Followed by disabled padding
-    // [enabled, counter[0]=i, counter[1]=j, is_first[0]=j_is_first, is_first[1]=k_is_first, is_transition[0]=j_is_transition]
+    // [enabled, counter[0]=i, counter[1]=j, is_first[0]=j_is_first, is_first[1]=k_is_first,
+    // is_transition[0]=j_is_transition]
     let trace = generate_trace::<_, 2, 1, { width::<2, 1>() }>(vec![
         [1, 0, 0, 1, 1, 1], // i=0, j=0 start, k start
         [1, 0, 1, 0, 1, 0], // i=0, j=1 start, k start
@@ -545,7 +550,8 @@ fn test_three_loops_with_disabled_padding() {
 #[test]
 fn test_three_loops_all_disabled() {
     // All rows disabled (no active loop iterations)
-    // [enabled, counter[0]=i, counter[1]=j, is_first[0]=j_is_first, is_first[1]=k_is_first, is_transition[0]=j_is_transition]
+    // [enabled, counter[0]=i, counter[1]=j, is_first[0]=j_is_first, is_first[1]=k_is_first,
+    // is_transition[0]=j_is_transition]
     let trace = generate_trace::<_, 2, 1, { width::<2, 1>() }>(vec![
         [0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0],
@@ -557,7 +563,8 @@ fn test_three_loops_all_disabled() {
 #[test]
 fn test_three_loops_3x2_iterations() {
     // for i in 0..3 { for j in 0..2 { for k in 0..1 { ... }}}
-    // [enabled, counter[0]=i, counter[1]=j, is_first[0]=j_is_first, is_first[1]=k_is_first, is_transition[0]=j_is_transition]
+    // [enabled, counter[0]=i, counter[1]=j, is_first[0]=j_is_first, is_first[1]=k_is_first,
+    // is_transition[0]=j_is_transition]
     let trace = generate_trace::<_, 2, 1, { width::<2, 1>() }>(vec![
         [1, 0, 0, 1, 1, 1], // i=0, j=0 start, k start
         [1, 0, 1, 0, 1, 0], // i=0, j=1 start, k start
@@ -635,7 +642,8 @@ fn test_three_loops_fail_middle_counter_decreases() {
 #[test]
 #[should_panic(expected = "Zerocheck sum is not zero")]
 fn test_three_loops_fail_outer_missing_start_flag() {
-    // i missing start flag on first row (j is missing start flag, since there's no i start flag in data)
+    // i missing start flag on first row (j is missing start flag, since there's no i start flag in
+    // data)
     let trace = generate_trace::<_, 2, 1, { width::<2, 1>() }>(vec![[1, 0, 0, 1, 0, 0]]);
     prove_and_verify_test_air::<2, 1>(trace);
 }
@@ -689,7 +697,9 @@ fn test_four_loops_max_constraint_degree() {
 #[test]
 fn test_four_loops_single_iteration_each() {
     // for i in 0..1 { for j in 0..1 { for k in 0..1 { for l in 0..1 { ... }}}}
-    // [enabled, counter[0]=i, counter[1]=j, counter[2]=k, is_first[0]=j_is_first, is_first[1]=k_is_first, is_first[2]=l_is_first, is_transition[0]=j_is_transition, is_transition[1]=k_is_transition]
+    // [enabled, counter[0]=i, counter[1]=j, counter[2]=k, is_first[0]=j_is_first,
+    // is_first[1]=k_is_first, is_first[2]=l_is_first, is_transition[0]=j_is_transition,
+    // is_transition[1]=k_is_transition]
     let trace = generate_trace::<_, 3, 2, { width::<3, 2>() }>(vec![[1, 0, 0, 0, 1, 1, 1, 0, 0]]);
     prove_and_verify_test_air::<3, 2>(trace);
 }
@@ -697,7 +707,9 @@ fn test_four_loops_single_iteration_each() {
 #[test]
 fn test_four_loops_multiple_mid_inner_iterations() {
     // for i in 0..1 { for j in 0..1 { for k in 0..2 { for l in 0..M { ... }}}}
-    // [enabled, counter[0]=i, counter[1]=j, counter[2]=k, is_first[0]=j_is_first, is_first[1]=k_is_first, is_first[2]=l_is_first, is_transition[0]=j_is_transition, is_transition[1]=k_is_transition]
+    // [enabled, counter[0]=i, counter[1]=j, counter[2]=k, is_first[0]=j_is_first,
+    // is_first[1]=k_is_first, is_first[2]=l_is_first, is_transition[0]=j_is_transition,
+    // is_transition[1]=k_is_transition]
     let trace = generate_trace::<_, 3, 2, { width::<3, 2>() }>(vec![
         [1, 0, 0, 0, 1, 1, 1, 1, 1], // i=0, j=0 start, k=0 start, l start
         [1, 0, 0, 1, 0, 0, 1, 0, 0], // i=0, j=0 continue, k=1 start, l start
@@ -708,7 +720,9 @@ fn test_four_loops_multiple_mid_inner_iterations() {
 #[test]
 fn test_four_loops_mid_outer_increment_resets_mid_inner() {
     // for i in 0..1 { for j in 0..2 { for k in 0..2 { for l in 0..M { ... }}}}
-    // [enabled, counter[0]=i, counter[1]=j, counter[2]=k, is_first[0]=j_is_first, is_first[1]=k_is_first, is_first[2]=l_is_first, is_transition[0]=j_is_transition, is_transition[1]=k_is_transition]
+    // [enabled, counter[0]=i, counter[1]=j, counter[2]=k, is_first[0]=j_is_first,
+    // is_first[1]=k_is_first, is_first[2]=l_is_first, is_transition[0]=j_is_transition,
+    // is_transition[1]=k_is_transition]
     let trace = generate_trace::<_, 3, 2, { width::<3, 2>() }>(vec![
         [1, 0, 0, 0, 1, 1, 1, 1, 1], // i=0, j=0 start, k=0 start, l start
         [1, 0, 0, 1, 0, 0, 1, 1, 0], // i=0, j=0 continue, k=1 start, l start
@@ -720,13 +734,16 @@ fn test_four_loops_mid_outer_increment_resets_mid_inner() {
 #[test]
 fn test_four_loops_outer_increment_resets_all() {
     // for i in 0..2 { for j in 0..2 { for k in 0..2 { for l in 0..M { ... }}}}
-    // [enabled, counter[0]=i, counter[1]=j, counter[2]=k, is_first[0]=j_is_first, is_first[1]=k_is_first, is_first[2]=l_is_first, is_transition[0]=j_is_transition, is_transition[1]=k_is_transition]
+    // [enabled, counter[0]=i, counter[1]=j, counter[2]=k, is_first[0]=j_is_first,
+    // is_first[1]=k_is_first, is_first[2]=l_is_first, is_transition[0]=j_is_transition,
+    // is_transition[1]=k_is_transition]
     let trace = generate_trace::<_, 3, 2, { width::<3, 2>() }>(vec![
         [1, 0, 0, 0, 1, 1, 1, 1, 1], // i=0, j=0 start, k=0 start, l start
         [1, 0, 0, 1, 0, 0, 1, 1, 0], // i=0, j=0 continue, k=1 start, l start
         [1, 0, 1, 0, 0, 1, 1, 1, 1], // i=0, j=1 start, k=0 start (j increments, k resets)
         [1, 0, 1, 1, 0, 0, 1, 0, 0], // i=0, j=1 continue, k=1 start
-        [1, 1, 0, 0, 1, 1, 1, 0, 0], // i=1, j=0 start, k=0 start (i increments, j and k both reset)
+        [1, 1, 0, 0, 1, 1, 1, 0, 0], /* i=1, j=0 start, k=0 start (i increments, j and k both
+                                      * reset) */
     ]);
     prove_and_verify_test_air::<3, 2>(trace);
 }
@@ -734,7 +751,9 @@ fn test_four_loops_outer_increment_resets_all() {
 #[test]
 fn test_four_loops_2x2x2_iterations() {
     // for i in 0..2 { for j in 0..2 { for k in 0..2 { for l in 0..1 { ... }}}}
-    // [enabled, counter[0]=i, counter[1]=j, counter[2]=k, is_first[0]=j_is_first, is_first[1]=k_is_first, is_first[2]=l_is_first, is_transition[0]=j_is_transition, is_transition[1]=k_is_transition]
+    // [enabled, counter[0]=i, counter[1]=j, counter[2]=k, is_first[0]=j_is_first,
+    // is_first[1]=k_is_first, is_first[2]=l_is_first, is_transition[0]=j_is_transition,
+    // is_transition[1]=k_is_transition]
     let trace = generate_trace::<_, 3, 2, { width::<3, 2>() }>(vec![
         [1, 0, 0, 0, 1, 1, 1, 1, 1], // i=0, j=0 start, k=0 start, l start
         [1, 0, 0, 1, 0, 0, 1, 1, 0], // i=0, j=0 continue, k=1 start, l start
@@ -752,7 +771,9 @@ fn test_four_loops_2x2x2_iterations() {
 fn test_four_loops_with_disabled_padding() {
     // for i in 0..1 { for j in 0..1 { for k in 0..2 { for l in 0..M { ... }}}}
     // Followed by disabled padding
-    // [enabled, counter[0]=i, counter[1]=j, counter[2]=k, is_first[0]=j_is_first, is_first[1]=k_is_first, is_first[2]=l_is_first, is_transition[0]=j_is_transition, is_transition[1]=k_is_transition]
+    // [enabled, counter[0]=i, counter[1]=j, counter[2]=k, is_first[0]=j_is_first,
+    // is_first[1]=k_is_first, is_first[2]=l_is_first, is_transition[0]=j_is_transition,
+    // is_transition[1]=k_is_transition]
     let trace = generate_trace::<_, 3, 2, { width::<3, 2>() }>(vec![
         [1, 0, 0, 0, 1, 1, 1, 1, 1], // i=0, j=0 start, k=0 start, l start
         [1, 0, 0, 1, 0, 0, 1, 0, 0], // i=0, j=0 continue, k=1 start, l start
