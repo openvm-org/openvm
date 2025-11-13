@@ -34,12 +34,13 @@ jobs:
     name: Run codspeed walltime benchmarks
     runs-on:
       - runs-on=${{ github.run_id }}
-      - family=m5a.xlarge # 2.5Ghz clock speed
+      - family=m5a.16xlarge # 2.5Ghz clock speed
       - image=ubuntu24-full-x64
       - extras=s3-cache
 
     env:
       CODSPEED_RUNNER_MODE: walltime
+      CODSPEED_PROFILING: "false"
 
     steps:
       - uses: runs-on/action@v2

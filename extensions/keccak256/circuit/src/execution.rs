@@ -95,7 +95,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for KeccakVmExecutor {
 #[cfg(feature = "aot")]
 impl<F: PrimeField32> AotExecutor<F> for KeccakVmExecutor {}
 
-impl<F: PrimeField32> MeteredExecutor<F> for KeccakVmExecutor {
+impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakVmExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<KeccakPreCompute>>()
     }
@@ -134,6 +134,8 @@ impl<F: PrimeField32> MeteredExecutor<F> for KeccakVmExecutor {
         Ok(execute_e2_handler::<_, _>)
     }
 }
+#[cfg(feature = "aot")]
+impl<F: PrimeField32> AotMeteredExecutor<F> for KeccakVmExecutor {}
 
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1: bool>(

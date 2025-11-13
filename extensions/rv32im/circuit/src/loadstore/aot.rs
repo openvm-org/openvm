@@ -1,6 +1,6 @@
 use openvm_circuit::arch::{
     aot::common::{convert_x86_reg, Width, RISCV_TO_X86_OVERRIDE_MAP},
-    AotError, AotExecutor,
+    AotError, AotExecutor, AotMeteredExecutor,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -154,4 +154,8 @@ where
 
         Ok(asm_str)
     }
+}
+impl<F, A, const NUM_CELLS: usize> AotMeteredExecutor<F> for LoadStoreExecutor<A, NUM_CELLS> where
+    F: PrimeField32
+{
 }

@@ -1,6 +1,6 @@
 use openvm_circuit::arch::{
     aot::common::{convert_x86_reg, Width, RISCV_TO_X86_OVERRIDE_MAP},
-    AotError, AotExecutor,
+    AotError, AotExecutor, AotMeteredExecutor,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -110,4 +110,11 @@ where
 
         Ok(asm_str)
     }
+}
+
+impl<F, A, const LIMB_BITS: usize> AotMeteredExecutor<F>
+    for LoadSignExtendExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+where
+    F: PrimeField32,
+{
 }

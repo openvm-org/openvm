@@ -141,7 +141,7 @@ where
     }
 }
 
-impl<F, A> MeteredExecutor<F> for Rv32JalrExecutor<A>
+impl<F, A> InterpreterMeteredExecutor<F> for Rv32JalrExecutor<A>
 where
     F: PrimeField32,
 {
@@ -184,6 +184,8 @@ where
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F, A> AotMeteredExecutor<F> for Rv32JalrExecutor<A> where F: PrimeField32 {}
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLED: bool>(
     pre_compute: &JalrPreCompute,

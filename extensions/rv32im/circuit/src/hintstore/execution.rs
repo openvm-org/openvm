@@ -109,7 +109,7 @@ where
 #[cfg(feature = "aot")]
 impl<F> AotExecutor<F> for Rv32HintStoreExecutor where F: PrimeField32 {}
 
-impl<F> MeteredExecutor<F> for Rv32HintStoreExecutor
+impl<F> InterpreterMeteredExecutor<F> for Rv32HintStoreExecutor
 where
     F: PrimeField32,
 {
@@ -152,6 +152,8 @@ where
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F> AotMeteredExecutor<F> for Rv32HintStoreExecutor where F: PrimeField32 {}
 /// Return the number of used rows.
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HINT_STOREW: bool>(

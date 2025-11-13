@@ -117,7 +117,8 @@ impl<F, A, const NUM_CELLS: usize> AotExecutor<F> for NativeLoadStoreCoreExecuto
 {
 }
 
-impl<F, A, const NUM_CELLS: usize> MeteredExecutor<F> for NativeLoadStoreCoreExecutor<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> InterpreterMeteredExecutor<F>
+    for NativeLoadStoreCoreExecutor<A, NUM_CELLS>
 where
     F: PrimeField32,
 {
@@ -174,6 +175,14 @@ where
 
         Ok(fn_ptr)
     }
+}
+
+#[cfg(feature = "aot")]
+impl<F, A, const NUM_CELLS: usize> AotMeteredExecutor<F>
+    for NativeLoadStoreCoreExecutor<A, NUM_CELLS>
+where
+    F: PrimeField32,
+{
 }
 
 #[create_handler]

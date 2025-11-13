@@ -139,7 +139,7 @@ where
     }
 }
 
-impl<F, A> MeteredExecutor<F> for Rv32JalLuiExecutor<A>
+impl<F, A> InterpreterMeteredExecutor<F> for Rv32JalLuiExecutor<A>
 where
     F: PrimeField32,
 {
@@ -181,6 +181,9 @@ where
         dispatch!(execute_e2_handler, is_jal, enabled)
     }
 }
+
+#[cfg(feature = "aot")]
+impl<F, A> AotMeteredExecutor<F> for Rv32JalLuiExecutor<A> where F: PrimeField32 {}
 
 #[inline(always)]
 unsafe fn execute_e12_impl<

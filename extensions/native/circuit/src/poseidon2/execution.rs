@@ -254,7 +254,7 @@ macro_rules! dispatch2 {
     };
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> MeteredExecutor<F>
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> InterpreterMeteredExecutor<F>
     for NativePoseidon2Executor<F, SBOX_REGISTERS>
 {
     #[inline(always)]
@@ -306,7 +306,11 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> MeteredExecutor<F>
         )
     }
 }
-
+#[cfg(feature = "aot")]
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> AotMeteredExecutor<F>
+    for NativePoseidon2Executor<F, SBOX_REGISTERS>
+{
+}
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_pos2_e1_impl<

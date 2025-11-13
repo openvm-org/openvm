@@ -10,18 +10,18 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::rngs::StdRng;
 
-#[cfg(feature = "aot")]
-use crate::arch::AotExecutor;
 #[cfg(not(feature = "tco"))]
 use crate::arch::ExecuteFunc;
 #[cfg(feature = "tco")]
 use crate::arch::Handler;
+#[cfg(feature = "aot")]
+use crate::arch::{AotExecutor, AotMeteredExecutor};
 use crate::{
     arch::{
         create_handler,
         execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait},
-        E2PreCompute, ExecutionError, InterpreterExecutor, MeteredExecutor, PhantomSubExecutor,
-        StaticProgramError, Streams, VmExecState,
+        E2PreCompute, ExecutionError, InterpreterExecutor, InterpreterMeteredExecutor,
+        PhantomSubExecutor, StaticProgramError, Streams, VmExecState,
     },
     system::{memory::online::GuestMemory, phantom::PhantomExecutor},
 };
@@ -113,7 +113,7 @@ where
     }
 }
 
-impl<F> MeteredExecutor<F> for PhantomExecutor<F>
+impl<F> InterpreterMeteredExecutor<F> for PhantomExecutor<F>
 where
     F: PrimeField32,
 {
@@ -155,6 +155,9 @@ where
         Ok(execute_e2_handler)
     }
 }
+
+#[cfg(feature = "aot")]
+impl<F> AotMeteredExecutor<F> for PhantomExecutor<F> where F: PrimeField32 {}
 
 #[inline(always)]
 fn execute_impl<F>(

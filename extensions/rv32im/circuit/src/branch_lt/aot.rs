@@ -1,4 +1,4 @@
-use openvm_circuit::arch::{AotError, AotExecutor};
+use openvm_circuit::arch::{AotError, AotExecutor, AotMeteredExecutor};
 #[cfg(feature = "aot")]
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -77,4 +77,10 @@ where
     fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
         true
     }
+}
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AotMeteredExecutor<F>
+    for BranchLessThanExecutor<A, NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+{
 }

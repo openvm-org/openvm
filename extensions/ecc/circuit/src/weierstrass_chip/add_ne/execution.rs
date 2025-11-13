@@ -219,7 +219,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> AotExecutor<
 {
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecutor<F>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterMeteredExecutor<F>
     for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
@@ -264,6 +264,11 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecu
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute_pure)?;
         dispatch!(execute_e2_handler, pre_compute_pure, is_setup)
     }
+}
+#[cfg(feature = "aot")]
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> AotMeteredExecutor<F>
+    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
+{
 }
 
 #[inline(always)]
