@@ -5,7 +5,10 @@ mod tests {
     use eyre::Result;
     use openvm_circuit::{
         arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, Streams, VmExecutor},
-        system::memory::{merkle::{public_values::UserPublicValuesProof, MerkleTree}, online::LinearMemory},
+        system::memory::{
+            merkle::{public_values::UserPublicValuesProof, MerkleTree},
+            online::LinearMemory,
+        },
         utils::{air_test, air_test_with_min_segments, test_system_config},
     };
     use openvm_instructions::{exe::VmExe, instruction::Instruction, LocalOpcode, SystemOpcode};
