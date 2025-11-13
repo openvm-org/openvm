@@ -1,1 +1,58 @@
+use std::{ops::Deref, ptr};
 
+use openvm_cuda_backend::{base::DeviceMatrix, types::F};
+use openvm_cuda_common::copy::MemCopyH2D;
+use p3_matrix::dense::RowMajorMatrix;
+
+use super::{ExpBitsLenCols, ExpBitsLenCpuTraceGenerator};
+use crate::primitives::cuda_abi::exp_bits_len_tracegen;
+
+#[derive(Debug, Default)]
+pub struct ExpBitsLenGpuTraceGenerator(pub ExpBitsLenCpuTraceGenerator);
+
+impl Deref for ExpBitsLenGpuTraceGenerator {
+    type Target = ExpBitsLenCpuTraceGenerator;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl ExpBitsLenGpuTraceGenerator {
+    pub fn generate_trace_row_major(self) -> RowMajorMatrix<F> {
+        self.0.generate_trace_row_major()
+    }
+
+    #[tracing::instrument(name = "generate_trace_device(ExpBitsLenAir)", skip_all)]
+    pub fn generate_trace_device(self) -> DeviceMatrix<F> {
+        let records = self.0.requests.into_inner().unwrap();
+        let num_valid_rows = records.last().map(|record| record.end_row()).unwrap_or(0);
+        let height = num_valid_rows.next_power_of_two();
+        let width = ExpBitsLenCols::<u8>::width();
+
+        let trace = tracing::info_span!("allocate_trace_matrix")
+            .in_scope(|| DeviceMatrix::with_capacity(height, width));
+
+        trace.buffer().fill_zero().unwrap();
+
+        let records_ptr = if records.is_empty() {
+            ptr::null()
+        } else {
+            tracing::info_span!("allocate_records")
+                .in_scope(|| records.to_device().unwrap().as_ptr())
+        };
+
+        unsafe {
+            exp_bits_len_tracegen(
+                records_ptr,
+                records.len(),
+                trace.buffer(),
+                height,
+                num_valid_rows,
+            )
+            .unwrap();
+        }
+
+        trace
+    }
+}

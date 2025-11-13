@@ -77,7 +77,7 @@ pub trait TraceGenModule<GC: GlobalTraceGenCtx, PB: ProverBackendV2>: Send + Syn
         child_vk: &GC::ChildVerifyingKey,
         proofs: &GC::MultiProof,
         preflights: &GC::PreflightRecords,
-        ctx: Self::ModuleSpecificCtx,
+        ctx: &Self::ModuleSpecificCtx,
     ) -> Vec<AirProvingContextV2<PB>>;
 }
 
@@ -321,26 +321,26 @@ impl<'a> TraceModuleRef<'a> {
         child_vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
         preflights: &[Preflight],
-        exp_bits_len_gen: &Arc<ExpBitsLenTraceGenerator>,
+        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         match self {
             TraceModuleRef::Transcript(module) => {
-                module.generate_proving_ctxs(child_vk, proofs, preflights, ())
+                module.generate_proving_ctxs(child_vk, proofs, preflights, &())
             }
             TraceModuleRef::ProofShape(module) => {
-                module.generate_proving_ctxs(child_vk, proofs, preflights, ())
+                module.generate_proving_ctxs(child_vk, proofs, preflights, &())
             }
             TraceModuleRef::Gkr(module) => {
-                module.generate_proving_ctxs(child_vk, proofs, preflights, exp_bits_len_gen.clone())
+                module.generate_proving_ctxs(child_vk, proofs, preflights, exp_bits_len_gen)
             }
             TraceModuleRef::BatchConstraint(module) => {
-                module.generate_proving_ctxs(child_vk, proofs, preflights, ())
+                module.generate_proving_ctxs(child_vk, proofs, preflights, &())
             }
             TraceModuleRef::Stacking(module) => {
-                module.generate_proving_ctxs(child_vk, proofs, preflights, ())
+                module.generate_proving_ctxs(child_vk, proofs, preflights, &())
             }
             TraceModuleRef::Whir(module) => {
-                module.generate_proving_ctxs(child_vk, proofs, preflights, exp_bits_len_gen.clone())
+                module.generate_proving_ctxs(child_vk, proofs, preflights, exp_bits_len_gen)
             }
         }
     }
@@ -494,7 +494,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             .collect::<Vec<_>>();
 
         self.power_checker_trace.reset();
-        let exp_bits_len_gen = Arc::new(ExpBitsLenTraceGenerator::default());
+        let exp_bits_len_gen = ExpBitsLenTraceGenerator::default();
 
         // WARNING: SymbolicExpressionAir MUST be the first AIR in verifier circuit
         let modules = vec![
@@ -546,33 +546,27 @@ pub mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            exp_bits_len_gen: &Arc<ExpBitsLenTraceGenerator>,
+            exp_bits_len_gen: &ExpBitsLenTraceGenerator,
         ) -> Vec<AirProvingContextV2<cuda_backend_v2::GpuBackendV2>> {
             match self {
                 TraceModuleRef::Transcript(module) => {
-                    module.generate_proving_ctxs(child_vk, proofs, preflights, ())
+                    module.generate_proving_ctxs(child_vk, proofs, preflights, &())
                 }
                 TraceModuleRef::ProofShape(module) => {
-                    module.generate_proving_ctxs(child_vk, proofs, preflights, ())
+                    module.generate_proving_ctxs(child_vk, proofs, preflights, &())
                 }
-                TraceModuleRef::Gkr(module) => module.generate_proving_ctxs(
-                    child_vk,
-                    proofs,
-                    preflights,
-                    exp_bits_len_gen.clone(),
-                ),
+                TraceModuleRef::Gkr(module) => {
+                    module.generate_proving_ctxs(child_vk, proofs, preflights, exp_bits_len_gen)
+                }
                 TraceModuleRef::BatchConstraint(module) => {
-                    module.generate_proving_ctxs(child_vk, proofs, preflights, ())
+                    module.generate_proving_ctxs(child_vk, proofs, preflights, &())
                 }
                 TraceModuleRef::Stacking(module) => {
-                    module.generate_proving_ctxs(child_vk, proofs, preflights, ())
+                    module.generate_proving_ctxs(child_vk, proofs, preflights, &())
                 }
-                TraceModuleRef::Whir(module) => module.generate_proving_ctxs(
-                    child_vk,
-                    proofs,
-                    preflights,
-                    exp_bits_len_gen.clone(),
-                ),
+                TraceModuleRef::Whir(module) => {
+                    module.generate_proving_ctxs(child_vk, proofs, preflights, exp_bits_len_gen)
+                }
             }
         }
     }
@@ -617,7 +611,7 @@ pub mod cuda_tracegen {
                 })
                 .collect::<Vec<_>>();
 
-            let exp_bits_len_gen = Arc::new(ExpBitsLenTraceGenerator::default());
+            let exp_bits_len_gen = ExpBitsLenTraceGenerator::default();
             self.power_checker_trace.reset();
 
             // NOTE: avoid par_iter for now so H2D transfer all happens on same stream to avoid sync
@@ -651,7 +645,7 @@ pub mod cuda_tracegen {
             ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
                 .cached_mains = vec![child_vk_pcs_data];
             let mut ctx_per_trace = ctxs_by_module.into_iter().flatten().collect::<Vec<_>>();
-            // TODO: move this to gpu
+            // TODO: move pow bits tracegen to gpu
             // Caution: this must be done after GKR and WHIR tracegen
             let pow_bits_trace = ColMajorMatrix::from_row_major(
                 &self.power_checker_trace.generate_trace_row_major(),
@@ -660,11 +654,8 @@ pub mod cuda_tracegen {
                 transport_matrix_h2d_col_major(&pow_bits_trace).unwrap(),
             ));
 
-            let exp_bits_trace =
-                ColMajorMatrix::from_row_major(&exp_bits_len_gen.generate_trace_row_major());
-            ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
-                transport_matrix_h2d_col_major(&exp_bits_trace).unwrap(),
-            ));
+            let exp_bits_trace = exp_bits_len_gen.generate_trace_device();
+            ctx_per_trace.push(AirProvingContextV2::simple_no_pis(exp_bits_trace));
 
             ctx_per_trace
         }

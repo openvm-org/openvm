@@ -302,7 +302,7 @@ impl GkrModule {
         _child_vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
         preflights: &[Preflight],
-        exp_bits_len_gen: Arc<ExpBitsLenTraceGenerator>,
+        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
     ) -> GkrBlobCpu {
         debug_assert_eq!(proofs.len(), preflights.len());
 
@@ -326,11 +326,7 @@ impl GkrModule {
                 ts.observe(*logup_pow_witness);
                 let logup_pow_sample = ts.sample();
 
-                exp_bits_len_gen.add_exp_bits_len(
-                    F::GENERATOR,
-                    logup_pow_sample,
-                    self.logup_pow_bits,
-                );
+                exp_bits_len_gen.add_request(F::GENERATOR, logup_pow_sample, self.logup_pow_bits);
 
                 let alpha_logup = ts.sample_ext();
                 let _beta_logup = ts.sample_ext();
@@ -509,7 +505,7 @@ impl GkrModule {
 }
 
 impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for GkrModule {
-    type ModuleSpecificCtx = Arc<ExpBitsLenTraceGenerator>;
+    type ModuleSpecificCtx = ExpBitsLenTraceGenerator;
 
     #[tracing::instrument(name = "generate_proving_ctxs(GkrModule)", skip_all)]
     fn generate_proving_ctxs(
@@ -517,7 +513,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for GkrModule {
         child_vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
         preflights: &[Preflight],
-        exp_bits_len_gen: Arc<ExpBitsLenTraceGenerator>,
+        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         let blob = self.generate_blob(child_vk, proofs, preflights, exp_bits_len_gen);
 
@@ -578,14 +574,14 @@ mod cuda_tracegen {
     };
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for GkrModule {
-        type ModuleSpecificCtx = Arc<ExpBitsLenTraceGenerator>;
+        type ModuleSpecificCtx = ExpBitsLenTraceGenerator;
 
         fn generate_proving_ctxs(
             &self,
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            exp_bits_len_gen: Arc<ExpBitsLenTraceGenerator>,
+            exp_bits_len_gen: &ExpBitsLenTraceGenerator,
         ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
             // default hybrid implementation:
             let ctxs_cpu = TraceGenModule::<GlobalCtxCpu, CpuBackendV2>::generate_proving_ctxs(

@@ -476,7 +476,7 @@ impl WhirModule {
         child_vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
         preflights: &[Preflight],
-        exp_bits_len_gen: Arc<ExpBitsLenTraceGenerator>,
+        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
     ) -> WhirBlobCpu {
         // TODO: Move more stuff here. (Out of preflight and redundant logic in generate_trace
         // functions.)
@@ -498,9 +498,14 @@ impl WhirModule {
         for (proof_idx, (proof, preflight)) in zip(proofs, preflights).enumerate() {
             let mu = preflight.stacking.stacking_batching_challenge;
 
-            preflight.whir.pow_samples.iter().for_each(|&pow_sample| {
-                exp_bits_len_gen.add_exp_bits_len(F::GENERATOR, pow_sample, whir_pow_bits);
-            });
+            exp_bits_len_gen.add_requests(
+                preflight
+                    .whir
+                    .pow_samples
+                    .iter()
+                    .copied()
+                    .map(|pow_sample| (F::GENERATOR, pow_sample, whir_pow_bits)),
+            );
 
             let mut log_rs_domain_size = l_skip + n_stack + log_blowup;
             let num_whir_rounds = preflight.whir.pow_samples.len();
@@ -511,9 +516,12 @@ impl WhirModule {
                 .take(num_whir_rounds)
             {
                 let omega = F::two_adic_generator(log_rs_domain_size);
-                for &sample in round_queries {
-                    exp_bits_len_gen.add_exp_bits_len(omega, sample, log_rs_domain_size - k_whir);
-                }
+                exp_bits_len_gen.add_requests(
+                    round_queries
+                        .iter()
+                        .copied()
+                        .map(|sample| (omega, sample, log_rs_domain_size - k_whir)),
+                );
                 log_rs_domain_size -= 1;
             }
 
@@ -582,7 +590,7 @@ impl WhirModule {
 }
 
 impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for WhirModule {
-    type ModuleSpecificCtx = Arc<ExpBitsLenTraceGenerator>;
+    type ModuleSpecificCtx = ExpBitsLenTraceGenerator;
 
     #[tracing::instrument(name = "generate_proving_ctxs(WhirModule)", skip_all)]
     fn generate_proving_ctxs(
@@ -590,7 +598,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for WhirModule {
         child_vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
         preflights: &[Preflight],
-        exp_bits_len_gen: Arc<ExpBitsLenTraceGenerator>,
+        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         let blob = self.generate_blob(child_vk, proofs, preflights, exp_bits_len_gen);
 
@@ -732,14 +740,14 @@ mod cuda_tracegen {
     };
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for WhirModule {
-        type ModuleSpecificCtx = Arc<ExpBitsLenTraceGenerator>;
+        type ModuleSpecificCtx = ExpBitsLenTraceGenerator;
 
         fn generate_proving_ctxs(
             &self,
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            exp_bits_len_gen: Arc<ExpBitsLenTraceGenerator>,
+            exp_bits_len_gen: &ExpBitsLenTraceGenerator,
         ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
             // default hybrid implementation:
             let ctxs_cpu = TraceGenModule::<GlobalCtxCpu, CpuBackendV2>::generate_proving_ctxs(

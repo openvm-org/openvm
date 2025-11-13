@@ -620,7 +620,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
         child_vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
         preflights: &[Preflight],
-        _ctx: (),
+        _ctx: &(),
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         let blob = self.generate_blob(child_vk, proofs, preflights);
 
@@ -729,7 +729,7 @@ pub mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            module_ctx: (),
+            module_ctx: &(),
         ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
             // default hybrid implementation:
             let ctxs_cpu = TraceGenModule::<GlobalCtxCpu, CpuBackendV2>::generate_proving_ctxs(
