@@ -1,4 +1,4 @@
-use std::ffi::c_void;
+use std::{ffi::c_void, mem::offset_of};
 
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -15,7 +15,9 @@ use crate::{
         aot::{
             asm_to_lib, extern_handler, get_vm_address_space_addr, set_pc_shim, should_suspend_shim,
         },
-        execution_mode::{ExecutionCtx, MeteredCtx, Segment},
+        execution_mode::{
+            metered::segment_ctx::SegmentationCtx, ExecutionCtx, MeteredCtx, Segment,
+        },
         interpreter::{
             alloc_pre_compute_buf, get_metered_pre_compute_instructions,
             get_metered_pre_compute_max_size, split_pre_compute_buf,
@@ -25,7 +27,6 @@ use crate::{
     },
     system::memory::online::GuestMemory,
 };
-
 static_assertions::assert_impl_all!(AotInstance<p3_baby_bear::BabyBear, MeteredCtx>: Send, Sync);
 
 impl<F> AotInstance<F, MeteredCtx>
@@ -79,6 +80,19 @@ where
         E: MeteredExecutor<F>,
     {
         let mut asm_str = String::new();
+        let instret_until_end_offset = offset_of!(VmExecState<F, GuestMemory, MeteredCtx>, ctx)
+            + offset_of!(MeteredCtx, segmentation_ctx)
+            + offset_of!(SegmentationCtx, instrets_until_check);
+        let sync_reg_to_instret_until_end = || {
+            format!(
+                "    mov QWORD PTR [{REG_EXEC_STATE_PTR} + {instret_until_end_offset}], {REG_INSTRET_END}\n"
+            )
+        };
+        let sync_instret_until_end_to_reg = || {
+            format!(
+                "    mov {REG_INSTRET_END}, [{REG_EXEC_STATE_PTR} + {instret_until_end_offset}]\n"
+            )
+        };
         // generate the assembly based on exe.program
 
         // header part
@@ -138,6 +152,7 @@ where
 
         // asm_execute_pc_{pc_num}
         // do fallback first for now but expand per instruction
+        // other function, then check rax = 1 value, for should suspend
 
         let pc_base = exe.program.pc_base;
 
@@ -155,24 +170,34 @@ where
             /* Preprocessing step, to check if we should suspend or not */
             asm_str += &format!("asm_execute_pc_{pc}:\n");
 
+            asm_str += &format!("    dec {REG_INSTRET_END}\n");
+            asm_str += &format!("    jnz continue_execution_{pc}\n"); // ALTERNATIVEly: change this to check if value is 1
+
             asm_str += &Self::xmm_to_rv32_regs();
             asm_str += &Self::push_address_space_start();
             asm_str += &Self::push_internal_registers();
+            asm_str += &format!("    inc {REG_INSTRET_END}\n"); // extern function, decrements by 1;
+            asm_str += &sync_reg_to_instret_until_end();
             asm_str += &format!("    movabs {REG_D}, {should_suspend_ptr}\n");
             asm_str += &format!("    mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
             asm_str += &format!("    call {REG_D}\n");
             asm_str += &format!("    test al, al\n");
+
             asm_str += &Self::pop_internal_registers();
             asm_str += &Self::pop_address_space_start();
+            asm_str += &sync_instret_until_end_to_reg();
             asm_str += &Self::rv32_regs_to_xmm();
             asm_str += &format!("    jnz asm_run_end_{pc}\n");
+
+            // continue with execution, as should_suspend returned false
+            asm_str += &format!("continue_execution_{pc}:\n");
 
             if instruction.opcode.as_usize() == 0 {
                 // terminal opcode has no associated executor, so can handle with default fallback
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
-
+                asm_str += &sync_reg_to_instret_until_end();
                 asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
                 asm_str += &format!("   mov {REG_SECOND_ARG}, {REG_INSNS_PTR}\n");
                 asm_str += &format!("   mov {REG_THIRD_ARG}, {pc}\n");
@@ -221,7 +246,7 @@ where
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
-
+                asm_str += &sync_reg_to_instret_until_end();
                 asm_str += "    mov rdi, rbx\n";
                 asm_str += "    mov rsi, rbp\n";
                 asm_str += &format!("    mov rdx, {pc}\n");
@@ -341,12 +366,12 @@ where
             let vm_exec_state_ptr =
                 vm_exec_state.as_mut() as *mut VmExecState<F, GuestMemory, MeteredCtx>;
 
+            let instret_until_end = vm_exec_state.ctx.segmentation_ctx.instrets_until_check;
             asm_run(
                 vm_exec_state_ptr.cast(),
                 pre_compute_insns_ptr as *const c_void,
                 from_state_pc,
-                0, /* TODO: this is a placeholder because in the pure case asm_run needs to take
-                    * in 5 args. Fix later */
+                instret_until_end,
             );
         }
         Ok(*vm_exec_state)
@@ -357,7 +382,7 @@ where
 rbx = aot_vm_exec_state_ptr
 rbp = pre_compute_insns_ptr
 r13 = cur_pc
-r12 is currently unused
+r12 = instret_until_end counter
 
 Assembly code explanation
 
