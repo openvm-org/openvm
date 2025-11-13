@@ -202,7 +202,7 @@ where
 
     fn xmm_to_rv32_regs() -> String {
         let mut asm_str = String::new();
-        
+
         asm_str += &sync_gpr_to_xmm();
 
         asm_str += &format!("    push {REG_AS2_PTR}\n");

@@ -7,9 +7,9 @@ mod aot {
         sync_gpr_to_xmm, sync_xmm_to_gpr, RISCV_TO_X86_OVERRIDE_MAP,
     };
     pub use openvm_circuit::arch::aot::common::{
-        DEFAULT_PC_OFFSET, REG_A, REG_A_W, REG_B, REG_B_W, REG_C, REG_C_B, REG_C_LB, REG_C_W,
-        REG_D, REG_D_W, REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_AS2_PTR, REG_INSNS_PTR,
-        REG_PC, REG_PC_W, REG_RETURN_VAL, REG_SECOND_ARG, REG_THIRD_ARG,
+        DEFAULT_PC_OFFSET, REG_A, REG_AS2_PTR, REG_A_W, REG_B, REG_B_W, REG_C, REG_C_B, REG_C_LB,
+        REG_C_W, REG_D, REG_D_W, REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_INSNS_PTR, REG_PC,
+        REG_PC_W, REG_RETURN_VAL, REG_SECOND_ARG, REG_THIRD_ARG,
     };
 
     pub(crate) fn rv32_register_to_gpr(rv32_reg: u8, gpr: &str) -> String {
