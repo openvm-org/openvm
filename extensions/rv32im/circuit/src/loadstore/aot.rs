@@ -88,9 +88,9 @@ where
         // REG_A = <start of destination address space>
         match e_u32 {
             2 => {
-                // for AS2, the starting address is already in REG_AS2_PTR
+                // REG_AS2_PTR = <start of destination address space>
                 asm_str += &address_space_start_to_gpr(e_u32, REG_AS2_PTR);
-                // REG_B = REG_B + REG_A = <memory address in host memory>
+                // REG_B = REG_B + REG_AS2_PTR = <memory address in host memory>
                 asm_str += &format!("   lea {gpr_reg_w64}, [{gpr_reg_w64} + {REG_AS2_PTR}]\n");
             }
             _ => {

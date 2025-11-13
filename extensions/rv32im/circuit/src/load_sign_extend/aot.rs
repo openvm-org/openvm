@@ -77,10 +77,21 @@ where
 
         let gpr_reg_w64 =
             convert_x86_reg(&gpr_reg, Width::W64).ok_or(AotError::InvalidInstruction)?;
-        // REG_A = <start of destination address space>
-        asm_str += &address_space_start_to_gpr(e_u32, REG_A);
-        // REG_B = REG_B + REG_A = <memory address in host memory>
-        asm_str += &format!("   lea {gpr_reg_w64}, [{gpr_reg_w64} + {REG_A}]\n");
+
+        match e_u32 {
+            2 => {
+                // REG_AS2_PTR = <start of destination address space>
+                asm_str += &address_space_start_to_gpr(e_u32, REG_AS2_PTR);
+                // REG_B = REG_B + REG_AS2_PTR = <memory address in host memory>
+                asm_str += &format!("   lea {gpr_reg_w64}, [{gpr_reg_w64} + {REG_AS2_PTR}]\n");
+            }
+            _ => {
+                // REG_A = <start of destination address space>
+                asm_str += &address_space_start_to_gpr(e_u32, REG_A);
+                // REG_B = REG_B + REG_A = <memory address in host memory>
+                asm_str += &format!("   lea {gpr_reg_w64}, [{gpr_reg_w64} + {REG_A}]\n");
+            }
+        }
 
         if enabled {
             match local_opcode {
