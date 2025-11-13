@@ -152,11 +152,9 @@ where
         match local_opcode {
             DivRemOpcode::DIV => {
                 asm_str += &format!("   test {reg_c}, {reg_c}\n");
-                asm_str += &format!("   test {reg_c}, {reg_c}\n");
                 asm_str += &format!("   je {zero_label}\n");
                 asm_str += "   cmp eax, 0x80000000\n";
                 asm_str += &format!("   jne {normal_label}\n");
-                asm_str += &format!("   cmp {reg_c}, -1\n");
                 asm_str += &format!("   cmp {reg_c}, -1\n");
                 asm_str += &format!("   jne {normal_label}\n");
                 asm_str += &format!("   jmp {overflow_label}\n");
@@ -165,7 +163,6 @@ where
                 // sign-extend EAX into EDX:EAX
                 asm_str += "   cdq\n";
                 // eax = eax / ecx, edx = eax % ecx
-                asm_str += &format!("   idiv {reg_c}\n");
                 asm_str += &format!("   idiv {reg_c}\n");
                 asm_str += "   mov edx, eax\n";
                 asm_str += &format!("   jmp {done_label}\n");
@@ -179,10 +176,8 @@ where
             }
             DivRemOpcode::DIVU => {
                 asm_str += &format!("   test {reg_c}, {reg_c}\n");
-                asm_str += &format!("   test {reg_c}, {reg_c}\n");
                 asm_str += &format!("   je {zero_label}\n");
                 // eax = eax / ecx, edx = eax % ecx
-                asm_str += &format!("   div {reg_c}\n");
                 asm_str += &format!("   div {reg_c}\n");
                 asm_str += "   mov edx, eax\n";
                 asm_str += &format!("   jmp {done_label}\n");
@@ -192,11 +187,9 @@ where
             }
             DivRemOpcode::REM => {
                 asm_str += &format!("   test {reg_c}, {reg_c}\n");
-                asm_str += &format!("   test {reg_c}, {reg_c}\n");
                 asm_str += &format!("   je {zero_label}\n");
                 asm_str += "   cmp eax, 0x80000000\n";
                 asm_str += &format!("   jne {normal_label}\n");
-                asm_str += &format!("   cmp {reg_c}, -1\n");
                 asm_str += &format!("   cmp {reg_c}, -1\n");
                 asm_str += &format!("   jne {normal_label}\n");
                 asm_str += "   mov edx, 0\n";
@@ -207,7 +200,6 @@ where
                 asm_str += "   cdq\n";
                 // eax = eax / ecx, edx = eax % ecx
                 asm_str += &format!("   idiv {reg_c}\n");
-                asm_str += &format!("   idiv {reg_c}\n");
                 asm_str += &format!("   jmp {done_label}\n");
 
                 asm_str += &format!("{zero_label}:\n");
@@ -215,10 +207,8 @@ where
             }
             DivRemOpcode::REMU => {
                 asm_str += &format!("   test {reg_c}, {reg_c}\n");
-                asm_str += &format!("   test {reg_c}, {reg_c}\n");
                 asm_str += &format!("   je {zero_label}\n");
                 // eax = eax / ecx, edx = eax % ecx
-                asm_str += &format!("   div {reg_c}\n");
                 asm_str += &format!("   div {reg_c}\n");
                 asm_str += &format!("   jmp {done_label}\n");
 
