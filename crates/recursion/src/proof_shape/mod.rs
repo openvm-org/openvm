@@ -72,6 +72,10 @@ pub struct ProofShapeModule {
     commit_mult: usize,
     range_checker: Arc<RangeCheckerTraceGenerator<8>>,
     pow_checker: Arc<PowerCheckerTraceGenerator<2, 32>>,
+
+    // Module sends extra public values message for use outside of verifier
+    // sub-circuit if true
+    continuations_enabled: bool,
 }
 
 impl ProofShapeModule {
@@ -80,6 +84,7 @@ impl ProofShapeModule {
         b: &mut BusIndexManager,
         bus_inventory: BusInventory,
         pow_checker: Arc<PowerCheckerTraceGenerator<2, 32>>,
+        continuations_enabled: bool,
     ) -> Self {
         let idx_encoder = Arc::new(Encoder::new(mvk.per_air.len(), 2, true));
         let range_checker = Arc::new(RangeCheckerTraceGenerator::<8>::default());
@@ -132,6 +137,7 @@ impl ProofShapeModule {
             commit_mult: mvk.params.num_whir_queries,
             range_checker,
             pow_checker,
+            continuations_enabled,
         }
     }
 
@@ -238,11 +244,14 @@ impl AirModule for ProofShapeModule {
             lifted_heights_bus: self.bus_inventory.lifted_heights_bus,
             commitments_bus: self.bus_inventory.commitments_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
+            cached_commit_bus: self.bus_inventory.cached_commit_bus,
+            continuations_enabled: self.continuations_enabled,
         };
         let pvs_air = PublicValuesAir {
             public_values_bus: self.bus_inventory.public_values_bus,
             num_pvs_bus: self.num_pvs_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
+            continuations_enabled: self.continuations_enabled,
         };
         let range_checker = RangeCheckerAir::<8> {
             bus: self.range_bus,

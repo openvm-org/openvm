@@ -101,7 +101,11 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UserPvsReceiverAir {
         let local: &UserPvsReceiverCols<AB::Var> = (*local).borrow();
 
         builder.assert_bool(local.is_valid);
-
-        // TODO[INT-5302]: receive user public values from proof shape
+        self.public_values_bus.receive(
+            builder,
+            local.proof_idx,
+            local.pv_bus_msg.clone(),
+            local.is_valid,
+        );
     }
 }

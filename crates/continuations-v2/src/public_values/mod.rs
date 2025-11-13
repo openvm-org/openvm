@@ -19,10 +19,10 @@ pub struct NonRootVerifierPvs<F> {
     pub app_commit: [F; DIGEST_SIZE],
 
     // connector pvs
-    pub is_terminate: F,
     pub initial_pc: F,
     pub final_pc: F,
     pub exit_code: F,
+    pub is_terminate: F,
 
     // memory merkle pvs
     pub initial_root: [F; DIGEST_SIZE],
