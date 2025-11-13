@@ -1,6 +1,12 @@
+use std::io::{self, Write};
+
 use itertools::Itertools;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_util::log2_strict_usize};
 use serde::{Deserialize, Serialize};
+use stark_backend_v2::{
+    codec::{Decode, Encode},
+    DIGEST_SIZE, F,
+};
 use thiserror::Error;
 use tracing::instrument;
 
@@ -30,6 +36,24 @@ pub struct UserPublicValuesProof<const CHUNK: usize, F> {
     /// `MemoryNode`. The merkle tree doesn't pad because the length `public_values` implies the
     /// merkle tree is always a full binary tree.
     pub public_values_commit: [F; CHUNK],
+}
+
+impl Encode for UserPublicValuesProof<DIGEST_SIZE, F> {
+    fn encode<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+        self.proof.encode(writer)?;
+        self.public_values.encode(writer)?;
+        self.public_values_commit.encode(writer)
+    }
+}
+
+impl Decode for UserPublicValuesProof<DIGEST_SIZE, F> {
+    fn decode<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+        Ok(Self {
+            proof: Vec::<[F; DIGEST_SIZE]>::decode(reader)?,
+            public_values: Vec::<F>::decode(reader)?,
+            public_values_commit: <[F; DIGEST_SIZE]>::decode(reader)?,
+        })
+    }
 }
 
 #[derive(Error, Debug)]
