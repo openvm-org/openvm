@@ -145,7 +145,7 @@ where
             .naive_metered_interpreter(&exe)?
             .execute_metered(input.clone(), metered_ctx.clone())?;
 
-        assert_eq!(interp_state_metered.pc(), aot_state_metered.pc()); // hmmmmm; aot_state_metered not executing enough?
+        assert_eq!(interp_state_metered.pc(), aot_state_metered.pc());
 
         let system_config: &SystemConfig = config.as_ref();
         let addr_spaces = &system_config.memory_config.addr_spaces;

@@ -270,8 +270,6 @@ where
             asm_str += &format!("   .long asm_execute_pc_{pc} - map_pc_base\n");
         }
 
-        // std::fs::write("/tmp/asm_dump.s", &asm_str).expect("failed to write asm_str");
-        // println!("ASM_STR_METERED: {}", asm_str);
         Ok(asm_str)
     }
     fn generate_metered_asm() -> String {
