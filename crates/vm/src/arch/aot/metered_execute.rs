@@ -150,10 +150,6 @@ where
         asm_str += &format!("   add {REG_PC}, {REG_D}\n");
         asm_str += &format!("   jmp {REG_PC}\n");
 
-        // asm_execute_pc_{pc_num}
-        // do fallback first for now but expand per instruction
-        // other function, then check rax = 1 value, for should suspend
-
         let pc_base = exe.program.pc_base;
 
         for i in 0..(pc_base / 4) {
@@ -164,10 +160,8 @@ where
         let extern_handler_ptr =
             format!("{:p}", extern_handler::<F, MeteredCtx, true> as *const ());
         let set_pc_ptr = format!("{:p}", set_pc_shim::<F, MeteredCtx> as *const ());
-        let should_suspend_ptr = format!("{:p}", should_suspend_shim::<F, MeteredCtx> as *const ()); //needs state_ptr
-                                                                                                     // need to pass in config: SystemConfig
+        let should_suspend_ptr = format!("{:p}", should_suspend_shim::<F, MeteredCtx> as *const ());
 
-        // before, 1 too high, now 1 too low for instret
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
             /* Preprocessing step, to check if we should suspend or not */
             asm_str += &format!("asm_execute_pc_{pc}:\n");
