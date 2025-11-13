@@ -364,8 +364,8 @@ where
 
 /// Updates the eq evaluation incrementally for one sumcheck round.
 ///
-/// Computes: `eq_out = eq_in * (prev_challenge * challenge + (1 - prev_challenge) * (1 - challenge))`
-/// where `prev_challenge` is xi and `challenge` is ri.
+/// Computes: `eq_out = eq_in * (prev_challenge * challenge + (1 - prev_challenge) * (1 -
+/// challenge))` where `prev_challenge` is xi and `challenge` is ri.
 pub(super) fn update_eq<F, FA>(
     eq_in: [F; D_EF],
     prev_challenge: [F; D_EF],
