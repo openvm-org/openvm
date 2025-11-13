@@ -255,7 +255,9 @@ pub fn verify_app_proof(
 mod async_prover {
     use derivative::Derivative;
     use eyre::eyre;
-    use openvm_circuit::system::memory::merkle::public_values::UserPublicValuesProof;
+    use openvm_circuit::{
+        arch::ExecutionError, system::memory::merkle::public_values::UserPublicValuesProof,
+    };
     use openvm_stark_sdk::config::FriParameters;
     use tokio::{spawn, sync::Semaphore, task::spawn_blocking};
     use tracing::{info_span, instrument, Instrument};
