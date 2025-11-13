@@ -85,16 +85,16 @@ where
 
         // Summary:
         // - iter_idx consistency: TODO to grow the nested-loop sub-AIR; the first valid row
-        //   initializes `is_first_iter` and `iter_idx`, invalid rows force `iter_idx = 0`, each step
-        //   either increments or wraps `iter_idx`, wrapping signals that `root_half_order` was
-        //   reached, sets `next.is_first_iter`, and is enforced immediately after the header to keep
-        //   layer sizes sound.
+        //   initializes `is_first_iter` and `iter_idx`, invalid rows force `iter_idx = 0`, each
+        //   step either increments or wraps `iter_idx`, wrapping signals that `root_half_order` was
+        //   reached, sets `next.is_first_iter`, and is enforced immediately after the header to
+        //   keep layer sizes sound.
         // - Root consistency: continuing iterations multiply `root_pow` by `root` while preserving
         //   `root` and its half order; when a wrap happens, the root squares and the half order
-        //   doubles; the first row fixes `root = -1`, `root_half_order = 1`, and `root_pow = 1`, and
-        //   the final row forces the root to equal `canonical_inverse_generator`.
-        // - Xi/product consistency: the initial product equals one and `xi_idx` starts at
-        //   `l_skip - 1`, wraps decrement `xi_idx` until reaching zero on the last row, and bus
+        //   doubles; the first row fixes `root = -1`, `root_half_order = 1`, and `root_pow = 1`,
+        //   and the final row forces the root to equal `canonical_inverse_generator`.
+        // - Xi/product consistency: the initial product equals one and `xi_idx` starts at `l_skip -
+        //   1`, wraps decrement `xi_idx` until reaching zero on the last row, and bus
         //   communications consume and emit products based on `xi`, `1 - xi`, and `xi * root_pow`
         //   combinations.
 
@@ -171,9 +171,9 @@ where
         builder
             .when(next.is_first_iter * not(next.is_first))
             .assert_eq(local.root, next.root * next.root);
-        // Important: we need to enforce dropping iter_idx to zero if root_pow is going to become one.
-        // We can leave this to inner interactions, but then we need to guarantee that the first layer
-        // has size 1.
+        // Important: we need to enforce dropping iter_idx to zero if root_pow is going to become
+        // one. We can leave this to inner interactions, but then we need to guarantee that
+        // the first layer has size 1.
         builder
             .when(next.is_valid * local.is_first)
             .assert_one(next.is_first_iter);
