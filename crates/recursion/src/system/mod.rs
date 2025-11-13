@@ -23,7 +23,7 @@ use stark_backend_v2::{
 use crate::{
     batch_constraint::{BatchConstraintModule, LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX},
     bus::{
-        AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus, CommitmentsBus,
+        AirShapeBus, BatchConstraintModuleBus, CachedCommitBus, ColumnClaimsBus, CommitmentsBus,
         ConstraintSumcheckRandomnessBus, EqNegBaseRandBus, EqNegResultBus, ExpressionClaimNMaxBus,
         FractionFolderInputBus, GkrModuleBus, HyperdimBus, LiftedHeightsBus, MerkleVerifyBus,
         Poseidon2Bus, PublicValuesBus, SelUniBus, StackingIndicesBus, StackingModuleBus,
@@ -44,7 +44,7 @@ use crate::{
 mod dummy;
 pub(crate) mod frame;
 
-const BATCH_CONSTRAINT_MOD_IDX: usize = 3;
+const BATCH_CONSTRAINT_MOD_IDX: usize = 0;
 
 // TODO[jpw]: make this generic in <SC: StarkGenericConfig>
 pub trait AirModule {
@@ -160,6 +160,9 @@ pub struct BusInventory {
     pub sel_uni_bus: SelUniBus,
     pub eq_neg_result_bus: EqNegResultBus,
     pub eq_neg_base_rand_bus: EqNegBaseRandBus,
+
+    // Continuations buses
+    pub cached_commit_bus: CachedCommitBus,
 }
 
 /// The records from global recursion preflight on CPU for verifying a single proof.
@@ -294,6 +297,9 @@ impl BusInventory {
             exp_bits_len_bus: ExpBitsLenBus::new(b.new_bus_idx()),
             eq_neg_base_rand_bus: EqNegBaseRandBus::new(b.new_bus_idx()),
             eq_neg_result_bus: EqNegResultBus::new(b.new_bus_idx()),
+
+            // Continuation buses
+            cached_commit_bus: CachedCommitBus::new(b.new_bus_idx()),
         }
     }
 }
@@ -358,6 +364,13 @@ pub struct VerifierSubCircuit<const MAX_NUM_PROOFS: usize> {
 
 impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
     pub fn new(child_mvk: Arc<MultiStarkVerifyingKeyV2>) -> Self {
+        Self::new_with_set_continuations(child_mvk, false)
+    }
+
+    pub fn new_with_set_continuations(
+        child_mvk: Arc<MultiStarkVerifyingKeyV2>,
+        continuations_enabled: bool,
+    ) -> Self {
         let mut b = BusIndexManager::new();
         let bus_inventory = BusInventory::new(&mut b);
         let power_checker_trace = Arc::new(PowerCheckerTraceGenerator::<2, 32>::default());
@@ -373,6 +386,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             &mut b,
             bus_inventory.clone(),
             power_checker_trace.clone(),
+            continuations_enabled,
         );
         let gkr = GkrModule::new(&child_mvk, &mut b, bus_inventory.clone());
         let batch_constraint = BatchConstraintModule::new(
@@ -401,11 +415,12 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
     pub fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let exp_bits_len_air = ExpBitsLenAir::new(self.bus_inventory.exp_bits_len_bus);
 
+        // WARNING: SymbolicExpressionAir MUST be the first AIR in verifier circuit
         iter::empty()
+            .chain(self.batch_constraint.airs())
             .chain(self.transcript.airs())
             .chain(self.proof_shape.airs())
             .chain(self.gkr.airs())
-            .chain(self.batch_constraint.airs())
             .chain(self.stacking.airs())
             .chain(self.whir.airs())
             .chain([
@@ -480,11 +495,12 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         self.power_checker_trace.reset();
         let exp_bits_len_gen = Arc::new(ExpBitsLenTraceGenerator::default());
 
+        // WARNING: SymbolicExpressionAir MUST be the first AIR in verifier circuit
         let modules = vec![
+            TraceModuleRef::BatchConstraint(&self.batch_constraint),
             TraceModuleRef::Transcript(&self.transcript),
             TraceModuleRef::ProofShape(&self.proof_shape),
             TraceModuleRef::Gkr(&self.gkr),
-            TraceModuleRef::BatchConstraint(&self.batch_constraint),
             TraceModuleRef::Stacking(&self.stacking),
             TraceModuleRef::Whir(&self.whir),
         ];
@@ -608,10 +624,10 @@ pub mod cuda_tracegen {
                 .map(|(proof, preflight_cpu)| PreflightGpu::new(child_vk, proof, &preflight_cpu))
                 .collect::<Vec<_>>();
             let modules = vec![
+                TraceModuleRef::BatchConstraint(&self.batch_constraint),
                 TraceModuleRef::Transcript(&self.transcript),
                 TraceModuleRef::ProofShape(&self.proof_shape),
                 TraceModuleRef::Gkr(&self.gkr),
-                TraceModuleRef::BatchConstraint(&self.batch_constraint),
                 TraceModuleRef::Stacking(&self.stacking),
                 TraceModuleRef::Whir(&self.whir),
             ];

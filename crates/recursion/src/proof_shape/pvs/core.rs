@@ -101,6 +101,7 @@ pub struct PublicValuesAir {
     pub public_values_bus: PublicValuesBus,
     pub num_pvs_bus: NumPublicValuesBus,
     pub transcript_bus: TranscriptBus,
+    pub(crate) continuations_enabled: bool,
 }
 
 impl<F> BaseAir<F> for PublicValuesAir {
@@ -181,7 +182,7 @@ where
                 pv_idx: local.pv_idx,
                 value: local.value,
             },
-            local.is_valid,
+            local.is_valid * (AB::F::ONE + AB::F::from_bool(self.continuations_enabled)),
         );
 
         // Receive transcript read of public values

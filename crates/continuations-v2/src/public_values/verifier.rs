@@ -1,18 +1,24 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    array::from_fn,
+    borrow::{Borrow, BorrowMut},
+};
 
 use openvm_circuit::system::{
     connector::{DEFAULT_SUSPEND_EXIT_CODE, VmConnectorPvs},
     memory::merkle::MemoryMerklePvs,
 };
-use openvm_circuit_primitives::utils::{and, assert_array_eq, not};
+use openvm_circuit_primitives::utils::{and, assert_array_eq, not, select};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
-use p3_field::FieldAlgebra;
+use p3_field::{Field, FieldAlgebra};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use recursion_circuit::{bus::PublicValuesBus, utils::assert_zeros};
+use recursion_circuit::{
+    bus::{CachedCommitBus, CachedCommitBusMessage, PublicValuesBus, PublicValuesBusMessage},
+    utils::assert_zeros,
+};
 use stark_backend_v2::{
     DIGEST_SIZE, F,
     proof::Proof,
@@ -23,7 +29,7 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 use crate::public_values::{NonRootVerifierPvs, app::*};
 
 pub const VERIFIER_PVS_AIR_ID: usize = 0;
-pub const CONSTRAINT_EVAL_AIR_ID: usize = 6;
+pub const CONSTRAINT_EVAL_AIR_ID: usize = 1;
 pub const CONSTRAINT_EVAL_CACHED_INDEX: usize = 0;
 
 #[repr(C)]
@@ -78,10 +84,10 @@ pub fn generate_proving_ctx(
                 exit_code,
                 is_terminate,
             } = proof.public_values[CONNECTOR_AIR_ID].as_slice().borrow();
-            cols.child_pvs.is_terminate = is_terminate;
             cols.child_pvs.initial_pc = initial_pc;
             cols.child_pvs.final_pc = final_pc;
             cols.child_pvs.exit_code = exit_code;
+            cols.child_pvs.is_terminate = is_terminate;
 
             let &MemoryMerklePvs::<_, DIGEST_SIZE> {
                 initial_root,
@@ -118,19 +124,22 @@ pub fn generate_proving_ctx(
             pvs.leaf_commit = proofs[0].trace_vdata[CONSTRAINT_EVAL_AIR_ID]
                 .as_ref()
                 .unwrap()
-                .cached_commitments[CONSTRAINT_EVAL_CACHED_INDEX]
+                .cached_commitments[CONSTRAINT_EVAL_CACHED_INDEX];
+            pvs.internal_flag = F::ZERO;
         }
         VerifierChildLevel::InternalForLeaf => {
             pvs.internal_for_leaf_commit = proofs[0].trace_vdata[CONSTRAINT_EVAL_AIR_ID]
                 .as_ref()
                 .unwrap()
-                .cached_commitments[CONSTRAINT_EVAL_CACHED_INDEX]
+                .cached_commitments[CONSTRAINT_EVAL_CACHED_INDEX];
+            pvs.internal_flag = F::ONE;
         }
         VerifierChildLevel::InternalRecursive => {
             pvs.internal_recursive_commit = proofs[0].trace_vdata[CONSTRAINT_EVAL_AIR_ID]
                 .as_ref()
                 .unwrap()
-                .cached_commitments[CONSTRAINT_EVAL_CACHED_INDEX]
+                .cached_commitments[CONSTRAINT_EVAL_CACHED_INDEX];
+            pvs.internal_flag = F::TWO;
         }
     }
 
@@ -143,7 +152,7 @@ pub fn generate_proving_ctx(
 
 pub struct VerifierPvsAir {
     pub public_values_bus: PublicValuesBus,
-    // TODO[INT-5302]: add bus to receive constraint eval cached commit
+    pub cached_commit_bus: CachedCommitBus,
 }
 
 impl<F> BaseAir<F> for VerifierPvsAir {
@@ -267,8 +276,163 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             local.child_pvs.internal_recursive_commit,
         );
 
-        // TODO[INT-5302]: receive verifier public values from proof shape
-        // TODO[INT-5302]: receive constraint eval cached commit from proof shape
+        /*
+         * We need to receive public values from ProofShapeModule to ensure the values being read
+         * here are correct. The leaf verifier needs to read public values from CONNECTOR_AIR_ID
+         * and MERKLE_AIR_ID, while the internal verifier reads from VERIFIER_PVS_AIR_ID.
+         */
+        let is_leaf = not(local.has_verifier_pvs);
+        let is_internal = local.has_verifier_pvs;
+
+        let verifier_pvs_id = AB::F::from_canonical_usize(VERIFIER_PVS_AIR_ID);
+        let verifier_pvs_id_cond = is_internal.clone() * verifier_pvs_id;
+
+        let connector_id_cond = AB::Expr::from_canonical_usize(CONNECTOR_AIR_ID) * is_leaf.clone();
+        let connector_pvs_offset =
+            is_internal.clone() * AB::F::from_canonical_usize(2 * DIGEST_SIZE);
+
+        self.public_values_bus.receive(
+            builder,
+            local.proof_idx,
+            PublicValuesBusMessage {
+                air_idx: connector_id_cond.clone() + verifier_pvs_id_cond.clone(),
+                pv_idx: connector_pvs_offset.clone(),
+                value: local.child_pvs.initial_pc.into(),
+            },
+            local.is_valid,
+        );
+
+        self.public_values_bus.receive(
+            builder,
+            local.proof_idx,
+            PublicValuesBusMessage {
+                air_idx: connector_id_cond.clone() + verifier_pvs_id_cond.clone(),
+                pv_idx: connector_pvs_offset.clone() + AB::F::ONE,
+                value: local.child_pvs.final_pc.into(),
+            },
+            local.is_valid,
+        );
+
+        self.public_values_bus.receive(
+            builder,
+            local.proof_idx,
+            PublicValuesBusMessage {
+                air_idx: connector_id_cond.clone() + verifier_pvs_id_cond.clone(),
+                pv_idx: connector_pvs_offset.clone() + AB::F::TWO,
+                value: local.child_pvs.exit_code.into(),
+            },
+            local.is_valid,
+        );
+
+        self.public_values_bus.receive(
+            builder,
+            local.proof_idx,
+            PublicValuesBusMessage {
+                air_idx: connector_id_cond.clone() + verifier_pvs_id_cond.clone(),
+                pv_idx: connector_pvs_offset.clone() + AB::F::from_canonical_u8(3),
+                value: local.child_pvs.is_terminate.into(),
+            },
+            local.is_valid,
+        );
+
+        let merkle_id_cond = AB::Expr::from_canonical_usize(MERKLE_AIR_ID) * is_leaf.clone();
+        let merkle_pvs_offset =
+            connector_pvs_offset + is_internal.clone() * AB::Expr::from_canonical_u8(4);
+        let verifier_pvs_offset =
+            merkle_pvs_offset.clone() + AB::F::from_canonical_usize(2 * DIGEST_SIZE);
+
+        self.public_values_bus.receive(
+            builder,
+            local.proof_idx,
+            PublicValuesBusMessage {
+                air_idx: verifier_pvs_id.into(),
+                pv_idx: verifier_pvs_offset.clone(),
+                value: local.child_pvs.internal_flag.into(),
+            },
+            local.is_valid * is_internal.clone(),
+        );
+
+        for didx in 0..DIGEST_SIZE {
+            self.public_values_bus.receive(
+                builder,
+                local.proof_idx,
+                PublicValuesBusMessage {
+                    air_idx: verifier_pvs_id.into(),
+                    pv_idx: AB::Expr::from_canonical_usize(didx),
+                    value: local.child_pvs.user_pv_commit[didx].into(),
+                },
+                local.is_valid * is_internal.clone(),
+            );
+
+            self.public_values_bus.receive(
+                builder,
+                local.proof_idx,
+                PublicValuesBusMessage {
+                    air_idx: verifier_pvs_id.into(),
+                    pv_idx: AB::Expr::from_canonical_usize(didx + DIGEST_SIZE),
+                    value: local.child_pvs.app_commit[didx].into(),
+                },
+                local.is_valid * is_internal.clone(),
+            );
+
+            self.public_values_bus.receive(
+                builder,
+                local.proof_idx,
+                PublicValuesBusMessage {
+                    air_idx: merkle_id_cond.clone() + verifier_pvs_id_cond.clone(),
+                    pv_idx: merkle_pvs_offset.clone() + AB::F::from_canonical_usize(didx),
+                    value: local.child_pvs.initial_root[didx].into(),
+                },
+                local.is_valid,
+            );
+
+            self.public_values_bus.receive(
+                builder,
+                local.proof_idx,
+                PublicValuesBusMessage {
+                    air_idx: merkle_id_cond.clone() + verifier_pvs_id_cond.clone(),
+                    pv_idx: merkle_pvs_offset.clone()
+                        + AB::F::from_canonical_usize(didx + DIGEST_SIZE),
+                    value: local.child_pvs.final_root[didx].into(),
+                },
+                local.is_valid,
+            );
+
+            self.public_values_bus.receive(
+                builder,
+                local.proof_idx,
+                PublicValuesBusMessage {
+                    air_idx: verifier_pvs_id.into(),
+                    pv_idx: verifier_pvs_offset.clone() + AB::F::from_canonical_usize(didx + 1),
+                    value: local.child_pvs.leaf_commit[didx].into(),
+                },
+                local.is_valid * is_internal.clone(),
+            );
+
+            self.public_values_bus.receive(
+                builder,
+                local.proof_idx,
+                PublicValuesBusMessage {
+                    air_idx: verifier_pvs_id.into(),
+                    pv_idx: verifier_pvs_offset.clone()
+                        + AB::F::from_canonical_usize(didx + DIGEST_SIZE + 1),
+                    value: local.child_pvs.internal_for_leaf_commit[didx].into(),
+                },
+                local.is_valid * is_internal.clone(),
+            );
+
+            self.public_values_bus.receive(
+                builder,
+                local.proof_idx,
+                PublicValuesBusMessage {
+                    air_idx: verifier_pvs_id.into(),
+                    pv_idx: verifier_pvs_offset.clone()
+                        + AB::F::from_canonical_usize(didx + 2 * DIGEST_SIZE + 1),
+                    value: local.child_pvs.internal_recursive_commit[didx].into(),
+                },
+                local.is_valid * is_internal.clone(),
+            );
+        }
 
         /*
          * Finally, we need to constrain that the public values this AIR produces are consistent
@@ -327,10 +491,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             .when(not(local.has_verifier_pvs))
             .assert_zero(internal_flag);
 
-        // constrain internal_flag and leaf_commit are set at all internal levels
-        builder
-            .when(local.has_verifier_pvs)
-            .assert_bool(internal_flag.into() - AB::F::ONE);
+        // constrain leaf_commit is set at all internal levels
         assert_array_eq(
             &mut builder.when(local.has_verifier_pvs),
             local.child_pvs.leaf_commit,
@@ -353,6 +514,47 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
                 .when(local.child_pvs.internal_flag * (local.child_pvs.internal_flag - AB::F::ONE)),
             local.child_pvs.internal_recursive_commit,
             internal_recursive_commit,
+        );
+
+        /*
+         * We also need to receive cached commits from ProofShapeModule. The leaf verifier needs
+         * to receive app_commit, and the internal verifier receives SymbolicExpressionAir's. Note
+         * this interaction forces there to be exactly one cached trace per circuit.
+         */
+        let is_internal_flag_zero = (local.child_pvs.internal_flag - AB::F::ONE)
+            * (local.child_pvs.internal_flag - AB::F::TWO)
+            * AB::F::TWO.inverse();
+        let is_internal_flag_one =
+            -(local.child_pvs.internal_flag - AB::F::TWO) * local.child_pvs.internal_flag;
+        let is_local_flag_two = (local.child_pvs.internal_flag - AB::F::ONE)
+            * local.child_pvs.internal_flag
+            * AB::F::TWO.inverse();
+        let cached_commit = from_fn(|i| {
+            is_leaf.clone() * local.child_pvs.app_commit[i]
+                + is_internal
+                    * (is_internal_flag_zero.clone() * local.child_pvs.leaf_commit[i]
+                        + is_internal_flag_one.clone()
+                            * local.child_pvs.internal_for_leaf_commit[i]
+                        + is_local_flag_two.clone() * local.child_pvs.internal_recursive_commit[i])
+        });
+
+        self.cached_commit_bus.receive(
+            builder,
+            local.proof_idx,
+            CachedCommitBusMessage {
+                air_idx: select(
+                    is_leaf.clone(),
+                    AB::Expr::from_canonical_usize(PROGRAM_AIR_ID),
+                    AB::Expr::from_canonical_usize(CONSTRAINT_EVAL_AIR_ID),
+                ),
+                cached_idx: select(
+                    is_leaf.clone(),
+                    AB::Expr::from_canonical_usize(PROGRAM_CACHED_TRACE_INDEX),
+                    AB::Expr::from_canonical_usize(CONSTRAINT_EVAL_CACHED_INDEX),
+                ),
+                cached_commit,
+            },
+            local.is_valid,
         );
     }
 }

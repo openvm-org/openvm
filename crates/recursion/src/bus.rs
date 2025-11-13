@@ -432,6 +432,16 @@ define_typed_per_proof_permutation_bus!(CommitmentsBus, CommitmentsBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
+pub struct CachedCommitBusMessage<T> {
+    pub air_idx: T,
+    pub cached_idx: T,
+    pub cached_commit: [T; DIGEST_SIZE],
+}
+
+define_typed_per_proof_permutation_bus!(CachedCommitBus, CachedCommitBusMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct XiRandomnessMessage<T> {
     pub idx: T,
     pub xi: [T; D_EF],

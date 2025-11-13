@@ -62,7 +62,7 @@ pub mod fractions_folder;
 pub mod sumcheck;
 
 /// AIR index within the BatchConstraintModule
-pub(crate) const LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX: usize = 8;
+pub(crate) const LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX: usize = 0;
 
 pub struct BatchConstraintModule {
     transcript_bus: TranscriptBus,
@@ -291,6 +291,20 @@ impl AirModule for BatchConstraintModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let l_skip = self.l_skip;
 
+        let symbolic_expression_air = SymbolicExpressionAir {
+            expr_bus: self.symbolic_expression_bus,
+            claim_bus: self.expression_claim_bus,
+            air_shape_bus: self.air_shape_bus,
+            column_claims_bus: self.column_opening_bus,
+            interactions_folding_bus: self.interactions_folding_bus,
+            constraints_folding_bus: self.constraints_folding_bus,
+            hyperdim_bus: self.hyperdim_bus,
+            public_values_bus: self.public_values_bus,
+            sel_hypercube_bus: self.sel_hypercube_bus,
+            sel_uni_bus: self.sel_uni_bus,
+            eq_neg_internal_bus: self.eq_neg_internal_bus,
+            cnt_proofs: self.max_num_proofs,
+        };
         let fraction_folder_air = FractionsFolderAir {
             transcript_bus: self.transcript_bus,
             univariate_sumcheck_input_bus: self.univariate_sumcheck_input_bus,
@@ -355,20 +369,6 @@ impl AirModule for BatchConstraintModule {
             sel_uni_bus: self.sel_uni_bus,
             l_skip: self.l_skip,
         };
-        let symbolic_expression_air = SymbolicExpressionAir {
-            expr_bus: self.symbolic_expression_bus,
-            claim_bus: self.expression_claim_bus,
-            air_shape_bus: self.air_shape_bus,
-            column_claims_bus: self.column_opening_bus,
-            interactions_folding_bus: self.interactions_folding_bus,
-            constraints_folding_bus: self.constraints_folding_bus,
-            hyperdim_bus: self.hyperdim_bus,
-            public_values_bus: self.public_values_bus,
-            sel_hypercube_bus: self.sel_hypercube_bus,
-            sel_uni_bus: self.sel_uni_bus,
-            eq_neg_internal_bus: self.eq_neg_internal_bus,
-            cnt_proofs: self.max_num_proofs,
-        };
         let expression_claim_air = ExpressionClaimAir {
             expression_claim_n_max_bus: self.expression_claim_n_max_bus,
             expr_claim_bus: self.expression_claim_bus,
@@ -391,7 +391,9 @@ impl AirModule for BatchConstraintModule {
             expression_claim_bus: self.expression_claim_bus,
             eq_n_outer_bus: self.eq_n_outer_bus,
         };
+        // WARNING: SymbolicExpressionAir MUST be the first AIR in verifier circuit
         vec![
+            Arc::new(symbolic_expression_air) as AirRef<_>,
             Arc::new(fraction_folder_air) as AirRef<_>,
             Arc::new(sumcheck_uni_air) as AirRef<_>,
             Arc::new(sumcheck_lin_air) as AirRef<_>,
@@ -400,7 +402,6 @@ impl AirModule for BatchConstraintModule {
             Arc::new(eq_sharp_uni_air) as AirRef<_>,
             Arc::new(eq_sharp_uni_receiver_air) as AirRef<_>,
             Arc::new(eq_uni_air) as AirRef<_>,
-            Arc::new(symbolic_expression_air) as AirRef<_>,
             Arc::new(expression_claim_air) as AirRef<_>,
             Arc::new(interactions_folding_air) as AirRef<_>,
             Arc::new(constraints_folding_air) as AirRef<_>,
@@ -639,7 +640,9 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
         let eq_3b_blob = eq_airs::generate_eq_3b_blob(child_vk, preflights);
         let cf_blob = generate_constraints_folding_blob(child_vk, &blob, preflights);
         let if_blob = generate_interactions_folding_blob(child_vk, &blob, &eq_3b_blob, preflights);
+        // WARNING: SymbolicExpressionAir MUST be the first AIR in verifier circuit
         vec![
+            symbolic_expr_ctx,
             transpose(fractions_folder::generate_trace(
                 child_vk, proofs, preflights,
             )),
@@ -663,7 +666,6 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
             transpose(uni_trace),
             transpose(uni_receiver_trace),
             transpose(eq_airs::generate_eq_uni_trace(child_vk, proofs, preflights)),
-            symbolic_expr_ctx,
             transpose(expression_claim::generate_trace(
                 child_vk,
                 &cf_blob,
