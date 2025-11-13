@@ -5,8 +5,6 @@ use std::{
 
 #[cfg(feature = "aot")]
 use openvm_circuit::arch::aot::common::REG_A_W;
-#[cfg(feature = "aot")]
-use openvm_circuit::arch::aot::common::REG_A_W;
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
@@ -235,7 +233,6 @@ where
     }
 
     fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
-        true
         true
     }
 }
