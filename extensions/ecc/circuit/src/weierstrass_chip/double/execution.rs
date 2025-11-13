@@ -183,7 +183,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> AotExecutor<
 {
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecutor<F>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterMeteredExecutor<F>
     for EcDoubleExecutor<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
@@ -228,6 +228,12 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecu
 
         dispatch!(execute_e2_handler, pre_compute_pure, is_setup)
     }
+}
+
+#[cfg(feature = "aot")]
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> AotMeteredExecutor<F>
+    for EcDoubleExecutor<BLOCKS, BLOCK_SIZE>
+{
 }
 
 #[inline(always)]

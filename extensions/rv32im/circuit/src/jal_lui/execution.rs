@@ -97,7 +97,7 @@ where
     F: PrimeField32,
 {
     fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
-        use crate::common::gpr_to_rv32_register;
+        use crate::common::*;
 
         let local_opcode = Rv32JalLuiOpcode::from_usize(
             inst.opcode.local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET),
@@ -117,9 +117,13 @@ where
             imm << 12
         };
 
-        asm_str += &format!("   mov edx, {rd}\n");
         if enabled {
-            asm_str += &gpr_to_rv32_register("edx", a_reg);
+            if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[a_reg as usize] {
+                asm_str += &format!("   mov {override_reg}, {rd}\n");
+            } else {
+                asm_str += &format!("   mov {REG_A_W}, {rd}\n");
+                asm_str += &gpr_to_xmm(REG_A_W, a_reg);
+            }
         }
         if is_jal {
             let next_pc = pc as i32 + signed_imm;
@@ -135,7 +139,7 @@ where
     }
 }
 
-impl<F, A> MeteredExecutor<F> for Rv32JalLuiExecutor<A>
+impl<F, A> InterpreterMeteredExecutor<F> for Rv32JalLuiExecutor<A>
 where
     F: PrimeField32,
 {
@@ -177,6 +181,9 @@ where
         dispatch!(execute_e2_handler, is_jal, enabled)
     }
 }
+
+#[cfg(feature = "aot")]
+impl<F, A> AotMeteredExecutor<F> for Rv32JalLuiExecutor<A> where F: PrimeField32 {}
 
 #[inline(always)]
 unsafe fn execute_e12_impl<

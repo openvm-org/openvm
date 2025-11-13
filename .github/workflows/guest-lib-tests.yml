@@ -77,6 +77,6 @@ jobs:
           rustup component add rust-src --toolchain nightly-2025-08-02
           PAIRING_FEATURE_ARGS=""
           if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
-            PAIRING_FEATURE_ARGS="--features=bn254,bls12_381"
+            PAIRING_FEATURE_ARGS="--features=bn254,bls12_381,aot"
           fi
           cargo nextest run --cargo-profile=fast $PAIRING_FEATURE_ARGS --no-tests=pass --test-threads=1

@@ -11,6 +11,8 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{run_auipc, Rv32AuipcExecutor};
+#[cfg(feature = "aot")]
+use crate::common::*;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -101,15 +103,13 @@ where
             return Err(AotError::InvalidInstruction);
         }
 
-        let xmm_map_reg_a = a / 8;
-        asm_str += &format!("   mov eax, {rd}\n");
+        let a_reg = a / 4;
 
-        if (a / 4) % 2 == 0 {
-            // write eax to the [0:32) bits of xmm_map_reg_a
-            asm_str += &format!("   pinsrd xmm{xmm_map_reg_a}, eax, 0\n");
+        if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[a_reg as usize] {
+            asm_str += &format!("   mov {override_reg}, {rd}\n");
         } else {
-            // write eax to the [32:64) bits of xmm_map_reg_a
-            asm_str += &format!("   pinsrd xmm{xmm_map_reg_a}, eax, 1\n");
+            asm_str += &format!("   mov {REG_A_W}, {rd}\n");
+            asm_str += &gpr_to_xmm(REG_A_W, a_reg as u8);
         }
 
         Ok(asm_str)
@@ -120,7 +120,7 @@ where
     }
 }
 
-impl<F, A> MeteredExecutor<F> for Rv32AuipcExecutor<A>
+impl<F, A> InterpreterMeteredExecutor<F> for Rv32AuipcExecutor<A>
 where
     F: PrimeField32,
 {
@@ -162,6 +162,9 @@ where
         Ok(execute_e2_handler)
     }
 }
+
+#[cfg(feature = "aot")]
+impl<F, A> AotMeteredExecutor<F> for Rv32AuipcExecutor<A> where F: PrimeField32 {}
 
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(

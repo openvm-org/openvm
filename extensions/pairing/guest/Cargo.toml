@@ -38,6 +38,7 @@ halo2curves = ["bls12_381", "bn254", "dep:halo2curves-axiom"]
 # only enable for the curves you use as it affects the init! macro
 bn254 = []
 bls12_381 = []
+aot = []
 
 [package.metadata.cargo-shear]
 ignored = ["openvm", "openvm-custom-insn", "serde" ]

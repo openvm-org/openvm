@@ -179,7 +179,7 @@ where
 #[cfg(feature = "aot")]
 impl<F, A> AotExecutor<F> for FieldArithmeticCoreExecutor<A> where F: PrimeField32 {}
 
-impl<F, A> MeteredExecutor<F> for FieldArithmeticCoreExecutor<A>
+impl<F, A> InterpreterMeteredExecutor<F> for FieldArithmeticCoreExecutor<A>
 where
     F: PrimeField32,
 {
@@ -223,6 +223,9 @@ where
         dispatch!(execute_e2_handler, local_opcode, a_is_imm, b_is_imm)
     }
 }
+
+#[cfg(feature = "aot")]
+impl<F, A> AotMeteredExecutor<F> for FieldArithmeticCoreExecutor<A> where F: PrimeField32 {}
 
 #[inline(always)]
 unsafe fn execute_e12_impl<

@@ -3,35 +3,14 @@ pub use aot::*;
 
 #[cfg(feature = "aot")]
 mod aot {
-    // Callee saved
-    pub const REG_EXEC_STATE_PTR: &str = "rbx";
-    pub const REG_INSNS_PTR: &str = "rbp";
-    pub const REG_PC: &str = "r13";
-    pub const REG_GUEST_MEM_PTR: &str = "r15";
-
-    // Caller saved
-    pub const REG_B: &str = "rax";
-    pub const REG_B_W: &str = "eax";
-
-    pub const REG_A: &str = "rcx";
-    pub const REG_A_W: &str = "ecx";
-
-    pub const REG_FOURTH_ARG: &str = "rcx";
-    pub const REG_THIRD_ARG: &str = "rdx";
-    pub const REG_SECOND_ARG: &str = "rsi";
-    pub const REG_FIRST_ARG: &str = "rdi";
-    pub const REG_RETURN_VAL: &str = "rax";
-
-    pub const REG_TMP_W: &str = "r8d";
-
-    pub const REG_C: &str = "r10";
-    pub const REG_C_W: &str = "r10d";
-    pub const REG_C_B: &str = "r10b";
-    pub const REG_AUX: &str = "r11";
-
-    pub const REG_PC_W: &str = "r13d";
-
-    pub const DEFAULT_PC_OFFSET: i32 = 4;
+    pub(crate) use openvm_circuit::arch::aot::common::{
+        sync_gpr_to_xmm, sync_xmm_to_gpr, RISCV_TO_X86_OVERRIDE_MAP,
+    };
+    pub use openvm_circuit::arch::aot::common::{
+        DEFAULT_PC_OFFSET, REG_A, REG_AS2_PTR, REG_A_W, REG_B, REG_B_W, REG_C, REG_C_B, REG_C_LB,
+        REG_C_W, REG_D, REG_D_W, REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_INSNS_PTR, REG_PC,
+        REG_PC_W, REG_RETURN_VAL, REG_SECOND_ARG, REG_THIRD_ARG,
+    };
 
     pub(crate) fn rv32_register_to_gpr(rv32_reg: u8, gpr: &str) -> String {
         let xmm_map_reg = rv32_reg / 2;
@@ -52,19 +31,74 @@ mod aot {
     }
 
     pub(crate) fn address_space_start_to_gpr(address_space: u32, gpr: &str) -> String {
-        if address_space == 1 {
-            if "r15" != gpr {
+        if address_space == 2 {
+            if REG_AS2_PTR != gpr {
                 return format!("    mov {gpr}, r15\n");
             }
             return "".to_string();
         }
 
         let xmm_map_reg = match address_space {
-            2 => "xmm0",
+            1 => "xmm0",
             3 => "xmm1",
             4 => "xmm2",
             _ => unreachable!("Only address space 1, 2, 3, 4 is supported"),
         };
         format!("   pextrq {gpr}, {xmm_map_reg}, 1\n")
+    }
+
+    /*
+    input:
+    - riscv register number
+    - gpr register to write into
+    - is_gpr_force_write boolean
+
+    output:
+    - string representing the general purpose register that stores the value of register number `rv32_reg`
+    - emitted assembly string that performs the move
+    */
+    pub(crate) fn xmm_to_gpr(
+        rv32_reg: u8,
+        gpr: &str,
+        is_gpr_force_write: bool,
+    ) -> (String, String) {
+        if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[rv32_reg as usize] {
+            // a/4 is overridden, b/4 is overridden
+            if is_gpr_force_write {
+                return (
+                    gpr.to_string(),
+                    format!("  mov {}, {}\n", gpr, override_reg),
+                );
+            }
+            return (override_reg.to_string(), "".to_string());
+        }
+        let xmm_map_reg = rv32_reg / 2;
+        if rv32_reg % 2 == 0 {
+            (
+                gpr.to_string(),
+                format!("   pextrd {}, xmm{}, 0\n", gpr, xmm_map_reg),
+            )
+        } else {
+            (
+                gpr.to_string(),
+                format!("   pextrd {}, xmm{}, 1\n", gpr, xmm_map_reg),
+            )
+        }
+    }
+
+    pub(crate) fn gpr_to_xmm(gpr: &str, rv32_reg: u8) -> String {
+        if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[rv32_reg as usize] {
+            if gpr == override_reg {
+                //already in correct location
+                return "".to_string();
+            }
+            return format!("   mov {}, {}\n", override_reg, gpr);
+        }
+        let xmm_map_reg = rv32_reg / 2;
+        if rv32_reg % 2 == 0 {
+            format!("   pinsrd xmm{}, {}, 0\n", xmm_map_reg, gpr)
+        } else {
+            format!("   pinsrd xmm{}, {}, 1\n", xmm_map_reg, gpr)
+        }
     }
 }

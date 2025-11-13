@@ -10,17 +10,18 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::PublicValuesExecutor;
-#[cfg(feature = "aot")]
-use crate::arch::AotExecutor;
 #[cfg(not(feature = "tco"))]
 use crate::arch::ExecuteFunc;
 #[cfg(feature = "tco")]
 use crate::arch::Handler;
+#[cfg(feature = "aot")]
+use crate::arch::{AotExecutor, AotMeteredExecutor};
 use crate::{
     arch::{
         create_handler,
         execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait},
-        E2PreCompute, InterpreterExecutor, MeteredExecutor, StaticProgramError, VmExecState,
+        E2PreCompute, InterpreterExecutor, InterpreterMeteredExecutor, StaticProgramError,
+        VmExecState,
     },
     system::memory::online::GuestMemory,
     utils::{transmute_field_to_u32, transmute_u32_to_field},
@@ -124,7 +125,7 @@ where
 #[cfg(feature = "aot")]
 impl<F, A> AotExecutor<F> for PublicValuesExecutor<F, A> where F: PrimeField32 {}
 
-impl<F, A> MeteredExecutor<F> for PublicValuesExecutor<F, A>
+impl<F, A> InterpreterMeteredExecutor<F> for PublicValuesExecutor<F, A>
 where
     F: PrimeField32,
 {
@@ -168,6 +169,9 @@ where
         dispatch!(execute_e2_handler, b_is_imm, c_is_imm)
     }
 }
+
+#[cfg(feature = "aot")]
+impl<F, A> AotMeteredExecutor<F> for PublicValuesExecutor<F, A> where F: PrimeField32 {}
 
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(

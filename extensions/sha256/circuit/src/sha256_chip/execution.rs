@@ -61,7 +61,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Sha256VmExecutor {
 #[cfg(feature = "aot")]
 impl<F: PrimeField32> AotExecutor<F> for Sha256VmExecutor {}
 
-impl<F: PrimeField32> MeteredExecutor<F> for Sha256VmExecutor {
+impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Sha256VmExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<ShaPreCompute>>()
     }
@@ -100,6 +100,9 @@ impl<F: PrimeField32> MeteredExecutor<F> for Sha256VmExecutor {
         Ok(execute_e2_handler::<_, _>)
     }
 }
+
+#[cfg(feature = "aot")]
+impl<F: PrimeField32> AotMeteredExecutor<F> for Sha256VmExecutor {}
 
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1: bool>(

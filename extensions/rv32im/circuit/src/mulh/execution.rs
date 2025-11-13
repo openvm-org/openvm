@@ -123,38 +123,42 @@ where
         let opcode = MulHOpcode::from_usize(inst.opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
 
         let mut asm = String::new();
-        const REG_A_W: &str = "eax";
-        const REG_B_W: &str = "ecx";
-        const REG_TMP_W: &str = "r8d";
 
-        asm += &rv32_register_to_gpr((b / 4) as u8, REG_A_W);
-        asm += &rv32_register_to_gpr((c / 4) as u8, REG_B_W);
-
+        /*
+            for implicit multiplication, we need to load the multiplicand into `eax`
+            result of hi bits are always stored in `edx`
+            can't use REG_C_W, because it is edx, and it gets overridden
+        */
+        let (_, delta_str_b) = &xmm_to_gpr((b / 4) as u8, "eax", true);
+        let (gpr_reg_c, delta_str_c) = &xmm_to_gpr((c / 4) as u8, REG_A_W, false);
+        asm += &delta_str_b;
+        asm += &delta_str_c;
         match opcode {
             MulHOpcode::MULH => {
-                asm += "   imul ecx\n";
-                asm += "   mov eax, edx\n";
+                asm += &format!("   imul {gpr_reg_c}\n");
+                asm += &gpr_to_xmm("edx", (a / 4) as u8);
             }
             MulHOpcode::MULHSU => {
-                asm += &format!("   mov {REG_TMP_W}, {REG_A_W}\n");
-                asm += "   imul ecx\n";
+                // free to modify edx:eax, since mul and imul operations modify anyways
+                asm += &format!("   mov {REG_B_W}, eax\n");
+                asm += &format!("   imul {gpr_reg_c}\n");
                 asm += "   mov eax, edx\n";
-                asm += "   mov edx, ecx\n";
+                asm += &format!("   mov edx, {gpr_reg_c}\n");
                 asm += "   sar edx, 31\n";
-                asm += &format!("   and edx, {REG_TMP_W}\n");
+                asm += &format!("   and edx, {REG_B_W}\n");
                 asm += "   add eax, edx\n";
+                asm += &gpr_to_xmm("eax", (a / 4) as u8);
             }
             MulHOpcode::MULHU => {
-                asm += "   mul ecx\n";
-                asm += "   mov eax, edx\n";
+                asm += &format!("   mul {gpr_reg_c}\n");
+                asm += &gpr_to_xmm("edx", (a / 4) as u8);
             }
         }
-        asm += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
         Ok(asm)
     }
 }
 
-impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>
+impl<F, A, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
     for MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
@@ -198,6 +202,13 @@ where
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F, A, const LIMB_BITS: usize> AotMeteredExecutor<F>
+    for MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+where
+    F: PrimeField32,
+{
+}
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: MulHOperation>(
     pre_compute: &MulHPreCompute,

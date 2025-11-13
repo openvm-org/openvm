@@ -121,7 +121,7 @@ where
     }
 }
 
-impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>
+impl<F, A, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
     for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
@@ -185,13 +185,17 @@ where
             c_i24 as i16
         };
         let mut asm_str = String::new();
+
         let a: i16 = to_i16(inst.a);
         let b: i16 = to_i16(inst.b);
         let c: i16 = to_i16(inst.c);
         let e: i16 = to_i16(inst.e);
 
-        // load the left operand of the opcode
-        asm_str += &rv32_register_to_gpr((b / 4) as u8, REG_A_W);
+        let str_reg_a = if RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].is_some() {
+            RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].unwrap()
+        } else {
+            REG_A_W
+        };
 
         let mut asm_opcode = String::new();
         if inst.opcode == BaseAluOpcode::ADD.global_opcode() {
@@ -208,16 +212,38 @@ where
 
         if e == 0 {
             // [a:4]_1 = [a:4]_1 + c
-            asm_str += &format!("   {asm_opcode} {REG_A_W}, {c}\n");
+            let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 4) as u8, str_reg_a, a != b);
+            asm_str += &delta_str_b;
+            asm_str += &format!("   {} {}, {}\n", asm_opcode, gpr_reg_b, c);
+            asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
         } else {
-            // load the right operand of the opcode
-            asm_str += &rv32_register_to_gpr((c / 4) as u8, REG_C_W);
-            asm_str += &format!("   {asm_opcode} {REG_A_W}, {REG_C_W}\n");
+            if a == c {
+                let (gpr_reg_c, delta_str_c) = xmm_to_gpr((c / 4) as u8, REG_C_W, true);
+                asm_str += &delta_str_c;
+                let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 4) as u8, str_reg_a, true);
+                asm_str += &delta_str_b;
+                asm_str += &format!("   {} {}, {}\n", asm_opcode, gpr_reg_b, gpr_reg_c);
+                asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
+            } else {
+                let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 4) as u8, str_reg_a, true);
+                asm_str += &delta_str_b; // data is now in gpr_reg_b
+                let (gpr_reg_c, delta_str_c) = xmm_to_gpr((c / 4) as u8, REG_C_W, false); // data is in gpr_reg_c now
+                asm_str += &delta_str_c; // have to get a return value here, since it modifies further registers too
+                asm_str += &format!("   {} {}, {}\n", asm_opcode, gpr_reg_b, gpr_reg_c);
+                asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
+            }
         }
 
-        asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
         Ok(asm_str)
     }
+}
+
+#[cfg(feature = "aot")]
+impl<F, A, const LIMB_BITS: usize> AotMeteredExecutor<F>
+    for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+where
+    F: PrimeField32,
+{
 }
 
 #[inline(always)]

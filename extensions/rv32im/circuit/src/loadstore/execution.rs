@@ -149,7 +149,7 @@ where
     }
 }
 
-impl<F, A, const NUM_CELLS: usize> MeteredExecutor<F> for LoadStoreExecutor<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> InterpreterMeteredExecutor<F> for LoadStoreExecutor<A, NUM_CELLS>
 where
     F: PrimeField32,
 {

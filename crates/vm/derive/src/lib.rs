@@ -470,7 +470,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
             let where_clause = new_generics.make_where_clause();
             where_clause
                 .predicates
-                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::MeteredExecutor<F> });
+                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InterpreterMeteredExecutor<F> });
 
             // We use the macro's feature to decide whether to generate the impl or not. This avoids
             // the target crate needing the "tco" feature defined.
@@ -492,7 +492,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
             let metered_handler = quote! {};
 
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::MeteredExecutor<F> for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::InterpreterMeteredExecutor<F> for #name #ty_generics #where_clause {
                     #[inline(always)]
                     fn metered_pre_compute_size(&self) -> usize {
                         self.0.metered_pre_compute_size()
@@ -547,16 +547,16 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
             let (pre_compute_size_arms, metered_pre_compute_arms, _metered_handler_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 let pre_compute_size_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic>>::metered_pre_compute_size(x)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterMeteredExecutor<#first_ty_generic>>::metered_pre_compute_size(x)
                 };
                 let metered_pre_compute_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic>>::metered_pre_compute(x, chip_idx, pc, instruction, data)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterMeteredExecutor<#first_ty_generic>>::metered_pre_compute(x, chip_idx, pc, instruction, data)
                 };
                 let metered_handler_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic>>::metered_handler(x, chip_idx, pc, instruction, data)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterMeteredExecutor<#first_ty_generic>>::metered_handler(x, chip_idx, pc, instruction, data)
                 };
                 let where_predicate = syn::parse_quote! {
-                    #field_ty: ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic>
+                    #field_ty: ::openvm_circuit::arch::InterpreterMeteredExecutor<#first_ty_generic>
                 };
                 (pre_compute_size_arm, metered_pre_compute_arm, metered_handler_arm, where_predicate)
             }));
@@ -590,7 +590,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
             let metered_handler = quote! {};
 
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic> for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::InterpreterMeteredExecutor<#first_ty_generic> for #name #ty_generics #where_clause {
                     #[inline(always)]
                     fn metered_pre_compute_size(&self) -> usize {
                         match self {
@@ -618,6 +618,145 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                 }
             }
                 .into()
+        }
+        Data::Union(_) => unimplemented!("Unions are not supported"),
+    }
+}
+
+#[proc_macro_derive(AotMeteredExecutor)]
+pub fn aot_metered_executor_derive(input: TokenStream) -> TokenStream {
+    let ast: syn::DeriveInput = syn::parse(input).unwrap();
+
+    let name = &ast.ident;
+    let generics = &ast.generics;
+    let (_, ty_generics, _) = generics.split_for_impl();
+
+    match &ast.data {
+        Data::Struct(inner) => {
+            let inner_ty = match &inner.fields {
+                Fields::Unnamed(fields) => {
+                    if fields.unnamed.len() != 1 {
+                        panic!("Only one unnamed field is supported");
+                    }
+                    fields.unnamed.first().unwrap().ty.clone()
+                }
+                _ => panic!("Only unnamed fields are supported"),
+            };
+            let mut new_generics = generics.clone();
+            let where_clause = new_generics.make_where_clause();
+            where_clause.predicates.push(
+                syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::AotMeteredExecutor<F> },
+            );
+            let (impl_generics, _, where_clause) = new_generics.split_for_impl();
+
+            quote! {
+                #[cfg(feature = "aot")]
+                impl #impl_generics ::openvm_circuit::arch::AotMeteredExecutor<F> for #name #ty_generics #where_clause {
+                    #[inline(always)]
+                    fn is_aot_metered_supported(&self, inst: &::openvm_instructions::instruction::Instruction<F>) -> bool {
+                        self.0.is_aot_metered_supported(inst)
+                    }
+
+                    fn generate_x86_metered_asm(
+                        &self,
+                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        pc: u32,
+                        config: &::openvm_circuit::arch::SystemConfig,
+                    ) -> ::std::result::Result<
+                        ::std::string::String,
+                        ::openvm_circuit::arch::AotError,
+                    > {
+                        self.0.generate_x86_metered_asm(inst, pc, config)
+                    }
+                }
+            }
+            .into()
+        }
+        Data::Enum(e) => {
+            let variants = e
+                .variants
+                .iter()
+                .map(|variant| {
+                    let variant_name = &variant.ident;
+                    let mut fields = variant.fields.iter();
+                    let field = fields.next().unwrap();
+                    assert!(fields.next().is_none(), "Only one field is supported");
+                    (variant_name, field)
+                })
+                .collect::<Vec<_>>();
+            let default_ty_generic = Ident::new("F", proc_macro2::Span::call_site());
+            let mut new_generics = generics.clone();
+            let first_ty_generic = ast
+                .generics
+                .params
+                .first()
+                .and_then(|param| match param {
+                    GenericParam::Type(type_param) => Some(&type_param.ident),
+                    _ => None,
+                })
+                .unwrap_or_else(|| {
+                    new_generics.params.push(syn::parse_quote! { F });
+                    &default_ty_generic
+                });
+            let (
+                is_aot_metered_supported_arms,
+                generate_x86_metered_asm_arms,
+                where_predicates,
+            ): (Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(
+                |(variant_name, field)| {
+                    let field_ty = &field.ty;
+                    let is_aot_metered_supported_arm = quote! {
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotMeteredExecutor<#first_ty_generic>>::is_aot_metered_supported(x, inst)
+                    };
+                    let generate_x86_metered_asm_arm = quote! {
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotMeteredExecutor<#first_ty_generic>>::generate_x86_metered_asm(
+                            x,
+                            inst,
+                            pc,
+                            config,
+                        )
+                    };
+                    let where_predicate =
+                        syn::parse_quote! { #field_ty: ::openvm_circuit::arch::AotMeteredExecutor<#first_ty_generic> };
+                    (
+                        is_aot_metered_supported_arm,
+                        generate_x86_metered_asm_arm,
+                        where_predicate,
+                    )
+                },
+            ));
+            let where_clause = new_generics.make_where_clause();
+            for predicate in where_predicates {
+                where_clause.predicates.push(predicate);
+            }
+            let (impl_generics, _, where_clause) = new_generics.split_for_impl();
+
+            quote! {
+                #[cfg(feature = "aot")]
+                impl #impl_generics ::openvm_circuit::arch::AotMeteredExecutor<#first_ty_generic> for #name #ty_generics #where_clause {
+                    #[inline(always)]
+                    fn is_aot_metered_supported(&self, inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>) -> bool {
+                        match self {
+                            #(#is_aot_metered_supported_arms,)*
+                        }
+                    }
+
+                    fn generate_x86_metered_asm(
+                        &self,
+                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
+                        pc: u32,
+                        config: &::openvm_circuit::arch::SystemConfig,
+                    ) -> ::std::result::Result<
+                        ::std::string::String,
+                        ::openvm_circuit::arch::AotError,
+                    > {
+                        match self {
+                            #(#generate_x86_metered_asm_arms,)*
+                        }
+                    }
+                }
+            }
+            .into()
         }
         Data::Union(_) => unimplemented!("Unions are not supported"),
     }
@@ -809,7 +948,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
             ::openvm_circuit::derive::MeteredExecutor,
             ::openvm_circuit::derive::PreflightExecutor,
         )]
-        #[cfg_attr(feature = "aot", derive(::openvm_circuit::derive::AotExecutor))]
+        #[cfg_attr(feature = "aot", derive(::openvm_circuit::derive::AotExecutor, ::openvm_circuit::derive::AotMeteredExecutor))]
         pub enum #executor_type<F: openvm_stark_backend::p3_field::Field> {
             #[any_enum]
             #source_name_upper(#source_executor_type),

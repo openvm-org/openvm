@@ -12,8 +12,15 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::{execution_mode::ExecutionCtxTrait, Streams, VmExecState};
+#[cfg(feature = "aot")]
+use crate::arch::aot::common::{
+    REG_D, REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_FOURTH_ARG, REG_INSNS_PTR, REG_INSTRET_END,
+    REG_PC, REG_RETURN_VAL, REG_SECOND_ARG, REG_THIRD_ARG,
+};
 #[cfg(feature = "tco")]
 use crate::arch::interpreter::InterpretedInstance;
+#[cfg(feature = "aot")]
+use crate::arch::SystemConfig;
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
@@ -196,7 +203,7 @@ impl<F, T> Executor<F> for T where T: InterpreterExecutor<F> {}
 /// pre-process the program code into function pointers which operate on `pre_compute` instruction
 /// data which contains auxiliary data (e.g., corresponding AIR ID) for metering purposes.
 // @dev: In the codebase this is sometimes referred to as (E2).
-pub trait MeteredExecutor<F> {
+pub trait InterpreterMeteredExecutor<F> {
     fn metered_pre_compute_size(&self) -> usize;
 
     #[cfg(not(feature = "tco"))]
@@ -225,19 +232,33 @@ pub trait MeteredExecutor<F> {
     ) -> Result<Handler<F, Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait;
+}
 
-    #[cfg(feature = "aot")]
-    fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
+#[cfg(feature = "aot")]
+pub trait AotMeteredExecutor<F> {
+    fn is_aot_metered_supported(&self, _inst: &Instruction<F>) -> bool {
         false
+    }
+
+    fn generate_x86_metered_asm(
+        &self,
+        inst: &Instruction<F>,
+        pc: u32,
+        config: &SystemConfig,
+    ) -> Result<String, AotError> {
+        unimplemented!()
     }
 }
 
 #[cfg(feature = "aot")]
-pub trait AotMeteredExecutor<F>: MeteredExecutor<F> {
-    /// Generate x86 assembly for the given instruction. Preconditions: Opcode must be supported by
-    /// AOT
-    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError>;
-}
+pub trait MeteredExecutor<F>: InterpreterMeteredExecutor<F> + AotMeteredExecutor<F> {}
+#[cfg(feature = "aot")]
+impl<F, T> MeteredExecutor<F> for T where T: InterpreterMeteredExecutor<F> + AotMeteredExecutor<F> {}
+
+#[cfg(not(feature = "aot"))]
+pub trait MeteredExecutor<F>: InterpreterMeteredExecutor<F> {}
+#[cfg(not(feature = "aot"))]
+impl<F, T> MeteredExecutor<F> for T where T: InterpreterMeteredExecutor<F> {}
 
 /// Trait for preflight execution via a host interpreter. The trait methods allow execution of
 /// instructions via enum dispatch within an interpreter. This execution is specialized to record
