@@ -417,15 +417,6 @@ mod async_prover {
                 );
                 tasks.push(task);
             }
-            // Finish execution to termination
-            state = pure_interpreter.execute_from_state(state, None)?;
-            let final_memory = &state.memory.memory;
-            let user_public_values = UserPublicValuesProof::compute(
-                vm.config().as_ref().memory_config.memory_dimensions(),
-                vm.config().as_ref().num_public_values,
-                &vm_poseidon2_hasher(),
-                final_memory,
-            );
 
             let mut proofs = Vec::with_capacity(tasks.len());
             for task in tasks {
