@@ -108,7 +108,7 @@ jobs:
 
       - name: Build benchmarks
         working-directory: benchmarks/execute
-        run: cargo $TOOLCHAIN codspeed build --features tco
+        run: cargo $TOOLCHAIN codspeed build --features tco --bench execute
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v3
         with:
