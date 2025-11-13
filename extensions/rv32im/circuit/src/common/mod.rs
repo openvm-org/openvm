@@ -7,9 +7,9 @@ mod aot {
         sync_gpr_to_xmm, sync_xmm_to_gpr, RISCV_TO_X86_OVERRIDE_MAP,
     };
     pub use openvm_circuit::arch::aot::common::{
-        DEFAULT_PC_OFFSET, REG_A, REG_A_W, REG_B, REG_B_W, REG_C, REG_C_B, REG_C_LB, REG_C_W,
-        REG_D, REG_D_W, REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_GUEST_MEM_PTR, REG_INSNS_PTR,
-        REG_PC, REG_PC_W, REG_RETURN_VAL, REG_SECOND_ARG, REG_THIRD_ARG,
+        DEFAULT_PC_OFFSET, REG_A, REG_AS2_PTR, REG_A_W, REG_B, REG_B_W, REG_C, REG_C_B, REG_C_LB,
+        REG_C_W, REG_D, REG_D_W, REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_INSNS_PTR, REG_PC,
+        REG_PC_W, REG_RETURN_VAL, REG_SECOND_ARG, REG_THIRD_ARG,
     };
 
     pub(crate) fn rv32_register_to_gpr(rv32_reg: u8, gpr: &str) -> String {
@@ -31,15 +31,15 @@ mod aot {
     }
 
     pub(crate) fn address_space_start_to_gpr(address_space: u32, gpr: &str) -> String {
-        if address_space == 1 {
-            if "r15" != gpr {
+        if address_space == 2 {
+            if REG_AS2_PTR != gpr {
                 return format!("    mov {gpr}, r15\n");
             }
             return "".to_string();
         }
 
         let xmm_map_reg = match address_space {
-            2 => "xmm0",
+            1 => "xmm0",
             3 => "xmm1",
             4 => "xmm2",
             _ => unreachable!("Only address space 1, 2, 3, 4 is supported"),

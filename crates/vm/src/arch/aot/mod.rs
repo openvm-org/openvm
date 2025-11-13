@@ -6,7 +6,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        aot::common::{sync_gpr_to_xmm, sync_xmm_to_gpr},
+        aot::common::{sync_gpr_to_xmm, sync_xmm_to_gpr, REG_AS2_PTR},
         interpreter::{AlignedBuf, PreComputeInstruction},
         ExecutionCtxTrait, StaticProgramError, Streams, SystemConfig, VmExecState, VmState,
     },
@@ -172,10 +172,15 @@ where
     fn rv32_regs_to_xmm() -> String {
         let mut asm_str = String::new();
 
+        asm_str += &format!("    push {REG_AS2_PTR}\n");
+        asm_str += &format!("    pextrq {REG_AS2_PTR}, xmm0, 1\n");
+
         for r in 0..16 {
-            asm_str += &format!("   mov rdi, [r15 + 8*{r}]\n");
+            asm_str += &format!("   mov rdi, [{REG_AS2_PTR} + 8*{r}]\n");
             asm_str += &format!("   pinsrq xmm{r}, rdi, 0\n");
         }
+
+        asm_str += &format!("    pop {REG_AS2_PTR}\n");
 
         asm_str += &sync_xmm_to_gpr();
 
@@ -199,10 +204,16 @@ where
         let mut asm_str = String::new();
 
         asm_str += &sync_gpr_to_xmm();
+
+        asm_str += &format!("    push {REG_AS2_PTR}\n");
+        asm_str += &format!("    pextrq {REG_AS2_PTR}, xmm0, 1\n");
+
         for r in 0..16 {
             // at each iteration we save register 2r and 2r+1 of the guest mem to xmm
-            asm_str += &format!("   movq [r15 + 8*{r}], xmm{r}\n");
+            asm_str += &format!("   movq [{REG_AS2_PTR} + 8*{r}], xmm{r}\n");
         }
+
+        asm_str += &format!("    pop {REG_AS2_PTR}\n");
 
         asm_str
     }

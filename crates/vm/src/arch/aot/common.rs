@@ -23,7 +23,7 @@ pub const REG_EXEC_STATE_PTR: &str = "rbx";
 pub const REG_INSNS_PTR: &str = "rbp";
 pub const REG_PC: &str = "r13";
 pub const REG_PC_W: &str = "r13d";
-pub const REG_GUEST_MEM_PTR: &str = "r15";
+pub const REG_AS2_PTR: &str = "r15";
 
 pub const DEFAULT_PC_OFFSET: i32 = 4;
 
