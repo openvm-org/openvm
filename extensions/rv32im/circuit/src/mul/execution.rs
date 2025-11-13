@@ -139,6 +139,7 @@ where
             asm_str += &format!("   imul {gpr_reg_b}, {gpr_reg_c}\n");
             asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
         }
+
         Ok(asm_str)
     }
 }
