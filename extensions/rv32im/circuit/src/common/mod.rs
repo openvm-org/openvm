@@ -32,7 +32,7 @@ mod aot {
 
     pub(crate) fn address_space_start_to_gpr(address_space: u32, gpr: &str) -> String {
         if address_space == 2 {
-            if "r15" != gpr {
+            if REG_AS2_PTR != gpr {
                 return format!("    mov {gpr}, r15\n");
             }
             return "".to_string();
