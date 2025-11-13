@@ -16,7 +16,7 @@ use openvm_benchmarks_utils::{get_elf_path, get_fixtures_dir, get_programs_dir, 
 use openvm_bigint_circuit::{Int256, Int256CpuProverExt, Int256Executor};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 #[cfg(feature = "aot")]
-use openvm_circuit::arch::execution_mode::ExecutionCtx;
+use openvm_circuit::arch::execution_mode::{ExecutionCtx, MeteredCtx};
 use openvm_circuit::{
     arch::{execution_mode::MeteredCostCtx, instructions::exe::VmExe, ContinuationVmProof, *},
     derive::VmConfig,
@@ -345,32 +345,71 @@ fn create_aot_instance(program: &str) -> AotInstance<BabyBear, ExecutionCtx> {
     instance
 }
 
+#[cfg(feature = "aot")]
+fn create_metered_aot_instance(program: &str) -> (AotInstance<BabyBear, MeteredCtx>, MeteredCtx) {
+    let exe = load_program_executable(program)
+        .expect("Failed to load program executable for metered AOT cache");
+    let config = ExecuteConfig::default();
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let pk = vm_proving_key();
+    let d_pk = engine.device().transport_pk_to_device(pk);
+    let vm = VirtualMachine::new(engine, ExecuteBuilder, config, d_pk)
+        .expect("Failed to create VM for metered AOT setup");
+    let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+    let ctx = vm.build_metered_ctx(&exe);
+
+    let instance = executor()
+        .metered_instance(&exe, &executor_idx_to_air_idx)
+        .unwrap_or_else(|err| panic!("Failed to create metered AOT instance for {program}: {err}"));
+    (instance, ctx)
+}
+
 #[divan::bench(args = APP_PROGRAMS, sample_count=5)]
 fn benchmark_execute_metered(bencher: Bencher, program: &str) {
-    bencher
-        .with_inputs(|| {
-            let exe = load_program_executable(program).expect("Failed to load program executable");
-            let config = ExecuteConfig::default();
-            let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-            let pk = vm_proving_key();
-            let d_pk = engine.device().transport_pk_to_device(pk);
-            let vm = VirtualMachine::new(engine, ExecuteBuilder, config, d_pk).unwrap();
-            let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+    #[cfg(feature = "aot")]
+    {
+        let program_name = program.to_string();
+        let (aot_instance, metered_ctx) = create_metered_aot_instance(&program_name);
+        bencher
+            .with_inputs(Vec::<Vec<BabyBear>>::new)
+            .bench_values(|input| {
+                expect_execution(
+                    aot_instance.execute_metered(input, metered_ctx.clone()),
+                    "metered benchmark",
+                    program,
+                    "Failed to execute program",
+                );
+            });
+    }
 
-            let ctx = vm.build_metered_ctx(&exe);
-            let interpreter = executor()
-                .metered_instance(&exe, &executor_idx_to_air_idx)
-                .unwrap();
-            (interpreter, vec![], ctx.clone())
-        })
-        .bench_values(|(interpreter, input, ctx)| {
-            expect_execution(
-                interpreter.execute_metered(input, ctx),
-                "metered benchmark",
-                program,
-                "Failed to execute program",
-            );
-        });
+    #[cfg(not(feature = "aot"))]
+    {
+        bencher
+            .with_inputs(|| {
+                let exe =
+                    load_program_executable(program).expect("Failed to load program executable");
+                let config = ExecuteConfig::default();
+                let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+                let pk = vm_proving_key();
+                let d_pk = engine.device().transport_pk_to_device(pk);
+                let vm = VirtualMachine::new(engine, ExecuteBuilder, config, d_pk).unwrap();
+                let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+
+                let ctx = vm.build_metered_ctx(&exe);
+                let interpreter = executor()
+                    .metered_instance(&exe, &executor_idx_to_air_idx)
+                    .unwrap();
+                (interpreter, vec![], ctx.clone())
+            })
+            .bench_values(|(interpreter, input, ctx)| {
+                expect_execution(
+                    interpreter.execute_metered(input, ctx),
+                    "metered benchmark",
+                    program,
+                    "Failed to execute program",
+                );
+            });
+    }
 }
 
 #[divan::bench(ignore = true, args = APP_PROGRAMS, sample_count=5)]
