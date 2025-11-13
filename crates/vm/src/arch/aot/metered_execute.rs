@@ -161,10 +161,11 @@ where
             asm_str += &format!("    movabs {REG_D}, {should_suspend_ptr}\n");
             asm_str += &format!("    mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
             asm_str += &format!("    call {REG_D}\n");
-            asm_str += &format!("    test al, al\n");
+            asm_str += "    movzx r14d, al\n";
             asm_str += &Self::pop_internal_registers();
             asm_str += &Self::pop_address_space_start();
             asm_str += &Self::rv32_regs_to_xmm();
+            asm_str += "    test r14b, r14b\n";
             asm_str += &format!("    jnz asm_run_end_{pc}\n");
 
             if instruction.opcode.as_usize() == 0 {
@@ -377,7 +378,8 @@ asm_execute:
     mov rdi, rbx         ; rdi = aot_vm_exec_state_ptr
     mov {should_suspend_ptr} ; rax = should_suspend
     call rax                 ; should_suspend(aot_vm_exec_state_ptr)
-    cmp al, 1            ; if return value of should_suspend is 1. CAREFUL: when a function returns a boolean, only the lower 8 bits are set.
+    movzx r14d, al       ; preserve the boolean result before clobbering flags
+    test r14b, r14b      ; if return value of should_suspend is non-zero
     je asm_run_end       ; jump to asm_run_end
     mov rdi, rbx         ; rdi = aot_vm_exec_state_ptr
     mov rsi, rbp         ; rsi = pre_compute_insns_ptr
@@ -421,7 +423,8 @@ asm_execute:
     mov rdi, rbx
     mov rax, {should_suspend_ptr}
     call rax
-    cmp al, 1          
+    movzx r14d, al
+    test r14b, r14b
     je asm_run_end      
     mov rdi, rbx        
     mov rsi, rbp        
