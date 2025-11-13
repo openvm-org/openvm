@@ -37,9 +37,6 @@ struct WhirQueryCols<T> {
     // first flags
     is_first_in_proof: T,
     is_first_in_round: T,
-    // transition flags
-    is_same_proof: T,
-    is_same_round: T,
     tidx: T,
     omega: T,
     sample: T,
@@ -83,47 +80,45 @@ where
         let local: &WhirQueryCols<AB::Var> = (*local).borrow();
         let next: &WhirQueryCols<AB::Var> = (*next).borrow();
 
-        NestedForLoopSubAir::<3, 2>.eval(
+        let proof_idx = local.proof_idx;
+        let is_enabled = local.is_enabled;
+        builder.assert_bool(is_enabled);
+        builder
+            .when(local.is_first_in_proof)
+            .assert_one(is_enabled);
+        builder
+            .when(local.is_first_in_round)
+            .assert_one(is_enabled);
+
+        let is_same_proof = next.is_enabled - next.is_first_in_proof;
+        let is_same_round = next.is_enabled - next.is_first_in_round;
+
+        NestedForLoopSubAir.eval(
             builder,
             (
                 (
                     NestedForLoopIoCols {
-                        is_enabled: local.is_enabled.into(),
-                        counter: [
-                            local.proof_idx.into(),
-                            local.whir_round.into(),
-                            local.query_idx.into(),
-                        ],
-                        is_first: [
-                            local.is_first_in_proof.into(),
-                            local.is_first_in_round.into(),
-                            AB::Expr::ONE,
-                        ],
-                    },
+                        is_enabled,
+                        counter: [local.proof_idx, local.whir_round, local.query_idx],
+                        is_first: [local.is_first_in_proof, local.is_first_in_round, is_enabled],
+                    }
+                    .map_into(),
                     NestedForLoopIoCols {
-                        is_enabled: next.is_enabled.into(),
-                        counter: [
-                            next.proof_idx.into(),
-                            next.whir_round.into(),
-                            next.query_idx.into(),
-                        ],
+                        is_enabled: next.is_enabled,
+                        counter: [next.proof_idx, next.whir_round, next.query_idx],
                         is_first: [
-                            next.is_first_in_proof.into(),
-                            next.is_first_in_round.into(),
-                            AB::Expr::ONE,
+                            next.is_first_in_proof,
+                            next.is_first_in_round,
+                            next.is_enabled,
                         ],
-                    },
+                    }
+                    .map_into(),
                 ),
                 NestedForLoopAuxCols {
-                    is_transition: [local.is_same_proof, local.is_same_round],
-                }
-                .map_into(),
+                    is_transition: [is_same_proof.clone(), is_same_round.clone()],
+                },
             ),
         );
-
-        let proof_idx = local.proof_idx;
-        let is_enabled = local.is_enabled;
-        builder.assert_bool(is_enabled);
 
         assert_array_eq(
             &mut builder.when(local.is_first_in_round),
@@ -132,7 +127,7 @@ where
         );
 
         builder
-            .when(local.is_enabled - local.is_same_round)
+            .when(local.is_enabled - is_same_round.clone())
             .assert_eq(
                 local.query_idx,
                 AB::Expr::from_canonical_usize(self.num_queries - 1),
@@ -151,17 +146,17 @@ where
             local.is_first_in_round,
         );
         assert_array_eq(
-            &mut builder.when(local.is_same_round),
+            &mut builder.when(is_same_round.clone()),
             next.gamma,
             local.gamma,
         );
         assert_array_eq(
-            &mut builder.when(local.is_same_round),
+            &mut builder.when(is_same_round.clone()),
             next.gamma_pow,
             ext_field_multiply::<AB::Expr>(local.gamma, local.gamma_pow),
         );
         assert_array_eq(
-            &mut builder.when(local.is_same_round),
+            &mut builder.when(is_same_round.clone()),
             next.pre_claim,
             ext_field_add::<AB::Expr>(
                 local.pre_claim,
@@ -169,12 +164,12 @@ where
             ),
         );
         assert_array_eq(
-            &mut builder.when(local.is_same_round),
+            &mut builder.when(is_same_round.clone()),
             next.post_claim,
             local.post_claim,
         );
         assert_array_eq(
-            &mut builder.when(local.is_enabled - local.is_same_round),
+            &mut builder.when(local.is_enabled - is_same_round.clone()),
             ext_field_add::<AB::Expr>(
                 local.pre_claim,
                 ext_field_multiply::<AB::Expr>(local.yi, local.gamma_pow),
@@ -261,8 +256,6 @@ pub(crate) fn generate_trace(
             cols.proof_idx = F::from_canonical_usize(proof_idx);
             cols.is_first_in_proof = F::from_bool(whir_round == 0 && query_idx == 0);
             cols.is_first_in_round = F::from_bool(query_idx == 0);
-            cols.is_same_proof = F::from_bool(i + 1 < num_rows_per_proof);
-            cols.is_same_round = F::from_bool(query_idx != params.num_whir_queries - 1);
             cols.tidx = F::from_canonical_usize(
                 preflight.whir.query_tidx_per_round[whir_round] + query_idx,
             );
