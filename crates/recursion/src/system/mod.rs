@@ -19,6 +19,7 @@ use stark_backend_v2::{
         AirProvingContextV2, ColMajorMatrix, CommittedTraceDataV2, CpuBackendV2, ProverBackendV2,
     },
 };
+use tracing::instrument;
 
 use crate::{
     batch_constraint::{BatchConstraintModule, LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX},
@@ -473,7 +474,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
 
     /// The generic `TS` allows using different transcript implementations for debugging purposes.
     /// The default type is use is `DuplexSpongeRecorder`.
-    #[tracing::instrument(skip_all)]
+    #[instrument(name = "VerifierSubCircuit::generate_proving_ctxs", skip_all)]
     pub fn generate_proving_ctxs<TS>(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -591,6 +592,7 @@ pub mod cuda_tracegen {
             }
         }
 
+        #[instrument(name = "VerifierSubCircuit::generate_proving_ctxs_gpu", skip_all)]
         pub fn generate_proving_ctxs_gpu<TS>(
             &self,
             child_vk: &MultiStarkVerifyingKeyV2,
