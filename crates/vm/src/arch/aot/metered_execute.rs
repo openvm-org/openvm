@@ -172,9 +172,8 @@ where
             /* Preprocessing step, to check if we should suspend or not */
             asm_str += &format!("asm_execute_pc_{pc}:\n");
 
-            // asm_str += &sync_reg_to_instret_until_end();
             asm_str += &format!("    cmp {REG_INSTRET_END}, 0\n");
-            asm_str += &format!("    jne continue_execution_{pc}\n"); // if instret > 0, obv false, so we jump to continue and decrement
+            asm_str += &format!("    jne instret_positive_{pc}\n"); // if instret > 0, skip slow path
 
             asm_str += &Self::xmm_to_rv32_regs();
             asm_str += &Self::push_address_space_start();
@@ -190,10 +189,14 @@ where
             asm_str += &sync_instret_until_end_to_reg();
             asm_str += &Self::rv32_regs_to_xmm();
             asm_str += &format!("    jnz asm_run_end_{pc}\n");
+            asm_str += &format!("    jmp execute_instruction_{pc}\n");
+
+            asm_str += &format!("instret_positive_{pc}:\n");
+            asm_str += &format!("    dec {REG_INSTRET_END}\n");
+            asm_str += &sync_reg_to_instret_until_end();
 
             // continue with execution, as should_suspend returned false
-            asm_str += &format!("continue_execution_{pc}:\n");
-            asm_str += &format!("    dec {REG_INSTRET_END}\n");
+            asm_str += &format!("execute_instruction_{pc}:\n");
 
             if instruction.opcode.as_usize() == 0 {
                 // terminal opcode has no associated executor, so can handle with default fallback
