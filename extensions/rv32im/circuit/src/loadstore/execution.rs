@@ -211,7 +211,15 @@ unsafe fn execute_e12_impl<
     let rs1_val = u32::from_le_bytes(rs1_bytes);
     let ptr_val = rs1_val.wrapping_add(pre_compute.imm_extended);
     // sign_extend([r32{c,g}(b):2]_e)`
+    if ptr_val >= (1 << POINTER_MAX_BITS) {
+        println!(
+            "at {} ptr_val: {ptr_val} >= (1 << POINTER_MAX_BITS): {}",
+            pc,
+            1 << POINTER_MAX_BITS
+        );
+    }
     debug_assert!(ptr_val < (1 << POINTER_MAX_BITS));
+
     let shift_amount = ptr_val % 4;
     let ptr_val = ptr_val - shift_amount; // aligned ptr
 

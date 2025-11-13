@@ -1,29 +1,23 @@
 #[cfg(feature = "aot")]
-pub use aot::*;
+pub(crate) use aot::*;
 
 #[cfg(feature = "aot")]
 mod aot {
     use std::mem::offset_of;
 
-    pub(crate) use openvm_circuit::arch::aot::common::{
-        sync_gpr_to_xmm, sync_xmm_to_gpr, RISCV_TO_X86_OVERRIDE_MAP,
-    };
-    pub use openvm_circuit::arch::aot::common::{
-        DEFAULT_PC_OFFSET, REG_A, REG_AS2_PTR, REG_A_W, REG_B, REG_B_W, REG_C, REG_C_B, REG_C_LB,
-        REG_C_W, REG_D, REG_D_W, REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_INSNS_PTR, REG_PC,
-        REG_PC_W, REG_RETURN_VAL, REG_SECOND_ARG, REG_THIRD_ARG,
-    };
+    pub(crate) use openvm_circuit::arch::aot::common::*;
     use openvm_circuit::{
         arch::{
-            ADDR_SPACE_OFFSET, AotError, SystemConfig, VmExecState, execution_mode::{MeteredCtx, metered::memory_ctx::MemoryCtx}
+            execution_mode::{metered::memory_ctx::MemoryCtx, MeteredCtx},
+            AotError, SystemConfig, VmExecState, ADDR_SPACE_OFFSET,
         },
-        system::memory::{CHUNK, merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory},
+        system::memory::{merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory, CHUNK},
     };
     use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
 
     /// The minimum block size is 4, but RISC-V `lb` only requires alignment of 1 and `lh` only requires
     /// alignment of 2 because the instructions are implemented by doing an access of block size 4.
-    const DEFAULT_U8_BLOCK_SIZE: u8 = 4;
+    const DEFAULT_U8_BLOCK_SIZE_BITS: u8 = 2;
     /// This is DIRTY because PAGE_BITS is a generic parameter of E2 context.
     const DEFAULT_PAGE_BITS: usize = 6;
 
@@ -121,17 +115,20 @@ mod aot {
         _address_space: u32,
     ) -> Result<String, AotError> {
         let min_block_size_bits = config.memory_config.min_block_size_bits();
-        if min_block_size_bits[RV32_REGISTER_AS as usize] != DEFAULT_U8_BLOCK_SIZE {
+        if min_block_size_bits[RV32_REGISTER_AS as usize] != DEFAULT_U8_BLOCK_SIZE_BITS {
+            println!("RV32_REGISTER_AS must have a minimum block size of 4");
             return Err(AotError::Other(String::from(
                 "RV32_REGISTER_AS must have a minimum block size of 4",
             )));
         }
-        if min_block_size_bits[RV32_MEMORY_AS as usize] != DEFAULT_U8_BLOCK_SIZE {
+        if min_block_size_bits[RV32_MEMORY_AS as usize] != DEFAULT_U8_BLOCK_SIZE_BITS {
+            println!("RV32_MEMORY_AS must have a minimum block size of 4");
             return Err(AotError::Other(String::from(
                 "RV32_MEMORY_AS must have a minimum block size of 4",
             )));
         }
-        if min_block_size_bits[PUBLIC_VALUES_AS as usize] != DEFAULT_U8_BLOCK_SIZE {
+        if min_block_size_bits[PUBLIC_VALUES_AS as usize] != DEFAULT_U8_BLOCK_SIZE_BITS {
+            println!("PUBLIC_VALUES_AS must have a minimum block size of 4");
             return Err(AotError::Other(String::from(
                 "PUBLIC_VALUES_AS must have a minimum block size of 4",
             )));
@@ -329,7 +326,7 @@ mod aot {
         Ok(asm_str)
     }
 
-    /// Assumption: `r14` is the pointer of `trace_heights``.
+    /// Assumption: `REG_TRACE_HEIGHT` is the pointer of `trace_heights``.
     pub(crate) fn update_height_change_asm(
         chip_idx: usize,
         height_delta: u32,
@@ -341,7 +338,8 @@ mod aot {
         //     self.trace_heights[chip_idx] += height_delta;
         // }
         // ```
-        asm_str += &format!("    add [r14 + {chip_idx} * 4], {height_delta}\n");
+        asm_str +=
+            &format!("    add dword ptr [{REG_TRACE_HEIGHT} + {chip_idx} * 4], {height_delta}\n");
         Ok(asm_str)
     }
 }

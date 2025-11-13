@@ -121,8 +121,6 @@ where
             REG_A_W
         };
 
-        let mut asm_opcode = String::new();
-
         if a == c {
             // a = b * c; commutative, so don't need to write to tmp, but should copy c to a first
             let (gpr_reg_c, delta_str_c) = xmm_to_gpr((c / 4) as u8, str_reg_a, true);
