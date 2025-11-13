@@ -67,8 +67,8 @@ where
         // Summary:
         // - Proof loop: rely on the nested for-loop sub-AIR to enforce the standard
         //   `is_valid`/`is_first`/`is_last`/`proof_idx` sequencing across proofs.
-        // - idx handling: start `idx` at zero, increment it on each transition within the proof, keep
-        //   it zero on invalid rows, and ensure the last valid row reaches `l_skip`.
+        // - idx handling: start `idx` at zero, increment it on each transition within the proof,
+        //   keep it zero on invalid rows, and ensure the last valid row reaches `l_skip`.
         // - Values recalculation: during transitions, square both `x` and `y`, and update `res` via
         //   `(x + y) * res + (1 - x) * (1 - y)`.
 
