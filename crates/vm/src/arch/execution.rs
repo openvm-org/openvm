@@ -13,10 +13,7 @@ use thiserror::Error;
 
 use super::{execution_mode::ExecutionCtxTrait, Streams, VmExecState};
 #[cfg(feature = "aot")]
-use crate::arch::aot::common::{
-    REG_D, REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_FOURTH_ARG, REG_INSNS_PTR, REG_INSTRET_END,
-    REG_PC, REG_RETURN_VAL, REG_SECOND_ARG, REG_THIRD_ARG,
-};
+use crate::arch::aot::common::*;
 #[cfg(feature = "tco")]
 use crate::arch::interpreter::InterpretedInstance;
 #[cfg(feature = "aot")]
@@ -242,9 +239,10 @@ pub trait AotMeteredExecutor<F> {
 
     fn generate_x86_metered_asm(
         &self,
-        inst: &Instruction<F>,
-        pc: u32,
-        config: &SystemConfig,
+        _inst: &Instruction<F>,
+        _pc: u32,
+        _chip_idx: usize,
+        _config: &SystemConfig,
     ) -> Result<String, AotError> {
         unimplemented!()
     }

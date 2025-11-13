@@ -3,13 +3,7 @@ use std::{ffi::c_void, mem::offset_of};
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{
-    common::{
-        sync_gpr_to_xmm, sync_xmm_to_gpr, REG_D, REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_FOURTH_ARG,
-        REG_INSTRET_END, REG_PC, REG_RETURN_VAL, REG_SECOND_ARG, REG_THIRD_ARG, REG_TRACE_HEIGHT,
-    },
-    AotInstance, AsmRunFn,
-};
+use super::{common::*, AotInstance, AsmRunFn};
 use crate::{
     arch::{
         aot::{
@@ -56,7 +50,12 @@ where
             &mut split_pre_compute_buf,
         )?;
 
-        let asm_source = Self::create_metered_asm(exe, inventory, pre_compute_insns.as_ptr())?;
+        let asm_source = Self::create_metered_asm(
+            exe,
+            inventory,
+            executor_idx_to_air_idx,
+            pre_compute_insns.as_ptr(),
+        )?;
         let lib = asm_to_lib(&asm_source)?;
 
         let init_memory = exe.init_memory.clone();
@@ -76,6 +75,7 @@ where
     pub fn create_metered_asm<E>(
         exe: &VmExe<F>,
         inventory: &ExecutorInventory<E>,
+        executor_idx_to_air_idx: &[usize],
         pre_compute_insns_ptr: *const PreComputeInstruction<F, MeteredCtx>,
     ) -> Result<String, StaticProgramError>
     where
@@ -121,27 +121,29 @@ where
 
         asm_str += &Self::push_internal_registers();
 
-        // Temporarily use r14 as the pointer to get_vm_address_space_addr
-        asm_str += &format!("    mov r14, {get_vm_address_space_addr_ptr}\n");
         asm_str += "    mov rdi, rbx\n";
         asm_str += "    mov rsi, 1\n";
-        asm_str += "    call r14\n";
-        // Store the start of register address space in r15
-        asm_str += "    mov r15, rax\n";
+        asm_str += &format!("    mov {REG_D}, {get_vm_address_space_addr_ptr}\n");
+        asm_str += &format!("    call {REG_D}\n");
+        // Store the start of register address space in high 64 bits of xmm0
+        asm_str += "    pinsrq  xmm0, rax, 1\n";
         // Store the start of address space 2 in high 64 bits of xmm0
         asm_str += "    mov rdi, rbx\n";
         asm_str += "    mov rsi, 2\n";
-        asm_str += "    call r14\n";
-        asm_str += "    pinsrq  xmm0, rax, 1\n";
+        asm_str += &format!("    mov {REG_D}, {get_vm_address_space_addr_ptr}\n");
+        asm_str += &format!("    call {REG_D}\n");
+        asm_str += &format!("    mov {REG_AS2_PTR}, rax\n");
         // Store the start of address space 3 in high 64 bits of xmm1
         asm_str += "    mov rdi, rbx\n";
         asm_str += "    mov rsi, 3\n";
-        asm_str += "    call r14\n";
+        asm_str += &format!("    mov {REG_D}, {get_vm_address_space_addr_ptr}\n");
+        asm_str += &format!("    call {REG_D}\n");
         asm_str += "    pinsrq  xmm1, rax, 1\n";
         // Store the start of address space 4 in high 64 bits of xmm2
         asm_str += "    mov rdi, rbx\n";
         asm_str += "    mov rsi, 4\n";
-        asm_str += "    call r14\n";
+        asm_str += &format!("    mov {REG_D}, {get_vm_address_space_addr_ptr}\n");
+        asm_str += &format!("    call {REG_D}\n");
         asm_str += "    pinsrq  xmm2, rax, 1\n";
 
         asm_str += &Self::pop_internal_registers();
@@ -219,10 +221,12 @@ where
             let executor = inventory
                 .get_executor(instruction.opcode)
                 .expect("executor not found for opcode");
+            let executor_idx = inventory.instruction_lookup[&instruction.opcode] as usize;
+            let air_idx = executor_idx_to_air_idx[executor_idx];
 
             if executor.is_aot_metered_supported(&instruction) {
                 let segment = executor
-                    .generate_x86_metered_asm(&instruction, pc, inventory.config())
+                    .generate_x86_metered_asm(&instruction, pc, air_idx, inventory.config())
                     .map_err(|err| match err {
                         AotError::InvalidInstruction => StaticProgramError::InvalidInstruction(pc),
                         AotError::NotSupported => StaticProgramError::DisabledOperation {

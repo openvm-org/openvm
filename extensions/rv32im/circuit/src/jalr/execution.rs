@@ -102,7 +102,7 @@ impl<F, A> AotExecutor<F> for Rv32JalrExecutor<A>
 where
     F: PrimeField32,
 {
-    fn is_aot_supported(&self, inst: &Instruction<F>) -> bool {
+    fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
         true
     }
 

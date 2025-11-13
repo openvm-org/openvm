@@ -661,12 +661,13 @@ pub fn aot_metered_executor_derive(input: TokenStream) -> TokenStream {
                         &self,
                         inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         pc: u32,
+                        chip_idx: usize,
                         config: &::openvm_circuit::arch::SystemConfig,
                     ) -> ::std::result::Result<
                         ::std::string::String,
                         ::openvm_circuit::arch::AotError,
                     > {
-                        self.0.generate_x86_metered_asm(inst, pc, config)
+                        self.0.generate_x86_metered_asm(inst, pc, chip_idx, config)
                     }
                 }
             }
@@ -713,6 +714,7 @@ pub fn aot_metered_executor_derive(input: TokenStream) -> TokenStream {
                             x,
                             inst,
                             pc,
+                            chip_idx,
                             config,
                         )
                     };
@@ -745,6 +747,7 @@ pub fn aot_metered_executor_derive(input: TokenStream) -> TokenStream {
                         &self,
                         inst: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
                         pc: u32,
+                        chip_idx: usize,
                         config: &::openvm_circuit::arch::SystemConfig,
                     ) -> ::std::result::Result<
                         ::std::string::String,

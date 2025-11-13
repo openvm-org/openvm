@@ -244,6 +244,28 @@ impl<F, A, const LIMB_BITS: usize> AotMeteredExecutor<F>
 where
     F: PrimeField32,
 {
+    fn is_aot_metered_supported(&self, _inst: &Instruction<F>) -> bool {
+        true
+    }
+    fn generate_x86_metered_asm(
+        &self,
+        inst: &Instruction<F>,
+        pc: u32,
+        chip_idx: usize,
+        config: &SystemConfig,
+    ) -> Result<String, AotError> {
+        let mut asm_str = self.generate_x86_asm(inst, pc)?;
+        asm_str += &update_height_change_asm(chip_idx, 1)?;
+        // read [b:4]_1
+        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
+        // read [c:4]_1
+        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
+        if inst.e.as_canonical_u32() != RV32_IMM_AS {
+            // read [a:4]_1
+            asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
+        }
+        Ok(asm_str)
+    }
 }
 
 #[inline(always)]
