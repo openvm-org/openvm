@@ -39,9 +39,6 @@ struct NonInitialOpenedValuesCols<T> {
     is_first_in_proof: T,
     is_first_in_round: T,
     is_first_in_query: T,
-    is_same_proof: T,
-    is_same_round: T,
-    is_same_query: T,
     merkle_idx_bit_src: T,
     coset_idx_max_aux: T,
     // TODO: extract
@@ -83,6 +80,19 @@ where
         let next: &NonInitialOpenedValuesCols<AB::Var> = (*next).borrow();
 
         builder.assert_bool(local.is_enabled);
+        builder
+            .when(local.is_first_in_proof)
+            .assert_one(local.is_enabled);
+        builder
+            .when(local.is_first_in_round)
+            .assert_one(local.is_enabled);
+        builder
+            .when(local.is_first_in_query)
+            .assert_one(local.is_enabled);
+
+        let is_same_proof = next.is_enabled - next.is_first_in_proof;
+        let is_same_round = next.is_enabled - next.is_first_in_round;
+        let is_same_query = next.is_enabled - next.is_first_in_query;
 
         let max_coset_idx = AB::Expr::from_canonical_usize((1 << self.k) - 1);
         let coset_idx_diff = max_coset_idx - local.coset_idx;
@@ -94,49 +104,50 @@ where
             .when(local.is_enabled - is_not_last_in_query)
             .assert_zero(next.coset_idx);
 
-        NestedForLoopSubAir::<4, 3>.eval(
+        NestedForLoopSubAir.eval(
             builder,
             (
                 (
                     NestedForLoopIoCols {
-                        is_enabled: local.is_enabled.into(),
+                        is_enabled: local.is_enabled,
                         counter: [
-                            local.proof_idx.into(),
-                            local.whir_round.into(),
-                            local.query_idx.into(),
-                            local.coset_idx.into(),
+                            local.proof_idx,
+                            local.whir_round,
+                            local.query_idx,
+                            local.coset_idx,
                         ],
                         is_first: [
-                            local.is_first_in_proof.into(),
-                            local.is_first_in_round.into(),
-                            local.is_first_in_query.into(),
-                            AB::Expr::ONE,
+                            local.is_first_in_proof,
+                            local.is_first_in_round,
+                            local.is_first_in_query,
+                            local.is_enabled,
                         ],
-                    },
+                    }
+                    .map_into(),
                     NestedForLoopIoCols {
-                        is_enabled: next.is_enabled.into(),
+                        is_enabled: next.is_enabled,
                         counter: [
-                            next.proof_idx.into(),
-                            next.whir_round.into(),
-                            next.query_idx.into(),
-                            next.coset_idx.into(),
+                            next.proof_idx,
+                            next.whir_round,
+                            next.query_idx,
+                            next.coset_idx,
                         ],
                         is_first: [
-                            next.is_first_in_proof.into(),
-                            next.is_first_in_round.into(),
-                            next.is_first_in_query.into(),
-                            AB::Expr::ONE,
+                            next.is_first_in_proof,
+                            next.is_first_in_round,
+                            next.is_first_in_query,
+                            next.is_enabled,
                         ],
-                    },
+                    }
+                    .map_into(),
                 ),
                 NestedForLoopAuxCols {
                     is_transition: [
-                        local.is_same_proof,
-                        local.is_same_round,
-                        local.is_same_query,
+                        is_same_proof.clone(),
+                        is_same_round.clone(),
+                        is_same_query.clone(),
                     ],
-                }
-                .map_into(),
+                },
             ),
         );
 
@@ -161,15 +172,19 @@ where
             .when(local.is_first_in_round)
             .assert_eq(local.twiddle, AB::Expr::ONE);
         builder
-            .when(local.is_same_query)
+            .when(is_same_query.clone())
             .assert_eq(next.twiddle, local.twiddle * omega_k);
 
-        assert_array_eq(&mut builder.when(local.is_same_query), local.yi, next.yi);
+        assert_array_eq(
+            &mut builder.when(is_same_query.clone()),
+            local.yi,
+            next.yi,
+        );
         builder
-            .when(local.is_same_query)
+            .when(is_same_query.clone())
             .assert_eq(local.zi, next.zi);
         builder
-            .when(local.is_same_query)
+            .when(is_same_query.clone())
             .assert_eq(local.zi_root, next.zi_root);
 
         self.folding_bus.send(
@@ -302,8 +317,6 @@ pub(crate) fn generate_trace(
             let is_first_in_round = is_first_in_query && query_idx == 0;
             let is_last_in_query = coset_idx + 1 == rows_per_query;
             let is_last_query_in_round = query_idx + 1 == num_queries;
-            let is_same_query = !is_last_in_proof && !is_last_in_query;
-            let is_same_round = !is_last_in_proof && (!is_last_in_query || !is_last_query_in_round);
 
             cols.whir_round = F::from_canonical_usize(whir_round);
             cols.query_idx = F::from_canonical_usize(query_idx);
@@ -313,11 +326,8 @@ pub(crate) fn generate_trace(
                 .unwrap_or_default();
             cols.twiddle = omega_k.exp_u64(coset_idx as u64);
             cols.is_first_in_proof = F::from_bool(is_first_in_proof);
-            cols.is_same_proof = F::from_bool(!is_last_in_proof);
             cols.is_first_in_round = F::from_bool(is_first_in_round);
             cols.is_first_in_query = F::from_bool(is_first_in_query);
-            cols.is_same_round = F::from_bool(is_same_round);
-            cols.is_same_query = F::from_bool(is_same_query);
             cols.zi_root = preflight.whir.zj_roots[whir_round][query_idx];
             cols.value.copy_from_slice(
                 proof.whir_proof.codeword_opened_values[whir_round - 1][query_idx][coset_idx]

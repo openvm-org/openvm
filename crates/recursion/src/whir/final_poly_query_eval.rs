@@ -38,11 +38,6 @@ struct FinalyPolyQueryEvalCols<T> {
     is_first_in_round: T,
     is_first_in_query: T,
     is_first_in_phase: T,
-    // transition flags
-    is_same_proof: T,
-    is_same_round: T,
-    is_same_query: T,
-    is_same_phase: T,
     is_last_round: T,
     is_query_zero: T,
     query_pow: [T; D_EF],
@@ -103,63 +98,82 @@ where
         builder.assert_bool(local.phase_idx);
 
         builder
+            .when(local.is_first_in_proof)
+            .assert_one(local.is_enabled);
+        builder
+            .when(local.is_first_in_round)
+            .assert_one(local.is_enabled);
+        builder
+            .when(local.is_first_in_query)
+            .assert_one(local.is_enabled);
+        builder
+            .when(local.is_first_in_phase)
+            .assert_one(local.is_enabled);
+
+        let is_same_proof = next.is_enabled - next.is_first_in_proof;
+        let is_same_round = next.is_enabled - next.is_first_in_round;
+        let is_same_query = next.is_enabled - next.is_first_in_query;
+        let is_same_phase = next.is_enabled - next.is_first_in_phase;
+
+        builder
             .when(local.phase_idx)
-            .when(local.is_enabled - local.is_same_phase)
+            .when(local.is_enabled - is_same_phase.clone())
             .assert_eq(local.eval_idx, final_poly_phase_len.clone());
 
         builder
             .when(AB::Expr::ONE - local.phase_idx)
-            .when(local.is_enabled - local.is_same_phase)
+            .when(local.is_enabled - is_same_phase.clone())
             .assert_eq(local.eval_idx, eq_phase_len - AB::Expr::ONE);
 
-        NestedForLoopSubAir::<5, 4>.eval(
+        NestedForLoopSubAir.eval(
             builder,
             (
                 (
                     NestedForLoopIoCols {
-                        is_enabled: local.is_enabled.into(),
+                        is_enabled: local.is_enabled,
                         counter: [
-                            local.proof_idx.into(),
-                            local.whir_round.into(),
-                            local.query_idx.into(),
-                            local.phase_idx.into(),
-                            local.eval_idx.into(),
+                            local.proof_idx,
+                            local.whir_round,
+                            local.query_idx,
+                            local.phase_idx,
+                            local.eval_idx,
                         ],
                         is_first: [
-                            local.is_first_in_proof.into(),
-                            local.is_first_in_round.into(),
-                            local.is_first_in_query.into(),
-                            local.is_first_in_phase.into(),
-                            AB::Expr::ONE,
+                            local.is_first_in_proof,
+                            local.is_first_in_round,
+                            local.is_first_in_query,
+                            local.is_first_in_phase,
+                            local.is_enabled,
                         ],
-                    },
+                    }
+                    .map_into(),
                     NestedForLoopIoCols {
-                        is_enabled: next.is_enabled.into(),
+                        is_enabled: next.is_enabled,
                         counter: [
-                            next.proof_idx.into(),
-                            next.whir_round.into(),
-                            next.query_idx.into(),
-                            next.phase_idx.into(),
-                            next.eval_idx.into(),
+                            next.proof_idx,
+                            next.whir_round,
+                            next.query_idx,
+                            next.phase_idx,
+                            next.eval_idx,
                         ],
                         is_first: [
-                            next.is_first_in_proof.into(),
-                            next.is_first_in_round.into(),
-                            next.is_first_in_query.into(),
-                            next.is_first_in_phase.into(),
-                            AB::Expr::ONE,
+                            next.is_first_in_proof,
+                            next.is_first_in_round,
+                            next.is_first_in_query,
+                            next.is_first_in_phase,
+                            next.is_enabled,
                         ],
-                    },
+                    }
+                    .map_into(),
                 ),
                 NestedForLoopAuxCols {
                     is_transition: [
-                        local.is_same_proof,
-                        local.is_same_round,
-                        local.is_same_query,
-                        local.is_same_phase,
+                        is_same_proof.clone(),
+                        is_same_round.clone(),
+                        is_same_query.clone(),
+                        is_same_phase.clone(),
                     ],
-                }
-                .map_into(),
+                },
             ),
         );
 
@@ -170,7 +184,7 @@ where
         );
 
         assert_array_eq(
-            &mut builder.when(local.phase_idx * local.is_same_query),
+            &mut builder.when(local.phase_idx * is_same_query.clone()),
             next.query_pow,
             local.query_pow,
         );
@@ -196,7 +210,8 @@ where
             post_eq_acc.clone(),
         );
         assert_array_eq(
-            &mut builder.when((local.is_enabled - local_is_eq_phase.clone()) * local.is_same_query),
+            &mut builder
+                .when((local.is_enabled - local_is_eq_phase.clone()) * is_same_query.clone()),
             next.eq_acc,
             local.eq_acc,
         );
@@ -211,7 +226,7 @@ where
             ext_field_multiply(local.gamma_eq_acc, eq_1(local.alpha, local.query_pow)),
         );
         assert_array_eq(
-            &mut builder.when((AB::Expr::ONE - local_is_eq_phase.clone()) * local.is_same_query),
+            &mut builder.when((AB::Expr::ONE - local_is_eq_phase.clone()) * is_same_query.clone()),
             next.gamma_eq_acc,
             local.gamma_eq_acc,
         );
@@ -221,18 +236,18 @@ where
             local.gamma,
         );
         assert_array_eq(
-            &mut builder.when(local.is_same_query),
+            &mut builder.when(is_same_query.clone()),
             next.gamma_pow,
             local.gamma_pow,
         );
         assert_array_eq(
-            &mut builder.when(local.is_same_round * next.is_first_in_query),
+            &mut builder.when(is_same_round.clone() * next.is_first_in_query),
             next.gamma_pow,
             ext_field_multiply(local.gamma_pow, local.gamma),
         );
 
         assert_array_eq(
-            &mut builder.when(local.is_same_query),
+            &mut builder.when(is_same_query.clone()),
             next.final_value_acc,
             local.final_value_acc,
         );
@@ -240,16 +255,16 @@ where
             .when(local.is_first_in_round)
             .assert_one(local.is_query_zero);
         builder
-            .when(local.is_same_query)
+            .when(is_same_query.clone())
             .assert_eq(local.is_query_zero, next.is_query_zero);
         builder
             .when(local.query_idx)
             .assert_zero(local.is_query_zero);
         builder
-            .when(local.is_enabled - local.is_same_proof)
+            .when(local.is_enabled - is_same_proof.clone())
             .assert_one(local.is_last_round);
         builder
-            .when(local.is_same_round)
+            .when(is_same_round.clone())
             .assert_eq(local.is_last_round, next.is_last_round);
         builder
             .when(local.whir_round - AB::Expr::from_canonical_usize(self.num_whir_rounds - 1))
@@ -258,8 +273,8 @@ where
         builder.assert_bool(local.do_carry);
         builder.when(local.is_enabled).assert_eq(
             local.do_carry,
-            (AB::Expr::ONE - local.is_same_query)
-                * local.is_same_proof
+            (AB::Expr::ONE - is_same_query.clone())
+                * is_same_proof.clone()
                 * (AB::Expr::ONE - local.is_query_zero * local.is_last_round),
         );
 
@@ -272,7 +287,7 @@ where
             [AB::F::ZERO; 4],
         );
         assert_array_eq(
-            &mut builder.when(local.is_same_query),
+            &mut builder.when(is_same_query.clone()),
             next.horner_acc,
             post_horner_acc.clone(),
         );
@@ -285,8 +300,8 @@ where
         );
         assert_array_eq(
             &mut builder.when(
-                (AB::Expr::ONE - local.is_same_query)
-                    * local.is_same_proof
+                (AB::Expr::ONE - is_same_query.clone())
+                    * is_same_proof.clone()
                     * (local.is_query_zero * local.is_last_round),
             ),
             next.final_value_acc,
@@ -323,11 +338,11 @@ where
             local.is_first_in_round,
         );
         assert_array_eq(
-            &mut builder.when(local.is_same_round),
+            &mut builder.when(is_same_round.clone()),
             local.gamma,
             next.gamma,
         );
-        let is_last = local.is_enabled - local.is_same_proof;
+        let is_last = local.is_enabled - is_same_proof.clone();
         let final_value = ext_field_add(local.final_value_acc, gamma_eq_post);
         self.final_poly_query_eval_bus.receive(
             builder,
@@ -500,10 +515,6 @@ pub(crate) fn generate_trace(
             cols.is_first_in_round = F::from_bool(is_first_in_round);
             cols.is_first_in_query = F::from_bool(is_first_in_query);
             cols.is_first_in_phase = F::from_bool(is_first_in_phase);
-            cols.is_same_proof = F::from_bool(is_same_proof);
-            cols.is_same_round = F::from_bool(is_same_round);
-            cols.is_same_query = F::from_bool(is_same_query);
-            cols.is_same_phase = F::from_bool(is_same_phase);
             cols.is_query_zero = F::from_bool(record.query_idx == 0);
             cols.is_last_round = F::from_bool(whir_round + 1 == num_whir_rounds);
 
