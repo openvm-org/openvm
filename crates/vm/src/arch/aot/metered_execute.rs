@@ -166,39 +166,41 @@ where
         let set_pc_ptr = format!("{:p}", set_pc_shim::<F, MeteredCtx> as *const ());
         let should_suspend_ptr = format!("{:p}", should_suspend_shim::<F, MeteredCtx> as *const ()); //needs state_ptr
                                                                                                      // need to pass in config: SystemConfig
+
+        // before, 1 too high, now 1 too low for instret
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
             /* Preprocessing step, to check if we should suspend or not */
             asm_str += &format!("asm_execute_pc_{pc}:\n");
 
-            asm_str += &format!("    dec {REG_INSTRET_END}\n"); //if its > 0, we decrement
-            asm_str += &sync_reg_to_instret_until_end();
-            asm_str += &format!("    jg continue_execution_{pc}\n");
+            // asm_str += &sync_reg_to_instret_until_end();
+            asm_str += &format!("    cmp {REG_INSTRET_END}, 0\n");
+            asm_str += &format!("    jne continue_execution_{pc}\n"); // if instret > 0, obv false, so we jump to continue and decrement
 
             asm_str += &Self::xmm_to_rv32_regs();
             asm_str += &Self::push_address_space_start();
             asm_str += &Self::push_internal_registers();
-            // asm_str += &sync_reg_to_instret_until_end();
+            asm_str += &sync_reg_to_instret_until_end();
             asm_str += &format!("    movabs {REG_D}, {should_suspend_ptr}\n");
             asm_str += &format!("    mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
             asm_str += &format!("    call {REG_D}\n");
-            asm_str += &format!("    test al, al\n"); //if its false, double subtract, add back
+            asm_str += &format!("    test al, al\n");
 
             asm_str += &Self::pop_internal_registers();
             asm_str += &Self::pop_address_space_start();
             asm_str += &sync_instret_until_end_to_reg();
             asm_str += &Self::rv32_regs_to_xmm();
             asm_str += &format!("    jnz asm_run_end_{pc}\n");
-            asm_str += &format!("    inc {REG_INSTRET_END}\n"); //if its false, double subtract, add back
 
             // continue with execution, as should_suspend returned false
             asm_str += &format!("continue_execution_{pc}:\n");
+            asm_str += &format!("    dec {REG_INSTRET_END}\n");
 
             if instruction.opcode.as_usize() == 0 {
                 // terminal opcode has no associated executor, so can handle with default fallback
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
-                // asm_str += &sync_reg_to_instret_until_end();
+                asm_str += &sync_reg_to_instret_until_end();
                 asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
                 asm_str += &format!("   mov {REG_SECOND_ARG}, {REG_INSNS_PTR}\n");
                 asm_str += &format!("   mov {REG_THIRD_ARG}, {pc}\n");
@@ -247,7 +249,7 @@ where
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
-                // asm_str += &sync_reg_to_instret_until_end();
+                asm_str += &sync_reg_to_instret_until_end();
                 asm_str += "    mov rdi, rbx\n";
                 asm_str += "    mov rsi, rbp\n";
                 asm_str += &format!("    mov rdx, {pc}\n");
