@@ -170,24 +170,25 @@ where
             /* Preprocessing step, to check if we should suspend or not */
             asm_str += &format!("asm_execute_pc_{pc}:\n");
 
-            asm_str += &format!("    dec {REG_INSTRET_END}\n");
-            asm_str += &format!("    jnz continue_execution_{pc}\n"); // ALTERNATIVEly: change this to check if value is 1
+            asm_str += &format!("    dec {REG_INSTRET_END}\n"); //if its > 0, we decrement
+            asm_str += &sync_reg_to_instret_until_end();
+            asm_str += &format!("    jg continue_execution_{pc}\n");
 
             asm_str += &Self::xmm_to_rv32_regs();
             asm_str += &Self::push_address_space_start();
             asm_str += &Self::push_internal_registers();
-            asm_str += &format!("    inc {REG_INSTRET_END}\n"); // extern function, decrements by 1;
-            asm_str += &sync_reg_to_instret_until_end();
+            // asm_str += &sync_reg_to_instret_until_end();
             asm_str += &format!("    movabs {REG_D}, {should_suspend_ptr}\n");
             asm_str += &format!("    mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
             asm_str += &format!("    call {REG_D}\n");
-            asm_str += &format!("    test al, al\n");
+            asm_str += &format!("    test al, al\n"); //if its false, double subtract, add back
 
             asm_str += &Self::pop_internal_registers();
             asm_str += &Self::pop_address_space_start();
             asm_str += &sync_instret_until_end_to_reg();
             asm_str += &Self::rv32_regs_to_xmm();
             asm_str += &format!("    jnz asm_run_end_{pc}\n");
+            asm_str += &format!("    inc {REG_INSTRET_END}\n"); //if its false, double subtract, add back
 
             // continue with execution, as should_suspend returned false
             asm_str += &format!("continue_execution_{pc}:\n");
@@ -197,7 +198,7 @@ where
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
-                asm_str += &sync_reg_to_instret_until_end();
+                // asm_str += &sync_reg_to_instret_until_end();
                 asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
                 asm_str += &format!("   mov {REG_SECOND_ARG}, {REG_INSNS_PTR}\n");
                 asm_str += &format!("   mov {REG_THIRD_ARG}, {pc}\n");
@@ -246,7 +247,7 @@ where
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
-                asm_str += &sync_reg_to_instret_until_end();
+                // asm_str += &sync_reg_to_instret_until_end();
                 asm_str += "    mov rdi, rbx\n";
                 asm_str += "    mov rsi, rbp\n";
                 asm_str += &format!("    mov rdx, {pc}\n");
