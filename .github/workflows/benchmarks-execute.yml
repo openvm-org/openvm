@@ -40,6 +40,7 @@ jobs:
 
     env:
       CODSPEED_RUNNER_MODE: walltime
+      CODSPEED_PROFILING: "false"
 
     steps:
       - uses: runs-on/action@v2
