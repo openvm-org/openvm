@@ -73,6 +73,7 @@ const APP_PROGRAMS: &[&str] = &[
     "fibonacci_iterative",
     "quicksort",
     "bubblesort",
+    "factorial_iterative_u256",
     "revm_snailtracer",
     "keccak256",
     "keccak256_iter",
@@ -81,6 +82,7 @@ const APP_PROGRAMS: &[&str] = &[
     "revm_transfer",
     "pairing",
 ];
+
 #[allow(dead_code)]
 const LEAF_VERIFIER_PROGRAMS: &[&str] = &["kitchen-sink"];
 #[allow(dead_code)]

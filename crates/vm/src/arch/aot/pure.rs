@@ -174,21 +174,26 @@ where
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
 
-                asm_str += &executor.call_extern_handler(pc);
+                asm_str += "    mov rdi, rbx\n";
+                asm_str += "    mov rsi, rbp\n";
+                asm_str += &format!("    mov rdx, {pc}\n");
+                asm_str += &format!("    mov rax, {extern_handler_ptr}\n");
+                asm_str += "    call rax\n";
 
-                asm_str += &format!("   mov {REG_PC}, {REG_RETURN_VAL}\n");
-                asm_str += &format!("   AND {REG_RETURN_VAL}, 1\n");
-                asm_str += &format!("   cmp {REG_RETURN_VAL}, 1\n");
-
-                asm_str += &Self::pop_internal_registers();
+                asm_str += "    mov r13, rax\n"; // move the return value of the extern_handler into r13
+                asm_str += "    AND rax, 1\n"; // check if the return value is 1
+                asm_str += "    cmp rax, 1\n"; // compare the return value with 1
+                asm_str += &Self::pop_internal_registers(); // pop the internal registers from the stack
                 asm_str += &Self::pop_address_space_start();
-                asm_str += &Self::rv32_regs_to_xmm();
+                asm_str += &Self::rv32_regs_to_xmm(); // read the memory from the memory location of the RV32 registers in `GuestMemory`
+                                                      // registers, to the appropriate XMM registers
                 asm_str += &format!("   je asm_run_end_{pc}\n");
 
-                asm_str += &format!("   lea {REG_D}, [rip + map_pc_base]\n");
-                asm_str += &format!("   movsxd {REG_PC}, [{REG_D} + {REG_PC}]\n");
-                asm_str += &format!("   add {REG_PC}, {REG_D}\n");
-                asm_str += &format!("   jmp {REG_PC}\n");
+                asm_str += "    lea rdx, [rip + map_pc_base]\n"; // load the base address of the map_pc_base section
+                asm_str += "    movsxd rcx, [rdx + r13]\n"; // load the offset of the next instruction (r13 is the next pc)
+                asm_str += "    add rcx, rdx\n"; // add the base address and the offset
+                asm_str += "    jmp rcx\n"; // jump to the next instruction (rcx is the next instruction)
+                asm_str += "\n";
             }
         }
 
