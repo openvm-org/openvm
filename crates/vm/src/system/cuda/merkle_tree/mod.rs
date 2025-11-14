@@ -183,10 +183,9 @@ impl MemoryMerkleSubTree {
 ///
 /// Execution:
 /// - Subtrees are built asynchronously on individual CUDA streams.
-/// - The final root is computed after all subtrees complete, on a shared stream.
+/// - The final root is computed after all subtrees complete, on the default stream.
 /// - `CudaEvent`s are used to synchronize subtree completion.
 pub struct MemoryMerkleTree {
-    pub stream: Arc<CudaStream>,
     pub subtrees: Vec<MemoryMerkleSubTree>,
     pub top_roots: DeviceBuffer<H>,
     zero_hash: DeviceBuffer<H>,
@@ -234,7 +233,6 @@ impl MemoryMerkleTree {
         }
 
         Self {
-            stream: Arc::new(CudaStream::new().unwrap()),
             subtrees: Vec::new(),
             top_roots,
             height: label_max_bits + log2_ceil_usize(num_addr_spaces),
@@ -273,18 +271,17 @@ impl MemoryMerkleTree {
 
     /// Finalizes the Merkle tree by collecting all subtree roots and computing the final root.
     /// Waits for all subtrees to complete and then performs the final hash operation.
-    pub fn finalize(&self) {
+    pub fn finalize(&mut self) {
+        // Default stream waits for all subtrees to complete
         for subtree in self.subtrees.iter() {
-            self.stream.wait(subtree.event.as_ref().unwrap()).unwrap();
+            default_stream_wait(
+                subtree
+                    .event
+                    .as_ref()
+                    .expect("Subtree build event does not exist"),
+            )
+            .unwrap();
         }
-
-        let we_can_gather_bufs_event = CudaEvent::new().unwrap();
-        unsafe {
-            we_can_gather_bufs_event
-                .record(self.stream.as_raw())
-                .unwrap();
-        }
-        default_stream_wait(&we_can_gather_bufs_event).unwrap();
 
         let roots: Vec<usize> = self
             .subtrees
@@ -292,23 +289,16 @@ impl MemoryMerkleTree {
             .map(|subtree| subtree.buf.as_ptr() as usize)
             .collect();
         let d_roots = roots.to_device().unwrap();
-        let to_device_event = CudaEvent::new().unwrap();
-        unsafe {
-            to_device_event.record(cudaStreamPerThread).unwrap();
-        }
-        self.stream.wait(&to_device_event).unwrap();
 
         unsafe {
             finalize_merkle_tree(
                 &d_roots,
                 &self.top_roots,
                 self.subtrees.len(),
-                self.stream.as_raw(),
+                cudaStreamPerThread,
             )
             .unwrap();
         }
-
-        self.stream.synchronize().unwrap();
     }
 
     /// Drops all massive buffers to free memory. Used at the end of an execution segment.

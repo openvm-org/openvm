@@ -239,7 +239,6 @@ impl Drop for PersistentMemoryInventoryGPU {
         for s in &self.merkle_tree.subtrees {
             s.stream.synchronize().unwrap();
         }
-        self.merkle_tree.stream.synchronize().unwrap();
         self.merkle_tree.drop_subtrees();
         self.initial_memory.clear();
     }
