@@ -170,12 +170,12 @@ where
             /* Preprocessing step, to check if we should suspend or not */
             asm_str += &format!("asm_execute_pc_{pc}:\n");
 
-            asm_str += &format!("    cmp {REG_INSTRET_END}, 0\n");
-            asm_str += &format!("    je instret_zero_{pc}\n"); // if instret == 0, jump to slow path
-            asm_str += &format!("    dec {REG_INSTRET_END}\n");
+            asm_str += &format!("    sub {REG_INSTRET_END}, 1\n");
+            asm_str += &format!("    jc instret_zero_{pc}\n");
             asm_str += &format!("    jmp execute_instruction_{pc}\n");
 
             asm_str += &format!("instret_zero_{pc}:\n");
+            asm_str += &format!("    inc {REG_INSTRET_END}\n");
             asm_str += "    call asm_handle_segment_check\n";
             asm_str += "    test al, al\n";
             asm_str += &format!("    jnz asm_run_end_{pc}\n");
