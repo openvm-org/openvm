@@ -9,7 +9,9 @@ use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, prover_backend::GpuBac
 use openvm_cuda_common::{
     copy::{cuda_memcpy, MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,
-    stream::{cudaStreamPerThread, default_stream_wait, CudaEvent, CudaStream},
+    stream::{
+        cudaStreamPerThread, current_stream_sync, default_stream_wait, CudaEvent, CudaStream,
+    },
 };
 use openvm_stark_backend::{
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
@@ -304,8 +306,24 @@ impl MemoryMerkleTree {
     }
 
     /// Drops all massive buffers to free memory. Used at the end of an execution segment.
+    ///
+    /// Caution: this method destroys all subtree streams and events. If events have not been
+    /// manually removed after completion, they are enqueued to the default stream and then a forced
+    /// synchronization is performed on the default stream. The forced synchronization is avoided if
+    /// all events are manually removed when they are known to be completed (e.g., after some other
+    /// synchronization like D2H transfer).
     pub fn drop_subtrees(&mut self) {
-        self.subtrees = Vec::new();
+        let mut needs_sync = false;
+        for subtree in self.subtrees.iter() {
+            if let Some(event) = subtree.event.as_ref() {
+                needs_sync = true;
+                default_stream_wait(event).unwrap();
+            }
+        }
+        if needs_sync {
+            current_stream_sync().unwrap();
+        }
+        self.subtrees.clear();
     }
 
     /// Updates the tree and returns the merkle trace.
@@ -316,6 +334,11 @@ impl MemoryMerkleTree {
         empty_touched_blocks: bool,
     ) -> AirProvingContext<GpuBackend> {
         let mut public_values = self.top_roots.to_host().unwrap()[0].to_vec();
+        // .to_host() calls cudaEventSynchronize on the D2H memcpy, which also means all subtree
+        // events are now completed, so we can clear up the events.
+        for subtree in &mut self.subtrees {
+            subtree.event = None;
+        }
         let merkle_trace = {
             let width = MemoryMerkleCols::<u8, DIGEST_WIDTH>::width();
             let padded_height = next_power_of_two_or_zero(unpadded_height);
@@ -386,6 +409,12 @@ impl MemoryMerkleTree {
                     })
                     .sum::<usize>()
         }
+    }
+}
+
+impl Drop for MemoryMerkleTree {
+    fn drop(&mut self) {
+        self.drop_subtrees();
     }
 }
 
