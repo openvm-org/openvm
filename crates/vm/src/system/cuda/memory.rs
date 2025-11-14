@@ -203,11 +203,12 @@ impl MemoryInventoryGPU {
                 }
                 mem.tracing_info("merkle update");
                 persistent.merkle_tree.finalize();
-                Some(persistent.merkle_tree.update_with_touched_blocks(
+                let merkle_tree_ctx = persistent.merkle_tree.update_with_touched_blocks(
                     unpadded_merkle_height,
                     &d_touched_memory,
                     empty,
-                ))
+                );
+                Some(merkle_tree_ctx)
             }
             TouchedMemory::Volatile(partition) => {
                 assert!(self.persistent.is_none(), "TouchedMemory enum mismatch");
