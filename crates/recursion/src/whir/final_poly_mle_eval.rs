@@ -320,10 +320,5 @@ pub(crate) fn generate_trace(
         global_row += row_in_proof;
     }
 
-    for row in trace.chunks_mut(width).skip(total_valid_rows) {
-        let cols: &mut FinalyPolyMleEvalCols<F> = row.borrow_mut();
-        cols.proof_idx = F::from_canonical_usize(proofs.len());
-    }
-
     RowMajorMatrix::new(trace, width)
 }
