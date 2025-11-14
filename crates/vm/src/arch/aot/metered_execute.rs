@@ -252,7 +252,6 @@ where
                 asm_str += "    cmp rax, 1\n"; // compare the return value with 1
                 asm_str += &Self::pop_internal_registers(); // pop the internal registers from the stack
                 asm_str += &Self::pop_address_space_start();
-                // asm_str += &sync_instret_until_end_to_reg();
                 asm_str += &Self::rv32_regs_to_xmm(); // read the memory from the memory location of the RV32 registers in `GuestMemory`
                                                       // registers, to the appropriate XMM registers
                 asm_str += &format!("   je asm_run_end_{pc}\n");
