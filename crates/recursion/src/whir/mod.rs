@@ -5,6 +5,8 @@ use itertools::{Itertools, izip};
 use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdicField};
+#[cfg(not(debug_assertions))]
+use p3_maybe_rayon::prelude::*;
 use p3_symmetric::Permutation;
 use stark_backend_v2::{
     EF, F, SystemParams,
@@ -767,11 +769,13 @@ mod cuda_tracegen {
     use cuda_backend_v2::{GpuBackendV2, transport_matrix_h2d_col_major};
     use itertools::Itertools;
     use openvm_cuda_common::d_buffer::DeviceBuffer;
+    #[cfg(debug_assertions)]
     use p3_maybe_rayon::prelude::*;
 
     use super::*;
     use crate::cuda::{
-        GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr, vk::VerifyingKeyGpu
+        GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr,
+        vk::VerifyingKeyGpu,
     };
 
     pub(in crate::whir) struct WhirBlobGpu {
@@ -894,7 +898,8 @@ mod cuda_tracegen {
                 ),
                 _ => {
                     // Fall back to CPU impl.
-                    let mat = chip.generate_trace(&child_vk.cpu, &proofs_cpu, &preflights_cpu, &blob);
+                    let mat =
+                        chip.generate_trace(&child_vk.cpu, &proofs_cpu, &preflights_cpu, &blob);
                     transport_matrix_h2d_col_major(&mat).unwrap()
                 }
             })
