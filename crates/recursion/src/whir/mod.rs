@@ -5,8 +5,6 @@ use itertools::{Itertools, izip};
 use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdicField};
-#[cfg(not(debug_assertions))]
-use p3_maybe_rayon::prelude::*;
 use p3_symmetric::Permutation;
 use stark_backend_v2::{
     EF, F, SystemParams,
@@ -45,7 +43,6 @@ use crate::{
 };
 
 mod bus;
-
 mod final_poly_mle_eval;
 mod final_poly_query_eval;
 mod folding;
@@ -54,6 +51,9 @@ mod non_initial_opened_values;
 mod query;
 mod sumcheck;
 mod whir_round;
+
+#[cfg(feature = "cuda")]
+mod cuda_abi;
 
 pub struct WhirModule {
     params: SystemParams,
@@ -370,6 +370,11 @@ impl WhirModule {
 
 struct WhirBlobCpu {
     initial_opened_values_records: Vec<InitialOpenedValueRecord>,
+    iov_rows_per_proof_psums: Vec<usize>,
+    commits_per_proof_psums: Vec<usize>,
+    stacking_chunks_psums: Vec<usize>,
+    stacking_widths_psums: Vec<usize>,
+    mu_pows: Vec<EF>, // flattened over proofs
 }
 
 impl AirModule for WhirModule {
@@ -474,8 +479,8 @@ impl WhirModule {
     fn generate_blob(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
-        preflights: &[Preflight],
+        proofs: &[&Proof],
+        preflights: &[&Preflight],
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
     ) -> WhirBlobCpu {
         // TODO: Move more stuff here. (Out of preflight and redundant logic in generate_trace
@@ -493,11 +498,19 @@ impl WhirModule {
         let perm = poseidon2_perm();
 
         let mut initial_opened_values_records = vec![];
-        let mut initial_opened_values_rows_per_proof = vec![0; proofs.len()];
 
-        for (proof_idx, (proof, preflight)) in zip(proofs, preflights).enumerate() {
-            let mu = preflight.stacking.stacking_batching_challenge;
+        let mut iov_rows_per_proof_psums = vec![0];
+        let mut commits_per_proof_psums = vec![0];
 
+        let mut stacking_chunks_psums = vec![0];
+        let mut stacking_widths_psums = vec![0];
+
+        let mut mu_pows = vec![];
+
+        let mut total_iov_rows = 0;
+        let mut total_commits = 0;
+
+        for (proof, preflight) in zip(proofs, preflights) {
             exp_bits_len_gen.add_requests(
                 preflight
                     .whir
@@ -508,7 +521,7 @@ impl WhirModule {
             );
 
             let mut log_rs_domain_size = l_skip + n_stack + log_blowup;
-            let num_whir_rounds = preflight.whir.pow_samples.len();
+            let num_whir_rounds = self.params.num_whir_rounds();
             for round_queries in preflight
                 .whir
                 .queries
@@ -525,29 +538,43 @@ impl WhirModule {
                 log_rs_domain_size -= 1;
             }
 
-            let num_total_stacking_cols: usize = proof
-                .stacking_proof
-                .stacking_openings
-                .iter()
-                .map(|opening| opening.len())
-                .sum();
-            let mu_pows = mu.powers().take(num_total_stacking_cols).collect_vec();
+            let mut total_width_for_proof = 0;
+            let mut total_chunks_for_proof = 0;
+
+            let num_commits_for_proof = proof.whir_proof.initial_round_opened_rows.len();
+
+            for openings_per_commit in proof.whir_proof.initial_round_opened_rows.iter() {
+                let width = openings_per_commit[0][0].len();
+                let chunks = width.div_ceil(CHUNK);
+
+                total_width_for_proof += width;
+                total_chunks_for_proof += chunks;
+
+                let last_width = *stacking_widths_psums.last().unwrap();
+                stacking_widths_psums.push(last_width + width);
+
+                let last_chunks = *stacking_chunks_psums.last().unwrap();
+                stacking_chunks_psums.push(last_chunks + chunks);
+            }
+            total_commits += num_commits_for_proof;
+            commits_per_proof_psums.push(total_commits);
+
+            total_iov_rows += (total_chunks_for_proof * num_whir_queries) << k_whir;
+            iov_rows_per_proof_psums.push(total_iov_rows);
+
+            let mu = preflight.stacking.stacking_batching_challenge;
+            let mu_pow_offset = mu_pows.len();
+            mu_pows.extend(mu.powers().take(total_width_for_proof));
 
             for query_idx in 0..num_whir_queries {
                 let mut codeword_vals = EF::zero_vec(1 << k_whir);
                 for (coset_idx, codeword_val) in codeword_vals.iter_mut().enumerate() {
                     let mut base = 0;
-                    for (commit_idx, opened_rows_per_query) in proof
-                        .whir_proof
-                        .initial_round_opened_rows
-                        .iter()
-                        .enumerate()
-                    {
+                    for opened_rows_per_query in proof.whir_proof.initial_round_opened_rows.iter() {
                         let opened_rows = &opened_rows_per_query[query_idx];
 
-                        let width = proof.stacking_proof.stacking_openings[commit_idx].len();
+                        let width = opened_rows[0].len();
                         let num_chunks = width.div_ceil(CHUNK);
-                        initial_opened_values_rows_per_proof[proof_idx] += num_chunks;
 
                         let mut state = [F::ZERO; WIDTH];
                         for chunk_idx in 0..num_chunks {
@@ -562,20 +589,14 @@ impl WhirModule {
                             perm.permute_mut(&mut state);
 
                             initial_opened_values_records.push(InitialOpenedValueRecord {
-                                proof_idx,
-                                query_idx,
-                                commit_idx,
-                                chunk_idx,
-                                chunk_len,
-                                coset_idx,
-                                mu_pow: mu_pows[base + chunk_start],
                                 codeword_slice_val_acc: *codeword_val,
                                 pre_state,
                                 post_state: state,
                             });
 
                             for (offset, &val) in opened_chunk.iter().enumerate() {
-                                *codeword_val += mu_pows[base + chunk_start + offset] * val;
+                                *codeword_val +=
+                                    mu_pows[mu_pow_offset + base + chunk_start + offset] * val;
                             }
                         }
                         base += width;
@@ -585,6 +606,11 @@ impl WhirModule {
         }
         WhirBlobCpu {
             initial_opened_values_records,
+            iov_rows_per_proof_psums,
+            commits_per_proof_psums,
+            stacking_chunks_psums,
+            stacking_widths_psums,
+            mu_pows,
         }
     }
 }
@@ -600,7 +626,9 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for WhirModule {
         preflights: &[Preflight],
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
-        let blob = self.generate_blob(child_vk, proofs, preflights, exp_bits_len_gen);
+        let proofs = proofs.iter().collect_vec();
+        let preflights = preflights.iter().collect_vec();
+        let blob = self.generate_blob(child_vk, &proofs, &preflights, exp_bits_len_gen);
 
         let chips = [
             WhirModuleChip::WhirRound,
@@ -616,7 +644,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for WhirModule {
         let iter = chips.iter();
         #[cfg(not(debug_assertions))]
         let iter = chips.par_iter();
-        iter.map(|chip| chip.generate_trace(child_vk, proofs, preflights, &blob))
+        iter.map(|chip| chip.generate_trace(child_vk, &proofs, &preflights, &blob))
             .map(AirProvingContextV2::simple_no_pis)
             .collect()
     }
@@ -701,8 +729,8 @@ impl WhirModuleChip {
     fn generate_trace(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
-        preflights: &[Preflight],
+        proofs: &[&Proof],
+        preflights: &[&Preflight],
         blob: &WhirBlobCpu,
     ) -> ColMajorMatrix<F> {
         use WhirModuleChip::*;
@@ -715,6 +743,11 @@ impl WhirModuleChip {
                 proofs,
                 preflights,
                 &blob.initial_opened_values_records,
+                &blob.iov_rows_per_proof_psums,
+                &blob.commits_per_proof_psums,
+                &blob.stacking_chunks_psums,
+                &blob.stacking_widths_psums,
+                &blob.mu_pows,
             ),
             NonInitialOpenedValues => {
                 non_initial_opened_values::generate_trace(child_vk, proofs, preflights)
@@ -733,11 +766,94 @@ impl WhirModuleChip {
 mod cuda_tracegen {
     use cuda_backend_v2::{GpuBackendV2, transport_matrix_h2d_col_major};
     use itertools::Itertools;
+    use openvm_cuda_common::d_buffer::DeviceBuffer;
+    use p3_maybe_rayon::prelude::*;
 
     use super::*;
     use crate::cuda::{
-        GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu,
+        GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr, vk::VerifyingKeyGpu
     };
+
+    pub(in crate::whir) struct WhirBlobGpu {
+        // Currently only contains round 0.
+        pub zis: DeviceBuffer<F>,
+        // Currently only contains round 0.
+        pub zi_roots: DeviceBuffer<F>,
+        // Currently only contains round 0.
+        pub yis: DeviceBuffer<EF>,
+        pub raw_queries: DeviceBuffer<F>,
+        pub initial_opened_values_records: DeviceBuffer<InitialOpenedValueRecord>,
+        pub iov_rows_per_proof_psums: DeviceBuffer<usize>,
+        pub commits_per_proof_psums: DeviceBuffer<usize>,
+        pub stacking_chunks_psums: DeviceBuffer<usize>,
+        pub stacking_widths_psums: DeviceBuffer<usize>,
+        pub mus: DeviceBuffer<EF>,
+        pub mu_pows: DeviceBuffer<EF>,
+    }
+
+    impl WhirBlobGpu {
+        // TODO: Receive PreflightGPU?
+        fn new(preflights: &[&Preflight], blob: &WhirBlobCpu) -> Self {
+            let mus = to_device_or_nullptr(
+                &preflights
+                    .iter()
+                    .map(|preflight| preflight.stacking.stacking_batching_challenge)
+                    .collect_vec(),
+            )
+            .unwrap();
+            let zis = to_device_or_nullptr(
+                &preflights
+                    .iter()
+                    .flat_map(|preflight| preflight.whir.zjs[0].iter().copied())
+                    .collect_vec(),
+            )
+            .unwrap();
+            let zi_roots = to_device_or_nullptr(
+                &preflights
+                    .iter()
+                    .flat_map(|preflight| preflight.whir.zj_roots[0].iter().copied())
+                    .collect_vec(),
+            )
+            .unwrap();
+            let yis = to_device_or_nullptr(
+                &preflights
+                    .iter()
+                    .flat_map(|preflight| preflight.whir.yjs[0].iter().copied())
+                    .collect_vec(),
+            )
+            .unwrap();
+            let raw_queries = to_device_or_nullptr(
+                &preflights
+                    .iter()
+                    .flat_map(|preflight| preflight.whir.queries.iter().copied())
+                    .collect_vec(),
+            )
+            .unwrap();
+            let iov_rows_per_proof_psums =
+                to_device_or_nullptr(&blob.iov_rows_per_proof_psums).unwrap();
+            let commits_per_proof_psums =
+                to_device_or_nullptr(&blob.commits_per_proof_psums).unwrap();
+            let stacking_chunks_psums = to_device_or_nullptr(&blob.stacking_chunks_psums).unwrap();
+            let stacking_widths_psums = to_device_or_nullptr(&blob.stacking_widths_psums).unwrap();
+            let mu_pows = to_device_or_nullptr(&blob.mu_pows).unwrap();
+            let initial_opened_values_records =
+                to_device_or_nullptr(&blob.initial_opened_values_records).unwrap();
+
+            WhirBlobGpu {
+                zis,
+                zi_roots,
+                yis,
+                raw_queries,
+                initial_opened_values_records,
+                iov_rows_per_proof_psums,
+                commits_per_proof_psums,
+                stacking_chunks_psums,
+                stacking_widths_psums,
+                mus,
+                mu_pows,
+            }
+        }
+    }
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for WhirModule {
         type ModuleSpecificCtx = ExpBitsLenTraceGenerator;
@@ -749,26 +865,41 @@ mod cuda_tracegen {
             preflights: &[PreflightGpu],
             exp_bits_len_gen: &ExpBitsLenTraceGenerator,
         ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
-            // default hybrid implementation:
-            let ctxs_cpu = TraceGenModule::<GlobalCtxCpu, CpuBackendV2>::generate_proving_ctxs(
-                self,
-                &child_vk.cpu,
-                &proofs.iter().map(|proof| proof.cpu.clone()).collect_vec(),
-                &preflights
-                    .iter()
-                    .map(|preflight| preflight.cpu.clone())
-                    .collect_vec(),
-                exp_bits_len_gen,
-            );
-            ctxs_cpu
-                .into_iter()
-                .map(|ctx| {
-                    assert!(ctx.cached_mains.is_empty());
-                    AirProvingContextV2::simple_no_pis(
-                        transport_matrix_h2d_col_major(&ctx.common_main).unwrap(),
-                    )
-                })
-                .collect()
+            let proofs_cpu = &proofs.iter().map(|proof| &proof.cpu).collect_vec();
+            let preflights_cpu = &preflights
+                .iter()
+                .map(|preflight| &preflight.cpu)
+                .collect_vec();
+
+            let blob =
+                self.generate_blob(&child_vk.cpu, proofs_cpu, preflights_cpu, exp_bits_len_gen);
+            let blob_gpu = WhirBlobGpu::new(preflights_cpu, &blob);
+
+            [
+                WhirModuleChip::WhirRound,
+                WhirModuleChip::Sumcheck,
+                WhirModuleChip::Query,
+                WhirModuleChip::InitialOpenedValues,
+                WhirModuleChip::NonInitialOpenedValues,
+                WhirModuleChip::Folding,
+                WhirModuleChip::FinalPolyMleEval,
+                WhirModuleChip::FinalPolyQueryEval,
+            ]
+            .par_iter()
+            .map(|chip| match chip {
+                WhirModuleChip::InitialOpenedValues => initial_opened_values::cuda::generate_trace(
+                    proofs.len(),
+                    &blob_gpu,
+                    child_vk.system_params,
+                ),
+                _ => {
+                    // Fall back to CPU impl.
+                    let mat = chip.generate_trace(&child_vk.cpu, &proofs_cpu, &preflights_cpu, &blob);
+                    transport_matrix_h2d_col_major(&mat).unwrap()
+                }
+            })
+            .map(|mat| AirProvingContextV2::simple_no_pis(mat))
+            .collect()
         }
     }
 }

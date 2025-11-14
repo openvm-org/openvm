@@ -163,8 +163,8 @@ where
 #[tracing::instrument(name = "generate_trace(WhirFoldingAir)", skip_all)]
 pub(crate) fn generate_trace(
     mvk: &MultiStarkVerifyingKeyV2,
-    _proofs: &[Proof],
-    preflights: &[Preflight],
+    _proofs: &[&Proof],
+    preflights: &[&Preflight],
 ) -> RowMajorMatrix<F> {
     let params = mvk.inner.params;
 

@@ -19,7 +19,7 @@ impl GlobalTraceGenCtx for GlobalCtxGpu {
     type PreflightRecords = [PreflightGpu];
 }
 
-fn to_device_or_nullptr<T>(h2d: &[T]) -> Result<DeviceBuffer<T>, MemCopyError> {
+pub fn to_device_or_nullptr<T>(h2d: &[T]) -> Result<DeviceBuffer<T>, MemCopyError> {
     if h2d.is_empty() {
         Ok(DeviceBuffer::new())
     } else {
