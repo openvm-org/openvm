@@ -119,7 +119,8 @@ where
                             local.is_first_in_commit,
                             local.flags[0],
                         ],
-                    }.map_into(),
+                    }
+                    .map_into(),
                     NestedForLoopIoCols {
                         is_enabled: next.flags[0],
                         counter: [
@@ -136,7 +137,8 @@ where
                             next.is_first_in_commit,
                             next.flags[0],
                         ],
-                    }.map_into(),
+                    }
+                    .map_into(),
                 ),
                 NestedForLoopAuxCols {
                     is_transition: [
@@ -145,7 +147,7 @@ where
                         is_same_coset_idx.clone(),
                         is_same_commit.clone(),
                     ],
-                }
+                },
             ),
         );
 
@@ -432,14 +434,6 @@ pub(crate) fn generate_trace(
             }
             cols.pre_state = record.pre_state;
             cols.post_state = record.post_state;
-        });
-
-    trace
-        .par_chunks_exact_mut(width)
-        .skip(num_valid_rows)
-        .for_each(|row| {
-            let cols: &mut InitialOpenedValuesCols<F> = row.borrow_mut();
-            cols.proof_idx = F::from_canonical_usize(proofs.len());
         });
 
     RowMajorMatrix::new(trace, width)

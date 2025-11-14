@@ -541,13 +541,5 @@ pub(crate) fn generate_trace(
                 .copy_from_slice(record.horner_acc.as_base_slice());
         });
 
-    trace
-        .par_chunks_exact_mut(width)
-        .skip(total_valid_rows)
-        .for_each(|row| {
-            let cols: &mut FinalyPolyQueryEvalCols<F> = row.borrow_mut();
-            cols.proof_idx = F::from_canonical_usize(proofs.len());
-        });
-
     RowMajorMatrix::new(trace, width)
 }
