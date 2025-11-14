@@ -1,11 +1,12 @@
-use openvm_circuit::arch::{AotError, AotExecutor, AotMeteredExecutor};
 #[cfg(feature = "aot")]
-use openvm_instructions::instruction::Instruction;
+use openvm_circuit::arch::{AotError, AotExecutor, AotMeteredExecutor, SystemConfig};
+use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-#[cfg(feature = "aot")]
-use crate::common::{xmm_to_gpr, REG_A_W, REG_B_W};
-use crate::BranchLessThanExecutor;
+use crate::{
+    common::{update_adapter_heights_asm, update_height_change_asm, xmm_to_gpr, REG_A_W, REG_B_W},
+    BranchLessThanExecutor,
+};
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AotExecutor<F>
     for BranchLessThanExecutor<A, NUM_LIMBS, LIMB_BITS>
@@ -81,4 +82,25 @@ impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AotMeteredExecutor<F>
 where
     F: PrimeField32,
 {
+    fn is_aot_metered_supported(&self, _inst: &Instruction<F>) -> bool {
+        true
+    }
+    fn generate_x86_metered_asm(
+        &self,
+        inst: &Instruction<F>,
+        pc: u32,
+        chip_idx: usize,
+        config: &SystemConfig,
+    ) -> Result<String, AotError> {
+        let mut asm_str = String::from("");
+
+        asm_str += &update_height_change_asm(chip_idx, 1)?;
+        // read [b:4]_1
+        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
+        // read [c:4]_1
+        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
+
+        asm_str += &self.generate_x86_asm(inst, pc)?;
+        Ok(asm_str)
+    }
 }

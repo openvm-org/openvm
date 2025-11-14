@@ -170,10 +170,10 @@ mod aot {
     /// * `config` - The system configuration.
     /// * `address_space` - The address space.
     /// * `pc` - The program counter of the current instruction.
-    /// * `ptr_reg` - The 64-bit register to store the accessed pointer. The caller should not
-    ///   expect the value of this register to be preserved.
-    /// * `reg1` - A 64-bit register to store the intermediate result.
-    /// * `reg2` - A 64-bitregister to store the intermediate result.
+    /// * `ptr_reg` - The register to store the accessed pointer. The caller should not expect the
+    ///   value of this register to be preserved.
+    /// * `reg1` - A register to store the intermediate result.
+    /// * `reg2` - A register to store the intermediate result.
     ///
     /// # Returns
     ///

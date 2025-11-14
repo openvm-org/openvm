@@ -13,7 +13,9 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::BranchEqualExecutor;
 #[cfg(feature = "aot")]
-use crate::common::{xmm_to_gpr, REG_A_W, REG_B_W, REG_PC};
+use crate::common::{
+    update_adapter_heights_asm, update_height_change_asm, xmm_to_gpr, REG_A_W, REG_B_W, REG_PC,
+};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -204,9 +206,31 @@ where
     }
 }
 #[cfg(feature = "aot")]
-impl<F, A, const NUM_LIMBS: usize> AotMeteredExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS> where
-    F: PrimeField32
+impl<F, A, const NUM_LIMBS: usize> AotMeteredExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS>
+where
+    F: PrimeField32,
 {
+    fn is_aot_metered_supported(&self, _inst: &Instruction<F>) -> bool {
+        true
+    }
+    fn generate_x86_metered_asm(
+        &self,
+        inst: &Instruction<F>,
+        pc: u32,
+        chip_idx: usize,
+        config: &SystemConfig,
+    ) -> Result<String, AotError> {
+        let mut asm_str = String::from("");
+
+        asm_str += &update_height_change_asm(chip_idx, 1)?;
+        // read [b:4]_1
+        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
+        // read [c:4]_1
+        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
+
+        asm_str += &self.generate_x86_asm(inst, pc)?;
+        Ok(asm_str)
+    }
 }
 
 #[inline(always)]
