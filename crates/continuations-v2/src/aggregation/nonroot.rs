@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use eyre::Result;
 use itertools::Itertools;
+use openvm_circuit::system::memory::merkle::public_values::UserPublicValuesProof;
 use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use recursion_circuit::system::VerifierSubCircuit;
@@ -23,12 +24,18 @@ use crate::{
     },
 };
 
+#[derive(Clone, Debug)]
+pub struct NonRootStarkProof {
+    pub inner: Proof,
+    pub user_pvs_proof: UserPublicValuesProof<DIGEST_SIZE, F>,
+}
+
 /*
  * Stateless struct to generate the AIRs of the aggregation circuit
  */
 #[derive(derive_new::new, Clone)]
 pub struct NonRootAggregationCircuit {
-    verifier_circuit: Arc<VerifierSubCircuit<MAX_NUM_PROOFS>>,
+    pub verifier_circuit: Arc<VerifierSubCircuit<MAX_NUM_PROOFS>>,
 }
 
 impl AggregationCircuit for NonRootAggregationCircuit {
