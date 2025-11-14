@@ -889,7 +889,7 @@ mod cuda_tracegen {
                 WhirModuleChip::FinalPolyMleEval,
                 WhirModuleChip::FinalPolyQueryEval,
             ]
-            .par_iter()
+            .iter()
             .map(|chip| match chip {
                 WhirModuleChip::InitialOpenedValues => initial_opened_values::cuda::generate_trace(
                     proofs.len(),
