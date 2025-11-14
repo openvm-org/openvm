@@ -40,8 +40,8 @@ pub const RISCV_TO_X86_OVERRIDE_MAP: [Option<&str>; 32] = [
     Some("r11d"), // x11
     Some("r9d"),  // x12
     Some("r8d"),  // x13
-    None,         // x14
-    None,         // x15
+    Some("rbp"),  // x14
+    Some("r13"),  // x15
     None,         // x16
     None,         // x17
     None,         // x18
