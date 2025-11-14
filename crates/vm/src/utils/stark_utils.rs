@@ -201,6 +201,8 @@ where
     let input = input.into();
     let metered_ctx = vm.build_metered_ctx(&exe);
 
+    let _ = vm.interpreter(&exe)?.execute(input.clone(), None)?;
+
     #[cfg(feature = "aot")]
     check_aot_equivalence(&vm, &config, &exe, &input)?;
 

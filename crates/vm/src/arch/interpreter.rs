@@ -339,6 +339,8 @@ where
 
         run!("execute_e1", self, exec_state, ExecutionCtx);
 
+        println!("elapsed time: {} seconds", exec_state.ctx.total_elapsed_ecc_time);
+
         #[cfg(feature = "metrics")]
         {
             let elapsed = start.elapsed();

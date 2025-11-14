@@ -2,10 +2,12 @@ use crate::{
     arch::{execution_mode::ExecutionCtxTrait, VmExecState},
     system::memory::online::GuestMemory,
 };
+use std::time::Duration;
 
 #[repr(C)]
 pub struct ExecutionCtx {
     pub instret_left: u64,
+    pub total_elapsed_ecc_time: u64 
 }
 
 impl ExecutionCtx {
@@ -16,6 +18,7 @@ impl ExecutionCtx {
             } else {
                 u64::MAX
             },
+            total_elapsed_ecc_time: 0u64,   
         }
     }
 }
@@ -34,5 +37,16 @@ impl ExecutionCtxTrait for ExecutionCtx {
             exec_state.ctx.instret_left -= 1;
             false
         }
+    }
+
+    #[inline(always)]
+    fn add_ecc_time(&mut self, elapsed: Duration) {
+        let nanos = elapsed.as_nanos();
+        let delta = if nanos > u64::MAX as u128 {
+            u64::MAX
+        } else {
+            nanos as u64
+        };
+        self.total_elapsed_ecc_time = self.total_elapsed_ecc_time.saturating_add(delta);
     }
 }
