@@ -50,7 +50,6 @@ where
         asm_str += &Self::push_external_registers();
 
         asm_str += &format!("   mov {REG_EXEC_STATE_PTR}, {REG_FIRST_ARG}\n");
-        asm_str += &format!("   mov {REG_INSNS_PTR}, {REG_SECOND_ARG}\n");
         asm_str += &format!("   mov {REG_B}, {REG_THIRD_ARG}\n");
         asm_str += &format!("   mov {REG_INSTRET_END}, {REG_FOURTH_ARG}\n");
 
@@ -137,7 +136,7 @@ where
                 asm_str += &Self::push_internal_registers();
 
                 asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
-                asm_str += &format!("   mov {REG_SECOND_ARG}, {REG_INSNS_PTR}\n");
+                asm_str += &format!("   mov {REG_SECOND_ARG}, {pre_compute_insns_ptr}\n");
                 asm_str += &format!("   mov {REG_THIRD_ARG}, {pc}\n");
                 asm_str += &format!("   mov {REG_D}, {extern_handler_ptr}\n");
                 asm_str += &format!("   call {REG_D}\n");

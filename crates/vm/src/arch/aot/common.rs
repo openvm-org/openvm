@@ -20,8 +20,6 @@ pub const REG_D_W: &str = "eax";
 pub const REG_INSTRET_END: &str = "r12";
 
 pub const REG_EXEC_STATE_PTR: &str = "rbx";
-pub const REG_INSNS_PTR: &str = "rbp";
-
 pub const REG_TRACE_HEIGHT: &str = "r14";
 pub const REG_AS2_PTR: &str = "r15";
 
