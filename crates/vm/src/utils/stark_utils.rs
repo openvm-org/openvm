@@ -136,13 +136,13 @@ where
     */
     println!("Checking metered AOT equivalence");
     {
-        let metered_ctx = vm.build_metered_ctx(&exe);
+        let metered_ctx = vm.build_metered_ctx(exe);
         let (aot_segments, aot_state_metered) = vm
-            .get_metered_aot_instance(&exe)?
+            .get_metered_aot_instance(exe)?
             .execute_metered(input.clone(), metered_ctx.clone())?;
 
         let (segments, interp_state_metered) = vm
-            .naive_metered_interpreter(&exe)?
+            .naive_metered_interpreter(exe)?
             .execute_metered(input.clone(), metered_ctx.clone())?;
 
         assert_eq!(interp_state_metered.pc(), aot_state_metered.pc());

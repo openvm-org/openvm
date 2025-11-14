@@ -152,7 +152,7 @@ where
 
         if e == 0 {
             let (reg_b, delta_str_b) = &xmm_to_gpr((b / 4) as u8, REG_B_W, false);
-            asm_str += &delta_str_b;
+            asm_str += delta_str_b;
 
             let reg_a = if RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].is_some() {
                 RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].unwrap()
@@ -170,10 +170,10 @@ where
             asm_str += &gpr_to_xmm(reg_a, (a / 4) as u8);
         } else {
             let (reg_b, delta_str_b) = &xmm_to_gpr((b / 4) as u8, REG_B_W, false);
-            asm_str += &delta_str_b;
+            asm_str += delta_str_b;
 
             let (reg_c, delta_str_c) = &xmm_to_gpr((c / 4) as u8, REG_C_W, false);
-            asm_str += &delta_str_c;
+            asm_str += delta_str_c;
 
             let reg_a = if RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].is_some() {
                 RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].unwrap()

@@ -16,8 +16,6 @@ where
         use openvm_instructions::{riscv::RV32_REGISTER_AS, LocalOpcode};
         use openvm_rv32im_transpiler::BranchLessThanOpcode;
 
-        use crate::common::rv32_register_to_gpr;
-
         let &Instruction {
             opcode, a, b, c, d, ..
         } = inst;

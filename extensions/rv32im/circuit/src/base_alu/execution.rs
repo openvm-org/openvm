@@ -214,24 +214,22 @@ where
             // [a:4]_1 = [a:4]_1 + c
             let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 4) as u8, str_reg_a, a != b);
             asm_str += &delta_str_b;
-            asm_str += &format!("   {} {}, {}\n", asm_opcode, gpr_reg_b, c);
+            asm_str += &format!("   {asm_opcode} {gpr_reg_b}, {c}\n");
+            asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
+        } else if a == c {
+            let (gpr_reg_c, delta_str_c) = xmm_to_gpr((c / 4) as u8, REG_C_W, true);
+            asm_str += &delta_str_c;
+            let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 4) as u8, str_reg_a, true);
+            asm_str += &delta_str_b;
+            asm_str += &format!("   {asm_opcode} {gpr_reg_b}, {gpr_reg_c}\n");
             asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
         } else {
-            if a == c {
-                let (gpr_reg_c, delta_str_c) = xmm_to_gpr((c / 4) as u8, REG_C_W, true);
-                asm_str += &delta_str_c;
-                let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 4) as u8, str_reg_a, true);
-                asm_str += &delta_str_b;
-                asm_str += &format!("   {} {}, {}\n", asm_opcode, gpr_reg_b, gpr_reg_c);
-                asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
-            } else {
-                let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 4) as u8, str_reg_a, true);
-                asm_str += &delta_str_b; // data is now in gpr_reg_b
-                let (gpr_reg_c, delta_str_c) = xmm_to_gpr((c / 4) as u8, REG_C_W, false); // data is in gpr_reg_c now
-                asm_str += &delta_str_c; // have to get a return value here, since it modifies further registers too
-                asm_str += &format!("   {} {}, {}\n", asm_opcode, gpr_reg_b, gpr_reg_c);
-                asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
-            }
+            let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 4) as u8, str_reg_a, true);
+            asm_str += &delta_str_b; // data is now in gpr_reg_b
+            let (gpr_reg_c, delta_str_c) = xmm_to_gpr((c / 4) as u8, REG_C_W, false); // data is in gpr_reg_c now
+            asm_str += &delta_str_c; // have to get a return value here, since it modifies further registers too
+            asm_str += &format!("   {asm_opcode} {gpr_reg_b}, {gpr_reg_c}\n");
+            asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
         }
 
         Ok(asm_str)
@@ -244,6 +242,28 @@ impl<F, A, const LIMB_BITS: usize> AotMeteredExecutor<F>
 where
     F: PrimeField32,
 {
+    fn is_aot_metered_supported(&self, _inst: &Instruction<F>) -> bool {
+        true
+    }
+    fn generate_x86_metered_asm(
+        &self,
+        inst: &Instruction<F>,
+        pc: u32,
+        chip_idx: usize,
+        config: &SystemConfig,
+    ) -> Result<String, AotError> {
+        let mut asm_str = self.generate_x86_asm(inst, pc)?;
+        asm_str += &update_height_change_asm(chip_idx, 1)?;
+        // read [b:4]_1
+        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
+        // read [c:4]_1
+        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
+        if inst.e.as_canonical_u32() != RV32_IMM_AS {
+            // read [a:4]_1
+            asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
+        }
+        Ok(asm_str)
+    }
 }
 
 #[inline(always)]

@@ -5,15 +5,11 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
-#[cfg(feature = "aot")]
-use openvm_instructions::LocalOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
     riscv::RV32_REGISTER_AS,
 };
-#[cfg(feature = "aot")]
-use openvm_rv32im_transpiler::Rv32JalrOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::Rv32JalrExecutor;
@@ -102,7 +98,7 @@ impl<F, A> AotExecutor<F> for Rv32JalrExecutor<A>
 where
     F: PrimeField32,
 {
-    fn is_aot_supported(&self, inst: &Instruction<F>) -> bool {
+    fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
         true
     }
 
