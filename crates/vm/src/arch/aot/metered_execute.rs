@@ -7,7 +7,8 @@ use super::{common::*, AotInstance};
 use crate::{
     arch::{
         aot::{
-            asm_to_lib, extern_handler, get_vm_address_space_addr, get_vm_pc_ptr, set_pc_shim, should_suspend_shim,
+            asm_to_lib, extern_handler, get_vm_address_space_addr, get_vm_pc_ptr, set_pc_shim,
+            should_suspend_shim,
         },
         execution_mode::{metered::segment_ctx::SegmentationCtx, MeteredCtx, Segment},
         interpreter::{
@@ -124,10 +125,7 @@ where
             get_vm_address_space_addr::<F, MeteredCtx> as *const ()
         );
 
-        let get_vm_pc_ptr = format!(
-            "{:p}",
-            get_vm_pc_ptr::<F, MeteredCtx> as *const ()
-        );
+        let get_vm_pc_ptr = format!("{:p}", get_vm_pc_ptr::<F, MeteredCtx> as *const ());
 
         asm_str += &Self::push_internal_registers();
 
@@ -177,7 +175,7 @@ where
         for i in 0..(pc_base / 4) {
             asm_str += &format!("asm_execute_pc_{}:", i * 4);
             asm_str += "\n";
-        }        
+        }
 
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
             /* Preprocessing step, to check if we should suspend or not */

@@ -3,17 +3,14 @@ use std::ffi::c_void;
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{
-    common::*,
-    AotInstance, AsmRunFn,
-};
+use super::{common::*, AotInstance, AsmRunFn};
 use crate::{
     arch::{
         aot::{asm_to_lib, extern_handler, get_vm_address_space_addr, get_vm_pc_ptr, set_pc_shim},
         execution_mode::ExecutionCtx,
         interpreter::{
             alloc_pre_compute_buf, get_pre_compute_instructions, get_pre_compute_max_size,
-            split_pre_compute_buf, PreComputeInstruction
+            split_pre_compute_buf, PreComputeInstruction,
         },
         AotError, ExecutionError, Executor, ExecutorInventory, ExitCode, StaticProgramError,
         Streams, VmExecState, VmState,
@@ -58,10 +55,7 @@ where
             get_vm_address_space_addr::<F, ExecutionCtx> as *const ()
         );
 
-        let get_vm_pc_ptr = format!(
-            "{:p}",
-            get_vm_pc_ptr::<F, ExecutionCtx> as *const ()
-        );
+        let get_vm_pc_ptr = format!("{:p}", get_vm_pc_ptr::<F, ExecutionCtx> as *const ());
 
         asm_str += &Self::push_internal_registers();
 

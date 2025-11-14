@@ -330,16 +330,13 @@ extern "C" fn get_vm_address_space_addr<F, Ctx: ExecutionCtxTrait>(
     ptr.as_ptr() as *mut u64 // mut u64 because we want to write 8 bytes at a time
 }
 
-extern "C" fn get_vm_pc_ptr<F, Ctx: ExecutionCtxTrait>(
-    exec_state_ptr: *mut c_void,
-) -> *mut u64 {
+extern "C" fn get_vm_pc_ptr<F, Ctx: ExecutionCtxTrait>(exec_state_ptr: *mut c_void) -> *mut u64 {
     let vm_exec_state_ref =
         unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
-    // since pc is the first element of the vm_state field and we use `repr(C)` 
+    // since pc is the first element of the vm_state field and we use `repr(C)`
     // hence `ptr` will be equal to the address of pc in vm_state
     let state = &mut vm_exec_state_ref.vm_state;
     let ptr = state.pc_mut() as *mut u32;
 
     ptr as *mut u64
 }
-

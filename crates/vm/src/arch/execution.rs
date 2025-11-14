@@ -172,7 +172,7 @@ pub trait AotExecutor<F> {
     Function: Generate x86 assembly for the given RV32 instruction, and transfer control to the next RV32 instruction
 
     Preconditions:
-    x86 Registers: rbx = vm_exec_state_ptr, rbp = pre_compute_insns_ptr, 
+    x86 Registers: rbx = vm_exec_state_ptr, rbp = pre_compute_insns_ptr,
     - instruction: the instruction to be executed
 
     Postcondition:
