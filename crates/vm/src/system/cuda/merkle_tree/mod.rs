@@ -41,7 +41,9 @@ pub const TIMESTAMPED_BLOCK_WIDTH: usize = 11;
 /// wait for the completion.
 pub struct MemoryMerkleSubTree {
     pub stream: Arc<CudaStream>,
-    pub event: Option<CudaEvent>,
+    #[allow(dead_code)] // See `drop_subtrees`
+    created_buffer_event: Option<CudaEvent>,
+    build_completion_event: Option<CudaEvent>,
     pub buf: DeviceBuffer<H>,
     pub height: usize,
     pub path_len: usize,
@@ -83,7 +85,8 @@ impl MemoryMerkleSubTree {
         stream.wait(&created_buffer_event).unwrap();
         Self {
             stream,
-            event: None,
+            created_buffer_event: Some(created_buffer_event),
+            build_completion_event: None,
             height,
             buf,
             path_len,
@@ -93,7 +96,8 @@ impl MemoryMerkleSubTree {
     pub fn dummy() -> Self {
         Self {
             stream: Arc::new(CudaStream::new().unwrap()),
-            event: None,
+            created_buffer_event: None,
+            build_completion_event: None,
             height: 0,
             buf: DeviceBuffer::new(),
             path_len: 0,
@@ -148,7 +152,7 @@ impl MemoryMerkleSubTree {
                 event.record(self.stream.as_raw()).unwrap();
             }
         }
-        self.event = Some(event);
+        self.build_completion_event = Some(event);
     }
 
     /// Returns the bounds [start, end) of the layer at the given depth.
@@ -278,7 +282,7 @@ impl MemoryMerkleTree {
         for subtree in self.subtrees.iter() {
             default_stream_wait(
                 subtree
-                    .event
+                    .build_completion_event
                     .as_ref()
                     .expect("Subtree build event does not exist"),
             )
@@ -312,8 +316,10 @@ impl MemoryMerkleTree {
     /// synchronization like D2H transfer).
     pub fn drop_subtrees(&mut self) {
         let mut needs_sync = false;
+        // Make sure all streams are synchronized before destroying events
         for subtree in self.subtrees.iter() {
-            if let Some(event) = subtree.event.as_ref() {
+            subtree.stream.synchronize().unwrap();
+            if let Some(event) = subtree.build_completion_event.as_ref() {
                 needs_sync = true;
                 default_stream_wait(event).unwrap();
             }
@@ -321,6 +327,8 @@ impl MemoryMerkleTree {
         if needs_sync {
             current_stream_sync().unwrap();
         }
+        // Clearing will drop streams (which calls synchronize again) and drops events (which
+        // destroys them)
         self.subtrees.clear();
     }
 
@@ -333,9 +341,9 @@ impl MemoryMerkleTree {
     ) -> AirProvingContext<GpuBackend> {
         let mut public_values = self.top_roots.to_host().unwrap()[0].to_vec();
         // .to_host() calls cudaEventSynchronize on the D2H memcpy, which also means all subtree
-        // events are now completed, so we can clear up the events.
+        // events are now completed, so we can clean up the events.
         for subtree in &mut self.subtrees {
-            subtree.event = None;
+            subtree.build_completion_event = None;
         }
         let merkle_trace = {
             let width = MemoryMerkleCols::<u8, DIGEST_WIDTH>::width();
