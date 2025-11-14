@@ -131,8 +131,8 @@ where
         */
         let (_, delta_str_b) = &xmm_to_gpr((b / 4) as u8, "eax", true);
         let (gpr_reg_c, delta_str_c) = &xmm_to_gpr((c / 4) as u8, REG_A_W, false);
-        asm += &delta_str_b;
-        asm += &delta_str_c;
+        asm += delta_str_b;
+        asm += delta_str_c;
         match opcode {
             MulHOpcode::MULH => {
                 asm += &format!("   imul {gpr_reg_c}\n");

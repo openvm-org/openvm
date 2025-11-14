@@ -68,7 +68,7 @@ mod aot {
             if is_gpr_force_write {
                 return (
                     gpr.to_string(),
-                    format!("  mov {}, {}\n", gpr, override_reg),
+                    format!("  mov {gpr}, {override_reg}\n"),
                 );
             }
             return (override_reg.to_string(), "".to_string());
@@ -77,12 +77,12 @@ mod aot {
         if rv32_reg % 2 == 0 {
             (
                 gpr.to_string(),
-                format!("   pextrd {}, xmm{}, 0\n", gpr, xmm_map_reg),
+                format!("   pextrd {gpr}, xmm{xmm_map_reg}, 0\n"),
             )
         } else {
             (
                 gpr.to_string(),
-                format!("   pextrd {}, xmm{}, 1\n", gpr, xmm_map_reg),
+                format!("   pextrd {gpr}, xmm{xmm_map_reg}, 1\n"),
             )
         }
     }
@@ -93,13 +93,13 @@ mod aot {
                 //already in correct location
                 return "".to_string();
             }
-            return format!("   mov {}, {}\n", override_reg, gpr);
+            return format!("   mov {override_reg}, {gpr}\n");
         }
         let xmm_map_reg = rv32_reg / 2;
         if rv32_reg % 2 == 0 {
-            format!("   pinsrd xmm{}, {}, 0\n", xmm_map_reg, gpr)
+            format!("   pinsrd xmm{xmm_map_reg}, {gpr}, 0\n")
         } else {
-            format!("   pinsrd xmm{}, {}, 1\n", xmm_map_reg, gpr)
+            format!("   pinsrd xmm{xmm_map_reg}, {gpr}, 1\n")
         }
     }
     pub(crate) fn update_adapter_heights_asm(
@@ -249,8 +249,7 @@ mod aot {
         let initial_block_size: usize = config.initial_block_size();
         if initial_block_size != CHUNK {
             return Err(AotError::Other(format!(
-                "initial_block_size must be {}, got {}",
-                CHUNK, initial_block_size
+                "initial_block_size must be {CHUNK}, got {initial_block_size}"
             )));
         }
         let chunk_bits = CHUNK.ilog2();

@@ -174,7 +174,7 @@ where
             asm_str += &format!("    jne instret_positive_{pc}\n"); // if instret > 0, skip slow path
 
             asm_str += "    call asm_handle_segment_check\n";
-            asm_str += &format!("    test al, al\n");
+            asm_str += "    test al, al\n";
             asm_str += &format!("    jnz asm_run_end_{pc}\n");
             asm_str += &format!("    jmp execute_instruction_{pc}\n");
 
