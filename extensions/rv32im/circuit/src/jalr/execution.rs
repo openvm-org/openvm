@@ -181,7 +181,32 @@ where
 }
 
 #[cfg(feature = "aot")]
-impl<F, A> AotMeteredExecutor<F> for Rv32JalrExecutor<A> where F: PrimeField32 {}
+impl<F, A> AotMeteredExecutor<F> for Rv32JalrExecutor<A>
+where
+    F: PrimeField32,
+{
+    fn is_aot_metered_supported(&self, _inst: &Instruction<F>) -> bool {
+        true
+    }
+    fn generate_x86_metered_asm(
+        &self,
+        inst: &Instruction<F>,
+        pc: u32,
+        chip_idx: usize,
+        config: &SystemConfig,
+    ) -> Result<String, AotError> {
+        let enabled = !inst.f.is_zero();
+        let mut asm_str = update_height_change_asm(chip_idx, 1)?;
+        // read [b:4]_1
+        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
+        if enabled {
+            // write [a:4]_1
+            asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
+        }
+        asm_str += &self.generate_x86_asm(inst, pc)?;
+        Ok(asm_str)
+    }
+}
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLED: bool>(
     pre_compute: &JalrPreCompute,
