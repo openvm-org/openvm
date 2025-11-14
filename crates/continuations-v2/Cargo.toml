@@ -1,5 +1,5 @@
 [package]
-name = "continuations"
+name = "continuations-v2"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
