@@ -744,7 +744,7 @@ where
         });
 
         let num_pvs_tidx = tidx.clone();
-        tidx += num_pvs.clone() * local.is_valid;
+        tidx += num_pvs.clone() * local.is_present;
 
         self.starting_tidx_bus.send(
             builder,

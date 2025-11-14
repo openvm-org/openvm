@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc};
 
 use itertools::Itertools;
 use openvm_stark_backend::{
@@ -115,6 +115,43 @@ fn test_recursion_circuit_many_fib_airs() {
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
     let fib = FibFixture::new_with_num_airs(0, 1, 1 << log_trace_degree, 9);
     let (vk, proof) = fib.keygen_and_prove(&engine);
+
+    let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
+    let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
+    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
+    debug(&circuit.airs(), &pk.per_air, &ctxs);
+}
+
+#[test]
+fn test_recursion_circuit_many_fib_airs_some_missing() {
+    let l_skip = 3;
+    let n_stack = 5;
+    let k_whir = 3;
+    let log_trace_degree = 8;
+
+    if log_trace_degree > l_skip + n_stack {
+        return;
+    }
+    let params = test_system_params_small(l_skip, n_stack, k_whir);
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let empty_air_indices = vec![1, 3, 6];
+    let fib = FibFixture::new_with_num_airs(0, 1, 1 << log_trace_degree, 9)
+        .with_empty_air_indices(empty_air_indices.clone());
+    let (vk, proof) = fib.keygen_and_prove(&engine);
+
+    let empty_air_indices = empty_air_indices.into_iter().collect::<BTreeSet<_>>();
+    for air_idx in 0..vk.inner.per_air.len() {
+        if empty_air_indices.contains(&air_idx) {
+            assert!(
+                !vk.inner.per_air[air_idx].is_required,
+                "air {air_idx} unexpectedly marked required"
+            );
+            assert!(proof.trace_vdata[air_idx].is_none());
+            assert!(proof.public_values[air_idx].is_empty());
+        } else {
+            assert!(proof.trace_vdata[air_idx].is_some());
+        }
+    }
 
     let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
@@ -564,11 +601,15 @@ mod cuda {
         }
 
         const POSEIDON2_AIR_ID: usize = 14;
-        assert!(circuit.airs()[POSEIDON2_AIR_ID].name().starts_with("Poseidon2Air"));
+        assert!(
+            circuit.airs()[POSEIDON2_AIR_ID]
+                .name()
+                .starts_with("Poseidon2Air")
+        );
 
         let non_deterministic_air_idxs = [
             POSEIDON2_AIR_ID,
-            cpu_ctx.len() - 1 // exp_bits is non-deterministic when multi-threaded
+            cpu_ctx.len() - 1, // exp_bits is non-deterministic when multi-threaded
         ];
 
         for (i, (cpu, gpu)) in zip_eq(cpu_ctx, gpu_ctx).enumerate() {
@@ -589,7 +630,8 @@ mod cuda {
                     assert_eq!(
                         gpu[c * cpu.height() + r],
                         *cpu.get(r, c).unwrap(),
-                        "Mismatch for {} at row {r} column {c}", name
+                        "Mismatch for {} at row {r} column {c}",
+                        name
                     );
                 }
             }
