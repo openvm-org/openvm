@@ -83,12 +83,8 @@ where
         let proof_idx = local.proof_idx;
         let is_enabled = local.is_enabled;
         builder.assert_bool(is_enabled);
-        builder
-            .when(local.is_first_in_proof)
-            .assert_one(is_enabled);
-        builder
-            .when(local.is_first_in_round)
-            .assert_one(is_enabled);
+        builder.when(local.is_first_in_proof).assert_one(is_enabled);
+        builder.when(local.is_first_in_round).assert_one(is_enabled);
 
         let is_same_proof = next.is_enabled - next.is_first_in_proof;
         let is_same_round = next.is_enabled - next.is_first_in_round;
@@ -285,14 +281,6 @@ pub(crate) fn generate_trace(
             cols.post_claim.copy_from_slice(
                 preflight.whir.initial_claim_per_round[whir_round + 1].as_base_slice(),
             );
-        });
-
-    trace
-        .par_chunks_exact_mut(width)
-        .skip(num_valid_rows)
-        .for_each(|row| {
-            let cols: &mut WhirQueryCols<F> = row.borrow_mut();
-            cols.proof_idx = F::from_canonical_usize(proofs.len());
         });
 
     RowMajorMatrix::new(trace, width)
