@@ -203,11 +203,12 @@ impl MemoryInventoryGPU {
                 }
                 mem.tracing_info("merkle update");
                 persistent.merkle_tree.finalize();
-                Some(persistent.merkle_tree.update_with_touched_blocks(
+                let merkle_tree_ctx = persistent.merkle_tree.update_with_touched_blocks(
                     unpadded_merkle_height,
                     &d_touched_memory,
                     empty,
-                ))
+                );
+                Some(merkle_tree_ctx)
             }
             TouchedMemory::Volatile(partition) => {
                 assert!(self.persistent.is_none(), "TouchedMemory enum mismatch");
@@ -234,12 +235,8 @@ impl MemoryInventoryGPU {
 
 impl Drop for PersistentMemoryInventoryGPU {
     fn drop(&mut self) {
-        // Force synchronize all streams in merkle tree before dropping the
-        // initial memory buffers. This prevents buffers from dropping before build_async completes.
-        for s in &self.merkle_tree.subtrees {
-            s.stream.synchronize().unwrap();
-        }
-        self.merkle_tree.stream.synchronize().unwrap();
+        // WARNING: The merkle subtree events must be completed before dropping the initial memory
+        // buffers. This prevents buffers from dropping before build_async completes.
         self.merkle_tree.drop_subtrees();
         self.initial_memory.clear();
     }
