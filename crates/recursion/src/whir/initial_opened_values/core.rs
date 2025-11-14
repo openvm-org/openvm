@@ -1,6 +1,7 @@
 use core::{
     array,
     borrow::{Borrow, BorrowMut},
+    cmp::min,
 };
 
 use openvm_circuit_primitives::{SubAir, utils::assert_array_eq};
@@ -10,7 +11,7 @@ use openvm_stark_backend::{
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    Field, FieldAlgebra, FieldExtensionAlgebra, TwoAdicField, extension::BinomiallyExtendable,
+    FieldAlgebra, FieldExtensionAlgebra, TwoAdicField, extension::BinomiallyExtendable,
 };
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
@@ -35,7 +36,7 @@ use crate::{
 // (proof_idx, query_idx, coset_idx, commit_idx, col_chunk_idx)
 #[repr(C)]
 #[derive(AlignedBorrow)]
-struct InitialOpenedValuesCols<T> {
+pub(in crate::whir::initial_opened_values) struct InitialOpenedValuesCols<T> {
     proof_idx: T,
     query_idx: T,
     commit_idx: T,
@@ -45,11 +46,6 @@ struct InitialOpenedValuesCols<T> {
     is_first_in_query: T,
     is_first_in_commit: T,
     is_first_in_coset: T,
-    is_same_proof: T,
-    is_same_query: T,
-    is_same_commit: T,
-    is_same_coset_idx: T,
-    coset_idx_max_aux: T,
     flags: [T; CHUNK],
     codeword_value_acc: [T; 4],
     // TODO: reduce number of mu pows
@@ -98,54 +94,58 @@ where
             <<AB::Expr as FieldAlgebra>::F as TwoAdicField>::two_adic_generator(self.k),
         );
 
+        let is_same_proof = next.flags[0] - next.is_first_in_proof;
+        let is_same_query = next.flags[0] - next.is_first_in_query;
+        let is_same_coset_idx = next.flags[0] - next.is_first_in_coset;
+        let is_same_commit = next.flags[0] - next.is_first_in_commit;
+
         NestedForLoopSubAir::<5, 4>.eval(
             builder,
             (
                 (
                     NestedForLoopIoCols {
-                        is_enabled: local.flags[0].into(),
+                        is_enabled: local.flags[0],
                         counter: [
-                            local.proof_idx.into(),
-                            local.query_idx.into(),
-                            local.coset_idx.into(),
-                            local.commit_idx.into(),
-                            local.col_chunk_idx.into(),
+                            local.proof_idx,
+                            local.query_idx,
+                            local.coset_idx,
+                            local.commit_idx,
+                            local.col_chunk_idx,
                         ],
                         is_first: [
-                            local.is_first_in_proof.into(),
-                            local.is_first_in_query.into(),
-                            local.is_first_in_coset.into(),
-                            local.is_first_in_commit.into(),
-                            AB::Expr::ONE,
+                            local.is_first_in_proof,
+                            local.is_first_in_query,
+                            local.is_first_in_coset,
+                            local.is_first_in_commit,
+                            local.flags[0],
                         ],
-                    },
+                    }.map_into(),
                     NestedForLoopIoCols {
-                        is_enabled: next.flags[0].into(),
+                        is_enabled: next.flags[0],
                         counter: [
-                            next.proof_idx.into(),
-                            next.query_idx.into(),
-                            next.coset_idx.into(),
-                            next.commit_idx.into(),
-                            next.col_chunk_idx.into(),
+                            next.proof_idx,
+                            next.query_idx,
+                            next.coset_idx,
+                            next.commit_idx,
+                            next.col_chunk_idx,
                         ],
                         is_first: [
-                            next.is_first_in_proof.into(),
-                            next.is_first_in_query.into(),
-                            next.is_first_in_coset.into(),
-                            next.is_first_in_commit.into(),
-                            AB::Expr::ONE,
+                            next.is_first_in_proof,
+                            next.is_first_in_query,
+                            next.is_first_in_coset,
+                            next.is_first_in_commit,
+                            next.flags[0],
                         ],
-                    },
+                    }.map_into(),
                 ),
                 NestedForLoopAuxCols {
                     is_transition: [
-                        local.is_same_proof,
-                        local.is_same_query,
-                        local.is_same_coset_idx,
-                        local.is_same_commit,
+                        is_same_proof.clone(),
+                        is_same_query.clone(),
+                        is_same_coset_idx.clone(),
+                        is_same_commit.clone(),
                     ],
                 }
-                .map_into(),
             ),
         );
 
@@ -160,7 +160,7 @@ where
         let mut chunk_len = AB::Expr::ZERO;
         let mut codeword_value_slice_acc = local.codeword_value_acc.map(Into::into);
 
-        assert_array_eq(&mut builder.when(local.is_same_proof), local.mu, next.mu);
+        assert_array_eq(&mut builder.when(is_same_proof.clone()), local.mu, next.mu);
         assert_array_eq(
             &mut builder.when(local.is_first_in_coset),
             local.mu_pows[0],
@@ -172,15 +172,10 @@ where
             [AB::F::ZERO; 4],
         );
 
-        let diff = AB::Expr::from_canonical_usize((1 << self.k) - 1) - local.coset_idx;
-        builder
-            .when(is_enabled)
-            .when(diff.clone())
-            .assert_one(diff.clone() * local.coset_idx_max_aux);
-        let is_coset_idx_max = AB::Expr::ONE - diff * local.coset_idx_max_aux;
-        builder
-            .when(is_coset_idx_max * (is_enabled - local.is_same_coset_idx))
-            .assert_zero(next.coset_idx);
+        builder.when(is_enabled - is_same_query.clone()).assert_eq(
+            local.coset_idx,
+            AB::Expr::from_canonical_usize((1 << self.k) - 1),
+        );
 
         for i in 0..CHUNK {
             if i < CHUNK - 1 {
@@ -196,14 +191,14 @@ where
                 );
             } else {
                 assert_array_eq(
-                    &mut builder.when(local.is_same_coset_idx),
+                    &mut builder.when(is_same_coset_idx.clone()),
                     next.mu_pows[0],
                     ext_field_multiply(local.mu, local.mu_pows[CHUNK - 1]),
                 );
             }
 
             builder
-                .when(local.is_same_commit)
+                .when(is_same_commit.clone())
                 .when(AB::Expr::ONE - next.flags[i])
                 .assert_eq(local.post_state[i], next.pre_state[i]);
 
@@ -218,7 +213,7 @@ where
                 .when(local.is_first_in_commit)
                 .assert_zero(local.pre_state[CHUNK + i]);
             builder
-                .when(local.is_same_commit)
+                .when(is_same_commit.clone())
                 .assert_eq(next.pre_state[CHUNK + i], local.post_state[CHUNK + i]);
 
             let col_idx = local.col_chunk_idx * AB::Expr::from_canonical_usize(CHUNK)
@@ -250,7 +245,7 @@ where
             local.is_first_in_query,
         );
         assert_array_eq(
-            &mut builder.when(local.is_same_coset_idx),
+            &mut builder.when(is_same_coset_idx.clone()),
             codeword_value_slice_acc.clone(),
             next.codeword_value_acc,
         );
@@ -264,7 +259,7 @@ where
             is_enabled,
         );
 
-        let is_last_in_commit = is_enabled - local.is_same_commit;
+        let is_last_in_commit = is_enabled - is_same_commit.clone();
         self.merkle_verify_bus.send(
             builder,
             local.proof_idx,
@@ -284,19 +279,19 @@ where
             .when(local.is_first_in_query)
             .assert_eq(local.twiddle, AB::Expr::ONE);
         builder
-            .when(local.is_same_coset_idx)
+            .when(is_same_coset_idx.clone())
             .assert_eq(next.twiddle, local.twiddle);
         builder
-            .when((is_enabled - local.is_same_coset_idx) * next.flags[0])
+            .when((is_enabled - is_same_coset_idx.clone()) * next.flags[0])
             .assert_eq(next.twiddle, local.twiddle * omega_k);
 
         builder
-            .when(local.is_same_query)
+            .when(is_same_query.clone())
             .assert_eq(next.zi_root, local.zi_root);
         builder
-            .when(local.is_same_query)
+            .when(is_same_query.clone())
             .assert_eq(next.zi, local.zi);
-        assert_array_eq(&mut builder.when(local.is_same_query), next.yi, local.yi);
+        assert_array_eq(&mut builder.when(is_same_query.clone()), next.yi, local.yi);
         self.folding_bus.send(
             builder,
             local.proof_idx,
@@ -312,19 +307,13 @@ where
                 z_final: local.zi.into(),
                 y_final: local.yi.map(Into::into),
             },
-            is_enabled - local.is_same_coset_idx,
+            is_enabled - is_same_coset_idx.clone(),
         );
     }
 }
 
-pub(in crate::whir) struct InitialOpenedValueRecord {
-    pub proof_idx: usize,
-    pub query_idx: usize,
-    pub commit_idx: usize,
-    pub chunk_idx: usize,
-    pub chunk_len: usize,
-    pub coset_idx: usize,
-    pub mu_pow: EF,
+#[repr(C)]
+pub struct InitialOpenedValueRecord {
     pub codeword_slice_val_acc: EF,
     pub pre_state: [F; WIDTH],
     pub post_state: [F; WIDTH],
@@ -333,9 +322,14 @@ pub(in crate::whir) struct InitialOpenedValueRecord {
 #[tracing::instrument(name = "generate_trace(InitialOpenedValuesAir)", skip_all)]
 pub(crate) fn generate_trace(
     params: SystemParams,
-    proofs: &[Proof],
-    preflights: &[Preflight],
+    proofs: &[&Proof],
+    preflights: &[&Preflight],
     records: &[InitialOpenedValueRecord],
+    rows_per_proof_psums: &[usize],
+    commits_per_proof_psums: &[usize],
+    stacking_chunks_psums: &[usize], // proof x commit
+    stacking_widths_psums: &[usize],
+    mu_pows: &[EF],
 ) -> RowMajorMatrix<F> {
     debug_assert_eq!(proofs.len(), preflights.len());
 
@@ -351,72 +345,93 @@ pub(crate) fn generate_trace(
         .par_chunks_exact_mut(width)
         .take(num_valid_rows)
         .zip(records)
-        .for_each(|(row, record)| {
-            let proof_idx = record.proof_idx;
-            let proof = &proofs[proof_idx];
+        .enumerate()
+        .for_each(|(row_idx, (row, record))| {
+            let proof_idx = rows_per_proof_psums[1..].partition_point(|&x| x <= row_idx);
             let preflight = &preflights[proof_idx];
+
+            let record_idx = row_idx - rows_per_proof_psums[proof_idx];
+
+            let cp_start = commits_per_proof_psums[proof_idx];
+            let cp_end = commits_per_proof_psums[proof_idx + 1];
+
+            let chunks_before_proof = stacking_chunks_psums[cp_start];
+            let chunks_after_proof = stacking_chunks_psums[cp_end];
+
+            let records_per_coset_idx = chunks_after_proof - chunks_before_proof;
+
+            let coset_idx = (record_idx / records_per_coset_idx) % (1 << k_whir);
+            let query_idx =
+                (record_idx / (records_per_coset_idx << k_whir)) % params.num_whir_queries;
+
+            let local_chunk_idx = record_idx % records_per_coset_idx;
+            let absolute_chunk_idx = chunks_before_proof + local_chunk_idx;
+            let rel_commit_idx = stacking_chunks_psums[cp_start + 1..=cp_end]
+                .partition_point(|&x| x <= absolute_chunk_idx);
+            let commit_idx = rel_commit_idx;
+
+            let commit_chunks_before = stacking_chunks_psums[cp_start + commit_idx];
+            let chunk_idx = absolute_chunk_idx - commit_chunks_before;
+
+            let num_chunks = stacking_chunks_psums[cp_start + commit_idx + 1]
+                - stacking_chunks_psums[cp_start + commit_idx];
+
             let mu = preflight.stacking.stacking_batching_challenge;
 
             let cols: &mut InitialOpenedValuesCols<F> = row.borrow_mut();
 
-            let is_first_in_commit = record.chunk_idx == 0;
-            let is_first_in_coset = is_first_in_commit && record.commit_idx == 0;
-            let is_first_in_query = is_first_in_coset && record.coset_idx == 0;
-            let is_first_in_proof = is_first_in_query && record.query_idx == 0;
+            let is_first_in_commit = chunk_idx == 0;
+            let is_first_in_coset = is_first_in_commit && commit_idx == 0;
+            let is_first_in_query = is_first_in_coset && coset_idx == 0;
+            let is_first_in_proof = is_first_in_query && query_idx == 0;
 
-            let num_chunks = proof.whir_proof.initial_round_opened_rows[record.commit_idx]
-                [record.query_idx][record.coset_idx]
-                .len()
-                .div_ceil(CHUNK);
-            let is_same_commit = record.chunk_idx < num_chunks - 1;
-            let is_same_coset_idx = is_same_commit
-                || record.commit_idx < proof.whir_proof.initial_round_opened_rows.len() - 1;
-            let is_same_query = is_same_coset_idx || record.coset_idx < (1 << k_whir) - 1;
-            let is_same_proof = is_same_query || record.query_idx < params.num_whir_queries - 1;
+            let is_same_commit = chunk_idx < num_chunks - 1;
+            let chunk_len = if is_same_commit {
+                CHUNK
+            } else {
+                let width = stacking_widths_psums[cp_start + commit_idx + 1]
+                    - stacking_widths_psums[cp_start + commit_idx];
+                if width % CHUNK == 0 {
+                    CHUNK
+                } else {
+                    width % CHUNK
+                }
+            };
 
             cols.proof_idx = F::from_canonical_usize(proof_idx);
             cols.is_first_in_proof = F::from_bool(is_first_in_proof);
             cols.is_first_in_query = F::from_bool(is_first_in_query);
             cols.is_first_in_coset = F::from_bool(is_first_in_coset);
             cols.is_first_in_commit = F::from_bool(is_first_in_commit);
-            cols.query_idx = F::from_canonical_usize(record.query_idx);
-            cols.commit_idx = F::from_canonical_usize(record.commit_idx);
-            cols.col_chunk_idx = F::from_canonical_usize(record.chunk_idx);
-            cols.coset_idx = F::from_canonical_usize(record.coset_idx);
-            for flag in cols.flags.iter_mut().take(record.chunk_len) {
+            cols.query_idx = F::from_canonical_usize(query_idx);
+            cols.commit_idx = F::from_canonical_usize(commit_idx);
+            cols.col_chunk_idx = F::from_canonical_usize(chunk_idx);
+            cols.coset_idx = F::from_canonical_usize(coset_idx);
+            for flag in cols.flags.iter_mut().take(chunk_len) {
                 *flag = F::ONE;
             }
-            cols.twiddle = omega_k.exp_u64(record.coset_idx as u64);
+            cols.twiddle = omega_k.exp_u64(coset_idx as u64);
             cols.codeword_value_acc
                 .copy_from_slice(record.codeword_slice_val_acc.as_base_slice());
-            cols.zi_root = preflight.whir.zj_roots[0][record.query_idx];
-            cols.zi = preflight.whir.zjs[0][record.query_idx];
+            cols.zi_root = preflight.whir.zj_roots[0][query_idx];
+            cols.zi = preflight.whir.zjs[0][query_idx];
             cols.yi
-                .copy_from_slice(preflight.whir.yjs[0][record.query_idx].as_base_slice());
-            cols.mu.copy_from_slice(
-                preflight
-                    .stacking
-                    .stacking_batching_challenge
-                    .as_base_slice(),
-            );
-            cols.merkle_idx_bit_src = preflight.whir.queries[record.query_idx];
-            let mut mu_pow = record.mu_pow;
+                .copy_from_slice(preflight.whir.yjs[0][query_idx].as_base_slice());
+            cols.mu.copy_from_slice(mu.as_base_slice());
+            cols.merkle_idx_bit_src = preflight.whir.queries[query_idx];
+
+            let width_before_proof = stacking_widths_psums[cp_start];
+            let exponent_base_in_proof =
+                stacking_widths_psums[cp_start + commit_idx] - width_before_proof;
+            let exponent_base = exponent_base_in_proof;
+
             for offset in 0..CHUNK {
+                let exponent = exponent_base + chunk_idx * CHUNK + min(offset, chunk_len - 1);
+                let mu_pow = mu_pows[width_before_proof + exponent];
                 cols.mu_pows[offset].copy_from_slice(mu_pow.as_base_slice());
-                if offset < record.chunk_len - 1 {
-                    mu_pow *= mu;
-                }
             }
             cols.pre_state = record.pre_state;
             cols.post_state = record.post_state;
-            cols.coset_idx_max_aux = F::from_canonical_usize((1 << k_whir) - 1 - record.coset_idx)
-                .try_inverse()
-                .unwrap_or_default();
-
-            cols.is_same_proof = F::from_bool(is_same_proof);
-            cols.is_same_query = F::from_bool(is_same_query);
-            cols.is_same_commit = F::from_bool(is_same_commit);
-            cols.is_same_coset_idx = F::from_bool(is_same_coset_idx);
         });
 
     trace

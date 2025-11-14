@@ -236,8 +236,8 @@ where
 #[tracing::instrument(name = "generate_trace(SumcheckAir)", skip_all)]
 pub(crate) fn generate_trace(
     vk: &MultiStarkVerifyingKeyV2,
-    proofs: &[Proof],
-    preflights: &[Preflight],
+    proofs: &[&Proof],
+    preflights: &[&Preflight],
 ) -> RowMajorMatrix<F> {
     debug_assert_eq!(proofs.len(), preflights.len());
 
@@ -287,7 +287,7 @@ pub(crate) fn generate_trace(
             let proof = &proofs[proof_idx];
             let whir = &preflights[proof_idx].whir;
 
-            let num_rounds = whir.pow_samples.len();
+            let num_rounds = params.num_whir_rounds();
             debug_assert_eq!(whir.alphas.len(), num_rounds * k_whir);
 
             let is_first_in_group = j == 0;
