@@ -313,17 +313,10 @@ pub(crate) extern "C" fn extern_handler<F, Ctx: ExecutionCtxTrait, const E1: boo
     unsafe {
         (pre_compute_insns.handler)(pre_compute_insns.pre_compute, vm_exec_state_ref);
     };
-    let pc = vm_exec_state_ref.pc();
 
     match vm_exec_state_ref.exit_code {
-        Ok(None) => pc,
-        _ => {
-            if E1 {
-                pc + 1
-            } else {
-                1
-            }
-        }
+        Ok(None) => 0,
+        _ => 1,
     }
 }
 
@@ -336,3 +329,17 @@ extern "C" fn get_vm_address_space_addr<F, Ctx: ExecutionCtxTrait>(
     let ptr = &vm_exec_state_ref.vm_state.memory.memory.mem[addr_space as usize];
     ptr.as_ptr() as *mut u64 // mut u64 because we want to write 8 bytes at a time
 }
+
+extern "C" fn get_vm_pc_ptr<F, Ctx: ExecutionCtxTrait>(
+    exec_state_ptr: *mut c_void,
+) -> *mut u64 {
+    let vm_exec_state_ref =
+        unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
+    // since pc is the first element of the vm_state field and we use `repr(C)` 
+    // hence `ptr` will be equal to the address of pc in vm_state
+    let state = &mut vm_exec_state_ref.vm_state;
+    let ptr = state.pc_mut() as *mut u32;
+
+    ptr as *mut u64
+}
+

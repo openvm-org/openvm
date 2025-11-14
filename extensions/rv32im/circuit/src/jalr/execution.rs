@@ -121,7 +121,8 @@ where
         asm_str += &delta_b;
         asm_str += &format!("   add {gpr_reg_b}, {imm_extended}\n");
         asm_str += &format!("   and {gpr_reg_b}, -2\n"); // clear bit 0 per RISC-V jalr
-        asm_str += &format!("   mov {REG_PC_W}, {gpr_reg_b}\n"); // zero-extend into r13
+
+        let gpr_reg_b_64 = convert_x86_reg(&gpr_reg_b, Width::W64).unwrap();
 
         if write_rd {
             let next_pc = pc.wrapping_add(DEFAULT_PC_STEP);
@@ -130,7 +131,7 @@ where
         }
 
         asm_str += &format!("   lea {REG_C}, [rip + map_pc_base]\n");
-        asm_str += &format!("   movsxd {REG_A}, [{REG_C} + {REG_PC}]\n");
+        asm_str += &format!("   movsxd {REG_A}, [{REG_C} + {gpr_reg_b_64}]\n");
         asm_str += &format!("   add {REG_A}, {REG_C}\n");
         asm_str += &format!("   jmp {REG_A}\n");
         Ok(asm_str)
