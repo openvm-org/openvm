@@ -66,10 +66,7 @@ mod aot {
         if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[rv32_reg as usize] {
             // a/4 is overridden, b/4 is overridden
             if is_gpr_force_write {
-                return (
-                    gpr.to_string(),
-                    format!("  mov {gpr}, {override_reg}\n"),
-                );
+                return (gpr.to_string(), format!("  mov {gpr}, {override_reg}\n"));
             }
             return (override_reg.to_string(), "".to_string());
         }
@@ -151,7 +148,7 @@ mod aot {
         //     }
         // }
         // ```
-        //
+        // 
         // For a specific RV32 instruction, the variables can be treated as constants at AOT
         // compilation time:
         // - `address_space`: always a constant because it is derived from an Instruction
@@ -228,7 +225,7 @@ mod aot {
         //     }
         // }
         // ```
-        //
+        // 
         // For a specific RV32 instruction, the variables can be treated as constants at AOT compilation time:
         // Inputs:
         // - `chunk`: always 8(CHUNK) because we only support when continuation is enabled.
