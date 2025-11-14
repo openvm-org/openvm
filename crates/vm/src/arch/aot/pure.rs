@@ -5,8 +5,8 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{
     common::{
-        sync_gpr_to_xmm, sync_xmm_to_gpr, REG_D, REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_FOURTH_ARG,
-        REG_INSNS_PTR, REG_INSTRET_END, REG_PC, REG_RETURN_VAL, REG_SECOND_ARG, REG_THIRD_ARG,
+        REG_D, REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_FOURTH_ARG, REG_INSNS_PTR, REG_INSTRET_END,
+        REG_PC, REG_RETURN_VAL, REG_SECOND_ARG, REG_THIRD_ARG,
     },
     AotInstance, AsmRunFn,
 };

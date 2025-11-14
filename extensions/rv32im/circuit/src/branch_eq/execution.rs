@@ -109,8 +109,6 @@ where
     F: PrimeField32,
 {
     fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
-        use crate::common::rv32_register_to_gpr;
-
         let &Instruction {
             opcode, a, b, c, d, ..
         } = inst;

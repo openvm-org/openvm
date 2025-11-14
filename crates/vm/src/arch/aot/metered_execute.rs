@@ -3,15 +3,13 @@ use std::{ffi::c_void, mem::offset_of};
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{common::*, AotInstance, AsmRunFn};
+use super::{common::*, AotInstance};
 use crate::{
     arch::{
         aot::{
             asm_to_lib, extern_handler, get_vm_address_space_addr, set_pc_shim, should_suspend_shim,
         },
-        execution_mode::{
-            metered::segment_ctx::SegmentationCtx, ExecutionCtx, MeteredCtx, Segment,
-        },
+        execution_mode::{metered::segment_ctx::SegmentationCtx, MeteredCtx, Segment},
         interpreter::{
             alloc_pre_compute_buf, get_metered_pre_compute_instructions,
             get_metered_pre_compute_max_size, split_pre_compute_buf, PreComputeInstruction,

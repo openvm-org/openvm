@@ -12,8 +12,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::{execution_mode::ExecutionCtxTrait, Streams, VmExecState};
-#[cfg(feature = "aot")]
-use crate::arch::aot::common::*;
 #[cfg(feature = "tco")]
 use crate::arch::interpreter::InterpretedInstance;
 #[cfg(feature = "aot")]

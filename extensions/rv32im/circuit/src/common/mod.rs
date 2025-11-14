@@ -15,20 +15,12 @@ mod aot {
     };
     use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
 
-    /// The minimum block size is 4, but RISC-V `lb` only requires alignment of 1 and `lh` only requires
-    /// alignment of 2 because the instructions are implemented by doing an access of block size 4.
+    /// The minimum block size is 4, but RISC-V `lb` only requires alignment of 1 and `lh` only
+    /// requires alignment of 2 because the instructions are implemented by doing an access of
+    /// block size 4.
     const DEFAULT_U8_BLOCK_SIZE_BITS: u8 = 2;
     /// This is DIRTY because PAGE_BITS is a generic parameter of E2 context.
     const DEFAULT_PAGE_BITS: usize = 6;
-
-    pub(crate) fn rv32_register_to_gpr(rv32_reg: u8, gpr: &str) -> String {
-        let xmm_map_reg = rv32_reg / 2;
-        if rv32_reg % 2 == 0 {
-            format!("   pextrd {gpr}, xmm{xmm_map_reg}, 0\n")
-        } else {
-            format!("   pextrd {gpr}, xmm{xmm_map_reg}, 1\n")
-        }
-    }
 
     pub(crate) fn gpr_to_rv32_register(gpr: &str, rv32_reg: u8) -> String {
         let xmm_map_reg = rv32_reg / 2;
@@ -134,8 +126,8 @@ mod aot {
             )));
         }
 
-        // `update_adapter_heights_asm` rewrites the following code in ASM for `on_memory_operation`:
-        // ```
+        // `update_adapter_heights_asm` rewrites the following code in ASM for
+        // `on_memory_operation`: ```
         // pub fn update_adapter_heights_batch(
         //     &self,
         //     trace_heights: &mut [u32],
@@ -160,14 +152,17 @@ mod aot {
         // }
         // ```
         //
-        // For a specific RV32 instruction, the variables can be treated as constants at AOT compilation time:
+        // For a specific RV32 instruction, the variables can be treated as constants at AOT
+        // compilation time:
         // - `address_space`: always a constant because it is derived from an Instruction
         // - `num`: always 1 in `on_memory_operation`
         // - `align_bits`: always a constant because `address_space` is a constant
-        // - `size_bits`: RV32 instruction always read 4 bytes(in the AIR level). So `size` is always 4 bytes. So `size_bits` is always 2.
+        // - `size_bits`: RV32 instruction always read 4 bytes(in the AIR level). So `size` is
+        //   always 4 bytes. So `size_bits` is always 2.
         //
-        // If we ignore the Native address space, `min_block_size_bits`` is always `DEFAULT_U8_BLOCK_SIZE=4`. Therefore,
-        // `align_bits` is always 2. So the loop will never be executed and we can leave the function empty.
+        // If we ignore the Native address space, `min_block_size_bits`` is always
+        // `DEFAULT_U8_BLOCK_SIZE=4`. Therefore, `align_bits` is always 2. So the loop will
+        // never be executed and we can leave the function empty.
         Ok("".to_string())
     }
 
@@ -178,9 +173,10 @@ mod aot {
     /// * `config` - The system configuration.
     /// * `address_space` - The address space.
     /// * `pc` - The program counter of the current instruction.
-    /// * `ptr_reg` - The register to store the accessed pointer. The caller should not expect the value of this register to be preserved.
-    /// * `reg1` - A register to store the intermediate result.
-    /// * `reg2` - A register to store the intermediate result.
+    /// * `ptr_reg` - The 64-bit register to store the accessed pointer. The caller should not
+    ///   expect the value of this register to be preserved.
+    /// * `reg1` - A 64-bit register to store the intermediate result.
+    /// * `reg2` - A 64-bitregister to store the intermediate result.
     ///
     /// # Returns
     ///
@@ -193,8 +189,8 @@ mod aot {
         reg1: &str,
         reg2: &str,
     ) -> Result<String, AotError> {
-        // `update_boundary_merkle_heights_asm` rewrites the following code in ASM for `on_memory_operation`:
-        // ```
+        // `update_boundary_merkle_heights_asm` rewrites the following code in ASM for
+        // `on_memory_operation`: ```
         // pub fn label_to_index((addr_space, block_id): (u32, u32)) -> u64 {
         //     (((addr_space - ADDR_SPACE_OFFSET) as u64) << self.address_height) + block_id as u64
         // }
@@ -221,8 +217,8 @@ mod aot {
         //     for page_id in start_page_id..end_page_id {
         //         if self.page_indices.insert(page_id as usize) {
         //             self.page_access_count += 1;
-        //             // SAFETY: address_space passed is usually a hardcoded constant or derived from an
-        //             // Instruction where it is bounds checked before passing
+        //             // SAFETY: address_space passed is usually a hardcoded constant or derived
+        // from an             // Instruction where it is bounds checked before passing
         //             unsafe {
         //                 *self
         //                     .addr_space_access_count
@@ -249,7 +245,6 @@ mod aot {
         // - `end_page_id`: ((end_block_id - 1) >> PAGE_BITS) + 1 = start_block_id >> PAGE_BITS + 1;
         //
         // Therefore the loop only iterates once for `page_id = start_page_id`.
-        //
 
         let initial_block_size: usize = config.initial_block_size();
         if initial_block_size != CHUNK {
@@ -299,7 +294,7 @@ mod aot {
         asm_str += &format!("    and {ptr_reg}, 63\n");
         // `reg2 = mask = 1u64 << bit_index`
         asm_str += &format!("    mov {reg2}, 1\n");
-        asm_str += &format!("    shl {reg2}, {ptr_reg}\n");
+        asm_str += &format!("    shlx {reg2}, {reg2}, {ptr_reg}\n");
         // `ptr_reg = self.page_indices.ptr`
         asm_str +=
             &format!("    mov {ptr_reg}, [{REG_EXEC_STATE_PTR} + {page_indices_ptr_offset}]\n");
@@ -316,10 +311,18 @@ mod aot {
         // `*word += mask`
         asm_str += &format!("    add {ptr_reg}, {reg2}\n");
         asm_str += &format!("    mov [{reg1}], {ptr_reg}\n");
+        // reg1 = &self.page_access_count`
+        asm_str +=
+            &format!("    lea {reg1}, [{REG_EXEC_STATE_PTR} + {page_access_count_offset}]\n");
         // self.page_access_count += 1;
-        asm_str += &format!("    add [{REG_EXEC_STATE_PTR} + {page_access_count_offset}], 1\n");
-        // addr_space_access_count[address_space] += 1;
-        asm_str += &format!("    add [{REG_EXEC_STATE_PTR} + {addr_space_access_count_ptr_offset} + {address_space} * 4], 1\n");
+        asm_str += &format!("    add dword ptr [{reg1}], 1\n");
+        // reg1 = &addr_space_access_count.as_ptr()
+        asm_str += &format!(
+            "    lea {reg1}, [{REG_EXEC_STATE_PTR} + {addr_space_access_count_ptr_offset}]\n"
+        );
+        asm_str += &format!("    mov {reg1}, [{reg1}]\n");
+        // self.addr_space_access_count[address_space] += 1;
+        asm_str += &format!("    add dword ptr [{reg1} + {address_space} * 4], 1\n");
         asm_str += &format!("{inserted_label}:\n");
         // Inserted, do nothing
 
