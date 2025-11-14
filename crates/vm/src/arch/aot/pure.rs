@@ -114,10 +114,8 @@ where
             asm_str += &format!("asm_execute_pc_{pc}:\n");
 
             // Check if we should suspend or not
-
-            asm_str += &format!("    cmp {REG_INSTRET_END}, 0\n");
-            asm_str += &format!("    je asm_run_end_{pc}\n");
-            asm_str += &format!("    dec {REG_INSTRET_END}\n");
+            asm_str += &format!("    sub {REG_INSTRET_END}, 1\n");
+            asm_str += &format!("    jb asm_run_end_{pc}\n");
 
             if instruction.opcode.as_usize() == 0 {
                 // terminal opcode has no associated executor, so can handle with default fallback
