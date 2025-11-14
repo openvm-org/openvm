@@ -309,24 +309,20 @@ impl MemoryMerkleTree {
 
     /// Drops all massive buffers to free memory. Used at the end of an execution segment.
     ///
-    /// Caution: this method destroys all subtree streams and events. If events have not been
-    /// manually removed after completion, they are enqueued to the default stream and then a forced
-    /// synchronization is performed on the default stream. The forced synchronization is avoided if
-    /// all events are manually removed when they are known to be completed (e.g., after some other
-    /// synchronization like D2H transfer).
+    /// Caution: this method destroys all subtree streams and events. For safety, we force
+    /// synchronize all subtree streams and the default stream (cudaStreamPerThread) with host
+    /// before deallocating buffers.
     pub fn drop_subtrees(&mut self) {
-        let mut needs_sync = false;
         // Make sure all streams are synchronized before destroying events
         for subtree in self.subtrees.iter() {
             subtree.stream.synchronize().unwrap();
-            if let Some(event) = subtree.build_completion_event.as_ref() {
-                needs_sync = true;
-                default_stream_wait(event).unwrap();
+            if let Some(_event) = subtree.build_completion_event.as_ref() {
+                tracing::warn!(
+                    "Dropping merkle subtree before build_async event has been destroyed"
+                );
             }
         }
-        if needs_sync {
-            current_stream_sync().unwrap();
-        }
+        current_stream_sync().unwrap();
         // Clearing will drop streams (which calls synchronize again) and drops events (which
         // destroys them)
         self.subtrees.clear();
