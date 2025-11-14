@@ -84,6 +84,8 @@ where
 
         builder.assert_bool(local.is_enabled);
         builder.assert_bool(local.is_root);
+        builder.when(local.layer).assert_one(local.is_enabled);
+        builder.when(local.node_idx).assert_one(local.is_enabled);
 
         let is_nonleaf = local.layer_inv * local.layer;
         builder.when(local.layer).assert_one(is_nonleaf.clone());

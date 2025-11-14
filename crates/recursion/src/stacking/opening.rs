@@ -550,7 +550,7 @@ where
                 stacked_col_idx: local.stacked_col_idx,
                 coefficient: local.stacking_claim_coefficient,
             },
-            local.is_last_for_claim,
+            and(local.is_valid, local.is_last_for_claim),
         );
 
         /*

@@ -223,6 +223,7 @@ where
         builder
             .when(and(not(local.is_valid), local.is_last))
             .assert_zero(next.proof_idx);
+        builder.when(local.is_first).assert_one(local.is_valid);
 
         /*
          * Constrain that the sum of s_0(z) for z in D via interaction equals the RLC of column

@@ -362,7 +362,7 @@ where
                 idx: coeff_idx,
                 coeff: local.final_poly_coeff.map(Into::into),
             },
-            local.phase_idx,
+            local.is_enabled * local.phase_idx,
         );
     }
 }

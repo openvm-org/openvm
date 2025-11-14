@@ -351,6 +351,7 @@ where
         builder
             .when(and(not(local.is_valid), local.is_last))
             .assert_zero(next.proof_idx);
+        builder.when(local.is_first).assert_one(local.is_valid);
 
         /*
          * Constrain that round increments correctly.
@@ -523,7 +524,7 @@ where
                     ),
                 ),
             },
-            local.eq_rot_mult,
+            local.is_valid * local.eq_rot_mult,
         );
 
         builder.assert_bool(local.has_r);
@@ -544,7 +545,7 @@ where
                 idx: local.round,
                 challenge: local.r_round,
             },
-            local.has_r,
+            and(local.is_valid, local.has_r),
         );
 
         self.whir_opening_point_bus.send(
