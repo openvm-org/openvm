@@ -540,27 +540,57 @@ mod cuda {
             vk_commit_data_gpu,
             &proofs,
         );
-        let non_deterministic_air_idxs = [cpu_ctx.len() - 1]; // exp_bits is non-deterministic when multi-threaded
+
+        #[cfg(feature = "touchemall")]
+        for (i, gpu) in gpu_ctx.iter().enumerate() {
+            let gpu = &gpu.common_main;
+            let name = circuit.airs()[i].name();
+
+            let width = gpu.width();
+            let height = gpu.height();
+
+            let gpu = gpu.to_host().unwrap();
+
+            for r in 0..height {
+                for c in 0..width {
+                    let val = gpu[c * height + r];
+                    let val_32 = unsafe { *(&val as *const F as *const u32) };
+                    assert!(
+                        val_32 != 0xffffffff,
+                        "potentially untouched value at ({r}, {c}) of a trace of size {height}x{width} for air {name}"
+                    );
+                }
+            }
+        }
+
+        const POSEIDON2_AIR_ID: usize = 14;
+        assert!(circuit.airs()[POSEIDON2_AIR_ID].name().starts_with("Poseidon2Air"));
+
+        let non_deterministic_air_idxs = [
+            POSEIDON2_AIR_ID,
+            cpu_ctx.len() - 1 // exp_bits is non-deterministic when multi-threaded
+        ];
 
         for (i, (cpu, gpu)) in zip_eq(cpu_ctx, gpu_ctx).enumerate() {
             let cpu = cpu.common_main;
             let gpu = gpu.common_main;
             assert_eq!(gpu.width(), cpu.width(), "Width mismatch at AIR {i}");
             assert_eq!(gpu.height(), cpu.height(), "Height mismatch at AIR {i}");
+
+            let name = circuit.airs()[i].name();
+
             if non_deterministic_air_idxs.contains(&i) {
                 continue;
             }
             let gpu = gpu.to_host().unwrap();
-            // i = 14 is poseidon2 where we do some unstable sort, so skip the comparison.
-            if i != 14 {
-                for r in 0..cpu.height() {
-                    for c in 0..cpu.width() {
-                        assert_eq!(
-                            gpu[c * cpu.height() + r],
-                            *cpu.get(r, c).unwrap(),
-                            "Mismatch for AIR {i} at row {r} column {c}"
-                        );
-                    }
+
+            for r in 0..cpu.height() {
+                for c in 0..cpu.width() {
+                    assert_eq!(
+                        gpu[c * cpu.height() + r],
+                        *cpu.get(r, c).unwrap(),
+                        "Mismatch for {} at row {r} column {c}", name
+                    );
                 }
             }
         }
