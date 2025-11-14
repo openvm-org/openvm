@@ -16,7 +16,7 @@ pub mod verifier;
 pub struct NonRootVerifierPvs<F> {
     // app commit pvs
     pub user_pv_commit: [F; DIGEST_SIZE],
-    pub app_commit: [F; DIGEST_SIZE],
+    pub program_commit: [F; DIGEST_SIZE],
 
     // connector pvs
     pub initial_pc: F,
