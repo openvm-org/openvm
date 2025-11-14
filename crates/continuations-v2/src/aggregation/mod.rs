@@ -18,7 +18,7 @@ pub use nonroot::*;
 pub use root::*;
 pub use utils::*;
 
-const MAX_NUM_PROOFS: usize = 4;
+pub const MAX_NUM_PROOFS: usize = 4;
 
 pub trait AggregationCircuit {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>>;

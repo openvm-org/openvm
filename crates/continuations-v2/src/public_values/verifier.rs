@@ -73,7 +73,7 @@ pub fn generate_proving_ctx(
         if let Some(user_pv_commit) = user_pv_commit {
             cols.has_verifier_pvs = F::ZERO;
             cols.child_pvs.user_pv_commit = user_pv_commit;
-            cols.child_pvs.app_commit = proof.trace_vdata[PROGRAM_AIR_ID]
+            cols.child_pvs.program_commit = proof.trace_vdata[PROGRAM_AIR_ID]
                 .as_ref()
                 .unwrap()
                 .cached_commitments[PROGRAM_CACHED_TRACE_INDEX];
@@ -370,7 +370,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
                 PublicValuesBusMessage {
                     air_idx: verifier_pvs_id.into(),
                     pv_idx: AB::Expr::from_canonical_usize(didx + DIGEST_SIZE),
-                    value: local.child_pvs.app_commit[didx].into(),
+                    value: local.child_pvs.program_commit[didx].into(),
                 },
                 local.is_valid * is_internal.clone(),
             );
@@ -443,7 +443,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
         let &NonRootVerifierPvs::<_> {
             initial_pc,
             user_pv_commit,
-            app_commit,
+            program_commit: app_commit,
             is_terminate,
             final_pc,
             exit_code,
@@ -484,7 +484,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             .when(local.is_last)
             .assert_eq(local.child_pvs.exit_code, exit_code);
         assert_array_eq(builder, local.child_pvs.user_pv_commit, user_pv_commit);
-        assert_array_eq(builder, local.child_pvs.app_commit, app_commit);
+        assert_array_eq(builder, local.child_pvs.program_commit, app_commit);
 
         // constrain internal_flag is 0 at the leaf level
         builder
@@ -530,7 +530,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             * local.child_pvs.internal_flag
             * AB::F::TWO.inverse();
         let cached_commit = from_fn(|i| {
-            is_leaf.clone() * local.child_pvs.app_commit[i]
+            is_leaf.clone() * local.child_pvs.program_commit[i]
                 + is_internal
                     * (is_internal_flag_zero.clone() * local.child_pvs.leaf_commit[i]
                         + is_internal_flag_one.clone()
