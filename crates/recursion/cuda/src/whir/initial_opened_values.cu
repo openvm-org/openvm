@@ -83,7 +83,6 @@ __global__ void initial_opened_values_tracegen(
 
     if (row_idx >= num_valid_rows) {
         row.fill_zero(0, sizeof(InitialOpenedValuesCols<uint8_t>));
-        COL_WRITE_VALUE(row, InitialOpenedValuesCols, proof_idx, NUM_PROOFS);
         return;
     }
 

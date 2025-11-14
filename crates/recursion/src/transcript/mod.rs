@@ -2,7 +2,7 @@ use core::borrow::BorrowMut;
 use std::sync::Arc;
 
 use openvm_poseidon2_air::{POSEIDON2_WIDTH, Poseidon2Config, Poseidon2SubChip};
-use openvm_stark_backend::{AirRef, p3_maybe_rayon::prelude::*, prover::MatrixDimensions};
+use openvm_stark_backend::{AirRef, p3_maybe_rayon::prelude::*};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_air::BaseAir;
 use p3_baby_bear::Poseidon2BabyBear;
@@ -320,6 +320,7 @@ mod cuda_tracegen {
         copy::{MemCopyD2H, MemCopyH2D},
         d_buffer::DeviceBuffer,
     };
+    use openvm_stark_backend::prover::MatrixDimensions;
 
     use super::*;
     use crate::{

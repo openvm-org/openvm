@@ -199,9 +199,7 @@ where
             WhirQueryBusMessage {
                 whir_round: local.whir_round.into(),
                 query_idx: AB::Expr::ZERO,
-                value: local
-                    .z0
-                    .map(|z0_i| z0_i * is_same_proof_for_query.clone()),
+                value: local.z0.map(|z0_i| z0_i * is_same_proof_for_query.clone()),
             },
             is_enabled,
         );
@@ -369,14 +367,6 @@ pub(crate) fn generate_trace(
                 cols.y0
                     .copy_from_slice(whir_proof.ood_values[i].as_base_slice());
             }
-        });
-
-    trace
-        .chunks_exact_mut(width)
-        .skip(total_valid_rows)
-        .for_each(|row| {
-            let cols: &mut WhirRoundCols<F> = row.borrow_mut();
-            cols.proof_idx = F::from_canonical_usize(proofs.len());
         });
 
     RowMajorMatrix::new(trace, width)

@@ -7,7 +7,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, TwoAdicField};
+use p3_field::{FieldAlgebra, FieldExtensionAlgebra, TwoAdicField};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
 use p3_symmetric::Permutation;
@@ -40,7 +40,6 @@ struct NonInitialOpenedValuesCols<T> {
     is_first_in_round: T,
     is_first_in_query: T,
     merkle_idx_bit_src: T,
-    coset_idx_max_aux: T,
     // TODO: extract
     zi_root: T,
     zi: T,
@@ -95,14 +94,9 @@ where
         let is_same_query = next.is_enabled - next.is_first_in_query;
 
         let max_coset_idx = AB::Expr::from_canonical_usize((1 << self.k) - 1);
-        let coset_idx_diff = max_coset_idx - local.coset_idx;
-        let is_not_last_in_query = coset_idx_diff.clone() * local.coset_idx_max_aux;
         builder
-            .when(local.is_enabled * coset_idx_diff.clone())
-            .assert_one(is_not_last_in_query.clone());
-        builder
-            .when(local.is_enabled - is_not_last_in_query)
-            .assert_zero(next.coset_idx);
+            .when(local.is_enabled - is_same_query.clone())
+            .assert_eq(local.coset_idx, max_coset_idx);
 
         NestedForLoopSubAir.eval(
             builder,
@@ -175,11 +169,7 @@ where
             .when(is_same_query.clone())
             .assert_eq(next.twiddle, local.twiddle * omega_k);
 
-        assert_array_eq(
-            &mut builder.when(is_same_query.clone()),
-            local.yi,
-            next.yi,
-        );
+        assert_array_eq(&mut builder.when(is_same_query.clone()), local.yi, next.yi);
         builder
             .when(is_same_query.clone())
             .assert_eq(local.zi, next.zi);
@@ -253,7 +243,6 @@ pub(crate) fn generate_trace(
     let k_whir = params.k_whir;
     let omega_k = F::two_adic_generator(k_whir);
     let rows_per_query = 1 << k_whir;
-    let max_coset_idx = rows_per_query - 1;
     let rows_per_round = rows_per_query * num_queries;
 
     let num_rows_per_proof: usize = (num_rounds - 1) * rows_per_round;
@@ -318,9 +307,6 @@ pub(crate) fn generate_trace(
             cols.whir_round = F::from_canonical_usize(whir_round);
             cols.query_idx = F::from_canonical_usize(query_idx);
             cols.coset_idx = F::from_canonical_usize(coset_idx);
-            cols.coset_idx_max_aux = F::from_canonical_usize(max_coset_idx - coset_idx)
-                .try_inverse()
-                .unwrap_or_default();
             cols.twiddle = omega_k.exp_u64(coset_idx as u64);
             cols.is_first_in_proof = F::from_bool(is_first_in_proof);
             cols.is_first_in_round = F::from_bool(is_first_in_round);
@@ -335,17 +321,6 @@ pub(crate) fn generate_trace(
             cols.zi = preflight.whir.zjs[whir_round][query_idx];
             cols.yi
                 .copy_from_slice(preflight.whir.yjs[whir_round][query_idx].as_base_slice());
-        });
-
-    trace
-        .par_chunks_exact_mut(width)
-        .skip(num_valid_rows)
-        .for_each(|row| {
-            let cols: &mut NonInitialOpenedValuesCols<F> = row.borrow_mut();
-            cols.proof_idx = F::from_canonical_usize(proofs.len());
-            cols.coset_idx_max_aux = F::from_canonical_usize(max_coset_idx)
-                .try_inverse()
-                .unwrap_or_default();
         });
 
     RowMajorMatrix::new(trace, width)

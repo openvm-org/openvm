@@ -326,13 +326,5 @@ pub(crate) fn generate_trace(
                 F::from_canonical_usize(alpha_lookup_counts[whir_round * k_whir + j]);
         });
 
-    trace
-        .chunks_exact_mut(width)
-        .skip(total_valid_rows)
-        .for_each(|row| {
-            let cols: &mut SumcheckCols<F> = row.borrow_mut();
-            cols.proof_idx = F::from_canonical_usize(proofs.len());
-        });
-
     RowMajorMatrix::new(trace, width)
 }
