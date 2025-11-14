@@ -51,3 +51,9 @@ cuda = [
     "openvm-circuit/cuda",
     "recursion-circuit/cuda",
 ]
+touchemall = [
+    "cuda",
+    "openvm-cuda-common/touchemall",
+    "openvm-cuda-backend/touchemall",
+    "openvm-circuit/touchemall",
+]
