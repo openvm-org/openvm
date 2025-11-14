@@ -189,8 +189,9 @@ where
 
     fn pop_address_space_start() -> String {
         let mut asm_str = String::new();
-        // For byte alignment
+        // SAFETY: pay attention to byte alignment.
         asm_str += "   pop rdi\n";
+        asm_str += "   pinsrq xmm3, rdi, 1\n";
         asm_str += "   pop rdi\n";
         asm_str += "   pinsrq xmm2, rdi, 1\n";
         asm_str += "   pop rdi\n";
@@ -221,13 +222,14 @@ where
     fn push_address_space_start() -> String {
         let mut asm_str = String::new();
 
+        // SAFETY: pay attention to byte alignment.
         asm_str += "   pextrq rdi, xmm0, 1\n";
         asm_str += "   push rdi\n";
         asm_str += "   pextrq rdi, xmm1, 1\n";
         asm_str += "   push rdi\n";
         asm_str += "   pextrq rdi, xmm2, 1\n";
         asm_str += "   push rdi\n";
-        // For byte alignment
+        asm_str += "   pextrq rdi, xmm3, 1\n";
         asm_str += "   push rdi\n";
 
         asm_str
