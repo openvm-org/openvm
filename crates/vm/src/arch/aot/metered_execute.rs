@@ -173,7 +173,7 @@ where
             asm_str += &format!("    cmp {REG_INSTRET_END}, 0\n");
             asm_str += &format!("    je instret_zero_{pc}\n"); // if instret == 0, jump to slow path
             asm_str += &format!("    dec {REG_INSTRET_END}\n");
-            asm_str += &sync_reg_to_instret_until_end(); // TODO: remove this; too many reads from memory, every op
+            // asm_str += &sync_reg_to_instret_until_end(); // TODO: remove this; too many reads from memory, every op
             asm_str += &format!("    jmp execute_instruction_{pc}\n");
 
             asm_str += &format!("instret_zero_{pc}:\n");
@@ -252,6 +252,7 @@ where
                 asm_str += "    cmp rax, 1\n"; // compare the return value with 1
                 asm_str += &Self::pop_internal_registers(); // pop the internal registers from the stack
                 asm_str += &Self::pop_address_space_start();
+                asm_str += &sync_instret_until_end_to_reg();
                 asm_str += &Self::rv32_regs_to_xmm(); // read the memory from the memory location of the RV32 registers in `GuestMemory`
                                                       // registers, to the appropriate XMM registers
                 asm_str += &format!("   je asm_run_end_{pc}\n");
@@ -263,6 +264,12 @@ where
                 asm_str += "\n";
             }
         }
+        /*
+        extensions/rv32im/tests: cargo test --features aot
+        extensions/ecc/tests: cargo test test_decompress --features aot
+        crates/sdk/tests: cargo test test_execution_suspension --features aot -- --nocapture
+
+        */
 
         asm_str += "asm_handle_segment_check:\n";
         asm_str += "    push r14\n";
