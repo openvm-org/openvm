@@ -83,6 +83,7 @@ where
         let instret_until_end_offset = offset_of!(VmExecState<F, GuestMemory, MeteredCtx>, ctx)
             + offset_of!(MeteredCtx, segmentation_ctx)
             + offset_of!(SegmentationCtx, instrets_until_check);
+        // TODO: Dont use REG_INSTRET_END, read from memory instead
         let sync_reg_to_instret_until_end = || {
             format!(
                 "    mov QWORD PTR [{REG_EXEC_STATE_PTR} + {instret_until_end_offset}], {REG_INSTRET_END}\n"
