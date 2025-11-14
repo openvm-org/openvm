@@ -243,8 +243,8 @@ where
 #[tracing::instrument(name = "generate_trace(NonInitialOpenedValuesAir)", skip_all)]
 pub(crate) fn generate_trace(
     mvk: &MultiStarkVerifyingKeyV2,
-    proofs: &[Proof],
-    preflights: &[Preflight],
+    proofs: &[&Proof],
+    preflights: &[&Preflight],
 ) -> RowMajorMatrix<F> {
     let params = mvk.inner.params;
 
@@ -312,11 +312,8 @@ pub(crate) fn generate_trace(
             };
             let row_in_proof = i;
             let is_first_in_proof = row_in_proof == 0;
-            let is_last_in_proof = row_in_proof + 1 == num_rows_per_proof;
             let is_first_in_query = coset_idx == 0;
             let is_first_in_round = is_first_in_query && query_idx == 0;
-            let is_last_in_query = coset_idx + 1 == rows_per_query;
-            let is_last_query_in_round = query_idx + 1 == num_queries;
 
             cols.whir_round = F::from_canonical_usize(whir_round);
             cols.query_idx = F::from_canonical_usize(query_idx);

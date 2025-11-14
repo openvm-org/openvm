@@ -370,8 +370,8 @@ where
 #[tracing::instrument(name = "generate_trace(FinalPolyQueryEvalAir)", skip_all)]
 pub(crate) fn generate_trace(
     mvk: &MultiStarkVerifyingKeyV2,
-    proofs: &[Proof],
-    preflights: &[Preflight],
+    proofs: &[&Proof],
+    preflights: &[&Preflight],
 ) -> RowMajorMatrix<F> {
     debug_assert_eq!(proofs.len(), preflights.len());
 

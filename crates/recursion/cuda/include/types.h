@@ -5,7 +5,10 @@
 #include <cstdint>
 #include <stddef.h>
 
-const size_t DIGEST_SIZE = 8;
+constexpr size_t D_EF = 4;
+constexpr size_t CHUNK = 8;
+constexpr size_t WIDTH = 16;
+constexpr size_t DIGEST_SIZE = 8;
 typedef Fp Digest[DIGEST_SIZE];
 
 typedef struct {
