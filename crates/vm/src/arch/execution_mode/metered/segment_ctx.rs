@@ -3,7 +3,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
 
-pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
+pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 10000;
 
 pub const DEFAULT_MAX_TRACE_HEIGHT_BITS: u8 = 22;
 pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << DEFAULT_MAX_TRACE_HEIGHT_BITS;
