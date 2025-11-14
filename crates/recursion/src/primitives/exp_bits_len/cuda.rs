@@ -1,7 +1,6 @@
-use std::{ops::Deref, ptr};
+use std::ops::Deref;
 
 use openvm_cuda_backend::{base::DeviceMatrix, types::F};
-use openvm_cuda_common::copy::MemCopyH2D;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{ExpBitsLenCols, ExpBitsLenCpuTraceGenerator};
