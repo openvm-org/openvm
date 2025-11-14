@@ -40,8 +40,6 @@ struct SumcheckCols<T> {
     subidx: T,
     is_first_in_proof: T,
     is_first_in_round: T,
-    is_same_proof: T,
-    is_same_round: T,
     /// The transcript index at the beginning of the current sumcheck round.
     tidx: T,
     ev1: [T; D_EF],
@@ -92,46 +90,42 @@ where
         let is_enabled = local.is_enabled;
         builder.assert_bool(is_enabled);
 
+        let is_same_proof = next.is_enabled - next.is_first_in_proof;
+        let is_same_round = next.is_enabled - next.is_first_in_round;
+
         NestedForLoopSubAir::<3, 2>.eval(
             builder,
             (
                 (
                     NestedForLoopIoCols {
-                        is_enabled: local.is_enabled.into(),
-                        counter: [
-                            local.proof_idx.into(),
-                            local.whir_round.into(),
-                            local.subidx.into(),
-                        ],
+                        is_enabled: local.is_enabled,
+                        counter: [local.proof_idx, local.whir_round, local.subidx],
                         is_first: [
-                            local.is_first_in_proof.into(),
-                            local.is_first_in_round.into(),
-                            AB::Expr::ONE,
+                            local.is_first_in_proof,
+                            local.is_first_in_round,
+                            local.is_enabled,
                         ],
-                    },
+                    }
+                    .map_into(),
                     NestedForLoopIoCols {
-                        is_enabled: next.is_enabled.into(),
-                        counter: [
-                            next.proof_idx.into(),
-                            next.whir_round.into(),
-                            next.subidx.into(),
-                        ],
+                        is_enabled: next.is_enabled,
+                        counter: [next.proof_idx, next.whir_round, next.subidx],
                         is_first: [
-                            next.is_first_in_proof.into(),
-                            next.is_first_in_round.into(),
-                            AB::Expr::ONE,
+                            next.is_first_in_proof,
+                            next.is_first_in_round,
+                            next.is_enabled,
                         ],
-                    },
+                    }
+                    .map_into(),
                 ),
                 NestedForLoopAuxCols {
-                    is_transition: [local.is_same_proof, local.is_same_round],
-                }
-                .map_into(),
+                    is_transition: [is_same_proof.clone(), is_same_round.clone()],
+                },
             ),
         );
 
         builder
-            .when(local.is_enabled - local.is_same_round)
+            .when(local.is_enabled - is_same_round.clone())
             .assert_eq(local.subidx, AB::Expr::from_canonical_usize(self.k - 1));
 
         let sumcheck_idx = local.whir_round * AB::Expr::from_canonical_usize(self.k) + local.subidx;
@@ -149,12 +143,12 @@ where
 
         let post_claim = interpolate_quadratic(local.pre_claim, local.ev1, local.ev2, local.alpha);
         assert_array_eq(
-            &mut builder.when(local.is_enabled - local.is_same_round),
+            &mut builder.when(local.is_enabled - is_same_round.clone()),
             post_claim.clone(),
             local.post_group_claim,
         );
 
-        let mut when_sumcheck_transition = builder.when(local.is_same_round);
+        let mut when_sumcheck_transition = builder.when(is_same_round.clone());
         when_sumcheck_transition.assert_zero(next.is_first_in_round);
         assert_array_eq(&mut when_sumcheck_transition, post_claim, next.pre_claim);
         assert_array_eq(
@@ -171,15 +165,6 @@ where
             next.eq_partial,
             ext_field_multiply::<AB::Expr>(local.eq_partial, eq_1::<AB::Expr>(next.alpha, next.u)),
         );
-
-        when_sumcheck_transition.assert_eq(next.subidx, local.subidx + AB::Expr::ONE);
-        builder
-            .when(local.is_enabled - local.is_same_round)
-            .assert_zero(next.subidx);
-        // builder
-        //     .when(next.is_enabled)
-        //     .when(AB::Expr::ONE - next.is_transition_in_group)
-        //     .assert_one(next.is_first_in_group);
 
         assert_array_eq(
             &mut builder.when(local.is_first_in_proof),
@@ -211,7 +196,7 @@ where
                 idx: sumcheck_idx.clone(),
                 challenge: local.alpha.map(Into::into),
             },
-            local.alpha_lookup_count,
+            local.is_enabled * local.alpha_lookup_count,
         );
         self.eq_alpha_u_bus.send(
             builder,
@@ -219,7 +204,7 @@ where
             WhirEqAlphaUMessage {
                 value: local.eq_partial,
             },
-            local.is_enabled - local.is_same_proof,
+            local.is_enabled - is_same_proof.clone(),
         );
         self.whir_opening_point_bus.receive(
             builder,
@@ -298,9 +283,7 @@ pub(crate) fn generate_trace(
             cols.is_enabled = F::ONE;
             cols.proof_idx = F::from_canonical_usize(proof_idx);
             cols.is_first_in_proof = F::from_bool(i == 0);
-            cols.is_same_proof = F::from_bool(i + 1 < rows_per_proof);
             cols.is_first_in_round = F::from_bool(is_first_in_group);
-            cols.is_same_round = F::from_bool(j + 1 < k_whir);
             cols.whir_round = F::from_canonical_usize(whir_round);
             cols.subidx = F::from_canonical_usize(j);
             cols.tidx = F::from_canonical_usize(tidx);

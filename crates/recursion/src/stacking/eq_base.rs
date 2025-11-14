@@ -307,6 +307,7 @@ where
             .when(and(not(local.is_valid), local.is_last))
             .assert_zero(next.proof_idx);
         builder.assert_zero(local.is_first * local.is_last);
+        builder.when(local.is_first).assert_one(local.is_valid);
 
         /*
          * Constrain value of row_idx and send u^{2^row} to WhirOpeningPointBus when
@@ -488,7 +489,7 @@ where
                 eq_in: eq_u_r.clone(),
                 k_rot_in: eq_u_r_omega.clone(),
             },
-            next.mult,
+            next.is_valid * next.mult,
         );
 
         /*

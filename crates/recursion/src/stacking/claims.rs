@@ -260,6 +260,7 @@ where
         builder
             .when(and(not(local.is_valid), local.is_last))
             .assert_zero(next.proof_idx);
+        builder.when(local.is_first).assert_one(local.is_valid);
 
         /*
          * Constrain that commit_idx and stacked_col_idx increment correctly.

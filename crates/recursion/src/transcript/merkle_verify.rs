@@ -181,7 +181,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
                 commit_major: local.commit_major.into(),
                 commit_minor: local.commit_minor.into(),
             },
-            local.recv_left,
+            local.is_valid * local.recv_left,
         );
         self.merkle_verify_bus.receive(
             builder,
@@ -195,7 +195,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
                 commit_major: local.commit_major.into(),
                 commit_minor: local.commit_minor.into(),
             },
-            local.recv_right,
+            local.is_valid * local.recv_right,
         );
         let send_value = array::from_fn(|i| {
             if i < CHUNK {
@@ -231,7 +231,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
                 minor_idx: local.commit_minor,
                 commitment: local.left, // left and right are both the commitment
             },
-            local.is_last_merkle,
+            local.is_valid * local.is_last_merkle,
         );
 
         let poseidon2_input = array::from_fn(|i| {

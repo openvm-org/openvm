@@ -341,7 +341,7 @@ where
                 num_bits: local.num_bits.into(),
                 eval: eval.clone(),
             },
-            local.internal_mult,
+            local.is_valid * local.internal_mult,
         );
 
         self.eq_bits_lookup_bus.send(
@@ -352,7 +352,7 @@ where
                 num_bits: local.num_bits.into(),
                 eval,
             },
-            local.external_mult,
+            local.is_valid * local.external_mult,
         );
     }
 }
