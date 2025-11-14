@@ -56,14 +56,14 @@ pub unsafe fn range_checker_tracegen(
 
 #[tracing::instrument(name = "exp_bits_len_tracegen", skip_all)]
 pub unsafe fn exp_bits_len_tracegen(
-    d_requests: *const ExpBitsLenRecord,
+    d_requests: &DeviceBuffer<ExpBitsLenRecord>,
     num_requests: usize,
     d_trace: &DeviceBuffer<F>,
     height: usize,
     num_valid_rows: usize,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_exp_bits_len_tracegen(
-        d_requests,
+        d_requests.as_ptr(),
         num_requests,
         d_trace.as_mut_ptr(),
         height,

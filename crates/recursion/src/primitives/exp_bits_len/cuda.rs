@@ -5,7 +5,7 @@ use openvm_cuda_common::copy::MemCopyH2D;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{ExpBitsLenCols, ExpBitsLenCpuTraceGenerator};
-use crate::primitives::cuda_abi::exp_bits_len_tracegen;
+use crate::{cuda::to_device_or_nullptr, primitives::cuda_abi::exp_bits_len_tracegen};
 
 #[derive(Debug, Default)]
 pub struct ExpBitsLenGpuTraceGenerator(pub ExpBitsLenCpuTraceGenerator);
@@ -35,16 +35,10 @@ impl ExpBitsLenGpuTraceGenerator {
 
         trace.buffer().fill_zero().unwrap();
 
-        let records_ptr = if records.is_empty() {
-            ptr::null()
-        } else {
-            tracing::info_span!("allocate_records")
-                .in_scope(|| records.to_device().unwrap().as_ptr())
-        };
-
+        let records = to_device_or_nullptr(&records).unwrap();
         unsafe {
             exp_bits_len_tracegen(
-                records_ptr,
+                &records,
                 records.len(),
                 trace.buffer(),
                 height,
