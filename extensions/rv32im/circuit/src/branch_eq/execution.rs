@@ -14,7 +14,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use super::BranchEqualExecutor;
 #[cfg(feature = "aot")]
 use crate::common::{
-    update_adapter_heights_asm, update_height_change_asm, xmm_to_gpr, REG_A_W, REG_B_W, REG_PC,
+    update_adapter_heights_asm, update_height_change_asm, xmm_to_gpr, REG_A_W, REG_B_W,
 };
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -143,12 +143,10 @@ where
         match local_opcode {
             BranchEqualOpcode::BEQ => {
                 asm_str += &format!("   jne {not_jump_label}\n");
-                asm_str += &format!("   mov {REG_PC}, {next_pc}\n");
                 asm_str += &format!("   jmp asm_execute_pc_{next_pc}\n");
             }
             BranchEqualOpcode::BNE => {
                 asm_str += &format!("   je {not_jump_label}\n");
-                asm_str += &format!("   mov {REG_PC}, {next_pc}\n");
                 asm_str += &format!("   jmp asm_execute_pc_{next_pc}\n");
             }
         }
