@@ -178,92 +178,88 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::LoadFI(dst, src, var_index, size, offset) => {
                 write!(
                     f,
-                    "lwi   ({})fp, ({})fp, {}, {}, {}",
-                    dst, src, var_index, size, offset
+                    "lwi   ({dst})fp, ({src})fp, {var_index}, {size}, {offset}"
                 )
             }
             AsmInstruction::LoadEI(dst, src, var_index, size, offset) => {
                 write!(
                     f,
-                    "lei   ({})fp, ({})fp, {}, {}, {}",
-                    dst, src, var_index, size, offset
+                    "lei   ({dst})fp, ({src})fp, {var_index}, {size}, {offset}"
                 )
             }
             AsmInstruction::StoreFI(dst, src, var_index, size, offset) => {
                 write!(
                     f,
-                    "swi   ({})fp, ({})fp, {}, {}, {}",
-                    dst, src, var_index, size, offset
+                    "swi   ({dst})fp, ({src})fp, {var_index}, {size}, {offset}"
                 )
             }
             AsmInstruction::StoreEI(dst, src, var_index, size, offset) => {
                 write!(
                     f,
-                    "sei   ({})fp, ({})fp, {}, {}, {}",
-                    dst, src, var_index, size, offset
+                    "sei   ({dst})fp, ({src})fp, {var_index}, {size}, {offset}"
                 )
             }
             AsmInstruction::ImmF(dst, src) => {
-                write!(f, "imm   ({})fp, ({})", dst, src)
+                write!(f, "imm   ({dst})fp, ({src})")
             }
             AsmInstruction::CopyF(dst, src) => {
-                write!(f, "copy  ({})fp, ({})", dst, src)
+                write!(f, "copy  ({dst})fp, ({src})")
             }
             AsmInstruction::AddF(dst, lhs, rhs) => {
-                write!(f, "add   ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
+                write!(f, "add   ({dst})fp, ({lhs})fp, ({rhs})fp")
             }
             AsmInstruction::AddFI(dst, lhs, rhs) => {
-                write!(f, "addi  ({})fp, ({})fp, {}", dst, lhs, rhs)
+                write!(f, "addi  ({dst})fp, ({lhs})fp, {rhs}")
             }
             AsmInstruction::SubF(dst, lhs, rhs) => {
-                write!(f, "sub   ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
+                write!(f, "sub   ({dst})fp, ({lhs})fp, ({rhs})fp")
             }
             AsmInstruction::SubFI(dst, lhs, rhs) => {
-                write!(f, "subi  ({})fp, ({})fp, {}", dst, lhs, rhs)
+                write!(f, "subi  ({dst})fp, ({lhs})fp, {rhs}")
             }
             AsmInstruction::SubFIN(dst, lhs, rhs) => {
-                write!(f, "subin ({})fp, {}, ({})fp", dst, lhs, rhs)
+                write!(f, "subin ({dst})fp, {lhs}, ({rhs})fp")
             }
             AsmInstruction::MulF(dst, lhs, rhs) => {
-                write!(f, "mul   ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
+                write!(f, "mul   ({dst})fp, ({lhs})fp, ({rhs})fp")
             }
             AsmInstruction::MulFI(dst, lhs, rhs) => {
-                write!(f, "muli  ({})fp, ({})fp, {}", dst, lhs, rhs)
+                write!(f, "muli  ({dst})fp, ({lhs})fp, {rhs}")
             }
             AsmInstruction::DivF(dst, lhs, rhs) => {
-                write!(f, "div   ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
+                write!(f, "div   ({dst})fp, ({lhs})fp, ({rhs})fp")
             }
             AsmInstruction::DivFI(dst, lhs, rhs) => {
-                write!(f, "divi  ({})fp, ({})fp, {}", dst, lhs, rhs)
+                write!(f, "divi  ({dst})fp, ({lhs})fp, {rhs}")
             }
             AsmInstruction::DivFIN(dst, lhs, rhs) => {
-                write!(f, "divi  ({})fp, {}, ({})fp", dst, lhs, rhs)
+                write!(f, "divi  ({dst})fp, {lhs}, ({rhs})fp")
             }
             AsmInstruction::AddE(dst, lhs, rhs) => {
-                write!(f, "eadd ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
+                write!(f, "eadd ({dst})fp, ({lhs})fp, ({rhs})fp")
             }
             AsmInstruction::SubE(dst, lhs, rhs) => {
-                write!(f, "esub  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
+                write!(f, "esub  ({dst})fp, ({lhs})fp, ({rhs})fp")
             }
             AsmInstruction::MulE(dst, lhs, rhs) => {
-                write!(f, "emul  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
+                write!(f, "emul  ({dst})fp, ({lhs})fp, ({rhs})fp")
             }
             AsmInstruction::DivE(dst, lhs, rhs) => {
-                write!(f, "ediv  ({})fp, ({})fp, ({})fp", dst, lhs, rhs)
+                write!(f, "ediv  ({dst})fp, ({lhs})fp, ({rhs})fp")
             }
             AsmInstruction::Jump(dst, label) => {
                 write!(
                     f,
                     "j     ({})fp, {}",
                     dst,
-                    labels.get(label).unwrap_or(&format!(".L{}", label))
+                    labels.get(label).unwrap_or(&format!(".L{label}"))
                 )
             }
             AsmInstruction::Bne(label, lhs, rhs) => {
                 write!(
                     f,
                     "bne   {}, ({})fp, ({})fp",
-                    labels.get(label).unwrap_or(&format!(".L{}", label)),
+                    labels.get(label).unwrap_or(&format!(".L{label}")),
                     lhs,
                     rhs
                 )
@@ -272,7 +268,7 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                 write!(
                     f,
                     "bnei  {}, ({})fp, {}",
-                    labels.get(label).unwrap_or(&format!(".L{}", label)),
+                    labels.get(label).unwrap_or(&format!(".L{label}")),
                     lhs,
                     rhs
                 )
@@ -281,7 +277,7 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                 write!(
                     f,
                     "beq  {}, ({})fp, ({})fp",
-                    labels.get(label).unwrap_or(&format!(".L{}", label)),
+                    labels.get(label).unwrap_or(&format!(".L{label}")),
                     lhs,
                     rhs
                 )
@@ -290,7 +286,7 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                 write!(
                     f,
                     "beqi {}, ({})fp, {}",
-                    labels.get(label).unwrap_or(&format!(".L{}", label)),
+                    labels.get(label).unwrap_or(&format!(".L{label}")),
                     lhs,
                     rhs
                 )
@@ -299,7 +295,7 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                 write!(
                     f,
                     "ebne  {}, ({})fp, ({})fp",
-                    labels.get(label).unwrap_or(&format!(".L{}", label)),
+                    labels.get(label).unwrap_or(&format!(".L{label}")),
                     lhs,
                     rhs
                 )
@@ -308,7 +304,7 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                 write!(
                     f,
                     "ebnei {}, ({})fp, {}",
-                    labels.get(label).unwrap_or(&format!(".L{}", label)),
+                    labels.get(label).unwrap_or(&format!(".L{label}")),
                     lhs,
                     rhs
                 )
@@ -317,7 +313,7 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                 write!(
                     f,
                     "ebeq  {}, ({})fp, ({})fp",
-                    labels.get(label).unwrap_or(&format!(".L{}", label)),
+                    labels.get(label).unwrap_or(&format!(".L{label}")),
                     lhs,
                     rhs
                 )
@@ -326,44 +322,40 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                 write!(
                     f,
                     "ebeqi {}, ({})fp, {}",
-                    labels.get(label).unwrap_or(&format!(".L{}", label)),
+                    labels.get(label).unwrap_or(&format!(".L{label}")),
                     lhs,
                     rhs
                 )
             }
             AsmInstruction::Trap => write!(f, "trap"),
             AsmInstruction::Halt => write!(f, "halt"),
-            AsmInstruction::HintBits(src, len) => write!(f, "hint_bits ({})fp, {}", src, len),
+            AsmInstruction::HintBits(src, len) => write!(f, "hint_bits ({src})fp, {len}"),
             AsmInstruction::Poseidon2Permute(dst, lhs) => {
-                write!(f, "poseidon2_permute ({})fp, ({})fp", dst, lhs)
+                write!(f, "poseidon2_permute ({dst})fp, ({lhs})fp")
             }
             AsmInstruction::Poseidon2Compress(result, src1, src2) => {
-                write!(
-                    f,
-                    "poseidon2_compress ({})fp, ({})fp, ({})fp",
-                    result, src1, src2
-                )
+                write!(f, "poseidon2_compress ({result})fp, ({src1})fp, ({src2})fp")
             }
             AsmInstruction::PrintF(dst) => {
-                write!(f, "print_f ({})fp", dst)
+                write!(f, "print_f ({dst})fp")
             }
             AsmInstruction::PrintV(dst) => {
-                write!(f, "print_v ({})fp", dst)
+                write!(f, "print_v ({dst})fp")
             }
             AsmInstruction::PrintE(dst) => {
-                write!(f, "print_e ({})fp", dst)
+                write!(f, "print_e ({dst})fp")
             }
             AsmInstruction::HintInputVec() => write!(f, "hint_vec"),
             AsmInstruction::HintFelt() => write!(f, "hint_felt"),
             AsmInstruction::StoreHintWordI(dst, offset) => {
-                write!(f, "shintw ({})fp {}", dst, offset)
+                write!(f, "shintw ({dst})fp {offset}")
             }
             AsmInstruction::StoreHintExtI(dst, offset) => {
-                write!(f, "shinte ({})fp {}", dst, offset)
+                write!(f, "shinte ({dst})fp {offset}")
             }
             AsmInstruction::HintLoad() => write!(f, "hint_load"),
             AsmInstruction::Publish(val, index) => {
-                write!(f, "commit ({})fp ({})fp", val, index)
+                write!(f, "commit ({val})fp ({index})fp")
             }
             AsmInstruction::CycleTrackerStart() => {
                 write!(f, "cycle_tracker_start")
@@ -374,26 +366,23 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
             AsmInstruction::FriReducedOpening(a, b, length, alpha, res, hint_id, is_init) => {
                 write!(
                     f,
-                    "fri_mat_opening ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp",
-                    a, b, length, alpha, res, hint_id, is_init
+                    "fri_mat_opening ({a})fp, ({b})fp, ({length})fp, ({alpha})fp, ({res})fp, ({hint_id})fp, ({is_init})fp"
                 )
             }
             AsmInstruction::VerifyBatchFelt(dim, opened, opened_length, sibling, index, commit) => {
                 write!(
                     f,
-                    "verify_batch_felt ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp",
-                    dim, opened, opened_length, sibling, index, commit
+                    "verify_batch_felt ({dim})fp, ({opened})fp, ({opened_length})fp, ({sibling})fp, ({index})fp, ({commit})fp"
                 )
             }
             AsmInstruction::VerifyBatchExt(dim, opened, opened_length, sibling, index, commit) => {
                 write!(
                     f,
-                    "verify_batch_ext ({})fp, ({})fp, ({})fp, ({})fp, ({})fp, ({})fp",
-                    dim, opened, opened_length, sibling, index, commit
+                    "verify_batch_ext ({dim})fp, ({opened})fp, ({opened_length})fp, ({sibling})fp, ({index})fp, ({commit})fp"
                 )
             }
             AsmInstruction::RangeCheck(fp, lo_bits, hi_bits) => {
-                write!(f, "range_check_fp ({})fp, ({}), ({})", fp, lo_bits, hi_bits)
+                write!(f, "range_check_fp ({fp})fp, ({lo_bits}), ({hi_bits})")
             }
         }
     }

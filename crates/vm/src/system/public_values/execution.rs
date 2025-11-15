@@ -14,11 +14,14 @@ use super::PublicValuesExecutor;
 use crate::arch::ExecuteFunc;
 #[cfg(feature = "tco")]
 use crate::arch::Handler;
+#[cfg(feature = "aot")]
+use crate::arch::{AotExecutor, AotMeteredExecutor};
 use crate::{
     arch::{
         create_handler,
         execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait},
-        E2PreCompute, Executor, MeteredExecutor, StaticProgramError, VmExecState,
+        E2PreCompute, InterpreterExecutor, InterpreterMeteredExecutor, StaticProgramError,
+        VmExecState,
     },
     system::memory::online::GuestMemory,
     utils::{transmute_field_to_u32, transmute_u32_to_field},
@@ -76,7 +79,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> Executor<F> for PublicValuesExecutor<F, A>
+impl<F, A> InterpreterExecutor<F> for PublicValuesExecutor<F, A>
 where
     F: PrimeField32,
 {
@@ -119,7 +122,10 @@ where
     }
 }
 
-impl<F, A> MeteredExecutor<F> for PublicValuesExecutor<F, A>
+#[cfg(feature = "aot")]
+impl<F, A> AotExecutor<F> for PublicValuesExecutor<F, A> where F: PrimeField32 {}
+
+impl<F, A> InterpreterMeteredExecutor<F> for PublicValuesExecutor<F, A>
 where
     F: PrimeField32,
 {
@@ -164,11 +170,12 @@ where
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F, A> AotMeteredExecutor<F> for PublicValuesExecutor<F, A> where F: PrimeField32 {}
+
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
     pre_compute: &PublicValuesPreCompute,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
     CTX: ExecutionCtxTrait,
@@ -193,42 +200,41 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_I
         } else {
             // Not a hard constraint violation when publishing the same value twice but the
             // program should avoid that.
-            panic!("Custom public value {} already set", idx);
+            panic!("Custom public value {idx} already set");
         }
     }
-    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
-    *instret += 1;
+    let pc = exec_state.pc();
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
     CTX: ExecutionCtxTrait,
 {
-    let pre_compute: &PublicValuesPreCompute = pre_compute.borrow();
-    execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(pre_compute, instret, pc, exec_state);
+    let pre_compute: &PublicValuesPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<PublicValuesPreCompute>()).borrow();
+    execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
     CTX: MeteredExecutionCtxTrait,
 {
-    let pre_compute: &E2PreCompute<PublicValuesPreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<PublicValuesPreCompute> = std::slice::from_raw_parts(
+        pre_compute,
+        size_of::<E2PreCompute<PublicValuesPreCompute>>(),
+    )
+    .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(&pre_compute.data, instret, pc, exec_state);
+    execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(&pre_compute.data, exec_state);
 }

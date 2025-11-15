@@ -193,7 +193,7 @@ impl AggregateMetrics {
                 continue;
             }
             let stats = stats.unwrap_or_else(|| {
-                panic!("Missing proof time statistics for group '{}'", group_name)
+                panic!("Missing proof time statistics for group '{group_name}'")
             });
             let mut sum = stats.sum;
             let mut max = stats.max;
@@ -302,9 +302,7 @@ impl AggregateMetrics {
                 let value = self
                     .by_group
                     .get(group_name)
-                    .unwrap_or_else(|| {
-                        panic!("Group '{}' should exist in by_group map", group_name)
-                    })
+                    .unwrap_or_else(|| panic!("Group '{group_name}' should exist in by_group map"))
                     .clone();
                 (key, value)
             })
@@ -351,7 +349,7 @@ impl AggregateMetrics {
 
         let metric_names = metric_names.to_vec();
         for (group_name, summaries) in self.to_vec() {
-            writeln!(writer, "| {} |||||", group_name)?;
+            writeln!(writer, "| {group_name} |||||")?;
             writeln!(writer, "|:---|---:|---:|---:|---:|")?;
             writeln!(writer, "|metric|avg|sum|max|min|")?;
             let names = if metric_names.is_empty() {
@@ -418,7 +416,7 @@ impl AggregateMetrics {
                 continue;
             }
             let stats = stats.unwrap_or_else(|| {
-                panic!("Missing proof time statistics for group '{}'", group_name)
+                panic!("Missing proof time statistics for group '{group_name}'")
             });
             let mut sum = stats.sum;
             let mut max = stats.max;

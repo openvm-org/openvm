@@ -65,7 +65,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> ChipUsageGetter
     for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
 {
     fn air_name(&self) -> String {
-        format!("Poseidon2PeripheryAir<F, {}>", SBOX_REGISTERS)
+        format!("Poseidon2PeripheryAir<F, {SBOX_REGISTERS}>")
     }
 
     fn current_trace_height(&self) -> usize {

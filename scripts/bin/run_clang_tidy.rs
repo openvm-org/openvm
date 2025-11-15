@@ -43,10 +43,10 @@ fn run_clang_tidy_single(
     ])
     .arg(file.to_str().unwrap())
     .args(["--", "-x", "cuda", "-std=c++17"])
-    .arg(format!("--cuda-path={}", cuda_path))
-    .arg(format!("--cuda-gpu-arch=sm_{}", cuda_arch))
+    .arg(format!("--cuda-path={cuda_path}"))
+    .arg(format!("--cuda-gpu-arch=sm_{cuda_arch}"))
     .arg("-D__CUDACC__")
-    .arg(format!("-I{}/include", cuda_path));
+    .arg(format!("-I{cuda_path}/include"));
 
     // Check if CCCL directory exists (CUDA 13.0+)
     let cccl_path = PathBuf::from(cuda_path).join("include").join("cccl");
@@ -55,7 +55,7 @@ fn run_clang_tidy_single(
     }
 
     for include in includes {
-        cmd.arg(format!("-I{}", include));
+        cmd.arg(format!("-I{include}"));
     }
 
     println!("Running for {}", file.display());

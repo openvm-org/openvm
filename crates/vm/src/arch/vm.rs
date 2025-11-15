@@ -39,6 +39,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info_span, instrument};
 
+#[cfg(feature = "aot")]
+use super::aot::AotInstance;
 use super::{
     execution_mode::{ExecutionCtx, MeteredCostCtx, MeteredCtx, PreflightCtx, Segment},
     hasher::poseidon2::vm_poseidon2_hasher,
@@ -227,11 +229,42 @@ where
     /// the given `exe`.
     ///
     /// For metered execution, use the [`metered_instance`](Self::metered_instance) constructor.
+    #[cfg(not(feature = "aot"))]
     pub fn instance(
         &self,
         exe: &VmExe<F>,
     ) -> Result<InterpretedInstance<F, ExecutionCtx>, StaticProgramError> {
         InterpretedInstance::new(&self.inventory, exe)
+    }
+
+    #[cfg(feature = "aot")]
+    pub fn interpreter_instance(
+        &self,
+        exe: &VmExe<F>,
+    ) -> Result<InterpretedInstance<F, ExecutionCtx>, StaticProgramError> {
+        InterpretedInstance::new(&self.inventory, exe)
+    }
+
+    #[cfg(feature = "aot")]
+    pub fn instance(
+        &self,
+        exe: &VmExe<F>,
+    ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
+        Self::aot_instance(self, exe)
+    }
+}
+#[cfg(feature = "aot")]
+impl<F, VC> VmExecutor<F, VC>
+where
+    F: PrimeField32,
+    VC: VmExecutionConfig<F>,
+    VC::Executor: Executor<F>,
+{
+    pub fn aot_instance(
+        &self,
+        exe: &VmExe<F>,
+    ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
+        AotInstance::new(&self.inventory, exe)
     }
 }
 
@@ -242,12 +275,41 @@ where
     VC::Executor: MeteredExecutor<F>,
 {
     /// Creates an instance of the interpreter specialized for metered execution of the given `exe`.
+    #[cfg(not(feature = "aot"))]
     pub fn metered_instance(
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<InterpretedInstance<F, MeteredCtx>, StaticProgramError> {
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
+    }
+
+    #[cfg(feature = "aot")]
+    pub fn metered_interpreter_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<InterpretedInstance<F, MeteredCtx>, StaticProgramError> {
+        InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
+    }
+
+    #[cfg(feature = "aot")]
+    pub fn metered_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<AotInstance<F, MeteredCtx>, StaticProgramError> {
+        Self::metered_aot_instance(self, exe, executor_idx_to_air_idx)
+    }
+
+    // Crates an AOT instance for metered execution of the given `exe`.
+    #[cfg(feature = "aot")]
+    pub fn metered_aot_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<AotInstance<F, MeteredCtx>, StaticProgramError> {
+        AotInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
     /// Creates an instance of the interpreter specialized for cost metering execution of the given
@@ -389,6 +451,7 @@ where
     }
 
     /// Pure interpreter.
+    #[cfg(not(feature = "aot"))]
     pub fn interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
@@ -400,6 +463,45 @@ where
         self.executor().instance(exe)
     }
 
+    // Pure AOT execution
+    #[cfg(feature = "aot")]
+    pub fn naive_interpreter(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<InterpretedInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+    {
+        self.executor().interpreter_instance(exe)
+    }
+
+    // Pure AOT execution
+    #[cfg(feature = "aot")]
+    pub fn interpreter(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<AotInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+    {
+        Self::get_aot_instance(self, exe)
+    }
+
+    #[cfg(feature = "aot")]
+    pub fn get_aot_instance(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<AotInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+    {
+        self.executor().aot_instance(exe)
+    }
+
+    #[cfg(not(feature = "aot"))]
     pub fn metered_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
@@ -411,6 +513,49 @@ where
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
         self.executor()
             .metered_instance(exe, &executor_idx_to_air_idx)
+    }
+
+    #[cfg(feature = "aot")]
+    pub fn metered_interpreter(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<AotInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .metered_instance(exe, &executor_idx_to_air_idx)
+    }
+
+    // Metered AOT execution
+    #[cfg(feature = "aot")]
+    pub fn get_metered_aot_instance(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<AotInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .metered_aot_instance(exe, &executor_idx_to_air_idx)
+    }
+
+    #[cfg(feature = "aot")]
+    pub fn naive_metered_interpreter(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<InterpretedInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .metered_interpreter_instance(exe, &executor_idx_to_air_idx)
     }
 
     pub fn metered_cost_interpreter(
@@ -462,7 +607,6 @@ where
             .iter()
             .all(|&air_idx| air_idx < trace_heights.len()));
 
-        let instret_end = num_insns.map(|ni| state.instret().saturating_add(ni));
         // TODO[jpw]: figure out how to compute RA specific main_widths
         let main_widths = self
             .pk
@@ -473,7 +617,7 @@ where
         let capacities = zip_eq(trace_heights, main_widths)
             .map(|(&h, w)| (h as usize, w))
             .collect::<Vec<_>>();
-        let ctx = PreflightCtx::new_with_capacity(&capacities, instret_end);
+        let ctx = PreflightCtx::new_with_capacity(&capacities, num_insns);
 
         let system_config: &SystemConfig = self.config().as_ref();
         let adapter_offset = system_config.access_adapter_air_id_offset();
@@ -483,7 +627,6 @@ where
         let access_adapter_arena_size_bound = records::arena_size_bound(
             &trace_heights[adapter_offset..adapter_offset + num_adapters],
         );
-        let instret = state.instret();
         let pc = state.pc();
         let memory = TracingMemory::from_image(
             state.memory,
@@ -492,7 +635,6 @@ where
         );
         let from_state = ExecutionState::new(pc, memory.timestamp());
         let vm_state = VmState::new(
-            instret,
             pc,
             memory,
             state.streams,
@@ -512,7 +654,6 @@ where
         #[cfg(feature = "perf-metrics")]
         crate::metrics::end_segment_metrics(&mut exec_state);
 
-        let instret = exec_state.vm_state.instret();
         let pc = exec_state.vm_state.pc();
         let memory = exec_state.vm_state.memory;
         let to_state = ExecutionState::new(pc, memory.timestamp());
@@ -534,7 +675,6 @@ where
         };
         let record_arenas = exec_state.ctx.arenas;
         let to_state = VmState::new(
-            instret,
             pc,
             memory.data,
             exec_state.vm_state.streams,
@@ -1000,11 +1140,10 @@ where
             // We need a separate span so the metric label includes "segment" from _segment_span
             let _prove_span = info_span!("total_proof").entered();
             let Segment {
-                instret_start,
                 num_insns,
                 trace_heights,
+                ..
             } = segment;
-            assert_eq!(state.as_ref().unwrap().instret(), instret_start);
             let from_state = Option::take(&mut state).unwrap();
             vm.transport_init_memory_to_device(&from_state.memory);
             let PreflightExecutionOutput {
@@ -1068,7 +1207,6 @@ where
         let final_memory = final_memory.ok_or(ExecutionError::DidNotTerminate)?;
         // Put back state to avoid re-allocation
         self.state = Some(VmState::new_with_defaults(
-            0,
             exe.pc_start,
             final_memory,
             vec![],

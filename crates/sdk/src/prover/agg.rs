@@ -232,7 +232,7 @@ where
                 break;
             }
             if wrapper_layers >= max_internal_wrapper_layers {
-                panic!("The heights of the root verifier still exceed the required heights after {} wrapper layers", max_internal_wrapper_layers);
+                panic!("The heights of the root verifier still exceed the required heights after {max_internal_wrapper_layers} wrapper layers");
             }
             wrapper_layers += 1;
             let input = InternalVmVerifierInput {

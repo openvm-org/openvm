@@ -93,6 +93,17 @@ tco = [
     "openvm-ecc-circuit/tco",
     "openvm-pairing-circuit/tco",
 ]
+aot = [
+    "openvm-circuit/aot",
+    "openvm-rv32im-circuit/aot",
+    "openvm-native-circuit/aot",
+    "openvm-sha256-circuit/aot",
+    "openvm-keccak256-circuit/aot",
+    "openvm-bigint-circuit/aot",
+    "openvm-algebra-circuit/aot",
+    "openvm-ecc-circuit/aot",
+    "openvm-pairing-circuit/aot",
+]
 unprotected = ["openvm-circuit/unprotected"]
 # for guest profiling:
 perf-metrics = [

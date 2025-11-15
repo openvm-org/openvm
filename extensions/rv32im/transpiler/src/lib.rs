@@ -56,8 +56,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32ITranspilerExtension {
                     }
                 }
                 eprintln!(
-                    "Transpiling system / CSR instruction: {:b} (opcode = {:07b}, funct3 = {:03b}) to unimp",
-                    instruction_u32, opcode, funct3
+                    "Transpiling system / CSR instruction: {instruction_u32:b} (opcode = {opcode:07b}, funct3 = {funct3:03b}) to unimp"
                 );
                 return Some(TranspilerOutput::one_to_one(unimp()));
             }

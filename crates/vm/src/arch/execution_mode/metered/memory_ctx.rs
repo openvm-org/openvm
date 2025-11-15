@@ -1,3 +1,4 @@
+use abi_stable::std_types::RVec;
 use openvm_instructions::riscv::{RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
 
 use crate::{arch::SystemConfig, system::memory::dimensions::MemoryDimensions};
@@ -107,9 +108,9 @@ pub struct MemoryCtx<const PAGE_BITS: usize> {
     continuations_enabled: bool,
     chunk: u32,
     chunk_bits: u32,
-    page_access_count: usize,
+    pub page_access_count: usize,
     // Note: 32 is the maximum access adapter size.
-    addr_space_access_count: Vec<usize>,
+    pub addr_space_access_count: RVec<usize>,
 }
 
 impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
@@ -132,7 +133,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             memory_dimensions,
             continuations_enabled: config.continuation_enabled,
             page_access_count: 0,
-            addr_space_access_count: vec![0; (1 << memory_dimensions.addr_space_height) + 1],
+            addr_space_access_count: vec![0; (1 << memory_dimensions.addr_space_height) + 1].into(),
         }
     }
 
@@ -220,9 +221,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         };
         debug_assert!(
             align_bits as u32 <= size_bits,
-            "align_bits ({}) must be <= size_bits ({})",
-            align_bits,
-            size_bits
+            "align_bits ({align_bits}) must be <= size_bits ({size_bits})"
         );
 
         for adapter_bits in (align_bits as u32 + 1..=size_bits).rev() {

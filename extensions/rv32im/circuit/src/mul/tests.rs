@@ -1,5 +1,13 @@
+#[cfg(feature = "aot")]
+use std::collections::HashMap;
 use std::{array, borrow::BorrowMut, sync::Arc};
 
+#[cfg(feature = "aot")]
+use openvm_circuit::arch::{VmExecutor, VmState};
+#[cfg(feature = "aot")]
+use openvm_circuit::{
+    arch::hasher::poseidon2::vm_poseidon2_hasher, system::memory::merkle::MerkleTree,
+};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, RANGE_TUPLE_CHECKER_BUS},
@@ -11,6 +19,16 @@ use openvm_circuit_primitives::range_tuple::{
     RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip, SharedRangeTupleCheckerChip,
 };
 use openvm_instructions::LocalOpcode;
+#[cfg(feature = "aot")]
+use openvm_instructions::{
+    exe::VmExe,
+    instruction::Instruction,
+    program::Program,
+    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
+    SystemOpcode,
+};
+#[cfg(feature = "aot")]
+use openvm_rv32im_transpiler::BaseAluOpcode::ADD;
 use openvm_rv32im_transpiler::MulOpcode::{self, MUL};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -33,6 +51,8 @@ use {
 };
 
 use super::core::run_mul;
+#[cfg(feature = "aot")]
+use crate::Rv32ImConfig;
 use crate::{
     adapters::{
         Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller, RV32_CELL_BITS,
@@ -257,6 +277,183 @@ fn run_mul_sanity_test() {
         assert_eq!(z[i], result[i]);
         assert_eq!(c[i], carry[i]);
     }
+}
+
+#[cfg(feature = "aot")]
+fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>) {
+    let program = Program::from_instructions(&instructions);
+    let exe = VmExe::new(program);
+    let config = Rv32ImConfig::default();
+    let memory_dimensions = config.rv32i.system.memory_config.memory_dimensions();
+    let executor = VmExecutor::new(config.clone()).expect("failed to create Rv32IM executor");
+
+    let interpreter = executor
+        .interpreter_instance(&exe)
+        .expect("interpreter build must succeed");
+    let interp_state = interpreter
+        .execute(vec![], None)
+        .expect("interpreter execution must succeed");
+
+    let aot_instance = executor.aot_instance(&exe).expect("AOT build must succeed");
+    let aot_state = aot_instance
+        .execute(vec![], None)
+        .expect("AOT execution must succeed");
+
+    assert_eq!(interp_state.pc(), aot_state.pc());
+
+    let hasher = vm_poseidon2_hasher::<BabyBear>();
+    let tree1 = MerkleTree::from_memory(&interp_state.memory.memory, &memory_dimensions, &hasher);
+    let tree2 = MerkleTree::from_memory(&aot_state.memory.memory, &memory_dimensions, &hasher);
+    assert_eq!(tree1.root(), tree2.root(), "Memory states differ");
+
+    (interp_state, aot_state)
+}
+
+#[cfg(feature = "aot")]
+fn read_register(state: &VmState<F>, offset: usize) -> u32 {
+    let bytes = unsafe { state.memory.read::<u8, 4>(RV32_REGISTER_AS, offset as u32) };
+    u32::from_le_bytes(bytes)
+}
+
+#[cfg(feature = "aot")]
+fn add_immediate(rd: usize, imm: u32) -> Instruction<F> {
+    Instruction::from_usize(
+        ADD.global_opcode(),
+        [
+            rd,
+            0,
+            imm as usize,
+            RV32_REGISTER_AS as usize,
+            RV32_IMM_AS as usize,
+        ],
+    )
+}
+
+#[cfg(feature = "aot")]
+fn mul_register(rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
+    Instruction::from_usize(
+        MulOpcode::MUL.global_opcode(),
+        [
+            rd,
+            rs1,
+            rs2,
+            RV32_REGISTER_AS as usize,
+            RV32_REGISTER_AS as usize,
+        ],
+    )
+}
+
+#[cfg(feature = "aot")]
+#[test]
+fn test_aot_mul_basic() {
+    let instructions = vec![
+        add_immediate(4, 7),
+        add_immediate(8, 11),
+        mul_register(12, 4, 8),
+        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let (interp_state, aot_state) = run_mul_program(instructions);
+
+    let interp_x3 = read_register(&interp_state, 12);
+    let aot_x3 = read_register(&aot_state, 12);
+    assert_eq!(interp_x3, 77);
+    assert_eq!(interp_x3, aot_x3);
+}
+
+#[cfg(feature = "aot")]
+#[test]
+fn test_aot_mul_upper_xmm() {
+    let instructions = vec![
+        add_immediate(4, 5),
+        add_immediate(12, 9),
+        mul_register(4, 4, 12),
+        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let (interp_state, aot_state) = run_mul_program(instructions);
+
+    let interp_x1 = read_register(&interp_state, 4);
+    let aot_x1 = read_register(&aot_state, 4);
+    assert_eq!(interp_x1, 45);
+    assert_eq!(interp_x1, aot_x1);
+}
+
+#[cfg(feature = "aot")]
+#[test]
+fn test_aot_mul_randomized_pairs() {
+    let offsets: [usize; 12] = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48];
+    let mut rng = create_seeded_rng();
+    let mut instructions = Vec::new();
+    let mut expected = HashMap::new();
+
+    for &offset in &offsets {
+        let value_i32 = rng.gen_range(-(1i32 << 11)..(1i32 << 11));
+        let imm_field = (value_i32 as u32) & 0x00FF_FFFF;
+        instructions.push(add_immediate(offset, imm_field));
+        expected.insert(offset, value_i32 as u32);
+    }
+
+    for (i, &rd_offset) in offsets.iter().enumerate() {
+        let rs1_offset = offsets[i];
+        let rs2_offset = offsets[(i + 3) % offsets.len()];
+        instructions.push(mul_register(rd_offset, rs1_offset, rs2_offset));
+
+        let rs1_val = *expected.get(&rs1_offset).unwrap();
+        let rs2_val = *expected.get(&rs2_offset).unwrap();
+        expected.insert(rd_offset, rs1_val.wrapping_mul(rs2_val));
+    }
+
+    instructions.push(Instruction::from_isize(
+        SystemOpcode::TERMINATE.global_opcode(),
+        0,
+        0,
+        0,
+        0,
+        0,
+    ));
+
+    let (interp_state, aot_state) = run_mul_program(instructions);
+
+    for (offset, expected_val) in expected {
+        let interp_val = read_register(&interp_state, offset);
+        let aot_val = read_register(&aot_state, offset);
+        assert_eq!(
+            interp_val, expected_val,
+            "unexpected value at offset {offset}"
+        );
+        assert_eq!(interp_val, aot_val, "AOT mismatch at offset {offset}");
+    }
+}
+
+#[cfg(feature = "aot")]
+#[test]
+fn test_aot_mul_chained_dependencies() {
+    let instructions = vec![
+        add_immediate(4, 3),
+        add_immediate(8, 5),
+        mul_register(12, 4, 8),
+        mul_register(4, 12, 8),
+        mul_register(8, 4, 12),
+        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let (interp_state, aot_state) = run_mul_program(instructions);
+
+    let interp_x3 = read_register(&interp_state, 12);
+    let aot_x3 = read_register(&aot_state, 12);
+    assert_eq!(interp_x3, 15);
+    assert_eq!(interp_x3, aot_x3);
+
+    let interp_x1 = read_register(&interp_state, 4);
+    let aot_x1 = read_register(&aot_state, 4);
+    assert_eq!(interp_x1, 75);
+    assert_eq!(interp_x1, aot_x1);
+
+    let interp_x2 = read_register(&interp_state, 8);
+    let aot_x2 = read_register(&aot_state, 8);
+    assert_eq!(interp_x2, 1125);
+    assert_eq!(interp_x2, aot_x2);
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////

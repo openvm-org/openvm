@@ -166,7 +166,7 @@ macro_rules! dispatch1 {
     };
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> Executor<F>
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> InterpreterExecutor<F>
     for NativePoseidon2Executor<F, SBOX_REGISTERS>
 {
     #[inline(always)]
@@ -215,6 +215,12 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> Executor<F>
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> AotExecutor<F>
+    for NativePoseidon2Executor<F, SBOX_REGISTERS>
+{
+}
+
 macro_rules! dispatch2 {
     (
         $execute_pos2_impl:ident,
@@ -248,7 +254,7 @@ macro_rules! dispatch2 {
     };
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> MeteredExecutor<F>
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> InterpreterMeteredExecutor<F>
     for NativePoseidon2Executor<F, SBOX_REGISTERS>
 {
     #[inline(always)]
@@ -300,7 +306,11 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> MeteredExecutor<F>
         )
     }
 }
-
+#[cfg(feature = "aot")]
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> AotMeteredExecutor<F>
+    for NativePoseidon2Executor<F, SBOX_REGISTERS>
+{
+}
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_pos2_e1_impl<
@@ -309,14 +319,13 @@ unsafe fn execute_pos2_e1_impl<
     const SBOX_REGISTERS: usize,
     const IS_PERM: bool,
 >(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &Pos2PreCompute<F, SBOX_REGISTERS> = pre_compute.borrow();
-    execute_pos2_e12_impl::<_, _, SBOX_REGISTERS, IS_PERM>(pre_compute, instret, pc, exec_state);
+    let pre_compute: &Pos2PreCompute<F, SBOX_REGISTERS> =
+        std::slice::from_raw_parts(pre_compute, size_of::<Pos2PreCompute<F, SBOX_REGISTERS>>())
+            .borrow();
+    execute_pos2_e12_impl::<_, _, SBOX_REGISTERS, IS_PERM>(pre_compute, exec_state);
 }
 
 #[create_handler]
@@ -327,19 +336,16 @@ unsafe fn execute_pos2_e2_impl<
     const SBOX_REGISTERS: usize,
     const IS_PERM: bool,
 >(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<Pos2PreCompute<F, SBOX_REGISTERS>> = pre_compute.borrow();
-    let height = execute_pos2_e12_impl::<_, _, SBOX_REGISTERS, IS_PERM>(
-        &pre_compute.data,
-        instret,
-        pc,
-        exec_state,
-    );
+    let pre_compute: &E2PreCompute<Pos2PreCompute<F, SBOX_REGISTERS>> = std::slice::from_raw_parts(
+        pre_compute,
+        size_of::<E2PreCompute<Pos2PreCompute<F, SBOX_REGISTERS>>>(),
+    )
+    .borrow();
+    let height =
+        execute_pos2_e12_impl::<_, _, SBOX_REGISTERS, IS_PERM>(&pre_compute.data, exec_state);
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, height);
@@ -352,20 +358,16 @@ unsafe fn execute_verify_batch_e1_impl<
     CTX: ExecutionCtxTrait,
     const SBOX_REGISTERS: usize,
 >(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &VerifyBatchPreCompute<F, SBOX_REGISTERS> = pre_compute.borrow();
-    // NOTE: using optimistic execution
-    execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS, true>(
+    let pre_compute: &VerifyBatchPreCompute<F, SBOX_REGISTERS> = std::slice::from_raw_parts(
         pre_compute,
-        instret,
-        pc,
-        exec_state,
-    );
+        size_of::<VerifyBatchPreCompute<F, SBOX_REGISTERS>>(),
+    )
+    .borrow();
+    // NOTE: using optimistic execution
+    execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS, true>(pre_compute, exec_state);
 }
 
 #[create_handler]
@@ -375,20 +377,18 @@ unsafe fn execute_verify_batch_e2_impl<
     CTX: MeteredExecutionCtxTrait,
     const SBOX_REGISTERS: usize,
 >(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<VerifyBatchPreCompute<F, SBOX_REGISTERS>> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<VerifyBatchPreCompute<F, SBOX_REGISTERS>> =
+        std::slice::from_raw_parts(
+            pre_compute,
+            size_of::<E2PreCompute<VerifyBatchPreCompute<F, SBOX_REGISTERS>>>(),
+        )
+        .borrow();
     // NOTE: using optimistic execution
-    let height = execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS, true>(
-        &pre_compute.data,
-        instret,
-        pc,
-        exec_state,
-    );
+    let height =
+        execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS, true>(&pre_compute.data, exec_state);
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, height);
@@ -402,8 +402,6 @@ unsafe fn execute_pos2_e12_impl<
     const IS_PERM: bool,
 >(
     pre_compute: &Pos2PreCompute<F, SBOX_REGISTERS>,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
     let subchip = pre_compute.subchip;
@@ -446,8 +444,8 @@ unsafe fn execute_pos2_e12_impl<
         );
     }
 
-    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
-    *instret += 1;
+    let pc = exec_state.pc();
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 
     1
 }
@@ -460,8 +458,6 @@ unsafe fn execute_verify_batch_e12_impl<
     const OPTIMISTIC: bool,
 >(
     pre_compute: &VerifyBatchPreCompute<F, SBOX_REGISTERS>,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
     let subchip = pre_compute.subchip;
@@ -615,8 +611,8 @@ unsafe fn execute_verify_batch_e12_impl<
         assert_eq!(commit, root);
     }
 
-    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
-    *instret += 1;
+    let pc = exec_state.pc();
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 
     height
 }

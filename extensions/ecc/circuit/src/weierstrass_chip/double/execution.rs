@@ -136,7 +136,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterExecutor<F>
     for EcDoubleExecutor<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
@@ -177,7 +177,13 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
     }
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecutor<F>
+#[cfg(feature = "aot")]
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> AotExecutor<F>
+    for EcDoubleExecutor<BLOCKS, BLOCK_SIZE>
+{
+}
+
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterMeteredExecutor<F>
     for EcDoubleExecutor<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
@@ -224,6 +230,12 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecu
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> AotMeteredExecutor<F>
+    for EcDoubleExecutor<BLOCKS, BLOCK_SIZE>
+{
+}
+
 #[inline(always)]
 unsafe fn execute_e12_impl<
     F: PrimeField32,
@@ -234,10 +246,9 @@ unsafe fn execute_e12_impl<
     const IS_SETUP: bool,
 >(
     pre_compute: &EcDoublePreCompute,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
+    let pc = exec_state.pc();
     // Read register values
     let rs_vals = pre_compute
         .rs_addrs
@@ -255,7 +266,7 @@ unsafe fn execute_e12_impl<
 
         if input_prime != pre_compute.expr.builder.prime {
             let err = ExecutionError::Fail {
-                pc: *pc,
+                pc,
                 msg: "EcDouble: mismatched prime",
             };
             return Err(err);
@@ -266,7 +277,7 @@ unsafe fn execute_e12_impl<
         let coeff_a = &pre_compute.expr.setup_values[0];
         if input_a != *coeff_a {
             let err = ExecutionError::Fail {
-                pc: *pc,
+                pc,
                 msg: "EcDouble: mismatched coeff_a",
             };
             return Err(err);
@@ -293,8 +304,7 @@ unsafe fn execute_e12_impl<
         exec_state.vm_write(RV32_MEMORY_AS, rd_val + (i * BLOCK_SIZE) as u32, &block);
     }
 
-    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
-    *instret += 1;
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 
     Ok(())
 }
@@ -309,19 +319,12 @@ unsafe fn execute_e1_impl<
     const CURVE_TYPE: u8,
     const IS_SETUP: bool,
 >(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &EcDoublePreCompute = pre_compute.borrow();
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, IS_SETUP>(
-        pre_compute,
-        instret,
-        pc,
-        exec_state,
-    )
+    let pre_compute: &EcDoublePreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<EcDoublePreCompute>()).borrow();
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, IS_SETUP>(pre_compute, exec_state)
 }
 
 #[create_handler]
@@ -334,20 +337,17 @@ unsafe fn execute_e2_impl<
     const CURVE_TYPE: u8,
     const IS_SETUP: bool,
 >(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let e2_pre_compute: &E2PreCompute<EcDoublePreCompute> = pre_compute.borrow();
+    let e2_pre_compute: &E2PreCompute<EcDoublePreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<EcDoublePreCompute>>())
+            .borrow();
     exec_state
         .ctx
         .on_height_change(e2_pre_compute.chip_idx as usize, 1);
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, IS_SETUP>(
         &e2_pre_compute.data,
-        instret,
-        pc,
         exec_state,
     )
 }

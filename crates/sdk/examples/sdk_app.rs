@@ -22,7 +22,7 @@ fn main() -> eyre::Result<()> {
     // [!region execution]
     // 3. Run the program with default inputs.
     let output = sdk.execute(elf.clone(), stdin.clone())?;
-    println!("public values output: {:?}", output);
+    println!("public values output: {output:?}");
     // [!endregion execution]
 
     // [!region proof_generation]

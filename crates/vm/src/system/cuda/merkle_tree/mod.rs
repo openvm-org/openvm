@@ -156,9 +156,7 @@ impl MemoryMerkleSubTree {
         let global_height = self.height + self.path_len;
         assert!(
             depth < global_height,
-            "Depth {} out of bounds for height {}",
-            depth,
-            global_height
+            "Depth {depth} out of bounds for height {global_height}",
         );
         if depth >= self.path_len {
             // depth is within the heap-ordered subtree

@@ -155,14 +155,14 @@ jobs:
     needs: [create-matrix, benchmark]
     runs-on:
       - runs-on=${{ github.run_id }}
-      - runner=8cpu-linux-arm64
+      - runner=8cpu-linux-x64
     steps:
       ##########################################################################
       # Install S3 if necessary                                                #
       ##########################################################################
       - name: Install architecture specific tools
         run: |
-          S5CMD_BIN="s5cmd_2.2.2_linux_arm64.deb"
+          S5CMD_BIN="s5cmd_2.2.2_linux_amd64.deb"
           echo "Checking s5cmd"
           if type s5cmd &>/dev/null; then
               echo "s5cmd was installed."

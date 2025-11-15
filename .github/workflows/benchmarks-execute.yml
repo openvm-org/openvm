@@ -34,12 +34,13 @@ jobs:
     name: Run codspeed walltime benchmarks
     runs-on:
       - runs-on=${{ github.run_id }}
-      - family=m5a.xlarge # 2.5Ghz clock speed
+      - family=m5a.16xlarge # 2.5Ghz clock speed
       - image=ubuntu24-full-x64
       - extras=s3-cache
 
     env:
       CODSPEED_RUNNER_MODE: walltime
+      CODSPEED_PROFILING: "false"
 
     steps:
       - uses: runs-on/action@v2
@@ -66,7 +67,7 @@ jobs:
 
       - name: Build benchmarks
         working-directory: benchmarks/execute
-        run: cargo $TOOLCHAIN codspeed build --profile maxperf --features tco --bench execute
+        run: cargo $TOOLCHAIN codspeed build --profile maxperf --features aot --bench execute
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v3
         with:
@@ -106,9 +107,16 @@ jobs:
       - name: Install codspeed
         run: cargo binstall --no-confirm --force cargo-codspeed
 
+      - name: Create codspeed-post-bench symlink
+        run: |
+          # codspeed-post-bench is just a sym-link
+          which codspeed-post-bench || echo "codspeed-post-bench not found"
+          sudo ln -sf ~/.cargo/bin/cargo-codspeed /usr/local/bin/codspeed-post-bench
+          ls -la /usr/local/bin/codspeed-post-bench
+
       - name: Build benchmarks
         working-directory: benchmarks/execute
-        run: cargo $TOOLCHAIN codspeed build --features tco --bench execute
+        run: cargo $TOOLCHAIN codspeed build --features aot --bench execute
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v3
         with:

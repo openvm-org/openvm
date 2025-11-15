@@ -1,5 +1,7 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
+#[cfg(feature = "aot")]
+use openvm_circuit::arch::{VmExecutor, VmState};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
@@ -14,7 +16,11 @@ use openvm_circuit_primitives::{
     },
     var_range::VariableRangeCheckerChip,
 };
+#[cfg(feature = "aot")]
+use openvm_instructions::{exe::VmExe, program::Program, riscv::RV32_REGISTER_AS, SystemOpcode};
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
+#[cfg(feature = "aot")]
+use openvm_rv32im_transpiler::BaseAluOpcode::ADD;
 use openvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -40,6 +46,8 @@ use {
 };
 
 use super::Rv32JalrCoreAir;
+#[cfg(feature = "aot")]
+use crate::Rv32ImConfig;
 use crate::{
     adapters::{
         compose, Rv32JalrAdapterAir, Rv32JalrAdapterExecutor, Rv32JalrAdapterFiller,
@@ -362,6 +370,104 @@ fn run_jalr_sanity_test() {
     let (next_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, true);
     assert_eq!(next_pc & !1, 736481674);
     assert_eq!(rd_data, [252, 36, 14, 47]);
+}
+
+#[cfg(feature = "aot")]
+fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>) {
+    eprintln!("run_jalr_program called");
+    let program = Program::from_instructions(&instructions);
+    let exe = VmExe::new(program);
+    let config = Rv32ImConfig::default();
+    let memory_dimensions = config.rv32i.system.memory_config.memory_dimensions();
+    let executor = VmExecutor::new(config.clone()).expect("failed to create Rv32IM executor");
+
+    let interpreter = executor
+        .interpreter_instance(&exe)
+        .expect("interpreter build must succeed");
+    let interp_state = interpreter
+        .execute(vec![], None)
+        .expect("interpreter execution must succeed");
+
+    let aot_instance = executor.aot_instance(&exe).expect("AOT build must succeed");
+    let aot_state = aot_instance
+        .execute(vec![], None)
+        .expect("AOT execution must succeed");
+
+    // TODO: add this code to AOT utils file for testing purposes to check equivalence of VMStates
+    assert_eq!(interp_state.pc(), aot_state.pc());
+    use openvm_circuit::{
+        arch::hasher::poseidon2::vm_poseidon2_hasher, system::memory::merkle::MerkleTree,
+    };
+
+    let hasher = vm_poseidon2_hasher::<BabyBear>();
+
+    let tree1 = MerkleTree::from_memory(&interp_state.memory.memory, &memory_dimensions, &hasher);
+    let tree2 = MerkleTree::from_memory(&aot_state.memory.memory, &memory_dimensions, &hasher);
+
+    assert_eq!(tree1.root(), tree2.root(), "Memory states differ");
+    (interp_state, aot_state)
+}
+
+#[cfg(feature = "aot")]
+fn read_register(state: &VmState<F>, offset: usize) -> u32 {
+    let bytes = unsafe { state.memory.read::<u8, 4>(RV32_REGISTER_AS, offset as u32) };
+    u32::from_le_bytes(bytes)
+}
+
+#[cfg(feature = "aot")]
+#[test]
+fn test_jalr_aot_jump_forward() {
+    eprintln!("test_jalr_aot_jump_forward called");
+    let instructions = vec![
+        Instruction::from_usize(ADD.global_opcode(), [4, 0, 8, RV32_REGISTER_AS as usize, 0]),
+        Instruction::from_usize(
+            JALR.global_opcode(),
+            [0, 4, 0, RV32_REGISTER_AS as usize, 0, 0, 0],
+        ),
+        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let (interp_state, aot_state) = run_jalr_program(instructions);
+
+    assert_eq!(interp_state.pc(), 8);
+    assert_eq!(aot_state.pc(), 8);
+
+    let interp_x1 = read_register(&interp_state, 4);
+    let aot_x1 = read_register(&aot_state, 4);
+    assert_eq!(interp_x1, 8);
+    assert_eq!(interp_x1, aot_x1);
+}
+
+#[cfg(feature = "aot")]
+#[test]
+fn test_jalr_aot_writes_return_address() {
+    eprintln!("test_jalr_aot_writes_return_address called");
+    let instructions = vec![
+        Instruction::from_usize(
+            ADD.global_opcode(),
+            [4, 0, 12, RV32_REGISTER_AS as usize, 0],
+        ),
+        Instruction::from_usize(
+            JALR.global_opcode(),
+            [12, 4, 0xfffc, RV32_REGISTER_AS as usize, 0, 1, 1],
+        ),
+        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let (interp_state, aot_state) = run_jalr_program(instructions);
+
+    assert_eq!(interp_state.pc(), 8);
+    assert_eq!(aot_state.pc(), 8);
+
+    let interp_x1 = read_register(&interp_state, 4);
+    let aot_x1 = read_register(&aot_state, 4);
+    assert_eq!(interp_x1, 12);
+    assert_eq!(interp_x1, aot_x1);
+
+    let interp_x3 = read_register(&interp_state, 12);
+    let aot_x3 = read_register(&aot_state, 12);
+    assert_eq!(interp_x3, 8);
+    assert_eq!(interp_x3, aot_x3);
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////

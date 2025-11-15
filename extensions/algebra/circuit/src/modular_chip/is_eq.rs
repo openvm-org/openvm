@@ -538,8 +538,8 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize> Executor<F>
-    for VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
+impl<F, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize>
+    InterpreterExecutor<F> for VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
 where
     F: PrimeField32,
 {
@@ -578,8 +578,17 @@ where
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize> AotExecutor<F>
+    for VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
+where
+    F: PrimeField32,
+{
+}
+
 impl<F, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize>
-    MeteredExecutor<F> for VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
+    InterpreterMeteredExecutor<F>
+    for VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
 where
     F: PrimeField32,
 {
@@ -623,6 +632,13 @@ where
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize>
+    AotMeteredExecutor<F> for VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
+where
+    F: PrimeField32,
+{
+}
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<
@@ -633,18 +649,17 @@ unsafe fn execute_e1_impl<
     const TOTAL_READ_SIZE: usize,
     const IS_SETUP: bool,
 >(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &ModularIsEqualPreCompute<TOTAL_READ_SIZE> = pre_compute.borrow();
+    let pre_compute: &ModularIsEqualPreCompute<TOTAL_READ_SIZE> = std::slice::from_raw_parts(
+        pre_compute,
+        size_of::<ModularIsEqualPreCompute<TOTAL_READ_SIZE>>(),
+    )
+    .borrow();
 
     execute_e12_impl::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, IS_SETUP>(
         pre_compute,
-        instret,
-        pc,
         exec_state,
     );
 }
@@ -659,21 +674,20 @@ unsafe fn execute_e2_impl<
     const TOTAL_READ_SIZE: usize,
     const IS_SETUP: bool,
 >(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>> =
-        pre_compute.borrow();
+        std::slice::from_raw_parts(
+            pre_compute,
+            size_of::<E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>>>(),
+        )
+        .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
     execute_e12_impl::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, IS_SETUP>(
         &pre_compute.data,
-        instret,
-        pc,
         exec_state,
     );
 }
@@ -688,8 +702,6 @@ unsafe fn execute_e12_impl<
     const IS_SETUP: bool,
 >(
     pre_compute: &ModularIsEqualPreCompute<TOTAL_READ_SIZE>,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     // Read register values
@@ -723,8 +735,8 @@ unsafe fn execute_e12_impl<
     // Write result to register
     exec_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &write_data);
 
-    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
-    *instret += 1;
+    let pc = exec_state.pc();
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }
 
 // Returns (cmp_result, diff_idx)

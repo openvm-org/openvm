@@ -55,7 +55,7 @@ impl<F: PrimeField32, EF: ExtensionField<F>> Display for AssemblyCode<F, EF> {
                 "{}:",
                 self.labels
                     .get(&F::from_canonical_u32(i as u32))
-                    .unwrap_or(&format!(".L{}", i))
+                    .unwrap_or(&format!(".L{i}"))
             )?;
             for instruction in &block.0 {
                 write!(f, "        ")?;

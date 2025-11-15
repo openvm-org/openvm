@@ -14,6 +14,8 @@ use thiserror::Error;
 use super::{execution_mode::ExecutionCtxTrait, Streams, VmExecState};
 #[cfg(feature = "tco")]
 use crate::arch::interpreter::InterpretedInstance;
+#[cfg(feature = "aot")]
+use crate::arch::SystemConfig;
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
@@ -85,23 +87,36 @@ pub enum StaticProgramError {
     DisabledOperation { pc: u32, opcode: VmOpcode },
     #[error("Executor not found for opcode {opcode}")]
     ExecutorNotFound { opcode: VmOpcode },
+    #[error("Failed to create temporary file: {err}")]
+    FailToCreateTemporaryFile { err: String },
+    #[error("Failed to write into temporary file: {err}")]
+    FailToWriteTemporaryFile { err: String },
+    #[error("Failed to generate dynamic library: {err}")]
+    FailToGenerateDynamicLibrary { err: String },
 }
 
-/// Function pointer for interpreter execution with function signature `(pre_compute, instret, pc,
-/// arg, exec_state)`. The `pre_compute: &[u8]` is a pre-computed buffer of data
+#[cfg(feature = "aot")]
+#[derive(Error, Debug)]
+pub enum AotError {
+    #[error("AOT compilation not supported for this opcode")]
+    NotSupported,
+
+    #[error("No executor found for opcode {0}")]
+    NoExecutorFound(VmOpcode),
+
+    #[error("Invalid instruction format")]
+    InvalidInstruction,
+
+    #[error("Other AOT error: {0}")]
+    Other(String),
+}
+
+/// Function pointer for interpreter execution with function signature `(pre_compute,
+/// arg, exec_state)`. The `pre_compute: *const u8` is a pre-computed buffer of data
 /// corresponding to a single instruction. The contents of `pre_compute` are determined from the
 /// program code as specified by the [Executor] and [MeteredExecutor] traits.
-/// `arg` is a runtime constant that we want to keep in register:
-/// - For pure execution it is `instret_end`
-/// - For metered cost execution it is the `max_execution_cost`
-/// - For metered execution it is `segment_check_insns`
-pub type ExecuteFunc<F, CTX> = unsafe fn(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    arg: u64,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-);
+pub type ExecuteFunc<F, CTX> =
+    unsafe fn(pre_compute: *const u8, exec_state: &mut VmExecState<F, GuestMemory, CTX>);
 
 /// Handler for tail call elimination. The `CTX` is assumed to contain pointers to the pre-computed
 /// buffer and the function handler table.
@@ -109,18 +124,9 @@ pub type ExecuteFunc<F, CTX> = unsafe fn(
 /// - `pre_compute_buf` is the starting pointer of the pre-computed buffer.
 /// - `handlers` is the starting pointer of the table of function pointers of `Handler` type. The
 ///   pointer is typeless to avoid self-referential types.
-/// - `pc`, `instret`, `instret_end` are passed as separate arguments for efficiency
-///
-/// `arg` is a runtime constant that we want to keep in register:
-/// - For pure execution it is `instret_end`
-/// - For metered cost execution it is the `max_execution_cost`
-/// - For metered execution it is `segment_check_insns`
 #[cfg(feature = "tco")]
 pub type Handler<F, CTX> = unsafe fn(
     interpreter: &InterpretedInstance<F, CTX>,
-    instret: u64,
-    pc: u32,
-    arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 );
 
@@ -128,7 +134,7 @@ pub type Handler<F, CTX> = unsafe fn(
 /// pre-process the program code into function pointers which operate on `pre_compute` instruction
 /// data.
 // @dev: In the codebase this is sometimes referred to as (E1).
-pub trait Executor<F> {
+pub trait InterpreterExecutor<F> {
     fn pre_compute_size(&self) -> usize;
 
     #[cfg(not(feature = "tco"))]
@@ -156,11 +162,42 @@ pub trait Executor<F> {
         Ctx: ExecutionCtxTrait;
 }
 
+#[cfg(feature = "aot")]
+pub trait AotExecutor<F> {
+    fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
+        false
+    }
+
+    /*
+    Function: Generate x86 assembly for the given RV32 instruction, and transfer control to the next RV32 instruction
+
+    Preconditions:
+    x86 Registers: rbx = vm_exec_state_ptr, rbp = pre_compute_insns_ptr,
+    - instruction: the instruction to be executed
+
+    Postcondition:
+    - x86's PC should be set to the label of the next RV32 instruction, and transfers control to the next instruction
+    */
+    fn generate_x86_asm(&self, _inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
+        unimplemented!()
+    }
+    // TODO: add air_idx:usize parameter to the function, for AotMeteredExecutor::generate_x86_asm
+}
+#[cfg(feature = "aot")]
+pub trait Executor<F>: InterpreterExecutor<F> + AotExecutor<F> {}
+#[cfg(feature = "aot")]
+impl<F, T> Executor<F> for T where T: InterpreterExecutor<F> + AotExecutor<F> {}
+
+#[cfg(not(feature = "aot"))]
+pub trait Executor<F>: InterpreterExecutor<F> {}
+#[cfg(not(feature = "aot"))]
+impl<F, T> Executor<F> for T where T: InterpreterExecutor<F> {}
+
 /// Trait for metered execution via a host interpreter. The trait methods provide the methods to
 /// pre-process the program code into function pointers which operate on `pre_compute` instruction
 /// data which contains auxiliary data (e.g., corresponding AIR ID) for metering purposes.
 // @dev: In the codebase this is sometimes referred to as (E2).
-pub trait MeteredExecutor<F> {
+pub trait InterpreterMeteredExecutor<F> {
     fn metered_pre_compute_size(&self) -> usize;
 
     #[cfg(not(feature = "tco"))]
@@ -190,6 +227,33 @@ pub trait MeteredExecutor<F> {
     where
         Ctx: MeteredExecutionCtxTrait;
 }
+
+#[cfg(feature = "aot")]
+pub trait AotMeteredExecutor<F> {
+    fn is_aot_metered_supported(&self, _inst: &Instruction<F>) -> bool {
+        false
+    }
+
+    fn generate_x86_metered_asm(
+        &self,
+        _inst: &Instruction<F>,
+        _pc: u32,
+        _chip_idx: usize,
+        _config: &SystemConfig,
+    ) -> Result<String, AotError> {
+        unimplemented!()
+    }
+}
+
+#[cfg(feature = "aot")]
+pub trait MeteredExecutor<F>: InterpreterMeteredExecutor<F> + AotMeteredExecutor<F> {}
+#[cfg(feature = "aot")]
+impl<F, T> MeteredExecutor<F> for T where T: InterpreterMeteredExecutor<F> + AotMeteredExecutor<F> {}
+
+#[cfg(not(feature = "aot"))]
+pub trait MeteredExecutor<F>: InterpreterMeteredExecutor<F> {}
+#[cfg(not(feature = "aot"))]
+impl<F, T> MeteredExecutor<F> for T where T: InterpreterMeteredExecutor<F> {}
 
 /// Trait for preflight execution via a host interpreter. The trait methods allow execution of
 /// instructions via enum dispatch within an interpreter. This execution is specialized to record

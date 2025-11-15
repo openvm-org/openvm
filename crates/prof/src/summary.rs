@@ -62,7 +62,7 @@ impl GithubSummary {
                     .to_str()
                     .expect("Filename should be valid UTF-8");
                 let mut row = aggregated.get_summary_row(md_filename).unwrap_or_else(|| {
-                    panic!("Failed to get summary row for file '{}'", md_filename)
+                    panic!("Failed to get summary row for file '{md_filename}'")
                 });
                 if let Some(prev_aggregated) = prev_aggregated {
                     // md_filename doesn't matter
@@ -183,10 +183,7 @@ impl AggregateMetrics {
                 .get(PROVE_EXCL_TRACE_TIME_LABEL)
                 .map(|s| s.sum.val)
                 .unwrap_or(0.0);
-            println!(
-                "{} {} {} {}",
-                execute_metered, execute_preflight, trace_gen, stark_prove
-            );
+            println!("{execute_metered} {execute_preflight} {trace_gen} {stark_prove}");
             MdTableCell::new(
                 execute_metered + execute_preflight + trace_gen + stark_prove,
                 None,

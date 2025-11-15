@@ -365,7 +365,7 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
             return Err(eyre::eyre!("Failed to build guest"));
         }
         Err(Some(code)) => {
-            return Err(eyre::eyre!("Failed to build guest: code = {}", code));
+            return Err(eyre::eyre!("Failed to build guest: code = {code}"));
         }
     };
     println!("[openvm] Successfully built the packages");

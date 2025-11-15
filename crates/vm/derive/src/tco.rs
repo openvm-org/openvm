@@ -33,9 +33,9 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
     // Build the function call with all the generics
     let generic_args = build_generic_args(generics);
     let execute_call = if generic_args.is_empty() {
-        quote! { #fn_name(pre_compute, &mut instret, &mut pc, arg, exec_state) }
+        quote! { #fn_name(pre_compute, exec_state) }
     } else {
-        quote! { #fn_name::<#(#generic_args),*>(pre_compute, &mut instret, &mut pc, arg, exec_state) }
+        quote! { #fn_name::<#(#generic_args),*>(pre_compute, exec_state) }
     };
 
     // Generate the execute and exit check code based on return type
@@ -44,7 +44,6 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
             // Call original impl and wire errors into exit_code.
             let __ret = { #execute_call };
             if let ::core::result::Result::Err(e) = __ret {
-                exec_state.set_instret_and_pc(instret, pc);
                 exec_state.exit_code = ::core::result::Result::Err(e);
                 return;
             }
@@ -58,9 +57,6 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
         #[inline(never)]
         unsafe fn #handler_name #handler_generics (
             interpreter: &::openvm_circuit::arch::interpreter::InterpretedInstance<#f_type, #ctx_type>,
-            mut instret: u64,
-            mut pc: u32,
-            arg: u64,
             exec_state: &mut ::openvm_circuit::arch::VmExecState<
                 #f_type,
                 ::openvm_circuit::system::memory::online::GuestMemory,
@@ -70,18 +66,17 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
         #where_clause
         {
             use ::openvm_circuit::arch::ExecutionError;
-
+            let pc = exec_state.vm_state.pc();
             let pre_compute = interpreter.get_pre_compute(pc);
             #execute_stmt
 
-            if ::core::intrinsics::unlikely(#ctx_type::should_suspend(instret, pc, arg, exec_state)) {
-                exec_state.set_instret_and_pc(instret, pc);
+            if ::core::intrinsics::unlikely(#ctx_type::should_suspend(exec_state)) {
                 return;
             }
 
+            let pc = exec_state.vm_state.pc();
             let next_handler = interpreter.get_handler(pc);
             if ::core::intrinsics::unlikely(next_handler.is_none()) {
-                exec_state.set_instret_and_pc(instret, pc);
                 exec_state.exit_code = Err(ExecutionError::PcOutOfBounds(pc));
                 return;
             }
@@ -90,7 +85,7 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
             // NOTE: `become` is a keyword that requires Rust Nightly.
             // It is part of the explicit tail calls RFC: <https://github.com/rust-lang/rust/issues/112788>
             // which is still incomplete.
-            become next_handler(interpreter, instret, pc, arg, exec_state)
+            become next_handler(interpreter, exec_state)
         }
     };
 

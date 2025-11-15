@@ -46,6 +46,7 @@ evm-prove = ["openvm-sdk/evm-prove"]
 evm-verify = ["evm-prove", "openvm-sdk/evm-verify"]
 metrics = ["openvm-sdk/metrics"]
 tco = ["openvm-sdk/tco"]
+aot = ["openvm-sdk/aot"]
 unprotected = ["openvm-sdk/unprotected"]
 # for guest profiling:
 perf-metrics = ["openvm-sdk/perf-metrics", "metrics"]

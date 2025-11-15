@@ -145,6 +145,7 @@ pub trait LinearMemory {
 /// performance reasons, and it is up to the user to enforce types. Needless to say, this is a very
 /// `unsafe` API.
 #[derive(Debug, Clone)]
+#[repr(C)]
 pub struct AddressMap<M: LinearMemory = MemoryBackend> {
     /// Underlying memory data.
     pub mem: Vec<M>,
@@ -287,6 +288,7 @@ impl<M: LinearMemory> AddressMap<M> {
 // @dev Note we don't make this a trait because phantom executors currently need a concrete type for
 // guest memory
 #[derive(Debug, Clone)]
+#[repr(C)]
 pub struct GuestMemory {
     pub memory: AddressMap,
 }
@@ -398,8 +400,7 @@ impl AccessMetadata {
         debug_assert!(timestamp < (1 << 29), "Timestamp must be less than 2^29");
         debug_assert!(
             block_size == 0 || (block_size.is_power_of_two() && block_size <= MAX_BLOCK_SIZE as u8),
-            "Block size must be 0 or power of 2 and <= {}",
-            MAX_BLOCK_SIZE
+            "Block size must be 0 or power of 2 and <= {MAX_BLOCK_SIZE}"
         );
 
         let encoded_block_size = if block_size == 0 {

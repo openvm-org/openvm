@@ -133,7 +133,7 @@ impl ExprBuilder {
     #[allow(unused)]
     fn debug_print(&self, msg: &str) {
         if self.debug {
-            println!("{}", msg);
+            println!("{msg}");
         }
     }
 

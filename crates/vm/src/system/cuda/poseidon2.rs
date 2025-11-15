@@ -118,7 +118,7 @@ impl Poseidon2PeripheryChipGPU {
         match sbox_registers {
             0 => Self::Register0(Poseidon2ChipGPU::new(max_buffer_size)),
             1 => Self::Register1(Poseidon2ChipGPU::new(max_buffer_size)),
-            _ => panic!("Invalid number of sbox registers: {}", sbox_registers),
+            _ => panic!("Invalid number of sbox registers: {sbox_registers}"),
         }
     }
 

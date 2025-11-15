@@ -148,7 +148,7 @@ impl Elf {
             .map_err(|err| eyre::eyre!("e_entry was larger than 32 bits. {err}"))?;
 
         // Make sure the entrypoint is valid.
-        if entry >= max_mem || entry % WORD_SIZE as u32 != 0 {
+        if entry >= max_mem || !entry.is_multiple_of(WORD_SIZE as u32) {
             bail!("Invalid entrypoint");
         }
 
@@ -179,7 +179,7 @@ impl Elf {
 
             // Get the virtual address of the segment as an u32.
             let vaddr: u32 = segment.p_vaddr.try_into()?;
-            if vaddr % WORD_SIZE as u32 != 0 {
+            if !vaddr.is_multiple_of(WORD_SIZE as u32) {
                 bail!("vaddr {vaddr:08x} is unaligned");
             }
 

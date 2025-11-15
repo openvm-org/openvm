@@ -26,4 +26,5 @@ strum.workspace = true
 default = ["parallel"]
 parallel = ["openvm-circuit/parallel"]
 tco = ["openvm-rv32im-circuit/tco"]
+aot = ["openvm-rv32im-circuit/aot"]
 cuda = ["openvm-rv32im-circuit/cuda"]

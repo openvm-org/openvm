@@ -5,7 +5,10 @@ mod tests {
     use eyre::Result;
     use openvm_circuit::{
         arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, Streams, VmExecutor},
-        system::memory::merkle::{public_values::UserPublicValuesProof, MerkleTree},
+        system::memory::{
+            merkle::{public_values::UserPublicValuesProof, MerkleTree},
+            online::LinearMemory,
+        },
         utils::{air_test, air_test_with_min_segments, test_system_config},
     };
     use openvm_instructions::{exe::VmExe, instruction::Instruction, LocalOpcode, SystemOpcode};
@@ -50,6 +53,43 @@ mod tests {
         )?;
         change_rv32m_insn_to_nop(&mut exe);
         air_test_with_min_segments(Rv32IBuilder, config, exe, vec![], min_segments);
+        Ok(())
+    }
+
+    #[test]
+    fn test_suspend() -> Result<()> {
+        let config = test_rv32im_config();
+        let elf = build_example_program_at_path(get_programs_dir!(), "fibonacci", &config)?;
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension),
+        )?;
+
+        let executor = VmExecutor::new(config)?;
+        let instance = executor.instance(&exe)?;
+        let state = instance.execute(vec![], Some(10))?;
+        let state = instance.execute_from_state(state, Some(10))?;
+        let end_state1 = instance.execute_from_state(state, None)?;
+        let end_state2 = instance.execute(vec![], None)?;
+        assert_eq!(end_state1.pc(), end_state2.pc());
+        for addr_space in 1..end_state1.memory.memory.mem.len() {
+            assert_eq!(
+                end_state1.memory.memory.mem[addr_space].size(),
+                end_state2.memory.memory.mem[addr_space].size()
+            );
+            let len = end_state2.memory.memory.mem[addr_space].size();
+            for i in 0..len {
+                unsafe {
+                    assert_eq!(
+                        end_state1.memory.memory.mem[addr_space].read::<u8>(i),
+                        end_state2.memory.memory.mem[addr_space].read::<u8>(i)
+                    );
+                }
+            }
+        }
         Ok(())
     }
 
@@ -279,6 +319,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[cfg(not(feature = "aot"))] // AOT skips this test since it is not a trusted program
     fn test_load_x0() {
         let config = test_rv32im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "load_x0", &config).unwrap();

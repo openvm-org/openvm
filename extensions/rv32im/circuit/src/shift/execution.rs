@@ -15,7 +15,8 @@ use openvm_rv32im_transpiler::ShiftOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::ShiftExecutor;
-use crate::adapters::imm_to_bytes;
+#[allow(unused_imports)]
+use crate::{adapters::imm_to_bytes, common::*};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -72,7 +73,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> Executor<F>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
     for ShiftExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
@@ -111,7 +112,84 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> MeteredExecutor<F>
+#[cfg(feature = "aot")]
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AotExecutor<F>
+    for ShiftExecutor<A, NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+{
+    fn is_aot_supported(&self, _instruction: &Instruction<F>) -> bool {
+        true
+    }
+    fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
+        let to_i16 = |c: F| -> i16 {
+            let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
+            let c_i24 = ((c_u24 << 8) as i32) >> 8;
+            c_i24 as i16
+        };
+        let mut asm_str = String::new();
+        let a: i16 = to_i16(inst.a);
+        let b: i16 = to_i16(inst.b);
+        let c: i16 = to_i16(inst.c);
+        let e: i16 = to_i16(inst.e);
+        assert!(a % 4 == 0, "instruction.a must be a multiple of 4");
+        assert!(b % 4 == 0, "instruction.b must be a multiple of 4");
+
+        // note: for shift we will use REG_B since
+        // it is a hardware requirement that cl is used as the shift value
+        // and we don't want to override the written [b:4]_1
+        // [a:4]_1 <- [b:4]_1
+
+        let str_reg_a = if RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].is_some() {
+            RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].unwrap()
+        } else {
+            REG_A_W
+        };
+
+        if e == 0 {
+            // [a:4]_1 <- [b:4]_1 (shift) c
+            let mut asm_opcode = String::new();
+            if inst.opcode == ShiftOpcode::SLL.global_opcode() {
+                asm_opcode += "shl";
+            } else if inst.opcode == ShiftOpcode::SRL.global_opcode() {
+                asm_opcode += "shr";
+            } else if inst.opcode == ShiftOpcode::SRA.global_opcode() {
+                asm_opcode += "sar";
+            }
+
+            let (reg_b, delta_str_b) = &xmm_to_gpr((b / 4) as u8, str_reg_a, true);
+            asm_str += delta_str_b;
+            asm_str += &format!("   {asm_opcode} {reg_b}, {c}\n");
+            asm_str += &gpr_to_xmm(reg_b, (a / 4) as u8);
+        } else {
+            // [b:4]_1 <- [b:4]_1 (shift) [c:4]_1
+            let mut asm_opcode = String::new();
+            if inst.opcode == ShiftOpcode::SLL.global_opcode() {
+                asm_opcode += "shlx";
+            } else if inst.opcode == ShiftOpcode::SRL.global_opcode() {
+                asm_opcode += "shrx";
+            } else if inst.opcode == ShiftOpcode::SRA.global_opcode() {
+                asm_opcode += "sarx";
+            }
+
+            let (reg_b, delta_str_b) = &xmm_to_gpr((b / 4) as u8, REG_B_W, false);
+            // after this force write, we set [a:4]_1 <- [b:4]_1
+            asm_str += delta_str_b;
+
+            let (reg_c, delta_str_c) = &xmm_to_gpr((c / 4) as u8, REG_C_W, false);
+            asm_str += delta_str_c;
+
+            asm_str += &format!("   {asm_opcode} {str_reg_a}, {reg_b}, {reg_c}\n");
+
+            asm_str += &gpr_to_xmm(str_reg_a, (a / 4) as u8);
+        }
+
+        // let it fall to the next instruction
+        Ok(asm_str)
+    }
+}
+
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
     for ShiftExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
@@ -151,6 +229,36 @@ where
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AotMeteredExecutor<F>
+    for ShiftExecutor<A, NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+{
+    fn is_aot_metered_supported(&self, _inst: &Instruction<F>) -> bool {
+        true
+    }
+    fn generate_x86_metered_asm(
+        &self,
+        inst: &Instruction<F>,
+        pc: u32,
+        chip_idx: usize,
+        config: &SystemConfig,
+    ) -> Result<String, AotError> {
+        let is_imm = inst.e.as_canonical_u32() == RV32_IMM_AS;
+        let mut asm_str = self.generate_x86_asm(inst, pc)?;
+        asm_str += &update_height_change_asm(chip_idx, 1)?;
+        // read [a:4]_1
+        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
+        // read [b:4]_1
+        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
+        if !is_imm {
+            // read [c:4]_1
+            asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
+        }
+        Ok(asm_str)
+    }
+}
 #[inline(always)]
 unsafe fn execute_e12_impl<
     F: PrimeField32,
@@ -159,8 +267,6 @@ unsafe fn execute_e12_impl<
     OP: ShiftOp,
 >(
     pre_compute: &ShiftPreCompute,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1 = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
@@ -176,8 +282,8 @@ unsafe fn execute_e12_impl<
     // Write the result back to memory
     exec_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
 
-    *instret += 1;
-    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
+    let pc = exec_state.pc();
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }
 
 #[create_handler]
@@ -188,14 +294,12 @@ unsafe fn execute_e1_impl<
     const IS_IMM: bool,
     OP: ShiftOp,
 >(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &ShiftPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, instret, pc, exec_state);
+    let pre_compute: &ShiftPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<ShiftPreCompute>()).borrow();
+    execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
@@ -206,17 +310,16 @@ unsafe fn execute_e2_impl<
     const IS_IMM: bool,
     OP: ShiftOp,
 >(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<ShiftPreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<ShiftPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<ShiftPreCompute>>())
+            .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, instret, pc, exec_state);
+    execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, exec_state);
 }
 
 trait ShiftOp {

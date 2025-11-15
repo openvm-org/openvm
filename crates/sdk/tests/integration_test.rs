@@ -166,6 +166,7 @@ fn test_public_values_and_leaf_verification() -> eyre::Result<()> {
     let mut app_proof = app_prover.prove(StdIn::default())?;
 
     assert!(app_proof.per_segment.len() > 2);
+    verify_app_proof(&app_pk.get_app_vk(), &app_proof)?;
     let app_last_proof = app_proof.per_segment.pop().unwrap();
 
     let expected_app_commit: [F; DIGEST_SIZE] = app_prover.app_program_commit().into();
@@ -240,8 +241,7 @@ fn test_public_values_and_leaf_verification() -> eyre::Result<()> {
                 execution_result,
                 Err(VirtualMachineError::Execution(ExecutionError::Fail { .. }))
             ),
-            "Expected failure: the public value root proof has a wrong pv commit: {:?}",
-            execution_result
+            "Expected failure: the public value root proof has a wrong pv commit: {execution_result:?}"
         );
     }
 
@@ -262,15 +262,14 @@ fn test_public_values_and_leaf_verification() -> eyre::Result<()> {
                 execution_result,
                 Err(VirtualMachineError::Execution(ExecutionError::Fail { .. }))
             ),
-            "Expected failure: the public value root proof has a wrong path proof: {:?}",
-            execution_result
+            "Expected failure: the public value root proof has a wrong path proof: {execution_result:?}"
         );
     }
     Ok(())
 }
 
 #[test]
-fn test_metered_execution_suspension() -> eyre::Result<()> {
+fn test_execution_suspension() -> eyre::Result<()> {
     setup_tracing();
     let app_log_blowup = 1;
     let app_config = small_test_app_config(app_log_blowup);
@@ -291,6 +290,10 @@ fn test_metered_execution_suspension() -> eyre::Result<()> {
         "Execution exits with an error: {:?}",
         vm_exec_state.exit_code
     );
+    let metered_instret = vm_exec_state.ctx.segmentation_ctx.instret;
+    let pure_interpreter = vm.executor().instance(&exe)?;
+    let pure_vm_state = pure_interpreter.execute(vec![], Some(metered_instret))?;
+    assert_eq!(pure_vm_state.pc(), vm_exec_state.vm_state.pc());
 
     // Benchmark VmExecState clone.
     unsafe {
@@ -317,7 +320,7 @@ fn test_metered_execution_suspension() -> eyre::Result<()> {
                 .map(|state| state.vm_state.memory.read::<u8, 1>(2, 100))
                 .collect()
         };
-        println!("Values at address space 2, ptr: 100: {:?}", values);
+        println!("Values at address space 2, ptr: 100: {values:?}");
     }
 
     Ok(())
@@ -354,7 +357,7 @@ fn test_static_verifier_custom_pv_handler() -> eyre::Result<()> {
             let leaf_commit = compress_babybear_var_to_bn254(builder, pvs.leaf_verifier_commit);
             let num_public_values = pvs.public_values.len();
 
-            println!("num_public_values: {}", num_public_values);
+            println!("num_public_values: {num_public_values}");
             println!("self.exe_commit: {:?}", self.exe_commit);
             println!("self.leaf_verifier_commit: {:?}", self.leaf_verifier_commit);
 

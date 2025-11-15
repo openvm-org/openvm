@@ -81,6 +81,7 @@ jobs:
           export RUST_BACKTRACE=1
           export RUST_MIN_STACK=8388608
           CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,evm-verify
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,evm-verify,aot
 
       - name: Run ignored tests
         if: ${{ matrix.ignored == true }}

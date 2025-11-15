@@ -437,11 +437,11 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
         // Unique identifier shared by sw_define! and sw_init! used for naming the extern funcs.
         // Currently it's just the struct type name.
         let add_ne_extern_func =
-            syn::Ident::new(&format!("sw_add_ne_extern_func_{}", struct_id), span.into());
+            syn::Ident::new(&format!("sw_add_ne_extern_func_{struct_id}"), span.into());
         let double_extern_func =
-            syn::Ident::new(&format!("sw_double_extern_func_{}", struct_id), span.into());
+            syn::Ident::new(&format!("sw_double_extern_func_{struct_id}"), span.into());
         let setup_extern_func =
-            syn::Ident::new(&format!("sw_setup_extern_func_{}", struct_id), span.into());
+            syn::Ident::new(&format!("sw_setup_extern_func_{struct_id}"), span.into());
 
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]

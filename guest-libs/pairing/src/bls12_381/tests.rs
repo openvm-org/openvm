@@ -33,9 +33,7 @@ fn test_bls12381_frobenius_coeffs() {
             assert_eq!(
                 Bls12_381::FROBENIUS_COEFFS[i][j],
                 convert_bls12381_halo2_fq2_to_fp2(FROBENIUS_COEFF_FQ12_C1[i].pow([j as u64 + 1])),
-                "FROBENIUS_COEFFS[{}][{}] failed",
-                i,
-                j
+                "FROBENIUS_COEFFS[{i}][{j}] failed"
             )
         }
     }

@@ -12,6 +12,9 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 ### Added
 - (CLI) Add configurable segmentation arguments to `cargo openvm prove` commands.
 
+### Added
+- (CLI) Add configurable segmentation arguments to `cargo openvm prove` commands.
+
 ### Changed
 - (Toolchain) Update `cargo openvm build` to use Rust nightly version `nightly-2025-08-02`.
 - (Primitives Library) Fix in `openvm-algebra-complex-macros` to ensure `const` byte arrays have proper memory alignment.

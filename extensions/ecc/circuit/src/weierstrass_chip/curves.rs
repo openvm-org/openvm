@@ -66,7 +66,7 @@ pub fn ec_add_ne<const FIELD_TYPE: u8, const BLOCKS: usize, const BLOCK_SIZE: us
         x if x == FieldType::BLS12_381Coordinate as u8 => {
             ec_add_ne_bls12_381::<BLOCKS, BLOCK_SIZE>(input_data)
         }
-        _ => panic!("Unsupported field type: {}", FIELD_TYPE),
+        _ => panic!("Unsupported field type: {FIELD_TYPE}"),
     }
 }
 
@@ -90,7 +90,7 @@ pub fn ec_double<const CURVE_TYPE: u8, const BLOCKS: usize, const BLOCK_SIZE: us
         x if x == CurveType::BLS12_381 as u8 => {
             ec_double_bls12_381::<BLOCKS, BLOCK_SIZE>(input_data)
         }
-        _ => panic!("Unsupported curve type: {}", CURVE_TYPE),
+        _ => panic!("Unsupported curve type: {CURVE_TYPE}"),
     }
 }
 

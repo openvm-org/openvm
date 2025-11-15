@@ -99,9 +99,7 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
         let filtered_len = filtered_exec_freqs.len();
         assert!(
             filtered_len <= height,
-            "filtered_exec_freqs len={} > cached trace height={}",
-            filtered_len,
-            height
+            "filtered_exec_freqs len={filtered_len} > cached trace height={height}"
         );
         let mut buffer: DeviceBuffer<F> = DeviceBuffer::with_capacity(height);
 

@@ -382,7 +382,7 @@ where
         } else if opcode == HINT_BUFFER.global_opcode().as_usize() {
             String::from("HINT_BUFFER")
         } else {
-            unreachable!("unsupported opcode: {}", opcode)
+            unreachable!("unsupported opcode: {opcode}")
         }
     }
 

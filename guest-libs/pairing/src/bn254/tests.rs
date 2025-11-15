@@ -34,9 +34,7 @@ fn test_bn254_frobenius_coeffs() {
             assert_eq!(
                 Bn254::FROBENIUS_COEFFS[i][j],
                 convert_bn254_halo2_fq2_to_fp2(FROBENIUS_COEFF_FQ12_C1[i].pow([j as u64 + 1])),
-                "FROBENIUS_COEFFS[{}][{}] failed",
-                i,
-                j
+                "FROBENIUS_COEFFS[{i}][{j}] failed"
             )
         }
     }
@@ -302,8 +300,7 @@ fn test_bn254_frobenius_coeffs_fq6() {
         assert_eq!(
             Bn254::FROBENIUS_COEFF_FQ6_C1[i],
             convert_bn254_halo2_fq2_to_fp2(FROBENIUS_COEFF_FQ6_C1[i]),
-            "FROBENIUS_COEFFS_FQ6_C1[{}] failed",
-            i,
+            "FROBENIUS_COEFFS_FQ6_C1[{i}] failed",
         )
     }
 }

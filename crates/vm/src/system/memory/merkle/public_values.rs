@@ -91,7 +91,7 @@ impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
         let pv_as = PUBLIC_VALUES_AS;
         let pv_start_idx = memory_dimensions.label_to_index((pv_as, 0));
         let pvs = &self.public_values;
-        if pvs.len() % CHUNK != 0 || !(pvs.len() / CHUNK).is_power_of_two() {
+        if !pvs.len().is_multiple_of(CHUNK) || !(pvs.len() / CHUNK).is_power_of_two() {
             return Err(UserPublicValuesProofError::UnexpectedLength(pvs.len()));
         }
         let pv_height = log2_strict_usize(pvs.len() / CHUNK);

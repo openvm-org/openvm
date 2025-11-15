@@ -30,7 +30,7 @@ fn test_ext2felt() {
     builder.halt();
 
     let program = builder.compile_isa();
-    println!("{}", program);
+    println!("{program}");
     execute_program(program, vec![]);
 }
 
@@ -59,6 +59,6 @@ fn test_ext_from_base_slice() {
     builder.halt();
 
     let program = builder.compile_isa();
-    println!("{}", program);
+    println!("{program}");
     execute_program(program, vec![]);
 }

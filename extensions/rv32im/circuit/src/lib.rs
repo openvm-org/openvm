@@ -1,5 +1,6 @@
 #![cfg_attr(feature = "tco", allow(incomplete_features))]
 #![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
+#![cfg_attr(feature = "tco", allow(internal_features))]
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
 use openvm_circuit::{
     arch::{
@@ -8,7 +9,7 @@ use openvm_circuit::{
     },
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
-use openvm_circuit_derive::{Executor, PreflightExecutor, VmConfig};
+use openvm_circuit_derive::{Executor, MeteredExecutor, PreflightExecutor, VmConfig};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::StarkEngine,
@@ -22,6 +23,7 @@ mod auipc;
 mod base_alu;
 mod branch_eq;
 mod branch_lt;
+pub mod common;
 mod divrem;
 mod hintstore;
 mod jal_lui;

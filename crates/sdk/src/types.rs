@@ -178,7 +178,7 @@ impl TryFrom<RawEvmProof> for EvmProof {
         };
 
         Ok(Self {
-            version: format!("v{}", OPENVM_VERSION),
+            version: format!("v{OPENVM_VERSION}"),
             app_commit,
             user_public_values,
             proof_data: ProofData {
@@ -262,7 +262,7 @@ impl VersionedVmStarkProof {
         let mut user_public_values = Vec::new();
         encode_slice(&proof.user_public_values, &mut user_public_values)?;
         Ok(Self {
-            version: format!("v{}", OPENVM_VERSION),
+            version: format!("v{OPENVM_VERSION}"),
             user_public_values,
             proof: proof.inner.encode_to_vec()?,
         })

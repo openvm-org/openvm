@@ -47,9 +47,7 @@ impl AccessAdapterCtx {
         };
         debug_assert!(
             align_bits as u32 <= size_bits,
-            "align_bits ({}) must be <= size_bits ({})",
-            align_bits,
-            size_bits
+            "align_bits ({align_bits}) must be <= size_bits ({size_bits})"
         );
 
         for adapter_bits in (align_bits as u32 + 1..=size_bits).rev() {
@@ -71,6 +69,8 @@ pub struct MeteredCostCtx {
     pub max_execution_cost: u64,
     // Cost is number of trace cells (height * width)
     pub cost: u64,
+    /// To measure instructions/s
+    pub instret: u64,
 }
 
 impl MeteredCostCtx {
@@ -81,6 +81,7 @@ impl MeteredCostCtx {
             access_adapter_ctx,
             max_execution_cost: DEFAULT_MAX_COST,
             cost: 0,
+            instret: 0,
         }
     }
 
@@ -101,11 +102,10 @@ impl ExecutionCtxTrait for MeteredCostCtx {
             address_space != RV32_IMM_AS,
             "address space must not be immediate"
         );
-        debug_assert!(size > 0, "size must be greater than 0, got {}", size);
+        debug_assert!(size > 0, "size must be greater than 0, got {size}");
         debug_assert!(
             size.is_power_of_two(),
-            "size must be a power of 2, got {}",
-            size
+            "size must be a power of 2, got {size}"
         );
         // Prevent unbounded memory accesses per instruction
         if self.cost > 2 * std::cmp::max(self.max_execution_cost, DEFAULT_MAX_COST) {
@@ -124,13 +124,13 @@ impl ExecutionCtxTrait for MeteredCostCtx {
     }
 
     #[inline(always)]
-    fn should_suspend<F>(
-        _instret: u64,
-        _pc: u32,
-        max_execution_cost: u64,
-        exec_state: &mut VmExecState<F, GuestMemory, Self>,
-    ) -> bool {
-        exec_state.ctx.cost > max_execution_cost
+    fn should_suspend<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
+        if exec_state.ctx.cost > exec_state.ctx.max_execution_cost {
+            true
+        } else {
+            exec_state.ctx.instret += 1;
+            false
+        }
     }
 }
 

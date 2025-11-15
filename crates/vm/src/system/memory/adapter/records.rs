@@ -144,9 +144,7 @@ pub fn arena_size_bound(trace_heights: &[u32]) -> usize {
         })
         .sum::<usize>();
     tracing::debug!(
-        "Allocating {} bytes for memory adapters arena from heights {:?}",
-        size_bound,
-        trace_heights
+        "Allocating {size_bound} bytes for memory adapters arena from heights {trace_heights:?}"
     );
     size_bound
 }

@@ -26,7 +26,7 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
             if skip_list.contains(&file_name) {
                 continue;
             }
-            println!("Running: {}", file_name);
+            println!("Running: {file_name}");
             let result = std::panic::catch_unwind(|| -> Result<_> {
                 let elf = decode_elf(&path)?;
                 let exe = VmExe::from_elf(
@@ -38,14 +38,34 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
                 )?;
                 let executor = VmExecutor::new(config.clone())?;
                 let interpreter = executor.instance(&exe)?;
-                let _state = interpreter.execute(vec![], None)?;
+                #[allow(unused_variables)]
+                let state = interpreter.execute(vec![], None)?;
+
+                #[cfg(feature = "aot")]
+                {
+                    use openvm_circuit::{arch::VmState, system::memory::online::GuestMemory};
+                    let naive_interpreter = executor.interpreter_instance(&exe)?;
+                    let naive_state = naive_interpreter.execute(vec![], None)?;
+                    let assert_vm_state_eq =
+                        |lhs: &VmState<BabyBear, GuestMemory>,
+                         rhs: &VmState<BabyBear, GuestMemory>| {
+                            assert_eq!(lhs.pc(), rhs.pc());
+                            for r in 0..32 {
+                                let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
+                                let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
+                                assert_eq!(a, b);
+                            }
+                        };
+                    assert_vm_state_eq(&state, &naive_state);
+                }
+
                 Ok(())
             });
 
             match result {
-                Ok(Ok(_)) => println!("Passed!: {}", file_name),
-                Ok(Err(e)) => println!("Failed: {} with error: {}", file_name, e),
-                Err(_) => panic!("Panic occurred while running: {}", file_name),
+                Ok(Ok(_)) => println!("Passed!: {file_name}"),
+                Ok(Err(e)) => println!("Failed: {file_name} with error: {e}"),
+                Err(_) => panic!("Panic occurred while running: {file_name}"),
             }
         }
     }
@@ -71,7 +91,7 @@ fn test_rv32im_riscv_vector_prove() -> Result<()> {
             if skip_list.contains(&file_name) {
                 continue;
             }
-            println!("Running: {}", file_name);
+            println!("Running: {file_name}");
             let elf = decode_elf(&path)?;
             let exe = VmExe::from_elf(
                 elf,
@@ -86,8 +106,8 @@ fn test_rv32im_riscv_vector_prove() -> Result<()> {
             });
 
             match result {
-                Ok(_) => println!("Passed!: {}", file_name),
-                Err(_) => println!("Panic occurred while running: {}", file_name),
+                Ok(_) => println!("Passed!: {file_name}"),
+                Err(_) => println!("Panic occurred while running: {file_name}"),
             }
         }
     }

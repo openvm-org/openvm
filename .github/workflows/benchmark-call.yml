@@ -232,6 +232,7 @@ jobs:
         working-directory: ${{ steps.set-working-dir.outputs.working_dir }}
         run: |
           export JEMALLOC_SYS_WITH_MALLOC_CONF="retain:true,background_thread:true,metadata_thp:always,thp:always,dirty_decay_ms:-1,muzzy_decay_ms:-1,abort_conf:true"
+          export RUST_BACKTRACE=1
           python3 ${{ steps.set-working-dir.outputs.relative_path }}/ci/scripts/bench.py $BIN_NAME $INPUT_ARGS
 
       ##########################################################################

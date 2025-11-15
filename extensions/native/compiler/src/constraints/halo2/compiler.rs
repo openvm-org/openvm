@@ -502,14 +502,15 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                     DslIr::CircuitPublish(val, index) => {
                         public_values[index] = vars[&val.0];
                     }
-                    _ => panic!("unsupported {:?}", instruction),
+                    _ => panic!("unsupported {instruction:?}"),
                 }
             }));
             if res.is_err() {
                 if let Some(mut backtrace) = backtrace {
                     backtrace.resolve();
-                    eprintln!("openvm circuit failure; backtrace:\n{:?}", backtrace);
+                    eprintln!("openvm circuit failure; backtrace:\n{backtrace:?}");
                 }
+                #[allow(clippy::panicking_unwrap)]
                 res.unwrap();
             }
             #[cfg(feature = "metrics")]

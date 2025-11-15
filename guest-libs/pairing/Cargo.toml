@@ -69,6 +69,7 @@ cuda = [
     "openvm-pairing-circuit/cuda",
     "openvm-ecc-circuit/cuda",
 ]
+aot = ["openvm-pairing-guest/aot"]
 
 [package.metadata.cargo-shear]
 ignored = ["openvm", "openvm-custom-insn"]

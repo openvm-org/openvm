@@ -185,7 +185,7 @@ impl ProveCmd {
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
 
                 let agg_pk = read_object_from_file(default_agg_stark_pk_path()).map_err(|e| {
-                    eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
+                    eyre::eyre!("Failed to read aggregation proving key: {e}\nPlease run 'cargo openvm setup' first")
                 })?;
                 let app_config = get_app_config(&mut app_pk, segmentation_args);
                 let sdk = Sdk::new(app_config)?

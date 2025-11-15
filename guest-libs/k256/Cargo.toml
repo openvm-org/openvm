@@ -81,6 +81,7 @@ cuda = [
     "openvm-sha256-circuit/cuda",
 ]
 tco = ["openvm-circuit/tco"]
+aot = ["openvm-circuit/aot"]
 
 [package.metadata.cargo-shear]
 ignored = [

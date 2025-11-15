@@ -76,7 +76,7 @@ impl RawEvmProof {
     /// Return bytes calldata to be passed to the verifier contract.
     #[cfg(feature = "evm-prove")]
     pub fn verifier_calldata(&self) -> Vec<u8> {
-        snark_verifier_sdk::evm::encode_calldata(&[self.instances.clone()], &self.proof)
+        snark_verifier_sdk::evm::encode_calldata(std::slice::from_ref(&self.instances), &self.proof)
     }
 }
 
@@ -141,7 +141,7 @@ impl Halo2Prover {
         let mut builder = Self::populate(builder, dsl_operations, witness, true);
 
         let public_instances = builder.instances();
-        println!("Public instances: {:?}", public_instances);
+        println!("Public instances: {public_instances:?}");
 
         builder.calculate_params(Some(20));
 
@@ -255,7 +255,7 @@ impl<'de> Deserialize<'de> for Halo2ProvingPinning {
             SerdeFormat::RawBytes,
             metadata.config_params.clone(),
         )
-        .map_err(|e| de::Error::custom(format!("invalid bytes for proving key: {}", e)))?;
+        .map_err(|e| de::Error::custom(format!("invalid bytes for proving key: {e}")))?;
 
         Ok(Halo2ProvingPinning { pk, metadata })
     }

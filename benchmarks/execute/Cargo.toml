@@ -47,6 +47,7 @@ divan = { package = "codspeed-divan-compat", version = "3.0.2" }
 [features]
 default = ["jemalloc"]
 tco = ["openvm-sdk/tco"]
+aot = ["openvm-sdk/aot"]
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
@@ -56,14 +57,6 @@ perf-metrics = [
     "openvm-transpiler/function-span",
 ]
 evm-prove = []
-
-# [[bench]]
-# name = "fibonacci_execute"
-# harness = false
-
-# [[bench]]
-# name = "regex_execute"
-# harness = false
 
 [[bench]]
 name = "execute"

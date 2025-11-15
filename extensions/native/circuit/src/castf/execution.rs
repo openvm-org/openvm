@@ -51,7 +51,7 @@ impl<A> CastFCoreExecutor<A> {
     }
 }
 
-impl<F, A> Executor<F> for CastFCoreExecutor<A>
+impl<F, A> InterpreterExecutor<F> for CastFCoreExecutor<A>
 where
     F: PrimeField32,
 {
@@ -97,7 +97,10 @@ where
     }
 }
 
-impl<F, A> MeteredExecutor<F> for CastFCoreExecutor<A>
+#[cfg(feature = "aot")]
+impl<F, A> AotExecutor<F> for CastFCoreExecutor<A> where F: PrimeField32 {}
+
+impl<F, A> InterpreterMeteredExecutor<F> for CastFCoreExecutor<A>
 where
     F: PrimeField32,
 {
@@ -144,40 +147,38 @@ where
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F, A> AotMeteredExecutor<F> for CastFCoreExecutor<A> where F: PrimeField32 {}
+
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &CastFPreCompute = pre_compute.borrow();
-    execute_e12_impl(pre_compute, instret, pc, exec_state);
+    let pre_compute: &CastFPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<CastFPreCompute>()).borrow();
+    execute_e12_impl(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<CastFPreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<CastFPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<CastFPreCompute>>())
+            .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl(&pre_compute.data, instret, pc, exec_state);
+    execute_e12_impl(&pre_compute.data, exec_state);
 }
 
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &CastFPreCompute,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let y = exec_state.vm_read::<F, 1>(AS::Native as u32, pre_compute.b)[0];
@@ -185,6 +186,6 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 
     exec_state.vm_write::<u8, RV32_REGISTER_NUM_LIMBS>(RV32_MEMORY_AS, pre_compute.a, &x);
 
-    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
-    *instret += 1;
+    let pc = exec_state.pc();
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }

@@ -33,7 +33,7 @@ impl FromStr for Input {
 pub fn decode_hex_string(s: &str) -> Result<Vec<u8>> {
     // Remove 0x prefix if present (exactly once)
     let s = s.strip_prefix("0x").unwrap_or(s);
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return Err(eyre::eyre!("The hex string must be of even length"));
     }
     if !s.chars().all(|c| c.is_ascii_hexdigit()) {
@@ -60,7 +60,7 @@ pub fn read_bytes_into_stdin(stdin: &mut StdIn, bytes: &[u8]) -> Result<()> {
         }
         Some(0x02) => {
             let data = &bytes[1..];
-            if data.len() % 4 != 0 {
+            if !data.len().is_multiple_of(4) {
                 return Err(eyre::eyre!(
                     "Invalid input format: incorrect number of bytes"
                 ));

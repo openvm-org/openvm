@@ -93,12 +93,12 @@ fn load_proof(
     index: usize,
 ) -> Result<Proof<SC>> {
     let proof_filename = match proof_type {
-        ProofType::Leaf => format!("{}.leaf.{}.proof", program_name, index),
-        ProofType::Internal => format!("{}.internal.{}.proof", program_name, index),
+        ProofType::Leaf => format!("{program_name}.leaf.{index}.proof"),
+        ProofType::Internal => format!("{program_name}.internal.{index}.proof"),
     };
 
     let proof_bytes = fs::read(fixtures_dir.join(proof_filename))
-        .unwrap_or_else(|_| panic!("No {:?} proof available at index {}", proof_type, index));
+        .unwrap_or_else(|_| panic!("No {proof_type:?} proof available at index {index}"));
     let proof: Proof<SC> = bitcode::deserialize(&proof_bytes).unwrap();
     Ok(proof)
 }
@@ -178,10 +178,7 @@ fn get_internal_verifier_proof_indices(
         return (ProofType::Internal, vec![proof_to_wrap_idx]);
     }
 
-    panic!(
-        "Invalid internal verifier index {}",
-        internal_verifier_index
-    );
+    panic!("Invalid internal verifier index {internal_verifier_index}");
 }
 
 fn main() -> Result<()> {
@@ -217,7 +214,7 @@ fn main() -> Result<()> {
             let index = cli.index.unwrap_or(0);
             let leaf_input = leaf_inputs
                 .get(index)
-                .unwrap_or_else(|| panic!("No leaf input available at index {}", index));
+                .unwrap_or_else(|| panic!("No leaf input available at index {index}"));
 
             let agg_config = AggregationConfig::default();
             let config = agg_config.leaf_vm_config();

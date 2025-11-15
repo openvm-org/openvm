@@ -8,6 +8,7 @@ on:
       - reopened
       - edited
       - synchronize
+      - labeled
 
 permissions:
   pull-requests: read
@@ -82,3 +83,13 @@ jobs:
       - name: Fail workflow if title invalid
         if: steps.lint_pr_title.outcome == 'failure'
         run: exit 1
+
+  execute-benchmarks:
+    name: Execute benchmarks
+    uses: ./.github/workflows/benchmarks-execute.yml
+    secrets: inherit
+
+  extension-tests:
+    name: Extension tests
+    uses: ./.github/workflows/extension-tests.yml
+    secrets: inherit

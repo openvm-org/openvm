@@ -122,8 +122,7 @@ fn test_trace_equivalence(
     let recorded_trace = generate_recorded_trace(expr, range_checker, &inputs, flags, width);
     assert_eq!(
         direct_trace, recorded_trace,
-        "Direct and recorded traces must be identical for inputs: {:?}",
-        inputs
+        "Direct and recorded traces must be identical for inputs: {inputs:?}"
     );
 }
 

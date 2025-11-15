@@ -49,7 +49,7 @@ fn main() -> eyre::Result<()> {
 
     // 4. Run the program
     let output = sdk.execute(elf.clone(), stdin.clone())?;
-    println!("public values output: {:?}", output);
+    println!("public values output: {output:?}");
     // [!endregion execution]
 
     // [!region proof_generation]

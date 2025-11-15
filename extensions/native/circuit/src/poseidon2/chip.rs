@@ -660,7 +660,7 @@ where
         } else if opcode == COMP_POS2.global_opcode().as_usize() {
             String::from("COMP_POS2")
         } else {
-            unreachable!("unsupported opcode: {}", opcode)
+            unreachable!("unsupported opcode: {opcode}")
         }
     }
 }

@@ -16,4 +16,5 @@ proc-macro2 = "1.0"
 itertools = { workspace = true }
 
 [features]
+aot = []
 tco = []

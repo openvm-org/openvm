@@ -198,7 +198,7 @@ where
             } else {
                 // Not a hard constraint violation when publishing the same value twice but the
                 // program should avoid that.
-                panic!("Custom public value {} already set", idx);
+                panic!("Custom public value {idx} already set");
             }
         }
 

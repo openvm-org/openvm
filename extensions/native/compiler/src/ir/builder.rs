@@ -258,7 +258,7 @@ impl<C: Config> Builder<C> {
         &mut self,
         lhs: LhsExpr,
         rhs: RhsExpr,
-    ) -> IfBuilder<C> {
+    ) -> IfBuilder<'_, C> {
         IfBuilder {
             lhs: lhs.into(),
             rhs: rhs.into(),
@@ -272,7 +272,7 @@ impl<C: Config> Builder<C> {
         &mut self,
         lhs: LhsExpr,
         rhs: RhsExpr,
-    ) -> IfBuilder<C> {
+    ) -> IfBuilder<'_, C> {
         IfBuilder {
             lhs: lhs.into(),
             rhs: rhs.into(),
@@ -339,7 +339,7 @@ impl<C: Config> Builder<C> {
         &mut self,
         start: impl Into<RVar<C::N>>,
         end: impl Into<RVar<C::N>>,
-    ) -> IteratorBuilder<C> {
+    ) -> IteratorBuilder<'_, C> {
         self.range_with_step(start, end, C::N::ONE)
     }
     /// Evaluate a block of operations over a range from start to end with a custom step.
@@ -348,7 +348,7 @@ impl<C: Config> Builder<C> {
         start: impl Into<RVar<C::N>>,
         end: impl Into<RVar<C::N>>,
         step: C::N,
-    ) -> IteratorBuilder<C> {
+    ) -> IteratorBuilder<'_, C> {
         let start = start.into();
         let end0 = end.into();
         IteratorBuilder {

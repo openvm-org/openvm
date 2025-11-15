@@ -92,7 +92,6 @@ fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingCo
     vm.load_program(committed_exe.get_committed_trace());
     let from_state = VmState::new_with_defaults(
         0,
-        0,
         memory,
         Streams::default(),
         0,
