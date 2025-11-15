@@ -32,8 +32,13 @@ serde = { workspace = true }
 serde_with = { workspace = true }
 lazy_static = { workspace = true }
 hex-literal = { workspace = true }
-halo2curves-axiom = { workspace = true }
 cfg-if = { workspace = true }
+
+[target.'cfg(not(target_arch = "x86_64"))'.dependencies]
+halo2curves-axiom = { workspace = true }
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+halo2curves-axiom = { workspace = true, features = ["asm"]}
 
 [dev-dependencies]
 openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }

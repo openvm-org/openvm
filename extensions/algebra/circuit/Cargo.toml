@@ -22,7 +22,6 @@ openvm-algebra-transpiler = { workspace = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
 
-halo2curves-axiom = { workspace = true }
 num-bigint = { workspace = true, features = ["serde"] }
 num-traits = { workspace = true }
 rand = { workspace = true }
@@ -33,6 +32,12 @@ serde.workspace = true
 serde_with = { workspace = true }
 eyre = { workspace = true }
 cfg-if = { workspace = true }
+
+[target.'cfg(not(target_arch = "x86_64"))'.dependencies]
+halo2curves-axiom = { workspace = true }
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+halo2curves-axiom = { workspace = true, features = ["asm"]}
 
 [dev-dependencies]
 openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }

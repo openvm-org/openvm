@@ -36,8 +36,13 @@ derive-new = { workspace = true }
 rand = { workspace = true }
 eyre = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
-halo2curves-axiom = { workspace = true }
 cfg-if = { workspace = true }
+
+[target.'cfg(not(target_arch = "x86_64"))'.dependencies]
+halo2curves-axiom = { workspace = true }
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+halo2curves-axiom = { workspace = true, features = ["asm"]}
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 openvm-pairing-guest = { workspace = true }
