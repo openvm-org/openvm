@@ -50,7 +50,7 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
 
         let records = arena.allocated();
         if records.is_empty() {
-            return get_empty_air_proving_ctx::<GpuBackend>();
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % record_size, 0);
 

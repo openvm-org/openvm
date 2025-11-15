@@ -6,7 +6,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_backend::{
-    base::DeviceMatrix, chip::get_empty_air_proving_ctx, prover_backend::GpuBackend, types::F,
+    base::DeviceMatrix, prover_backend::GpuBackend, types::F,
 };
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
@@ -34,7 +34,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32ShiftChipGpu {
         )>();
         let records = arena.allocated();
         if records.is_empty() {
-            return get_empty_air_proving_ctx::<GpuBackend>();
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
