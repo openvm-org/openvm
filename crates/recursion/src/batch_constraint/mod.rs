@@ -10,7 +10,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, TwoAdicField};
 use stark_backend_v2::{
-    BabyBearPoseidon2CpuEngineV2, Digest, EF, F, StarkEngineV2,
+    Digest, EF, F, SC, StarkEngineV2,
     keygen::types::MultiStarkVerifyingKeyV2,
     poly_common::{eval_eq_sharp_uni, eval_eq_uni, eval_eq_uni_at_one},
     poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
@@ -696,11 +696,14 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
 impl BatchConstraintModule {
     /// Generates and then commits to the cache trace for `SymbolicExpressionAir`. Returns the
     /// committed PCS data.
-    pub fn commit_child_vk(
+    pub fn commit_child_vk<E>(
         &self,
-        engine: &BabyBearPoseidon2CpuEngineV2,
+        engine: &E,
         child_vk: &MultiStarkVerifyingKeyV2,
-    ) -> (Digest, StackedPcsData<F, Digest>) {
+    ) -> (Digest, StackedPcsData<F, Digest>)
+    where
+        E: StarkEngineV2<SC = SC, PB = CpuBackendV2>,
+    {
         let cached_trace = expr_eval::generate_symbolic_expr_cached_trace(child_vk);
         engine
             .device()
@@ -711,8 +714,7 @@ impl BatchConstraintModule {
 #[cfg(feature = "cuda")]
 pub mod cuda_tracegen {
     use cuda_backend_v2::{
-        BabyBearPoseidon2GpuEngineV2, GpuBackendV2, stacked_pcs::StackedPcsDataGpu,
-        transport_matrix_h2d_col_major,
+        GpuBackendV2, stacked_pcs::StackedPcsDataGpu, transport_matrix_h2d_col_major,
     };
     use itertools::Itertools;
 
@@ -757,11 +759,14 @@ pub mod cuda_tracegen {
     impl BatchConstraintModule {
         /// Generates and then commits to the cache trace for `SymbolicExpressionAir`. Returns the
         /// committed PCS data.
-        pub fn commit_child_vk_gpu(
+        pub fn commit_child_vk_gpu<E>(
             &self,
-            engine: &BabyBearPoseidon2GpuEngineV2,
+            engine: &E,
             child_vk: &MultiStarkVerifyingKeyV2,
-        ) -> (Digest, StackedPcsDataGpu<F, Digest>) {
+        ) -> (Digest, StackedPcsDataGpu<F, Digest>)
+        where
+            E: StarkEngineV2<SC = SC, PB = GpuBackendV2>,
+        {
             let cached_trace = expr_eval::generate_symbolic_expr_cached_trace(child_vk);
             let cached_trace = ColMajorMatrix::from_row_major(&cached_trace);
             engine

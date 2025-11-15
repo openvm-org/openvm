@@ -8,7 +8,7 @@ use openvm_stark_backend::{AirRef, interaction::BusIndex};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
-    BabyBearPoseidon2CpuEngineV2, DIGEST_SIZE, EF, F,
+    DIGEST_SIZE, EF, F, SC, StarkEngineV2,
     keygen::types::MultiStarkVerifyingKeyV2,
     poseidon2::{
         WIDTH,
@@ -46,6 +46,31 @@ mod dummy;
 pub(crate) mod frame;
 
 const BATCH_CONSTRAINT_MOD_IDX: usize = 0;
+
+// Trait to make tracegen functions generic on ProverBackendV2
+pub trait VerifierTraceGen<PB: ProverBackendV2> {
+    fn new(child_mvk: Arc<MultiStarkVerifyingKeyV2>, continuations_enabled: bool) -> Self;
+    fn commit_child_vk<E: StarkEngineV2<SC = SC, PB = PB>>(
+        &self,
+        engine: &E,
+        child_vk: &MultiStarkVerifyingKeyV2,
+    ) -> CommittedTraceDataV2<PB>;
+    /// The generic `TS` allows using different transcript implementations for debugging purposes.
+    /// The default type is use is `DuplexSpongeRecorder`.
+    fn generate_proving_ctxs<TS: FiatShamirTranscript + TranscriptHistory + Default>(
+        &self,
+        child_vk: &MultiStarkVerifyingKeyV2,
+        child_vk_pcs_data: CommittedTraceDataV2<PB>,
+        proofs: &[Proof],
+    ) -> Vec<AirProvingContextV2<PB>>;
+}
+
+// Trait to help make AIR generation generic
+pub trait AggregationSubCircuit {
+    fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>>;
+    fn public_values_bus(&self) -> PublicValuesBus;
+    fn cached_commit_bus(&self) -> CachedCommitBus;
+}
 
 // TODO[jpw]: make this generic in <SC: StarkGenericConfig>
 pub trait AirModule {
@@ -413,24 +438,6 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         }
     }
 
-    pub fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
-        let exp_bits_len_air = ExpBitsLenAir::new(self.bus_inventory.exp_bits_len_bus);
-
-        // WARNING: SymbolicExpressionAir MUST be the first AIR in verifier circuit
-        iter::empty()
-            .chain(self.batch_constraint.airs())
-            .chain(self.transcript.airs())
-            .chain(self.proof_shape.airs())
-            .chain(self.gkr.airs())
-            .chain(self.stacking.airs())
-            .chain(self.whir.airs())
-            .chain([
-                self.power_checker_air.clone() as AirRef<_>,
-                Arc::new(exp_bits_len_air) as AirRef<_>,
-            ])
-            .collect()
-    }
-
     /// Runs preflight for a single proof.
     pub fn run_preflight<TS>(
         &self,
@@ -455,12 +462,46 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         preflight.transcript = sponge.into_log();
         preflight
     }
+}
 
-    // TODO: consider making trait for commit_child_vk and generate_proving_ctxs generic in
-    // ProverBackendV2
-    pub fn commit_child_vk(
+impl<const MAX_NUM_PROOFS: usize> AggregationSubCircuit for VerifierSubCircuit<MAX_NUM_PROOFS> {
+    fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
+        let exp_bits_len_air = ExpBitsLenAir::new(self.bus_inventory.exp_bits_len_bus);
+
+        // WARNING: SymbolicExpressionAir MUST be the first AIR in verifier circuit
+        iter::empty()
+            .chain(self.batch_constraint.airs())
+            .chain(self.transcript.airs())
+            .chain(self.proof_shape.airs())
+            .chain(self.gkr.airs())
+            .chain(self.stacking.airs())
+            .chain(self.whir.airs())
+            .chain([
+                self.power_checker_air.clone() as AirRef<_>,
+                Arc::new(exp_bits_len_air) as AirRef<_>,
+            ])
+            .collect()
+    }
+
+    fn public_values_bus(&self) -> PublicValuesBus {
+        self.bus_inventory.public_values_bus
+    }
+
+    fn cached_commit_bus(&self) -> CachedCommitBus {
+        self.bus_inventory.cached_commit_bus
+    }
+}
+
+impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
+    for VerifierSubCircuit<MAX_NUM_PROOFS>
+{
+    fn new(child_mvk: Arc<MultiStarkVerifyingKeyV2>, continuations_enabled: bool) -> Self {
+        Self::new_with_set_continuations(child_mvk, continuations_enabled)
+    }
+
+    fn commit_child_vk<E: StarkEngineV2<SC = SC, PB = CpuBackendV2>>(
         &self,
-        engine: &BabyBearPoseidon2CpuEngineV2,
+        engine: &E,
         child_vk: &MultiStarkVerifyingKeyV2,
     ) -> CommittedTraceDataV2<CpuBackendV2> {
         let (commitment, data) = self.batch_constraint.commit_child_vk(engine, child_vk);
@@ -472,18 +513,13 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         }
     }
 
-    /// The generic `TS` allows using different transcript implementations for debugging purposes.
-    /// The default type is use is `DuplexSpongeRecorder`.
     #[instrument(name = "VerifierSubCircuit::generate_proving_ctxs", skip_all)]
-    pub fn generate_proving_ctxs<TS>(
+    fn generate_proving_ctxs<TS: FiatShamirTranscript + TranscriptHistory + Default>(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
         child_vk_pcs_data: CommittedTraceDataV2<CpuBackendV2>,
         proofs: &[Proof],
-    ) -> Vec<AirProvingContextV2<CpuBackendV2>>
-    where
-        TS: FiatShamirTranscript + TranscriptHistory + Default,
-    {
+    ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
         let preflights = proofs
             .par_iter()
@@ -533,9 +569,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
 pub mod cuda_tracegen {
     use std::iter::zip;
 
-    use cuda_backend_v2::{
-        BabyBearPoseidon2GpuEngineV2, GpuBackendV2, transport_matrix_h2d_col_major,
-    };
+    use cuda_backend_v2::{GpuBackendV2, transport_matrix_h2d_col_major};
 
     use super::*;
     use crate::cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu};
@@ -571,10 +605,16 @@ pub mod cuda_tracegen {
         }
     }
 
-    impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
-        pub fn commit_child_vk_gpu(
+    impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<GpuBackendV2>
+        for VerifierSubCircuit<MAX_NUM_PROOFS>
+    {
+        fn new(child_mvk: Arc<MultiStarkVerifyingKeyV2>, continuations_enabled: bool) -> Self {
+            Self::new_with_set_continuations(child_mvk, continuations_enabled)
+        }
+
+        fn commit_child_vk<E: StarkEngineV2<SC = SC, PB = GpuBackendV2>>(
             &self,
-            engine: &BabyBearPoseidon2GpuEngineV2,
+            engine: &E,
             child_vk: &MultiStarkVerifyingKeyV2,
         ) -> CommittedTraceDataV2<GpuBackendV2> {
             let (commitment, data) = self.batch_constraint.commit_child_vk_gpu(engine, child_vk);
@@ -586,16 +626,12 @@ pub mod cuda_tracegen {
             }
         }
 
-        #[instrument(name = "VerifierSubCircuit::generate_proving_ctxs_gpu", skip_all)]
-        pub fn generate_proving_ctxs_gpu<TS>(
+        fn generate_proving_ctxs<TS: FiatShamirTranscript + TranscriptHistory + Default>(
             &self,
             child_vk: &MultiStarkVerifyingKeyV2,
             child_vk_pcs_data: CommittedTraceDataV2<GpuBackendV2>,
             proofs: &[Proof],
-        ) -> Vec<AirProvingContextV2<GpuBackendV2>>
-        where
-            TS: FiatShamirTranscript + TranscriptHistory + Default,
-        {
+        ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
             debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
             let child_vk_gpu = VerifyingKeyGpu::new(child_vk);
             let proofs_gpu = proofs

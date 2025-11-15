@@ -29,7 +29,7 @@ use stark_backend_v2::{
 use test_case::{test_case, test_matrix};
 use tracing::Level;
 
-use crate::system::VerifierSubCircuit;
+use crate::system::{AggregationSubCircuit, VerifierSubCircuit, VerifierTraceGen};
 
 // TODO[jpw]: switch to v2 types (currently using v1 for debugging)
 fn verifier_circuit_keygen<const MAX_NUM_PROOFS: usize>(
@@ -487,7 +487,7 @@ fn run_negative_hypercube_test<Fx: TestFixture>(
     num_proofs: usize,
 ) {
     params.l_skip += 3;
-    let engine = BabyBearPoseidon2CpuEngineV2::new(params);
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
     assert!(num_proofs <= 5);
 
     let (vk, proof) = fx.keygen_and_prove(&engine);
@@ -554,8 +554,8 @@ mod cuda {
         num_proofs: usize,
     ) {
         setup_tracing_with_log_level(Level::INFO);
-        let cpu_engine = BabyBearPoseidon2CpuEngineV2::new(params);
-        let gpu_engine = BabyBearPoseidon2GpuEngineV2::new(params);
+        let cpu_engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+        let gpu_engine = BabyBearPoseidon2GpuEngineV2::<DuplexSponge>::new(params);
         let (pk, vk) = fx.keygen(&cpu_engine);
         assert!(num_proofs <= 5);
         let proofs = (0..num_proofs)
@@ -569,14 +569,11 @@ mod cuda {
         }
 
         let vk_commit_data_cpu = circuit.commit_child_vk(&cpu_engine, &vk);
-        let vk_commit_data_gpu = circuit.commit_child_vk_gpu(&gpu_engine, &vk);
+        let vk_commit_data_gpu = circuit.commit_child_vk(&gpu_engine, &vk);
         let cpu_ctx =
             circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(&vk, vk_commit_data_cpu, &proofs);
-        let gpu_ctx = circuit.generate_proving_ctxs_gpu::<DuplexSpongeRecorder>(
-            &vk,
-            vk_commit_data_gpu,
-            &proofs,
-        );
+        let gpu_ctx =
+            circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(&vk, vk_commit_data_gpu, &proofs);
 
         #[cfg(feature = "touchemall")]
         for (i, gpu) in gpu_ctx.iter().enumerate() {
