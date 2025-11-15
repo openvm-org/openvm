@@ -8,7 +8,7 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_cuda_backend::{
-    base::DeviceMatrix, chip::get_empty_air_proving_ctx, prover_backend::GpuBackend, types::F,
+    base::DeviceMatrix, prover_backend::GpuBackend, types::F,
 };
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip, ChipUsageGetter};
@@ -55,7 +55,7 @@ impl<RA> Chip<RA, GpuBackend> for DeviceExecutionTester {
         let width = self.0.trace_width();
 
         if height == 0 {
-            return get_empty_air_proving_ctx();
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         let trace = DeviceMatrix::<F>::with_capacity(height, width);
 
