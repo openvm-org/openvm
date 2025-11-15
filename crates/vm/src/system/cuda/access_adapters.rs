@@ -43,7 +43,7 @@ impl AccessAdapterInventoryGPU {
         assert!(max_access_adapter_n.is_power_of_two());
         let cnt_adapters = max_access_adapter_n.ilog2() as usize;
         if records.is_empty() {
-            return vec![None; cnt_adapters];
+            return vec![Some(DeviceMatrix::<F>::dummy()); cnt_adapters];
         }
 
         let mut offsets = Vec::new();
@@ -84,7 +84,7 @@ impl AccessAdapterInventoryGPU {
             .iter()
             .enumerate()
             .map(|(i, &h)| match h {
-                0 => None,
+                0 => Some(DeviceMatrix::<F>::dummy()),
                 h => Some(DeviceMatrix::<F>::with_capacity(
                     next_power_of_two_or_zero(h),
                     widths[i],
