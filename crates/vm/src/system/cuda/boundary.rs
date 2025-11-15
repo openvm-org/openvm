@@ -9,7 +9,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{
-    base::DeviceMatrix, chip::get_empty_air_proving_ctx, prelude::F, prover_backend::GpuBackend,
+    base::DeviceMatrix, prelude::F, prover_backend::GpuBackend,
 };
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_stark_backend::{
@@ -127,7 +127,7 @@ impl<RA> Chip<RA, GpuBackend> for BoundaryChipGPU {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
         let num_records = self.num_records.unwrap();
         if num_records == 0 {
-            return get_empty_air_proving_ctx();
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         let unpadded_height = match &self.fields {
             BoundaryFields::Persistent(_) => 2 * num_records,
