@@ -30,8 +30,6 @@ openvm-sha256-circuit = { workspace = true }
 openvm-sha256-transpiler = { workspace = true }
 openvm-pairing-circuit = { workspace = true }
 openvm-pairing-transpiler = { workspace = true }
-openvm-native-circuit = { workspace = true }
-openvm-native-transpiler = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
 openvm-rv32im-transpiler = { workspace = true }
 
@@ -66,7 +64,6 @@ metrics = ["openvm-circuit/metrics"]
 tco = [
     "openvm-circuit/tco",
     "openvm-rv32im-circuit/tco",
-    "openvm-native-circuit/tco",
     "openvm-sha256-circuit/tco",
     "openvm-keccak256-circuit/tco",
     "openvm-bigint-circuit/tco",
@@ -102,7 +99,6 @@ cuda = [
     "openvm-keccak256-circuit/cuda",
     "openvm-sha256-circuit/cuda",
     "openvm-pairing-circuit/cuda",
-    "openvm-native-circuit/cuda",
     "openvm-rv32im-circuit/cuda",
     "continuations-v2/cuda",
 ]

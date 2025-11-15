@@ -1,44 +1,31 @@
 use bon::Builder;
-use openvm_algebra_circuit::{
-    AlgebraCpuProverExt, Fp2Extension, Fp2ExtensionExecutor, ModularExtension,
-    ModularExtensionExecutor,
-};
+use openvm_algebra_circuit::*;
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-use openvm_bigint_circuit::{Int256, Int256CpuProverExt, Int256Executor};
-use openvm_bigint_transpiler::Int256TranspilerExtension;
+use openvm_bigint_circuit::*;
+use openvm_bigint_transpiler::*;
 use openvm_circuit::{
-    arch::*,
+    arch::{instructions::NATIVE_AS, *},
     derive::VmConfig,
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
-use openvm_ecc_circuit::{
-    EccCpuProverExt, P256_CONFIG, SECP256K1_CONFIG, WeierstrassExtension,
-    WeierstrassExtensionExecutor,
-};
-use openvm_ecc_transpiler::EccTranspilerExtension;
-use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
-use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
-use openvm_pairing_circuit::{
-    BLS12_381_COMPLEX_STRUCT_NAME, BN254_COMPLEX_STRUCT_NAME, PairingCurve, PairingExtension,
-    PairingExtensionExecutor, PairingProverExt,
-};
-use openvm_pairing_transpiler::PairingTranspilerExtension;
-use openvm_rv32im_circuit::{
-    Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
-};
-use openvm_rv32im_transpiler::{
-    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
-};
-use openvm_sha256_circuit::{Sha2CpuProverExt, Sha256, Sha256Executor};
-use openvm_sha256_transpiler::Sha256TranspilerExtension;
+use openvm_ecc_circuit::*;
+use openvm_ecc_transpiler::*;
+use openvm_keccak256_circuit::*;
+use openvm_keccak256_transpiler::*;
+use openvm_pairing_circuit::*;
+use openvm_pairing_transpiler::*;
+use openvm_rv32im_circuit::*;
+use openvm_rv32im_transpiler::*;
+use openvm_sha256_circuit::*;
+use openvm_sha256_transpiler::*;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    p3_field::{Field, PrimeField32},
+    p3_field::Field,
 };
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
 use stark_backend_v2::{
-    StarkEngineV2 as StarkEngine, SystemParams,
+    F, StarkEngineV2 as StarkEngine,
     prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
 };
 cfg_if::cfg_if! {
@@ -47,7 +34,7 @@ cfg_if::cfg_if! {
         use openvm_bigint_circuit::Int256GpuProverExt;
         use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};
         use cuda_backend_v2::{
-            BabyBearPoseidon2GpuEngineV2 as GpuBabyBearPoseidon2Engine, GpuBackendV2 as GpuBackend,
+            BabyBearPoseidon2GpuEngineV2, GpuBackendV2 as GpuBackend
         };
         use openvm_ecc_circuit::EccProverExt;
         use openvm_keccak256_circuit::Keccak256GpuProverExt;
@@ -59,10 +46,10 @@ cfg_if::cfg_if! {
     }
 }
 
-use crate::{
-    F,
-    config::{AppConfig, TranspilerConfig},
-};
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AppConfig<VC> {
+    pub app_vm_config: VC,
+}
 
 /// The recommended way to construct [SdkVmConfig] is using [SdkVmConfig::from_toml].
 ///
@@ -171,18 +158,8 @@ impl SdkVmConfig {
     }
 }
 
-impl AppConfig<SdkVmConfig> {
-    pub fn standard(params: SystemParams) -> Self {
-        Self::new(SdkVmConfig::standard(), params)
-    }
-
-    pub fn riscv32(params: SystemParams) -> Self {
-        Self::new(SdkVmConfig::riscv32(), params)
-    }
-}
-
-impl TranspilerConfig<F> for SdkVmConfig {
-    fn transpiler(&self) -> Transpiler<F> {
+impl SdkVmConfig {
+    pub fn transpiler(&self) -> Transpiler<F> {
         let mut transpiler = Transpiler::default();
         if self.rv32i.is_some() {
             transpiler = transpiler.with_extension(Rv32ITranspilerExtension);
@@ -238,6 +215,10 @@ impl SdkVmConfig {
 
     /// Apply small optimizations to the configuration.
     pub fn apply_optimizations(&mut self) {
+        // There should be no need to write to native address space since Native extension and
+        // CastF extension are not enabled.
+        self.system.config.memory_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
+
         let rv32m = self.rv32m.as_mut();
         let bigint = self.bigint.as_mut();
         if let (Some(bigint), Some(rv32m)) = (bigint, rv32m) {
@@ -299,6 +280,7 @@ pub struct SdkVmConfigInner {
     pub keccak: Option<Keccak256>,
     #[extension(executor = "Sha256Executor")]
     pub sha256: Option<Sha256>,
+
     #[extension(executor = "Rv32MExecutor")]
     pub rv32m: Option<Rv32M>,
     #[extension(executor = "Int256Executor")]
@@ -341,9 +323,7 @@ where
 type SC = stark_backend_v2::SC;
 impl<E> VmBuilder<E> for SdkVmCpuBuilder
 where
-    SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
-    Val<SC>: PrimeField32,
 {
     type VmConfig = SdkVmConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
@@ -400,7 +380,7 @@ where
 pub struct SdkVmGpuBuilder;
 
 #[cfg(feature = "cuda")]
-impl VmBuilder<GpuBabyBearPoseidon2Engine> for SdkVmGpuBuilder {
+impl VmBuilder<BabyBearPoseidon2GpuEngineV2> for SdkVmGpuBuilder {
     type VmConfig = SdkVmConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
     type RecordArena = DenseRecordArena;
@@ -413,7 +393,7 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for SdkVmGpuBuilder {
         VmChipComplex<SC, Self::RecordArena, GpuBackend, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
-        type E = GpuBabyBearPoseidon2Engine;
+        type E = BabyBearPoseidon2GpuEngineV2;
 
         let config = config.to_inner();
         let mut chip_complex =
@@ -574,33 +554,3 @@ impl From<SdkVmConfigWithDefaultDeser> for SdkVmConfig {
         ret.optimize()
     }
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use itertools::zip_eq;
-
-//     use super::*;
-
-//     #[test]
-//     fn test_app_config_consistency() {
-//         let toml_config =
-// SdkVmConfig::from_toml(include_str!("./openvm_standard.toml")).unwrap();         for (line1,
-// line2) in zip_eq(             toml::to_string_pretty(&AppConfig::standard())
-//                 .unwrap()
-//                 .lines(),
-//             toml::to_string_pretty(&toml_config).unwrap().lines(),
-//         ) {
-//             assert_eq!(line1, line2);
-//         }
-
-//         let toml_config = SdkVmConfig::from_toml(include_str!("./openvm_riscv32.toml")).unwrap();
-//         for (line1, line2) in zip_eq(
-//             toml::to_string_pretty(&AppConfig::riscv32())
-//                 .unwrap()
-//                 .lines(),
-//             toml::to_string_pretty(&toml_config).unwrap().lines(),
-//         ) {
-//             assert_eq!(line1, line2);
-//         }
-//     }
-// }
