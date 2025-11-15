@@ -14,13 +14,25 @@ use openvm_stark_sdk::config::setup_tracing_with_log_level;
 use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
 use openvm_transpiler::{FromElf, transpiler::Transpiler};
 use p3_field::FieldAlgebra;
-use stark_backend_v2::{
-    BabyBearPoseidon2CpuEngineV2, F, StarkEngineV2, SystemParams, poseidon2::sponge::DuplexSponge,
-};
+use stark_backend_v2::{F, StarkEngineV2, SystemParams, poseidon2::sponge::DuplexSponge};
 use test_case::test_case;
 use tracing::Level;
 
-use crate::aggregation::{AggregationProver, NonRootAggregationProver};
+use crate::aggregation::AggregationProver;
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cuda")] {
+        use crate::aggregation::NonRootGpuProver;
+        use cuda_backend_v2::BabyBearPoseidon2GpuEngineV2;
+        type Engine = BabyBearPoseidon2GpuEngineV2<DuplexSponge>;
+        type NonRootProver = NonRootGpuProver;
+    } else {
+        use crate::aggregation::NonRootCpuProver;
+        use stark_backend_v2::BabyBearPoseidon2CpuEngineV2;
+        type Engine = BabyBearPoseidon2CpuEngineV2<DuplexSponge>;
+        type NonRootProver = NonRootCpuProver;
+    }
+}
 
 const LOG_MAX_TRACE_HEIGHT: usize = 20;
 
@@ -73,21 +85,20 @@ fn test_leaf_aggregation(log_fib_height: usize) -> Result<()> {
         .map(F::from_canonical_u8)
         .to_vec();
 
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(APP_SYSTEM_PARAMS);
+    let engine = Engine::new(APP_SYSTEM_PARAMS);
     let (vm, app_pk) = VirtualMachine::new_with_keygen(engine, Rv32ImBuilder, config)?;
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     let mut instance = VmInstance::new(vm, exe.into(), cached_program_trace)?;
     let app_proof = instance.prove(vec![input])?;
 
-    let leaf_prover =
-        NonRootAggregationProver::<2>::new(Arc::new(app_pk.get_vk()), LEAF_SYSTEM_PARAMS);
-    let leaf_proof = leaf_prover.agg_prove(
+    let leaf_prover = NonRootProver::new::<Engine>(Arc::new(app_pk.get_vk()), LEAF_SYSTEM_PARAMS);
+    let leaf_proof = leaf_prover.agg_prove::<Engine>(
         &app_proof.per_segment,
         Some(app_proof.user_public_values.public_values_commit),
     )?;
 
     let leaf_vk = leaf_prover.get_vk();
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(leaf_vk.inner.params);
+    let engine = Engine::new(leaf_vk.inner.params);
     engine.verify(&leaf_vk, &leaf_proof)?;
     Ok(())
 }
