@@ -7,10 +7,7 @@ use openvm_circuit_primitives::{
     var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_backend::{
-    base::DeviceMatrix,
-    chip::{get_empty_air_proving_ctx, UInt2},
-    prelude::F,
-    prover_backend::GpuBackend,
+    base::DeviceMatrix, chip::UInt2, prelude::F, prover_backend::GpuBackend,
 };
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_rv32_adapters::{
@@ -47,7 +44,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BaseAlu256ChipGpu {
         const RECORD_SIZE: usize = size_of::<(BaseAlu256AdapterRecord, BaseAlu256CoreRecord)>();
         let records = arena.allocated();
         if records.is_empty() {
-            return get_empty_air_proving_ctx::<GpuBackend>();
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
@@ -96,7 +93,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchEqual256ChipGpu {
             size_of::<(BranchEqual256AdapterRecord, BranchEqual256CoreRecord)>();
         let records = arena.allocated();
         if records.is_empty() {
-            return get_empty_air_proving_ctx::<GpuBackend>();
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
@@ -145,7 +142,7 @@ impl Chip<DenseRecordArena, GpuBackend> for LessThan256ChipGpu {
         const RECORD_SIZE: usize = size_of::<(LessThan256AdapterRecord, LessThan256CoreRecord)>();
         let records = arena.allocated();
         if records.is_empty() {
-            return get_empty_air_proving_ctx::<GpuBackend>();
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
@@ -194,7 +191,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchLessThan256ChipGpu {
             size_of::<(BranchLessThan256AdapterRecord, BranchLessThan256CoreRecord)>();
         let records = arena.allocated();
         if records.is_empty() {
-            return get_empty_air_proving_ctx::<GpuBackend>();
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
@@ -243,7 +240,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Shift256ChipGpu {
         const RECORD_SIZE: usize = size_of::<(Shift256AdapterRecord, Shift256CoreRecord)>();
         let records = arena.allocated();
         if records.is_empty() {
-            return get_empty_air_proving_ctx::<GpuBackend>();
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
@@ -294,7 +291,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Multiplication256ChipGpu {
             size_of::<(Multiplication256AdapterRecord, Multiplication256CoreRecord)>();
         let records = arena.allocated();
         if records.is_empty() {
-            return get_empty_air_proving_ctx::<GpuBackend>();
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
