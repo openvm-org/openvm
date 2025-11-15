@@ -12,15 +12,16 @@ use openvm_stark_sdk::{
     },
     engine::{StarkEngine, StarkFriEngine},
 };
+use recursion_circuit::system::AggregationSubCircuit;
 use stark_backend_v2::{
     F,
-    prover::{AirProvingContextV2, CpuBackendV2, StridedColMajorMatrixView},
+    prover::{AirProvingContextV2, CpuBackendV2, ProverBackendV2, StridedColMajorMatrixView},
 };
 
 use crate::aggregation::AggregationCircuit;
 
-pub fn debug<const NUM_CHILDREN: usize>(
-    circuit: impl AggregationCircuit,
+pub fn debug<const NUM_CHILDREN: usize, S: AggregationSubCircuit>(
+    circuit: AggregationCircuit<S>,
     ctxs: &[(usize, AirProvingContextV2<CpuBackendV2>)],
 ) {
     let transpose = |mat: StridedColMajorMatrixView<F>| Arc::new(mat.to_row_major_matrix());
@@ -46,8 +47,8 @@ pub fn debug<const NUM_CHILDREN: usize>(
     engine.debug(&airs, &keygen_builder.generate_pk().per_air, &inputs);
 }
 
-pub(crate) fn trace_heights_tracing_info(
-    ctxs: &[(usize, AirProvingContextV2<CpuBackendV2>)],
+pub(crate) fn trace_heights_tracing_info<PB: ProverBackendV2>(
+    ctxs: &[(usize, AirProvingContextV2<PB>)],
     airs: &[AirRef<BabyBearPoseidon2Config>],
 ) {
     for ((_, ctx), air) in ctxs.iter().zip(airs) {

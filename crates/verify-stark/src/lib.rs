@@ -7,29 +7,47 @@ use continuations_v2::{
 use eyre::Result;
 use openvm_circuit::{
     arch::{ExitCode, hasher::poseidon2::vm_poseidon2_hasher},
-    system::program::trace::compute_exe_commit,
+    system::{memory::dimensions::MemoryDimensions, program::trace::compute_exe_commit},
 };
 use p3_field::{FieldAlgebra, PrimeField32};
 use stark_backend_v2::{
-    BabyBearPoseidon2CpuEngineV2, DIGEST_SIZE, F, StarkEngineV2,
+    BabyBearPoseidon2CpuEngineV2, DIGEST_SIZE, Digest, F, StarkEngineV2,
     keygen::types::MultiStarkVerifyingKeyV2, poseidon2::sponge::DuplexSponge,
 };
 
-use crate::{baseline::VerificationBaseline, error::VerifyStarkError};
+use crate::error::VerifyStarkError;
 
-pub mod baseline;
 pub mod error;
+
+/// Baseline artifacts for a specific VM and fixed executable that are used to verify a final
+/// (i.e. internal-recursive) VM STARK proof
+pub struct VerificationBaseline {
+    /// Commit to the app exe (i.e. hash of the program commit, initial memory merkle root,
+    /// and initial program counter)
+    pub app_exe_commit: Digest,
+    /// VM memory metadata used to verify the user public values merkle proof
+    pub memory_dimensions: MemoryDimensions,
+    /// Cached trace commit of the leaf verifier circuit's SymbolicExpresionAir, which is
+    /// derived from the app_vk
+    pub leaf_commit: Digest,
+    /// Cached trace commit of the internal-for-leaf verifier circuit's SymbolicExpresionAir,
+    /// which derived from the leaf_vk
+    pub internal_for_leaf_commit: Digest,
+    /// Cached trace commit of the internal-recursive verifier circuit's SymbolicExpresionAir,
+    /// which derived from the internal_for_leaf_vk
+    pub internal_recursive_commit: Digest,
+}
 
 /// Verifies a non-root VM STARK proof given the internal-recursive layer verifying
 /// key and VM- and exe-specific baseline artifacts.
 pub fn verify_vm_stark_proof(
-    vk: MultiStarkVerifyingKeyV2,
+    vk: &MultiStarkVerifyingKeyV2,
     baseline: VerificationBaseline,
-    proof: NonRootStarkProof,
+    proof: &NonRootStarkProof,
 ) -> Result<(), VerifyStarkError> {
     // Verify the STARK proof.
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(vk.inner.params);
-    engine.verify(&vk, &proof.inner)?;
+    engine.verify(vk, &proof.inner)?;
 
     let &NonRootVerifierPvs::<F> {
         user_pv_commit,
