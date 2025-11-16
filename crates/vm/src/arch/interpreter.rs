@@ -339,6 +339,8 @@ where
 
         run!("execute_e1", self, exec_state, ExecutionCtx);
 
+        println!("fallback time: {} seconds", exec_state.ctx.total_fallback_time as f64 / 1_000_000_000.0);
+
         #[cfg(feature = "metrics")]
         {
             let elapsed = start.elapsed();

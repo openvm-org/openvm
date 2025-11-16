@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::{arch::VmExecState, system::memory::online::GuestMemory};
 
 pub mod metered;
@@ -16,6 +18,9 @@ pub trait ExecutionCtxTrait: Sized {
     fn should_suspend<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) -> bool;
 
     fn on_terminate<F>(_exec_state: &mut VmExecState<F, GuestMemory, Self>) {}
+
+    #[inline(always)]
+    fn add_fallback_time(&mut self, _elapsed: Duration) {}
 }
 
 pub trait MeteredExecutionCtxTrait: ExecutionCtxTrait {
