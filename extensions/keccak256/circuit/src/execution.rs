@@ -17,6 +17,7 @@ use p3_keccak_air::NUM_ROUNDS;
 
 use super::{KeccakVmExecutor, KECCAK_WORD_SIZE};
 use crate::utils::{keccak256, num_keccak_f};
+use std::time::Instant;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
