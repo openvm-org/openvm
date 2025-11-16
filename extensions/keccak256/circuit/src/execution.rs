@@ -183,11 +183,9 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let start = Instant::now();
     let pre_compute: &KeccakPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<KeccakPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, true>(pre_compute, exec_state);
-    exec_state.ctx.add_fallback_time(start.elapsed());
 }
 
 #[create_handler]
@@ -196,12 +194,10 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let start = Instant::now();
     let pre_compute: &E2PreCompute<KeccakPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<KeccakPreCompute>>())
             .borrow();
     let height = execute_e12_impl::<F, CTX, false>(&pre_compute.data, exec_state);
-    exec_state.ctx.add_fallback_time(start.elapsed());
 
     exec_state
         .ctx

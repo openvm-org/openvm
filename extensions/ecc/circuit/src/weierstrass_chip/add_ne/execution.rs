@@ -348,13 +348,10 @@ unsafe fn execute_e1_impl<
     let pre_compute: &EcAddNePreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<EcAddNePreCompute>()).borrow();
 
-    let start = Instant::now();
     let result = execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE, IS_SETUP>(
         pre_compute,
         exec_state,
     );
-
-    exec_state.ctx.add_fallback_time(start.elapsed());
 
     result
 }
@@ -378,11 +375,9 @@ unsafe fn execute_e2_impl<
     exec_state
         .ctx
         .on_height_change(e2_pre_compute.chip_idx as usize, 1);
-    let start = Instant::now();
     let result = execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE, IS_SETUP>(
         &e2_pre_compute.data,
         exec_state,
     );
-    exec_state.ctx.add_fallback_time(start.elapsed());
     result
 }
