@@ -3,6 +3,7 @@ use std::{ffi::c_void, io::Write, process::Command};
 use libloading::Library;
 use openvm_instructions::{exe::SparseMemoryImage, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::p3_field::PrimeField32;
+use std::time::Instant;
 
 use crate::{
     arch::{
@@ -308,7 +309,7 @@ pub(crate) extern "C" fn extern_handler<F, Ctx: ExecutionCtxTrait, const E1: boo
     let vm_exec_state_ref = unsafe { &mut *(state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
     vm_exec_state_ref.set_pc(cur_pc);
 
-    let start = std::time::Instant::now();
+    let start = Instant::now();
 
     // pointer to the first element of `pre_compute_insns`
     let pre_compute_insns_base_ptr = pre_compute_insns_ptr as *const PreComputeInstruction<F, Ctx>;
@@ -318,7 +319,9 @@ pub(crate) extern "C" fn extern_handler<F, Ctx: ExecutionCtxTrait, const E1: boo
         (pre_compute_insns.handler)(pre_compute_insns.pre_compute, vm_exec_state_ref);
     };
 
-    vm_exec_state_ref.ctx.add_fallback_time(start.elapsed());
+    let elapsed = start.elapsed();
+    println!("Fallback time elapsed: {elapsed:?}");
+    vm_exec_state_ref.ctx.add_fallback_time(elapsed);
 
     match vm_exec_state_ref.exit_code {
         Ok(None) => 0,
