@@ -1,10 +1,18 @@
 use halo2curves_axiom::ff::PrimeField;
 use num_bigint::BigUint;
 use num_traits::Num;
+use openvm_algebra_circuit::fields::{blocks_to_field_element, field_element_to_blocks, FieldType};
+#[cfg(not(feature = "aot"))]
 use openvm_algebra_circuit::fields::{
-    blocks_to_field_element, blocks_to_field_element_bls12_381_coordinate, field_element_to_blocks,
-    field_element_to_blocks_bls12_381_coordinate, FieldType,
+    blocks_to_field_element_bls12_381_coordinate, field_element_to_blocks_bls12_381_coordinate,
 };
+
+#[cfg(feature = "aot")]
+use ff::Field;
+#[cfg(feature = "aot")]
+type Bls12CoordField = blstrs::Fp;
+#[cfg(not(feature = "aot"))]
+type Bls12CoordField = halo2curves_axiom::bls12_381::Fq;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CurveType {
@@ -47,6 +55,102 @@ pub(super) fn get_curve_type(modulus: &BigUint, a_coeff: &BigUint) -> Option<Cur
     }
 
     None
+}
+
+#[cfg(feature = "aot")]
+#[inline(always)]
+fn bls12_coord_from_blocks(blocks: &[u8]) -> Bls12CoordField {
+    debug_assert!(blocks.len() == 48);
+    let mut bytes = [0u8; 48];
+    bytes[..blocks.len()].copy_from_slice(&blocks[..blocks.len()]);
+
+    Bls12CoordField::from_bytes_le(&bytes).unwrap_or_else(|| {
+        let reduced_bytes = reduce_bls12_bytes(&bytes);
+        Bls12CoordField::from_bytes_le(&reduced_bytes)
+            .unwrap_or_else(|| panic!("reduced bytes must be within the field modulus"))
+    })
+}
+
+#[cfg(feature = "aot")]
+#[inline(always)]
+fn bls12_coord_to_blocks<const BLOCK_SIZE: usize>(
+    field_element: &Bls12CoordField,
+    output: &mut [[u8; BLOCK_SIZE]],
+) {
+    debug_assert!(output.len() * BLOCK_SIZE == 48);
+    let bytes = field_element.to_bytes_le();
+    let mut byte_idx = 0;
+
+    for block in output.iter_mut() {
+        for byte in block.iter_mut() {
+            *byte = if byte_idx < bytes.len() {
+                bytes[byte_idx]
+            } else {
+                0
+            };
+            byte_idx += 1;
+        }
+    }
+}
+
+#[cfg(feature = "aot")]
+#[inline(always)]
+fn reduce_bls12_bytes(bytes: &[u8; 48]) -> [u8; 48] {
+    let modulus = get_modulus_as_bigint::<halo2curves_axiom::bls12_381::Fq>();
+    let value = BigUint::from_bytes_le(bytes);
+    let reduced = value % modulus;
+
+    let mut reduced_bytes = [0u8; 48];
+    let reduced_le_bytes = reduced.to_bytes_le();
+    reduced_bytes[..reduced_le_bytes.len()].copy_from_slice(&reduced_le_bytes);
+    reduced_bytes
+}
+
+#[cfg(feature = "aot")]
+#[inline(always)]
+fn ec_add_ne_impl_bls(
+    x1: Bls12CoordField,
+    y1: Bls12CoordField,
+    x2: Bls12CoordField,
+    y2: Bls12CoordField,
+) -> (Bls12CoordField, Bls12CoordField) {
+    let lambda = (y2 - y1) * (x2 - x1).invert().unwrap();
+    let x3 = lambda * lambda - x1 - x2;
+    let y3 = lambda * (x1 - x3) - y1;
+
+    (x3, y3)
+}
+
+#[cfg(feature = "aot")]
+#[inline(always)]
+fn ec_double_impl_bls(
+    x1: Bls12CoordField,
+    y1: Bls12CoordField,
+) -> (Bls12CoordField, Bls12CoordField) {
+    let x1_squared = x1 * x1;
+    let three_x1_squared = x1_squared + x1_squared + x1_squared;
+    let two_y1 = y1 + y1;
+    let lambda = three_x1_squared * two_y1.invert().unwrap();
+
+    let x3 = lambda * lambda - (x1 + x1);
+    let y3 = lambda * (x1 - x3) - y1;
+
+    (x3, y3)
+}
+
+#[cfg(not(feature = "aot"))]
+#[inline(always)]
+fn bls12_coord_from_blocks(blocks: &[u8]) -> Bls12CoordField {
+    blocks_to_field_element_bls12_381_coordinate(blocks)
+}
+
+#[cfg(not(feature = "aot"))]
+#[inline(always)]
+fn bls12_coord_to_blocks<const BLOCK_SIZE: usize>(
+    field_element: &Bls12CoordField,
+    output: &mut [[u8; BLOCK_SIZE]],
+) {
+    field_element_to_blocks_bls12_381_coordinate(field_element, output)
 }
 
 #[inline(always)]
@@ -140,21 +244,20 @@ fn ec_add_ne_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     input_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
 ) -> [[u8; BLOCK_SIZE]; BLOCKS] {
     // Extract coordinates
-    let x1 =
-        blocks_to_field_element_bls12_381_coordinate(input_data[0][..BLOCKS / 2].as_flattened());
-    let y1 =
-        blocks_to_field_element_bls12_381_coordinate(input_data[0][BLOCKS / 2..].as_flattened());
-    let x2 =
-        blocks_to_field_element_bls12_381_coordinate(input_data[1][..BLOCKS / 2].as_flattened());
-    let y2 =
-        blocks_to_field_element_bls12_381_coordinate(input_data[1][BLOCKS / 2..].as_flattened());
+    let x1 = bls12_coord_from_blocks(input_data[0][..BLOCKS / 2].as_flattened());
+    let y1 = bls12_coord_from_blocks(input_data[0][BLOCKS / 2..].as_flattened());
+    let x2 = bls12_coord_from_blocks(input_data[1][..BLOCKS / 2].as_flattened());
+    let y2 = bls12_coord_from_blocks(input_data[1][BLOCKS / 2..].as_flattened());
 
-    let (x3, y3) = ec_add_ne_impl::<halo2curves_axiom::bls12_381::Fq>(x1, y1, x2, y2);
+    #[cfg(feature = "aot")]
+    let (x3, y3) = ec_add_ne_impl_bls(x1, y1, x2, y2);
+    #[cfg(not(feature = "aot"))]
+    let (x3, y3) = ec_add_ne_impl::<Bls12CoordField>(x1, y1, x2, y2);
 
     // Final output
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
-    field_element_to_blocks_bls12_381_coordinate(&x3, &mut output[..BLOCKS / 2]);
-    field_element_to_blocks_bls12_381_coordinate(&y3, &mut output[BLOCKS / 2..]);
+    bls12_coord_to_blocks(&x3, &mut output[..BLOCKS / 2]);
+    bls12_coord_to_blocks(&y3, &mut output[BLOCKS / 2..]);
     output
 }
 
@@ -163,15 +266,18 @@ fn ec_double_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     input_data: [[u8; BLOCK_SIZE]; BLOCKS],
 ) -> [[u8; BLOCK_SIZE]; BLOCKS] {
     // Extract coordinates
-    let x1 = blocks_to_field_element_bls12_381_coordinate(input_data[..BLOCKS / 2].as_flattened());
-    let y1 = blocks_to_field_element_bls12_381_coordinate(input_data[BLOCKS / 2..].as_flattened());
+    let x1 = bls12_coord_from_blocks(input_data[..BLOCKS / 2].as_flattened());
+    let y1 = bls12_coord_from_blocks(input_data[BLOCKS / 2..].as_flattened());
 
-    let (x3, y3) = ec_double_impl::<halo2curves_axiom::bls12_381::Fq, 0>(x1, y1);
+    #[cfg(feature = "aot")]
+    let (x3, y3) = ec_double_impl_bls(x1, y1);
+    #[cfg(not(feature = "aot"))]
+    let (x3, y3) = ec_double_impl::<Bls12CoordField, 0>(x1, y1);
 
     // Final output
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
-    field_element_to_blocks_bls12_381_coordinate(&x3, &mut output[..BLOCKS / 2]);
-    field_element_to_blocks_bls12_381_coordinate(&y3, &mut output[BLOCKS / 2..]);
+    bls12_coord_to_blocks(&x3, &mut output[..BLOCKS / 2]);
+    bls12_coord_to_blocks(&y3, &mut output[BLOCKS / 2..]);
     output
 }
 

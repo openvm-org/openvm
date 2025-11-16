@@ -1666,6 +1666,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "blstrs"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a8a8ed6fefbeef4a8c7b460e4110e12c5e22a5b7cf32621aae6ad650c4dcf29"
+dependencies = [
+ "blst",
+ "byte-slice-cast",
+ "ff 0.13.1",
+ "group 0.13.0",
+ "pairing 0.23.0",
+ "rand_core 0.6.4",
+ "subtle",
+]
+
+[[package]]
 name = "bn-rs"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3609,7 +3624,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0f9ef7462f7c099f518d754361858f86d8a07af53ba9af0fe635bbccb151a63"
 dependencies = [
  "ff 0.13.1",
+ "rand 0.8.5",
  "rand_core 0.6.4",
+ "rand_xorshift 0.3.0",
  "subtle",
 ]
 
@@ -5657,9 +5674,11 @@ dependencies = [
 name = "openvm-ecc-circuit"
 version = "1.4.1"
 dependencies = [
+ "blstrs",
  "cfg-if",
  "derive-new 0.6.0",
  "derive_more 1.0.0",
+ "ff 0.13.1",
  "halo2curves-axiom 0.7.0 (git+https://github.com/axiom-crypto/halo2curves.git?branch=test%2Fasm)",
  "hex-literal 0.4.1",
  "lazy_static",
