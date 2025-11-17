@@ -92,24 +92,16 @@ pub fn sync_gpr_to_xmm() -> String {
 pub fn sync_xmm_to_trace_heights_memory() -> String {
     let mut asm_str = String::new();
     for (i, xmm_reg) in XMM_TRACE_HEIGHTS_BASE.iter().enumerate() {
-        let chip_idx1 = i * 2;
-        let chip_idx2 = i * 2 + 1;
-        asm_str +=
-            &format!("   pextrd dword [{REG_TRACE_HEIGHT} + {chip_idx1} * 4], {xmm_reg}, 2\n");
-        asm_str +=
-            &format!("   pextrd dword [{REG_TRACE_HEIGHT} + {chip_idx2} * 4], {xmm_reg}, 3\n");
+        asm_str += &format!("   pextrd dword [{REG_TRACE_HEIGHT} + {i} * 8], {xmm_reg}, 2\n");
+        asm_str += &format!("   pextrd dword [{REG_TRACE_HEIGHT} + {i} * 8 + 4], {xmm_reg}, 3\n");
     }
     asm_str
 }
 pub fn sync_trace_heights_memory_to_xmm() -> String {
     let mut asm_str = String::new();
     for (i, xmm_reg) in XMM_TRACE_HEIGHTS_BASE.iter().enumerate() {
-        let chip_idx1 = i * 2;
-        let chip_idx2 = i * 2 + 1;
-        asm_str +=
-            &format!("   pinsrd {xmm_reg}, dword [{REG_TRACE_HEIGHT} + {chip_idx1} * 4], 2\n");
-        asm_str +=
-            &format!("   pinsrd {xmm_reg}, dword [{REG_TRACE_HEIGHT} + {chip_idx2} * 4], 3\n");
+        asm_str += &format!("   pinsrd {xmm_reg}, dword [{REG_TRACE_HEIGHT} + {i} * 8], 2\n");
+        asm_str += &format!("   pinsrd {xmm_reg}, dword [{REG_TRACE_HEIGHT} + {i} * 8 + 4], 3\n");
     }
     asm_str
 }
