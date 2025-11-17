@@ -144,11 +144,23 @@ impl PreflightGpu {
             .chain(once(preflight.proof_shape.post_tidx))
             .collect_vec();
 
+        let mut pvs_tidx_by_air_id = vec![0usize; vk.inner.per_air.len()];
+        for ((air_idx, pvs), &starting_tidx) in proof
+            .public_values
+            .iter()
+            .enumerate()
+            .filter(|(_, per_air)| !per_air.is_empty())
+            .zip(&preflight.proof_shape.pvs_tidx)
+        {
+            debug_assert!(!pvs.is_empty());
+            pvs_tidx_by_air_id[air_idx] = starting_tidx;
+        }
+
         ProofShapePreflightGpu {
             sorted_trace_vdata: to_device_or_nullptr(&sorted_trace_vdata).unwrap(),
             sorted_cached_commits: to_device_or_nullptr(&sorted_cached_commits).unwrap(),
             per_row_tidx: to_device_or_nullptr(&per_row_tidx).unwrap(),
-            pvs_tidx: to_device_or_nullptr(&preflight.proof_shape.pvs_tidx).unwrap(),
+            pvs_tidx: to_device_or_nullptr(&pvs_tidx_by_air_id).unwrap(),
             post_tidx: preflight.proof_shape.post_tidx,
             num_present: preflight.proof_shape.sorted_trace_vdata.len(),
             n_max: preflight.proof_shape.n_max,
