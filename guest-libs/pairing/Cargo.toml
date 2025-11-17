@@ -54,10 +54,10 @@ num-bigint.workspace = true
 num-traits.workspace = true
 openvm-pairing = { path = ".", features = ["halo2curves"] }
 
-[target.'cfg(not(all(feature = "aot", not(target_os = "zkvm"), target_arch = "x86_64")))'.dependencies]
+[target.'cfg(not(all(not(target_os = "zkvm"), target_arch = "x86_64")))'.dependencies]
 halo2curves-axiom = { workspace = true }
 
-[target.'cfg(all(feature = "aot", not(target_os = "zkvm"), target_arch = "x86_64"))'.dependencies]
+[target.'cfg(all(not(target_os = "zkvm"), target_arch = "x86_64"))'.dependencies]
 halo2curves-axiom = { workspace = true, features = ["asm"] }
 
 [features]
