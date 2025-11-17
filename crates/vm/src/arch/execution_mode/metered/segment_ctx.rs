@@ -270,7 +270,7 @@ impl SegmentationCtx {
                 .map(|(&height, name)| format!("  {name} = {height}"))
                 .collect::<Vec<_>>()
                 .join("\n");
-            
+
             tracing::warn!(
                 "No valid checkpoint, creating segment using instret={instret}\ntrace_heights=[\n{trace_heights_str}\n]"
             );

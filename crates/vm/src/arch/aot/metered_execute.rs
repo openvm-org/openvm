@@ -1,6 +1,7 @@
 use std::{ffi::c_void, mem::offset_of};
 
-use openvm_instructions::exe::VmExe;
+use openvm_instructions::{exe::VmExe, LocalOpcode};
+use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{common::*, AotInstance};
@@ -20,9 +21,6 @@ use crate::{
     },
     system::memory::online::GuestMemory,
 };
-
-use openvm_rv32im_transpiler::BaseAluOpcode;
-use openvm_instructions::LocalOpcode;
 
 static_assertions::assert_impl_all!(AotInstance<p3_baby_bear::BabyBear, MeteredCtx>: Send, Sync);
 
@@ -169,12 +167,14 @@ where
 
         // update the vm trace height from the x86 register used to store trace height
         let base_alu_opcode = BaseAluOpcode::ADD.global_opcode(); // add, sub, and other base alu share the same executor
-        let base_alu_executor = inventory
-            .get_executor(base_alu_opcode)
-            .expect("executor not found for opcode");
-        let base_alu_executor_idx = inventory.instruction_lookup[&base_alu_opcode] as usize;
-        let base_alu_air_idx = executor_idx_to_air_idx[base_alu_executor_idx];
-        asm_str += &base_alu_executor.update_register_trace_height(base_alu_air_idx).unwrap();
+
+        if let Some(base_alu_executor) = inventory.get_executor(base_alu_opcode) {
+            let base_alu_executor_idx = inventory.instruction_lookup[&base_alu_opcode] as usize;
+            let base_alu_air_idx = executor_idx_to_air_idx[base_alu_executor_idx];
+            asm_str += &base_alu_executor
+                .update_register_trace_height(base_alu_air_idx)
+                .unwrap();
+        }
 
         asm_str += &format!("   lea {REG_C}, [rip + map_pc_base]\n");
         asm_str += &format!("   pextrq {REG_A}, xmm3, 1\n"); // extract the upper 64 bits of the xmm3 register to REG_A
@@ -209,13 +209,14 @@ where
 
             if instruction.opcode.as_usize() == 0 {
                 // update the vm trace height from the x86 register used to store trace height
-                let base_alu_opcode = BaseAluOpcode::ADD.global_opcode(); // add, sub, and other base alu share the same executor
-                let base_alu_executor = inventory
-                    .get_executor(base_alu_opcode)
-                    .expect("executor not found for opcode");
-                let base_alu_executor_idx = inventory.instruction_lookup[&base_alu_opcode] as usize;
-                let base_alu_air_idx = executor_idx_to_air_idx[base_alu_executor_idx];
-                asm_str += &base_alu_executor.update_vm_trace_height(base_alu_air_idx).unwrap();
+                if let Some(base_alu_executor) = inventory.get_executor(base_alu_opcode) {
+                    let base_alu_executor_idx =
+                        inventory.instruction_lookup[&base_alu_opcode] as usize;
+                    let base_alu_air_idx = executor_idx_to_air_idx[base_alu_executor_idx];
+                    asm_str += &base_alu_executor
+                        .update_vm_trace_height(base_alu_air_idx)
+                        .unwrap();
+                }
 
                 // terminal opcode has no associated executor, so can handle with default fallback
                 asm_str += &Self::xmm_to_rv32_regs();
@@ -294,14 +295,14 @@ where
         asm_str += "asm_handle_segment_check:\n";
 
         // update the vm trace height from the x86 register used to store trace height
-        let base_alu_opcode = BaseAluOpcode::ADD.global_opcode(); // add, sub, and other base alu share the same executor
-        let base_alu_executor = inventory
-            .get_executor(base_alu_opcode)
-            .expect("executor not found for opcode");
-        let base_alu_executor_idx = inventory.instruction_lookup[&base_alu_opcode] as usize;
-        let base_alu_air_idx = executor_idx_to_air_idx[base_alu_executor_idx];
-        asm_str += &base_alu_executor.update_vm_trace_height(base_alu_air_idx).unwrap();
-        
+        if let Some(base_alu_executor) = inventory.get_executor(base_alu_opcode) {
+            let base_alu_executor_idx = inventory.instruction_lookup[&base_alu_opcode] as usize;
+            let base_alu_air_idx = executor_idx_to_air_idx[base_alu_executor_idx];
+            asm_str += &base_alu_executor
+                .update_vm_trace_height(base_alu_air_idx)
+                .unwrap();
+        }
+
         asm_str += "    push r14\n";
         asm_str += &Self::xmm_to_rv32_regs();
         asm_str += &Self::push_address_space_start();
@@ -318,7 +319,14 @@ where
         asm_str += "    mov al, r14b\n";
         asm_str += "    pop r14\n";
 
-        asm_str += &base_alu_executor.update_register_trace_height(base_alu_air_idx).unwrap();
+        // update the vm trace height from the x86 register used to store trace height
+        if let Some(base_alu_executor) = inventory.get_executor(base_alu_opcode) {
+            let base_alu_executor_idx = inventory.instruction_lookup[&base_alu_opcode] as usize;
+            let base_alu_air_idx = executor_idx_to_air_idx[base_alu_executor_idx];
+            asm_str += &base_alu_executor
+                .update_register_trace_height(base_alu_air_idx)
+                .unwrap();
+        }
 
         asm_str += "    ret\n";
 
@@ -327,13 +335,13 @@ where
             asm_str += &format!("asm_run_end_{pc}:\n");
 
             // update the vm trace height from the x86 register used to store trace height
-            let base_alu_opcode = BaseAluOpcode::ADD.global_opcode(); // add, sub, and other base alu share the same executor
-            let base_alu_executor = inventory
-                .get_executor(base_alu_opcode)
-                .expect("executor not found for opcode");
-            let base_alu_executor_idx = inventory.instruction_lookup[&base_alu_opcode] as usize;
-            let base_alu_air_idx = executor_idx_to_air_idx[base_alu_executor_idx];
-            asm_str += &base_alu_executor.update_vm_trace_height(base_alu_air_idx).unwrap();
+            if let Some(base_alu_executor) = inventory.get_executor(base_alu_opcode) {
+                let base_alu_executor_idx = inventory.instruction_lookup[&base_alu_opcode] as usize;
+                let base_alu_air_idx = executor_idx_to_air_idx[base_alu_executor_idx];
+                asm_str += &base_alu_executor
+                    .update_vm_trace_height(base_alu_air_idx)
+                    .unwrap();
+            }
 
             asm_str += &Self::xmm_to_rv32_regs();
             asm_str += &format!("    mov {REG_FIRST_ARG}, rbx\n");

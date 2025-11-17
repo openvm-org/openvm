@@ -247,12 +247,16 @@ where
     }
 
     fn update_vm_trace_height(&self, chip_idx: usize) -> Result<String, AotError> {
-        let asm_str = String::from(&format!("   mov dword ptr [{REG_TRACE_HEIGHT} + {chip_idx} * 4], {REG_BASE_ALU_TRACE_HEIGHT}\n"));
+        let asm_str = String::from(&format!(
+            "   mov dword ptr [{REG_TRACE_HEIGHT} + {chip_idx} * 4], {REG_BASE_ALU_TRACE_HEIGHT}\n"
+        ));
         Ok(asm_str)
     }
 
     fn update_register_trace_height(&self, chip_idx: usize) -> Result<String, AotError> {
-        let asm_str = String::from(&format!("   mov {REG_BASE_ALU_TRACE_HEIGHT}, dword ptr [{REG_TRACE_HEIGHT} + {chip_idx} * 4]\n"));
+        let asm_str = String::from(&format!(
+            "   mov {REG_BASE_ALU_TRACE_HEIGHT}, dword ptr [{REG_TRACE_HEIGHT} + {chip_idx} * 4]\n"
+        ));
         Ok(asm_str)
     }
 
@@ -264,7 +268,8 @@ where
         config: &SystemConfig,
     ) -> Result<String, AotError> {
         let mut asm_str = self.generate_x86_asm(inst, pc)?;
-        asm_str += &update_height_change_asm(chip_idx, 1, Some(String::from(REG_BASE_ALU_TRACE_HEIGHT)))?;
+        asm_str +=
+            &update_height_change_asm(chip_idx, 1, Some(String::from(REG_BASE_ALU_TRACE_HEIGHT)))?;
         // read [b:4]_1
         asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
         // read [c:4]_1
