@@ -160,7 +160,7 @@ where
         asm_str += "    pinsrq xmm3, rax, 1\n";
 
         asm_str += &Self::pop_internal_registers();
-
+        asm_str += &sync_trace_heights_memory_to_xmm();
         asm_str += &Self::rv32_regs_to_xmm();
 
         asm_str += &format!("   lea {REG_C}, [rip + map_pc_base]\n");
@@ -200,6 +200,7 @@ where
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
                 asm_str += &sync_reg_to_instret_until_end();
+                asm_str += &sync_xmm_to_trace_heights_memory();
                 asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
                 asm_str += &format!("   mov {REG_SECOND_ARG}, {pre_compute_insns_ptr}\n");
                 asm_str += &format!("   mov {REG_THIRD_ARG}, {pc}\n");
@@ -249,6 +250,7 @@ where
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
                 asm_str += &sync_reg_to_instret_until_end();
+                asm_str += &sync_xmm_to_trace_heights_memory();
                 asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
                 asm_str += &format!("   mov {REG_SECOND_ARG}, {pre_compute_insns_ptr}\n");
                 asm_str += &format!("   mov {REG_THIRD_ARG}, {pc}\n");
@@ -258,6 +260,7 @@ where
                 asm_str += &Self::pop_internal_registers(); // pop the internal registers from the stack
                 asm_str += &Self::pop_address_space_start();
                 asm_str += &sync_instret_until_end_to_reg();
+                asm_str += &sync_trace_heights_memory_to_xmm();
                 asm_str += &Self::rv32_regs_to_xmm(); // read the memory from the memory location of the RV32 registers in `GuestMemory`
                                                       // registers, to the appropriate XMM registers
                 asm_str += &format!("   je asm_run_end_{pc}\n");
@@ -275,6 +278,7 @@ where
         asm_str += &Self::push_address_space_start();
         asm_str += &Self::push_internal_registers();
         asm_str += &sync_reg_to_instret_until_end();
+        asm_str += &sync_xmm_to_trace_heights_memory();
         asm_str += &format!("    movabs {REG_D}, {should_suspend_ptr}\n");
         asm_str += &format!("    mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
         asm_str += &format!("    call {REG_D}\n");
@@ -282,6 +286,7 @@ where
         asm_str += &Self::pop_internal_registers();
         asm_str += &Self::pop_address_space_start();
         asm_str += &sync_instret_until_end_to_reg();
+        asm_str += &sync_trace_heights_memory_to_xmm();
         asm_str += &Self::rv32_regs_to_xmm();
         asm_str += "    mov al, r14b\n";
         asm_str += "    pop r14\n";
