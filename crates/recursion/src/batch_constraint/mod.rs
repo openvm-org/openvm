@@ -10,14 +10,13 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, TwoAdicField};
 use stark_backend_v2::{
-    Digest, EF, F, SC, StarkEngineV2,
+    EF, F, SC, StarkEngineV2,
     keygen::types::MultiStarkVerifyingKeyV2,
     poly_common::{eval_eq_sharp_uni, eval_eq_uni, eval_eq_uni_at_one},
     poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
     proof::{BatchConstraintProof, Proof},
     prover::{
-        AirProvingContextV2, ColMajorMatrix, CpuBackendV2, TraceCommitterV2,
-        stacked_pcs::StackedPcsData,
+        AirProvingContextV2, ColMajorMatrix, CommittedTraceDataV2, CpuBackendV2, TraceCommitterV2,
     },
 };
 
@@ -700,22 +699,24 @@ impl BatchConstraintModule {
         &self,
         engine: &E,
         child_vk: &MultiStarkVerifyingKeyV2,
-    ) -> (Digest, StackedPcsData<F, Digest>)
+    ) -> CommittedTraceDataV2<CpuBackendV2>
     where
         E: StarkEngineV2<SC = SC, PB = CpuBackendV2>,
     {
-        let cached_trace = expr_eval::generate_symbolic_expr_cached_trace(child_vk);
-        engine
-            .device()
-            .commit(&[&ColMajorMatrix::from_row_major(&cached_trace)])
+        let cached_trace_rm = expr_eval::generate_symbolic_expr_cached_trace(child_vk);
+        let cached_trace = ColMajorMatrix::from_row_major(&cached_trace_rm);
+        let (commitment, data) = engine.device().commit(&[&cached_trace]);
+        CommittedTraceDataV2 {
+            commitment,
+            data: Arc::new(data),
+            trace: cached_trace,
+        }
     }
 }
 
 #[cfg(feature = "cuda")]
 pub mod cuda_tracegen {
-    use cuda_backend_v2::{
-        GpuBackendV2, stacked_pcs::StackedPcsDataGpu, transport_matrix_h2d_col_major,
-    };
+    use cuda_backend_v2::{GpuBackendV2, transport_matrix_h2d_col_major};
     use itertools::Itertools;
 
     use super::*;
@@ -763,15 +764,20 @@ pub mod cuda_tracegen {
             &self,
             engine: &E,
             child_vk: &MultiStarkVerifyingKeyV2,
-        ) -> (Digest, StackedPcsDataGpu<F, Digest>)
+        ) -> CommittedTraceDataV2<GpuBackendV2>
         where
             E: StarkEngineV2<SC = SC, PB = GpuBackendV2>,
         {
             let cached_trace = expr_eval::generate_symbolic_expr_cached_trace(child_vk);
+            // TODO: gpu transpose
             let cached_trace = ColMajorMatrix::from_row_major(&cached_trace);
-            engine
-                .device()
-                .commit(&[&transport_matrix_h2d_col_major(&cached_trace).unwrap()])
+            let d_cached_trace = transport_matrix_h2d_col_major(&cached_trace).unwrap();
+            let (commitment, data) = engine.device().commit(&[&d_cached_trace]);
+            CommittedTraceDataV2 {
+                commitment,
+                trace: d_cached_trace,
+                data: Arc::new(data),
+            }
         }
     }
 }
