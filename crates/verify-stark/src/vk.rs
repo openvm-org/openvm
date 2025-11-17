@@ -33,7 +33,7 @@ pub fn read_vk_from_file<P: AsRef<Path>>(path: P) -> Result<VmStarkVerifyingKey>
     Ok(ret)
 }
 
-pub fn write_vk_from_file<P: AsRef<Path>>(path: P, vk: &VmStarkVerifyingKey) -> Result<()> {
+pub fn write_vk_to_file<P: AsRef<Path>>(path: P, vk: &VmStarkVerifyingKey) -> Result<()> {
     if let Some(parent) = path.as_ref().parent() {
         create_dir_all(parent).map_err(|e| write_error(&path, e.into()))?;
     }
