@@ -32,7 +32,11 @@ pub fn verify_vm_stark_proof(
     vk: &VmStarkVerifyingKey,
     encoded_proof: &[u8],
 ) -> Result<(), VerifyStarkError> {
-    verify_vm_stark_proof_decoded(vk, &VmStarkProof::<SC>::decode_from_bytes(encoded_proof)?)
+    let decompressed_proof = zstd::decode_all(encoded_proof)?;
+    verify_vm_stark_proof_decoded(
+        vk,
+        &VmStarkProof::<SC>::decode_from_bytes(&decompressed_proof)?,
+    )
 }
 
 pub fn verify_vm_stark_proof_decoded(

@@ -70,7 +70,7 @@ members = [
     "guest-libs/ruint/",
     "guest-libs/sha2/",
     "guest-libs/verify_stark/",
-    "scripts"
+    "scripts",
 ]
 exclude = ["crates/sdk/example", "benchmarks/guest/**"]
 resolver = "2"
@@ -236,6 +236,7 @@ memmap2 = "0.9.5"
 libc = "0.2.175"
 tracing-subscriber = { version = "0.3.20", features = ["std", "env-filter"] }
 tokio = "1" # >=1.0.0 to allow downstream flexibility
+zstd = "0.13"
 
 # default-features = false for no_std for use in guest programs
 itertools = { version = "0.14.0", default-features = false }
