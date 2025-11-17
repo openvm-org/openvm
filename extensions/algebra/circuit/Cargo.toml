@@ -33,11 +33,7 @@ serde_with = { workspace = true }
 eyre = { workspace = true }
 cfg-if = { workspace = true }
 
-[target.'cfg(not(target_arch = "x86_64"))'.dependencies]
 halo2curves-axiom = { workspace = true }
-
-[target.'cfg(target_arch = "x86_64")'.dependencies]
-halo2curves-axiom = { workspace = true, features = ["asm"]}
 
 [dev-dependencies]
 openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
@@ -52,7 +48,7 @@ openvm-cuda-builder = { workspace = true, optional = true }
 [features]
 default = []
 tco = ["openvm-rv32im-circuit/tco"]
-aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot"]
+aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot", "halo2curves-axiom/asm"]
 cuda = [
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
