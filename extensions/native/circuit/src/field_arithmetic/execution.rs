@@ -1,6 +1,7 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     mem::size_of,
+    time::Instant,
 };
 
 use openvm_circuit::{
@@ -288,10 +289,13 @@ unsafe fn execute_e1_impl<
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    println!("native");
+    let start = Instant::now();
     let pre_compute: &FieldArithmeticPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<FieldArithmeticPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(pre_compute, exec_state)
+    let result = execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(pre_compute, exec_state);
+    let elapsed = start.elapsed();
+    println!("native [{:.6}s]", elapsed.as_secs_f64());
+    result
 }
 
 #[create_handler]

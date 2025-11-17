@@ -323,13 +323,16 @@ unsafe fn execute_e1_impl<
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    println!("ecc");
+    let start = Instant::now();
     let pre_compute: &EcDoublePreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<EcDoublePreCompute>()).borrow();
     let result = execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, IS_SETUP>(
         pre_compute,
         exec_state,
     );
+
+    let elapsed = start.elapsed();
+    println!("ecc [{:.6}s]", elapsed.as_secs_f64());
 
     result
 }

@@ -1,5 +1,6 @@
 use core::mem::size_of;
 use std::borrow::{Borrow, BorrowMut};
+use std::time::Instant;
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives::AlignedBytesBorrow;
@@ -189,10 +190,12 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const OPCODE:
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    println!("native");
+    let start = Instant::now();
     let pre_compute: &FieldExtensionPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<FieldExtensionPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, OPCODE>(pre_compute, exec_state);
+    let elapsed = start.elapsed();
+    println!("native [{:.6}s]", elapsed.as_secs_f64());
 }
 
 #[create_handler]

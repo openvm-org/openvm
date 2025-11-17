@@ -1,6 +1,7 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     mem::size_of,
+    time::Instant,
 };
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
@@ -239,9 +240,12 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
+    let start = Instant::now();
     let pre_compute: &MultiPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<MultiPreCompute>()).borrow();
     execute_e12_impl(pre_compute, exec_state);
+    let elapsed = start.elapsed();
+    println!("rv32im [{:.6}s]", elapsed.as_secs_f64());
 }
 
 #[create_handler]

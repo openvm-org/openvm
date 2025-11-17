@@ -1,4 +1,5 @@
 use std::borrow::{Borrow, BorrowMut};
+use std::time::Instant;
 
 use openvm_bigint_transpiler::Rv32Mul256Opcode;
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
@@ -142,10 +143,12 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    println!("bigint");
+    let start = Instant::now();
     let pre_compute: &MultPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<MultPreCompute>()).borrow();
     execute_e12_impl(pre_compute, exec_state);
+    let elapsed = start.elapsed();
+    println!("bigint [{:.6}s]", elapsed.as_secs_f64());
 }
 
 #[create_handler]
