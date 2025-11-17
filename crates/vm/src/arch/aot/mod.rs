@@ -320,8 +320,7 @@ pub(crate) extern "C" fn extern_handler<F, Ctx: ExecutionCtxTrait, const E1: boo
     };
 
     let elapsed = start.elapsed();
-    println!("Fallback time elapsed: {elapsed:?}");
-    vm_exec_state_ref.ctx.add_fallback_time(elapsed);
+    println!("{elapsed:?}");
 
     match vm_exec_state_ref.exit_code {
         Ok(None) => 0,
