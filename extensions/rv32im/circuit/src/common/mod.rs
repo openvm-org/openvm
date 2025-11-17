@@ -148,7 +148,7 @@ mod aot {
         //     }
         // }
         // ```
-        // 
+        //
         // For a specific RV32 instruction, the variables can be treated as constants at AOT
         // compilation time:
         // - `address_space`: always a constant because it is derived from an Instruction
@@ -225,7 +225,7 @@ mod aot {
         //     }
         // }
         // ```
-        // 
+        //
         // For a specific RV32 instruction, the variables can be treated as constants at AOT compilation time:
         // Inputs:
         // - `chunk`: always 8(CHUNK) because we only support when continuation is enabled.
@@ -327,6 +327,7 @@ mod aot {
 
     /// Assumption: `REG_TRACE_HEIGHT` is the pointer of `trace_heights``.
     pub(crate) fn update_height_change_asm(
+        // use spare XMM registers, instead of memory
         chip_idx: usize,
         height_delta: u32,
     ) -> Result<String, AotError> {
@@ -337,8 +338,18 @@ mod aot {
         //     self.trace_heights[chip_idx] += height_delta;
         // }
         // ```
-        asm_str +=
-            &format!("    add dword ptr [{REG_TRACE_HEIGHT} + {chip_idx} * 4], {height_delta}\n");
+        if chip_idx < 2 * XMM_TRACE_HEIGHTS_BASE.len() {
+            // need to pick a lane too
+            let xmm_lane = chip_idx % 2 + 2;
+            let xmm_reg = XMM_TRACE_HEIGHTS_BASE[chip_idx / 2];
+            asm_str += &format!("    pextrd {REG_A_W}, {xmm_reg}, {xmm_lane}\n");
+            asm_str += &format!("    add {REG_A_W}, {height_delta}\n");
+            asm_str += &format!("    pinsrd {xmm_reg}, {REG_A_W}, {xmm_lane}\n");
+        } else {
+            asm_str += &format!(
+                "    add dword ptr [{REG_TRACE_HEIGHT} + {chip_idx} * 4], {height_delta}\n"
+            );
+        }
         Ok(asm_str)
-    }
+    } // 32 bit value; need to store in 32 bit register
 }

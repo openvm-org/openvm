@@ -1,6 +1,5 @@
 use std::num::NonZero;
 
-use getset::{Getters, Setters, WithSetters};
 use itertools::Itertools;
 use openvm_instructions::riscv::{RV32_IMM_AS, RV32_REGISTER_AS};
 
@@ -18,13 +17,12 @@ use crate::{
 
 pub const DEFAULT_PAGE_BITS: usize = 6;
 
-#[derive(Clone, Debug, Getters, Setters, WithSetters)]
+#[derive(Clone, Debug)]
 pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
     pub trace_heights: Vec<u32>,
     pub is_trace_height_constant: Vec<bool>,
     pub memory_ctx: MemoryCtx<PAGE_BITS>,
     pub segmentation_ctx: SegmentationCtx,
-    #[getset(get = "pub", set = "pub", set_with = "pub")]
     suspend_on_segment: bool,
 }
 
@@ -130,6 +128,8 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
     #[inline(always)]
     pub fn check_and_segment(&mut self) -> bool {
+        // used in Check_And_segment; have to update XMM -> memory, before should_suspend call
+
         // We track the segmentation check by instrets_until_check instead of instret in order to
         // save a register in AOT mode.
         if self.segmentation_ctx.instrets_until_check > 0 {
@@ -188,7 +188,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
         // SAFETY: size passed is always a non-zero power of 2
         let size_bits = unsafe { NonZero::new_unchecked(size).ilog2() };
         self.memory_ctx
-            .update_adapter_heights(&mut self.trace_heights, address_space, size_bits);
+            .update_adapter_heights(&mut self.trace_heights, address_space, size_bits); // this one in ASM does NUTTING
 
         // Handle merkle tree updates
         if address_space != RV32_REGISTER_AS {
@@ -214,6 +214,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
 
     #[inline(always)]
     fn on_terminate<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) {
+        // on terminate; have to update XMM -> memory too
         exec_state
             .ctx
             .memory_ctx
@@ -226,6 +227,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
 }
 
 impl<const PAGE_BITS: usize> MeteredExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
+    // oh, this is the function we modifying LOL
     #[inline(always)]
     fn on_height_change(&mut self, chip_idx: usize, height_delta: u32) {
         debug_assert!(

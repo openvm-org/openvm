@@ -59,6 +59,11 @@ pub const RISCV_TO_X86_OVERRIDE_MAP: [Option<&str>; 32] = [
     None,         // x30
     None,         // x31
 ];
+pub const XMM_TRACE_HEIGHTS_BASE_START: usize = 4; // 4 is the start of the XMM registers for trace heights
+pub const XMM_TRACE_HEIGHTS_BASE: [&str; 1] = [
+    // "xmm4", "xmm5", "xmm6", "xmm7", "xmm8", "xmm9", "xmm10", "xmm11", "xmm12", "xmm13", "xmm14",
+    "xmm15",
+];
 
 pub fn sync_xmm_to_gpr() -> String {
     let mut asm_str = String::new();
@@ -80,6 +85,23 @@ pub fn sync_gpr_to_xmm() -> String {
             let lane = rv32_reg % 2;
             asm_str += &format!("   pinsrd xmm{xmm_reg}, {override_reg}, {lane}\n");
         }
+    }
+    asm_str
+}
+
+pub fn sync_xmm_to_trace_heights_memory() -> String {
+    let mut asm_str = String::new();
+    for (i, xmm_reg) in XMM_TRACE_HEIGHTS_BASE.iter().enumerate() {
+        asm_str += &format!("   pextrd dword [{REG_TRACE_HEIGHT} + {i} * 8], {xmm_reg}, 2\n");
+        asm_str += &format!("   pextrd dword [{REG_TRACE_HEIGHT} + {i} * 8 + 4], {xmm_reg}, 3\n");
+    }
+    asm_str
+}
+pub fn sync_trace_heights_memory_to_xmm() -> String {
+    let mut asm_str = String::new();
+    for (i, xmm_reg) in XMM_TRACE_HEIGHTS_BASE.iter().enumerate() {
+        asm_str += &format!("   pinsrd {xmm_reg}, dword [{REG_TRACE_HEIGHT} + {i} * 8], 2\n");
+        asm_str += &format!("   pinsrd {xmm_reg}, dword [{REG_TRACE_HEIGHT} + {i} * 8 + 4], 3\n");
     }
     asm_str
 }
