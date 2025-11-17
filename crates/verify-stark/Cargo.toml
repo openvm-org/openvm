@@ -3,12 +3,14 @@ name = "verify-stark"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Lightweight crate to verify a v2 STARK proof"
+description = "Lightweight crate to verify a VM STARK proof"
 
 [dependencies]
 openvm-circuit = { workspace = true }
 openvm-continuations = { workspace = true }
 openvm-native-compiler = { workspace = true }
+openvm-native-recursion = { workspace = true }
+p3-fri = { workspace = true }
 
 bitcode = { workspace = true }
 eyre = { workspace = true }

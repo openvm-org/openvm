@@ -21,14 +21,21 @@ use openvm_continuations::{
 };
 use openvm_native_compiler::ir::DIGEST_SIZE;
 
-use crate::{error::VerifyStarkError, vk::VmStarkVerifyingKey};
+use crate::{codec::Decode, error::VerifyStarkError, vk::VmStarkVerifyingKey};
 
+pub mod codec;
 pub mod error;
 pub mod vk;
 
-/// Verifies a non-root VM STARK proof given the internal-recursive layer verifying
-/// key and VM- and exe-specific baseline artifacts.
+/// Verifies a non-root VM STARK proof given the VmStarkVerifyingKey
 pub fn verify_vm_stark_proof(
+    vk: &VmStarkVerifyingKey,
+    encoded_proof: &[u8],
+) -> Result<(), VerifyStarkError> {
+    verify_vm_stark_proof_decoded(vk, &VmStarkProof::<SC>::decode_from_bytes(encoded_proof)?)
+}
+
+pub fn verify_vm_stark_proof_decoded(
     vk: &VmStarkVerifyingKey,
     proof: &VmStarkProof<SC>,
 ) -> Result<(), VerifyStarkError> {

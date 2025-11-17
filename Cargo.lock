@@ -9688,6 +9688,8 @@ dependencies = [
  "openvm-circuit",
  "openvm-continuations",
  "openvm-native-compiler",
+ "openvm-native-recursion",
+ "p3-fri",
  "serde",
  "thiserror 1.0.69",
 ]
