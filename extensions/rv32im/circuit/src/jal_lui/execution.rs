@@ -199,7 +199,7 @@ where
     ) -> Result<String, AotError> {
         use crate::common::{update_adapter_heights_asm, update_height_change_asm};
         let enabled = !inst.f.is_zero();
-        let mut asm_str = update_height_change_asm(chip_idx, 1)?;
+        let mut asm_str = update_height_change_asm(chip_idx, 1, None)?;
         if enabled {
             // write [a:4]_1
             asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;

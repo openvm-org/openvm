@@ -67,7 +67,7 @@ where
 
         let enabled = !inst.f.is_zero();
         let e_u32 = inst.e.as_canonical_u32();
-        asm_str += &update_height_change_asm(chip_idx, 1)?;
+        asm_str += &update_height_change_asm(chip_idx, 1, None)?;
         // [b:4]_1
         asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
         // read [[b:4]_1]_e

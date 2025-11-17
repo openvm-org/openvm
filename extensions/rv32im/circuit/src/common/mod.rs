@@ -329,6 +329,7 @@ mod aot {
     pub(crate) fn update_height_change_asm(
         chip_idx: usize,
         height_delta: u32,
+        reg_str: Option<String>
     ) -> Result<String, AotError> {
         let mut asm_str = String::new();
         // `update_height_change_asm` rewrites the following code in ASM for `on_height_change`:
@@ -337,8 +338,18 @@ mod aot {
         //     self.trace_heights[chip_idx] += height_delta;
         // }
         // ```
-        asm_str +=
-            &format!("    add dword ptr [{REG_TRACE_HEIGHT} + {chip_idx} * 4], {height_delta}\n");
+
+        match reg_str {
+            Some(reg) => {
+                asm_str += 
+                    &format!("  add {reg}, {height_delta}\n");
+            },
+            None => {
+                asm_str +=
+                    &format!("    add dword ptr [{REG_TRACE_HEIGHT} + {chip_idx} * 4], {height_delta}\n");
+            }
+        }
+
         Ok(asm_str)
     }
 }
