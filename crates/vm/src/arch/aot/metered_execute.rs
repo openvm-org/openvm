@@ -160,7 +160,7 @@ where
         asm_str += "    pinsrq xmm3, rax, 1\n";
 
         asm_str += &Self::pop_internal_registers();
-        asm_str += &sync_trace_heights_memory_to_xmm();
+        // asm_str += &sync_trace_heights_memory_to_xmm();
         asm_str += &Self::rv32_regs_to_xmm();
 
         asm_str += &format!("   lea {REG_C}, [rip + map_pc_base]\n");
@@ -194,7 +194,7 @@ where
             asm_str += &format!("execute_instruction_{pc}:\n");
             if instruction.opcode.as_usize() == 0 {
                 // terminal opcode has no associated executor, so can handle with default fallback
-                asm_str += &sync_xmm_to_trace_heights_memory();
+                // asm_str += &sync_xmm_to_trace_heights_memory();
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
@@ -242,11 +242,11 @@ where
                         }
                         AotError::Other(_message) => StaticProgramError::InvalidInstruction(pc),
                     })?;
-                asm_str += &sync_trace_heights_memory_to_xmm(); // TODO: remove these syncs
+                // asm_str += &sync_trace_heights_memory_to_xmm(); // TODO: remove these syncs
                 asm_str += &segment;
-                asm_str += &sync_xmm_to_trace_heights_memory();
+                // asm_str += &sync_xmm_to_trace_heights_memory();
             } else {
-                asm_str += &sync_xmm_to_trace_heights_memory();
+                // asm_str += &sync_xmm_to_trace_heights_memory();
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
@@ -261,7 +261,8 @@ where
                 asm_str += &Self::pop_address_space_start();
                 asm_str += &sync_instret_until_end_to_reg();
                 asm_str += &Self::rv32_regs_to_xmm(); // read the memory from the memory location of the RV32 registers in `GuestMemory`
-                asm_str += &sync_trace_heights_memory_to_xmm();
+
+                // asm_str += &sync_trace_heights_memory_to_xmm();
                 asm_str += &format!("   je asm_run_end_{pc}\n");
                 asm_str += &format!("   lea {REG_C}, [rip + map_pc_base]\n");
                 asm_str += &format!("   pextrq {REG_A}, xmm3, 1\n"); // extract the upper 64 bits of the xmm3 register to REG_A
@@ -273,7 +274,7 @@ where
         }
         asm_str += "asm_handle_segment_check:\n";
         asm_str += "    push r14\n";
-        asm_str += &sync_xmm_to_trace_heights_memory();
+        // asm_str += &sync_xmm_to_trace_heights_memory();
         asm_str += &Self::xmm_to_rv32_regs();
         asm_str += &Self::push_address_space_start();
         asm_str += &Self::push_internal_registers();
@@ -286,7 +287,7 @@ where
         asm_str += &Self::pop_address_space_start();
         asm_str += &sync_instret_until_end_to_reg();
         asm_str += &Self::rv32_regs_to_xmm();
-        asm_str += &sync_trace_heights_memory_to_xmm();
+        // asm_str += &sync_trace_heights_memory_to_xmm();
         asm_str += "    mov al, r14b\n";
         asm_str += "    pop r14\n";
         asm_str += "    ret\n";

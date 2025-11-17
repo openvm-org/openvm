@@ -1,3 +1,4 @@
+use getset::{Getters, Setters, WithSetters};
 use std::num::NonZero;
 
 use itertools::Itertools;
@@ -17,12 +18,13 @@ use crate::{
 
 pub const DEFAULT_PAGE_BITS: usize = 6;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Getters, Setters, WithSetters)]
 pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
     pub trace_heights: Vec<u32>,
     pub is_trace_height_constant: Vec<bool>,
     pub memory_ctx: MemoryCtx<PAGE_BITS>,
     pub segmentation_ctx: SegmentationCtx,
+    #[getset(get = "pub", set = "pub", set_with = "pub")]
     suspend_on_segment: bool,
 }
 
