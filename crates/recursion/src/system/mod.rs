@@ -504,13 +504,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
         engine: &E,
         child_vk: &MultiStarkVerifyingKeyV2,
     ) -> CommittedTraceDataV2<CpuBackendV2> {
-        let (commitment, data) = self.batch_constraint.commit_child_vk(engine, child_vk);
-        let height = 1 << data.layout.sorted_cols[0].2.log_height();
-        CommittedTraceDataV2 {
-            commitment,
-            data: Arc::new(data),
-            height,
-        }
+        self.batch_constraint.commit_child_vk(engine, child_vk)
     }
 
     #[instrument(name = "VerifierSubCircuit::generate_proving_ctxs", skip_all)]
@@ -617,13 +611,7 @@ pub mod cuda_tracegen {
             engine: &E,
             child_vk: &MultiStarkVerifyingKeyV2,
         ) -> CommittedTraceDataV2<GpuBackendV2> {
-            let (commitment, data) = self.batch_constraint.commit_child_vk_gpu(engine, child_vk);
-            let height = 1 << data.layout.sorted_cols[0].2.log_height();
-            CommittedTraceDataV2 {
-                commitment,
-                data: Arc::new(data),
-                height,
-            }
+            self.batch_constraint.commit_child_vk_gpu(engine, child_vk)
         }
 
         fn generate_proving_ctxs<TS: FiatShamirTranscript + TranscriptHistory + Default>(

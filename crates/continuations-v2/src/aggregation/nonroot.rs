@@ -44,8 +44,12 @@ pub struct NonRootAggregationProver<
     circuit: Arc<AggregationCircuit<S>>,
 }
 
-impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: AggNodeTraceGen<PB>>
-    AggregationProver<PB> for NonRootAggregationProver<PB, S, T>
+impl<PB, S, T> AggregationProver<PB> for NonRootAggregationProver<PB, S, T>
+where
+    PB: ProverBackendV2,
+    S: AggregationSubCircuit + VerifierTraceGen<PB>,
+    T: AggNodeTraceGen<PB>,
+    PB::Matrix: Clone,
 {
     fn get_vk(&self) -> Arc<MultiStarkVerifyingKeyV2> {
         self.vk.clone()
