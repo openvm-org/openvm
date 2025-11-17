@@ -1,6 +1,5 @@
 use std::borrow::Borrow;
 
-use eyre::Result;
 use openvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},

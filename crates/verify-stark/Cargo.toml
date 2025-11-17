@@ -10,8 +10,9 @@ openvm-circuit = { workspace = true }
 openvm-continuations = { workspace = true }
 openvm-native-compiler = { workspace = true }
 
+bitcode = { workspace = true }
 eyre = { workspace = true }
-p3-field = { workspace = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
 
 [features]

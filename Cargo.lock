@@ -9683,11 +9683,12 @@ dependencies = [
 name = "verify-stark"
 version = "1.4.1"
 dependencies = [
+ "bitcode",
  "eyre",
  "openvm-circuit",
  "openvm-continuations",
  "openvm-native-compiler",
- "p3-field",
+ "serde",
  "thiserror 1.0.69",
 ]
 
