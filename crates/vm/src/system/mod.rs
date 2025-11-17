@@ -648,7 +648,7 @@ where
                 .cached
                 .as_ref()
                 .expect("program not loaded")
-                .height
+                .height()
         );
         assert_eq!(heights[CONNECTOR_AIR_ID], 2);
         let mut memory_start_idx = PUBLIC_VALUES_AIR_ID;
