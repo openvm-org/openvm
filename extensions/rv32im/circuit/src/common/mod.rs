@@ -266,10 +266,6 @@ mod aot {
             + offset_of!(MeteredCtx, memory_ctx);
         let page_indices_ptr_offset =
             memory_ctx_offset + offset_of!(MemoryCtx<DEFAULT_PAGE_BITS>, page_indices);
-        let page_access_count_offset =
-            memory_ctx_offset + offset_of!(MemoryCtx<DEFAULT_PAGE_BITS>, page_access_count);
-        let addr_space_access_count_ptr_offset =
-            memory_ctx_offset + offset_of!(MemoryCtx<DEFAULT_PAGE_BITS>, addr_space_access_count);
         let inserted_label = format!(".asm_execute_pc_{pc}_inserted");
         // The next section is the implementation of `BitSet::insert` in ASM.
         // pub fn insert(&mut self, index: usize) -> bool {
@@ -307,18 +303,9 @@ mod aot {
         // `*word += mask`
         asm_str += &format!("    add {ptr_reg}, {reg2}\n");
         asm_str += &format!("    mov [{reg1}], {ptr_reg}\n");
-        // reg1 = &self.page_access_count`
-        asm_str +=
-            &format!("    lea {reg1}, [{REG_EXEC_STATE_PTR} + {page_access_count_offset}]\n");
-        // self.page_access_count += 1;
-        asm_str += &format!("    add dword ptr [{reg1}], 1\n");
-        // reg1 = &addr_space_access_count.as_ptr()
-        asm_str += &format!(
-            "    lea {reg1}, [{REG_EXEC_STATE_PTR} + {addr_space_access_count_ptr_offset}]\n"
-        );
-        asm_str += &format!("    mov {reg1}, [{reg1}]\n");
-        // self.addr_space_access_count[address_space] += 1;
-        asm_str += &format!("    add dword ptr [{reg1} + {address_space} * 4], 1\n");
+        // Putting the increment in a register. Postpone the actual increment until `on_suspend` or
+        // `on_terminate`.
+        asm_str += &format!("    add {REG_AS2_ACCESS_COUNT_W}, 1\n");
         asm_str += &format!("{inserted_label}:\n");
         // Inserted, do nothing
 

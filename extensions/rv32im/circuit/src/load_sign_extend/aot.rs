@@ -4,7 +4,7 @@ use openvm_circuit::arch::{
 };
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode;
@@ -23,14 +23,8 @@ where
     F: PrimeField32,
 {
     fn is_aot_supported(&self, inst: &Instruction<F>) -> bool {
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(
-            inst.opcode
-                .local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
-        );
-        match local_opcode {
-            Rv32LoadStoreOpcode::LOADB | Rv32LoadStoreOpcode::LOADH => true,
-            _ => unreachable!(),
-        }
+        let e_u32 = inst.e.as_canonical_u32();
+        e_u32 == RV32_MEMORY_AS
     }
     fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
         generate_x86_asm_impl(inst, pc, |_, _, _, _, _| Ok(String::new()))

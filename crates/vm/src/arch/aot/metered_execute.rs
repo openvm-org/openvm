@@ -10,7 +10,12 @@ use crate::{
             asm_to_lib, extern_handler, get_vm_address_space_addr, get_vm_pc_ptr, set_pc_shim,
             should_suspend_shim,
         },
-        execution_mode::{metered::segment_ctx::SegmentationCtx, MeteredCtx, Segment},
+        execution_mode::{
+            metered::{
+                ctx::DEFAULT_PAGE_BITS, memory_ctx::MemoryCtx, segment_ctx::SegmentationCtx,
+            },
+            MeteredCtx, Segment,
+        },
         interpreter::{
             alloc_pre_compute_buf, get_metered_pre_compute_instructions,
             get_metered_pre_compute_max_size, split_pre_compute_buf, PreComputeInstruction,
@@ -81,6 +86,12 @@ where
         E: MeteredExecutor<F>,
     {
         let mut asm_str = String::new();
+        let memory_ctx_offset = offset_of!(VmExecState<F, GuestMemory, MeteredCtx>, ctx)
+            + offset_of!(MeteredCtx, memory_ctx);
+        let page_access_count_offset =
+            memory_ctx_offset + offset_of!(MemoryCtx<DEFAULT_PAGE_BITS>, page_access_count);
+        let addr_space_access_count_ptr_offset =
+            memory_ctx_offset + offset_of!(MemoryCtx<DEFAULT_PAGE_BITS>, addr_space_access_count);
         let instret_until_end_offset = offset_of!(VmExecState<F, GuestMemory, MeteredCtx>, ctx)
             + offset_of!(MeteredCtx, segmentation_ctx)
             + offset_of!(SegmentationCtx, instrets_until_check);
@@ -94,6 +105,19 @@ where
             format!(
                 "    mov {REG_INSTRET_END}, [{REG_EXEC_STATE_PTR} + {instret_until_end_offset}]\n"
             )
+        };
+        let sync_as_2_access_count_to_reg = || {
+            let mut asm_str = String::new();
+            asm_str += &format!(
+                "    add DWORD PTR [{REG_EXEC_STATE_PTR} + {page_access_count_offset}], {REG_AS2_ACCESS_COUNT_W}\n"
+            );
+            asm_str += &format!(
+                "    mov {REG_B}, [{REG_EXEC_STATE_PTR} + {addr_space_access_count_ptr_offset}]\n"
+            );
+            // Address space 2
+            asm_str += &format!("    add DWORD PTR[{REG_B} + 2 * 4], {REG_AS2_ACCESS_COUNT_W}\n");
+            asm_str += &format!("    mov {REG_AS2_ACCESS_COUNT}, 0\n");
+            asm_str
         };
 
         let extern_handler_ptr =
@@ -119,6 +143,7 @@ where
         asm_str += &format!("   mov {REG_TRACE_HEIGHT}, {REG_SECOND_ARG}\n");
         asm_str += &format!("   mov {REG_B}, {REG_THIRD_ARG}\n");
         asm_str += &format!("   mov {REG_INSTRET_END}, {REG_FOURTH_ARG}\n");
+        asm_str += &format!("   mov {REG_AS2_ACCESS_COUNT}, 0\n");
 
         let get_vm_address_space_addr_ptr = format!(
             "{:p}",
@@ -187,6 +212,8 @@ where
             asm_str += &format!("    jmp execute_instruction_{pc}\n");
 
             asm_str += &format!("instret_zero_{pc}:\n");
+
+            asm_str += &sync_as_2_access_count_to_reg();
             asm_str += "    call asm_handle_segment_check\n";
             asm_str += "    test al, al\n";
             asm_str += &format!("    jnz asm_run_end_{pc}\n");
@@ -200,6 +227,8 @@ where
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
                 asm_str += &sync_reg_to_instret_until_end();
+                asm_str += &sync_as_2_access_count_to_reg();
+
                 asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
                 asm_str += &format!("   mov {REG_SECOND_ARG}, {pre_compute_insns_ptr}\n");
                 asm_str += &format!("   mov {REG_THIRD_ARG}, {pc}\n");
@@ -291,6 +320,8 @@ where
         for (pc, _instruction, _) in exe.program.enumerate_by_pc() {
             asm_str += &format!("asm_run_end_{pc}:\n");
             asm_str += &Self::xmm_to_rv32_regs();
+
+            asm_str += &sync_as_2_access_count_to_reg();
             asm_str += &format!("    mov {REG_FIRST_ARG}, rbx\n");
             asm_str += &format!("    mov {REG_SECOND_ARG}, {pc}\n");
             asm_str += &format!("    mov {REG_D}, {set_pc_ptr}\n");
