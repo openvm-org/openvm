@@ -82,60 +82,6 @@ where
         asm_str
     }
 
-    #[allow(dead_code)]
-    fn debug_cur_string(str: &String) {
-        println!("DEBUG");
-        println!("{str}");
-    }
-
-    #[allow(dead_code)]
-    fn push_xmm_regs() -> String {
-        let mut asm_str = String::new();
-        asm_str += "    sub rsp, 16*16";
-        asm_str += "    movaps [rsp + 0*16], xmm0\n";
-        asm_str += "    movaps [rsp + 1*16], xmm1\n";
-        asm_str += "    movaps [rsp + 2*16], xmm2\n";
-        asm_str += "    movaps [rsp + 3*16], xmm3\n";
-        asm_str += "    movaps [rsp + 4*16], xmm4\n";
-        asm_str += "    movaps [rsp + 5*16], xmm5\n";
-        asm_str += "    movaps [rsp + 6*16], xmm6\n";
-        asm_str += "    movaps [rsp + 7*16], xmm7\n";
-        asm_str += "    movaps [rsp + 8*16], xmm8\n";
-        asm_str += "    movaps [rsp + 9*16], xmm9\n";
-        asm_str += "    movaps [rsp + 10*16], xmm10\n";
-        asm_str += "    movaps [rsp + 11*16], xmm11\n";
-        asm_str += "    movaps [rsp + 12*16], xmm12\n";
-        asm_str += "    movaps [rsp + 13*16], xmm13\n";
-        asm_str += "    movaps [rsp + 14*16], xmm14\n";
-        asm_str += "    movaps [rsp + 15*16], xmm15\n";
-
-        asm_str
-    }
-
-    #[allow(dead_code)]
-    fn pop_xmm_regs() -> String {
-        let mut asm_str = String::new();
-        asm_str += "    movaps xmm0, [rsp + 0*16]\n";
-        asm_str += "    movaps xmm1, [rsp + 1*16]\n";
-        asm_str += "    movaps xmm2, [rsp + 2*16]\n";
-        asm_str += "    movaps xmm3, [rsp + 3*16]\n";
-        asm_str += "    movaps xmm4, [rsp + 4*16]\n";
-        asm_str += "    movaps xmm5, [rsp + 5*16]\n";
-        asm_str += "    movaps xmm6, [rsp + 6*16]\n";
-        asm_str += "    movaps xmm7, [rsp + 7*16]\n";
-        asm_str += "    movaps xmm8, [rsp + 8*16]\n";
-        asm_str += "    movaps xmm9, [rsp + 9*16]\n";
-        asm_str += "    movaps xmm10, [rsp + 10*16]\n";
-        asm_str += "    movaps xmm11, [rsp + 11*16]\n";
-        asm_str += "    movaps xmm12, [rsp + 12*16]\n";
-        asm_str += "    movaps xmm13, [rsp + 13*16]\n";
-        asm_str += "    movaps xmm14, [rsp + 14*16]\n";
-        asm_str += "    movaps xmm15, [rsp + 15*16]\n";
-        asm_str += "    add rsp, 16*16\n";
-
-        asm_str
-    }
-
     fn push_internal_registers() -> String {
         let mut asm_str = String::new();
 
