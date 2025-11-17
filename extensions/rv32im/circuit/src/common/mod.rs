@@ -331,17 +331,40 @@ mod aot {
         height_delta: u32,
     ) -> Result<String, AotError> {
         let mut asm_str = String::new();
-        // `update_height_change_asm` rewrites the following code in ASM for `on_height_change`:
-        // ```
-        // pub fn on_height_change(&mut self, chip_idx: usize, height_delta: u32) {
-        //     self.trace_heights[chip_idx] += height_delta;
-        // }
-        // ```
+        let chip_offset = chip_idx * 4;
+        // Buffer trace height updates in an XMM cache and lazily flush to memory when needed.
+        asm_str += &format!(
+            "    pextrq {REG_RETURN_VAL}, {XMM_TRACE_HEIGHT_CACHE_PTR}, 1\n"
+        );
         asm_str += &format!(
             "    pextrq {REG_TRACE_HEIGHT}, {XMM_TRACE_HEIGHT_PTR}, 1\n"
         );
-        asm_str +=
-            &format!("    add dword ptr [{REG_TRACE_HEIGHT} + {chip_idx} * 4], {height_delta}\n");
+        asm_str += &format!("    add {REG_TRACE_HEIGHT}, {chip_offset}\n");
+        asm_str += &format!("    cmp {REG_RETURN_VAL}, {REG_TRACE_HEIGHT}\n");
+        asm_str += "    je 1f\n";
+        asm_str += &flush_trace_height_cache();
+        asm_str += &format!(
+            "    pextrq {REG_TRACE_HEIGHT}, {XMM_TRACE_HEIGHT_PTR}, 1\n"
+        );
+        asm_str += &format!("    add {REG_TRACE_HEIGHT}, {chip_offset}\n");
+        asm_str += &format!("    mov {REG_D_W}, dword ptr [{REG_TRACE_HEIGHT}]\n");
+        asm_str += &format!("    add {REG_D_W}, {height_delta}\n");
+        asm_str += &format!(
+            "    pinsrq {XMM_TRACE_HEIGHT_CACHE_PTR}, {REG_TRACE_HEIGHT}, 1\n"
+        );
+        asm_str += &format!(
+            "    pinsrq {XMM_TRACE_HEIGHT_CACHE_VAL}, {REG_RETURN_VAL}, 1\n"
+        );
+        asm_str += "    jmp 2f\n";
+        asm_str += "1:\n";
+        asm_str += &format!(
+            "    pextrq {REG_RETURN_VAL}, {XMM_TRACE_HEIGHT_CACHE_VAL}, 1\n"
+        );
+        asm_str += &format!("    add {REG_D_W}, {height_delta}\n");
+        asm_str += &format!(
+            "    pinsrq {XMM_TRACE_HEIGHT_CACHE_VAL}, {REG_RETURN_VAL}, 1\n"
+        );
+        asm_str += "2:\n";
         Ok(asm_str)
     }
 }

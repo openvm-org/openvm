@@ -21,8 +21,11 @@ pub const REG_INSTRET_END: &str = "r12";
 
 pub const REG_EXEC_STATE_PTR: &str = "rbx";
 pub const REG_TRACE_HEIGHT: &str = "r14";
+pub const REG_TRACE_HEIGHT_W: &str = "r14d";
 pub const REG_AS2_PTR: &str = "r15";
 pub const XMM_TRACE_HEIGHT_PTR: &str = "xmm4";
+pub const XMM_TRACE_HEIGHT_CACHE_PTR: &str = "xmm5";
+pub const XMM_TRACE_HEIGHT_CACHE_VAL: &str = "xmm6";
 
 pub const DEFAULT_PC_OFFSET: i32 = 4;
 
@@ -133,4 +136,29 @@ pub fn convert_x86_reg(any: &str, to: Width) -> Option<&'static str> {
         }
     }
     None
+}
+
+pub fn flush_trace_height_cache() -> String {
+    let mut asm_str = String::new();
+    asm_str += &format!("    pextrq {REG_RETURN_VAL}, {XMM_TRACE_HEIGHT_CACHE_PTR}, 1\n");
+    asm_str += &format!("    test {REG_RETURN_VAL}, {REG_RETURN_VAL}\n");
+    asm_str += "    je 9f\n";
+    asm_str += &format!("    pextrq {REG_TRACE_HEIGHT}, {XMM_TRACE_HEIGHT_CACHE_VAL}, 1\n");
+    asm_str += &format!(
+        "    mov dword ptr [{REG_RETURN_VAL}], {REG_TRACE_HEIGHT_W}\n"
+    );
+    asm_str += &format!("    xor {REG_TRACE_HEIGHT}, {REG_TRACE_HEIGHT}\n");
+    asm_str += &format!("    pinsrq {XMM_TRACE_HEIGHT_CACHE_VAL}, {REG_TRACE_HEIGHT}, 1\n");
+    asm_str += &format!("    xor {REG_RETURN_VAL}, {REG_RETURN_VAL}\n");
+    asm_str += &format!("    pinsrq {XMM_TRACE_HEIGHT_CACHE_PTR}, {REG_RETURN_VAL}, 1\n");
+    asm_str += "9:\n";
+    asm_str
+}
+
+pub fn invalidate_trace_height_cache() -> String {
+    let mut asm_str = String::new();
+    asm_str += &format!("    xor {REG_TRACE_HEIGHT}, {REG_TRACE_HEIGHT}\n");
+    asm_str += &format!("    pinsrq {XMM_TRACE_HEIGHT_CACHE_PTR}, {REG_TRACE_HEIGHT}, 1\n");
+    asm_str += &format!("    pinsrq {XMM_TRACE_HEIGHT_CACHE_VAL}, {REG_TRACE_HEIGHT}, 1\n");
+    asm_str
 }

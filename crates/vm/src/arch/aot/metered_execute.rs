@@ -120,6 +120,7 @@ where
         asm_str += &format!("   pinsrq {XMM_TRACE_HEIGHT_PTR}, {REG_SECOND_ARG}, 1\n");
         asm_str += &format!("   mov {REG_B}, {REG_THIRD_ARG}\n");
         asm_str += &format!("   mov {REG_INSTRET_END}, {REG_FOURTH_ARG}\n");
+        asm_str += &invalidate_trace_height_cache();
 
         let get_vm_address_space_addr_ptr = format!(
             "{:p}",
@@ -163,6 +164,7 @@ where
         asm_str += &Self::pop_internal_registers();
 
         asm_str += &Self::rv32_regs_to_xmm();
+        asm_str += &invalidate_trace_height_cache();
 
         asm_str += &format!("   lea {REG_C}, [rip + map_pc_base]\n");
         asm_str += &format!("   pextrq {REG_A}, xmm3, 1\n"); // extract the upper 64 bits of the xmm3 register to REG_A
@@ -197,6 +199,7 @@ where
 
             if instruction.opcode.as_usize() == 0 {
                 // terminal opcode has no associated executor, so can handle with default fallback
+                asm_str += &flush_trace_height_cache();
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
@@ -206,7 +209,7 @@ where
                 asm_str += &format!("   mov {REG_THIRD_ARG}, {pc}\n");
                 asm_str += &format!("   mov {REG_D}, {extern_handler_ptr}\n");
                 asm_str += &format!("   call {REG_D}\n");
-                asm_str += &format!("   cmp {REG_D}, 1\n");
+                asm_str += &format!("   cmp {REG_RETURN_VAL}, 1\n");
 
                 asm_str += &Self::pop_internal_registers();
                 asm_str += &Self::pop_address_space_start();
@@ -246,6 +249,7 @@ where
                     })?;
                 asm_str += &segment;
             } else {
+                asm_str += &flush_trace_height_cache();
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
@@ -261,6 +265,7 @@ where
                 asm_str += &sync_instret_until_end_to_reg();
                 asm_str += &Self::rv32_regs_to_xmm(); // read the memory from the memory location of the RV32 registers in `GuestMemory`
                                                       // registers, to the appropriate XMM registers
+                asm_str += &invalidate_trace_height_cache();
                 asm_str += &format!("   je asm_run_end_{pc}\n");
                 asm_str += &format!("   lea {REG_C}, [rip + map_pc_base]\n");
                 asm_str += &format!("   pextrq {REG_A}, xmm3, 1\n"); // extract the upper 64 bits of the xmm3 register to REG_A
@@ -272,6 +277,7 @@ where
         }
         asm_str += "asm_handle_segment_check:\n";
         asm_str += "    push r14\n";
+        asm_str += &flush_trace_height_cache();
         asm_str += &Self::xmm_to_rv32_regs();
         asm_str += &Self::push_address_space_start();
         asm_str += &Self::push_internal_registers();
@@ -284,6 +290,7 @@ where
         asm_str += &Self::pop_address_space_start();
         asm_str += &sync_instret_until_end_to_reg();
         asm_str += &Self::rv32_regs_to_xmm();
+        asm_str += &invalidate_trace_height_cache();
         asm_str += "    mov al, r14b\n";
         asm_str += "    pop r14\n";
         asm_str += "    ret\n";
@@ -291,6 +298,7 @@ where
         // asm_run_end part
         for (pc, _instruction, _) in exe.program.enumerate_by_pc() {
             asm_str += &format!("asm_run_end_{pc}:\n");
+            asm_str += &flush_trace_height_cache();
             asm_str += &Self::xmm_to_rv32_regs();
             asm_str += &format!("    mov {REG_FIRST_ARG}, rbx\n");
             asm_str += &format!("    mov {REG_SECOND_ARG}, {pc}\n");
