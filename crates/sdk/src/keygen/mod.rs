@@ -92,12 +92,12 @@ pub struct AggProvingKey {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AggVerifyingKey {
-    pub(super) leaf_fri_params: FriParameters,
-    pub(super) leaf_vk: MultiStarkVerifyingKey<SC>,
+    pub leaf_fri_params: FriParameters,
+    pub leaf_vk: MultiStarkVerifyingKey<SC>,
     /// FRI parameters used to generate the last internal proof.
-    pub(super) internal_fri_params: FriParameters,
-    pub(super) internal_vk: MultiStarkVerifyingKey<SC>,
-    pub(super) internal_verifier_program_commit: Com<SC>,
+    pub internal_fri_params: FriParameters,
+    pub internal_vk: MultiStarkVerifyingKey<SC>,
+    pub internal_verifier_program_commit: Com<SC>,
 }
 
 /// Attention: the serialized size of this struct is VERY large, usually >10GB.
