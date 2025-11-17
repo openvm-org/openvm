@@ -242,8 +242,9 @@ where
                         }
                         AotError::Other(_message) => StaticProgramError::InvalidInstruction(pc),
                     })?;
+                asm_str += &sync_trace_heights_memory_to_xmm(); // TODO: remove these syncs
                 asm_str += &segment;
-                asm_str += &sync_trace_heights_memory_to_xmm(); // this should be unnecessary (?): TODO: why this needed
+                asm_str += &sync_xmm_to_trace_heights_memory();
             } else {
                 asm_str += &sync_xmm_to_trace_heights_memory();
                 asm_str += &Self::xmm_to_rv32_regs();
