@@ -1,7 +1,7 @@
 use cuda_backend_v2::{EF, F};
 use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
 
-use crate::whir::InitialOpenedValueRecord;
+use crate::whir::{InitialOpenedValueRecord, final_poly_query_eval::FinalPolyQueryEvalRecord};
 
 extern "C" {
     fn _initial_opened_values_tracegen(
@@ -24,6 +24,18 @@ extern "C" {
         stacking_widths_psums_per_proof: *const usize,
         mu_pows: *const EF,
         num_proofs: usize,
+    ) -> i32;
+
+    fn _final_poly_query_eval_tracegen(
+        trace_d: *mut F,
+        num_valid_rows: usize,
+        height: usize,
+        records_d: *const FinalPolyQueryEvalRecord,
+        num_whir_rounds: usize,
+        rows_per_proof: usize,
+        round_offsets_d: *const usize,
+        log_final_poly_len: usize,
+        num_whir_queries: usize,
     ) -> i32;
 }
 
@@ -73,5 +85,29 @@ pub unsafe fn initial_opened_values_tracegen(
         stacking_widths_psums_per_proof.as_ptr(),
         mu_pows.as_ptr(),
         num_proofs,
+    ))
+}
+
+pub unsafe fn final_poly_query_eval_tracegen(
+    trace_d: &DeviceBuffer<F>,
+    num_valid_rows: usize,
+    height: usize,
+    records_d: &DeviceBuffer<FinalPolyQueryEvalRecord>,
+    num_whir_rounds: usize,
+    rows_per_proof: usize,
+    round_offsets_d: &DeviceBuffer<usize>,
+    log_final_poly_len: usize,
+    num_whir_queries: usize,
+) -> Result<(), CudaError> {
+    CudaError::from_result(_final_poly_query_eval_tracegen(
+        trace_d.as_mut_ptr(),
+        num_valid_rows,
+        height,
+        records_d.as_ptr(),
+        num_whir_rounds,
+        rows_per_proof,
+        round_offsets_d.as_ptr(),
+        log_final_poly_len,
+        num_whir_queries,
     ))
 }
