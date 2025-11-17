@@ -81,7 +81,7 @@ impl ProgramChipGPU {
         CommittedTraceData {
             commitment,
             data: Arc::new(data),
-            height: trace.height(),
+            trace,
         }
     }
 }
@@ -95,7 +95,7 @@ impl Default for ProgramChipGPU {
 impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
     fn generate_proving_ctx(&self, filtered_exec_freqs: Vec<u32>) -> AirProvingContext<GpuBackend> {
         let cached = self.cached.clone().expect("Cached program must be loaded");
-        let height = cached.height;
+        let height = cached.height();
         let filtered_len = filtered_exec_freqs.len();
         assert!(
             filtered_len <= height,
