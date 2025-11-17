@@ -20,6 +20,10 @@ use crate::{
     },
     system::memory::online::GuestMemory,
 };
+
+use openvm_rv32im_transpiler::BaseAluOpcode;
+use openvm_instructions::LocalOpcode;
+
 static_assertions::assert_impl_all!(AotInstance<p3_baby_bear::BabyBear, MeteredCtx>: Send, Sync);
 
 impl<F> AotInstance<F, MeteredCtx>
@@ -270,6 +274,16 @@ where
             }
         }
         asm_str += "asm_handle_segment_check:\n";
+
+        // update the vm trace height from the x86 register used to store trace height
+        let base_alu_opcode = BaseAluOpcode::ADD.global_opcode(); // add, sub, and other base alu share the same executor
+        let base_alu_executor = inventory
+            .get_executor(base_alu_opcode)
+            .expect("executor not found for opcode");
+        let base_alu_executor_idx = inventory.instruction_lookup[&base_alu_opcode] as usize;
+        let base_alu_air_idx = executor_idx_to_air_idx[base_alu_executor_idx];
+        asm_str += &base_alu_executor.update_vm_trace_height(base_alu_air_idx).unwrap();
+        
         asm_str += "    push r14\n";
         asm_str += &Self::xmm_to_rv32_regs();
         asm_str += &Self::push_address_space_start();
@@ -285,11 +299,15 @@ where
         asm_str += &Self::rv32_regs_to_xmm();
         asm_str += "    mov al, r14b\n";
         asm_str += "    pop r14\n";
+
+        asm_str += &base_alu_executor.update_register_trace_height(base_alu_air_idx).unwrap();
+
         asm_str += "    ret\n";
 
         // asm_run_end part
         for (pc, _instruction, _) in exe.program.enumerate_by_pc() {
             asm_str += &format!("asm_run_end_{pc}:\n");
+
             asm_str += &Self::xmm_to_rv32_regs();
             asm_str += &format!("    mov {REG_FIRST_ARG}, rbx\n");
             asm_str += &format!("    mov {REG_SECOND_ARG}, {pc}\n");

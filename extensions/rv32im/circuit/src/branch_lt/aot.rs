@@ -94,7 +94,7 @@ where
     ) -> Result<String, AotError> {
         let mut asm_str = String::from("");
 
-        asm_str += &update_height_change_asm(chip_idx, 1)?;
+        asm_str += &update_height_change_asm(chip_idx, 1, None)?;
         // read [b:4]_1
         asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
         // read [c:4]_1

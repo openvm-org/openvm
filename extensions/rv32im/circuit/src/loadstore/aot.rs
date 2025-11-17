@@ -62,7 +62,7 @@ where
             local_opcode,
             Rv32LoadStoreOpcode::LOADW | Rv32LoadStoreOpcode::LOADBU | Rv32LoadStoreOpcode::LOADHU
         );
-        asm_str += &update_height_change_asm(chip_idx, 1)?;
+        asm_str += &update_height_change_asm(chip_idx, 1, None)?;
         // [b:4]_1
         asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
         // read or write [a:4]_1

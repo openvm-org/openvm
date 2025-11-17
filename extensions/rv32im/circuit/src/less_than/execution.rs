@@ -257,7 +257,7 @@ where
         config: &SystemConfig,
     ) -> Result<String, AotError> {
         let mut asm_str = self.generate_x86_asm(inst, pc)?;
-        asm_str += &update_height_change_asm(chip_idx, 1)?;
+        asm_str += &update_height_change_asm(chip_idx, 1, None)?;
         // read [b:4]_1
         asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
         if inst.e.as_canonical_u32() != RV32_IMM_AS {

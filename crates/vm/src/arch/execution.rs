@@ -234,6 +234,14 @@ pub trait AotMeteredExecutor<F> {
         false
     }
 
+    fn update_vm_trace_height(&self, _chip_idx: usize) -> Result<String, AotError> {
+        unimplemented!()
+    }
+
+    fn update_register_trace_height(&self, _chip_idx: usize) -> Result<String, AotError> {
+        unimplemented!()
+    }
+
     fn generate_x86_metered_asm(
         &self,
         _inst: &Instruction<F>,

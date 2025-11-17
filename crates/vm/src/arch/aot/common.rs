@@ -22,6 +22,7 @@ pub const REG_INSTRET_END: &str = "r12";
 pub const REG_EXEC_STATE_PTR: &str = "rbx";
 pub const REG_TRACE_HEIGHT: &str = "r14";
 pub const REG_AS2_PTR: &str = "r15";
+pub const REG_BASE_ALU_TRACE_HEIGHT: &str = "r13d";
 
 pub const DEFAULT_PC_OFFSET: i32 = 4;
 
@@ -41,7 +42,7 @@ pub const RISCV_TO_X86_OVERRIDE_MAP: [Option<&str>; 32] = [
     Some("r9d"),  // x12
     Some("r8d"),  // x13
     Some("ebp"),  // x14
-    Some("r13d"), // x15
+    None, // x15
     None,         // x16
     None,         // x17
     None,         // x18
