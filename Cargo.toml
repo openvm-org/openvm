@@ -28,6 +28,7 @@ members = [
     "crates/toolchain/platform",
     "crates/toolchain/tests",
     "crates/continuations",
+    "crates/verify-stark",
     "crates/vm",
     "extensions/rv32im/circuit",
     "extensions/rv32im/transpiler",
@@ -139,6 +140,7 @@ openvm-circuit = { path = "crates/vm", default-features = false }
 openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
 openvm-continuations = { path = "crates/continuations", default-features = false }
 cargo-openvm = { path = "crates/cli", default-features = false }
+verify-stark = { path = "crates/verify-stark", default-features = false }
 
 # Extensions
 openvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }

@@ -9680,6 +9680,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "verify-stark"
+version = "1.4.1"
+dependencies = [
+ "eyre",
+ "openvm-circuit",
+ "openvm-continuations",
+ "openvm-native-compiler",
+ "p3-field",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

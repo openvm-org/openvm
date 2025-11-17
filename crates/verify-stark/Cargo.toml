@@ -1,0 +1,19 @@
+[package]
+name = "verify-stark"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Lightweight crate to verify a v2 STARK proof"
+
+[dependencies]
+openvm-circuit = { workspace = true }
+openvm-continuations = { workspace = true }
+openvm-native-compiler = { workspace = true }
+
+eyre = { workspace = true }
+p3-field = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = ["parallel"]
+parallel = []
