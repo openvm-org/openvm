@@ -194,7 +194,7 @@ snark-verifier-sdk = { version = "0.2.0", default-features = false, features = [
     "halo2-axiom",
 ] }
 snark-verifier = { version = "0.2.0", default-features = false }
-halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git", rev = "2e6aa5e27684c13a0e44170f83a3ec55767a8c5e" }
+halo2curves-axiom = "^0.7.1"
 
 forge-fmt = "0.2.0"
 cargo_metadata = "0.18"
