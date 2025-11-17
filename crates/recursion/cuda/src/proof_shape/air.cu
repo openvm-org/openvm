@@ -198,6 +198,7 @@ __device__ __forceinline__ void fill_non_present_row(
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, starting_cidx, final_cidx);
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_present, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, height, Fp::zero());
+    COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, num_air_id_lookups, Fp::zero());
     row.fill_zero(
         COL_INDEX(typename Cols<MAX_CACHED>::template Type, lifted_height_limbs), NUM_LIMBS
     );
@@ -428,8 +429,14 @@ __global__ void proof_shape_tracegen(
             }
         }
     } else {
+        Encoder encoder(inputs.num_airs, 2, true);
+        size_t encoder_flags_idx =
+            COL_INDEX(typename Cols<MAX_CACHED>::template Type, cached_commits);
+        size_t cached_commits_idx = encoder_flags_idx + encoder.width();
+        size_t num_cols = cached_commits_idx + MAX_CACHED * DIGEST_SIZE;
+
         COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, proof_idx, NUM_PROOFS);
-        row.fill_zero(1, sizeof(ProofShapeCols<uint8_t, MAX_CACHED>));
+        row.fill_zero(1, num_cols - 1);
     }
 }
 
