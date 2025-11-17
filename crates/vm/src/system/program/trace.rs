@@ -13,7 +13,6 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
-    prover::MatrixDimensions,
 };
 use serde::{Deserialize, Serialize};
 use stark_backend_v2::{
@@ -77,7 +76,7 @@ impl VmCommittedExe<SC> {
         CommittedTraceData {
             commitment: self.prover_data.commit(),
             data: self.prover_data.clone(),
-            height: self.trace.height(),
+            trace: ColMajorMatrix::from_row_major(&self.trace),
         }
     }
 
@@ -127,8 +126,8 @@ impl Chip<(), CpuBackend> for ProgramChip<SC> {
             .cached
             .clone()
             .expect("cached program trace must be loaded");
-        assert!(self.filtered_exec_frequencies.len() <= cached.height);
-        let mut freqs = Val::<SC>::zero_vec(cached.height);
+        assert!(self.filtered_exec_frequencies.len() <= cached.height());
+        let mut freqs = Val::<SC>::zero_vec(cached.height());
         freqs
             .par_iter_mut()
             .zip(self.filtered_exec_frequencies.par_iter())
