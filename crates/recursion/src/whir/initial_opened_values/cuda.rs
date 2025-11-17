@@ -4,7 +4,7 @@ use p3_field::TwoAdicField;
 use stark_backend_v2::SystemParams;
 
 use crate::whir::{
-    cuda_tracegen::WhirBlobGpu, cuda_abi::initial_opened_values_tracegen,
+    cuda_abi::initial_opened_values_tracegen, cuda_tracegen::WhirBlobGpu,
     initial_opened_values::InitialOpenedValuesCols,
 };
 
