@@ -757,7 +757,6 @@ where
         program: &Program<Val<E::SC>>,
     ) -> CommittedTraceData<E::PB> {
         let trace = ColMajorMatrix::from_row_major(&generate_cached_trace(program));
-        let height = trace.height();
         let d_trace = self
             .engine
             .device()
@@ -765,8 +764,8 @@ where
         let (commitment, pcs) = self.engine.device().commit(std::slice::from_ref(&&d_trace));
         CommittedTraceData {
             commitment,
+            trace: d_trace,
             data: Arc::new(pcs),
-            height,
         }
     }
 
@@ -780,13 +779,14 @@ where
         committed_exe: &VmCommittedExe<E::SC>,
     ) -> CommittedTraceData<E::PB> {
         let data = &committed_exe.prover_data;
-        let height = data.mat_view(0).height();
+        let trace = data.mat_view(0).to_matrix();
+        let d_trace = self.engine.device().transport_matrix_to_device(&trace);
         let d_data = self.engine.device().transport_pcs_data_to_device(data);
         let commitment = data.commit();
         CommittedTraceData {
             commitment,
             data: Arc::new(d_data),
-            height,
+            trace: d_trace,
         }
     }
 
@@ -828,7 +828,7 @@ where
             .per_air
             .iter()
             .map(|pk| {
-                let constant_trace_height = pk.preprocessed_data.as_ref().map(|cd| cd.height);
+                let constant_trace_height = pk.preprocessed_data.as_ref().map(|cd| cd.height());
                 let air_names = pk.air_name.clone();
                 // TODO[jpw]: revisit v2 width calculation
                 let width = pk.vk.params.width.total_width(
@@ -1419,7 +1419,7 @@ mod vm_metrics {
                 .collect();
             // If there are any constant trace heights, set them
             for (pk, height) in zip(&self.pk.per_air, &mut heights) {
-                if let Some(constant_height) = pk.preprocessed_data.as_ref().map(|pd| pd.height) {
+                if let Some(constant_height) = pk.preprocessed_data.as_ref().map(|pd| pd.height()) {
                     *height = constant_height;
                 }
             }
