@@ -6,7 +6,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        aot::common::{sync_gpr_to_xmm, sync_xmm_to_gpr, REG_AS2_PTR},
+        aot::common::{sync_gpr_to_xmm, sync_xmm_to_gpr, REG_AS2_PTR, XMM_TRACE_HEIGHT_PTR},
         interpreter::{AlignedBuf, PreComputeInstruction},
         ExecutionCtxTrait, StaticProgramError, Streams, SystemConfig, VmExecState, VmState,
     },
@@ -191,6 +191,8 @@ where
         let mut asm_str = String::new();
         // SAFETY: pay attention to byte alignment.
         asm_str += "   pop rdi\n";
+        asm_str += &format!("   pinsrq {XMM_TRACE_HEIGHT_PTR}, rdi, 1\n");
+        asm_str += "   pop rdi\n";
         asm_str += "   pinsrq xmm3, rdi, 1\n";
         asm_str += "   pop rdi\n";
         asm_str += "   pinsrq xmm2, rdi, 1\n";
@@ -230,6 +232,8 @@ where
         asm_str += "   pextrq rdi, xmm2, 1\n";
         asm_str += "   push rdi\n";
         asm_str += "   pextrq rdi, xmm3, 1\n";
+        asm_str += "   push rdi\n";
+        asm_str += &format!("   pextrq rdi, {XMM_TRACE_HEIGHT_PTR}, 1\n");
         asm_str += "   push rdi\n";
 
         asm_str

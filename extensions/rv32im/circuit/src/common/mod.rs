@@ -325,7 +325,7 @@ mod aot {
         Ok(asm_str)
     }
 
-    /// Assumption: `REG_TRACE_HEIGHT` is the pointer of `trace_heights``.
+    /// Assumption: `XMM_TRACE_HEIGHT_PTR` keeps the pointer to `trace_heights``.
     pub(crate) fn update_height_change_asm(
         chip_idx: usize,
         height_delta: u32,
@@ -337,6 +337,9 @@ mod aot {
         //     self.trace_heights[chip_idx] += height_delta;
         // }
         // ```
+        asm_str += &format!(
+            "    pextrq {REG_TRACE_HEIGHT}, {XMM_TRACE_HEIGHT_PTR}, 1\n"
+        );
         asm_str +=
             &format!("    add dword ptr [{REG_TRACE_HEIGHT} + {chip_idx} * 4], {height_delta}\n");
         Ok(asm_str)

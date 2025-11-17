@@ -22,6 +22,7 @@ pub const REG_INSTRET_END: &str = "r12";
 pub const REG_EXEC_STATE_PTR: &str = "rbx";
 pub const REG_TRACE_HEIGHT: &str = "r14";
 pub const REG_AS2_PTR: &str = "r15";
+pub const XMM_TRACE_HEIGHT_PTR: &str = "xmm4";
 
 pub const DEFAULT_PC_OFFSET: i32 = 4;
 

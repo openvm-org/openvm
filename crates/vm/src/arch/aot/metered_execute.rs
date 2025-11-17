@@ -116,7 +116,8 @@ where
         asm_str += &Self::push_external_registers();
 
         asm_str += &format!("   mov {REG_EXEC_STATE_PTR}, {REG_FIRST_ARG}\n");
-        asm_str += &format!("   mov {REG_TRACE_HEIGHT}, {REG_SECOND_ARG}\n");
+        // Cache the trace_heights pointer in the high 64 bits of its dedicated XMM register.
+        asm_str += &format!("   pinsrq {XMM_TRACE_HEIGHT_PTR}, {REG_SECOND_ARG}, 1\n");
         asm_str += &format!("   mov {REG_B}, {REG_THIRD_ARG}\n");
         asm_str += &format!("   mov {REG_INSTRET_END}, {REG_FOURTH_ARG}\n");
 
