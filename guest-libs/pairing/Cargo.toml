@@ -27,6 +27,9 @@ openvm-pairing-guest = { workspace = true }
 halo2curves-axiom = { workspace = true, optional = true }
 group = "0.13.0"
 
+[target.'cfg(all(feature = "aot", not(target_os = "zkvm"), target_arch = "x86_64"))'.dependencies]
+halo2curves-axiom = { workspace = true, optional = true, features = ["asm"] }
+
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint.workspace = true
 num-traits.workspace = true
@@ -54,6 +57,9 @@ num-bigint.workspace = true
 num-traits.workspace = true
 halo2curves-axiom = { workspace = true }
 openvm-pairing = { path = ".", features = ["halo2curves"] }
+
+[target.'cfg(all(feature = "aot", not(target_os = "zkvm"), target_arch = "x86_64"))'.dev-dependencies]
+halo2curves-axiom = { workspace = true, features = ["asm"] }
 
 [features]
 default = []
