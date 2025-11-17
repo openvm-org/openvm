@@ -345,6 +345,7 @@ unsafe fn execute_e1_impl<
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
+    println!("ecc");
     let pre_compute: &EcAddNePreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<EcAddNePreCompute>()).borrow();
 

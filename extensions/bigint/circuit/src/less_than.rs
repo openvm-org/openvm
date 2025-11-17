@@ -157,6 +157,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U256
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
+    println!("bigint");
     let pre_compute: &LessThanPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<LessThanPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, IS_U256>(pre_compute, exec_state);

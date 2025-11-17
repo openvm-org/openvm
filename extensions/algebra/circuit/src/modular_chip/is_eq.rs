@@ -652,6 +652,8 @@ unsafe fn execute_e1_impl<
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
+
+    println!("algebra");
     let pre_compute: &ModularIsEqualPreCompute<TOTAL_READ_SIZE> = std::slice::from_raw_parts(
         pre_compute,
         size_of::<ModularIsEqualPreCompute<TOTAL_READ_SIZE>>(),

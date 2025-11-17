@@ -142,6 +142,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
+    println!("bigint");
     let pre_compute: &MultPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<MultPreCompute>()).borrow();
     execute_e12_impl(pre_compute, exec_state);

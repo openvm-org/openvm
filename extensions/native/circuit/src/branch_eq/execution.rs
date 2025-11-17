@@ -228,6 +228,7 @@ unsafe fn execute_e1_impl<
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
+    println!("native");
     let pre_compute: &NativeBranchEqualPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<NativeBranchEqualPreCompute>()).borrow();
     execute_e12_impl::<_, _, A_IS_IMM, B_IS_IMM, IS_NE>(pre_compute, exec_state);

@@ -156,6 +156,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
+    println!("native");
     let pre_compute: &CastFPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<CastFPreCompute>()).borrow();
     execute_e12_impl(pre_compute, exec_state);

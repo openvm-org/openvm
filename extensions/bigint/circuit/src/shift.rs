@@ -154,6 +154,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
+    println!("bigint");
     let pre_compute: &ShiftPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<ShiftPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, OP>(pre_compute, exec_state);

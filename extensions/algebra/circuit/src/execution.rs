@@ -565,6 +565,7 @@ unsafe fn execute_e1_impl<
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
+    println!("algebra");
     let pre_compute: &FieldExpressionPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<FieldExpressionPreCompute>()).borrow();
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2, FIELD_TYPE, OP>(pre_compute, exec_state);
