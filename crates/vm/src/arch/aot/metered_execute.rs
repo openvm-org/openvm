@@ -167,6 +167,15 @@ where
 
         asm_str += &Self::rv32_regs_to_xmm();
 
+        // update the vm trace height from the x86 register used to store trace height
+        let base_alu_opcode = BaseAluOpcode::ADD.global_opcode(); // add, sub, and other base alu share the same executor
+        let base_alu_executor = inventory
+            .get_executor(base_alu_opcode)
+            .expect("executor not found for opcode");
+        let base_alu_executor_idx = inventory.instruction_lookup[&base_alu_opcode] as usize;
+        let base_alu_air_idx = executor_idx_to_air_idx[base_alu_executor_idx];
+        asm_str += &base_alu_executor.update_register_trace_height(base_alu_air_idx).unwrap();
+
         asm_str += &format!("   lea {REG_C}, [rip + map_pc_base]\n");
         asm_str += &format!("   pextrq {REG_A}, xmm3, 1\n"); // extract the upper 64 bits of the xmm3 register to REG_A
         asm_str += &format!("   mov {REG_A_W}, dword ptr [{REG_A}]\n");
@@ -199,6 +208,15 @@ where
             asm_str += &format!("execute_instruction_{pc}:\n");
 
             if instruction.opcode.as_usize() == 0 {
+                // update the vm trace height from the x86 register used to store trace height
+                let base_alu_opcode = BaseAluOpcode::ADD.global_opcode(); // add, sub, and other base alu share the same executor
+                let base_alu_executor = inventory
+                    .get_executor(base_alu_opcode)
+                    .expect("executor not found for opcode");
+                let base_alu_executor_idx = inventory.instruction_lookup[&base_alu_opcode] as usize;
+                let base_alu_air_idx = executor_idx_to_air_idx[base_alu_executor_idx];
+                asm_str += &base_alu_executor.update_vm_trace_height(base_alu_air_idx).unwrap();
+
                 // terminal opcode has no associated executor, so can handle with default fallback
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
@@ -307,6 +325,15 @@ where
         // asm_run_end part
         for (pc, _instruction, _) in exe.program.enumerate_by_pc() {
             asm_str += &format!("asm_run_end_{pc}:\n");
+
+            // update the vm trace height from the x86 register used to store trace height
+            let base_alu_opcode = BaseAluOpcode::ADD.global_opcode(); // add, sub, and other base alu share the same executor
+            let base_alu_executor = inventory
+                .get_executor(base_alu_opcode)
+                .expect("executor not found for opcode");
+            let base_alu_executor_idx = inventory.instruction_lookup[&base_alu_opcode] as usize;
+            let base_alu_air_idx = executor_idx_to_air_idx[base_alu_executor_idx];
+            asm_str += &base_alu_executor.update_vm_trace_height(base_alu_air_idx).unwrap();
 
             asm_str += &Self::xmm_to_rv32_regs();
             asm_str += &format!("    mov {REG_FIRST_ARG}, rbx\n");
