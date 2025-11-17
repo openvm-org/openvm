@@ -9684,6 +9684,7 @@ name = "verify-stark"
 version = "1.4.1"
 dependencies = [
  "bitcode",
+ "clap",
  "eyre",
  "openvm-circuit",
  "openvm-continuations",

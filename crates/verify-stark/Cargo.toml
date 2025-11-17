@@ -17,6 +17,9 @@ eyre = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 
+[dev-dependencies]
+clap = { workspace = true, features = ["derive"] }
+
 [features]
 default = ["parallel"]
 parallel = []
