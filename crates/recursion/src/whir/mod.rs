@@ -34,7 +34,7 @@ use crate::{
             WhirGammaBus, WhirQueryBus, WhirSumcheckBus,
         },
         final_poly_mle_eval::FinalPolyMleEvalAir,
-        final_poly_query_eval::FinalPolyQueryEvalAir,
+        final_poly_query_eval::{FinalPolyQueryEvalAir, FinalPolyQueryEvalRecord},
         folding::WhirFoldingAir,
         initial_opened_values::{InitialOpenedValueRecord, InitialOpenedValuesAir},
         non_initial_opened_values::NonInitialOpenedValuesAir,
@@ -377,6 +377,7 @@ struct WhirBlobCpu {
     stacking_chunks_psums: Vec<usize>,
     stacking_widths_psums: Vec<usize>,
     mu_pows: Vec<EF>, // flattened over proofs
+    final_poly_query_eval_records: Vec<FinalPolyQueryEvalRecord>,
 }
 
 impl AirModule for WhirModule {
@@ -508,6 +509,12 @@ impl WhirModule {
         let mut stacking_widths_psums = vec![0];
 
         let mut mu_pows = vec![];
+        let final_poly_query_eval_records =
+            final_poly_query_eval::build_final_poly_query_eval_records(
+                child_vk.inner.params,
+                proofs,
+                preflights,
+            );
 
         let mut total_iov_rows = 0;
         let mut total_commits = 0;
@@ -613,6 +620,7 @@ impl WhirModule {
             stacking_chunks_psums,
             stacking_widths_psums,
             mu_pows,
+            final_poly_query_eval_records,
         }
     }
 }
@@ -756,9 +764,11 @@ impl WhirModuleChip {
             }
             Folding => folding::generate_trace(child_vk, proofs, preflights),
             FinalPolyMleEval => final_poly_mle_eval::generate_trace(child_vk, proofs, preflights),
-            FinalPolyQueryEval => {
-                final_poly_query_eval::generate_trace(child_vk, proofs, preflights)
-            }
+            FinalPolyQueryEval => final_poly_query_eval::generate_trace(
+                child_vk,
+                proofs,
+                &blob.final_poly_query_eval_records,
+            ),
         };
         ColMajorMatrix::from_row_major(&trace)
     }
@@ -769,8 +779,6 @@ mod cuda_tracegen {
     use cuda_backend_v2::{GpuBackendV2, transport_matrix_h2d_col_major};
     use itertools::Itertools;
     use openvm_cuda_common::d_buffer::DeviceBuffer;
-    #[cfg(debug_assertions)]
-    use p3_maybe_rayon::prelude::*;
 
     use super::*;
     use crate::cuda::{
@@ -793,6 +801,7 @@ mod cuda_tracegen {
         pub stacking_widths_psums: DeviceBuffer<usize>,
         pub mus: DeviceBuffer<EF>,
         pub mu_pows: DeviceBuffer<EF>,
+        pub final_poly_query_eval_records: DeviceBuffer<FinalPolyQueryEvalRecord>,
     }
 
     impl WhirBlobGpu {
@@ -842,6 +851,8 @@ mod cuda_tracegen {
             let mu_pows = to_device_or_nullptr(&blob.mu_pows).unwrap();
             let initial_opened_values_records =
                 to_device_or_nullptr(&blob.initial_opened_values_records).unwrap();
+            let final_poly_query_eval_records =
+                to_device_or_nullptr(&blob.final_poly_query_eval_records).unwrap();
 
             WhirBlobGpu {
                 zis,
@@ -855,6 +866,7 @@ mod cuda_tracegen {
                 stacking_widths_psums,
                 mus,
                 mu_pows,
+                final_poly_query_eval_records,
             }
         }
     }
@@ -896,6 +908,9 @@ mod cuda_tracegen {
                     &blob_gpu,
                     child_vk.system_params,
                 ),
+                WhirModuleChip::FinalPolyQueryEval => {
+                    final_poly_query_eval::cuda::generate_trace(&blob_gpu, child_vk.system_params)
+                }
                 _ => {
                     // Fall back to CPU impl.
                     let mat =
