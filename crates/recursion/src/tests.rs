@@ -655,6 +655,27 @@ mod cuda {
     }
 
     #[test_matrix(
+        [2,3],
+        [8],
+        [3],
+        [1,3,5],
+        [1,4]
+    )]
+    fn test_cuda_tracegen_multiple_fib(
+        l_skip: usize,
+        n_stack: usize,
+        k_whir: usize,
+        log_trace_degree: usize,
+        num_proofs: usize,
+    ) {
+        let params = test_system_params_small(l_skip, n_stack, k_whir);
+        let empty_air_indices = vec![1, 3, 6];
+        let fx = FibFixture::new_with_num_airs(0, 1, 1 << log_trace_degree, 9)
+            .with_empty_air_indices(empty_air_indices);
+        compare_cpu_tracegen_vs_gpu_tracegen(fx, params, num_proofs);
+    }
+
+    #[test_matrix(
         [1,2,5],
         [5,8],
         [3,4],
