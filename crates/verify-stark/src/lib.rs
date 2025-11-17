@@ -122,7 +122,7 @@ pub fn verify_vm_stark_proof_decoded(
             expected: vk.expected_app_exe_commit.into(),
             actual: claimed_app_exe_commit,
         });
-    } else if claimed_app_vm_commit != Into::<[F; DIGEST_SIZE]>::into(vk.expected_app_exe_commit) {
+    } else if claimed_app_vm_commit != Into::<[F; DIGEST_SIZE]>::into(vk.expected_app_vm_commit) {
         return Err(VerifyStarkError::AppVmCommitMismatch {
             expected: vk.expected_app_vm_commit.into(),
             actual: claimed_app_vm_commit,
