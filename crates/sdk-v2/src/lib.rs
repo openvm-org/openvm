@@ -8,7 +8,7 @@ use std::{
 };
 
 use config::{AggregationTreeConfig, AppConfig};
-use continuations_v2::aggregation::{AggregationProver, NonRootStarkProof};
+use continuations_v2::aggregation::AggregationProver;
 use getset::{Getters, MutGetters, WithSetters};
 use keygen::{AppProvingKey, AppVerifyingKey};
 use openvm_build::{
@@ -30,7 +30,10 @@ use stark_backend_v2::{
     BabyBearPoseidon2CpuEngineV2 as BabyBearPoseidon2Engine, StarkWhirEngine, SystemParams,
     keygen::types::MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey,
 };
-use verify_stark::{VerificationBaseline, verify_vm_stark_proof};
+use verify_stark::{
+    NonRootStarkProof, verify_vm_stark_proof_decoded,
+    vk::{NonRootStarkVerifyingKey, VerificationBaseline},
+};
 
 use crate::{
     config::{AggregationConfig, AggregationSystemParams},
@@ -472,11 +475,15 @@ where
     /// **Note**: This function does not have any reliance on `self` and does not depend on the app
     /// config set in the [Sdk].
     pub fn verify_proof(
-        agg_vk: &MultiStarkVerifyingKey,
+        agg_vk: MultiStarkVerifyingKey,
         baseline: VerificationBaseline,
         proof: &NonRootStarkProof,
     ) -> Result<(), SdkError> {
-        verify_vm_stark_proof(agg_vk, baseline, proof)?;
+        let vk = NonRootStarkVerifyingKey {
+            mvk: agg_vk,
+            baseline,
+        };
+        verify_vm_stark_proof_decoded(&vk, proof)?;
         Ok(())
     }
 }

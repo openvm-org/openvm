@@ -14,11 +14,9 @@ use stark_backend_v2::{
     prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
+use verify_stark::pvs::VERIFIER_PVS_AIR_ID;
 
-use crate::public_values::{
-    app::*,
-    verifier::{CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID},
-};
+use crate::public_values::{app::*, verifier::CONSTRAINT_EVAL_AIR_ID};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]

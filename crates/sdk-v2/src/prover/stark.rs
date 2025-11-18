@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use continuations_v2::aggregation::{AggregationProver, NonRootStarkProof};
+use continuations_v2::aggregation::AggregationProver;
 use eyre::Result;
 use openvm_circuit::arch::{
     Executor, MeteredExecutor, PreflightExecutor, VmBuilder, VmExecutionConfig,
@@ -11,7 +11,7 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
 };
 use stark_backend_v2::{StarkWhirEngine, poseidon2::CHUNK};
-use verify_stark::VerificationBaseline;
+use verify_stark::{NonRootStarkProof, vk::VerificationBaseline};
 
 use crate::{
     SC, StdIn,
