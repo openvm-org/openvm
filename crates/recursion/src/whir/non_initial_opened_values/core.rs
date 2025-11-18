@@ -12,7 +12,7 @@ use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
 use p3_symmetric::Permutation;
 use stark_backend_v2::{
-    D_EF, F,
+    D_EF, F, SystemParams,
     keygen::types::MultiStarkVerifyingKeyV2,
     poseidon2::{WIDTH, poseidon2_perm},
     proof::Proof,
@@ -28,7 +28,7 @@ use crate::{
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-struct NonInitialOpenedValuesCols<T> {
+pub(in crate::whir::non_initial_opened_values) struct NonInitialOpenedValuesCols<T> {
     is_enabled: T,
     // Indices
     proof_idx: T,
@@ -47,6 +47,13 @@ struct NonInitialOpenedValuesCols<T> {
     value: [T; D_EF],
     value_hash: [T; WIDTH],
     yi: [T; D_EF],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub(in crate::whir) struct NonInitialOpenedValueRecord {
+    pub value: [F; D_EF],
+    pub value_hash: [F; WIDTH],
 }
 
 pub struct NonInitialOpenedValuesAir {
@@ -230,11 +237,46 @@ where
     }
 }
 
+pub(in crate::whir) fn build_non_initial_opened_value_records(
+    params: SystemParams,
+    proofs: &[&Proof],
+) -> Vec<NonInitialOpenedValueRecord> {
+    let perm = poseidon2_perm();
+    let num_rounds = params.num_whir_rounds();
+    let num_queries = params.num_whir_queries;
+
+    let mut records = Vec::new();
+    for proof in proofs {
+        for whir_round in 1..num_rounds {
+            for query_idx in 0..num_queries {
+                let opened_values =
+                    proof.whir_proof.codeword_opened_values[whir_round - 1][query_idx].clone();
+
+                for opened_value in opened_values {
+                    let mut state = [F::ZERO; WIDTH];
+                    state[..D_EF].copy_from_slice(opened_value.as_base_slice());
+                    perm.permute_mut(&mut state);
+
+                    let mut value = [F::ZERO; D_EF];
+                    value.copy_from_slice(opened_value.as_base_slice());
+
+                    records.push(NonInitialOpenedValueRecord {
+                        value,
+                        value_hash: state,
+                    });
+                }
+            }
+        }
+    }
+
+    records
+}
+
 #[tracing::instrument(name = "generate_trace(NonInitialOpenedValuesAir)", skip_all)]
 pub(crate) fn generate_trace(
     mvk: &MultiStarkVerifyingKeyV2,
-    proofs: &[&Proof],
     preflights: &[&Preflight],
+    records: &[NonInitialOpenedValueRecord],
 ) -> RowMajorMatrix<F> {
     let params = mvk.inner.params;
 
@@ -246,35 +288,11 @@ pub(crate) fn generate_trace(
     let rows_per_round = rows_per_query * num_queries;
 
     let num_rows_per_proof: usize = (num_rounds - 1) * rows_per_round;
-    let num_valid_rows = num_rows_per_proof * proofs.len();
+    let num_valid_rows = num_rows_per_proof * preflights.len();
     let num_rows = num_valid_rows.next_power_of_two();
     let width = NonInitialOpenedValuesCols::<F>::width();
 
-    struct Record {
-        value_hash: [F; WIDTH],
-    }
-
-    let perm = poseidon2_perm();
-
-    let mut records = vec![];
-
-    for proof in proofs {
-        for whir_round in 1..params.num_whir_rounds() {
-            for query_idx in 0..params.num_whir_queries {
-                let opened_values =
-                    proof.whir_proof.codeword_opened_values[whir_round - 1][query_idx].clone();
-
-                for opened_value in opened_values {
-                    let mut state = [F::ZERO; WIDTH];
-                    state[..D_EF].copy_from_slice(opened_value.as_base_slice());
-                    perm.permute_mut(&mut state);
-
-                    records.push(Record { value_hash: state });
-                }
-            }
-        }
-    }
-
+    debug_assert_eq!(records.len(), num_valid_rows);
     let mut trace = vec![F::ZERO; num_rows * width];
 
     trace
@@ -285,7 +303,6 @@ pub(crate) fn generate_trace(
             let proof_idx = row_idx / num_rows_per_proof;
             let i = row_idx % num_rows_per_proof;
 
-            let proof = &proofs[proof_idx];
             let preflight = &preflights[proof_idx];
 
             let cols: &mut NonInitialOpenedValuesCols<F> = row.borrow_mut();
@@ -312,11 +329,8 @@ pub(crate) fn generate_trace(
             cols.is_first_in_round = F::from_bool(is_first_in_round);
             cols.is_first_in_query = F::from_bool(is_first_in_query);
             cols.zi_root = preflight.whir.zj_roots[whir_round][query_idx];
-            cols.value.copy_from_slice(
-                proof.whir_proof.codeword_opened_values[whir_round - 1][query_idx][coset_idx]
-                    .as_base_slice(),
-            );
             cols.value_hash = record.value_hash;
+            cols.value.copy_from_slice(&record.value);
             cols.merkle_idx_bit_src = preflight.whir.queries[whir_round * num_queries + query_idx];
             cols.zi = preflight.whir.zjs[whir_round][query_idx];
             cols.yi

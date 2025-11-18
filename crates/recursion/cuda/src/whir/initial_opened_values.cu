@@ -147,13 +147,19 @@ __global__ void initial_opened_values_tracegen(
     Fp twiddle = pow(omega_k, coset_idx);
     COL_WRITE_VALUE(row, InitialOpenedValuesCols, twiddle, twiddle);
 
-    size_t proof_query_idx = num_whir_queries * proof_idx + query_idx;
+    const size_t proof_round_offset = proof_idx * num_whir_rounds * num_whir_queries;
+    const size_t proof_query_idx = proof_round_offset + query_idx;
 
     COL_WRITE_ARRAY(row, InitialOpenedValuesCols, codeword_value_acc, record.codeword_slice_val_acc.elems);
     COL_WRITE_VALUE(row, InitialOpenedValuesCols, zi, zis_per_proof[proof_query_idx]);
     COL_WRITE_VALUE(row, InitialOpenedValuesCols, zi_root, zi_roots_per_proof[proof_query_idx]);
     COL_WRITE_ARRAY(row, InitialOpenedValuesCols, yi, yis_per_proof[proof_query_idx].elems);
-    COL_WRITE_VALUE(row, InitialOpenedValuesCols, merkle_idx_bit_src, raw_queries[num_whir_queries * num_whir_rounds * proof_idx + query_idx]);
+    COL_WRITE_VALUE(
+        row,
+        InitialOpenedValuesCols,
+        merkle_idx_bit_src,
+        raw_queries[proof_round_offset + query_idx]
+    );
 
     FpExt mu = mus_per_proof[proof_idx];
     COL_WRITE_ARRAY(row, InitialOpenedValuesCols, mu, mu.elems);

@@ -37,7 +37,10 @@ use crate::{
         final_poly_query_eval::{FinalPolyQueryEvalAir, FinalPolyQueryEvalRecord},
         folding::WhirFoldingAir,
         initial_opened_values::{InitialOpenedValueRecord, InitialOpenedValuesAir},
-        non_initial_opened_values::NonInitialOpenedValuesAir,
+        non_initial_opened_values::{
+            NonInitialOpenedValueRecord, NonInitialOpenedValuesAir,
+            build_non_initial_opened_value_records,
+        },
         query::WhirQueryAir,
         sumcheck::SumcheckAir,
         whir_round::WhirRoundAir,
@@ -379,6 +382,7 @@ struct WhirBlobCpu {
     stacking_widths_psums: Vec<usize>,
     mu_pows: Vec<EF>, // flattened over proofs
     final_poly_query_eval_records: Vec<FinalPolyQueryEvalRecord>,
+    non_initial_opened_values_records: Vec<NonInitialOpenedValueRecord>,
 }
 
 impl AirModule for WhirModule {
@@ -517,6 +521,8 @@ impl WhirModule {
                 proofs,
                 preflights,
             );
+        let non_initial_opened_values_records =
+            build_non_initial_opened_value_records(child_vk.inner.params, proofs);
 
         let mut total_iov_rows = 0;
         let mut total_commits = 0;
@@ -623,6 +629,7 @@ impl WhirModule {
             stacking_widths_psums,
             mu_pows,
             final_poly_query_eval_records,
+            non_initial_opened_values_records,
         }
     }
 }
@@ -761,9 +768,11 @@ impl WhirModuleChip {
                 &blob.stacking_widths_psums,
                 &blob.mu_pows,
             ),
-            NonInitialOpenedValues => {
-                non_initial_opened_values::generate_trace(child_vk, proofs, preflights)
-            }
+            NonInitialOpenedValues => non_initial_opened_values::generate_trace(
+                child_vk,
+                preflights,
+                &blob.non_initial_opened_values_records,
+            ),
             Folding => folding::generate_trace(child_vk, proofs, preflights),
             FinalPolyMleEval => final_poly_mle_eval::generate_trace(child_vk, proofs, preflights),
             FinalPolyQueryEval => final_poly_query_eval::generate_trace(
@@ -789,11 +798,8 @@ mod cuda_tracegen {
     };
 
     pub(in crate::whir) struct WhirBlobGpu {
-        // Currently only contains round 0.
         pub zis: DeviceBuffer<F>,
-        // Currently only contains round 0.
         pub zi_roots: DeviceBuffer<F>,
-        // Currently only contains round 0.
         pub yis: DeviceBuffer<EF>,
         pub raw_queries: DeviceBuffer<F>,
         pub initial_opened_values_records: DeviceBuffer<InitialOpenedValueRecord>,
@@ -804,6 +810,7 @@ mod cuda_tracegen {
         pub mus: DeviceBuffer<EF>,
         pub mu_pows: DeviceBuffer<EF>,
         pub final_poly_query_eval_records: DeviceBuffer<FinalPolyQueryEvalRecord>,
+        pub non_initial_opened_values_records: DeviceBuffer<NonInitialOpenedValueRecord>,
     }
 
     impl WhirBlobGpu {
@@ -819,21 +826,21 @@ mod cuda_tracegen {
             let zis = to_device_or_nullptr(
                 &preflights
                     .iter()
-                    .flat_map(|preflight| preflight.whir.zjs[0].iter().copied())
+                    .flat_map(|preflight| preflight.whir.zjs.iter().flatten().copied())
                     .collect_vec(),
             )
             .unwrap();
             let zi_roots = to_device_or_nullptr(
                 &preflights
                     .iter()
-                    .flat_map(|preflight| preflight.whir.zj_roots[0].iter().copied())
+                    .flat_map(|preflight| preflight.whir.zj_roots.iter().flatten().copied())
                     .collect_vec(),
             )
             .unwrap();
             let yis = to_device_or_nullptr(
                 &preflights
                     .iter()
-                    .flat_map(|preflight| preflight.whir.yjs[0].iter().copied())
+                    .flat_map(|preflight| preflight.whir.yjs.iter().flatten().copied())
                     .collect_vec(),
             )
             .unwrap();
@@ -855,6 +862,8 @@ mod cuda_tracegen {
                 to_device_or_nullptr(&blob.initial_opened_values_records).unwrap();
             let final_poly_query_eval_records =
                 to_device_or_nullptr(&blob.final_poly_query_eval_records).unwrap();
+            let non_initial_opened_values_records =
+                to_device_or_nullptr(&blob.non_initial_opened_values_records).unwrap();
 
             WhirBlobGpu {
                 zis,
@@ -869,6 +878,7 @@ mod cuda_tracegen {
                 mus,
                 mu_pows,
                 final_poly_query_eval_records,
+                non_initial_opened_values_records,
             }
         }
     }
@@ -910,6 +920,12 @@ mod cuda_tracegen {
                     &blob_gpu,
                     child_vk.system_params,
                 ),
+                WhirModuleChip::NonInitialOpenedValues => {
+                    non_initial_opened_values::cuda::generate_trace(
+                        &blob_gpu,
+                        child_vk.system_params,
+                    )
+                }
                 WhirModuleChip::FinalPolyQueryEval => {
                     final_poly_query_eval::cuda::generate_trace(&blob_gpu, child_vk.system_params)
                 }
