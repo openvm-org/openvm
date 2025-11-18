@@ -201,6 +201,63 @@ impl<T> Index<usize> for MultiProofVecVec<T> {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct MultiVecWithBounds<T, const DIM_MINUS_ONE: usize> {
+    pub data: Vec<T>,
+    pub bounds: [Vec<usize>; DIM_MINUS_ONE],
+}
+
+impl<T, const DIM_MINUS_ONE: usize> MultiVecWithBounds<T, DIM_MINUS_ONE> {
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> Self {
+        Self {
+            data: Vec::new(),
+            bounds: core::array::from_fn(|_| vec![0]),
+        }
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            data: Vec::with_capacity(capacity),
+            bounds: core::array::from_fn(|_| vec![0]),
+        }
+    }
+
+    pub fn push(&mut self, x: T) {
+        self.data.push(x);
+    }
+
+    pub fn close_level(&mut self, level: usize) {
+        debug_assert!(level < DIM_MINUS_ONE);
+        for i in level..DIM_MINUS_ONE - 1 {
+            self.bounds[i].push(self.bounds[i + 1].len());
+        }
+        self.bounds[DIM_MINUS_ONE - 1].push(self.data.len());
+    }
+
+    pub fn extend(&mut self, iter: impl IntoIterator<Item = T>) {
+        self.data.extend(iter);
+    }
+}
+
+impl<T, const DIM_MINUS_ONE: usize> Index<[usize; DIM_MINUS_ONE]>
+    for MultiVecWithBounds<T, DIM_MINUS_ONE>
+{
+    type Output = [T];
+
+    fn index(&self, index: [usize; DIM_MINUS_ONE]) -> &Self::Output {
+        let mut idx = 0;
+        #[allow(clippy::needless_range_loop)]
+        for i in 0..DIM_MINUS_ONE {
+            idx += index[i];
+            if i < DIM_MINUS_ONE - 1 {
+                idx = self.bounds[i][idx];
+            }
+        }
+        &self.data[self.bounds[DIM_MINUS_ONE - 1][idx]..self.bounds[DIM_MINUS_ONE - 1][idx + 1]]
+    }
+}
+
 pub fn interpolate_quadratic<FA>(
     pre_claim: [impl Into<FA>; D_EF],
     ev1: [impl Into<FA>; D_EF],

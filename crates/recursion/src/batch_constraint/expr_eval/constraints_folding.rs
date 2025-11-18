@@ -13,21 +13,21 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra, extension::BinomiallyExtendable};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2};
+use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKey0V2};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    batch_constraint::{
-        BatchConstraintBlobCpu,
-        bus::{
-            ConstraintsFoldingBus, ConstraintsFoldingMessage, EqNOuterBus, EqNOuterMessage,
-            ExpressionClaimBus, ExpressionClaimMessage,
-        },
+    batch_constraint::bus::{
+        ConstraintsFoldingBus, ConstraintsFoldingMessage, EqNOuterBus, EqNOuterMessage,
+        ExpressionClaimBus, ExpressionClaimMessage,
     },
     bus::TranscriptBus,
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
-    utils::{MultiProofVecVec, ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
+    utils::{
+        MultiProofVecVec, MultiVecWithBounds, ext_field_add, ext_field_multiply,
+        ext_field_multiply_scalar,
+    },
 };
 
 #[derive(AlignedBorrow, Copy, Clone)]
@@ -215,12 +215,11 @@ pub(in crate::batch_constraint) struct ConstraintsFoldingBlob {
 }
 
 pub(in crate::batch_constraint) fn generate_constraints_folding_blob(
-    vk: &MultiStarkVerifyingKeyV2,
-    bc_blob: &BatchConstraintBlobCpu,
+    vk: &MultiStarkVerifyingKey0V2,
+    expr_evals: &MultiVecWithBounds<EF, 2>,
     preflights: &[Preflight],
 ) -> ConstraintsFoldingBlob {
     let constraints = vk
-        .inner
         .per_air
         .iter()
         .map(|vk| vk.symbolic_constraints.constraints.constraint_idx.clone())
@@ -228,7 +227,7 @@ pub(in crate::batch_constraint) fn generate_constraints_folding_blob(
 
     let mut records = MultiProofVecVec::new();
     let mut folded = MultiProofVecVec::new();
-    for (preflight, node_claims) in preflights.iter().zip(bc_blob.expr_evals.iter()) {
+    for (pidx, preflight) in preflights.iter().enumerate() {
         let lambda_tidx = preflight.batch_constraint.lambda_tidx;
         let lambda =
             EF::from_base_slice(&preflight.transcript.values()[lambda_tidx..lambda_tidx + D_EF]);
@@ -248,7 +247,7 @@ pub(in crate::batch_constraint) fn generate_constraints_folding_blob(
             let mut folded_claim = EF::ZERO;
             let mut lambda_pow = EF::ONE;
             for (constraint_idx, &constr) in constrs.iter().enumerate() {
-                let value = node_claims[*air_idx][constr];
+                let value = expr_evals[[pidx, *air_idx]][constr];
                 folded_claim += lambda_pow * value;
                 lambda_pow *= lambda;
                 records.push(ConstraintsFoldingRecord {
@@ -260,8 +259,8 @@ pub(in crate::batch_constraint) fn generate_constraints_folding_blob(
                     value,
                 });
             }
-            let n_lift = v.log_height.saturating_sub(vk.inner.params.l_skip);
-            let n = v.log_height as isize - vk.inner.params.l_skip as isize;
+            let n_lift = v.log_height.saturating_sub(vk.params.l_skip);
+            let n = v.log_height as isize - vk.params.l_skip as isize;
             folded.push((
                 n,
                 folded_claim * preflight.batch_constraint.eq_ns_frontloaded[n_lift],
