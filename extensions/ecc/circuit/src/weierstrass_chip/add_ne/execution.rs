@@ -1,3 +1,4 @@
+#![allow(clippy::let_and_return)]
 use std::{
     array::from_fn,
     borrow::{Borrow, BorrowMut},
@@ -332,6 +333,7 @@ unsafe fn execute_e12_impl<
     Ok(())
 }
 
+#[allow(clippy::let_and_return)]
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<

@@ -1,6 +1,7 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     mem::size_of,
+    time::Instant,
 };
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};

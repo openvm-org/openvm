@@ -2,6 +2,7 @@ use std::{
     array,
     borrow::{Borrow, BorrowMut},
     mem::size_of,
+    time::Instant,
 };
 
 use openvm_circuit::{
@@ -231,7 +232,8 @@ unsafe fn execute_e1_impl<
 ) -> Result<(), ExecutionError> {
     let pre_compute: &LoadSignExtendPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<LoadSignExtendPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, IS_LOADB, ENABLED>(pre_compute, exec_state)
+    let result = execute_e12_impl::<F, CTX, IS_LOADB, ENABLED>(pre_compute, exec_state);
+    result
 }
 
 #[create_handler]

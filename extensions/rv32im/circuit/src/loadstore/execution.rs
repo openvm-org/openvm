@@ -2,6 +2,7 @@ use std::{
     borrow::{Borrow, BorrowMut},
     fmt::Debug,
     mem::size_of,
+    time::Instant,
 };
 
 use openvm_circuit::{
@@ -271,7 +272,8 @@ unsafe fn execute_e1_impl<
 ) -> Result<(), ExecutionError> {
     let pre_compute: &LoadStorePreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<LoadStorePreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, T, OP, ENABLED>(pre_compute, exec_state)
+    let result = execute_e12_impl::<F, CTX, T, OP, ENABLED>(pre_compute, exec_state);
+    result
 }
 
 #[create_handler]
