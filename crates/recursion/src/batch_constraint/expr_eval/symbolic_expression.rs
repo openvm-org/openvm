@@ -28,13 +28,10 @@ use strum::{EnumCount, IntoEnumIterator};
 use strum_macros::EnumIter;
 
 use crate::{
-    batch_constraint::{
-        BatchConstraintBlobCpu,
-        bus::{
-            ConstraintsFoldingBus, ConstraintsFoldingMessage, EqNegInternalBus, ExpressionClaimBus,
-            InteractionsFoldingBus, InteractionsFoldingMessage, SymbolicExpressionBus,
-            SymbolicExpressionMessage,
-        },
+    batch_constraint::bus::{
+        ConstraintsFoldingBus, ConstraintsFoldingMessage, EqNegInternalBus, ExpressionClaimBus,
+        InteractionsFoldingBus, InteractionsFoldingMessage, SymbolicExpressionBus,
+        SymbolicExpressionMessage,
     },
     bus::{
         AirShapeBus, AirShapeBusMessage, ColumnClaimsBus, ColumnClaimsMessage, HyperdimBus,
@@ -43,8 +40,8 @@ use crate::{
     },
     system::Preflight,
     utils::{
-        base_to_ext, ext_field_add, ext_field_multiply, ext_field_multiply_scalar,
-        ext_field_subtract, scalar_subtract_ext_field,
+        MultiVecWithBounds, base_to_ext, ext_field_add, ext_field_multiply,
+        ext_field_multiply_scalar, ext_field_subtract, scalar_subtract_ext_field,
     },
 };
 const NUM_FLAGS: usize = 4;
@@ -346,9 +343,9 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
     proofs: &[Proof],
     preflights: &[Preflight],
     max_num_proofs: usize,
-    blob: &BatchConstraintBlobCpu,
+    expr_evals: &MultiVecWithBounds<EF, 2>,
 ) -> RowMajorMatrix<F> {
-    let params = child_vk.inner.params;
+    let l_skip = child_vk.inner.params.l_skip;
 
     let single_main_width = SingleMainSymbolicExpressionColumns::<F>::width();
     let main_width = single_main_width * max_num_proofs;
@@ -369,7 +366,7 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
 
         for (log_height, &r_pow) in rs_0
             .exp_powers_of_2()
-            .take(params.l_skip + 1)
+            .take(l_skip + 1)
             .collect::<Vec<_>>()
             .iter()
             .rev()
@@ -390,7 +387,7 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
 
         for (air_idx, vk) in child_vk.inner.per_air.iter().enumerate() {
             let constraints = &vk.symbolic_constraints.constraints;
-            let expr_evals = &blob.expr_evals[proof_idx][air_idx];
+            let expr_evals = &expr_evals[[proof_idx, air_idx]];
 
             // TODO: don't do any pushes at all for absent traces
             if expr_evals.is_empty() {
@@ -415,10 +412,10 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
 
             // TODO sort_idx in trace
             let log_height = proof.trace_vdata[air_idx].as_ref().unwrap().log_height;
-            let (n_abs, is_n_neg) = if log_height < params.l_skip {
-                (params.l_skip - log_height, 1)
+            let (n_abs, is_n_neg) = if log_height < l_skip {
+                (l_skip - log_height, 1)
             } else {
-                (log_height - params.l_skip, 0)
+                (log_height - l_skip, 0)
             };
 
             for (node_idx, node) in constraints.nodes.iter().enumerate() {
@@ -446,22 +443,18 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
                     },
                     SymbolicExpressionNode::IsFirstRow => {
                         record.args[..D_EF].copy_from_slice(
-                            is_first_uni_by_log_height[min(log_height, params.l_skip)]
-                                .as_base_slice(),
+                            is_first_uni_by_log_height[min(log_height, l_skip)].as_base_slice(),
                         );
                         record.args[D_EF..2 * D_EF].copy_from_slice(
-                            is_first_mle_by_n[log_height.saturating_sub(params.l_skip)]
-                                .as_base_slice(),
+                            is_first_mle_by_n[log_height.saturating_sub(l_skip)].as_base_slice(),
                         );
                     }
                     SymbolicExpressionNode::IsLastRow | SymbolicExpressionNode::IsTransition => {
                         record.args[..D_EF].copy_from_slice(
-                            is_last_uni_by_log_height[min(log_height, params.l_skip)]
-                                .as_base_slice(),
+                            is_last_uni_by_log_height[min(log_height, l_skip)].as_base_slice(),
                         );
                         record.args[D_EF..2 * D_EF].copy_from_slice(
-                            is_last_mle_by_n[log_height.saturating_sub(params.l_skip)]
-                                .as_base_slice(),
+                            is_last_mle_by_n[log_height.saturating_sub(l_skip)].as_base_slice(),
                         );
                     }
                     SymbolicExpressionNode::Constant(_) => {}
@@ -597,7 +590,7 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
 }
 
 #[derive(Debug, Clone, Copy, EnumIter, EnumCount)]
-enum NodeKind {
+pub(crate) enum NodeKind {
     // Args: (col_idx, is_next)
     VarPreprocessed = 0,
     // Args: (col_idx, is_next)
