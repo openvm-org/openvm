@@ -31,7 +31,7 @@ use crate::{
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     utils::{
-        base_to_ext, ext_field_add, ext_field_add_scalar, ext_field_multiply,
+        MultiVecWithBounds, base_to_ext, ext_field_add, ext_field_add_scalar, ext_field_multiply,
         ext_field_multiply_scalar, ext_field_subtract,
     },
 };
@@ -81,7 +81,7 @@ impl EqNegTraceGenerator {
     pub fn generate_trace(
         vk: &MultiStarkVerifyingKeyV2,
         preflights: &[Preflight],
-        selector_counts: &[Vec<SelectorCount>],
+        selector_counts: &MultiVecWithBounds<SelectorCount, 1>,
     ) -> RowMajorMatrix<F> {
         let l_skip = vk.inner.params.l_skip;
         let width = EqNegCols::<usize>::width();
@@ -163,15 +163,16 @@ impl EqNegTraceGenerator {
                     // We use the very first row to hard-code the lookup for log_height = 0 since
                     // it's disjoint from the other condition.
                     if neg_hypercube == 0 && row_idx == 0 {
-                        let counts = selector_counts[proof_idx][0];
+                        let counts = selector_counts[[proof_idx]][0];
                         cols.sel_first_count = F::from_canonical_usize(counts.first);
                         cols.sel_last_trans_count =
                             F::from_canonical_usize(counts.last + counts.transition);
                     } else if row_idx == l_skip - neg_hypercube {
-                        let mut counts = selector_counts[proof_idx][row_idx];
+                        let mut counts = selector_counts[[proof_idx]][row_idx];
                         // On `neg_hypercube`, we collect counts for all heights >= l_skip.
                         if neg_hypercube == 0 {
-                            for count in &selector_counts[proof_idx][l_skip - neg_hypercube + 1..] {
+                            for count in &selector_counts[[proof_idx]][l_skip - neg_hypercube + 1..]
+                            {
                                 counts.first += count.first;
                                 counts.last += count.last;
                                 counts.transition += count.transition;

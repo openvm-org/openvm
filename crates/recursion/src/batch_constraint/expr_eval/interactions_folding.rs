@@ -13,7 +13,10 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra, extension::BinomiallyExtendable};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2};
+use stark_backend_v2::{
+    D_EF, EF, F,
+    keygen::types::{MultiStarkVerifyingKey0V2, MultiStarkVerifyingKeyV2},
+};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -28,7 +31,7 @@ use crate::{
     bus::{AirShapeBus, AirShapeBusMessage, AirShapeProperty, TranscriptBus},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
-    utils::{MultiProofVecVec, ext_field_add, ext_field_multiply},
+    utils::{MultiProofVecVec, MultiVecWithBounds, ext_field_add, ext_field_multiply},
 };
 
 #[derive(AlignedBorrow, Copy, Clone)]
@@ -344,14 +347,13 @@ pub(in crate::batch_constraint) struct InteractionsFoldingBlob {
 }
 
 pub(in crate::batch_constraint) fn generate_interactions_folding_blob(
-    vk: &MultiStarkVerifyingKeyV2,
-    expr_blob: &BatchConstraintBlobCpu,
+    vk: &MultiStarkVerifyingKey0V2,
+    expr_evals: &MultiVecWithBounds<EF, 2>,
     eq_3b_blob: &Eq3bBlob,
     preflights: &[Preflight],
 ) -> InteractionsFoldingBlob {
-    let l_skip = vk.inner.params.l_skip;
+    let l_skip = vk.params.l_skip;
     let interactions = vk
-        .inner
         .per_air
         .iter()
         .map(|vk| vk.symbolic_constraints.interactions.clone())
@@ -366,7 +368,6 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_blob(
         let eq_3bs = &eq_3b_blob.all_stacked_ids[pidx];
         let mut cur_eq3b_idx = 0;
 
-        let node_claims = &expr_blob.expr_evals[pidx];
         let vdata = &preflight.proof_shape.sorted_trace_vdata;
         for (sort_idx, (air_idx, vdata)) in vdata.iter().enumerate() {
             let n = vdata.log_height as isize - l_skip as isize;
@@ -393,12 +394,12 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_blob(
                 for (interaction_idx, inter) in inters.iter().enumerate() {
                     let eq_3b = eq_3bs[cur_eq3b_idx].eq_mle(
                         &preflight.batch_constraint.xi,
-                        vk.inner.params.l_skip,
+                        vk.params.l_skip,
                         preflight.proof_shape.n_logup,
                     );
                     cur_eq3b_idx += 1;
                     records.push(InteractionsFoldingRecord {
-                        value: node_claims[*air_idx][inter.count],
+                        value: expr_evals[[pidx, *air_idx]][inter.count],
                         air_idx: *air_idx,
                         sort_idx,
                         interaction_idx,
@@ -410,12 +411,12 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_blob(
                         is_mult: true, // for each interaction, only the first record with is_mult = true
                         is_bus_index: false,
                     });
-                    num_sum += node_claims[*air_idx][inter.count] * eq_3b;
+                    num_sum += expr_evals[[pidx, *air_idx]][inter.count] * eq_3b;
 
                     let mut beta_pow = EF::ONE;
                     let mut cur_sum = EF::ZERO;
                     for (j, &node_idx) in inter.message.iter().enumerate() {
-                        let value = node_claims[*air_idx][node_idx];
+                        let value = expr_evals[[pidx, *air_idx]][node_idx];
                         cur_sum += beta_pow * value;
                         beta_pow *= beta;
                         records.push(InteractionsFoldingRecord {
@@ -466,11 +467,12 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_blob(
 #[tracing::instrument(name = "generate_trace(InteractionsFoldingAir)", skip_all)]
 pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
     vk: &MultiStarkVerifyingKeyV2,
-    expr_blob: &BatchConstraintBlobCpu,
-    eq_3b_blob: &Eq3bBlob,
-    if_blob: &InteractionsFoldingBlob,
+    blob: &BatchConstraintBlobCpu,
     preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
+    let eq_3b_blob = &blob.eq_3b_blob;
+    let if_blob = &blob.if_blob;
+
     let width = InteractionsFoldingCols::<F>::width();
 
     let total_height = if_blob.records.len();
@@ -483,8 +485,6 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
         let beta_slice = &preflight.transcript.values()[beta_tidx..beta_tidx + D_EF];
         let records = &if_blob.records[pidx];
         let eq_3bs = &eq_3b_blob.all_stacked_ids[pidx];
-
-        let node_claims = &expr_blob.expr_evals[pidx];
 
         let mut is_first_in_message_indices = vec![];
         let mut cur_eq3b_idx = 0;
@@ -513,8 +513,9 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
                 cols.loop_aux.is_transition[0] = F::ONE;
                 cols.loop_aux.is_transition[1] = F::from_bool(!record.is_last_in_air);
                 if !record.is_bus_index {
-                    cols.value
-                        .copy_from_slice(node_claims[air_idx][record.node_idx].as_base_slice());
+                    cols.value.copy_from_slice(
+                        blob.expr_evals[[pidx, air_idx]][record.node_idx].as_base_slice(),
+                    );
                 } else {
                     cols.value[0] = cols.node_idx;
                 }

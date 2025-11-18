@@ -12,7 +12,10 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra, extension::BinomiallyExtendable};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2};
+use stark_backend_v2::{
+    D_EF, EF, F,
+    keygen::types::{MultiStarkVerifyingKey0V2, MultiStarkVerifyingKeyV2},
+};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -292,10 +295,10 @@ impl Eq3bBlob {
 }
 
 pub(crate) fn generate_eq_3b_blob(
-    vk: &MultiStarkVerifyingKeyV2,
+    vk: &MultiStarkVerifyingKey0V2,
     preflights: &[Preflight],
 ) -> Eq3bBlob {
-    let l_skip = vk.inner.params.l_skip;
+    let l_skip = vk.params.l_skip;
     let mut blob = Eq3bBlob::new();
     for preflight in preflights.iter() {
         let mut row_idx = 0;
@@ -304,7 +307,7 @@ pub(crate) fn generate_eq_3b_blob(
             preflight.proof_shape.sorted_trace_vdata.iter().enumerate()
         {
             let n_lift = vdata.log_height.saturating_sub(l_skip);
-            let num_interactions = vk.inner.per_air[*air_idx].num_interactions();
+            let num_interactions = vk.per_air[*air_idx].num_interactions();
             for i in 0..num_interactions {
                 blob.all_stacked_ids.push(StackedIdxRecord {
                     sort_idx,

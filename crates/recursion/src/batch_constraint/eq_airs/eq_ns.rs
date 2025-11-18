@@ -30,8 +30,8 @@ use crate::{
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     utils::{
-        base_to_ext, ext_field_add, ext_field_multiply, ext_field_multiply_scalar,
-        ext_field_one_minus, ext_field_subtract,
+        MultiVecWithBounds, base_to_ext, ext_field_add, ext_field_multiply,
+        ext_field_multiply_scalar, ext_field_one_minus, ext_field_subtract,
     },
 };
 
@@ -322,14 +322,15 @@ pub(crate) fn generate_eq_ns_trace(
     vk: &MultiStarkVerifyingKeyV2,
     _proofs: &[Proof],
     preflights: &[Preflight],
-    selector_counts: &[Vec<SelectorCount>],
+    selector_counts: &MultiVecWithBounds<SelectorCount, 1>,
 ) -> RowMajorMatrix<F> {
     let l_skip = vk.inner.params.l_skip;
     // TODO: blob, MultiProofVecVec etc
     let records = preflights
         .iter()
-        .zip(selector_counts.iter())
-        .map(|(preflight, selector_counts)| {
+        .enumerate()
+        .map(|(pidx, preflight)| {
+            let selector_counts = &selector_counts[[pidx]];
             let n_global = preflight.proof_shape.n_global();
             let n_max = preflight.proof_shape.n_max;
             let rs = &preflight.batch_constraint.sumcheck_rnd;
