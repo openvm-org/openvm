@@ -25,10 +25,10 @@ use stark_backend_v2::{
     prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
+use verify_stark::pvs::{NonRootVerifierPvs, VERIFIER_PVS_AIR_ID};
 
-use crate::public_values::{NonRootVerifierPvs, app::*};
+use crate::public_values::app::*;
 
-pub const VERIFIER_PVS_AIR_ID: usize = 0;
 pub const CONSTRAINT_EVAL_AIR_ID: usize = 1;
 pub const CONSTRAINT_EVAL_CACHED_INDEX: usize = 0;
 

@@ -12,6 +12,7 @@ p3-matrix = { workspace = true }
 stark-backend-v2 = { workspace = true }
 recursion-circuit = { workspace = true }
 stark-recursion-circuit-derive = { workspace = true }
+verify-stark = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 openvm-circuit-primitives = { workspace = true }

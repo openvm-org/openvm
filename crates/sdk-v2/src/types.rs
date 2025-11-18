@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use continuations_v2::aggregation::NonRootStarkProof;
 use derive_more::derive::From;
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
@@ -14,6 +13,7 @@ use stark_backend_v2::{
     codec::{Decode, Encode},
     proof::Proof,
 };
+use verify_stark::NonRootStarkProof;
 
 use crate::OPENVM_VERSION;
 

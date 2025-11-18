@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
-use continuations_v2::aggregation::{AggregationProver, NonRootStarkProof};
+use continuations_v2::aggregation::AggregationProver;
 use eyre::Result;
 use openvm_circuit::arch::ContinuationVmProof;
 use stark_backend_v2::{SC, keygen::types::MultiStarkVerifyingKeyV2};
+use verify_stark::NonRootStarkProof;
 
 use crate::config::{AggregationConfig, AggregationTreeConfig};
 
