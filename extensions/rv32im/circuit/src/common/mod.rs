@@ -346,7 +346,7 @@ mod aot {
             asm_str += &format!("    pextrd {REG_A_W}, {xmm_reg}, {xmm_lane}\n");
             asm_str += &format!("    add {REG_A_W}, {height_delta}\n");
             asm_str += &format!("    pinsrd {xmm_reg}, {REG_A_W}, {xmm_lane}\n");
-            asm_str += &sync_xmm_to_trace_heights_memory();
+            // asm_str += &sync_xmm_to_trace_heights_memory();
         } else {
             asm_str += &format!(
                 "    add dword ptr [{REG_TRACE_HEIGHT} + {chip_idx} * 4], {height_delta}\n"

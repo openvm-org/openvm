@@ -161,6 +161,7 @@ where
 
         asm_str += &Self::pop_internal_registers();
         asm_str += &Self::rv32_regs_to_xmm();
+        asm_str += &sync_trace_heights_memory_to_xmm();
 
         asm_str += &format!("   lea {REG_C}, [rip + map_pc_base]\n");
         asm_str += &format!("   pextrq {REG_A}, xmm3, 1\n"); // extract the upper 64 bits of the xmm3 register to REG_A
@@ -242,7 +243,7 @@ where
                     })?;
                 asm_str += &segment;
             } else {
-                // asm_str += &sync_xmm_to_trace_heights_memory(); // xmm has garbage values?
+                asm_str += &sync_xmm_to_trace_heights_memory(); // xmm has garbage values?
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
@@ -268,7 +269,7 @@ where
             }
         }
         asm_str += "asm_handle_segment_check:\n";
-        // asm_str += &sync_xmm_to_trace_heights_memory(); // xmm has garbage values?
+        asm_str += &sync_xmm_to_trace_heights_memory(); // xmm has garbage values?
         asm_str += "    push r14\n"; // r14 is REG_TRACE_HEIGHT LOL
         asm_str += &Self::xmm_to_rv32_regs();
         asm_str += &Self::push_address_space_start();
