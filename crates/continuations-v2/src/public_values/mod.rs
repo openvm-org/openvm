@@ -56,6 +56,7 @@ pub trait AggNodeTraceGen<PB: ProverBackendV2> {
         &self,
         proofs: &[Proof],
         user_pv_commit: Option<[F; DIGEST_SIZE]>,
+        child_vk_commit: PB::Commitment,
     ) -> AirProvingContextV2<PB>;
     fn generate_other_proving_ctxs(
         &self,
@@ -75,8 +76,9 @@ impl AggNodeTraceGen<CpuBackendV2> for NonRootTraceGen {
         &self,
         proofs: &[Proof],
         user_pv_commit: Option<[F; DIGEST_SIZE]>,
+        child_vk_commit: [F; DIGEST_SIZE],
     ) -> AirProvingContextV2<CpuBackendV2> {
-        verifier::generate_proving_ctx(proofs, user_pv_commit)
+        verifier::generate_proving_ctx(proofs, user_pv_commit, child_vk_commit)
     }
 
     fn generate_other_proving_ctxs(
@@ -101,8 +103,9 @@ impl AggNodeTraceGen<GpuBackendV2> for NonRootTraceGen {
         &self,
         proofs: &[Proof],
         user_pv_commit: Option<[F; DIGEST_SIZE]>,
+        child_vk_commit: [F; DIGEST_SIZE],
     ) -> AirProvingContextV2<GpuBackendV2> {
-        let cpu_ctx = verifier::generate_proving_ctx(proofs, user_pv_commit);
+        let cpu_ctx = verifier::generate_proving_ctx(proofs, user_pv_commit, child_vk_commit);
         AirProvingContextV2 {
             cached_mains: vec![],
             common_main: transport_matrix_h2d_col_major(&cpu_ctx.common_main).unwrap(),

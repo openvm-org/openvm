@@ -169,7 +169,9 @@ where
 
         // Initialize sum over roots
         assert_array_eq(
-            &mut builder.when(local.is_first),
+            &mut builder
+                .when(local.is_first)
+                .when(local.is_omega_skip_power_equal_to_one),
             local.sum_at_roots,
             ext_field_multiply_scalar(local.coeff, domain_size.clone()),
         );

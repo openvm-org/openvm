@@ -22,6 +22,7 @@ use openvm_circuit::{
     },
     system::memory::merkle::public_values::extract_public_values,
 };
+use openvm_sdk_config::{SdkVmConfig, SdkVmCpuBuilder, TranspilerConfig};
 use openvm_transpiler::{
     FromElf, elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler,
 };
@@ -32,16 +33,14 @@ use stark_backend_v2::{
 use verify_stark::{VerificationBaseline, verify_vm_stark_proof};
 
 use crate::{
-    config::{
-        AggregationConfig, AggregationSystemParams, SdkVmConfig, SdkVmCpuBuilder, TranspilerConfig,
-    },
+    config::{AggregationConfig, AggregationSystemParams},
     prover::{AggProver, AppProver, StarkProver},
     types::ExecutableFormat,
 };
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        use config::SdkVmGpuBuilder;
+        use openvm_sdk_config::SdkVmGpuBuilder;
         use cuda_backend_v2::BabyBearPoseidon2GpuEngineV2 as GpuBabyBearPoseidon2Engine;
         pub use GpuSdk as Sdk;
         pub type DefaultStarkEngine = GpuBabyBearPoseidon2Engine;
@@ -131,7 +130,7 @@ where
     /// The `app_vm_config` field of your `openvm.toml` must exactly match the following:
     ///
     /// ```toml
-    #[doc = include_str!("./config/openvm_standard.toml")]
+    #[doc = include_str!("../../openvm-sdk-config/src/openvm_standard.toml")]
     /// ```
     pub fn standard(app_params: SystemParams, agg_params: AggregationSystemParams) -> Self {
         GenericSdk::new(AppConfig::standard(app_params), agg_params).unwrap()
@@ -142,7 +141,7 @@ where
     /// **Note**: To use this configuration, your `openvm.toml` must exactly match the following:
     ///
     /// ```toml
-    #[doc = include_str!("./config/openvm_riscv32.toml")]
+    #[doc = include_str!("../../openvm-sdk-config/src/openvm_riscv32.toml")]
     /// ```
     pub fn riscv32(app_params: SystemParams, agg_params: AggregationSystemParams) -> Self {
         GenericSdk::new(AppConfig::riscv32(app_params), agg_params).unwrap()

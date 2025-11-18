@@ -17,21 +17,7 @@ openvm-transpiler = { workspace = true }
 openvm = { workspace = true }
 
 cuda-backend-v2 = { workspace = true, optional = true }
-
-openvm-algebra-circuit = { workspace = true }
-openvm-algebra-transpiler = { workspace = true }
-openvm-bigint-circuit = { workspace = true }
-openvm-bigint-transpiler = { workspace = true }
-openvm-ecc-circuit = { workspace = true }
-openvm-ecc-transpiler = { workspace = true }
-openvm-keccak256-circuit = { workspace = true }
-openvm-keccak256-transpiler = { workspace = true }
-openvm-sha256-circuit = { workspace = true }
-openvm-sha256-transpiler = { workspace = true }
-openvm-pairing-circuit = { workspace = true }
-openvm-pairing-transpiler = { workspace = true }
-openvm-rv32im-circuit = { workspace = true }
-openvm-rv32im-transpiler = { workspace = true }
+openvm-sdk-config = { workspace = true }
 
 stark-backend-v2 = { workspace = true }
 continuations-v2 = { workspace = true }
@@ -60,16 +46,10 @@ toml = { workspace = true }
 [features]
 default = ["parallel", "jemalloc"]
 
-metrics = ["openvm-circuit/metrics"]
+metrics = ["openvm-circuit/metrics", "openvm-sdk-config/metrics"]
 tco = [
     "openvm-circuit/tco",
-    "openvm-rv32im-circuit/tco",
-    "openvm-sha256-circuit/tco",
-    "openvm-keccak256-circuit/tco",
-    "openvm-bigint-circuit/tco",
-    "openvm-algebra-circuit/tco",
-    "openvm-ecc-circuit/tco",
-    "openvm-pairing-circuit/tco",
+    "openvm-sdk-config/tco",
 ]
 unprotected = ["openvm-circuit/unprotected"]
 
@@ -77,6 +57,7 @@ unprotected = ["openvm-circuit/unprotected"]
 perf-metrics = [
     "openvm-circuit/perf-metrics",
     "openvm-transpiler/function-span",
+    "openvm-sdk-config/perf-metrics"
 ]
 
 # turns on stark-backend debugger in all proofs
@@ -84,21 +65,15 @@ stark-debug = ["openvm-circuit/stark-debug"]
 test-utils = ["openvm-circuit/test-utils"]
 
 async = ["tokio"]
-parallel = ["openvm-circuit/parallel"]
-mimalloc = ["openvm-circuit/mimalloc"]
-jemalloc = ["openvm-circuit/jemalloc"]
+parallel = ["openvm-circuit/parallel", "openvm-sdk-config/parallel"]
+mimalloc = ["openvm-circuit/mimalloc", "openvm-sdk-config/mimalloc"]
+jemalloc = ["openvm-circuit/jemalloc", "openvm-sdk-config/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
 nightly-features = ["openvm-circuit/nightly-features"]
 
 cuda = [
     "dep:cuda-backend-v2",
     "openvm-circuit/cuda",
-    "openvm-algebra-circuit/cuda",
-    "openvm-bigint-circuit/cuda",
-    "openvm-ecc-circuit/cuda",
-    "openvm-keccak256-circuit/cuda",
-    "openvm-sha256-circuit/cuda",
-    "openvm-pairing-circuit/cuda",
-    "openvm-rv32im-circuit/cuda",
+    "openvm-sdk-config/cuda",
     "continuations-v2/cuda",
 ]
