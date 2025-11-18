@@ -52,6 +52,7 @@ pub enum VerifierChildLevel {
 pub fn generate_proving_ctx(
     proofs: &[Proof],
     user_pv_commit: Option<[F; DIGEST_SIZE]>,
+    child_vk_commit: [F; DIGEST_SIZE],
 ) -> AirProvingContextV2<CpuBackendV2> {
     let num_proofs = proofs.len();
     let height = num_proofs.next_power_of_two();
@@ -119,26 +120,18 @@ pub fn generate_proving_ctx(
     pvs.initial_root = first_row.child_pvs.initial_root;
 
     match child_level {
-        VerifierChildLevel::App => {}
-        VerifierChildLevel::Leaf => {
-            pvs.leaf_commit = proofs[0].trace_vdata[CONSTRAINT_EVAL_AIR_ID]
-                .as_ref()
-                .unwrap()
-                .cached_commitments[CONSTRAINT_EVAL_CACHED_INDEX];
-            pvs.internal_flag = F::ZERO;
+        VerifierChildLevel::App => {
+            pvs.leaf_commit = child_vk_commit;
         }
-        VerifierChildLevel::InternalForLeaf => {
-            pvs.internal_for_leaf_commit = proofs[0].trace_vdata[CONSTRAINT_EVAL_AIR_ID]
-                .as_ref()
-                .unwrap()
-                .cached_commitments[CONSTRAINT_EVAL_CACHED_INDEX];
+        VerifierChildLevel::Leaf => {
+            pvs.internal_for_leaf_commit = child_vk_commit;
             pvs.internal_flag = F::ONE;
         }
+        VerifierChildLevel::InternalForLeaf => {
+            pvs.internal_recursive_commit = child_vk_commit;
+            pvs.internal_flag = F::TWO;
+        }
         VerifierChildLevel::InternalRecursive => {
-            pvs.internal_recursive_commit = proofs[0].trace_vdata[CONSTRAINT_EVAL_AIR_ID]
-                .as_ref()
-                .unwrap()
-                .cached_commitments[CONSTRAINT_EVAL_CACHED_INDEX];
             pvs.internal_flag = F::TWO;
         }
     }
@@ -271,8 +264,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             local.child_pvs.internal_for_leaf_commit,
         );
         assert_zeros(
-            &mut builder
-                .when(local.child_pvs.internal_flag * (local.child_pvs.internal_flag - AB::F::ONE)),
+            &mut builder.when(local.child_pvs.internal_flag - AB::F::TWO),
             local.child_pvs.internal_recursive_commit,
         );
 
