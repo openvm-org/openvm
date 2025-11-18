@@ -118,7 +118,7 @@ openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", br
 openvm-cuda-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
 openvm-cuda-builder = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
 openvm-cuda-common = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
-stark-backend-v2 = { path = "../crates/stark-backend", default-features = false }
+stark-backend-v2 = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
 cuda-backend-v2 = { path = "../crates/cuda-backend", default-features = false }
 
 # OpenVM
