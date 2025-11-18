@@ -8,17 +8,15 @@ description = "Lightweight crate to verify a v2 STARK proof"
 [dependencies]
 openvm-circuit = { workspace = true }
 stark-backend-v2 = { workspace = true }
-recursion-circuit = { workspace = true }
-continuations-v2 = { workspace = true }
+stark-recursion-circuit-derive = { workspace = true }
 
+bitcode = { workspace = true }
 eyre = { workspace = true }
 p3-field = { workspace = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
+zstd = { workspace = true }
 
 [features]
 default = ["parallel"]
-parallel = [
-    "stark-backend-v2/parallel",
-    "recursion-circuit/parallel",
-    "continuations-v2/parallel"
-]
+parallel = ["stark-backend-v2/parallel"]

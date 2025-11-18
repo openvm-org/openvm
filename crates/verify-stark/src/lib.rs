@@ -1,53 +1,56 @@
 use std::borrow::Borrow;
 
-use continuations_v2::{
-    aggregation::NonRootStarkProof,
-    public_values::{NonRootVerifierPvs, verifier::VERIFIER_PVS_AIR_ID},
-};
 use eyre::Result;
 use openvm_circuit::{
     arch::{ExitCode, hasher::poseidon2::vm_poseidon2_hasher},
-    system::{memory::dimensions::MemoryDimensions, program::trace::compute_exe_commit},
+    system::{
+        memory::merkle::public_values::UserPublicValuesProof, program::trace::compute_exe_commit,
+    },
 };
 use p3_field::{FieldAlgebra, PrimeField32};
 use stark_backend_v2::{
-    BabyBearPoseidon2CpuEngineV2, Digest, F, StarkEngineV2,
-    keygen::types::MultiStarkVerifyingKeyV2, poseidon2::sponge::DuplexSponge,
+    BabyBearPoseidon2CpuEngineV2, DIGEST_SIZE, F, StarkEngineV2,
+    codec::{Decode, Encode},
+    poseidon2::sponge::DuplexSponge,
+    proof::Proof,
 };
 
-use crate::error::VerifyStarkError;
+use crate::{
+    error::VerifyStarkError,
+    pvs::{NonRootVerifierPvs, VERIFIER_PVS_AIR_ID},
+    vk::NonRootStarkVerifyingKey,
+};
 
 pub mod error;
+pub mod pvs;
+pub mod vk;
 
-/// Baseline artifacts for a specific VM and fixed executable that are used to verify a final
-/// (i.e. internal-recursive) VM STARK proof
-pub struct VerificationBaseline {
-    /// Commit to the app exe (i.e. hash of the program commit, initial memory merkle root,
-    /// and initial program counter)
-    pub app_exe_commit: Digest,
-    /// VM memory metadata used to verify the user public values merkle proof
-    pub memory_dimensions: MemoryDimensions,
-    /// Cached trace commit of the leaf verifier circuit's SymbolicExpresionAir, which is
-    /// derived from the app_vk
-    pub leaf_commit: Digest,
-    /// Cached trace commit of the internal-for-leaf verifier circuit's SymbolicExpresionAir,
-    /// which derived from the leaf_vk
-    pub internal_for_leaf_commit: Digest,
-    /// Cached trace commit of the internal-recursive verifier circuit's SymbolicExpresionAir,
-    /// which derived from the internal_for_leaf_vk
-    pub internal_recursive_commit: Digest,
+// Final internal recursive STARK proof to be verified against the baseline
+#[derive(Clone, Debug, Encode, Decode)]
+pub struct NonRootStarkProof {
+    pub inner: Proof,
+    pub user_pvs_proof: UserPublicValuesProof<DIGEST_SIZE, F>,
+}
+
+/// Verifies a non-root VM STARK proof (as a byte stream) given the internal-recursive
+/// layer verifying key and VM- and exe-specific baseline artifacts.
+pub fn verify_vm_stark_proof(
+    vk: &NonRootStarkVerifyingKey,
+    encoded_proof: &[u8],
+) -> Result<(), VerifyStarkError> {
+    let decompressed = zstd::decode_all(encoded_proof)?;
+    verify_vm_stark_proof_decoded(vk, &NonRootStarkProof::decode_from_bytes(&decompressed)?)
 }
 
 /// Verifies a non-root VM STARK proof given the internal-recursive layer verifying
 /// key and VM- and exe-specific baseline artifacts.
-pub fn verify_vm_stark_proof(
-    vk: &MultiStarkVerifyingKeyV2,
-    baseline: VerificationBaseline,
+pub fn verify_vm_stark_proof_decoded(
+    vk: &NonRootStarkVerifyingKey,
     proof: &NonRootStarkProof,
 ) -> Result<(), VerifyStarkError> {
     // Verify the STARK proof.
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(vk.inner.params);
-    engine.verify(vk, &proof.inner)?;
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(vk.mvk.inner.params);
+    engine.verify(&vk.mvk, &proof.inner)?;
 
     let &NonRootVerifierPvs::<F> {
         user_pv_commit,
@@ -70,7 +73,7 @@ pub fn verify_vm_stark_proof(
     // Verify the merkle root proof against final_root.
     proof
         .user_pvs_proof
-        .verify(&hasher, baseline.memory_dimensions, final_root)?;
+        .verify(&hasher, vk.baseline.memory_dimensions, final_root)?;
 
     // Check that user_pv_commit is equal to the commit given in the merkle proof
     if user_pv_commit != proof.user_pvs_proof.public_values_commit {
@@ -83,9 +86,9 @@ pub fn verify_vm_stark_proof(
     // Check that the app_commit is as expected.
     let claimed_app_exe_commit =
         compute_exe_commit(&hasher, &program_commit, &initial_root, initial_pc);
-    if claimed_app_exe_commit != baseline.app_exe_commit {
+    if claimed_app_exe_commit != vk.baseline.app_exe_commit {
         return Err(VerifyStarkError::AppExeCommitMismatch {
-            expected: baseline.app_exe_commit,
+            expected: vk.baseline.app_exe_commit,
             actual: claimed_app_exe_commit,
         });
     }
@@ -102,25 +105,25 @@ pub fn verify_vm_stark_proof(
     }
 
     // Check leaf_commit against expected_commits.
-    if leaf_commit != baseline.leaf_commit {
+    if leaf_commit != vk.baseline.leaf_commit {
         return Err(VerifyStarkError::LeafCommitMismatch {
-            expected: baseline.leaf_commit,
+            expected: vk.baseline.leaf_commit,
             actual: leaf_commit,
         });
     }
 
     // Check internal_for_leaf_commit against expected_commits.
-    if internal_for_leaf_commit != baseline.internal_for_leaf_commit {
+    if internal_for_leaf_commit != vk.baseline.internal_for_leaf_commit {
         return Err(VerifyStarkError::InternalForLeafCommitMismatch {
-            expected: baseline.internal_for_leaf_commit,
+            expected: vk.baseline.internal_for_leaf_commit,
             actual: internal_for_leaf_commit,
         });
     }
 
     // Check internal_for_leaf_commit against expected_commits.
-    if internal_recursive_commit != baseline.internal_recursive_commit {
+    if internal_recursive_commit != vk.baseline.internal_recursive_commit {
         return Err(VerifyStarkError::InternalRecursiveMismatch {
-            expected: baseline.internal_recursive_commit,
+            expected: vk.baseline.internal_recursive_commit,
             actual: internal_recursive_commit,
         });
     }
