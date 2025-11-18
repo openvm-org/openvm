@@ -59,9 +59,8 @@ pub const RISCV_TO_X86_OVERRIDE_MAP: [Option<&str>; 32] = [
     None,         // x30
     None,         // x31
 ];
-pub const XMM_TRACE_HEIGHTS_BASE_START: usize = 4; // 4 is the start of the XMM registers for trace heights
-pub const XMM_TRACE_HEIGHTS_BASE: [&str; 1] = [
-    // "xmm4", "xmm5", "xmm6", "xmm7", "xmm8", "xmm9", "xmm10", "xmm11", "xmm12", "xmm13", "xmm14",
+pub const XMM_TRACE_HEIGHTS_BASE: [&str; 12] = [
+    "xmm4", "xmm5", "xmm6", "xmm7", "xmm8", "xmm9", "xmm10", "xmm11", "xmm12", "xmm13", "xmm14",
     "xmm15",
 ];
 

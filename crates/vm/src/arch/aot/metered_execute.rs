@@ -243,7 +243,7 @@ where
                     })?;
                 asm_str += &segment;
             } else {
-                asm_str += &sync_xmm_to_trace_heights_memory(); // xmm has garbage values?
+                asm_str += &sync_xmm_to_trace_heights_memory();
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
@@ -269,8 +269,8 @@ where
             }
         }
         asm_str += "asm_handle_segment_check:\n";
-        asm_str += &sync_xmm_to_trace_heights_memory(); // xmm has garbage values?
-        asm_str += "    push r14\n"; // r14 is REG_TRACE_HEIGHT LOL
+        asm_str += &sync_xmm_to_trace_heights_memory();
+        asm_str += "    push r14\n";
         asm_str += &Self::xmm_to_rv32_regs();
         asm_str += &Self::push_address_space_start();
         asm_str += &Self::push_internal_registers();
