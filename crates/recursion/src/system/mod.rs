@@ -439,6 +439,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
     }
 
     /// Runs preflight for a single proof.
+    #[tracing::instrument(name = "run_preflight(VerifierSubCircuit)", skip_all)]
     pub fn run_preflight<TS>(
         &self,
         mut sponge: TS,
