@@ -10,6 +10,7 @@ use stark_backend_v2::{
     proof::Proof,
     prover::{CommittedTraceDataV2, DeviceDataTransporterV2, ProverBackendV2, ProvingContextV2},
 };
+use tracing::instrument;
 
 use crate::{
     aggregation::{
@@ -54,6 +55,7 @@ where
         self.child_vk_pcs_data.commitment.clone()
     }
 
+    #[instrument(name = "trace_gen", skip_all)]
     fn generate_proving_ctx(
         &self,
         proofs: &[Proof],
@@ -92,6 +94,7 @@ where
         }
     }
 
+    #[instrument(name = "total_proof", skip_all)]
     fn agg_prove<E: StarkWhirEngine<PB = PB>>(
         &self,
         proofs: &[Proof],
