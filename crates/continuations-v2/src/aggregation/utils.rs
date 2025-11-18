@@ -51,11 +51,17 @@ pub(crate) fn trace_heights_tracing_info<PB: ProverBackendV2>(
     ctxs: &[(usize, AirProvingContextV2<PB>)],
     airs: &[AirRef<BabyBearPoseidon2Config>],
 ) {
+    let mut total_cells = 0usize;
     for ((_, ctx), air) in ctxs.iter().zip(airs) {
+        let cells = ctx.common_main.height() * ctx.common_main.width();
         tracing::info!(
-            "{:<40} | Height: {:>8}",
+            "{:<40} | Height: {:>8} | Width: {:>8} | Cells: {:>8}",
             air.name(),
-            ctx.common_main.height()
+            ctx.common_main.height(),
+            ctx.common_main.width(),
+            cells
         );
+        total_cells += cells;
     }
+    tracing::info!("Total Common Cells: {total_cells}");
 }

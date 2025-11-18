@@ -4,6 +4,7 @@ use continuations_v2::aggregation::AggregationProver;
 use eyre::Result;
 use openvm_circuit::arch::ContinuationVmProof;
 use stark_backend_v2::{SC, keygen::types::MultiStarkVerifyingKeyV2};
+use tracing::info_span;
 use verify_stark::NonRootStarkProof;
 
 use crate::config::{AggregationConfig, AggregationTreeConfig};
@@ -52,45 +53,74 @@ impl AggProver {
 
     pub fn prove(&self, continuation_proof: ContinuationVmProof<SC>) -> Result<NonRootStarkProof> {
         // Verify app-layer proofs and generate leaf-layer proofs
-        let leaf_proofs = continuation_proof
-            .per_segment
-            .chunks(self.agg_tree_config.num_children_leaf)
-            .map(|proofs| {
-                self.leaf_prover.agg_prove::<E>(
-                    proofs,
-                    Some(continuation_proof.user_public_values.public_values_commit),
-                    false,
-                )
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let leaf_proofs = info_span!("agg_layer", group = "leaf").in_scope(|| {
+            continuation_proof
+                .per_segment
+                .chunks(self.agg_tree_config.num_children_leaf)
+                .enumerate()
+                .map(|(leaf_node_idx, proofs)| {
+                    info_span!("single_leaf_agg", idx = leaf_node_idx).in_scope(|| {
+                        self.leaf_prover.agg_prove::<E>(
+                            proofs,
+                            Some(continuation_proof.user_public_values.public_values_commit),
+                            false,
+                        )
+                    })
+                })
+                .collect::<Result<Vec<_>>>()
+        })?;
 
         // Verify leaf-layer proofs and generate internal-for-leaf-layer proofs
-        let mut internal_proofs = leaf_proofs
-            .chunks(self.agg_tree_config.num_children_internal)
-            .map(|proofs| {
-                self.internal_for_leaf_prover
-                    .agg_prove::<E>(proofs, None, false)
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let mut internal_node_idx = -1;
+        let mut internal_proofs =
+            info_span!("agg_layer", group = "internal_for_leaf").in_scope(|| {
+                leaf_proofs
+                    .chunks(self.agg_tree_config.num_children_internal)
+                    .map(|proofs| {
+                        internal_node_idx += 1;
+                        info_span!("single_internal_agg", idx = internal_node_idx).in_scope(|| {
+                            self.internal_for_leaf_prover
+                                .agg_prove::<E>(proofs, None, false)
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()
+            })?;
 
         // Verify internal-for-leaf-layer proofs and generate internal-recursive-layer proofs
-        internal_proofs = internal_proofs
-            .chunks(self.agg_tree_config.num_children_internal)
-            .map(|proofs| {
-                self.internal_recursive_prover
-                    .agg_prove::<E>(proofs, None, false)
-            })
-            .collect::<Result<Vec<_>>>()?;
+        internal_proofs =
+            info_span!("agg_layer", group = "internal_recursive.0").in_scope(|| {
+                internal_proofs
+                    .chunks(self.agg_tree_config.num_children_internal)
+                    .map(|proofs| {
+                        internal_node_idx += 1;
+                        info_span!("single_internal_agg", idx = internal_node_idx).in_scope(|| {
+                            self.internal_recursive_prover
+                                .agg_prove::<E>(proofs, None, false)
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()
+            })?;
 
         // Recursively verify internal-layer proofs until only 1 remains
+        let mut internal_recursive_layer = 1;
         while internal_proofs.len() > 1 {
-            internal_proofs = internal_proofs
-                .chunks(self.agg_tree_config.num_children_internal)
-                .map(|proofs| {
-                    self.internal_recursive_prover
-                        .agg_prove::<E>(proofs, None, true)
-                })
-                .collect::<Result<Vec<_>>>()?;
+            internal_proofs = info_span!(
+                "agg_layer",
+                group = format!("internal_recursive.{internal_recursive_layer}")
+            )
+            .in_scope(|| {
+                internal_proofs
+                    .chunks(self.agg_tree_config.num_children_internal)
+                    .map(|proofs| {
+                        internal_node_idx += 1;
+                        info_span!("single_internal_agg", idx = internal_node_idx).in_scope(|| {
+                            self.internal_recursive_prover
+                                .agg_prove::<E>(proofs, None, true)
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()
+            })?;
+            internal_recursive_layer += 1;
         }
 
         Ok(NonRootStarkProof {
