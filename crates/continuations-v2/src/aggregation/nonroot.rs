@@ -2,7 +2,6 @@ use std::{iter::once, sync::Arc};
 
 use eyre::Result;
 use itertools::Itertools;
-use openvm_circuit::system::memory::merkle::public_values::UserPublicValuesProof;
 use recursion_circuit::system::{AggregationSubCircuit, VerifierTraceGen};
 use stark_backend_v2::{
     DIGEST_SIZE, F, SC, StarkWhirEngine, SystemParams,
@@ -18,12 +17,6 @@ use crate::{
     },
     public_values::AggNodeTraceGen,
 };
-
-#[derive(Clone, Debug)]
-pub struct NonRootStarkProof {
-    pub inner: Proof,
-    pub user_pvs_proof: UserPublicValuesProof<DIGEST_SIZE, F>,
-}
 
 /*
  * Struct to generate an aggregation proof
