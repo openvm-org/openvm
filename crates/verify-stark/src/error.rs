@@ -22,6 +22,8 @@ pub enum VerifyStarkError {
     ExecutionUnsuccessful(F),
     #[error("Invalid internal flag {0}, should be either 2")]
     InvalidInternalFlag(F),
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
     #[error("Other error: {0}")]
-    Other(eyre::Error),
+    Other(#[from] eyre::Error),
 }
