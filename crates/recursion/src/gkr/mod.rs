@@ -547,6 +547,7 @@ enum GkrModuleChip {
 impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for GkrModuleChip {
     type ModuleSpecificCtx = GkrBlobCpu;
 
+    #[tracing::instrument(name = "generate_trace(GkrModuleChip)", skip_all)]
     fn generate_trace(
         &self,
         _child_vk: &MultiStarkVerifyingKeyV2,
