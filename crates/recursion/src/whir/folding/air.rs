@@ -1,4 +1,4 @@
-use core::borrow::{Borrow, BorrowMut};
+use core::borrow::Borrow;
 
 use openvm_circuit_primitives::utils::assert_array_eq;
 use openvm_stark_backend::{
@@ -6,40 +6,36 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra, extension::BinomiallyExtendable};
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
+use p3_field::{FieldAlgebra, extension::BinomiallyExtendable};
+use p3_matrix::Matrix;
+use stark_backend_v2::{D_EF, F};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    system::Preflight,
     utils::{base_to_ext, ext_field_multiply, ext_field_subtract},
-    whir::{
-        FoldRecord,
-        bus::{WhirAlphaBus, WhirAlphaMessage, WhirFoldingBus, WhirFoldingBusMessage},
-    },
+    whir::bus::{WhirAlphaBus, WhirAlphaMessage, WhirFoldingBus, WhirFoldingBusMessage},
 };
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-struct WhirFoldingCols<T> {
-    is_valid: T,
-    proof_idx: T,
-    whir_round: T,
-    query_idx: T,
-    is_root: T,
-    coset_shift: T,
-    coset_idx: T,
+pub struct WhirFoldingCols<T> {
+    pub is_valid: T,
+    pub proof_idx: T,
+    pub whir_round: T,
+    pub query_idx: T,
+    pub is_root: T,
+    pub coset_shift: T,
+    pub coset_idx: T,
     /// Distance from the leaf layer in the folding tree.
-    height: T,
-    twiddle: T,
-    coset_size: T,
-    value: [T; 4],
-    left_value: [T; 4],
-    right_value: [T; 4],
-    z_final: T,
-    y_final: [T; 4],
-    alpha: [T; 4],
+    pub height: T,
+    pub twiddle: T,
+    pub coset_size: T,
+    pub z_final: T,
+    pub value: [T; 4],
+    pub left_value: [T; 4],
+    pub right_value: [T; 4],
+    pub y_final: [T; 4],
+    pub alpha: [T; 4],
 }
 
 pub struct WhirFoldingAir {
@@ -158,68 +154,4 @@ where
             local.is_valid - local.is_root,
         );
     }
-}
-
-#[tracing::instrument(name = "generate_trace(WhirFoldingAir)", skip_all)]
-pub(crate) fn generate_trace(
-    mvk: &MultiStarkVerifyingKeyV2,
-    _proofs: &[&Proof],
-    preflights: &[&Preflight],
-) -> RowMajorMatrix<F> {
-    let params = mvk.inner.params;
-
-    let num_rounds = params.num_whir_rounds();
-    let num_queries = params.num_whir_queries;
-    let k_whir = params.k_whir;
-    let internal_nodes = (1 << k_whir) - 1;
-
-    let num_rows_per_proof = num_rounds * num_queries * internal_nodes;
-    let num_valid_rows = num_rows_per_proof * preflights.len();
-    let height = num_valid_rows.next_power_of_two();
-    let width = WhirFoldingCols::<F>::width();
-
-    let mut trace = vec![F::ZERO; height * width];
-
-    for (row_idx, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
-        let proof_idx = row_idx / num_rows_per_proof;
-        let i = row_idx % num_rows_per_proof;
-
-        let preflight = &preflights[proof_idx];
-
-        let &FoldRecord {
-            whir_round,
-            query_idx,
-            twiddle,
-            coset_shift,
-            coset_size,
-            coset_idx,
-            height,
-            left_value,
-            right_value,
-            value,
-        } = &preflight.whir.fold_records[i];
-
-        let cols: &mut WhirFoldingCols<F> = row.borrow_mut();
-        cols.is_valid = F::ONE;
-        cols.proof_idx = F::from_canonical_usize(proof_idx);
-        cols.is_root = F::from_bool(coset_size == 1);
-        cols.alpha.copy_from_slice(
-            preflight.whir.alphas[whir_round * k_whir + height - 1].as_base_slice(),
-        );
-        cols.height = F::from_canonical_usize(height);
-        cols.whir_round = F::from_canonical_usize(whir_round);
-        cols.query_idx = F::from_canonical_usize(query_idx);
-        cols.coset_idx = F::from_canonical_usize(coset_idx);
-        cols.left_value = left_value.as_base_slice().try_into().unwrap();
-        cols.right_value = right_value.as_base_slice().try_into().unwrap();
-        cols.value = value.as_base_slice().try_into().unwrap();
-        cols.twiddle = twiddle;
-        cols.coset_shift = coset_shift;
-        cols.coset_size = F::from_canonical_usize(coset_size);
-        cols.z_final = preflight.whir.zjs[whir_round][query_idx];
-        cols.y_final
-            .copy_from_slice(preflight.whir.yjs[whir_round][query_idx].as_base_slice());
-    }
-
-    RowMajorMatrix::new(trace, width)
 }
