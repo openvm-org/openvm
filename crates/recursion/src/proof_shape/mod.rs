@@ -141,6 +141,7 @@ impl ProofShapeModule {
         }
     }
 
+    #[tracing::instrument(name = "run_preflight(ProofShapeModule)", skip_all)]
     pub fn run_preflight<TS>(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,

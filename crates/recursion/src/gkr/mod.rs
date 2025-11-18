@@ -145,6 +145,7 @@ impl GkrModule {
         }
     }
 
+    #[tracing::instrument(name = "run_preflight(GkrModule)", skip_all)]
     pub fn run_preflight<TS>(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS)
     where
         TS: FiatShamirTranscript + TranscriptHistory,
@@ -297,6 +298,7 @@ impl AirModule for GkrModule {
 }
 
 impl GkrModule {
+    #[tracing::instrument(name = "generate_blob(GkrModule)", skip_all)]
     fn generate_blob(
         &self,
         _child_vk: &MultiStarkVerifyingKeyV2,
