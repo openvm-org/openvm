@@ -58,9 +58,9 @@ pub use extension::*;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
+        use cuda_backend_v2::{GpuBackendV2 as GpuBackend, BabyBearPoseidon2GpuEngineV2 as GpuBabyBearPoseidon2Engine};
         use openvm_circuit::arch::DenseRecordArena;
         use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};
-        use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
         use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
         pub(crate) mod cuda_abi;
         pub use self::{

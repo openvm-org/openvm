@@ -17,16 +17,18 @@ use openvm_rv32im_circuit::{
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::PrimeField32,
-    prover::cpu::{CpuBackend, CpuDevice},
 };
-use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
+use stark_backend_v2::{
+    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
+    StarkEngineV2 as StarkEngine,
+};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
+        use cuda_backend_v2::{GpuBackendV2 as GpuBackend, BabyBearPoseidon2GpuEngineV2 as GpuBabyBearPoseidon2Engine};
         use openvm_circuit::arch::DenseRecordArena;
         use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};
-        use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
         use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
         pub(crate) mod cuda_abi;
     }
@@ -81,10 +83,11 @@ impl InitFileGenerator for NativeConfig {}
 #[derive(Clone, Default)]
 pub struct NativeCpuBuilder;
 
-impl<E, SC> VmBuilder<E> for NativeCpuBuilder
+type SC = stark_backend_v2::SC;
+impl<E> VmBuilder<E> for NativeCpuBuilder
 where
     SC: StarkGenericConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
     Val<SC>: PrimeField32,
 {
     type VmConfig = NativeConfig;
@@ -184,10 +187,10 @@ impl InitFileGenerator for Rv32WithKernelsConfig {}
 #[derive(Clone)]
 pub struct Rv32WithKernelsCpuBuilder;
 
-impl<E, SC> VmBuilder<E> for Rv32WithKernelsCpuBuilder
+impl<E> VmBuilder<E> for Rv32WithKernelsCpuBuilder
 where
     SC: StarkGenericConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
     Val<SC>: PrimeField32,
 {
     type VmConfig = Rv32WithKernelsConfig;
