@@ -21,7 +21,7 @@ use stark_backend_v2::{
 use crate::aggregation::AggregationCircuit;
 
 pub fn debug<const NUM_CHILDREN: usize, S: AggregationSubCircuit>(
-    circuit: AggregationCircuit<S>,
+    circuit: &AggregationCircuit<S>,
     ctxs: &[(usize, AirProvingContextV2<CpuBackendV2>)],
 ) {
     let transpose = |mat: StridedColMajorMatrixView<F>| Arc::new(mat.to_row_major_matrix());

@@ -47,8 +47,8 @@ cfg_if::cfg_if! {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AppConfig<VC> {
-    pub app_vm_config: VC,
+struct SdkVmConfigWrapper {
+    app_vm_config: SdkVmConfig,
 }
 
 /// The recommended way to construct [SdkVmConfig] is using [SdkVmConfig::from_toml].
@@ -153,13 +153,18 @@ impl SdkVmConfig {
     }
 
     /// `openvm_toml` should be the TOML string read from an openvm.toml file.
-    pub fn from_toml(openvm_toml: &str) -> Result<AppConfig<Self>, toml::de::Error> {
-        toml::from_str(openvm_toml)
+    pub fn from_toml(openvm_toml: &str) -> Result<Self, toml::de::Error> {
+        let wrapper: SdkVmConfigWrapper = toml::from_str(openvm_toml)?;
+        Ok(wrapper.app_vm_config)
     }
 }
 
-impl SdkVmConfig {
-    pub fn transpiler(&self) -> Transpiler<F> {
+pub trait TranspilerConfig<F> {
+    fn transpiler(&self) -> Transpiler<F>;
+}
+
+impl TranspilerConfig<F> for SdkVmConfig {
+    fn transpiler(&self) -> Transpiler<F> {
         let mut transpiler = Transpiler::default();
         if self.rv32i.is_some() {
             transpiler = transpiler.with_extension(Rv32ITranspilerExtension);
