@@ -11,7 +11,7 @@ use openvm_circuit::{
 };
 use p3_field::{FieldAlgebra, PrimeField32};
 use stark_backend_v2::{
-    BabyBearPoseidon2CpuEngineV2, DIGEST_SIZE, Digest, F, StarkEngineV2,
+    BabyBearPoseidon2CpuEngineV2, Digest, F, StarkEngineV2,
     keygen::types::MultiStarkVerifyingKeyV2, poseidon2::sponge::DuplexSponge,
 };
 
@@ -96,8 +96,8 @@ pub fn verify_vm_stark_proof(
     }
 
     // Check that the final proof is computed by the internal recursive prover, i.e.
-    // that internal_flag is in {1, 2}.
-    if internal_flag != F::ONE && internal_flag != F::TWO {
+    // that internal_flag is 2.
+    if internal_flag != F::TWO {
         return Err(VerifyStarkError::InvalidInternalFlag(internal_flag));
     }
 
@@ -117,20 +117,12 @@ pub fn verify_vm_stark_proof(
         });
     }
 
-    // If internal_flag == 2 then the final internal recursive layer prover another
-    // internal recursive layer - thus we check internal_recursive_commit against
-    // expected_commits. Else, internal_recursive_commit should not be defined.
-    if internal_flag == F::TWO {
-        if internal_recursive_commit != baseline.internal_recursive_commit {
-            return Err(VerifyStarkError::InternalRecursiveMismatch {
-                expected: baseline.internal_recursive_commit,
-                actual: internal_recursive_commit,
-            });
-        }
-    } else {
-        if internal_recursive_commit != [F::ZERO; DIGEST_SIZE] {
-            return Err(VerifyStarkError::InternalRecursiveDefined);
-        }
+    // Check internal_for_leaf_commit against expected_commits.
+    if internal_recursive_commit != baseline.internal_recursive_commit {
+        return Err(VerifyStarkError::InternalRecursiveMismatch {
+            expected: baseline.internal_recursive_commit,
+            actual: internal_recursive_commit,
+        });
     }
     Ok(())
 }

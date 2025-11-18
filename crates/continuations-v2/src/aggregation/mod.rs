@@ -37,11 +37,13 @@ pub trait AggregationProver<PB: ProverBackendV2> {
         &self,
         proofs: &[Proof],
         user_pv_commit: Option<[F; DIGEST_SIZE]>,
+        is_recursive: bool,
     ) -> ProvingContextV2<PB>;
     fn agg_prove<E: StarkWhirEngine<PB = PB>>(
         &self,
         proofs: &[Proof],
         user_pv_commit: Option<[F; DIGEST_SIZE]>,
+        is_recursive: bool,
     ) -> Result<Proof>;
 }
 

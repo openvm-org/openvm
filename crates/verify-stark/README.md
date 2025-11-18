@@ -35,14 +35,13 @@ The final internal-recursive STARK proof is verified using the internal-recursiv
 Given a fixed VM and executable, we must certain exposed public values against a set of baseline artifacts (which can be generated ahead of time given the exe and VM, app, and aggregation configs).
 
 - `program_commit`, `initial_root`, and `initial_pc` are hash-compressed and compared against a baseline `app_exe_commit`, which is derived from the `VmConfig`, `VmExe`, `MemoryConfig`, and application `SystemParams`.
-- `leaf_commit` and `internal_for_leaf_commit` are also compared against a pre-computed baseline
-- `internal_recursive_commit` is compared against a baseline if the final internal-recursive layer verified another internal-recursive proof (i.e. if  `internal_flag == 2`); otherwise it is checked to be unset
+- `leaf_commit`, `internal_for_leaf_commit`, and `internal_recursive_commit` are also compared against a pre-computed baseline
 
 **Other Public Values Validation:**
 
 The other public values are checked for completeness.
 
 - `exit_code` is checked to be 0 (success) and `is_terminate` is checked to be true.
-- `internal_flag` is checked to be 1 or 2, i.e. the final layer must be internal-recursive
+- `internal_flag` is checked to be 2, i.e. the final layer must be internal-recursive
 
 Note there is no expected value for `final_pc`, and thus it is left unchecked.

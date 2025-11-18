@@ -18,11 +18,9 @@ pub enum VerifyStarkError {
     InternalForLeafCommitMismatch { expected: Digest, actual: Digest },
     #[error("Invalid internal recursive commit: expected {expected:?}, actual {actual:?}")]
     InternalRecursiveMismatch { expected: Digest, actual: Digest },
-    #[error("Internal recursive commit should not be defined for internal flag 1")]
-    InternalRecursiveDefined,
     #[error("Program execution did not terminate successfully, exit_code: {0}")]
     ExecutionUnsuccessful(F),
-    #[error("Invalid internal flag {0}, should be either 1 or 2")]
+    #[error("Invalid internal flag {0}, should be either 2")]
     InvalidInternalFlag(F),
     #[error("Other error: {0}")]
     Other(eyre::Error),

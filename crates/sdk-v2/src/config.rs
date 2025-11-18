@@ -1,23 +1,26 @@
 use clap::Args;
-use openvm_transpiler::transpiler::Transpiler;
+use openvm_sdk_config::SdkVmConfig;
 use serde::{Deserialize, Serialize};
 use stark_backend_v2::SystemParams;
-
-mod global;
-pub use global::*;
 
 // Aggregation Tree Defaults
 pub const DEFAULT_NUM_CHILDREN_LEAF: usize = 1;
 pub const DEFAULT_NUM_CHILDREN_INTERNAL: usize = 3;
 
-pub trait TranspilerConfig<F> {
-    fn transpiler(&self) -> Transpiler<F>;
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize, derive_new::new)]
 pub struct AppConfig<VC> {
     pub app_vm_config: VC,
     pub system_params: SystemParams,
+}
+
+impl AppConfig<SdkVmConfig> {
+    pub fn standard(params: SystemParams) -> Self {
+        Self::new(SdkVmConfig::standard(), params)
+    }
+
+    pub fn riscv32(params: SystemParams) -> Self {
+        Self::new(SdkVmConfig::riscv32(), params)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -29,8 +32,7 @@ pub struct AggregationConfig {
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct AggregationSystemParams {
     pub leaf: SystemParams,
-    pub internal_for_leaf: SystemParams,
-    pub internal_recursive: SystemParams,
+    pub internal: SystemParams,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Args)]

@@ -30,14 +30,16 @@ impl AggProver {
         agg_config: AggregationConfig,
         agg_tree_config: AggregationTreeConfig,
     ) -> Self {
-        let leaf_prover = NonRootAggregationProver::new::<E>(app_vk, agg_config.params.leaf);
+        let leaf_prover = NonRootAggregationProver::new::<E>(app_vk, agg_config.params.leaf, false);
         let internal_for_leaf_prover = NonRootAggregationProver::new::<E>(
             leaf_prover.get_vk(),
-            agg_config.params.internal_for_leaf,
+            agg_config.params.internal,
+            false,
         );
         let internal_recursive_prover = NonRootAggregationProver::new::<E>(
             internal_for_leaf_prover.get_vk(),
-            agg_config.params.internal_recursive,
+            agg_config.params.internal,
+            true,
         );
         Self {
             leaf_prover,
@@ -56,6 +58,7 @@ impl AggProver {
                 self.leaf_prover.agg_prove::<E>(
                     proofs,
                     Some(continuation_proof.user_public_values.public_values_commit),
+                    false,
                 )
             })
             .collect::<Result<Vec<_>>>()?;
@@ -63,20 +66,29 @@ impl AggProver {
         // Verify leaf-layer proofs and generate internal-for-leaf-layer proofs
         let mut internal_proofs = leaf_proofs
             .chunks(self.agg_tree_config.num_children_internal)
-            .map(|proofs| self.internal_for_leaf_prover.agg_prove::<E>(proofs, None))
+            .map(|proofs| {
+                self.internal_for_leaf_prover
+                    .agg_prove::<E>(proofs, None, false)
+            })
             .collect::<Result<Vec<_>>>()?;
 
         // Verify internal-for-leaf-layer proofs and generate internal-recursive-layer proofs
         internal_proofs = internal_proofs
             .chunks(self.agg_tree_config.num_children_internal)
-            .map(|proofs| self.internal_recursive_prover.agg_prove::<E>(proofs, None))
+            .map(|proofs| {
+                self.internal_recursive_prover
+                    .agg_prove::<E>(proofs, None, false)
+            })
             .collect::<Result<Vec<_>>>()?;
 
         // Recursively verify internal-layer proofs until only 1 remains
         while internal_proofs.len() > 1 {
             internal_proofs = internal_proofs
                 .chunks(self.agg_tree_config.num_children_internal)
-                .map(|proofs| self.internal_recursive_prover.agg_prove::<E>(proofs, None))
+                .map(|proofs| {
+                    self.internal_recursive_prover
+                        .agg_prove::<E>(proofs, None, true)
+                })
                 .collect::<Result<Vec<_>>>()?;
         }
 
