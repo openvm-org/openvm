@@ -77,6 +77,7 @@ impl StackingModule {
         }
     }
 
+    #[tracing::instrument(name = "run_preflight(StackingModule)", skip_all)]
     pub fn run_preflight<TS>(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS)
     where
         TS: FiatShamirTranscript + TranscriptHistory,
