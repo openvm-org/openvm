@@ -335,10 +335,11 @@ where
             .metered_cost_interpreter(&exe)
             .map_err(VirtualMachineError::from)?;
 
-        let (cost, final_state) = interpreter
+        let (ctx, final_state) = interpreter
             .execute_metered_cost(inputs, ctx)
             .map_err(VirtualMachineError::from)?;
-        let instret = final_state.instret();
+        let instret = ctx.instret;
+        let cost = ctx.cost;
 
         let public_values = extract_public_values(
             self.executor.config.as_ref().num_public_values,
@@ -354,8 +355,8 @@ where
     /// `app_exe` with program inputs `inputs`.\
     ///
     /// For convenience, this function also returns the [VerificationBaseline], which is a full
-    /// commitment to the App [VmExe] and aggregation verifiers. It does **not** depend on the `inputs`.
-    /// It can be generated separately from the proof by creating a
+    /// commitment to the App [VmExe] and aggregation verifiers. It does **not** depend on the
+    /// `inputs`. It can be generated separately from the proof by creating a
     /// [`prover`](Self::prover) and calling
     /// [`app_commit`](StarkProver::app_commit).
     ///
