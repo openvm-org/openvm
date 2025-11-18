@@ -159,6 +159,7 @@ impl BatchConstraintModule {
         }
     }
 
+    #[tracing::instrument(name = "run_preflight(BatchConstraintModule)", skip_all)]
     pub fn run_preflight<TS>(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS)
     where
         TS: FiatShamirTranscript + TranscriptHistory,
@@ -426,6 +427,7 @@ pub struct SelectorCount {
 }
 
 impl BatchConstraintModule {
+    #[tracing::instrument(name = "generate_blob(BatchConstraintModule)", skip_all)]
     fn generate_blob(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,

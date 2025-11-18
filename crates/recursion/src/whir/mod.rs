@@ -116,6 +116,7 @@ impl WhirModule {
 }
 
 impl WhirModule {
+    #[tracing::instrument(name = "run_preflight(WhirModule)", skip_all)]
     pub fn run_preflight<TS: FiatShamirTranscript + TranscriptHistory>(
         &self,
         proof: &Proof,
@@ -479,6 +480,7 @@ impl AirModule for WhirModule {
 }
 
 impl WhirModule {
+    #[tracing::instrument(name = "generate_blob(WhirModule)", skip_all)]
     fn generate_blob(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
