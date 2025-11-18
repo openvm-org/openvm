@@ -13,12 +13,12 @@ use crate::{
     utils::MultiProofVecVec,
 };
 
-struct ExpressionClaimBlob {
+pub struct ExpressionClaimBlob {
     // (n, value), n is before lift, can be negative
     claims: MultiProofVecVec<(isize, EF)>,
 }
 
-fn generate_expression_claim_blob(
+pub fn generate_expression_claim_blob(
     cf_blob: &ConstraintsFoldingBlob,
     if_blob: &InteractionsFoldingBlob,
 ) -> ExpressionClaimBlob {
@@ -34,14 +34,12 @@ fn generate_expression_claim_blob(
 #[tracing::instrument(name = "generate_trace(ExpressionClaimAir)", skip_all)]
 pub(in crate::batch_constraint) fn generate_trace(
     _vk: &MultiStarkVerifyingKeyV2,
-    cf_blob: &ConstraintsFoldingBlob,
-    if_blob: &InteractionsFoldingBlob,
+    blob: &ExpressionClaimBlob,
     proofs: &[Proof],
     preflights: &[Preflight],
     pow_checker: &PowerCheckerTraceGenerator<2, 32>,
 ) -> RowMajorMatrix<F> {
     let width = ExpressionClaimCols::<F>::width();
-    let blob = generate_expression_claim_blob(cf_blob, if_blob);
 
     let height = blob.claims.len();
     let padded_height = height.next_power_of_two();
