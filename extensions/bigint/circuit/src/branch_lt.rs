@@ -164,7 +164,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLes
         std::slice::from_raw_parts(pre_compute, size_of::<BranchLtPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, OP>(pre_compute, exec_state);
     let elapsed = start.elapsed();
-    println!("bigint [{:.6}s]", elapsed.as_secs_f64());
+    println!("bigint [{:.12}s]", elapsed.as_secs_f64());
 }
 
 #[create_handler]

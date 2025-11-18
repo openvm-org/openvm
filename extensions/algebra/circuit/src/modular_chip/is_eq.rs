@@ -665,7 +665,7 @@ unsafe fn execute_e1_impl<
         exec_state,
     );
     let elapsed = start.elapsed();
-    println!("algebra [{:.6}s]", elapsed.as_secs_f64());
+    println!("algebra [{:.12}s]", elapsed.as_secs_f64());
 }
 
 #[create_handler]

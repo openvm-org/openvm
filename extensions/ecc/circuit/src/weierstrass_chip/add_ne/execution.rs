@@ -357,7 +357,7 @@ unsafe fn execute_e1_impl<
     );
 
     let elapsed = start.elapsed();
-    println!("ecc [{:.6}s]", elapsed.as_secs_f64());
+    println!("ecc [{:.12}s]", elapsed.as_secs_f64());
 
     result
 }

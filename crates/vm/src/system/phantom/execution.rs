@@ -231,7 +231,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
         std::slice::from_raw_parts(pre_compute, size_of::<PhantomPreCompute<F>>()).borrow();
     let result = execute_e12_impl(pre_compute, exec_state);
     let elapsed = start.elapsed();
-    println!("phantom [{:.6}s]", elapsed.as_secs_f64());
+    println!("phantom [{:.12}s]", elapsed.as_secs_f64());
     result
 }
 
