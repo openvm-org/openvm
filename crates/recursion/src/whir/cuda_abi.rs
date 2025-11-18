@@ -2,7 +2,7 @@ use cuda_backend_v2::{EF, F};
 use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
 
 use crate::whir::{
-    InitialOpenedValueRecord, final_poly_query_eval::FinalPolyQueryEvalRecord,
+    InitialOpenedValueRecord, final_poly_query_eval::FinalPolyQueryEvalRecord, folding::FoldRecord,
     non_initial_opened_values::NonInitialOpenedValueRecord,
 };
 
@@ -54,6 +54,16 @@ extern "C" {
         zi_roots_d: *const F,
         yis_d: *const EF,
         raw_queries_d: *const F,
+    ) -> i32;
+
+    fn _whir_folding_tracegen(
+        trace_d: *mut F,
+        num_valid_rows: u32,
+        height: u32,
+        records_d: *const FoldRecord,
+        num_rounds: u32,
+        num_queries: u32,
+        k_whir: u32,
     ) -> i32;
 }
 
@@ -157,5 +167,25 @@ pub unsafe fn non_initial_opened_values_tracegen(
         zi_roots_d.as_ptr(),
         yis_d.as_ptr(),
         raw_queries_d.as_ptr(),
+    ))
+}
+
+pub unsafe fn whir_folding_tracegen(
+    trace_d: &DeviceBuffer<F>,
+    num_valid_rows: u32,
+    height: u32,
+    records_d: &DeviceBuffer<FoldRecord>,
+    num_rounds: u32,
+    num_queries: u32,
+    k_whir: u32,
+) -> Result<(), CudaError> {
+    CudaError::from_result(_whir_folding_tracegen(
+        trace_d.as_mut_ptr(),
+        num_valid_rows,
+        height,
+        records_d.as_ptr(),
+        num_rounds,
+        num_queries,
+        k_whir,
     ))
 }
