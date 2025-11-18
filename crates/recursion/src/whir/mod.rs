@@ -35,7 +35,7 @@ use crate::{
         },
         final_poly_mle_eval::FinalPolyMleEvalAir,
         final_poly_query_eval::{FinalPolyQueryEvalAir, FinalPolyQueryEvalRecord},
-        folding::WhirFoldingAir,
+        folding::{FoldRecord, WhirFoldingAir},
         initial_opened_values::{InitialOpenedValueRecord, InitialOpenedValuesAir},
         non_initial_opened_values::{
             NonInitialOpenedValueRecord, NonInitialOpenedValuesAir,
@@ -50,7 +50,7 @@ use crate::{
 mod bus;
 mod final_poly_mle_eval;
 mod final_poly_query_eval;
-mod folding;
+pub mod folding;
 mod initial_opened_values;
 mod non_initial_opened_values;
 mod query;
@@ -251,7 +251,7 @@ impl WhirModule {
                 let zj_root = omega.exp_u64(index as u64);
 
                 let zj = zj_root.exp_power_of_2(k_whir);
-
+                let record_start = fold_records.len();
                 let yj = if i == 0 {
                     let mut codeword_vals = vec![EF::ZERO; 1 << k_whir];
                     let mut mu_pow_iter = mu_pows.iter();
@@ -330,6 +330,9 @@ impl WhirModule {
                         &mut fold_records,
                     )
                 };
+                for rec in &mut fold_records[record_start..] {
+                    rec.set_final_values(zj, yj);
+                }
                 zj_roots_round.push(zj_root);
                 zjs_round.push(zj);
                 yjs_round.push(yj);
@@ -669,20 +672,6 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for WhirModule {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct FoldRecord {
-    whir_round: usize,
-    query_idx: usize,
-    twiddle: F,
-    coset_shift: F,
-    coset_size: usize,
-    coset_idx: usize,
-    height: usize,
-    left_value: EF,
-    right_value: EF,
-    value: EF,
-}
-
 fn binary_k_fold(
     mut values: Vec<EF>,
     alphas: &[EF],
@@ -715,18 +704,19 @@ fn binary_k_fold(
             let x = tw[i << j] * coset_shift;
             let x_inv = inv_tw[i << j] * coset_shift_inv;
             let new_val = lo[i] + (alpha - x) * (lo[i] - hi[i]) * x_inv.halve();
-            records.push(FoldRecord {
+            records.push(FoldRecord::new(
                 whir_round,
                 query_idx,
-                twiddle: tw[i << j],
+                tw[i << j],
                 coset_shift,
-                coset_size: m,
-                coset_idx: i,
-                height: j + 1,
-                left_value: lo[i],
-                right_value: hi[i],
-                value: new_val,
-            });
+                m,
+                i,
+                j + 1,
+                lo[i],
+                hi[i],
+                new_val,
+                alpha,
+            ));
             lo[i] = new_val;
         }
     }
@@ -811,6 +801,7 @@ mod cuda_tracegen {
         pub mu_pows: DeviceBuffer<EF>,
         pub final_poly_query_eval_records: DeviceBuffer<FinalPolyQueryEvalRecord>,
         pub non_initial_opened_values_records: DeviceBuffer<NonInitialOpenedValueRecord>,
+        pub folding_records: DeviceBuffer<FoldRecord>,
     }
 
     impl WhirBlobGpu {
@@ -860,6 +851,11 @@ mod cuda_tracegen {
             let mu_pows = to_device_or_nullptr(&blob.mu_pows).unwrap();
             let initial_opened_values_records =
                 to_device_or_nullptr(&blob.initial_opened_values_records).unwrap();
+            let folding_records_host = preflights
+                .iter()
+                .flat_map(|preflight| preflight.whir.fold_records.iter().copied())
+                .collect_vec();
+            let folding_records = to_device_or_nullptr(&folding_records_host).unwrap();
             let final_poly_query_eval_records =
                 to_device_or_nullptr(&blob.final_poly_query_eval_records).unwrap();
             let non_initial_opened_values_records =
@@ -878,6 +874,7 @@ mod cuda_tracegen {
                 mus,
                 mu_pows,
                 final_poly_query_eval_records,
+                folding_records,
                 non_initial_opened_values_records,
             }
         }
@@ -928,6 +925,9 @@ mod cuda_tracegen {
                 }
                 WhirModuleChip::FinalPolyQueryEval => {
                     final_poly_query_eval::cuda::generate_trace(&blob_gpu, child_vk.system_params)
+                }
+                WhirModuleChip::Folding => {
+                    folding::cuda::generate_trace(&blob_gpu, child_vk.system_params, proofs.len())
                 }
                 _ => {
                     // Fall back to CPU impl.
