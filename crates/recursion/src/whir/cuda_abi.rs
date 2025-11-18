@@ -1,7 +1,10 @@
 use cuda_backend_v2::{EF, F};
 use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
 
-use crate::whir::{InitialOpenedValueRecord, final_poly_query_eval::FinalPolyQueryEvalRecord};
+use crate::whir::{
+    InitialOpenedValueRecord, final_poly_query_eval::FinalPolyQueryEvalRecord,
+    non_initial_opened_values::NonInitialOpenedValueRecord,
+};
 
 extern "C" {
     fn _initial_opened_values_tracegen(
@@ -36,6 +39,21 @@ extern "C" {
         round_offsets_d: *const usize,
         log_final_poly_len: usize,
         num_whir_queries: usize,
+    ) -> i32;
+
+    fn _non_initial_opened_values_tracegen(
+        trace_d: *mut F,
+        num_valid_rows: usize,
+        height: usize,
+        records_d: *const NonInitialOpenedValueRecord,
+        num_whir_rounds: usize,
+        num_whir_queries: usize,
+        k_whir: usize,
+        omega_k: F,
+        zis_d: *const F,
+        zi_roots_d: *const F,
+        yis_d: *const EF,
+        raw_queries_d: *const F,
     ) -> i32;
 }
 
@@ -109,5 +127,35 @@ pub unsafe fn final_poly_query_eval_tracegen(
         round_offsets_d.as_ptr(),
         log_final_poly_len,
         num_whir_queries,
+    ))
+}
+
+pub unsafe fn non_initial_opened_values_tracegen(
+    trace_d: &DeviceBuffer<F>,
+    num_valid_rows: usize,
+    height: usize,
+    records_d: &DeviceBuffer<NonInitialOpenedValueRecord>,
+    num_whir_rounds: usize,
+    num_whir_queries: usize,
+    k_whir: usize,
+    omega_k: F,
+    zis_d: &DeviceBuffer<F>,
+    zi_roots_d: &DeviceBuffer<F>,
+    yis_d: &DeviceBuffer<EF>,
+    raw_queries_d: &DeviceBuffer<F>,
+) -> Result<(), CudaError> {
+    CudaError::from_result(_non_initial_opened_values_tracegen(
+        trace_d.as_mut_ptr(),
+        num_valid_rows,
+        height,
+        records_d.as_ptr(),
+        num_whir_rounds,
+        num_whir_queries,
+        k_whir,
+        omega_k,
+        zis_d.as_ptr(),
+        zi_roots_d.as_ptr(),
+        yis_d.as_ptr(),
+        raw_queries_d.as_ptr(),
     ))
 }
