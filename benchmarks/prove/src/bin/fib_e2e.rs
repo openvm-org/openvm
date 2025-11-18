@@ -24,7 +24,7 @@ async fn main() -> Result<()> {
 
     let sdk = Sdk::new(app_config)?;
 
-    let n = 800_000u64;
+    let n = 100_000u64;
     let mut stdin = StdIn::default();
     stdin.write(&n);
     run_with_metric_collection("OUTPUT_PATH", || -> eyre::Result<_> {
