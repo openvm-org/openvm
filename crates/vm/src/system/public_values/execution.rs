@@ -215,9 +215,12 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS
 ) where
     CTX: ExecutionCtxTrait,
 {
+    let start = std::time::Instant::now();
     let pre_compute: &PublicValuesPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<PublicValuesPreCompute>()).borrow();
     execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(pre_compute, exec_state);
+    let elapsed = start.elapsed();
+    println!("public values [{:.12}s]", elapsed.as_secs_f64());
 }
 
 #[create_handler]

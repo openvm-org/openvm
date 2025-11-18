@@ -225,9 +225,14 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
+    let start = std::time::Instant::now();
     let pre_compute: &PhantomPreCompute<F> =
         std::slice::from_raw_parts(pre_compute, size_of::<PhantomPreCompute<F>>()).borrow();
-    execute_e12_impl(pre_compute, exec_state)
+    let result = execute_e12_impl(pre_compute, exec_state);
+    let elapsed = start.elapsed();
+    println!("phantom [{:.12}s]", elapsed.as_secs_f64());
+
+    result 
 }
 
 #[create_handler]

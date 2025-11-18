@@ -150,9 +150,12 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE: 
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
+    let start = std::time::Instant::now();
     let pre_compute: &BranchEqPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<BranchEqPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, IS_NE>(pre_compute, exec_state);
+    let elapsed = start.elapsed();
+    println!("bigint [{:.12}s]", elapsed.as_secs_f64());
 }
 
 #[create_handler]

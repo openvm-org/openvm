@@ -153,9 +153,12 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
+    let start = std::time::Instant::now();
     let pre_compute: &ShaPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<ShaPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, true>(pre_compute, exec_state);
+    let elapsed = start.elapsed();
+    println!("sha256 [{:.12}s]", elapsed.as_secs_f64());
 }
 
 #[create_handler]
