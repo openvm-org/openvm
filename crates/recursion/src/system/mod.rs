@@ -39,7 +39,7 @@ use crate::{
     proof_shape::ProofShapeModule,
     stacking::StackingModule,
     transcript::TranscriptModule,
-    whir::{FoldRecord, WhirModule},
+    whir::{WhirModule, folding::FoldRecord},
 };
 
 mod dummy;
