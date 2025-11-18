@@ -1,0 +1,142 @@
+#include "fp.h"
+#include "fpext.h"
+#include "launcher.cuh"
+#include "primitives/trace_access.h"
+#include "types.h"
+#include "util.cuh"
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+
+template <typename T> struct NonInitialOpenedValuesCols {
+    T is_enabled;
+    T proof_idx;
+    T whir_round;
+    T query_idx;
+    T coset_idx;
+    T is_first_in_proof;
+    T is_first_in_round;
+    T is_first_in_query;
+    T merkle_idx_bit_src;
+    T zi_root;
+    T zi;
+    T twiddle;
+    T value[D_EF];
+    T value_hash[WIDTH];
+    T yi[D_EF];
+};
+
+typedef struct {
+    Fp value[D_EF];
+    Fp value_hash[WIDTH];
+} NonInitialOpenedValueRecord;
+
+__global__ void non_initial_opened_values_tracegen(
+    Fp *trace,
+    size_t num_valid_rows,
+    size_t height,
+    const NonInitialOpenedValueRecord *records,
+    size_t num_whir_rounds,
+    size_t num_whir_queries,
+    size_t k_whir,
+    Fp omega_k,
+    const Fp *zis,
+    const Fp *zi_roots,
+    const FpExt *yis,
+    const Fp *raw_queries
+) {
+    uint32_t row_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row_idx >= height)
+        return;
+
+    RowSlice row(trace + row_idx, height);
+
+    if (row_idx >= num_valid_rows) {
+        row.fill_zero(0, sizeof(NonInitialOpenedValuesCols<uint8_t>));
+        return;
+    }
+
+    const size_t rows_per_query = 1ull << k_whir;
+    const size_t rows_per_round = rows_per_query * num_whir_queries;
+    const size_t rows_per_proof =
+        (num_whir_rounds > 0 ? num_whir_rounds - 1 : 0) * rows_per_round;
+    assert(rows_per_proof > 0);
+
+    const size_t row_idx_usize = static_cast<size_t>(row_idx);
+    const size_t proof_idx = row_idx_usize / rows_per_proof;
+    const size_t row_in_proof = row_idx_usize - proof_idx * rows_per_proof;
+    const size_t whir_round = row_in_proof / rows_per_round + 1;
+    const size_t row_in_round = row_in_proof - (whir_round - 1) * rows_per_round;
+    const size_t query_idx = row_in_round / rows_per_query;
+    const size_t coset_idx = row_in_round - query_idx * rows_per_query;
+
+    const bool is_first_in_proof = row_in_proof == 0;
+    const bool is_first_in_query = coset_idx == 0;
+    const bool is_first_in_round = is_first_in_query && query_idx == 0;
+
+    const size_t per_proof_offset = proof_idx * num_whir_rounds * num_whir_queries;
+    const size_t round_query_idx =
+        per_proof_offset + whir_round * num_whir_queries + query_idx;
+
+    const NonInitialOpenedValueRecord record = records[row_idx];
+
+    COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, is_enabled, Fp::one());
+    COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, proof_idx, proof_idx);
+    COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, whir_round, whir_round);
+    COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, query_idx, query_idx);
+    COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, coset_idx, coset_idx);
+    COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, is_first_in_proof, is_first_in_proof);
+    COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, is_first_in_round, is_first_in_round);
+    COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, is_first_in_query, is_first_in_query);
+    COL_WRITE_VALUE(
+        row,
+        NonInitialOpenedValuesCols,
+        merkle_idx_bit_src,
+        raw_queries[round_query_idx]
+    );
+    COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, zi_root, zi_roots[round_query_idx]);
+    COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, zi, zis[round_query_idx]);
+
+    Fp twiddle = pow(omega_k, coset_idx);
+    COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, twiddle, twiddle);
+
+    COL_WRITE_ARRAY(row, NonInitialOpenedValuesCols, value, record.value);
+    COL_WRITE_ARRAY(row, NonInitialOpenedValuesCols, value_hash, record.value_hash);
+
+    const FpExt yi = yis[round_query_idx];
+    COL_WRITE_ARRAY(row, NonInitialOpenedValuesCols, yi, yi.elems);
+}
+
+extern "C" int _non_initial_opened_values_tracegen(
+    Fp *trace_d,
+    size_t num_valid_rows,
+    size_t height,
+    const NonInitialOpenedValueRecord *records_d,
+    size_t num_whir_rounds,
+    size_t num_whir_queries,
+    size_t k_whir,
+    Fp omega_k,
+    const Fp *zis_d,
+    const Fp *zi_roots_d,
+    const FpExt *yis_d,
+    const Fp *raw_queries_d
+) {
+    assert((height & (height - 1)) == 0);
+    auto [grid, block] = kernel_launch_params(height);
+
+    non_initial_opened_values_tracegen<<<grid, block>>>(
+        trace_d,
+        num_valid_rows,
+        height,
+        records_d,
+        num_whir_rounds,
+        num_whir_queries,
+        k_whir,
+        omega_k,
+        zis_d,
+        zi_roots_d,
+        yis_d,
+        raw_queries_d
+    );
+    return CHECK_KERNEL();
+}
