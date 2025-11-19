@@ -34,8 +34,8 @@ pub struct NonRootAggregationProver<
 
     // TODO: tracegen currently requires storing these, we should revisit this
     child_vk: Arc<MultiStarkVerifyingKeyV2>,
-    pub(crate) child_vk_pcs_data: CommittedTraceDataV2<PB>,
-    pub(crate) circuit: Arc<AggregationCircuit<S>>,
+    child_vk_pcs_data: CommittedTraceDataV2<PB>,
+    circuit: Arc<AggregationCircuit<S>>,
 
     pub(crate) self_vk_pcs_data: Option<CommittedTraceDataV2<PB>>,
 }
