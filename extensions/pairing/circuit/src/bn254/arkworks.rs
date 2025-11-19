@@ -83,9 +83,10 @@ pub fn parse_g2_points<const N: usize>(raw: Vec<[[[u8; N]; 2]; 2]>) -> Vec<G2Aff
 pub fn pairing_hint_bytes(p: &[G1Affine], q: &[G2Affine]) -> Vec<u8> {
     let miller = multi_miller_loop(p, q);
     let (c, u) = final_exp_witness(&miller);
+    // Emit bytes in the Halo layout so guest code can consume the hint directly.
     let mut bytes = Vec::with_capacity(2 * FQ12_NUM_BYTES);
-    bytes.extend_from_slice(&fq12_to_bytes(&c));
-    bytes.extend_from_slice(&fq12_to_bytes(&u));
+    bytes.extend_from_slice(&fq12_to_bytes_halo_layout(&c));
+    bytes.extend_from_slice(&fq12_to_bytes_halo_layout(&u));
     bytes
 }
 
@@ -747,6 +748,33 @@ mod tests {
                 halo_fq12_to_bytes(&u_halo),
                 "u mismatch"
             );
+        }
+    }
+
+    #[test]
+    fn test_pairing_hint_bytes_matches_halo2() {
+        use crate::bn254::halo2curves as bn254_halo;
+
+        let mut rng = StdRng::seed_from_u64(1337);
+        for _ in 0..5 {
+            let ark_g1 = G1Affine::rand(&mut rng);
+            let ark_g2 = G2Affine::rand(&mut rng);
+
+            let raw_p = vec![[fq_to_bytes(&ark_g1.x), fq_to_bytes(&ark_g1.y)]];
+            let raw_q = vec![[
+                [fq_to_bytes(&ark_g2.x.c0), fq_to_bytes(&ark_g2.x.c1)],
+                [fq_to_bytes(&ark_g2.y.c0), fq_to_bytes(&ark_g2.y.c1)],
+            ]];
+
+            let p_ark = super::parse_g1_points(raw_p.clone());
+            let q_ark = super::parse_g2_points(raw_q.clone());
+            let bytes_ark = super::pairing_hint_bytes(&p_ark, &q_ark);
+
+            let p_halo = bn254_halo::parse_g1_points(raw_p);
+            let q_halo = bn254_halo::parse_g2_points(raw_q);
+            let bytes_halo = bn254_halo::pairing_hint_bytes(&p_halo, &q_halo);
+
+            assert_eq!(bytes_ark, bytes_halo, "pairing hint bytes mismatch");
         }
     }
 }

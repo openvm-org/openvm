@@ -186,18 +186,16 @@ pub(crate) mod phantom {
                 let raw_p = read_g1::<BN254_NUM_LIMBS>(memory, p_ptr, p_len);
                 let raw_q = read_g2::<BN254_NUM_LIMBS>(memory, q_ptr, q_len);
 
-                let halo_p = bn254_halo::parse_g1_points(raw_p.clone());
-                let halo_q = bn254_halo::parse_g2_points(raw_q.clone());
-                let halo_bytes = bn254_halo::pairing_hint_bytes(&halo_p, &halo_q);
+                let p = bn254_ark::parse_g1_points(raw_p);
+                let q = bn254_ark::parse_g2_points(raw_q);
+                let bytes = bn254_ark::pairing_hint_bytes(&p, &q);
 
-                let ark_p = bn254_ark::parse_g1_points(raw_p);
-                let ark_q = bn254_ark::parse_g2_points(raw_q);
-                let ark_bytes = bn254_ark::pairing_hint_bytes(&ark_p, &ark_q);
-
-                ensure_matching_bytes("BN254", &halo_bytes, &ark_bytes)?;
+                // let p = bn254_halo::parse_g1_points(raw_p.clone());
+                // let q = bn254_halo::parse_g2_points(raw_q.clone());
+                // let bytes = bn254_halo::pairing_hint_bytes(&p, &q);
 
                 hint_stream.clear();
-                hint_stream.extend(ark_bytes.into_iter().map(F::from_canonical_u8));
+                hint_stream.extend(bytes.into_iter().map(F::from_canonical_u8));
             }
             Some(PairingCurve::Bls12_381) => {
                 if p_len != q_len {
@@ -207,15 +205,9 @@ pub(crate) mod phantom {
                 let raw_p = read_g1::<BLS12_381_NUM_LIMBS>(memory, p_ptr, p_len);
                 let raw_q = read_g2::<BLS12_381_NUM_LIMBS>(memory, q_ptr, q_len);
 
-                let halo_p = bls12_halo::parse_g1_points(raw_p.clone());
-                let halo_q = bls12_halo::parse_g2_points(raw_q.clone());
-                let halo_bytes = bls12_halo::pairing_hint_bytes(&halo_p, &halo_q);
-
                 let ark_p = bls12_ark::parse_g1_points(raw_p);
                 let ark_q = bls12_ark::parse_g2_points(raw_q);
                 let ark_bytes = bls12_ark::pairing_hint_bytes(&ark_p, &ark_q);
-
-                ensure_matching_bytes("BLS12-381", &halo_bytes, &ark_bytes)?;
 
                 hint_stream.clear();
                 hint_stream.extend(ark_bytes.into_iter().map(F::from_canonical_u8));
@@ -224,31 +216,6 @@ pub(crate) mod phantom {
                 bail!("hint_pairing: invalid PairingCurve={c_upper}");
             }
         }
-        Ok(())
-    }
-
-    fn ensure_matching_bytes(label: &str, lhs: &[u8], rhs: &[u8]) -> eyre::Result<()> {
-        if lhs.len() != rhs.len() {
-            bail!(
-                "{} pairing byte length mismatch: halo2={}, arkworks={}",
-                label,
-                lhs.len(),
-                rhs.len()
-            );
-        }
-
-        for (idx, (h, a)) in lhs.iter().zip(rhs.iter()).enumerate() {
-            if h != a {
-                bail!(
-                    "{} pairing bytes differ at index {}: halo2={:02x}, arkworks={:02x}",
-                    label,
-                    idx,
-                    h,
-                    a
-                );
-            }
-        }
-
         Ok(())
     }
 }
