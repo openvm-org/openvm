@@ -6,6 +6,8 @@ pub use openvm_pairing_guest::{
     bn254::BN254_COMPLEX_STRUCT_NAME,
 };
 
+mod bls12_381;
+mod bn254;
 mod config;
 mod fp12;
 mod pairing_extension;

@@ -56,7 +56,7 @@ perf-metrics = [
     "openvm-circuit/perf-metrics",
     "openvm-transpiler/function-span",
 ]
-evm-prove = []
+execute-verifier = []
 
 [[bench]]
 name = "execute"
@@ -65,6 +65,7 @@ harness = false
 [[bin]]
 name = "execute-verifier"
 path = "src/execute-verifier.rs"
+required-features = ["execute-verifier"]
 
 [package.metadata.cargo-shear]
 ignored = ["derive_more", "rand"]

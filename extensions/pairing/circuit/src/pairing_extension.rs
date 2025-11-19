@@ -7,11 +7,11 @@ use openvm_circuit::{
         ExecutorInventoryBuilder, ExecutorInventoryError, VmCircuitExtension, VmExecutionExtension,
         VmProverExtension,
     },
-    system::phantom::PhantomExecutor,
+    system::{memory::online::GuestMemory, phantom::PhantomExecutor},
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
 use openvm_ecc_circuit::CurveConfig;
-use openvm_instructions::PhantomDiscriminant;
+use openvm_instructions::{riscv::RV32_MEMORY_AS, PhantomDiscriminant};
 use openvm_pairing_guest::{
     bls12_381::{
         BLS12_381_ECC_STRUCT_NAME, BLS12_381_MODULUS, BLS12_381_ORDER, BLS12_381_XI_ISIZE,
@@ -22,6 +22,11 @@ use openvm_pairing_transpiler::PairingPhantom;
 use openvm_stark_backend::{config::StarkGenericConfig, engine::StarkEngine, p3_field::Field};
 use serde::{Deserialize, Serialize};
 use strum::FromRepr;
+
+use crate::{
+    bls12_381::{arkworks as bls12_ark, halo2curves as bls12_halo},
+    bn254::{arkworks as bn254_ark, halo2curves as bn254_halo},
+};
 
 // All the supported pairing curves.
 #[derive(Clone, Copy, Debug, FromRepr, Serialize, Deserialize)]
@@ -115,26 +120,20 @@ pub(crate) mod phantom {
     use std::collections::VecDeque;
 
     use eyre::bail;
-    use halo2curves_axiom::ff;
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
         system::memory::online::GuestMemory,
     };
-    use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
     use openvm_instructions::{
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},
         PhantomDiscriminant,
     };
-    use openvm_pairing_guest::{
-        bls12_381::BLS12_381_NUM_LIMBS,
-        bn254::BN254_NUM_LIMBS,
-        pairing::{FinalExp, MultiMillerLoop},
-    };
+    use openvm_pairing_guest::{bls12_381::BLS12_381_NUM_LIMBS, bn254::BN254_NUM_LIMBS};
     use openvm_rv32im_circuit::adapters::{memory_read, read_rv32_register};
     use openvm_stark_backend::p3_field::Field;
     use rand::rngs::StdRng;
 
-    use super::PairingCurve;
+    use super::*;
 
     pub struct PairingHintSubEx;
 
@@ -180,88 +179,46 @@ pub(crate) mod phantom {
 
         match PairingCurve::from_repr(c_upper as usize) {
             Some(PairingCurve::Bn254) => {
-                use halo2curves_axiom::bn256::{Fq, Fq12, Fq2};
-                use openvm_pairing_guest::halo2curves_shims::bn254::Bn254;
-                const N: usize = BN254_NUM_LIMBS;
                 if p_len != q_len {
                     bail!("hint_pairing: p_len={p_len} != q_len={q_len}");
                 }
-                let p = (0..p_len)
-                    .map(|i| -> eyre::Result<_> {
-                        let ptr = p_ptr + i * 2 * (N as u32);
-                        let x = read_fp::<N, Fq>(memory, ptr)?;
-                        let y = read_fp::<N, Fq>(memory, ptr + N as u32)?;
-                        Ok(AffinePoint::new(x, y))
-                    })
-                    .collect::<eyre::Result<Vec<_>>>()?;
-                let q = (0..q_len)
-                    .map(|i| -> eyre::Result<_> {
-                        let mut ptr = q_ptr + i * 4 * (N as u32);
-                        let mut read_fp2 = || -> eyre::Result<_> {
-                            let c0 = read_fp::<N, Fq>(memory, ptr)?;
-                            let c1 = read_fp::<N, Fq>(memory, ptr + N as u32)?;
-                            ptr += 2 * N as u32;
-                            Ok(Fq2::new(c0, c1))
-                        };
-                        let x = read_fp2()?;
-                        let y = read_fp2()?;
-                        Ok(AffinePoint::new(x, y))
-                    })
-                    .collect::<eyre::Result<Vec<_>>>()?;
 
-                let f: Fq12 = Bn254::multi_miller_loop(&p, &q);
-                let (c, u) = Bn254::final_exp_hint(&f);
+                let raw_p = read_g1::<BN254_NUM_LIMBS>(memory, p_ptr, p_len);
+                let raw_q = read_g2::<BN254_NUM_LIMBS>(memory, q_ptr, q_len);
+
+                let halo_p = bn254_halo::parse_g1_points(raw_p.clone());
+                let halo_q = bn254_halo::parse_g2_points(raw_q.clone());
+                let halo_bytes = bn254_halo::pairing_hint_bytes(&halo_p, &halo_q);
+
+                let ark_p = bn254_ark::parse_g1_points(raw_p);
+                let ark_q = bn254_ark::parse_g2_points(raw_q);
+                let ark_bytes = bn254_ark::pairing_hint_bytes(&ark_p, &ark_q);
+
+                ensure_matching_bytes("BN254", &halo_bytes, &ark_bytes)?;
+
                 hint_stream.clear();
-                hint_stream.extend(
-                    c.to_coeffs()
-                        .into_iter()
-                        .chain(u.to_coeffs())
-                        .flat_map(|fp2| fp2.to_coeffs())
-                        .flat_map(|fp| fp.to_bytes())
-                        .map(F::from_canonical_u8),
-                );
+                hint_stream.extend(ark_bytes.into_iter().map(F::from_canonical_u8));
             }
             Some(PairingCurve::Bls12_381) => {
-                use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
-                use openvm_pairing_guest::halo2curves_shims::bls12_381::Bls12_381;
-                const N: usize = BLS12_381_NUM_LIMBS;
                 if p_len != q_len {
                     bail!("hint_pairing: p_len={p_len} != q_len={q_len}");
                 }
-                let p = (0..p_len)
-                    .map(|i| -> eyre::Result<_> {
-                        let ptr = p_ptr + i * 2 * (N as u32);
-                        let x = read_fp::<N, Fq>(memory, ptr)?;
-                        let y = read_fp::<N, Fq>(memory, ptr + N as u32)?;
-                        Ok(AffinePoint::new(x, y))
-                    })
-                    .collect::<eyre::Result<Vec<_>>>()?;
-                let q = (0..q_len)
-                    .map(|i| -> eyre::Result<_> {
-                        let mut ptr = q_ptr + i * 4 * (N as u32);
-                        let mut read_fp2 = || -> eyre::Result<_> {
-                            let c0 = read_fp::<N, Fq>(memory, ptr)?;
-                            let c1 = read_fp::<N, Fq>(memory, ptr + N as u32)?;
-                            ptr += 2 * N as u32;
-                            Ok(Fq2 { c0, c1 })
-                        };
-                        let x = read_fp2()?;
-                        let y = read_fp2()?;
-                        Ok(AffinePoint::new(x, y))
-                    })
-                    .collect::<eyre::Result<Vec<_>>>()?;
 
-                let f: Fq12 = Bls12_381::multi_miller_loop(&p, &q);
-                let (c, u) = Bls12_381::final_exp_hint(&f);
+                let raw_p = read_g1::<BLS12_381_NUM_LIMBS>(memory, p_ptr, p_len);
+                let raw_q = read_g2::<BLS12_381_NUM_LIMBS>(memory, q_ptr, q_len);
+
+                let halo_p = bls12_halo::parse_g1_points(raw_p.clone());
+                let halo_q = bls12_halo::parse_g2_points(raw_q.clone());
+                let halo_bytes = bls12_halo::pairing_hint_bytes(&halo_p, &halo_q);
+
+                let ark_p = bls12_ark::parse_g1_points(raw_p);
+                let ark_q = bls12_ark::parse_g2_points(raw_q);
+                let ark_bytes = bls12_ark::pairing_hint_bytes(&ark_p, &ark_q);
+
+                ensure_matching_bytes("BLS12-381", &halo_bytes, &ark_bytes)?;
+
                 hint_stream.clear();
-                hint_stream.extend(
-                    c.to_coeffs()
-                        .into_iter()
-                        .chain(u.to_coeffs())
-                        .flat_map(|fp2| fp2.to_coeffs())
-                        .flat_map(|fp| fp.to_bytes())
-                        .map(F::from_canonical_u8),
-                );
+                hint_stream.extend(ark_bytes.into_iter().map(F::from_canonical_u8));
             }
             _ => {
                 bail!("hint_pairing: invalid PairingCurve={c_upper}");
@@ -270,25 +227,59 @@ pub(crate) mod phantom {
         Ok(())
     }
 
-    fn read_fp<const N: usize, Fp: ff::PrimeField>(
-        memory: &GuestMemory,
-        ptr: u32,
-    ) -> eyre::Result<Fp>
-    where
-        Fp::Repr: From<[u8; N]>,
-    {
-        // SAFETY:
-        // - RV32_MEMORY_AS consists of `u8`s
-        // - RV32_MEMORY_AS is in bounds
-        let repr: &[u8; N] = unsafe {
-            memory
-                .memory
-                .get_slice::<u8>((RV32_MEMORY_AS, ptr), N)
-                .try_into()
-                .unwrap()
-        };
-        Fp::from_repr((*repr).into())
-            .into_option()
-            .ok_or(eyre::eyre!("bad ff::PrimeField repr"))
+    fn ensure_matching_bytes(label: &str, lhs: &[u8], rhs: &[u8]) -> eyre::Result<()> {
+        if lhs.len() != rhs.len() {
+            bail!(
+                "{} pairing byte length mismatch: halo2={}, arkworks={}",
+                label,
+                lhs.len(),
+                rhs.len()
+            );
+        }
+
+        for (idx, (h, a)) in lhs.iter().zip(rhs.iter()).enumerate() {
+            if h != a {
+                bail!(
+                    "{} pairing bytes differ at index {}: halo2={:02x}, arkworks={:02x}",
+                    label,
+                    idx,
+                    h,
+                    a
+                );
+            }
+        }
+
+        Ok(())
     }
+}
+
+fn read_g1<const N: usize>(memory: &GuestMemory, base_ptr: u32, len: u32) -> Vec<[[u8; N]; 2]> {
+    (0..len)
+        .map(|i| {
+            let ptr = base_ptr + i * 2 * (N as u32);
+            let x = unsafe { memory.read::<u8, N>(RV32_MEMORY_AS, ptr) };
+            let y = unsafe { memory.read::<u8, N>(RV32_MEMORY_AS, ptr + N as u32) };
+            [x, y]
+        })
+        .collect()
+}
+
+fn read_g2<const N: usize>(
+    memory: &GuestMemory,
+    base_ptr: u32,
+    len: u32,
+) -> Vec<[[[u8; N]; 2]; 2]> {
+    (0..len)
+        .map(|i| {
+            let offset = i * 4 * (N as u32);
+            let x_c0 = unsafe { memory.read::<u8, N>(RV32_MEMORY_AS, base_ptr + offset) };
+            let x_c1 =
+                unsafe { memory.read::<u8, N>(RV32_MEMORY_AS, base_ptr + offset + N as u32) };
+            let y_c0 =
+                unsafe { memory.read::<u8, N>(RV32_MEMORY_AS, base_ptr + offset + 2 * N as u32) };
+            let y_c1 =
+                unsafe { memory.read::<u8, N>(RV32_MEMORY_AS, base_ptr + offset + 3 * N as u32) };
+            [[x_c0, x_c1], [y_c0, y_c1]]
+        })
+        .collect()
 }

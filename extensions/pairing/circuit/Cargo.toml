@@ -39,6 +39,12 @@ serde = { workspace = true, features = ["derive", "std"] }
 cfg-if = { workspace = true }
 
 halo2curves-axiom = { workspace = true }
+ark-serialize = { version = "0.5", default-features = false, features = ["std"] }
+ark-ec = { version = "0.5", default-features = false, features = ["std"] }
+ark-ff = { version = "0.5", default-features = false, features = ["std"] }
+ark-bls12-381 = { version = "0.5", default-features = false, features = ["std", "curve"] }
+ark-bn254 = { version = "0.5", default-features = false, features = ["std", "curve"] }
+lazy_static = { workspace = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 openvm-pairing-guest = { workspace = true }
@@ -54,6 +60,10 @@ openvm-pairing-guest = { workspace = true, features = [
     "bls12_381",
     "bn254",
 ] }
+
+[[bin]]
+name = "print_bn254_constants"
+path = "src/arkworks/print_constants.rs"
 
 [features]
 default = []
