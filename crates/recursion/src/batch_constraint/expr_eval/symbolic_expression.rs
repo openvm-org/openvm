@@ -10,7 +10,7 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use p3_air::{Air, BaseAir};
+use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
     FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdicField,
     extension::BinomiallyExtendable,
@@ -153,6 +153,7 @@ where
             let arg_ef1: [AB::Var; D_EF] = cols.args[D_EF..2 * D_EF].try_into().unwrap();
 
             builder.assert_bool(cols.is_present);
+            builder.when(cols.is_n_neg).assert_one(cols.is_present);
 
             let mut value = [AB::Expr::ZERO; D_EF];
             for node_kind in NodeKind::iter() {
@@ -292,10 +293,10 @@ where
                         is_first: is_first.clone(),
                         value: arg_ef1.map(Into::into),
                     },
-                    cols.is_present * is_sel.clone() * (AB::Expr::ONE - cols.is_n_neg),
+                    is_sel.clone() * (cols.is_present - cols.is_n_neg),
                 );
                 assert_array_eq(
-                    &mut builder.when(cols.is_present * is_sel.clone() * cols.is_n_neg),
+                    &mut builder.when(is_sel.clone() * cols.is_n_neg),
                     arg_ef1,
                     [
                         AB::Expr::ONE,
