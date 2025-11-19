@@ -100,12 +100,9 @@ where
             ),
         );
 
-        let is_transition = LoopSubAir::local_is_transition(next.is_valid, next.is_first);
-        // Since local.is_valid = 0 => next.is_valid = 0 => is_transition = 0
-        // is_last = local.is_valid * (1 - is_transition) <=> local.is_valid - is_transition
+        builder.when(local.is_first).assert_one(local.is_valid);
+        let is_transition = next.is_valid - next.is_first;
         let is_last = local.is_valid - is_transition.clone();
-
-        let is_first_and_valid = local.is_first * local.is_valid;
 
         // Air index decrements by 1
         builder
@@ -186,7 +183,7 @@ where
             FractionFolderInputMessage {
                 num_present_airs: local.air_idx + AB::Expr::ONE,
             },
-            local.is_valid * local.is_first,
+            local.is_first,
         );
 
         // Sample mu
@@ -195,7 +192,7 @@ where
             local.proof_idx,
             local.tidx + AB::Expr::from_canonical_usize(2 * D_EF),
             local.mu,
-            is_first_and_valid.clone(),
+            local.is_first,
         );
         self.transcript_bus.observe_ext(
             builder,
@@ -244,7 +241,7 @@ where
                 // Skip mu
                 tidx: local.tidx + AB::Expr::from_canonical_usize(3 * D_EF),
             },
-            is_first_and_valid.clone(),
+            local.is_first,
         );
 
         self.mu_bus.send(
@@ -255,7 +252,7 @@ where
                 idx: AB::Expr::ZERO,
                 value: local.mu.map(Into::into),
             },
-            is_first_and_valid,
+            local.is_first,
         );
     }
 }

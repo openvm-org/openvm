@@ -262,8 +262,8 @@ where
                 ),
                 NestedForLoopAuxCols {
                     is_transition: [
-                        local.is_valid * (AB::Expr::ONE - local.is_last),
-                        local.is_valid * (AB::Expr::ONE - local.is_last_hypercube),
+                        local.is_valid - local.is_last,
+                        local.is_valid - local.is_last_hypercube,
                     ],
                 },
             ),
@@ -274,6 +274,14 @@ where
         builder.assert_bool(local.is_last);
         builder.assert_bool(local.is_first_hypercube);
         builder.assert_bool(local.is_last_hypercube);
+        builder.when(local.is_first).assert_one(local.is_valid);
+        builder.when(local.is_last).assert_one(local.is_valid);
+        builder
+            .when(local.is_first_hypercube)
+            .assert_one(local.is_valid);
+        builder
+            .when(local.is_last_hypercube)
+            .assert_one(local.is_valid);
 
         /*
          * Constrain that neg_hypercube dimension starts at 0 and increments, and
@@ -294,10 +302,10 @@ where
         );
 
         builder
-            .when(and(local.is_valid, not(local.is_last_hypercube)))
+            .when(local.is_valid - local.is_last_hypercube)
             .assert_one(next.row_index - local.row_index);
         builder
-            .when(and(local.is_valid, not(local.is_last_hypercube)))
+            .when(local.is_valid - local.is_last_hypercube)
             .assert_eq(next.neg_hypercube, local.neg_hypercube);
 
         /*
@@ -362,25 +370,25 @@ where
         );
 
         assert_array_eq(
-            &mut builder.when(and(local.is_valid, not(local.is_last_hypercube))),
+            &mut builder.when(local.is_valid - local.is_last_hypercube),
             ext_field_multiply(local.u_pow, local.u_pow),
             next.u_pow,
         );
 
         assert_array_eq(
-            &mut builder.when(and(local.is_valid, not(local.is_last_hypercube))),
+            &mut builder.when(local.is_valid - local.is_last_hypercube),
             ext_field_multiply(local.r_pow, local.r_pow),
             next.r_pow,
         );
 
         assert_array_eq(
-            &mut builder.when(and(local.is_valid, not(local.is_last_hypercube))),
+            &mut builder.when(local.is_valid - local.is_last_hypercube),
             ext_field_multiply(local.prod_u_r, ext_field_add(next.u_pow, next.r_pow)),
             next.prod_u_r,
         );
 
         assert_array_eq(
-            &mut builder.when(and(local.is_valid, not(local.is_last_hypercube))),
+            &mut builder.when(local.is_valid - local.is_last_hypercube),
             ext_field_multiply(
                 local.prod_1_r,
                 ext_field_add(next.r_pow, base_to_ext::<AB::Expr>(AB::F::ONE)),
@@ -398,13 +406,13 @@ where
         );
 
         assert_array_eq(
-            &mut builder.when(and(local.is_valid, not(local.is_last_hypercube))),
+            &mut builder.when(local.is_valid - local.is_last_hypercube),
             ext_field_multiply(local.r_omega_pow, local.r_omega_pow),
             next.r_omega_pow,
         );
 
         assert_array_eq(
-            &mut builder.when(and(local.is_valid, not(local.is_last_hypercube))),
+            &mut builder.when(local.is_valid - local.is_last_hypercube),
             ext_field_multiply(
                 local.prod_u_r_omega,
                 ext_field_add(next.u_pow, next.r_omega_pow),
@@ -420,7 +428,7 @@ where
                 is_first: AB::Expr::ONE,
                 value: local.prod_1_r.map(|x| x * local.one_half_pow),
             },
-            and(next.is_last_hypercube, next.is_valid) * next.sel_first_count,
+            next.is_last_hypercube * next.sel_first_count,
         );
         self.sel_uni_bus.send(
             builder,
@@ -430,7 +438,7 @@ where
                 is_first: AB::Expr::ZERO,
                 value: local.prod_1_r_omega.map(|x| x * local.one_half_pow),
             },
-            and(next.is_last_hypercube, next.is_valid) * next.sel_last_trans_count,
+            next.is_last_hypercube * next.sel_last_trans_count,
         );
 
         // This is kind of ugly. But we use the first row as the lookup table for
@@ -489,7 +497,7 @@ where
                 eq,
                 k_rot,
             },
-            is_neg * next.is_last_hypercube * next.is_valid,
+            is_neg * next.is_last_hypercube,
         );
     }
 }
