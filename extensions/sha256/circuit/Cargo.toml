@@ -18,7 +18,7 @@ openvm-sha256-transpiler = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
 openvm-sha256-air = { workspace = true }
 stark-backend-v2 = { workspace = true }
-cuda-backend-v2 = { workspace = true, optional = true }
+# cuda-backend-v2 = { workspace = true, optional = true }
 
 derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
@@ -52,7 +52,7 @@ cuda = [
     "dep:openvm-cuda-builder",
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
-    "dep:cuda-backend-v2",
+    # "dep:cuda-backend-v2",
     "openvm-circuit-primitives/cuda",
     "openvm-circuit/cuda",
     "openvm-rv32im-circuit/cuda",
