@@ -199,10 +199,12 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             .assert_zero(local.child_pvs.exit_code);
 
         // constrain that non-terminal segments exited successfully
-        builder.when(not(local.child_pvs.is_terminate)).assert_eq(
-            local.child_pvs.exit_code,
-            AB::F::from_canonical_u32(DEFAULT_SUSPEND_EXIT_CODE),
-        );
+        builder
+            .when(and(local.is_valid, not(local.child_pvs.is_terminate)))
+            .assert_eq(
+                local.child_pvs.exit_code,
+                AB::F::from_canonical_u32(DEFAULT_SUSPEND_EXIT_CODE),
+            );
 
         // when local and next are valid, constrain increasing proof_idx and adjacency
         let mut when_both = builder.when(and(local.is_valid, not(local.is_last)));
@@ -475,12 +477,20 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
         builder
             .when(local.is_last)
             .assert_eq(local.child_pvs.exit_code, exit_code);
-        assert_array_eq(builder, local.child_pvs.user_pv_commit, user_pv_commit);
-        assert_array_eq(builder, local.child_pvs.program_commit, app_commit);
+        assert_array_eq(
+            &mut builder.when(local.is_valid),
+            local.child_pvs.user_pv_commit,
+            user_pv_commit,
+        );
+        assert_array_eq(
+            &mut builder.when(local.is_valid),
+            local.child_pvs.program_commit,
+            app_commit,
+        );
 
         // constrain internal_flag is 0 at the leaf level
         builder
-            .when(not(local.has_verifier_pvs))
+            .when(and(local.is_valid, not(local.has_verifier_pvs)))
             .assert_zero(internal_flag);
 
         // constrain leaf_commit is set at all internal levels
