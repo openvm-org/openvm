@@ -255,20 +255,19 @@ pub(crate) mod phantom {
                     })
                     .collect::<eyre::Result<Vec<_>>>()?;
 
-                use halo2curves_axiom::bls12_381::G1Affine;
-                use halo2curves_axiom::bls12_381::G2Affine;
-                use halo2curves_axiom::CurveAffine;
+                use halo2curves_axiom::{
+                    bls12_381::{G1Affine, G2Affine},
+                    CurveAffine,
+                };
 
-                let p_vec: Vec<G1Affine> = p.iter()
-                    .map(|point| {
-                        G1Affine::from_xy(point.x, point.y).unwrap()
-                    })
+                let p_vec: Vec<G1Affine> = p
+                    .iter()
+                    .map(|point| G1Affine::from_xy(point.x, point.y).unwrap())
                     .collect();
 
-                let q_vec: Vec<G2Affine> = q.iter()
-                    .map(|point| {
-                        G2Affine::from_xy(point.x, point.y).unwrap()
-                    })
+                let q_vec: Vec<G2Affine> = q
+                    .iter()
+                    .map(|point| G2Affine::from_xy(point.x, point.y).unwrap())
                     .collect();
 
                 let g2_prepareds = q_vec
@@ -282,11 +281,6 @@ pub(crate) mod phantom {
                 let a = unsafe { transmute::<MillerLoopResult, Fq12>(f) };
 
                 let (c, u) = Bls12_381::final_exp_hint(&a);
-
-                let f: Fq12 = Bls12_381::multi_miller_loop(&p, &q);
-                assert_eq!(a, f);
-
-                let (c_new, u_new) = Bls12_381::final_exp_hint(&f);
 
                 hint_stream.clear();
 
