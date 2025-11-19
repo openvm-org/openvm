@@ -156,11 +156,13 @@ fn fq6_to_bytes(value: &Fq6) -> [u8; FQ6_NUM_BYTES] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ark_ff::UniformRand;
+    use ark_ec::AdditiveGroup;
+    use ark_ff::{Field as ArkField, UniformRand};
     use halo2curves_axiom::bn256::{
         Fq as HaloFq, Fq12 as HaloFq12, Fq2 as HaloFq2, Fq6 as HaloFq6, G1Affine as HaloG1,
         G2Affine as HaloG2,
     };
+    use halo2curves_axiom::ff::Field as HaloField;
     use openvm_ecc_guest::algebra::field::FieldExtension;
     use openvm_ecc_guest::AffinePoint;
     use openvm_pairing_guest::{
@@ -218,8 +220,8 @@ mod tests {
     }
 
     fn halo_fq12_to_bytes(value: &HaloFq12) -> Vec<u8> {
-        value
-            .to_coeffs()
+        let [c0_c0, c1_c0, c0_c1, c1_c1, c0_c2, c1_c2] = value.to_coeffs();
+        [c0_c0, c0_c1, c0_c2, c1_c0, c1_c1, c1_c2]
             .into_iter()
             .flat_map(|fp2| fp2.to_coeffs())
             .flat_map(|fp| fp.to_bytes())
@@ -258,14 +260,9 @@ mod tests {
             let c1 = HaloFq::from_bytes(&c1_bytes).unwrap();
             fp2_coeffs.push(HaloFq2::new(c0, c1));
         }
-        HaloFq12::from_coeffs([
-            fp2_coeffs[0],
-            fp2_coeffs[1],
-            fp2_coeffs[2],
-            fp2_coeffs[3],
-            fp2_coeffs[4],
-            fp2_coeffs[5],
-        ])
+        let fp2_coeffs: [HaloFq2; 6] = fp2_coeffs.try_into().unwrap();
+        let [c0_c0, c0_c1, c0_c2, c1_c0, c1_c1, c1_c2] = fp2_coeffs;
+        HaloFq12::from_coeffs([c0_c0, c1_c0, c0_c1, c1_c1, c0_c2, c1_c2])
     }
 
     fn ark_fq_from_bytes(bytes: &[u8]) -> Fq {

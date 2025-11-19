@@ -61,10 +61,6 @@ openvm-pairing-guest = { workspace = true, features = [
     "bn254",
 ] }
 
-[[bin]]
-name = "print_bn254_constants"
-path = "src/arkworks/print_constants.rs"
-
 [features]
 default = []
 tco = ["openvm-rv32im-circuit/tco", "openvm-ecc-circuit/tco"]
