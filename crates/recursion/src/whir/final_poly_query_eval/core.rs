@@ -273,10 +273,9 @@ where
             .assert_zero(local.is_last_round);
 
         builder.assert_bool(local.do_carry);
-        builder.when(local.is_enabled).assert_eq(
-            local.do_carry,
-            (AB::Expr::ONE - is_same_query.clone())
-                * is_same_proof.clone()
+        builder.assert_eq(
+            local.is_enabled * local.do_carry,
+            (is_same_proof.clone() - is_same_query.clone())
                 * (AB::Expr::ONE - local.is_query_zero * local.is_last_round),
         );
 
@@ -302,8 +301,7 @@ where
         );
         assert_array_eq(
             &mut builder.when(
-                (AB::Expr::ONE - is_same_query.clone())
-                    * is_same_proof.clone()
+                (is_same_proof.clone() - is_same_query.clone())
                     * (local.is_query_zero * local.is_last_round),
             ),
             next.final_value_acc,

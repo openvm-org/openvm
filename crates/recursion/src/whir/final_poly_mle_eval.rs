@@ -42,6 +42,7 @@ struct FinalyPolyMleEvalCols<T> {
     node_idx: T,
     node_idx_inv: T,
     tidx_final_poly_start: T,
+    is_nonleaf_and_first_in_layer: T,
     point: [T; D_EF],
     left_value: [T; D_EF],
     right_value: [T; D_EF],
@@ -118,6 +119,13 @@ where
             },
             is_nonleaf.clone(),
         );
+        builder.assert_eq(
+            local.is_nonleaf_and_first_in_layer,
+            is_nonleaf.clone() * (local.is_enabled - is_node_idx_nonzero),
+        );
+        builder
+            .when(local.is_nonleaf_and_first_in_layer)
+            .assert_one(local.is_enabled);
         // copy it a bunch of times if we are node_idx 0
         // FIXME: technically we are violating the |multiplicity| <= 1 rule
         self.whir_opening_point_bus.send(
@@ -127,9 +135,7 @@ where
                 idx: var_idx,
                 value: local.point.map(Into::into),
             },
-            is_nonleaf.clone()
-                * (local.is_enabled - is_node_idx_nonzero)
-                * (local.num_nodes_in_layer - AB::Expr::ONE),
+            local.is_nonleaf_and_first_in_layer * (local.num_nodes_in_layer - AB::Expr::ONE),
         );
 
         let left_idx = local.node_idx;
@@ -313,6 +319,7 @@ pub(crate) fn generate_trace(
                 cols.result.copy_from_slice(result.as_base_slice());
                 cols.eq_alpha_u.copy_from_slice(eq_alpha_u.as_base_slice());
                 cols.num_nodes_in_layer = F::from_canonical_usize(1 << (num_vars - layer));
+                cols.is_nonleaf_and_first_in_layer = F::from_bool(layer != 0 && node_idx == 0);
 
                 row_in_proof += 1;
             }

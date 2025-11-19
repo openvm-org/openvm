@@ -77,7 +77,7 @@ pub(in crate::batch_constraint) fn generate_trace(
                 } else {
                     i - 2 * num_present
                 });
-                cols.idx_parity = F::from_canonical_usize(i % 2);
+                cols.idx_parity = F::from_bool(is_interaction && i % 2 == 1);
                 let trace_idx = if is_interaction {
                     i / 2
                 } else {

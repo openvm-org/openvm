@@ -56,12 +56,12 @@ pub struct EqNsRecord {
 pub struct EqNsColumns<T> {
     is_valid: T,
     is_first: T,
-    is_last: T,
     proof_idx: T,
 
     n: T,
     n_less_than_n_logup: T,
     n_less_than_n_max: T,
+    is_transition_and_n_less_than_n_max: T,
     xi_n: [T; D_EF],
     r_n: [T; D_EF],
     r_product: [T; D_EF],
@@ -142,23 +142,27 @@ where
 
         builder.assert_bool(local.is_valid);
         builder.assert_bool(local.is_first);
-        builder.assert_bool(local.is_last);
+        builder.when(local.is_first).assert_one(local.is_valid);
+
+        let is_transition = next.is_valid - next.is_first;
+        let is_last = local.is_valid - is_transition.clone();
 
         // ========================= n consistency ==============================
+        builder.assert_bool(local.n_less_than_n_max);
         builder.assert_bool(local.n_less_than_n_logup);
         builder.when(local.is_first).assert_zero(local.n);
         builder
-            .when(not(next.is_first))
+            .when(is_transition.clone())
             .assert_one(next.n - local.n);
         builder
-            .when(not(next.is_first))
+            .when(is_transition.clone())
             .when(next.n_less_than_n_logup)
             .assert_one(local.n_less_than_n_logup);
         builder
             .when(not(local.is_valid))
             .assert_zero(local.n_less_than_n_logup);
         builder
-            .when(not(next.is_first))
+            .when(is_transition.clone())
             .when(next.n_less_than_n_max)
             .assert_one(local.n_less_than_n_max);
         builder
@@ -166,39 +170,37 @@ where
             .assert_zero(local.n_less_than_n_max);
         // ========================= r consistency ==============================
         assert_array_eq(
-            &mut builder
-                .when(not(local.n_less_than_n_max))
-                .when(local.is_valid),
+            &mut builder.when(local.is_valid - local.n_less_than_n_max),
             local.r_n,
             base_to_ext::<AB::Expr>(AB::Expr::ONE),
         );
         assert_array_eq(
-            &mut builder.when(local.is_valid * next.is_first),
+            &mut builder.when(is_last.clone()),
             local.r_product,
             base_to_ext::<AB::Expr>(AB::Expr::ONE),
         );
         assert_array_eq(
-            &mut builder.when(not(next.is_first)),
+            &mut builder.when(is_transition.clone()),
             local.r_product,
             ext_field_multiply(next.r_product, local.r_n),
         );
         assert_array_eq(
-            &mut builder.when(local.is_valid * local.is_first),
+            &mut builder.when(local.is_first),
             local.r_pref_product,
             base_to_ext::<AB::Expr>(AB::Expr::ONE),
         );
         assert_array_eq(
-            &mut builder.when(not(next.is_first) * local.n_less_than_n_max),
+            &mut builder.when(is_transition.clone() * local.n_less_than_n_max),
             next.r_pref_product,
             ext_field_multiply(local.r_pref_product, local.r_n),
         );
         assert_array_eq(
-            &mut builder.when(local.is_valid * local.is_first),
+            &mut builder.when(local.is_first),
             local.one_minus_r_pref_prod,
             base_to_ext::<AB::Expr>(AB::Expr::ONE),
         );
         assert_array_eq(
-            &mut builder.when(not(next.is_first) * local.n_less_than_n_max),
+            &mut builder.when(is_transition.clone() * local.n_less_than_n_max),
             next.one_minus_r_pref_prod,
             ext_field_multiply(
                 local.one_minus_r_pref_prod,
@@ -233,13 +235,17 @@ where
                 AB::Expr::TWO,
             ),
         ));
+        builder.assert_eq(
+            local.is_transition_and_n_less_than_n_max,
+            is_transition.clone() * local.n_less_than_n_max,
+        );
         assert_array_eq(
-            &mut builder.when(not(next.is_first) * local.n_less_than_n_max),
+            &mut builder.when(local.is_transition_and_n_less_than_n_max),
             next.eq,
             ext_field_multiply(local.eq, mult.clone()),
         );
         assert_array_eq(
-            &mut builder.when(not(next.is_first) * local.n_less_than_n_max),
+            &mut builder.when(local.is_transition_and_n_less_than_n_max),
             next.eq_sharp,
             ext_field_multiply(local.eq_sharp, mult.clone()),
         );
@@ -251,7 +257,7 @@ where
                 idx: local.n + AB::Expr::from_canonical_usize(self.l_skip),
                 xi: local.xi_n.map(|x| x.into()),
             },
-            local.is_valid * (AB::Expr::ONE - local.is_last),
+            is_transition.clone(),
         );
         self.r_xi_bus.send(
             builder,
@@ -271,7 +277,7 @@ where
                 is_sharp: AB::Expr::ZERO,
                 value: local.eq.map(|x| x.into()),
             },
-            local.is_valid * local.is_first,
+            local.is_first,
         );
         self.zero_n_bus.receive(
             builder,
@@ -280,7 +286,7 @@ where
                 is_sharp: AB::Expr::ONE,
                 value: local.eq_sharp.map(|x| x.into()),
             },
-            local.is_valid * local.is_first,
+            local.is_first,
         );
 
         self.r_xi_bus.receive(
@@ -404,11 +410,12 @@ pub(crate) fn generate_eq_ns_trace(
                 let cols: &mut EqNsColumns<_> = chunk.borrow_mut();
                 cols.is_valid = F::ONE;
                 cols.is_first = F::from_bool(i == 0);
-                cols.is_last = F::from_bool(i + 1 == rows.len());
                 cols.proof_idx = F::from_canonical_usize(pidx);
                 cols.n = F::from_canonical_usize(i);
                 cols.n_less_than_n_logup = F::from_bool(i < record.n_logup);
                 cols.n_less_than_n_max = F::from_bool(i < record.n_max);
+                cols.is_transition_and_n_less_than_n_max =
+                    F::from_bool(i + 1 < rows.len() && i < record.n_max);
                 cols.xi_n.copy_from_slice(record.xi.as_base_slice());
                 cols.r_n.copy_from_slice(record.r.as_base_slice());
                 cols.r_product
@@ -452,17 +459,6 @@ pub(crate) fn generate_eq_ns_trace(
         }
         cur_height += rows.len();
     }
-    trace[total_height * width..]
-        .par_chunks_mut(width)
-        .enumerate()
-        .for_each(|(i, chunk)| {
-            let cols: &mut EqNsColumns<F> = chunk.borrow_mut();
-            cols.proof_idx = F::from_canonical_usize(preflights.len() + i);
-            cols.is_first = F::ONE;
-            cols.is_last = F::ONE;
-            cols.sel_first_count = F::ZERO;
-            cols.sel_last_and_trans_count = F::ZERO;
-        });
 
     RowMajorMatrix::new(trace, width)
 }

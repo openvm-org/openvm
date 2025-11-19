@@ -38,8 +38,9 @@ pub struct ExpressionClaimCols<T> {
     pub idx: T,
     pub idx_parity: T,
     pub trace_idx: T,
-    /// The received evaluation claim. Note that for interactions, this is without norm_factor and eq_sharp_ns.
-    /// These are interactions_evals (without norm_factor and eq_sharp_ns) and constraint_evals in the rust verifier.
+    /// The received evaluation claim. Note that for interactions, this is without norm_factor and
+    /// eq_sharp_ns. These are interactions_evals (without norm_factor and eq_sharp_ns) and
+    /// constraint_evals in the rust verifier.
     pub value: [T; D_EF],
     /// Receive from eq_ns AIR
     pub eq_sharp_ns: [T; D_EF],
@@ -99,6 +100,9 @@ where
         builder
             .when(local.is_interaction)
             .assert_eq(local.idx_parity + next.idx_parity, AB::Expr::ONE);
+        builder
+            .when(local.idx_parity)
+            .assert_one(local.is_interaction);
 
         // === cum sum folding ===
         // cur_sum = next_cur_sum * mu + value * multiplier
@@ -119,8 +123,7 @@ where
 
         // IF negative n and numerator
         assert_array_eq(
-            &mut builder
-                .when(local.is_interaction * local.n_sign * (AB::Expr::ONE - local.idx_parity)),
+            &mut builder.when(local.n_sign * (local.is_interaction - local.idx_parity)),
             ext_field_multiply_scalar::<AB::Expr>(local.multiplier, local.n_abs_pow),
             local.eq_sharp_ns,
         );
@@ -132,7 +135,7 @@ where
         );
         // ELSE 2
         assert_array_eq(
-            &mut builder.when(local.is_interaction * local.idx_parity),
+            &mut builder.when(local.idx_parity),
             local.multiplier,
             local.eq_sharp_ns,
         );
@@ -188,7 +191,7 @@ where
                 n_abs: local.n_abs.into(),
                 n_sign_bit: local.n_sign.into(),
             },
-            local.is_valid * local.is_interaction * (AB::Expr::ONE - local.idx_parity),
+            local.is_valid * (local.is_interaction - local.idx_parity),
         );
 
         self.eq_n_outer_bus.receive(
