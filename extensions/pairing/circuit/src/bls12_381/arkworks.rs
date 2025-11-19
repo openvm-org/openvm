@@ -7,8 +7,7 @@ use num_bigint::BigUint;
 use num_traits::{Num, Zero};
 use std::convert::TryInto;
 
-const FQ_NUM_BYTES: usize = 48;
-const FQ12_NUM_BYTES: usize = 12 * FQ_NUM_BYTES;
+use super::{FQ12_NUM_BYTES, FQ2_NUM_BYTES, FQ6_NUM_BYTES, FQ_NUM_BYTES};
 
 lazy_static! {
     static ref POLY_FACTOR: BigUint =
@@ -188,6 +187,30 @@ fn fq_to_bytes(value: &Fq) -> [u8; FQ_NUM_BYTES] {
     bytes_le
 }
 
+fn fq2_to_bytes(value: &Fq2) -> [u8; FQ2_NUM_BYTES] {
+    let mut bytes = [0u8; FQ2_NUM_BYTES];
+    let mut offset = 0;
+    for fp in [value.c0, value.c1] {
+        let limb_bytes = fq_to_bytes(&fp);
+        bytes[offset..offset + FQ_NUM_BYTES].copy_from_slice(&limb_bytes);
+        offset += FQ_NUM_BYTES;
+    }
+    bytes
+}
+
+fn fq6_to_bytes(value: &Fq6) -> [u8; FQ6_NUM_BYTES] {
+    let mut bytes = [0u8; FQ6_NUM_BYTES];
+    let mut offset = 0;
+    for fp2 in [value.c0, value.c1, value.c2] {
+        for fp in [fp2.c0, fp2.c1] {
+            let limb_bytes = fq_to_bytes(&fp);
+            bytes[offset..offset + FQ_NUM_BYTES].copy_from_slice(&limb_bytes);
+            offset += FQ_NUM_BYTES;
+        }
+    }
+    bytes
+}
+
 fn neg_mod(value: &BigUint, modulus: &BigUint) -> BigUint {
     let value_mod = value % modulus;
     if value_mod.is_zero() {
@@ -200,9 +223,11 @@ fn neg_mod(value: &BigUint, modulus: &BigUint) -> BigUint {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ark_bls12_381::Fq6;
     use ark_ff::UniformRand;
     use halo2curves_axiom::bls12_381::{
-        Fq as HaloFq, Fq12 as HaloFq12, Fq2 as HaloFq2, G1Affine as HaloG1, G2Affine as HaloG2,
+        Fq as HaloFq, Fq12 as HaloFq12, Fq2 as HaloFq2, Fq6 as HaloFq6, G1Affine as HaloG1,
+        G2Affine as HaloG2,
     };
     use openvm_ecc_guest::algebra::field::FieldExtension;
     use openvm_ecc_guest::AffinePoint;
@@ -311,30 +336,325 @@ mod tests {
         ])
     }
 
+    fn ark_fq_from_bytes(bytes: &[u8]) -> Fq {
+        assert_eq!(bytes.len(), FQ_NUM_BYTES);
+        Fq::deserialize_uncompressed(bytes).unwrap()
+    }
+
+    fn halo_fq_from_bytes(bytes: &[u8]) -> HaloFq {
+        assert_eq!(bytes.len(), FQ_NUM_BYTES);
+        let bytes_array: [u8; FQ_NUM_BYTES] = bytes.try_into().unwrap();
+        HaloFq::from_bytes(&bytes_array).unwrap()
+    }
+
+    fn halo_fq_to_bytes(value: &HaloFq) -> Vec<u8> {
+        value.to_bytes().to_vec()
+    }
+
+    fn ark_fq2_from_bytes(bytes: &[u8]) -> Fq2 {
+        assert_eq!(bytes.len(), FQ2_NUM_BYTES);
+        let mut offset = 0;
+        let c0 = Fq::deserialize_uncompressed(&bytes[offset..offset + FQ_NUM_BYTES]).unwrap();
+        offset += FQ_NUM_BYTES;
+        let c1 = Fq::deserialize_uncompressed(&bytes[offset..offset + FQ_NUM_BYTES]).unwrap();
+        Fq2::new(c0, c1)
+    }
+
+    fn halo_fq2_from_bytes(bytes: &[u8]) -> HaloFq2 {
+        assert_eq!(bytes.len(), FQ2_NUM_BYTES);
+        let mut offset = 0;
+        let c0_bytes: [u8; FQ_NUM_BYTES] = bytes[offset..offset + FQ_NUM_BYTES].try_into().unwrap();
+        offset += FQ_NUM_BYTES;
+        let c1_bytes: [u8; FQ_NUM_BYTES] = bytes[offset..offset + FQ_NUM_BYTES].try_into().unwrap();
+        let c0 = HaloFq::from_bytes(&c0_bytes).unwrap();
+        let c1 = HaloFq::from_bytes(&c1_bytes).unwrap();
+        HaloFq2 { c0, c1 }
+    }
+
+    fn halo_fq2_to_bytes(value: &HaloFq2) -> Vec<u8> {
+        value
+            .to_coeffs()
+            .into_iter()
+            .flat_map(|fp| fp.to_bytes())
+            .collect()
+    }
+
+    fn ark_fq6_from_bytes(bytes: &[u8]) -> Fq6 {
+        assert_eq!(bytes.len(), FQ6_NUM_BYTES);
+        let mut fp2_coeffs = Vec::with_capacity(3);
+        let mut offset = 0;
+        for _ in 0..3 {
+            let c0 = Fq::deserialize_uncompressed(&bytes[offset..offset + FQ_NUM_BYTES]).unwrap();
+            offset += FQ_NUM_BYTES;
+            let c1 = Fq::deserialize_uncompressed(&bytes[offset..offset + FQ_NUM_BYTES]).unwrap();
+            offset += FQ_NUM_BYTES;
+            fp2_coeffs.push(Fq2::new(c0, c1));
+        }
+        Fq6::new(fp2_coeffs[0], fp2_coeffs[1], fp2_coeffs[2])
+    }
+
+    fn halo_fq6_from_bytes(bytes: &[u8]) -> HaloFq6 {
+        assert_eq!(bytes.len(), FQ6_NUM_BYTES);
+        let mut fp2_coeffs = Vec::with_capacity(3);
+        let mut offset = 0;
+        for _ in 0..3 {
+            let c0_bytes: [u8; FQ_NUM_BYTES] =
+                bytes[offset..offset + FQ_NUM_BYTES].try_into().unwrap();
+            offset += FQ_NUM_BYTES;
+            let c1_bytes: [u8; FQ_NUM_BYTES] =
+                bytes[offset..offset + FQ_NUM_BYTES].try_into().unwrap();
+            offset += FQ_NUM_BYTES;
+            let c0 = HaloFq::from_bytes(&c0_bytes).unwrap();
+            let c1 = HaloFq::from_bytes(&c1_bytes).unwrap();
+            fp2_coeffs.push(HaloFq2 { c0, c1 });
+        }
+        HaloFq6 {
+            c0: fp2_coeffs[0],
+            c1: fp2_coeffs[1],
+            c2: fp2_coeffs[2],
+        }
+    }
+
+    fn halo_fq6_to_bytes(value: &HaloFq6) -> Vec<u8> {
+        [value.c0, value.c1, value.c2]
+            .into_iter()
+            .flat_map(|fp2| fp2.to_coeffs())
+            .flat_map(|fp| fp.to_bytes())
+            .collect()
+    }
+
     #[test]
-    fn test_byte_array_field_roundtrip() {
-        let mut rng = StdRng::seed_from_u64(9001);
+    fn test_byte_array_fq_roundtrip() {
+        let mut rng = StdRng::seed_from_u64(4242);
+        for _ in 0..5 {
+            let lhs = Fq::rand(&mut rng);
+            let rhs = Fq::rand(&mut rng);
+
+            let lhs_bytes = fq_to_bytes(&lhs);
+            let rhs_bytes = fq_to_bytes(&rhs);
+
+            let ark_lhs = ark_fq_from_bytes(&lhs_bytes);
+            let ark_rhs = ark_fq_from_bytes(&rhs_bytes);
+
+            assert_eq!(ark_lhs, lhs, "ark lhs mismatch");
+            assert_eq!(ark_rhs, rhs, "ark rhs mismatch");
+
+            let halo_lhs = halo_fq_from_bytes(&lhs_bytes);
+            let halo_rhs = halo_fq_from_bytes(&rhs_bytes);
+
+            assert_eq!(
+                fq_to_bytes(&ark_lhs).to_vec(),
+                halo_fq_to_bytes(&halo_lhs),
+                "lhs mismatch"
+            );
+            assert_eq!(
+                fq_to_bytes(&ark_rhs).to_vec(),
+                halo_fq_to_bytes(&halo_rhs),
+                "rhs mismatch"
+            );
+
+            let ark_sum = ark_lhs + ark_rhs;
+            let halo_sum = halo_lhs + halo_rhs;
+
+            assert_eq!(
+                fq_to_bytes(&ark_sum).to_vec(),
+                halo_fq_to_bytes(&halo_sum),
+                "sum mismatch"
+            );
+
+            let ark_square = ark_sum.square();
+            let halo_square = halo_sum.square();
+
+            assert_eq!(
+                fq_to_bytes(&ark_square).to_vec(),
+                halo_fq_to_bytes(&halo_square),
+                "square mismatch"
+            );
+
+            let ark_mul = ark_lhs * ark_rhs;
+            let halo_mul = halo_lhs * halo_rhs;
+
+            assert_eq!(
+                fq_to_bytes(&ark_mul).to_vec(),
+                halo_fq_to_bytes(&halo_mul),
+                "mul mismatch"
+            );
+        }
+    }
+
+    #[test]
+    fn test_byte_array_fq2_roundtrip() {
+        let mut rng = StdRng::seed_from_u64(4242);
+        for _ in 0..5 {
+            let lhs = Fq2::rand(&mut rng);
+            let rhs = Fq2::rand(&mut rng);
+
+            let lhs_bytes = fq2_to_bytes(&lhs);
+            let rhs_bytes = fq2_to_bytes(&rhs);
+
+            let ark_lhs = ark_fq2_from_bytes(&lhs_bytes);
+            let ark_rhs = ark_fq2_from_bytes(&rhs_bytes);
+
+            assert_eq!(ark_lhs, lhs, "ark lhs mismatch");
+            assert_eq!(ark_rhs, rhs, "ark rhs mismatch");
+
+            let halo_lhs = halo_fq2_from_bytes(&lhs_bytes);
+            let halo_rhs = halo_fq2_from_bytes(&rhs_bytes);
+
+            assert_eq!(
+                fq2_to_bytes(&ark_lhs).to_vec(),
+                halo_fq2_to_bytes(&halo_lhs),
+                "lhs mismatch"
+            );
+            assert_eq!(
+                fq2_to_bytes(&ark_rhs).to_vec(),
+                halo_fq2_to_bytes(&halo_rhs),
+                "rhs mismatch"
+            );
+
+            let ark_sum = ark_lhs + ark_rhs;
+            let halo_sum = halo_lhs + halo_rhs;
+
+            assert_eq!(
+                fq2_to_bytes(&ark_sum).to_vec(),
+                halo_fq2_to_bytes(&halo_sum),
+                "sum mismatch"
+            );
+
+            let ark_square = ark_sum.square();
+            let halo_square = halo_sum.square();
+
+            assert_eq!(
+                fq2_to_bytes(&ark_square).to_vec(),
+                halo_fq2_to_bytes(&halo_square),
+                "square mismatch"
+            );
+
+            let ark_mul = ark_lhs * ark_rhs;
+            let halo_mul = halo_lhs * halo_rhs;
+
+            assert_eq!(
+                fq2_to_bytes(&ark_mul).to_vec(),
+                halo_fq2_to_bytes(&halo_mul),
+                "mul mismatch"
+            );
+        }
+    }
+
+    #[test]
+    fn test_byte_array_fq6_roundtrip() {
+        let mut rng = StdRng::seed_from_u64(4242);
+        for _ in 0..5 {
+            let lhs = Fq6::rand(&mut rng);
+            let rhs = Fq6::rand(&mut rng);
+
+            let lhs_bytes = fq6_to_bytes(&lhs);
+            let rhs_bytes = fq6_to_bytes(&rhs);
+
+            let ark_lhs = ark_fq6_from_bytes(&lhs_bytes);
+            let ark_rhs = ark_fq6_from_bytes(&rhs_bytes);
+
+            assert_eq!(ark_lhs, lhs, "ark lhs mismatch");
+            assert_eq!(ark_rhs, rhs, "ark rhs mismatch");
+
+            let halo_lhs = halo_fq6_from_bytes(&lhs_bytes);
+            let halo_rhs = halo_fq6_from_bytes(&rhs_bytes);
+
+            assert_eq!(
+                fq6_to_bytes(&ark_lhs).to_vec(),
+                halo_fq6_to_bytes(&halo_lhs),
+                "lhs mismatch"
+            );
+            assert_eq!(
+                fq6_to_bytes(&ark_rhs).to_vec(),
+                halo_fq6_to_bytes(&halo_rhs),
+                "rhs mismatch"
+            );
+
+            let ark_sum = ark_lhs + ark_rhs;
+            let halo_sum = halo_lhs + halo_rhs;
+
+            assert_eq!(
+                fq6_to_bytes(&ark_sum).to_vec(),
+                halo_fq6_to_bytes(&halo_sum),
+                "sum mismatch"
+            );
+
+            let ark_square = ark_sum.square();
+            let halo_square = halo_sum.square();
+
+            assert_eq!(
+                fq6_to_bytes(&ark_square).to_vec(),
+                halo_fq6_to_bytes(&halo_square),
+                "square mismatch"
+            );
+
+            let ark_mul = ark_lhs * ark_rhs;
+            let halo_mul = halo_lhs * halo_rhs;
+
+            assert_eq!(
+                fq6_to_bytes(&ark_mul).to_vec(),
+                halo_fq6_to_bytes(&halo_mul),
+                "mul mismatch"
+            );
+        }
+    }
+
+    #[test]
+    fn test_byte_array_fq12_roundtrip() {
+        let mut rng = StdRng::seed_from_u64(4242);
         for _ in 0..5 {
             let lhs = Fq12::rand(&mut rng);
             let rhs = Fq12::rand(&mut rng);
+
             let lhs_bytes = fq12_to_bytes(&lhs);
             let rhs_bytes = fq12_to_bytes(&rhs);
 
             let ark_lhs = ark_fq12_from_bytes(&lhs_bytes);
             let ark_rhs = ark_fq12_from_bytes(&rhs_bytes);
+
+            assert_eq!(ark_lhs, lhs, "ark lhs mismatch");
+            assert_eq!(ark_rhs, rhs, "ark rhs mismatch");
+
             let halo_lhs = halo_fq12_from_bytes(&lhs_bytes);
             let halo_rhs = halo_fq12_from_bytes(&rhs_bytes);
 
-            let ark_sum = ark_lhs + ark_rhs;
-            let ark_result = ark_sum.square() * ark_rhs;
+            assert_eq!(
+                fq12_to_bytes(&ark_lhs).to_vec(),
+                halo_fq12_to_bytes(&halo_lhs),
+                "lhs mismatch"
+            );
+            assert_eq!(
+                fq12_to_bytes(&ark_rhs).to_vec(),
+                halo_fq12_to_bytes(&halo_rhs),
+                "rhs mismatch"
+            );
 
+            let ark_sum = ark_lhs + ark_rhs;
             let halo_sum = halo_lhs + halo_rhs;
-            let halo_result = (halo_sum * halo_sum) * halo_rhs;
 
             assert_eq!(
-                fq12_to_bytes(&ark_result).to_vec(),
-                halo_fq12_to_bytes(&halo_result),
-                "byte conversion mismatch"
+                fq12_to_bytes(&ark_sum).to_vec(),
+                halo_fq12_to_bytes(&halo_sum),
+                "sum mismatch"
+            );
+
+            let ark_square = ark_sum.square();
+            let halo_square = halo_sum.square();
+
+            assert_eq!(
+                fq12_to_bytes(&ark_square).to_vec(),
+                halo_fq12_to_bytes(&halo_square),
+                "square mismatch"
+            );
+
+            let ark_mul = ark_lhs * ark_rhs;
+            let halo_mul = halo_lhs * halo_rhs;
+
+            assert_eq!(
+                fq12_to_bytes(&ark_mul).to_vec(),
+                halo_fq12_to_bytes(&halo_mul),
+                "mul mismatch"
             );
         }
     }
