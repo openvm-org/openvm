@@ -5,9 +5,20 @@ use super::{
 
 use ark_bn254::{Bn254 as ArkBn254, Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine};
 use ark_ec::pairing::{prepare_g1, prepare_g2, Pairing};
-use ark_ff::{Field, Zero};
+use ark_ff::{FftField, Field, Zero};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref UNITY_ROOT_27: Fq12 = {
+        // let u0 = biguint_to_prime_field::<Fq>(&U27_COEFF_0);
+        // let u1 = biguint_to_prime_field::<Fq>(&U27_COEFF_1);
+        // let u_coeffs = Fq2::new(u0, u1);
+        // Fq12::new(Fq6::new(Fq2::zero(), Fq2::zero(), u_coeffs), Fq6::zero())
+        Fq12::get_root_of_unity(27).unwrap()
+    };
+    static ref UNITY_ROOT_27_EXP2: Fq12 = UNITY_ROOT_27.pow(EXP2_LIMBS.as_slice());
+}
 
 pub fn parse_g1_points<const N: usize>(raw: Vec<[[u8; N]; 2]>) -> Vec<G1Affine> {
     raw.into_iter()
@@ -60,16 +71,6 @@ pub fn multi_miller_loop(p: &[G1Affine], q: &[G2Affine]) -> Fq12 {
     let g1_it = p.iter().map(|point| prepare_g1::<ArkBn254>(*point));
     let g2_it = q.iter().map(|point| prepare_g2::<ArkBn254>(*point));
     ArkBn254::multi_miller_loop(g1_it, g2_it).0
-}
-
-lazy_static! {
-    static ref UNITY_ROOT_27: Fq12 = {
-        let u0 = biguint_to_prime_field::<Fq>(&U27_COEFF_0);
-        let u1 = biguint_to_prime_field::<Fq>(&U27_COEFF_1);
-        let u_coeffs = Fq2::new(u0, u1);
-        Fq12::new(Fq6::new(Fq2::zero(), Fq2::zero(), u_coeffs), Fq6::zero())
-    };
-    static ref UNITY_ROOT_27_EXP2: Fq12 = UNITY_ROOT_27.pow(EXP2_LIMBS.as_slice());
 }
 
 pub fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
@@ -156,17 +157,22 @@ fn fq6_to_bytes(value: &Fq6) -> [u8; FQ6_NUM_BYTES] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ark_ec::AdditiveGroup;
+    use ark_ec::{pairing::MillerLoopOutput, AdditiveGroup};
     use ark_ff::{Field as ArkField, UniformRand};
-    use halo2curves_axiom::bn256::{
-        Fq as HaloFq, Fq12 as HaloFq12, Fq2 as HaloFq2, Fq6 as HaloFq6, G1Affine as HaloG1,
-        G2Affine as HaloG2,
+    use halo2curves_axiom::{
+        bn256::{
+            Fq as HaloFq, Fq12 as HaloFq12, Fq2 as HaloFq2, Fq6 as HaloFq6, G1Affine as HaloG1,
+            G2Affine as HaloG2, Gt,
+        },
+        pairing::MillerLoopResult,
     };
-    use halo2curves_axiom::ff::Field as HaloField;
     use openvm_ecc_guest::algebra::field::FieldExtension;
     use openvm_ecc_guest::AffinePoint;
     use openvm_pairing_guest::{
-        halo2curves_shims::bn254::Bn254 as GuestBn254,
+        halo2curves_shims::bn254::{
+            test_utils::{assert_miller_results_eq, final_exp},
+            Bn254 as GuestBn254,
+        },
         pairing::{FinalExp, MultiMillerLoop},
     };
     use rand::{rngs::StdRng, SeedableRng};
@@ -628,49 +634,52 @@ mod tests {
     }
 
     #[test]
-    fn test_miller_loop_matches_halo2() {
-        let mut rng = StdRng::seed_from_u64(7);
-        for _ in 0..5 {
-            // Step 1: Create random ark points
-            let ark_g1 = G1Affine::rand(&mut rng);
-            let ark_g2 = G2Affine::rand(&mut rng);
-
-            let halo_g1_x = HaloFq::from_bytes(&fq_to_bytes(&ark_g1.x)).unwrap();
-            let halo_g1_y = HaloFq::from_bytes(&fq_to_bytes(&ark_g1.y)).unwrap();
-            let halo_g2_x = halo_fq2_from_bytes(&fq2_to_bytes(&ark_g2.x));
-            let halo_g2_y = halo_fq2_from_bytes(&fq2_to_bytes(&ark_g2.y));
-
-            let halo_ps = vec![AffinePoint::new(halo_g1_x, halo_g1_y)];
-            let halo_qs = vec![AffinePoint::new(halo_g2_x, halo_g2_y)];
-
-            let halo_result = GuestBn254::multi_miller_loop(&halo_ps, &halo_qs);
-            let ark_result = super::multi_miller_loop(&[ark_g1], &[ark_g2]);
-
-            assert_eq!(
-                fq12_to_bytes(&ark_result).to_vec(),
-                halo_fq12_to_bytes(&halo_result),
-                "miller mismatch"
-            );
-        }
-    }
-
-    #[test]
     fn test_final_exp_hint_matches_halo2() {
         let mut rng = StdRng::seed_from_u64(1337);
         for _ in 0..5 {
             let ark_g1 = G1Affine::rand(&mut rng);
             let ark_g2 = G2Affine::rand(&mut rng);
 
-            let halo_g1_x = HaloFq::from_bytes(&fq_to_bytes(&ark_g1.x)).unwrap();
-            let halo_g1_y = HaloFq::from_bytes(&fq_to_bytes(&ark_g1.y)).unwrap();
+            let halo_g1_x = halo_fq_from_bytes(&fq_to_bytes(&ark_g1.x));
+            let halo_g1_y = halo_fq_from_bytes(&fq_to_bytes(&ark_g1.y));
             let halo_g2_x = halo_fq2_from_bytes(&fq2_to_bytes(&ark_g2.x));
             let halo_g2_y = halo_fq2_from_bytes(&fq2_to_bytes(&ark_g2.y));
+
+            let halo_g1 = HaloG1 {
+                x: halo_g1_x,
+                y: halo_g1_y,
+            };
+            let halo_g2 = HaloG2 {
+                x: halo_g2_x,
+                y: halo_g2_y,
+            };
 
             let halo_ps = vec![AffinePoint::new(halo_g1_x, halo_g1_y)];
             let halo_qs = vec![AffinePoint::new(halo_g2_x, halo_g2_y)];
 
             let halo_miller = GuestBn254::multi_miller_loop(&halo_ps, &halo_qs);
+            let halo_miller2 = unsafe {
+                std::mem::transmute::<Gt, HaloFq12>(halo2curves_axiom::bn256::multi_miller_loop(&[
+                    (&halo_g1, &halo_g2.into()),
+                ]))
+            };
+
+            let halo_exp = final_exp(halo_miller);
+            let halo_exp2 = final_exp(halo_miller2);
+            assert_eq!(halo_exp, halo_exp2, "halo exponentiation mismatch");
+
             let ark_miller = super::multi_miller_loop(&[ark_g1], &[ark_g2]);
+            let ark_miller_output = MillerLoopOutput::<ArkBn254>(ark_miller);
+
+            let ark_exp = ArkBn254::final_exponentiation(ark_miller_output).unwrap().0;
+            assert_eq!(
+                halo_exp,
+                ark_fq12_to_halo(&ark_exp),
+                "ark exponentiation mismatch"
+            );
+
+            let ark_exp2 = final_exp(ark_fq12_to_halo(&ark_miller));
+            assert_eq!(halo_exp, ark_exp2, "ark exponentiation 2 mismatch");
 
             let (c_halo, u_halo) = GuestBn254::final_exp_hint(&halo_miller);
             let (c_ark, u_ark) = super::final_exp_witness(&ark_miller);
