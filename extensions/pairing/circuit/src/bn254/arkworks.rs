@@ -1,10 +1,8 @@
 use super::{
-    biguint_to_prime_field, EXP1_LIMBS, EXP2_LIMBS, FQ12_NUM_BYTES, FQ_NUM_BYTES, M_INV_LIMBS,
-    R_INV_LIMBS, U27_COEFF_0, U27_COEFF_1,
+    biguint_to_prime_field, EXP1_LIMBS, EXP2_LIMBS, FQ12_NUM_BYTES, FQ2_NUM_BYTES, FQ6_NUM_BYTES,
+    FQ_NUM_BYTES, M_INV_LIMBS, R_INV_LIMBS, U27_COEFF_0, U27_COEFF_1,
 };
 
-const FQ2_NUM_BYTES: usize = 2 * FQ_NUM_BYTES;
-const FQ6_NUM_BYTES: usize = 6 * FQ_NUM_BYTES;
 use ark_bn254::{Bn254 as ArkBn254, Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine};
 use ark_ec::pairing::{prepare_g1, prepare_g2, Pairing};
 use ark_ff::{Field, Zero};
@@ -123,24 +121,11 @@ pub fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
     (residue_witness, cubic_non_residue_power)
 }
 
-pub fn fq12_to_bytes(value: &Fq12) -> [u8; FQ12_NUM_BYTES] {
+fn fq12_to_bytes(value: &Fq12) -> [u8; FQ12_NUM_BYTES] {
     let mut bytes = [0u8; FQ12_NUM_BYTES];
-    let coeffs = [
-        value.c0.c0,
-        value.c0.c1,
-        value.c0.c2,
-        value.c1.c0,
-        value.c1.c1,
-        value.c1.c2,
-    ];
-    let mut offset = 0;
-    for fp2 in coeffs {
-        for fp in [fp2.c0, fp2.c1] {
-            let limb_bytes = fq_to_bytes(&fp);
-            bytes[offset..offset + FQ_NUM_BYTES].copy_from_slice(&limb_bytes);
-            offset += FQ_NUM_BYTES;
-        }
-    }
+    value
+        .serialize_uncompressed(&mut bytes[..])
+        .expect("Failed to serialize Fq12");
     bytes
 }
 
@@ -154,25 +139,17 @@ fn fq_to_bytes(value: &Fq) -> [u8; FQ_NUM_BYTES] {
 
 fn fq2_to_bytes(value: &Fq2) -> [u8; FQ2_NUM_BYTES] {
     let mut bytes = [0u8; FQ2_NUM_BYTES];
-    let mut offset = 0;
-    for fp in [value.c0, value.c1] {
-        let limb_bytes = fq_to_bytes(&fp);
-        bytes[offset..offset + FQ_NUM_BYTES].copy_from_slice(&limb_bytes);
-        offset += FQ_NUM_BYTES;
-    }
+    value
+        .serialize_uncompressed(&mut bytes[..])
+        .expect("Failed to serialize Fq2");
     bytes
 }
 
 fn fq6_to_bytes(value: &Fq6) -> [u8; FQ6_NUM_BYTES] {
     let mut bytes = [0u8; FQ6_NUM_BYTES];
-    let mut offset = 0;
-    for fp2 in [value.c0, value.c1, value.c2] {
-        for fp in [fp2.c0, fp2.c1] {
-            let limb_bytes = fq_to_bytes(&fp);
-            bytes[offset..offset + FQ_NUM_BYTES].copy_from_slice(&limb_bytes);
-            offset += FQ_NUM_BYTES;
-        }
-    }
+    value
+        .serialize_uncompressed(&mut bytes[..])
+        .expect("Failed to serialize Fq6");
     bytes
 }
 
@@ -193,6 +170,17 @@ mod tests {
     use rand::{rngs::StdRng, SeedableRng};
     use std::convert::TryInto;
 
+    fn ark_fq_to_halo(value: &Fq) -> HaloFq {
+        HaloFq::from_bytes(&fq_to_bytes(value)).unwrap()
+    }
+
+    fn ark_fp2_to_halo(value: &Fq2) -> HaloFq2 {
+        HaloFq2 {
+            c0: ark_fq_to_halo(&value.c0),
+            c1: ark_fq_to_halo(&value.c1),
+        }
+    }
+
     fn halo_fq_to_ark(value: &HaloFq) -> Fq {
         let bytes = value.to_bytes();
         Fq::deserialize_uncompressed(&bytes[..]).unwrap()
@@ -200,6 +188,17 @@ mod tests {
 
     fn halo_fp2_to_ark(value: &HaloFq2) -> Fq2 {
         Fq2::new(halo_fq_to_ark(&value.c0), halo_fq_to_ark(&value.c1))
+    }
+
+    fn ark_fq12_to_halo(value: &Fq12) -> HaloFq12 {
+        HaloFq12::from_coeffs([
+            ark_fp2_to_halo(&value.c0.c0),
+            ark_fp2_to_halo(&value.c0.c1),
+            ark_fp2_to_halo(&value.c0.c2),
+            ark_fp2_to_halo(&value.c1.c0),
+            ark_fp2_to_halo(&value.c1.c1),
+            ark_fp2_to_halo(&value.c1.c2),
+        ])
     }
 
     fn halo_g1_to_ark(g: &HaloG1) -> G1Affine {
@@ -286,11 +285,7 @@ mod tests {
 
     fn ark_fq2_from_bytes(bytes: &[u8]) -> Fq2 {
         assert_eq!(bytes.len(), FQ2_NUM_BYTES);
-        let mut offset = 0;
-        let c0 = Fq::deserialize_uncompressed(&bytes[offset..offset + FQ_NUM_BYTES]).unwrap();
-        offset += FQ_NUM_BYTES;
-        let c1 = Fq::deserialize_uncompressed(&bytes[offset..offset + FQ_NUM_BYTES]).unwrap();
-        Fq2::new(c0, c1)
+        Fq2::deserialize_uncompressed(bytes).unwrap()
     }
 
     fn halo_fq2_from_bytes(bytes: &[u8]) -> HaloFq2 {
@@ -314,16 +309,7 @@ mod tests {
 
     fn ark_fq6_from_bytes(bytes: &[u8]) -> Fq6 {
         assert_eq!(bytes.len(), FQ6_NUM_BYTES);
-        let mut fp2_coeffs = Vec::with_capacity(3);
-        let mut offset = 0;
-        for _ in 0..3 {
-            let c0 = Fq::deserialize_uncompressed(&bytes[offset..offset + FQ_NUM_BYTES]).unwrap();
-            offset += FQ_NUM_BYTES;
-            let c1 = Fq::deserialize_uncompressed(&bytes[offset..offset + FQ_NUM_BYTES]).unwrap();
-            offset += FQ_NUM_BYTES;
-            fp2_coeffs.push(Fq2::new(c0, c1));
-        }
-        Fq6::new(fp2_coeffs[0], fp2_coeffs[1], fp2_coeffs[2])
+        Fq6::deserialize_uncompressed(bytes).unwrap()
     }
 
     fn halo_fq6_from_bytes(bytes: &[u8]) -> HaloFq6 {
@@ -395,6 +381,15 @@ mod tests {
                 "sum mismatch"
             );
 
+            let ark_double = ark_sum.double();
+            let halo_double = halo_sum.double();
+
+            assert_eq!(
+                fq_to_bytes(&ark_double).to_vec(),
+                halo_fq_to_bytes(&halo_double),
+                "double mismatch"
+            );
+
             let ark_square = ark_sum.square();
             let halo_square = halo_sum.square();
 
@@ -452,6 +447,15 @@ mod tests {
                 fq2_to_bytes(&ark_sum).to_vec(),
                 halo_fq2_to_bytes(&halo_sum),
                 "sum mismatch"
+            );
+
+            let ark_double = ark_sum.double();
+            let halo_double = halo_sum.double();
+
+            assert_eq!(
+                fq2_to_bytes(&ark_double).to_vec(),
+                halo_fq2_to_bytes(&halo_double),
+                "double mismatch"
             );
 
             let ark_square = ark_sum.square();
@@ -513,6 +517,15 @@ mod tests {
                 "sum mismatch"
             );
 
+            let ark_double = ark_sum.double();
+            let halo_double = halo_sum.double();
+
+            assert_eq!(
+                fq6_to_bytes(&ark_double).to_vec(),
+                halo_fq6_to_bytes(&halo_double),
+                "double mismatch"
+            );
+
             let ark_square = ark_sum.square();
             let halo_square = halo_sum.square();
 
@@ -572,6 +585,15 @@ mod tests {
                 "sum mismatch"
             );
 
+            let ark_double = ark_sum.double();
+            let halo_double = halo_sum.double();
+
+            assert_eq!(
+                fq12_to_bytes(&ark_double).to_vec(),
+                halo_fq12_to_bytes(&halo_double),
+                "double mismatch"
+            );
+
             let ark_square = ark_sum.square();
             let halo_square = halo_sum.square();
 
@@ -593,28 +615,18 @@ mod tests {
     }
 
     #[test]
-    fn test_final_exp_hint_matches_halo2() {
-        let mut rng = StdRng::seed_from_u64(1337);
+    fn test_fq12_to_bytes_matches_halo2_layout() {
+        let mut rng = StdRng::seed_from_u64(24);
         for _ in 0..5 {
-            let halo_g1 = HaloG1::random(&mut rng);
-            let halo_g2 = HaloG2::random(&mut rng);
-            let g1 = halo_g1_to_ark(&halo_g1);
-            let g2 = halo_g2_to_ark(&halo_g2);
-            let f = super::multi_miller_loop(&[g1], &[g2]);
-            let (c_ark, u_ark) = super::final_exp_witness(&f);
-
-            let halo_ps = vec![halo_g1_to_affine_point(&halo_g1)];
-            let halo_qs = vec![halo_g2_to_affine_point(&halo_g2)];
-            let halo_f = GuestBn254::multi_miller_loop(&halo_ps, &halo_qs);
-            let (c_halo, u_halo) = GuestBn254::final_exp_hint(&halo_f);
-
-            let ark_c_bytes = fq12_to_bytes(&c_ark).to_vec();
-            let ark_u_bytes = fq12_to_bytes(&u_ark).to_vec();
-            let halo_c_bytes = halo_fq12_to_bytes(&c_halo);
-            let halo_u_bytes = halo_fq12_to_bytes(&u_halo);
-
-            assert_eq!(ark_c_bytes, halo_c_bytes, "c mismatch");
-            assert_eq!(ark_u_bytes, halo_u_bytes, "u mismatch");
+            let value = Fq12::rand(&mut rng);
+            let halo = ark_fq12_to_halo(&value);
+            let expected: Vec<u8> = halo
+                .to_coeffs()
+                .into_iter()
+                .flat_map(|fp2| fp2.to_coeffs())
+                .flat_map(|fp| fp.to_bytes())
+                .collect();
+            assert_eq!(fq12_to_bytes(&value), expected.as_slice());
         }
     }
 
@@ -622,20 +634,59 @@ mod tests {
     fn test_miller_loop_matches_halo2() {
         let mut rng = StdRng::seed_from_u64(7);
         for _ in 0..5 {
-            let halo_g1 = HaloG1::random(&mut rng);
-            let halo_g2 = HaloG2::random(&mut rng);
-            let g1 = halo_g1_to_ark(&halo_g1);
-            let g2 = halo_g2_to_ark(&halo_g2);
-            let ark_result = super::multi_miller_loop(&[g1], &[g2]);
+            // Step 1: Create random ark points
+            let ark_g1 = G1Affine::rand(&mut rng);
+            let ark_g2 = G2Affine::rand(&mut rng);
 
-            let halo_ps = vec![halo_g1_to_affine_point(&halo_g1)];
-            let halo_qs = vec![halo_g2_to_affine_point(&halo_g2)];
+            let halo_g1_x = HaloFq::from_bytes(&fq_to_bytes(&ark_g1.x)).unwrap();
+            let halo_g1_y = HaloFq::from_bytes(&fq_to_bytes(&ark_g1.y)).unwrap();
+            let halo_g2_x = halo_fq2_from_bytes(&fq2_to_bytes(&ark_g2.x));
+            let halo_g2_y = halo_fq2_from_bytes(&fq2_to_bytes(&ark_g2.y));
+
+            let halo_ps = vec![AffinePoint::new(halo_g1_x, halo_g1_y)];
+            let halo_qs = vec![AffinePoint::new(halo_g2_x, halo_g2_y)];
+
             let halo_result = GuestBn254::multi_miller_loop(&halo_ps, &halo_qs);
+            let ark_result = super::multi_miller_loop(&[ark_g1], &[ark_g2]);
 
             assert_eq!(
                 fq12_to_bytes(&ark_result).to_vec(),
                 halo_fq12_to_bytes(&halo_result),
                 "miller mismatch"
+            );
+        }
+    }
+
+    #[test]
+    fn test_final_exp_hint_matches_halo2() {
+        let mut rng = StdRng::seed_from_u64(1337);
+        for _ in 0..5 {
+            let ark_g1 = G1Affine::rand(&mut rng);
+            let ark_g2 = G2Affine::rand(&mut rng);
+
+            let halo_g1_x = HaloFq::from_bytes(&fq_to_bytes(&ark_g1.x)).unwrap();
+            let halo_g1_y = HaloFq::from_bytes(&fq_to_bytes(&ark_g1.y)).unwrap();
+            let halo_g2_x = halo_fq2_from_bytes(&fq2_to_bytes(&ark_g2.x));
+            let halo_g2_y = halo_fq2_from_bytes(&fq2_to_bytes(&ark_g2.y));
+
+            let halo_ps = vec![AffinePoint::new(halo_g1_x, halo_g1_y)];
+            let halo_qs = vec![AffinePoint::new(halo_g2_x, halo_g2_y)];
+
+            let halo_miller = GuestBn254::multi_miller_loop(&halo_ps, &halo_qs);
+            let ark_miller = super::multi_miller_loop(&[ark_g1], &[ark_g2]);
+
+            let (c_halo, u_halo) = GuestBn254::final_exp_hint(&halo_miller);
+            let (c_ark, u_ark) = super::final_exp_witness(&ark_miller);
+
+            assert_eq!(
+                fq12_to_bytes(&c_ark).to_vec(),
+                halo_fq12_to_bytes(&c_halo),
+                "c mismatch"
+            );
+            assert_eq!(
+                fq12_to_bytes(&u_ark).to_vec(),
+                halo_fq12_to_bytes(&u_halo),
+                "u mismatch"
             );
         }
     }

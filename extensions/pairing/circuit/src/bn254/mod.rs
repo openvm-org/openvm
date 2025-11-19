@@ -7,6 +7,8 @@ use num_bigint::BigUint;
 use num_traits::Num;
 
 pub const FQ_NUM_BYTES: usize = 32;
+pub const FQ2_NUM_BYTES: usize = 2 * FQ_NUM_BYTES;
+pub const FQ6_NUM_BYTES: usize = 6 * FQ_NUM_BYTES;
 pub const FQ12_NUM_BYTES: usize = 12 * FQ_NUM_BYTES;
 
 lazy_static! {
