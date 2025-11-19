@@ -1,12 +1,17 @@
 use super::{
-    biguint_to_prime_field, EXP1_LIMBS, EXP2_LIMBS, FQ12_NUM_BYTES, FQ2_NUM_BYTES, FQ6_NUM_BYTES,
-    FQ_NUM_BYTES, M_INV_LIMBS, R_INV_LIMBS, U27_COEFF_0, U27_COEFF_1,
+    EXP1_LIMBS, EXP2_LIMBS, FQ12_NUM_BYTES, FQ2_NUM_BYTES, FQ6_NUM_BYTES, FQ_NUM_BYTES,
+    M_INV_LIMBS, R_INV_LIMBS,
 };
 
 use ark_bn254::{Bn254 as ArkBn254, Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine};
 use ark_ec::pairing::{prepare_g1, prepare_g2, Pairing};
 use ark_ff::{FftField, Field, Zero};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use halo2curves_axiom::bn256::{
+    Fq as HaloFq, Fq2 as HaloFq2, FROBENIUS_COEFF_FQ6_C1 as HALO_FROBENIUS_COEFF_FQ6_C1,
+    FROBENIUS_COEFF_FQ6_C2 as HALO_FROBENIUS_COEFF_FQ6_C2,
+    XI_TO_Q_MINUS_1_OVER_2 as HALO_XI_TO_Q_MINUS_1_OVER_2,
+};
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -18,6 +23,22 @@ lazy_static! {
         Fq12::get_root_of_unity(27).unwrap()
     };
     static ref UNITY_ROOT_27_EXP2: Fq12 = UNITY_ROOT_27.pow(EXP2_LIMBS.as_slice());
+    pub(crate) static ref FROBENIUS_COEFF_FQ6_C1: [Fq2; 6] = {
+        let mut coeffs = [Fq2::zero(); 6];
+        for (i, value) in HALO_FROBENIUS_COEFF_FQ6_C1.iter().enumerate() {
+            coeffs[i] = halo_fq2_to_ark(value);
+        }
+        coeffs
+    };
+    pub(crate) static ref FROBENIUS_COEFF_FQ6_C2: [Fq2; 6] = {
+        let mut coeffs = [Fq2::zero(); 6];
+        for (i, value) in HALO_FROBENIUS_COEFF_FQ6_C2.iter().enumerate() {
+            coeffs[i] = halo_fq2_to_ark(value);
+        }
+        coeffs
+    };
+    pub(crate) static ref XI_TO_Q_MINUS_1_OVER_2: Fq2 =
+        halo_fq2_to_ark(&HALO_XI_TO_Q_MINUS_1_OVER_2);
 }
 
 pub fn parse_g1_points<const N: usize>(raw: Vec<[[u8; N]; 2]>) -> Vec<G1Affine> {
@@ -156,25 +177,28 @@ fn fq6_to_bytes(value: &Fq6) -> [u8; FQ6_NUM_BYTES] {
     bytes
 }
 
+fn halo_fq_to_ark(value: &HaloFq) -> Fq {
+    let bytes = value.to_bytes();
+    Fq::deserialize_uncompressed(&bytes[..]).expect("valid halo fq bytes")
+}
+
+fn halo_fq2_to_ark(value: &HaloFq2) -> Fq2 {
+    Fq2::new(halo_fq_to_ark(&value.c0), halo_fq_to_ark(&value.c1))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use ark_ec::{pairing::MillerLoopOutput, AdditiveGroup};
     use ark_ff::{Field as ArkField, UniformRand};
-    use halo2curves_axiom::{
-        bn256::{
-            Fq as HaloFq, Fq12 as HaloFq12, Fq2 as HaloFq2, Fq6 as HaloFq6, G1Affine as HaloG1,
-            G2Affine as HaloG2, Gt,
-        },
-        pairing::MillerLoopResult,
+    use halo2curves_axiom::bn256::{
+        Fq as HaloFq, Fq12 as HaloFq12, Fq2 as HaloFq2, Fq6 as HaloFq6, G1Affine as HaloG1,
+        G2Affine as HaloG2,
     };
     use openvm_ecc_guest::algebra::field::FieldExtension;
     use openvm_ecc_guest::AffinePoint;
     use openvm_pairing_guest::{
-        halo2curves_shims::bn254::{
-            test_utils::{assert_miller_results_eq, final_exp},
-            Bn254 as GuestBn254,
-        },
+        halo2curves_shims::bn254::{test_utils::final_exp, Bn254 as GuestBn254},
         pairing::{FinalExp, MultiMillerLoop},
     };
     use rand::{rngs::StdRng, SeedableRng};
@@ -184,39 +208,30 @@ mod tests {
         HaloFq::from_bytes(&fq_to_bytes(value)).unwrap()
     }
 
-    fn ark_fp2_to_halo(value: &Fq2) -> HaloFq2 {
+    fn ark_fq2_to_halo(value: &Fq2) -> HaloFq2 {
         HaloFq2 {
             c0: ark_fq_to_halo(&value.c0),
             c1: ark_fq_to_halo(&value.c1),
         }
     }
 
-    fn halo_fq_to_ark(value: &HaloFq) -> Fq {
-        let bytes = value.to_bytes();
-        Fq::deserialize_uncompressed(&bytes[..]).unwrap()
-    }
-
-    fn halo_fp2_to_ark(value: &HaloFq2) -> Fq2 {
-        Fq2::new(halo_fq_to_ark(&value.c0), halo_fq_to_ark(&value.c1))
-    }
-
     fn ark_fq12_to_halo(value: &Fq12) -> HaloFq12 {
         HaloFq12::from_coeffs([
-            ark_fp2_to_halo(&value.c0.c0),
-            ark_fp2_to_halo(&value.c0.c1),
-            ark_fp2_to_halo(&value.c0.c2),
-            ark_fp2_to_halo(&value.c1.c0),
-            ark_fp2_to_halo(&value.c1.c1),
-            ark_fp2_to_halo(&value.c1.c2),
+            ark_fq2_to_halo(&value.c0.c0),
+            ark_fq2_to_halo(&value.c0.c1),
+            ark_fq2_to_halo(&value.c0.c2),
+            ark_fq2_to_halo(&value.c1.c0),
+            ark_fq2_to_halo(&value.c1.c1),
+            ark_fq2_to_halo(&value.c1.c2),
         ])
     }
 
     fn halo_g1_to_ark(g: &HaloG1) -> G1Affine {
-        G1Affine::new_unchecked(halo_fq_to_ark(&g.x), halo_fq_to_ark(&g.y))
+        G1Affine::new_unchecked(super::halo_fq_to_ark(&g.x), super::halo_fq_to_ark(&g.y))
     }
 
     fn halo_g2_to_ark(g: &HaloG2) -> G2Affine {
-        G2Affine::new_unchecked(halo_fp2_to_ark(&g.x), halo_fp2_to_ark(&g.y))
+        G2Affine::new_unchecked(super::halo_fq2_to_ark(&g.x), super::halo_fq2_to_ark(&g.y))
     }
 
     fn halo_g1_to_affine_point(g: &HaloG1) -> AffinePoint<HaloFq> {
@@ -231,31 +246,31 @@ mod tests {
         let [c0_c0, c1_c0, c0_c1, c1_c1, c0_c2, c1_c2] = value.to_coeffs();
         [c0_c0, c0_c1, c0_c2, c1_c0, c1_c1, c1_c2]
             .into_iter()
-            .flat_map(|fp2| fp2.to_coeffs())
-            .flat_map(|fp| fp.to_bytes())
+            .flat_map(|fq2| fq2.to_coeffs())
+            .flat_map(|fq| fq.to_bytes())
             .collect()
     }
 
     fn ark_fq12_from_bytes(bytes: &[u8]) -> Fq12 {
         assert_eq!(bytes.len(), FQ12_NUM_BYTES);
-        let mut fp2_coeffs = Vec::with_capacity(6);
+        let mut fq2_coeffs = Vec::with_capacity(6);
         let mut offset = 0;
         for _ in 0..6 {
             let c0 = Fq::deserialize_uncompressed(&bytes[offset..offset + FQ_NUM_BYTES]).unwrap();
             offset += FQ_NUM_BYTES;
             let c1 = Fq::deserialize_uncompressed(&bytes[offset..offset + FQ_NUM_BYTES]).unwrap();
             offset += FQ_NUM_BYTES;
-            fp2_coeffs.push(Fq2::new(c0, c1));
+            fq2_coeffs.push(Fq2::new(c0, c1));
         }
         Fq12::new(
-            Fq6::new(fp2_coeffs[0], fp2_coeffs[1], fp2_coeffs[2]),
-            Fq6::new(fp2_coeffs[3], fp2_coeffs[4], fp2_coeffs[5]),
+            Fq6::new(fq2_coeffs[0], fq2_coeffs[1], fq2_coeffs[2]),
+            Fq6::new(fq2_coeffs[3], fq2_coeffs[4], fq2_coeffs[5]),
         )
     }
 
     fn halo_fq12_from_bytes(bytes: &[u8]) -> HaloFq12 {
         assert_eq!(bytes.len(), FQ12_NUM_BYTES);
-        let mut fp2_coeffs = Vec::with_capacity(6);
+        let mut fq2_coeffs = Vec::with_capacity(6);
         let mut offset = 0;
         for _ in 0..6 {
             let c0_bytes: [u8; FQ_NUM_BYTES] =
@@ -266,10 +281,10 @@ mod tests {
             offset += FQ_NUM_BYTES;
             let c0 = HaloFq::from_bytes(&c0_bytes).unwrap();
             let c1 = HaloFq::from_bytes(&c1_bytes).unwrap();
-            fp2_coeffs.push(HaloFq2::new(c0, c1));
+            fq2_coeffs.push(HaloFq2::new(c0, c1));
         }
-        let fp2_coeffs: [HaloFq2; 6] = fp2_coeffs.try_into().unwrap();
-        let [c0_c0, c0_c1, c0_c2, c1_c0, c1_c1, c1_c2] = fp2_coeffs;
+        let fq2_coeffs: [HaloFq2; 6] = fq2_coeffs.try_into().unwrap();
+        let [c0_c0, c0_c1, c0_c2, c1_c0, c1_c1, c1_c2] = fq2_coeffs;
         HaloFq12::from_coeffs([c0_c0, c1_c0, c0_c1, c1_c1, c0_c2, c1_c2])
     }
 
@@ -308,7 +323,7 @@ mod tests {
         value
             .to_coeffs()
             .into_iter()
-            .flat_map(|fp| fp.to_bytes())
+            .flat_map(|fq| fq.to_bytes())
             .collect()
     }
 
@@ -319,7 +334,7 @@ mod tests {
 
     fn halo_fq6_from_bytes(bytes: &[u8]) -> HaloFq6 {
         assert_eq!(bytes.len(), FQ6_NUM_BYTES);
-        let mut fp2_coeffs = Vec::with_capacity(3);
+        let mut fq2_coeffs = Vec::with_capacity(3);
         let mut offset = 0;
         for _ in 0..3 {
             let c0_bytes: [u8; FQ_NUM_BYTES] =
@@ -330,20 +345,20 @@ mod tests {
             offset += FQ_NUM_BYTES;
             let c0 = HaloFq::from_bytes(&c0_bytes).unwrap();
             let c1 = HaloFq::from_bytes(&c1_bytes).unwrap();
-            fp2_coeffs.push(HaloFq2::new(c0, c1));
+            fq2_coeffs.push(HaloFq2::new(c0, c1));
         }
         HaloFq6 {
-            c0: fp2_coeffs[0],
-            c1: fp2_coeffs[1],
-            c2: fp2_coeffs[2],
+            c0: fq2_coeffs[0],
+            c1: fq2_coeffs[1],
+            c2: fq2_coeffs[2],
         }
     }
 
     fn halo_fq6_to_bytes(value: &HaloFq6) -> Vec<u8> {
         [value.c0, value.c1, value.c2]
             .into_iter()
-            .flat_map(|fp2| fp2.to_coeffs())
-            .flat_map(|fp| fp.to_bytes())
+            .flat_map(|fq2| fq2.to_coeffs())
+            .flat_map(|fq| fq.to_bytes())
             .collect()
     }
 
@@ -628,8 +643,8 @@ mod tests {
             let expected: Vec<u8> = halo
                 .to_coeffs()
                 .into_iter()
-                .flat_map(|fp2| fp2.to_coeffs())
-                .flat_map(|fp| fp.to_bytes())
+                .flat_map(|fq2| fq2.to_coeffs())
+                .flat_map(|fq| fq.to_bytes())
                 .collect();
             assert_eq!(fq12_to_bytes(&value), expected.as_slice());
         }

@@ -1,9 +1,10 @@
 use ark_bn254::{Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine};
 use ark_ec::AffineRepr;
-use ark_ff::{Field, Zero};
+use ark_ff::Field;
 
-use crate::arkworks::miller_loop::{
-    miller_add_step, miller_double_and_add_step, miller_double_step,
+use crate::{
+    arkworks::miller_loop::{miller_add_step, miller_double_and_add_step, miller_double_step},
+    bn254::arkworks::{FROBENIUS_COEFF_FQ6_C1, XI_TO_Q_MINUS_1_OVER_2},
 };
 
 const BN254_PSEUDO_BINARY_ENCODING: [i8; 66] = [
@@ -109,6 +110,68 @@ fn evaluate_lines_vec(mut f: Fq12, mut lines: Vec<EvaluatedLine>) -> Fq12 {
     f
 }
 
+fn post_loop(
+    f: Fq12,
+    mut q_acc: Vec<G2Affine>,
+    q: &[G2Affine],
+    xy_fracs: &[(Fq, Fq)],
+) -> (Fq12, Vec<G2Affine>) {
+    let mut lines = Vec::new();
+    let x_to_q_minus_1_over_3 = FROBENIUS_COEFF_FQ6_C1[1];
+    let x_to_q_sq_minus_1_over_3 = FROBENIUS_COEFF_FQ6_C1[2];
+    let xi_to_q_minus_1_over_2 = *XI_TO_Q_MINUS_1_OVER_2;
+    let q1_vec: Vec<G2Affine> = q
+        .iter()
+        .map(|q| {
+            let (x, y) = q.xy().unwrap();
+            let x = x.frobenius_map(1) * x_to_q_minus_1_over_3;
+            let y = -(y.frobenius_map(1) * xi_to_q_minus_1_over_2);
+            G2Affine::new_unchecked(x, y)
+        })
+        .collect();
+
+    let (q_out_add, lines_s_plus_q1): (Vec<_>, Vec<_>) = q_acc
+        .iter()
+        .zip(q1_vec.iter())
+        .map(|(q_acc, q1)| miller_add_step(q_acc, q1))
+        .unzip();
+    q_acc = q_out_add;
+
+    for (line, xy_frac) in lines_s_plus_q1.iter().zip(xy_fracs.iter()) {
+        lines.push(EvaluatedLine {
+            b: line.b * Fq2::new(xy_frac.0, Fq::from(0u64)),
+            c: line.c * Fq2::new(xy_frac.1, Fq::from(0u64)),
+        });
+    }
+
+    let q2_vec: Vec<G2Affine> = q
+        .iter()
+        .map(|q| {
+            let (x, y) = q.xy().unwrap();
+            let x = x * x_to_q_sq_minus_1_over_3;
+            G2Affine::new_unchecked(x, y)
+        })
+        .collect();
+
+    let (_q_out_add, lines_s_plus_q2): (Vec<_>, Vec<_>) = q_acc
+        .iter()
+        .zip(q2_vec.iter())
+        .map(|(q_acc, q2)| miller_add_step(q_acc, q2))
+        .unzip();
+
+    for (line, xy_frac) in lines_s_plus_q2.iter().zip(xy_fracs.iter()) {
+        lines.push(EvaluatedLine {
+            b: line.b * Fq2::new(xy_frac.0, Fq::from(0u64)),
+            c: line.c * Fq2::new(xy_frac.1, Fq::from(0u64)),
+        });
+    }
+
+    let mut f = f;
+    f = evaluate_lines_vec(f, lines);
+
+    (f, q_acc)
+}
+
 pub fn multi_miller_loop(P: &[G1Affine], Q: &[G2Affine]) -> Fq12 {
     assert!(!P.is_empty());
     assert_eq!(P.len(), Q.len());
@@ -207,49 +270,7 @@ pub fn multi_miller_loop(P: &[G1Affine], Q: &[G2Affine]) -> Fq12 {
         f = evaluate_lines_vec(f, lines);
     }
 
-    let mut lines = Vec::new();
-    let q1_vec: Vec<G2Affine> = Q
-        .iter()
-        .map(|q| {
-            let (x, y) = q.xy().unwrap();
-            G2Affine::new_unchecked(x.frobenius_map(1), -y.frobenius_map(1))
-        })
-        .collect();
+    let (f, _) = post_loop(f, Q_acc, &Q, &xy_fracs);
 
-    let (Q_out_add, lines_S_plus_Q1): (Vec<_>, Vec<_>) = Q_acc
-        .iter()
-        .zip(q1_vec.iter())
-        .map(|(q_acc, q1)| miller_add_step(q_acc, q1))
-        .unzip();
-    Q_acc = Q_out_add;
-
-    for (line, xy_frac) in lines_S_plus_Q1.iter().zip(xy_fracs.iter()) {
-        lines.push(EvaluatedLine {
-            b: line.b * Fq2::new(xy_frac.0, Fq::from(0u64)),
-            c: line.c * Fq2::new(xy_frac.1, Fq::from(0u64)),
-        });
-    }
-
-    let q2_vec: Vec<G2Affine> = Q
-        .iter()
-        .map(|q| {
-            let (x, y) = q.xy().unwrap();
-            G2Affine::new_unchecked(x.frobenius_map(2), y.frobenius_map(2))
-        })
-        .collect();
-
-    let (_Q_out_add, lines_S_plus_Q2): (Vec<_>, Vec<_>) = Q_acc
-        .iter()
-        .zip(q2_vec.iter())
-        .map(|(q_acc, q2)| miller_add_step(q_acc, q2))
-        .unzip();
-
-    for (line, xy_frac) in lines_S_plus_Q2.iter().zip(xy_fracs.iter()) {
-        lines.push(EvaluatedLine {
-            b: line.b * Fq2::new(xy_frac.0, Fq::from(0u64)),
-            c: line.c * Fq2::new(xy_frac.1, Fq::from(0u64)),
-        });
-    }
-
-    evaluate_lines_vec(f, lines)
+    f
 }
