@@ -126,7 +126,7 @@ fn test_internal_recursive_vk_stabilization() -> Result<()> {
     let test_prover =
         NonRootProver::new::<Engine>(internal_1_prover.get_vk(), INTERNAL_SYSTEM_PARAMS, true);
     assert_eq!(
-        test_prover.child_vk_pcs_data.commitment,
+        test_prover.get_commit(),
         test_prover.self_vk_pcs_data.unwrap().commitment
     );
     Ok(())

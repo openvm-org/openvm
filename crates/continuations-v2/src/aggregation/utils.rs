@@ -20,7 +20,7 @@ use stark_backend_v2::{
 
 use crate::aggregation::AggregationCircuit;
 
-pub fn debug<const NUM_CHILDREN: usize, S: AggregationSubCircuit>(
+pub fn debug<S: AggregationSubCircuit>(
     circuit: &AggregationCircuit<S>,
     ctxs: &[(usize, AirProvingContextV2<CpuBackendV2>)],
 ) {
