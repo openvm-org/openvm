@@ -7,7 +7,10 @@ use stark_backend_v2::{SC, keygen::types::MultiStarkVerifyingKeyV2};
 use tracing::info_span;
 use verify_stark::NonRootStarkProof;
 
-use crate::config::{AggregationConfig, AggregationTreeConfig};
+use crate::{
+    config::{AggregationConfig, AggregationTreeConfig},
+    keygen::AggProvingKey,
+};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
@@ -41,6 +44,30 @@ impl AggProver {
         let internal_recursive_prover = NonRootAggregationProver::new::<E>(
             internal_for_leaf_prover.get_vk(),
             agg_config.params.internal,
+            true,
+        );
+        Self {
+            leaf_prover,
+            internal_for_leaf_prover,
+            internal_recursive_prover,
+            agg_tree_config,
+        }
+    }
+
+    pub fn from_pk(
+        app_vk: Arc<MultiStarkVerifyingKeyV2>,
+        agg_pk: AggProvingKey,
+        agg_tree_config: AggregationTreeConfig,
+    ) -> Self {
+        let leaf_prover = NonRootAggregationProver::from_pk::<E>(app_vk, agg_pk.leaf_pk, false);
+        let internal_for_leaf_prover = NonRootAggregationProver::from_pk::<E>(
+            leaf_prover.get_vk(),
+            agg_pk.internal_for_leaf_pk,
+            false,
+        );
+        let internal_recursive_prover = NonRootAggregationProver::from_pk::<E>(
+            internal_for_leaf_prover.get_vk(),
+            agg_pk.internal_recursive_pk,
             true,
         );
         Self {
