@@ -142,7 +142,38 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ag
         }
     }
 
+    pub fn from_pk<E: StarkWhirEngine<SC = SC, PB = PB>>(
+        child_vk: Arc<MultiStarkVerifyingKeyV2>,
+        pk: Arc<MultiStarkProvingKeyV2>,
+        is_recursive: bool,
+    ) -> Self {
+        let verifier_circuit = S::new(child_vk.clone(), true);
+        let engine = E::new(pk.params);
+        let child_vk_pcs_data: CommittedTraceDataV2<PB> =
+            verifier_circuit.commit_child_vk(&engine, &child_vk);
+        let circuit = Arc::new(AggregationCircuit::new(Arc::new(verifier_circuit)));
+        let vk = Arc::new(pk.get_vk());
+        let self_vk_pcs_data = if is_recursive {
+            Some(circuit.verifier_circuit.commit_child_vk(&engine, &vk))
+        } else {
+            None
+        };
+        Self {
+            pk,
+            vk,
+            agg_node_tracegen: T::new(),
+            child_vk,
+            child_vk_pcs_data,
+            circuit,
+            self_vk_pcs_data,
+        }
+    }
+
     pub fn get_circuit(&self) -> Arc<AggregationCircuit<S>> {
         self.circuit.clone()
+    }
+
+    pub fn get_pk(&self) -> Arc<MultiStarkProvingKeyV2> {
+        self.pk.clone()
     }
 }
