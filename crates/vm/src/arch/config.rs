@@ -327,7 +327,8 @@ impl SystemConfig {
     }
 
     pub fn with_max_segment_len(mut self, max_segment_len: usize) -> Self {
-        self.segmentation_limits.max_trace_height = max_segment_len as u32;
+        self.segmentation_limits
+            .set_max_trace_height(max_segment_len as u32);
         self
     }
 
