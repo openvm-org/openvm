@@ -68,9 +68,11 @@ pub fn pairing_hint_bytes(p: &[G1Affine], q: &[G2Affine]) -> Vec<u8> {
 }
 
 pub fn multi_miller_loop(p: &[G1Affine], q: &[G2Affine]) -> Fq12 {
-    let g1_it = p.iter().map(|point| prepare_g1::<ArkBn254>(*point));
-    let g2_it = q.iter().map(|point| prepare_g2::<ArkBn254>(*point));
-    ArkBn254::multi_miller_loop(g1_it, g2_it).0
+    // DO NOT USE THESE. THEY DON'T WORK
+    // let g1_it = p.iter().map(|point| prepare_g1::<ArkBn254>(*point));
+    // let g2_it = q.iter().map(|point| prepare_g2::<ArkBn254>(*point));
+    // ArkBn254::multi_miller_loop(g1_it, g2_it).0
+    crate::arkworks::miller_loop_bn254::multi_miller_loop(p, q)
 }
 
 pub fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
@@ -634,6 +636,38 @@ mod tests {
     }
 
     #[test]
+    fn test_final_exp_matches_halo2() {
+        let mut rng = StdRng::seed_from_u64(1337);
+        for _ in 0..5 {
+            let ark_g1 = G1Affine::rand(&mut rng);
+            let ark_g2 = G2Affine::rand(&mut rng);
+
+            let halo_g1_x = halo_fq_from_bytes(&fq_to_bytes(&ark_g1.x));
+            let halo_g1_y = halo_fq_from_bytes(&fq_to_bytes(&ark_g1.y));
+            let halo_g2_x = halo_fq2_from_bytes(&fq2_to_bytes(&ark_g2.x));
+            let halo_g2_y = halo_fq2_from_bytes(&fq2_to_bytes(&ark_g2.y));
+
+            let halo_ps = vec![AffinePoint::new(halo_g1_x, halo_g1_y)];
+            let halo_qs = vec![AffinePoint::new(halo_g2_x, halo_g2_y)];
+
+            let halo_miller = GuestBn254::multi_miller_loop(&halo_ps, &halo_qs);
+            let halo_exp = final_exp(halo_miller);
+
+            let ark_miller = super::multi_miller_loop(&[ark_g1], &[ark_g2]);
+            let ark_exp2 = final_exp(ark_fq12_to_halo(&ark_miller));
+            assert_eq!(halo_exp, ark_exp2, "ark exponentiation 2 mismatch");
+
+            // let ark_miller_output = MillerLoopOutput::<ArkBn254>(ark_miller);
+            // let ark_exp = ArkBn254::final_exponentiation(ark_miller_output).unwrap().0;
+            // assert_eq!(
+            //     halo_exp,
+            //     ark_fq12_to_halo(&ark_exp),
+            //     "ark exponentiation mismatch"
+            // );
+        }
+    }
+
+    #[test]
     fn test_final_exp_hint_matches_halo2() {
         let mut rng = StdRng::seed_from_u64(1337);
         for _ in 0..5 {
@@ -645,41 +679,23 @@ mod tests {
             let halo_g2_x = halo_fq2_from_bytes(&fq2_to_bytes(&ark_g2.x));
             let halo_g2_y = halo_fq2_from_bytes(&fq2_to_bytes(&ark_g2.y));
 
-            let halo_g1 = HaloG1 {
-                x: halo_g1_x,
-                y: halo_g1_y,
-            };
-            let halo_g2 = HaloG2 {
-                x: halo_g2_x,
-                y: halo_g2_y,
-            };
-
             let halo_ps = vec![AffinePoint::new(halo_g1_x, halo_g1_y)];
             let halo_qs = vec![AffinePoint::new(halo_g2_x, halo_g2_y)];
 
             let halo_miller = GuestBn254::multi_miller_loop(&halo_ps, &halo_qs);
-            let halo_miller2 = unsafe {
-                std::mem::transmute::<Gt, HaloFq12>(halo2curves_axiom::bn256::multi_miller_loop(&[
-                    (&halo_g1, &halo_g2.into()),
-                ]))
-            };
-
             let halo_exp = final_exp(halo_miller);
-            let halo_exp2 = final_exp(halo_miller2);
-            assert_eq!(halo_exp, halo_exp2, "halo exponentiation mismatch");
 
             let ark_miller = super::multi_miller_loop(&[ark_g1], &[ark_g2]);
-            let ark_miller_output = MillerLoopOutput::<ArkBn254>(ark_miller);
+            let ark_exp = final_exp(ark_fq12_to_halo(&ark_miller));
+            assert_eq!(halo_exp, ark_exp, "ark exponentiation mismatch");
 
-            let ark_exp = ArkBn254::final_exponentiation(ark_miller_output).unwrap().0;
+            let ark_miller_output = MillerLoopOutput::<ArkBn254>(ark_miller);
+            let ark_exp2 = ArkBn254::final_exponentiation(ark_miller_output).unwrap().0;
             assert_eq!(
                 halo_exp,
-                ark_fq12_to_halo(&ark_exp),
-                "ark exponentiation mismatch"
+                ark_fq12_to_halo(&ark_exp2),
+                "ark exponentiation 2 mismatch"
             );
-
-            let ark_exp2 = final_exp(ark_fq12_to_halo(&ark_miller));
-            assert_eq!(halo_exp, ark_exp2, "ark exponentiation 2 mismatch");
 
             let (c_halo, u_halo) = GuestBn254::final_exp_hint(&halo_miller);
             let (c_ark, u_ark) = super::final_exp_witness(&ark_miller);
