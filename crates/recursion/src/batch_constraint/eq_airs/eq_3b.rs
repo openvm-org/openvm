@@ -258,21 +258,39 @@ where
     }
 }
 
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub(crate) struct StackedIdxRecord {
-    sort_idx: usize,
-    interaction_idx: usize,
-    stacked_idx: usize,
-    n_lift: usize,
-    is_last_in_air: bool,
+    pub sort_idx: u32,
+    pub interaction_idx: u32,
+    pub stacked_idx: u32,
+    pub n_lift: u32,
+    pub is_last_in_air: bool,
 }
 
 impl StackedIdxRecord {
+    pub fn from_usizes(
+        sort_idx: usize,
+        interaction_idx: usize,
+        stacked_idx: usize,
+        n_lift: usize,
+        is_last_in_air: bool,
+    ) -> Self {
+        Self {
+            sort_idx: sort_idx as u32,
+            interaction_idx: interaction_idx as u32,
+            stacked_idx: stacked_idx as u32,
+            n_lift: n_lift as u32,
+            is_last_in_air,
+        }
+    }
+
     pub fn eq_mle(&self, xi: &[EF], l_skip: usize, n_logup: usize) -> EF {
-        xi[l_skip + self.n_lift..l_skip + n_logup]
+        xi[l_skip + (self.n_lift as usize)..l_skip + n_logup]
             .iter()
             .enumerate()
             .map(|(i, &x)| {
-                if self.stacked_idx & (1 << (l_skip + self.n_lift + i)) > 0 {
+                if self.stacked_idx & (1 << (l_skip + (self.n_lift as usize) + i)) > 0 {
                     x
                 } else {
                     EF::ONE - x
@@ -309,13 +327,13 @@ pub(crate) fn generate_eq_3b_blob(
             let n_lift = vdata.log_height.saturating_sub(l_skip);
             let num_interactions = vk.per_air[*air_idx].num_interactions();
             for i in 0..num_interactions {
-                blob.all_stacked_ids.push(StackedIdxRecord {
+                blob.all_stacked_ids.push(StackedIdxRecord::from_usizes(
                     sort_idx,
-                    interaction_idx: i,
-                    stacked_idx: row_idx,
+                    i,
+                    row_idx,
                     n_lift,
-                    is_last_in_air: i + 1 == num_interactions,
-                });
+                    i + 1 == num_interactions,
+                ));
                 row_idx += 1 << (l_skip + n_lift);
                 if row_idx == 1 << (l_skip + n_logup) {
                     row_idx = 0;
@@ -367,24 +385,24 @@ pub(crate) fn generate_eq_3b_trace(
                         cols.is_first = F::from_bool(j == 0 && n == 0);
                         cols.proof_idx = F::from_canonical_usize(pidx);
 
-                        cols.sort_idx = F::from_canonical_usize(record.sort_idx);
-                        cols.interaction_idx = F::from_canonical_usize(record.interaction_idx);
-                        cols.n_lift = F::from_canonical_usize(record.n_lift);
+                        cols.sort_idx = F::from_canonical_u32(record.sort_idx);
+                        cols.interaction_idx = F::from_canonical_u32(record.interaction_idx);
+                        cols.n_lift = F::from_canonical_u32(record.n_lift);
                         cols.two_to_the_n_lift = F::from_canonical_usize(1 << record.n_lift);
                         cols.n = F::from_canonical_usize(n);
-                        cols.n_at_least_n_lift = F::from_bool(n >= record.n_lift);
+                        cols.n_at_least_n_lift = F::from_bool(n >= record.n_lift as usize);
                         cols.hypercube_volume = F::from_canonical_usize(1 << n);
                         cols.is_first_in_air = F::from_bool(record.interaction_idx == 0 && n == 0);
                         cols.is_first_in_interaction = F::from_bool(n == 0);
-                        cols.idx = F::from_canonical_usize(shifted_idx & ((1 << n) - 1));
-                        cols.running_idx = F::from_canonical_usize(shifted_idx);
+                        cols.idx = F::from_canonical_u32(shifted_idx & ((1 << n) - 1));
+                        cols.running_idx = F::from_canonical_u32(shifted_idx);
                         let nth_bit = (shifted_idx & (1 << n)) > 0;
                         cols.nth_bit = F::from_bool(nth_bit);
                         cols.loop_aux.is_transition[0] =
                             F::from_bool(j + 1 < stacked_ids.len() || n < n_logup);
                         cols.loop_aux.is_transition[1] =
                             F::from_bool(!record.is_last_in_air || n < n_logup);
-                        let xi = if (record.n_lift..n_logup).contains(&n) {
+                        let xi = if (record.n_lift as usize..n_logup).contains(&n) {
                             xi[l_skip + n]
                         } else if nth_bit {
                             EF::ONE
