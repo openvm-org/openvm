@@ -213,7 +213,7 @@ where
                 is_first: AB::Expr::ZERO,
                 value: local.r_pref_product.map(Into::into),
             },
-            local.sel_last_and_trans_count,
+            local.is_valid * local.sel_last_and_trans_count,
         );
         self.sel_hypercube_bus.send(
             builder,
@@ -223,7 +223,7 @@ where
                 is_first: AB::Expr::ONE,
                 value: local.one_minus_r_pref_prod.map(Into::into),
             },
-            local.sel_first_count,
+            local.is_valid * local.sel_first_count,
         );
         // ========================= eq consistency ===============================
         let mult = ext_field_one_minus::<AB::Expr>(ext_field_subtract::<AB::Expr>(
@@ -357,9 +357,19 @@ pub(crate) fn generate_eq_ns_trace(
                 eq_r_zeroes *= EF::ONE - rs[1 + i];
             }
             let counts = selector_counts[l_skip + n_max];
-            for i in n_max..n_global {
+            for i in n_max..=n_global {
+                let (sel_first_count, sel_last_and_trans_count) = if i == n_max {
+                    (counts.first, counts.last + counts.transition)
+                } else {
+                    (0, 0)
+                };
+                let xi = if i == n_global {
+                    EF::ZERO
+                } else {
+                    xi[l_skip + i]
+                };
                 res.push(EqNsRecord {
-                    xi: xi[l_skip + i],
+                    xi,
                     r: EF::ONE,
                     r_prod: EF::ONE,
                     eq: preflight.batch_constraint.eq_ns[n_max],
@@ -368,23 +378,10 @@ pub(crate) fn generate_eq_ns_trace(
                     eq_r_zeroes,
                     n_logup: preflight.proof_shape.n_logup,
                     n_max: preflight.proof_shape.n_max,
-                    sel_first_count: counts.first,
-                    sel_last_and_trans_count: counts.last + counts.transition,
+                    sel_first_count,
+                    sel_last_and_trans_count,
                 });
             }
-            res.push(EqNsRecord {
-                xi: EF::ZERO,
-                r: EF::ONE,
-                r_prod: EF::ONE,
-                eq_r_ones,
-                eq_r_zeroes,
-                eq: preflight.batch_constraint.eq_ns[n_max],
-                eq_sharp: preflight.batch_constraint.eq_sharp_ns[n_max],
-                n_logup: preflight.proof_shape.n_logup,
-                n_max: preflight.proof_shape.n_max,
-                sel_first_count: counts.first,
-                sel_last_and_trans_count: counts.last + counts.transition,
-            });
             for i in (0..n_global).rev() {
                 res[i].r_prod = res[i + 1].r_prod * res[i].r;
             }
