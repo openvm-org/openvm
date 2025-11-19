@@ -7,6 +7,27 @@ use stark_backend_v2::SystemParams;
 pub const DEFAULT_NUM_CHILDREN_LEAF: usize = 1;
 pub const DEFAULT_NUM_CHILDREN_INTERNAL: usize = 3;
 
+pub const DEFAULT_LEAF_PARAMS: SystemParams = SystemParams {
+    l_skip: 2,
+    n_stack: 17,
+    log_blowup: 3,
+    k_whir: 4,
+    num_whir_queries: 30,
+    log_final_poly_len: 7,
+    logup_pow_bits: 16,
+    whir_pow_bits: 16,
+};
+pub const DEFAULT_INTERNAL_PARAMS: SystemParams = SystemParams {
+    l_skip: 2,
+    n_stack: 17,
+    log_blowup: 3,
+    k_whir: 4,
+    num_whir_queries: 30,
+    log_final_poly_len: 7,
+    logup_pow_bits: 16,
+    whir_pow_bits: 16,
+};
+
 #[derive(Clone, Debug, Serialize, Deserialize, derive_new::new)]
 pub struct AppConfig<VC> {
     pub app_vm_config: VC,
@@ -33,6 +54,15 @@ pub struct AggregationConfig {
 pub struct AggregationSystemParams {
     pub leaf: SystemParams,
     pub internal: SystemParams,
+}
+
+impl Default for AggregationSystemParams {
+    fn default() -> Self {
+        Self {
+            leaf: DEFAULT_LEAF_PARAMS,
+            internal: DEFAULT_INTERNAL_PARAMS,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Args)]
