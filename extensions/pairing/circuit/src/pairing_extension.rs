@@ -255,8 +255,21 @@ pub(crate) mod phantom {
                     })
                     .collect::<eyre::Result<Vec<_>>>()?;
 
-                let p_vec = convert_p_to_g1_affine(&p);
-                let q_vec = convert_q_to_g2_affine(&q);
+                use halo2curves_axiom::bls12_381::G1Affine;
+                use halo2curves_axiom::bls12_381::G2Affine;
+                use halo2curves_axiom::CurveAffine;
+
+                let p_vec: Vec<G1Affine> = p.iter()
+                    .map(|point| {
+                        G1Affine::from_xy(point.x, point.y).unwrap()
+                    })
+                    .collect();
+
+                let q_vec: Vec<G2Affine> = q.iter()
+                    .map(|point| {
+                        G2Affine::from_xy(point.x, point.y).unwrap()
+                    })
+                    .collect();
 
                 let g2_prepareds = q_vec
                     .iter()
@@ -268,10 +281,12 @@ pub(crate) mod phantom {
                 let f = halo2curves_axiom::bls12_381::multi_miller_loop(terms.as_slice());
                 let a = unsafe { transmute::<MillerLoopResult, Fq12>(f) };
 
-                // let f: Fq12 = Bls12_381::multi_miller_loop(&p, &q);
-                // let (c, u) = Bls12_381::final_exp_hint(&f);
-
                 let (c, u) = Bls12_381::final_exp_hint(&a);
+
+                let f: Fq12 = Bls12_381::multi_miller_loop(&p, &q);
+                assert_eq!(a, f);
+
+                let (c_new, u_new) = Bls12_381::final_exp_hint(&f);
 
                 hint_stream.clear();
 
@@ -289,50 +304,6 @@ pub(crate) mod phantom {
             }
         }
         Ok(())
-    }
-
-    fn convert_p_to_g1_affine(
-        p: &[AffinePoint<halo2curves_axiom::bls12_381::Fq>],
-    ) -> Vec<halo2curves_axiom::bls12_381::G1Affine> {
-        use halo2curves_axiom::bls12_381::G1Affine;
-
-        p.iter()
-            .map(|point| {
-                if point.is_infinity() {
-                    G1Affine::identity()
-                } else {
-                    let mut affine = G1Affine::generator();
-                    affine.x = point.x;
-                    affine.y = point.y;
-                    // `generator()` initializes `infinity` with `Choice::from(0u8)`, matching the
-                    // desired construction `G1Affine { x: p_i.x, y: p_i.y, infinity:
-                    // Choice::from(0u8) }`.
-                    affine
-                }
-            })
-            .collect()
-    }
-
-    fn convert_q_to_g2_affine(
-        q: &[AffinePoint<halo2curves_axiom::bls12_381::Fq2>],
-    ) -> Vec<halo2curves_axiom::bls12_381::G2Affine> {
-        use halo2curves_axiom::bls12_381::G2Affine;
-
-        q.iter()
-            .map(|point| {
-                if point.is_infinity() {
-                    G2Affine::identity()
-                } else {
-                    let mut affine = G2Affine::generator();
-                    affine.x = point.x;
-                    affine.y = point.y;
-                    // `generator()` initializes `infinity` with `Choice::from(0u8)`, matching the
-                    // desired construction `G2Affine { x: q_i.x, y: q_i.y, infinity:
-                    // Choice::from(0u8) }`.
-                    affine
-                }
-            })
-            .collect()
     }
 
     fn read_fp<const N: usize, Fp: ff::PrimeField>(
