@@ -1,7 +1,7 @@
 mod curve;
 mod final_exp;
 mod line;
-mod miller_loop;
+pub mod miller_loop;
 
 pub use curve::*;
 pub use line::*;

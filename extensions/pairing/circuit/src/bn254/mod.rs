@@ -63,3 +63,28 @@ pub(crate) fn biguint_to_prime_field<F: PrimeField>(value: &BigUint) -> F {
     }
     F::from_bigint(bigint).expect("valid bigint")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ark_bn254::Fq;
+
+    #[test]
+    fn test_biguint_to_prime_field_matches_digits() {
+        fn check(value: &BigUint) {
+            let fq = biguint_to_prime_field::<Fq>(value);
+            let digits = value.to_u64_digits();
+            let mut expected = <Fq as PrimeField>::BigInt::from(0u64);
+            let limbs = expected.as_mut();
+            assert!(digits.len() <= limbs.len());
+            limbs[..digits.len()].copy_from_slice(&digits);
+            for limb in &mut limbs[digits.len()..] {
+                *limb = 0;
+            }
+            assert_eq!(fq.into_bigint(), expected);
+        }
+
+        check(&U27_COEFF_0);
+        check(&U27_COEFF_1);
+    }
+}

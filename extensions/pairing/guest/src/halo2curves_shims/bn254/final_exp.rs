@@ -1,3 +1,6 @@
+#[cfg(not(target_os = "zkvm"))]
+extern crate std;
+
 use alloc::vec::Vec;
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2},
