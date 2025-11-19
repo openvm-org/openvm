@@ -6,7 +6,11 @@ use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, error::CudaEr
 use stark_backend_v2::keygen::types::MultiStarkVerifyingKeyV2;
 
 use crate::{
-    batch_constraint::{cuda_utils::*, expr_eval::SingleMainSymbolicExpressionColumns},
+    batch_constraint::{
+        cuda_utils::*,
+        eq_airs::{Eq3bBlob, Eq3bColumns, StackedIdxRecord},
+        expr_eval::SingleMainSymbolicExpressionColumns,
+    },
     cuda::{preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr},
     utils::MultiVecWithBounds,
 };
@@ -36,6 +40,20 @@ extern "C" {
         num_records_per_proof: usize,
         d_sumcheck_rnds: *const EF,
         d_sumcheck_bounds: *const usize,
+    ) -> i32;
+
+    fn _eq_3b_tracegen(
+        d_trace: *mut F,
+        num_valid_rows: usize,
+        height: usize,
+        num_proofs: usize,
+        l_skip: usize,
+        records: *const StackedIdxRecord,
+        record_bounds: *const usize,
+        rows_per_proof_bounds: *const usize,
+        n_logups: *const usize,
+        xis: *const EF,
+        xi_bounds: *const usize,
     ) -> i32;
 }
 
@@ -89,6 +107,35 @@ pub unsafe fn sym_expr_common_tracegen(
         num_records_per_proof,
         d_sumcheck_rnds.as_ptr(),
         d_sumcheck_bounds.as_ptr(),
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub unsafe fn eq_3b_tracegen(
+    d_trace: &DeviceBuffer<F>,
+    num_valid_rows: usize,
+    height: usize,
+    num_proofs: usize,
+    l_skip: usize,
+    d_records: &DeviceBuffer<StackedIdxRecord>,
+    d_record_bounds: &DeviceBuffer<usize>,
+    d_rows_per_proof_bounds: &DeviceBuffer<usize>,
+    d_n_logups: &DeviceBuffer<usize>,
+    d_xis: &DeviceBuffer<EF>,
+    d_xi_bounds: &DeviceBuffer<usize>,
+) -> Result<(), CudaError> {
+    CudaError::from_result(_eq_3b_tracegen(
+        d_trace.as_mut_ptr(),
+        num_valid_rows,
+        height,
+        num_proofs,
+        l_skip,
+        d_records.as_ptr(),
+        d_record_bounds.as_ptr(),
+        d_rows_per_proof_bounds.as_ptr(),
+        d_n_logups.as_ptr(),
+        d_xis.as_ptr(),
+        d_xi_bounds.as_ptr(),
     ))
 }
 
@@ -251,5 +298,74 @@ pub fn generate_sym_expr_trace(
         )
         .unwrap();
     }
+    trace
+}
+
+pub fn generate_eq_3b_trace(
+    child_vk: &MultiStarkVerifyingKeyV2,
+    blob: &Eq3bBlob,
+    preflights: &[PreflightGpu],
+) -> DeviceMatrix<F> {
+    debug_assert_eq!(blob.all_stacked_ids.num_proofs(), preflights.len());
+
+    let num_proofs = preflights.len();
+    let width = Eq3bColumns::<F>::width();
+    let l_skip = child_vk.inner.params.l_skip;
+
+    let mut device_records = MultiVecWithBounds::<_, 1>::with_capacity(blob.all_stacked_ids.len());
+
+    let mut rows_per_proof_bounds = Vec::with_capacity(num_proofs + 1);
+    rows_per_proof_bounds.push(0);
+
+    let mut n_logups = Vec::with_capacity(num_proofs);
+    let mut all_xi = MultiVecWithBounds::<_, 1>::new();
+
+    let mut num_valid_rows = 0usize;
+
+    for (pidx, preflight) in preflights.iter().enumerate() {
+        let records = &blob.all_stacked_ids[pidx];
+
+        device_records.extend(records.iter().cloned());
+        device_records.close_level(0);
+
+        let n_logup = preflight.cpu.proof_shape.n_logup;
+        n_logups.push(n_logup);
+
+        let one_height = n_logup + 1;
+        let rows_for_proof = records.len() * one_height;
+        num_valid_rows += rows_for_proof;
+        rows_per_proof_bounds.push(num_valid_rows);
+
+        all_xi.extend(preflight.cpu.batch_constraint.xi.iter().cloned());
+        all_xi.close_level(0);
+    }
+
+    let height = num_valid_rows.max(1).next_power_of_two();
+    let trace = DeviceMatrix::with_capacity(height, width);
+
+    let d_records = to_device_or_nullptr(&device_records.data).unwrap();
+    let d_record_bounds = device_records.bounds[0].to_device().unwrap();
+    let d_rows_per_proof_bounds = rows_per_proof_bounds.to_device().unwrap();
+    let d_n_logups = n_logups.to_device().unwrap();
+    let d_xis = to_device_or_nullptr(&all_xi.data).unwrap();
+    let d_xi_bounds = all_xi.bounds[0].to_device().unwrap();
+
+    unsafe {
+        eq_3b_tracegen(
+            trace.buffer(),
+            num_valid_rows,
+            height,
+            num_proofs,
+            l_skip,
+            &d_records,
+            &d_record_bounds,
+            &d_rows_per_proof_bounds,
+            &d_n_logups,
+            &d_xis,
+            &d_xi_bounds,
+        )
+        .unwrap();
+    }
+
     trace
 }

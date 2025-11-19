@@ -804,7 +804,7 @@ pub mod cuda_tracegen {
 
     use super::*;
     use crate::{
-        batch_constraint::cuda_abi::generate_sym_expr_trace,
+        batch_constraint::cuda_abi::{generate_eq_3b_trace, generate_sym_expr_trace},
         cuda::{GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
     };
 
@@ -828,6 +828,7 @@ pub mod cuda_tracegen {
                     *max_num_proofs,
                     &blob.expr_evals,
                 ),
+                Eq3b => generate_eq_3b_trace(child_vk, &blob.eq_3b_blob, preflights),
                 _ => {
                     let proofs = proofs.iter().map(|p| p.cpu.clone()).collect::<Vec<_>>();
                     let preflights = preflights.iter().map(|p| p.cpu.clone()).collect::<Vec<_>>();
