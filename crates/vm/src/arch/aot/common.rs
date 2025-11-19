@@ -59,10 +59,7 @@ pub const RISCV_TO_X86_OVERRIDE_MAP: [Option<&str>; 32] = [
     None,         // x30
     None,         // x31
 ];
-pub const XMM_TRACE_HEIGHTS_BASE: [&str; 4] = [
-    // "xmm4", "xmm5", "xmm6",  "xmm10", "xmm11", "xmm12",
-    "xmm11", "xmm12", "xmm13", "xmm14",
-];
+pub const XMM_TRACE_HEIGHTS_BASE: [&str; 4] = ["xmm12", "xmm13", "xmm14", "xmm15"];
 
 pub fn sync_xmm_to_gpr() -> String {
     let mut asm_str = String::new();
