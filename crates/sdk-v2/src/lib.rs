@@ -37,6 +37,7 @@ use verify_stark::{
 
 use crate::{
     config::{AggregationConfig, AggregationSystemParams},
+    keygen::AggProvingKey,
     prover::{AggProver, AppProver, StarkProver},
     types::ExecutableFormat,
 };
@@ -462,6 +463,15 @@ where
             .set_app_pk(app_pk)
             .map_err(|_| panic!("app_pk already set"));
         self
+    }
+
+    pub fn agg_pk(&self) -> AggProvingKey {
+        let agg_prover = self.agg_prover();
+        AggProvingKey {
+            leaf_pk: agg_prover.leaf_prover.get_pk(),
+            internal_for_leaf_pk: agg_prover.internal_for_leaf_prover.get_pk(),
+            internal_recursive_pk: agg_prover.internal_recursive_prover.get_pk(),
+        }
     }
 
     pub fn agg_vk(&self) -> Arc<MultiStarkVerifyingKey> {

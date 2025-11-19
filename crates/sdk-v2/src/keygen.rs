@@ -9,7 +9,10 @@ use openvm_circuit::{
 use serde::{Deserialize, Serialize};
 use stark_backend_v2::{
     BabyBearPoseidon2CpuEngineV2, StarkEngineV2,
-    keygen::types::MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey,
+    keygen::types::{
+        MultiStarkProvingKeyV2 as MultiStarkProvingKey,
+        MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey,
+    },
     poseidon2::sponge::DuplexSponge,
 };
 
@@ -25,6 +28,13 @@ pub struct AppProvingKey<VC> {
 pub struct AppVerifyingKey {
     pub vk: MultiStarkVerifyingKey,
     pub memory_dimensions: MemoryDimensions,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct AggProvingKey {
+    pub leaf_pk: Arc<MultiStarkProvingKey>,
+    pub internal_for_leaf_pk: Arc<MultiStarkProvingKey>,
+    pub internal_recursive_pk: Arc<MultiStarkProvingKey>,
 }
 
 impl<VC> AppProvingKey<VC>
