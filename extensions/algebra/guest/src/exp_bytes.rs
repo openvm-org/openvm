@@ -43,30 +43,12 @@ pub trait ExpBytes: Field {
             return Self::ONE;
         }
 
-        if *self == Self::ZERO {
-            // Zero raised to a non-zero positive exponent stays zero.
-            if digits_naf.iter().all(|&d| d == 0) {
-                return Self::ONE;
-            }
-            assert!(is_positive, "cannot raise zero to a negative exponent");
-            return Self::ZERO;
+        let mut base = self.clone();
+        if !is_positive {
+            base = Self::ONE.div_unsafe(&base);
         }
 
-        let has_neg_digit = digits_naf.iter().any(|&d| d == -1);
-        let base = if is_positive {
-            self.clone()
-        } else {
-            self.invert()
-        };
-        let base_inv = if has_neg_digit {
-            Some(if is_positive {
-                self.invert()
-            } else {
-                self.clone()
-            })
-        } else {
-            None
-        };
+        let base_inv = digits_naf.contains(&-1).then(|| base.invert());
 
         let mut res = Self::ONE;
         for &digit in digits_naf.iter().rev() {
@@ -74,10 +56,9 @@ pub trait ExpBytes: Field {
             if digit == 1 {
                 res *= &base;
             } else if digit == -1 {
-                let inv = base_inv
+                res *= base_inv
                     .as_ref()
                     .expect("negative digit requires available inverse");
-                res *= inv;
             }
         }
         res
