@@ -65,6 +65,7 @@ use itertools::Itertools;
 use openvm_stark_backend::{AirRef, p3_maybe_rayon::prelude::*};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, FieldAlgebra};
+use p3_matrix::dense::RowMajorMatrix;
 use stark_backend_v2::{
     D_EF, EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
@@ -555,21 +556,27 @@ impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for GkrModuleChip {
         _preflights: &[Preflight],
         blob: &GkrBlobCpu,
     ) -> ColMajorMatrix<F> {
+        ColMajorMatrix::from_row_major(&self.generate_trace_row_major(blob))
+    }
+}
+
+impl GkrModuleChip {
+    fn generate_trace_row_major(&self, blob: &GkrBlobCpu) -> RowMajorMatrix<F> {
         use GkrModuleChip::*;
-        let trace = match self {
+        match self {
             Input => input::generate_trace(&blob.input_records, &blob.q0_claims),
             Layer => layer::generate_trace(&blob.layer_records, &blob.mus_records, &blob.q0_claims),
             LayerSumcheck => sumcheck::generate_trace(&blob.sumcheck_records, &blob.mus_records),
             XiSampler => xi_sampler::generate_trace(&blob.xi_sampler_records),
-        };
-        ColMajorMatrix::from_row_major(&trace)
+        }
     }
 }
 
 #[cfg(feature = "cuda")]
 mod cuda_tracegen {
-    use cuda_backend_v2::{GpuBackendV2, transport_matrix_h2d_col_major};
+    use cuda_backend_v2::GpuBackendV2;
     use itertools::Itertools;
+    use openvm_cuda_backend::data_transporter::transport_matrix_to_device;
 
     use super::*;
     use crate::cuda::{
@@ -586,9 +593,7 @@ mod cuda_tracegen {
             preflights: &[PreflightGpu],
             exp_bits_len_gen: &ExpBitsLenTraceGenerator,
         ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
-            // default hybrid implementation:
-            let ctxs_cpu = TraceGenModule::<GlobalCtxCpu, CpuBackendV2>::generate_proving_ctxs(
-                self,
+            let blob = self.generate_blob(
                 &child_vk.cpu,
                 &proofs.iter().map(|proof| proof.cpu.clone()).collect_vec(),
                 &preflights
@@ -597,13 +602,18 @@ mod cuda_tracegen {
                     .collect_vec(),
                 exp_bits_len_gen,
             );
-            ctxs_cpu
-                .into_iter()
-                .map(|ctx| {
-                    assert!(ctx.cached_mains.is_empty());
-                    AirProvingContextV2::simple_no_pis(
-                        transport_matrix_h2d_col_major(&ctx.common_main).unwrap(),
-                    )
+            let chips = [
+                GkrModuleChip::Input,
+                GkrModuleChip::Layer,
+                GkrModuleChip::LayerSumcheck,
+                GkrModuleChip::XiSampler,
+            ];
+            chips
+                .iter()
+                .map(|chip| {
+                    AirProvingContextV2::simple_no_pis(transport_matrix_to_device(Arc::new(
+                        chip.generate_trace_row_major(&blob),
+                    )))
                 })
                 .collect()
         }

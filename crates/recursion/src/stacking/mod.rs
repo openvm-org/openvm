@@ -233,8 +233,9 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for StackingModule {
 
 #[cfg(feature = "cuda")]
 mod cuda_tracegen {
-    use cuda_backend_v2::{GpuBackendV2, transport_matrix_h2d_col_major};
+    use cuda_backend_v2::GpuBackendV2;
     use itertools::Itertools;
+    use openvm_cuda_backend::data_transporter::transport_matrix_to_device;
 
     use super::*;
     use crate::cuda::{
@@ -249,26 +250,26 @@ mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            module_ctx: &(),
+            _module_ctx: &(),
         ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
             // default hybrid implementation:
-            let ctxs_cpu = TraceGenModule::<GlobalCtxCpu, CpuBackendV2>::generate_proving_ctxs(
-                self,
-                &child_vk.cpu,
-                &proofs.iter().map(|proof| proof.cpu.clone()).collect_vec(),
-                &preflights
-                    .iter()
-                    .map(|preflight| preflight.cpu.clone())
-                    .collect_vec(),
-                module_ctx,
-            );
-            ctxs_cpu
+            let proofs = proofs.iter().map(|proof| proof.cpu.clone()).collect_vec();
+            let preflights = preflights
+                .iter()
+                .map(|preflight| preflight.cpu.clone())
+                .collect_vec();
+            let cpu_traces = [
+                OpeningClaimsTraceGenerator::generate_trace(&child_vk.cpu, &proofs, &preflights),
+                UnivariateRoundTraceGenerator::generate_trace(&child_vk.cpu, &proofs, &preflights),
+                SumcheckRoundsTraceGenerator::generate_trace(&child_vk.cpu, &proofs, &preflights),
+                StackingClaimsTraceGenerator::generate_trace(&child_vk.cpu, &proofs, &preflights),
+                EqBaseTraceGenerator::generate_trace(&child_vk.cpu, &proofs, &preflights),
+                EqBitsTraceGenerator::generate_trace(&child_vk.cpu, &proofs, &preflights),
+            ];
+            cpu_traces
                 .into_iter()
-                .map(|ctx| {
-                    assert!(ctx.cached_mains.is_empty());
-                    AirProvingContextV2::simple_no_pis(
-                        transport_matrix_h2d_col_major(&ctx.common_main).unwrap(),
-                    )
+                .map(|trace| {
+                    AirProvingContextV2::simple_no_pis(transport_matrix_to_device(Arc::new(trace)))
                 })
                 .collect()
         }
