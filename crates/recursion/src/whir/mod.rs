@@ -5,6 +5,7 @@ use itertools::{Itertools, izip};
 use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdicField};
+use p3_matrix::dense::RowMajorMatrix;
 #[cfg(not(debug_assertions))]
 use p3_maybe_rayon::prelude::*;
 use p3_symmetric::Permutation;
@@ -666,7 +667,8 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for WhirModule {
         let iter = chips.iter();
         #[cfg(not(debug_assertions))]
         let iter = chips.par_iter();
-        iter.map(|chip| chip.generate_trace(child_vk, &proofs, &preflights, &blob))
+        iter.map(|chip| chip.generate_trace_row_major(child_vk, &proofs, &preflights, &blob))
+            .map(|trace| ColMajorMatrix::from_row_major(&trace))
             .map(AirProvingContextV2::simple_no_pis)
             .collect()
     }
@@ -735,15 +737,15 @@ enum WhirModuleChip {
 }
 
 impl WhirModuleChip {
-    fn generate_trace(
+    fn generate_trace_row_major(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
         proofs: &[&Proof],
         preflights: &[&Preflight],
         blob: &WhirBlobCpu,
-    ) -> ColMajorMatrix<F> {
+    ) -> RowMajorMatrix<F> {
         use WhirModuleChip::*;
-        let trace = match self {
+        match self {
             WhirRound => whir_round::generate_trace(child_vk, proofs, preflights),
             Sumcheck => sumcheck::generate_trace(child_vk, proofs, preflights),
             Query => query::generate_trace(child_vk, proofs, preflights),
@@ -770,15 +772,15 @@ impl WhirModuleChip {
                 proofs,
                 &blob.final_poly_query_eval_records,
             ),
-        };
-        ColMajorMatrix::from_row_major(&trace)
+        }
     }
 }
 
 #[cfg(feature = "cuda")]
 mod cuda_tracegen {
-    use cuda_backend_v2::{GpuBackendV2, transport_matrix_h2d_col_major};
+    use cuda_backend_v2::GpuBackendV2;
     use itertools::Itertools;
+    use openvm_cuda_backend::data_transporter::transport_matrix_to_device;
     use openvm_cuda_common::d_buffer::DeviceBuffer;
 
     use super::*;
@@ -931,9 +933,13 @@ mod cuda_tracegen {
                 }
                 _ => {
                     // Fall back to CPU impl.
-                    let mat =
-                        chip.generate_trace(&child_vk.cpu, &proofs_cpu, &preflights_cpu, &blob);
-                    transport_matrix_h2d_col_major(&mat).unwrap()
+                    let mat = chip.generate_trace_row_major(
+                        &child_vk.cpu,
+                        &proofs_cpu,
+                        &preflights_cpu,
+                        &blob,
+                    );
+                    transport_matrix_to_device(Arc::new(mat))
                 }
             })
             .map(|mat| AirProvingContextV2::simple_no_pis(mat))

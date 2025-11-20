@@ -9,6 +9,7 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, TwoAdicField};
+use p3_matrix::dense::RowMajorMatrix;
 use stark_backend_v2::{
     EF, F, SC, StarkEngineV2,
     keygen::types::MultiStarkVerifyingKeyV2,
@@ -747,8 +748,22 @@ impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModuleChip {
         preflights: &[Preflight],
         blob: &Self::ModuleSpecificCtx,
     ) -> ColMajorMatrix<F> {
+        ColMajorMatrix::from_row_major(
+            &self.generate_trace_row_major(child_vk, proofs, preflights, blob),
+        )
+    }
+}
+
+impl BatchConstraintModuleChip {
+    fn generate_trace_row_major(
+        &self,
+        child_vk: &MultiStarkVerifyingKeyV2,
+        proofs: &[Proof],
+        preflights: &[Preflight],
+        blob: &BatchConstraintBlobCpu,
+    ) -> RowMajorMatrix<F> {
         use BatchConstraintModuleChip::*;
-        let trace = match self {
+        match self {
             FractionsFolder => fractions_folder::generate_trace(child_vk, proofs, preflights),
             SumcheckUni => sumcheck::univariate::generate_trace(child_vk, proofs, preflights),
             SumcheckLin => sumcheck::multilinear::generate_trace(child_vk, proofs, preflights),
@@ -790,15 +805,14 @@ impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModuleChip {
             EqNeg => {
                 EqNegTraceGenerator::generate_trace(child_vk, preflights, &blob.selector_counts)
             }
-        };
-        ColMajorMatrix::from_row_major(&trace)
+        }
     }
 }
 
 #[cfg(feature = "cuda")]
 pub mod cuda_tracegen {
     use cuda_backend_v2::{GpuBackendV2, transport_matrix_h2d_col_major};
-    use openvm_cuda_backend::base::DeviceMatrix;
+    use openvm_cuda_backend::{base::DeviceMatrix, data_transporter::transport_matrix_to_device};
     #[cfg(not(debug_assertions))]
     use p3_maybe_rayon::prelude::*;
 
@@ -832,14 +846,8 @@ pub mod cuda_tracegen {
                 _ => {
                     let proofs = proofs.iter().map(|p| p.cpu.clone()).collect::<Vec<_>>();
                     let preflights = preflights.iter().map(|p| p.cpu.clone()).collect::<Vec<_>>();
-                    let trace = ModuleChip::<GlobalCtxCpu, CpuBackendV2>::generate_trace(
-                        self,
-                        child_vk,
-                        &proofs,
-                        &preflights,
-                        blob,
-                    );
-                    transport_matrix_h2d_col_major(&trace).unwrap()
+                    let trace = self.generate_trace_row_major(child_vk, &proofs, &preflights, blob);
+                    transport_matrix_to_device(Arc::new(trace))
                 }
             }
         }
