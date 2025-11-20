@@ -65,37 +65,20 @@ impl FinalExp for Bls12_381 {
         }
 
         // 2.1. get order of 3rd primitive root
-        let mut order_3rd_power: u32 = 0;
-        exp = POLY_FACTOR.clone() * FINAL_EXP_FACTOR.clone();
-
-        root = f.exp_bytes(true, &exp.to_bytes_be());
-        // NOTE[yj]: we can probably remove this first check as an optimization since we initialize
-        // order_3rd_power to 0
-        root = root.exp_bytes(true, &BigUint::from(27u32).to_bytes_be());
-        if root == Fq12::ONE {
-            order_3rd_power = 3;
+        let mut frob = *f;
+        root = Self::Fp12::ONE;
+        for c in BIG_EXP_DECOMPOSITION.iter() {
+            root *= frob.exp_bytes(true, &c.to_bytes_be());
+            frob = frob.frobenius_map();
         }
 
         // 2.2. get 27th root inverse
-        let root_27th_inv: Fq12;
-        if order_3rd_power == 0 {
-            root_27th_inv = Fq12::ONE;
-        } else {
-            let mut frob = *f;
-            let mut root = Self::Fp12::ONE;
-            for c in BIG_EXP_DECOMPOSITION.iter() {
-                root *= frob.exp_bytes(true, &c.to_bytes_be());
-                frob = frob.frobenius_map();
-            }
-            // while exp != BigUint::ZERO {
-            //     let c = exp.clone() % BLS12_381_MODULUS.clone();
-            //     exp /= BLS12_381_MODULUS.clone();
-            //     root *= frob.exp_bytes(true, &c.to_bytes_be());
-            //     frob = frob.frobenius_map();
-            // }
-            let exp = BigUint::from(10u32);
-            root_27th_inv = root.exp_bytes(false, &exp.to_bytes_be());
-        }
+        let root_27th_inv =
+            if root.exp_bytes(true, &BigUint::from(27u32).to_bytes_be()) == Fq12::ONE {
+                root.exp_bytes(false, &BigUint::from(10u32).to_bytes_be())
+            } else {
+                Fq12::ONE
+            };
 
         // 2.3. shift the Miller loop result so that millerLoop * scalingFactor
         // is of order finalExpFactor
