@@ -19,6 +19,7 @@ pub enum Rv32WeierstrassOpcode {
     SETUP_EC_ADD_NE,
     EC_DOUBLE,
     SETUP_EC_DOUBLE,
+    EC_MUL,
 }
 
 #[derive(Default)]
@@ -75,6 +76,9 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
                         assert!(dec_insn.rs2 == 0);
                         Rv32WeierstrassOpcode::EC_DOUBLE as usize
                             + Rv32WeierstrassOpcode::CLASS_OFFSET
+                    }
+                    Some(SwBaseFunct7::SwEcMul) => {
+                        Rv32WeierstrassOpcode::EC_MUL as usize + Rv32WeierstrassOpcode::CLASS_OFFSET
                     }
                     _ => unimplemented!(),
                 };

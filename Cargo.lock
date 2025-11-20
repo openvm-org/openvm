@@ -4505,6 +4505,7 @@ dependencies = [
  "openvm-ecc-guest",
  "openvm-ecc-sw-macros",
  "openvm-ecc-transpiler",
+ "openvm-platform",
  "openvm-rv32im-transpiler",
  "openvm-sha256-circuit",
  "openvm-sha256-transpiler",

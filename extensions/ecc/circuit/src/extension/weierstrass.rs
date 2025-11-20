@@ -36,7 +36,8 @@ use strum::EnumCount;
 
 use crate::{
     get_ec_addne_air, get_ec_addne_chip, get_ec_addne_step, get_ec_double_air, get_ec_double_chip,
-    get_ec_double_step, EcAddNeExecutor, EcDoubleExecutor, EccCpuProverExt, WeierstrassAir,
+    get_ec_double_step, get_ec_mul_air, get_ec_mul_chip, get_ec_mul_step, EcAddNeExecutor,
+    EcDoubleExecutor, EcMulExecutor, EccCpuProverExt, WeierstrassAir,
 };
 
 #[serde_as]
@@ -104,6 +105,7 @@ pub enum WeierstrassExtensionExecutor {
     // 32 limbs prime
     EcAddNeRv32_32(EcAddNeExecutor<2, 32>),
     EcDoubleRv32_32(EcDoubleExecutor<2, 32>),
+    EcMulRv32_32(EcMulExecutor<2, 32>),
     // 48 limbs prime
     EcAddNeRv32_48(EcAddNeExecutor<6, 16>),
     EcDoubleRv32_48(EcDoubleExecutor<6, 16>),
@@ -145,7 +147,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                 )?;
 
                 let double = get_ec_double_step(
-                    config,
+                    config.clone(),
                     dummy_range_checker_bus,
                     pointer_max_bits,
                     start_offset,
@@ -156,6 +158,20 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                     WeierstrassExtensionExecutor::EcDoubleRv32_32(double),
                     ((Rv32WeierstrassOpcode::EC_DOUBLE as usize)
                         ..=(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize))
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
+                )?;
+
+                let mul = get_ec_mul_step(
+                    config,
+                    dummy_range_checker_bus,
+                    pointer_max_bits,
+                    start_offset,
+                );
+
+                inventory.add_executor(
+                    WeierstrassExtensionExecutor::EcMulRv32_32(mul),
+                    ((Rv32WeierstrassOpcode::EC_MUL as usize)
+                        ..=(Rv32WeierstrassOpcode::EC_MUL as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else if bytes <= 48 {
@@ -251,7 +267,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                 let double = get_ec_double_air::<2, 32>(
                     exec_bridge,
                     memory_bridge,
-                    config,
+                    config.clone(),
                     range_checker_bus,
                     bitwise_lu,
                     pointer_max_bits,
@@ -259,6 +275,17 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                     curve.a.clone(),
                 );
                 inventory.add_air(double);
+
+                let mul = get_ec_mul_air::<2, 32>(
+                    exec_bridge,
+                    memory_bridge,
+                    config,
+                    range_checker_bus,
+                    bitwise_lu,
+                    pointer_max_bits,
+                    start_offset,
+                );
+                inventory.add_air(mul);
             } else if bytes <= 48 {
                 let config = ExprBuilderConfig {
                     modulus: curve.modulus.clone(),
@@ -350,7 +377,7 @@ where
 
                 inventory.next_air::<WeierstrassAir<1, 2, 32>>()?;
                 let double = get_ec_double_chip::<Val<SC>, 2, 32>(
-                    config,
+                    config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
@@ -358,6 +385,16 @@ where
                     curve.a.clone(),
                 );
                 inventory.add_executor_chip(double);
+
+                inventory.next_air::<WeierstrassAir<2, 2, 32>>()?;
+                let mul = get_ec_mul_chip::<Val<SC>, 2, 32>(
+                    config,
+                    mem_helper.clone(),
+                    range_checker.clone(),
+                    bitwise_lu.clone(),
+                    pointer_max_bits,
+                );
+                inventory.add_executor_chip(mul);
             } else if bytes <= 48 {
                 let config = ExprBuilderConfig {
                     modulus: curve.modulus.clone(),

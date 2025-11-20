@@ -1,4 +1,4 @@
-use core::ops::{Add, Neg};
+use core::ops::{Add, AddAssign, Neg};
 
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
@@ -60,14 +60,48 @@ impl IntrinsicCurve for Secp256k1 {
     where
         for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
     {
-        // heuristic
-        if coeffs.len() < 25 {
-            let table = CachedMulTable::<Self>::new_with_prime_order(bases, 4);
-            table.windowed_mul(coeffs)
-        } else {
-            openvm_ecc_guest::msm(coeffs, bases)
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            // heuristic
+            if coeffs.len() < 25 {
+                let table = CachedMulTable::<Self>::new_with_prime_order(bases, 4);
+                table.windowed_mul(coeffs)
+            } else {
+                openvm_ecc_guest::msm(coeffs, bases)
+            }
+        }
+        #[cfg(target_os = "zkvm")]
+        {
+            let mut acc = <Self::Point as Group>::IDENTITY;
+            for (coeff, base) in coeffs.iter().zip(bases.iter()) {
+                unsafe {
+                    let mut uninit: core::mem::MaybeUninit<Self::Point> =
+                        core::mem::MaybeUninit::uninit();
+                    secp256k1_ec_mul(
+                        uninit.as_mut_ptr() as usize,
+                        coeff as *const Self::Scalar as usize,
+                        base as *const Self::Point as usize,
+                    );
+                    acc.add_assign(&uninit.assume_init());
+                }
+            }
+            acc
         }
     }
+}
+
+#[cfg(target_os = "zkvm")]
+#[inline(always)]
+#[no_mangle]
+extern "C" fn secp256k1_ec_mul(rd: usize, rs1: usize, rs2: usize) {
+    openvm_platform::custom_insn_r!(
+        opcode = openvm_ecc_guest::OPCODE,
+        funct3 = openvm_ecc_guest::SW_FUNCT3 as usize,
+        funct7 = openvm_ecc_guest::SwBaseFunct7::SwEcMul as usize,
+        rd = In rd,
+        rs1 = In rs1,
+        rs2 = In rs2
+    );
 }
 
 // --- Implement helpful methods mimicking the structs in k256 ---
