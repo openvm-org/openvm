@@ -104,22 +104,12 @@ fn multi_miller_loop(p: &[G1Affine], q: &[G2Affine]) -> Fq12 {
 }
 
 fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
-    #[cfg(not(target_os = "zkvm"))]
-    println!("[arkworks bls12 final_exp_witness] start f={:?}", f);
-
     let root = exp_bytes(f, true, FINAL_EXP_FACTOR_TIMES_27_BE.as_slice());
-    #[cfg(not(target_os = "zkvm"))]
-    println!("[arkworks bls12 final_exp_witness] root={:?}", root);
     let root_pth_inverse = if root == Fq12::ONE {
         Fq12::ONE
     } else {
         exp_bytes(&root, true, PTH_ROOT_INV_EXP_BE.as_slice())
     };
-    #[cfg(not(target_os = "zkvm"))]
-    println!(
-        "[arkworks bls12 final_exp_witness] root_pth_inverse={:?}",
-        root_pth_inverse
-    );
 
     let mut order_3rd_power = 0u32;
     let mut root_order = exp_bytes(f, true, POLY_FACTOR_TIMES_FINAL_EXP_BE.as_slice());
@@ -138,11 +128,6 @@ fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
     if root_order == Fq12::ONE {
         order_3rd_power = 3;
     }
-    #[cfg(not(target_os = "zkvm"))]
-    println!(
-        "[arkworks bls12 final_exp_witness] order_3rd_power={}",
-        order_3rd_power
-    );
 
     let root_27th_inverse = if order_3rd_power == 0 {
         Fq12::ONE
@@ -151,20 +136,10 @@ fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
         let root = exp_bytes(f, true, POLY_FACTOR_TIMES_FINAL_EXP_BE.as_slice());
         exp_bytes(&root, true, exponent_bytes.as_slice())
     };
-    #[cfg(not(target_os = "zkvm"))]
-    println!(
-        "[arkworks bls12 final_exp_witness] root_27th_inverse={:?}",
-        root_27th_inverse
-    );
 
     let scaling_factor = root_pth_inverse * root_27th_inverse;
     let shifted = *f * scaling_factor;
     let residue_witness = exp_bytes(&shifted, true, LAMBDA_INV_MOD_FINAL_EXP_BE.as_slice());
-    #[cfg(not(target_os = "zkvm"))]
-    println!(
-        "[arkworks bls12 final_exp_witness] scaling_factor={:?}, residue_witness={:?}",
-        scaling_factor, residue_witness
-    );
 
     (residue_witness, scaling_factor)
 }
