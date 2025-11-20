@@ -2,7 +2,7 @@ use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::AffinePoint;
 #[allow(unused_imports)]
 use openvm_pairing::{
-    bn254::{Bn254, Bn254G1Affine, Fp, Fp2},
+    bls12_381::{Bls12_381, Bls12_381G1Affine, Fp, Fp2},
     PairingCheck,
 };
 
@@ -61,6 +61,6 @@ pub fn main() {
         p.push(g1);
         q.push(g2);
     }
-    let success = Bn254::pairing_check(&p, &q).is_ok();
+    let success = Bls12_381::pairing_check(&p, &q).is_ok();
     assert!(success);
 }

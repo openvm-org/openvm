@@ -8,7 +8,7 @@ openvm = { workspace = true, features = ["std"] }
 openvm-algebra-guest.workspace = true
 openvm-ecc-guest.workspace = true
 openvm-pairing = { workspace = true, features = [
-    "bn254",
+    "bls12_381",
 ] }
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 
