@@ -66,6 +66,35 @@ fn evaluate_lines_vec(mut f: Fq12, mut lines: Vec<EvaluatedLine>) -> Fq12 {
     f
 }
 
+fn pre_loop(
+    mut q_acc: Vec<G2Affine>,
+    _q: &[G2Affine],
+    c: Option<Fq12>,
+    xy_fracs: &[(Fq, Fq)],
+) -> (Fq12, Vec<G2Affine>) {
+    let mut f = if let Some(mut c) = c {
+        c.square_in_place();
+        c
+    } else {
+        Fq12::ONE
+    };
+
+    let (q_out_double, lines_2s): (Vec<_>, Vec<_>) =
+        q_acc.iter().map(|q| miller_double_step(q)).unzip();
+    q_acc = q_out_double;
+
+    let mut initial_lines = Vec::with_capacity(lines_2s.len());
+    for (line, xy_frac) in lines_2s.iter().zip(xy_fracs.iter()) {
+        initial_lines.push(EvaluatedLine {
+            b: mul_fp2_by_fp(&line.b, &xy_frac.0),
+            c: mul_fp2_by_fp(&line.c, &xy_frac.1),
+        });
+    }
+    f = evaluate_lines_vec(f, initial_lines);
+
+    (f, q_acc)
+}
+
 fn post_loop(
     f: Fq12,
     mut q_acc: Vec<G2Affine>,
@@ -130,6 +159,10 @@ fn post_loop(
 }
 
 pub fn multi_miller_loop(P: &[G1Affine], Q: &[G2Affine]) -> Fq12 {
+    multi_miller_loop_embedded_exp(P, Q, None)
+}
+
+pub fn multi_miller_loop_embedded_exp(P: &[G1Affine], Q: &[G2Affine], c: Option<Fq12>) -> Fq12 {
     assert!(!P.is_empty());
     assert_eq!(P.len(), Q.len());
 
@@ -154,21 +187,17 @@ pub fn multi_miller_loop(P: &[G1Affine], Q: &[G2Affine]) -> Fq12 {
         })
         .collect();
 
+    let (c_value, c_inv_value) = if let Some(value) = c.clone() {
+        let inv = value
+            .inverse()
+            .expect("attempted to invert zero element for embedded exponent");
+        (Some(value), Some(inv))
+    } else {
+        (None, None)
+    };
+
     let mut Q_acc = Q.clone();
-    let mut f = Fq12::ONE;
-
-    let (Q_out_double, lines_2S): (Vec<_>, Vec<_>) =
-        Q_acc.iter().map(|q| miller_double_step(q)).unzip();
-    Q_acc = Q_out_double;
-
-    let mut initial_lines = Vec::new();
-    for (line, xy_frac) in lines_2S.iter().zip(xy_fracs.iter()) {
-        initial_lines.push(EvaluatedLine {
-            b: mul_fp2_by_fp(&line.b, &xy_frac.0),
-            c: mul_fp2_by_fp(&line.c, &xy_frac.1),
-        });
-    }
-    f = evaluate_lines_vec(f, initial_lines);
+    let (mut f, mut Q_acc) = pre_loop(Q_acc, &Q, c.clone(), &xy_fracs);
 
     for i in (0..BN254_PSEUDO_BINARY_ENCODING.len() - 2).rev() {
         f = f.square();
@@ -185,6 +214,21 @@ pub fn multi_miller_loop(P: &[G1Affine], Q: &[G2Affine]) -> Fq12 {
                 });
             }
         } else {
+            if let Some(c_val) = c_value.as_ref() {
+                match BN254_PSEUDO_BINARY_ENCODING[i] {
+                    1 => {
+                        f *= c_val;
+                    }
+                    -1 => {
+                        let c_inv = c_inv_value
+                            .as_ref()
+                            .expect("missing inverse for embedded exponent input");
+                        f *= c_inv;
+                    }
+                    _ => panic!("invalid encoding"),
+                }
+            }
+
             let results: Vec<_> = Q_acc
                 .iter()
                 .zip(&Q)

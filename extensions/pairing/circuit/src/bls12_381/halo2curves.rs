@@ -1,5 +1,5 @@
 use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
-use halo2curves_axiom::ff::PrimeField;
+use halo2curves_axiom::ff::{Field, PrimeField};
 use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
 use openvm_pairing_guest::{
     halo2curves_shims::bls12_381::Bls12_381,
@@ -50,13 +50,27 @@ pub fn multi_miller_loop(p: &[G1Affine], q: &[G2Affine]) -> Fq12 {
     Bls12_381::multi_miller_loop(p, q)
 }
 
-pub fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
+pub fn multi_miller_loop_embedded_exp(p: &[G1Affine], q: &[G2Affine], c: Option<Fq12>) -> Fq12 {
+    Bls12_381::multi_miller_loop_embedded_exp(p, q, c)
+}
+
+pub fn final_exp_hint(f: &Fq12) -> (Fq12, Fq12) {
     Bls12_381::final_exp_hint(f)
+}
+
+/// Verifies the final exponentiation hint `(c, s)` against the Miller loop inputs.
+pub fn pairing_check_from_hint(p: &[G1Affine], q: &[G2Affine], c: &Fq12, s: &Fq12) -> bool {
+    let c_conj_inv = c.conjugate().invert().unwrap();
+    let c_inv = c.invert().unwrap();
+    let c_q_inv = FieldExtension::frobenius_map(&c_inv, 1);
+    let fc = multi_miller_loop_embedded_exp(p, q, Some(c_conj_inv));
+
+    fc * c_q_inv * s == Fq12::ONE
 }
 
 pub fn pairing_hint_bytes(p: &[G1Affine], q: &[G2Affine]) -> Vec<u8> {
     let miller = multi_miller_loop(p, q);
-    let (c, s) = final_exp_witness(&miller);
+    let (c, s) = final_exp_hint(&miller);
     let mut bytes = Vec::with_capacity(2 * FQ12_NUM_BYTES);
     bytes.extend_from_slice(&fq12_to_bytes(&c));
     bytes.extend_from_slice(&fq12_to_bytes(&s));

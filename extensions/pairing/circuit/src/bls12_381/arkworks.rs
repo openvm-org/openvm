@@ -87,7 +87,7 @@ pub fn parse_g2_points<const N: usize>(raw: Vec<[[[u8; N]; 2]; 2]>) -> Vec<G2Aff
 
 pub fn pairing_hint_bytes(p: &[G1Affine], q: &[G2Affine]) -> Vec<u8> {
     let miller = multi_miller_loop(p, q);
-    let (c, s) = final_exp_witness(&miller);
+    let (c, s) = final_exp_hint(&miller);
     // Emit bytes in the Halo layout so guest code can consume the hint directly.
     let mut bytes = Vec::with_capacity(2 * FQ12_NUM_BYTES);
     bytes.extend_from_slice(&fq12_to_bytes_halo_layout(&c));
@@ -95,15 +95,19 @@ pub fn pairing_hint_bytes(p: &[G1Affine], q: &[G2Affine]) -> Vec<u8> {
     bytes
 }
 
+fn multi_miller_loop_embedded_exp(p: &[G1Affine], q: &[G2Affine], c: Option<Fq12>) -> Fq12 {
+    crate::arkworks::miller_loop_bls12_381::multi_miller_loop_embedded_exp(p, q, c)
+}
+
 fn multi_miller_loop(p: &[G1Affine], q: &[G2Affine]) -> Fq12 {
     // DO NOT USE THESE. THEY DON'T WORK
     // let g1_it = p.iter().map(|point| prepare_g1::<ArkBls12_381>(*point));
     // let g2_it = q.iter().map(|point| prepare_g2::<ArkBls12_381>(*point));
     // ArkBls12_381::multi_miller_loop(g1_it, g2_it).0
-    crate::arkworks::miller_loop_bls12_381::multi_miller_loop(p, q)
+    multi_miller_loop_embedded_exp(p, q, None)
 }
 
-fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
+fn final_exp_hint(f: &Fq12) -> (Fq12, Fq12) {
     let root = exp_bytes(f, true, FINAL_EXP_FACTOR_TIMES_27_BE.as_slice());
     let root_pth_inverse = if root == Fq12::ONE {
         Fq12::ONE
@@ -139,9 +143,9 @@ fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
 
     let scaling_factor = root_pth_inverse * root_27th_inverse;
     let shifted = *f * scaling_factor;
-    let residue_witness = exp_bytes(&shifted, true, LAMBDA_INV_MOD_FINAL_EXP_BE.as_slice());
+    let residue_hint = exp_bytes(&shifted, true, LAMBDA_INV_MOD_FINAL_EXP_BE.as_slice());
 
-    (residue_witness, scaling_factor)
+    (residue_hint, scaling_factor)
 }
 
 fn exp_bytes(base: &Fq12, is_positive: bool, bytes_be: &[u8]) -> Fq12 {
@@ -158,6 +162,20 @@ fn exp_bytes(base: &Fq12, is_positive: bool, bytes_be: &[u8]) -> Fq12 {
     }
     let limbs = exp.to_u64_digits();
     element.pow(limbs.as_slice())
+}
+
+fn pairing_check_from_hint(p: &[G1Affine], q: &[G2Affine], c: &Fq12, s: &Fq12) -> bool {
+    let mut c_q = c.clone();
+    c_q.frobenius_map_in_place(1);
+
+    let mut c_conj = c.clone();
+    c_conj.conjugate_in_place();
+    let c_conj_inv = c_conj
+        .inverse()
+        .expect("non-zero pairing hint should be invertible");
+    let fc = multi_miller_loop_embedded_exp(p, q, Some(c_conj_inv));
+
+    fc * s == c_q
 }
 
 fn fq12_to_bytes(value: &Fq12) -> [u8; FQ12_NUM_BYTES] {
@@ -228,8 +246,8 @@ fn neg_mod(value: &BigUint, modulus: &BigUint) -> BigUint {
 mod tests {
     use super::*;
     use crate::bls12_381::halo2curves as bls12_halo;
-    use ark_bls12_381::Fq6;
-    use ark_ec::AdditiveGroup;
+    use ark_bls12_381::{Fq6, Fr};
+    use ark_ec::{AdditiveGroup, AffineRepr};
     use ark_ff::{Field as ArkField, UniformRand};
     use halo2curves_axiom::bls12_381::{
         Fq as HaloFq, Fq12 as HaloFq12, Fq2 as HaloFq2, Fq6 as HaloFq6, G1Affine as HaloG1,
@@ -429,6 +447,50 @@ mod tests {
             .flat_map(|fq2| fq2.to_coeffs())
             .flat_map(|fq| fq.to_bytes())
             .collect()
+    }
+
+    #[allow(non_snake_case)]
+    #[allow(clippy::type_complexity)]
+    fn generate_test_points_bls12_381(
+        a: &[Fr; 2],
+        b: &[Fr; 2],
+    ) -> (
+        Vec<G1Affine>,
+        Vec<G2Affine>,
+        Vec<AffinePoint<HaloFq>>,
+        Vec<AffinePoint<HaloFq2>>,
+    ) {
+        let mut P_vec = Vec::new();
+        let mut Q_vec = Vec::new();
+        for i in 0..2 {
+            let p = G1Affine::generator() * a[i];
+            let mut p = G1Affine::from(p);
+            if i % 2 == 1 {
+                p.y = -p.y;
+            }
+            let q = G2Affine::generator() * b[i];
+            let q = G2Affine::from(q);
+            P_vec.push(p);
+            Q_vec.push(q);
+        }
+        let (P_ecpoints, Q_ecpoints) = P_vec
+            .clone()
+            .into_iter()
+            .zip(Q_vec.clone().into_iter())
+            .map(|(P, Q)| {
+                (
+                    AffinePoint {
+                        x: ark_fq_to_halo(&P.x),
+                        y: ark_fq_to_halo(&P.y),
+                    },
+                    AffinePoint {
+                        x: ark_fq2_to_halo(&Q.x),
+                        y: ark_fq2_to_halo(&Q.y),
+                    },
+                )
+            })
+            .unzip::<_, _, Vec<_>, Vec<_>>();
+        (P_vec, Q_vec, P_ecpoints, Q_ecpoints)
     }
 
     #[test]
@@ -780,8 +842,8 @@ mod tests {
             // );
 
             let (c_halo, u_halo) = GuestBls12_381::final_exp_hint(&halo_miller);
-            let (c_ark, u_ark) = super::final_exp_witness(&halo_fq12_to_ark(&halo_miller));
-            // let (c_ark, u_ark) = super::final_exp_witness(&ark_miller);
+            let (c_ark, u_ark) = super::final_exp_hint(&halo_fq12_to_ark(&halo_miller));
+            // let (c_ark, u_ark) = super::final_exp_hint(&ark_miller);
 
             assert_eq!(
                 fq12_to_bytes(&c_ark).to_vec(),
@@ -819,5 +881,31 @@ mod tests {
 
             assert_eq!(bytes_ark, bytes_halo, "pairing hint bytes mismatch");
         }
+    }
+
+    #[test]
+    fn test_pairing_check_from_hint() {
+        let a = [Fr::from(1), Fr::from(2)];
+        let b = [Fr::from(2), Fr::from(1)];
+
+        // Construct inputs such that e(P0, Q0) * e(P1, Q1) = 1 by pairing P and -P with the
+        // same Q (negation is handled by the helper for odd indices).
+        let (ark_ps, ark_qs, halo_ps, halo_qs) = generate_test_points_bls12_381(&a, &b);
+
+        let halo_miller = bls12_halo::multi_miller_loop(&halo_ps, &halo_qs);
+        let ark_miller = super::multi_miller_loop(&ark_ps, &ark_qs);
+
+        let (c_halo, s_halo) = bls12_halo::final_exp_hint(&halo_miller);
+        assert!(
+            bls12_halo::pairing_check_from_hint(&halo_ps, &halo_qs, &c_halo, &s_halo),
+            "halo pairing check failed"
+        );
+
+        let (c_ark, s_ark) = super::final_exp_hint(&ark_miller);
+        println!("arkworks final exp hint: {:?}", (c_ark, s_ark));
+        assert!(
+            super::pairing_check_from_hint(&ark_ps, &ark_qs, &c_ark, &s_ark),
+            "arkworks pairing check failed"
+        );
     }
 }

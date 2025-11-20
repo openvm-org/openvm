@@ -49,13 +49,13 @@ pub fn multi_miller_loop(p: &[G1Affine], q: &[G2Affine]) -> Fq12 {
     Bn254::multi_miller_loop(p, q)
 }
 
-pub fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
+pub fn final_exp_hint(f: &Fq12) -> (Fq12, Fq12) {
     Bn254::final_exp_hint(f)
 }
 
 pub fn pairing_hint_bytes(p: &[G1Affine], q: &[G2Affine]) -> Vec<u8> {
     let miller = multi_miller_loop(p, q);
-    let (c, u) = final_exp_witness(&miller);
+    let (c, u) = final_exp_hint(&miller);
     let mut bytes = Vec::with_capacity(2 * FQ12_NUM_BYTES);
     bytes.extend_from_slice(&fq12_to_bytes(&c));
     bytes.extend_from_slice(&fq12_to_bytes(&u));

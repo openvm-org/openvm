@@ -81,7 +81,7 @@ pub fn parse_g2_points<const N: usize>(raw: Vec<[[[u8; N]; 2]; 2]>) -> Vec<G2Aff
 
 pub fn pairing_hint_bytes(p: &[G1Affine], q: &[G2Affine]) -> Vec<u8> {
     let miller = multi_miller_loop(p, q);
-    let (c, u) = final_exp_witness(&miller);
+    let (c, u) = final_exp_hint(&miller);
     // Emit bytes in the Halo layout so guest code can consume the hint directly.
     let mut bytes = Vec::with_capacity(2 * FQ12_NUM_BYTES);
     bytes.extend_from_slice(&fq12_to_bytes_halo_layout(&c));
@@ -97,26 +97,25 @@ pub fn multi_miller_loop(p: &[G1Affine], q: &[G2Affine]) -> Fq12 {
     crate::arkworks::miller_loop_bn254::multi_miller_loop(p, q)
 }
 
-pub fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
+pub fn final_exp_hint(f: &Fq12) -> (Fq12, Fq12) {
     let unity_root_27 = *UNITY_ROOT_27;
     debug_assert_eq!(unity_root_27.pow([27u64]), Fq12::ONE);
-    let (mut residue_witness, cubic_non_residue_power) =
-        if f.pow(EXP1_LIMBS.as_slice()) == Fq12::ONE {
-            (*f, Fq12::ONE)
+    let (mut residue_hint, cubic_non_residue_power) = if f.pow(EXP1_LIMBS.as_slice()) == Fq12::ONE {
+        (*f, Fq12::ONE)
+    } else {
+        let f_mul_unity_root_27 = *f * unity_root_27;
+        if f_mul_unity_root_27.pow(EXP1_LIMBS.as_slice()) == Fq12::ONE {
+            (f_mul_unity_root_27, unity_root_27)
         } else {
-            let f_mul_unity_root_27 = *f * unity_root_27;
-            if f_mul_unity_root_27.pow(EXP1_LIMBS.as_slice()) == Fq12::ONE {
-                (f_mul_unity_root_27, unity_root_27)
-            } else {
-                (f_mul_unity_root_27 * unity_root_27, unity_root_27.square())
-            }
-        };
+            (f_mul_unity_root_27 * unity_root_27, unity_root_27.square())
+        }
+    };
 
-    residue_witness = residue_witness.pow(R_INV_LIMBS.as_slice());
-    residue_witness = residue_witness.pow(M_INV_LIMBS.as_slice());
-    let mut x = residue_witness.pow(EXP2_LIMBS.as_slice());
-    let residue_witness_inv = residue_witness.inverse().unwrap();
-    let mut x3 = x.square() * x * residue_witness_inv;
+    residue_hint = residue_hint.pow(R_INV_LIMBS.as_slice());
+    residue_hint = residue_hint.pow(M_INV_LIMBS.as_slice());
+    let mut x = residue_hint.pow(EXP2_LIMBS.as_slice());
+    let residue_hint_inv = residue_hint.inverse().unwrap();
+    let mut x3 = x.square() * x * residue_hint_inv;
     let mut t = 0;
     let mut tmp = x3.square();
 
@@ -134,15 +133,15 @@ pub fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
         tmp = unity_root_27_exp2;
         x *= tmp;
 
-        x3 = x.square() * x * residue_witness_inv;
+        x3 = x.square() * x * residue_hint_inv;
         t = 0;
         tonelli_shanks_loop(&mut x3, &mut tmp, &mut t);
     }
 
-    debug_assert_eq!(residue_witness, x * x * x);
-    residue_witness = x;
+    debug_assert_eq!(residue_hint, x * x * x);
+    residue_hint = x;
 
-    (residue_witness, cubic_non_residue_power)
+    (residue_hint, cubic_non_residue_power)
 }
 
 fn fq12_to_bytes(value: &Fq12) -> [u8; FQ12_NUM_BYTES] {
@@ -735,7 +734,7 @@ mod tests {
             // );
 
             let (c_halo, u_halo) = GuestBn254::final_exp_hint(&halo_miller);
-            let (c_ark, u_ark) = super::final_exp_witness(&ark_miller);
+            let (c_ark, u_ark) = super::final_exp_hint(&ark_miller);
 
             assert_eq!(
                 fq12_to_bytes(&c_ark).to_vec(),
