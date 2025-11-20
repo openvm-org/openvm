@@ -65,8 +65,8 @@ impl FinalExp for Bls12_381 {
         let three = BigUint::from(3u32);
         let mut order_3rd_power: u32 = 0;
         exp = POLY_FACTOR.clone() * FINAL_EXP_FACTOR.clone();
-
         root = f.exp_bytes(true, &exp.to_bytes_be());
+        let root_final_exp = root.clone();
         let three_be = three.to_bytes_be();
         // NOTE[yj]: we can probably remove this first check as an optimization since we initialize
         // order_3rd_power to 0
@@ -92,11 +92,9 @@ impl FinalExp for Bls12_381 {
             root_27th_inv = Fq12::ONE;
         } else {
             let order_3rd = three.pow(order_3rd_power);
-            exp = POLY_FACTOR.clone() * FINAL_EXP_FACTOR.clone();
-            root = f.exp_bytes(true, &exp.to_bytes_be());
             let exp_inv = exp.modinv(&order_3rd).unwrap();
             exp = exp_inv % order_3rd;
-            root_27th_inv = root.exp_bytes(false, &exp.to_bytes_be());
+            root_27th_inv = root_final_exp.exp_bytes(false, &exp.to_bytes_be());
         }
 
         // 2.3. shift the Miller loop result so that millerLoop * scalingFactor
