@@ -65,8 +65,9 @@ impl FinalExp for Bls12_381 {
         let three = BigUint::from(3u32);
         let mut order_3rd_power: u32 = 0;
         exp = POLY_FACTOR.clone() * FINAL_EXP_FACTOR.clone();
+
         root = f.exp_bytes(true, &exp.to_bytes_be());
-        let root_final_exp = root.clone();
+        let root_final_exp = root;
         let three_be = three.to_bytes_be();
         // NOTE[yj]: we can probably remove this first check as an optimization since we initialize
         // order_3rd_power to 0
