@@ -6,10 +6,7 @@ use openvm_ecc_guest::{
 };
 
 use super::{Bls12_381, FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR};
-use crate::{
-    halo2curves_shims::bls12_381::BIG_EXP_DECOMPOSITION,
-    pairing::{FinalExp, MultiMillerLoop},
-};
+use crate::pairing::{FinalExp, MultiMillerLoop};
 
 // The paper only describes the implementation for Bn254, so we use the gnark implementation for
 // Bls12_381.
@@ -52,26 +49,20 @@ impl FinalExp for Bls12_381 {
     // returns c (residueWitness) and s (scalingFactor)
     // The Gnark implementation is based on https://eprint.iacr.org/2024/640.pdf
     fn final_exp_hint(f: &Self::Fp12) -> (Self::Fp12, Self::Fp12) {
+        let f_final_exp = f.exp_bytes(true, &FINAL_EXP_FACTOR.to_bytes_be());
+        let root = f_final_exp.exp_bytes(true, &BigUint::from(27u32).to_bytes_be());
+
         // 1. get p-th root inverse
-        let mut exp = FINAL_EXP_FACTOR.clone() * BigUint::from(27u32);
-        let mut root = f.exp_bytes(true, &exp.to_bytes_be());
-        let root_pth_inv: Fq12;
-        if root == Fq12::ONE {
-            root_pth_inv = Fq12::ONE;
+        let root_pth_inv = if root == Fq12::ONE {
+            Fq12::ONE
         } else {
-            let exp_inv = exp.modinv(&POLY_FACTOR.clone()).unwrap();
-            exp = exp_inv % POLY_FACTOR.clone();
-            root_pth_inv = root.exp_bytes(false, &exp.to_bytes_be());
-        }
+            let exp_inv = (FINAL_EXP_FACTOR.clone() * BigUint::from(27u32))
+                .modinv(&POLY_FACTOR.clone())
+                .unwrap();
+            root.exp_bytes(false, &exp_inv.to_bytes_be())
+        };
 
-        // 2.1. get order of 3rd primitive root
-        let mut frob = *f;
-        root = Self::Fp12::ONE;
-        for c in BIG_EXP_DECOMPOSITION.iter() {
-            root *= frob.exp_bytes(true, &c.to_bytes_be());
-            frob = frob.frobenius_map();
-        }
-
+        let root = f_final_exp.exp_bytes(true, &POLY_FACTOR.to_bytes_be());
         // 2.2. get 27th root inverse
         let root_27th_inv =
             if root.exp_bytes(true, &BigUint::from(27u32).to_bytes_be()) == Fq12::ONE {
@@ -87,7 +78,7 @@ impl FinalExp for Bls12_381 {
 
         // 3. get the witness residue
         // lambda = q - u, the optimal exponent
-        exp = LAMBDA.clone().modinv(&FINAL_EXP_FACTOR.clone()).unwrap();
+        let exp = LAMBDA.clone().modinv(&FINAL_EXP_FACTOR.clone()).unwrap();
         let c = f.exp_bytes(true, &exp.to_bytes_be());
 
         (c, s)
