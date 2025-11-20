@@ -191,7 +191,7 @@ p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539bbc84
 zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
 snark-verifier-sdk = { version = "0.2.0", default-features = false, features = ["loader_halo2", "halo2-axiom"] }
 snark-verifier = { version = "0.2.0", default-features = false }
-halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git", tag = "v0.7.2" }
+halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git", rev = "175e7c0cd818c436570f62c30fb01295ea287232" }
 
 forge-fmt = "0.2.0"
 cargo_metadata = "0.18"

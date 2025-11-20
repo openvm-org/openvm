@@ -23,10 +23,7 @@ use openvm_stark_backend::{config::StarkGenericConfig, engine::StarkEngine, p3_f
 use serde::{Deserialize, Serialize};
 use strum::FromRepr;
 
-use crate::{
-    bls12_381::{arkworks as bls12_ark, halo2curves as bls12_halo},
-    bn254::{arkworks as bn254_ark, halo2curves as bn254_halo},
-};
+use crate::{bls12_381::arkworks as bls12_ark, bn254::arkworks as bn254_ark};
 
 // All the supported pairing curves.
 #[derive(Clone, Copy, Debug, FromRepr, Serialize, Deserialize)]

@@ -1,22 +1,26 @@
-#[cfg(not(target_os = "zkvm"))]
-extern crate std;
-
 use alloc::vec::Vec;
+
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2},
     ff::Field,
 };
 use lazy_static::lazy_static;
-use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
+use openvm_ecc_guest::{
+    algebra::{field::FieldExtension, ExpBytes},
+    AffinePoint,
+};
 
 use super::{Bn254, EXP1, EXP2, M_INV, R_INV, U27_COEFF_0, U27_COEFF_1};
-use crate::pairing::{FinalExp, MultiMillerLoop};
+use crate::{
+    halo2curves_shims::naf::biguint_to_naf,
+    pairing::{FinalExp, MultiMillerLoop},
+};
 
 lazy_static! {
-    pub static ref EXP1_LIMBS: Vec<u64> = EXP1.to_u64_digits();
-    pub static ref EXP2_LIMBS: Vec<u64> = EXP2.to_u64_digits();
-    pub static ref R_INV_LIMBS: Vec<u64> = R_INV.to_u64_digits();
-    pub static ref M_INV_LIMBS: Vec<u64> = M_INV.to_u64_digits();
+    static ref EXP1_NAF: Vec<i8> = biguint_to_naf(&EXP1);
+    static ref EXP2_NAF: Vec<i8> = biguint_to_naf(&EXP2);
+    static ref R_INV_NAF: Vec<i8> = biguint_to_naf(&R_INV);
+    static ref M_INV_NAF: Vec<i8> = biguint_to_naf(&M_INV);
     pub static ref UNITY_ROOT_27: Fq12 = {
         let u0 = U27_COEFF_0.to_u64_digits();
         let u1 = U27_COEFF_1.to_u64_digits();
@@ -33,7 +37,7 @@ lazy_static! {
             Fq2::ZERO,
         ])
     };
-    pub static ref UNITY_ROOT_27_EXP2: Fq12 = UNITY_ROOT_27.pow(EXP2_LIMBS.as_slice());
+    pub static ref UNITY_ROOT_27_EXP2: Fq12 = UNITY_ROOT_27.exp_naf(true, &EXP2_NAF);
 }
 
 #[allow(non_snake_case)]
@@ -79,40 +83,52 @@ impl FinalExp for Bn254 {
 }
 
 fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
+    // Residue witness
+    let mut c;
+    // Cubic nonresidue power
+    let u;
+
     let unity_root_27 = *UNITY_ROOT_27;
-    debug_assert_eq!(unity_root_27.pow([27]), Fq12::ONE);
+    debug_assert_eq!(unity_root_27.pow([27]), Fq12::one());
 
-    // Find cubic residue witness and the corresponding cubic non-residue power.
-    let (mut residue_witness, cubic_non_residue_power) =
-        if f.pow(EXP1_LIMBS.as_slice()) == Fq12::ONE {
-            (*f, Fq12::ONE)
+    if f.exp_naf(true, &EXP1_NAF) == Fq12::ONE {
+        c = *f;
+        u = Fq12::ONE;
+    } else {
+        let f_mul_unity_root_27 = f * unity_root_27;
+        if f_mul_unity_root_27.exp_naf(true, &EXP1_NAF) == Fq12::ONE {
+            c = f_mul_unity_root_27;
+            u = unity_root_27;
         } else {
-            let f_mul_unity_root_27 = *f * unity_root_27;
-            if f_mul_unity_root_27.pow(EXP1_LIMBS.as_slice()) == Fq12::ONE {
-                (f_mul_unity_root_27, unity_root_27)
-            } else {
-                (f_mul_unity_root_27 * unity_root_27, unity_root_27.square())
-            }
-        };
+            c = f_mul_unity_root_27 * unity_root_27;
+            u = unity_root_27.square();
+        }
+    }
 
-    // 1. Compute r-th root where rInv = 1/r mod (p^12-1)/r.
-    residue_witness = residue_witness.pow(R_INV_LIMBS.as_slice());
+    // 1. Compute r-th root and exponentiate to rInv where
+    //   rInv = 1/r mod (p^12-1)/r
+    c = c.exp_naf(true, &R_INV_NAF);
 
-    // 2. Compute m-th root where mInv = 1/m mod p^12-1 and
-    // m = (6x + 2 + q^3 - q^2 + q) / 3r.
-    residue_witness = residue_witness.pow(M_INV_LIMBS.as_slice());
+    // 2. Compute m-th root where
+    //   m = (6x + 2 + q^3 - q^2 +q)/3r
+    // Exponentiate to mInv where
+    //   mInv = 1/m mod p^12-1
+    c = c.exp_naf(true, &M_INV_NAF);
 
-    // 3. Compute the cube root using a modified Tonelli-Shanks algorithm.
-    // Typo in the paper: p^k - 1 = 3^n * s (k = 12, n = 3) and exp2 = (s + 1) / 3.
-    let mut x = residue_witness.pow(EXP2_LIMBS.as_slice());
+    // 3. Compute cube root
+    // since gcd(3, (p^12-1)/r) != 1, we use a modified Tonelli-Shanks algorithm
+    // see Alg.4 of https://eprint.iacr.org/2024/640.pdf
+    // Typo in the paper: p^k-1 = 3^n * s instead of p-1 = 3^r * s
+    // where k=12 and n=3 here and exp2 = (s+1)/3
+    let mut x = c.exp_naf(true, &EXP2_NAF);
 
-    // 3^t is ord(x^3 / residueWitness).
-    let residue_witness_inv = residue_witness.invert().unwrap();
-    let mut x3 = x.square() * x * residue_witness_inv;
+    // 3^t is ord(x^3 / residueWitness)
+    let c_inv = c.invert().unwrap();
+    let mut x3 = x.square() * x * c_inv;
     let mut t = 0;
     let mut tmp = x3.square();
 
-    // Modified Tonelli-Shanks algorithm for computing the cube root.
+    // Modified Tonelli-Shanks algorithm for computing the cube root
     fn tonelli_shanks_loop(x3: &mut Fq12, tmp: &mut Fq12, t: &mut i32) {
         while *x3 != Fq12::ONE {
             *tmp = (*x3).square();
@@ -128,13 +144,14 @@ fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
         tmp = unity_root_27_exp2;
         x *= tmp;
 
-        x3 = x.square() * x * residue_witness_inv;
+        x3 = x.square() * x * c_inv;
         t = 0;
         tonelli_shanks_loop(&mut x3, &mut tmp, &mut t);
     }
 
-    debug_assert_eq!(residue_witness, x * x * x);
-    residue_witness = x;
+    debug_assert_eq!(c, x * x * x);
+    // x is the cube root of the residue witness c
+    c = x;
 
-    (residue_witness, cubic_non_residue_power)
+    (c, u)
 }

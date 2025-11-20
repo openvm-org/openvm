@@ -37,6 +37,28 @@ impl Default for SegmentationLimits {
     }
 }
 
+impl SegmentationLimits {
+    pub fn new(max_trace_height: u32, max_cells: usize, max_interactions: usize) -> Self {
+        debug_assert!(
+            max_trace_height.is_power_of_two(),
+            "max_trace_height should be a power of two"
+        );
+        Self {
+            max_trace_height,
+            max_cells,
+            max_interactions,
+        }
+    }
+
+    pub fn set_max_trace_height(&mut self, max_trace_height: u32) {
+        debug_assert!(
+            max_trace_height.is_power_of_two(),
+            "max_trace_height should be a power of two"
+        );
+        self.max_trace_height = max_trace_height;
+    }
+}
+
 #[derive(Clone, Debug, WithSetters)]
 pub struct SegmentationCtx {
     pub segments: Vec<Segment>,
@@ -103,11 +125,8 @@ impl SegmentationCtx {
     }
 
     pub fn set_max_trace_height(&mut self, max_trace_height: u32) {
-        debug_assert!(
-            max_trace_height.is_power_of_two(),
-            "max_trace_height should be a power of two"
-        );
-        self.segmentation_limits.max_trace_height = max_trace_height;
+        self.segmentation_limits
+            .set_max_trace_height(max_trace_height);
     }
 
     pub fn set_max_cells(&mut self, max_cells: usize) {

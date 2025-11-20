@@ -126,7 +126,7 @@ fn agg_config_for_test() -> AggregationConfig {
 
 fn app_vm_config_for_test() -> SdkVmConfig {
     let config = test_system_config()
-        .with_max_segment_len(200)
+        .with_max_segment_len(256)
         .with_public_values(NUM_PUB_VALUES);
     SdkVmConfig::builder()
         .system(SdkSystemConfig { config })
