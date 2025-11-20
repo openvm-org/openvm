@@ -190,10 +190,6 @@ pub(crate) mod phantom {
                 let q = bn254_ark::parse_g2_points(raw_q);
                 let bytes = bn254_ark::pairing_hint_bytes(&p, &q);
 
-                // let p = bn254_halo::parse_g1_points(raw_p.clone());
-                // let q = bn254_halo::parse_g2_points(raw_q.clone());
-                // let bytes = bn254_halo::pairing_hint_bytes(&p, &q);
-
                 hint_stream.clear();
                 hint_stream.extend(bytes.into_iter().map(F::from_canonical_u8));
             }
@@ -205,9 +201,9 @@ pub(crate) mod phantom {
                 let raw_p = read_g1::<BLS12_381_NUM_LIMBS>(memory, p_ptr, p_len);
                 let raw_q = read_g2::<BLS12_381_NUM_LIMBS>(memory, q_ptr, q_len);
 
-                let ark_p = bls12_ark::parse_g1_points(raw_p);
-                let ark_q = bls12_ark::parse_g2_points(raw_q);
-                let ark_bytes = bls12_ark::pairing_hint_bytes(&ark_p, &ark_q);
+                let p = bls12_ark::parse_g1_points(raw_p);
+                let q = bls12_ark::parse_g2_points(raw_q);
+                let ark_bytes = bls12_ark::pairing_hint_bytes(&p, &q);
 
                 hint_stream.clear();
                 hint_stream.extend(ark_bytes.into_iter().map(F::from_canonical_u8));

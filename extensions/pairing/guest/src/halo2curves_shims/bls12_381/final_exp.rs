@@ -1,3 +1,6 @@
+#[cfg(not(target_os = "zkvm"))]
+extern crate std;
+
 use alloc::vec::Vec;
 use core::convert::TryInto;
 use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
@@ -90,13 +93,23 @@ impl FinalExp for Bls12_381 {
 }
 
 fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
+    #[cfg(not(target_os = "zkvm"))]
+    std::println!("[guest bls12 final_exp_witness] start f={:?}", f);
+
     // 1. Compute the p-th root inverse factor.
     let root = f.exp_bytes(true, FINAL_EXP_FACTOR_TIMES_27_BE.as_slice());
+    #[cfg(not(target_os = "zkvm"))]
+    std::println!("[guest bls12 final_exp_witness] root={:?}", root);
     let root_pth_inverse = if root == Fq12::ONE {
         Fq12::ONE
     } else {
         root.exp_bytes(true, PTH_ROOT_INV_EXP_BE.as_slice())
     };
+    #[cfg(not(target_os = "zkvm"))]
+    std::println!(
+        "[guest bls12 final_exp_witness] root_pth_inverse={:?}",
+        root_pth_inverse
+    );
 
     // 2.1 Determine the order of the 3rd primitive root.
     let mut order_3rd_power = 0u32;
@@ -116,6 +129,11 @@ fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
     if root_order == Fq12::ONE {
         order_3rd_power = 3;
     }
+    #[cfg(not(target_os = "zkvm"))]
+    std::println!(
+        "[guest bls12 final_exp_witness] order_3rd_power={}",
+        order_3rd_power
+    );
 
     // 2.2 Compute the 27th root inverse.
     let root_27th_inverse = if order_3rd_power == 0 {
@@ -125,6 +143,11 @@ fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
         let root = f.exp_bytes(true, POLY_FACTOR_TIMES_FINAL_EXP_BE.as_slice());
         root.exp_bytes(true, exponent_bytes.as_slice())
     };
+    #[cfg(not(target_os = "zkvm"))]
+    std::println!(
+        "[guest bls12 final_exp_witness] root_27th_inverse={:?}",
+        root_27th_inverse
+    );
 
     // 2.3 Shift the Miller loop output by the scaling factor so that the result
     // has order FINAL_EXP_FACTOR.
@@ -133,6 +156,12 @@ fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
 
     // 3. Compute the residue witness with exponent lambda^{-1} mod FINAL_EXP_FACTOR.
     let residue_witness = shifted.exp_bytes(true, LAMBDA_INV_MOD_FINAL_EXP_BE.as_slice());
+    #[cfg(not(target_os = "zkvm"))]
+    std::println!(
+        "[guest bls12 final_exp_witness] scaling_factor={:?}, residue_witness={:?}",
+        scaling_factor,
+        residue_witness
+    );
 
     (residue_witness, scaling_factor)
 }

@@ -5,9 +5,8 @@ use super::{
     M_INV_LIMBS, R_INV_LIMBS,
 };
 
-use ark_bn254::{Bn254 as ArkBn254, Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine};
-use ark_ec::pairing::{prepare_g1, prepare_g2, Pairing};
-use ark_ff::{FftField, Field, Zero};
+use ark_bn254::{Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine};
+use ark_ff::{Field, Zero};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use halo2curves_axiom::bn256::{
     Fq as HaloFq, Fq2 as HaloFq2, FROBENIUS_COEFF_FQ6_C1 as HALO_FROBENIUS_COEFF_FQ6_C1,

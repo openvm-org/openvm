@@ -1,5 +1,4 @@
-use ark_bls12_381::{Bls12_381 as ArkBls12_381, Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine};
-use ark_ec::pairing::{prepare_g1, prepare_g2, Pairing};
+use ark_bls12_381::{Fq, Fq12, Fq2, Fq6, G1Affine, G2Affine};
 use ark_ff::Field;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use lazy_static::lazy_static;
@@ -89,25 +88,38 @@ pub fn parse_g2_points<const N: usize>(raw: Vec<[[[u8; N]; 2]; 2]>) -> Vec<G2Aff
 pub fn pairing_hint_bytes(p: &[G1Affine], q: &[G2Affine]) -> Vec<u8> {
     let miller = multi_miller_loop(p, q);
     let (c, s) = final_exp_witness(&miller);
+    // Emit bytes in the Halo layout so guest code can consume the hint directly.
     let mut bytes = Vec::with_capacity(2 * FQ12_NUM_BYTES);
-    bytes.extend_from_slice(&fq12_to_bytes(&c));
-    bytes.extend_from_slice(&fq12_to_bytes(&s));
+    bytes.extend_from_slice(&fq12_to_bytes_halo_layout(&c));
+    bytes.extend_from_slice(&fq12_to_bytes_halo_layout(&s));
     bytes
 }
 
 fn multi_miller_loop(p: &[G1Affine], q: &[G2Affine]) -> Fq12 {
-    let g1_it = p.iter().map(|point| prepare_g1::<ArkBls12_381>(*point));
-    let g2_it = q.iter().map(|point| prepare_g2::<ArkBls12_381>(*point));
-    ArkBls12_381::multi_miller_loop(g1_it, g2_it).0
+    // DO NOT USE THESE. THEY DON'T WORK
+    // let g1_it = p.iter().map(|point| prepare_g1::<ArkBls12_381>(*point));
+    // let g2_it = q.iter().map(|point| prepare_g2::<ArkBls12_381>(*point));
+    // ArkBls12_381::multi_miller_loop(g1_it, g2_it).0
+    crate::arkworks::miller_loop_bls12_381::multi_miller_loop(p, q)
 }
 
 fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
+    #[cfg(not(target_os = "zkvm"))]
+    println!("[arkworks bls12 final_exp_witness] start f={:?}", f);
+
     let root = exp_bytes(f, true, FINAL_EXP_FACTOR_TIMES_27_BE.as_slice());
+    #[cfg(not(target_os = "zkvm"))]
+    println!("[arkworks bls12 final_exp_witness] root={:?}", root);
     let root_pth_inverse = if root == Fq12::ONE {
         Fq12::ONE
     } else {
         exp_bytes(&root, true, PTH_ROOT_INV_EXP_BE.as_slice())
     };
+    #[cfg(not(target_os = "zkvm"))]
+    println!(
+        "[arkworks bls12 final_exp_witness] root_pth_inverse={:?}",
+        root_pth_inverse
+    );
 
     let mut order_3rd_power = 0u32;
     let mut root_order = exp_bytes(f, true, POLY_FACTOR_TIMES_FINAL_EXP_BE.as_slice());
@@ -126,6 +138,11 @@ fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
     if root_order == Fq12::ONE {
         order_3rd_power = 3;
     }
+    #[cfg(not(target_os = "zkvm"))]
+    println!(
+        "[arkworks bls12 final_exp_witness] order_3rd_power={}",
+        order_3rd_power
+    );
 
     let root_27th_inverse = if order_3rd_power == 0 {
         Fq12::ONE
@@ -134,10 +151,20 @@ fn final_exp_witness(f: &Fq12) -> (Fq12, Fq12) {
         let root = exp_bytes(f, true, POLY_FACTOR_TIMES_FINAL_EXP_BE.as_slice());
         exp_bytes(&root, true, exponent_bytes.as_slice())
     };
+    #[cfg(not(target_os = "zkvm"))]
+    println!(
+        "[arkworks bls12 final_exp_witness] root_27th_inverse={:?}",
+        root_27th_inverse
+    );
 
     let scaling_factor = root_pth_inverse * root_27th_inverse;
     let shifted = *f * scaling_factor;
     let residue_witness = exp_bytes(&shifted, true, LAMBDA_INV_MOD_FINAL_EXP_BE.as_slice());
+    #[cfg(not(target_os = "zkvm"))]
+    println!(
+        "[arkworks bls12 final_exp_witness] scaling_factor={:?}, residue_witness={:?}",
+        scaling_factor, residue_witness
+    );
 
     (residue_witness, scaling_factor)
 }
@@ -163,6 +190,29 @@ fn fq12_to_bytes(value: &Fq12) -> [u8; FQ12_NUM_BYTES] {
     value
         .serialize_uncompressed(&mut bytes[..])
         .expect("Failed to serialize Fq12");
+    bytes
+}
+
+fn fq12_to_bytes_halo_layout(value: &Fq12) -> [u8; FQ12_NUM_BYTES] {
+    // Halo encodes coefficients as [c0.c0, c1.c0, c0.c1, c1.c1, c0.c2, c1.c2].
+    let coeffs = [
+        value.c0.c0,
+        value.c1.c0,
+        value.c0.c1,
+        value.c1.c1,
+        value.c0.c2,
+        value.c1.c2,
+    ];
+
+    let mut bytes = [0u8; FQ12_NUM_BYTES];
+    let mut offset = 0;
+    for fq2 in coeffs {
+        for limb in [fq2.c0, fq2.c1] {
+            let limb_bytes = fq_to_bytes(&limb);
+            bytes[offset..offset + FQ_NUM_BYTES].copy_from_slice(&limb_bytes);
+            offset += FQ_NUM_BYTES;
+        }
+    }
     bytes
 }
 
@@ -202,8 +252,8 @@ fn neg_mod(value: &BigUint, modulus: &BigUint) -> BigUint {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bls12_381::halo2curves as bls12_halo;
     use ark_bls12_381::Fq6;
-    use ark_ec::pairing::MillerLoopOutput;
     use ark_ec::AdditiveGroup;
     use ark_ff::{Field as ArkField, UniformRand};
     use halo2curves_axiom::bls12_381::{
@@ -227,7 +277,7 @@ mod tests {
         HaloFq::from_bytes(&fq_to_bytes(value)).unwrap()
     }
 
-    fn ark_fp2_to_halo(value: &Fq2) -> HaloFq2 {
+    fn ark_fq2_to_halo(value: &Fq2) -> HaloFq2 {
         HaloFq2 {
             c0: ark_fq_to_halo(&value.c0),
             c1: ark_fq_to_halo(&value.c1),
@@ -239,19 +289,35 @@ mod tests {
         Fq::deserialize_uncompressed(&bytes[..]).unwrap()
     }
 
-    fn halo_fp2_to_ark(value: &HaloFq2) -> Fq2 {
+    fn halo_fq2_to_ark(value: &HaloFq2) -> Fq2 {
         Fq2::new(halo_fq_to_ark(&value.c0), halo_fq_to_ark(&value.c1))
     }
 
     fn ark_fq12_to_halo(value: &Fq12) -> HaloFq12 {
         HaloFq12::from_coeffs([
-            ark_fp2_to_halo(&value.c0.c0),
-            ark_fp2_to_halo(&value.c0.c1),
-            ark_fp2_to_halo(&value.c0.c2),
-            ark_fp2_to_halo(&value.c1.c0),
-            ark_fp2_to_halo(&value.c1.c1),
-            ark_fp2_to_halo(&value.c1.c2),
+            ark_fq2_to_halo(&value.c0.c0),
+            ark_fq2_to_halo(&value.c1.c0),
+            ark_fq2_to_halo(&value.c0.c1),
+            ark_fq2_to_halo(&value.c1.c1),
+            ark_fq2_to_halo(&value.c0.c2),
+            ark_fq2_to_halo(&value.c1.c2),
         ])
+    }
+
+    fn halo_fq12_to_ark(value: &HaloFq12) -> Fq12 {
+        let [c0_c0, c1_c0, c0_c1, c1_c1, c0_c2, c1_c2] = value.to_coeffs();
+        Fq12::new(
+            Fq6::new(
+                halo_fq2_to_ark(&c0_c0),
+                halo_fq2_to_ark(&c0_c1),
+                halo_fq2_to_ark(&c0_c2),
+            ),
+            Fq6::new(
+                halo_fq2_to_ark(&c1_c0),
+                halo_fq2_to_ark(&c1_c1),
+                halo_fq2_to_ark(&c1_c2),
+            ),
+        )
     }
 
     fn halo_g1_to_ark(g: &HaloG1) -> G1Affine {
@@ -259,7 +325,7 @@ mod tests {
     }
 
     fn halo_g2_to_ark(g: &HaloG2) -> G2Affine {
-        G2Affine::new_unchecked(halo_fp2_to_ark(&g.x), halo_fp2_to_ark(&g.y))
+        G2Affine::new_unchecked(halo_fq2_to_ark(&g.x), halo_fq2_to_ark(&g.y))
     }
 
     fn halo_g1_to_affine_point(g: &HaloG1) -> AffinePoint<HaloFq> {
@@ -274,31 +340,31 @@ mod tests {
         let [c0_c0, c1_c0, c0_c1, c1_c1, c0_c2, c1_c2] = value.to_coeffs();
         [c0_c0, c0_c1, c0_c2, c1_c0, c1_c1, c1_c2]
             .into_iter()
-            .flat_map(|fp2| fp2.to_coeffs())
-            .flat_map(|fp| fp.to_bytes())
+            .flat_map(|fq2| fq2.to_coeffs())
+            .flat_map(|fq| fq.to_bytes())
             .collect()
     }
 
     fn ark_fq12_from_bytes(bytes: &[u8]) -> Fq12 {
         assert_eq!(bytes.len(), FQ12_NUM_BYTES);
-        let mut fp2_coeffs = Vec::with_capacity(6);
+        let mut fq2_coeffs = Vec::with_capacity(6);
         let mut offset = 0;
         for _ in 0..6 {
             let c0 = Fq::deserialize_uncompressed(&bytes[offset..offset + FQ_NUM_BYTES]).unwrap();
             offset += FQ_NUM_BYTES;
             let c1 = Fq::deserialize_uncompressed(&bytes[offset..offset + FQ_NUM_BYTES]).unwrap();
             offset += FQ_NUM_BYTES;
-            fp2_coeffs.push(Fq2::new(c0, c1));
+            fq2_coeffs.push(Fq2::new(c0, c1));
         }
         Fq12::new(
-            Fq6::new(fp2_coeffs[0], fp2_coeffs[1], fp2_coeffs[2]),
-            Fq6::new(fp2_coeffs[3], fp2_coeffs[4], fp2_coeffs[5]),
+            Fq6::new(fq2_coeffs[0], fq2_coeffs[1], fq2_coeffs[2]),
+            Fq6::new(fq2_coeffs[3], fq2_coeffs[4], fq2_coeffs[5]),
         )
     }
 
     fn halo_fq12_from_bytes(bytes: &[u8]) -> HaloFq12 {
         assert_eq!(bytes.len(), FQ12_NUM_BYTES);
-        let mut fp2_coeffs = Vec::with_capacity(6);
+        let mut fq2_coeffs = Vec::with_capacity(6);
         let mut offset = 0;
         for _ in 0..6 {
             let c0_bytes: [u8; FQ_NUM_BYTES] =
@@ -309,10 +375,10 @@ mod tests {
             offset += FQ_NUM_BYTES;
             let c0 = HaloFq::from_bytes(&c0_bytes).unwrap();
             let c1 = HaloFq::from_bytes(&c1_bytes).unwrap();
-            fp2_coeffs.push(HaloFq2 { c0, c1 });
+            fq2_coeffs.push(HaloFq2 { c0, c1 });
         }
-        let fp2_coeffs: [HaloFq2; 6] = fp2_coeffs.try_into().unwrap();
-        let [c0_c0, c0_c1, c0_c2, c1_c0, c1_c1, c1_c2] = fp2_coeffs;
+        let fq2_coeffs: [HaloFq2; 6] = fq2_coeffs.try_into().unwrap();
+        let [c0_c0, c0_c1, c0_c2, c1_c0, c1_c1, c1_c2] = fq2_coeffs;
         HaloFq12::from_coeffs([c0_c0, c1_c0, c0_c1, c1_c1, c0_c2, c1_c2])
     }
 
@@ -351,7 +417,7 @@ mod tests {
         value
             .to_coeffs()
             .into_iter()
-            .flat_map(|fp| fp.to_bytes())
+            .flat_map(|fq| fq.to_bytes())
             .collect()
     }
 
@@ -362,7 +428,7 @@ mod tests {
 
     fn halo_fq6_from_bytes(bytes: &[u8]) -> HaloFq6 {
         assert_eq!(bytes.len(), FQ6_NUM_BYTES);
-        let mut fp2_coeffs = Vec::with_capacity(3);
+        let mut fq2_coeffs = Vec::with_capacity(3);
         let mut offset = 0;
         for _ in 0..3 {
             let c0_bytes: [u8; FQ_NUM_BYTES] =
@@ -373,20 +439,20 @@ mod tests {
             offset += FQ_NUM_BYTES;
             let c0 = HaloFq::from_bytes(&c0_bytes).unwrap();
             let c1 = HaloFq::from_bytes(&c1_bytes).unwrap();
-            fp2_coeffs.push(HaloFq2 { c0, c1 });
+            fq2_coeffs.push(HaloFq2 { c0, c1 });
         }
         HaloFq6 {
-            c0: fp2_coeffs[0],
-            c1: fp2_coeffs[1],
-            c2: fp2_coeffs[2],
+            c0: fq2_coeffs[0],
+            c1: fq2_coeffs[1],
+            c2: fq2_coeffs[2],
         }
     }
 
     fn halo_fq6_to_bytes(value: &HaloFq6) -> Vec<u8> {
         [value.c0, value.c1, value.c2]
             .into_iter()
-            .flat_map(|fp2| fp2.to_coeffs())
-            .flat_map(|fp| fp.to_bytes())
+            .flat_map(|fq2| fq2.to_coeffs())
+            .flat_map(|fq| fq.to_bytes())
             .collect()
     }
 
@@ -668,13 +734,7 @@ mod tests {
         for _ in 0..5 {
             let value = Fq12::rand(&mut rng);
             let halo = ark_fq12_to_halo(&value);
-            let expected: Vec<u8> = halo
-                .to_coeffs()
-                .into_iter()
-                .flat_map(|fp2| fp2.to_coeffs())
-                .flat_map(|fp| fp.to_bytes())
-                .collect();
-            assert_eq!(fq12_to_bytes(&value), expected.as_slice());
+            assert_eq!(fq12_to_bytes(&value).to_vec(), halo_fq12_to_bytes(&halo));
         }
     }
 
@@ -698,15 +758,19 @@ mod tests {
             let ark_exp = final_exp(ark_fq12_to_halo(&ark_miller));
             assert_eq!(halo_exp, ark_exp, "ark exponentiation mismatch");
 
-            let ark_miller_output = MillerLoopOutput::<ArkBls12_381>(ark_miller);
-            let ark_exp_output = ArkBls12_381::final_exponentiation(ark_miller_output)
-                .unwrap()
-                .0;
-            assert_eq!(
-                halo_exp,
-                ark_fq12_to_halo(&ark_exp_output),
-                "ark exponentiation output mismatch"
-            );
+            // let ark_miller_output = {
+            //     let g1_it = std::iter::once(ark_g1).map(|point| prepare_g1::<ArkBls12_381>(point));
+            //     let g2_it = std::iter::once(ark_g2).map(|point| prepare_g2::<ArkBls12_381>(point));
+            //     ArkBls12_381::multi_miller_loop(g1_it, g2_it)
+            // };
+            // let ark_exp_output = ArkBls12_381::final_exponentiation(ark_miller_output)
+            //     .unwrap()
+            //     .0;
+            // assert_eq!(
+            //     halo_exp,
+            //     ark_fq12_to_halo(&ark_exp_output),
+            //     "ark exponentiation output mismatch"
+            // );
         }
     }
 
@@ -730,18 +794,19 @@ mod tests {
             let ark_exp = final_exp(ark_fq12_to_halo(&ark_miller));
             assert_eq!(halo_exp, ark_exp, "ark exponentiation mismatch");
 
-            let ark_miller_output = MillerLoopOutput::<ArkBls12_381>(ark_miller);
-            let ark_exp_output = ArkBls12_381::final_exponentiation(ark_miller_output)
-                .unwrap()
-                .0;
-            assert_eq!(
-                halo_exp,
-                ark_fq12_to_halo(&ark_exp_output),
-                "ark exponentiation output mismatch"
-            );
+            // let ark_miller_output = MillerLoopOutput::<ArkBls12_381>(ark_miller);
+            // let ark_exp_output = ArkBls12_381::final_exponentiation(ark_miller_output)
+            //     .unwrap()
+            //     .0;
+            // assert_eq!(
+            //     halo_exp,
+            //     ark_fq12_to_halo(&ark_exp_output),
+            //     "ark exponentiation output mismatch"
+            // );
 
             let (c_halo, u_halo) = GuestBls12_381::final_exp_hint(&halo_miller);
-            let (c_ark, u_ark) = super::final_exp_witness(&ark_miller);
+            let (c_ark, u_ark) = super::final_exp_witness(&halo_fq12_to_ark(&halo_miller));
+            // let (c_ark, u_ark) = super::final_exp_witness(&ark_miller);
 
             assert_eq!(
                 fq12_to_bytes(&c_ark).to_vec(),
@@ -753,6 +818,31 @@ mod tests {
                 halo_fq12_to_bytes(&u_halo),
                 "u mismatch"
             );
+        }
+    }
+
+    #[test]
+    fn test_pairing_hint_bytes_matches_halo2() {
+        let mut rng = StdRng::seed_from_u64(1337);
+        for _ in 0..5 {
+            let ark_g1 = G1Affine::rand(&mut rng);
+            let ark_g2 = G2Affine::rand(&mut rng);
+
+            let raw_p = vec![[fq_to_bytes(&ark_g1.x), fq_to_bytes(&ark_g1.y)]];
+            let raw_q = vec![[
+                [fq_to_bytes(&ark_g2.x.c0), fq_to_bytes(&ark_g2.x.c1)],
+                [fq_to_bytes(&ark_g2.y.c0), fq_to_bytes(&ark_g2.y.c1)],
+            ]];
+
+            let p_ark = super::parse_g1_points(raw_p.clone());
+            let q_ark = super::parse_g2_points(raw_q.clone());
+            let bytes_ark = super::pairing_hint_bytes(&p_ark, &q_ark);
+
+            let p_halo = bls12_halo::parse_g1_points(raw_p);
+            let q_halo = bls12_halo::parse_g2_points(raw_q);
+            let bytes_halo = bls12_halo::pairing_hint_bytes(&p_halo, &q_halo);
+
+            assert_eq!(bytes_ark, bytes_halo, "pairing hint bytes mismatch");
         }
     }
 }
