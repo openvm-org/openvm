@@ -1,4 +1,7 @@
+use alloc::vec::Vec;
+
 use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
+use lazy_static::lazy_static;
 use num_bigint::BigUint;
 use openvm_ecc_guest::{
     algebra::{ExpBytes, Field},
@@ -6,7 +9,27 @@ use openvm_ecc_guest::{
 };
 
 use super::{Bls12_381, FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR};
-use crate::pairing::{FinalExp, MultiMillerLoop};
+use crate::{
+    halo2curves_shims::naf::biguint_to_naf,
+    pairing::{FinalExp, MultiMillerLoop},
+};
+
+lazy_static! {
+    static ref FINAL_EXP_FACTOR_NAF: Vec<i8> = biguint_to_naf(&FINAL_EXP_FACTOR);
+    static ref POLY_FACTOR_NAF: Vec<i8> = biguint_to_naf(&POLY_FACTOR);
+    static ref TWENTY_SEVEN_NAF: Vec<i8> = biguint_to_naf(&BigUint::from(27u32));
+    static ref TEN_NAF: Vec<i8> = biguint_to_naf(&BigUint::from(10u32));
+    static ref FINAL_EXP_TIMES_27: BigUint = FINAL_EXP_FACTOR.clone() * BigUint::from(27u32);
+    static ref FINAL_EXP_TIMES_27_MOD_POLY: BigUint = {
+        let exp_inv = FINAL_EXP_TIMES_27.modinv(&POLY_FACTOR.clone()).unwrap();
+        exp_inv % POLY_FACTOR.clone()
+    };
+    static ref FINAL_EXP_TIMES_27_MOD_POLY_NAF: Vec<i8> =
+        biguint_to_naf(&FINAL_EXP_TIMES_27_MOD_POLY);
+    static ref LAMBDA_INV_FINAL_EXP: BigUint =
+        LAMBDA.clone().modinv(&FINAL_EXP_FACTOR.clone()).unwrap();
+    static ref LAMBDA_INV_FINAL_EXP_NAF: Vec<i8> = biguint_to_naf(&LAMBDA_INV_FINAL_EXP);
+}
 
 // The paper only describes the implementation for Bn254, so we use the gnark implementation for
 // Bls12_381.
@@ -49,54 +72,23 @@ impl FinalExp for Bls12_381 {
     // returns c (residueWitness) and s (scalingFactor)
     // The Gnark implementation is based on https://eprint.iacr.org/2024/640.pdf
     fn final_exp_hint(f: &Self::Fp12) -> (Self::Fp12, Self::Fp12) {
+        let f_final_exp = f.exp_naf(true, &FINAL_EXP_FACTOR_NAF);
+        let root = f_final_exp.exp_naf(true, &TWENTY_SEVEN_NAF);
+
         // 1. get p-th root inverse
-        let mut exp = FINAL_EXP_FACTOR.clone() * BigUint::from(27u32);
-        let mut root = f.exp_bytes(true, &exp.to_bytes_be());
-        let root_pth_inv: Fq12;
-        if root == Fq12::ONE {
-            root_pth_inv = Fq12::ONE;
+        let root_pth_inv = if root == Fq12::ONE {
+            Fq12::ONE
         } else {
-            let exp_inv = exp.modinv(&POLY_FACTOR.clone()).unwrap();
-            exp = exp_inv % POLY_FACTOR.clone();
-            root_pth_inv = root.exp_bytes(false, &exp.to_bytes_be());
-        }
+            root.exp_naf(false, &FINAL_EXP_TIMES_27_MOD_POLY_NAF)
+        };
 
-        // 2.1. get order of 3rd primitive root
-        let three = BigUint::from(3u32);
-        let mut order_3rd_power: u32 = 0;
-        exp = POLY_FACTOR.clone() * FINAL_EXP_FACTOR.clone();
-
-        root = f.exp_bytes(true, &exp.to_bytes_be());
-        let root_final_exp = root;
-        let three_be = three.to_bytes_be();
-        // NOTE[yj]: we can probably remove this first check as an optimization since we initialize
-        // order_3rd_power to 0
-        if root == Fq12::ONE {
-            order_3rd_power = 0;
-        }
-        root = root.exp_bytes(true, &three_be);
-        if root == Fq12::ONE {
-            order_3rd_power = 1;
-        }
-        root = root.exp_bytes(true, &three_be);
-        if root == Fq12::ONE {
-            order_3rd_power = 2;
-        }
-        root = root.exp_bytes(true, &three_be);
-        if root == Fq12::ONE {
-            order_3rd_power = 3;
-        }
-
-        // 2.2. get 27th root inverse
-        let root_27th_inv: Fq12;
-        if order_3rd_power == 0 {
-            root_27th_inv = Fq12::ONE;
+        let root = f_final_exp.exp_naf(true, &POLY_FACTOR_NAF);
+        // 2. get 27th root inverse
+        let root_27th_inv = if root.exp_naf(true, &TWENTY_SEVEN_NAF) == Fq12::ONE {
+            root.exp_naf(false, &TEN_NAF)
         } else {
-            let order_3rd = three.pow(order_3rd_power);
-            let exp_inv = exp.modinv(&order_3rd).unwrap();
-            exp = exp_inv % order_3rd;
-            root_27th_inv = root_final_exp.exp_bytes(false, &exp.to_bytes_be());
-        }
+            Fq12::ONE
+        };
 
         // 2.3. shift the Miller loop result so that millerLoop * scalingFactor
         // is of order finalExpFactor
@@ -105,8 +97,7 @@ impl FinalExp for Bls12_381 {
 
         // 3. get the witness residue
         // lambda = q - u, the optimal exponent
-        exp = LAMBDA.clone().modinv(&FINAL_EXP_FACTOR.clone()).unwrap();
-        let c = f.exp_bytes(true, &exp.to_bytes_be());
+        let c = f.exp_naf(true, &LAMBDA_INV_FINAL_EXP_NAF);
 
         (c, s)
     }
