@@ -133,7 +133,8 @@ where
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
 
-                asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_INSTRET_END}\n");
+                asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
+                asm_str += &format!("   mov {REG_SECOND_ARG}, {REG_INSTRET_END}\n");
                 asm_str += &format!("   mov {REG_D}, {instret_left_ptr}\n");
                 asm_str += &format!("   call {REG_D}\n");
 
@@ -207,7 +208,8 @@ where
         // asm_run_end part
         for (pc, _instruction, _) in exe.program.enumerate_by_pc() {
             asm_str += &format!("asm_run_end_{pc}:\n");
-            asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_INSTRET_END}\n");
+            asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
+            asm_str += &format!("   mov {REG_SECOND_ARG}, {REG_INSTRET_END}\n");
             asm_str += &format!("   mov {REG_D}, {instret_left_ptr}\n");
             asm_str += &format!("   call {REG_D}\n");
             asm_str += &Self::xmm_to_rv32_regs();
