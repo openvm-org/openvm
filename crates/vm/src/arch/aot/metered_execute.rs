@@ -367,7 +367,7 @@ where
         #[cfg(feature = "metrics")]
         let start_instret = vm_exec_state.ctx.segmentation_ctx.instret;
 
-        tracing::info_span!("execute_metered").in_scope(|| unsafe {
+        tracing::info_span!("execute_metered_aot").in_scope(|| unsafe {
             let asm_run: libloading::Symbol<MeteredAsmRunFn> = self
                 .lib
                 .get(b"asm_run")
