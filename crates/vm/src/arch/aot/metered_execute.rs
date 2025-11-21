@@ -362,7 +362,12 @@ where
         let mut vm_exec_state: Box<VmExecState<F, GuestMemory, MeteredCtx>> =
             Box::new(vm_exec_state);
 
-        unsafe {
+        #[cfg(feature = "metrics")]
+        let start = std::time::Instant::now();
+        #[cfg(feature = "metrics")]
+        let start_instret = vm_exec_state.ctx.segmentation_ctx.instret;
+
+        tracing::info_span!("execute_metered").in_scope(|| unsafe {
             let asm_run: libloading::Symbol<MeteredAsmRunFn> = self
                 .lib
                 .get(b"asm_run")
@@ -379,6 +384,16 @@ where
                 from_state_pc,
                 instret_until_end,
             );
+        });
+
+        #[cfg(feature = "metrics")]
+        {
+            let elapsed = start.elapsed();
+            let insns = vm_exec_state.ctx.segmentation_ctx.instret - start_instret;
+            tracing::info!("instructions_executed={insns}");
+            metrics::counter!("execute_metered_insns").absolute(insns);
+            metrics::gauge!("execute_metered_insn_mi/s")
+                .set(insns as f64 / elapsed.as_micros() as f64);
         }
         Ok(*vm_exec_state)
     }

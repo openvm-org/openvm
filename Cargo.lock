@@ -1666,6 +1666,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "blstrs"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a8a8ed6fefbeef4a8c7b460e4110e12c5e22a5b7cf32621aae6ad650c4dcf29"
+dependencies = [
+ "blst",
+ "byte-slice-cast",
+ "ff 0.13.1",
+ "group 0.13.0",
+ "pairing 0.23.0",
+ "rand_core 0.6.4",
+ "serde",
+ "subtle",
+]
+
+[[package]]
 name = "bn-rs"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3609,7 +3625,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0f9ef7462f7c099f518d754361858f86d8a07af53ba9af0fe635bbccb151a63"
 dependencies = [
  "ff 0.13.1",
+ "rand 0.8.5",
  "rand_core 0.6.4",
+ "rand_xorshift 0.3.0",
  "subtle",
 ]
 
@@ -3807,9 +3825,10 @@ dependencies = [
 [[package]]
 name = "halo2curves-axiom"
 version = "0.7.2"
-source = "git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2#3a65a710e27fe03711f6fb4fc0c4469ae351974a"
+source = "git+https://github.com/axiom-crypto/halo2curves.git?rev=175e7c0cd818c436570f62c30fb01295ea287232#175e7c0cd818c436570f62c30fb01295ea287232"
 dependencies = [
  "blake2b_simd",
+ "blstrs",
  "digest 0.10.7",
  "ff 0.13.1",
  "group 0.13.0",
@@ -5255,7 +5274,7 @@ dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "eyre",
- "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
+ "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?rev=175e7c0cd818c436570f62c30fb01295ea287232)",
  "num-bigint 0.4.6",
  "num-traits",
  "openvm-algebra-transpiler",
@@ -5293,7 +5312,7 @@ dependencies = [
 name = "openvm-algebra-guest"
 version = "1.4.1"
 dependencies = [
- "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
+ "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?rev=175e7c0cd818c436570f62c30fb01295ea287232)",
  "num-bigint 0.4.6",
  "once_cell",
  "openvm-algebra-complex-macros",
@@ -5660,7 +5679,7 @@ dependencies = [
  "cfg-if",
  "derive-new 0.6.0",
  "derive_more 1.0.0",
- "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
+ "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?rev=175e7c0cd818c436570f62c30fb01295ea287232)",
  "hex-literal 0.4.1",
  "lazy_static",
  "num-bigint 0.4.6",
@@ -5692,7 +5711,7 @@ dependencies = [
  "ecdsa 0.16.9",
  "elliptic-curve 0.13.8",
  "group 0.13.0",
- "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
+ "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?rev=175e7c0cd818c436570f62c30fb01295ea287232)",
  "once_cell",
  "openvm",
  "openvm-algebra-guest",
@@ -5708,7 +5727,7 @@ name = "openvm-ecc-integration-tests"
 version = "1.4.1"
 dependencies = [
  "eyre",
- "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
+ "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?rev=175e7c0cd818c436570f62c30fb01295ea287232)",
  "hex-literal 0.4.1",
  "num-bigint 0.4.6",
  "openvm-algebra-transpiler",
@@ -5879,7 +5898,7 @@ name = "openvm-mod-circuit-builder"
 version = "1.4.1"
 dependencies = [
  "cuda-runtime-sys",
- "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
+ "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?rev=175e7c0cd818c436570f62c30fb01295ea287232)",
  "itertools 0.14.0",
  "num-bigint 0.4.6",
  "num-traits",
@@ -6007,7 +6026,7 @@ version = "1.4.1"
 dependencies = [
  "eyre",
  "group 0.13.0",
- "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
+ "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?rev=175e7c0cd818c436570f62c30fb01295ea287232)",
  "hex-literal 0.4.1",
  "itertools 0.14.0",
  "num-bigint 0.4.6",
@@ -6047,7 +6066,7 @@ dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "eyre",
- "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
+ "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?rev=175e7c0cd818c436570f62c30fb01295ea287232)",
  "num-bigint 0.4.6",
  "num-traits",
  "openvm-algebra-circuit",
@@ -6073,7 +6092,7 @@ dependencies = [
 name = "openvm-pairing-guest"
 version = "1.4.1"
 dependencies = [
- "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
+ "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?rev=175e7c0cd818c436570f62c30fb01295ea287232)",
  "hex-literal 0.4.1",
  "itertools 0.14.0",
  "lazy_static",

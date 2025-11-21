@@ -288,9 +288,15 @@ where
         let ctx = ExecutionCtx::new(num_insns);
         let instret_left = ctx.instret_left;
 
+        #[cfg(feature = "metrics")]
+        let start = std::time::Instant::now();
+        #[cfg(feature = "metrics")]
+        let start_instret_left = instret_left;
+
         let mut vm_exec_state: Box<VmExecState<F, GuestMemory, ExecutionCtx>> =
             Box::new(VmExecState::new(from_state, ctx));
-        unsafe {
+
+        tracing::info_span!("execute_e1").in_scope(|| unsafe {
             let asm_run: libloading::Symbol<AsmRunFn> = self
                 .lib
                 .get(b"asm_run")
@@ -306,6 +312,15 @@ where
                 from_state_pc,
                 instret_left,
             );
+        });
+
+        #[cfg(feature = "metrics")]
+        {
+            let elapsed = start.elapsed();
+            let insns = start_instret_left - vm_exec_state.ctx.instret_left;
+            tracing::info!("instructions_executed={insns}");
+            metrics::counter!("execute_e1_insns").absolute(insns);
+            metrics::gauge!("execute_e1_insn_mi/s").set(insns as f64 / elapsed.as_micros() as f64);
         }
 
         if num_insns.is_some() {
