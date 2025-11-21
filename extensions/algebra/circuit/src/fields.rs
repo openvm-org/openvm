@@ -22,6 +22,7 @@ pub enum Operation {
     Div = 3,
 }
 
+// TODO: hardcode this. it's slow
 fn get_modulus_as_bigint<F: PrimeField>() -> BigUint {
     BigUint::from_str_radix(F::MODULUS.trim_start_matches("0x"), 16).unwrap()
 }
@@ -252,7 +253,7 @@ fn from_repr_with_reduction<F: PrimeField<Repr = [u8; 32]>>(bytes: [u8; 32]) -> 
 fn from_repr_with_reduction_bls12_381_coordinate(bytes: [u8; 48]) -> blstrs::Fp {
     blstrs::Fp::from_bytes_le(&bytes).unwrap_or_else(|| {
         // Reduce modulo the field's modulus for non-canonical representations
-        let modulus = get_modulus_as_bigint::<halo2curves_axiom::bls12_381::Fq>();
+        let modulus = BigUint::from_bytes_le(&blstrs::Fp::char());
         let value = BigUint::from_bytes_le(&bytes);
         let reduced = value % modulus;
 
