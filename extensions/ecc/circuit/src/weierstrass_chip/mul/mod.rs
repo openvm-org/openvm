@@ -36,8 +36,8 @@ pub fn ec_mul_expr(
     // Create inputs: point x and point y (scalar is handled separately via register)
     let x1 = ExprBuilder::new_input(builder.clone());
     let y1 = ExprBuilder::new_input(builder.clone());
-    let x2 = ExprBuilder::new_input(builder.clone());
-    let y2 = ExprBuilder::new_input(builder.clone());
+    let _x2 = ExprBuilder::new_input(builder.clone());
+    let _y2 = ExprBuilder::new_input(builder.clone());
 
     // Create dummy outputs: result x and result y
     // Note: The actual computation is done natively, but we need these for the AIR structure

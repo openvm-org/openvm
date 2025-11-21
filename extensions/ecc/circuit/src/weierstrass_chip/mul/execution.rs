@@ -90,7 +90,7 @@ macro_rules! dispatch {
         }
     };
 }
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterExecutor<F>
     for EcMulExecutor<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
@@ -131,7 +131,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
     }
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecutor<F>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterMeteredExecutor<F>
     for EcMulExecutor<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
@@ -188,10 +188,9 @@ unsafe fn execute_e12_impl<
     const IS_SETUP: bool,
 >(
     pre_compute: &EcMulPreCompute,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
+    let pc = exec_state.pc();
     // Read register values
     let rs_vals = pre_compute
         .rs_addrs
@@ -212,8 +211,7 @@ unsafe fn execute_e12_impl<
         exec_state.vm_write(RV32_MEMORY_AS, rd_val + (i * BLOCK_SIZE) as u32, &block);
     }
 
-    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
-    *instret += 1;
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 
     Ok(())
 }
@@ -228,19 +226,12 @@ unsafe fn execute_e1_impl<
     const FIELD_TYPE: u8,
     const IS_SETUP: bool,
 >(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &EcMulPreCompute = pre_compute.borrow();
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE, IS_SETUP>(
-        pre_compute,
-        instret,
-        pc,
-        exec_state,
-    )
+    let pre_compute: &EcMulPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<EcMulPreCompute>()).borrow();
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE, IS_SETUP>(pre_compute, exec_state)
 }
 
 #[create_handler]
@@ -253,20 +244,17 @@ unsafe fn execute_e2_impl<
     const FIELD_TYPE: u8,
     const IS_SETUP: bool,
 >(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let e2_pre_compute: &E2PreCompute<EcMulPreCompute> = pre_compute.borrow();
+    let e2_pre_compute: &E2PreCompute<EcMulPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<EcMulPreCompute>>())
+            .borrow();
     exec_state
         .ctx
         .on_height_change(e2_pre_compute.chip_idx as usize, 1);
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE, IS_SETUP>(
         &e2_pre_compute.data,
-        instret,
-        pc,
         exec_state,
     )
 }
