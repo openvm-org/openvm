@@ -7,8 +7,6 @@ use num_bigint::BigUint;
 use num_traits::Num;
 
 pub const FQ_NUM_BYTES: usize = 32;
-pub const FQ2_NUM_BYTES: usize = 2 * FQ_NUM_BYTES;
-pub const FQ6_NUM_BYTES: usize = 6 * FQ_NUM_BYTES;
 pub const FQ12_NUM_BYTES: usize = 12 * FQ_NUM_BYTES;
 
 lazy_static! {
@@ -66,8 +64,9 @@ pub(crate) fn biguint_to_prime_field<F: PrimeField>(value: &BigUint) -> F {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use ark_bn254::Fq;
+
+    use super::*;
 
     #[test]
     fn test_biguint_to_prime_field_matches_digits() {

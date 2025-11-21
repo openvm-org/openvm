@@ -1,5 +1,9 @@
-use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
-use halo2curves_axiom::ff::{Field, PrimeField};
+#![cfg_attr(not(test), allow(dead_code))]
+
+use halo2curves_axiom::{
+    bls12_381::{Fq, Fq12, Fq2},
+    ff::{Field, PrimeField},
+};
 use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
 use openvm_pairing_guest::{
     halo2curves_shims::bls12_381::Bls12_381,
@@ -50,7 +54,7 @@ pub fn multi_miller_loop(p: &[G1Affine], q: &[G2Affine]) -> Fq12 {
     Bls12_381::multi_miller_loop(p, q)
 }
 
-pub fn multi_miller_loop_embedded_exp(p: &[G1Affine], q: &[G2Affine], c: Option<Fq12>) -> Fq12 {
+fn multi_miller_loop_embedded_exp(p: &[G1Affine], q: &[G2Affine], c: Option<Fq12>) -> Fq12 {
     Bls12_381::multi_miller_loop_embedded_exp(p, q, c)
 }
 

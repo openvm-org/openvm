@@ -1,15 +1,20 @@
-use halo2curves_axiom::bn256::{Fq, Fq12, Fq2};
-use halo2curves_axiom::ff::PrimeField;
+#![cfg_attr(not(test), allow(dead_code))]
+
+use halo2curves_axiom::{
+    bn256::{Fq, Fq12, Fq2},
+    ff::{Field, PrimeField},
+};
 use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
 use openvm_pairing_guest::{
     halo2curves_shims::bn254::Bn254,
     pairing::{FinalExp, MultiMillerLoop},
 };
 
-use super::{FQ12_NUM_BYTES, FQ_NUM_BYTES};
-
 pub type G1Affine = AffinePoint<Fq>;
 pub type G2Affine = AffinePoint<Fq2>;
+
+pub const FQ_NUM_BYTES: usize = 32;
+pub const FQ12_NUM_BYTES: usize = 12 * FQ_NUM_BYTES;
 
 pub fn parse_g1_points<const N: usize>(raw: Vec<[[u8; N]; 2]>) -> Vec<G1Affine>
 where
@@ -49,8 +54,28 @@ pub fn multi_miller_loop(p: &[G1Affine], q: &[G2Affine]) -> Fq12 {
     Bn254::multi_miller_loop(p, q)
 }
 
+fn multi_miller_loop_embedded_exp(p: &[G1Affine], q: &[G2Affine], c: Option<Fq12>) -> Fq12 {
+    Bn254::multi_miller_loop_embedded_exp(p, q, c)
+}
+
 pub fn final_exp_hint(f: &Fq12) -> (Fq12, Fq12) {
     Bn254::final_exp_hint(f)
+}
+
+/// Verifies the final exponentiation hint `(c, u)` against the Miller loop inputs.
+pub fn pairing_check_from_hint(p: &[G1Affine], q: &[G2Affine], c: &Fq12, u: &Fq12) -> bool {
+    let c_inv = c.invert().unwrap();
+
+    // c_mul = c^-{q^3 - q^2 + q}
+    let c_q3_inv = FieldExtension::frobenius_map(&c_inv, 3);
+    let c_q2 = FieldExtension::frobenius_map(c, 2);
+    let c_q_inv = FieldExtension::frobenius_map(&c_inv, 1);
+    let c_mul = c_q3_inv * c_q2 * c_q_inv;
+
+    // Pass c inverse into the miller loop so that we compute fc == f * c^-{6x + 2}
+    let fc = multi_miller_loop_embedded_exp(p, q, Some(c_inv));
+
+    fc * c_mul * u == Fq12::ONE
 }
 
 pub fn pairing_hint_bytes(p: &[G1Affine], q: &[G2Affine]) -> Vec<u8> {
