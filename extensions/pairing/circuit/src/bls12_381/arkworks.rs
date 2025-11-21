@@ -157,10 +157,11 @@ fn fq12_to_bytes_halo_layout(value: &Fq12) -> [u8; FQ12_NUM_BYTES] {
 
 #[cfg(test)]
 mod tests {
-    use ark_bls12_381::Fr;
+    use ark_bls12_381::{Fq6, Fr};
     use ark_ec::AffineRepr;
     use ark_ff::{Field as ArkField, UniformRand};
     use halo2curves_axiom::bls12_381::{Fq as HaloFq, Fq12 as HaloFq12, Fq2 as HaloFq2};
+    use openvm_ecc_guest::algebra::field::FieldExtension;
     use rand::{rngs::StdRng, SeedableRng};
 
     use super::*;
@@ -184,7 +185,6 @@ mod tests {
     }
 
     fn halo_fq12_to_bytes(value: &HaloFq12) -> Vec<u8> {
-        use openvm_ecc_guest::algebra::field::FieldExtension;
         value
             .to_coeffs()
             .into_iter()
@@ -194,8 +194,6 @@ mod tests {
     }
 
     fn halo_fq12_to_ark(value: &HaloFq12) -> Fq12 {
-        use ark_bls12_381::Fq6;
-        use openvm_ecc_guest::algebra::field::FieldExtension;
         let [c0_c0, c1_c0, c0_c1, c1_c1, c0_c2, c1_c2] = value.to_coeffs();
         Fq12::new(
             Fq6::new(
