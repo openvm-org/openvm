@@ -155,7 +155,7 @@ fn exp_naf_blstrs(base: &Fq12, is_positive: bool, digits_naf: &[i8]) -> Fq12 {
     }
 
     // Transmute to blstrs for computation
-    let base_blstrs = unsafe { core::mem::transmute::<Fq12, blstrs::Fp12>(base.clone()) };
+    let base_blstrs = unsafe { core::mem::transmute::<Fq12, blstrs::Fp12>(*base) };
 
     let base_blstrs = if !is_positive {
         base_blstrs.invert().unwrap_or(blstrs::Fp12::ONE)
