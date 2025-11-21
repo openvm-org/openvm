@@ -3,7 +3,7 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use openvm_algebra_circuit::fields::{get_field_type, FieldType};
+use num_bigint::BigUint;
 use openvm_circuit::{
     arch::*,
     system::memory::{online::GuestMemory, POINTER_MAX_BITS},
@@ -18,7 +18,7 @@ use openvm_mod_circuit_builder::FieldExpr;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::EcMulExecutor;
-use crate::weierstrass_chip::curves::ec_mul;
+use crate::weierstrass_chip::curves::{ec_mul, get_curve_type, CurveType};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -68,20 +68,16 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcMulExecutor<BLOCKS, BLO
 
 macro_rules! dispatch {
     ($execute_impl:ident, $pre_compute:ident, $is_setup:ident) => {
-        if let Some(field_type) = {
+        if let Some(curve_type) = {
             let modulus = &$pre_compute.expr.builder.prime;
-            get_field_type(modulus)
+            let a_coeff = &BigUint::ZERO;
+            get_curve_type(modulus, a_coeff)
         } {
-            match ($is_setup, field_type) {
-                (false, FieldType::K256Coordinate) => Ok($execute_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::K256Coordinate as u8 },
-                    false,
-                >),
-                _ => panic!("Unsupported field type"),
+            match ($is_setup, curve_type) {
+                (false, CurveType::K256) => {
+                    Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }, false>)
+                }
+                _ => panic!("Unsupported curve type: {:?}", curve_type),
             }
         } else if $is_setup {
             Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, true>)
@@ -184,7 +180,7 @@ unsafe fn execute_e12_impl<
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
-    const FIELD_TYPE: u8,
+    const CURVE_TYPE: u8,
     const IS_SETUP: bool,
 >(
     pre_compute: &EcMulPreCompute,
@@ -201,7 +197,7 @@ unsafe fn execute_e12_impl<
     let point_data: [[u8; BLOCK_SIZE]; BLOCKS] =
         from_fn(|i| exec_state.vm_read(RV32_MEMORY_AS, rs_vals[1] + (i * BLOCK_SIZE) as u32));
 
-    let output_data = ec_mul::<FIELD_TYPE, BLOCKS, BLOCK_SIZE>(scalar_data, point_data);
+    let output_data = ec_mul::<CURVE_TYPE, BLOCKS, BLOCK_SIZE>(scalar_data, point_data);
 
     let rd_val = u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));
     debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
@@ -223,7 +219,7 @@ unsafe fn execute_e1_impl<
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
-    const FIELD_TYPE: u8,
+    const CURVE_TYPE: u8,
     const IS_SETUP: bool,
 >(
     pre_compute: *const u8,
@@ -231,7 +227,7 @@ unsafe fn execute_e1_impl<
 ) -> Result<(), ExecutionError> {
     let pre_compute: &EcMulPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<EcMulPreCompute>()).borrow();
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE, IS_SETUP>(pre_compute, exec_state)
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, IS_SETUP>(pre_compute, exec_state)
 }
 
 #[create_handler]
@@ -241,7 +237,7 @@ unsafe fn execute_e2_impl<
     CTX: MeteredExecutionCtxTrait,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
-    const FIELD_TYPE: u8,
+    const CURVE_TYPE: u8,
     const IS_SETUP: bool,
 >(
     pre_compute: *const u8,
@@ -253,7 +249,7 @@ unsafe fn execute_e2_impl<
     exec_state
         .ctx
         .on_height_change(e2_pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE, IS_SETUP>(
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, IS_SETUP>(
         &e2_pre_compute.data,
         exec_state,
     )

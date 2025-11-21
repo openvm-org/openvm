@@ -97,7 +97,9 @@ extern "C" fn secp256k1_ec_mul(rd: usize, rs1: usize, rs2: usize) {
     openvm_platform::custom_insn_r!(
         opcode = openvm_ecc_guest::OPCODE,
         funct3 = openvm_ecc_guest::SW_FUNCT3 as usize,
-        funct7 = openvm_ecc_guest::SwBaseFunct7::SwEcMul as usize,
+        funct7 = openvm_ecc_guest::SwBaseFunct7::SwEcMul as usize
+            + 1
+                * (openvm_ecc_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
         rd = In rd,
         rs1 = In rs1,
         rs2 = In rs2

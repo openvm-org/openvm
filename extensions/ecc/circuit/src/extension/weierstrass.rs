@@ -161,19 +161,21 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let mul = get_ec_mul_step(
-                    config,
-                    dummy_range_checker_bus,
-                    pointer_max_bits,
-                    start_offset,
-                );
+                if i == 1 {
+                    let mul = get_ec_mul_step(
+                        config,
+                        dummy_range_checker_bus,
+                        pointer_max_bits,
+                        start_offset,
+                    );
 
-                inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcMulRv32_32(mul),
-                    ((Rv32WeierstrassOpcode::EC_MUL as usize)
-                        ..=(Rv32WeierstrassOpcode::EC_MUL as usize))
-                        .map(|x| VmOpcode::from_usize(x + start_offset)),
-                )?;
+                    inventory.add_executor(
+                        WeierstrassExtensionExecutor::EcMulRv32_32(mul),
+                        ((Rv32WeierstrassOpcode::EC_MUL as usize)
+                            ..=(Rv32WeierstrassOpcode::EC_MUL as usize))
+                            .map(|x| VmOpcode::from_usize(x + start_offset)),
+                    )?;
+                }
             } else if bytes <= 48 {
                 let config = ExprBuilderConfig {
                     modulus: curve.modulus.clone(),
@@ -276,16 +278,18 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                 );
                 inventory.add_air(double);
 
-                let mul = get_ec_mul_air::<2, 32>(
-                    exec_bridge,
-                    memory_bridge,
-                    config,
-                    range_checker_bus,
-                    bitwise_lu,
-                    pointer_max_bits,
-                    start_offset,
-                );
-                inventory.add_air(mul);
+                if i == 1 {
+                    let mul = get_ec_mul_air::<2, 32>(
+                        exec_bridge,
+                        memory_bridge,
+                        config,
+                        range_checker_bus,
+                        bitwise_lu,
+                        pointer_max_bits,
+                        start_offset,
+                    );
+                    inventory.add_air(mul);
+                }
             } else if bytes <= 48 {
                 let config = ExprBuilderConfig {
                     modulus: curve.modulus.clone(),
@@ -386,15 +390,17 @@ where
                 );
                 inventory.add_executor_chip(double);
 
-                inventory.next_air::<WeierstrassAir<2, 2, 32>>()?;
-                let mul = get_ec_mul_chip::<Val<SC>, 2, 32>(
-                    config,
-                    mem_helper.clone(),
-                    range_checker.clone(),
-                    bitwise_lu.clone(),
-                    pointer_max_bits,
-                );
-                inventory.add_executor_chip(mul);
+                if curve.struct_name == SECP256K1_ECC_STRUCT_NAME {
+                    inventory.next_air::<WeierstrassAir<2, 2, 32>>()?;
+                    let mul = get_ec_mul_chip::<Val<SC>, 2, 32>(
+                        config,
+                        mem_helper.clone(),
+                        range_checker.clone(),
+                        bitwise_lu.clone(),
+                        pointer_max_bits,
+                    );
+                    inventory.add_executor_chip(mul);
+                }
             } else if bytes <= 48 {
                 let config = ExprBuilderConfig {
                     modulus: curve.modulus.clone(),
