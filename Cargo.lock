@@ -5677,6 +5677,7 @@ dependencies = [
 name = "openvm-ecc-circuit"
 version = "1.4.1"
 dependencies = [
+ "blstrs",
  "cfg-if",
  "derive-new 0.6.0",
  "derive_more 1.0.0",

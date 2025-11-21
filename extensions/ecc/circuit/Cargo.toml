@@ -35,6 +35,7 @@ hex-literal = { workspace = true }
 cfg-if = { workspace = true }
 
 halo2curves-axiom = { workspace = true }
+blstrs = { workspace = true }
 
 [dev-dependencies]
 openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
