@@ -6,7 +6,10 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use super::{common::*, AotInstance, AsmRunFn};
 use crate::{
     arch::{
-        aot::{asm_to_lib, extern_handler, get_vm_address_space_addr, get_vm_pc_ptr, set_pc_shim},
+        aot::{
+            asm_to_lib, extern_handler, get_vm_address_space_addr, get_vm_pc_ptr,
+            set_instret_left_shim, set_pc_shim,
+        },
         execution_mode::ExecutionCtx,
         interpreter::{
             alloc_pre_compute_buf, get_pre_compute_instructions, get_pre_compute_max_size,
@@ -112,6 +115,7 @@ where
             format!("{:p}", extern_handler::<F, ExecutionCtx, true> as *const ());
         let set_pc_ptr = format!("{:p}", set_pc_shim::<F, ExecutionCtx> as *const ());
         let pre_compute_insns_ptr = format!("{:p}", pre_compute_insns_ptr as *const ());
+        let instret_left_ptr = format!("{:p}", set_instret_left_shim::<F> as *const ());
 
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
             /* Preprocessing step, to check if we should suspend or not */
@@ -128,6 +132,10 @@ where
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
+
+                asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_INSTRET_END}\n");
+                asm_str += &format!("   mov {REG_D}, {instret_left_ptr}\n");
+                asm_str += &format!("   call {REG_D}\n");
 
                 asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
                 asm_str += &format!("   mov {REG_SECOND_ARG}, {pre_compute_insns_ptr}\n");
@@ -199,6 +207,9 @@ where
         // asm_run_end part
         for (pc, _instruction, _) in exe.program.enumerate_by_pc() {
             asm_str += &format!("asm_run_end_{pc}:\n");
+            asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_INSTRET_END}\n");
+            asm_str += &format!("   mov {REG_D}, {instret_left_ptr}\n");
+            asm_str += &format!("   call {REG_D}\n");
             asm_str += &Self::xmm_to_rv32_regs();
             asm_str += &format!("    mov {REG_FIRST_ARG}, rbx\n");
             asm_str += &format!("    mov {REG_SECOND_ARG}, {pc}\n");

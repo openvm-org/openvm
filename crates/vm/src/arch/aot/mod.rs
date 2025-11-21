@@ -7,6 +7,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use crate::{
     arch::{
         aot::common::{sync_gpr_to_xmm, sync_xmm_to_gpr, REG_AS2_PTR},
+        execution_mode::ExecutionCtx,
         interpreter::{AlignedBuf, PreComputeInstruction},
         ExecutionCtxTrait, StaticProgramError, Streams, SystemConfig, VmExecState, VmState,
     },
@@ -298,6 +299,12 @@ unsafe extern "C" fn should_suspend_shim<F, Ctx: ExecutionCtxTrait>(
 unsafe extern "C" fn set_pc_shim<F, Ctx: ExecutionCtxTrait>(state_ptr: *mut c_void, pc: u32) {
     let state = &mut *(state_ptr as *mut VmExecState<F, GuestMemory, Ctx>);
     state.vm_state.set_pc(pc);
+}
+
+// only needed for pure execution
+unsafe extern "C" fn set_instret_left_shim<F>(state_ptr: *mut c_void, instret_left: u64) {
+    let state = &mut *(state_ptr as *mut VmExecState<F, GuestMemory, ExecutionCtx>);
+    state.ctx.instret_left = instret_left;
 }
 
 pub(crate) extern "C" fn extern_handler<F, Ctx: ExecutionCtxTrait, const E1: bool>(
