@@ -296,7 +296,7 @@ where
         let mut vm_exec_state: Box<VmExecState<F, GuestMemory, ExecutionCtx>> =
             Box::new(VmExecState::new(from_state, ctx));
 
-        tracing::info_span!("execute_pure_aot").in_scope(|| unsafe {
+        tracing::info_span!("execute_e1").in_scope(|| unsafe {
             let asm_run: libloading::Symbol<AsmRunFn> = self
                 .lib
                 .get(b"asm_run")
