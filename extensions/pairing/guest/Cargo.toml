@@ -21,7 +21,7 @@ openvm-custom-insn = { workspace = true }
 
 # Used for `halo2curves` feature
 halo2curves-axiom = { workspace = true, optional = true }
-blstrs = { version = "0.7.1", optional = true }
+blstrs = { workspace = true, optional = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint.workspace = true
