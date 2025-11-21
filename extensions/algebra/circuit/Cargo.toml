@@ -34,6 +34,7 @@ eyre = { workspace = true }
 cfg-if = { workspace = true }
 
 halo2curves-axiom = { workspace = true }
+blstrs = { workspace = true, features = ["__private_bench"] }
 
 [dev-dependencies]
 openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }

@@ -17,6 +17,7 @@ openvm-pairing-guest = { workspace = true, features = [
     "bls12_381",
     "bn254",
     "aot",
+    "blstrs"
 ] }
 openvm-instructions = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true }

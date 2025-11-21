@@ -3,10 +3,7 @@ use alloc::vec::Vec;
 use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
 use lazy_static::lazy_static;
 use num_bigint::BigUint;
-use openvm_ecc_guest::{
-    algebra::{ExpBytes, Field},
-    AffinePoint,
-};
+use openvm_ecc_guest::{algebra::Field, AffinePoint};
 
 use super::{Bls12_381, FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR};
 use crate::{
@@ -72,20 +69,20 @@ impl FinalExp for Bls12_381 {
     // returns c (residueWitness) and s (scalingFactor)
     // The Gnark implementation is based on https://eprint.iacr.org/2024/640.pdf
     fn final_exp_hint(f: &Self::Fp12) -> (Self::Fp12, Self::Fp12) {
-        let f_final_exp = f.exp_naf(true, &FINAL_EXP_FACTOR_NAF);
-        let root = f_final_exp.exp_naf(true, &TWENTY_SEVEN_NAF);
+        let f_final_exp = exp_naf(f, true, &FINAL_EXP_FACTOR_NAF);
+        let root = exp_naf(&f_final_exp, true, &TWENTY_SEVEN_NAF);
 
         // 1. get p-th root inverse
         let root_pth_inv = if root == Fq12::ONE {
             Fq12::ONE
         } else {
-            root.exp_naf(false, &FINAL_EXP_TIMES_27_MOD_POLY_NAF)
+            exp_naf(&root, false, &FINAL_EXP_TIMES_27_MOD_POLY_NAF)
         };
 
-        let root = f_final_exp.exp_naf(true, &POLY_FACTOR_NAF);
+        let root = exp_naf(&f_final_exp, true, &POLY_FACTOR_NAF);
         // 2. get 27th root inverse
-        let root_27th_inv = if root.exp_naf(true, &TWENTY_SEVEN_NAF) == Fq12::ONE {
-            root.exp_naf(false, &TEN_NAF)
+        let root_27th_inv = if exp_naf(&root, true, &TWENTY_SEVEN_NAF) == Fq12::ONE {
+            exp_naf(&root, false, &TEN_NAF)
         } else {
             Fq12::ONE
         };
@@ -97,8 +94,93 @@ impl FinalExp for Bls12_381 {
 
         // 3. get the witness residue
         // lambda = q - u, the optimal exponent
-        let c = f.exp_naf(true, &LAMBDA_INV_FINAL_EXP_NAF);
+        let c = exp_naf(&f, true, &LAMBDA_INV_FINAL_EXP_NAF);
 
         (c, s)
     }
+}
+
+/// Exponentiates a field element using a signed digit representation (e.g. NAF).
+/// `digits_naf` is expected to be in LSB-first order with entries in {-1, 0, 1}.
+fn exp_naf(base: &Fq12, is_positive: bool, digits_naf: &[i8]) -> Fq12 {
+    #[cfg(feature = "blstrs")]
+    {
+        exp_naf_blstrs(base, is_positive, digits_naf)
+    }
+    #[cfg(not(feature = "blstrs"))]
+    {
+        exp_naf_basic(base, is_positive, digits_naf)
+    }
+}
+
+#[cfg(not(feature = "blstrs"))]
+fn exp_naf_basic(base: &Fq12, is_positive: bool, digits_naf: &[i8]) -> Fq12 {
+    if digits_naf.is_empty() {
+        return Fq12::ONE;
+    }
+
+    let base = if !is_positive {
+        base.invert().unwrap_or(Fq12::ONE)
+    } else {
+        *base
+    };
+
+    let base_inv = if digits_naf.contains(&-1) {
+        Some(base.invert().unwrap_or(Fq12::ONE))
+    } else {
+        None
+    };
+
+    let mut res = Fq12::ONE;
+    for &digit in digits_naf.iter().rev() {
+        res = res.square();
+        if digit == 1 {
+            res *= base;
+        } else if digit == -1 {
+            res *= base_inv
+                .as_ref()
+                .expect("negative digit requires available inverse");
+        }
+    }
+
+    res
+}
+
+#[cfg(feature = "blstrs")]
+fn exp_naf_blstrs(base: &Fq12, is_positive: bool, digits_naf: &[i8]) -> Fq12 {
+    use halo2curves_axiom::ff::Field;
+
+    if digits_naf.is_empty() {
+        return <Fq12 as halo2curves_axiom::ff::Field>::ONE;
+    }
+
+    // Transmute to blstrs for computation
+    let base_blstrs = unsafe { core::mem::transmute::<Fq12, blstrs::Fp12>(*base) };
+
+    let base_blstrs = if !is_positive {
+        base_blstrs.invert().unwrap_or(blstrs::Fp12::ONE)
+    } else {
+        base_blstrs
+    };
+
+    let base_inv_blstrs = if digits_naf.contains(&-1) {
+        Some(base_blstrs.invert().unwrap_or(blstrs::Fp12::ONE))
+    } else {
+        None
+    };
+
+    let mut res_blstrs = blstrs::Fp12::ONE;
+    for &digit in digits_naf.iter().rev() {
+        res_blstrs = res_blstrs.square();
+        if digit == 1 {
+            res_blstrs *= base_blstrs;
+        } else if digit == -1 {
+            res_blstrs *= base_inv_blstrs
+                .as_ref()
+                .expect("negative digit requires available inverse");
+        }
+    }
+
+    // Transmute back to Fq12
+    unsafe { core::mem::transmute::<blstrs::Fp12, Fq12>(res_blstrs) }
 }
