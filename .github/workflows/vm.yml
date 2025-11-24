@@ -33,7 +33,7 @@ jobs:
 
     steps:
       - uses: runs-on/action@v2
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - run: | # avoid cross-device link error
           rustup component remove clippy || true
           rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true

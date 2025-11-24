@@ -15,7 +15,7 @@ jobs:
       - runs-on=${{ github.run_id }}-cpu/runner=64cpu-linux-x64/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: codespell-project/actions-codespell@v2
         with:
           skip: Cargo.lock,./docs/vocs/pnpm-lock.yaml,*.txt,./crates/toolchain/openvm/src/memcpy.s,./crates/toolchain/openvm/src/memset.s,./audits/*.pdf,./guest-libs/ruint/*
@@ -81,7 +81,7 @@ jobs:
       - runs-on=${{ github.run_id }}-cuda/runner=test-gpu-nvidia
     steps:
       - uses: runs-on/action@v2
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - run: | # avoid cross-device link error
           rustup component remove clippy || true
           rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true

@@ -38,7 +38,7 @@ jobs:
       - runs-on=${{ github.run_id }}/disk=large/runner=64cpu-linux-x64/image=ubuntu24-full-x64/extras=s3-cache
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:

@@ -19,7 +19,7 @@ jobs:
       - runs-on=${{ github.run_id }}/runner=64cpu-linux-x64/extras=s3-cache/disk=large
     steps:
       - name: Checkout base branch
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set version
         run: echo "version=${{ github.event.inputs.version || 'v1.4.1' }}" >> $GITHUB_ENV
@@ -37,7 +37,7 @@ jobs:
 
       # Checkout and test tagged version
       - name: Checkout tagged version
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ env.version }}
 
