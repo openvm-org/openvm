@@ -33,7 +33,7 @@ use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
         baby_bear_poseidon2_root::{BabyBearPoseidon2RootConfig, BabyBearPoseidon2RootEngine},
-        fri_params::standard_fri_params_with_100_bits_conjectured_security,
+        fri_params::standard_fri_params_with_100_bits_security,
         FriParameters,
     },
     engine::StarkFriEngine,
@@ -120,7 +120,7 @@ pub(super) fn dummy_internal_proof_riscv_app_vm(
     internal_exe: Arc<VmCommittedExe<SC>>,
     num_public_values: usize,
 ) -> Result<Proof<SC>, VirtualMachineError> {
-    let fri_params = standard_fri_params_with_100_bits_conjectured_security(1);
+    let fri_params = standard_fri_params_with_100_bits_security(1);
     let leaf_proof = dummy_leaf_proof_riscv_app_vm(leaf_vm_pk, num_public_values, fri_params)?;
     dummy_internal_proof(internal_vm_pk, internal_exe, leaf_proof)
 }
