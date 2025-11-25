@@ -1492,7 +1492,7 @@ checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
 [[package]]
 name = "codec-derive"
 version = "2.0.0-alpha"
-source = "git+ssh://git@github.com/axiom-crypto/v2-proof-system.git?branch=main#3ead9d7f63216b6c95d6379c069e4d7c1b86652a"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#ef4cd892f48217de14cd6829f9ed7954617b0410"
 dependencies = [
  "proc-macro-crate 1.3.1",
  "proc-macro2",
@@ -1796,7 +1796,6 @@ checksum = "e2931af7e13dc045d8e9d26afccc6fa115d64e115c9c84b1166288b46f6782c2"
 [[package]]
 name = "cuda-backend-v2"
 version = "2.0.0-alpha"
-source = "git+ssh://git@github.com/axiom-crypto/v2-proof-system.git?branch=main#3ead9d7f63216b6c95d6379c069e4d7c1b86652a"
 dependencies = [
  "derive-new 0.7.0",
  "getset",
@@ -4592,8 +4591,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-backend"
-version = "1.2.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#48b9bf621c50e08296e2e490b1cb4980a68c41b8"
+version = "2.0.0-alpha"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#ef4cd892f48217de14cd6829f9ed7954617b0410"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -4624,8 +4623,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-builder"
-version = "1.2.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#48b9bf621c50e08296e2e490b1cb4980a68c41b8"
+version = "2.0.0-alpha"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#ef4cd892f48217de14cd6829f9ed7954617b0410"
 dependencies = [
  "cc",
  "glob",
@@ -4633,8 +4632,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-common"
-version = "1.2.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#48b9bf621c50e08296e2e490b1cb4980a68c41b8"
+version = "2.0.0-alpha"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#ef4cd892f48217de14cd6829f9ed7954617b0410"
 dependencies = [
  "bytesize",
  "ctor",
@@ -5393,8 +5392,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-backend"
-version = "1.2.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#48b9bf621c50e08296e2e490b1cb4980a68c41b8"
+version = "2.0.0-alpha"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#ef4cd892f48217de14cd6829f9ed7954617b0410"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -5423,8 +5422,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-sdk"
-version = "1.2.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#48b9bf621c50e08296e2e490b1cb4980a68c41b8"
+version = "2.0.0-alpha"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#ef4cd892f48217de14cd6829f9ed7954617b0410"
 dependencies = [
  "dashmap",
  "derivative",
@@ -7744,7 +7743,7 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 [[package]]
 name = "stark-backend-v2"
 version = "2.0.0-alpha"
-source = "git+ssh://git@github.com/axiom-crypto/v2-proof-system.git?branch=main#3ead9d7f63216b6c95d6379c069e4d7c1b86652a"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#ef4cd892f48217de14cd6829f9ed7954617b0410"
 dependencies = [
  "cfg-if",
  "codec-derive",
@@ -7769,7 +7768,7 @@ dependencies = [
  "p3-util",
  "rayon",
  "serde",
- "thiserror 2.0.15",
+ "thiserror 1.0.69",
  "tracing",
 ]
 
