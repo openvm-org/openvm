@@ -313,7 +313,7 @@ extern "C" int _sym_expr_common_tracegen(
 
     assert((height & (height - 1)) == 0);
     size_t total_slots = height * max_num_proofs;
-    auto [grid, block] = kernel_launch_params(total_slots);
+    auto [grid, block] = kernel_launch_params(total_slots, 512);
     symbolic_expression_tracegen<<<grid, block>>>(
         d_trace,
         height,
@@ -341,4 +341,3 @@ extern "C" int _sym_expr_common_tracegen(
     );
     return CHECK_KERNEL();
 }
-
