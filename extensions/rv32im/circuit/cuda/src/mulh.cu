@@ -203,7 +203,7 @@ extern "C" int _mulh_tracegen(
     assert(height >= d_records.len());
     assert(width == sizeof(MulHCols<uint8_t>));
 
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 512);
 
     mulh_tracegen<<<grid, block>>>(
         d_trace,
