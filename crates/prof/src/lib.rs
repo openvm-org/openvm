@@ -127,6 +127,137 @@ impl MetricDb {
         }
     }
 
+    /// Generate a Mermaid XY chart for GPU memory usage over modules
+    pub fn generate_gpu_memory_chart(&self) -> Option<String> {
+        // (timestamp, current_gb, peak_gb)
+        let mut data: Vec<(f64, f64, f64)> = Vec::new();
+        // module -> [(delta_gb, current_gb, context_label)]
+        let mut module_deltas: HashMap<String, Vec<(f64, f64, String)>> = HashMap::new();
+
+        for (label_keys, metrics_dict) in &self.dict_by_label_types {
+            let module_idx = match label_keys.iter().position(|k| k == "module") {
+                Some(idx) => idx,
+                None => continue,
+            };
+
+            for (label_values, metrics) in metrics_dict {
+                let get = |name: &str| metrics.iter().find(|m| m.name == name).map(|m| m.value);
+                let ts = get("gpu_mem.timestamp_ms");
+                let current = get("gpu_mem.current_bytes");
+                let peak = get("gpu_mem.peak_bytes");
+                let delta = get("gpu_mem.delta_bytes");
+
+                if let (Some(ts), Some(current), Some(peak)) = (ts, current, peak) {
+                    let current_gb = current / 1e9;
+                    data.push((ts, current_gb, peak / 1e9));
+
+                    let module_name = label_values.get(module_idx).cloned().unwrap_or_default();
+                    let context_label: String = label_keys
+                        .iter()
+                        .zip(label_values.iter())
+                        .filter(|(k, _)| *k != "module")
+                        .map(|(_, v)| v.as_str())
+                        .collect::<Vec<_>>()
+                        .join(".");
+
+                    if let Some(delta) = delta {
+                        module_deltas.entry(module_name).or_default().push((
+                            delta / 1e9,
+                            current_gb,
+                            context_label,
+                        ));
+                    }
+                }
+            }
+        }
+
+        if data.is_empty() {
+            return None;
+        }
+
+        data.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+        let max_val = data.iter().map(|(_, _, p)| *p).fold(0.0_f64, f64::max);
+
+        let mut chart = String::new();
+        chart.push_str("```mermaid\n");
+        chart.push_str("---\n");
+        chart.push_str("config:\n");
+        chart.push_str("    xyChart:\n");
+        chart.push_str("        xAxis:\n");
+        chart.push_str("            showLabel: false\n");
+        chart.push_str("    themeVariables:\n");
+        chart.push_str("        xyChart:\n");
+        chart.push_str("            plotColorPalette: \"#2563eb, #dc2626\"\n");
+        chart.push_str("---\n");
+        chart.push_str("xychart-beta\n");
+        chart.push_str("    title \"GPU Memory Usage\"\n");
+        chart.push_str(&format!(
+            "    y-axis \"Memory (GB)\" 0 --> {:.1}\n",
+            max_val * 1.1
+        ));
+        // Current memory line (blue)
+        chart.push_str("    line [");
+        chart.push_str(
+            &data
+                .iter()
+                .map(|(_, c, _)| format!("{:.2}", c))
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
+        chart.push_str("]\n");
+        // Peak memory line (red)
+        chart.push_str("    line [");
+        chart.push_str(
+            &data
+                .iter()
+                .map(|(_, _, p)| format!("{:.2}", p))
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
+        chart.push_str("]\n");
+        chart.push_str("```\n");
+
+        chart.push_str("\n> **Legend:** ");
+        chart.push_str("🔵 Tracked | ");
+        chart.push_str("🔴 Peak\n");
+        chart.push_str(&format!("\n**GPU Memory Peak: {:.2} GB**\n", max_val));
+
+        // Per-module stats table
+        chart.push_str(
+            "\n| Module | Avg Delta (GB) | Max Delta (GB) | Max Current (GB) | Max Current At |\n",
+        );
+        chart.push_str("| --- | ---: | ---: | ---: | --- |\n");
+
+        let mut module_rows: Vec<_> = module_deltas
+            .iter()
+            .map(|(module, entries)| {
+                let avg_delta =
+                    entries.iter().map(|(d, _, _)| *d).sum::<f64>() / entries.len() as f64;
+                let max_delta = entries
+                    .iter()
+                    .map(|(d, _, _)| *d)
+                    .fold(f64::NEG_INFINITY, f64::max);
+                let (max_current, max_at) = entries
+                    .iter()
+                    .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+                    .map(|(_, c, label)| (*c, label.as_str()))
+                    .unwrap_or((0.0, ""));
+                (module, avg_delta, max_delta, max_current, max_at)
+            })
+            .collect();
+        module_rows.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal));
+
+        for (module, avg_delta, max_delta, max_current, max_at) in module_rows {
+            chart.push_str(&format!(
+                "| {} | {:.3} | {:.3} | {:.2} | {} |\n",
+                module, avg_delta, max_delta, max_current, max_at
+            ));
+        }
+
+        Some(chart)
+    }
+
     pub fn generate_markdown_tables(&self) -> String {
         let mut markdown_output = String::new();
         // Get sorted keys to iterate in consistent order
@@ -147,6 +278,14 @@ impl MetricDb {
                 .into_iter()
                 .collect();
             metric_names.sort_by(|a, b| b.cmp(a));
+
+            // Filter out gpu_mem metrics - these are summarized in the GPU memory chart
+            metric_names.retain(|n| !n.starts_with("gpu_mem."));
+
+            // Skip tables that have no metrics left after filtering
+            if metric_names.is_empty() {
+                continue;
+            }
 
             // Create table header
             let header = format!(
