@@ -5611,7 +5611,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "1.2.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm-full-usage#79313ec8d3dd4c326d466afb023d3e0d3dd58951"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm-full-usage#90b53d67ee497dfe9435032038636d3ea674d00f"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5643,7 +5643,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "1.2.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm-full-usage#79313ec8d3dd4c326d466afb023d3e0d3dd58951"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm-full-usage#90b53d67ee497dfe9435032038636d3ea674d00f"
 dependencies = [
  "cc",
  "glob",
@@ -5652,7 +5652,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "1.2.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm-full-usage#79313ec8d3dd4c326d466afb023d3e0d3dd58951"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm-full-usage#90b53d67ee497dfe9435032038636d3ea674d00f"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6401,7 +6401,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.2.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm-full-usage#79313ec8d3dd4c326d466afb023d3e0d3dd58951"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm-full-usage#90b53d67ee497dfe9435032038636d3ea674d00f"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6431,7 +6431,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.2.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm-full-usage#79313ec8d3dd4c326d466afb023d3e0d3dd58951"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm-full-usage#90b53d67ee497dfe9435032038636d3ea674d00f"
 dependencies = [
  "dashmap",
  "derivative",
