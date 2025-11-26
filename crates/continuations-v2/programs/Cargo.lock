@@ -376,3 +376,27 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[patch.unused]]
+name = "openvm-cuda-backend"
+version = "2.0.0-alpha"
+
+[[patch.unused]]
+name = "openvm-cuda-builder"
+version = "2.0.0-alpha"
+
+[[patch.unused]]
+name = "openvm-cuda-common"
+version = "2.0.0-alpha"
+
+[[patch.unused]]
+name = "openvm-stark-backend"
+version = "2.0.0-alpha"
+
+[[patch.unused]]
+name = "openvm-stark-sdk"
+version = "2.0.0-alpha"
+
+[[patch.unused]]
+name = "stark-backend-v2"
+version = "2.0.0-alpha"

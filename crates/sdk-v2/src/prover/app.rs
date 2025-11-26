@@ -359,22 +359,25 @@ mod async_prover {
                 user_public_values,
             };
 
-            // We skip verification of the user public values proof here because it is directly
-            // computed from the merkle tree above
-            let engine = E::new(self.fri_params());
-            let res = verify_segments(
-                &engine,
-                &self.app_vm_pk.vm_pk.get_vk(),
-                &cont_proof.per_segment,
-            )?;
-            let app_exe_commit_u32s = app_commit.app_exe_commit.to_u32_digest();
-            let exe_commit_u32s = res.exe_commit.map(|x| x.as_canonical_u32());
-            if exe_commit_u32s != app_exe_commit_u32s {
-                return Err(VmVerificationError::ExeCommitMismatch {
-                    expected: app_exe_commit_u32s,
-                    actual: exe_commit_u32s,
+            #[cfg(debug_assertions)]
+            {
+                // We skip verification of the user public values proof here because it is directly
+                // computed from the merkle tree above
+                let engine = E::new(self.fri_params());
+                let res = verify_segments(
+                    &engine,
+                    &self.app_vm_pk.vm_pk.get_vk(),
+                    &cont_proof.per_segment,
+                )?;
+                let app_exe_commit_u32s = app_commit.app_exe_commit.to_u32_digest();
+                let exe_commit_u32s = res.exe_commit.map(|x| x.as_canonical_u32());
+                if exe_commit_u32s != app_exe_commit_u32s {
+                    return Err(VmVerificationError::ExeCommitMismatch {
+                        expected: app_exe_commit_u32s,
+                        actual: exe_commit_u32s,
+                    }
+                    .into());
                 }
-                .into());
             }
             Ok(cont_proof)
         }
