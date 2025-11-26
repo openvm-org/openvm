@@ -6,8 +6,11 @@ use getset::Getters;
 use openvm_circuit::{
     arch::{
         ContinuationVmProof, ContinuationVmProver, Executor, MeteredExecutor, PreflightExecutor,
-        VirtualMachine, VirtualMachineError, VmBuilder, VmExecutionConfig, VmInstance,
+        VerifiedExecutionPayload, VirtualMachine, VirtualMachineError, VmBuilder,
+        VmExecutionConfig, VmInstance, VmVerificationError,
+        hasher::poseidon2::{Poseidon2Hasher, vm_poseidon2_hasher},
         instructions::exe::VmExe,
+        verify_segments,
     },
     system::{
         memory::{CHUNK, dimensions::MemoryDimensions},
@@ -24,7 +27,7 @@ use stark_backend_v2::{
 use tracing::instrument;
 
 use crate::{
-    SC, StdIn,
+    F, SC, StdIn,
     prover::vm::{new_local_prover, types::VmProvingKey},
     util::check_max_constraint_degrees,
 };
@@ -132,7 +135,10 @@ where
             self.vm_config().as_ref(),
             self.app_vm_vk.inner.max_constraint_degree,
         );
-        ContinuationVmProver::prove(&mut self.instance, input)
+        let proof = ContinuationVmProver::prove(&mut self.instance, input)?;
+        #[cfg(debug_assertions)]
+        verify_app_proof::<E>(&self.app_vm_vk, self.memory_dimensions(), &proof)?;
+        Ok(proof)
     }
 
     /// App Exe
@@ -149,6 +155,28 @@ where
     pub fn vm_config(&self) -> &VB::VmConfig {
         self.instance.vm.config()
     }
+}
+
+/// Verifies a ContinuationVmProof and returns the app_exe_commit
+pub fn verify_app_proof<E: StarkWhirEngine>(
+    vk: &MultiStarkVerifyingKeyV2,
+    memory_dimensions: MemoryDimensions,
+    proof: &ContinuationVmProof<E::SC>,
+) -> Result<Digest, VmVerificationError> {
+    static POSEIDON2_HASHER: OnceLock<Poseidon2Hasher<F>> = OnceLock::new();
+    let engine = E::new(vk.inner.params);
+    let VerifiedExecutionPayload {
+        exe_commit,
+        final_memory_root,
+    } = verify_segments(&engine, &vk, &proof.per_segment)?;
+
+    proof.user_public_values.verify(
+        POSEIDON2_HASHER.get_or_init(vm_poseidon2_hasher),
+        memory_dimensions,
+        final_memory_root,
+    )?;
+
+    Ok(exe_commit)
 }
 
 #[cfg(feature = "async")]
