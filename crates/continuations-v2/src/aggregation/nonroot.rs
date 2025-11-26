@@ -106,10 +106,13 @@ where
             trace_heights_tracing_info(&ctx.per_trace, &self.circuit.airs());
         }
         let engine = E::new(self.pk.params);
-        Ok(engine.prove(
+        let proof = engine.prove(
             &engine.device().transport_pk_to_device(self.pk.as_ref()),
             ctx,
-        ))
+        );
+        #[cfg(debug_assertions)]
+        engine.verify(&self.vk, &proof)?;
+        Ok(proof)
     }
 }
 
