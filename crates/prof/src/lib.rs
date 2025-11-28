@@ -131,8 +131,8 @@ impl MetricDb {
     pub fn generate_gpu_memory_chart(&self) -> Option<String> {
         // (timestamp, tracked_gb, reserved_gb, device_gb)
         let mut data: Vec<(f64, f64, f64, f64)> = Vec::new();
-        // module -> [(delta_gb, tracked_gb, context_label)]
-        let mut module_stats: HashMap<String, Vec<(f64, f64, String)>> = HashMap::new();
+        // module -> [(tracked_gb, context_label)]
+        let mut module_stats: HashMap<String, Vec<(f64, String)>> = HashMap::new();
 
         for (label_keys, metrics_dict) in &self.dict_by_label_types {
             let module_idx = match label_keys.iter().position(|k| k == "module") {
@@ -143,7 +143,6 @@ impl MetricDb {
             for (label_values, metrics) in metrics_dict {
                 let get = |name: &str| metrics.iter().find(|m| m.name == name).map(|m| m.value);
                 let ts = get("gpu_mem.timestamp_ms");
-                let delta = get("gpu_mem.delta_bytes");
                 let tracked = get("gpu_mem.tracked_bytes");
                 let reserved = get("gpu_mem.reserved_bytes");
                 let device = get("gpu_mem.device_bytes");
@@ -160,17 +159,15 @@ impl MetricDb {
                     let context_label: String = label_keys
                         .iter()
                         .zip(label_values.iter())
-                        .filter(|(k, _)| *k != "module")
+                        .filter(|(k, _)| *k != "module" && *k != "block_number")
                         .map(|(_, v)| v.as_str())
                         .collect::<Vec<_>>()
                         .join(".");
 
-                    let delta_gb = delta.map(|d| d / 1e9).unwrap_or(0.0);
-                    module_stats.entry(module_name).or_default().push((
-                        delta_gb,
-                        tracked_gb,
-                        context_label,
-                    ));
+                    module_stats
+                        .entry(module_name)
+                        .or_default()
+                        .push((tracked_gb, context_label));
                 }
             }
         }
@@ -235,43 +232,32 @@ impl MetricDb {
         chart.push_str("]\n");
         chart.push_str("```\n");
 
-        chart.push_str("\n> **Legend:** ");
-        chart.push_str("🔵 Tracked | ");
-        chart.push_str("🟢 Reserved | ");
+        chart.push_str("\n> ");
+        chart.push_str("🔵 Tracked (Current) | ");
+        chart.push_str("🟢 Reserved (Pool) | ");
         chart.push_str("🔴 Device\n");
-        chart.push_str(&format!("\n**Tracked Max: {:.2} GB**\n", max_tracked));
-        chart.push_str(&format!("**Reserved Max: {:.2} GB**\n", max_reserved));
-        chart.push_str(&format!("**Device Max: {:.2} GB**\n", max_device));
 
         // Per-module stats table
-        chart.push_str(
-            "\n| Module | Avg Delta (GB) | Max Delta (GB) | Max Tracked (GB) | Max Tracked At |\n",
-        );
-        chart.push_str("| --- | ---: | ---: | ---: | --- |\n");
+        chart.push_str("\n| Module | Max (GB) | Max At |\n");
+        chart.push_str("| --- | ---: | --- |\n");
 
         let mut module_rows: Vec<_> = module_stats
             .iter()
             .map(|(module, entries)| {
-                let avg_delta =
-                    entries.iter().map(|(d, _, _)| *d).sum::<f64>() / entries.len() as f64;
-                let max_delta = entries
-                    .iter()
-                    .map(|(d, _, _)| *d)
-                    .fold(f64::NEG_INFINITY, f64::max);
                 let (max_tracked, max_at) = entries
                     .iter()
-                    .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
-                    .map(|(_, t, label)| (*t, label.as_str()))
+                    .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
+                    .map(|(t, label)| (*t, label.as_str()))
                     .unwrap_or((0.0, ""));
-                (module, avg_delta, max_delta, max_tracked, max_at)
+                (module, max_tracked, max_at)
             })
             .collect();
-        module_rows.sort_by(|a, b| b.3.partial_cmp(&a.3).unwrap_or(std::cmp::Ordering::Equal));
+        module_rows.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        for (module, avg_delta, max_delta, max_tracked, max_at) in module_rows {
+        for (module, max_tracked, max_at) in module_rows {
             chart.push_str(&format!(
-                "| {} | {:.3} | {:.3} | {:.2} | {} |\n",
-                module, avg_delta, max_delta, max_tracked, max_at
+                "| {} | {:.2} | {} |\n",
+                module, max_tracked, max_at
             ));
         }
 
