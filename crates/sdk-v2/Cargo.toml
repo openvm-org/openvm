@@ -47,6 +47,10 @@ toml = { workspace = true }
 default = ["parallel", "jemalloc"]
 
 metrics = ["openvm-circuit/metrics", "openvm-sdk-config/metrics"]
+aot = [
+    "openvm-circuit/aot",
+    "openvm-sdk-config/aot",
+]
 tco = [
     "openvm-circuit/tco",
     "openvm-sdk-config/tco",
