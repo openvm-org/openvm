@@ -98,6 +98,13 @@ fn main() -> Result<()> {
 
         let mut markdown_output = String::from_utf8(writer)?;
 
+        // Add GPU memory chart if available
+        if let Some(chart) = db.generate_gpu_memory_chart() {
+            markdown_output.push_str("\n## GPU Memory Usage\n\n");
+            markdown_output.push_str(&chart);
+            markdown_output.push('\n');
+        }
+
         // TODO: calculate diffs for detailed metrics
         // Add detailed metrics in a collapsible section
         markdown_output.push_str("\n<details>\n<summary>Detailed Metrics</summary>\n\n");
