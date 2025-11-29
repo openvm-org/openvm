@@ -1,5 +1,6 @@
 use cuda_backend_v2::F;
 use openvm_cuda_backend::base::DeviceMatrix;
+use openvm_cuda_common::memory_manager::MemTracker;
 use p3_field::TwoAdicField;
 use stark_backend_v2::SystemParams;
 
@@ -13,6 +14,7 @@ pub(in crate::whir) fn generate_trace(
     blob: &WhirBlobGpu,
     params: SystemParams,
 ) -> DeviceMatrix<F> {
+    let mem = MemTracker::start("tracegen.whir_initial_opened_values");
     let num_valid_rows = blob.initial_opened_values_records.len();
     let omega_k = F::two_adic_generator(params.k_whir);
     let height = num_valid_rows.next_power_of_two();
@@ -43,5 +45,6 @@ pub(in crate::whir) fn generate_trace(
         )
         .unwrap();
     }
+    mem.emit_metrics();
     trace_d
 }

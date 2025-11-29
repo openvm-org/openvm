@@ -1,5 +1,6 @@
 use cuda_backend_v2::F;
 use openvm_cuda_backend::base::DeviceMatrix;
+use openvm_cuda_common::memory_manager::MemTracker;
 use stark_backend_v2::SystemParams;
 
 use crate::{
@@ -10,6 +11,7 @@ use crate::{
 use super::{FinalyPolyQueryEvalCols, compute_round_offsets};
 
 pub(in crate::whir) fn generate_trace(blob: &WhirBlobGpu, params: SystemParams) -> DeviceMatrix<F> {
+    let mem = MemTracker::start("tracegen.whir_final_poly_query_eval");
     let num_valid_rows = blob.final_poly_query_eval_records.len();
     let height = num_valid_rows.next_power_of_two();
     let width = FinalyPolyQueryEvalCols::<F>::width();
@@ -41,5 +43,6 @@ pub(in crate::whir) fn generate_trace(blob: &WhirBlobGpu, params: SystemParams) 
         )
         .unwrap();
     }
+    mem.emit_metrics();
     trace_d
 }

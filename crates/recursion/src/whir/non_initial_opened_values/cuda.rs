@@ -1,5 +1,6 @@
 use cuda_backend_v2::F;
 use openvm_cuda_backend::base::DeviceMatrix;
+use openvm_cuda_common::memory_manager::MemTracker;
 use p3_field::TwoAdicField;
 use stark_backend_v2::SystemParams;
 
@@ -9,6 +10,7 @@ use crate::whir::{
 };
 
 pub(in crate::whir) fn generate_trace(blob: &WhirBlobGpu, params: SystemParams) -> DeviceMatrix<F> {
+    let mem = MemTracker::start("tracegen.whir_non_initial_opened_values");
     let num_valid_rows = blob.non_initial_opened_values_records.len();
     let height = num_valid_rows.next_power_of_two();
     let width = NonInitialOpenedValuesCols::<F>::width();
@@ -33,5 +35,6 @@ pub(in crate::whir) fn generate_trace(blob: &WhirBlobGpu, params: SystemParams) 
         .unwrap();
     }
 
+    mem.emit_metrics();
     trace_d
 }
