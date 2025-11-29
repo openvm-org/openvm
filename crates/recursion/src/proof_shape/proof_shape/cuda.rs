@@ -3,7 +3,7 @@ use std::sync::Arc;
 use cuda_backend_v2::Digest;
 use itertools::Itertools;
 use openvm_cuda_backend::{base::DeviceMatrix, types::F};
-use openvm_cuda_common::copy::MemCopyH2D;
+use openvm_cuda_common::{copy::MemCopyH2D, memory_manager::MemTracker};
 use stark_backend_v2::DIGEST_SIZE;
 
 use crate::{
@@ -54,6 +54,7 @@ impl ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
         vk_gpu: &VerifyingKeyGpu,
         preflights_gpu: &[PreflightGpu],
     ) -> DeviceMatrix<F> {
+        let mem = MemTracker::start("tracegen.proof_shape");
         let encoder_width = self.encoder_width;
         let min_cached_idx = self.min_cached_idx;
         let max_cached = self.max_cached;
@@ -115,6 +116,7 @@ impl ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
             )
             .unwrap();
         }
+        mem.emit_metrics();
         trace
     }
 }

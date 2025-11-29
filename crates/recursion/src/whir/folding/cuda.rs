@@ -1,4 +1,5 @@
 use openvm_cuda_backend::base::DeviceMatrix;
+use openvm_cuda_common::memory_manager::MemTracker;
 
 use super::WhirFoldingCols;
 use crate::whir::cuda_abi::whir_folding_tracegen;
@@ -11,6 +12,7 @@ pub(in crate::whir) fn generate_trace(
     params: SystemParams,
     num_proofs: usize,
 ) -> DeviceMatrix<F> {
+    let mem = MemTracker::start("tracegen.whir_folding");
     let num_rounds = params.num_whir_rounds();
     let num_queries = params.num_whir_queries;
     let k_whir = params.k_whir;
@@ -38,5 +40,6 @@ pub(in crate::whir) fn generate_trace(
         }
     }
 
+    mem.emit_metrics();
     trace
 }

@@ -1,6 +1,7 @@
 use std::ops::Deref;
 
 use openvm_cuda_backend::{base::DeviceMatrix, types::F};
+use openvm_cuda_common::memory_manager::MemTracker;
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::{ExpBitsLenCols, ExpBitsLenCpuTraceGenerator};
@@ -24,6 +25,7 @@ impl ExpBitsLenGpuTraceGenerator {
 
     #[tracing::instrument(name = "generate_trace_device(ExpBitsLenAir)", skip_all)]
     pub fn generate_trace_device(self) -> DeviceMatrix<F> {
+        let mem = MemTracker::start("tracegen.exp_bits_len");
         let records = self.0.requests.into_inner().unwrap();
         let num_valid_rows = records.last().map(|record| record.end_row()).unwrap_or(0);
         let height = num_valid_rows.next_power_of_two();
@@ -46,6 +48,7 @@ impl ExpBitsLenGpuTraceGenerator {
             .unwrap();
         }
 
+        mem.emit_metrics();
         trace
     }
 }

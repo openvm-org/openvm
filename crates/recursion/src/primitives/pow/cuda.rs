@@ -1,5 +1,6 @@
 use cuda_backend_v2::F;
 use openvm_cuda_backend::base::DeviceMatrix;
+use openvm_cuda_common::memory_manager::MemTracker;
 
 use crate::primitives::{cuda_abi::pow_checker_tracegen, pow::PowerCheckerCols};
 
@@ -34,6 +35,7 @@ impl<const BASE: usize, const N: usize> PowerCheckerGpuTraceGenerator<BASE, N> {
     }
 
     pub fn generate_trace(self) -> DeviceMatrix<F> {
+        let mem = MemTracker::start("tracegen.pow_checker");
         unsafe {
             pow_checker_tracegen(
                 self.pow_count_ptr(),
@@ -43,6 +45,7 @@ impl<const BASE: usize, const N: usize> PowerCheckerGpuTraceGenerator<BASE, N> {
             )
             .unwrap();
         }
+        mem.emit_metrics();
         self.trace
     }
 }
