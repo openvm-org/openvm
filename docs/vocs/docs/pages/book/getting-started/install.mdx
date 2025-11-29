@@ -6,7 +6,7 @@ approach, you should make sure you have the necessary [Installation Prerequisite
 
 Skip [below](#installation-with-nvidia-gpu-support) for instructions on installing `cargo-openvm` with Nvidia GPU support.
 
-## Installation
+## Installation without GPU Support
 
 ### Installation Prerequisites
 
@@ -105,13 +105,24 @@ You will need all of the common prerequisites listed [above](#installation-prere
 
 For machines running Ubuntu 24.04, you can install Nvidia drivers using
 
-```bash [Ubuntu 24.04]
+:::code-group
+```bash [Ubuntu 24.04 Open Source]
 wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
 sudo dpkg -i cuda-keyring_1.1-1_all.deb
 sudo apt-get update
 
+# If using open-source drivers:
+sudo apt-get install -y nvidia-open
+```
+```bash [Ubuntu 24.04 Data Center]
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
+sudo apt-get update
+
+# If using proprietary data center drivers:
 sudo apt-get install -y cuda-drivers
 ```
+:::
 
 To check that CUDA drivers are installed, run
 ```bash
@@ -130,7 +141,7 @@ To check that CUDA toolkit is installed, run
 nvcc --version
 ```
 
-The OpenVM CLI has been tested with CUDA toolkit version 12.9, and this is the version we recommend installing. The CLI has **not** yet been tested with CUDA toolkit version 13.0.
+The OpenVM CLI has been tested with CUDA toolkit version 12.9, and this is the version we recommend installing. The CLI is likely to also work with CUDA toolkit version 13.0, but it has not been tested as thoroughly.
 
 Post-installation, ensure that you set the proper [path variables for CUDA](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/#environment-setup):
 ```bash
