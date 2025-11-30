@@ -108,6 +108,8 @@ pub struct MemoryCtx<const PAGE_BITS: usize> {
     continuations_enabled: bool,
     chunk: u32,
     chunk_bits: u32,
+    /// The maximum access adapter block size in bits, i.e., log2(max_access_adapter_n).
+    max_block_size_bits: u32,
     pub page_access_count: usize,
     // Note: 32 is the maximum access adapter size.
     pub addr_space_access_count: RVec<usize>,
@@ -130,6 +132,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             adapter_offset: config.access_adapter_air_id_offset(),
             chunk,
             chunk_bits,
+            max_block_size_bits: config.memory_config.max_access_adapter_n.ilog2(),
             memory_dimensions,
             continuations_enabled: config.continuation_enabled,
             page_access_count: 0,
@@ -271,11 +274,13 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             // SAFETY: address_space is from 0 to len(), guaranteed to be in bounds
             let x = unsafe { *self.addr_space_access_count.get_unchecked(address_space) };
             if x > 0 {
-                // After finalize, we'll need to read it in chunk-sized units for the merkle chip
+                // After finalize, we'll need to read it in chunk-sized units for the merkle chip.
+                // Use `max_block_size_bits` to account for worst-case block sizes during
+                // finalization.
                 self.update_adapter_heights_batch(
                     trace_heights,
                     address_space as u32,
-                    self.chunk_bits,
+                    self.max_block_size_bits,
                     (x << PAGE_BITS) as u32,
                 );
                 // SAFETY: address_space is from 0 to len(), guaranteed to be in bounds
