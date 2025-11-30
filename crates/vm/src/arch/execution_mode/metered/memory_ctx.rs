@@ -271,12 +271,15 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             // SAFETY: address_space is from 0 to len(), guaranteed to be in bounds
             let x = unsafe { *self.addr_space_access_count.get_unchecked(address_space) };
             if x > 0 {
-                // After finalize, we'll need to read it in chunk-sized units for the merkle chip
+                // Initial **and** final handling of touched pages requires send (resp. receive) in
+                // chunk-sized units for the merkle chip
+                // Corresponds to `handle_uninitialized_memory` and `handle_touched_blocks` in
+                // online.rs
                 self.update_adapter_heights_batch(
                     trace_heights,
                     address_space as u32,
                     self.chunk_bits,
-                    (x << PAGE_BITS) as u32,
+                    (x << (PAGE_BITS + 1)) as u32,
                 );
                 // SAFETY: address_space is from 0 to len(), guaranteed to be in bounds
                 unsafe {
