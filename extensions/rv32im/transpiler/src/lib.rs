@@ -9,6 +9,8 @@ use openvm_rv32im_guest::{
     NATIVE_STOREW_FUNCT3, NATIVE_STOREW_FUNCT7, PHANTOM_FUNCT3, REVEAL_FUNCT3, RV32M_FUNCT7,
     RV32_ALU_OPCODE, SYSTEM_OPCODE, TERMINATE_FUNCT3,
 };
+// Re-export hint buffer constants for use in circuit crate
+pub use openvm_rv32im_guest::{MAX_HINT_BUFFER_BITS, MAX_HINT_BUFFER_WORDS};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{
     util::{nop, unimp},
@@ -169,7 +171,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32IoTranspilerExtension {
                         1,
                         2,
                     )),
-                    HINT_BUFFER_IMM => Some(Instruction::from_isize(
+                    HINT_BUFFER_IMM => Some(Instruction::from_isize( // hint buffer handling
                         Rv32HintStoreOpcode::HINT_BUFFER.global_opcode(),
                         (RV32_REGISTER_NUM_LIMBS * dec_insn.rs1) as isize,
                         (RV32_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,

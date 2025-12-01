@@ -25,6 +25,10 @@ pub const REVEAL_FUNCT3: u8 = 0b010;
 pub const PHANTOM_FUNCT3: u8 = 0b011;
 pub const CSRRW_FUNCT3: u8 = 0b001;
 
+pub const MAX_HINT_BUFFER_BITS: usize = 18;
+// AIR constraint requires rem_words < 2^MAX_HINT_BUFFER_BITS, so max is one less
+pub const MAX_HINT_BUFFER_WORDS: usize = (1 << MAX_HINT_BUFFER_BITS) - 1; // 262,143 words ≈ 1MB
+
 /// imm options for system phantom instructions
 #[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
 #[repr(u16)]

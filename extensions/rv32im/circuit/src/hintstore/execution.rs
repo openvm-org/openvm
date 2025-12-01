@@ -14,6 +14,7 @@ use openvm_instructions::{
 use openvm_rv32im_transpiler::{
     Rv32HintStoreOpcode,
     Rv32HintStoreOpcode::{HINT_BUFFER, HINT_STOREW},
+    MAX_HINT_BUFFER_WORDS,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -171,6 +172,14 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
         u32::from_le_bytes(num_words_limbs)
     };
     debug_assert_ne!(num_words, 0);
+
+    // Bounds check: num_words must not exceed MAX_HINT_BUFFER_WORDS
+    if num_words > MAX_HINT_BUFFER_WORDS as u32 {
+        return Err(ExecutionError::Fail {
+            pc,
+            msg: "hint buffer num_words exceeds MAX_HINT_BUFFER_WORDS",
+        });
+    }
 
     if exec_state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
         let err = ExecutionError::HintOutOfBounds { pc };

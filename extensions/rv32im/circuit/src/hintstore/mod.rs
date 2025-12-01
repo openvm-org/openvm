@@ -25,6 +25,7 @@ use openvm_instructions::{
 use openvm_rv32im_transpiler::{
     Rv32HintStoreOpcode,
     Rv32HintStoreOpcode::{HINT_BUFFER, HINT_STOREW},
+    MAX_HINT_BUFFER_BITS, MAX_HINT_BUFFER_WORDS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -54,7 +55,7 @@ pub struct Rv32HintStoreCols<T> {
     pub is_single: T,
     pub is_buffer: T,
     // should be 1 for single
-    pub rem_words_limbs: [T; RV32_REGISTER_NUM_LIMBS],
+    pub rem_words_limbs: [T; RV32_REGISTER_NUM_LIMBS], // 4
 
     pub from_state: ExecutionState<T>,
     pub mem_ptr_ptr: T,
@@ -202,19 +203,33 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
             )
             .eval(builder, is_start.clone());
 
-        // Preventing mem_ptr and rem_words overflow
+        // Preventing mem_ptr overflow
         // Constraining mem_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1] < 2^(pointer_max_bits -
         // (RV32_REGISTER_NUM_LIMBS - 1)*RV32_CELL_BITS) which implies mem_ptr <=
-        // 2^pointer_max_bits Similarly for rem_words <= 2^pointer_max_bits
+        // 2^pointer_max_bits
         self.bitwise_operation_lookup_bus
             .send_range(
                 local_cols.mem_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1]
                     * AB::F::from_canonical_usize(
                         1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits),
                     ),
+                AB::F::ZERO,
+            )
+            .eval(builder, is_start.clone());
+
+        // Preventing rem_words overflow: rem_words < 2^MAX_HINT_BUFFER_BITS
+        // For MAX_HINT_BUFFER_BITS = 18:
+        // - limbs[3] * 2^14 must be < 256, so limbs[3] = 0
+        // - limbs[2] * 64 must be < 256, so limbs[2] < 4
+        self.bitwise_operation_lookup_bus
+            .send_range(
                 local_cols.rem_words_limbs[RV32_REGISTER_NUM_LIMBS - 1]
                     * AB::F::from_canonical_usize(
-                        1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits),
+                        1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - MAX_HINT_BUFFER_BITS),
+                    ),
+                local_cols.rem_words_limbs[RV32_REGISTER_NUM_LIMBS - 2]
+                    * AB::F::from_canonical_usize(
+                        1 << (RV32_CELL_BITS - (MAX_HINT_BUFFER_BITS % RV32_CELL_BITS)),
                     ),
             )
             .eval(builder, is_start.clone());
@@ -409,6 +424,15 @@ where
             read_rv32_register(state.memory.data(), a)
         };
 
+        // Bounds check: num_words must not exceed MAX_HINT_BUFFER_WORDS
+        eprintln!("num_words: {}", num_words);
+        if num_words > MAX_HINT_BUFFER_WORDS as u32 {
+            return Err(ExecutionError::Fail {
+                pc: *state.pc,
+                msg: "hint buffer num_words exceeds MAX_HINT_BUFFER_WORDS",
+            });
+        }
+
         let record = state.ctx.alloc(MultiRowLayout::new(Rv32HintStoreMetadata {
             num_words: num_words as usize,
         }));
@@ -427,6 +451,7 @@ where
         debug_assert!(record.inner.mem_ptr <= (1 << self.pointer_max_bits));
         debug_assert_ne!(num_words, 0);
         debug_assert!(num_words <= (1 << self.pointer_max_bits));
+        debug_assert!(num_words <= MAX_HINT_BUFFER_WORDS as u32);
 
         record.inner.num_words = num_words;
         if local_opcode == HINT_STOREW {
@@ -508,6 +533,12 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
         let msl_lshift: u32 =
             (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits) as u32;
 
+        // Scale factors for rem_words range check (using MAX_HINT_BUFFER_BITS)
+        let rem_words_limb3_lshift: u32 =
+            (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - MAX_HINT_BUFFER_BITS) as u32;
+        let rem_words_limb2_lshift: u32 =
+            (RV32_CELL_BITS - (MAX_HINT_BUFFER_BITS % RV32_CELL_BITS)) as u32;
+
         chunks
             .par_iter_mut()
             .zip(sizes.par_iter())
@@ -526,9 +557,15 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
                         }),
                     )
                 };
+                // Range check for mem_ptr (using pointer_max_bits)
                 self.bitwise_lookup_chip.request_range(
                     (record.inner.mem_ptr >> msl_rshift) << msl_lshift,
-                    (num_words >> msl_rshift) << msl_lshift,
+                    0,
+                );
+                // Range check for rem_words (using MAX_HINT_BUFFER_BITS)
+                self.bitwise_lookup_chip.request_range(
+                    (num_words >> msl_rshift) << rem_words_limb3_lshift,
+                    ((num_words >> 16) & 0xFF) << rem_words_limb2_lshift,
                 );
 
                 let mut timestamp = record.inner.timestamp + num_words * 3;
