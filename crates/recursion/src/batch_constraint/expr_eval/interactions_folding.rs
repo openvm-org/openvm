@@ -31,7 +31,9 @@ use crate::{
     bus::{AirShapeBus, AirShapeBusMessage, AirShapeProperty, TranscriptBus},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
-    utils::{MultiProofVecVec, MultiVecWithBounds, ext_field_add, ext_field_multiply},
+    utils::{
+        MultiProofVecVec, MultiVecWithBounds, assert_zeros, ext_field_add, ext_field_multiply,
+    },
 };
 
 #[derive(AlignedBorrow, Copy, Clone)]
@@ -141,6 +143,9 @@ where
         builder.assert_bool(local.has_interactions);
         builder.assert_bool(local.is_first_in_air);
         builder.assert_bool(local.is_first_in_message);
+        builder
+            .when(local.has_interactions)
+            .assert_one(local.is_valid);
 
         // =========================== indices consistency ===============================
         // When we are within one proof, sort_idx increases by 0/1
@@ -195,17 +200,25 @@ where
             next.final_acc_num,
         );
         assert_array_eq(
-            &mut builder.when(local.is_first_in_message * local.is_valid),
+            &mut builder.when(local.is_first_in_message * local.has_interactions),
             local.final_acc_num,
             ext_field_add(
                 next.final_acc_num,
                 ext_field_multiply(local.cur_sum, local.eq_3b),
             ),
         );
+        assert_zeros(
+            &mut builder
+                .when(local.is_first_in_message * (local.is_valid - local.has_interactions)),
+            local.final_acc_num,
+        );
         // final_acc_denom only changes when it's second in message
         assert_array_eq(
-            &mut builder
-                .when(not(local.is_second_in_message) * local.is_valid * not(next.is_first_in_air)),
+            &mut builder.when(
+                (not(local.is_second_in_message) + not(local.has_interactions))
+                    * local.is_valid
+                    * not(next.is_first_in_air),
+            ),
             local.final_acc_denom,
             next.final_acc_denom,
         );
@@ -261,7 +274,7 @@ where
                 is_interaction: AB::Expr::ONE,
                 idx: local.sort_idx * AB::Expr::TWO + AB::Expr::ONE,
                 // value: ext_field_multiply(next.cur_sum, next.eq_3b),
-                value: next.final_acc_denom.map(Into::into),
+                value: local.final_acc_denom.map(Into::into),
             },
             local.is_first_in_air * local.is_valid,
         );
@@ -388,6 +401,7 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_blob(
                     is_mult: false,
                     is_bus_index: false,
                 });
+                cur_eq3b_idx += 1;
             } else {
                 // `cur_interactions_evals` in rust verifier are the list of evaluated node_claims
                 // After multiplying with eq_3b and sum together we get the `num` and `denom` in rust verifier.
@@ -487,7 +501,7 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
         let eq_3bs = &eq_3b_blob.all_stacked_ids[pidx];
 
         let mut is_first_in_message_indices = vec![];
-        let mut cur_eq3b_idx = 0;
+        let mut cur_eq3b_idx = -1i32;
         let mut was_first_interaction_in_message = false;
         trace[cur_height * width..(cur_height + records.len()) * width]
             .chunks_exact_mut(width)
@@ -521,12 +535,12 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
                 }
                 cols.beta.copy_from_slice(beta_slice);
 
+                if !record.has_interactions || record.is_mult {
+                    cur_eq3b_idx += 1;
+                }
                 if record.has_interactions {
-                    if record.is_mult && i > 0 {
-                        cur_eq3b_idx += 1;
-                    }
                     cols.eq_3b.copy_from_slice(
-                        eq_3bs[cur_eq3b_idx]
+                        eq_3bs[cur_eq3b_idx as usize]
                             .eq_mle(
                                 &preflight.batch_constraint.xi,
                                 vk.inner.params.l_skip,
@@ -536,7 +550,7 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
                     );
                 }
 
-                if cols.is_first_in_message == F::ONE {
+                if cols.is_first_in_message == F::ONE && record.has_interactions {
                     is_first_in_message_indices.push(i);
                 }
             });
@@ -566,29 +580,20 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
                     // Case 1: first in message, only accumulate the num
                     cur_acc_num +=
                         EF::from_base_slice(&cols.cur_sum) * EF::from_base_slice(&cols.eq_3b);
-                    cols.final_acc_num
-                        .copy_from_slice(cur_acc_num.as_base_slice());
-
-                    // denom remains the same
-                    cols.final_acc_denom
-                        .copy_from_slice(cur_acc_denom.as_base_slice());
+                    if cols.has_interactions == F::ZERO {
+                        // AIR with no interactions doesn't have "second in message"
+                        cur_acc_denom +=
+                            EF::from_base_slice(&cols.cur_sum) * EF::from_base_slice(&cols.eq_3b);
+                    }
                 } else if is_first_in_message_indices.contains(&(i - 1)) {
                     // Case 2: second in message, accumulate the denom
                     cur_acc_denom +=
                         EF::from_base_slice(&cols.cur_sum) * EF::from_base_slice(&cols.eq_3b);
-                    cols.final_acc_denom
-                        .copy_from_slice(cur_acc_denom.as_base_slice());
-
-                    // num remains the same
-                    cols.final_acc_num
-                        .copy_from_slice(cur_acc_num.as_base_slice());
-                } else {
-                    // Case 3: others, both acc remain the same
-                    cols.final_acc_num
-                        .copy_from_slice(cur_acc_num.as_base_slice());
-                    cols.final_acc_denom
-                        .copy_from_slice(cur_acc_denom.as_base_slice());
                 }
+                cols.final_acc_num
+                    .copy_from_slice(cur_acc_num.as_base_slice());
+                cols.final_acc_denom
+                    .copy_from_slice(cur_acc_denom.as_base_slice());
 
                 // Reset per AIR
                 if cols.is_first_in_air == F::ONE {

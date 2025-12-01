@@ -21,11 +21,12 @@ use stark_backend_v2::{
     poseidon2::sponge::{DuplexSponge, DuplexSpongeRecorder, TranscriptHistory},
     prover::{AirProvingContextV2, CpuBackendV2, StridedColMajorMatrixView},
     test_utils::{
-        CachedFixture11, DuplexSpongeValidator, FibFixture, InteractionsFixture11,
-        PreprocessedFibFixture, TestFixture, default_test_params_small, test_system_params_small,
-        test_system_params_small_with_poly_len,
+        CachedFixture11, DuplexSpongeValidator, FibFixture, InteractionsFixture11, MixtureFixture,
+        PreprocessedFibFixture, SelfInteractionFixture, TestFixture, default_test_params_small,
+        test_system_params_small, test_system_params_small_with_poly_len,
     },
 };
+
 use test_case::{test_case, test_matrix};
 use tracing::Level;
 
@@ -245,6 +246,60 @@ fn test_preflight_preprocessed_trace(
     let sels = (0..height).map(|i| i % 2 == 0).collect_vec();
     let fx = PreprocessedFibFixture::new(0, 1, sels);
     let (vk, proof) = fx.keygen_and_prove(&engine);
+
+    let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
+    let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
+    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
+    debug(&circuit.airs(), &pk.per_air, &ctxs);
+}
+
+#[test_case(2, 8, 3, 5)]
+#[test_case(3, 5, 3, 5)]
+#[test_case(3, 5, 3, 1)]
+fn test_preflight_multi_interaction_trace(
+    l_skip: usize,
+    n_stack: usize,
+    k_whir: usize,
+    log_trace_height: usize,
+) {
+    let params = test_system_params_small(l_skip, n_stack, k_whir);
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let fx = SelfInteractionFixture {
+        widths: vec![4, 7, 8, 8, 10, 100],
+        log_height: log_trace_height,
+        bus_index: 4,
+    };
+    let (vk, proof) = fx.keygen_and_prove(&engine);
+
+    // Due to the size of SelfInteractionAir, SymbolicExpressionAir's cached trace
+    // may be of height up to 2^10
+    let params = test_system_params_small(l_skip, n_stack.max(10 - l_skip), k_whir);
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+
+    let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
+    let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
+    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
+    debug(&circuit.airs(), &pk.per_air, &ctxs);
+}
+
+#[test_case(2, 8, 3, 5)]
+#[test_case(3, 5, 3, 5)]
+#[test_case(3, 5, 3, 1)]
+fn test_preflight_mixture_trace(
+    l_skip: usize,
+    n_stack: usize,
+    k_whir: usize,
+    log_trace_height: usize,
+) {
+    let params = test_system_params_small(l_skip, n_stack, k_whir);
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let fx = MixtureFixture::standard(log_trace_height, params);
+    let (vk, proof) = fx.keygen_and_prove(&engine);
+
+    // Due to the size of SelfInteractionAir, SymbolicExpressionAir's cached trace
+    // may be of height up to 2^10
+    let params = test_system_params_small(l_skip, n_stack.max(10 - l_skip), k_whir);
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
 
     let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
@@ -540,6 +595,30 @@ fn test_neg_hypercube_preprocessed(num_proofs: usize) {
     run_negative_hypercube_test(fx, params, num_proofs);
 }
 
+#[test_case(1)]
+#[test_case(4)]
+fn test_neg_hypercube_multi_interaction(num_proofs: usize) {
+    let params = default_test_params_small();
+    let fx = SelfInteractionFixture {
+        widths: vec![4, 7, 8, 8, 10, 100],
+        log_height: 3,
+        bus_index: 4,
+    };
+    run_negative_hypercube_test(fx, params, num_proofs);
+}
+
+#[test_case(1)]
+#[test_case(4)]
+fn test_neg_hypercube_mixture(num_proofs: usize) {
+    let params = default_test_params_small();
+    // NOTE: the CachedFixture's cached trace needs correct params, run_negative_hypercube_test will
+    // +3 to params.l_skip
+    let mut fx_params = params;
+    fx_params.l_skip += 3;
+    let fx = MixtureFixture::standard(3, fx_params);
+    run_negative_hypercube_test(fx, params, num_proofs);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // CUDA TRACEGEN TESTS
 ///////////////////////////////////////////////////////////////////////////////
@@ -715,6 +794,50 @@ mod cuda {
             .map(|i| i % 2 == 0)
             .collect_vec();
         let fx = PreprocessedFibFixture::new(0, 1, sels);
+        compare_cpu_tracegen_vs_gpu_tracegen(fx, params, num_proofs);
+    }
+
+    #[test_matrix(
+        [1,2,5],
+        [5,8],
+        [3,4],
+        [1,3,5],
+        [1,4]
+    )]
+    fn test_cuda_tracegen_multi_interaction(
+        l_skip: usize,
+        n_stack: usize,
+        k_whir: usize,
+        log_trace_degree: usize,
+        num_proofs: usize,
+    ) {
+        let n_stack = n_stack.max(10 - l_skip);
+        let params = test_system_params_small(l_skip, n_stack, k_whir);
+        let fx = SelfInteractionFixture {
+            widths: vec![4, 7, 8, 8, 10, 100],
+            log_height: log_trace_degree,
+            bus_index: 4,
+        };
+        compare_cpu_tracegen_vs_gpu_tracegen(fx, params, num_proofs);
+    }
+
+    #[test_matrix(
+        [1,2,5],
+        [5,8],
+        [3,4],
+        [1,3,5],
+        [1,4]
+    )]
+    fn test_cuda_tracegen_mixture(
+        l_skip: usize,
+        n_stack: usize,
+        k_whir: usize,
+        log_trace_degree: usize,
+        num_proofs: usize,
+    ) {
+        let n_stack = n_stack.max(10 - l_skip);
+        let params = test_system_params_small(l_skip, n_stack, k_whir);
+        let fx = MixtureFixture::standard(log_trace_degree, params);
         compare_cpu_tracegen_vs_gpu_tracegen(fx, params, num_proofs);
     }
 }

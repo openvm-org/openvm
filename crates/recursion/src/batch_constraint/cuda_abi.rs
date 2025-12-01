@@ -8,7 +8,7 @@ use stark_backend_v2::keygen::types::MultiStarkVerifyingKeyV2;
 use crate::{
     batch_constraint::{
         cuda_utils::*,
-        eq_airs::{Eq3bBlob, Eq3bColumns, StackedIdxRecord},
+        eq_airs::{Eq3bBlob, Eq3bColumns, RecordIdx, StackedIdxRecord},
         expr_eval::SingleMainSymbolicExpressionColumns,
     },
     cuda::{preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr},
@@ -50,6 +50,8 @@ extern "C" {
         l_skip: usize,
         records: *const StackedIdxRecord,
         record_bounds: *const usize,
+        record_idxs: *const RecordIdx,
+        record_idxs_bounds: *const usize,
         rows_per_proof_bounds: *const usize,
         n_logups: *const usize,
         xis: *const EF,
@@ -119,6 +121,8 @@ pub unsafe fn eq_3b_tracegen(
     l_skip: usize,
     d_records: &DeviceBuffer<StackedIdxRecord>,
     d_record_bounds: &DeviceBuffer<usize>,
+    d_record_idxs: &DeviceBuffer<RecordIdx>,
+    d_record_idxs_bounds: &DeviceBuffer<usize>,
     d_rows_per_proof_bounds: &DeviceBuffer<usize>,
     d_n_logups: &DeviceBuffer<usize>,
     d_xis: &DeviceBuffer<EF>,
@@ -132,6 +136,8 @@ pub unsafe fn eq_3b_tracegen(
         l_skip,
         d_records.as_ptr(),
         d_record_bounds.as_ptr(),
+        d_record_idxs.as_ptr(),
+        d_record_idxs_bounds.as_ptr(),
         d_rows_per_proof_bounds.as_ptr(),
         d_n_logups.as_ptr(),
         d_xis.as_ptr(),
@@ -313,6 +319,7 @@ pub fn generate_eq_3b_trace(
     let l_skip = child_vk.inner.params.l_skip;
 
     let mut device_records = MultiVecWithBounds::<_, 1>::with_capacity(blob.all_stacked_ids.len());
+    let mut record_idxs = MultiVecWithBounds::<_, 1>::with_capacity(blob.record_idxs.len());
 
     let mut rows_per_proof_bounds = Vec::with_capacity(num_proofs + 1);
     rows_per_proof_bounds.push(0);
@@ -327,12 +334,20 @@ pub fn generate_eq_3b_trace(
 
         device_records.extend(records.iter().cloned());
         device_records.close_level(0);
+        record_idxs.extend(blob.record_idxs[pidx].iter().cloned());
+        record_idxs.close_level(0);
 
         let n_logup = preflight.cpu.proof_shape.n_logup;
         n_logups.push(n_logup);
 
         let one_height = n_logup + 1;
-        let rows_for_proof = records.len() * one_height;
+        let rows_for_proof = records.iter().fold(0, |acc, record| {
+            acc + if record.no_interactions {
+                1
+            } else {
+                one_height
+            }
+        });
         num_valid_rows += rows_for_proof;
         rows_per_proof_bounds.push(num_valid_rows);
 
@@ -345,6 +360,8 @@ pub fn generate_eq_3b_trace(
 
     let d_records = to_device_or_nullptr(&device_records.data).unwrap();
     let d_record_bounds = device_records.bounds[0].to_device().unwrap();
+    let d_record_idxs = to_device_or_nullptr(&record_idxs.data).unwrap();
+    let d_record_idxs_bounds = record_idxs.bounds[0].to_device().unwrap();
     let d_rows_per_proof_bounds = rows_per_proof_bounds.to_device().unwrap();
     let d_n_logups = n_logups.to_device().unwrap();
     let d_xis = to_device_or_nullptr(&all_xi.data).unwrap();
@@ -359,6 +376,8 @@ pub fn generate_eq_3b_trace(
             l_skip,
             &d_records,
             &d_record_bounds,
+            &d_record_idxs,
+            &d_record_idxs_bounds,
             &d_rows_per_proof_bounds,
             &d_n_logups,
             &d_xis,
