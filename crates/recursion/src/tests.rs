@@ -29,7 +29,16 @@ use stark_backend_v2::{
 use test_case::{test_case, test_matrix};
 use tracing::Level;
 
-use crate::system::{AggregationSubCircuit, VerifierSubCircuit, VerifierTraceGen};
+use crate::{
+    system::{AggregationSubCircuit, VerifierSubCircuit, VerifierTraceGen},
+    utils::MAX_CONSTRAINT_DEGREE,
+};
+
+pub fn test_engine_small() -> BabyBearPoseidon2CpuEngineV2<DuplexSponge> {
+    let mut params = default_test_params_small();
+    params.max_constraint_degree = MAX_CONSTRAINT_DEGREE;
+    BabyBearPoseidon2CpuEngineV2::new(params)
+}
 
 // TODO[jpw]: switch to v2 types (currently using v1 for debugging)
 fn verifier_circuit_keygen<const MAX_NUM_PROOFS: usize>(

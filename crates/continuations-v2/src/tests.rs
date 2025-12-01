@@ -2,19 +2,21 @@ use std::sync::Arc;
 
 use eyre::Result;
 use itertools::Itertools;
-use openvm_circuit::arch::ContinuationVmProver;
 use openvm_circuit::{
-    arch::{VirtualMachine, VmCircuitConfig, VmInstance, instructions::exe::VmExe},
+    arch::{
+        ContinuationVmProver, VirtualMachine, VmCircuitConfig, VmInstance, instructions::exe::VmExe,
+    },
     utils::test_utils::test_system_config,
 };
 use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImBuilder, Rv32ImConfig};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_stark_sdk::config::setup_tracing_with_log_level;
+use openvm_stark_backend::interaction::LogUpSecurityParameters;
+use openvm_stark_sdk::{config::setup_tracing_with_log_level, p3_baby_bear::BabyBear};
 use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
 use openvm_transpiler::{FromElf, transpiler::Transpiler};
-use p3_field::FieldAlgebra;
+use p3_field::{FieldAlgebra, PrimeField32};
 use stark_backend_v2::{F, StarkEngineV2, SystemParams, poseidon2::sponge::DuplexSponge};
 use tracing::Level;
 
@@ -43,8 +45,13 @@ const APP_SYSTEM_PARAMS: SystemParams = SystemParams {
     k_whir: 4,
     num_whir_queries: 100,
     log_final_poly_len: 1,
-    logup_pow_bits: 16,
+    logup: LogUpSecurityParameters {
+        max_interaction_count: BabyBear::ORDER_U32,
+        log_max_message_length: 7,
+        pow_bits: 16,
+    },
     whir_pow_bits: 16,
+    max_constraint_degree: 4,
 };
 
 const LEAF_SYSTEM_PARAMS: SystemParams = APP_SYSTEM_PARAMS;

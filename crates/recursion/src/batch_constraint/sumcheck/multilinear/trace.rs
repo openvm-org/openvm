@@ -15,7 +15,7 @@ pub(crate) fn generate_trace(
     preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
     let width = MultilinearSumcheckCols::<F>::width();
-    let s_deg = vk.inner.max_constraint_degree + 1;
+    let s_deg = vk.max_constraint_degree() + 1;
     let rows_per_round = s_deg + 1;
 
     let rows_per_proof: Vec<usize> = proofs
