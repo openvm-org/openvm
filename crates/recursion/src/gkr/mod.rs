@@ -135,7 +135,7 @@ impl GkrModule {
     ) -> Self {
         GkrModule {
             l_skip: mvk.inner.params.l_skip,
-            logup_pow_bits: mvk.inner.params.logup_pow_bits,
+            logup_pow_bits: mvk.inner.params.logup.pow_bits,
             bus_inventory,
             layer_input_bus: GkrLayerInputBus::new(b.new_bus_idx()),
             layer_output_bus: GkrLayerOutputBus::new(b.new_bus_idx()),

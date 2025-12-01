@@ -27,12 +27,11 @@ use stark_backend_v2::{
         AirProvingContextV2, ColMajorMatrix, CpuBackendV2, DeviceDataTransporterV2,
         ProvingContextV2,
     },
-    test_utils::test_engine_small,
     verifier::VerifierError,
 };
 
 use super::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir};
-use crate::utils::MAX_CONSTRAINT_DEGREE;
+use crate::{tests::test_engine_small, utils::MAX_CONSTRAINT_DEGREE};
 
 const fn width<const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>() -> usize {
     size_of::<NestedForLoopIoCols<u8, DEPTH_MINUS_ONE>>()
@@ -212,7 +211,7 @@ fn test_max_constraint_degree() {
     let airs = any_rap_arc_vec![TestAir::<1, 0>];
     let (_pk, vk) = engine.keygen(&airs);
 
-    assert!(vk.inner.max_constraint_degree <= MAX_CONSTRAINT_DEGREE);
+    assert!(vk.max_constraint_degree() <= MAX_CONSTRAINT_DEGREE);
 }
 
 #[test]
@@ -475,7 +474,7 @@ fn test_nested_max_constraint_degree() {
     let airs = any_rap_arc_vec![TestAir::<2, 1>];
     let (_pk, vk) = engine.keygen(&airs);
 
-    assert!(vk.inner.max_constraint_degree <= MAX_CONSTRAINT_DEGREE);
+    assert!(vk.max_constraint_degree() <= MAX_CONSTRAINT_DEGREE);
 }
 
 #[test]
@@ -691,7 +690,7 @@ fn test_four_loops_max_constraint_degree() {
     let airs = any_rap_arc_vec![TestAir::<3, 2>];
     let (_pk, vk) = engine.keygen(&airs);
 
-    assert!(vk.inner.max_constraint_degree <= MAX_CONSTRAINT_DEGREE);
+    assert!(vk.max_constraint_degree() <= MAX_CONSTRAINT_DEGREE);
 }
 
 #[test]

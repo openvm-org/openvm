@@ -133,7 +133,7 @@ where
         assert!(self.vm_config().as_ref().continuation_enabled);
         check_max_constraint_degrees(
             self.vm_config().as_ref(),
-            self.app_vm_vk.inner.max_constraint_degree,
+            self.app_vm_vk.inner.max_constraint_degree(),
         );
         let proof = ContinuationVmProver::prove(&mut self.instance, input)?;
         #[cfg(debug_assertions)]

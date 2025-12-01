@@ -1,5 +1,7 @@
 use clap::Args;
 use openvm_sdk_config::SdkVmConfig;
+use openvm_stark_backend::{interaction::LogUpSecurityParameters, p3_field::PrimeField32};
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
 use stark_backend_v2::SystemParams;
 
@@ -14,8 +16,14 @@ pub const DEFAULT_LEAF_PARAMS: SystemParams = SystemParams {
     k_whir: 4,
     num_whir_queries: 30,
     log_final_poly_len: 7,
-    logup_pow_bits: 16,
+    // TODO[jpw]: clean this up
+    logup: LogUpSecurityParameters {
+        max_interaction_count: BabyBear::ORDER_U32,
+        log_max_message_length: 7,
+        pow_bits: 16,
+    },
     whir_pow_bits: 16,
+    max_constraint_degree: 4,
 };
 pub const DEFAULT_INTERNAL_PARAMS: SystemParams = SystemParams {
     l_skip: 2,
@@ -24,8 +32,13 @@ pub const DEFAULT_INTERNAL_PARAMS: SystemParams = SystemParams {
     k_whir: 4,
     num_whir_queries: 30,
     log_final_poly_len: 7,
-    logup_pow_bits: 16,
+    logup: LogUpSecurityParameters {
+        max_interaction_count: BabyBear::ORDER_U32,
+        log_max_message_length: 7,
+        pow_bits: 16,
+    },
     whir_pow_bits: 16,
+    max_constraint_degree: 4,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize, derive_new::new)]
