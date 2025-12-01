@@ -280,7 +280,7 @@ impl PairingCheck for Bls12_381 {
         }
         #[cfg(target_os = "zkvm")]
         {
-            let hint = MaybeUninit::<(Fp12, Fp12)>::uninit();
+            let mut hint = MaybeUninit::<(Fp12, Fp12)>::uninit();
             // We do not rely on the slice P's memory layout since rust does not guarantee it across
             // compiler versions.
             let p_fat_ptr = (P.as_ptr() as u32, P.len() as u32);

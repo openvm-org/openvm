@@ -878,7 +878,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                             use ::openvm_algebra_guest::{openvm_custom_insn, openvm_rv32im_guest}; // needed for hint_store_u32! and hint_buffer_chunked
 
                             let is_square = core::mem::MaybeUninit::<u32>::uninit();
-                            let sqrt = core::mem::MaybeUninit::<#struct_name>::uninit();
+                            let mut sqrt = core::mem::MaybeUninit::<#struct_name>::uninit();
                             unsafe {
                                 #hint_sqrt_extern_func(self as *const #struct_name as usize);
                                 let is_square_ptr = is_square.as_ptr() as *const u32;
