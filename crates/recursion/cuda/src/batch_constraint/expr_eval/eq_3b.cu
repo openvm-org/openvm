@@ -23,6 +23,8 @@ template <typename T> struct Eq3bColumns {
     T hypercube_volume;
     T n_at_least_n_lift;
 
+    T has_no_interactions;
+
     T is_first_in_air;
     T is_first_in_interaction;
 
@@ -42,6 +44,12 @@ struct Eq3bStackedIdxRecord {
     uint32_t stacked_idx;
     uint32_t n_lift;
     bool is_last_in_air;
+    bool no_interactions;
+};
+
+struct RecordIdx {
+    uint32_t record_idx;
+    uint32_t local_n;
 };
 
 __global__ void eq_3b_tracegen(
@@ -52,6 +60,8 @@ __global__ void eq_3b_tracegen(
     size_t l_skip,
     const Eq3bStackedIdxRecord *__restrict__ records,
     const size_t *__restrict__ record_bounds,
+    const RecordIdx *__restrict__ record_idxs,
+    const size_t *__restrict__ record_idxs_bounds,
     const size_t *__restrict__ rows_per_proof_bounds,
     const size_t *__restrict__ n_logups,
     const FpExt *__restrict__ xis,
@@ -86,14 +96,15 @@ __global__ void eq_3b_tracegen(
     uint32_t local_row_idx = row_idx - proof_row_start;
 
     uint32_t n_logup = n_logups[proof_idx];
-    uint32_t one_height = n_logup + 1;
 
-    if (one_height == 0) {
+    if (n_logup + 1 == 0) {
         return;
     }
 
-    uint32_t record_idx = local_row_idx / one_height;
-    uint32_t local_n = local_row_idx % one_height;
+    uint32_t record_idxs_start = record_idxs_bounds[proof_idx];
+    RecordIdx record_idx_info = record_idxs[record_idxs_start + local_row_idx];
+    uint32_t record_idx = record_idx_info.record_idx;
+    uint32_t local_n = record_idx_info.local_n;
 
     uint32_t record_start = record_bounds[proof_idx];
     uint32_t record_end = record_bounds[proof_idx + 1];
@@ -120,15 +131,14 @@ __global__ void eq_3b_tracegen(
     FpExt eq_acc = one_ext;
     for (uint32_t m = 0; m < local_n; ++m) {
         bool bit_m = !!(shifted_idx & (1u << m));
-        bool use_xi_m =
-            has_xi && (m >= record.n_lift) && (m < n_logup) && (l_skip + m < xi_len);
+        bool use_xi_m = has_xi && (m >= record.n_lift) && (m < n_logup) && (l_skip + m < xi_len);
         FpExt xi_m = use_xi_m ? xi_slice[l_skip + m] : (bit_m ? one_ext : zero_ext);
         FpExt factor = bit_m ? xi_m : (one_ext - xi_m);
         eq_acc = eq_acc * factor;
     }
 
-    bool use_xi_cur = has_xi && (local_n >= record.n_lift) && (local_n < n_logup)
-                      && (l_skip + local_n < xi_len);
+    bool use_xi_cur =
+        has_xi && (local_n >= record.n_lift) && (local_n < n_logup) && (l_skip + local_n < xi_len);
     FpExt xi_cur = use_xi_cur ? xi_slice[l_skip + local_n] : (nth_bit ? one_ext : zero_ext);
 
     COL_WRITE_VALUE(row, Eq3bColumns, is_valid, 1);
@@ -140,13 +150,16 @@ __global__ void eq_3b_tracegen(
     COL_WRITE_VALUE(row, Eq3bColumns, two_to_the_n_lift, 1u << record.n_lift);
     COL_WRITE_VALUE(row, Eq3bColumns, n, local_n);
     COL_WRITE_VALUE(row, Eq3bColumns, hypercube_volume, 1u << local_n);
+    COL_WRITE_VALUE(row, Eq3bColumns, has_no_interactions, record.no_interactions);
     COL_WRITE_VALUE(row, Eq3bColumns, n_at_least_n_lift, local_n >= record.n_lift);
-    COL_WRITE_VALUE(row, Eq3bColumns, is_first_in_air, (record.interaction_idx == 0) && (local_n == 0));
     COL_WRITE_VALUE(
         row,
         Eq3bColumns,
-        is_first_in_interaction,
-        local_n == 0
+        is_first_in_air,
+        (record.interaction_idx == 0 && local_n == 0) || record.no_interactions
+    );
+    COL_WRITE_VALUE(
+        row, Eq3bColumns, is_first_in_interaction, local_n == 0 || record.no_interactions
     );
     COL_WRITE_VALUE(row, Eq3bColumns, idx, shifted_idx & ((1u << local_n) - 1));
     COL_WRITE_VALUE(row, Eq3bColumns, running_idx, shifted_idx);
@@ -155,13 +168,13 @@ __global__ void eq_3b_tracegen(
         row,
         Eq3bColumns,
         loop_transitions[0],
-        (record_idx + 1) < record_count || (local_n < n_logup)
+        (record_idx + 1) < record_count || (local_n < n_logup && !record.no_interactions)
     );
     COL_WRITE_VALUE(
         row,
         Eq3bColumns,
         loop_transitions[1],
-        (!record.is_last_in_air) || (local_n < n_logup)
+        (!record.is_last_in_air || local_n < n_logup) && !record.no_interactions
     );
     COL_WRITE_ARRAY(row, Eq3bColumns, xi, xi_cur.elems);
     COL_WRITE_ARRAY(row, Eq3bColumns, eq, eq_acc.elems);
@@ -175,6 +188,8 @@ extern "C" int _eq_3b_tracegen(
     size_t l_skip,
     const Eq3bStackedIdxRecord *records_d,
     const size_t *record_bounds_d,
+    const RecordIdx *record_idxs_d,
+    const size_t *record_idxs_bounds_d,
     const size_t *rows_per_proof_bounds_d,
     const size_t *n_logups_d,
     const FpExt *xis_d,
@@ -190,6 +205,8 @@ extern "C" int _eq_3b_tracegen(
         l_skip,
         records_d,
         record_bounds_d,
+        record_idxs_d,
+        record_idxs_bounds_d,
         rows_per_proof_bounds_d,
         n_logups_d,
         xis_d,
@@ -197,4 +214,3 @@ extern "C" int _eq_3b_tracegen(
     );
     return CHECK_KERNEL();
 }
-
