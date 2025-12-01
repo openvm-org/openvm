@@ -10,6 +10,8 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, TwoAdicField};
 use p3_matrix::dense::RowMajorMatrix;
+#[cfg(not(debug_assertions))]
+use p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use stark_backend_v2::{
     EF, F, SC, StarkEngineV2,
     keygen::types::MultiStarkVerifyingKeyV2,
@@ -20,9 +22,6 @@ use stark_backend_v2::{
         AirProvingContextV2, ColMajorMatrix, CommittedTraceDataV2, CpuBackendV2, TraceCommitterV2,
     },
 };
-
-#[cfg(not(debug_assertions))]
-use p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
     batch_constraint::{
@@ -126,7 +125,7 @@ impl BatchConstraintModule {
         pow_checker: Arc<PowerCheckerTraceGenerator<2, 32>>,
     ) -> Self {
         let l_skip = child_vk.inner.params.l_skip;
-        let max_constraint_degree = child_vk.inner.max_constraint_degree;
+        let max_constraint_degree = child_vk.max_constraint_degree();
         let widths = child_vk
             .inner
             .per_air

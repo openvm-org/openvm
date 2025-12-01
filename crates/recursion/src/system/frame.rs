@@ -48,7 +48,7 @@ impl From<&MultiStarkVerifyingKeyV2> for MultiStarkVkeyFrame {
         Self {
             params: mvk.inner.params,
             per_air: mvk.inner.per_air.iter().map(Into::into).collect_vec(),
-            max_constraint_degree: mvk.inner.max_constraint_degree,
+            max_constraint_degree: mvk.max_constraint_degree(),
         }
     }
 }
