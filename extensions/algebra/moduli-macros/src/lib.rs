@@ -883,7 +883,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                                 #hint_sqrt_extern_func(self as *const #struct_name as usize);
                                 let is_square_ptr = is_square.as_ptr() as *const u32;
                                 openvm_rv32im_guest::hint_store_u32!(is_square_ptr);
-                                openvm_rv32im_guest::hint_buffer_chunked(sqrt.as_ptr() as *const u8, <#struct_name as ::openvm_algebra_guest::IntMod>::NUM_LIMBS / 4 as usize);
+                                openvm_rv32im_guest::hint_buffer_chunked(sqrt.as_mut_ptr() as *mut u8, <#struct_name as ::openvm_algebra_guest::IntMod>::NUM_LIMBS / 4 as usize);
                                 let is_square = is_square.assume_init();
                                 if is_square == 0 || is_square == 1 {
                                     Some((is_square == 1, sqrt.assume_init()))
@@ -908,7 +908,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                             let mut non_qr;
                             unsafe {
                                 #hint_non_qr_extern_func();
-                                let ptr = non_qr_uninit.as_ptr() as *const u8;
+                                let ptr = non_qr_uninit.as_mut_ptr() as *mut u8;
                                 openvm_rv32im_guest::hint_buffer_chunked(ptr, <Self as ::openvm_algebra_guest::IntMod>::NUM_LIMBS / 4 as usize);
                                 non_qr = non_qr_uninit.assume_init();
                             }

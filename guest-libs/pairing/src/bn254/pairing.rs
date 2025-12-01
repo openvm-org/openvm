@@ -328,7 +328,7 @@ impl PairingCheck for Bn254 {
                     rs1 = In &p_fat_ptr,
                     rs2 = In &q_fat_ptr
                 );
-                let ptr = hint.as_ptr() as *const u8;
+                let ptr = hint.as_mut_ptr() as *mut u8;
                 hint_buffer_chunked(ptr, (32 * 12 * 2) / 4 as usize);
                 hint.assume_init()
             }
