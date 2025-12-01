@@ -47,6 +47,8 @@ pub struct Eq3bColumns<T> {
     hypercube_volume: T, // 2^n
     n_at_least_n_lift: T,
 
+    has_no_interactions: T,
+
     is_first_in_air: T,
     is_first_in_interaction: T,
 
@@ -119,6 +121,7 @@ where
 
         builder.assert_bool(local.n_at_least_n_lift);
         builder.assert_bool(local.nth_bit);
+        builder.assert_bool(local.has_no_interactions);
 
         let within_one_air = not(next.is_first_in_air);
         let within_one_interaction = not(next.is_first_in_interaction);
@@ -151,6 +154,7 @@ where
             .assert_one(next.n_at_least_n_lift);
         // it's always 1 in the end
         builder
+            .when(not(local.has_no_interactions))
             .when(next.is_first_in_interaction)
             .when(local.is_valid)
             .assert_one(local.n_at_least_n_lift);
@@ -174,7 +178,7 @@ where
             .when(local.n_at_least_n_lift)
             .assert_one(local.two_to_the_n_lift);
 
-        builder.when(within_one_air).assert_eq(
+        builder.when(within_one_air.clone()).assert_eq(
             next.running_idx,
             local.running_idx + next.is_first_in_interaction * local.two_to_the_n_lift,
         );
@@ -195,12 +199,17 @@ where
                 next.is_valid,
                 next.is_first_in_interaction,
             ))
+            .when(not(local.has_no_interactions))
             .assert_eq(local.idx, local.running_idx);
+        builder
+            .when(next.is_valid)
+            .when(local.has_no_interactions)
+            .assert_eq(local.running_idx, next.running_idx);
 
         // If n is less than n_lift, assert that eq doesn't change
         assert_array_eq(
             &mut builder
-                .when(local.is_valid)
+                .when(local.is_valid - local.has_no_interactions)
                 .when(not(local.n_at_least_n_lift)),
             local.eq,
             next.eq,
@@ -229,6 +238,17 @@ where
             ),
         );
 
+        // ==================== no interactions consistency ==========================
+        builder
+            .when(local.has_no_interactions)
+            .assert_one(local.is_valid);
+        builder
+            .when(local.has_no_interactions)
+            .assert_one(local.is_first_in_air);
+        builder
+            .when(local.has_no_interactions)
+            .assert_zero(within_one_air);
+
         self.batch_constraint_conductor_bus.receive(
             builder,
             local.proof_idx,
@@ -253,7 +273,7 @@ where
                 interaction_idx: local.interaction_idx,
                 eq_3b: local.eq,
             },
-            next.is_first_in_interaction * local.is_valid,
+            next.is_first_in_interaction * (local.is_valid - local.has_no_interactions),
         );
     }
 }
@@ -266,6 +286,14 @@ pub(crate) struct StackedIdxRecord {
     pub stacked_idx: u32,
     pub n_lift: u32,
     pub is_last_in_air: bool,
+    pub no_interactions: bool,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub(crate) struct RecordIdx {
+    pub record_idx: u32,
+    pub local_n: u32,
 }
 
 impl StackedIdxRecord {
@@ -275,6 +303,7 @@ impl StackedIdxRecord {
         stacked_idx: usize,
         n_lift: usize,
         is_last_in_air: bool,
+        no_interactions: bool,
     ) -> Self {
         Self {
             sort_idx: sort_idx as u32,
@@ -282,6 +311,7 @@ impl StackedIdxRecord {
             stacked_idx: stacked_idx as u32,
             n_lift: n_lift as u32,
             is_last_in_air,
+            no_interactions,
         }
     }
 
@@ -302,12 +332,14 @@ impl StackedIdxRecord {
 
 pub struct Eq3bBlob {
     pub(crate) all_stacked_ids: MultiProofVecVec<StackedIdxRecord>,
+    pub(crate) record_idxs: MultiProofVecVec<RecordIdx>,
 }
 
 impl Eq3bBlob {
     fn new() -> Self {
         Self {
             all_stacked_ids: MultiProofVecVec::new(),
+            record_idxs: MultiProofVecVec::new(),
         }
     }
 }
@@ -320,27 +352,45 @@ pub(crate) fn generate_eq_3b_blob(
     let mut blob = Eq3bBlob::new();
     for preflight in preflights.iter() {
         let mut row_idx = 0;
+        let mut record_idx = 0;
         let n_logup = preflight.proof_shape.n_logup;
         for (sort_idx, (air_idx, vdata)) in
             preflight.proof_shape.sorted_trace_vdata.iter().enumerate()
         {
             let n_lift = vdata.log_height.saturating_sub(l_skip);
             let num_interactions = vk.per_air[*air_idx].num_interactions();
-            for i in 0..num_interactions {
+            if num_interactions == 0 {
+                blob.record_idxs.push(RecordIdx {
+                    record_idx,
+                    local_n: 0,
+                });
                 blob.all_stacked_ids.push(StackedIdxRecord::from_usizes(
-                    sort_idx,
-                    i,
-                    row_idx,
-                    n_lift,
-                    i + 1 == num_interactions,
+                    sort_idx, 0, row_idx, n_lift, true, true,
                 ));
-                row_idx += 1 << (l_skip + n_lift);
-                if row_idx == 1 << (l_skip + n_logup) {
-                    row_idx = 0;
+                record_idx += 1;
+            } else {
+                for i in 0..num_interactions {
+                    blob.record_idxs
+                        .extend((0..=n_logup).map(|local_n| RecordIdx {
+                            record_idx,
+                            local_n: local_n as u32,
+                        }));
+                    blob.all_stacked_ids.push(StackedIdxRecord::from_usizes(
+                        sort_idx,
+                        i,
+                        row_idx,
+                        n_lift,
+                        i + 1 == num_interactions,
+                        false,
+                    ));
+                    row_idx += 1 << (l_skip + n_lift);
+                    record_idx += 1;
                 }
             }
         }
+        debug_assert!(row_idx <= 1 << (l_skip + n_logup));
         blob.all_stacked_ids.end_proof();
+        blob.record_idxs.end_proof();
     }
     blob
 }
@@ -356,7 +406,15 @@ pub(crate) fn generate_eq_3b_trace(
     let total_height = preflights
         .iter()
         .enumerate()
-        .map(|(i, p)| (p.proof_shape.n_logup + 1) * blob.all_stacked_ids[i].len())
+        .map(|(i, p)| {
+            let num_dummy_records = blob.all_stacked_ids[i]
+                .iter()
+                .filter(|record| record.no_interactions)
+                .count();
+
+            (p.proof_shape.n_logup + 1) * (blob.all_stacked_ids[i].len() - num_dummy_records)
+                + num_dummy_records
+        })
         .sum::<usize>();
     let padding_height = total_height.next_power_of_two();
     let mut trace = vec![F::ZERO; padding_height * width];
@@ -368,53 +426,59 @@ pub(crate) fn generate_eq_3b_trace(
 
         let stacked_ids = &blob.all_stacked_ids[pidx];
         let one_height = n_logup + 1;
-        trace[cur_height * width..(cur_height + one_height * stacked_ids.len()) * width]
-            .par_chunks_exact_mut(one_height * width)
-            .enumerate()
-            .for_each(|(j, chunks)| {
-                let record = &stacked_ids[j];
-                let shifted_idx = record.stacked_idx >> l_skip;
 
-                let mut cur_eq = EF::ONE;
-                chunks
-                    .chunks_exact_mut(width)
-                    .enumerate()
-                    .for_each(|(n, chunk)| {
-                        let cols: &mut Eq3bColumns<_> = chunk.borrow_mut();
-                        cols.is_valid = F::ONE;
-                        cols.is_first = F::from_bool(j == 0 && n == 0);
-                        cols.proof_idx = F::from_canonical_usize(pidx);
+        for (j, record) in stacked_ids.iter().enumerate() {
+            let this_height = if record.no_interactions {
+                1
+            } else {
+                one_height
+            };
+            let shifted_idx = record.stacked_idx >> l_skip;
+            let mut cur_eq = EF::ONE;
+            trace[cur_height * width..(cur_height + this_height) * width]
+                .chunks_exact_mut(width)
+                .enumerate()
+                .for_each(|(n, chunk)| {
+                    let cols: &mut Eq3bColumns<_> = chunk.borrow_mut();
+                    cols.is_valid = F::ONE;
+                    cols.is_first = F::from_bool(j == 0 && n == 0);
+                    cols.proof_idx = F::from_canonical_usize(pidx);
 
-                        cols.sort_idx = F::from_canonical_u32(record.sort_idx);
-                        cols.interaction_idx = F::from_canonical_u32(record.interaction_idx);
-                        cols.n_lift = F::from_canonical_u32(record.n_lift);
-                        cols.two_to_the_n_lift = F::from_canonical_usize(1 << record.n_lift);
-                        cols.n = F::from_canonical_usize(n);
-                        cols.n_at_least_n_lift = F::from_bool(n >= record.n_lift as usize);
-                        cols.hypercube_volume = F::from_canonical_usize(1 << n);
-                        cols.is_first_in_air = F::from_bool(record.interaction_idx == 0 && n == 0);
-                        cols.is_first_in_interaction = F::from_bool(n == 0);
-                        cols.idx = F::from_canonical_u32(shifted_idx & ((1 << n) - 1));
-                        cols.running_idx = F::from_canonical_u32(shifted_idx);
-                        let nth_bit = (shifted_idx & (1 << n)) > 0;
-                        cols.nth_bit = F::from_bool(nth_bit);
-                        cols.loop_aux.is_transition[0] =
-                            F::from_bool(j + 1 < stacked_ids.len() || n < n_logup);
-                        cols.loop_aux.is_transition[1] =
-                            F::from_bool(!record.is_last_in_air || n < n_logup);
-                        let xi = if (record.n_lift as usize..n_logup).contains(&n) {
-                            xi[l_skip + n]
-                        } else if nth_bit {
-                            EF::ONE
-                        } else {
-                            EF::ZERO
-                        };
-                        cols.xi.copy_from_slice(xi.as_base_slice());
-                        cols.eq.copy_from_slice(cur_eq.as_base_slice());
-                        cur_eq *= if nth_bit { xi } else { EF::ONE - xi };
-                    });
-            });
-        cur_height += one_height * stacked_ids.len();
+                    cols.sort_idx = F::from_canonical_u32(record.sort_idx);
+                    cols.interaction_idx = F::from_canonical_u32(record.interaction_idx);
+                    cols.n_lift = F::from_canonical_u32(record.n_lift);
+                    cols.two_to_the_n_lift = F::from_canonical_usize(1 << record.n_lift);
+                    cols.n = F::from_canonical_usize(n);
+                    cols.n_at_least_n_lift = F::from_bool(n >= record.n_lift as usize);
+                    cols.has_no_interactions = F::from_bool(record.no_interactions);
+                    cols.hypercube_volume = F::from_canonical_usize(1 << n);
+                    cols.is_first_in_air = F::from_bool(
+                        record.interaction_idx == 0 && n == 0 || record.no_interactions,
+                    );
+                    cols.is_first_in_interaction = F::from_bool(n == 0 || record.no_interactions);
+                    cols.idx = F::from_canonical_u32(shifted_idx & ((1 << n) - 1));
+                    cols.running_idx = F::from_canonical_u32(shifted_idx);
+                    let nth_bit = (shifted_idx & (1 << n)) > 0;
+                    cols.nth_bit = F::from_bool(nth_bit);
+                    cols.loop_aux.is_transition[0] = F::from_bool(
+                        j + 1 < stacked_ids.len() || (n < n_logup && !record.no_interactions),
+                    );
+                    cols.loop_aux.is_transition[1] = F::from_bool(
+                        (!record.is_last_in_air || n < n_logup) && !record.no_interactions,
+                    );
+                    let xi = if (record.n_lift as usize..n_logup).contains(&n) {
+                        xi[l_skip + n]
+                    } else if nth_bit {
+                        EF::ONE
+                    } else {
+                        EF::ZERO
+                    };
+                    cols.xi.copy_from_slice(xi.as_base_slice());
+                    cols.eq.copy_from_slice(cur_eq.as_base_slice());
+                    cur_eq *= if nth_bit { xi } else { EF::ONE - xi };
+                });
+            cur_height += this_height;
+        }
     }
 
     trace[cur_height * width..]
