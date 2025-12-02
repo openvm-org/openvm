@@ -319,11 +319,15 @@ impl MetricDb {
             }
 
             // Create table header
-            let header = format!(
-                "| {} | {} |",
-                label_keys.join(" | "),
-                metric_names.join(" | ")
-            );
+            let header = if label_keys.is_empty() {
+                format!("| {} |", metric_names.join(" | "))
+            } else {
+                format!(
+                    "| {} | {} |",
+                    label_keys.join(" | "),
+                    metric_names.join(" | ")
+                )
+            };
 
             let separator = "| ".to_string()
                 + &vec!["---"; label_keys.len() + metric_names.len()].join(" | ")
@@ -383,8 +387,10 @@ impl MetricDb {
             for (label_values, metrics) in rows {
                 let mut row = String::new();
                 row.push_str("| ");
-                row.push_str(&label_values.join(" | "));
-                row.push_str(" | ");
+                if !label_values.is_empty() {
+                    row.push_str(&label_values.join(" | "));
+                    row.push_str(" | ");
+                }
 
                 // Add metric values
                 for metric_name in &metric_names {
