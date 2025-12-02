@@ -1,7 +1,7 @@
 name: Auto Rebase Feature Branches
 # Long-running feature branches should be added to the corresponding repository ruleset:
 # - PRs should be squash merged into the feature branch
-# - This workflow will keep the feature branch rebased again main
+# - This workflow will keep the feature branch rebased against main
 # - It will only ever do auto rebase when there are no conflicts. It will trigger a slack notification if there is a conflict that requires manual resolution.
 
 on:
