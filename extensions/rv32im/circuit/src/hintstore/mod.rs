@@ -558,10 +558,8 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
                     )
                 };
                 // Range check for mem_ptr (using pointer_max_bits)
-                self.bitwise_lookup_chip.request_range(
-                    (record.inner.mem_ptr >> msl_rshift) << msl_lshift,
-                    0,
-                );
+                self.bitwise_lookup_chip
+                    .request_range((record.inner.mem_ptr >> msl_rshift) << msl_lshift, 0);
                 // Range check for rem_words (using MAX_HINT_BUFFER_BITS)
                 self.bitwise_lookup_chip.request_range(
                     (num_words >> msl_rshift) << rem_words_limb3_lshift,

@@ -171,7 +171,8 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32IoTranspilerExtension {
                         1,
                         2,
                     )),
-                    HINT_BUFFER_IMM => Some(Instruction::from_isize( // hint buffer handling
+                    HINT_BUFFER_IMM => Some(Instruction::from_isize(
+                        // hint buffer handling
                         Rv32HintStoreOpcode::HINT_BUFFER.global_opcode(),
                         (RV32_REGISTER_NUM_LIMBS * dec_insn.rs1) as isize,
                         (RV32_REGISTER_NUM_LIMBS * dec_insn.rd) as isize,

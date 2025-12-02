@@ -1,5 +1,5 @@
 #![allow(unused_imports)]
-use crate::{PhantomImm, PHANTOM_FUNCT3, SYSTEM_OPCODE, MAX_HINT_BUFFER_WORDS};
+use crate::{PhantomImm, MAX_HINT_BUFFER_WORDS, PHANTOM_FUNCT3, SYSTEM_OPCODE};
 
 /// Store the next 4 bytes from the hint stream to [[rd]_1]_2.
 #[macro_export]
