@@ -264,6 +264,37 @@ impl MetricDb {
         Some(chart)
     }
 
+    pub fn sum_metric_grouped_by(
+        &mut self,
+        metric_name: &str,
+        group_by_keys: &[&str],
+        new_metric_name: &str,
+    ) {
+        let mut sums: HashMap<Vec<(String, String)>, f64> = HashMap::new();
+
+        for (labels, metrics) in &self.flat_dict {
+            let group_values: Option<Vec<(String, String)>> = group_by_keys
+                .iter()
+                .map(|key| labels.get(key).map(|v| (key.to_string(), v.to_string())))
+                .collect();
+
+            let Some(group_values) = group_values else {
+                continue;
+            };
+
+            for metric in metrics {
+                if metric.name == metric_name {
+                    *sums.entry(group_values.clone()).or_default() += metric.value;
+                }
+            }
+        }
+
+        for (group_labels, sum) in sums {
+            let labels = Labels(group_labels);
+            self.add_to_flat_dict(labels, new_metric_name.to_string(), sum);
+        }
+    }
+
     pub fn generate_markdown_tables(&self) -> String {
         let mut markdown_output = String::new();
         // Get sorted keys to iterate in consistent order
