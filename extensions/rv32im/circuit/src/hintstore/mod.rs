@@ -425,7 +425,6 @@ where
         };
 
         // Bounds check: num_words must not exceed MAX_HINT_BUFFER_WORDS
-        eprintln!("num_words: {}", num_words);
         if num_words > MAX_HINT_BUFFER_WORDS as u32 {
             return Err(ExecutionError::Fail {
                 pc: *state.pc,
