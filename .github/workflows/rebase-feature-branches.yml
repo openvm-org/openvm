@@ -141,17 +141,17 @@ jobs:
           COMMIT_MSG=$(git log -1 --pretty=format:'%s' ${{ github.sha }})
           COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an' ${{ github.sha }})
 
-          # Build branch list for Slack
+          # Build branch list for Slack (using $'\n' for actual newlines)
           FAILED_LIST=""
           for branch in $FAILED_BRANCHES; do
-            FAILED_LIST="${FAILED_LIST}\n• \`${branch}\`"
+            FAILED_LIST="${FAILED_LIST}"$'\n'"• \`${branch}\`"
           done
 
           BACKUP_INFO=""
           if [ "$TOTAL_BACKED_UP" != "0" ]; then
-            BACKUP_INFO="\n\n*Backups created:*"
+            BACKUP_INFO=$'\n\n'"*Backups created:*"
             for backup in $BACKED_UP_BRANCHES; do
-              BACKUP_INFO="${BACKUP_INFO}\n• \`${backup}\`"
+              BACKUP_INFO="${BACKUP_INFO}"$'\n'"• \`${backup}\`"
             done
           fi
 
@@ -237,25 +237,24 @@ jobs:
         run: |
           REPO_URL="${{ github.server_url }}/${{ github.repository }}"
 
-          # Build branch list for Slack
+          # Build branch list for Slack (using $'\n' for actual newlines)
           SUCCESS_LIST=""
           for branch in $SUCCEEDED_BRANCHES; do
-            SUCCESS_LIST="${SUCCESS_LIST}\n• \`${branch}\`"
+            SUCCESS_LIST="${SUCCESS_LIST}"$'\n'"• \`${branch}\`"
           done
 
           BACKUP_INFO=""
           if [ "$TOTAL_BACKED_UP" != "0" ]; then
-            BACKUP_INFO="\n\n*Backups created:*"
+            BACKUP_INFO=$'\n\n'"*Backups created:*"
             for backup in $BACKED_UP_BRANCHES; do
-              BACKUP_INFO="${BACKUP_INFO}\n• \`${backup}\`"
+              BACKUP_INFO="${BACKUP_INFO}"$'\n'"• \`${backup}\`"
             done
           fi
 
           # Construct Slack message using jq for proper JSON escaping
+          CONTENT="✅ *Auto-rebase completed* for <$REPO_URL|${{ github.repository }}>"$'\n\n'"*Rebased branches:*${SUCCESS_LIST}${BACKUP_INFO}"
           SLACK_PAYLOAD=$(jq -n \
-            --arg repo "${{ github.repository }}" \
-            --arg repo_url "$REPO_URL" \
-            --arg content "✅ *Auto-rebase completed* for <$REPO_URL|${{ github.repository }}>\n\n*Rebased branches:*${SUCCESS_LIST}${BACKUP_INFO}" \
+            --arg content "$CONTENT" \
             '{
               text: "✅ Feature Branches Rebased Successfully",
               blocks: [
