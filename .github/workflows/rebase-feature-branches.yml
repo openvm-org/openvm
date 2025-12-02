@@ -20,13 +20,13 @@ jobs:
       # This step exchanges your app credentials for a temporary token
       - name: Generate GitHub App Token
         id: app_token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v2.2.0
         with:
           app-id: ${{ secrets.REBASE_APP_ID }}
           private-key: ${{ secrets.REBASE_APP_PRIVATE_KEY }}
 
       # Use the generated token for git operations
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6.0.1
         with:
           fetch-depth: 0
           token: ${{ steps.app_token.outputs.token }}
