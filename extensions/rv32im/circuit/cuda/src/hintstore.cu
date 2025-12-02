@@ -90,16 +90,18 @@ struct Rv32HintStore {
         if (local_idx == 0) {
             uint32_t msl_rshift = (RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS;
             uint32_t msl_lshift = RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - pointer_max_bits;
-            // Range check for mem_ptr (using pointer_max_bits)
+            // Combined range check for mem_ptr and num_words (using pointer_max_bits)
+            // This ensures mem_ptr + num_words * 4 doesn't overflow the address space
             bitwise_lookup.add_range(
                 (record.mem_ptr >> msl_rshift) << msl_lshift,
-                0
+                (record.num_words >> msl_rshift) << msl_lshift
             );
-            // Range check for rem_words (using MAX_HINT_BUFFER_BITS)
-            uint32_t rem_words_limb3_lshift = RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - MAX_HINT_BUFFER_BITS;
-            uint32_t rem_words_limb2_lshift = RV32_CELL_BITS - (MAX_HINT_BUFFER_BITS % RV32_CELL_BITS);
+
+            uint32_t rem_words_limb3_lshift = RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - MAX_HINT_BUFFER_BITS; // works
+            uint32_t rem_words_limb2_lshift = RV32_CELL_BITS - (MAX_HINT_BUFFER_BITS % RV32_CELL_BITS); 
+            // Bounds if MAX_HINT_BUFFER_BITS is between [16,23]
             bitwise_lookup.add_range(
-                (record.num_words >> msl_rshift) << rem_words_limb3_lshift,
+                (record.num_words >> msl_rshift) << rem_words_limb3_lshift, // third limb, 
                 ((record.num_words >> 16) & 0xFF) << rem_words_limb2_lshift
             );
             mem_helper.fill(
