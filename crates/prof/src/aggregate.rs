@@ -494,6 +494,7 @@ pub const EXECUTE_METERED_INSN_MI_S_LABEL: &str = "execute_metered_insn_mi/s";
 pub const EXECUTE_PREFLIGHT_TIME_LABEL: &str = "execute_preflight_time_ms";
 pub const EXECUTE_PREFLIGHT_INSN_MI_S_LABEL: &str = "execute_preflight_insn_mi/s";
 pub const TRACE_GEN_TIME_LABEL: &str = "trace_gen_time_ms";
+pub const GENERATE_BLOB_TIME_LABEL: &str = "generate_blob_total_time_ms";
 pub const MEM_FIN_TIME_LABEL: &str = "memory_finalize_time_ms";
 pub const BOUNDARY_FIN_TIME_LABEL: &str = "boundary_finalize_time_ms";
 pub const MERKLE_FIN_TIME_LABEL: &str = "merkle_finalize_time_ms";
@@ -511,6 +512,7 @@ pub const VM_METRIC_NAMES: &[&str] = &[
     EXECUTE_PREFLIGHT_TIME_LABEL,
     EXECUTE_PREFLIGHT_INSN_MI_S_LABEL,
     TRACE_GEN_TIME_LABEL,
+    GENERATE_BLOB_TIME_LABEL,
     MEM_FIN_TIME_LABEL,
     BOUNDARY_FIN_TIME_LABEL,
     MERKLE_FIN_TIME_LABEL,
