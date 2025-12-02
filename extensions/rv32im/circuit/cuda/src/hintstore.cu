@@ -6,6 +6,7 @@
 
 using namespace riscv;
 using namespace program;
+using hintstore::MAX_HINT_BUFFER_BITS;
 
 template <typename T> struct Rv32HintStoreCols {
     // common
@@ -89,9 +90,17 @@ struct Rv32HintStore {
         if (local_idx == 0) {
             uint32_t msl_rshift = (RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS;
             uint32_t msl_lshift = RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - pointer_max_bits;
+            // Range check for mem_ptr (using pointer_max_bits)
             bitwise_lookup.add_range(
                 (record.mem_ptr >> msl_rshift) << msl_lshift,
-                (record.num_words >> msl_rshift) << msl_lshift
+                0
+            );
+            // Range check for rem_words (using MAX_HINT_BUFFER_BITS)
+            uint32_t rem_words_limb3_lshift = RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - MAX_HINT_BUFFER_BITS;
+            uint32_t rem_words_limb2_lshift = RV32_CELL_BITS - (MAX_HINT_BUFFER_BITS % RV32_CELL_BITS);
+            bitwise_lookup.add_range(
+                (record.num_words >> msl_rshift) << rem_words_limb3_lshift,
+                ((record.num_words >> 16) & 0xFF) << rem_words_limb2_lshift
             );
             mem_helper.fill(
                 row.slice_from(COL_INDEX(Rv32HintStoreCols, mem_ptr_aux_cols)),
