@@ -17,8 +17,8 @@ pub fn main() {
         openvm::process::panic();
     }
 
-    for i in 0..vec.len() {
-        if vec[i] != (i as u8) {
+    for (i, item) in vec.iter().enumerate() {
+        if *item != (i as u8) {
             openvm::process::panic();
         }
     }
