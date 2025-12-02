@@ -19,7 +19,10 @@ use openvm_instructions::{
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_rv32im_transpiler::{Rv32HintStoreOpcode::{self, *}, MAX_HINT_BUFFER_WORDS};
+use openvm_rv32im_transpiler::{
+    Rv32HintStoreOpcode::{self, *},
+    MAX_HINT_BUFFER_WORDS,
+};
 use openvm_stark_backend::{
     p3_field::FieldAlgebra,
     p3_matrix::{
@@ -268,12 +271,7 @@ fn test_hint_buffer_rem_words_range_check() {
         let mut trace_row = trace.row_slice(0).to_vec();
         let cols: &mut Rv32HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
         // Force `rem_words` to overflow MAX_HINT_BUFFER_BITS on the start row.
-        cols.rem_words_limbs = [
-            F::ZERO,
-            F::ZERO,
-            F::ZERO,
-            F::from_canonical_u8(1),
-        ];
+        cols.rem_words_limbs = [F::ZERO, F::ZERO, F::ZERO, F::from_canonical_u8(1)];
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
@@ -283,7 +281,7 @@ fn test_hint_buffer_rem_words_range_check() {
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-        
+
     tester.simple_test_with_expected_error(get_verification_error(false));
 }
 

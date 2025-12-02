@@ -26,7 +26,7 @@ pub const PHANTOM_FUNCT3: u8 = 0b011;
 pub const CSRRW_FUNCT3: u8 = 0b001;
 
 /// Maximum number of bits for hint buffer size.
-/// IMPORTANT: Must be synced with MAX_HINT_BUFFER_BITS constant for cuda 
+/// IMPORTANT: Must be synced with MAX_HINT_BUFFER_BITS constant for cuda
 /// `crates/circuits/primitives/cuda/include/primitives/constants.h`
 pub const MAX_HINT_BUFFER_BITS: usize = 18;
 /// Maximum number of words that can be read in a single HINT_BUFFER instruction.

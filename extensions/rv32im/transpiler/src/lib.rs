@@ -9,7 +9,6 @@ use openvm_rv32im_guest::{
     NATIVE_STOREW_FUNCT3, NATIVE_STOREW_FUNCT7, PHANTOM_FUNCT3, REVEAL_FUNCT3, RV32M_FUNCT7,
     RV32_ALU_OPCODE, SYSTEM_OPCODE, TERMINATE_FUNCT3,
 };
-
 pub use openvm_rv32im_guest::{MAX_HINT_BUFFER_BITS, MAX_HINT_BUFFER_WORDS};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{

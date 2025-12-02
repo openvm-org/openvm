@@ -170,7 +170,8 @@ mod tests {
     }
 
     /// NOTE: This test is slow because it processes > 1MB of data. It is marked #[ignore]
-    /// and can be run with: cargo test -p openvm-rv32im-integration-tests test_hint_buffer_chunking -- --ignored 
+    /// and can be run with: cargo test -p openvm-rv32im-integration-tests test_hint_buffer_chunking
+    /// -- --ignored
     #[test]
     #[ignore = "slow test: processes >1MB of data"]
     fn test_hint_buffer_chunking() -> Result<()> {

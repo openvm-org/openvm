@@ -220,8 +220,8 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
             )
             .eval(builder, is_start.clone());
 
-        // Preventing rem_words overflow: rem_words < 2^MAX_HINT_BUFFER_BITS, rem_words <= MAX_HINT_BUFFER_WORDS
-        // MAX_HINT_BUFFER_WORDS = 2^MAX_HINT_BUFFER_BITS - 1
+        // Preventing rem_words overflow: rem_words < 2^MAX_HINT_BUFFER_BITS, rem_words <=
+        // MAX_HINT_BUFFER_WORDS MAX_HINT_BUFFER_WORDS = 2^MAX_HINT_BUFFER_BITS - 1
         // For MAX_HINT_BUFFER_BITS = 18:
         // - limbs[3] * 2^14 must be < 256, so limbs[3] = 0
         // - limbs[2] * 64 must be < 256, so limbs[2] < 4
