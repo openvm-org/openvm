@@ -76,6 +76,7 @@ parallel = [
 metrics = [
     "dep:metrics",
     "openvm-stark-backend/metrics",
+    "stark-backend-v2/metrics",
     "openvm-stark-sdk?/metrics",
 ]
 # turns on more invasive profiling for fine-grained guest metrics
