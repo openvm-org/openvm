@@ -8,7 +8,7 @@ use clap::{Parser, Subcommand};
 use eyre::Result;
 use itertools::Itertools;
 use openvm_prof::{
-    aggregate::{GroupedMetrics, VM_METRIC_NAMES},
+    aggregate::{GroupedMetrics, GENERATE_BLOB_TIME_LABEL, VM_METRIC_NAMES},
     summary::GithubSummary,
     types::{BenchmarkOutput, MetricDb},
 };
@@ -84,7 +84,12 @@ fn main() -> Result<()> {
         .zip_eq(prev_json_paths)
         .zip_eq(&mut names)
     {
-        let db = MetricDb::new(&metrics_path)?;
+        let mut db = MetricDb::new(&metrics_path)?;
+        db.sum_metric_grouped_by(
+            "generate_blob_time_ms",
+            &["group", "idx"],
+            GENERATE_BLOB_TIME_LABEL,
+        );
         let grouped = GroupedMetrics::new(&db, "group")?;
         let num_parallel = args.num_devices * args.proofs_per_device;
         let mut aggregated = grouped.aggregate(num_parallel);
