@@ -279,11 +279,10 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
         let is_internal = local.has_verifier_pvs;
 
         let verifier_pvs_id = AB::F::from_canonical_usize(VERIFIER_PVS_AIR_ID);
-        let verifier_pvs_id_cond = is_internal.clone() * verifier_pvs_id;
+        let verifier_pvs_id_cond = is_internal * verifier_pvs_id;
 
         let connector_id_cond = AB::Expr::from_canonical_usize(CONNECTOR_AIR_ID) * is_leaf.clone();
-        let connector_pvs_offset =
-            is_internal.clone() * AB::F::from_canonical_usize(2 * DIGEST_SIZE);
+        let connector_pvs_offset = is_internal * AB::F::from_canonical_usize(2 * DIGEST_SIZE);
 
         self.public_values_bus.receive(
             builder,
@@ -330,8 +329,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
         );
 
         let merkle_id_cond = AB::Expr::from_canonical_usize(MERKLE_AIR_ID) * is_leaf.clone();
-        let merkle_pvs_offset =
-            connector_pvs_offset + is_internal.clone() * AB::Expr::from_canonical_u8(4);
+        let merkle_pvs_offset = connector_pvs_offset + is_internal * AB::Expr::from_canonical_u8(4);
         let verifier_pvs_offset =
             merkle_pvs_offset.clone() + AB::F::from_canonical_usize(2 * DIGEST_SIZE);
 
@@ -343,7 +341,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
                 pv_idx: verifier_pvs_offset.clone(),
                 value: local.child_pvs.internal_flag.into(),
             },
-            local.is_valid * is_internal.clone(),
+            local.is_valid * is_internal,
         );
 
         for didx in 0..DIGEST_SIZE {
@@ -355,7 +353,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
                     pv_idx: AB::Expr::from_canonical_usize(didx),
                     value: local.child_pvs.user_pv_commit[didx].into(),
                 },
-                local.is_valid * is_internal.clone(),
+                local.is_valid * is_internal,
             );
 
             self.public_values_bus.receive(
@@ -366,7 +364,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
                     pv_idx: AB::Expr::from_canonical_usize(didx + DIGEST_SIZE),
                     value: local.child_pvs.program_commit[didx].into(),
                 },
-                local.is_valid * is_internal.clone(),
+                local.is_valid * is_internal,
             );
 
             self.public_values_bus.receive(
@@ -400,7 +398,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
                     pv_idx: verifier_pvs_offset.clone() + AB::F::from_canonical_usize(didx + 1),
                     value: local.child_pvs.leaf_commit[didx].into(),
                 },
-                local.is_valid * is_internal.clone(),
+                local.is_valid * is_internal,
             );
 
             self.public_values_bus.receive(
@@ -520,8 +518,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
 
         /*
          * We also need to receive cached commits from ProofShapeModule. The leaf verifier needs
-         * to receive app_commit, and the internal verifier receives SymbolicExpressionAir's. Note
-         * this interaction forces there to be exactly one cached trace per circuit.
+         * to receive app_commit, and the internal verifier receives SymbolicExpressionAir's.
+         * Note this interaction forces there to be exactly one cached trace per circuit.
          */
         let is_internal_flag_zero = (local.child_pvs.internal_flag - AB::F::ONE)
             * (local.child_pvs.internal_flag - AB::F::TWO)

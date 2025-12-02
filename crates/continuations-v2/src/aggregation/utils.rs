@@ -43,7 +43,7 @@ pub fn debug<S: AggregationSubCircuit>(
     for air in &airs {
         keygen_builder.add_air(air.clone());
     }
-    trace_heights_tracing_info(&ctxs, &airs);
+    trace_heights_tracing_info(ctxs, &airs);
     engine.debug(&airs, &keygen_builder.generate_pk().per_air, &inputs);
 }
 
