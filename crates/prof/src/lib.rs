@@ -287,6 +287,8 @@ impl MetricDb {
 
             // Filter out gpu_mem metrics - these are summarized in the GPU memory chart
             metric_names.retain(|n| !n.starts_with("gpu_mem."));
+            // Filter out wrapper spans - these are just for propagating fields to child spans
+            metric_names.retain(|n| !n.starts_with("wrapper."));
 
             // Skip tables that have no metrics left after filtering
             if metric_names.is_empty() {
