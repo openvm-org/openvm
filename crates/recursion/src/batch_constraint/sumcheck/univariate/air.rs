@@ -112,12 +112,10 @@ where
             ),
         );
 
-        let is_transition = LoopSubAir::local_is_transition(next.is_valid, next.is_first);
-        // Since local.is_valid = 0 => next.is_valid = 0 => is_transition = 0
-        // is_last = local.is_valid * (1 - is_transition) <=> local.is_valid - is_transition
+        // TODO(ayush): move to NestedForLoopSubAir
+        builder.when(local.is_first).assert_one(local.is_valid);
+        let is_transition = next.is_valid - next.is_first;
         let is_last = local.is_valid - is_transition.clone();
-
-        let is_first_and_valid = local.is_first * local.is_valid;
 
         // Coeff index starts at univariate degree
         builder.when(local.is_first).assert_eq(
@@ -233,7 +231,7 @@ where
             local.proof_idx,
             local.tidx + AB::Expr::from_canonical_usize(D_EF),
             local.r,
-            is_first_and_valid.clone(),
+            local.is_first,
         );
         // Observe coefficients
         self.transcript_bus.observe_ext(
@@ -259,7 +257,7 @@ where
                 // Skip r
                 tidx: local.tidx + AB::Expr::from_canonical_usize(2 * D_EF),
             },
-            is_first_and_valid.clone(),
+            local.is_first,
         );
 
         self.claim_bus.receive(
@@ -287,7 +285,7 @@ where
                 idx: AB::Expr::ZERO,
                 challenge: local.r.map(Into::into),
             },
-            is_first_and_valid,
+            local.is_first,
         );
 
         self.batch_constraint_conductor_bus.send(
