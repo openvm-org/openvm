@@ -9,6 +9,7 @@ use crate::whir::{
     non_initial_opened_values::NonInitialOpenedValuesCols,
 };
 
+#[tracing::instrument(skip_all)]
 pub(in crate::whir) fn generate_trace(blob: &WhirBlobGpu, params: SystemParams) -> DeviceMatrix<F> {
     let mem = MemTracker::start("tracegen.whir_non_initial_opened_values");
     let num_valid_rows = blob.non_initial_opened_values_records.len();

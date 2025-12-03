@@ -4,7 +4,9 @@ use itertools::izip;
 use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::FieldAlgebra;
+use p3_matrix::dense::RowMajorMatrix;
 use stark_backend_v2::{
+    F,
     keygen::types::MultiStarkVerifyingKeyV2,
     poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
     proof::{Proof, StackingProof},
@@ -22,8 +24,8 @@ use crate::{
         univariate::{UnivariateRoundAir, UnivariateRoundTraceGenerator},
     },
     system::{
-        AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, Preflight, StackingPreflight,
-        TraceGenModule,
+        AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, ModuleChip, Preflight,
+        StackingPreflight, TraceGenModule,
     },
 };
 
@@ -77,7 +79,7 @@ impl StackingModule {
         }
     }
 
-    #[tracing::instrument(name = "run_preflight(StackingModule)", skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn run_preflight<TS>(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS)
     where
         TS: FiatShamirTranscript + TranscriptHistory,
@@ -204,10 +206,65 @@ impl AirModule for StackingModule {
     }
 }
 
+#[derive(strum_macros::Display)]
+enum StackingModuleChip {
+    OpeningClaims,
+    UnivariateRound,
+    SumcheckRounds,
+    StackingClaims,
+    EqBase,
+    EqBits,
+}
+
+impl StackingModuleChip {
+    fn generate_trace_row_major(
+        &self,
+        child_vk: &MultiStarkVerifyingKeyV2,
+        proofs: &[Proof],
+        preflights: &[Preflight],
+    ) -> RowMajorMatrix<F> {
+        match self {
+            StackingModuleChip::OpeningClaims => {
+                OpeningClaimsTraceGenerator::generate_trace(child_vk, proofs, preflights)
+            }
+            StackingModuleChip::UnivariateRound => {
+                UnivariateRoundTraceGenerator::generate_trace(child_vk, proofs, preflights)
+            }
+            StackingModuleChip::SumcheckRounds => {
+                SumcheckRoundsTraceGenerator::generate_trace(child_vk, proofs, preflights)
+            }
+            StackingModuleChip::StackingClaims => {
+                StackingClaimsTraceGenerator::generate_trace(child_vk, proofs, preflights)
+            }
+            StackingModuleChip::EqBase => {
+                EqBaseTraceGenerator::generate_trace(child_vk, proofs, preflights)
+            }
+            StackingModuleChip::EqBits => {
+                EqBitsTraceGenerator::generate_trace(child_vk, proofs, preflights)
+            }
+        }
+    }
+}
+
+impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for StackingModuleChip {
+    type ModuleSpecificCtx = ();
+
+    #[tracing::instrument(name = "wrapper.generate_trace", skip_all, fields(air = %self))]
+    fn generate_trace(
+        &self,
+        child_vk: &MultiStarkVerifyingKeyV2,
+        proofs: &[Proof],
+        preflights: &[Preflight],
+        _ctx: &(),
+    ) -> ColMajorMatrix<F> {
+        ColMajorMatrix::from_row_major(&self.generate_trace_row_major(child_vk, proofs, preflights))
+    }
+}
+
 impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for StackingModule {
     type ModuleSpecificCtx = ();
 
-    #[tracing::instrument(name = "generate_proving_ctxs(StackingModule)", skip_all)]
+    #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -216,17 +273,26 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for StackingModule {
         _ctx: &(),
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         // TODO: parallelize
-        let traces = [
-            OpeningClaimsTraceGenerator::generate_trace(child_vk, proofs, preflights),
-            UnivariateRoundTraceGenerator::generate_trace(child_vk, proofs, preflights),
-            SumcheckRoundsTraceGenerator::generate_trace(child_vk, proofs, preflights),
-            StackingClaimsTraceGenerator::generate_trace(child_vk, proofs, preflights),
-            EqBaseTraceGenerator::generate_trace(child_vk, proofs, preflights),
-            EqBitsTraceGenerator::generate_trace(child_vk, proofs, preflights),
+        let chips = [
+            StackingModuleChip::OpeningClaims,
+            StackingModuleChip::UnivariateRound,
+            StackingModuleChip::SumcheckRounds,
+            StackingModuleChip::StackingClaims,
+            StackingModuleChip::EqBase,
+            StackingModuleChip::EqBits,
         ];
-        traces
-            .into_iter()
-            .map(|trace| AirProvingContextV2::simple_no_pis(ColMajorMatrix::from_row_major(&trace)))
+        chips
+            .iter()
+            .map(|chip| {
+                ModuleChip::<GlobalCtxCpu, CpuBackendV2>::generate_trace(
+                    chip,
+                    child_vk,
+                    proofs,
+                    preflights,
+                    &(),
+                )
+            })
+            .map(AirProvingContextV2::simple_no_pis)
             .collect()
     }
 }
@@ -235,16 +301,41 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for StackingModule {
 mod cuda_tracegen {
     use cuda_backend_v2::GpuBackendV2;
     use itertools::Itertools;
-    use openvm_cuda_backend::data_transporter::transport_matrix_to_device;
+    use openvm_cuda_backend::{base::DeviceMatrix, data_transporter::transport_matrix_to_device};
 
     use super::*;
     use crate::cuda::{
         GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu,
     };
 
+    impl ModuleChip<GlobalCtxGpu, GpuBackendV2> for StackingModuleChip {
+        type ModuleSpecificCtx = ();
+
+        #[tracing::instrument(name = "wrapper.generate_trace", skip_all, fields(air = %self))]
+        fn generate_trace(
+            &self,
+            child_vk: &VerifyingKeyGpu,
+            proofs: &[ProofGpu],
+            preflights: &[PreflightGpu],
+            _ctx: &(),
+        ) -> DeviceMatrix<F> {
+            transport_matrix_to_device(Arc::new(
+                self.generate_trace_row_major(
+                    &child_vk.cpu,
+                    &proofs.iter().map(|proof| proof.cpu.clone()).collect_vec(),
+                    &preflights
+                        .iter()
+                        .map(|preflight| preflight.cpu.clone())
+                        .collect_vec(),
+                ),
+            ))
+        }
+    }
+
     impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for StackingModule {
         type ModuleSpecificCtx = ();
 
+        #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(
             &self,
             child_vk: &VerifyingKeyGpu,
@@ -252,25 +343,26 @@ mod cuda_tracegen {
             preflights: &[PreflightGpu],
             _module_ctx: &(),
         ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
-            // default hybrid implementation:
-            let proofs = proofs.iter().map(|proof| proof.cpu.clone()).collect_vec();
-            let preflights = preflights
-                .iter()
-                .map(|preflight| preflight.cpu.clone())
-                .collect_vec();
-            let cpu_traces = [
-                OpeningClaimsTraceGenerator::generate_trace(&child_vk.cpu, &proofs, &preflights),
-                UnivariateRoundTraceGenerator::generate_trace(&child_vk.cpu, &proofs, &preflights),
-                SumcheckRoundsTraceGenerator::generate_trace(&child_vk.cpu, &proofs, &preflights),
-                StackingClaimsTraceGenerator::generate_trace(&child_vk.cpu, &proofs, &preflights),
-                EqBaseTraceGenerator::generate_trace(&child_vk.cpu, &proofs, &preflights),
-                EqBitsTraceGenerator::generate_trace(&child_vk.cpu, &proofs, &preflights),
+            let chips = [
+                StackingModuleChip::OpeningClaims,
+                StackingModuleChip::UnivariateRound,
+                StackingModuleChip::SumcheckRounds,
+                StackingModuleChip::StackingClaims,
+                StackingModuleChip::EqBase,
+                StackingModuleChip::EqBits,
             ];
-            cpu_traces
-                .into_iter()
-                .map(|trace| {
-                    AirProvingContextV2::simple_no_pis(transport_matrix_to_device(Arc::new(trace)))
+            chips
+                .iter()
+                .map(|chip| {
+                    ModuleChip::<GlobalCtxGpu, GpuBackendV2>::generate_trace(
+                        chip,
+                        child_vk,
+                        &proofs,
+                        &preflights,
+                        &(),
+                    )
                 })
+                .map(AirProvingContextV2::simple_no_pis)
                 .collect()
         }
     }

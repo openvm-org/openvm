@@ -14,7 +14,7 @@ pub struct GkrXiSamplerRecord {
     pub xis: Vec<EF>,
 }
 
-#[tracing::instrument(name = "generate_trace(GkrXiSamplerAir)", skip_all)]
+#[tracing::instrument(skip_all)]
 pub fn generate_trace(xi_sampler_records: &[GkrXiSamplerRecord]) -> RowMajorMatrix<F> {
     let width = GkrXiSamplerCols::<F>::width();
 

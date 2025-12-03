@@ -45,7 +45,7 @@ impl<const NUM_BITS: usize> RangeCheckerCpuTraceGenerator<NUM_BITS> {
         self.count[value].fetch_add(mult, Ordering::Relaxed);
     }
 
-    #[tracing::instrument(name = "generate_trace(RangeCheckerAir)", skip_all)]
+    #[tracing::instrument(name = "generate_trace", skip_all)]
     pub fn generate_trace_row_major(&self) -> RowMajorMatrix<F> {
         let trace = self
             .count

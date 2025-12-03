@@ -535,7 +535,7 @@ fn compute_indices_from_row_idx(
     )
 }
 
-#[tracing::instrument(name = "generate_trace(FinalPolyQueryEvalAir)", skip_all)]
+#[tracing::instrument(skip_all)]
 pub(crate) fn generate_trace(
     mvk: &MultiStarkVerifyingKeyV2,
     _proofs: &[&Proof],

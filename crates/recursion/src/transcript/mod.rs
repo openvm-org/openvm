@@ -16,6 +16,7 @@ use stark_backend_v2::{
     proof::Proof,
     prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
 };
+use tracing::info_span;
 
 use crate::{
     system::{AirModule, BusInventory, GlobalCtxCpu, Preflight, TraceGenModule},
@@ -57,7 +58,7 @@ impl TranscriptModule {
 
     // Builds trace for transcript and merkle verify AIRs (and records poseidon2 permutations).
     // Also combines in the poseidon2 permutations from preflight (from WHIR).
-    #[tracing::instrument(name = "build_trace_artifacts(TranscriptModule)", skip_all)]
+    #[tracing::instrument(name = "generate_trace", skip_all)]
     fn build_trace_artifacts(
         &self,
         preflights: &[Preflight],
@@ -256,7 +257,7 @@ pub(super) struct TranscriptTraceArtifacts {
 impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
     type ModuleSpecificCtx = ();
 
-    #[tracing::instrument(name = "generate_proving_ctxs(TranscriptModule)", skip_all)]
+    #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -265,45 +266,56 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
         _ctx: &(),
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         let (merkle_verify_trace_vec, poseidon_inputs) =
-            merkle_verify::generate_trace(child_vk, proofs, preflights, self.params.k_whir);
+            tracing::info_span!("wrapper.generate_trace", air = "MerkleVerify").in_scope(|| {
+                merkle_verify::generate_trace(child_vk, proofs, preflights, self.params.k_whir)
+            });
         let merkle_verify_trace =
             RowMajorMatrix::new(merkle_verify_trace_vec, MerkleVerifyCols::<F>::width());
         let TranscriptTraceArtifacts {
             transcript_trace,
             poseidon_inputs,
-        } = self.build_trace_artifacts(preflights, poseidon_inputs);
+        } = tracing::info_span!("wrapper.generate_trace", air = "Transcript")
+            .in_scope(|| self.build_trace_artifacts(preflights, poseidon_inputs));
 
-        let (mut poseidon_states, mut poseidon_counts) =
-            Self::dedup_poseidon_inputs(poseidon_inputs);
-        let poseidon2_valid_rows = poseidon_states.len();
-        let poseidon2_num_rows = if poseidon2_valid_rows == 0 {
-            1
-        } else {
-            poseidon2_valid_rows.next_power_of_two()
-        };
-        poseidon_states.resize(poseidon2_num_rows, [F::ZERO; POSEIDON2_WIDTH]);
-        poseidon_counts.resize(poseidon2_num_rows, 0);
-        let poseidon_counts: Vec<F> = poseidon_counts
-            .into_iter()
-            .map(F::from_canonical_u32)
-            .collect();
+        let poseidon2_trace =
+            info_span!("wrapper.generate_trace", air = "Poseidon2").in_scope(|| {
+                // TODO: This is unfortunately how we propagate span fields given our current tracing
+                // system. It would be extraordinarily helpful to update our metric outputs to contain
+                // the fields they define as labels.
+                info_span!("generate_trace").in_scope(|| {
+                    let (mut poseidon_states, mut poseidon_counts) =
+                        Self::dedup_poseidon_inputs(poseidon_inputs);
+                    let poseidon2_valid_rows = poseidon_states.len();
+                    let poseidon2_num_rows = if poseidon2_valid_rows == 0 {
+                        1
+                    } else {
+                        poseidon2_valid_rows.next_power_of_two()
+                    };
+                    poseidon_states.resize(poseidon2_num_rows, [F::ZERO; POSEIDON2_WIDTH]);
+                    poseidon_counts.resize(poseidon2_num_rows, 0);
+                    let poseidon_counts: Vec<F> = poseidon_counts
+                        .into_iter()
+                        .map(F::from_canonical_u32)
+                        .collect();
 
-        let inner_width = self.sub_chip.air.width();
-        let poseidon2_width = Poseidon2Cols::<F, SBOX_REGISTERS>::width();
-        let inner_trace = self.sub_chip.generate_trace(poseidon_states);
-        let mut poseidon_trace = F::zero_vec(poseidon2_num_rows * poseidon2_width);
-        poseidon_trace
-            .par_chunks_mut(poseidon2_width)
-            .zip(inner_trace.values.par_chunks(inner_width))
-            .enumerate()
-            .for_each(|(i, (row, inner_row))| {
-                row[..inner_width].copy_from_slice(inner_row);
-                let cols: &mut Poseidon2Cols<F, SBOX_REGISTERS> = row.borrow_mut();
-                cols.mult = poseidon_counts.get(i).copied().unwrap_or(F::ZERO);
+                    let inner_width = self.sub_chip.air.width();
+                    let poseidon2_width = Poseidon2Cols::<F, SBOX_REGISTERS>::width();
+                    let inner_trace = self.sub_chip.generate_trace(poseidon_states);
+                    let mut poseidon_trace = F::zero_vec(poseidon2_num_rows * poseidon2_width);
+                    poseidon_trace
+                        .par_chunks_mut(poseidon2_width)
+                        .zip(inner_trace.values.par_chunks(inner_width))
+                        .enumerate()
+                        .for_each(|(i, (row, inner_row))| {
+                            row[..inner_width].copy_from_slice(inner_row);
+                            let cols: &mut Poseidon2Cols<F, SBOX_REGISTERS> = row.borrow_mut();
+                            cols.mult = poseidon_counts.get(i).copied().unwrap_or(F::ZERO);
+                        });
+                    RowMajorMatrix::new(poseidon_trace, poseidon2_width)
+                })
             });
 
         // Finally, make the RawInput structs
-        let poseidon2_trace = RowMajorMatrix::new(poseidon_trace, poseidon2_width);
         [transcript_trace, poseidon2_trace, merkle_verify_trace]
             .map(|trace| AirProvingContextV2::simple_no_pis(ColMajorMatrix::from_row_major(&trace)))
             .into_iter()
@@ -331,7 +343,7 @@ mod cuda_tracegen {
     impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for TranscriptModule {
         type ModuleSpecificCtx = ();
 
-        #[tracing::instrument(name = "generate_proving_ctxs(TranscriptModule)", skip_all)]
+        #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(
             &self,
             child_vk: &VerifyingKeyGpu,
@@ -344,16 +356,22 @@ mod cuda_tracegen {
                 .iter()
                 .map(|preflight| preflight.cpu.clone())
                 .collect_vec();
-            let (merkle_trace, poseidon_inputs) = merkle_verify::generate_trace(
-                &child_vk.cpu,
-                &proofs_cpu,
-                &preflights_cpu,
-                self.params.k_whir,
-            );
+            let (merkle_trace, poseidon_inputs) =
+                tracing::info_span!("wrapper.generate_trace", air = "MerkleVerify").in_scope(
+                    || {
+                        merkle_verify::generate_trace(
+                            &child_vk.cpu,
+                            &proofs_cpu,
+                            &preflights_cpu,
+                            self.params.k_whir,
+                        )
+                    },
+                );
             let TranscriptTraceArtifacts {
                 transcript_trace,
                 poseidon_inputs,
-            } = self.build_trace_artifacts(&preflights_cpu, poseidon_inputs);
+            } = tracing::info_span!("wrapper.generate_trace", air = "Transcript")
+                .in_scope(|| self.build_trace_artifacts(&preflights_cpu, poseidon_inputs));
 
             let transcript_trace_gpu =
                 transport_matrix_h2d_col_major(&ColMajorMatrix::from_row_major(&transcript_trace))
@@ -363,67 +381,75 @@ mod cuda_tracegen {
             ))
             .unwrap();
 
-            let poseidon2_width = Poseidon2Cols::<F, SBOX_REGISTERS>::width();
-            let poseidon2_valid_rows = poseidon_inputs.len();
-            let poseidon_inputs_flat: Vec<CudaF> = poseidon_inputs
-                .into_iter()
-                .flat_map(|state| state.into_iter())
-                .collect();
-            let d_records = poseidon_inputs_flat.to_device().unwrap();
-            let d_counts = if poseidon2_valid_rows == 0 {
-                DeviceBuffer::<u32>::new()
-            } else {
-                vec![1u32; poseidon2_valid_rows].to_device().unwrap()
-            };
-            let mut num_records = poseidon2_valid_rows;
-            if num_records > 0 {
-                unsafe {
-                    let d_num_records = [num_records].to_device().unwrap();
-                    let mut temp_bytes = 0;
-                    cuda_abi::poseidon2_deduplicate_records_get_temp_bytes(
-                        &d_records,
-                        &d_counts,
-                        num_records,
-                        &d_num_records,
-                        &mut temp_bytes,
-                    )
-                    .unwrap();
-                    let d_temp_storage = if temp_bytes == 0 {
-                        DeviceBuffer::<u8>::new()
-                    } else {
-                        DeviceBuffer::<u8>::with_capacity(temp_bytes)
-                    };
-                    cuda_abi::poseidon2_deduplicate_records(
-                        &d_records,
-                        &d_counts,
-                        num_records,
-                        &d_num_records,
-                        &d_temp_storage,
-                        temp_bytes,
-                    )
-                    .unwrap();
-                    num_records = *d_num_records.to_host().unwrap().first().unwrap();
-                }
-            }
-            let poseidon2_num_rows = if num_records == 0 {
-                1
-            } else {
-                num_records.next_power_of_two()
-            };
-            let poseidon_trace_gpu =
-                DeviceMatrix::<CudaF>::with_capacity(poseidon2_num_rows, poseidon2_width);
-            unsafe {
-                cuda_abi::poseidon2_tracegen(
-                    poseidon_trace_gpu.buffer(),
-                    poseidon_trace_gpu.height(),
-                    poseidon_trace_gpu.width(),
-                    &d_records,
-                    &d_counts,
-                    num_records,
-                    SBOX_REGISTERS,
-                )
-                .unwrap();
-            }
+            let poseidon_trace_gpu = info_span!("wrapper.generate_trace", air = "Poseidon2")
+                .in_scope(|| {
+                    info_span!("generate_trace").in_scope(|| {
+                        let poseidon2_width = Poseidon2Cols::<F, SBOX_REGISTERS>::width();
+                        let poseidon2_valid_rows = poseidon_inputs.len();
+                        let poseidon_inputs_flat: Vec<CudaF> = poseidon_inputs
+                            .into_iter()
+                            .flat_map(|state| state.into_iter())
+                            .collect();
+                        let d_records = poseidon_inputs_flat.to_device().unwrap();
+                        let d_counts = if poseidon2_valid_rows == 0 {
+                            DeviceBuffer::<u32>::new()
+                        } else {
+                            vec![1u32; poseidon2_valid_rows].to_device().unwrap()
+                        };
+                        let mut num_records = poseidon2_valid_rows;
+                        if num_records > 0 {
+                            unsafe {
+                                let d_num_records = [num_records].to_device().unwrap();
+                                let mut temp_bytes = 0;
+                                cuda_abi::poseidon2_deduplicate_records_get_temp_bytes(
+                                    &d_records,
+                                    &d_counts,
+                                    num_records,
+                                    &d_num_records,
+                                    &mut temp_bytes,
+                                )
+                                .unwrap();
+                                let d_temp_storage = if temp_bytes == 0 {
+                                    DeviceBuffer::<u8>::new()
+                                } else {
+                                    DeviceBuffer::<u8>::with_capacity(temp_bytes)
+                                };
+                                cuda_abi::poseidon2_deduplicate_records(
+                                    &d_records,
+                                    &d_counts,
+                                    num_records,
+                                    &d_num_records,
+                                    &d_temp_storage,
+                                    temp_bytes,
+                                )
+                                .unwrap();
+                                num_records = *d_num_records.to_host().unwrap().first().unwrap();
+                            }
+                        }
+                        let poseidon2_num_rows = if num_records == 0 {
+                            1
+                        } else {
+                            num_records.next_power_of_two()
+                        };
+                        let poseidon_trace_gpu = DeviceMatrix::<CudaF>::with_capacity(
+                            poseidon2_num_rows,
+                            poseidon2_width,
+                        );
+                        unsafe {
+                            cuda_abi::poseidon2_tracegen(
+                                poseidon_trace_gpu.buffer(),
+                                poseidon_trace_gpu.height(),
+                                poseidon_trace_gpu.width(),
+                                &d_records,
+                                &d_counts,
+                                num_records,
+                                SBOX_REGISTERS,
+                            )
+                            .unwrap();
+                        }
+                        poseidon_trace_gpu
+                    })
+                });
 
             vec![
                 AirProvingContextV2::simple_no_pis(transcript_trace_gpu),

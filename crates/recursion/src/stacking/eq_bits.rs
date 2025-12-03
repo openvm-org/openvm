@@ -69,7 +69,7 @@ pub struct EqBitsCols<F> {
 pub struct EqBitsTraceGenerator;
 
 impl EqBitsTraceGenerator {
-    #[tracing::instrument(name = "generate_trace(EqBitsAir)", skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn generate_trace(
         vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
