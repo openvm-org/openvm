@@ -539,8 +539,6 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
             (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits) as u32;
 
         // Scale factors for rem_words range check (using MAX_HINT_BUFFER_WORDS_BITS)
-        let rem_words_limb3_lshift: u32 =
-            (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - MAX_HINT_BUFFER_WORDS_BITS) as u32;
         let rem_words_limb2_lshift: u32 =
             ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS - MAX_HINT_BUFFER_WORDS_BITS) as u32;
 
