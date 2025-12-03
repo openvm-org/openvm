@@ -28,7 +28,8 @@ pub const CSRRW_FUNCT3: u8 = 0b001;
 /// Maximum number of bits for hint buffer size.
 /// IMPORTANT: Must be synced with MAX_HINT_BUFFER_WORDS_BITS constant for cuda
 /// `crates/circuits/primitives/cuda/include/primitives/constants.h`
-// For the constraints, they are configured for a range of MAX_HINT_BUFFER_WORDS_BITS between [16,23]
+// For the constraints, they are configured for a range of MAX_HINT_BUFFER_WORDS_BITS between
+// [16,23]
 pub const MAX_HINT_BUFFER_WORDS_BITS: usize = 18;
 /// Maximum number of words that can be read in a single HINT_BUFFER instruction.
 /// AIR constraint requires rem_words < 2^MAX_HINT_BUFFER_WORDS_BITS, so max is one less

@@ -25,7 +25,7 @@ use openvm_instructions::{
 use openvm_rv32im_transpiler::{
     Rv32HintStoreOpcode,
     Rv32HintStoreOpcode::{HINT_BUFFER, HINT_STOREW},
-    MAX_HINT_BUFFER_WORDS_BITS, MAX_HINT_BUFFER_WORDS,
+    MAX_HINT_BUFFER_WORDS, MAX_HINT_BUFFER_WORDS_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -227,7 +227,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
         builder
             .when(is_start.clone())
             .assert_zero(local_cols.rem_words_limbs[RV32_REGISTER_NUM_LIMBS - 1]);
-            
+
         self.bitwise_operation_lookup_bus
             .send_range(
                 local_cols.rem_words_limbs[RV32_REGISTER_NUM_LIMBS - 2]
@@ -563,19 +563,16 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
                     )
                 };
                 // Range check for mem_ptr (using pointer_max_bits)
-                // (num_words overflow check is handled below with the stricter MAX_HINT_BUFFER_WORDS_BITS bound)
-                self.bitwise_lookup_chip.request_range(
-                    (record.inner.mem_ptr >> msl_rshift) << msl_lshift,
-                    0,
-                );
+                // (num_words overflow check is handled below with the stricter
+                // MAX_HINT_BUFFER_WORDS_BITS bound)
+                self.bitwise_lookup_chip
+                    .request_range((record.inner.mem_ptr >> msl_rshift) << msl_lshift, 0);
                 // Range check for num_words (using MAX_HINT_BUFFER_WORDS_BITS)
                 // limbs[3] = 0 is checked via assert_zero in AIR (no lookup needed)
                 // limbs[2] * shift < 256 is checked via send_range
                 debug_assert_eq!(num_words >> 24, 0, "num_words limbs[3] must be 0");
-                self.bitwise_lookup_chip.request_range(
-                    ((num_words >> 16) & 0xFF) << rem_words_limb2_lshift,
-                    0,
-                );
+                self.bitwise_lookup_chip
+                    .request_range(((num_words >> 16) & 0xFF) << rem_words_limb2_lshift, 0);
 
                 let mut timestamp = record.inner.timestamp + num_words * 3;
                 let mut mem_ptr = record.inner.mem_ptr + num_words * RV32_REGISTER_NUM_LIMBS as u32;
