@@ -136,10 +136,10 @@ where
             ),
         );
 
-        let is_transition = LoopSubAir::local_is_transition(next.is_enabled, next.is_first);
+        // TODO(ayush): move to NestedForLoopSubAir
+        builder.when(local.is_first).assert_one(local.is_enabled);
+        let is_transition = next.is_enabled - next.is_first;
         let is_last = local.is_enabled - is_transition.clone();
-
-        let is_first_and_enabled = local.is_first * local.is_enabled;
 
         // Layer index starts from 0
         builder.when(local.is_first).assert_zero(local.layer_idx);
@@ -224,7 +224,7 @@ where
                 tidx: local.tidx,
                 q0_claim: local.sumcheck_claim_in,
             },
-            is_first_and_enabled.clone() * is_not_dummy.clone(),
+            local.is_first * is_not_dummy.clone(),
         );
         // 2. GkrLayerOutputBus
         // 2a. Send GKR input layer claims back
