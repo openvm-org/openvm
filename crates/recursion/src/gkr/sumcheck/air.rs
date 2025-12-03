@@ -150,11 +150,12 @@ where
             ),
         );
 
-        let is_transition_round =
-            LoopSubAir::local_is_transition(next.is_enabled, next.is_first_round);
+        // TODO(ayush): move to NestedForLoopSubAir
+        builder
+            .when(local.is_first_round)
+            .assert_one(local.is_enabled);
+        let is_transition_round = next.is_enabled - next.is_first_round;
         let is_last_round = local.is_enabled - is_transition_round.clone();
-
-        let is_first_round_and_enabled = local.is_first_round * local.is_enabled;
 
         // Sumcheck round flag starts at 0
         builder.when(local.is_first_round).assert_zero(local.round);
@@ -224,7 +225,7 @@ where
                 tidx: local.tidx,
                 claim: local.claim_in,
             },
-            is_first_round_and_enabled.clone() * is_not_dummy.clone(),
+            local.is_first_round * is_not_dummy.clone(),
         );
         // 2. GkrSumcheckOutputBus
         // 2a. Send output back to GkrLayerAir on final round
