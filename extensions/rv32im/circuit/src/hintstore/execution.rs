@@ -175,9 +175,10 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
 
     // Bounds check: num_words must not exceed MAX_HINT_BUFFER_WORDS
     if num_words > MAX_HINT_BUFFER_WORDS as u32 {
-        return Err(ExecutionError::Fail {
+        return Err(ExecutionError::HintBufferTooLarge {
             pc,
-            msg: "hint buffer num_words exceeds MAX_HINT_BUFFER_WORDS",
+            num_words,
+            max_hint_buffer_words: MAX_HINT_BUFFER_WORDS as u32,
         });
     }
 

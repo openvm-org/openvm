@@ -25,7 +25,7 @@ use openvm_instructions::{
 use openvm_rv32im_transpiler::{
     Rv32HintStoreOpcode,
     Rv32HintStoreOpcode::{HINT_BUFFER, HINT_STOREW},
-    MAX_HINT_BUFFER_BITS, MAX_HINT_BUFFER_WORDS,
+    MAX_HINT_BUFFER_WORDS_BITS, MAX_HINT_BUFFER_WORDS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -203,38 +203,39 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
             )
             .eval(builder, is_start.clone());
 
-        // Preventing mem_ptr and rem_words overflow
-        // Constraining mem_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1] < 2^(pointer_max_bits -
-        // (RV32_REGISTER_NUM_LIMBS - 1)*RV32_CELL_BITS) which implies mem_ptr <=
-        // 2^pointer_max_bits Similarly for rem_words <= 2^pointer_max_bits
+        // Preventing mem_ptr overflow: mem_ptr < 2^pointer_max_bits
+        // (rem_words overflow is handled below with the stricter MAX_HINT_BUFFER_WORDS_BITS bound)
         self.bitwise_operation_lookup_bus
             .send_range(
                 local_cols.mem_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1]
                     * AB::F::from_canonical_usize(
                         1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits),
                     ),
-                local_cols.rem_words_limbs[RV32_REGISTER_NUM_LIMBS - 1]
-                    * AB::F::from_canonical_usize(
-                        1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits),
-                    ),
+                AB::F::ZERO,
             )
             .eval(builder, is_start.clone());
 
-        // Preventing rem_words overflow: rem_words < 2^MAX_HINT_BUFFER_BITS, rem_words <=
-        // MAX_HINT_BUFFER_WORDS MAX_HINT_BUFFER_WORDS = 2^MAX_HINT_BUFFER_BITS - 1
-        // For MAX_HINT_BUFFER_BITS = 18:
-        // - limbs[3] * 2^14 must be < 256, so limbs[3] = 0
-        // - limbs[2] * 64 must be < 256, so limbs[2] < 4
+        // Preventing rem_words overflow: rem_words < 2^MAX_HINT_BUFFER_WORDS_BITS
+        // These constraints only work for MAX_HINT_BUFFER_WORDS_BITS in [16, 23]
+        debug_assert!(
+            (16..=23).contains(&MAX_HINT_BUFFER_WORDS_BITS),
+            "MAX_HINT_BUFFER_WORDS_BITS must be in [16, 23] for these constraints to work"
+        );
+        // For MAX_HINT_BUFFER_WORDS_BITS = 18, this requires:
+        // - limbs[3] = 0 (since 2^18 < 2^24)
+        // - limbs[2] < 4 (since 2^18 = 4 * 2^16)
+        builder
+            .when(is_start.clone())
+            .assert_zero(local_cols.rem_words_limbs[RV32_REGISTER_NUM_LIMBS - 1]);
+            
         self.bitwise_operation_lookup_bus
             .send_range(
-                local_cols.rem_words_limbs[RV32_REGISTER_NUM_LIMBS - 1]
-                    * AB::F::from_canonical_usize(
-                        1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - MAX_HINT_BUFFER_BITS),
-                    ),
                 local_cols.rem_words_limbs[RV32_REGISTER_NUM_LIMBS - 2]
                     * AB::F::from_canonical_usize(
-                        1 << (RV32_CELL_BITS - (MAX_HINT_BUFFER_BITS % RV32_CELL_BITS)),
+                        1 << ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS
+                            - MAX_HINT_BUFFER_WORDS_BITS),
                     ),
+                AB::F::ZERO,
             )
             .eval(builder, is_start.clone());
 
@@ -430,9 +431,10 @@ where
 
         // Bounds check: num_words must not exceed MAX_HINT_BUFFER_WORDS
         if num_words > MAX_HINT_BUFFER_WORDS as u32 {
-            return Err(ExecutionError::Fail {
+            return Err(ExecutionError::HintBufferTooLarge {
                 pc: *state.pc,
-                msg: "hint buffer num_words exceeds MAX_HINT_BUFFER_WORDS",
+                num_words,
+                max_hint_buffer_words: MAX_HINT_BUFFER_WORDS as u32,
             });
         }
 
@@ -536,11 +538,11 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
         let msl_lshift: u32 =
             (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits) as u32;
 
-        // Scale factors for rem_words range check (using MAX_HINT_BUFFER_BITS)
+        // Scale factors for rem_words range check (using MAX_HINT_BUFFER_WORDS_BITS)
         let rem_words_limb3_lshift: u32 =
-            (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - MAX_HINT_BUFFER_BITS) as u32;
+            (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - MAX_HINT_BUFFER_WORDS_BITS) as u32;
         let rem_words_limb2_lshift: u32 =
-            (RV32_CELL_BITS - (MAX_HINT_BUFFER_BITS % RV32_CELL_BITS)) as u32;
+            ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS - MAX_HINT_BUFFER_WORDS_BITS) as u32;
 
         chunks
             .par_iter_mut()
@@ -560,17 +562,19 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
                         }),
                     )
                 };
-                // Combined range check for mem_ptr and num_words (using pointer_max_bits)
-                // This ensures mem_ptr + num_words * 4 doesn't overflow the address space
+                // Range check for mem_ptr (using pointer_max_bits)
+                // (num_words overflow check is handled below with the stricter MAX_HINT_BUFFER_WORDS_BITS bound)
                 self.bitwise_lookup_chip.request_range(
                     (record.inner.mem_ptr >> msl_rshift) << msl_lshift,
-                    (num_words >> msl_rshift) << msl_lshift,
+                    0,
                 );
-                // Additional range check for num_words (using MAX_HINT_BUFFER_BITS)
-                // This tighter bound (num_words < 2^18) enables hint buffer chunking
+                // Range check for num_words (using MAX_HINT_BUFFER_WORDS_BITS)
+                // limbs[3] = 0 is checked via assert_zero in AIR (no lookup needed)
+                // limbs[2] * shift < 256 is checked via send_range
+                debug_assert_eq!(num_words >> 24, 0, "num_words limbs[3] must be 0");
                 self.bitwise_lookup_chip.request_range(
-                    (num_words >> msl_rshift) << rem_words_limb3_lshift,
                     ((num_words >> 16) & 0xFF) << rem_words_limb2_lshift,
+                    0,
                 );
 
                 let mut timestamp = record.inner.timestamp + num_words * 3;

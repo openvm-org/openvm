@@ -6,7 +6,7 @@
 
 using namespace riscv;
 using namespace program;
-using hintstore::MAX_HINT_BUFFER_BITS;
+using hintstore::MAX_HINT_BUFFER_WORDS_BITS;
 
 template <typename T> struct Rv32HintStoreCols {
     // common
@@ -88,21 +88,21 @@ struct Rv32HintStore {
         COL_WRITE_ARRAY(row, Rv32HintStoreCols, mem_ptr_limbs, mem_ptr_limbs);
 
         if (local_idx == 0) {
-            uint32_t msl_rshift = (RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS;
-            uint32_t msl_lshift = RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - pointer_max_bits;
-            // Combined range check for mem_ptr and num_words (using pointer_max_bits)
-            // This ensures mem_ptr + num_words * 4 doesn't overflow the address space
-            bitwise_lookup.add_range(
-                (record.mem_ptr >> msl_rshift) << msl_lshift,
-                (record.num_words >> msl_rshift) << msl_lshift
-            );
+            // The overflow check for mem_ptr + num_words * 4 is not needed because
+            // 4 * MAX_HINT_BUFFER_WORDS < 2^pointer_max_bits guarantees no overflow
+            debug_assert(MAX_HINT_BUFFER_WORDS_BITS + 2 < pointer_max_bits);
+            
+            // These constraints only work for MAX_HINT_BUFFER_WORDS_BITS in [16, 23]
+            debug_assert(MAX_HINT_BUFFER_WORDS_BITS >= 16 && MAX_HINT_BUFFER_WORDS_BITS <= 23);
 
-            uint32_t rem_words_limb3_lshift = RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - MAX_HINT_BUFFER_BITS; // works
-            uint32_t rem_words_limb2_lshift = RV32_CELL_BITS - (MAX_HINT_BUFFER_BITS % RV32_CELL_BITS); 
-            // Bounds if MAX_HINT_BUFFER_BITS is between [16,23]
+            // rem_words < 2^MAX_HINT_BUFFER_WORDS_BITS requires:
+            // - limbs[3] = 0 (high byte must be zero)
+            // - limbs[2] < 4 (for MAX_HINT_BUFFER_WORDS_BITS = 18)
+            debug_assert((record.num_words >> 24) == 0);
+            uint32_t rem_words_limb2_lshift = (RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS - MAX_HINT_BUFFER_WORDS_BITS;
             bitwise_lookup.add_range(
-                (record.num_words >> msl_rshift) << rem_words_limb3_lshift, // third limb, 
-                ((record.num_words >> 16) & 0xFF) << rem_words_limb2_lshift
+                ((record.num_words >> 16) & 0xFF) << rem_words_limb2_lshift,
+                0
             );
             mem_helper.fill(
                 row.slice_from(COL_INDEX(Rv32HintStoreCols, mem_ptr_aux_cols)),
