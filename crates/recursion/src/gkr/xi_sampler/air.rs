@@ -99,11 +99,12 @@ where
             ),
         );
 
-        let is_transition_challenge =
-            LoopSubAir::local_is_transition(next.is_enabled, next.is_first_challenge);
+        // TODO(ayush): move to NestedForLoopSubAir
+        builder
+            .when(local.is_first_challenge)
+            .assert_one(local.is_enabled);
+        let is_transition_challenge = next.is_enabled - next.is_first_challenge;
         let is_last_challenge = local.is_enabled - is_transition_challenge.clone();
-
-        let is_first_challenge_and_enabled = local.is_first_challenge * local.is_enabled;
 
         // Challenge index increments by 1
         builder
@@ -133,7 +134,7 @@ where
                 idx: local.idx.into(),
                 tidx: local.tidx.into(),
             },
-            is_first_challenge_and_enabled.clone() * is_not_dummy.clone(),
+            local.is_first_challenge * is_not_dummy.clone(),
         );
         // 1b. Send output to GkrInputAir
         let tidx_end = local.tidx + AB::Expr::from_canonical_usize(D_EF);

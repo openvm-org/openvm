@@ -36,6 +36,7 @@ pub struct MultilinearSumcheckCols<T> {
     pub is_proof_start: T,
     pub is_first_eval: T,
 
+    // TODO(ayush): remove
     pub nested_for_loop_aux_cols: NestedForLoopAuxCols<T, 1>,
 
     /// A valid row which is not involved in any interactions
@@ -125,16 +126,17 @@ where
             ),
         );
 
-        let is_first_eval_and_valid = local.is_valid * local.is_first_eval;
-        let is_proof_start_and_valid = local.is_valid * local.is_proof_start;
+        // TODO(ayush): move to NestedForLoopSubAir
+        builder.when(local.is_first_eval).assert_one(local.is_valid);
+        builder
+            .when(local.is_proof_start)
+            .assert_one(local.is_valid);
 
-        let is_transition_eval = LoopSubAir::local_is_transition(next.is_valid, next.is_first_eval);
-        // Since local.is_valid = 0 => next.is_valid = 0 => is_transition_eval = 0
-        // is_last_eval = local.is_valid * (1 - is_transition_eval) <=> local.is_valid - is_transition_eval
+        let is_transition_eval = next.is_valid - next.is_first_eval;
         let is_last_eval = local.is_valid - is_transition_eval.clone();
 
-        let is_proof_end = AB::Expr::ONE - local.nested_for_loop_aux_cols.is_transition[0];
-        let is_proof_end_and_valid = local.is_valid + is_proof_end.clone() - AB::Expr::ONE;
+        let is_proof_transition = next.is_valid - next.is_proof_start;
+        let is_proof_end = local.is_valid - is_proof_transition.clone();
 
         let is_not_dummy = AB::Expr::ONE - local.is_dummy;
 
@@ -165,7 +167,7 @@ where
         );
         // Starts at d!
         builder
-            .when(is_first_eval_and_valid.clone())
+            .when(local.is_first_eval)
             .assert_eq(local.denom_inv, d_factorial_inv);
         // 1 / (i + 1)!(d - i - 1)!  (i + 1) = 1 / i!(d - i)! * (d - i)
         builder.when(is_transition_eval.clone()).assert_eq(
@@ -185,10 +187,7 @@ where
 
         // Prefix Product
         // Starts at 1
-        assert_one_ext(
-            &mut builder.when(is_first_eval_and_valid.clone()),
-            local.prefix_product,
-        );
+        assert_one_ext(&mut builder.when(local.is_first_eval), local.prefix_product);
         // p' = p * (r - i)
         assert_array_eq(
             &mut builder.when(is_transition_eval.clone()),
@@ -231,7 +230,7 @@ where
 
         // Initialize at first evaluation
         assert_array_eq(
-            &mut builder.when(is_first_eval_and_valid.clone()),
+            &mut builder.when(local.is_first_eval),
             local.cur_sum,
             ext_field_multiply(local.eval, local.lagrange_coeff),
         );
@@ -280,7 +279,7 @@ where
             builder,
             local.proof_idx,
             StackingModuleMessage { tidx: local.tidx },
-            is_proof_start_and_valid * is_not_dummy.clone(),
+            local.is_proof_start * is_not_dummy.clone(),
         );
         self.stacking_module_bus.send(
             builder,
@@ -288,7 +287,7 @@ where
             StackingModuleMessage {
                 tidx: local.tidx + AB::Expr::from_canonical_usize(D_EF),
             },
-            is_proof_end_and_valid.clone() * is_not_dummy.clone(),
+            is_proof_end.clone() * is_not_dummy.clone(),
         );
 
         self.claim_bus.receive(
@@ -298,7 +297,7 @@ where
                 round: local.round_idx.into(),
                 value: ext_field_add(local.eval, next.eval),
             },
-            is_first_eval_and_valid.clone() * is_not_dummy.clone(),
+            local.is_first_eval * is_not_dummy.clone(),
         );
         self.claim_bus.send(
             builder,
@@ -316,7 +315,7 @@ where
                 idx: local.round_idx + AB::Expr::ONE,
                 challenge: local.r.map(|x| x.into()),
             },
-            is_first_eval_and_valid.clone() * is_not_dummy.clone(),
+            local.is_first_eval * is_not_dummy.clone(),
         );
         self.batch_constraint_conductor_bus.send(
             builder,
@@ -326,7 +325,7 @@ where
                 idx: local.round_idx + AB::Expr::ONE,
                 value: local.r.map(|x| x.into()),
             },
-            is_first_eval_and_valid * is_not_dummy,
+            local.is_first_eval * is_not_dummy,
         );
     }
 }
