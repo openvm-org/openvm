@@ -44,6 +44,8 @@ pub struct Stats {
     pub avg: MdTableCell,
     #[serde(skip)]
     pub count: usize,
+    #[serde(skip)]
+    pub phase: Option<String>,
 }
 
 impl Default for Stats {
@@ -60,6 +62,7 @@ impl Stats {
             min: MdTableCell::new(f64::MAX, None),
             avg: MdTableCell::default(),
             count: 0,
+            phase: None,
         }
     }
     pub fn push(&mut self, value: f64) {
@@ -143,8 +146,14 @@ impl GroupedMetrics {
                     .iter()
                     .map(|(metric_name, metrics)| {
                         let mut summary = Stats::new();
-                        for (value, _) in metrics {
+                        for (value, labels) in metrics {
                             summary.push(*value);
+                            // Extract phase from labels if present
+                            if summary.phase.is_none() {
+                                if let Some(phase) = labels.get("phase") {
+                                    summary.phase = Some(phase.to_string());
+                                }
+                            }
                         }
                         summary.finalize();
                         (metric_name.clone(), summary)
@@ -352,51 +361,99 @@ impl AggregateMetrics {
             writeln!(writer, "| {group_name} |||||")?;
             writeln!(writer, "|:---|---:|---:|---:|---:|")?;
             writeln!(writer, "|metric|avg|sum|max|min|")?;
-            let names = if metric_names.is_empty() {
+
+            let names: Vec<&str> = if metric_names.is_empty() {
                 summaries.keys().map(|s| s.as_str()).collect()
             } else {
                 metric_names.clone()
             };
-            for metric_name in names {
-                let summary = summaries.get(metric_name);
-                if let Some(summary) = summary {
-                    // Special handling for execute_metered metrics (not aggregated across segments
-                    // in the app proof case)
-                    if metric_name == EXECUTE_METERED_TIME_LABEL
-                        && group_name != "leaf"
-                        && group_name != "root"
-                        && group_name != "halo2_outer"
-                        && group_name != "halo2_wrapper"
-                        && !group_name.starts_with("internal")
-                    {
-                        writeln!(
-                            writer,
-                            "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
-                            metric_name, summary.avg, "-", "-", "-",
-                        )?;
-                    } else if metric_name == EXECUTE_E1_INSN_MI_S_LABEL
-                        || metric_name == EXECUTE_PREFLIGHT_INSN_MI_S_LABEL
-                        || metric_name == EXECUTE_METERED_INSN_MI_S_LABEL
-                    {
-                        // skip sum because it is misleading
-                        writeln!(
-                            writer,
-                            "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
-                            metric_name, summary.avg, "-", summary.max, summary.min,
-                        )?;
-                    } else {
-                        writeln!(
-                            writer,
-                            "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
-                            metric_name, summary.avg, summary.sum, summary.max, summary.min,
-                        )?;
+
+            // Group metrics by phase
+            let get_phase = |name: &str| -> Option<&str> {
+                summaries.get(name).and_then(|stats| stats.phase.as_deref())
+            };
+
+            // Collect unique phases (preserving order: uncategorized first, then by phase)
+            let mut phases: Vec<Option<&str>> = vec![None];
+            for name in &names {
+                if let Some(phase) = get_phase(name) {
+                    if !phases.contains(&Some(phase)) {
+                        phases.push(Some(phase));
                     }
                 }
             }
+
+            // Write metrics grouped by phase
+            for phase in &phases {
+                let phase_names: Vec<&str> = names
+                    .iter()
+                    .filter(|name| get_phase(name) == *phase)
+                    .copied()
+                    .collect();
+
+                if phase_names.is_empty() {
+                    continue;
+                }
+
+                // Write separator for non-default phases
+                if let Some(p) = phase {
+                    let label = p[0..1].to_uppercase() + &p[1..]; // Capitalize
+                    writeln!(writer, "| **{label}** |||||")?;
+                }
+
+                for metric_name in &phase_names {
+                    self.write_metric_row(writer, &group_name, &summaries, metric_name)?;
+                }
+            }
+
             writeln!(writer)?;
         }
         writeln!(writer)?;
 
+        Ok(())
+    }
+
+    fn write_metric_row(
+        &self,
+        writer: &mut impl Write,
+        group_name: &str,
+        summaries: &HashMap<MetricName, Stats>,
+        metric_name: &str,
+    ) -> Result<()> {
+        let summary = summaries.get(metric_name);
+        if let Some(summary) = summary {
+            // Special handling for execute_metered metrics (not aggregated across segments
+            // in the app proof case)
+            if metric_name == EXECUTE_METERED_TIME_LABEL
+                && group_name != "leaf"
+                && group_name != "root"
+                && group_name != "halo2_outer"
+                && group_name != "halo2_wrapper"
+                && !group_name.starts_with("internal")
+            {
+                writeln!(
+                    writer,
+                    "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
+                    metric_name, summary.avg, "-", "-", "-",
+                )?;
+            } else if metric_name == EXECUTE_E1_INSN_MI_S_LABEL
+                || metric_name == EXECUTE_PREFLIGHT_INSN_MI_S_LABEL
+                || metric_name == EXECUTE_METERED_INSN_MI_S_LABEL
+            {
+                // skip sum because it is misleading
+                writeln!(
+                    writer,
+                    "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
+                    metric_name, summary.avg, "-", summary.max, summary.min,
+                )?;
+            } else {
+                writeln!(
+                    writer,
+                    "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
+                    metric_name, summary.avg, summary.sum, summary.max, summary.min,
+                )?;
+            }
+        }
         Ok(())
     }
 
@@ -500,7 +557,7 @@ pub const BOUNDARY_FIN_TIME_LABEL: &str = "boundary_finalize_time_ms";
 pub const MERKLE_FIN_TIME_LABEL: &str = "merkle_finalize_time_ms";
 pub const PROVE_EXCL_TRACE_TIME_LABEL: &str = "stark_prove_excluding_trace_time_ms";
 
-pub const VM_METRIC_NAMES: &[&str] = &[
+pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
     PROOF_TIME_LABEL,
     MAIN_CELLS_USED_LABEL,
     TOTAL_CELLS_USED_LABEL,
@@ -523,4 +580,10 @@ pub const VM_METRIC_NAMES: &[&str] = &[
     "quotient_poly_compute_time_ms",
     "quotient_poly_commit_time_ms",
     "pcs_opening_time_ms",
+    "prover.rap_constraints_time_ms",
+    "prover.openings_time_ms",
+    "prover.gkr_input_evals_time_ms",
+    "prover.batch_constraints.round0_time_ms",
+    "frac_sumcheck.segment_tree_time_ms",
+    "frac_sumcheck.gkr_rounds_time_ms",
 ];

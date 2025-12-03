@@ -8,7 +8,7 @@ use clap::{Parser, Subcommand};
 use eyre::Result;
 use itertools::Itertools;
 use openvm_prof::{
-    aggregate::{GroupedMetrics, GENERATE_BLOB_TIME_LABEL, VM_METRIC_NAMES},
+    aggregate::{GroupedMetrics, AGGREGATED_METRIC_NAMES, GENERATE_BLOB_TIME_LABEL},
     summary::GithubSummary,
     types::{BenchmarkOutput, MetricDb},
 };
@@ -99,7 +99,7 @@ fn main() -> Result<()> {
         }
         output.insert(name, aggregated.to_bencher_metrics());
         let mut writer = Vec::new();
-        aggregated.write_markdown(&mut writer, VM_METRIC_NAMES)?;
+        aggregated.write_markdown(&mut writer, AGGREGATED_METRIC_NAMES)?;
 
         let mut markdown_output = String::from_utf8(writer)?;
 
