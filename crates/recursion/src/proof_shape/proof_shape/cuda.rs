@@ -49,6 +49,7 @@ pub(in crate::proof_shape) struct ProofShapeChipGpu<const NUM_LIMBS: usize, cons
 const NUM_LIMBS: usize = 4;
 const LIMB_BITS: usize = 8;
 impl ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
+    #[tracing::instrument(skip_all)]
     pub(in crate::proof_shape) fn generate_trace(
         &self,
         vk_gpu: &VerifyingKeyGpu,

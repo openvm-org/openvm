@@ -6,8 +6,7 @@ use openvm_circuit_primitives::encoder::Encoder;
 use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::FieldAlgebra;
-#[cfg(not(debug_assertions))]
-use p3_maybe_rayon::prelude::*;
+use p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use stark_backend_v2::{
     Digest, F,
     keygen::types::{MultiStarkVerifyingKeyV2, VerifierSinglePreprocessedData},
@@ -141,7 +140,7 @@ impl ProofShapeModule {
         }
     }
 
-    #[tracing::instrument(name = "run_preflight(ProofShapeModule)", skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn run_preflight<TS>(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -271,7 +270,7 @@ struct ProofShapeBlob;
 impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for ProofShapeModule {
     type ModuleSpecificCtx = ();
 
-    #[tracing::instrument(name = "generate_proving_ctxs(ProofShapeModule)", skip_all)]
+    #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -292,23 +291,24 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for ProofShapeModule {
             ProofShapeModuleChip::ProofShape(proof_shape),
             ProofShapeModuleChip::PublicValues,
         ];
-        #[cfg(debug_assertions)]
-        let iter = chips.iter();
-        #[cfg(not(debug_assertions))]
-        let iter = chips.par_iter();
         ctxs.extend(
-            iter.map(|chip| chip.generate_trace(child_vk, proofs, preflights, &blob))
+            chips
+                .par_iter()
+                .map(|chip| chip.generate_trace(child_vk, proofs, preflights, &blob))
                 .collect::<Vec<_>>(),
         );
-        ctxs.push(ColMajorMatrix::from_row_major(
-            &self.range_checker.generate_trace_row_major(),
-        ));
+        tracing::info_span!("wrapper.generate_trace", air = "RangeChecker").in_scope(|| {
+            ctxs.push(ColMajorMatrix::from_row_major(
+                &self.range_checker.generate_trace_row_major(),
+            ));
+        });
         ctxs.into_iter()
             .map(AirProvingContextV2::simple_no_pis)
             .collect()
     }
 }
 
+#[derive(strum_macros::Display)]
 enum ProofShapeModuleChip {
     ProofShape(proof_shape::ProofShapeChip<4, 8>),
     PublicValues,
@@ -317,6 +317,7 @@ enum ProofShapeModuleChip {
 impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for ProofShapeModuleChip {
     type ModuleSpecificCtx = ProofShapeBlob;
 
+    #[tracing::instrument(name = "wrapper.generate_trace", skip_all, fields(air = %self))]
     fn generate_trace(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -353,6 +354,7 @@ mod cuda_tracegen {
     impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for ProofShapeModule {
         type ModuleSpecificCtx = ();
 
+        #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(
             &self,
             child_vk: &VerifyingKeyGpu,
@@ -386,7 +388,9 @@ mod cuda_tracegen {
             );
             // Caution: proof_shape **must** finish trace gen before range_checker or pow_checker
             // can start trace gen with the correct multiplicities
-            ctxs.push(Arc::try_unwrap(range_checker_gpu).unwrap().generate_trace());
+            tracing::info_span!("wrapper.generate_trace", air = "RangeChecker").in_scope(|| {
+                ctxs.push(Arc::try_unwrap(range_checker_gpu).unwrap().generate_trace());
+            });
             let pow_trace = Arc::try_unwrap(pow_checker_gpu).unwrap().generate_trace();
             accumulate_power_checker_counts_from_gpu(&pow_trace, &self.pow_checker);
 
@@ -396,6 +400,7 @@ mod cuda_tracegen {
         }
     }
 
+    #[derive(strum_macros::Display)]
     enum ProofShapeModuleChipGpu {
         ProofShape(proof_shape::cuda::ProofShapeChipGpu<4, 8>),
         PublicValues,
@@ -405,6 +410,7 @@ mod cuda_tracegen {
         // Empty blob so no difference in type between cpu and gpu
         type ModuleSpecificCtx = ProofShapeBlob;
 
+        #[tracing::instrument(name = "wrapper.generate_trace", skip_all, fields(air = %self))]
         fn generate_trace(
             &self,
             child_vk: &VerifyingKeyGpu,
