@@ -10,7 +10,6 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, TwoAdicField};
 use p3_matrix::dense::RowMajorMatrix;
-#[cfg(not(debug_assertions))]
 use p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use stark_backend_v2::{
     EF, F, SC, StarkEngineV2,
@@ -171,7 +170,7 @@ impl BatchConstraintModule {
         }
     }
 
-    #[tracing::instrument(name = "run_preflight(BatchConstraintModule)", skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn run_preflight<TS>(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS)
     where
         TS: FiatShamirTranscript + TranscriptHistory,
@@ -444,7 +443,7 @@ pub struct SelectorCount {
 }
 
 impl BatchConstraintModule {
-    #[tracing::instrument(name = "generate_blob(BatchConstraintModule)", skip_all)]
+    #[tracing::instrument(skip_all)]
     fn generate_blob(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -652,7 +651,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
     /// **Note**: This generates all common main traces but leaves the cached trace for
     /// `SymbolicExpressionAir` unset. The cached trace must be loaded **after** calling this
     /// function.
-    #[tracing::instrument(name = "generate_proving_ctxs(BatchConstraintModule)", skip_all)]
+    #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -681,16 +680,15 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
             BatchConstraintModuleChip::ConstraintsFolding,
             BatchConstraintModuleChip::EqNeg,
         ];
-        #[cfg(debug_assertions)]
-        let iter = chips.iter();
-        #[cfg(not(debug_assertions))]
         let iter = chips.par_iter();
+        let span = tracing::Span::current();
         iter.map(|chip| {
-            ModuleChip::<GlobalCtxCpu, CpuBackendV2>::generate_trace(
+            let _guard = span.enter();
+            let trace = ModuleChip::<GlobalCtxCpu, CpuBackendV2>::generate_trace(
                 chip, child_vk, proofs, preflights, &blob,
-            )
+            );
+            AirProvingContextV2::simple_no_pis(trace)
         })
-        .map(AirProvingContextV2::simple_no_pis)
         .collect()
     }
 }
@@ -717,6 +715,7 @@ impl BatchConstraintModule {
     }
 }
 
+#[derive(strum_macros::Display)]
 enum BatchConstraintModuleChip {
     SymbolicExpression {
         max_num_proofs: usize,
@@ -740,6 +739,7 @@ enum BatchConstraintModuleChip {
 impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModuleChip {
     type ModuleSpecificCtx = BatchConstraintBlobCpu;
 
+    #[tracing::instrument(name = "wrapper.generate_trace", skip_all, fields(air = %self))]
     fn generate_trace(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -812,8 +812,6 @@ impl BatchConstraintModuleChip {
 pub mod cuda_tracegen {
     use cuda_backend_v2::{GpuBackendV2, transport_matrix_h2d_col_major};
     use openvm_cuda_backend::{base::DeviceMatrix, data_transporter::transport_matrix_to_device};
-    #[cfg(not(debug_assertions))]
-    use p3_maybe_rayon::prelude::*;
 
     use super::*;
     use crate::{
@@ -824,6 +822,7 @@ pub mod cuda_tracegen {
     impl ModuleChip<GlobalCtxGpu, GpuBackendV2> for BatchConstraintModuleChip {
         type ModuleSpecificCtx = BatchConstraintBlobCpu;
 
+        #[tracing::instrument(name = "wrapper.generate_trace", skip_all, fields(air = %self))]
         fn generate_trace(
             &self,
             child_vk: &VerifyingKeyGpu,
@@ -855,6 +854,7 @@ pub mod cuda_tracegen {
     impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for BatchConstraintModule {
         type ModuleSpecificCtx = ();
 
+        #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(
             &self,
             child_vk: &VerifyingKeyGpu,
@@ -885,17 +885,17 @@ pub mod cuda_tracegen {
                 BatchConstraintModuleChip::ConstraintsFolding,
                 BatchConstraintModuleChip::EqNeg,
             ];
-            #[cfg(debug_assertions)]
-            let iter = chips.iter();
-            #[cfg(not(debug_assertions))]
-            let iter = chips.par_iter();
-            iter.map(|chip| {
-                ModuleChip::<GlobalCtxGpu, GpuBackendV2>::generate_trace(
-                    chip, child_vk, proofs, preflights, &blob,
-                )
-            })
-            .map(AirProvingContextV2::simple_no_pis)
-            .collect()
+            let span = tracing::Span::current();
+            chips
+                .par_iter()
+                .map(|chip| {
+                    let _guard = span.enter();
+                    let trace = ModuleChip::<GlobalCtxGpu, GpuBackendV2>::generate_trace(
+                        chip, child_vk, proofs, preflights, &blob,
+                    );
+                    AirProvingContextV2::simple_no_pis(trace)
+                })
+                .collect()
         }
     }
 

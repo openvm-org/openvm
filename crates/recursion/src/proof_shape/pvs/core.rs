@@ -33,7 +33,7 @@ pub struct PublicValuesCols<F> {
     pub value: F,
 }
 
-#[tracing::instrument(name = "generate_trace(PublicValuesAir)", skip_all)]
+#[tracing::instrument(skip_all)]
 pub(in crate::proof_shape) fn generate_trace(
     proofs: &[Proof],
     preflights: &[Preflight],

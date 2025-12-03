@@ -478,7 +478,7 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_blob(
     }
 }
 
-#[tracing::instrument(name = "generate_trace(InteractionsFoldingAir)", skip_all)]
+#[tracing::instrument(name = "generate_trace", skip_all)]
 pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
     vk: &MultiStarkVerifyingKeyV2,
     blob: &BatchConstraintBlobCpu,

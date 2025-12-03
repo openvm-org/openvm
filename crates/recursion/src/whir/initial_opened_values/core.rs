@@ -321,7 +321,7 @@ pub struct InitialOpenedValueRecord {
     pub post_state: [F; WIDTH],
 }
 
-#[tracing::instrument(name = "generate_trace(InitialOpenedValuesAir)", skip_all)]
+#[tracing::instrument(skip_all)]
 pub(crate) fn generate_trace(
     params: SystemParams,
     proofs: &[&Proof],

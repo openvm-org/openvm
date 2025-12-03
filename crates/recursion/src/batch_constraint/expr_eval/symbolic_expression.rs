@@ -338,7 +338,7 @@ where
 }
 
 /// Returns the common main trace.
-#[tracing::instrument(name = "generate_trace(SymbolicExpressionAir)", skip_all)]
+#[tracing::instrument(name = "generate_trace", skip_all)]
 pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
     child_vk: &MultiStarkVerifyingKeyV2,
     proofs: &[Proof],
@@ -621,7 +621,11 @@ pub(crate) enum NodeKind {
 }
 
 /// Returns the cached trace
-#[tracing::instrument(name = "generate_cached_trace(SymbolicExpressionAir)", skip_all)]
+#[tracing::instrument(
+    name = "generate_cached_trace",
+    skip_all,
+    fields(air = "SymbolicExpressionAir")
+)]
 pub(crate) fn generate_symbolic_expr_cached_trace(
     child_vk: &MultiStarkVerifyingKeyV2,
 ) -> RowMajorMatrix<F> {

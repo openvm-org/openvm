@@ -24,8 +24,8 @@ use stark_backend_v2::{
 use crate::{
     primitives::exp_bits_len::ExpBitsLenTraceGenerator,
     system::{
-        AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, MerkleVerifyLog, Preflight,
-        TraceGenModule, WhirPreflight,
+        AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, MerkleVerifyLog, ModuleChip,
+        Preflight, TraceGenModule, WhirPreflight,
     },
     utils::poseidon2_hash_slice_with_records,
     whir::{
@@ -120,7 +120,7 @@ impl WhirModule {
 }
 
 impl WhirModule {
-    #[tracing::instrument(name = "run_preflight(WhirModule)", skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn run_preflight<TS: FiatShamirTranscript + TranscriptHistory>(
         &self,
         proof: &Proof,
@@ -488,7 +488,7 @@ impl AirModule for WhirModule {
 }
 
 impl WhirModule {
-    #[tracing::instrument(name = "generate_blob(WhirModule)", skip_all)]
+    #[tracing::instrument(skip_all)]
     fn generate_blob(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -641,7 +641,7 @@ impl WhirModule {
 impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for WhirModule {
     type ModuleSpecificCtx = ExpBitsLenTraceGenerator;
 
-    #[tracing::instrument(name = "generate_proving_ctxs(WhirModule)", skip_all)]
+    #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -725,6 +725,7 @@ fn binary_k_fold(
     values[0]
 }
 
+#[derive(strum_macros::Display)]
 enum WhirModuleChip {
     WhirRound,
     Sumcheck,
@@ -776,11 +777,33 @@ impl WhirModuleChip {
     }
 }
 
+impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for WhirModuleChip {
+    type ModuleSpecificCtx = WhirBlobCpu;
+
+    #[tracing::instrument(name = "wrapper.generate_trace", skip_all, fields(air = %self))]
+    fn generate_trace(
+        &self,
+        child_vk: &MultiStarkVerifyingKeyV2,
+        proofs: &[Proof],
+        preflights: &[Preflight],
+        blob: &WhirBlobCpu,
+    ) -> ColMajorMatrix<F> {
+        let proofs = proofs.iter().collect_vec();
+        let preflights = preflights.iter().collect_vec();
+        ColMajorMatrix::from_row_major(&self.generate_trace_row_major(
+            child_vk,
+            &proofs,
+            &preflights,
+            blob,
+        ))
+    }
+}
+
 #[cfg(feature = "cuda")]
 mod cuda_tracegen {
     use cuda_backend_v2::GpuBackendV2;
     use itertools::Itertools;
-    use openvm_cuda_backend::data_transporter::transport_matrix_to_device;
+    use openvm_cuda_backend::{base::DeviceMatrix, data_transporter::transport_matrix_to_device};
     use openvm_cuda_common::d_buffer::DeviceBuffer;
 
     use super::*;
@@ -882,9 +905,49 @@ mod cuda_tracegen {
         }
     }
 
+    impl WhirModuleChip {
+        #[tracing::instrument(name = "wrapper.generate_trace", skip_all, fields(air = %self))]
+        fn generate_gpu_trace(
+            &self,
+            child_vk: &VerifyingKeyGpu,
+            proofs_cpu: &[&Proof],
+            preflights_cpu: &[&Preflight],
+            blob: &WhirBlobGpu,
+            blob_cpu: &WhirBlobCpu,
+        ) -> DeviceMatrix<F> {
+            match self {
+                WhirModuleChip::InitialOpenedValues => initial_opened_values::cuda::generate_trace(
+                    proofs_cpu.len(),
+                    &blob,
+                    child_vk.system_params,
+                ),
+                WhirModuleChip::NonInitialOpenedValues => {
+                    non_initial_opened_values::cuda::generate_trace(&blob, child_vk.system_params)
+                }
+                WhirModuleChip::FinalPolyQueryEval => {
+                    final_poly_query_eval::cuda::generate_trace(&blob, child_vk.system_params)
+                }
+                WhirModuleChip::Folding => {
+                    folding::cuda::generate_trace(&blob, child_vk.system_params, proofs_cpu.len())
+                }
+                _ => {
+                    // Fall back to CPU impl.
+                    let mat = self.generate_trace_row_major(
+                        &child_vk.cpu,
+                        &proofs_cpu,
+                        &preflights_cpu,
+                        &blob_cpu,
+                    );
+                    transport_matrix_to_device(Arc::new(mat))
+                }
+            }
+        }
+    }
+
     impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for WhirModule {
         type ModuleSpecificCtx = ExpBitsLenTraceGenerator;
 
+        #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(
             &self,
             child_vk: &VerifyingKeyGpu,
@@ -913,34 +976,8 @@ mod cuda_tracegen {
                 WhirModuleChip::FinalPolyQueryEval,
             ]
             .iter()
-            .map(|chip| match chip {
-                WhirModuleChip::InitialOpenedValues => initial_opened_values::cuda::generate_trace(
-                    proofs.len(),
-                    &blob_gpu,
-                    child_vk.system_params,
-                ),
-                WhirModuleChip::NonInitialOpenedValues => {
-                    non_initial_opened_values::cuda::generate_trace(
-                        &blob_gpu,
-                        child_vk.system_params,
-                    )
-                }
-                WhirModuleChip::FinalPolyQueryEval => {
-                    final_poly_query_eval::cuda::generate_trace(&blob_gpu, child_vk.system_params)
-                }
-                WhirModuleChip::Folding => {
-                    folding::cuda::generate_trace(&blob_gpu, child_vk.system_params, proofs.len())
-                }
-                _ => {
-                    // Fall back to CPU impl.
-                    let mat = chip.generate_trace_row_major(
-                        &child_vk.cpu,
-                        &proofs_cpu,
-                        &preflights_cpu,
-                        &blob,
-                    );
-                    transport_matrix_to_device(Arc::new(mat))
-                }
+            .map(|chip| {
+                chip.generate_gpu_trace(child_vk, proofs_cpu, preflights_cpu, &blob_gpu, &blob)
             })
             .map(|mat| AirProvingContextV2::simple_no_pis(mat))
             .collect()

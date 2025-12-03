@@ -19,7 +19,6 @@ use stark_backend_v2::{
         AirProvingContextV2, ColMajorMatrix, CommittedTraceDataV2, CpuBackendV2, ProverBackendV2,
     },
 };
-use tracing::instrument;
 
 use crate::{
     batch_constraint::{BatchConstraintModule, LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX},
@@ -330,7 +329,7 @@ impl BusInventory {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, strum_macros::Display)]
 enum TraceModuleRef<'a> {
     Transcript(&'a TranscriptModule),
     ProofShape(&'a ProofShapeModule),
@@ -341,6 +340,31 @@ enum TraceModuleRef<'a> {
 }
 
 impl<'a> TraceModuleRef<'a> {
+    #[tracing::instrument(name = "wrapper.run_preflight", skip_all, fields(air_module = %self))]
+    fn run_preflight<TS>(
+        self,
+        child_vk: &MultiStarkVerifyingKeyV2,
+        proof: &Proof,
+        preflight: &mut Preflight,
+        sponge: &mut TS,
+    ) where
+        TS: FiatShamirTranscript + TranscriptHistory,
+    {
+        match self {
+            TraceModuleRef::ProofShape(module) => {
+                module.run_preflight(child_vk, proof, preflight, sponge)
+            }
+            TraceModuleRef::Gkr(module) => module.run_preflight(proof, preflight, sponge),
+            TraceModuleRef::BatchConstraint(module) => {
+                module.run_preflight(proof, preflight, sponge)
+            }
+            TraceModuleRef::Stacking(module) => module.run_preflight(proof, preflight, sponge),
+            TraceModuleRef::Whir(module) => module.run_preflight(proof, preflight, sponge),
+            _ => panic!("TraceModuleRef::run_preflight called with invalid module"),
+        }
+    }
+
+    #[tracing::instrument(name = "wrapper.generate_proving_ctxs", skip_all, fields(air_module = %self))]
     fn generate_cpu_ctxs(
         self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -439,7 +463,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
     }
 
     /// Runs preflight for a single proof.
-    #[tracing::instrument(name = "run_preflight(VerifierSubCircuit)", skip_all)]
+    #[tracing::instrument(name = "execute_preflight", skip_all)]
     pub fn run_preflight<TS>(
         &self,
         mut sponge: TS,
@@ -451,14 +475,16 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
     {
         let mut preflight = Preflight::default();
         // NOTE: it is not required that we group preflight into modules
-        self.proof_shape
-            .run_preflight(child_vk, proof, &mut preflight, &mut sponge);
-        self.gkr.run_preflight(proof, &mut preflight, &mut sponge);
-        self.batch_constraint
-            .run_preflight(proof, &mut preflight, &mut sponge);
-        self.stacking
-            .run_preflight(proof, &mut preflight, &mut sponge);
-        self.whir.run_preflight(proof, &mut preflight, &mut sponge);
+        let preflight_modules = vec![
+            TraceModuleRef::ProofShape(&self.proof_shape),
+            TraceModuleRef::Gkr(&self.gkr),
+            TraceModuleRef::BatchConstraint(&self.batch_constraint),
+            TraceModuleRef::Stacking(&self.stacking),
+            TraceModuleRef::Whir(&self.whir),
+        ];
+        preflight_modules.iter().for_each(|module| {
+            module.run_preflight(&child_vk, proof, &mut preflight, &mut sponge);
+        });
 
         preflight.transcript = sponge.into_log();
         preflight
@@ -508,7 +534,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
         self.batch_constraint.commit_child_vk(engine, child_vk)
     }
 
-    #[instrument(name = "VerifierSubCircuit::generate_proving_ctxs", skip_all)]
+    #[tracing::instrument(name = "subcircuit_generate_proving_ctxs", skip_all)]
     fn generate_proving_ctxs<TS: FiatShamirTranscript + TranscriptHistory + Default>(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -516,9 +542,11 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
         proofs: &[Proof],
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
+        let span = tracing::Span::current();
         let preflights = proofs
             .par_iter()
             .map(|proof| {
+                let _guard = span.enter();
                 let sponge = TS::default();
                 self.run_preflight(sponge, child_vk, proof)
             })
@@ -536,12 +564,10 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
             TraceModuleRef::Stacking(&self.stacking),
             TraceModuleRef::Whir(&self.whir),
         ];
-        #[cfg(debug_assertions)]
-        let modules_iter = modules.into_iter();
-        #[cfg(not(debug_assertions))]
-        let modules_iter = modules.into_par_iter();
-        let mut ctxs_by_module = modules_iter
+        let mut ctxs_by_module = modules
+            .into_par_iter()
             .map(|module| {
+                let _guard = span.enter();
                 module.generate_cpu_ctxs(child_vk, proofs, &preflights, &exp_bits_len_gen)
             })
             .collect::<Vec<_>>();
@@ -549,12 +575,26 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
             vec![child_vk_pcs_data];
         let mut ctx_per_trace = ctxs_by_module.into_iter().flatten().collect::<Vec<_>>();
         // Caution: this must be done after GKR and WHIR tracegen
-        ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
-            ColMajorMatrix::from_row_major(&self.power_checker_trace.generate_trace_row_major()),
-        ));
-        ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
-            ColMajorMatrix::from_row_major(&exp_bits_len_gen.generate_trace_row_major()),
-        ));
+        tracing::info_span!("wrapper.generate_proving_ctxs", air_module = "Primitives",).in_scope(
+            || {
+                tracing::info_span!("wrapper.generate_trace", air = "PowerChecker").in_scope(
+                    || {
+                        ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
+                            ColMajorMatrix::from_row_major(
+                                &self.power_checker_trace.generate_trace_row_major(),
+                            ),
+                        ));
+                    },
+                );
+                tracing::info_span!("wrapper.generate_trace", air = "ExpBitsLen").in_scope(|| {
+                    ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
+                        ColMajorMatrix::from_row_major(
+                            &exp_bits_len_gen.generate_trace_row_major(),
+                        ),
+                    ));
+                });
+            },
+        );
 
         ctx_per_trace
     }
@@ -570,6 +610,7 @@ pub mod cuda_tracegen {
     use crate::cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu};
 
     impl<'a> TraceModuleRef<'a> {
+        #[tracing::instrument(name = "wrapper.generate_proving_ctxs", skip_all, fields(air_module = %self))]
         fn generate_gpu_ctxs(
             self,
             child_vk: &VerifyingKeyGpu,
@@ -615,6 +656,7 @@ pub mod cuda_tracegen {
             self.batch_constraint.commit_child_vk_gpu(engine, child_vk)
         }
 
+        #[tracing::instrument(name = "subcircuit_generate_proving_ctxs", skip_all)]
         fn generate_proving_ctxs<TS: FiatShamirTranscript + TranscriptHistory + Default>(
             &self,
             child_vk: &MultiStarkVerifyingKeyV2,
@@ -628,9 +670,11 @@ pub mod cuda_tracegen {
                 .map(|proof_cpu| ProofGpu::new(child_vk, proof_cpu))
                 .collect::<Vec<_>>();
             // Run CPU preflight for each proof in parallel
+            let span = tracing::Span::current();
             let preflights_cpu = proofs
                 .par_iter()
                 .map(|proof| {
+                    let _guard = span.enter();
                     let sponge = TS::default();
                     self.run_preflight(sponge, child_vk, proof)
                 })
@@ -670,17 +714,26 @@ pub mod cuda_tracegen {
             ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
                 .cached_mains = vec![child_vk_pcs_data];
             let mut ctx_per_trace = ctxs_by_module.into_iter().flatten().collect::<Vec<_>>();
-            // TODO: move pow bits tracegen to gpu
             // Caution: this must be done after GKR and WHIR tracegen
-            let pow_bits_trace = ColMajorMatrix::from_row_major(
-                &self.power_checker_trace.generate_trace_row_major(),
-            );
-            ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
-                transport_matrix_h2d_col_major(&pow_bits_trace).unwrap(),
-            ));
-
-            let exp_bits_trace = exp_bits_len_gen.generate_trace_device();
-            ctx_per_trace.push(AirProvingContextV2::simple_no_pis(exp_bits_trace));
+            tracing::info_span!("wrapper.generate_proving_ctxs", air_module = "Primitives",)
+                .in_scope(|| {
+                    tracing::info_span!("wrapper.generate_trace", air = "PowerChecker").in_scope(
+                        || {
+                            let pow_bits_trace = ColMajorMatrix::from_row_major(
+                                &self.power_checker_trace.generate_trace_row_major(),
+                            );
+                            ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
+                                transport_matrix_h2d_col_major(&pow_bits_trace).unwrap(),
+                            ));
+                        },
+                    );
+                    tracing::info_span!("wrapper.generate_trace", air = "ExpBitsLen").in_scope(
+                        || {
+                            let exp_bits_trace = exp_bits_len_gen.generate_trace_device();
+                            ctx_per_trace.push(AirProvingContextV2::simple_no_pis(exp_bits_trace));
+                        },
+                    );
+                });
 
             ctx_per_trace
         }

@@ -10,6 +10,7 @@ use crate::{
 
 use super::{FinalyPolyQueryEvalCols, compute_round_offsets};
 
+#[tracing::instrument(skip_all)]
 pub(in crate::whir) fn generate_trace(blob: &WhirBlobGpu, params: SystemParams) -> DeviceMatrix<F> {
     let mem = MemTracker::start("tracegen.whir_final_poly_query_eval");
     let num_valid_rows = blob.final_poly_query_eval_records.len();

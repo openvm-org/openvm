@@ -63,7 +63,7 @@ impl FoldRecord {
     }
 }
 
-#[tracing::instrument(name = "generate_trace(WhirFoldingAir)", skip_all)]
+#[tracing::instrument(skip_all)]
 pub fn generate_trace(
     mvk: &MultiStarkVerifyingKeyV2,
     _proofs: &[&Proof],

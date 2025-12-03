@@ -237,7 +237,7 @@ where
     }
 }
 
-#[tracing::instrument(name = "generate_trace(FinalPolyMleEvalAir)", skip_all)]
+#[tracing::instrument(skip_all)]
 pub(crate) fn generate_trace(
     mvk: &MultiStarkVerifyingKeyV2,
     proofs: &[&Proof],
