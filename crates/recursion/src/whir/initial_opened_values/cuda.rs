@@ -9,6 +9,7 @@ use crate::whir::{
     initial_opened_values::InitialOpenedValuesCols,
 };
 
+#[tracing::instrument(skip_all)]
 pub(in crate::whir) fn generate_trace(
     num_proofs: usize,
     blob: &WhirBlobGpu,

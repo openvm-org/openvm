@@ -46,7 +46,7 @@ toml = { workspace = true }
 [features]
 default = ["parallel", "jemalloc"]
 
-metrics = ["openvm-circuit/metrics", "openvm-sdk-config/metrics"]
+metrics = ["continuations-v2/metrics", "openvm-sdk-config/metrics"]
 aot = [
     "openvm-circuit/aot",
     "openvm-sdk-config/aot",
@@ -69,7 +69,7 @@ stark-debug = ["openvm-circuit/stark-debug"]
 test-utils = ["openvm-circuit/test-utils"]
 
 async = ["tokio"]
-parallel = ["openvm-circuit/parallel", "openvm-sdk-config/parallel"]
+parallel = ["continuations-v2/parallel", "openvm-sdk-config/parallel"]
 mimalloc = ["openvm-circuit/mimalloc", "openvm-sdk-config/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc", "openvm-sdk-config/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
