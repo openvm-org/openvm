@@ -198,7 +198,7 @@ fn rand_hintstore_test() {
 //////////////////////////////////////////////////////////////////////////////////////
 
 #[test]
-#[should_panic(expected = "hint buffer num_words exceeds MAX_HINT_BUFFER_WORDS")]
+#[should_panic(expected = "HintBufferTooLarge")]
 fn test_hint_buffer_exceeds_max_words() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
