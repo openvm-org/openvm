@@ -90,15 +90,24 @@ struct Rv32HintStore {
         if (local_idx == 0) {
             // The overflow check for mem_ptr + num_words * 4 is not needed because
             // 4 * MAX_HINT_BUFFER_WORDS < 2^pointer_max_bits guarantees no overflow
-            debug_assert(MAX_HINT_BUFFER_WORDS_BITS + 2 < pointer_max_bits);
-            
+            assert(MAX_HINT_BUFFER_WORDS_BITS + 2 < pointer_max_bits);
+
+            // Range check for mem_ptr (using pointer_max_bits)
+            uint32_t msl_rshift = (RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS;
+            uint32_t msl_lshift = RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - pointer_max_bits;
+            bitwise_lookup.add_range(
+                (record.mem_ptr >> msl_rshift) << msl_lshift,
+                0
+            );
+
+            // Range check for num_words (using MAX_HINT_BUFFER_WORDS_BITS)
             // These constraints only work for MAX_HINT_BUFFER_WORDS_BITS in [16, 23]
-            debug_assert(MAX_HINT_BUFFER_WORDS_BITS >= 16 && MAX_HINT_BUFFER_WORDS_BITS <= 23);
+            assert(MAX_HINT_BUFFER_WORDS_BITS >= 16 && MAX_HINT_BUFFER_WORDS_BITS <= 23);
 
             // rem_words < 2^MAX_HINT_BUFFER_WORDS_BITS requires:
             // - limbs[3] = 0 (high byte must be zero)
             // - limbs[2] < 4 (for MAX_HINT_BUFFER_WORDS_BITS = 18)
-            debug_assert((record.num_words >> 24) == 0);
+            assert((record.num_words >> 24) == 0);
             uint32_t rem_words_limb2_lshift = (RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS - MAX_HINT_BUFFER_WORDS_BITS;
             bitwise_lookup.add_range(
                 ((record.num_words >> 16) & 0xFF) << rem_words_limb2_lshift,
