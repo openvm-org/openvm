@@ -6,7 +6,7 @@ use crate::whir::cuda_abi::whir_folding_tracegen;
 use crate::whir::cuda_tracegen::WhirBlobGpu;
 use stark_backend_v2::{F, SystemParams};
 
-#[tracing::instrument(name = "generate_trace_device(WhirFoldingAir)", skip_all)]
+#[tracing::instrument(skip_all)]
 pub(in crate::whir) fn generate_trace(
     blob: &WhirBlobGpu,
     params: SystemParams,

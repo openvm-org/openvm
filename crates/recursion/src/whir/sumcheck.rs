@@ -218,7 +218,7 @@ where
     }
 }
 
-#[tracing::instrument(name = "generate_trace(SumcheckAir)", skip_all)]
+#[tracing::instrument(skip_all)]
 pub(crate) fn generate_trace(
     vk: &MultiStarkVerifyingKeyV2,
     proofs: &[&Proof],

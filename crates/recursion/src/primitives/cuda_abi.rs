@@ -54,7 +54,6 @@ pub unsafe fn range_checker_tracegen(
     ))
 }
 
-#[tracing::instrument(name = "exp_bits_len_tracegen", skip_all)]
 pub unsafe fn exp_bits_len_tracegen(
     d_requests: &DeviceBuffer<ExpBitsLenRecord>,
     num_requests: usize,

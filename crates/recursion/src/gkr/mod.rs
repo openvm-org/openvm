@@ -146,7 +146,7 @@ impl GkrModule {
         }
     }
 
-    #[tracing::instrument(name = "run_preflight(GkrModule)", skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn run_preflight<TS>(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS)
     where
         TS: FiatShamirTranscript + TranscriptHistory,
@@ -299,7 +299,7 @@ impl AirModule for GkrModule {
 }
 
 impl GkrModule {
-    #[tracing::instrument(name = "generate_blob(GkrModule)", skip_all)]
+    #[tracing::instrument(skip_all)]
     fn generate_blob(
         &self,
         _child_vk: &MultiStarkVerifyingKeyV2,
@@ -510,7 +510,7 @@ impl GkrModule {
 impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for GkrModule {
     type ModuleSpecificCtx = ExpBitsLenTraceGenerator;
 
-    #[tracing::instrument(name = "generate_proving_ctxs(GkrModule)", skip_all)]
+    #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -526,18 +526,23 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for GkrModule {
             GkrModuleChip::LayerSumcheck,
             GkrModuleChip::XiSampler,
         ];
-        #[cfg(debug_assertions)]
-        let iter = chips.iter();
-        #[cfg(not(debug_assertions))]
         let iter = chips.par_iter();
-        iter.map(|chip| chip.generate_trace(child_vk, proofs, preflights, &blob))
-            .map(AirProvingContextV2::simple_no_pis)
-            .collect()
+        let span = tracing::Span::current();
+        iter.map(|chip| {
+            let _guard = span.enter();
+            AirProvingContextV2::simple_no_pis(
+                ModuleChip::<GlobalCtxCpu, CpuBackendV2>::generate_trace(
+                    chip, child_vk, proofs, preflights, &blob,
+                ),
+            )
+        })
+        .collect()
     }
 }
 
 // To reduce the number of structs and trait implementations, we collect them into a single enum
 // with enum dispatch.
+#[derive(strum_macros::Display)]
 enum GkrModuleChip {
     Input,
     Layer,
@@ -548,7 +553,7 @@ enum GkrModuleChip {
 impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for GkrModuleChip {
     type ModuleSpecificCtx = GkrBlobCpu;
 
-    #[tracing::instrument(name = "generate_trace(GkrModuleChip)", skip_all)]
+    #[tracing::instrument(name = "wrapper.generate_trace", skip_all, fields(air = %self))]
     fn generate_trace(
         &self,
         _child_vk: &MultiStarkVerifyingKeyV2,
@@ -576,16 +581,32 @@ impl GkrModuleChip {
 mod cuda_tracegen {
     use cuda_backend_v2::GpuBackendV2;
     use itertools::Itertools;
-    use openvm_cuda_backend::data_transporter::transport_matrix_to_device;
+    use openvm_cuda_backend::{base::DeviceMatrix, data_transporter::transport_matrix_to_device};
 
     use super::*;
     use crate::cuda::{
         GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu,
     };
 
+    impl ModuleChip<GlobalCtxGpu, GpuBackendV2> for GkrModuleChip {
+        type ModuleSpecificCtx = GkrBlobCpu;
+
+        #[tracing::instrument(name = "wrapper.generate_trace", skip_all, fields(air = %self))]
+        fn generate_trace(
+            &self,
+            _child_vk: &VerifyingKeyGpu,
+            _proofs: &[ProofGpu],
+            _preflights: &[PreflightGpu],
+            blob: &GkrBlobCpu,
+        ) -> DeviceMatrix<F> {
+            transport_matrix_to_device(Arc::new(self.generate_trace_row_major(blob)))
+        }
+    }
+
     impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for GkrModule {
         type ModuleSpecificCtx = ExpBitsLenTraceGenerator;
 
+        #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(
             &self,
             child_vk: &VerifyingKeyGpu,
@@ -611,9 +632,11 @@ mod cuda_tracegen {
             chips
                 .iter()
                 .map(|chip| {
-                    AirProvingContextV2::simple_no_pis(transport_matrix_to_device(Arc::new(
-                        chip.generate_trace_row_major(&blob),
-                    )))
+                    AirProvingContextV2::simple_no_pis(
+                        ModuleChip::<GlobalCtxGpu, GpuBackendV2>::generate_trace(
+                            chip, &child_vk, proofs, preflights, &blob,
+                        ),
+                    )
                 })
                 .collect()
         }

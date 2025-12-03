@@ -2,6 +2,8 @@ use std::{iter::once, sync::Arc};
 
 use eyre::Result;
 use itertools::Itertools;
+#[cfg(all(feature = "cuda", feature = "metrics"))]
+use openvm_cuda_common::stream::current_stream_sync;
 use recursion_circuit::system::{AggregationSubCircuit, VerifierTraceGen};
 use stark_backend_v2::{
     DIGEST_SIZE, F, SC, StarkWhirEngine, SystemParams,
@@ -74,24 +76,27 @@ where
             user_pv_commit,
             child_vk_commit.commitment.clone(),
         );
+        let subcircuit_ctxs = self
+            .circuit
+            .verifier_circuit
+            .generate_proving_ctxs::<DuplexSpongeRecorder>(
+                child_vk,
+                child_vk_commit.clone(),
+                proofs,
+            );
         let agg_other_ctxs = self
             .agg_node_tracegen
             .generate_other_proving_ctxs(proofs, user_pv_commit);
-        ProvingContextV2 {
+        let ret = ProvingContextV2 {
             per_trace: once(verifier_pvs_ctx)
-                .chain(
-                    self.circuit
-                        .verifier_circuit
-                        .generate_proving_ctxs::<DuplexSpongeRecorder>(
-                            child_vk,
-                            child_vk_commit.clone(),
-                            proofs,
-                        ),
-                )
+                .chain(subcircuit_ctxs)
                 .chain(agg_other_ctxs)
                 .enumerate()
                 .collect_vec(),
-        }
+        };
+        #[cfg(all(feature = "cuda", feature = "metrics"))]
+        current_stream_sync().unwrap();
+        ret
     }
 
     #[instrument(name = "total_proof", skip_all)]

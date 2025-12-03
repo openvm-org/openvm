@@ -43,6 +43,7 @@ openvm-cuda-builder = { workspace = true, optional = true }
 [features]
 default = ["parallel"]
 parallel = ["stark-backend-v2/parallel", "recursion-circuit/parallel"]
+metrics = ["openvm-circuit/metrics"]
 
 cuda = [
     "dep:openvm-cuda-builder",

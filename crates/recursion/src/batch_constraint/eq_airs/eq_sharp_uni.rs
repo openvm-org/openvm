@@ -478,7 +478,7 @@ pub fn generate_eq_sharp_uni_blob(
     blob
 }
 
-#[tracing::instrument(name = "generate_trace(EqSharpUniAir)", skip_all)]
+#[tracing::instrument(name = "generate_trace", skip_all)]
 pub(crate) fn generate_eq_sharp_uni_trace(
     vk: &MultiStarkVerifyingKeyV2,
     blob: &EqSharpUniBlob,
@@ -530,7 +530,7 @@ pub(crate) fn generate_eq_sharp_uni_trace(
     RowMajorMatrix::new(trace, width)
 }
 
-#[tracing::instrument(name = "generate_trace(EqSharpUniReceiverAir)", skip_all)]
+#[tracing::instrument(name = "generate_trace", skip_all)]
 pub(crate) fn generate_eq_sharp_uni_receiver_trace(
     vk: &MultiStarkVerifyingKeyV2,
     blob: &EqSharpUniBlob,
