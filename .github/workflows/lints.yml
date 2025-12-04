@@ -112,7 +112,4 @@ jobs:
           echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-21 main" | sudo tee /etc/apt/sources.list.d/llvm-toolchain.list
           sudo apt-get update
           sudo apt-get install -y clang-tidy-21
-          sudo ln -sf /usr/bin/clang-tidy-21 /usr/local/bin/clang-tidy
-          which clang-tidy
-          clang-tidy --version
-          ./scripts/run_clang_tidy.sh
+          cargo run -p openvm-scripts --features cuda --bin run-clang-tidy -- . --clang-tidy clang-tidy-21
