@@ -41,7 +41,7 @@ pub struct Poseidon2InternalLayer<F: PrimeCharacteristicRing, LinearLayers> {
     _marker: PhantomData<LinearLayers>,
 }
 
-impl<F: Field, LinearLayers> InternalLayerConstructor<F>
+impl<F: Field + PrimeCharacteristicRing, LinearLayers> InternalLayerConstructor<F>
     for Poseidon2InternalLayer<F, LinearLayers>
 {
     fn new_from_constants(internal_constants: Vec<F>) -> Self {
@@ -53,7 +53,7 @@ impl<F: Field, LinearLayers> InternalLayerConstructor<F>
 }
 
 impl<
-        F: Field + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
+        F: Field + PrimeCharacteristicRing + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
         LinearLayers,
         const W: usize,
     > InternalLayer<F, W, BABY_BEAR_POSEIDON2_SBOX_DEGREE>
@@ -77,8 +77,8 @@ pub struct Poseidon2ExternalLayer<F: PrimeCharacteristicRing, LinearLayers, cons
     _marker: PhantomData<LinearLayers>,
 }
 
-impl<F: Field, LinearLayers, const W: usize> ExternalLayerConstructor<F, W>
-    for Poseidon2ExternalLayer<F, LinearLayers, W>
+impl<F: Field + PrimeCharacteristicRing, LinearLayers, const W: usize>
+    ExternalLayerConstructor<F, W> for Poseidon2ExternalLayer<F, LinearLayers, W>
 {
     fn new_from_constants(external_layer_constants: ExternalLayerConstants<F, W>) -> Self {
         Self {
@@ -89,7 +89,7 @@ impl<F: Field, LinearLayers, const W: usize> ExternalLayerConstructor<F, W>
 }
 
 impl<
-        F: Field + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
+        F: Field + PrimeCharacteristicRing + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
         LinearLayers,
         const W: usize,
     > ExternalLayer<F, W, BABY_BEAR_POSEIDON2_SBOX_DEGREE>
@@ -111,7 +111,7 @@ where
 }
 
 fn external_permute_state<
-    F: Field + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
+    F: Field + PrimeCharacteristicRing + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
     LinearLayers,
     const W: usize,
 >(

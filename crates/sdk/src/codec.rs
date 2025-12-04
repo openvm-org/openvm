@@ -203,16 +203,18 @@ impl Encode for InnerFriProof {
     /// ```
     /// pub struct FriProof<Challenge, M: Mmcs<Challenge>> {
     ///     pub commit_phase_commits: Vec<M::Commitment>,
+    ///     pub commit_pow_witnesses: Vec<F>,
     ///     pub query_proofs: Vec<QueryProof<Challenge, M, Vec<BatchOpening<F>>>>,
     ///     pub final_poly: Vec<Challenge>,
-    ///     pub pow_witness: F,
+    ///     pub query_pow_witness: F,
     /// }
     /// ```
     fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
         encode_commitments(&self.commit_phase_commits, writer)?;
+        encode_slice(&self.commit_pow_witnesses, writer)?;
         encode_slice(&self.query_proofs, writer)?;
         encode_slice(&self.final_poly, writer)?;
-        self.pow_witness.encode(writer)?;
+        self.query_pow_witness.encode(writer)?;
         Ok(())
     }
 }
@@ -513,15 +515,17 @@ impl Decode for AirProofData<F, Challenge> {
 impl Decode for InnerFriProof {
     fn decode<R: Read>(reader: &mut R) -> Result<Self> {
         let commit_phase_commits = decode_commitments(reader)?;
+        let commit_pow_witnesses = decode_vec(reader)?;
         let query_proofs = decode_vec(reader)?;
         let final_poly = decode_vec(reader)?;
-        let pow_witness = F::decode(reader)?;
+        let query_pow_witness = F::decode(reader)?;
 
         Ok(InnerFriProof {
             commit_phase_commits,
+            commit_pow_witnesses,
             query_proofs,
             final_poly,
-            pow_witness,
+            query_pow_witness,
         })
     }
 }

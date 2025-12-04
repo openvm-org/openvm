@@ -119,6 +119,9 @@ impl<C: Config> DuplexChallengerVariable<C> {
     }
 
     pub fn check_witness(&self, builder: &mut Builder<C>, nb_bits: usize, witness: Felt<C::F>) {
+        if nb_bits == 0 {
+            return;
+        }
         self.observe(builder, witness);
         let element_bits = self.sample_bits(builder, RVar::from(nb_bits));
         let element_bits_truncated = element_bits.slice(builder, 0, nb_bits);
