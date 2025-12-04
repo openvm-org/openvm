@@ -40,7 +40,7 @@ fn run_clang_tidy_single(
         "--checks=*",
         "--warnings-as-errors=*",
         "--header-filter=.*",
-        "-extra-arg=-Wno-unknown-cuda-version",
+        "--extra-arg=-Wno-unknown-cuda-version",
     ])
     .arg(file.to_str().unwrap())
     .args(["--", "-x", "cuda", "-std=c++17"])
