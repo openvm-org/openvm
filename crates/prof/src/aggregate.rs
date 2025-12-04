@@ -398,7 +398,7 @@ impl AggregateMetrics {
                 // Write separator for non-default phases
                 if let Some(p) = phase {
                     let label = p[0..1].to_uppercase() + &p[1..]; // Capitalize
-                    writeln!(writer, "| **{label}** |||||")?;
+                    writeln!(writer, "| __{label}__ |||||")?;
                 }
 
                 for metric_name in &phase_names {
