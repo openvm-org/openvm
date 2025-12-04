@@ -28,7 +28,8 @@ pub fn const_fri_config<C: Config>(
         blowup: 1 << params.log_blowup,
         log_final_poly_len: params.log_final_poly_len,
         num_queries: params.num_queries,
-        proof_of_work_bits: params.proof_of_work_bits,
+        commit_proof_of_work_bits: params.commit_proof_of_work_bits,
+        query_proof_of_work_bits: params.query_proof_of_work_bits,
         subgroups,
         generators,
     }

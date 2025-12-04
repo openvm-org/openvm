@@ -1,4 +1,4 @@
-use openvm_stark_backend::p3_field::{Field, PrimeField32};
+use openvm_stark_backend::p3_field::{Field, PrimeCharacteristicRing, PrimeField32};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use p3_poseidon2::ExternalLayerConstants;
 use p3_poseidon2_air::RoundConstants;
@@ -31,7 +31,7 @@ pub struct Poseidon2Constants<F> {
     pub ending_full_round_constants: [[F; POSEIDON2_WIDTH]; BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS],
 }
 
-impl<F: Field> From<Poseidon2Constants<F>> for Plonky3RoundConstants<F> {
+impl<F: Field + PrimeCharacteristicRing> From<Poseidon2Constants<F>> for Plonky3RoundConstants<F> {
     fn from(constants: Poseidon2Constants<F>) -> Self {
         Plonky3RoundConstants::new(
             constants.beginning_full_round_constants,

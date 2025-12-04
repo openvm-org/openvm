@@ -110,15 +110,19 @@ pub fn verify_two_adic_pcs<C: Config>(
     iter_zip!(
         builder,
         proof.commit_phase_commits,
+        proof.commit_pow_witnesses,
         betas,
         betas_squared,
         i_plus_one_arr
     )
     .for_each(|ptr_vec, builder| {
-        let [comm_ptr, beta_ptr, beta_sq_ptr, i_plus_one_ptr] = ptr_vec.try_into().unwrap();
+        let [comm_ptr, commit_pow_ptr, beta_ptr, beta_sq_ptr, i_plus_one_ptr] =
+            ptr_vec.try_into().unwrap();
 
         let comm = builder.iter_ptr_get(&proof.commit_phase_commits, comm_ptr);
+        let commit_pow = builder.iter_ptr_get(&proof.commit_pow_witnesses, commit_pow_ptr);
         challenger.observe_digest(builder, comm);
+        challenger.check_witness(builder, config.commit_proof_of_work_bits, commit_pow);
         let sample = challenger.sample_ext(builder);
         builder.iter_ptr_set(&betas, beta_ptr, sample);
         builder.iter_ptr_set(&betas_squared, beta_sq_ptr, sample * sample);
@@ -134,7 +138,11 @@ pub fn verify_two_adic_pcs<C: Config>(
         challenger.observe_slice(builder, final_poly_elem_felts);
     });
 
-    challenger.check_witness(builder, config.proof_of_work_bits, proof.pow_witness);
+    challenger.check_witness(
+        builder,
+        config.query_proof_of_work_bits,
+        proof.query_pow_witness,
+    );
 
     let log_max_lde_height = builder.eval_expr(log_max_height + RVar::from(log_blowup));
     // tag_exp is a shared buffer.
