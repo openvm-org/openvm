@@ -95,23 +95,18 @@ struct Rv32HintStore {
             // Range check for mem_ptr (using pointer_max_bits)
             uint32_t msl_rshift = (RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS;
             uint32_t msl_lshift = RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - pointer_max_bits;
-            bitwise_lookup.add_range(
-                (record.mem_ptr >> msl_rshift) << msl_lshift,
-                0
-            );
 
             // Range check for num_words (using MAX_HINT_BUFFER_WORDS_BITS)
             // These constraints only work for MAX_HINT_BUFFER_WORDS_BITS in [16, 23]
             assert(MAX_HINT_BUFFER_WORDS_BITS >= 16 && MAX_HINT_BUFFER_WORDS_BITS <= 23);
 
-            // rem_words < 2^MAX_HINT_BUFFER_WORDS_BITS requires:
-            // - limbs[3] = 0 (high byte must be zero)
-            // - limbs[2] < 4 (for MAX_HINT_BUFFER_WORDS_BITS = 18)
-            assert((record.num_words >> 24) == 0);
+            assert(record.num_words <= MAX_HINT_BUFFER_WORDS);
             uint32_t rem_words_limb2_lshift = (RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS - MAX_HINT_BUFFER_WORDS_BITS;
+
+            // Combined range check for mem_ptr and num_words
             bitwise_lookup.add_range(
-                ((record.num_words >> 16) & 0xFF) << rem_words_limb2_lshift,
-                0
+                (record.mem_ptr >> msl_rshift) << msl_lshift,
+                ((record.num_words >> 16) & 0xFF) << rem_words_limb2_lshift
             );
             mem_helper.fill(
                 row.slice_from(COL_INDEX(Rv32HintStoreCols, mem_ptr_aux_cols)),
