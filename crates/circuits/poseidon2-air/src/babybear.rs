@@ -1,7 +1,7 @@
 use std::array::from_fn;
 
 use lazy_static::lazy_static;
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use zkhash::{
     ark_ff::PrimeField as _, fields::babybear::FpBabyBear as HorizenBabyBear,
@@ -14,7 +14,7 @@ use super::{
 };
 
 pub(crate) fn horizen_to_p3_babybear(horizen_babybear: HorizenBabyBear) -> BabyBear {
-    BabyBear::from_canonical_u64(horizen_babybear.into_bigint().0[0])
+    BabyBear::from_u64(horizen_babybear.into_bigint().0[0])
 }
 
 pub(crate) fn horizen_round_consts() -> Poseidon2Constants<BabyBear> {
@@ -53,12 +53,13 @@ lazy_static! {
         horizen_round_consts().ending_full_round_constants;
 }
 
-pub(crate) fn babybear_internal_linear_layer<FA: FieldAlgebra, const WIDTH: usize>(
+#[allow(unused)]
+pub(crate) fn babybear_internal_linear_layer<FA: PrimeCharacteristicRing, const WIDTH: usize>(
     state: &mut [FA; WIDTH],
-    int_diag_m1_matrix: &[FA::F; WIDTH],
+    int_diag_m1_matrix: &[FA::PrimeSubfield; WIDTH],
 ) {
     let sum = state.iter().cloned().sum::<FA>();
     for (input, diag_m1) in state.iter_mut().zip(int_diag_m1_matrix) {
-        *input = sum.clone() + FA::from_f(*diag_m1) * input.clone();
+        *input = sum.clone() + FA::from_prime_subfield(*diag_m1) * input.clone();
     }
 }

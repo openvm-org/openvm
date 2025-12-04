@@ -13,6 +13,7 @@ openvm-platform = { workspace = true }
 serde = { workspace = true }
 itertools = { workspace = true, features = ["use_alloc"] }
 rand.workspace = true
+rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"], optional = true }
 hex-literal = { workspace = true }
 openvm-algebra-guest = { workspace = true }
 openvm-algebra-moduli-macros = { workspace = true }
@@ -54,6 +55,7 @@ num-bigint.workspace = true
 num-traits.workspace = true
 halo2curves-axiom = { workspace = true }
 openvm-pairing = { path = ".", features = ["halo2curves"] }
+rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"] }
 
 [features]
 default = []

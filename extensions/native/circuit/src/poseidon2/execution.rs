@@ -13,7 +13,7 @@ use openvm_native_compiler::{
 };
 use openvm_poseidon2_air::Poseidon2SubChip;
 use openvm_stark_backend::{
-    p3_field::{Field, PrimeField32},
+    p3_field::{InjectiveMonomial, PrimeField32},
     p3_maybe_rayon::prelude::{ParallelIterator, ParallelSlice},
 };
 
@@ -22,7 +22,7 @@ use crate::poseidon2::CHUNK;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
-struct Pos2PreCompute<'a, F: Field, const SBOX_REGISTERS: usize> {
+struct Pos2PreCompute<'a, F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize> {
     subchip: &'a Poseidon2SubChip<F, SBOX_REGISTERS>,
     output_register: u32,
     input_register_1: u32,
@@ -31,7 +31,11 @@ struct Pos2PreCompute<'a, F: Field, const SBOX_REGISTERS: usize> {
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
-struct VerifyBatchPreCompute<'a, F: Field, const SBOX_REGISTERS: usize> {
+struct VerifyBatchPreCompute<
+    'a,
+    F: PrimeField32 + InjectiveMonomial<7>,
+    const SBOX_REGISTERS: usize,
+> {
     subchip: &'a Poseidon2SubChip<F, SBOX_REGISTERS>,
     dim_register: u32,
     opened_register: u32,
@@ -42,7 +46,9 @@ struct VerifyBatchPreCompute<'a, F: Field, const SBOX_REGISTERS: usize> {
     opened_element_size: F,
 }
 
-impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Executor<F, SBOX_REGISTERS> {
+impl<'a, F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
+    NativePoseidon2Executor<F, SBOX_REGISTERS>
+{
     #[inline(always)]
     fn pre_compute_pos2_impl(
         &'a self,
@@ -166,7 +172,7 @@ macro_rules! dispatch1 {
     };
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> InterpreterExecutor<F>
+impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize> InterpreterExecutor<F>
     for NativePoseidon2Executor<F, SBOX_REGISTERS>
 {
     #[inline(always)]
@@ -216,7 +222,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InterpreterExecutor<F>
 }
 
 #[cfg(feature = "aot")]
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> AotExecutor<F>
+impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize> AotExecutor<F>
     for NativePoseidon2Executor<F, SBOX_REGISTERS>
 {
 }
@@ -254,8 +260,8 @@ macro_rules! dispatch2 {
     };
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> InterpreterMeteredExecutor<F>
-    for NativePoseidon2Executor<F, SBOX_REGISTERS>
+impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
+    InterpreterMeteredExecutor<F> for NativePoseidon2Executor<F, SBOX_REGISTERS>
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
@@ -307,14 +313,14 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InterpreterMeteredExecutor<F>
     }
 }
 #[cfg(feature = "aot")]
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> AotMeteredExecutor<F>
+impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize> AotMeteredExecutor<F>
     for NativePoseidon2Executor<F, SBOX_REGISTERS>
 {
 }
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_pos2_e1_impl<
-    F: PrimeField32,
+    F: PrimeField32 + InjectiveMonomial<7>,
     CTX: ExecutionCtxTrait,
     const SBOX_REGISTERS: usize,
     const IS_PERM: bool,
@@ -331,7 +337,7 @@ unsafe fn execute_pos2_e1_impl<
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_pos2_e2_impl<
-    F: PrimeField32,
+    F: PrimeField32 + InjectiveMonomial<7>,
     CTX: MeteredExecutionCtxTrait,
     const SBOX_REGISTERS: usize,
     const IS_PERM: bool,
@@ -354,7 +360,7 @@ unsafe fn execute_pos2_e2_impl<
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_verify_batch_e1_impl<
-    F: PrimeField32,
+    F: PrimeField32 + InjectiveMonomial<7>,
     CTX: ExecutionCtxTrait,
     const SBOX_REGISTERS: usize,
 >(
@@ -373,7 +379,7 @@ unsafe fn execute_verify_batch_e1_impl<
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_verify_batch_e2_impl<
-    F: PrimeField32,
+    F: PrimeField32 + InjectiveMonomial<7>,
     CTX: MeteredExecutionCtxTrait,
     const SBOX_REGISTERS: usize,
 >(
@@ -396,7 +402,7 @@ unsafe fn execute_verify_batch_e2_impl<
 
 #[inline(always)]
 unsafe fn execute_pos2_e12_impl<
-    F: PrimeField32,
+    F: PrimeField32 + InjectiveMonomial<7>,
     CTX: ExecutionCtxTrait,
     const SBOX_REGISTERS: usize,
     const IS_PERM: bool,
@@ -411,7 +417,7 @@ unsafe fn execute_pos2_e12_impl<
     let [input_pointer_1]: [F; 1] =
         exec_state.vm_read(AS::Native as u32, pre_compute.input_register_1);
     let [input_pointer_2] = if IS_PERM {
-        [input_pointer_1 + F::from_canonical_usize(CHUNK)]
+        [input_pointer_1 + F::from_usize(CHUNK)]
     } else {
         exec_state.vm_read(AS::Native as u32, pre_compute.input_register_2)
     };
@@ -452,7 +458,7 @@ unsafe fn execute_pos2_e12_impl<
 
 #[inline(always)]
 unsafe fn execute_verify_batch_e12_impl<
-    F: PrimeField32,
+    F: PrimeField32 + InjectiveMonomial<7>,
     CTX: ExecutionCtxTrait,
     const SBOX_REGISTERS: usize,
     const OPTIMISTIC: bool,
@@ -506,7 +512,7 @@ unsafe fn execute_verify_batch_e12_impl<
             && exec_state.host_read::<F, 1>(
                 AS::Native as u32,
                 dim_base_pointer_u32 + opened_index as u32,
-            )[0] == F::from_canonical_u32(log_height as u32)
+            )[0] == F::from_u32(log_height as u32)
         {
             let initial_opened_index = opened_index;
 
@@ -529,7 +535,7 @@ unsafe fn execute_verify_batch_e12_impl<
                                 || exec_state.host_read::<F, 1>(
                                     AS::Native as u32,
                                     dim_base_pointer_u32 + opened_index as u32,
-                                )[0] != F::from_canonical_u32(log_height as u32)
+                                )[0] != F::from_u32(log_height as u32)
                             {
                                 break;
                             }
@@ -564,12 +570,12 @@ unsafe fn execute_verify_batch_e12_impl<
                 AS::Native as u32,
                 dim_base_pointer_u32 + initial_opened_index as u32,
             );
-            assert_eq!(height_check, F::from_canonical_u32(log_height as u32));
+            assert_eq!(height_check, F::from_u32(log_height as u32));
             let [height_check]: [F; 1] = exec_state.host_read(
                 AS::Native as u32,
                 dim_base_pointer_u32 + final_opened_index as u32,
             );
-            assert_eq!(height_check, F::from_canonical_u32(log_height as u32));
+            assert_eq!(height_check, F::from_u32(log_height as u32));
 
             if !OPTIMISTIC {
                 let hash: [F; CHUNK] = std::array::from_fn(|i| rolling_hash[i]);

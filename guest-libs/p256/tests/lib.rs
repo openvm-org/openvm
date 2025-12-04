@@ -118,7 +118,7 @@ mod guest_tests {
             openvm_stark_backend::{
                 config::{StarkGenericConfig, Val},
                 engine::StarkEngine,
-                p3_field::PrimeField32,
+                p3_field::{InjectiveMonomial, PrimeField32},
                 prover::cpu::{CpuBackend, CpuDevice},
             },
         };
@@ -158,7 +158,7 @@ mod guest_tests {
         where
             SC: StarkGenericConfig,
             E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-            Val<SC>: PrimeField32,
+            Val<SC>: PrimeField32 + InjectiveMonomial<7>,
         {
             type VmConfig = EcdsaConfig;
             type SystemChipInventory = SystemChipInventory<SC>;

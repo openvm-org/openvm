@@ -6,7 +6,7 @@ use std::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     p3_air::{Air, BaseAir},
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -60,7 +60,7 @@ impl<AB: InteractionBuilder, const NUM: usize, const AUX_LEN: usize> Air<AB>
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local: &IsLtArrayCols<AB::Var, NUM, AUX_LEN> = (*local).borrow();
 
         let io = IsLtArrayIo {
@@ -104,8 +104,8 @@ impl<const NUM: usize, const AUX_LEN: usize> IsLtArrayChip<NUM, AUX_LEN> {
             .zip(self.pairs)
             .for_each(|(row, (x, y))| {
                 let row: &mut IsLtArrayCols<_, NUM, AUX_LEN> = row.borrow_mut();
-                row.x = x.map(F::from_canonical_u32);
-                row.y = y.map(F::from_canonical_u32);
+                row.x = x.map(F::from_u32);
+                row.y = y.map(F::from_u32);
                 self.air.0.generate_subrow(
                     (&self.range_checker, &row.x, &row.y),
                     ((&mut row.aux).into(), &mut row.out),
@@ -122,8 +122,8 @@ impl<const NUM: usize, const AUX_LEN: usize> IsLtArrayChip<NUM, AUX_LEN> {
             .zip(self.pairs)
             .for_each(|(row, (x, y))| {
                 let row: &mut IsLtArrayCols<_, NUM, AUX_LEN> = row.borrow_mut();
-                row.x = x.map(F::from_canonical_u32);
-                row.y = y.map(F::from_canonical_u32);
+                row.x = x.map(F::from_u32);
+                row.y = y.map(F::from_u32);
                 row.out = F::ZERO;
                 let aux: IsLtArrayAuxColsMut<_> = (&mut row.aux).into();
                 aux.diff_marker
@@ -185,7 +185,7 @@ fn test_is_less_than_tuple_chip_negative() {
     let mut trace = chip.generate_trace();
     let range_checker_trace = range_checker.generate_trace();
 
-    trace.values[2] = FieldAlgebra::from_canonical_u64(0);
+    trace.values[2] = PrimeCharacteristicRing::from_u64(0);
 
     disable_debug_builder();
     assert_eq!(
@@ -270,7 +270,7 @@ fn test_cuda_less_than_array_tracegen() {
         expected_cpu_matrix_vals
             .into_iter()
             .flatten()
-            .map(F::from_canonical_u32)
+            .map(F::from_u32)
             .collect(),
         3 * ARRAY_LEN + AUX_LEN + 2,
     ));

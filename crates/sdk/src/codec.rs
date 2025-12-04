@@ -12,7 +12,7 @@ use openvm_stark_backend::{
     config::{Com, PcsProof},
     interaction::{fri_log_up::FriLogUpPartialProof, RapPhaseSeqKind},
     p3_field::{
-        extension::BinomialExtensionField, FieldAlgebra, FieldExtensionAlgebra, PrimeField32,
+        extension::BinomialExtensionField, BasedVectorSpace, PrimeCharacteristicRing, PrimeField32,
     },
     proof::{AdjacentOpenedValues, AirProofData, Commitments, OpenedValues, OpeningProof, Proof},
 };
@@ -271,7 +271,7 @@ impl Encode for Option<FriLogUpPartialProof<F>> {
 
 impl Encode for Challenge {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
-        let base_slice: &[F] = self.as_base_slice();
+        let base_slice: &[F] = self.as_basis_coefficients_slice();
         // Fixed length slice, so don't encode length
         for val in base_slice {
             val.encode(writer)?;
@@ -578,7 +578,7 @@ impl Decode for Option<FriLogUpPartialProof<F>> {
         }
 
         // Reconstruct the field element from the u32 value
-        let logup_pow_witness = F::from_canonical_u32(value);
+        let logup_pow_witness = F::from_u32(value);
         Ok(Some(FriLogUpPartialProof { logup_pow_witness }))
     }
 }
@@ -592,7 +592,7 @@ impl Decode for Challenge {
         }
 
         // Construct the extension field from base elements
-        Ok(Challenge::from_base_slice(&base_elements))
+        Ok(Challenge::from_basis_coefficients_slice(&base_elements).unwrap())
     }
 }
 
@@ -624,7 +624,7 @@ impl Decode for F {
         reader.read_exact(&mut bytes)?;
 
         let value = u32::from_le_bytes(bytes);
-        Ok(F::from_canonical_u32(value))
+        Ok(F::from_u32(value))
     }
 }
 

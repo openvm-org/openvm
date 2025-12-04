@@ -1,8 +1,7 @@
 use openvm_native_compiler::prelude::*;
 use openvm_native_compiler_derive::iter_zip;
-use openvm_stark_backend::{
-    p3_commit::TwoAdicMultiplicativeCoset,
-    p3_field::{FieldAlgebra, FieldExtensionAlgebra, TwoAdicField},
+use openvm_stark_backend::p3_field::{
+    coset::TwoAdicMultiplicativeCoset, BasedVectorSpace, PrimeCharacteristicRing, TwoAdicField,
 };
 use p3_symmetric::Hash;
 
@@ -73,7 +72,7 @@ pub fn verify_two_adic_pcs<C: Config>(
                         challenger.observe_slice(builder, arr);
                     } else {
                         let ptr = ptr_vec[0];
-                        for i in 0..C::EF::D {
+                        for i in 0..C::EF::DIMENSION {
                             let f: Felt<_> = builder.uninit();
                             builder.load(
                                 f,
@@ -629,14 +628,15 @@ pub mod tests {
         config::{StarkGenericConfig, Val},
         engine::StarkEngine,
         p3_challenger::{CanObserve, FieldChallenger},
-        p3_commit::{Pcs, TwoAdicMultiplicativeCoset},
+        p3_commit::Pcs,
+        p3_field::coset::TwoAdicMultiplicativeCoset,
         p3_matrix::dense::RowMajorMatrix,
     };
     use openvm_stark_sdk::{
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
         p3_baby_bear::BabyBear,
     };
-    use rand::rngs::OsRng;
+    use rand::{rngs::StdRng, SeedableRng};
 
     use crate::{
         challenger::{duplex::DuplexChallengerVariable, CanObserveDigest, FeltChallenger},
@@ -660,7 +660,7 @@ pub mod tests {
         type Challenger = <SC as StarkGenericConfig>::Challenger;
         type ScPcs = <SC as StarkGenericConfig>::Pcs;
 
-        let mut rng = &mut OsRng;
+        let mut rng = StdRng::seed_from_u64(0);
         let log_degrees = &[nb_log2_rows];
         let engine = default_engine();
         let pcs = engine.config().pcs();
@@ -675,12 +675,12 @@ pub mod tests {
                     RowMajorMatrix::<F>::rand(&mut rng, 1 << d, nb_cols),
                 )
             })
-            .sorted_by_key(|(dom, _)| Reverse(dom.log_n))
+            .sorted_by_key(|(dom, _)| Reverse(dom.log_size()))
             .collect::<Vec<_>>();
         let (commit, data) = <ScPcs as Pcs<EF, Challenger>>::commit(pcs, domains_and_polys.clone());
         let mut challenger = Challenger::new(perm.clone());
         challenger.observe(commit);
-        let zeta = challenger.sample_ext_element::<EF>();
+        let zeta = challenger.sample_algebra_element::<EF>();
         let points = domains_and_polys
             .iter()
             .map(|_| vec![zeta])
@@ -690,7 +690,7 @@ pub mod tests {
         // Verify proof.
         let mut challenger = Challenger::new(perm.clone());
         challenger.observe(commit);
-        challenger.sample_ext_element::<EF>();
+        let _ = challenger.sample_algebra_element::<EF>();
         let os: Vec<(TwoAdicMultiplicativeCoset<F>, Vec<_>)> = domains_and_polys
             .iter()
             .zip(&opening[0])

@@ -1,6 +1,6 @@
 use std::{array, sync::Arc};
 
-use num_bigint::{BigUint, RandBigInt};
+use num_bigint::BigUint;
 use num_traits::{FromPrimitive, One};
 use openvm_algebra_transpiler::{ModularPhantom, Rv32ModularArithmeticOpcode};
 use openvm_circuit::{
@@ -32,7 +32,7 @@ use openvm_stark_backend::{
     prover::cpu::{CpuBackend, CpuDevice},
 };
 use openvm_stark_sdk::engine::StarkEngine;
-use rand::Rng;
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
@@ -573,7 +573,7 @@ pub(crate) mod phantom {
                 .chain(
                     sqrt.to_bytes_le()
                         .into_iter()
-                        .map(F::from_canonical_u8)
+                        .map(F::from_u8)
                         .chain(repeat(F::ZERO))
                         .take(num_limbs),
                 )
@@ -638,7 +638,7 @@ pub(crate) mod phantom {
             let hint_bytes = self.non_qrs[mod_idx]
                 .to_bytes_le()
                 .into_iter()
-                .map(F::from_canonical_u8)
+                .map(F::from_u8)
                 .chain(repeat(F::ZERO))
                 .take(num_limbs)
                 .collect();
@@ -704,7 +704,7 @@ pub fn mod_sqrt(x: &BigUint, modulus: &BigUint, non_qr: &BigUint) -> Option<BigU
 }
 
 // Returns a non-quadratic residue in the field
-pub fn find_non_qr(modulus: &BigUint, rng: &mut impl Rng) -> BigUint {
+pub fn find_non_qr(modulus: &BigUint, rng: &mut impl RngCore) -> BigUint {
     if modulus % 4u32 == BigUint::from(3u8) {
         // p = 3 mod 4 then -1 is a quadratic residue
         modulus - BigUint::one()
@@ -713,19 +713,18 @@ pub fn find_non_qr(modulus: &BigUint, rng: &mut impl Rng) -> BigUint {
         // since 2^((p-1)/2) = (-1)^((p^2-1)/8)
         BigUint::from_u8(2u8).unwrap()
     } else {
-        let mut non_qr = rng.gen_biguint_range(
-            &BigUint::from_u8(2).unwrap(),
-            &(modulus - BigUint::from_u8(1).unwrap()),
-        );
+        let mut buf = vec![0u8; modulus.to_bytes_be().len()];
+        let lower = BigUint::from_u8(2).unwrap();
+        let upper = modulus - BigUint::one();
+        rng.fill_bytes(&mut buf);
+        let mut non_qr = BigUint::from_bytes_be(&buf) % &upper + &lower;
         // To check if non_qr is a quadratic nonresidue, we compute non_qr^((p-1)/2)
         // If the result is p-1, then non_qr is a quadratic nonresidue
         // Otherwise, non_qr is a quadratic residue
         let exponent = (modulus - BigUint::one()) >> 1;
         while non_qr.modpow(&exponent, modulus) != modulus - BigUint::one() {
-            non_qr = rng.gen_biguint_range(
-                &BigUint::from_u8(2).unwrap(),
-                &(modulus - BigUint::from_u8(1).unwrap()),
-            );
+            rng.fill_bytes(&mut buf);
+            non_qr = BigUint::from_bytes_be(&buf) % &upper + &lower;
         }
         non_qr
     }

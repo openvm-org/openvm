@@ -7,7 +7,7 @@ use std::{
 
 use openvm_stark_backend::{
     interaction::{PermutationCheckBus, PermutationInteractionType},
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
     prover::types::AirProvingContext,
 };
@@ -116,9 +116,9 @@ fn test(
         });
         dummy_interaction_trace_rows.extend([
             expand_direction,
-            BabyBear::from_canonical_usize(height),
-            BabyBear::from_canonical_u32(as_label),
-            BabyBear::from_canonical_u32(address_label),
+            BabyBear::from_usize(height),
+            BabyBear::from_u32(as_label),
+            BabyBear::from_u32(address_label),
         ]);
         dummy_interaction_trace_rows.extend(hash);
     };
@@ -229,7 +229,7 @@ fn random_test(
 
             if is_initial && num_initial_addresses != 0 {
                 num_initial_addresses -= 1;
-                let value = BabyBear::from_canonical_u32(next_u32() % max_value);
+                let value = BabyBear::from_u32(next_u32() % max_value);
                 unsafe {
                     initial_memory.write(address_space, pointer, [value]);
                     final_memory.write(address_space, pointer, [value]);
@@ -239,7 +239,7 @@ fn random_test(
                 num_touched_addresses -= 1;
                 touched_labels.insert((address_space, label));
                 if value_changes || !is_initial {
-                    let value = BabyBear::from_canonical_u32(next_u32() % max_value);
+                    let value = BabyBear::from_u32(next_u32() % max_value);
                     unsafe {
                         final_memory.write(address_space, pointer, [value]);
                     }

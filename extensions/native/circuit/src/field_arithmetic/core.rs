@@ -12,7 +12,7 @@ use openvm_native_compiler::FieldArithmeticOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 
@@ -81,7 +81,7 @@ where
             builder.assert_bool(flag);
 
             is_valid += flag.into();
-            expected_opcode += flag * AB::Expr::from_canonical_u32(opcode as u32);
+            expected_opcode += flag * AB::Expr::from_u32(opcode as u32);
             expected_result += flag * result;
         }
         builder.assert_eq(a, expected_result);

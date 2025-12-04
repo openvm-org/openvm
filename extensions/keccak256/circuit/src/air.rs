@@ -19,7 +19,7 @@ use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -54,7 +54,10 @@ impl<F> BaseAir<F> for KeccakVmAir {
 impl<AB: InteractionBuilder> Air<AB> for KeccakVmAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &KeccakVmCols<AB::Var> = (*local).borrow();
         let next: &KeccakVmCols<AB::Var> = (*next).borrow();
 
@@ -106,7 +109,7 @@ impl KeccakVmAir {
     }
 
     /// Many columns are expected to be the same between rounds and only change per-block.
-    pub fn constrain_consistency_across_rounds<AB: AirBuilder>(
+    pub fn constrain_consistency_across_rounds<AB: AirBuilder<Var: Copy>>(
         &self,
         builder: &mut AB,
         local: &KeccakVmCols<AB::Var>,
@@ -120,7 +123,7 @@ impl KeccakVmAir {
             .assert_eq(&mut round_builder, next.instruction);
     }
 
-    pub fn constrain_block_transition<AB: AirBuilder>(
+    pub fn constrain_block_transition<AB: AirBuilder<Var: Copy>>(
         &self,
         builder: &mut AB,
         local: &KeccakVmCols<AB::Var>,
@@ -151,14 +154,14 @@ impl KeccakVmAir {
         // This should always be RATE_BYTES since it's a non-final block.
         block_transition.assert_eq(
             next.instruction.src,
-            local.instruction.src + AB::F::from_canonical_usize(KECCAK_RATE_BYTES),
+            local.instruction.src + AB::F::from_usize(KECCAK_RATE_BYTES),
         );
         // Advance timestamp by the number of memory accesses from reading
         // `dst, src, len` and block input bytes.
         block_transition.assert_eq(next.instruction.start_timestamp, start_write_timestamp);
         block_transition.assert_eq(
             next.instruction.remaining_len,
-            local.instruction.remaining_len - AB::F::from_canonical_usize(KECCAK_RATE_BYTES),
+            local.instruction.remaining_len - AB::F::from_usize(KECCAK_RATE_BYTES),
         );
         // Padding transition is constrained in `constrain_padding`.
     }
@@ -174,7 +177,9 @@ impl KeccakVmAir {
         builder: &mut AB,
         local: &KeccakVmCols<AB::Var>,
         next: &KeccakVmCols<AB::Var>,
-    ) {
+    ) where
+        AB::Var: Copy,
+    {
         let is_padding_byte = local.sponge.is_padding_byte;
         let block_bytes = &local.sponge.block_bytes;
         let remaining_len = local.remaining_len();
@@ -213,7 +218,7 @@ impl KeccakVmAir {
         // is_padding_byte must be consistent with remaining_len
         builder.when(is_final_block).assert_eq(
             remaining_len,
-            AB::Expr::from_canonical_usize(KECCAK_RATE_BYTES) - num_padding_bytes,
+            AB::Expr::from_usize(KECCAK_RATE_BYTES) - num_padding_bytes,
         );
         // If this block is not final, when transitioning to next block, remaining len
         // must decrease by `KECCAK_RATE_BYTES`.
@@ -221,7 +226,7 @@ impl KeccakVmAir {
             .when(is_last_round)
             .when(not(is_final_block))
             .assert_eq(
-                remaining_len - AB::F::from_canonical_usize(KECCAK_RATE_BYTES),
+                remaining_len - AB::F::from_usize(KECCAK_RATE_BYTES),
                 next.remaining_len(),
             );
         // To enforce that is_padding_byte must be set appropriately for an input, we require
@@ -249,7 +254,7 @@ impl KeccakVmAir {
         // value 0b10000001
         builder.when(has_single_padding_byte.clone()).assert_eq(
             block_bytes[KECCAK_RATE_BYTES - 1],
-            AB::F::from_canonical_u8(0b10000001),
+            AB::F::from_u8(0b10000001),
         );
 
         let has_multiple_padding_bytes: AB::Expr = not(has_single_padding_byte.clone());
@@ -266,7 +271,7 @@ impl KeccakVmAir {
             builder
                 .when(has_multiple_padding_bytes.clone())
                 .when(is_first_padding_byte.clone())
-                .assert_eq(block_bytes[i], AB::F::from_canonical_u8(0x01));
+                .assert_eq(block_bytes[i], AB::F::from_u8(0x01));
             // If the row has multiple padding bytes, the other padding bytes
             // except the last one must be 0
             builder
@@ -280,10 +285,7 @@ impl KeccakVmAir {
         builder
             .when(is_final_block)
             .when(has_multiple_padding_bytes)
-            .assert_eq(
-                block_bytes[KECCAK_RATE_BYTES - 1],
-                AB::F::from_canonical_u8(0x80),
-            );
+            .assert_eq(block_bytes[KECCAK_RATE_BYTES - 1], AB::F::from_u8(0x80));
     }
 
     /// Constrain state transition between keccak-f permutations is valid absorb of input bytes.
@@ -317,7 +319,7 @@ impl KeccakVmAir {
             (0..U64_LIMBS).flat_map(move |limb| {
                 let state_limb = local.postimage(y, x, limb);
                 let hi = local.sponge.state_hi[i * U64_LIMBS + limb];
-                let lo = state_limb - hi * AB::F::from_canonical_u64(1 << 8);
+                let lo = state_limb - hi * AB::F::from_u64(1 << 8);
                 // Conversion from bytes to u64 is little-endian
                 [lo, hi.into()]
             })
@@ -329,7 +331,7 @@ impl KeccakVmAir {
             (0..U64_LIMBS).flat_map(move |limb| {
                 let state_limb = next.inner.preimage[y][x][limb];
                 let hi = next.sponge.state_hi[i * U64_LIMBS + limb];
-                let lo = state_limb - hi * AB::F::from_canonical_u64(1 << 8);
+                let lo = state_limb - hi * AB::F::from_u64(1 << 8);
                 [lo, hi.into()]
             })
         });
@@ -369,7 +371,7 @@ impl KeccakVmAir {
             (0..U64_LIMBS).flat_map(move |limb| {
                 let state_limb = local.inner.preimage[y][x][limb];
                 let hi = local.sponge.state_hi[i * U64_LIMBS + limb];
-                let lo = state_limb - hi * AB::F::from_canonical_u64(1 << 8);
+                let lo = state_limb - hi * AB::F::from_u64(1 << 8);
                 [lo, hi.into()]
             })
         });
@@ -428,13 +430,13 @@ impl KeccakVmAir {
         let timestamp_change: AB::Expr = Self::timestamp_change(instruction.remaining_len);
         self.execution_bridge
             .execute_and_increment_pc(
-                AB::Expr::from_canonical_usize(Rv32KeccakOpcode::KECCAK256 as usize + self.offset),
+                AB::Expr::from_usize(Rv32KeccakOpcode::KECCAK256 as usize + self.offset),
                 [
                     dst_ptr.into(),
                     src_ptr.into(),
                     len_ptr.into(),
                     reg_addr_sp.into(),
-                    AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
+                    AB::Expr::from_u32(RV32_MEMORY_AS),
                 ],
                 ExecutionState::new(instruction.pc, instruction.start_timestamp),
                 timestamp_change,
@@ -451,8 +453,7 @@ impl KeccakVmAir {
                         .into_iter()
                         .enumerate()
                         .fold(val.into(), |acc, (j, limb)| {
-                            acc - limb
-                                * AB::Expr::from_canonical_usize(1 << ((j + 1) * RV32_CELL_BITS))
+                            acc - limb * AB::Expr::from_usize(1 << ((j + 1) * RV32_CELL_BITS))
                         })
                 } else {
                     limbs[i - 1].into()
@@ -490,9 +491,8 @@ impl KeccakVmAir {
             *instruction.len_limbs.last().unwrap(),
             *instruction.len_limbs.last().unwrap(),
         ];
-        let limb_shift = AB::F::from_canonical_usize(
-            1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.ptr_max_bits),
-        );
+        let limb_shift =
+            AB::F::from_usize(1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.ptr_max_bits));
         for pair in need_range_check.chunks_exact(2) {
             self.bitwise_lookup_bus
                 .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
@@ -531,7 +531,7 @@ impl KeccakVmAir {
         )
         .enumerate()
         {
-            let ptr = local.instruction.src + AB::F::from_canonical_usize(i * KECCAK_WORD_SIZE);
+            let ptr = local.instruction.src + AB::F::from_usize(i * KECCAK_WORD_SIZE);
             // Only read block i if it is not entirely padding bytes
             // count is degree 2
             let count = is_input * not(is_padding[0]);
@@ -562,7 +562,7 @@ impl KeccakVmAir {
 
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::Expr::from_canonical_u32(RV32_MEMORY_AS), ptr),
+                    MemoryAddress::new(AB::Expr::from_u32(RV32_MEMORY_AS), ptr),
                     word, // degree 2
                     timestamp.clone(),
                     mem_aux,
@@ -598,7 +598,7 @@ impl KeccakVmAir {
             (0..U64_LIMBS).flat_map(move |limb| {
                 let state_limb = local.postimage(y, x, limb);
                 let hi = local.sponge.state_hi[i * U64_LIMBS + limb];
-                let lo = state_limb - hi * AB::F::from_canonical_u64(1 << 8);
+                let lo = state_limb - hi * AB::F::from_u64(1 << 8);
                 // Conversion from bytes to u64 is little-endian
                 [lo, hi.into()]
             })
@@ -611,12 +611,12 @@ impl KeccakVmAir {
             .enumerate()
         {
             let digest_bytes = digest_bytes.collect_vec();
-            let timestamp = start_write_timestamp.clone() + AB::Expr::from_canonical_usize(i);
+            let timestamp = start_write_timestamp.clone() + AB::Expr::from_usize(i);
             self.memory_bridge
                 .write(
                     MemoryAddress::new(
-                        AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
-                        dst.clone() + AB::F::from_canonical_usize(i * KECCAK_WORD_SIZE),
+                        AB::Expr::from_u32(RV32_MEMORY_AS),
+                        dst.clone() + AB::F::from_usize(i * KECCAK_WORD_SIZE),
                     ),
                     digest_bytes.try_into().unwrap(),
                     timestamp,
@@ -628,13 +628,11 @@ impl KeccakVmAir {
 
     /// Amount to advance timestamp by after execution of one opcode instruction.
     /// This is an upper bound dependent on the length `len` operand, which is unbounded.
-    pub fn timestamp_change<T: FieldAlgebra>(len: impl Into<T>) -> T {
+    pub fn timestamp_change<T: PrimeCharacteristicRing>(len: impl Into<T>) -> T {
         // actual number is ceil(len / 136) * (3 + 17) + KECCAK_DIGEST_WRITES
         // digest writes only done on last row of multi-block
         // add another KECCAK_ABSORB_READS to round up so we don't deal with padding
         len.into()
-            + T::from_canonical_usize(
-                KECCAK_REGISTER_READS + KECCAK_ABSORB_READS + KECCAK_DIGEST_WRITES,
-            )
+            + T::from_usize(KECCAK_REGISTER_READS + KECCAK_ABSORB_READS + KECCAK_DIGEST_WRITES)
     }
 }

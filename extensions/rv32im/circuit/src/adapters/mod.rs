@@ -8,7 +8,7 @@ use openvm_circuit::{
     },
 };
 use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
-use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
+use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 
 mod alu;
 mod branch;
@@ -49,7 +49,7 @@ pub fn compose<F: PrimeField32>(ptr_data: [F; RV32_REGISTER_NUM_LIMBS]) -> u32 {
 /// inverse of `compose`
 pub fn decompose<F: PrimeField32>(value: u32) -> [F; RV32_REGISTER_NUM_LIMBS] {
     std::array::from_fn(|i| {
-        F::from_canonical_u32((value >> (RV32_CELL_BITS * i)) & ((1 << RV32_CELL_BITS) - 1))
+        F::from_u32((value >> (RV32_CELL_BITS * i)) & ((1 << RV32_CELL_BITS) - 1))
     })
 }
 
@@ -244,13 +244,13 @@ pub fn read_rv32_register(memory: &GuestMemory, ptr: u32) -> u32 {
     u32::from_le_bytes(memory_read(memory, RV32_REGISTER_AS, ptr))
 }
 
-pub fn abstract_compose<T: FieldAlgebra, V: Mul<T, Output = T>>(
+pub fn abstract_compose<T: PrimeCharacteristicRing, V: Mul<T, Output = T>>(
     data: [V; RV32_REGISTER_NUM_LIMBS],
 ) -> T {
     data.into_iter()
         .enumerate()
         .fold(T::ZERO, |acc, (i, limb)| {
-            acc + limb * T::from_canonical_u32(1 << (i * RV32_CELL_BITS))
+            acc + limb * T::from_u32(1 << (i * RV32_CELL_BITS))
         })
 }
 

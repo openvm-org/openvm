@@ -15,7 +15,7 @@ use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::{BusIndex, LookupBus},
-    p3_field::{Field, PrimeField32},
+    p3_field::{InjectiveMonomial, PrimeField32},
     AirRef, ChipUsageGetter,
 };
 
@@ -37,12 +37,12 @@ pub const PERIPHERY_POSEIDON2_WIDTH: usize = 16;
 pub const PERIPHERY_POSEIDON2_CHUNK_SIZE: usize = 8;
 
 #[derive(Chip)]
-#[chip(where = "F: Field")]
-pub enum Poseidon2PeripheryChip<F: Field> {
+#[chip(where = "F: PrimeField32 + InjectiveMonomial<7>")]
+pub enum Poseidon2PeripheryChip<F: PrimeField32 + InjectiveMonomial<7>> {
     Register0(Poseidon2PeripheryBaseChip<F, 0>),
     Register1(Poseidon2PeripheryBaseChip<F, 1>),
 }
-impl<F: PrimeField32> Poseidon2PeripheryChip<F> {
+impl<F: PrimeField32 + InjectiveMonomial<7>> Poseidon2PeripheryChip<F> {
     pub fn new(
         poseidon2_config: Poseidon2Config<F>,
         bus_idx: BusIndex,
@@ -56,11 +56,15 @@ impl<F: PrimeField32> Poseidon2PeripheryChip<F> {
     }
 }
 
-pub fn new_poseidon2_periphery_air<SC: StarkGenericConfig>(
+pub fn new_poseidon2_periphery_air<SC>(
     poseidon2_config: Poseidon2Config<Val<SC>>,
     direct_bus: LookupBus,
     max_constraint_degree: usize,
-) -> AirRef<SC> {
+) -> AirRef<SC>
+where
+    SC: StarkGenericConfig,
+    Val<SC>: InjectiveMonomial<7> + PrimeField32,
+{
     if max_constraint_degree >= 7 {
         Arc::new(Poseidon2PeripheryAir::<Val<SC>, 0>::new(
             Arc::new(Poseidon2SubAir::new(poseidon2_config.constants.into())),
@@ -74,7 +78,7 @@ pub fn new_poseidon2_periphery_air<SC: StarkGenericConfig>(
     }
 }
 
-impl<F: PrimeField32> ChipUsageGetter for Poseidon2PeripheryChip<F> {
+impl<F: PrimeField32 + InjectiveMonomial<7>> ChipUsageGetter for Poseidon2PeripheryChip<F> {
     fn air_name(&self) -> String {
         match self {
             Poseidon2PeripheryChip::Register0(chip) => chip.air_name(),
@@ -97,7 +101,9 @@ impl<F: PrimeField32> ChipUsageGetter for Poseidon2PeripheryChip<F> {
     }
 }
 
-impl<F: PrimeField32> Hasher<PERIPHERY_POSEIDON2_CHUNK_SIZE, F> for Poseidon2PeripheryChip<F> {
+impl<F: PrimeField32 + InjectiveMonomial<7>> Hasher<PERIPHERY_POSEIDON2_CHUNK_SIZE, F>
+    for Poseidon2PeripheryChip<F>
+{
     fn compress(
         &self,
         lhs: &[F; PERIPHERY_POSEIDON2_CHUNK_SIZE],
@@ -110,7 +116,9 @@ impl<F: PrimeField32> Hasher<PERIPHERY_POSEIDON2_CHUNK_SIZE, F> for Poseidon2Per
     }
 }
 
-impl<F: PrimeField32> HasherChip<PERIPHERY_POSEIDON2_CHUNK_SIZE, F> for Poseidon2PeripheryChip<F> {
+impl<F: PrimeField32 + InjectiveMonomial<7>> HasherChip<PERIPHERY_POSEIDON2_CHUNK_SIZE, F>
+    for Poseidon2PeripheryChip<F>
+{
     fn compress_and_record(
         &self,
         lhs: &[F; PERIPHERY_POSEIDON2_CHUNK_SIZE],

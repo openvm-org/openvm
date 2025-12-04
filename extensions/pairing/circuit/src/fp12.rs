@@ -208,17 +208,18 @@ mod tests {
     use openvm_mod_circuit_builder::{test_utils::*, *};
     use openvm_pairing_guest::bn254::BN254_MODULUS;
     use openvm_stark_backend::{
-        p3_air::BaseAir, p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix,
+        p3_air::BaseAir, p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
     };
     use openvm_stark_sdk::{
         any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
-        p3_baby_bear::BabyBear, utils::create_seeded_rng,
+        p3_baby_bear::BabyBear,
     };
+    use rand08::{rngs::StdRng, SeedableRng};
 
     use super::*;
 
     fn generate_random_fq12() -> Fq12 {
-        let mut rng = create_seeded_rng();
+        let mut rng = StdRng::from_entropy();
         Fq12::random(&mut rng)
     }
 
