@@ -6,7 +6,8 @@
 
 using namespace riscv;
 using namespace program;
-using hintstore::{MAX_HINT_BUFFER_WORDS_BITS, MAX_HINT_BUFFER_WORDS};
+using hintstore::MAX_HINT_BUFFER_WORDS;
+using hintstore::MAX_HINT_BUFFER_WORDS_BITS;
 
 template <typename T> struct Rv32HintStoreCols {
     // common
