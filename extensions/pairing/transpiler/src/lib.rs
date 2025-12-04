@@ -44,8 +44,8 @@ impl<F: PrimeField32> TranspilerExtension<F> for PairingTranspilerExtension {
             // Return exits the outermost function
             return Some(TranspilerOutput::one_to_one(Instruction::phantom(
                 PhantomDiscriminant(PairingPhantom::HintFinalExp as u16),
-                F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
-                F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
+                F::from_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                F::from_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
                 pairing_idx as u16,
             )));
         }

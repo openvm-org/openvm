@@ -13,7 +13,7 @@ use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     interaction::PermutationCheckBus,
     p3_commit::PolynomialSpace,
-    p3_field::{Field, PrimeField32},
+    p3_field::{InjectiveMonomial, PrimeField32},
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
     p3_util::{log2_ceil_usize, log2_strict_usize},
     prover::{cpu::CpuBackend, types::AirProvingContext},
@@ -72,7 +72,7 @@ pub type TimestampedEquipartition<F, const N: usize> = Vec<((u32, u32), Timestam
 pub type Equipartition<F, const N: usize> = BTreeMap<(u32, u32), [F; N]>;
 
 #[derive(Getters, MutGetters)]
-pub struct MemoryController<F: Field> {
+pub struct MemoryController<F: PrimeField32 + InjectiveMonomial<7>> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<F>,
     pub range_checker: SharedVariableRangeCheckerChip,
@@ -120,7 +120,7 @@ impl PersistentMemoryTraceHeights {
     }
 }
 
-impl<F: PrimeField32> MemoryController<F> {
+impl<F: PrimeField32 + InjectiveMonomial<7>> MemoryController<F> {
     pub(crate) fn continuation_enabled(&self) -> bool {
         match &self.interface_chip {
             MemoryInterface::Volatile { .. } => false,
@@ -367,7 +367,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<'_, F> {
         self.generate_timestamp_lt(prev_timestamp, timestamp, &mut buffer.timestamp_lt_aux);
         // Safety: even if prev_timestamp were obtained by transmute_ref from
         // `buffer.prev_timestamp`, this should still work because it is a direct assignment
-        buffer.prev_timestamp = F::from_canonical_u32(prev_timestamp);
+        buffer.prev_timestamp = F::from_u32(prev_timestamp);
     }
 
     /// # Safety

@@ -3,7 +3,7 @@ use openvm_native_compiler::{
     prelude::*,
 };
 use openvm_native_compiler_derive::iter_zip;
-use openvm_stark_backend::p3_field::{Field, FieldAlgebra};
+use openvm_stark_backend::p3_field::{Field, PrimeCharacteristicRing};
 
 use crate::{
     challenger::{
@@ -35,8 +35,7 @@ impl<C: Config> DuplexChallengerVariable<C> {
                 builder.set(&sponge_state, i_vec[0], C::F::ZERO);
             });
         let io_empty_ptr = sponge_state.ptr();
-        let io_full_ptr: Ptr<_> =
-            builder.eval(io_empty_ptr + C::N::from_canonical_usize(DIGEST_SIZE));
+        let io_full_ptr: Ptr<_> = builder.eval(io_empty_ptr + C::N::from_usize(DIGEST_SIZE));
         let input_ptr = builder.eval(io_empty_ptr);
         let output_ptr = builder.eval(io_empty_ptr);
 
@@ -197,21 +196,22 @@ mod tests {
     use openvm_stark_backend::{
         config::{StarkGenericConfig, Val},
         p3_challenger::{CanObserve, CanSample},
-        p3_field::FieldAlgebra,
+        p3_field::PrimeCharacteristicRing,
     };
     use openvm_stark_sdk::{
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
         engine::StarkEngine,
         p3_baby_bear::BabyBear,
+        utils::create_seeded_rng,
     };
     use rand::Rng;
 
     use super::DuplexChallengerVariable;
 
     fn test_compiler_challenger_with_num_challenges(num_challenges: usize) {
-        let mut rng = rand::thread_rng();
+        let mut rng = create_seeded_rng();
         let observations = (0..num_challenges)
-            .map(|_| BabyBear::from_canonical_u32(rng.gen_range(0..(1 << 30))))
+            .map(|_| BabyBear::from_u32(rng.random_range(0..(1 << 30))))
             .collect::<Vec<_>>();
 
         type SC = BabyBearPoseidon2Config;

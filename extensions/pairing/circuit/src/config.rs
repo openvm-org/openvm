@@ -16,7 +16,7 @@ use openvm_ecc_circuit::{EccCpuProverExt, WeierstrassExtension, WeierstrassExten
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::StarkEngine,
-    p3_field::PrimeField32,
+    p3_field::{InjectiveMonomial, PrimeField32},
     prover::cpu::{CpuBackend, CpuDevice},
 };
 use serde::{Deserialize, Serialize};
@@ -77,7 +77,7 @@ impl<E, SC> VmBuilder<E> for Rv32PairingCpuBuilder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<SC>: PrimeField32,
+    Val<SC>: PrimeField32 + InjectiveMonomial<7>,
 {
     type VmConfig = Rv32PairingConfig;
     type SystemChipInventory = SystemChipInventory<SC>;

@@ -18,7 +18,9 @@ mod tests {
         DivRemOpcode, MulHOpcode, MulOpcode, Rv32ITranspilerExtension, Rv32IoTranspilerExtension,
         Rv32MTranspilerExtension,
     };
-    use openvm_stark_sdk::{openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear};
+    use openvm_stark_sdk::{
+        openvm_stark_backend::p3_field::PrimeCharacteristicRing, p3_baby_bear::BabyBear,
+    };
     use openvm_toolchain_tests::{
         build_example_program_at_path, build_example_program_at_path_with_features,
         get_programs_dir,
@@ -141,7 +143,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
-        let input = vec![[0, 1, 2, 3].map(F::from_canonical_u8).to_vec()];
+        let input = vec![[0, 1, 2, 3].map(F::from_u8).to_vec()];
         air_test_with_min_segments(Rv32ImBuilder, config, exe, input, 1);
         Ok(())
     }
@@ -158,9 +160,9 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
         // stdin will be read after reading kv_store
-        let stdin = vec![[0, 1, 2].map(F::from_canonical_u8).to_vec()];
+        let stdin = vec![[0, 1, 2].map(F::from_u8).to_vec()];
         let mut streams: Streams<F> = stdin.into();
-        let input = vec![[0, 1, 2, 3].map(F::from_canonical_u8).to_vec()];
+        let input = vec![[0, 1, 2, 3].map(F::from_u8).to_vec()];
         streams.kv_store = Arc::new(HashMap::from([(
             "key".as_bytes().to_vec(),
             hint_load_by_key_encode(&input),
@@ -194,7 +196,7 @@ mod tests {
         let input = serialized_foo
             .into_iter()
             .flat_map(|w| w.to_le_bytes())
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect();
         air_test_with_min_segments(Rv32ImBuilder, config, exe, vec![input], 1);
         Ok(())
@@ -234,7 +236,7 @@ mod tests {
                         .into_iter()
                         .flat_map(|x| x.to_le_bytes())
                 )
-                .map(F::from_canonical_u8)
+                .map(F::from_u8)
                 .collect::<Vec<_>>()
         );
         Ok(())
@@ -269,7 +271,7 @@ mod tests {
 
         let executor = VmExecutor::new(config)?;
         let instance = executor.instance(&exe)?;
-        let input = vec![[0, 0, 0, 1].map(F::from_canonical_u8).to_vec()];
+        let input = vec![[0, 0, 0, 1].map(F::from_u8).to_vec()];
         match instance.execute(input.clone(), None) {
             Err(ExecutionError::FailedWithExitCode(_)) => Ok(()),
             Err(_) => panic!("should fail with `FailedWithExitCode`"),

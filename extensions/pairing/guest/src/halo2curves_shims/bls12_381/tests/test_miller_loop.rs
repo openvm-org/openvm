@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use halo2curves_axiom::bls12_381::{Fq12, G1Affine, G2Affine, G2Prepared};
 use openvm_ecc_guest::{algebra::Field, AffinePoint};
-use rand::{rngs::StdRng, SeedableRng};
+use rand08::{rngs::StdRng, SeedableRng};
 use subtle::ConditionallySelectable;
 
 use super::generate_test_points_bls12_381;

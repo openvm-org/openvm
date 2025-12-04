@@ -1,8 +1,8 @@
 use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
-    utils::disable_debug_builder, verifier::VerificationError, AirRef,
+    p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*, utils::disable_debug_builder, verifier::VerificationError, AirRef,
 };
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
@@ -50,8 +50,8 @@ fn test_variable_range_checker_chip_send() {
         .map(|_| {
             (0..LIST_LEN)
                 .map(|_| {
-                    let bits = rng.gen_range(0..=MAX_BITS);
-                    let val = rng.gen_range(0..(1 << bits));
+                    let bits = rng.random_range(0..=MAX_BITS);
+                    let val = rng.random_range(0..(1 << bits));
                     [val, bits]
                 })
                 .collect::<Vec<[u32; 2]>>()
@@ -79,7 +79,7 @@ fn test_variable_range_checker_chip_send() {
                         var_range_checker.add_count(val, bits as usize);
                         iter::once(val).chain(iter::once(bits))
                     })
-                    .map(FieldAlgebra::from_canonical_u32)
+                    .map(PrimeCharacteristicRing::from_u32)
                     .collect(),
                 2,
             )
@@ -112,8 +112,8 @@ fn negative_test_variable_range_checker_chip_send() {
     // generate randomized valid values-bits pairs with one invalid pair (i.e. [4, 2])
     let list_vals = (0..(LIST_LEN - 1))
         .map(|_| {
-            let bits = rng.gen_range(0..=MAX_BITS);
-            let val = rng.gen_range(0..(1 << bits));
+            let bits = rng.random_range(0..=MAX_BITS);
+            let val = rng.random_range(0..(1 << bits));
             [val, bits]
         })
         .chain(iter::once([4, 2]))
@@ -131,7 +131,7 @@ fn negative_test_variable_range_checker_chip_send() {
                 var_range_checker.add_count(val, bits as usize);
                 iter::once(val).chain(iter::once(bits))
             })
-            .map(FieldAlgebra::from_canonical_u32)
+            .map(PrimeCharacteristicRing::from_u32)
             .collect(),
         2,
     );
@@ -164,7 +164,7 @@ fn test_variable_range_checker_chip_range_check() {
     let lists_vals = (0..num_lists)
         .map(|_| {
             (0..LIST_LEN)
-                .map(|_| rng.gen_range(0..MAX_VAL))
+                .map(|_| rng.random_range(0..MAX_VAL))
                 .collect::<Vec<u32>>()
         })
         .collect::<Vec<Vec<u32>>>();
@@ -190,7 +190,7 @@ fn test_variable_range_checker_chip_range_check() {
                         var_range_checker.add_count(val, MAX_BITS);
                         iter::once(val)
                     })
-                    .map(FieldAlgebra::from_canonical_u32)
+                    .map(PrimeCharacteristicRing::from_u32)
                     .collect(),
                 1,
             )
@@ -224,7 +224,7 @@ fn negative_test_variable_range_checker_chip_range_check() {
 
     // generate randomized valid values with one invalid value (i.e. MAX_VAL)
     let list_vals = (0..(LIST_LEN - 1))
-        .map(|_| rng.gen_range(0..MAX_VAL))
+        .map(|_| rng.random_range(0..MAX_VAL))
         .chain(iter::once(MAX_VAL))
         .collect::<Vec<u32>>();
 
@@ -240,7 +240,7 @@ fn negative_test_variable_range_checker_chip_range_check() {
                 var_range_checker.add_count(val, MAX_BITS);
                 iter::once(val)
             })
-            .map(FieldAlgebra::from_canonical_u32)
+            .map(PrimeCharacteristicRing::from_u32)
             .collect(),
         1,
     );
@@ -265,7 +265,7 @@ fn test_cuda_var_range() {
     let mut rng = create_seeded_rng();
     let bus = VariableRangeCheckerBus::new(1, RANGE_MAX_BITS);
     let random_values: Vec<u32> = (0..NUM_INPUTS)
-        .map(|_| rng.gen::<u32>() & RANGE_BIT_MASK)
+        .map(|_| rng.random::<u32>() & RANGE_BIT_MASK)
         .collect();
 
     let range_checker = Arc::new(VariableRangeCheckerChipGPU::new(bus));
@@ -298,16 +298,16 @@ fn test_cuda_var_range_hybrid() {
     )));
 
     let gpu_random_values: Vec<u32> = (0..NUM_INPUTS)
-        .map(|_| rng.gen::<u32>() & RANGE_BIT_MASK)
+        .map(|_| rng.random::<u32>() & RANGE_BIT_MASK)
         .collect();
     let gpu_dummy_chip = DummyInteractionChipGPU::new(range_checker.clone(), gpu_random_values);
 
     let cpu_chip = range_checker.cpu_chip.clone().unwrap();
     let cpu_pairs = (0..NUM_INPUTS)
         .map(|_| {
-            let bits = rng.gen_range(0..=(RANGE_MAX_BITS as u32));
+            let bits = rng.random_range(0..=(RANGE_MAX_BITS as u32));
             let mask = (1 << bits) - 1;
-            let value = rng.gen::<u32>() & mask;
+            let value = rng.random::<u32>() & mask;
             cpu_chip.add_count(value, bits as usize);
             [value, bits]
         })
@@ -317,8 +317,8 @@ fn test_cuda_var_range_hybrid() {
         .chain(
             cpu_pairs
                 .iter()
-                .map(|pair| F::from_canonical_u32(pair[0]))
-                .chain(cpu_pairs.iter().map(|pair| F::from_canonical_u32(pair[1]))),
+                .map(|pair| F::from_u32(pair[0]))
+                .chain(cpu_pairs.iter().map(|pair| F::from_u32(pair[1]))),
         )
         .collect::<Vec<_>>()
         .to_device()

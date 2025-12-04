@@ -5,7 +5,7 @@ use openvm_native_compiler::{
     prelude::ArrayLike,
 };
 use openvm_native_compiler_derive::iter_zip;
-use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
+use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, PrimeCharacteristicRing};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 type F = BabyBear;
@@ -15,8 +15,8 @@ type EF = BinomialExtensionField<BabyBear, 4>;
 fn test_compiler_for_loops() {
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let n_val = BabyBear::from_canonical_u32(10);
-    let m_val = BabyBear::from_canonical_u32(5);
+    let n_val = BabyBear::from_u32(10);
+    let m_val = BabyBear::from_u32(5);
 
     let zero: Var<_> = builder.eval(F::ZERO);
     let n: Var<_> = builder.eval(n_val);
@@ -75,11 +75,11 @@ fn test_compiler_zip_fixed() {
         builder.assign(&ptr1_cache, ptr_vec[0]);
         builder.assign(&ptr2_cache, ptr_vec[1]);
     });
-    builder.assert_var_eq(count, F::from_canonical_usize(2));
-    builder.assert_var_eq(x1, F::from_canonical_usize(1));
-    builder.assert_var_eq(x2, F::from_canonical_usize(7));
-    builder.assert_var_eq(ptr1_cache, F::from_canonical_usize(1));
-    builder.assert_var_eq(ptr2_cache, F::from_canonical_usize(1));
+    builder.assert_var_eq(count, F::from_usize(2));
+    builder.assert_var_eq(x1, F::from_usize(1));
+    builder.assert_var_eq(x2, F::from_usize(7));
+    builder.assert_var_eq(ptr1_cache, F::from_usize(1));
+    builder.assert_var_eq(ptr2_cache, F::from_usize(1));
     builder.halt();
 
     let program = builder.compile_isa();
@@ -117,11 +117,11 @@ fn test_compiler_zip_dyn() {
         builder.assign(&ptr1_cache, ptr_vec[0]);
         builder.assign(&ptr2_cache, ptr_vec[1]);
     });
-    builder.assert_var_eq(count, F::from_canonical_usize(2));
-    builder.assert_var_eq(x1, F::from_canonical_usize(1));
-    builder.assert_var_eq(x2, F::from_canonical_usize(7));
-    builder.assert_var_eq(ptr1_cache, arr1.ptr().address + F::from_canonical_usize(1));
-    builder.assert_var_eq(ptr2_cache, arr2.ptr().address + F::from_canonical_usize(1));
+    builder.assert_var_eq(count, F::from_usize(2));
+    builder.assert_var_eq(x1, F::from_usize(1));
+    builder.assert_var_eq(x2, F::from_usize(7));
+    builder.assert_var_eq(ptr1_cache, arr1.ptr().address + F::from_usize(1));
+    builder.assert_var_eq(ptr2_cache, arr2.ptr().address + F::from_usize(1));
     builder.halt();
 
     let program = builder.compile_isa();
@@ -169,7 +169,7 @@ fn test_compiler_nested_array_loop() {
 fn test_compiler_bneinc() {
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let n_val = BabyBear::from_canonical_u32(20);
+    let n_val = BabyBear::from_u32(20);
 
     let zero: Var<_> = builder.eval(F::ZERO);
     let n: Var<_> = builder.eval(n_val);

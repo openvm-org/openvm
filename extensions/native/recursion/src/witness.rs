@@ -10,7 +10,7 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig, p3_baby_bear::BabyBear,
-    p3_bn254_fr::Bn254Fr,
+    p3_bn254::Bn254,
 };
 use p3_symmetric::Hash;
 
@@ -33,10 +33,10 @@ pub trait Witnessable<C: Config> {
 }
 
 type C = OuterConfig;
-type OuterCom = Hash<BabyBear, Bn254Fr, 1>;
+type OuterCom = Hash<BabyBear, Bn254, 1>;
 
-impl Witnessable<C> for Bn254Fr {
-    type WitnessVariable = Var<Bn254Fr>;
+impl Witnessable<C> for Bn254 {
+    type WitnessVariable = Var<Bn254>;
 
     fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {
         builder.witness_var()
@@ -75,13 +75,13 @@ impl Witnessable<C> for OuterCom {
     type WitnessVariable = DigestVariable<C>;
 
     fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {
-        let bv: &[Bn254Fr; 1] = self.borrow();
+        let bv: &[Bn254; 1] = self.borrow();
         let v = vec![bv[0].read(builder)];
         DigestVariable::Var(builder.vec(v))
     }
 
     fn write(&self, witness: &mut Witness<C>) {
-        let bv: &[Bn254Fr; 1] = self.borrow();
+        let bv: &[Bn254; 1] = self.borrow();
         witness.vars.push(bv[0]);
     }
 }
@@ -100,7 +100,7 @@ impl Witnessable<C> for usize {
 }
 
 pub trait VectorWitnessable<C: Config>: Witnessable<C> {}
-impl VectorWitnessable<C> for Bn254Fr {}
+impl VectorWitnessable<C> for Bn254 {}
 impl VectorWitnessable<C> for OuterVal {}
 impl VectorWitnessable<C> for OuterChallenge {}
 impl VectorWitnessable<C> for OuterCom {}
