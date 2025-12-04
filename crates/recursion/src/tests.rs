@@ -272,8 +272,8 @@ fn test_preflight_multi_interaction_trace(
     let (vk, proof) = fx.keygen_and_prove(&engine);
 
     // Due to the size of SelfInteractionAir, SymbolicExpressionAir's cached trace
-    // may be of height up to 2^10
-    let params = test_system_params_small(l_skip, n_stack.max(10 - l_skip), k_whir);
+    // may be of height up to 2^12
+    let params = test_system_params_small(l_skip, n_stack.max(12 - l_skip), k_whir);
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
 
     let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
@@ -297,8 +297,8 @@ fn test_preflight_mixture_trace(
     let (vk, proof) = fx.keygen_and_prove(&engine);
 
     // Due to the size of SelfInteractionAir, SymbolicExpressionAir's cached trace
-    // may be of height up to 2^10
-    let params = test_system_params_small(l_skip, n_stack.max(10 - l_skip), k_whir);
+    // may be of height up to 2^12
+    let params = test_system_params_small(l_skip, n_stack.max(12 - l_skip), k_whir);
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
 
     let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
@@ -799,19 +799,17 @@ mod cuda {
 
     #[test_matrix(
         [1,2,5],
-        [5,8],
         [3,4],
         [1,3,5],
         [1,4]
     )]
     fn test_cuda_tracegen_multi_interaction(
         l_skip: usize,
-        n_stack: usize,
         k_whir: usize,
         log_trace_degree: usize,
         num_proofs: usize,
     ) {
-        let n_stack = n_stack.max(10 - l_skip);
+        let n_stack = 12 - l_skip;
         let params = test_system_params_small(l_skip, n_stack, k_whir);
         let fx = SelfInteractionFixture {
             widths: vec![4, 7, 8, 8, 10, 100],
@@ -823,19 +821,17 @@ mod cuda {
 
     #[test_matrix(
         [1,2,5],
-        [5,8],
         [3,4],
         [1,3,5],
         [1,4]
     )]
     fn test_cuda_tracegen_mixture(
         l_skip: usize,
-        n_stack: usize,
         k_whir: usize,
         log_trace_degree: usize,
         num_proofs: usize,
     ) {
-        let n_stack = n_stack.max(10 - l_skip);
+        let n_stack = 12 - l_skip;
         let params = test_system_params_small(l_skip, n_stack, k_whir);
         let fx = MixtureFixture::standard(log_trace_degree, params);
         compare_cpu_tracegen_vs_gpu_tracegen(fx, params, num_proofs);
