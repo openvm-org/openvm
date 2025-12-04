@@ -18,7 +18,7 @@ use openvm_stark_backend::{
     p3_util::log2_ceil_usize,
     prover::types::AirProvingContext,
 };
-use p3_field::FieldAlgebra;
+use p3_field::PrimeCharacteristicRing;
 
 use super::{poseidon2::SharedBuffer, Poseidon2PeripheryChipGPU, DIGEST_WIDTH};
 
@@ -448,7 +448,7 @@ mod tests {
         NATIVE_AS,
     };
     use openvm_stark_sdk::utils::create_seeded_rng;
-    use p3_field::{FieldAlgebra, PrimeField32};
+    use p3_field::{PrimeCharacteristicRing, PrimeField32};
     use rand::Rng;
 
     use super::MemoryMerkleTree;
@@ -476,7 +476,7 @@ mod tests {
                             initial_memory.write::<u8, 1>(
                                 idx as u32,
                                 i as u32,
-                                [rng.gen_range(0..space.layout.size()) as u8],
+                                [rng.random_range(0..space.layout.size()) as u8],
                             );
                         }
                     }
@@ -485,7 +485,7 @@ mod tests {
                             initial_memory.write::<u16, 1>(
                                 idx as u32,
                                 i as u32,
-                                [rng.gen_range(0..space.layout.size()) as u16],
+                                [rng.random_range(0..space.layout.size()) as u16],
                             );
                         }
                     }
@@ -494,7 +494,7 @@ mod tests {
                             initial_memory.write::<u32, 1>(
                                 idx as u32,
                                 i as u32,
-                                [rng.gen_range(0..space.layout.size()) as u32],
+                                [rng.random_range(0..space.layout.size()) as u32],
                             );
                         }
                     }
@@ -503,7 +503,7 @@ mod tests {
                             initial_memory.write::<F, 1>(
                                 idx as u32,
                                 i as u32,
-                                [F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32))],
+                                [F::from_u32(rng.random_range(0..F::ORDER_U32))],
                             );
                         }
                     }
@@ -562,7 +562,7 @@ mod tests {
             .flat_map(|(i, cnf)| {
                 let mut ptrs = Vec::new();
                 for j in 0..(cnf.num_cells / DIGEST_WIDTH) {
-                    if rng.gen_bool(0.333) {
+                    if rng.random_bool(0.333) {
                         ptrs.push((i as u32, (j * DIGEST_WIDTH) as u32));
                     }
                 }
@@ -571,7 +571,7 @@ mod tests {
             .collect::<Vec<_>>();
         let new_data = touched_ptrs
             .iter()
-            .map(|_| std::array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32))))
+            .map(|_| std::array::from_fn(|_| F::from_u32(rng.random_range(0..F::ORDER_U32))))
             .collect::<Vec<[F; DIGEST_WIDTH]>>();
         assert!(!touched_ptrs.is_empty());
         cpu_merkle_tree.finalize(
@@ -590,7 +590,7 @@ mod tests {
                 (
                     address,
                     TimestampedValues {
-                        timestamp: rng.gen_range(0..(1u32 << mem_config.timestamp_max_bits)),
+                        timestamp: rng.random_range(0..(1u32 << mem_config.timestamp_max_bits)),
                         values: data,
                     },
                 )

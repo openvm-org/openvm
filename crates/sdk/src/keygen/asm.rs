@@ -5,7 +5,7 @@ use openvm_circuit::arch::instructions::{
 };
 use openvm_continuations::F;
 use openvm_native_compiler::{asm::A0, conversion::AS, NativeJalOpcode};
-use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
+use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 use rrs_lib::instruction_formats::IType;
 
 const OPCODE: u32 = 0x0b;
@@ -61,14 +61,14 @@ fn handle_pc_diff(program: &mut Program<F>) -> usize {
     pc_diff += LONG_FORM_NATIVE_INSTRUCTION_WIDTH - 1;
     let jal = Instruction::<F> {
         opcode: NativeJalOpcode::JAL.global_opcode(),
-        a: F::from_canonical_usize(A0 as usize), // A0
+        a: F::from_usize(A0 as usize), // A0
         // +1 means the next instruction after the gap
-        b: F::from_canonical_usize(PC_STEP * (pc_diff + 1)),
-        c: F::from_canonical_usize(0),
-        d: F::from_canonical_u32(AS::Native as u32),
-        e: F::from_canonical_usize(0),
-        f: F::from_canonical_usize(0),
-        g: F::from_canonical_usize(0),
+        b: F::from_usize(PC_STEP * (pc_diff + 1)),
+        c: F::from_usize(0),
+        d: F::from_u32(AS::Native as u32),
+        e: F::from_usize(0),
+        f: F::from_usize(0),
+        g: F::from_usize(0),
     };
     program.push_instruction(jal);
     pc_diff

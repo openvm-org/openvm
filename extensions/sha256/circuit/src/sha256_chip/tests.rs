@@ -23,7 +23,7 @@ use openvm_instructions::{
 };
 use openvm_sha256_air::{get_sha256_num_blocks, SHA256_BLOCK_U8S};
 use openvm_sha256_transpiler::Rv32Sha256Opcode::{self, *};
-use openvm_stark_backend::{interaction::BusIndex, p3_field::FieldAlgebra};
+use openvm_stark_backend::{interaction::BusIndex, p3_field::PrimeCharacteristicRing};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
@@ -89,7 +89,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     message: Option<&[u8]>,
     len: Option<usize>,
 ) {
-    let len = len.unwrap_or(rng.gen_range(1..3000));
+    let len = len.unwrap_or(rng.random_range(1..3000));
     let tmp = get_random_message(rng, len);
     let message: &[u8] = message.unwrap_or(&tmp);
     let len = message.len();
@@ -100,18 +100,18 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let dst_ptr = gen_pointer(rng, 4);
     let src_ptr = gen_pointer(rng, 4);
-    tester.write(1, rd, dst_ptr.to_le_bytes().map(F::from_canonical_u8));
-    tester.write(1, rs1, src_ptr.to_le_bytes().map(F::from_canonical_u8));
-    tester.write(1, rs2, len.to_le_bytes().map(F::from_canonical_u8));
+    tester.write(1, rd, dst_ptr.to_le_bytes().map(F::from_u8));
+    tester.write(1, rs1, src_ptr.to_le_bytes().map(F::from_u8));
+    tester.write(1, rs2, len.to_le_bytes().map(F::from_u8));
 
     // Adding random memory after the message
     let num_blocks = get_sha256_num_blocks(len as u32) as usize;
     for offset in (0..num_blocks * SHA256_BLOCK_U8S).step_by(4) {
         let chunk: [F; 4] = array::from_fn(|i| {
             if offset + i < message.len() {
-                F::from_canonical_u8(message[offset + i])
+                F::from_u8(message[offset + i])
             } else {
-                F::from_canonical_u8(rng.gen())
+                F::from_u8(rng.random())
             }
         });
 
@@ -126,7 +126,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let output = sha256_solve(message);
     assert_eq!(
-        output.map(F::from_canonical_u8),
+        output.map(F::from_u8),
         tester.read::<32>(RV32_MEMORY_AS as usize, dst_ptr)
     );
 }

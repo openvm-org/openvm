@@ -60,7 +60,7 @@ impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
     ) -> Self {
         let public_values = extract_public_values(num_public_values, final_memory)
             .iter()
-            .map(|&x| F::from_canonical_u8(x))
+            .map(|&x| F::from_u8(x))
             .collect_vec();
         let public_values_commit = hasher.merkle_root(&public_values);
         let proof = compute_merkle_proof_to_user_public_values_root(
@@ -198,7 +198,7 @@ pub fn extract_public_values(num_public_values: usize, final_memory: &MemoryImag
 
 #[cfg(test)]
 mod tests {
-    use openvm_stark_backend::p3_field::FieldAlgebra;
+    use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
     use super::UserPublicValuesProof;

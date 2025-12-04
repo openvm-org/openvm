@@ -329,8 +329,7 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakVmFiller {
                             // The first row of a `dummy` block should have `is_new_start = F::ONE`
                             cols.sponge.is_new_start = F::from_bool(idx == 0);
                             cols.sponge.block_bytes[0] = F::ONE;
-                            cols.sponge.block_bytes[KECCAK_RATE_BYTES - 1] =
-                                F::from_canonical_u32(0x80);
+                            cols.sponge.block_bytes[KECCAK_RATE_BYTES - 1] = F::from_u32(0x80);
                             cols.sponge.is_padding_byte = [F::ONE; KECCAK_RATE_BYTES];
                         });
                     return;
@@ -364,7 +363,7 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakVmFiller {
                 } else {
                     [0u8; KECCAK_WORD_SIZE - 1]
                 }
-                .map(F::from_canonical_u8);
+                .map(F::from_u8);
                 let mut input = Vec::with_capacity(*num_blocks * KECCAK_RATE_BYTES);
                 input.extend_from_slice(&record.input[..*len]);
                 // Pad the input according to the Keccak spec
@@ -439,12 +438,11 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakVmFiller {
                                 } else {
                                     cols.sponge.is_padding_byte = [F::ZERO; KECCAK_RATE_BYTES];
                                 }
-                                cols.sponge.block_bytes = array::from_fn(|i| {
-                                    F::from_canonical_u8(input[input_offset + i])
-                                });
+                                cols.sponge.block_bytes =
+                                    array::from_fn(|i| F::from_u8(input[input_offset + i]));
                                 if row_idx == 0 {
                                     cols.sponge.state_hi = from_fn(|i| {
-                                        F::from_canonical_u8(
+                                        F::from_u8(
                                             (states[block_idx][i / U64_LIMBS]
                                                 >> ((i % U64_LIMBS) * 16 + 8))
                                                 as u8,
@@ -453,7 +451,7 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakVmFiller {
                                 } else if row_idx == NUM_ROUNDS - 1 {
                                     let state = keccak_f(states[block_idx]);
                                     cols.sponge.state_hi = from_fn(|i| {
-                                        F::from_canonical_u8(
+                                        F::from_u8(
                                             (state[i / U64_LIMBS] >> ((i % U64_LIMBS) * 16 + 8))
                                                 as u8,
                                         )
@@ -472,28 +470,25 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakVmFiller {
                                 }
 
                                 // Fill the instruction columns
-                                cols.instruction.pc = F::from_canonical_u32(vm_record.from_pc);
+                                cols.instruction.pc = F::from_u32(vm_record.from_pc);
                                 cols.instruction.is_enabled = F::ONE;
                                 cols.instruction.is_enabled_first_round =
                                     F::from_bool(row_idx == 0);
-                                cols.instruction.start_timestamp =
-                                    F::from_canonical_u32(start_timestamp);
-                                cols.instruction.dst_ptr = F::from_canonical_u32(vm_record.rd_ptr);
-                                cols.instruction.src_ptr = F::from_canonical_u32(vm_record.rs1_ptr);
-                                cols.instruction.len_ptr = F::from_canonical_u32(vm_record.rs2_ptr);
-                                cols.instruction.dst =
-                                    vm_record.dst.to_le_bytes().map(F::from_canonical_u8);
+                                cols.instruction.start_timestamp = F::from_u32(start_timestamp);
+                                cols.instruction.dst_ptr = F::from_u32(vm_record.rd_ptr);
+                                cols.instruction.src_ptr = F::from_u32(vm_record.rs1_ptr);
+                                cols.instruction.len_ptr = F::from_u32(vm_record.rs2_ptr);
+                                cols.instruction.dst = vm_record.dst.to_le_bytes().map(F::from_u8);
 
                                 let src = vm_record.src + (block_idx * KECCAK_RATE_BYTES) as u32;
-                                cols.instruction.src = F::from_canonical_u32(src);
-                                cols.instruction.src_limbs.copy_from_slice(
-                                    &src.to_le_bytes().map(F::from_canonical_u8)[1..],
-                                );
+                                cols.instruction.src = F::from_u32(src);
+                                cols.instruction
+                                    .src_limbs
+                                    .copy_from_slice(&src.to_le_bytes().map(F::from_u8)[1..]);
                                 cols.instruction.len_limbs.copy_from_slice(
-                                    &(rem_len as u32).to_le_bytes().map(F::from_canonical_u8)[1..],
+                                    &(rem_len as u32).to_le_bytes().map(F::from_u8)[1..],
                                 );
-                                cols.instruction.remaining_len =
-                                    F::from_canonical_u32(rem_len as u32);
+                                cols.instruction.remaining_len = F::from_u32(rem_len as u32);
 
                                 // Fill the register reads
                                 if row_idx == 0 && block_idx == 0 {
@@ -563,9 +558,7 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakVmFiller {
                                         .enumerate()
                                         .zip(vm_record.write_aux.par_iter())
                                         .for_each(|((i, cols), vm_record)| {
-                                            cols.set_prev_data(
-                                                vm_record.prev_data.map(F::from_canonical_u8),
-                                            );
+                                            cols.set_prev_data(vm_record.prev_data.map(F::from_u8));
                                             mem_helper.fill(
                                                 vm_record.prev_timestamp,
                                                 timestamp + i as u32,

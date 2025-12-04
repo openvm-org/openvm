@@ -28,7 +28,7 @@ pub struct OverflowInt<T> {
 impl<T> OverflowInt<T> {
     // Note: sign or unsigned are not about the type T.
     // It's how we will range check the limbs. If the limbs are non-negative, use this one.
-    pub fn from_canonical_unsigned_limbs(x: Vec<T>, limb_bits: usize) -> OverflowInt<T> {
+    pub fn from_unsigned_limbs(x: Vec<T>, limb_bits: usize) -> OverflowInt<T> {
         OverflowInt {
             limbs: x,
             max_overflow_bits: limb_bits,
@@ -38,7 +38,7 @@ impl<T> OverflowInt<T> {
 
     // Limbs can be negative. So the max_overflow_bits and limb_max_abs are different from the range
     // check result.
-    pub fn from_canonical_signed_limbs(x: Vec<T>, limb_bits: usize) -> OverflowInt<T> {
+    pub fn from_signed_limbs(x: Vec<T>, limb_bits: usize) -> OverflowInt<T> {
         OverflowInt {
             limbs: x,
             max_overflow_bits: limb_bits + 1,
@@ -120,7 +120,7 @@ impl OverflowInt<isize> {
             None => utils::big_uint_to_limbs(x, limb_bits),
         };
         let limbs: Vec<isize> = limbs.iter().map(|x| *x as isize).collect();
-        OverflowInt::from_canonical_unsigned_limbs(limbs, limb_bits)
+        OverflowInt::from_unsigned_limbs(limbs, limb_bits)
     }
 
     pub fn calculate_carries(&self, limb_bits: usize) -> Vec<isize> {

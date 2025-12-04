@@ -2,7 +2,7 @@ use std::iter;
 
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
 };
 
 use crate::system::memory::MemoryAddress;
@@ -74,7 +74,7 @@ pub struct MemoryBusInteraction<T> {
     pub timestamp: T,
 }
 
-impl<T: FieldAlgebra> MemoryBusInteraction<T> {
+impl<T: PrimeCharacteristicRing> MemoryBusInteraction<T> {
     /// Finalizes and sends/receives the memory operation with the specified direction over the bus.
     ///
     /// A read corresponds to a receive, and a write corresponds to a send.

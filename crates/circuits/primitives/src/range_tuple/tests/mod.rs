@@ -1,8 +1,8 @@
 use std::{array, iter, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
-    utils::disable_debug_builder, verifier::VerificationError, AirRef,
+    p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*, utils::disable_debug_builder, verifier::VerificationError, AirRef,
 };
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
@@ -37,7 +37,7 @@ fn test_range_tuple_chip() {
     const LIST_LEN: usize = 64;
 
     let bus_index = 0;
-    let sizes: [u32; 3] = array::from_fn(|_| 1 << rng.gen_range(1..5));
+    let sizes: [u32; 3] = array::from_fn(|_| 1 << rng.random_range(1..5));
 
     let bus = RangeTupleCheckerBus::new(bus_index, sizes);
     let range_checker = RangeTupleCheckerChip::new(bus);
@@ -46,7 +46,7 @@ fn test_range_tuple_chip() {
     let mut gen_tuple = || {
         sizes
             .iter()
-            .map(|&size| rng.gen_range(0..size))
+            .map(|&size| rng.random_range(0..size))
             .collect::<Vec<_>>()
     };
 
@@ -78,7 +78,7 @@ fn test_range_tuple_chip() {
                         range_checker.add_count(&v);
                         iter::once(1).chain(v)
                     })
-                    .map(FieldAlgebra::from_wrapped_u32)
+                    .map(PrimeCharacteristicRing::from_u32)
                     .collect(),
                 sizes.len() + 1,
             )
@@ -115,7 +115,7 @@ fn negative_test_range_tuple_chip() {
     let mut range_trace = range_checker.generate_trace();
 
     // Corrupt the trace to make it invalid
-    range_trace.values[0] = BabyBear::from_wrapped_u32(99);
+    range_trace.values[0] = BabyBear::from_u32(99);
 
     disable_debug_builder();
     assert_eq!(
@@ -148,13 +148,13 @@ fn test_cuda_range_tuple() {
     const NUM_INPUTS: usize = 1 << 16;
 
     let mut rng = create_seeded_rng();
-    let sizes: [u32; TUPLE_SIZE] = from_fn(|_| 1 << rng.gen_range(1..5));
+    let sizes: [u32; TUPLE_SIZE] = from_fn(|_| 1 << rng.random_range(1..5));
     let bus = RangeTupleCheckerBus::<TUPLE_SIZE>::new(0, sizes);
     let random_values = (0..NUM_INPUTS)
         .flat_map(|_| {
             sizes
                 .iter()
-                .map(|&size| rng.gen_range(0..size))
+                .map(|&size| rng.random_range(0..size))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
@@ -182,7 +182,7 @@ fn test_cuda_range_tuple_hybrid() {
     const NUM_INPUTS: usize = 1 << 16;
 
     let mut rng = create_seeded_rng();
-    let sizes: [u32; TUPLE_SIZE] = from_fn(|_| 1 << rng.gen_range(1..5));
+    let sizes: [u32; TUPLE_SIZE] = from_fn(|_| 1 << rng.random_range(1..5));
     let bus = RangeTupleCheckerBus::<TUPLE_SIZE>::new(0, sizes);
     let range_tuple_checker = Arc::new(RangeTupleCheckerChipGPU::hybrid(Arc::new(
         RangeTupleCheckerChip::new(bus),
@@ -192,7 +192,7 @@ fn test_cuda_range_tuple_hybrid() {
         .flat_map(|_| {
             sizes
                 .iter()
-                .map(|&size| rng.gen_range(0..size))
+                .map(|&size| rng.random_range(0..size))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
@@ -203,7 +203,7 @@ fn test_cuda_range_tuple_hybrid() {
         .map(|_| {
             let values = sizes
                 .iter()
-                .map(|&size| rng.gen_range(0..size))
+                .map(|&size| rng.random_range(0..size))
                 .collect::<Vec<_>>();
             cpu_chip.add_count(&values);
             values
@@ -214,9 +214,9 @@ fn test_cuda_range_tuple_hybrid() {
         .chain(
             cpu_values
                 .iter()
-                .map(|v| F::from_canonical_u32(v[0]))
-                .chain(cpu_values.iter().map(|v| F::from_canonical_u32(v[1])))
-                .chain(cpu_values.iter().map(|v| F::from_canonical_u32(v[2]))),
+                .map(|v| F::from_u32(v[0]))
+                .chain(cpu_values.iter().map(|v| F::from_u32(v[1])))
+                .chain(cpu_values.iter().map(|v| F::from_u32(v[2]))),
         )
         .collect::<Vec<_>>()
         .to_device()

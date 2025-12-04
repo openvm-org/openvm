@@ -69,7 +69,7 @@ impl<F: PrimeField32> MemoryReadAuxCols<F> {
     pub fn new(prev_timestamp: u32, timestamp_lt_aux: LessThanAuxCols<F, AUX_LEN>) -> Self {
         Self {
             base: MemoryBaseAuxCols {
-                prev_timestamp: F::from_canonical_u32(prev_timestamp),
+                prev_timestamp: F::from_u32(prev_timestamp),
                 timestamp_lt_aux,
             },
         }

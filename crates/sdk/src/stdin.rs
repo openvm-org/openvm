@@ -31,7 +31,7 @@ impl<F: Field> StdIn<F> {
     }
 
     pub fn write_bytes(&mut self, data: &[u8]) {
-        let field_data = data.iter().map(|b| F::from_canonical_u8(*b)).collect();
+        let field_data = data.iter().map(|b| F::from_u8(*b)).collect();
         self.buffer.push_back(field_data);
     }
 

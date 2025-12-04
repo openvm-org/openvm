@@ -71,7 +71,7 @@ where
             opcode.local_opcode_idx(self.offset) == BranchEqualOpcode::BEQ as usize;
 
         if cmp_result == core_record.is_beq {
-            *state.pc = (F::from_canonical_u32(*state.pc) + imm).as_canonical_u32();
+            *state.pc = (F::from_u32(*state.pc) + imm).as_canonical_u32();
         } else {
             *state.pc = state.pc.wrapping_add(self.pc_step);
         }

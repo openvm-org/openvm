@@ -58,8 +58,9 @@ impl<F: Field, const SBOX_REGISTERS: usize> PartitionedBaseAir<F>
 {
 }
 
-impl<AB: AirBuilder, const SBOX_REGISTERS: usize> Air<AB>
-    for Poseidon2SubAir<AB::F, SBOX_REGISTERS>
+impl<AB: AirBuilder, const SBOX_REGISTERS: usize> Air<AB> for Poseidon2SubAir<AB::F, SBOX_REGISTERS>
+where
+    AB::F: Field,
 {
     fn eval(&self, builder: &mut AB) {
         match self {

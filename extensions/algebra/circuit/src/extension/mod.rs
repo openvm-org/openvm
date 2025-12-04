@@ -14,7 +14,7 @@ use openvm_rv32im_circuit::{
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    p3_field::PrimeField32,
+    p3_field::{InjectiveMonomial, PrimeField32},
     prover::cpu::{CpuBackend, CpuDevice},
 };
 use openvm_stark_sdk::engine::StarkEngine;
@@ -120,7 +120,7 @@ impl<E, SC> VmBuilder<E> for Rv32ModularCpuBuilder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<SC>: PrimeField32,
+    Val<SC>: PrimeField32 + InjectiveMonomial<7>,
 {
     type VmConfig = Rv32ModularConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
@@ -156,7 +156,7 @@ impl<E, SC> VmBuilder<E> for Rv32ModularWithFp2CpuBuilder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<SC>: PrimeField32,
+    Val<SC>: PrimeField32 + InjectiveMonomial<7>,
 {
     type VmConfig = Rv32ModularWithFp2Config;
     type SystemChipInventory = SystemChipInventory<SC>;

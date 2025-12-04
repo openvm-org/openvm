@@ -3,7 +3,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::AirBuilder,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
 };
 
 use crate::{
@@ -113,7 +113,7 @@ impl<const NUM: usize> IsLtArraySubAir<NUM> {
 
     /// Constrain that `out` is boolean equal to `x < y` (lexicographic comparison)
     /// **without** doing range checks on `lt_decomp`.
-    fn eval_without_range_checks<AB: AirBuilder>(
+    fn eval_without_range_checks<AB: AirBuilder<Var: Copy>>(
         &self,
         builder: &mut AB,
         io: IsLtArrayIo<AB::Expr, NUM>,
@@ -238,8 +238,7 @@ impl<F: PrimeField32, const NUM: usize> TraceSubRowGenerator<F> for IsLtArraySub
             }
         }
         // diff_val can be "negative" but shifted_diff is in [0, 2^{max_bits+1})
-        let shifted_diff =
-            (diff_val + F::from_canonical_u32((1 << self.max_bits()) - 1)).as_canonical_u32();
+        let shifted_diff = (diff_val + F::from_u32((1 << self.max_bits()) - 1)).as_canonical_u32();
         let lower_u32 = shifted_diff & ((1 << self.max_bits()) - 1);
         *out = F::from_bool(shifted_diff != lower_u32);
 

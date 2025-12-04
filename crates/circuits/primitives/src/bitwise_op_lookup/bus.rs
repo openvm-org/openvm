@@ -1,6 +1,6 @@
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, LookupBus},
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -22,7 +22,7 @@ impl BitwiseOperationLookupBus {
         y: impl Into<T>,
     ) -> BitwiseOperationLookupBusInteraction<T>
     where
-        T: FieldAlgebra,
+        T: PrimeCharacteristicRing,
     {
         self.push(x, y, T::ZERO, T::ZERO, true)
     }
@@ -35,7 +35,7 @@ impl BitwiseOperationLookupBus {
         z: impl Into<T>,
     ) -> BitwiseOperationLookupBusInteraction<T>
     where
-        T: FieldAlgebra,
+        T: PrimeCharacteristicRing,
     {
         self.push(x, y, z, T::ONE, true)
     }
@@ -80,7 +80,7 @@ pub struct BitwiseOperationLookupBusInteraction<T> {
     is_lookup: bool,
 }
 
-impl<T: FieldAlgebra> BitwiseOperationLookupBusInteraction<T> {
+impl<T: PrimeCharacteristicRing> BitwiseOperationLookupBusInteraction<T> {
     pub fn eval<AB>(self, builder: &mut AB, count: impl Into<AB::Expr>)
     where
         AB: InteractionBuilder<Expr = T>,
