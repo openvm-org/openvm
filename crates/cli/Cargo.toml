@@ -41,7 +41,7 @@ toml_edit = "0.22"
 include_dir = "0.7"
 
 [features]
-default = ["parallel", "jemalloc", "evm-verify", "metrics"]
+default = ["parallel", "jemalloc", "metrics"]
 evm-prove = ["openvm-sdk/evm-prove"]
 evm-verify = ["evm-prove", "openvm-sdk/evm-verify"]
 metrics = ["openvm-sdk/metrics"]
