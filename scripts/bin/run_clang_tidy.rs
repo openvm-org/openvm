@@ -37,9 +37,9 @@ fn run_clang_tidy_single(
     let mut cmd = Command::new(clang_tidy);
 
     cmd.args([
-        "--checks=*",
-        "--warnings-as-errors=*",
-        "--header-filter=.*",
+        "--checks='*'",
+        "--warnings-as-errors='*'",
+        "--header-filter='.*'",
         "--extra-arg=-Wno-unknown-cuda-version",
     ])
     .arg(file.to_str().unwrap())
