@@ -10620,3 +10620,8 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
+
+[[patch.unused]]
+name = "svm-rs"
+version = "0.5.22"
+source = "git+https://github.com/alloy-rs/svm-rs.git?tag=v0.5.22#99fe67b6af86784ad1df18b9a1775cb627cd6b6d"
