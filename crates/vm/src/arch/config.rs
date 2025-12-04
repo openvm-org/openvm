@@ -183,6 +183,11 @@ pub struct MemoryConfig {
     pub decomp: usize,
     /// Maximum N AccessAdapter AIR to support.
     pub max_access_adapter_n: usize,
+    /// Whether access adapters are enabled. When disabled, all memory accesses must be of the
+    /// standard block size (e.g., 4 for address spaces 1-3). This removes the need for access
+    /// adapter AIRs and simplifies the memory system.
+    #[new(value = "true")]
+    pub access_adapters_enabled: bool,
 }
 
 impl Default for MemoryConfig {
@@ -194,7 +199,15 @@ impl Default for MemoryConfig {
         addr_spaces[RV32_MEMORY_AS as usize].num_cells = MAX_CELLS;
         addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = DEFAULT_MAX_NUM_PUBLIC_VALUES;
         addr_spaces[NATIVE_AS as usize].num_cells = MAX_CELLS;
-        Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17, 32)
+        Self {
+            addr_space_height: 3,
+            addr_spaces,
+            pointer_max_bits: POINTER_MAX_BITS,
+            timestamp_max_bits: 29,
+            decomp: 17,
+            max_access_adapter_n: 32,
+            access_adapters_enabled: true,
+        }
     }
 }
 
@@ -375,6 +388,7 @@ impl SystemConfig {
             + num_memory_airs(
                 self.continuation_enabled,
                 self.memory_config.max_access_adapter_n,
+                self.memory_config.access_adapters_enabled,
             )
     }
 
