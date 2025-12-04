@@ -582,7 +582,7 @@ pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
     "pcs_opening_time_ms",
     "prover.rap_constraints_time_ms",
     "prover.openings_time_ms",
-    "prover.gkr_input_evals_time_ms",
+    "prover.logup_gkr_time_ms",
     "prover.batch_constraints.round0_time_ms",
     "prover.batch_constraints.mle_rounds_time_ms",
     "prover.openings.stacked_reduction_time_ms",
