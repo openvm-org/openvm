@@ -6500,6 +6500,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-ecc-curve-macros"
+version = "1.4.1"
+dependencies = [
+ "openvm-macros-common",
+ "quote",
+ "syn 2.0.106",
+]
+
+[[package]]
 name = "openvm-ecc-guest"
 version = "1.4.2-rc.1"
 dependencies = [
@@ -6511,6 +6520,7 @@ dependencies = [
  "openvm",
  "openvm-algebra-guest",
  "openvm-custom-insn",
+ "openvm-ecc-curve-macros",
  "openvm-ecc-sw-macros",
  "openvm-rv32im-guest",
  "serde",

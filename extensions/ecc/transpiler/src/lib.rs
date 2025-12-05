@@ -19,6 +19,8 @@ pub enum Rv32WeierstrassOpcode {
     SETUP_EC_ADD_NE,
     EC_DOUBLE,
     SETUP_EC_DOUBLE,
+    EC_MUL,
+    SETUP_EC_MUL,
 }
 
 #[derive(Default)]
@@ -65,6 +67,22 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
                     F::ZERO,
                     F::ZERO,
                 ))
+            } else if base_funct7 == SwBaseFunct7::SwEcMul as u8 {
+                Some(Instruction::new(
+                    VmOpcode::from_usize(
+                        Rv32WeierstrassOpcode::SETUP_EC_MUL
+                            .global_opcode()
+                            .as_usize()
+                            + curve_idx_shift,
+                    ),
+                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
+                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
+                    F::ONE, // d_as = 1
+                    F::TWO, // e_as = 2
+                    F::ZERO,
+                    F::ZERO,
+                ))
             } else {
                 let global_opcode = match SwBaseFunct7::from_repr(base_funct7) {
                     Some(SwBaseFunct7::SwAddNe) => {
@@ -75,6 +93,9 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
                         assert!(dec_insn.rs2 == 0);
                         Rv32WeierstrassOpcode::EC_DOUBLE as usize
                             + Rv32WeierstrassOpcode::CLASS_OFFSET
+                    }
+                    Some(SwBaseFunct7::SwEcMul) => {
+                        Rv32WeierstrassOpcode::EC_MUL as usize + Rv32WeierstrassOpcode::CLASS_OFFSET
                     }
                     _ => unimplemented!(),
                 };

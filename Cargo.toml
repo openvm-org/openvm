@@ -58,6 +58,7 @@ members = [
     "extensions/ecc/transpiler",
     "extensions/ecc/guest",
     "extensions/ecc/sw-macros",
+    "extensions/ecc/curve-macros",
     "extensions/ecc/tests",
     "extensions/pairing/circuit",
     "extensions/pairing/guest",
@@ -168,6 +169,7 @@ openvm-ecc-circuit = { path = "extensions/ecc/circuit", default-features = false
 openvm-ecc-transpiler = { path = "extensions/ecc/transpiler", default-features = false }
 openvm-ecc-guest = { path = "extensions/ecc/guest", default-features = false }
 openvm-ecc-sw-macros = { path = "extensions/ecc/sw-macros", default-features = false }
+openvm-ecc-curve-macros = { path = "extensions/ecc/curve-macros", default-features = false }
 openvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features = false }
 openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
@@ -189,7 +191,10 @@ p3-poseidon2-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539b
 p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539bbc84085efb609f4f62cb03cf49588388abdb", default-features = false }
 
 zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
-snark-verifier-sdk = { version = "0.2.0", default-features = false, features = ["loader_halo2", "halo2-axiom"] }
+snark-verifier-sdk = { version = "0.2.0", default-features = false, features = [
+    "loader_halo2",
+    "halo2-axiom",
+] }
 snark-verifier = { version = "0.2.0", default-features = false }
 halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git", tag = "v0.7.2" }
 
@@ -204,7 +209,9 @@ clap = "4.5.23"
 toml = "0.8.14"
 lazy_static = "1.5.0"
 derive-new = "0.6.0"
-derive_more = { version = "1.0.0", features = ["display"], default-features = false }
+derive_more = { version = "1.0.0", features = [
+    "display",
+], default-features = false }
 derivative = "2.2.0"
 strum_macros = "0.26.4"
 strum = { version = "0.26.3", features = ["derive"] }
