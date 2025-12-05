@@ -206,10 +206,12 @@ where
 
     let (segments, _) = vm
         .metered_interpreter(&exe)?
-        .execute_metered(input.clone(), metered_ctx)?;
+        .execute_metered(input.clone(), metered_ctx.clone())?;
+
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     vm.load_program(cached_program_trace);
     let mut preflight_interpreter = vm.preflight_interpreter(&exe)?;
+
     let mut state = Some(vm.create_initial_state(&exe, input));
     let mut proofs = Vec::new();
     let mut exit_code = None;

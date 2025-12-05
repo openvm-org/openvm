@@ -2,7 +2,7 @@
 #include "primitives/constants.h"
 #include "primitives/trace_access.h"
 #include "sha2-block-hasher/columns.cuh"
-#include "sha2-block-hashker/tracegen.cuh"
+#include "sha2-block-hasher/tracegen.cuh"
 #include "sha2-block-hasher/utils.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"

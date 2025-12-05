@@ -1,4 +1,4 @@
-use openvm_native_circuit::test_execute_program;
+use openvm_native_circuit::execute_program;
 use openvm_native_compiler::{
     asm::AsmBuilder,
     ir::{Ext, Felt},

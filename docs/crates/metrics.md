@@ -15,9 +15,6 @@ For a segment proof, the following metrics are collected:
   - `memory_finalize_time_ms` (gauge): The time at the end of preflight execution spent on memory finalization.
 - `trace_gen_time_ms` (gauge): The time to generate non-cached trace matrices from execution records.
   - If this is a segment in a VM with continuations enabled, a `segment: segment_idx` label is added to the metric.
-  - `memory_finalize_time_ms` (gauge): The time in trace generation spent on memory finalization.
-    - `boundary_finalize_time_ms` (gauge): The time in memory finalization spent on boundary finalization.
-    - `merkle_finalize_time_ms` (gauge): The time in memory finalization spent on merkle tree finalization.
 - All metrics collected by [`openvm-stark-backend`](https://github.com/openvm-org/stark-backend/blob/main/docs/metrics.md), in particular `stark_prove_excluding_trace_time_ms` (gauge).
 - The `total_proof_time_ms` of the proof is instrumented directly when possible. Otherwise, it is calculated as:
   - The sum `execute_preflight_time_ms + trace_gen_time_ms + stark_prove_excluding_trace_time_ms`. The `execute_metered_time_ms` is excluded for app proofs because it is not run on a per-segment basis.

@@ -6384,7 +6384,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-sha256-air"
+name = "openvm-sha2-air"
 version = "1.4.2-rc.0"
 dependencies = [
  "itertools 0.14.0",
@@ -6400,7 +6400,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-sha256-circuit"
+name = "openvm-sha2-circuit"
 version = "1.4.2-rc.0"
 dependencies = [
  "cfg-if",
@@ -6430,14 +6430,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-sha256-guest"
+name = "openvm-sha2-guest"
 version = "1.4.2-rc.0"
 dependencies = [
  "openvm-platform",
 ]
 
 [[package]]
-name = "openvm-sha256-transpiler"
+name = "openvm-sha2-transpiler"
 version = "1.4.2-rc.0"
 dependencies = [
  "openvm-instructions",

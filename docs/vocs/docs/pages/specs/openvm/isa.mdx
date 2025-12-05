@@ -32,11 +32,7 @@ OpenVM depends on the following parameters, some of which are fixed and some of 
 | `DEFAULT_PC_STEP`   | The default program counter step size.                             | Fixed to 4.                                                                                         |
 | `LIMB_BITS`         | The number of bits in a limb for RISC-V memory emulation.          | Fixed to 8.                                                                                         |
 | `ADDR_SPACE_OFFSET` | The index of the first writable address space.                     | Fixed to 1.                                                                                         |
-<<<<<<< HEAD:docs/specs/ISA.md
-| `addr_space_height` | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `addr_space_height <= F::bits() - 2`                                             |
-=======
 | `addr_space_height` | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `addr_space_height <= F::bits() - 2`                                     |
->>>>>>> main:docs/vocs/docs/pages/specs/openvm/isa.mdx
 | `pointer_max_bits`  | The maximum number of bits in a pointer.                           | Configurable, must satisfy `pointer_max_bits <= F::bits() - 2`                                      |
 | `num_public_values` | The number of user public values.                                  | Configurable. If continuation is enabled, it must equal `8` times a power of two(which is nonzero). |
 | `MAX_HINT_BUFFER_WORDS_BITS` | The maximum number of bits for hint buffer word count. This determines `MAX_HINT_BUFFER_WORDS = 2^MAX_HINT_BUFFER_WORDS_BITS - 1` = 262,143 words (≈1MB), the maximum words per `HINT_BUFFER_RV32` instruction. | Fixed to 18. |

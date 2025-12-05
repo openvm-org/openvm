@@ -309,13 +309,8 @@ The `PersistentBoundaryChip` has rows of the form
 `(expand_direction, address_space, leaf_label, values, hash, timestamp)`
 and has the following interactions on the `MERKLE_BUS`:
 
-<<<<<<< HEAD:docs/specs/continuations.md
-- Send <span style="color:green">**(1, 0, (as - ADDR_SPACE_OFFSET) \* 2^L, node\*label, hash_initial)**</span>
-- Receive <span style="color:green">**(-1, 0, (as - ADDR_SPACE_OFFSET) \* 2^L, node_label, hash_final)**</span>
-=======
 - Send `(1, 0, (as - ADDR_SPACE_OFFSET) \* 2^L, node\*label, hash_initial)`
 - Receive `(-1, 0, (as - ADDR_SPACE_OFFSET) \* 2^L, node_label, hash_final)`
->>>>>>> main:docs/vocs/docs/pages/specs/architecture/continuations.mdx
 
 It receives `values` from the `MEMORY_BUS` and constrains `hash = compress(values, 0)` via the `POSEIDON2_DIRECT_BUS`.
 The aggregation program takes a variable number of consecutive segment proofs and consolidates them into a single proof

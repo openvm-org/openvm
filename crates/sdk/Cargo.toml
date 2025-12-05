@@ -97,7 +97,7 @@ aot = [
     "openvm-circuit/aot",
     "openvm-rv32im-circuit/aot",
     "openvm-native-circuit/aot",
-    "openvm-sha256-circuit/aot",
+    "openvm-sha2-circuit/aot",
     "openvm-keccak256-circuit/aot",
     "openvm-bigint-circuit/aot",
     "openvm-algebra-circuit/aot",

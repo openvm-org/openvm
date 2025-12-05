@@ -1,6 +1,15 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
+#[cfg(not(feature = "tco"))]
+use openvm_circuit::arch::{ExecutionCtxTrait, MeteredExecutionCtxTrait};
+use openvm_circuit::{
+    arch::{
+        E2PreCompute, ExecuteFunc, InterpreterExecutor, InterpreterMeteredExecutor,
+        StaticProgramError, VmExecState,
+    },
+    system::memory::online::GuestMemory,
+};
+use openvm_circuit_derive::create_handler;
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -21,7 +30,7 @@ struct Sha2PreCompute {
     c: u8,
 }
 
-impl<F: PrimeField32, C: Sha2Config> Executor<F> for Sha2VmExecutor<C> {
+impl<F: PrimeField32, C: Sha2Config> InterpreterExecutor<F> for Sha2VmExecutor<C> {
     fn pre_compute_size(&self) -> usize {
         size_of::<Sha2PreCompute>()
     }
@@ -57,7 +66,7 @@ impl<F: PrimeField32, C: Sha2Config> Executor<F> for Sha2VmExecutor<C> {
     }
 }
 
-impl<F: PrimeField32, C: Sha2Config> MeteredExecutor<F> for Sha2VmExecutor<C> {
+impl<F: PrimeField32, C: Sha2Config> InterpreterMeteredExecutor<F> for Sha2VmExecutor<C> {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<Sha2PreCompute>>()
     }
@@ -105,8 +114,6 @@ unsafe fn execute_e12_impl<
     const IS_E1: bool,
 >(
     pre_compute: &Sha2PreCompute,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
     let dst = exec_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32);
@@ -144,8 +151,8 @@ unsafe fn execute_e12_impl<
         );
     }
 
-    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
-    *instret += 1;
+    let pc = exec_state.pc();
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 
     1 // height delta
 }
@@ -153,27 +160,23 @@ unsafe fn execute_e12_impl<
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, C: Sha2Config>(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &Sha2PreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, C, CTX, true>(pre_compute, instret, pc, exec_state);
+    let pre_compute: &Sha2PreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<Sha2PreCompute>()).borrow();
+    execute_e12_impl::<F, C, CTX, true>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, C: Sha2Config>(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<Sha2PreCompute> = pre_compute.borrow();
-    let height = execute_e12_impl::<F, C, CTX, false>(&pre_compute.data, instret, pc, exec_state);
+    let pre_compute: &E2PreCompute<Sha2PreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<Sha2PreCompute>>()).borrow();
+    let height = execute_e12_impl::<F, C, CTX, false>(&pre_compute.data, exec_state);
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, height);
