@@ -19,7 +19,10 @@ use openvm_instructions::{
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_rv32im_transpiler::Rv32HintStoreOpcode::{self, *};
+use openvm_rv32im_transpiler::{
+    Rv32HintStoreOpcode::{self, *},
+    MAX_HINT_BUFFER_WORDS,
+};
 use openvm_stark_backend::{
     p3_field::FieldAlgebra,
     p3_matrix::{
@@ -193,6 +196,94 @@ fn rand_hintstore_test() {
 // Given a fake trace of a single operation, setup a chip and run the test. We replace
 // part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
+
+#[test]
+#[should_panic(expected = "HintBufferTooLarge")]
+fn test_hint_buffer_exceeds_max_words() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+
+    let (mut harness, _bitwise) = create_harness::<MatrixRecordArena<F>>(&mut tester);
+
+    let num_words = (MAX_HINT_BUFFER_WORDS + 1) as u32;
+
+    let a = gen_pointer(&mut rng, RV32_REGISTER_NUM_LIMBS);
+    tester.write(
+        RV32_REGISTER_AS as usize,
+        a,
+        num_words.to_le_bytes().map(F::from_canonical_u8),
+    );
+
+    let mem_ptr = gen_pointer(&mut rng, 4) as u32;
+    let b = gen_pointer(&mut rng, RV32_REGISTER_NUM_LIMBS);
+    tester.write(1, b, mem_ptr.to_le_bytes().map(F::from_canonical_u8));
+
+    for _ in 0..num_words {
+        let data = rng.next_u32().to_le_bytes().map(F::from_canonical_u8);
+        tester.streams_mut().hint_stream.extend(data);
+    }
+
+    tester.execute(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(
+            HINT_BUFFER.global_opcode(),
+            [a, b, 0, RV32_REGISTER_AS as usize, RV32_MEMORY_AS as usize],
+        ),
+    );
+}
+
+#[test]
+fn test_hint_buffer_rem_words_range_check() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    // Build a small, valid buffer instruction with 1 word so trace has 1 row.
+    let num_words: u32 = 1;
+    let a = gen_pointer(&mut rng, RV32_REGISTER_NUM_LIMBS);
+    tester.write(
+        RV32_REGISTER_AS as usize,
+        a,
+        num_words.to_le_bytes().map(F::from_canonical_u8),
+    );
+
+    let mem_ptr = gen_pointer(&mut rng, 4) as u32;
+    let b = gen_pointer(&mut rng, RV32_REGISTER_NUM_LIMBS);
+    tester.write(1, b, mem_ptr.to_le_bytes().map(F::from_canonical_u8));
+
+    for _ in 0..num_words {
+        let data = rng.next_u32().to_le_bytes().map(F::from_canonical_u8);
+        tester.streams_mut().hint_stream.extend(data);
+    }
+
+    tester.execute(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(
+            HINT_BUFFER.global_opcode(),
+            [a, b, 0, RV32_REGISTER_AS as usize, RV32_MEMORY_AS as usize],
+        ),
+    );
+
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut trace_row = trace.row_slice(0).to_vec();
+        let cols: &mut Rv32HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
+        // Force `rem_words` to overflow MAX_HINT_BUFFER_WORDS_BITS on the start row.
+        cols.rem_words_limbs = [F::ZERO, F::ZERO, F::ZERO, F::from_canonical_u8(1)];
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+
+    tester.simple_test_with_expected_error(get_verification_error(false));
+}
 
 #[allow(clippy::too_many_arguments)]
 fn run_negative_hintstore_test(
