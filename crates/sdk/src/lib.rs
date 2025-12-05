@@ -11,7 +11,9 @@ use std::{
 #[cfg(feature = "evm-verify")]
 use alloy_sol_types::sol;
 use commit::AppExecutionCommit;
-use config::{AggregationTreeConfig, AppConfig};
+use config::{
+    AggregationTreeConfig, AppConfig, DEFAULT_INTERNAL_LOG_BLOWUP, DEFAULT_ROOT_LOG_BLOWUP,
+};
 use getset::{Getters, MutGetters, WithSetters};
 use keygen::{AppProvingKey, AppVerifyingKey};
 use openvm_build::{
@@ -49,7 +51,7 @@ use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_native_recursion::halo2::utils::{CacheHalo2ParamsReader, Halo2ParamsReader};
 use openvm_stark_backend::proof::Proof;
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::{StarkEngine, StarkFriEngine},
 };
 use openvm_transpiler::{
@@ -239,6 +241,8 @@ where
         let agg_config = AggregationConfig {
             max_num_user_public_values: system_config.num_public_values,
             leaf_fri_params: app_config.leaf_fri_params.fri_params,
+            internal_fri_params: FriParameters::new_for_testing(DEFAULT_INTERNAL_LOG_BLOWUP),
+            root_fri_params: FriParameters::new_for_testing(DEFAULT_ROOT_LOG_BLOWUP),
             profiling,
             compiler_options,
             ..Default::default()

@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use derivative::Derivative;
-// use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use openvm_circuit::{
     arch::{AirInventoryError, SystemConfig, VirtualMachine, VirtualMachineError, VmCircuitConfig},
     system::memory::dimensions::MemoryDimensions,
@@ -361,6 +360,7 @@ impl AggProvingKey {
             internal_vm_pk.clone(),
             internal_committed_exe.clone(),
             config.max_num_user_public_values,
+            config.leaf_fri_params,
         )?;
 
         let root_verifier_pk = {

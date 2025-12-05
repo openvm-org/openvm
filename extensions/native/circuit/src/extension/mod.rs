@@ -576,7 +576,23 @@ where
 // Pre-computed maximum trace heights for NativeConfig. Found by doubling
 // the actual trace heights of kitchen-sink leaf verification (except for
 // VariableRangeChecker, which has a fixed height).
+#[rustfmt::skip]
 pub const NATIVE_MAX_TRACE_HEIGHTS: &[u32] = &[
-    4194304, 4, 128, 2097152, 8388608, 4194304, 262144, 2097152, 16777216, 2097152, 8388608,
-    262144, 2097152, 1048576, 4194304, 65536, 262144,
+    4194304,   // 0:  Program
+    4,         // 1:  Connector
+    64,        // 2:  PublicValues
+    2097152,   // 3:  Boundary
+    8388608,   // 4:  AccessAdapter (1-cell)
+    4194304,   // 5:  AccessAdapter (2-cell)
+    262144,    // 6:  AccessAdapter (4-cell)
+    4194304,   // 7:  VerifyBatch (NativePoseidon2Air)
+    33554432,  // 8:  FriReducedOpeningAir
+    2097152,   // 9:  FieldExtensionAir
+    16777216,  // 10: FieldArithmeticAir
+    262144,    // 11: JalRangeCheckAir
+    4194304,   // 12: NativeBranchEqAir
+    1048576,   // 13: NativeLoadStoreAir<4>
+    4194304,   // 14: NativeLoadStoreAir<1>
+    131072,    // 15: PhantomAir
+    262144,    // 16: VariableRangeCheckerAir
 ];
