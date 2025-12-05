@@ -79,10 +79,7 @@ impl<F: Field, const N: usize> BaseAir<F> for RangeTupleCheckerAir<N> {
             }
         }
         Some(RowMajorMatrix::new(
-            unrolled_matrix
-                .iter()
-                .map(|&v| F::from_canonical_u32(v))
-                .collect(),
+            unrolled_matrix.iter().map(|&v| F::from_u32(v)).collect(),
             N,
         ))
     }
@@ -91,12 +88,12 @@ impl<F: Field, const N: usize> BaseAir<F> for RangeTupleCheckerAir<N> {
 impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupleCheckerAir<N> {
     fn eval(&self, builder: &mut AB) {
         let preprocessed = builder.preprocessed();
-        let prep_local = preprocessed.row_slice(0);
+        let prep_local = preprocessed.row_slice(0).unwrap();
         let prep_local = RangeTuplePreprocessedCols {
             tuple: (*prep_local).to_vec(),
         };
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local = RangeTupleCols { mult: (*local)[0] };
 
         self.bus.receive(prep_local.tuple).eval(builder, local.mult);
@@ -157,7 +154,7 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
         let rows = self
             .count
             .iter()
-            .map(|c| F::from_canonical_u32(c.swap(0, std::sync::atomic::Ordering::Relaxed)))
+            .map(|c| F::from_u32(c.swap(0, std::sync::atomic::Ordering::Relaxed)))
             .collect::<Vec<_>>();
         RowMajorMatrix::new(rows, 1)
     }

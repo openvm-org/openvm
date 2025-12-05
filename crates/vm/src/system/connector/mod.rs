@@ -13,7 +13,7 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -156,8 +156,13 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let preprocessed = builder.preprocessed();
-        let prep_local = preprocessed.row_slice(0);
-        let (begin, end) = (main.row_slice(0), main.row_slice(1));
+        let prep_local = preprocessed
+            .row_slice(0)
+            .expect("window should have two elements");
+        let (begin, end) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
 
         let begin: &ConnectorCols<AB::Var> = (*begin).borrow();
         let end: &ConnectorCols<AB::Var> = (*end).borrow();
@@ -190,7 +195,7 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
         self.program_bus.lookup_instruction(
             builder,
             end.pc,
-            AB::Expr::from_canonical_usize(TERMINATE.global_opcode().as_usize()),
+            AB::Expr::from_usize(TERMINATE.global_opcode().as_usize()),
             [AB::Expr::ZERO, AB::Expr::ZERO, end.exit_code.into()],
             (AB::Expr::ONE - prep_local[0]) * end.is_terminate,
         );
@@ -284,7 +289,7 @@ where
             self.range_checker
                 .add_count(state.timestamp >> range_max_bits, high_bits);
 
-            state.map(Val::<SC>::from_canonical_u32)
+            state.map(Val::<SC>::from_u32)
         });
 
         let trace = Arc::new(RowMajorMatrix::new(

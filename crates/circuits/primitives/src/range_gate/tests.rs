@@ -1,8 +1,8 @@
 use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
-    utils::disable_debug_builder, verifier::VerificationError, AirRef,
+    p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*, utils::disable_debug_builder, verifier::VerificationError, AirRef,
 };
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
@@ -31,7 +31,7 @@ fn test_range_gate_chip() {
     let lists_vals = (0..num_lists)
         .map(|_| {
             (0..LIST_LEN)
-                .map(|_| rng.gen::<u32>() % MAX)
+                .map(|_| rng.random::<u32>() % MAX)
                 .collect::<Vec<u32>>()
         })
         .collect::<Vec<Vec<u32>>>();
@@ -50,7 +50,7 @@ fn test_range_gate_chip() {
                         range_checker.add_count(v);
                         iter::once(1).chain(iter::once(v))
                     })
-                    .map(FieldAlgebra::from_wrapped_u32)
+                    .map(PrimeCharacteristicRing::from_u32)
                     .collect(),
                 2,
             )
@@ -91,7 +91,7 @@ fn negative_test_range_gate_chip() {
                     range_checker.count[i as usize].load(std::sync::atomic::Ordering::Relaxed);
                 iter::once(i + 1).chain(iter::once(count))
             })
-            .map(FieldAlgebra::from_wrapped_u32)
+            .map(PrimeCharacteristicRing::from_u32)
             .collect(),
         2,
     );

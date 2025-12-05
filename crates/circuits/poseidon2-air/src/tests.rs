@@ -1,7 +1,7 @@
 use std::{array::from_fn, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_air::BaseAir, p3_field::FieldAlgebra, utils::disable_debug_builder,
+    p3_air::BaseAir, p3_field::PrimeCharacteristicRing, utils::disable_debug_builder,
     verifier::VerificationError,
 };
 use openvm_stark_sdk::{
@@ -34,7 +34,7 @@ fn run_poseidon2_subchip_test(subchip: Arc<Poseidon2SubChip<BabyBear, 0>>, rng: 
     let states: Vec<[BabyBear; 16]> = (0..num_rows)
         .map(|_| {
             let vec: Vec<BabyBear> = (0..16)
-                .map(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30)))
+                .map(|_| BabyBear::from_u32(rng.next_u32() % (1 << 30)))
                 .collect();
             vec.try_into().unwrap()
         })
@@ -56,8 +56,8 @@ fn run_poseidon2_subchip_test(subchip: Arc<Poseidon2SubChip<BabyBear, 0>>, rng: 
     // negative test
     disable_debug_builder();
     for _ in 0..10 {
-        let rand_idx = rng.gen_range(0..subchip.air.width());
-        let rand_inc = BabyBear::from_canonical_u32(rng.gen_range(1..=1 << 27));
+        let rand_idx = rng.random_range(0..subchip.air.width());
+        let rand_inc = BabyBear::from_u32(rng.random_range(1..=1 << 27));
         poseidon2_trace.row_mut((1 << 4) - 1)[rand_idx] += rand_inc;
         assert_eq!(
             engine
@@ -93,7 +93,7 @@ fn test_poseidon2_random_constants() {
     let beginning_full_round_constants = from_fn(|i| beginning_full_round_constants_vec[i]);
     let ending_full_round_constants_vec = external_constants.get_terminal_constants();
     let ending_full_round_constants = from_fn(|i| ending_full_round_constants_vec[i]);
-    let partial_round_constants = from_fn(|_| BabyBear::from_wrapped_u32(rng.next_u32()));
+    let partial_round_constants = from_fn(|_| BabyBear::from_u32(rng.next_u32()));
     let constants = Poseidon2Constants {
         beginning_full_round_constants,
         partial_round_constants,
@@ -115,7 +115,7 @@ fn test_cuda_tracegen_poseidon2() {
     // Generate random states and prepare GPU inputs
     let mut rng = create_seeded_rng();
     let cpu_inputs: Vec<[F; WIDTH]> = (0..N)
-        .map(|_| std::array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32))))
+        .map(|_| std::array::from_fn(|_| F::from_u32(rng.random_range(0..F::ORDER_U32))))
         .collect();
 
     // Flatten inputs in row-major order for GPU (same layout as cpu_inputs)

@@ -292,9 +292,9 @@ mod tests {
     fn test_shift_op() {
         let mut rng = StdRng::from_seed([42; 32]);
         for _ in 0..10000 {
-            let limbs_a: [u8; INT256_NUM_LIMBS] = rng.gen();
+            let limbs_a: [u8; INT256_NUM_LIMBS] = rng.random();
             let mut limbs_b: [u8; INT256_NUM_LIMBS] = [0; INT256_NUM_LIMBS];
-            let shift: u8 = rng.gen();
+            let shift: u8 = rng.random();
             limbs_b[0] = shift;
             let a = U256::from_le_bytes(limbs_a);
             {

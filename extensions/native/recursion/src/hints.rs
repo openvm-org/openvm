@@ -9,8 +9,10 @@ use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::{
     config::{Com, PcsProof},
     keygen::types::TraceWidth,
-    p3_commit::ExtensionMmcs,
-    p3_field::{extension::BinomialExtensionField, Field, FieldAlgebra, FieldExtensionAlgebra},
+    p3_commit::{BatchOpening, ExtensionMmcs},
+    p3_field::{
+        extension::BinomialExtensionField, BasedVectorSpace, Field, PrimeCharacteristicRing,
+    },
     p3_util::log2_strict_usize,
     proof::{AdjacentOpenedValues, AirProofData, Commitments, OpenedValues, OpeningProof, Proof},
 };
@@ -18,7 +20,7 @@ use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     p3_baby_bear::{BabyBear, Poseidon2BabyBear},
 };
-use p3_fri::{BatchOpening, CommitPhaseProofStep, FriProof, QueryProof};
+use p3_fri::{CommitPhaseProofStep, FriProof, QueryProof};
 use p3_merkle_tree::MerkleTreeMmcs;
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
 
@@ -71,7 +73,7 @@ impl<C: Config> Hintable<C> for usize {
     }
 
     fn write(&self) -> Vec<Vec<C::N>> {
-        vec![vec![FieldAlgebra::from_canonical_usize(*self)]]
+        vec![vec![PrimeCharacteristicRing::from_usize(*self)]]
     }
 }
 
@@ -97,7 +99,7 @@ impl Hintable<InnerConfig> for InnerChallenge {
     }
 
     fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
-        self.as_base_slice()
+        self.as_basis_coefficients_slice()
             .iter()
             .copied()
             .map(|x| vec![x])
@@ -141,7 +143,7 @@ impl<C: Config, I: VecAutoHintable + Hintable<C>> Hintable<C> for Vec<I> {
     fn write(&self) -> Vec<Vec<<C as Config>::N>> {
         let mut stream = Vec::new();
 
-        let len = C::N::from_canonical_usize(self.len());
+        let len = C::N::from_usize(self.len());
         stream.push(vec![len]);
 
         self.iter().for_each(|i| {
@@ -161,10 +163,7 @@ impl Hintable<InnerConfig> for Vec<usize> {
     }
 
     fn write(&self) -> Vec<Vec<InnerVal>> {
-        vec![self
-            .iter()
-            .map(|x| InnerVal::from_canonical_usize(*x))
-            .collect()]
+        vec![self.iter().map(|x| InnerVal::from_usize(*x)).collect()]
     }
 }
 
@@ -178,7 +177,7 @@ impl<C: Config> Hintable<C> for Vec<u8> {
     fn write(&self) -> Vec<Vec<C::N>> {
         vec![self
             .iter()
-            .map(|x| FieldAlgebra::from_canonical_u8(*x))
+            .map(|x| PrimeCharacteristicRing::from_u8(*x))
             .collect()]
     }
 }
@@ -204,9 +203,9 @@ impl Hintable<InnerConfig> for Vec<InnerChallenge> {
 
     fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
         vec![
-            vec![InnerVal::from_canonical_usize(self.len())],
+            vec![InnerVal::from_usize(self.len())],
             self.iter()
-                .flat_map(|x| (*x).as_base_slice().to_vec())
+                .flat_map(|x| (*x).as_basis_coefficients_slice().to_vec())
                 .collect(),
         ]
     }
@@ -228,7 +227,7 @@ impl Hintable<InnerConfig> for Vec<Vec<InnerChallenge>> {
     fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
         let mut stream = Vec::new();
 
-        let len = InnerVal::from_canonical_usize(self.len());
+        let len = InnerVal::from_usize(self.len());
         stream.push(vec![len]);
 
         self.iter().for_each(|arr| {
@@ -451,16 +450,16 @@ mod test {
         asm::AsmBuilder,
         ir::{Ext, Felt, Var},
     };
-    use openvm_stark_backend::p3_field::FieldAlgebra;
+    use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 
     use crate::hints::{Hintable, InnerChallenge, InnerVal};
 
     #[test]
     fn test_var_array() {
         let x = vec![
-            InnerVal::from_canonical_usize(1),
-            InnerVal::from_canonical_usize(2),
-            InnerVal::from_canonical_usize(3),
+            InnerVal::from_usize(1),
+            InnerVal::from_usize(2),
+            InnerVal::from_usize(3),
         ];
         let stream = Vec::<InnerVal>::write(&x);
         assert_eq!(stream, vec![x.clone()]);
@@ -468,7 +467,7 @@ mod test {
         let mut builder = AsmBuilder::<InnerVal, InnerChallenge>::default();
         let arr = Vec::<InnerVal>::read(&mut builder);
 
-        let expected: Var<_> = builder.constant(InnerVal::from_canonical_usize(3));
+        let expected: Var<_> = builder.constant(InnerVal::from_usize(3));
         builder.assert_var_eq(arr.len(), expected);
 
         for (i, &val) in x.iter().enumerate() {
@@ -486,28 +485,28 @@ mod test {
     #[test]
     fn test_ext_array() {
         let x = vec![
-            InnerChallenge::from_canonical_usize(1),
-            InnerChallenge::from_canonical_usize(2),
-            InnerChallenge::from_canonical_usize(3),
+            InnerChallenge::from_usize(1),
+            InnerChallenge::from_usize(2),
+            InnerChallenge::from_usize(3),
         ];
         let stream = Vec::<InnerChallenge>::write(&x);
         assert_eq!(
             stream,
             vec![
-                vec![InnerVal::from_canonical_usize(x.len())],
+                vec![InnerVal::from_usize(x.len())],
                 vec![
-                    InnerVal::from_canonical_usize(1),
-                    InnerVal::from_canonical_usize(0),
-                    InnerVal::from_canonical_usize(0),
-                    InnerVal::from_canonical_usize(0),
-                    InnerVal::from_canonical_usize(2),
-                    InnerVal::from_canonical_usize(0),
-                    InnerVal::from_canonical_usize(0),
-                    InnerVal::from_canonical_usize(0),
-                    InnerVal::from_canonical_usize(3),
-                    InnerVal::from_canonical_usize(0),
-                    InnerVal::from_canonical_usize(0),
-                    InnerVal::from_canonical_usize(0),
+                    InnerVal::from_usize(1),
+                    InnerVal::from_usize(0),
+                    InnerVal::from_usize(0),
+                    InnerVal::from_usize(0),
+                    InnerVal::from_usize(2),
+                    InnerVal::from_usize(0),
+                    InnerVal::from_usize(0),
+                    InnerVal::from_usize(0),
+                    InnerVal::from_usize(3),
+                    InnerVal::from_usize(0),
+                    InnerVal::from_usize(0),
+                    InnerVal::from_usize(0),
                 ],
             ]
         );
@@ -515,7 +514,7 @@ mod test {
         let mut builder = AsmBuilder::<InnerVal, InnerChallenge>::default();
         let arr = Vec::<InnerChallenge>::read(&mut builder);
 
-        let expected: Var<_> = builder.constant(InnerVal::from_canonical_usize(3));
+        let expected: Var<_> = builder.constant(InnerVal::from_usize(3));
         builder.assert_var_eq(arr.len(), expected);
 
         for (i, &val) in x.iter().enumerate() {

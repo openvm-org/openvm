@@ -4,9 +4,9 @@ use openvm_native_compiler::{
     conversion::{convert_program, CompilerOptions},
     ir::{Array, Ext, Felt},
 };
-use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
-use rand::{thread_rng, Rng};
+use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, PrimeCharacteristicRing};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use rand::Rng;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
@@ -15,21 +15,21 @@ type EF = BinomialExtensionField<BabyBear, 4>;
 fn test_single_reduced_opening_eval() {
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let mut rng = thread_rng();
+    let mut rng = create_seeded_rng();
     let n = 3;
 
-    let alpha_value = rng.gen::<EF>();
-    let initial_alpha_pow_value = rng.gen::<EF>();
-    let x_value = rng.gen::<EF>();
-    let z_value = rng.gen::<EF>();
+    let alpha_value = rng.random::<EF>();
+    let initial_alpha_pow_value = rng.random::<EF>();
+    let x_value = rng.random::<EF>();
+    let z_value = rng.random::<EF>();
 
     let ps_at_z: Array<_, Ext<_, _>> = builder.dyn_array(n);
     let mut mat_opening = Vec::with_capacity(n);
     let expected_mat_opening: Array<_, Felt<_>> = builder.dyn_array(n);
 
     for i in 0..n {
-        let a_value = rng.gen::<F>();
-        let b_value = rng.gen::<EF>();
+        let a_value = rng.random::<F>();
+        let b_value = rng.random::<EF>();
 
         mat_opening.push(a_value);
 

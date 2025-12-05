@@ -9,8 +9,8 @@ use std::{
 use itertools::Itertools;
 #[cfg(feature = "metrics")]
 use openvm_circuit::metrics::cycle_tracker::CycleTracker;
-use openvm_stark_backend::p3_field::{ExtensionField, Field, FieldAlgebra, PrimeField};
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
+use openvm_stark_backend::p3_field::{ExtensionField, Field, PrimeCharacteristicRing, PrimeField};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254::Bn254};
 use snark_verifier_sdk::snark_verifier::{
     halo2_base::{
         gates::{
@@ -133,7 +133,7 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
     // Assume: C::N = C::F = C::EF is type Fr
     pub fn constrain_halo2(&self, halo2_state: &mut Halo2State<C>, operations: TracedVec<DslIr<C>>)
     where
-        C: Config<N = Bn254Fr, F = BabyBear, EF = BabyBearExt4>,
+        C: Config<N = Bn254, F = BabyBear, EF = BabyBearExt4>,
     {
         #[cfg(feature = "metrics")]
         let mut cell_tracker = CycleTracker::new();
@@ -532,7 +532,7 @@ pub fn convert_fr<F: PrimeField>(a: &F) -> Fr {
 
 #[allow(dead_code)]
 pub fn convert_efr<F: PrimeField, EF: ExtensionField<F>>(a: &EF) -> Vec<Fr> {
-    let slc = a.as_base_slice();
+    let slc = a.as_basis_coefficients_slice();
     slc.iter()
         .map(|x| biguint_to_fe(&x.as_canonical_biguint()))
         .collect()
@@ -655,7 +655,7 @@ fn var_to_u64_limbs(
         gate.assert_bit(ctx, li_out_bd);
         // Update on_bound except the last limb
         if i > 0 {
-            debug_assert_ne!(fr_bound_limbs[i], 0, "This should never happen for Bn254Fr");
+            debug_assert_ne!(fr_bound_limbs[i], 0, "This should never happen for Bn254");
             // on_bound && limbs[i] - fr_bound_limbs[i] == 0
             let diff = gate.sub_mul(
                 ctx,

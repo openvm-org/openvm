@@ -88,7 +88,7 @@ impl AS {
     fn to_field<F: PrimeField64>(self) -> F {
         match self {
             AS::Immediate => F::ZERO,
-            AS::Native => F::from_canonical_u8(AS::Native as u8),
+            AS::Native => F::from_u8(AS::Native as u8),
         }
     }
 }
@@ -97,9 +97,9 @@ fn i32_f<F: PrimeField32>(x: i32) -> F {
     let modulus = F::ORDER_U32;
     assert!(x < modulus as i32 && x >= -(modulus as i32));
     if x < 0 {
-        -F::from_canonical_u32((-x) as u32)
+        -F::from_u32((-x) as u32)
     } else {
-        F::from_canonical_u32(x as u32)
+        F::from_u32(x as u32)
     }
 }
 
@@ -214,31 +214,31 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 AS::Immediate,
             ),
         ],
-        AsmInstruction::BneE(label, lhs, rhs) => (0..EF::D)
+        AsmInstruction::BneE(label, lhs, rhs) => (0..EF::DIMENSION)
             .map(|i|
             // if mem[lhs + i] != mem[rhs +i] for i = 0..4, pc <- labels[label]
             inst(
                 options.opcode_with_offset(NativeBranchEqualOpcode(BranchEqualOpcode::BNE)),
                 i32_f(lhs + (i as i32)),
                 i32_f(rhs + (i as i32)),
-                labels(label) - (pc + F::from_canonical_usize(i * DEFAULT_PC_STEP as usize)),
+                labels(label) - (pc + F::from_usize(i * DEFAULT_PC_STEP as usize)),
                 AS::Native,
                 AS::Native,
             ))
             .collect(),
-        AsmInstruction::BneEI(label, lhs, rhs) => (0..EF::D)
+        AsmInstruction::BneEI(label, lhs, rhs) => (0..EF::DIMENSION)
             .map(|i|
             // if mem[lhs + i] != rhs[i] for i = 0..4, pc <- labels[label]
             inst(
                 options.opcode_with_offset(NativeBranchEqualOpcode(BranchEqualOpcode::BNE)),
                 i32_f(lhs + (i as i32)),
-                rhs.as_base_slice()[i],
-                labels(label) - (pc + F::from_canonical_usize(i * DEFAULT_PC_STEP as usize)),
+                rhs.as_basis_coefficients_slice()[i],
+                labels(label) - (pc + F::from_usize(i * DEFAULT_PC_STEP as usize)),
                 AS::Native,
                 AS::Immediate,
             ))
             .collect(),
-        AsmInstruction::BeqE(label, lhs, rhs) => (0..EF::D)
+        AsmInstruction::BeqE(label, lhs, rhs) => (0..EF::DIMENSION)
             .rev()
             .map(|i|
             // if mem[lhs + i] == mem[rhs + i] for i = 0..4, pc <- labels[label]
@@ -247,26 +247,26 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
                 i32_f(lhs + (i as i32)),
                 i32_f(rhs + (i as i32)),
                 if i == 0 {
-                    labels(label) - (pc + F::from_canonical_usize((EF::D - 1) * DEFAULT_PC_STEP as usize))
+                    labels(label) - (pc + F::from_usize((EF::DIMENSION - 1) * DEFAULT_PC_STEP as usize))
                 } else {
-                    F::from_canonical_usize((i + 1) * DEFAULT_PC_STEP as usize)
+                    F::from_usize((i + 1) * DEFAULT_PC_STEP as usize)
                 },
                 AS::Native,
                 AS::Native,
             ))
             .collect(),
-        AsmInstruction::BeqEI(label, lhs, rhs) => (0..EF::D)
+        AsmInstruction::BeqEI(label, lhs, rhs) => (0..EF::DIMENSION)
             .rev()
             .map(|i|
             // if mem[lhs + i] == rhs[i] for i = 0..4, pc <- labels[label]
             inst(
                 if i == 0 { options.opcode_with_offset(NativeBranchEqualOpcode(BranchEqualOpcode::BEQ)) } else { options.opcode_with_offset(NativeBranchEqualOpcode(BranchEqualOpcode::BNE)) },
                 i32_f(lhs + (i as i32)),
-                rhs.as_base_slice()[i],
+                rhs.as_basis_coefficients_slice()[i],
                 if i == 0 {
-                    labels(label) - (pc + F::from_canonical_usize((EF::D - 1) * DEFAULT_PC_STEP as usize))
+                    labels(label) - (pc + F::from_usize((EF::DIMENSION - 1) * DEFAULT_PC_STEP as usize))
                 } else {
-                    F::from_canonical_usize((i + 1) * DEFAULT_PC_STEP as usize)
+                    F::from_usize((i + 1) * DEFAULT_PC_STEP as usize)
                 },
                 AS::Native,
                 AS::Immediate,
@@ -302,7 +302,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             Instruction::phantom(PhantomDiscriminant(NativePhantom::HintFelt as u16), F::ZERO, F::ZERO, 0)
         ],
         AsmInstruction::HintBits(src, len) => vec![
-            Instruction::phantom(PhantomDiscriminant(NativePhantom::HintBits as u16), i32_f(src), F::from_canonical_u32(len), AS::Native as u16)
+            Instruction::phantom(PhantomDiscriminant(NativePhantom::HintBits as u16), i32_f(src), F::from_u32(len), AS::Native as u16)
         ],
         AsmInstruction::HintLoad() => vec![
             Instruction::phantom(PhantomDiscriminant(NativePhantom::HintLoad as u16), F::ZERO, F::ZERO, 0)
@@ -335,7 +335,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             F::ZERO,
             AS::Native as u16,
         )],
-        AsmInstruction::PrintE(src) => (0..EF::D as i32)
+        AsmInstruction::PrintE(src) => (0..EF::DIMENSION as i32)
             .map(|i| {
                 Instruction::phantom(
                     PhantomDiscriminant(NativePhantom::Print as u16),
@@ -508,7 +508,7 @@ fn convert_instruction<F: PrimeField32, EF: ExtensionField<F>>(
             d: i32_f(sibling),
             e: i32_f(index),
             f: i32_f(commit),
-            g: F::from_canonical_usize(4).inverse(),
+            g: F::from_usize(4).inverse(),
         }],
         AsmInstruction::RangeCheck(v, x_bit, y_bit) => {
             assert!((0..=16).contains(&x_bit));
@@ -557,7 +557,7 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
             let instructions = convert_instruction::<F, EF>(
                 instruction.clone(),
                 debug_info.clone(),
-                F::from_canonical_u32(pc_idx * DEFAULT_PC_STEP),
+                F::from_u32(pc_idx * DEFAULT_PC_STEP),
                 |label| label,
                 &options,
             );
@@ -572,12 +572,11 @@ pub fn convert_program<F: PrimeField32, EF: ExtensionField<F>>(
             let cur_size = result.len() as u32;
             let cur_pc = cur_size * DEFAULT_PC_STEP;
 
-            let labels =
-                |label: F| F::from_canonical_u32(block_start[label.as_canonical_u64() as usize]);
+            let labels = |label: F| F::from_u32(block_start[label.as_canonical_u64() as usize]);
             let local_result = convert_instruction(
                 instruction.clone(),
                 debug_info.clone(),
-                F::from_canonical_u32(cur_pc),
+                F::from_u32(cur_pc),
                 labels,
                 &options,
             );

@@ -3,7 +3,7 @@ use std::{collections::HashSet, iter, sync::Arc};
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_stark_backend::{
     interaction::BusIndex,
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
     prover::{cpu::CpuBackend, types::AirProvingContext},
     AirRef, Chip,
@@ -40,8 +40,8 @@ fn boundary_air_test() {
     let num_addresses = 10;
     let mut distinct_addresses = HashSet::new();
     while distinct_addresses.len() < num_addresses {
-        let addr_space = rng.gen_range(0..MAX_ADDRESS_SPACE);
-        let pointer = rng.gen_range(0..MAX_VAL);
+        let addr_space = rng.random_range(0..MAX_ADDRESS_SPACE);
+        let pointer = rng.random_range(0..MAX_VAL);
         distinct_addresses.insert((addr_space, pointer));
     }
 
@@ -53,8 +53,8 @@ fn boundary_air_test() {
     let mut final_memory = TimestampedEquipartition::new();
 
     for (addr_space, pointer) in distinct_addresses.iter().cloned() {
-        let final_data = Val::from_canonical_u32(rng.gen_range(0..MAX_VAL));
-        let final_clk = rng.gen_range(1..MAX_VAL) as u32;
+        let final_data = Val::from_u32(rng.random_range(0..MAX_VAL));
+        let final_clk = rng.random_range(1..MAX_VAL) as u32;
 
         final_memory.push((
             (addr_space, pointer),
@@ -77,8 +77,8 @@ fn boundary_air_test() {
             .flat_map(|(addr_space, pointer)| {
                 vec![
                     Val::ONE,
-                    Val::from_canonical_u32(*addr_space),
-                    Val::from_canonical_u32(*pointer),
+                    Val::from_u32(*addr_space),
+                    Val::from_u32(*pointer),
                     Val::ZERO,
                     Val::ZERO,
                 ]
@@ -99,10 +99,10 @@ fn boundary_air_test() {
 
                 vec![
                     Val::ONE,
-                    Val::from_canonical_u32(*addr_space),
-                    Val::from_canonical_u32(*pointer),
+                    Val::from_u32(*addr_space),
+                    Val::from_u32(*pointer),
                     timestamped_value.values[0],
-                    Val::from_canonical_u32(timestamped_value.timestamp),
+                    Val::from_u32(timestamped_value.timestamp),
                 ]
             })
             .chain(iter::repeat_n(Val::ZERO, 5 * diff_height))

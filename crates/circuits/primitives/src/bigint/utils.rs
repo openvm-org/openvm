@@ -126,8 +126,6 @@ pub fn take_limb(deque: &mut VecDeque<usize>, limb_size: usize) -> usize {
 
 pub fn vec_isize_to_f<F: PrimeField64>(x: Vec<isize>) -> Vec<F> {
     x.iter()
-        .map(|x| {
-            F::from_canonical_usize(x.unsigned_abs()) * if x >= &0 { F::ONE } else { F::NEG_ONE }
-        })
+        .map(|x| F::from_usize(x.unsigned_abs()) * if x >= &0 { F::ONE } else { F::NEG_ONE })
         .collect()
 }

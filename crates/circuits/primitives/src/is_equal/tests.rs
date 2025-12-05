@@ -3,7 +3,7 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -49,11 +49,14 @@ impl<F: Field> BaseAir<F> for IsEqTestAir {
         IsEqualCols::<F>::width()
     }
 }
-impl<AB: AirBuilder> Air<AB> for IsEqTestAir {
+impl<AB> Air<AB> for IsEqTestAir
+where
+    AB: AirBuilder<F: Field, Var: Copy>,
+{
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local: &IsEqualCols<_> = (*local).borrow();
         let io = IsEqualIo::new(
             local.x.into(),
@@ -94,8 +97,8 @@ impl<F: Field> IsEqualChip<F> {
     [0,23,97]
 )]
 fn test_single_is_equal(x: u32, y: u32) {
-    let x = FieldAlgebra::from_canonical_u32(x);
-    let y = FieldAlgebra::from_canonical_u32(y);
+    let x = PrimeCharacteristicRing::from_u32(x);
+    let y = PrimeCharacteristicRing::from_u32(y);
 
     let chip = IsEqualChip {
         pairs: vec![(x, y)],
@@ -115,18 +118,18 @@ fn test_single_is_equal(x: u32, y: u32) {
     [0,23,97]
 )]
 fn test_single_is_zero_fail(x: u32, y: u32) {
-    let x = FieldAlgebra::from_canonical_u32(x);
-    let y = FieldAlgebra::from_canonical_u32(y);
+    let x = PrimeCharacteristicRing::from_u32(x);
+    let y = PrimeCharacteristicRing::from_u32(y);
 
     let chip = IsEqualChip {
         pairs: vec![(x, y)],
     };
 
     let mut trace = chip.generate_trace();
-    trace.values[2] = if trace.values[2] == FieldAlgebra::ONE {
-        FieldAlgebra::ZERO
+    trace.values[2] = if trace.values[2] == PrimeCharacteristicRing::ONE {
+        PrimeCharacteristicRing::ZERO
     } else {
-        FieldAlgebra::ONE
+        PrimeCharacteristicRing::ONE
     };
 
     disable_debug_builder();
@@ -150,15 +153,15 @@ fn test_cuda_is_equal_against_cpu_full() {
         let n = 1 << log_height;
 
         let vec_x: Vec<F> = (0..n)
-            .map(|_| F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32)))
+            .map(|_| F::from_u32(rng.random_range(0..F::ORDER_U32)))
             .collect();
 
         let vec_y: Vec<F> = (0..n)
             .map(|i| {
-                if rng.gen_bool(0.5) {
+                if rng.random_bool(0.5) {
                     vec_x[i] // 50 % chance: equal to x
                 } else {
-                    F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32)) // 50% chance to be random
+                    F::from_u32(rng.random_range(0..F::ORDER_U32)) // 50% chance to be random
                 }
             })
             .collect();

@@ -75,9 +75,8 @@ impl<F: Field> BaseAir<F> for VariableRangeCheckerAir {
         let rows: Vec<F> = [F::ZERO; NUM_VARIABLE_RANGE_PREPROCESSED_COLS]
             .into_iter()
             .chain((0..=self.range_max_bits()).flat_map(|bits| {
-                (0..(1 << bits)).flat_map(move |value| {
-                    [F::from_canonical_u32(value), F::from_canonical_usize(bits)].into_iter()
-                })
+                (0..(1 << bits))
+                    .flat_map(move |value| [F::from_u32(value), F::from_usize(bits)].into_iter())
             }))
             .collect();
         Some(RowMajorMatrix::new(
@@ -90,10 +89,12 @@ impl<F: Field> BaseAir<F> for VariableRangeCheckerAir {
 impl<AB: InteractionBuilder + PairBuilder> Air<AB> for VariableRangeCheckerAir {
     fn eval(&self, builder: &mut AB) {
         let preprocessed = builder.preprocessed();
-        let prep_local = preprocessed.row_slice(0);
+        let prep_local = preprocessed
+            .row_slice(0)
+            .expect("window should have two elements");
         let prep_local: &VariableRangePreprocessedCols<AB::Var> = (*prep_local).borrow();
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local: &VariableRangeCols<AB::Var> = (*local).borrow();
         // Omit creating separate bridge.rs file for brevity
         self.bus
@@ -162,8 +163,7 @@ impl VariableRangeCheckerChip {
         let mut rows = F::zero_vec(self.count.len() * NUM_VARIABLE_RANGE_COLS);
         for (n, row) in rows.chunks_mut(NUM_VARIABLE_RANGE_COLS).enumerate() {
             let cols: &mut VariableRangeCols<F> = row.borrow_mut();
-            cols.mult =
-                F::from_canonical_u32(self.count[n].swap(0, std::sync::atomic::Ordering::Relaxed));
+            cols.mult = F::from_u32(self.count[n].swap(0, std::sync::atomic::Ordering::Relaxed));
         }
         RowMajorMatrix::new(rows, NUM_VARIABLE_RANGE_COLS)
     }
@@ -180,7 +180,7 @@ impl VariableRangeCheckerChip {
         let mut bits_remaining = bits;
         for limb in limbs.iter_mut() {
             let limb_u32 = value & mask;
-            *limb = F::from_canonical_u32(limb_u32);
+            *limb = F::from_u32(limb_u32);
             self.add_count(limb_u32, bits_remaining.min(self.range_max_bits()));
 
             value >>= self.range_max_bits();

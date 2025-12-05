@@ -18,7 +18,7 @@ use openvm_native_compiler::{
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip, Poseidon2SubCols};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{Field, PrimeField32},
+    p3_field::{InjectiveMonomial, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelSliceMut, *},
 };
@@ -32,20 +32,28 @@ use crate::poseidon2::{
 };
 
 #[derive(Clone)]
-pub struct NativePoseidon2Executor<F: Field, const SBOX_REGISTERS: usize> {
+pub struct NativePoseidon2Executor<
+    F: PrimeField32 + InjectiveMonomial<7>,
+    const SBOX_REGISTERS: usize,
+> {
     pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
     /// If true, `verify_batch` assumes the verification is always passed and skips poseidon2
     /// computation during execution for performance.
     optimistic: bool,
 }
 
-pub struct NativePoseidon2Filler<F: Field, const SBOX_REGISTERS: usize> {
+pub struct NativePoseidon2Filler<
+    F: PrimeField32 + InjectiveMonomial<7>,
+    const SBOX_REGISTERS: usize,
+> {
     // pre-computed Poseidon2 sub cols for dummy rows.
     empty_poseidon2_sub_cols: Vec<F>,
     pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Executor<F, SBOX_REGISTERS> {
+impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
+    NativePoseidon2Executor<F, SBOX_REGISTERS>
+{
     pub fn new(poseidon2_config: Poseidon2Config<F>) -> Self {
         let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
         Self {
@@ -58,7 +66,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Executor<F, SB
     }
 }
 
-pub(crate) fn compress<F: PrimeField32, const SBOX_REGISTERS: usize>(
+pub(crate) fn compress<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>(
     subchip: &Poseidon2SubChip<F, SBOX_REGISTERS>,
     left: [F; CHUNK],
     right: [F; CHUNK],
@@ -68,7 +76,9 @@ pub(crate) fn compress<F: PrimeField32, const SBOX_REGISTERS: usize>(
     (concatenated, std::array::from_fn(|i| permuted[i]))
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Filler<F, SBOX_REGISTERS> {
+impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
+    NativePoseidon2Filler<F, SBOX_REGISTERS>
+{
     pub fn new(poseidon2_config: Poseidon2Config<F>) -> Self {
         let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
         let empty_poseidon2_sub_cols = subchip.generate_trace(vec![[F::ZERO; CHUNK * 2]]).values;
@@ -100,7 +110,7 @@ pub struct NativePoseidon2RecordMut<'a, F, const SBOX_REGISTERS: usize>(
     &'a mut [NativePoseidon2Cols<F, SBOX_REGISTERS>],
 );
 
-impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize>
+impl<'a, F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
     CustomBorrow<'a, NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS>, NativePoseidon2RecordLayout>
     for [u8]
 {
@@ -131,8 +141,8 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize>
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> SizedRecord<NativePoseidon2RecordLayout>
-    for NativePoseidon2RecordMut<'_, F, SBOX_REGISTERS>
+impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
+    SizedRecord<NativePoseidon2RecordLayout> for NativePoseidon2RecordMut<'_, F, SBOX_REGISTERS>
 {
     fn size(layout: &NativePoseidon2RecordLayout) -> usize {
         layout.metadata.num_rows * size_of::<NativePoseidon2Cols<F, SBOX_REGISTERS>>()
@@ -143,8 +153,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> SizedRecord<NativePoseidon2Re
     }
 }
 
-impl<F: PrimeField32, RA, const SBOX_REGISTERS: usize> PreflightExecutor<F, RA>
-    for NativePoseidon2Executor<F, SBOX_REGISTERS>
+impl<F: PrimeField32 + InjectiveMonomial<7>, RA, const SBOX_REGISTERS: usize>
+    PreflightExecutor<F, RA> for NativePoseidon2Executor<F, SBOX_REGISTERS>
 where
     for<'buf> RA: RecordArena<
         'buf,
@@ -175,11 +185,8 @@ where
                 e: data_address_space,
                 ..
             } = instruction;
-            debug_assert_eq!(
-                register_address_space,
-                F::from_canonical_u32(AS::Native as u32)
-            );
-            debug_assert_eq!(data_address_space, F::from_canonical_u32(AS::Native as u32));
+            debug_assert_eq!(register_address_space, F::from_u32(AS::Native as u32));
+            debug_assert_eq!(data_address_space, F::from_u32(AS::Native as u32));
             let [output_pointer]: [F; 1] = tracing_read_native_helper(
                 state.memory,
                 output_register.as_canonical_u32(),
@@ -194,7 +201,7 @@ where
             let input_pointer_1_u32 = input_pointer_1.as_canonical_u32();
             let [input_pointer_2]: [F; 1] = if instruction.opcode == PERM_POS2.global_opcode() {
                 state.memory.increment_timestamp();
-                [input_pointer_1 + F::from_canonical_usize(CHUNK)]
+                [input_pointer_1 + F::from_usize(CHUNK)]
             } else {
                 tracing_read_native_helper(
                     state.memory,
@@ -249,10 +256,10 @@ where
             cols.end_inside_row = F::ZERO;
             cols.end_top_level = F::ZERO;
             cols.is_exhausted = [F::ZERO; CHUNK - 1];
-            cols.start_timestamp = F::from_canonical_u32(init_timestamp_u32);
+            cols.start_timestamp = F::from_u32(init_timestamp_u32);
 
             cols.inner.inputs = p2_input;
-            simple_cols.pc = F::from_canonical_u32(*state.pc);
+            simple_cols.pc = F::from_u32(*state.pc);
             simple_cols.is_compress = F::from_bool(instruction.opcode == COMP_POS2.global_opcode());
             simple_cols.output_register = output_register;
             simple_cols.input_register_1 = input_register_1;
@@ -261,7 +268,7 @@ where
             simple_cols.input_pointer_1 = input_pointer_1;
             simple_cols.input_pointer_2 = input_pointer_2;
         } else if instruction.opcode == VERIFY_BATCH.global_opcode() {
-            let init_timestamp = F::from_canonical_u32(init_timestamp_u32);
+            let init_timestamp = F::from_u32(init_timestamp_u32);
             let mut col_buffer = vec![F::ZERO; NativePoseidon2Cols::<F, SBOX_REGISTERS>::width()];
             let last_top_level_cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> =
                 col_buffer.as_mut_slice().borrow_mut();
@@ -381,7 +388,7 @@ where
                     num_rows: total_num_row,
                 }))
                 .0;
-            allocated_rows[0].inner.export = F::from_canonical_u32(num_non_inside_rows as u32);
+            allocated_rows[0].inner.export = F::from_u32(num_non_inside_rows as u32);
             let mut inside_row_idx = num_non_inside_rows;
             let mut non_inside_row_idx = 0;
 
@@ -390,7 +397,7 @@ where
                     && memory_read_native::<F, 1>(
                         state.memory.data(),
                         dim_base_pointer_u32 + opened_index as u32,
-                    )[0] == F::from_canonical_u32(log_height as u32)
+                    )[0] == F::from_u32(log_height as u32)
                 {
                     state
                         .memory
@@ -425,7 +432,7 @@ where
                                         || memory_read_native::<F, 1>(
                                             state.memory.data(),
                                             dim_base_pointer_u32 + opened_index as u32,
-                                        )[0] != F::from_canonical_u32(log_height as u32)
+                                        )[0] != F::from_u32(log_height as u32)
                                     {
                                         break;
                                     }
@@ -448,9 +455,9 @@ where
                                 cell_cols.read.as_mut(),
                             );
 
-                            cell_cols.opened_index = F::from_canonical_usize(opened_index);
-                            cell_cols.row_pointer = F::from_canonical_usize(row_pointer);
-                            cell_cols.row_end = F::from_canonical_usize(row_end);
+                            cell_cols.opened_index = F::from_usize(opened_index);
+                            cell_cols.row_pointer = F::from_usize(row_pointer);
+                            cell_cols.row_end = F::from_usize(row_end);
 
                             *chunk_elem = value;
                             row_pointer += 1;
@@ -479,15 +486,13 @@ where
                         inside_cols.end_inside_row = F::ZERO;
                         inside_cols.end_top_level = F::ZERO;
                         inside_cols.opened_element_size_inv = opened_element_size_inv;
-                        inside_cols.very_first_timestamp =
-                            F::from_canonical_u32(incorporate_start_timestamp);
-                        inside_cols.start_timestamp = F::from_canonical_u32(start_timestamp_u32);
+                        inside_cols.very_first_timestamp = F::from_u32(incorporate_start_timestamp);
+                        inside_cols.start_timestamp = F::from_u32(start_timestamp_u32);
 
-                        inside_cols.initial_opened_index =
-                            F::from_canonical_usize(initial_opened_index);
+                        inside_cols.initial_opened_index = F::from_usize(initial_opened_index);
                         inside_cols.opened_base_pointer = opened_base_pointer;
                         if cells_idx < CHUNK {
-                            let exhausted_opened_idx = F::from_canonical_usize(opened_index - 1);
+                            let exhausted_opened_idx = F::from_usize(opened_index - 1);
                             for exhausted_idx in cells_idx..CHUNK {
                                 inside_cols.is_exhausted[exhausted_idx - 1] = F::ONE;
                                 inside_specific_cols.cells[exhausted_idx].opened_index =
@@ -514,14 +519,14 @@ where
                             .read_initial_height_or_sibling_is_on_right
                             .as_mut(),
                     );
-                    assert_eq!(height_check, F::from_canonical_u32(log_height as u32));
+                    assert_eq!(height_check, F::from_u32(log_height as u32));
                     let final_height_read_timestamp = state.memory.timestamp;
                     let [height_check]: [F; 1] = tracing_read_native_helper(
                         state.memory,
                         dim_base_pointer_u32 + final_opened_index as u32,
                         top_level_specific_cols.read_final_height.as_mut(),
                     );
-                    assert_eq!(height_check, F::from_canonical_u32(log_height as u32));
+                    assert_eq!(height_check, F::from_u32(log_height as u32));
 
                     if !self.optimistic {
                         let hash: [F; CHUNK] = std::array::from_fn(|i| rolling_hash[i]);
@@ -542,22 +547,19 @@ where
                     incorporate_cols.start_top_level = F::from_bool(proof_index == 0);
                     incorporate_cols.opened_element_size_inv = opened_element_size_inv;
                     incorporate_cols.very_first_timestamp = init_timestamp;
-                    incorporate_cols.start_timestamp = F::from_canonical_u32(
-                        incorporate_start_timestamp - NUM_INITIAL_READS as u32,
-                    );
+                    incorporate_cols.start_timestamp =
+                        F::from_u32(incorporate_start_timestamp - NUM_INITIAL_READS as u32);
                     top_level_specific_cols.end_timestamp =
-                        F::from_canonical_u32(final_height_read_timestamp + 1);
+                        F::from_u32(final_height_read_timestamp + 1);
 
-                    incorporate_cols.initial_opened_index =
-                        F::from_canonical_usize(initial_opened_index);
-                    top_level_specific_cols.final_opened_index =
-                        F::from_canonical_usize(final_opened_index);
-                    top_level_specific_cols.log_height = F::from_canonical_u32(log_height as u32);
-                    top_level_specific_cols.opened_length = F::from_canonical_usize(opened_length);
+                    incorporate_cols.initial_opened_index = F::from_usize(initial_opened_index);
+                    top_level_specific_cols.final_opened_index = F::from_usize(final_opened_index);
+                    top_level_specific_cols.log_height = F::from_u32(log_height as u32);
+                    top_level_specific_cols.opened_length = F::from_usize(opened_length);
                     top_level_specific_cols.dim_base_pointer = dim_base_pointer;
                     incorporate_cols.opened_base_pointer = opened_base_pointer;
                     top_level_specific_cols.index_base_pointer = index_base_pointer;
-                    top_level_specific_cols.proof_index = F::from_canonical_usize(proof_index);
+                    top_level_specific_cols.proof_index = F::from_usize(proof_index);
                 }
 
                 if log_height != 0 {
@@ -600,20 +602,19 @@ where
                     sibling_cols.start_top_level = F::ZERO;
                     sibling_cols.opened_element_size_inv = opened_element_size_inv;
                     sibling_cols.very_first_timestamp = init_timestamp;
-                    sibling_cols.start_timestamp = F::from_canonical_u32(row_start_timestamp);
+                    sibling_cols.start_timestamp = F::from_u32(row_start_timestamp);
 
                     top_level_specific_cols.end_timestamp =
-                        F::from_canonical_u32(read_sibling_is_on_right_timestamp + 1);
-                    sibling_cols.initial_opened_index = F::from_canonical_usize(opened_index);
-                    top_level_specific_cols.final_opened_index =
-                        F::from_canonical_usize(opened_index - 1);
-                    top_level_specific_cols.log_height = F::from_canonical_u32(log_height as u32);
-                    top_level_specific_cols.opened_length = F::from_canonical_usize(opened_length);
+                        F::from_u32(read_sibling_is_on_right_timestamp + 1);
+                    sibling_cols.initial_opened_index = F::from_usize(opened_index);
+                    top_level_specific_cols.final_opened_index = F::from_usize(opened_index - 1);
+                    top_level_specific_cols.log_height = F::from_u32(log_height as u32);
+                    top_level_specific_cols.opened_length = F::from_usize(opened_length);
                     top_level_specific_cols.dim_base_pointer = dim_base_pointer;
                     sibling_cols.opened_base_pointer = opened_base_pointer;
                     top_level_specific_cols.index_base_pointer = index_base_pointer;
 
-                    top_level_specific_cols.proof_index = F::from_canonical_usize(proof_index);
+                    top_level_specific_cols.proof_index = F::from_usize(proof_index);
                     top_level_specific_cols.sibling_is_on_right = sibling_is_on_right;
                 };
 
@@ -623,9 +624,9 @@ where
             let ltl_trace_cols = &mut allocated_rows[non_inside_row_idx - 1];
             let ltl_trace_specific_cols: &mut TopLevelSpecificCols<F> =
                 ltl_trace_cols.specific[..TopLevelSpecificCols::<u8>::width()].borrow_mut();
-            ltl_trace_cols.inner.export = F::from_canonical_u32(total_num_row as u32);
+            ltl_trace_cols.inner.export = F::from_u32(total_num_row as u32);
             ltl_trace_cols.end_top_level = F::ONE;
-            ltl_trace_specific_cols.pc = F::from_canonical_u32(*state.pc);
+            ltl_trace_specific_cols.pc = F::from_u32(*state.pc);
             ltl_trace_specific_cols.dim_register = dim_register;
             ltl_trace_specific_cols.opened_register = opened_register;
             ltl_trace_specific_cols.opened_length_register = opened_length_register;
@@ -665,7 +666,7 @@ where
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> TraceFiller<F>
+impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize> TraceFiller<F>
     for NativePoseidon2Filler<F, SBOX_REGISTERS>
 {
     fn fill_trace(
@@ -714,7 +715,9 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> TraceFiller<F>
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Filler<F, SBOX_REGISTERS> {
+impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
+    NativePoseidon2Filler<F, SBOX_REGISTERS>
+{
     fn fill_simple_chunk(&self, mem_helper: &MemoryAuxColsFactory<F>, chunk_slice: &mut [F]) {
         {
             let inner_width = self.subchip.air.width();
@@ -972,7 +975,7 @@ fn tracing_read_native_helper<F: PrimeField32, const BLOCK_SIZE: usize>(
 ) -> [F; BLOCK_SIZE] {
     let mut prev_ts = 0;
     let ret = tracing_read_native(memory, ptr, &mut prev_ts);
-    base_aux.set_prev(F::from_canonical_u32(prev_ts));
+    base_aux.set_prev(F::from_u32(prev_ts));
     ret
 }
 

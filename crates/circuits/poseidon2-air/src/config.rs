@@ -58,7 +58,7 @@ impl<F: Field> Poseidon2Constants<F> {
 // Round constants for only BabyBear, but we convert to `F` due to some annoyances with generics.
 // This should only be used concretely when `F = BabyBear`.
 fn default_baby_bear_rc<F: Field>() -> Poseidon2Constants<F> {
-    let convert_field = |f: BabyBear| F::from_canonical_u32(f.as_canonical_u32());
+    let convert_field = |f: BabyBear| F::from_u32(f.as_canonical_u32());
     Poseidon2Constants {
         beginning_full_round_constants: BABYBEAR_BEGIN_EXT_CONSTS.map(|x| x.map(convert_field)),
         partial_round_constants: BABYBEAR_PARTIAL_CONSTS.map(convert_field),

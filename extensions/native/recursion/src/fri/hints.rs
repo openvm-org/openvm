@@ -2,7 +2,7 @@ use openvm_native_compiler::{
     asm::AsmConfig,
     ir::{Builder, Config, Usize, DIGEST_SIZE},
 };
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 
 use super::types::BatchOpeningVariable;
 use crate::{
@@ -138,7 +138,7 @@ impl Hintable<C> for InnerBatchOpening {
         let mut stream = Vec::new();
         let flat_opened_values: Vec<_> = self.opened_values.iter().flatten().copied().collect();
         stream.extend(vec![
-            vec![InnerVal::from_canonical_usize(flat_opened_values.len())],
+            vec![InnerVal::from_usize(flat_opened_values.len())],
             flat_opened_values,
         ]);
         stream.extend(write_opening_proof(&self.opening_proof));
@@ -157,7 +157,7 @@ fn read_hint_slice(builder: &mut Builder<C>) -> HintSlice<C> {
 
 fn write_opening_proof(opening_proof: &[InnerDigest]) -> Vec<Vec<InnerVal>> {
     vec![
-        vec![InnerVal::from_canonical_usize(opening_proof.len())],
+        vec![InnerVal::from_usize(opening_proof.len())],
         opening_proof.iter().flatten().copied().collect(),
     ]
 }

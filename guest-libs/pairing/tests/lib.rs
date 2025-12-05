@@ -37,11 +37,12 @@ mod bn254 {
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
     use openvm_stark_sdk::{
-        config::FriParameters, openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear,
+        config::FriParameters, openvm_stark_backend::p3_field::PrimeCharacteristicRing,
+        p3_baby_bear::BabyBear,
     };
     use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
-    use rand::SeedableRng;
+    use rand08::SeedableRng;
 
     type F = BabyBear;
 
@@ -111,7 +112,7 @@ mod bn254 {
                 .with_extension(Fp2TranspilerExtension),
         )?;
 
-        let mut rng = rand::rngs::StdRng::seed_from_u64(2);
+        let mut rng = rand08::rngs::StdRng::seed_from_u64(2);
         let f0 = Fq12::random(&mut rng);
         let f1 = Fq12::random(&mut rng);
         let r = f0 * f1;
@@ -120,7 +121,7 @@ mod bn254 {
             .into_iter()
             .flat_map(|fp12| fp12.to_coeffs())
             .flat_map(|fp2| fp2.to_bytes())
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         air_test_with_min_segments(Rv32PairingBuilder, config, openvm_exe, vec![io], 1);
@@ -147,7 +148,7 @@ mod bn254 {
                 .with_extension(Fp2TranspilerExtension),
         )?;
 
-        let mut rng = rand::rngs::StdRng::seed_from_u64(2);
+        let mut rng = rand08::rngs::StdRng::seed_from_u64(2);
         let a = G2Affine::random(&mut rng);
         let b = G2Affine::random(&mut rng);
         let c = G2Affine::random(&mut rng);
@@ -164,7 +165,7 @@ mod bn254 {
             .chain(r0)
             .flat_map(|fp2| fp2.to_coeffs())
             .flat_map(|fp| fp.to_bytes())
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         // Test mul_by_01234
@@ -176,7 +177,7 @@ mod bn254 {
             .chain(r1.to_coeffs())
             .flat_map(|fp2| fp2.to_coeffs())
             .flat_map(|fp| fp.to_bytes())
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
@@ -205,7 +206,7 @@ mod bn254 {
                 .with_extension(Fp2TranspilerExtension),
         )?;
 
-        let mut rng = rand::rngs::StdRng::seed_from_u64(20);
+        let mut rng = rand08::rngs::StdRng::seed_from_u64(20);
         let S = G2Affine::random(&mut rng);
         let Q = G2Affine::random(&mut rng);
 
@@ -217,7 +218,7 @@ mod bn254 {
         let io0 = [s.x, s.y, pt.x, pt.y, l.b, l.c]
             .into_iter()
             .flat_map(|fp| fp.to_bytes())
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         // Test miller_double_and_add_step
@@ -225,7 +226,7 @@ mod bn254 {
         let io1 = [s.x, s.y, q.x, q.y, pt.x, pt.y, l0.b, l0.c, l1.b, l1.c]
             .into_iter()
             .flat_map(|fp| fp.to_bytes())
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
@@ -269,7 +270,7 @@ mod bn254 {
         let io0 = s
             .into_iter()
             .flat_map(|pt| [pt.x, pt.y].into_iter().flat_map(|fp| fp.to_bytes()))
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         let io1 = q
@@ -278,7 +279,7 @@ mod bn254 {
             .chain(f.to_coeffs())
             .flat_map(|fp2| fp2.to_coeffs())
             .flat_map(|fp| fp.to_bytes())
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
@@ -327,7 +328,7 @@ mod bn254 {
         let io0 = s
             .into_iter()
             .flat_map(|pt| [pt.x, pt.y].into_iter().flat_map(|fp| fp.to_bytes()))
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         let io1 = q
@@ -335,7 +336,7 @@ mod bn254 {
             .flat_map(|pt| [pt.x, pt.y].into_iter())
             .flat_map(|fp2| fp2.to_coeffs())
             .flat_map(|fp| fp.to_bytes())
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
@@ -384,7 +385,7 @@ mod bn254 {
         let io0 = s
             .into_iter()
             .flat_map(|pt| [pt.x, pt.y].into_iter().flat_map(|fp| fp.to_bytes()))
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         let io1 = q
@@ -392,7 +393,7 @@ mod bn254 {
             .flat_map(|pt| [pt.x, pt.y].into_iter())
             .flat_map(|fp2| fp2.to_coeffs())
             .flat_map(|fp| fp.to_bytes())
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
@@ -457,7 +458,7 @@ mod bn254 {
         let io = io
             .into_iter()
             .flat_map(|w| w.to_le_bytes())
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect();
         air_test_with_min_segments(Rv32PairingBuilder, config, openvm_exe, vec![io], 1);
         Ok(())
@@ -506,11 +507,12 @@ mod bls12_381 {
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
     use openvm_stark_sdk::{
-        config::FriParameters, openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear,
+        config::FriParameters, openvm_stark_backend::p3_field::PrimeCharacteristicRing,
+        p3_baby_bear::BabyBear,
     };
     use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
-    use rand::SeedableRng;
+    use rand08::SeedableRng;
 
     type F = BabyBear;
 
@@ -586,7 +588,7 @@ mod bls12_381 {
                 .with_extension(Fp2TranspilerExtension),
         )?;
 
-        let mut rng = rand::rngs::StdRng::seed_from_u64(50);
+        let mut rng = rand08::rngs::StdRng::seed_from_u64(50);
         let f0 = Fq12::random(&mut rng);
         let f1 = Fq12::random(&mut rng);
         let r = f0 * f1;
@@ -595,7 +597,7 @@ mod bls12_381 {
             .into_iter()
             .flat_map(|fp12| fp12.to_coeffs())
             .flat_map(|fp2| fp2.to_bytes())
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         air_test_with_min_segments(Rv32PairingBuilder, config, openvm_exe, vec![io], 1);
@@ -622,7 +624,7 @@ mod bls12_381 {
                 .with_extension(Fp2TranspilerExtension),
         )?;
 
-        let mut rng = rand::rngs::StdRng::seed_from_u64(5);
+        let mut rng = rand08::rngs::StdRng::seed_from_u64(5);
         let a = G2Affine::random(&mut rng);
         let b = G2Affine::random(&mut rng);
         let c = G2Affine::random(&mut rng);
@@ -639,7 +641,7 @@ mod bls12_381 {
             .chain(r0)
             .flat_map(|fp2| fp2.to_coeffs())
             .flat_map(|fp| fp.to_bytes())
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         // Test mul_by_02345
@@ -652,7 +654,7 @@ mod bls12_381 {
             .chain(r1.to_coeffs())
             .flat_map(|fp2| fp2.to_coeffs())
             .flat_map(|fp| fp.to_bytes())
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
@@ -681,7 +683,7 @@ mod bls12_381 {
                 .with_extension(Fp2TranspilerExtension),
         )?;
 
-        let mut rng = rand::rngs::StdRng::seed_from_u64(88);
+        let mut rng = rand08::rngs::StdRng::seed_from_u64(88);
         let S = G2Affine::random(&mut rng);
         let Q = G2Affine::random(&mut rng);
 
@@ -693,7 +695,7 @@ mod bls12_381 {
         let io0 = [s.x, s.y, pt.x, pt.y, l.b, l.c]
             .into_iter()
             .flat_map(|fp| fp.to_bytes())
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         // Test miller_double_and_add_step
@@ -701,7 +703,7 @@ mod bls12_381 {
         let io1 = [s.x, s.y, q.x, q.y, pt.x, pt.y, l0.b, l0.c, l1.b, l1.c]
             .into_iter()
             .flat_map(|fp| fp.to_bytes())
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
@@ -751,7 +753,7 @@ mod bls12_381 {
         let io0 = s
             .into_iter()
             .flat_map(|pt| [pt.x, pt.y].into_iter().flat_map(|fp| fp.to_bytes()))
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         let io1 = q
@@ -760,7 +762,7 @@ mod bls12_381 {
             .chain(f.to_coeffs())
             .flat_map(|fp2| fp2.to_coeffs())
             .flat_map(|fp| fp.to_bytes())
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
@@ -808,7 +810,7 @@ mod bls12_381 {
         let io0 = s
             .into_iter()
             .flat_map(|pt| [pt.x, pt.y].into_iter().flat_map(|fp| fp.to_bytes()))
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         let io1 = q
@@ -816,7 +818,7 @@ mod bls12_381 {
             .flat_map(|pt| [pt.x, pt.y].into_iter())
             .flat_map(|fp2| fp2.to_coeffs())
             .flat_map(|fp| fp.to_bytes())
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
@@ -865,7 +867,7 @@ mod bls12_381 {
         let io0 = s
             .into_iter()
             .flat_map(|pt| [pt.x, pt.y].into_iter().flat_map(|fp| fp.to_bytes()))
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         let io1 = q
@@ -873,7 +875,7 @@ mod bls12_381 {
             .flat_map(|pt| [pt.x, pt.y].into_iter())
             .flat_map(|fp2| fp2.to_coeffs())
             .flat_map(|fp| fp.to_bytes())
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect::<Vec<_>>();
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
@@ -938,7 +940,7 @@ mod bls12_381 {
         let io = io
             .into_iter()
             .flat_map(|w| w.to_le_bytes())
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect();
         air_test_with_min_segments(Rv32PairingBuilder, config, openvm_exe, vec![io], 1);
         Ok(())
