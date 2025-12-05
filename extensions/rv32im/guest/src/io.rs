@@ -1,5 +1,5 @@
 #![allow(unused_imports)]
-use crate::{PhantomImm, PHANTOM_FUNCT3, SYSTEM_OPCODE};
+use crate::{PhantomImm, MAX_HINT_BUFFER_WORDS, PHANTOM_FUNCT3, SYSTEM_OPCODE};
 
 /// Store the next 4 bytes from the hint stream to [[rd]_1]_2.
 #[macro_export]
@@ -21,14 +21,26 @@ macro_rules! hint_buffer_u32 {
     ($x:expr, $len:expr) => {
         if $len != 0 {
             openvm_custom_insn::custom_insn_i!(
-                opcode = openvm_rv32im_guest::SYSTEM_OPCODE,
-                funct3 = openvm_rv32im_guest::HINT_FUNCT3,
+                opcode = $crate::SYSTEM_OPCODE,
+                funct3 = $crate::HINT_FUNCT3,
                 rd = In $x,
                 rs1 = In $len,
                 imm = Const 1,
             )
         }
     };
+}
+
+/// Read hint buffer with automatic chunking for large reads.
+/// Splits reads larger than MAX_HINT_BUFFER_WORDS into multiple instructions.
+#[inline(always)]
+pub fn hint_buffer_chunked(mut ptr: *mut u8, mut num_words: usize) {
+    while num_words > 0 {
+        let chunk = core::cmp::min(num_words, MAX_HINT_BUFFER_WORDS);
+        hint_buffer_u32!(ptr, chunk);
+        ptr = ptr.wrapping_add(chunk * 4);
+        num_words -= chunk;
+    }
 }
 
 /// Reset the hint stream with the next hint.
