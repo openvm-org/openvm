@@ -6775,7 +6775,6 @@ dependencies = [
  "openvm-toolchain-tests",
  "openvm-transpiler",
  "rand 0.8.5",
- "rand 0.9.2",
  "serde",
 ]
 
@@ -6827,7 +6826,6 @@ dependencies = [
  "openvm-custom-insn",
  "openvm-ecc-guest",
  "rand 0.8.5",
- "rand 0.9.2",
  "serde",
  "strum_macros 0.26.4",
  "subtle",

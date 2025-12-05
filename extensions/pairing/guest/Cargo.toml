@@ -23,7 +23,6 @@ halo2curves-axiom = { workspace = true, optional = true }
 blstrs = { workspace = true, optional = true }
 
 [dev-dependencies]
-rand.workspace = true
 rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"] }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]

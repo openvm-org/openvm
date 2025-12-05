@@ -48,7 +48,6 @@ openvm-rv32im-transpiler.workspace = true
 openvm = { workspace = true }
 openvm-toolchain-tests = { workspace = true }
 eyre.workspace = true
-rand.workspace = true
 num-bigint.workspace = true
 num-traits.workspace = true
 halo2curves-axiom = { workspace = true }
