@@ -5,34 +5,31 @@ use sha2::digest::{
     FixedOutput, HashMarker, Output, OutputSizeUser, Update,
 };
 
-// TODO: the three implementations can be merged into one using a macro
-
-// We store static padding bytes so that we don't need to allocate a vector when padding in
+// We store static padding bytes here so that we don't need to allocate a vector when padding in
 // finalize().
 // Padding always consists of a single 0x80 byte, followed by zeros, (and then the length of the
 // message in bits but we don't include that here because it's not static).
-// Length is chosen to be the maximum block size between SHA-256 and SHA-512, since padding can be
-// at most BLOCK_BYTES bytes.
+// Length of this array is chosen to be the maximum block size between SHA-256 and SHA-512, since
+// padding can be at most BLOCK_BYTES bytes.
 const PADDING_BYTES: [u8; SHA512_BLOCK_BYTES] = {
     let mut padding_bytes = [0u8; SHA512_BLOCK_BYTES];
     padding_bytes[0] = 0x80;
     padding_bytes
 };
 
-const SHA256_STATE_BYTES: usize = 32;
+const SHA256_STATE_WORDS: usize = 8;
 const SHA256_BLOCK_BYTES: usize = 64;
 const SHA256_DIGEST_BYTES: usize = 32;
 
-// Initial state for SHA-256 in big-endian bytes
-const SHA256_H: [u8; SHA256_STATE_BYTES] = [
-    106, 9, 230, 103, 187, 103, 174, 133, 60, 110, 243, 114, 165, 79, 245, 58, 81, 14, 82, 127,
-    155, 5, 104, 140, 31, 131, 217, 171, 91, 224, 205, 25,
+// Initial state for SHA-256 in 32-bit words
+const SHA256_H: [u32; 8] = [
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
 ];
 
 #[derive(Debug, Clone, Copy)]
 pub struct Sha256 {
-    // the current hasher state, in big-endian
-    state: [u8; SHA256_STATE_BYTES],
+    // the current hasher state, in 32-bit words
+    state: [u32; SHA256_STATE_WORDS],
     // the next block of input
     buffer: [u8; SHA256_BLOCK_BYTES],
     // idx of next byte to write to buffer (equal to len mod SHA256_BLOCK_BYTES)
@@ -79,12 +76,19 @@ impl Sha256 {
         let message_len_in_bits = self.len * 8;
         self.update(&PADDING_BYTES[..num_bytes_of_padding]);
         self.update(&(message_len_in_bits as u64).to_be_bytes());
-        self.state
+        let mut output = [0u8; SHA256_DIGEST_BYTES];
+        output
+            .chunks_exact_mut(4)
+            .zip(self.state.iter())
+            .for_each(|(chunk, x)| {
+                chunk.copy_from_slice(&x.to_be_bytes());
+            });
+        output
     }
 
     fn compress(&mut self) {
         openvm_sha2_guest::zkvm_sha256_impl(
-            self.state.as_ptr(),
+            self.state.as_ptr() as *const u8,
             self.buffer.as_ptr(),
             self.state.as_mut_ptr() as *mut u8,
         );
@@ -114,22 +118,26 @@ impl FixedOutput for Sha256 {
 
 impl HashMarker for Sha256 {}
 
-const SHA512_STATE_BYTES: usize = 64;
+const SHA512_STATE_WORDS: usize = 8;
 const SHA512_BLOCK_BYTES: usize = 128;
 const SHA512_DIGEST_BYTES: usize = 64;
 
-// Initial state for SHA-512 in big-endian bytes
-const SHA512_H: [u8; SHA512_STATE_BYTES] = [
-    106, 9, 230, 103, 243, 188, 201, 8, 187, 103, 174, 133, 132, 202, 167, 59, 60, 110, 243, 114,
-    254, 148, 248, 43, 165, 79, 245, 58, 95, 29, 54, 241, 81, 14, 82, 127, 173, 230, 130, 209, 155,
-    5, 104, 140, 43, 62, 108, 31, 31, 131, 217, 171, 251, 65, 189, 107, 91, 224, 205, 25, 19, 126,
-    33, 121,
+// Initial state for SHA-512 in 64-bit words
+pub const SHA512_H: [u64; 8] = [
+    0x6a09e667f3bcc908,
+    0xbb67ae8584caa73b,
+    0x3c6ef372fe94f82b,
+    0xa54ff53a5f1d36f1,
+    0x510e527fade682d1,
+    0x9b05688c2b3e6c1f,
+    0x1f83d9abfb41bd6b,
+    0x5be0cd19137e2179,
 ];
 
 #[derive(Debug, Clone, Copy)]
 pub struct Sha512 {
     // the current hasher state
-    state: [u8; SHA512_STATE_BYTES],
+    state: [u64; SHA512_STATE_WORDS],
     // the next block of input
     buffer: [u8; SHA512_BLOCK_BYTES],
     // idx of next byte to write to buffer
@@ -176,12 +184,19 @@ impl Sha512 {
         let message_len_in_bits = self.len * 8;
         self.update(&PADDING_BYTES[..num_bytes_of_padding]);
         self.update(&(message_len_in_bits as u128).to_be_bytes());
-        self.state
+        let mut output = [0u8; SHA512_DIGEST_BYTES];
+        output
+            .chunks_exact_mut(8)
+            .zip(self.state.iter())
+            .for_each(|(chunk, x)| {
+                chunk.copy_from_slice(&x.to_be_bytes());
+            });
+        output
     }
 
     fn compress(&mut self) {
         openvm_sha2_guest::zkvm_sha512_impl(
-            self.state.as_ptr(),
+            self.state.as_ptr() as *const u8,
             self.buffer.as_ptr(),
             self.state.as_mut_ptr() as *mut u8,
         );
@@ -211,14 +226,20 @@ impl FixedOutput for Sha512 {
 
 impl HashMarker for Sha512 {}
 
-const SHA384_STATE_BYTES: usize = 64;
+const SHA384_STATE_WORDS: usize = 8;
 const SHA384_BLOCK_BYTES: usize = 128;
 const SHA384_DIGEST_BYTES: usize = 48;
 
-const SHA384_H: [u8; SHA384_STATE_BYTES] = [
-    203, 187, 157, 93, 193, 5, 158, 216, 98, 154, 41, 42, 54, 124, 213, 7, 145, 89, 1, 90, 48, 112,
-    221, 23, 21, 47, 236, 216, 247, 14, 89, 57, 103, 51, 38, 103, 255, 192, 11, 49, 142, 180, 74,
-    135, 104, 88, 21, 17, 219, 12, 46, 13, 100, 249, 143, 167, 71, 181, 72, 29, 190, 250, 79, 164,
+// Initial state for SHA-384 in 64-bit words
+pub const SHA384_H: [u64; 8] = [
+    0xcbbb9d5dc1059ed8,
+    0x629a292a367cd507,
+    0x9159015a3070dd17,
+    0x152fecd8f70e5939,
+    0x67332667ffc00b31,
+    0x8eb44a8768581511,
+    0xdb0c2e0d64f98fa7,
+    0x47b5481dbefa4fa4,
 ];
 
 #[derive(Debug, Clone, Copy)]

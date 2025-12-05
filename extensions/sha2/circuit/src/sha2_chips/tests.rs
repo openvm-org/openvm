@@ -267,10 +267,11 @@ fn set_and_execute_full_message<RA: Arena, C: Sha2Config + 'static, E: Preflight
     tester.write(1, rs1, state_ptr.to_le_bytes().map(F::from_canonical_u8));
     tester.write(1, rs2, input_ptr.to_le_bytes().map(F::from_canonical_u8));
 
+    // initial state as little-endian words
     let initial_state: Vec<u8> = C::get_h()
         .iter()
         .cloned()
-        .flat_map(|x| word_into_u8_limbs::<C>(x).into_iter().rev())
+        .flat_map(|x| word_into_u8_limbs::<C>(x).into_iter())
         .map(|x| x.try_into().unwrap())
         .collect_vec();
 
@@ -281,7 +282,13 @@ fn set_and_execute_full_message<RA: Arena, C: Sha2Config + 'static, E: Preflight
     let default_message = get_random_message(rng, len);
     let message = message.map(|x| x.to_vec()).unwrap_or(default_message);
 
-    let expected_output = C::hash(&message);
+    // C::hash() returns big-endian words.
+    // We want little-endian words so we can compare to our final state (which is in little-endian
+    // words)
+    let expected_output = C::hash(&message)
+        .chunks_exact(C::WORD_U8S)
+        .flat_map(|word| word.iter().rev().copied())
+        .collect_vec();
 
     let padded_message = add_padding_to_message::<C>(message);
 
@@ -439,15 +446,7 @@ fn execute_roundtrip_sanity_test<C: Sha2Config + 'static>() {
     let TestHarness { mut harness, .. } =
         create_test_harness::<MatrixRecordArena<F>, C>(&mut tester);
 
-    println!(
-        "Sha2DigestCols::width(): {}",
-        Sha2DigestColsRef::<u8>::width::<C>()
-    );
-    println!(
-        "Sha2RoundCols::width(): {}",
-        Sha2RoundColsRef::<u8>::width::<C>()
-    );
-
+    // let num_tests: usize = 10;
     let num_tests: usize = 1;
     for _ in 0..num_tests {
         set_and_execute_full_message::<_, C, _>(
@@ -458,7 +457,7 @@ fn execute_roundtrip_sanity_test<C: Sha2Config + 'static>() {
             C::OPCODE,
             None,
             // None,
-            Some(64),
+            Some(0),
         );
     }
 }

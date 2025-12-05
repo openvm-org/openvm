@@ -124,7 +124,7 @@ where
 
                 let prev_hash = (0..C::HASH_WORDS)
                     .map(|i| {
-                        be_limbs_into_word::<C>(
+                        le_limbs_into_word::<C>(
                             &record.prev_state[i * C::WORD_U8S..(i + 1) * C::WORD_U8S]
                                 .iter()
                                 .map(|x| *x as u32)

@@ -24,9 +24,9 @@ pub struct Sha2BlockCols<T, const BLOCK_BYTES: usize, const STATE_BYTES: usize> 
     pub request_id: T,
     /// Input bytes for this block
     pub message_bytes: [T; BLOCK_BYTES],
-    // Previous state of the SHA-2 hasher object
+    /// Previous state of the SHA-2 hasher object, as little-endian words
     pub prev_state: [T; STATE_BYTES],
-    // New state of the SHA-2 hasher object after processing this block
+    /// New state of the SHA-2 hasher object after processing this block, as little-endian words
     pub new_state: [T; STATE_BYTES],
 }
 

@@ -71,8 +71,8 @@ pub struct Sha2RecordMut<'a> {
     pub inner: &'a mut Sha2RecordHeader,
 
     pub message_bytes: &'a mut [u8],
-    pub prev_state: &'a mut [u8],
-    pub new_state: &'a mut [u8],
+    pub prev_state: &'a mut [u8], // little-endian words
+    pub new_state: &'a mut [u8],  // little-endian words
 
     pub input_reads_aux: &'a mut [MemoryReadAuxRecord],
     pub state_reads_aux: &'a mut [MemoryReadAuxRecord],
@@ -150,8 +150,9 @@ impl SizedRecord<Sha2RecordLayout> for Sha2RecordMut<'_> {
         let header_size = size_of::<Sha2RecordHeader>();
         let dims = Sha2PreComputeDims::new(layout.metadata.variant);
         let mut total_len = header_size
-            + dims.input_size // input
-            + dims.state_size; // prev_state
+            + dims.input_size  // input
+            + dims.state_size  // prev_state
+            + dims.state_size; // new_state
 
         total_len = total_len.next_multiple_of(align_of::<MemoryReadAuxRecord>());
         total_len += dims.input_reads * size_of::<MemoryReadAuxRecord>();

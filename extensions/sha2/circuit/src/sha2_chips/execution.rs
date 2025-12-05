@@ -117,14 +117,15 @@ unsafe fn execute_e12_impl<
     let state_u32 = u32::from_le_bytes(state);
     let input_u32 = u32::from_le_bytes(input);
 
+    // state is in 4-byte little-endian words
     let mut state_data = Vec::with_capacity(C::STATE_BYTES);
-    let mut input_block = Vec::with_capacity(C::BLOCK_BYTES);
     for i in 0..C::STATE_READS {
         state_data.extend_from_slice(&exec_state.vm_read::<u8, SHA2_READ_SIZE>(
             RV32_MEMORY_AS,
             state_u32 + (i * SHA2_READ_SIZE) as u32,
         ));
     }
+    let mut input_block = Vec::with_capacity(C::BLOCK_BYTES);
     for i in 0..C::BLOCK_READS {
         input_block.extend_from_slice(&exec_state.vm_read::<u8, SHA2_READ_SIZE>(
             RV32_MEMORY_AS,

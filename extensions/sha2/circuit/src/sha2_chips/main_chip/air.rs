@@ -123,20 +123,9 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
                 word.as_slice()
                     .unwrap()
                     .chunks_exact(2)
-                    .rev()
-                    .map(|x| x[0] * AB::F::from_canonical_u64(1 << 8) + x[1])
+                    .map(|x| x[1] * AB::F::from_canonical_u64(1 << 8) + x[0])
                     .collect::<Vec<_>>()
             })
-            .collect();
-
-        // for each word in the new state, byte1, byte2, ..., byteN, reverse the order of the bytes
-        // so that it matches what the block hasher chip expects
-        let new_state_big_endian: Vec<AB::Var> = local
-            .block
-            .new_state
-            .exact_chunks(C::WORD_U8S)
-            .into_iter()
-            .flat_map(|word| word.into_iter().rev().copied().collect::<Vec<_>>())
             .collect();
 
         // Send (STATE, request_id, prev_state_as_u16s, new_state) to the sha2 bus
@@ -148,7 +137,7 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
             ]
             .into_iter()
             .chain(prev_state_as_u16s)
-            .chain(new_state_big_endian.into_iter().map(|x| x.into())),
+            .chain(local.block.new_state.into_iter().copied().map(|x| x.into())),
             *local.instruction.is_enabled,
         );
 

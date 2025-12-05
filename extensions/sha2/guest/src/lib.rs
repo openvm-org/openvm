@@ -21,9 +21,11 @@ pub enum Sha2BaseFunct7 {
 ///
 /// The VM accepts the previous hash state and the next block of input, and writes the
 /// new hash state.
-/// - `prev_state` must point to a buffer of at least 32 bytes
+/// - `prev_state` must point to a buffer of at least 32 bytes, storing the previous hash state as 8
+///   32-bit words in little-endian order
 /// - `input` must point to a buffer of at least 64 bytes
-/// - `output` must point to a buffer of at least 32 bytes
+/// - `output` must point to a buffer of at least 32 bytes. It will be filled with the new hash
+///   state as 8 32-bit words in little-endian order
 ///
 /// [`sha2-256`]: https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf
 #[cfg(target_os = "zkvm")]
@@ -71,9 +73,11 @@ pub extern "C" fn zkvm_sha256_impl(prev_state: *const u8, input: *const u8, outp
 ///
 /// The VM accepts the previous hash state and the next block of input, and writes the
 /// new hash state.
-/// - `prev_state` must point to a buffer of at least 64 bytes
+/// - `prev_state` must point to a buffer of at least 64 bytes, storing the previous hash state as 8
+///   64-bit words in little-endian order
 /// - `input` must point to a buffer of at least 128 bytes
-/// - `output` must point to a buffer of at least 64 bytes
+/// - `output` must point to a buffer of at least 64 bytes. It will be filled with the new hash
+///   state as 8 64-bit words in little-endian order
 ///
 /// [`sha2-512`]: https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf
 #[cfg(target_os = "zkvm")]
@@ -122,9 +126,11 @@ pub extern "C" fn zkvm_sha512_impl(prev_state: *const u8, input: *const u8, outp
 ///
 /// The VM accepts the previous hash state and the next block of input, and writes the
 /// 32-byte hash.
-/// - `prev_state` must point to a buffer of at least 32 bytes
+/// - `prev_state` must point to a buffer of at least 32 bytes, storing the previous hash state as 8
+///   32-bit words in little-endian order
 /// - `input` must point to a buffer of at least 64 bytes
-/// - `output` must point to a buffer of at least 32 bytes
+/// - `output` must point to a buffer of at least 32 bytes. It will be filled with the new hash
+///   state as 8 32-bit words in little-endian order
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
 fn __native_sha256_compress(prev_state: *const u8, input: *const u8, output: *mut u8) {
@@ -137,9 +143,11 @@ fn __native_sha256_compress(prev_state: *const u8, input: *const u8, output: *mu
 ///
 /// The VM accepts the previous hash state and the next block of input, and writes the
 /// 64-byte hash.
-/// - `prev_state` must point to a buffer of at least 64 bytes
+/// - `prev_state` must point to a buffer of at least 32 bytes, storing the previous hash state as 8
+///   64-bit words in little-endian order
 /// - `input` must point to a buffer of at least 128 bytes
-/// - `output` must point to a buffer of at least 64 bytes
+/// - `output` must point to a buffer of at least 64 bytes. It will be filled with the new hash
+///   state as 8 64-bit words in little-endian order
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
 fn __native_sha512_compress(prev_state: *const u8, input: *const u8, output: *mut u8) {

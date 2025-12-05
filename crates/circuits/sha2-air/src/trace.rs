@@ -433,17 +433,6 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherFillerHelper<C> {
                 let const_local_cols = Sha2RoundColsRef::<F>::from_mut::<C>(&local_cols);
                 Self::generate_carry_ae(const_local_cols.clone(), &mut next_cols);
 
-                if global_block_idx == 3 {
-                    println!(
-                        "next_cols.work_vars.carry_a: {:?}",
-                        next_cols.work_vars.carry_a
-                    );
-                    println!(
-                        "next_cols.work_vars.carry_e: {:?}",
-                        next_cols.work_vars.carry_e
-                    );
-                }
-
                 // Fill in row 16's `intermed_4` with dummy values so the message schedule
                 // constraints holds on that row
                 Self::generate_intermed_4(const_local_cols, &mut next_cols);
