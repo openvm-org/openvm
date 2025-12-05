@@ -9,8 +9,8 @@ use openvm_circuit::{
 };
 use openvm_circuit_derive::{PreflightExecutor, VmConfig};
 use openvm_rv32_adapters::{
-    Rv32HeapAdapterAir, Rv32HeapAdapterExecutor, Rv32HeapAdapterFiller, Rv32HeapBranchAdapterAir,
-    Rv32HeapBranchAdapterExecutor, Rv32HeapBranchAdapterFiller,
+    Rv32Heap256_4ByteAdapterAir, Rv32Heap256_4ByteAdapterExecutor, Rv32Heap256_4ByteAdapterFiller,
+    Rv32HeapBranchAdapterAir, Rv32HeapBranchAdapterExecutor, Rv32HeapBranchAdapterFiller,
 };
 use openvm_rv32im_circuit::{
     adapters::{INT256_NUM_LIMBS, RV32_CELL_BITS},
@@ -41,92 +41,60 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-/// BaseAlu256
+/// BaseAlu256 - uses 8×4-byte memory bus interactions
 pub type Rv32BaseAlu256Air = VmAirWrapper<
-    Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
+    Rv32Heap256_4ByteAdapterAir<2>,
     BaseAluCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
 >;
 #[derive(Clone, PreflightExecutor)]
 pub struct Rv32BaseAlu256Executor(
-    BaseAluExecutor<
-        Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-        INT256_NUM_LIMBS,
-        RV32_CELL_BITS,
-    >,
+    BaseAluExecutor<Rv32Heap256_4ByteAdapterExecutor<2>, INT256_NUM_LIMBS, RV32_CELL_BITS>,
 );
 pub type Rv32BaseAlu256Chip<F> = VmChipWrapper<
     F,
-    BaseAluFiller<
-        Rv32HeapAdapterFiller<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-        INT256_NUM_LIMBS,
-        RV32_CELL_BITS,
-    >,
+    BaseAluFiller<Rv32Heap256_4ByteAdapterFiller<2>, INT256_NUM_LIMBS, RV32_CELL_BITS>,
 >;
 
-/// LessThan256
+/// LessThan256 - uses 8×4-byte memory bus interactions
 pub type Rv32LessThan256Air = VmAirWrapper<
-    Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
+    Rv32Heap256_4ByteAdapterAir<2>,
     LessThanCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
 >;
 #[derive(Clone, PreflightExecutor)]
 pub struct Rv32LessThan256Executor(
-    LessThanExecutor<
-        Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-        INT256_NUM_LIMBS,
-        RV32_CELL_BITS,
-    >,
+    LessThanExecutor<Rv32Heap256_4ByteAdapterExecutor<2>, INT256_NUM_LIMBS, RV32_CELL_BITS>,
 );
 pub type Rv32LessThan256Chip<F> = VmChipWrapper<
     F,
-    LessThanFiller<
-        Rv32HeapAdapterFiller<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-        INT256_NUM_LIMBS,
-        RV32_CELL_BITS,
-    >,
+    LessThanFiller<Rv32Heap256_4ByteAdapterFiller<2>, INT256_NUM_LIMBS, RV32_CELL_BITS>,
 >;
 
-/// Multiplication256
+/// Multiplication256 - uses 8×4-byte memory bus interactions
 pub type Rv32Multiplication256Air = VmAirWrapper<
-    Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
+    Rv32Heap256_4ByteAdapterAir<2>,
     MultiplicationCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
 >;
 #[derive(Clone, PreflightExecutor)]
 pub struct Rv32Multiplication256Executor(
-    MultiplicationExecutor<
-        Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-        INT256_NUM_LIMBS,
-        RV32_CELL_BITS,
-    >,
+    MultiplicationExecutor<Rv32Heap256_4ByteAdapterExecutor<2>, INT256_NUM_LIMBS, RV32_CELL_BITS>,
 );
 pub type Rv32Multiplication256Chip<F> = VmChipWrapper<
     F,
-    MultiplicationFiller<
-        Rv32HeapAdapterFiller<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-        INT256_NUM_LIMBS,
-        RV32_CELL_BITS,
-    >,
+    MultiplicationFiller<Rv32Heap256_4ByteAdapterFiller<2>, INT256_NUM_LIMBS, RV32_CELL_BITS>,
 >;
 
-/// Shift256
+/// Shift256 - uses 8×4-byte memory bus interactions
 pub type Rv32Shift256Air = VmAirWrapper<
-    Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
+    Rv32Heap256_4ByteAdapterAir<2>,
     ShiftCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
 >;
 #[derive(Clone, PreflightExecutor)]
 pub struct Rv32Shift256Executor(
-    ShiftExecutor<
-        Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-        INT256_NUM_LIMBS,
-        RV32_CELL_BITS,
-    >,
+    ShiftExecutor<Rv32Heap256_4ByteAdapterExecutor<2>, INT256_NUM_LIMBS, RV32_CELL_BITS>,
 );
 pub type Rv32Shift256Chip<F> = VmChipWrapper<
     F,
-    ShiftFiller<
-        Rv32HeapAdapterFiller<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-        INT256_NUM_LIMBS,
-        RV32_CELL_BITS,
-    >,
+    ShiftFiller<Rv32Heap256_4ByteAdapterFiller<2>, INT256_NUM_LIMBS, RV32_CELL_BITS>,
 >;
 
 /// BranchEqual256
