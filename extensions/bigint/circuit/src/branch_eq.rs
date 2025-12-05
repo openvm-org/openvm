@@ -9,7 +9,7 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::Rv32HeapBranch256_4ByteAdapterExecutor;
+use openvm_rv32_adapters::Rv32HeapBranchAdapterExecutor;
 use openvm_rv32im_circuit::BranchEqualExecutor;
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -19,7 +19,7 @@ use crate::{
     Rv32BranchEqual256Executor, INT256_NUM_LIMBS,
 };
 
-type AdapterExecutor = Rv32HeapBranch256_4ByteAdapterExecutor<2>;
+type AdapterExecutor = Rv32HeapBranchAdapterExecutor<2, INT256_NUM_LIMBS>;
 
 impl Rv32BranchEqual256Executor {
     pub fn new(adapter_step: AdapterExecutor, offset: usize, pc_step: u32) -> Self {
