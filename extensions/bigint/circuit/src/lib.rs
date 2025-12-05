@@ -41,7 +41,7 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-/// BaseAlu256
+/// BaseAlu256 - uses 8×4-byte memory bus interactions
 pub type Rv32BaseAlu256Air = VmAirWrapper<
     Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
     BaseAluCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
@@ -63,7 +63,7 @@ pub type Rv32BaseAlu256Chip<F> = VmChipWrapper<
     >,
 >;
 
-/// LessThan256
+/// LessThan256 - uses 8×4-byte memory bus interactions
 pub type Rv32LessThan256Air = VmAirWrapper<
     Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
     LessThanCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
@@ -85,7 +85,7 @@ pub type Rv32LessThan256Chip<F> = VmChipWrapper<
     >,
 >;
 
-/// Multiplication256
+/// Multiplication256 - uses 8×4-byte memory bus interactions
 pub type Rv32Multiplication256Air = VmAirWrapper<
     Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
     MultiplicationCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
@@ -107,7 +107,7 @@ pub type Rv32Multiplication256Chip<F> = VmChipWrapper<
     >,
 >;
 
-/// Shift256
+/// Shift256 - uses 8×4-byte memory bus interactions
 pub type Rv32Shift256Air = VmAirWrapper<
     Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
     ShiftCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
@@ -129,7 +129,7 @@ pub type Rv32Shift256Chip<F> = VmChipWrapper<
     >,
 >;
 
-/// BranchEqual256
+/// BranchEqual256 - uses 8×4-byte memory bus interactions
 pub type Rv32BranchEqual256Air = VmAirWrapper<
     Rv32HeapBranchAdapterAir<2, INT256_NUM_LIMBS>,
     BranchEqualCoreAir<INT256_NUM_LIMBS>,
@@ -143,7 +143,7 @@ pub type Rv32BranchEqual256Chip<F> = VmChipWrapper<
     BranchEqualFiller<Rv32HeapBranchAdapterFiller<2, INT256_NUM_LIMBS>, INT256_NUM_LIMBS>,
 >;
 
-/// BranchLessThan256
+/// BranchLessThan256 - uses 8×4-byte memory bus interactions
 pub type Rv32BranchLessThan256Air = VmAirWrapper<
     Rv32HeapBranchAdapterAir<2, INT256_NUM_LIMBS>,
     BranchLessThanCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,

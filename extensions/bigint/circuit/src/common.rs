@@ -1,4 +1,48 @@
+use openvm_circuit::{
+    arch::{ExecutionCtxTrait, VmExecState},
+    system::memory::online::GuestMemory,
+};
+
 use crate::{INT256_NUM_LIMBS, RV32_CELL_BITS};
+
+/// Block size for memory operations (4 bytes).
+pub const BLOCK_SIZE: usize = 4;
+/// Number of blocks per 256-bit (32-byte) read/write.
+pub const NUM_BLOCKS: usize = INT256_NUM_LIMBS / BLOCK_SIZE; // 32 / 4 = 8
+
+/// Read INT256_NUM_LIMBS bytes from memory using NUM_BLOCKS reads of BLOCK_SIZE bytes each.
+/// This ensures all memory bus interactions use the constant 4-byte block size.
+#[inline(always)]
+pub fn vm_read_256<F, CTX: ExecutionCtxTrait>(
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    addr_space: u32,
+    ptr: u32,
+) -> [u8; INT256_NUM_LIMBS] {
+    let mut result = [0u8; INT256_NUM_LIMBS];
+    for i in 0..NUM_BLOCKS {
+        let chunk: [u8; BLOCK_SIZE] =
+            exec_state.vm_read::<u8, BLOCK_SIZE>(addr_space, ptr + (i * BLOCK_SIZE) as u32);
+        result[i * BLOCK_SIZE..(i + 1) * BLOCK_SIZE].copy_from_slice(&chunk);
+    }
+    result
+}
+
+/// Write INT256_NUM_LIMBS bytes to memory using NUM_BLOCKS writes of BLOCK_SIZE bytes each.
+/// This ensures all memory bus interactions use the constant 4-byte block size.
+#[inline(always)]
+pub fn vm_write_256<F, CTX: ExecutionCtxTrait>(
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    addr_space: u32,
+    ptr: u32,
+    data: &[u8; INT256_NUM_LIMBS],
+) {
+    for i in 0..NUM_BLOCKS {
+        let chunk: [u8; BLOCK_SIZE] = data[i * BLOCK_SIZE..(i + 1) * BLOCK_SIZE]
+            .try_into()
+            .unwrap();
+        exec_state.vm_write::<u8, BLOCK_SIZE>(addr_space, ptr + (i * BLOCK_SIZE) as u32, &chunk);
+    }
+}
 
 #[inline(always)]
 pub fn bytes_to_u64_array(bytes: [u8; INT256_NUM_LIMBS]) -> [u64; 4] {
