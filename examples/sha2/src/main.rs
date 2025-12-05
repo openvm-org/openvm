@@ -1,24 +1,41 @@
 // [!region imports]
-use core::hint::black_box;
+#![cfg_attr(all(target_os = "zkvm", not(feature = "std")), no_main)]
+#![cfg_attr(all(target_os = "zkvm", not(feature = "std")), no_std)]
 
-use hex::FromHex;
-use openvm as _;
-use openvm_sha2::sha256;
+extern crate alloc;
+
+use alloc::{format, string::String};
+
+use openvm_sha2::{Digest, Sha256, Sha384, Sha512};
+
+openvm::entry!(main);
 // [!endregion imports]
 
 // [!region main]
-pub fn main() {
-    let test_vectors = [(
-        "",
-        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    )];
-    for (input, expected_output) in test_vectors.iter() {
-        let input = Vec::from_hex(input).unwrap();
-        let expected_output = Vec::from_hex(expected_output).unwrap();
-        let output = sha256(&black_box(input));
-        if output != *expected_output {
-            panic!();
-        }
-    }
+fn println(s: String) {
+    #[cfg(target_os = "zkvm")]
+    openvm::io::println(s);
+    #[cfg(not(target_os = "zkvm"))]
+    println!("{}", s);
 }
+pub fn main() {
+    let mut sha256 = Sha256::new();
+    sha256.update(b"Hello, world!");
+    sha256.update(b"some other input");
+    let output = sha256.finalize();
+    println(format!("SHA-256: {:?}", output));
+
+    let mut sha512 = Sha512::new();
+    sha512.update(b"Hello, world!");
+    sha512.update(b"some other input");
+    let output = sha512.finalize();
+    println(format!("SHA-512: {:?}", output));
+
+    let mut sha384 = Sha384::new();
+    sha384.update(b"Hello, world!");
+    sha384.update(b"some other input");
+    let output = sha384.finalize();
+    println(format!("SHA-384: {:?}", output));
+}
+
 // [!endregion main]
