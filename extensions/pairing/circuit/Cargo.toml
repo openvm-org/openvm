@@ -35,7 +35,6 @@ strum = { workspace = true }
 derive_more = { workspace = true }
 derive-new = { workspace = true }
 rand = { workspace = true }
-rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"], optional = true }
 eyre = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 cfg-if = { workspace = true }
