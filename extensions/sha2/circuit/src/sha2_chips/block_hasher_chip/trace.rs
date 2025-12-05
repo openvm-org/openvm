@@ -166,6 +166,10 @@ where
                 },
             );
 
+        // fill in the first dummy row.
+        // we need to do this first, so we can compute the carries that make the
+        // constraint_word_addition constraints hold on dummy rows (or more precisely, on rows such
+        // that the next row is a dummy row).
         let first_dummy_row_cols_const = self.fill_first_dummy_row(
             &mut trace[rows_used * C::BLOCK_HASHER_WIDTH..(rows_used + 1) * C::BLOCK_HASHER_WIDTH],
             &prev_hashes[0],
@@ -175,6 +179,7 @@ where
         trace[(rows_used + 1) * C::BLOCK_HASHER_WIDTH..]
             .par_chunks_exact_mut(C::BLOCK_HASHER_WIDTH)
             .for_each(|row| {
+                // copy the carries from the first dummy row into the current dummy row
                 self.inner.generate_default_row(
                     &mut Sha2RoundColsRefMut::from::<C>(
                         &mut row[INNER_OFFSET..INNER_OFFSET + C::SUBAIR_ROUND_WIDTH],
