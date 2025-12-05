@@ -30,9 +30,9 @@ pub fn nontco_impl(item: TokenStream) -> TokenStream {
     // Build the function call with all the generics
     let generic_args = build_generic_args(generics);
     let execute_call = if generic_args.is_empty() {
-        quote! { #fn_name(pre_compute, instret, pc, arg, exec_state) }
+        quote! { #fn_name(pre_compute, exec_state) }
     } else {
-        quote! { #fn_name::<#(#generic_args),*>(pre_compute, instret, pc, arg, exec_state) }
+        quote! { #fn_name::<#(#generic_args),*>(pre_compute, exec_state) }
     };
 
     // Generate the execute and exit check code based on return type
@@ -41,7 +41,6 @@ pub fn nontco_impl(item: TokenStream) -> TokenStream {
             // Call original impl and wire errors into exit_code.
             let __ret = { #execute_call };
             if let ::core::result::Result::Err(e) = __ret {
-                exec_state.set_instret_and_pc(*instret, *pc);
                 exec_state.exit_code = ::core::result::Result::Err(e);
                 return;
             }
@@ -56,10 +55,7 @@ pub fn nontco_impl(item: TokenStream) -> TokenStream {
     let handler_fn = quote! {
         #[inline(always)]
         unsafe fn #handler_name #generics (
-            pre_compute: &[u8],
-            instret: &mut u64,
-            pc: &mut u32,
-            arg: u64,
+            pre_compute: *const u8,
             exec_state: &mut ::openvm_circuit::arch::VmExecState<
                 #f_type,
                 ::openvm_circuit::system::memory::online::GuestMemory,

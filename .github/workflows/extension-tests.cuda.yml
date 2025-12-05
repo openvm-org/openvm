@@ -13,6 +13,12 @@ on:
       - "extensions/**"
       - "Cargo.toml"
       - ".github/workflows/extension-tests.cuda.yml"
+  workflow_dispatch:
+    inputs:
+      machine_type:
+        description: "Runner machine type (e.g. test-gpu-nvidia/cpu=8+32)"
+        required: false
+        default: test-gpu-nvidia/cpu=8+32
 
 concurrency:
   group: ${{ github.workflow_ref }}-extension-tests-cuda-${{ github.event.pull_request.number || github.sha }}
@@ -31,7 +37,7 @@ jobs:
           - "rv32im native"
           - "keccak256 sha256 bigint algebra ecc pairing"
     runs-on:
-      - runs-on=${{ github.run_id }}-extension-tests-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=test-gpu-nvidia/cpu=8+32
+      - runs-on=${{ github.run_id }}-extension-tests-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.machine_type || 'test-gpu-nvidia/cpu=8+32' }}
 
     steps:
       - uses: runs-on/action@v2
@@ -89,7 +95,7 @@ jobs:
           rustup component remove clippy || true
           rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest

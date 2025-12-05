@@ -18,10 +18,9 @@ use crate::{
 };
 
 /// Represents the core state of a VM.
+#[repr(C)]
 #[derive(derive_new::new, CopyGetters, MutGetters, Clone)]
 pub struct VmState<F, MEM = GuestMemory> {
-    #[getset(get_copy = "pub", get_mut = "pub")]
-    instret: u64,
     #[getset(get_copy = "pub", get_mut = "pub")]
     pc: u32,
     pub memory: MEM,
@@ -35,10 +34,16 @@ pub struct VmState<F, MEM = GuestMemory> {
 
 pub(super) const DEFAULT_RNG_SEED: u64 = 0;
 
+impl<F, MEM> VmState<F, MEM> {
+    #[inline(always)]
+    pub fn set_pc(&mut self, pc: u32) {
+        self.pc = pc;
+    }
+}
+
 impl<F: Clone, MEM> VmState<F, MEM> {
     /// `num_custom_pvs` should only be nonzero when the PublicValuesAir exists.
     pub fn new_with_defaults(
-        instret: u64,
         pc: u32,
         memory: MEM,
         streams: impl Into<Streams<F>>,
@@ -46,7 +51,6 @@ impl<F: Clone, MEM> VmState<F, MEM> {
         num_custom_pvs: usize,
     ) -> Self {
         Self {
-            instret,
             pc,
             memory,
             streams: streams.into(),
@@ -55,12 +59,6 @@ impl<F: Clone, MEM> VmState<F, MEM> {
             #[cfg(feature = "metrics")]
             metrics: VmMetrics::default(),
         }
-    }
-
-    #[inline(always)]
-    pub fn set_instret_and_pc(&mut self, instret: u64, pc: u32) {
-        self.instret = instret;
-        self.pc = pc;
     }
 
     #[inline(always)]
@@ -93,7 +91,6 @@ impl<F: Clone> VmState<F, GuestMemory> {
             0
         };
         VmState::new_with_defaults(
-            0,
             pc_start,
             memory,
             inputs.into(),
@@ -108,7 +105,6 @@ impl<F: Clone> VmState<F, GuestMemory> {
         pc_start: u32,
         streams: impl Into<Streams<F>>,
     ) {
-        self.instret = 0;
         self.pc = pc_start;
         self.memory.memory.fill_zero();
         self.memory.memory.set_from_sparse(init_memory);
@@ -121,12 +117,20 @@ impl<F: Clone> VmState<F, GuestMemory> {
 /// The global state is generic in guest memory `MEM` and additional context `CTX`.
 /// The host state is execution context specific.
 // @dev: Do not confuse with `ExecutionState` struct.
+#[repr(C)]
 pub struct VmExecState<F, MEM, CTX> {
     /// Core VM state
     pub vm_state: VmState<F, MEM>,
+    pub ctx: CTX,
     /// Execution-specific fields
     pub exit_code: Result<Option<u32>, ExecutionError>,
-    pub ctx: CTX,
+}
+
+impl<F, CTX: ExecutionCtxTrait> VmExecState<F, GuestMemory, CTX> {
+    #[inline(always)]
+    pub fn should_suspend(&mut self) -> bool {
+        CTX::should_suspend(self)
+    }
 }
 
 impl<F, MEM, CTX> VmExecState<F, MEM, CTX> {

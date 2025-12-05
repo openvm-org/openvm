@@ -48,7 +48,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F: PrimeField32> Executor<F> for Rv32Shift256Executor {
+impl<F: PrimeField32> InterpreterExecutor<F> for Rv32Shift256Executor {
     fn pre_compute_size(&self) -> usize {
         size_of::<ShiftPreCompute>()
     }
@@ -84,7 +84,10 @@ impl<F: PrimeField32> Executor<F> for Rv32Shift256Executor {
     }
 }
 
-impl<F: PrimeField32> MeteredExecutor<F> for Rv32Shift256Executor {
+#[cfg(feature = "aot")]
+impl<F: PrimeField32> AotExecutor<F> for Rv32Shift256Executor {}
+
+impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv32Shift256Executor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<ShiftPreCompute>>()
     }
@@ -124,11 +127,12 @@ impl<F: PrimeField32> MeteredExecutor<F> for Rv32Shift256Executor {
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F: PrimeField32> AotMeteredExecutor<F> for Rv32Shift256Executor {}
+
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>(
     pre_compute: &ShiftPreCompute,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
@@ -140,37 +144,34 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>
         exec_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
     let rd = OP::compute(rs1, rs2);
     exec_state.vm_write(RV32_MEMORY_AS, u32::from_le_bytes(rd_ptr), &rd);
-    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
-    *instret += 1;
+    let pc = exec_state.pc();
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &ShiftPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, OP>(pre_compute, instret, pc, exec_state);
+    let pre_compute: &ShiftPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<ShiftPreCompute>()).borrow();
+    execute_e12_impl::<F, CTX, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: ShiftOp>(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<ShiftPreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<ShiftPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<ShiftPreCompute>>())
+            .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, OP>(&pre_compute.data, instret, pc, exec_state);
+    execute_e12_impl::<F, CTX, OP>(&pre_compute.data, exec_state);
 }
 
 impl Rv32Shift256Executor {

@@ -1,5 +1,6 @@
 #![cfg_attr(feature = "tco", allow(incomplete_features))]
 #![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
+#![cfg_attr(feature = "tco", allow(internal_features))]
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
 
 use openvm_circuit::{
@@ -68,7 +69,7 @@ impl NativeConfig {
                 num_public_values,
             )
             .without_continuations()
-            .with_max_segment_len((1 << 24) - 100),
+            .with_max_segment_len(1 << 24),
             native: Default::default(),
         }
     }

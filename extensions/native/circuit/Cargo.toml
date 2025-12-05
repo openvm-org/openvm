@@ -50,6 +50,7 @@ test-log = { workspace = true }
 [features]
 default = ["parallel", "jemalloc"]
 tco = ["openvm-rv32im-circuit/tco"]
+aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot"]
 jemalloc = ["openvm-circuit/jemalloc"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]

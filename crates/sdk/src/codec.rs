@@ -377,10 +377,7 @@ impl Decode for Proof<SC> {
         if version != CODEC_VERSION {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!(
-                    "Invalid codec version. Expected {}, got {}",
-                    CODEC_VERSION, version
-                ),
+                format!("Invalid codec version. Expected {CODEC_VERSION}, got {version}"),
             ));
         }
 

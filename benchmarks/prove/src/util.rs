@@ -66,7 +66,7 @@ pub struct BenchmarkCli {
     #[arg(long, alias = "max_segment_length")]
     pub max_segment_length: Option<u32>,
 
-    /// Max cells per chip in segment for continuations
+    /// Total cells used in all chips in segment for continuations
     #[arg(long)]
     pub segment_max_cells: Option<usize>,
 
@@ -90,7 +90,10 @@ impl BenchmarkCli {
         app_vm_config.as_mut().profiling = self.profiling;
         app_vm_config.as_mut().max_constraint_degree = (1 << app_log_blowup) + 1;
         if let Some(max_height) = self.max_segment_length {
-            app_vm_config.as_mut().segmentation_limits.max_trace_height = max_height;
+            app_vm_config
+                .as_mut()
+                .segmentation_limits
+                .set_max_trace_height(max_height);
         }
         if let Some(max_cells) = self.segment_max_cells {
             app_vm_config.as_mut().segmentation_limits.max_cells = max_cells;

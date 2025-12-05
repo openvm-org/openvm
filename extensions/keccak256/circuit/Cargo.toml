@@ -45,6 +45,7 @@ default = ["parallel", "jemalloc"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]
 tco = ["openvm-rv32im-circuit/tco"]
+aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot"]
 # performance features:
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]

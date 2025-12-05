@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use derive_more::derive::From;
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
+#[cfg(feature = "aot")]
+use openvm_circuit_derive::{AotExecutor, AotMeteredExecutor};
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus,
     VariableRangeCheckerChip,
@@ -35,7 +37,7 @@ use crate::{
     system::{
         connector::VmConnectorChip,
         memory::{
-            interface::MemoryInterfaceAirs,
+            interface::{MemoryInterface, MemoryInterfaceAirs},
             offline_checker::{MemoryBridge, MemoryBus},
             online::GuestMemory,
             MemoryAirInventory, MemoryController, TimestampedEquipartition, CHUNK,
@@ -95,6 +97,16 @@ pub trait SystemChipComplex<RA, PB: ProverBackend> {
         record_arenas: Vec<RA>,
     ) -> Vec<AirProvingContext<PB>>;
 
+    /// This function only returns `Some` when continuations is enabled.
+    /// When continuations is enabled, it returns the top merkle sub-tree of the memory merkle tree
+    /// as a segment tree with `2 * (2^addr_space_height) - 1` nodes, representing the Merkle
+    /// tree formed from the roots of the sub-trees for each address space.
+    ///
+    /// This function **must** return `Some` if called after
+    /// [`generate_proving_ctx`](Self::generate_proving_ctx) and may return `None` if called before
+    /// that.
+    fn memory_top_tree(&self) -> Option<&[[PB::Val; CHUNK]]>;
+
     /// This function is only used for metric collection purposes and custom implementations are
     /// free to ignore it.
     ///
@@ -138,6 +150,7 @@ pub enum TouchedMemory<F> {
 }
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor, From)]
+#[cfg_attr(feature = "aot", derive(AotExecutor, AotMeteredExecutor))]
 pub enum SystemExecutor<F: Field> {
     PublicValues(PublicValuesExecutor<F>),
     Phantom(PhantomExecutor<F>),
@@ -470,6 +483,16 @@ where
             .chain(pv_ctx)
             .chain(memory_ctxs)
             .collect()
+    }
+
+    fn memory_top_tree(&self) -> Option<&[[Val<SC>; CHUNK]]> {
+        match &self.memory_controller.interface_chip {
+            MemoryInterface::Persistent { merkle_chip, .. } => {
+                let top_tree = &merkle_chip.top_tree;
+                (!top_tree.is_empty()).then_some(top_tree.as_slice())
+            }
+            MemoryInterface::Volatile { .. } => None,
+        }
     }
 
     #[cfg(feature = "metrics")]

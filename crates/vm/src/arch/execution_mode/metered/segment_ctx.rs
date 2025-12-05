@@ -5,8 +5,9 @@ use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
-pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << 23;
-pub const DEFAULT_MAX_CELLS: usize = 2_000_000_000; // 2B
+pub const DEFAULT_MAX_TRACE_HEIGHT_BITS: u8 = 22;
+pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << DEFAULT_MAX_TRACE_HEIGHT_BITS;
+pub const DEFAULT_MAX_CELLS: usize = 1_200_000_000; // 1.2B
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 
 #[derive(derive_new::new, Clone, Debug, Serialize, Deserialize)]
@@ -36,6 +37,28 @@ impl Default for SegmentationLimits {
     }
 }
 
+impl SegmentationLimits {
+    pub fn new(max_trace_height: u32, max_cells: usize, max_interactions: usize) -> Self {
+        debug_assert!(
+            max_trace_height.is_power_of_two(),
+            "max_trace_height should be a power of two"
+        );
+        Self {
+            max_trace_height,
+            max_cells,
+            max_interactions,
+        }
+    }
+
+    pub fn set_max_trace_height(&mut self, max_trace_height: u32) {
+        debug_assert!(
+            max_trace_height.is_power_of_two(),
+            "max_trace_height should be a power of two"
+        );
+        self.max_trace_height = max_trace_height;
+    }
+}
+
 #[derive(Clone, Debug, WithSetters)]
 pub struct SegmentationCtx {
     pub segments: Vec<Segment>,
@@ -43,7 +66,8 @@ pub struct SegmentationCtx {
     pub(crate) widths: Vec<usize>,
     interactions: Vec<usize>,
     pub(crate) segmentation_limits: SegmentationLimits,
-    pub instret_last_segment_check: u64,
+    pub instret: u64,
+    pub instrets_until_check: u64,
     #[getset(set_with = "pub")]
     pub segment_check_insns: u64,
     /// Checkpoint of trace heights at last known state where all thresholds satisfied
@@ -69,8 +93,9 @@ impl SegmentationCtx {
             widths,
             interactions,
             segmentation_limits,
+            instret: 0,
+            instrets_until_check: DEFAULT_SEGMENT_CHECK_INSNS,
             segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
-            instret_last_segment_check: 0,
             checkpoint_trace_heights: vec![0; num_airs],
             checkpoint_instret: 0,
         }
@@ -91,15 +116,17 @@ impl SegmentationCtx {
             widths,
             interactions,
             segmentation_limits: SegmentationLimits::default(),
+            instret: 0,
+            instrets_until_check: DEFAULT_SEGMENT_CHECK_INSNS,
             segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
-            instret_last_segment_check: 0,
             checkpoint_trace_heights: vec![0; num_airs],
             checkpoint_instret: 0,
         }
     }
 
     pub fn set_max_trace_height(&mut self, max_trace_height: u32) {
-        self.segmentation_limits.max_trace_height = max_trace_height;
+        self.segmentation_limits
+            .set_max_trace_height(max_trace_height);
     }
 
     pub fn set_max_cells(&mut self, max_cells: usize) {
@@ -186,10 +213,10 @@ impl SegmentationCtx {
                 tracing::info!(
                     "instret {:10} | height ({:8}) > max ({:8}) | chip {:3} ({}) ",
                     instret,
+                    padded_height,
+                    self.segmentation_limits.max_trace_height,
                     i,
                     air_name,
-                    padded_height,
-                    self.segmentation_limits.max_trace_height
                 );
                 return true;
             }
@@ -234,8 +261,6 @@ impl SegmentationCtx {
         } else {
             self.update_checkpoint(instret, trace_heights);
         }
-
-        self.instret_last_segment_check = instret;
         should_seg
     }
 
@@ -257,6 +282,16 @@ impl SegmentationCtx {
                 self.checkpoint_trace_heights.clone(),
             )
         } else {
+            let trace_heights_str = trace_heights
+                .iter()
+                .zip(self.air_names.iter())
+                .filter(|(&height, _)| height > 0)
+                .map(|(&height, name)| format!("  {name} = {height}"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            tracing::warn!(
+                "No valid checkpoint, creating segment using instret={instret}\ntrace_heights=[\n{trace_heights_str}\n]"
+            );
             // No valid checkpoint, use current values
             (instret, trace_heights.to_vec())
         };
@@ -297,13 +332,15 @@ impl SegmentationCtx {
 
     /// Try segment if there is at least one instruction
     #[inline(always)]
-    pub fn create_final_segment(&mut self, instret: u64, trace_heights: &[u32]) {
+    pub fn create_final_segment(&mut self, trace_heights: &[u32]) {
+        self.instret += self.segment_check_insns - self.instrets_until_check;
+        self.instrets_until_check = self.segment_check_insns;
         let instret_start = self
             .segments
             .last()
             .map_or(0, |s| s.instret_start + s.num_insns);
 
-        let num_insns = instret - instret_start;
+        let num_insns = self.instret - instret_start;
         self.create_segment::<true>(instret_start, num_insns, trace_heights.to_vec());
     }
 

@@ -1,4 +1,4 @@
-use halo2curves_axiom::ff::PrimeField;
+use halo2curves_axiom::ff::{Field, PrimeField};
 use num_bigint::BigUint;
 use num_traits::Num;
 
@@ -22,6 +22,7 @@ pub enum Operation {
     Div = 3,
 }
 
+// TODO: hardcode this. it's slow
 fn get_modulus_as_bigint<F: PrimeField>() -> BigUint {
     BigUint::from_str_radix(F::MODULUS.trim_start_matches("0x"), 16).unwrap()
 }
@@ -122,7 +123,7 @@ pub fn field_operation<
                 input_data,
             )
         }
-        _ => panic!("Unsupported field type: {}", FIELD),
+        _ => panic!("Unsupported field type: {FIELD}"),
     }
 }
 
@@ -142,7 +143,7 @@ pub fn fp2_operation<
         x if x == FieldType::BLS12_381Coordinate as u8 => {
             fp2_operation_bls12_381::<BLOCKS, BLOCK_SIZE, OP>(input_data)
         }
-        _ => panic!("Unsupported field type for Fp2: {}", FIELD),
+        _ => panic!("Unsupported field type for Fp2: {FIELD}"),
     }
 }
 
@@ -162,7 +163,7 @@ fn field_operation_256bit<
         x if x == Operation::Sub as u8 => a - b,
         x if x == Operation::Mul as u8 => a * b,
         x if x == Operation::Div as u8 => a * b.invert().unwrap(),
-        _ => panic!("Unsupported operation: {}", OP),
+        _ => panic!("Unsupported operation: {OP}"),
     };
 
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
@@ -185,7 +186,7 @@ fn field_operation_bls12_381_coordinate<
         x if x == Operation::Sub as u8 => a - b,
         x if x == Operation::Mul as u8 => a * b,
         x if x == Operation::Div as u8 => a * b.invert().unwrap(),
-        _ => panic!("Unsupported operation: {}", OP),
+        _ => panic!("Unsupported operation: {OP}"),
     };
 
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
@@ -204,7 +205,7 @@ fn fp2_operation_bn254<const BLOCKS: usize, const BLOCK_SIZE: usize, const OP: u
         x if x == Operation::Sub as u8 => a - b,
         x if x == Operation::Mul as u8 => a * b,
         x if x == Operation::Div as u8 => a * b.invert().unwrap(),
-        _ => panic!("Unsupported operation: {}", OP),
+        _ => panic!("Unsupported operation: {OP}"),
     };
 
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
@@ -223,7 +224,7 @@ fn fp2_operation_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize, const O
         x if x == Operation::Sub as u8 => a - b,
         x if x == Operation::Mul as u8 => a * b,
         x if x == Operation::Div as u8 => a * b.invert().unwrap(),
-        _ => panic!("Unsupported operation: {}", OP),
+        _ => panic!("Unsupported operation: {OP}"),
     };
 
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
@@ -249,12 +250,10 @@ fn from_repr_with_reduction<F: PrimeField<Repr = [u8; 32]>>(bytes: [u8; 32]) -> 
 }
 
 #[inline(always)]
-fn from_repr_with_reduction_bls12_381_coordinate(
-    bytes: [u8; 48],
-) -> halo2curves_axiom::bls12_381::Fq {
-    halo2curves_axiom::bls12_381::Fq::from_bytes(&bytes).unwrap_or_else(|| {
+fn from_repr_with_reduction_bls12_381_coordinate(bytes: [u8; 48]) -> blstrs::Fp {
+    blstrs::Fp::from_bytes_le(&bytes).unwrap_or_else(|| {
         // Reduce modulo the field's modulus for non-canonical representations
-        let modulus = get_modulus_as_bigint::<halo2curves_axiom::bls12_381::Fq>();
+        let modulus = BigUint::from_bytes_le(&blstrs::Fp::char());
         let value = BigUint::from_bytes_le(&bytes);
         let reduced = value % modulus;
 
@@ -263,7 +262,7 @@ fn from_repr_with_reduction_bls12_381_coordinate(
         reduced_bytes[..reduced_le_bytes.len()]
             .copy_from_slice(&reduced_le_bytes[..reduced_le_bytes.len()]);
 
-        halo2curves_axiom::bls12_381::Fq::from_bytes(&reduced_bytes).unwrap()
+        blstrs::Fp::from_bytes_le(&reduced_bytes).unwrap()
     })
 }
 
@@ -298,9 +297,7 @@ pub fn field_element_to_blocks<F: PrimeField<Repr = [u8; 32]>, const BLOCK_SIZE:
 }
 
 #[inline(always)]
-pub fn blocks_to_field_element_bls12_381_coordinate(
-    blocks: &[u8],
-) -> halo2curves_axiom::bls12_381::Fq {
+pub fn blocks_to_field_element_bls12_381_coordinate(blocks: &[u8]) -> blstrs::Fp {
     debug_assert!(blocks.len() == 48);
     let mut bytes = [0u8; 48];
     bytes[..blocks.len()].copy_from_slice(&blocks[..blocks.len()]);
@@ -310,11 +307,11 @@ pub fn blocks_to_field_element_bls12_381_coordinate(
 
 #[inline(always)]
 pub fn field_element_to_blocks_bls12_381_coordinate<const BLOCK_SIZE: usize>(
-    field_element: &halo2curves_axiom::bls12_381::Fq,
+    field_element: &blstrs::Fp,
     output: &mut [[u8; BLOCK_SIZE]],
 ) {
     debug_assert!(output.len() * BLOCK_SIZE == 48);
-    let bytes = field_element.to_bytes();
+    let bytes = field_element.to_bytes_le();
     let mut byte_idx = 0;
 
     for block in output.iter_mut() {
@@ -360,17 +357,17 @@ fn fp2_to_blocks_bn254<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 #[inline(always)]
 fn blocks_to_fp2_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     blocks: &[[u8; BLOCK_SIZE]],
-) -> halo2curves_axiom::bls12_381::Fq2 {
+) -> blstrs::Fp2 {
     let c0 = blocks_to_field_element_bls12_381_coordinate(blocks[..BLOCKS / 2].as_flattened());
     let c1 = blocks_to_field_element_bls12_381_coordinate(blocks[BLOCKS / 2..].as_flattened());
-    halo2curves_axiom::bls12_381::Fq2 { c0, c1 }
+    blstrs::Fp2::new(c0, c1)
 }
 
 #[inline(always)]
 fn fp2_to_blocks_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    fp2: &halo2curves_axiom::bls12_381::Fq2,
+    fp2: &blstrs::Fp2,
     output: &mut [[u8; BLOCK_SIZE]; BLOCKS],
 ) {
-    field_element_to_blocks_bls12_381_coordinate(&fp2.c0, &mut output[..BLOCKS / 2]);
-    field_element_to_blocks_bls12_381_coordinate(&fp2.c1, &mut output[BLOCKS / 2..]);
+    field_element_to_blocks_bls12_381_coordinate(&fp2.c0(), &mut output[..BLOCKS / 2]);
+    field_element_to_blocks_bls12_381_coordinate(&fp2.c1(), &mut output[BLOCKS / 2..]);
 }

@@ -30,8 +30,8 @@ jobs:
     strategy:
       matrix:
         platform:
-          - { runner: "64cpu-linux-arm64", image: "arm64-rust-riscv-dev-32gb" }
-          - { runner: "test-gpu-nvidia", image: "ubuntu24-gpu-x64" }
+          - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64", features: "aot" }
+          - { runner: "test-gpu-nvidia", image: "ubuntu24-gpu-x64", features: "cuda,touchemall" }
 
     runs-on:
       - runs-on=${{ github.run_id }}-riscv-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ matrix.platform.runner }}/image=${{ matrix.platform.image }}/extras=s3-cache
@@ -50,11 +50,18 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Check CUDA status and set environment variables
+      - name: Set feature flags
+        run: |
+          if [ -n "${{ matrix.platform.features }}" ]; then
+            echo "FEATURE_ARGS=--features=${{ matrix.platform.features }}" >> $GITHUB_ENV
+          else
+            echo "FEATURE_ARGS=" >> $GITHUB_ENV
+          fi
+
+      - name: Set VPMM_PAGES for GPU
         if: contains(matrix.platform.runner, 'gpu')
         run: |
           nvcc --version
-          echo "FEATURE_ARGS=--features=cuda,touchemall" >> $GITHUB_ENV
           echo "VPMM_PAGES=1" >> $GITHUB_ENV
 
       - name: Download and install risc64-elf-gcc
@@ -66,10 +73,6 @@ jobs:
           tar -xJf gcc.tar.xz
           echo "$GITHUB_WORKSPACE/riscv/bin" >> $GITHUB_PATH
           rm gcc.tar.xz
-      - name: Download and install risc64-elf-gcc
-        if: matrix.platform.image == 'arm64-rust-riscv-dev-32gb'
-        run: | # custom image has riscv-gnu-toolchain binary pre-built
-          echo "/opt/riscv/bin" >> $GITHUB_PATH
 
       - name: Run Makefile
         working-directory: crates/toolchain/tests/rv32im-test-vectors

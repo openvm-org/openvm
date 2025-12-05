@@ -134,7 +134,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> Executor<F> for FieldArithmeticCoreExecutor<A>
+impl<F, A> InterpreterExecutor<F> for FieldArithmeticCoreExecutor<A>
 where
     F: PrimeField32,
 {
@@ -176,7 +176,10 @@ where
     }
 }
 
-impl<F, A> MeteredExecutor<F> for FieldArithmeticCoreExecutor<A>
+#[cfg(feature = "aot")]
+impl<F, A> AotExecutor<F> for FieldArithmeticCoreExecutor<A> where F: PrimeField32 {}
+
+impl<F, A> InterpreterMeteredExecutor<F> for FieldArithmeticCoreExecutor<A>
 where
     F: PrimeField32,
 {
@@ -221,6 +224,9 @@ where
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F, A> AotMeteredExecutor<F> for FieldArithmeticCoreExecutor<A> where F: PrimeField32 {}
+
 #[inline(always)]
 unsafe fn execute_e12_impl<
     F: PrimeField32,
@@ -230,10 +236,9 @@ unsafe fn execute_e12_impl<
     const OPCODE: u8,
 >(
     pre_compute: &FieldArithmeticPreCompute,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
+    let pc = exec_state.pc();
     // Read values based on the adapter logic
     let b_val = if A_IS_IMM {
         transmute_u32_to_field(&pre_compute.b_or_imm)
@@ -254,7 +259,7 @@ unsafe fn execute_e12_impl<
             // DIV
             if c_val.is_zero() {
                 let err = ExecutionError::Fail {
-                    pc: *pc,
+                    pc,
                     msg: "DivF divide by zero",
                 };
                 return Err(err);
@@ -266,8 +271,7 @@ unsafe fn execute_e12_impl<
 
     exec_state.vm_write::<F, 1>(AS::Native as u32, pre_compute.a, &[a_val]);
 
-    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
-    *instret += 1;
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 
     Ok(())
 }
@@ -281,14 +285,12 @@ unsafe fn execute_e1_impl<
     const B_IS_IMM: bool,
     const OPCODE: u8,
 >(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &FieldArithmeticPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(pre_compute, instret, pc, exec_state)
+    let pre_compute: &FieldArithmeticPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<FieldArithmeticPreCompute>()).borrow();
+    execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(pre_compute, exec_state)
 }
 
 #[create_handler]
@@ -300,20 +302,16 @@ unsafe fn execute_e2_impl<
     const B_IS_IMM: bool,
     const OPCODE: u8,
 >(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &E2PreCompute<FieldArithmeticPreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<FieldArithmeticPreCompute> = std::slice::from_raw_parts(
+        pre_compute,
+        size_of::<E2PreCompute<FieldArithmeticPreCompute>>(),
+    )
+    .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(
-        &pre_compute.data,
-        instret,
-        pc,
-        exec_state,
-    )
+    execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(&pre_compute.data, exec_state)
 }

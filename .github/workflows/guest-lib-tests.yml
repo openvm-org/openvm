@@ -39,7 +39,7 @@ jobs:
           - { name: "pairing", path: "pairing" }
           - { name: "verify_stark", path: "verify_stark" }
         platform:
-          - { runner: "64cpu-linux-arm64", image: "ubuntu24-full-arm64" }
+          - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 
@@ -77,6 +77,6 @@ jobs:
           rustup component add rust-src --toolchain nightly-2025-08-02
           PAIRING_FEATURE_ARGS=""
           if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
-            PAIRING_FEATURE_ARGS="--features=bn254,bls12_381"
+            PAIRING_FEATURE_ARGS="--features=bn254,bls12_381,aot"
           fi
           cargo nextest run --cargo-profile=fast $PAIRING_FEATURE_ARGS --no-tests=pass --test-threads=1

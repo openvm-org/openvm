@@ -109,7 +109,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const NUM_CELLS: usize> Executor<F> for LoadStoreExecutor<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> InterpreterExecutor<F> for LoadStoreExecutor<A, NUM_CELLS>
 where
     F: PrimeField32,
 {
@@ -149,7 +149,7 @@ where
     }
 }
 
-impl<F, A, const NUM_CELLS: usize> MeteredExecutor<F> for LoadStoreExecutor<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> InterpreterMeteredExecutor<F> for LoadStoreExecutor<A, NUM_CELLS>
 where
     F: PrimeField32,
 {
@@ -203,16 +203,23 @@ unsafe fn execute_e12_impl<
     const ENABLED: bool,
 >(
     pre_compute: &LoadStorePreCompute,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
+    let pc = exec_state.pc();
     let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
         exec_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs1_val = u32::from_le_bytes(rs1_bytes);
     let ptr_val = rs1_val.wrapping_add(pre_compute.imm_extended);
     // sign_extend([r32{c,g}(b):2]_e)`
+    if ptr_val >= (1 << POINTER_MAX_BITS) {
+        println!(
+            "at {} ptr_val: {ptr_val} >= (1 << POINTER_MAX_BITS): {}",
+            pc,
+            1 << POINTER_MAX_BITS
+        );
+    }
     debug_assert!(ptr_val < (1 << POINTER_MAX_BITS));
+
     let shift_amount = ptr_val % 4;
     let ptr_val = ptr_val - shift_amount; // aligned ptr
 
@@ -231,7 +238,7 @@ unsafe fn execute_e12_impl<
 
     if !OP::compute_write_data(&mut write_data, read_data, shift_amount as usize) {
         let err = ExecutionError::Fail {
-            pc: *pc,
+            pc,
             msg: "Invalid LoadStoreOp",
         };
         return Err(err);
@@ -245,8 +252,7 @@ unsafe fn execute_e12_impl<
         }
     }
 
-    *pc += DEFAULT_PC_STEP;
-    *instret += 1;
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 
     Ok(())
 }
@@ -260,14 +266,12 @@ unsafe fn execute_e1_impl<
     OP: LoadStoreOp<T>,
     const ENABLED: bool,
 >(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &LoadStorePreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, T, OP, ENABLED>(pre_compute, instret, pc, exec_state)
+    let pre_compute: &LoadStorePreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<LoadStorePreCompute>()).borrow();
+    execute_e12_impl::<F, CTX, T, OP, ENABLED>(pre_compute, exec_state)
 }
 
 #[create_handler]
@@ -279,17 +283,16 @@ unsafe fn execute_e2_impl<
     OP: LoadStoreOp<T>,
     const ENABLED: bool,
 >(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &E2PreCompute<LoadStorePreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<LoadStorePreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<LoadStorePreCompute>>())
+            .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, T, OP, ENABLED>(&pre_compute.data, instret, pc, exec_state)
+    execute_e12_impl::<F, CTX, T, OP, ENABLED>(&pre_compute.data, exec_state)
 }
 
 trait LoadStoreOp<T> {

@@ -429,7 +429,7 @@ impl FieldExpressionChipGPU {
         expr_pool: &mut Vec<ExprNode>,
         node_map: &mut HashMap<String, u32>,
     ) -> u32 {
-        let expr_str = format!("{:?}", expr); // Simple deduplication key
+        let expr_str = format!("{expr:?}"); // Simple deduplication key
 
         if let Some(&existing_idx) = node_map.get(&expr_str) {
             return existing_idx;

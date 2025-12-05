@@ -32,6 +32,37 @@ pub trait ExpBytes: Field {
         }
         res
     }
+
+    /// Exponentiates a field element using a signed digit representation (e.g. NAF).
+    /// `digits_naf` is expected to be in LSB-first order with entries in {-1, 0, 1}.
+    fn exp_naf(&self, is_positive: bool, digits_naf: &[i8]) -> Self
+    where
+        for<'a> &'a Self: Mul<&'a Self, Output = Self>,
+    {
+        if digits_naf.is_empty() {
+            return Self::ONE;
+        }
+
+        let mut base = self.clone();
+        if !is_positive {
+            base = Self::ONE.div_unsafe(&base);
+        }
+
+        let base_inv = digits_naf.contains(&-1).then(|| base.invert());
+
+        let mut res = Self::ONE;
+        for &digit in digits_naf.iter().rev() {
+            res.square_assign();
+            if digit == 1 {
+                res *= &base;
+            } else if digit == -1 {
+                res *= base_inv
+                    .as_ref()
+                    .expect("negative digit requires available inverse");
+            }
+        }
+        res
+    }
 }
 
 impl<F: Field> ExpBytes for F where for<'a> &'a Self: Mul<&'a Self, Output = Self> {}

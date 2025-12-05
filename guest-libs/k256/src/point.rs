@@ -155,7 +155,6 @@ impl elliptic_curve::Group for Secp256k1Point {
         (<Self as openvm_ecc_guest::Group>::is_identity(self) as u8).into()
     }
 
-    #[must_use]
     fn double(&self) -> Self {
         self + self
     }

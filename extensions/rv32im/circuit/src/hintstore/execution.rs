@@ -14,6 +14,7 @@ use openvm_instructions::{
 use openvm_rv32im_transpiler::{
     Rv32HintStoreOpcode,
     Rv32HintStoreOpcode::{HINT_BUFFER, HINT_STOREW},
+    MAX_HINT_BUFFER_WORDS,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -69,7 +70,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F> Executor<F> for Rv32HintStoreExecutor
+impl<F> InterpreterExecutor<F> for Rv32HintStoreExecutor
 where
     F: PrimeField32,
 {
@@ -106,7 +107,10 @@ where
     }
 }
 
-impl<F> MeteredExecutor<F> for Rv32HintStoreExecutor
+#[cfg(feature = "aot")]
+impl<F> AotExecutor<F> for Rv32HintStoreExecutor where F: PrimeField32 {}
+
+impl<F> InterpreterMeteredExecutor<F> for Rv32HintStoreExecutor
 where
     F: PrimeField32,
 {
@@ -149,14 +153,15 @@ where
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F> AotMeteredExecutor<F> for Rv32HintStoreExecutor where F: PrimeField32 {}
 /// Return the number of used rows.
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HINT_STOREW: bool>(
     pre_compute: &HintStorePreCompute,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<u32, ExecutionError> {
+    let pc = exec_state.pc();
     let mem_ptr_limbs = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
     let mem_ptr = u32::from_le_bytes(mem_ptr_limbs);
 
@@ -168,8 +173,17 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
     };
     debug_assert_ne!(num_words, 0);
 
+    // Bounds check: num_words must not exceed MAX_HINT_BUFFER_WORDS
+    if num_words > MAX_HINT_BUFFER_WORDS as u32 {
+        return Err(ExecutionError::HintBufferTooLarge {
+            pc,
+            num_words,
+            max_hint_buffer_words: MAX_HINT_BUFFER_WORDS as u32,
+        });
+    }
+
     if exec_state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
-        let err = ExecutionError::HintOutOfBounds { pc: *pc };
+        let err = ExecutionError::HintOutOfBounds { pc };
         return Err(err);
     }
 
@@ -189,22 +203,19 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
         );
     }
 
-    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
-    *instret += 1;
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
     Ok(num_words)
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HINT_STOREW: bool>(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &HintStorePreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, IS_HINT_STOREW>(pre_compute, instret, pc, exec_state)?;
+    let pre_compute: &HintStorePreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<HintStorePreCompute>()).borrow();
+    execute_e12_impl::<F, CTX, IS_HINT_STOREW>(pre_compute, exec_state)?;
     Ok(())
 }
 
@@ -215,15 +226,13 @@ unsafe fn execute_e2_impl<
     CTX: MeteredExecutionCtxTrait,
     const IS_HINT_STOREW: bool,
 >(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &E2PreCompute<HintStorePreCompute> = pre_compute.borrow();
-    let height_delta =
-        execute_e12_impl::<F, CTX, IS_HINT_STOREW>(&pre_compute.data, instret, pc, exec_state)?;
+    let pre_compute: &E2PreCompute<HintStorePreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<HintStorePreCompute>>())
+            .borrow();
+    let height_delta = execute_e12_impl::<F, CTX, IS_HINT_STOREW>(&pre_compute.data, exec_state)?;
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, height_delta);

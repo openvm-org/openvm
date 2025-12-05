@@ -88,7 +88,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
         let modulus_hex = modulus_bytes
             .iter()
             .rev()
-            .map(|x| format!("{:02x}", x))
+            .map(|x| format!("{x:02x}"))
             .collect::<Vec<_>>()
             .join("");
         macro_rules! create_extern_func {
@@ -875,15 +875,15 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         }
                         #[cfg(target_os = "zkvm")]
                         {
-                            use ::openvm_algebra_guest::{openvm_custom_insn, openvm_rv32im_guest}; // needed for hint_store_u32! and hint_buffer_u32!
+                            use ::openvm_algebra_guest::{openvm_custom_insn, openvm_rv32im_guest}; // needed for hint_store_u32! and hint_buffer_chunked
 
                             let is_square = core::mem::MaybeUninit::<u32>::uninit();
-                            let sqrt = core::mem::MaybeUninit::<#struct_name>::uninit();
+                            let mut sqrt = core::mem::MaybeUninit::<#struct_name>::uninit();
                             unsafe {
                                 #hint_sqrt_extern_func(self as *const #struct_name as usize);
                                 let is_square_ptr = is_square.as_ptr() as *const u32;
                                 openvm_rv32im_guest::hint_store_u32!(is_square_ptr);
-                                openvm_rv32im_guest::hint_buffer_u32!(sqrt.as_ptr() as *const u8, <#struct_name as ::openvm_algebra_guest::IntMod>::NUM_LIMBS / 4);
+                                openvm_rv32im_guest::hint_buffer_chunked(sqrt.as_mut_ptr() as *mut u8, <#struct_name as ::openvm_algebra_guest::IntMod>::NUM_LIMBS / 4 as usize);
                                 let is_square = is_square.assume_init();
                                 if is_square == 0 || is_square == 1 {
                                     Some((is_square == 1, sqrt.assume_init()))
@@ -902,14 +902,14 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         }
                         #[cfg(target_os = "zkvm")]
                         {
-                            use ::openvm_algebra_guest::{openvm_custom_insn, openvm_rv32im_guest}; // needed for hint_buffer_u32!
+                            use ::openvm_algebra_guest::{openvm_custom_insn, openvm_rv32im_guest}; // needed for hint_buffer_chunked
 
                             let mut non_qr_uninit = core::mem::MaybeUninit::<Self>::uninit();
                             let mut non_qr;
                             unsafe {
                                 #hint_non_qr_extern_func();
-                                let ptr = non_qr_uninit.as_ptr() as *const u8;
-                                openvm_rv32im_guest::hint_buffer_u32!(ptr, <Self as ::openvm_algebra_guest::IntMod>::NUM_LIMBS / 4);
+                                let ptr = non_qr_uninit.as_mut_ptr() as *mut u8;
+                                openvm_rv32im_guest::hint_buffer_chunked(ptr, <Self as ::openvm_algebra_guest::IntMod>::NUM_LIMBS / 4 as usize);
                                 non_qr = non_qr_uninit.assume_init();
                             }
                             // ensure non_qr < modulus
@@ -1009,20 +1009,18 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         let modulus_hex = modulus_bytes
             .iter()
             .rev()
-            .map(|x| format!("{:02x}", x))
+            .map(|x| format!("{x:02x}"))
             .collect::<Vec<_>>()
             .join("");
 
         let setup_extern_func = syn::Ident::new(
-            &format!("moduli_setup_extern_func_{}", modulus_hex),
+            &format!("moduli_setup_extern_func_{modulus_hex}"),
             span.into(),
         );
 
         for op_type in ["add", "sub", "mul", "div"] {
-            let func_name = syn::Ident::new(
-                &format!("{}_extern_func_{}", op_type, modulus_hex),
-                span.into(),
-            );
+            let func_name =
+                syn::Ident::new(&format!("{op_type}_extern_func_{modulus_hex}"), span.into());
             let mut chars = op_type.chars().collect::<Vec<_>>();
             chars[0] = chars[0].to_ascii_uppercase();
             let local_opcode = syn::Ident::new(
@@ -1045,7 +1043,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         }
 
         let is_eq_extern_func =
-            syn::Ident::new(&format!("is_eq_extern_func_{}", modulus_hex), span.into());
+            syn::Ident::new(&format!("is_eq_extern_func_{modulus_hex}"), span.into());
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
             extern "C" fn #is_eq_extern_func(rs1: usize, rs2: usize) -> bool {
@@ -1063,7 +1061,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         });
 
         let hint_non_qr_extern_func = syn::Ident::new(
-            &format!("hint_non_qr_extern_func_{}", modulus_hex),
+            &format!("hint_non_qr_extern_func_{modulus_hex}"),
             span.into(),
         );
         externs.push(quote::quote_spanned! { span.into() =>
@@ -1084,10 +1082,8 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
 
         // This function will be defined regardless of whether the modulus is prime or not,
         // but it will be called only if the modulus is prime.
-        let hint_sqrt_extern_func = syn::Ident::new(
-            &format!("hint_sqrt_extern_func_{}", modulus_hex),
-            span.into(),
-        );
+        let hint_sqrt_extern_func =
+            syn::Ident::new(&format!("hint_sqrt_extern_func_{modulus_hex}"), span.into());
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
             extern "C" fn #hint_sqrt_extern_func(rs1: usize) {

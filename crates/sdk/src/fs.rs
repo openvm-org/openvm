@@ -24,7 +24,7 @@ pub fn read_evm_halo2_verifier_from_folder<P: AsRef<Path>>(folder: P) -> Result<
     let folder = folder
         .as_ref()
         .join("src")
-        .join(format!("v{}", OPENVM_VERSION));
+        .join(format!("v{OPENVM_VERSION}"));
     let halo2_verifier_code_path = folder.join(EVM_HALO2_VERIFIER_PARENT_NAME);
     let openvm_verifier_code_path = folder.join(EVM_HALO2_VERIFIER_BASE_NAME);
     let interface_path = folder
@@ -66,7 +66,7 @@ pub fn write_evm_halo2_verifier_to_folder<P: AsRef<Path>>(
     let folder = folder
         .as_ref()
         .join("src")
-        .join(format!("v{}", OPENVM_VERSION));
+        .join(format!("v{OPENVM_VERSION}"));
     if !folder.exists() {
         create_dir_all(&folder)?; // Make sure directories exist
     }

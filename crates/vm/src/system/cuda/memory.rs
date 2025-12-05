@@ -138,7 +138,7 @@ impl MemoryInventoryGPU {
             TouchedMemory::Persistent(partition) => {
                 let persistent = self
                     .persistent
-                    .as_ref()
+                    .as_mut()
                     .expect("persistent touched memory requires persistent memory interface");
 
                 let unpadded_merkle_height =
@@ -203,11 +203,12 @@ impl MemoryInventoryGPU {
                 }
                 mem.tracing_info("merkle update");
                 persistent.merkle_tree.finalize();
-                Some(persistent.merkle_tree.update_with_touched_blocks(
+                let merkle_tree_ctx = persistent.merkle_tree.update_with_touched_blocks(
                     unpadded_merkle_height,
                     &d_touched_memory,
                     empty,
-                ))
+                );
+                Some(merkle_tree_ctx)
             }
             TouchedMemory::Volatile(partition) => {
                 assert!(self.persistent.is_none(), "TouchedMemory enum mismatch");
@@ -229,5 +230,14 @@ impl MemoryInventoryGPU {
                 .generate_air_proving_ctxs(access_adapter_arena),
         );
         ret
+    }
+}
+
+impl Drop for PersistentMemoryInventoryGPU {
+    fn drop(&mut self) {
+        // WARNING: The merkle subtree events must be completed before dropping the initial memory
+        // buffers. This prevents buffers from dropping before build_async completes.
+        self.merkle_tree.drop_subtrees();
+        self.initial_memory.clear();
     }
 }

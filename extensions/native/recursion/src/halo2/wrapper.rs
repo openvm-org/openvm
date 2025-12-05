@@ -51,7 +51,7 @@ impl Halo2WrapperProvingKey {
     /// Auto select k to let Wrapper circuit only have 1 advice column.
     pub fn keygen_auto_tune(reader: &impl Halo2ParamsReader, dummy_snark: Snark) -> Self {
         let k = Self::select_k(dummy_snark.clone());
-        tracing::info!("Selected k: {}", k);
+        tracing::info!("Selected k: {k}");
         let params = reader.read_params(k);
         Self::keygen(&params, dummy_snark)
     }

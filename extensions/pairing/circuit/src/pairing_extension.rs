@@ -65,6 +65,13 @@ pub struct PairingExtension {
 }
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
+#[cfg_attr(
+    feature = "aot",
+    derive(
+        openvm_circuit_derive::AotExecutor,
+        openvm_circuit_derive::AotMeteredExecutor
+    )
+)]
 pub enum PairingExtensionExecutor<F: Field> {
     Phantom(PhantomExecutor<F>),
 }

@@ -757,6 +757,62 @@ fn test_vm_pure_execution_non_continuation() {
 }
 
 #[test]
+#[cfg(feature = "aot")]
+fn test_vm_pure_execution_non_continuation_aot() {
+    type F = BabyBear;
+    let n = 6;
+    /*
+    Instruction 0 assigns word[0]_4 to n.
+    Instruction 4 terminates
+    The remainder is a loop that decrements word[0]_4 until it reaches 0, then terminates.
+    Instruction 1 checks if word[0]_4 is 0 yet, and if so sets pc to 5 in order to terminate
+    Instruction 2 decrements word[0]_4 (using word[1]_4)
+    Instruction 3 uses JAL as a simple jump to go back to instruction 1 (repeating the loop).
+     */
+    let instructions: Vec<Instruction<F>> = vec![
+        // word[0]_4 <- word[n]_0
+        Instruction::large_from_isize(ADD.global_opcode(), 0, n, 0, 4, 0, 0, 0),
+        // if word[0]_4 == 0 then pc += 3 * DEFAULT_PC_STEP
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BEQ).global_opcode(),
+            0,
+            0,
+            3 * DEFAULT_PC_STEP as isize,
+            4,
+            0,
+        ),
+        // word[0]_4 <- word[0]_4 - word[1]_4
+        Instruction::large_from_isize(SUB.global_opcode(), 0, 0, 1, 4, 4, 0, 0),
+        // word[2]_4 <- pc + DEFAULT_PC_STEP, pc -= 2 * DEFAULT_PC_STEP
+        Instruction::from_isize(
+            JAL.global_opcode(),
+            2,
+            -2 * DEFAULT_PC_STEP as isize,
+            0,
+            4,
+            0,
+        ),
+        // terminate
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let exe = VmExe::new(Program::from_instructions(&instructions));
+    let executor = VmExecutor::new(test_native_config()).unwrap();
+    let aot_instance = executor.aot_instance(&exe).unwrap();
+    let aot_vm_state = aot_instance
+        .execute(vec![], None)
+        .expect("Failed to execute");
+    executor.instance(&exe).unwrap();
+
+    let interp_instance = executor.instance(&exe).unwrap();
+    let interp_vm_state = interp_instance
+        .execute(vec![], None)
+        .expect("Failed to execute");
+
+    assert_eq!(aot_vm_state.pc(), interp_vm_state.pc());
+}
+
+#[test]
 fn test_vm_pure_execution_continuation() {
     type F = BabyBear;
     let instructions: Vec<Instruction<F>> = vec![
@@ -956,12 +1012,12 @@ fn test_vm_execute_metered_cost_native_chips() {
         .metered_cost_instance(&exe, &executor_idx_to_air_idx)
         .unwrap();
     let ctx = vm.build_metered_cost_ctx();
-    let (cost, vm_state) = instance
+    let (ctx, _vm_state) = instance
         .execute_metered_cost(vec![], ctx)
         .expect("Failed to execute");
 
-    assert_eq!(vm_state.instret(), instructions.len() as u64);
-    assert!(cost > 0);
+    assert_eq!(ctx.instret, instructions.len() as u64);
+    assert!(ctx.cost > 0);
 }
 
 #[test]
@@ -993,11 +1049,11 @@ fn test_vm_execute_metered_cost_halt() {
         .metered_cost_instance(&exe, &executor_idx_to_air_idx)
         .unwrap();
     let ctx = vm.build_metered_cost_ctx();
-    let (cost1, vm_state1) = instance1
+    let (ctx1, _vm_state1) = instance1
         .execute_metered_cost(vec![], ctx)
         .expect("Failed to execute");
 
-    assert_eq!(vm_state1.instret(), instructions.len() as u64);
+    assert_eq!(ctx1.instret, instructions.len() as u64);
 
     let executor_idx_to_air_idx2 = vm.executor_idx_to_air_idx();
     let instance2 = vm
@@ -1005,10 +1061,10 @@ fn test_vm_execute_metered_cost_halt() {
         .metered_cost_instance(&exe, &executor_idx_to_air_idx2)
         .unwrap();
     let ctx2 = vm.build_metered_cost_ctx().with_max_execution_cost(0);
-    let (cost2, vm_state2) = instance2
+    let (ctx2, _vm_state2) = instance2
         .execute_metered_cost(vec![], ctx2)
         .expect("Failed to execute");
 
-    assert_eq!(vm_state2.instret(), 1);
-    assert!(cost2 < cost1);
+    assert_eq!(ctx2.instret, 1);
+    assert!(ctx2.cost < ctx1.cost);
 }

@@ -20,7 +20,16 @@ pub const OPENVM_VERSION_MESSAGE: &str = concat!(
     ") [cuda, tco]"
 );
 
-#[cfg(all(feature = "cuda", not(feature = "tco")))]
+#[cfg(all(feature = "cuda", feature = "aot", not(feature = "tco")))]
+pub const OPENVM_VERSION_MESSAGE: &str = concat!(
+    "v",
+    env!("CARGO_PKG_VERSION"),
+    " (",
+    env!("VERGEN_GIT_SHA"),
+    ") [cuda, aot]"
+);
+
+#[cfg(all(feature = "cuda", not(feature = "tco"), not(feature = "aot")))]
 pub const OPENVM_VERSION_MESSAGE: &str = concat!(
     "v",
     env!("CARGO_PKG_VERSION"),
@@ -38,7 +47,16 @@ pub const OPENVM_VERSION_MESSAGE: &str = concat!(
     ") [tco]"
 );
 
-#[cfg(all(not(feature = "cuda"), not(feature = "tco")))]
+#[cfg(all(not(feature = "cuda"), feature = "aot", not(feature = "tco")))]
+pub const OPENVM_VERSION_MESSAGE: &str = concat!(
+    "v",
+    env!("CARGO_PKG_VERSION"),
+    " (",
+    env!("VERGEN_GIT_SHA"),
+    ") [aot]"
+);
+
+#[cfg(all(not(feature = "cuda"), not(feature = "tco"), not(feature = "aot")))]
 pub const OPENVM_VERSION_MESSAGE: &str = concat!(
     "v",
     env!("CARGO_PKG_VERSION"),

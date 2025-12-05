@@ -218,7 +218,7 @@ where
     >,
 {
     fn get_opcode_name(&self, _: usize) -> String {
-        format!("{:?}", AUIPC)
+        format!("{AUIPC:?}")
     }
 
     fn execute(

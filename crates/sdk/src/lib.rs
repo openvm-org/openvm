@@ -408,10 +408,11 @@ where
             .metered_cost_interpreter(&exe)
             .map_err(VirtualMachineError::from)?;
 
-        let (cost, final_state) = interpreter
+        let (ctx, final_state) = interpreter
             .execute_metered_cost(inputs, ctx)
             .map_err(VirtualMachineError::from)?;
-        let instret = final_state.instret();
+        let instret = ctx.instret;
+        let cost = ctx.cost;
 
         let public_values = extract_public_values(
             self.executor.config.as_ref().num_public_values,
@@ -913,7 +914,7 @@ where
             .wrap_err("Failed to create temp dir")
             .map_err(SdkError::Other)?;
         let temp_path = temp_dir.path();
-        let root_path = Path::new("src").join(format!("v{}", OPENVM_VERSION));
+        let root_path = Path::new("src").join(format!("v{OPENVM_VERSION}"));
 
         // Make interfaces dir
         let interfaces_path = root_path.join("interfaces");
@@ -1004,12 +1005,9 @@ where
         let bytecode = parsed
             .get("contracts")
             .expect("No 'contracts' field found")
-            .get(format!("src/v{}/OpenVmHalo2Verifier.sol", OPENVM_VERSION))
+            .get(format!("src/v{OPENVM_VERSION}/OpenVmHalo2Verifier.sol"))
             .unwrap_or_else(|| {
-                panic!(
-                    "No 'src/v{}/OpenVmHalo2Verifier.sol' field found",
-                    OPENVM_VERSION
-                )
+                panic!("No 'src/v{OPENVM_VERSION}/OpenVmHalo2Verifier.sol' field found")
             })
             .get("OpenVmHalo2Verifier")
             .expect("No 'OpenVmHalo2Verifier' field found")

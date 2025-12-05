@@ -14,7 +14,8 @@ use openvm_instructions::{
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{adapters::imm_to_bytes, BaseAluExecutor};
+#[allow(unused_imports)]
+use crate::{adapters::imm_to_bytes, common::*, BaseAluExecutor};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -77,7 +78,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const LIMB_BITS: usize> Executor<F>
+impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
     for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
@@ -120,7 +121,7 @@ where
     }
 }
 
-impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>
+impl<F, A, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
     for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
@@ -167,6 +168,104 @@ where
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
+    for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+where
+    F: PrimeField32,
+{
+    fn is_aot_supported(&self, _instruction: &Instruction<F>) -> bool {
+        true
+    }
+
+    fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
+        let to_i16 = |c: F| -> i16 {
+            let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
+            let c_i24 = ((c_u24 << 8) as i32) >> 8;
+            c_i24 as i16
+        };
+        let mut asm_str = String::new();
+
+        let a: i16 = to_i16(inst.a);
+        let b: i16 = to_i16(inst.b);
+        let c: i16 = to_i16(inst.c);
+        let e: i16 = to_i16(inst.e);
+
+        let str_reg_a = if RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].is_some() {
+            RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].unwrap()
+        } else {
+            REG_A_W
+        };
+
+        let mut asm_opcode = String::new();
+        if inst.opcode == BaseAluOpcode::ADD.global_opcode() {
+            asm_opcode += "add";
+        } else if inst.opcode == BaseAluOpcode::SUB.global_opcode() {
+            asm_opcode += "sub";
+        } else if inst.opcode == BaseAluOpcode::AND.global_opcode() {
+            asm_opcode += "and";
+        } else if inst.opcode == BaseAluOpcode::OR.global_opcode() {
+            asm_opcode += "or";
+        } else if inst.opcode == BaseAluOpcode::XOR.global_opcode() {
+            asm_opcode += "xor";
+        }
+
+        if e == 0 {
+            // [a:4]_1 = [a:4]_1 + c
+            let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 4) as u8, str_reg_a, a != b);
+            asm_str += &delta_str_b;
+            asm_str += &format!("   {asm_opcode} {gpr_reg_b}, {c}\n");
+            asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
+        } else if a == c {
+            let (gpr_reg_c, delta_str_c) = xmm_to_gpr((c / 4) as u8, REG_C_W, true);
+            asm_str += &delta_str_c;
+            let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 4) as u8, str_reg_a, true);
+            asm_str += &delta_str_b;
+            asm_str += &format!("   {asm_opcode} {gpr_reg_b}, {gpr_reg_c}\n");
+            asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
+        } else {
+            let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 4) as u8, str_reg_a, true);
+            asm_str += &delta_str_b; // data is now in gpr_reg_b
+            let (gpr_reg_c, delta_str_c) = xmm_to_gpr((c / 4) as u8, REG_C_W, false); // data is in gpr_reg_c now
+            asm_str += &delta_str_c; // have to get a return value here, since it modifies further registers too
+            asm_str += &format!("   {asm_opcode} {gpr_reg_b}, {gpr_reg_c}\n");
+            asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
+        }
+
+        Ok(asm_str)
+    }
+}
+
+#[cfg(feature = "aot")]
+impl<F, A, const LIMB_BITS: usize> AotMeteredExecutor<F>
+    for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+where
+    F: PrimeField32,
+{
+    fn is_aot_metered_supported(&self, _inst: &Instruction<F>) -> bool {
+        true
+    }
+    fn generate_x86_metered_asm(
+        &self,
+        inst: &Instruction<F>,
+        pc: u32,
+        chip_idx: usize,
+        config: &SystemConfig,
+    ) -> Result<String, AotError> {
+        let mut asm_str = self.generate_x86_asm(inst, pc)?;
+        asm_str += &update_height_change_asm(chip_idx, 1)?;
+        // read [b:4]_1
+        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
+        // read [c:4]_1
+        asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
+        if inst.e.as_canonical_u32() != RV32_IMM_AS {
+            // read [a:4]_1
+            asm_str += &update_adapter_heights_asm(config, RV32_REGISTER_AS)?;
+        }
+        Ok(asm_str)
+    }
+}
+
 #[inline(always)]
 unsafe fn execute_e12_impl<
     F: PrimeField32,
@@ -175,8 +274,6 @@ unsafe fn execute_e12_impl<
     OP: AluOp,
 >(
     pre_compute: &BaseAluPreCompute,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1 = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
@@ -190,8 +287,8 @@ unsafe fn execute_e12_impl<
     let rd = <OP as AluOp>::compute(rs1, rs2);
     let rd = rd.to_le_bytes();
     exec_state.vm_write::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
-    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
-    *instret += 1;
+    let pc = exec_state.pc();
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }
 
 #[create_handler]
@@ -202,14 +299,12 @@ unsafe fn execute_e1_impl<
     const IS_IMM: bool,
     OP: AluOp,
 >(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &BaseAluPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, instret, pc, exec_state);
+    let pre_compute: &BaseAluPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<BaseAluPreCompute>()).borrow();
+    execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
@@ -220,17 +315,16 @@ unsafe fn execute_e2_impl<
     const IS_IMM: bool,
     OP: AluOp,
 >(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<BaseAluPreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<BaseAluPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<BaseAluPreCompute>>())
+            .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, instret, pc, exec_state);
+    execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, exec_state);
 }
 
 trait AluOp {

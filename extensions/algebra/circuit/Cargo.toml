@@ -22,7 +22,6 @@ openvm-algebra-transpiler = { workspace = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
 
-halo2curves-axiom = { workspace = true }
 num-bigint = { workspace = true, features = ["serde"] }
 num-traits = { workspace = true }
 rand = { workspace = true }
@@ -33,6 +32,9 @@ serde.workspace = true
 serde_with = { workspace = true }
 eyre = { workspace = true }
 cfg-if = { workspace = true }
+
+halo2curves-axiom = { workspace = true }
+blstrs = { workspace = true, features = ["__private_bench"] }
 
 [dev-dependencies]
 openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
@@ -47,6 +49,7 @@ openvm-cuda-builder = { workspace = true, optional = true }
 [features]
 default = []
 tco = ["openvm-rv32im-circuit/tco"]
+aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot", "halo2curves-axiom/asm"]
 cuda = [
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",

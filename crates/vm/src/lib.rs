@@ -1,6 +1,16 @@
 #![cfg_attr(feature = "tco", allow(incomplete_features))]
 #![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
+#![cfg_attr(feature = "tco", allow(internal_features))]
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
+
+// Ensure features "tco" and "aot" are mutually exclusive
+#[cfg(all(feature = "tco", feature = "aot"))]
+compile_error!("Features \"tco\" and \"aot\" cannot be enabled at the same time");
+
+// If "aot" feature is enabled but we're not on x86_64, throw a compile error
+#[cfg(all(feature = "aot", not(target_arch = "x86_64")))]
+compile_error!("Feature \"aot\" is only supported on x86_64 targets");
+
 extern crate self as openvm_circuit;
 
 pub use openvm_circuit_derive as derive;

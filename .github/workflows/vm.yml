@@ -26,7 +26,7 @@ jobs:
     strategy:
       matrix:
         platform:
-          - { runner: "64cpu-linux-arm64", image: "ubuntu24-full-arm64" }
+          - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64" }
 
     runs-on:
       - runs-on=${{ github.run_id }}-vm-tests-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ matrix.platform.runner }}/image=${{ matrix.platform.image }}/extras=s3-cache

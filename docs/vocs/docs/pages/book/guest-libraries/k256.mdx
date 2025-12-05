@@ -10,9 +10,9 @@ See a working example [here](https://github.com/openvm-org/openvm/blob/main/exam
 To use the K256 guest library, add the following dependencies to `Cargo.toml`:
 
 ```toml
-openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.4.0" }
-openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.4.0" }
-openvm-k256 = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.4.0", package = "k256" }
+openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.4.1" }
+openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.4.1" }
+openvm-k256 = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.4.1", package = "k256" }
 ```
 
 The guest library provides a `Secp256k1Coord`, which represents a field element on the coordinate field of Secp256k1, and a `Secp256k1Point`, which represents an Secp256k1 elliptic curve point.

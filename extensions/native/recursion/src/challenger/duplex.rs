@@ -224,7 +224,7 @@ mod tests {
             challenger.observe(*observation);
         }
         let result: F = challenger.sample();
-        println!("expected result: {}", result);
+        println!("expected result: {result}");
 
         let mut builder = AsmBuilder::<F, EF>::default();
 

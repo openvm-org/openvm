@@ -9,6 +9,7 @@ use openvm_rv32im_guest::{
     NATIVE_STOREW_FUNCT3, NATIVE_STOREW_FUNCT7, PHANTOM_FUNCT3, REVEAL_FUNCT3, RV32M_FUNCT7,
     RV32_ALU_OPCODE, SYSTEM_OPCODE, TERMINATE_FUNCT3,
 };
+pub use openvm_rv32im_guest::{MAX_HINT_BUFFER_WORDS, MAX_HINT_BUFFER_WORDS_BITS};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{
     util::{nop, unimp},
@@ -56,8 +57,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv32ITranspilerExtension {
                     }
                 }
                 eprintln!(
-                    "Transpiling system / CSR instruction: {:b} (opcode = {:07b}, funct3 = {:03b}) to unimp",
-                    instruction_u32, opcode, funct3
+                    "Transpiling system / CSR instruction: {instruction_u32:b} (opcode = {opcode:07b}, funct3 = {funct3:03b}) to unimp"
                 );
                 return Some(TranspilerOutput::one_to_one(unimp()));
             }

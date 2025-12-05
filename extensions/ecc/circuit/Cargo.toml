@@ -32,8 +32,10 @@ serde = { workspace = true }
 serde_with = { workspace = true }
 lazy_static = { workspace = true }
 hex-literal = { workspace = true }
-halo2curves-axiom = { workspace = true }
 cfg-if = { workspace = true }
+
+halo2curves-axiom = { workspace = true }
+blstrs = { workspace = true }
 
 [dev-dependencies]
 openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
@@ -46,6 +48,7 @@ lazy_static = { workspace = true }
 [features]
 default = []
 tco = ["openvm-algebra-circuit/tco"]
+aot = ["openvm-circuit/aot", "openvm-algebra-circuit/aot", "halo2curves-axiom/asm"]
 cuda = [
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",

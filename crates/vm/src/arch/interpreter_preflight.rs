@@ -1,5 +1,7 @@
 use std::{iter::repeat_n, sync::Arc};
 
+#[cfg(not(feature = "parallel"))]
+use itertools::Itertools;
 use openvm_instructions::{instruction::Instruction, program::Program, LocalOpcode, SystemOpcode};
 use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
@@ -101,17 +103,13 @@ impl<F: Field, E> PreflightInterpretedInstance<F, E> {
         &self.inventory.executors
     }
 
-    pub fn filtered_execution_frequencies(&self) -> Vec<u32>
-    where
-        E: Send + Sync,
-    {
+    pub fn filtered_execution_frequencies(&self) -> Vec<u32> {
         let base_idx = get_pc_index(self.pc_base);
         self.pc_handler
             .par_iter()
-            .enumerate()
+            .zip_eq(&self.execution_frequencies)
             .skip(base_idx)
-            .filter(|(_, entry)| entry.is_some())
-            .map(|(i, _)| self.execution_frequencies[i])
+            .filter_map(|(entry, freq)| entry.is_some().then_some(*freq))
             .collect()
     }
 
@@ -135,18 +133,14 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
                 // should terminate
                 break;
             }
-            if state
-                .ctx
-                .instret_end
-                .is_some_and(|instret_end| state.instret() >= instret_end)
-            {
+            if state.ctx.instret_left == 0 {
                 // should suspend
                 break;
             }
 
             // Fetch, decode and execute single instruction
             self.execute_instruction(state)?;
-            *state.instret_mut() += 1;
+            state.ctx.instret_left -= 1;
         }
 
         Ok(())
@@ -240,14 +234,14 @@ macro_rules! execute_spanned {
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
         #[cfg(feature = "metrics")]
-        let start_instret = $state.instret();
+        let start_instret_left = $state.ctx.instret_left;
 
         let result = $executor.execute_from_state($state);
 
         #[cfg(feature = "metrics")]
         {
             let elapsed = start.elapsed();
-            let insns = $state.instret() - start_instret;
+            let insns = start_instret_left - $state.ctx.instret_left;
             tracing::info!("instructions_executed={insns}");
             metrics::counter!(concat!($name, "_insns")).absolute(insns);
             metrics::gauge!(concat!($name, "_insn_mi/s"))

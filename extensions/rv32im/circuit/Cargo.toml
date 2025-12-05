@@ -43,6 +43,7 @@ default = ["parallel", "jemalloc"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils", "dep:openvm-stark-sdk"]
 tco = ["openvm-circuit/tco"]
+aot = ["openvm-circuit/aot", "openvm-circuit-derive/aot"]
 # performance features:
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]

@@ -16,6 +16,8 @@ openvm-pairing-guest = { workspace = true, features = [
     "halo2curves",
     "bls12_381",
     "bn254",
+    "aot",
+    "blstrs"
 ] }
 openvm-instructions = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true }
@@ -35,8 +37,9 @@ derive-new = { workspace = true }
 rand = { workspace = true }
 eyre = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
-halo2curves-axiom = { workspace = true }
 cfg-if = { workspace = true }
+
+halo2curves-axiom = { workspace = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 openvm-pairing-guest = { workspace = true }
@@ -56,6 +59,7 @@ openvm-pairing-guest = { workspace = true, features = [
 [features]
 default = []
 tco = ["openvm-rv32im-circuit/tco", "openvm-ecc-circuit/tco"]
+aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot", "openvm-ecc-circuit/aot", "halo2curves-axiom/asm"]
 cuda = [
     "dep:openvm-cuda-backend",
     "dep:openvm-stark-sdk",

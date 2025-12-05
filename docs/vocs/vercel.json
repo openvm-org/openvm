@@ -1,127 +1,127 @@
 {
-    "$schema": "https://openapi.vercel.sh/vercel.json",
-    "buildCommand": "pnpm install --frozen-lockfile && pnpm vercel-build",
-    "outputDirectory": "docs/dist",
-    "cleanUrls": false,
-    "trailingSlash": true,
-    "headers": [
-      {
-        "source": "/(.*)",
-        "headers": [
-          {
-            "key": "X-Frame-Options",
-            "value": "DENY"
-          },
-          {
-            "key": "X-Content-Type-Options",
-            "value": "nosniff"
-          }
-        ]
-      }
-    ],
-    "redirects": [
-      {
-        "source": "/book",
-        "destination": "/book/getting-started/introduction",
-        "permanent": false
-      },
-      {
-        "source": "/book/",
-        "destination": "/book/getting-started/introduction",
-        "permanent": false
-      },
-      {
-        "source": "/specs",
-        "destination": "/specs/openvm/overview",
-        "permanent": false
-      },
-      {
-        "source": "/specs/",
-        "destination": "/specs/openvm/overview",
-        "permanent": false
-      },
-      {
-        "source": "/openvm",
-        "destination": "/docs/openvm/",
-        "permanent": false
-      },
-      {
-        "source": "/openvm/",
-        "destination": "/docs/openvm/",
-        "permanent": false
-      },
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm install --frozen-lockfile && pnpm vercel-build",
+  "outputDirectory": "docs/dist",
+  "cleanUrls": false,
+  "trailingSlash": true,
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
         {
-          "source": "/stark-backend",
-          "destination": "/docs/stark-backend/",
-          "permanent": false
+          "key": "X-Frame-Options",
+          "value": "DENY"
         },
         {
-          "source": "/docs",
-          "destination": "/docs/openvm/",
-          "permanent": true
-        },
-        {
-          "source": "/docs/",
-          "destination": "/docs/openvm/",
-          "permanent": true
-        },
-        {
-          "source": "/docs/openvm",
-          "destination": "/docs/openvm/",
-          "permanent": true
-        },
-        {
-          "source": "/docs/stark-backend",
-          "destination": "/docs/stark-backend/",
-          "permanent": true
-        }
-      ],
-      "rewrites": [
-        {
-          "source": "/docs/openvm/",
-          "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/v1.4.0/index.html"
-        },
-        {
-          "source": "/docs/openvm/:path*/",
-          "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/v1.4.0/:path*/index.html"
-        }, 
-        {
-          "source": "/docs/openvm/:path*",
-          "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/v1.4.0/:path*"
-        },
-        {
-          "source": "/(static.files|fonts)/:path*",
-          "has": [
-            {
-              "type": "header",
-              "key": "referer",
-              "value": ".*/openvm.*"
-            }
-          ],
-          "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/v1.4.0/$1/:path*"
-        },
-        {
-          "source": "/docs/stark-backend/",
-          "destination": "https://openvm-crate-docs-stark-backend-us-east-1.s3.us-east-1.amazonaws.com/v1.2.0/index.html"
-        },
-        {
-          "source": "/docs/stark-backend/:path*/",
-          "destination": "https://openvm-crate-docs-stark-backend-us-east-1.s3.us-east-1.amazonaws.com/v1.2.0/:path*/index.html"
-        },
-        {
-          "source": "/docs/stark-backend/:path*",
-          "destination": "https://openvm-crate-docs-stark-backend-us-east-1.s3.us-east-1.amazonaws.com/v1.2.0/:path*"
-        },
-        {
-          "source": "/(static.files|fonts)/:path*",
-          "has": [
-            {
-              "type": "header",
-              "key": "referer",
-              "value": ".*/stark-backend.*"
-            }
-          ],
-          "destination": "https://openvm-crate-docs-stark-backend-us-east-1.s3.us-east-1.amazonaws.com/v1.2.0/$1/:path*"
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
         }
       ]
-  }
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/book",
+      "destination": "/book/getting-started/introduction",
+      "permanent": false
+    },
+    {
+      "source": "/book/",
+      "destination": "/book/getting-started/introduction",
+      "permanent": false
+    },
+    {
+      "source": "/specs",
+      "destination": "/specs/openvm/overview",
+      "permanent": false
+    },
+    {
+      "source": "/specs/",
+      "destination": "/specs/openvm/overview",
+      "permanent": false
+    },
+    {
+      "source": "/openvm",
+      "destination": "/docs/openvm/",
+      "permanent": false
+    },
+    {
+      "source": "/openvm/",
+      "destination": "/docs/openvm/",
+      "permanent": false
+    },
+    {
+      "source": "/stark-backend",
+      "destination": "/docs/stark-backend/",
+      "permanent": false
+    },
+    {
+      "source": "/docs",
+      "destination": "/docs/openvm/",
+      "permanent": true
+    },
+    {
+      "source": "/docs/",
+      "destination": "/docs/openvm/",
+      "permanent": true
+    },
+    {
+      "source": "/docs/openvm",
+      "destination": "/docs/openvm/",
+      "permanent": true
+    },
+    {
+      "source": "/docs/stark-backend",
+      "destination": "/docs/stark-backend/",
+      "permanent": true
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/docs/openvm/",
+      "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/v1.4.1/index.html"
+    },
+    {
+      "source": "/docs/openvm/:path*/",
+      "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/v1.4.1/:path*/index.html"
+    },
+    {
+      "source": "/docs/openvm/:path*",
+      "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/v1.4.1/:path*"
+    },
+    {
+      "source": "/(static.files|fonts)/:path*",
+      "has": [
+        {
+          "type": "header",
+          "key": "referer",
+          "value": ".*/openvm.*"
+        }
+      ],
+      "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/v1.4.1/$1/:path*"
+    },
+    {
+      "source": "/docs/stark-backend/",
+      "destination": "https://openvm-crate-docs-stark-backend-us-east-1.s3.us-east-1.amazonaws.com/v1.2.1/index.html"
+    },
+    {
+      "source": "/docs/stark-backend/:path*/",
+      "destination": "https://openvm-crate-docs-stark-backend-us-east-1.s3.us-east-1.amazonaws.com/v1.2.1/:path*/index.html"
+    },
+    {
+      "source": "/docs/stark-backend/:path*",
+      "destination": "https://openvm-crate-docs-stark-backend-us-east-1.s3.us-east-1.amazonaws.com/v1.2.1/:path*"
+    },
+    {
+      "source": "/(static.files|fonts)/:path*",
+      "has": [
+        {
+          "type": "header",
+          "key": "referer",
+          "value": ".*/stark-backend.*"
+        }
+      ],
+      "destination": "https://openvm-crate-docs-stark-backend-us-east-1.s3.us-east-1.amazonaws.com/v1.2.1/$1/:path*"
+    }
+  ]
+}

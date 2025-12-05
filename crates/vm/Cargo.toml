@@ -21,6 +21,7 @@ openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
+openvm-rv32im-transpiler = { workspace = true, optional = true }
 
 itertools.workspace = true
 tracing.workspace = true
@@ -40,6 +41,9 @@ static_assertions.workspace = true
 getset.workspace = true
 dashmap.workspace = true
 cfg-if.workspace = true
+libloading = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
+abi_stable.workspace = true
 
 [build-dependencies]
 openvm-cuda-builder = { workspace = true, optional = true }
@@ -80,6 +84,13 @@ test-utils = ["dep:openvm-stark-sdk"]
 # Tail call optimizations. This requires nightly for the `become` keyword (https://github.com/rust-lang/rust/pull/144232).
 # However tail call elimination is still an incomplete feature in Rust, so the `tco` feature remains experimental until then.
 tco = ["openvm-circuit-derive/tco"]
+# Ahead-of-time execution
+aot = [
+    "dep:libloading",
+    "dep:openvm-rv32im-transpiler",
+    "openvm-circuit-derive/aot",
+    "dep:tempfile",
+]
 # Disable bounds checking in memory operations for performance
 unprotected = []
 # performance features:

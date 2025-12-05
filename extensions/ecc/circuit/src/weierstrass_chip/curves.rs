@@ -1,4 +1,4 @@
-use halo2curves_axiom::ff::PrimeField;
+use halo2curves_axiom::ff::{Field, PrimeField};
 use num_bigint::BigUint;
 use num_traits::Num;
 use openvm_algebra_circuit::fields::{
@@ -66,7 +66,7 @@ pub fn ec_add_ne<const FIELD_TYPE: u8, const BLOCKS: usize, const BLOCK_SIZE: us
         x if x == FieldType::BLS12_381Coordinate as u8 => {
             ec_add_ne_bls12_381::<BLOCKS, BLOCK_SIZE>(input_data)
         }
-        _ => panic!("Unsupported field type: {}", FIELD_TYPE),
+        _ => panic!("Unsupported field type: {FIELD_TYPE}"),
     }
 }
 
@@ -90,7 +90,7 @@ pub fn ec_double<const CURVE_TYPE: u8, const BLOCKS: usize, const BLOCK_SIZE: us
         x if x == CurveType::BLS12_381 as u8 => {
             ec_double_bls12_381::<BLOCKS, BLOCK_SIZE>(input_data)
         }
-        _ => panic!("Unsupported curve type: {}", CURVE_TYPE),
+        _ => panic!("Unsupported curve type: {CURVE_TYPE}"),
     }
 }
 
@@ -149,7 +149,7 @@ fn ec_add_ne_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     let y2 =
         blocks_to_field_element_bls12_381_coordinate(input_data[1][BLOCKS / 2..].as_flattened());
 
-    let (x3, y3) = ec_add_ne_impl::<halo2curves_axiom::bls12_381::Fq>(x1, y1, x2, y2);
+    let (x3, y3) = ec_add_ne_impl::<blstrs::Fp>(x1, y1, x2, y2);
 
     // Final output
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
@@ -166,7 +166,7 @@ fn ec_double_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     let x1 = blocks_to_field_element_bls12_381_coordinate(input_data[..BLOCKS / 2].as_flattened());
     let y1 = blocks_to_field_element_bls12_381_coordinate(input_data[BLOCKS / 2..].as_flattened());
 
-    let (x3, y3) = ec_double_impl::<halo2curves_axiom::bls12_381::Fq, 0>(x1, y1);
+    let (x3, y3) = ec_double_impl::<blstrs::Fp, 0>(x1, y1);
 
     // Final output
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
@@ -176,7 +176,7 @@ fn ec_double_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 }
 
 #[inline(always)]
-pub fn ec_add_ne_impl<F: PrimeField>(x1: F, y1: F, x2: F, y2: F) -> (F, F) {
+pub fn ec_add_ne_impl<F: Field>(x1: F, y1: F, x2: F, y2: F) -> (F, F) {
     // Calculate lambda = (y2 - y1) / (x2 - x1)
     let lambda = (y2 - y1) * (x2 - x1).invert().unwrap();
 
@@ -190,7 +190,7 @@ pub fn ec_add_ne_impl<F: PrimeField>(x1: F, y1: F, x2: F, y2: F) -> (F, F) {
 }
 
 #[inline(always)]
-pub fn ec_double_impl<F: PrimeField, const NEG_A: u64>(x1: F, y1: F) -> (F, F) {
+pub fn ec_double_impl<F: Field + From<u64>, const NEG_A: u64>(x1: F, y1: F) -> (F, F) {
     // Calculate lambda based on curve coefficient 'a'
     let x1_squared = x1.square();
     let three_x1_squared = x1_squared + x1_squared.double();

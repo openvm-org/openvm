@@ -72,7 +72,7 @@ where
 }
 
 pub trait VmExecutionConfig<F> {
-    type Executor: AnyEnum + Send + Sync;
+    type Executor: AnyEnum;
 
     fn create_executors(&self)
         -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
@@ -143,7 +143,7 @@ pub trait InitFileGenerator {
             let dest_path = Path::new(manifest_dir)
                 .join(init_file_name.unwrap_or(OPENVM_DEFAULT_INIT_FILE_NAME));
             let mut f = File::create(&dest_path)?;
-            write!(f, "{}", contents)?;
+            write!(f, "{contents}")?;
         }
         Ok(())
     }
@@ -327,7 +327,8 @@ impl SystemConfig {
     }
 
     pub fn with_max_segment_len(mut self, max_segment_len: usize) -> Self {
-        self.segmentation_limits.max_trace_height = max_segment_len as u32;
+        self.segmentation_limits
+            .set_max_trace_height(max_segment_len as u32);
         self
     }
 

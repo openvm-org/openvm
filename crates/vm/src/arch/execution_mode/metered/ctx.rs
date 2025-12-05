@@ -83,6 +83,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         if !config.continuation_enabled {
             // force single segment
             ctx.segmentation_ctx.segment_check_insns = u64::MAX;
+            ctx.segmentation_ctx.instrets_until_check = u64::MAX;
         }
 
         // Add merkle height contributions for all registers
@@ -91,12 +92,15 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         ctx
     }
 
+    /// This changes the frequency of segment checks. BE CAREFUL when you change this during
+    /// execution!
     pub fn with_max_trace_height(mut self, max_trace_height: u32) -> Self {
         self.segmentation_ctx.set_max_trace_height(max_trace_height);
         let max_check_freq = (max_trace_height / 2) as u64;
         if max_check_freq < self.segmentation_ctx.segment_check_insns {
             self.segmentation_ctx.segment_check_insns = max_check_freq;
         }
+        self.segmentation_ctx.instrets_until_check = self.segmentation_ctx.segment_check_insns;
         self
     }
 
@@ -125,23 +129,19 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     }
 
     #[inline(always)]
-    pub fn check_and_segment(&mut self, instret: u64, segment_check_insns: u64) -> bool {
-        let threshold = self
-            .segmentation_ctx
-            .instret_last_segment_check
-            .wrapping_add(segment_check_insns);
-        debug_assert!(
-            threshold >= self.segmentation_ctx.instret_last_segment_check,
-            "overflow in segment check threshold calculation"
-        );
-        if instret < threshold {
+    pub fn check_and_segment(&mut self) -> bool {
+        // We track the segmentation check by instrets_until_check instead of instret in order to
+        // save a register in AOT mode.
+        if self.segmentation_ctx.instrets_until_check > 0 {
             return false;
         }
+        self.segmentation_ctx.instrets_until_check = self.segmentation_ctx.segment_check_insns;
+        self.segmentation_ctx.instret += self.segmentation_ctx.segment_check_insns;
 
         self.memory_ctx
             .lazy_update_boundary_heights(&mut self.trace_heights);
         let did_segment = self.segmentation_ctx.check_and_segment(
-            instret,
+            self.segmentation_ctx.instret,
             &mut self.trace_heights,
             &self.is_trace_height_constant,
         );
@@ -178,11 +178,10 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
             address_space != RV32_IMM_AS,
             "address space must not be immediate"
         );
-        debug_assert!(size > 0, "size must be greater than 0, got {}", size);
+        debug_assert!(size > 0, "size must be greater than 0, got {size}");
         debug_assert!(
             size.is_power_of_two(),
-            "size must be a power of 2, got {}",
-            size
+            "size must be a power of 2, got {size}"
         );
 
         // Handle access adapter updates
@@ -199,23 +198,22 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     }
 
     #[inline(always)]
-    fn should_suspend<F>(
-        instret: u64,
-        _pc: u32,
-        segment_check_insns: u64,
-        exec_state: &mut VmExecState<F, GuestMemory, Self>,
-    ) -> bool {
+    fn should_suspend<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
+        // ATTENTION: Please make sure to update the corresponding logic in the
+        // `asm_bridge` crate and `aot.rs`` when you change this function.
         // If `segment_suspend` is set, suspend when a segment is determined (but the VM state might
         // be after the segment boundary because the segment happens in the previous checkpoint).
         // Otherwise, execute until termination.
-        exec_state
-            .ctx
-            .check_and_segment(instret, segment_check_insns)
-            && exec_state.ctx.suspend_on_segment
+        if exec_state.ctx.check_and_segment() && exec_state.ctx.suspend_on_segment {
+            true
+        } else {
+            exec_state.ctx.segmentation_ctx.instrets_until_check -= 1;
+            false
+        }
     }
 
     #[inline(always)]
-    fn on_terminate<F>(instret: u64, _pc: u32, exec_state: &mut VmExecState<F, GuestMemory, Self>) {
+    fn on_terminate<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) {
         exec_state
             .ctx
             .memory_ctx
@@ -223,7 +221,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
         exec_state
             .ctx
             .segmentation_ctx
-            .create_final_segment(instret, &exec_state.ctx.trace_heights);
+            .create_final_segment(&exec_state.ctx.trace_heights);
     }
 }
 
