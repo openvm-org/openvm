@@ -63,7 +63,7 @@ pub fn cols_ref_impl(
                 .collect_vec();
 
             // The ColsRef struct is named by appending `Ref` to the struct name
-            let const_cols_ref_name = syn::Ident::new(&format!("{}Ref", ident), ident.span());
+            let const_cols_ref_name = syn::Ident::new(&format!("{ident}Ref"), ident.span());
 
             // the args to the `from` method will be different for the ColsRef and ColsRefMut
             // structs
@@ -94,7 +94,7 @@ pub fn cols_ref_impl(
                 .collect_vec();
 
             // The ColsRefMut struct is named by appending `RefMut` to the struct name
-            let mut_cols_ref_name = syn::Ident::new(&format!("{}RefMut", ident), ident.span());
+            let mut_cols_ref_name = syn::Ident::new(&format!("{ident}RefMut"), ident.span());
 
             // the args to the `from` method will be different for the ColsRef and ColsRefMut
             // structs
@@ -642,7 +642,7 @@ fn get_const_cols_ref_type(
     lifetime: syn::Lifetime,
 ) -> syn::TypePath {
     if !is_columns_struct(ty) {
-        panic!("Expected a columns struct, got {:?}", ty);
+        panic!("Expected a columns struct, got {ty:?}");
     }
 
     if let syn::Type::Path(type_path) = ty {
@@ -654,13 +654,10 @@ fn get_const_cols_ref_type(
             };
             const_cols_ref_type
         } else {
-            panic!("is_columns_struct returned true for type {:?} but the last segment is not a columns struct", ty);
+            panic!("is_columns_struct returned true for type {ty:?} but the last segment is not a columns struct");
         }
     } else {
-        panic!(
-            "is_columns_struct returned true but the type {:?} is not a path",
-            ty
-        );
+        panic!("is_columns_struct returned true but the type {ty:?} is not a path",);
     }
 }
 
@@ -668,7 +665,7 @@ fn get_const_cols_ref_type(
 // Otherwise, return None
 fn get_mut_cols_ref_type(ty: &syn::Type, generic_type: &syn::TypeParam) -> syn::TypePath {
     if !is_columns_struct(ty) {
-        panic!("Expected a columns struct, got {:?}", ty);
+        panic!("Expected a columns struct, got {ty:?}");
     }
 
     if let syn::Type::Path(type_path) = ty {
@@ -680,13 +677,10 @@ fn get_mut_cols_ref_type(ty: &syn::Type, generic_type: &syn::TypeParam) -> syn::
             };
             mut_cols_ref_type
         } else {
-            panic!("is_columns_struct returned true for type {:?} but the last segment is not a columns struct", ty);
+            panic!("is_columns_struct returned true for type {ty:?} but the last segment is not a columns struct");
         }
     } else {
-        panic!(
-            "is_columns_struct returned true but the type {:?} is not a path",
-            ty
-        );
+        panic!("is_columns_struct returned true but the type {ty:?} is not a path",);
     }
 }
 

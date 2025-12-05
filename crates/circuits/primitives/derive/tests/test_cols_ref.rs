@@ -64,7 +64,7 @@ fn test_cols_ref() {
     cols.nested_array_of_aligned_borrow[[0, 0]].b[0] = 11;
 
     let cols: TestColsRef<i32> = TestColsRef::from::<TestConfigImpl>(&input);
-    println!("{:?}", cols);
+    println!("{cols:?}");
     assert_eq!(*cols.single_field_element, 1);
     assert_eq!(cols.array_of_t[0], 2);
     assert_eq!(cols.nested_array_of_t[[0, 0]], 3);

@@ -48,7 +48,7 @@ fn get_elem_type(ty: &Type) -> Type {
     match ty {
         Type::Array(array) => get_elem_type(array.elem.as_ref()),
         Type::Path(_) => ty.clone(),
-        _ => panic!("Unsupported type: {:?}", ty),
+        _ => panic!("Unsupported type: {ty:?}"),
     }
 }
 
