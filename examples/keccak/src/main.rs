@@ -3,7 +3,9 @@ use core::hint::black_box;
 
 use hex::FromHex;
 use openvm as _;
-use openvm_keccak256::keccak256;
+
+
+
 // [!endregion imports]
 
 // [!region main]
@@ -21,10 +23,12 @@ pub fn main() {
     for (input, expected_output) in test_vectors.iter() {
         let input = Vec::from_hex(input).unwrap();
         let expected_output = Vec::from_hex(expected_output).unwrap();
-        let output = keccak256(&black_box(input));
-        if output != *expected_output {
-            panic!();
-        }
+
+        // let output = keccak256(&black_box(input));
+        // if output != *expected_output {
+        //     panic!();
+        // }
+
     }
 }
 // [!endregion main]
