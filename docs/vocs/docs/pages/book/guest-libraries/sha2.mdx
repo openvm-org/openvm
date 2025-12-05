@@ -6,34 +6,30 @@ The OpenVM SHA-2 guest library provides access to a set of accelerated SHA-2 fam
 - SHA-512
 - SHA-384
 
-Refer [here](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf) for more details on the SHA-2 family of hash functions.
+Refer to [the FIPS publication](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf) for more details on the SHA-2 family of hash functions.
 
-For SHA-256, the SHA2 guest library provides two functions for use in your guest code:
-- `sha256(input: &[u8]) -> [u8; 32]`: Computes the SHA-256 hash of the input data and returns it as an array of 32 bytes.
-- `set_sha256(input: &[u8], output: &mut [u8; 32])`: Sets the output to the SHA-256 hash of the input data into the provided output buffer.
-
-For SHA-512, we provide:
-- `sha512(input: &[u8]) -> [u8; 46]`: Computes the SHA-512 hash of the input data and returns it as an array of 64 bytes.
-- `set_sha512(input: &[u8], output: &mut [u8; 64])`: Sets the output to the SHA-512 hash of the input data into the provided output buffer.
-
-For SHA-384, we provide:
-- `sha384(input: &[u8]) -> [u8; 48]`: Computes the SHA-384 hash of the input data and returns it as an array of 48 bytes.
-- `set_sha384(input: &[u8], output: &mut [u8; 48])`: Sets the output to the SHA-384 hash of the input data into the provided output buffer.
-
-See the full example [here](https://github.com/openvm-org/openvm/blob/feat/sha-512-new-execution/examples/sha2/src/main.rs).
-
+The SHA-2 guest library provides the `Sha256`, `Sha512`, and `Sha384` structs for use in your guest code.
+These structs mimic the identically-named structs found in the `sha2` crate, in that they implement the [`sha2::Digest` trait](https://docs.rs/sha2/latest/sha2/trait.Digest.html).
+Importantly, the `sha2::Digest` trait has the following methods, which can be used to incrementally hash a stream of bytes.
+```Rust
+fn update(&mut self, data: impl AsRef<[u8]>);
+fn finalize(self) -> GenericArray<u8, Self::OutputSize>;
+```
 ### Example
 
+The following example can be run as guest code or host code (i.e. run in the zkvm or natively).
+To run with guest code, use `cargo openvm run`, and for host code use `cargo run`.
+The implementations for `Sha256`, `Sha512`, and `Sha384` fall back to using `sha2` when running as host code.
 ```rust
-// [!include ~/snippets/examples/sha2/src/main.rs:imports]
-// [!include ~/snippets/examples/sha2/src/main.rs:main]
+[!include ~/snippets/examples/sha2/src/main.rs:imports]
+[!include ~/snippets/examples/sha2/src/main.rs:main]
 ```
 
 To be able to import the `shaXXX` functions and run the example, add the following to your `Cargo.toml` file:
 
 ```toml
-openvm-sha2 = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.4.1" }
-hex = { version = "0.4.3" }
+openvm = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-sha2 = { git = "https://github.com/openvm-org/openvm.git" }
 ```
 
 ### Config parameters

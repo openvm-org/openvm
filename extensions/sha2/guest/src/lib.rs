@@ -21,7 +21,7 @@ pub enum Sha2BaseFunct7 {
 ///
 /// The VM accepts the previous hash state and the next block of input, and writes the
 /// new hash state.
-/// - `prev_state` must point to a buffer of at least 32 bytes, storing the previous hash state as 8
+/// - `state` must point to a buffer of at least 32 bytes, storing the previous hash state as 8
 ///   32-bit words in little-endian order
 /// - `input` must point to a buffer of at least 64 bytes
 /// - `output` must point to a buffer of at least 32 bytes. It will be filled with the new hash
@@ -31,21 +31,21 @@ pub enum Sha2BaseFunct7 {
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
 #[no_mangle]
-pub extern "C" fn zkvm_sha256_impl(prev_state: *const u8, input: *const u8, output: *mut u8) {
+pub extern "C" fn zkvm_sha256_impl(state: *const u8, input: *const u8, output: *mut u8) {
     // SAFETY: we handle all cases where `prev_state`, `input`, or `output` are not aligned to 4
     // bytes.
 
     // The minimum alignment required for the buffers
     const MIN_ALIGN: usize = 4;
     unsafe {
-        let prev_state_is_aligned = prev_state as usize % MIN_ALIGN == 0;
+        let state_is_aligned = state as usize % MIN_ALIGN == 0;
         let input_is_aligned = input as usize % MIN_ALIGN == 0;
         let output_is_aligned = output as usize % MIN_ALIGN == 0;
 
-        let prev_state_ptr = if prev_state_is_aligned {
-            prev_state
+        let state_ptr = if state_is_aligned {
+            state
         } else {
-            AlignedBuf::new(prev_state, 32, MIN_ALIGN).ptr
+            AlignedBuf::new(state, 32, MIN_ALIGN).ptr
         };
 
         let input_ptr = if input_is_aligned {
@@ -60,7 +60,7 @@ pub extern "C" fn zkvm_sha256_impl(prev_state: *const u8, input: *const u8, outp
             AlignedBuf::uninit(32, MIN_ALIGN).ptr
         };
 
-        __native_sha256_compress(prev_state_ptr, input_ptr, output_ptr);
+        __native_sha256_compress(state_ptr, input_ptr, output_ptr);
 
         if !output_is_aligned {
             core::ptr::copy_nonoverlapping(output_ptr, output, 32);
@@ -73,7 +73,7 @@ pub extern "C" fn zkvm_sha256_impl(prev_state: *const u8, input: *const u8, outp
 ///
 /// The VM accepts the previous hash state and the next block of input, and writes the
 /// new hash state.
-/// - `prev_state` must point to a buffer of at least 64 bytes, storing the previous hash state as 8
+/// - `state` must point to a buffer of at least 64 bytes, storing the previous hash state as 8
 ///   64-bit words in little-endian order
 /// - `input` must point to a buffer of at least 128 bytes
 /// - `output` must point to a buffer of at least 64 bytes. It will be filled with the new hash
@@ -83,21 +83,21 @@ pub extern "C" fn zkvm_sha256_impl(prev_state: *const u8, input: *const u8, outp
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
 #[no_mangle]
-pub extern "C" fn zkvm_sha512_impl(prev_state: *const u8, input: *const u8, output: *mut u8) {
+pub extern "C" fn zkvm_sha512_impl(state: *const u8, input: *const u8, output: *mut u8) {
     // SAFETY: we handle all cases where `prev_state`, `input`, or `output` are not aligned to 4
     // bytes.
 
     // The minimum alignment required for the buffers
     const MIN_ALIGN: usize = 4;
     unsafe {
-        let prev_state_is_aligned = prev_state as usize % MIN_ALIGN == 0;
+        let state_is_aligned = state as usize % MIN_ALIGN == 0;
         let input_is_aligned = input as usize % MIN_ALIGN == 0;
         let output_is_aligned = output as usize % MIN_ALIGN == 0;
 
-        let prev_state_ptr = if prev_state_is_aligned {
-            prev_state
+        let state_ptr = if state_is_aligned {
+            state
         } else {
-            AlignedBuf::new(prev_state, 64, MIN_ALIGN).ptr
+            AlignedBuf::new(state, 64, MIN_ALIGN).ptr
         };
 
         let input_ptr = if input_is_aligned {
@@ -112,7 +112,7 @@ pub extern "C" fn zkvm_sha512_impl(prev_state: *const u8, input: *const u8, outp
             AlignedBuf::uninit(64, MIN_ALIGN).ptr
         };
 
-        __native_sha512_compress(prev_state_ptr, input_ptr, output_ptr);
+        __native_sha512_compress(state_ptr, input_ptr, output_ptr);
 
         if !output_is_aligned {
             core::ptr::copy_nonoverlapping(output_ptr, output, 64);
