@@ -277,25 +277,6 @@ where
     record
 }
 
-/// Converts a field element slice into a record type.
-/// This function transmutes the `&mut [F]` to raw bytes,
-/// then uses the `CustomBorrow` trait to transmute to the desired record type `T`.
-/// ## Safety
-/// `slice` must satisfy the requirements of the `CustomBorrow` trait.
-/// Note: this function is different from get_record_from_slice only in the type of the slice
-/// parameter. Note that get_record_from_slice takes &mut &mut [F] so that you can borrow a record
-/// and columns struct from the same slice.
-pub unsafe fn get_record_from_slice_no_ref<'a, T, F, L>(slice: &'a mut [F], layout: L) -> T
-where
-    [u8]: CustomBorrow<'a, T, L>,
-{
-    // The alignment of `[u8]` is always satisfiedƒ
-    let record_buffer =
-        &mut *slice_from_raw_parts_mut(slice.as_mut_ptr() as *mut u8, size_of_val::<[F]>(slice));
-    let record: T = record_buffer.custom_borrow(layout);
-    record
-}
-
 /// A trait that allows for custom implementation of `borrow` given the necessary information
 /// This is useful for record structs that have dynamic size
 pub trait CustomBorrow<'a, T, L> {
