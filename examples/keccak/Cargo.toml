@@ -11,6 +11,7 @@ openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
     "std",
 ] }
 hex = { version = "0.4.3" }
+tiny-keccak = { git = "https://github.com/openvm-org/tiny-keccak.git", features = ["keccak"] }
 
 [features]
 default = []

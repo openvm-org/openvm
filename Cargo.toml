@@ -267,5 +267,8 @@ cuda-runtime-sys = "0.3.0-alpha.1"
 # p3-poseidon2-air = { path = "../Plonky3/poseidon2-air" }
 # p3-symmetric = { path = "../Plonky3/symmetric" }
 
+[patch.crates-io]
+tiny-keccak = { git = "https://github.com/openvm-org/tiny-keccak.git" }
+
 [workspace.metadata.cargo-shear]
 ignored = ["cargo-openvm"]
