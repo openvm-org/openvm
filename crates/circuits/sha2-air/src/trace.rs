@@ -114,32 +114,20 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherFillerHelper<C> {
                 *cols.flags.is_round_row = F::ONE;
                 *cols.flags.is_first_4_rows = if i < C::MESSAGE_ROWS { F::ONE } else { F::ZERO };
                 *cols.flags.is_digest_row = F::ZERO;
-                cols.flags
-                    .row_idx
-                    .iter_mut()
-                    .zip(
-                        get_flag_pt_array(&self.row_idx_encoder, i)
-                            .into_iter()
-                            .map(F::from_canonical_u32),
-                    )
-                    .for_each(|(x, y)| *x = y);
-
+                set_arrayview_from_u32_slice(
+                    &mut cols.flags.row_idx,
+                    get_flag_pt_array(&self.row_idx_encoder, i),
+                );
                 *cols.flags.global_block_idx = F::from_canonical_u32(global_block_idx);
                 *cols.flags.local_block_idx = F::from_canonical_u32(0);
 
                 // W_idx = M_idx
                 if i < C::MESSAGE_ROWS {
                     for j in 0..C::ROUNDS_PER_ROW {
-                        cols.message_schedule
-                            .w
-                            .row_mut(j)
-                            .iter_mut()
-                            .zip(
-                                word_into_bits::<C>(input[i * C::ROUNDS_PER_ROW + j])
-                                    .into_iter()
-                                    .map(F::from_canonical_u32),
-                            )
-                            .for_each(|(x, y)| *x = y);
+                        set_arrayview_from_u32_slice(
+                            &mut cols.message_schedule.w.row_mut(j),
+                            word_into_bits::<C>(input[i * C::ROUNDS_PER_ROW + j]),
+                        );
                     }
                 }
                 // W_idx = SIG1(W_{idx-2}) + W_{idx-7} + SIG0(W_{idx-15}) + W_{idx-16}
@@ -155,17 +143,10 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherFillerHelper<C> {
                         let w: C::Word = nums
                             .iter()
                             .fold(C::Word::from(0), |acc, &num| acc.wrapping_add(num));
-                        cols.message_schedule
-                            .w
-                            .row_mut(j)
-                            .iter_mut()
-                            .zip(
-                                word_into_bits::<C>(w)
-                                    .into_iter()
-                                    .map(F::from_canonical_u32),
-                            )
-                            .for_each(|(x, y)| *x = y);
-
+                        set_arrayview_from_u32_slice(
+                            &mut cols.message_schedule.w.row_mut(j),
+                            word_into_bits::<C>(w),
+                        );
                         let nums_limbs = nums
                             .iter()
                             .map(|x| word_into_u16_limbs::<C>(*x))
@@ -224,29 +205,17 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherFillerHelper<C> {
 
                     // e = d + t1
                     let e = work_vars[3].wrapping_add(t1_sum);
-                    cols.work_vars
-                        .e
-                        .row_mut(j)
-                        .iter_mut()
-                        .zip(
-                            word_into_bits::<C>(e)
-                                .into_iter()
-                                .map(F::from_canonical_u32),
-                        )
-                        .for_each(|(x, y)| *x = y);
+                    set_arrayview_from_u32_slice(
+                        &mut cols.work_vars.e.row_mut(j),
+                        word_into_bits::<C>(e),
+                    );
                     let e_limbs = word_into_u16_limbs::<C>(e);
                     // a = t1 + t2
                     let a = t1_sum.wrapping_add(t2_sum);
-                    cols.work_vars
-                        .a
-                        .row_mut(j)
-                        .iter_mut()
-                        .zip(
-                            word_into_bits::<C>(a)
-                                .into_iter()
-                                .map(F::from_canonical_u32),
-                        )
-                        .for_each(|(x, y)| *x = y);
+                    set_arrayview_from_u32_slice(
+                        &mut cols.work_vars.a.row_mut(j),
+                        word_into_bits::<C>(a),
+                    );
                     let a_limbs = word_into_u16_limbs::<C>(a);
                     // fill in the carrys
                     for k in 0..C::WORD_U16S {
@@ -288,28 +257,18 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherFillerHelper<C> {
                         let w_4 = word_into_u16_limbs::<C>(message_schedule[idx - 4]);
                         let sig_0_w_3 =
                             word_into_u16_limbs::<C>(small_sig0::<C>(message_schedule[idx - 3]));
-                        cols.schedule_helper
-                            .intermed_4
-                            .row_mut(j)
-                            .iter_mut()
-                            .zip(
-                                (0..C::WORD_U16S)
-                                    .map(|k| F::from_canonical_u32(w_4[k] + sig_0_w_3[k]))
-                                    .collect::<Vec<_>>(),
-                            )
-                            .for_each(|(x, y)| *x = y);
+                        set_arrayview_from_u32_slice(
+                            &mut cols.schedule_helper.intermed_4.row_mut(j),
+                            (0..C::WORD_U16S)
+                                .map(|k| w_4[k] + sig_0_w_3[k])
+                                .collect::<Vec<_>>(),
+                        );
                         if j < C::ROUNDS_PER_ROW - 1 {
                             let w_3 = message_schedule[idx - 3];
-                            cols.schedule_helper
-                                .w_3
-                                .row_mut(j)
-                                .iter_mut()
-                                .zip(
-                                    word_into_u16_limbs::<C>(w_3)
-                                        .into_iter()
-                                        .map(F::from_canonical_u32),
-                                )
-                                .for_each(|(x, y)| *x = y);
+                            set_arrayview_from_u32_slice(
+                                &mut cols.schedule_helper.w_3.row_mut(j),
+                                word_into_u16_limbs::<C>(w_3),
+                            );
                         }
                     }
                 }
@@ -321,31 +280,18 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherFillerHelper<C> {
                 );
                 for j in 0..C::ROUNDS_PER_ROW - 1 {
                     let w_3 = message_schedule[i * C::ROUNDS_PER_ROW + j - 3];
-                    cols.schedule_helper
-                        .w_3
-                        .row_mut(j)
-                        .iter_mut()
-                        .zip(
-                            word_into_u16_limbs::<C>(w_3)
-                                .into_iter()
-                                .map(F::from_canonical_u32)
-                                .collect::<Vec<_>>(),
-                        )
-                        .for_each(|(x, y)| *x = y);
+                    set_arrayview_from_u32_slice(
+                        &mut cols.schedule_helper.w_3.row_mut(j),
+                        word_into_u16_limbs::<C>(w_3),
+                    );
                 }
                 *cols.flags.is_round_row = F::ZERO;
                 *cols.flags.is_first_4_rows = F::ZERO;
                 *cols.flags.is_digest_row = F::ONE;
-                cols.flags
-                    .row_idx
-                    .iter_mut()
-                    .zip(
-                        get_flag_pt_array(&self.row_idx_encoder, C::ROUND_ROWS)
-                            .into_iter()
-                            .map(F::from_canonical_u32),
-                    )
-                    .for_each(|(x, y)| *x = y);
-
+                set_arrayview_from_u32_slice(
+                    &mut cols.flags.row_idx,
+                    get_flag_pt_array(&self.row_idx_encoder, C::ROUND_ROWS),
+                );
                 *cols.flags.global_block_idx = F::from_canonical_u32(global_block_idx);
 
                 *cols.flags.local_block_idx = F::from_canonical_u32(0);
@@ -364,25 +310,18 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherFillerHelper<C> {
                         bitwise_lookup_chip.request_range(chunk[0], chunk[1]);
                     }
                 }
-                cols.final_hash
-                    .iter_mut()
-                    .zip((0..C::HASH_WORDS).flat_map(|i| {
-                        word_into_u8_limbs::<C>(final_hash[i])
-                            .into_iter()
-                            .map(F::from_canonical_u32)
-                            .collect::<Vec<_>>()
-                    }))
-                    .for_each(|(x, y)| *x = y);
-                cols.prev_hash
-                    .iter_mut()
-                    .zip(prev_hash.iter().flat_map(|f| {
-                        word_into_u16_limbs::<C>(*f)
-                            .into_iter()
-                            .map(F::from_canonical_u32)
-                            .collect::<Vec<_>>()
-                    }))
-                    .for_each(|(x, y)| *x = y);
-
+                set_arrayview_from_u32_slice(
+                    &mut cols.final_hash,
+                    final_hash
+                        .iter()
+                        .flat_map(|word| word_into_u8_limbs::<C>(*word)),
+                );
+                set_arrayview_from_u32_slice(
+                    &mut cols.prev_hash,
+                    prev_hash
+                        .iter()
+                        .flat_map(|word| word_into_u16_limbs::<C>(*word)),
+                );
                 let next_block_prev_hash_bits = next_block_prev_hash
                     .iter()
                     .map(|x| word_into_bits::<C>(*x))
