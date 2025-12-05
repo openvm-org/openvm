@@ -206,12 +206,6 @@ where
                 self.inner
                     .generate_missing_cells(chunk, C::BLOCK_HASHER_WIDTH, INNER_OFFSET);
             });
-
-        let last_row =
-            &trace[(rows_used - 1) * C::BLOCK_HASHER_WIDTH..rows_used * C::BLOCK_HASHER_WIDTH];
-        let last_row_cols = Sha2RoundColsRef::<F>::from::<C>(
-            &last_row[INNER_OFFSET..INNER_OFFSET + C::SUBAIR_ROUND_WIDTH],
-        );
     }
 
     fn fill_first_dummy_row(
