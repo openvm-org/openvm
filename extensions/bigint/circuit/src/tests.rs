@@ -27,8 +27,9 @@ use openvm_instructions::{
 };
 use openvm_rv32_adapters::{
     rv32_heap_branch_default, rv32_write_heap_default, Rv32Heap256_4ByteAdapterAir,
-    Rv32Heap256_4ByteAdapterExecutor, Rv32Heap256_4ByteAdapterFiller, Rv32HeapBranchAdapterAir,
-    Rv32HeapBranchAdapterExecutor, Rv32HeapBranchAdapterFiller,
+    Rv32Heap256_4ByteAdapterExecutor, Rv32Heap256_4ByteAdapterFiller,
+    Rv32HeapBranch256_4ByteAdapterAir, Rv32HeapBranch256_4ByteAdapterExecutor,
+    Rv32HeapBranch256_4ByteAdapterFiller,
 };
 use openvm_rv32im_circuit::{
     adapters::{INT256_NUM_LIMBS, RV_B_TYPE_IMM_BITS},
@@ -234,7 +235,7 @@ fn create_beq_harness_fields(
     Rv32BranchEqual256Chip<F>,
 ) {
     let air = Rv32BranchEqual256Air::new(
-        Rv32HeapBranchAdapterAir::new(
+        Rv32HeapBranch256_4ByteAdapterAir::new(
             execution_bridge,
             memory_bridge,
             bitwise_chip.bus(),
@@ -243,13 +244,13 @@ fn create_beq_harness_fields(
         BranchEqualCoreAir::new(Rv32BranchEqual256Opcode::CLASS_OFFSET, DEFAULT_PC_STEP),
     );
     let executor = Rv32BranchEqual256Executor::new(
-        Rv32HeapBranchAdapterExecutor::new(address_bits),
+        Rv32HeapBranch256_4ByteAdapterExecutor::new(address_bits),
         Rv32BranchEqual256Opcode::CLASS_OFFSET,
         DEFAULT_PC_STEP,
     );
     let chip = Rv32BranchEqual256Chip::new(
         BranchEqualFiller::new(
-            Rv32HeapBranchAdapterFiller::new(address_bits, bitwise_chip),
+            Rv32HeapBranch256_4ByteAdapterFiller::new(address_bits, bitwise_chip),
             Rv32BranchEqual256Opcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
         ),
@@ -270,7 +271,7 @@ fn create_blt_harness_fields(
     Rv32BranchLessThan256Chip<F>,
 ) {
     let air = Rv32BranchLessThan256Air::new(
-        Rv32HeapBranchAdapterAir::new(
+        Rv32HeapBranch256_4ByteAdapterAir::new(
             execution_bridge,
             memory_bridge,
             bitwise_chip.bus(),
@@ -282,12 +283,12 @@ fn create_blt_harness_fields(
         ),
     );
     let executor = Rv32BranchLessThan256Executor::new(
-        Rv32HeapBranchAdapterExecutor::new(address_bits),
+        Rv32HeapBranch256_4ByteAdapterExecutor::new(address_bits),
         Rv32BranchLessThan256Opcode::CLASS_OFFSET,
     );
     let chip = Rv32BranchLessThan256Chip::new(
         BranchLessThanFiller::new(
-            Rv32HeapBranchAdapterFiller::new(address_bits, bitwise_chip.clone()),
+            Rv32HeapBranch256_4ByteAdapterFiller::new(address_bits, bitwise_chip.clone()),
             bitwise_chip,
             Rv32BranchLessThan256Opcode::CLASS_OFFSET,
         ),
@@ -917,7 +918,7 @@ fn run_beq_256_rand_test_cuda(opcode: BranchEqualOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32HeapBranchAdapterExecutor<2, INT256_NUM_LIMBS>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32HeapBranch256_4ByteAdapterExecutor<2>>::new(),
         );
 
     tester
@@ -980,7 +981,7 @@ fn run_blt_256_rand_test_cuda(opcode: BranchLessThanOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32HeapBranchAdapterExecutor<2, INT256_NUM_LIMBS>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32HeapBranch256_4ByteAdapterExecutor<2>>::new(),
         );
 
     tester

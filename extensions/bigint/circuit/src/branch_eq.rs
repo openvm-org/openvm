@@ -9,14 +9,17 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::Rv32HeapBranchAdapterExecutor;
+use openvm_rv32_adapters::Rv32HeapBranch256_4ByteAdapterExecutor;
 use openvm_rv32im_circuit::BranchEqualExecutor;
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{common::bytes_to_u64_array, Rv32BranchEqual256Executor, INT256_NUM_LIMBS};
+use crate::{
+    common::{bytes_to_u64_array, vm_read_256},
+    Rv32BranchEqual256Executor, INT256_NUM_LIMBS,
+};
 
-type AdapterExecutor = Rv32HeapBranchAdapterExecutor<2, INT256_NUM_LIMBS>;
+type AdapterExecutor = Rv32HeapBranch256_4ByteAdapterExecutor<2>;
 
 impl Rv32BranchEqual256Executor {
     pub fn new(adapter_step: AdapterExecutor, offset: usize, pc_step: u32) -> Self {
@@ -131,10 +134,9 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE:
     let mut pc = exec_state.pc();
     let rs1_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
     let rs2_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
-    let rs1 =
-        exec_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
-    let rs2 =
-        exec_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
+    // Use chunked reads: 8×4-byte reads instead of 1×32-byte read
+    let rs1 = vm_read_256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
+    let rs2 = vm_read_256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
     let cmp_result = u256_eq(rs1, rs2);
     if cmp_result ^ IS_NE {
         pc = (pc as isize + pre_compute.imm) as u32;

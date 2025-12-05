@@ -34,6 +34,8 @@ use openvm_stark_backend::{
 };
 use openvm_rv32_adapters::{
     Rv32Heap256_4ByteAdapterAir, Rv32Heap256_4ByteAdapterExecutor, Rv32Heap256_4ByteAdapterFiller,
+    Rv32HeapBranch256_4ByteAdapterAir, Rv32HeapBranch256_4ByteAdapterExecutor,
+    Rv32HeapBranch256_4ByteAdapterFiller,
 };
 use serde::{Deserialize, Serialize};
 
@@ -113,7 +115,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
         inventory.add_executor(lt, Rv32LessThan256Opcode::iter().map(|x| x.global_opcode()))?;
 
         let beq = Rv32BranchEqual256Executor::new(
-            Rv32HeapBranchAdapterExecutor::new(pointer_max_bits),
+            Rv32HeapBranch256_4ByteAdapterExecutor::new(pointer_max_bits),
             Rv32BranchEqual256Opcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
         );
@@ -123,7 +125,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
         )?;
 
         let blt = Rv32BranchLessThan256Executor::new(
-            Rv32HeapBranchAdapterExecutor::new(pointer_max_bits),
+            Rv32HeapBranch256_4ByteAdapterExecutor::new(pointer_max_bits),
             Rv32BranchLessThan256Opcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -203,13 +205,13 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Int256 {
         inventory.add_air(lt);
 
         let beq = Rv32BranchEqual256Air::new(
-            Rv32HeapBranchAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits),
+            Rv32HeapBranch256_4ByteAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits),
             BranchEqualCoreAir::new(Rv32BranchEqual256Opcode::CLASS_OFFSET, DEFAULT_PC_STEP),
         );
         inventory.add_air(beq);
 
         let blt = Rv32BranchLessThan256Air::new(
-            Rv32HeapBranchAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits),
+            Rv32HeapBranch256_4ByteAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits),
             BranchLessThanCoreAir::new(bitwise_lu, Rv32BranchLessThan256Opcode::CLASS_OFFSET),
         );
         inventory.add_air(blt);
@@ -306,7 +308,7 @@ where
         inventory.next_air::<Rv32BranchEqual256Air>()?;
         let beq = Rv32BranchEqual256Chip::new(
             BranchEqualFiller::new(
-                Rv32HeapBranchAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                Rv32HeapBranch256_4ByteAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                 Rv32BranchEqual256Opcode::CLASS_OFFSET,
                 DEFAULT_PC_STEP,
             ),
@@ -317,7 +319,7 @@ where
         inventory.next_air::<Rv32BranchLessThan256Air>()?;
         let blt = Rv32BranchLessThan256Chip::new(
             BranchLessThanFiller::new(
-                Rv32HeapBranchAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                Rv32HeapBranch256_4ByteAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                 bitwise_lu.clone(),
                 Rv32BranchLessThan256Opcode::CLASS_OFFSET,
             ),
