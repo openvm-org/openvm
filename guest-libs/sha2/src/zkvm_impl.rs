@@ -54,7 +54,7 @@ impl Sha256 {
         }
     }
 
-    pub fn update(&mut self, mut input: &[u8]) {
+    fn update(&mut self, mut input: &[u8]) {
         self.len += input.len();
         while !input.is_empty() {
             let to_copy = min(input.len(), SHA256_BLOCK_BYTES - self.idx);
@@ -68,7 +68,7 @@ impl Sha256 {
         }
     }
 
-    pub fn finalize(mut self) -> [u8; SHA256_DIGEST_BYTES] {
+    fn finalize(mut self) -> [u8; SHA256_DIGEST_BYTES] {
         // pad until length in bytes is 56 mod 64 (leave 8 bytes for the message length)
         let num_bytes_of_padding = SHA256_BLOCK_BYTES - 8 - self.idx;
         // ensure num_bytes_of_padding is positive
@@ -162,7 +162,7 @@ impl Sha512 {
         }
     }
 
-    pub fn update(&mut self, mut input: &[u8]) {
+    fn update(&mut self, mut input: &[u8]) {
         self.len += input.len();
         while !input.is_empty() {
             let to_copy = min(input.len(), SHA512_BLOCK_BYTES - self.idx);
@@ -176,7 +176,7 @@ impl Sha512 {
         }
     }
 
-    pub fn finalize(mut self) -> [u8; SHA512_DIGEST_BYTES] {
+    fn finalize(mut self) -> [u8; SHA512_DIGEST_BYTES] {
         // pad until length in bytes is 112 mod 128 (leave 16 bytes for the message length)
         let num_bytes_of_padding = SHA512_BLOCK_BYTES - 16 - self.idx;
         // ensure num_bytes_of_padding is positive
@@ -226,8 +226,6 @@ impl FixedOutput for Sha512 {
 
 impl HashMarker for Sha512 {}
 
-const SHA384_STATE_WORDS: usize = 8;
-const SHA384_BLOCK_BYTES: usize = 128;
 const SHA384_DIGEST_BYTES: usize = 48;
 
 // Initial state for SHA-384 in 64-bit words
@@ -267,10 +265,6 @@ impl Sha384 {
     pub fn finalize(self) -> [u8; SHA384_DIGEST_BYTES] {
         let digest = self.inner.finalize();
         digest[..SHA384_DIGEST_BYTES].try_into().unwrap()
-    }
-
-    fn compress(&mut self) {
-        self.inner.compress();
     }
 }
 

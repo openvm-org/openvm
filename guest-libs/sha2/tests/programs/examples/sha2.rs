@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 use core::hint::black_box;
 
 use hex::FromHex;
-use openvm_sha2::{Sha256, Sha384, Sha512};
+use openvm_sha2::{Digest, Sha256, Sha384, Sha512};
 
 openvm::entry!(main);
 
@@ -61,27 +61,31 @@ pub fn main() {
         let mut hasher = Sha256::new();
         hasher.update(black_box(&input));
         let output = hasher.finalize();
-        if output != *expected_output_sha256 {
+        if output.as_slice() != expected_output_sha256.as_slice() {
             panic!(
                 "sha256 test {i} failed on input: {:?}.\nexpected: {:?},\ngot: {:?}",
-                input, expected_output_sha256, output
+                input,
+                expected_output_sha256,
+                output.as_slice()
             );
         }
         let expected_output_sha512 = Vec::from_hex(expected_output_sha512).unwrap();
         let mut hasher = Sha512::new();
         hasher.update(black_box(&input));
         let output = hasher.finalize();
-        if output != *expected_output_sha512 {
+        if output.as_slice() != expected_output_sha512.as_slice() {
             panic!(
                 "sha512 test {i} failed on input: {:?}.\nexpected: {:?},\ngot: {:?}",
-                input, expected_output_sha512, output
+                input,
+                expected_output_sha512,
+                output.as_slice()
             );
         }
         let expected_output_sha384 = Vec::from_hex(expected_output_sha384).unwrap();
         let mut hasher = Sha384::new();
         hasher.update(black_box(&input));
         let output = hasher.finalize();
-        if output != *expected_output_sha384 {
+        if output.as_slice() != expected_output_sha384.as_slice() {
             panic!(
                 "sha384 test {i} failed on input: {:?}.\nexpected: {:?},\ngot: {:?}",
                 input, expected_output_sha384, output
