@@ -271,36 +271,15 @@ impl<F, C: Sha2BlockHasherVmConfig> Sha2BlockHasherChip<F, C> {
         debug_assert_eq!(input.len(), C::BLOCK_U8S);
         debug_assert_eq!(prev_hash.len(), C::HASH_WORDS);
 
-        // Set request_id and fill the input into carry_or_buffer
+        // Set request_id
         block_slice
             .par_chunks_exact_mut(C::BLOCK_HASHER_WIDTH)
-            .enumerate()
-            .for_each(|(row_idx, row_slice)| {
+            .for_each(|row_slice| {
                 // Set request_id
                 let cols = Sha2BlockHasherRoundColsRefMut::<F>::from::<C>(
                     &mut row_slice[..C::BLOCK_HASHER_WIDTH],
                 );
                 *cols.request_id = F::from_canonical_usize(request_id);
-
-                // Fill the input into carry_or_buffer
-                if row_idx < C::MESSAGE_ROWS {
-                    let mut round_cols = Sha2RoundColsRefMut::<F>::from::<C>(
-                        row_slice[INNER_OFFSET..INNER_OFFSET + C::SUBAIR_ROUND_WIDTH].borrow_mut(),
-                    );
-                    // We don't actually need to set carry_or_buffer for the first 4 rows, because
-                    // the subair won't actually use it (we used to store the memory read into here
-                    // in the old SHA-2 chip). We will remove the subair constraints that constrain
-                    // carry_or_buffer for the first 4 rows in the future. Then, we can skip setting
-                    // carry_or_buffer for the first 4 rows here.
-                    // TODO: resolve this before getting this PR reviewed.
-                    set_arrayview_from_u8_slice(
-                        &mut round_cols.message_schedule.carry_or_buffer,
-                        input[row_idx * C::ROUNDS_PER_ROW * C::WORD_U8S
-                            ..(row_idx + 1) * C::ROUNDS_PER_ROW * C::WORD_U8S]
-                            .iter()
-                            .copied(),
-                    );
-                }
             });
 
         let input_words = (0..C::BLOCK_WORDS)
