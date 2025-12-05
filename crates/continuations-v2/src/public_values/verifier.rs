@@ -410,7 +410,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
                         + AB::F::from_canonical_usize(didx + DIGEST_SIZE + 1),
                     value: local.child_pvs.internal_for_leaf_commit[didx].into(),
                 },
-                local.is_valid * is_internal.clone(),
+                local.is_valid * is_internal,
             );
 
             self.public_values_bus.receive(
@@ -422,7 +422,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
                         + AB::F::from_canonical_usize(didx + 2 * DIGEST_SIZE + 1),
                     value: local.child_pvs.internal_recursive_commit[didx].into(),
                 },
-                local.is_valid * is_internal.clone(),
+                local.is_valid * is_internal,
             );
         }
 
