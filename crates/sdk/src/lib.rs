@@ -811,7 +811,7 @@ where
 
         use eyre::Context;
         use forge_fmt::{
-            format, parse, FormatterConfig, IntTypes, MultilineFuncHeaderStyle, NumberUnderscore,
+            format, FormatterConfig, IntTypes, MultilineFuncHeaderStyle, NumberUnderscore,
             QuoteStyle, SingleLineBlockStyle,
         };
         use openvm_native_recursion::halo2::wrapper::EvmVerifierByteCode;
@@ -877,37 +877,19 @@ where
             wrap_comments: false,
             ignore: vec![],
             contract_new_lines: false,
+            sort_imports: false,
+            ..Default::default()
         };
 
-        let parsed_interface =
-            parse(EVM_HALO2_VERIFIER_INTERFACE).expect("Failed to parse interface");
-        let parsed_halo2_verifier_code =
-            parse(&halo2_verifier_code).expect("Failed to parse halo2 verifier code");
-        let parsed_openvm_verifier_code =
-            parse(&openvm_verifier_code).expect("Failed to parse openvm verifier code");
-
-        let mut formatted_interface = String::new();
-        let mut formatted_halo2_verifier_code = String::new();
-        let mut formatted_openvm_verifier_code = String::new();
-
-        format(
-            &mut formatted_interface,
-            parsed_interface,
-            formatter_config.clone(),
-        )
-        .expect("Failed to format interface");
-        format(
-            &mut formatted_halo2_verifier_code,
-            parsed_halo2_verifier_code,
-            formatter_config.clone(),
-        )
-        .expect("Failed to format halo2 verifier code");
-        format(
-            &mut formatted_openvm_verifier_code,
-            parsed_openvm_verifier_code,
-            formatter_config,
-        )
-        .expect("Failed to format openvm verifier code");
+        let formatted_interface = format(EVM_HALO2_VERIFIER_INTERFACE, formatter_config.clone())
+            .into_result()
+            .expect("Failed to format interface");
+        let formatted_halo2_verifier_code = format(&halo2_verifier_code, formatter_config.clone())
+            .into_result()
+            .expect("Failed to format halo2 verifier code");
+        let formatted_openvm_verifier_code = format(&openvm_verifier_code, formatter_config)
+            .into_result()
+            .expect("Failed to format openvm verifier code");
 
         // Create temp dir
         let temp_dir = tempdir()
