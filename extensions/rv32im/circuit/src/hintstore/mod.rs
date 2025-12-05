@@ -212,9 +212,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
         // For MAX_HINT_BUFFER_WORDS_BITS = 18, this requires:
         // - limbs[3] = 0 (since 2^18 < 2^24)
         // - limbs[2] < 4 (since 2^18 = 4 * 2^16)
-        builder
-            .when(is_start.clone())
-            .assert_zero(local_cols.rem_words_limbs[RV32_REGISTER_NUM_LIMBS - 1]);
+        builder.assert_zero(local_cols.rem_words_limbs[RV32_REGISTER_NUM_LIMBS - 1]);
 
         // Preventing mem_ptr overflow: mem_ptr < 2^pointer_max_bits
         // (rem_words overflow is handled below with the stricter MAX_HINT_BUFFER_WORDS_BITS bound)
