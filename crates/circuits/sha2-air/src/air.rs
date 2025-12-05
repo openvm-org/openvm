@@ -1,18 +1,14 @@
-use std::{cmp::max, iter::once, marker::PhantomData};
+use std::{iter::once, marker::PhantomData};
 
 use ndarray::s;
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupBus,
-    encoder::Encoder,
-    utils::{not, select},
-    SubAir,
+    bitwise_op_lookup::BitwiseOperationLookupBus, encoder::Encoder, utils::select, SubAir,
 };
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
-    p3_air::{Air, AirBuilder, BaseAir},
+    p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra},
     p3_matrix::Matrix,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 
 use super::{

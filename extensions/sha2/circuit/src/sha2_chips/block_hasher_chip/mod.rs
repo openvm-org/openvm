@@ -5,7 +5,6 @@ mod config;
 mod trace;
 
 use std::{
-    cell::Cell,
     marker::PhantomData,
     sync::{Arc, Mutex},
 };
@@ -13,17 +12,10 @@ use std::{
 pub use air::*;
 pub use columns::*;
 pub use config::*;
-use openvm_circuit::{
-    arch::{RowMajorMatrixArena, VmChipWrapper},
-    system::memory::SharedMemoryHelper,
-};
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip, encoder::Encoder,
-};
+use openvm_circuit::system::memory::SharedMemoryHelper;
+use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_sha2_air::{Sha2BlockHasherFillerHelper, Sha2BlockHasherSubairConfig};
-use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
-pub use trace::*;
 
 pub use super::{config::*, Sha2SharedRecords};
 

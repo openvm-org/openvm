@@ -1,5 +1,4 @@
-use itertools::Itertools;
-use openvm_sha2_air::{Sha256Config, Sha2BlockHasherSubairConfig, Sha384Config, Sha512Config};
+use openvm_sha2_air::{Sha256Config, Sha384Config, Sha512Config};
 use sha2::{
     compress256, compress512, digest::generic_array::GenericArray, Digest, Sha256, Sha384, Sha512,
 };

@@ -1,62 +1,10 @@
-use std::{
-    array,
-    borrow::BorrowMut,
-    sync::{Arc, Mutex},
-};
-
-use hex::FromHex;
 use itertools::Itertools;
-use openvm_circuit::{
-    arch::{
-        testing::{
-            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
-            BITWISE_OP_LOOKUP_BUS,
-        },
-        Arena, ExecutionBridge, PreflightExecutor,
-    },
-    system::{
-        memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
-        SystemPort,
-    },
-    utils::get_random_message,
-};
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
-};
-use openvm_instructions::{
-    instruction::Instruction,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS},
-    LocalOpcode,
-};
-use openvm_sha2_air::{
-    word_into_u8_limbs, Sha256Config, Sha2BlockHasherSubairConfig, Sha2Variant, Sha512Config,
-};
-use openvm_sha2_transpiler::Rv32Sha2Opcode::{self, *};
-use openvm_stark_backend::{
-    interaction::BusIndex,
-    p3_field::{FieldAlgebra, PrimeField32},
-    p3_matrix::{
-        dense::{DenseMatrix, RowMajorMatrix},
-        Matrix,
-    },
-    utils::disable_debug_builder,
-    verifier::VerificationError,
-};
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use rand::{rngs::StdRng, Rng};
-#[cfg(feature = "cuda")]
-use {
-    crate::{trace::Sha2BlockHasherRecordMut, Sha2BlockHasherChipGpu},
-    openvm_circuit::arch::testing::{
-        default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
-    },
-};
+use openvm_circuit::arch::testing::TestBuilder;
+use openvm_instructions::riscv::RV32_MEMORY_AS;
+use openvm_sha2_air::Sha2Variant;
+use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{
-    Sha2BlockHasherChip, Sha2BlockHasherVmAir, Sha2Config, Sha2MainAir, Sha2MainChip,
-    Sha2MainChipConfig, Sha2VmExecutor, SHA2_READ_SIZE, SHA2_WRITE_SIZE,
-};
+use crate::{Sha2Config, SHA2_READ_SIZE, SHA2_WRITE_SIZE};
 
 // See https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.180-4.pdf for the padding algorithm
 pub fn add_padding_to_message<C: Sha2Config + 'static>(mut message: Vec<u8>) -> Vec<u8> {

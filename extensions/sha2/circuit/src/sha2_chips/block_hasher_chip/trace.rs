@@ -1,53 +1,17 @@
-use std::{
-    array::{self, from_fn},
-    borrow::{Borrow, BorrowMut},
-    cmp::min,
-    marker::PhantomData,
-    mem,
-    ops::Range,
-    slice,
-    sync::Arc,
-};
+use std::{slice, sync::Arc};
 
-use itertools::Itertools;
-use openvm_circuit::{
-    arch::{
-        CustomBorrow, MultiRowLayout, MultiRowMetadata, PreflightExecutor, RecordArena,
-        SizedRecord, VmStateMut, *,
-    },
-    system::memory::{
-        offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
-        online::TracingMemory,
-        MemoryAuxColsFactory,
-    },
-};
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip,
-    encoder::Encoder,
-    utils::{compose, next_power_of_two_or_zero},
-    AlignedBytesBorrow,
-};
-use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode,
-};
-use openvm_rv32im_circuit::adapters::{read_rv32_register, tracing_read, tracing_write};
+use openvm_circuit::arch::get_record_from_slice;
+use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_sha2_air::{
-    be_limbs_into_word, big_sig0, big_sig1, ch, get_flag_pt_array, le_limbs_into_word, maj,
-    set_arrayview_from_u32_slice, set_arrayview_from_u8_slice, word_into_bits, word_into_u16_limbs,
-    Sha2BlockHasherFillerHelper, Sha2DigestColsRefMut, Sha2RoundColsRef, Sha2RoundColsRefMut,
-    WrappingAdd,
+    be_limbs_into_word, le_limbs_into_word, Sha2BlockHasherFillerHelper, Sha2RoundColsRef,
+    Sha2RoundColsRefMut,
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_field::{FieldAlgebra, PrimeField32},
+    p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
     prover::{cpu::CpuBackend, types::AirProvingContext},
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     Chip,
 };
 

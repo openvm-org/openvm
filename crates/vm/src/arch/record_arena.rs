@@ -2,7 +2,7 @@ use std::{
     borrow::BorrowMut,
     io::Cursor,
     marker::PhantomData,
-    ptr::{copy_nonoverlapping, slice_from_raw_parts, slice_from_raw_parts_mut},
+    ptr::{copy_nonoverlapping, slice_from_raw_parts_mut},
 };
 
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;

@@ -1,8 +1,4 @@
-use std::{
-    array,
-    borrow::BorrowMut,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use hex::FromHex;
 use itertools::Itertools;
@@ -12,36 +8,22 @@ use openvm_circuit::{
             memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS,
         },
-        Arena, ExecutionBridge, MatrixRecordArena, PreflightExecutor, RowMajorMatrixArena,
-        SizedRecord,
+        Arena, MatrixRecordArena, PreflightExecutor,
     },
-    system::{
-        memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
-        SystemPort,
-    },
+    system::{memory::SharedMemoryHelper, SystemPort},
     utils::get_random_message,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{
-    instruction::Instruction,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS},
-    LocalOpcode,
-};
-use openvm_sha2_air::{
-    word_into_u8_limbs, Sha256Config, Sha2BlockHasherSubairConfig, Sha2DigestColsRef,
-    Sha2RoundColsRef, Sha2Variant, Sha384Config, Sha512Config,
-};
-use openvm_sha2_transpiler::Rv32Sha2Opcode::{self, *};
+use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
+use openvm_sha2_air::{word_into_u8_limbs, Sha256Config, Sha384Config, Sha512Config};
+use openvm_sha2_transpiler::Rv32Sha2Opcode;
 use openvm_stark_backend::{
     interaction::BusIndex,
     p3_field::{Field, FieldAlgebra, PrimeField32},
-    p3_matrix::{
-        dense::{DenseMatrix, RowMajorMatrix},
-        Matrix,
-    },
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
     utils::disable_debug_builder,
     verifier::VerificationError,
 };
@@ -57,9 +39,8 @@ use {
 
 use crate::{
     add_padding_to_message, read_slice_from_memory, write_slice_to_memory, Sha2BlockHasherChip,
-    Sha2BlockHasherDigestColsRefMut, Sha2BlockHasherVmAir, Sha2BlockHasherVmConfig, Sha2Config,
-    Sha2MainAir, Sha2MainChip, Sha2MainChipConfig, Sha2Metadata, Sha2RecordLayout, Sha2RecordMut,
-    Sha2VmExecutor, SHA2_READ_SIZE, SHA2_WRITE_SIZE,
+    Sha2BlockHasherDigestColsRefMut, Sha2BlockHasherVmAir, Sha2Config, Sha2MainAir, Sha2MainChip,
+    Sha2VmExecutor,
 };
 
 const SHA2_BUS_IDX: BusIndex = 28;

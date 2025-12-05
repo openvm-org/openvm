@@ -1,5 +1,5 @@
 use std::{
-    borrow::{Borrow, BorrowMut},
+    borrow::BorrowMut,
     mem::transmute,
     slice::{from_raw_parts, from_raw_parts_mut},
 };
@@ -18,13 +18,11 @@ use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
 use openvm_rv32im_circuit::adapters::{tracing_read, tracing_write};
-use openvm_sha2_air::{
-    Sha256Config, Sha2BlockHasherSubairConfig, Sha2Variant, Sha384Config, Sha512Config,
-};
+use openvm_sha2_air::{Sha256Config, Sha2Variant, Sha384Config, Sha512Config};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{

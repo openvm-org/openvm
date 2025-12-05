@@ -1,26 +1,17 @@
-use std::{borrow::BorrowMut, marker::PhantomData, mem, ops::Range, slice};
+use std::{marker::PhantomData, ops::Range};
 
-use itertools::Itertools;
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip,
-    encoder::Encoder,
-    utils::{compose, next_power_of_two_or_zero},
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip, encoder::Encoder, utils::compose,
 };
-use openvm_stark_backend::{
-    p3_field::{FieldAlgebra, PrimeField32},
-    p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::{
-        IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator, ParallelSliceMut,
-    },
-};
+use openvm_stark_backend::p3_field::PrimeField32;
 use sha2::{compress256, compress512, digest::generic_array::GenericArray};
 
 use crate::{
     big_sig0, big_sig0_field, big_sig1, big_sig1_field, ch, ch_field, get_flag_pt_array,
-    le_limbs_into_word, maj, maj_field, set_arrayview_from_u32_slice, set_arrayview_from_u8_slice,
-    small_sig0, small_sig0_field, small_sig1, small_sig1_field, word_into_bits,
-    word_into_u16_limbs, word_into_u8_limbs, Sha2BlockHasherSubairConfig, Sha2DigestColsRefMut,
-    Sha2RoundColsRef, Sha2RoundColsRefMut, Sha2Variant, WrappingAdd,
+    le_limbs_into_word, maj, maj_field, set_arrayview_from_u32_slice, small_sig0, small_sig0_field,
+    small_sig1, small_sig1_field, word_into_bits, word_into_u16_limbs, word_into_u8_limbs,
+    Sha2BlockHasherSubairConfig, Sha2DigestColsRefMut, Sha2RoundColsRef, Sha2RoundColsRefMut,
+    Sha2Variant, WrappingAdd,
 };
 
 /// A helper struct for the SHA-2 trace generation.

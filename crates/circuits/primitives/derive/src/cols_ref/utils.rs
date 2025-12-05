@@ -1,4 +1,4 @@
-use syn::{Expr, ExprBlock, ExprPath, Ident, Stmt, Type, TypePath};
+use syn::{Expr, ExprPath, Ident, Stmt, Type, TypePath};
 
 pub fn is_primitive_type(ty: &Type) -> bool {
     match ty {

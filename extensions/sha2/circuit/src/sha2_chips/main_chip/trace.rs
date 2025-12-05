@@ -1,44 +1,27 @@
-use std::{
-    array::{self, from_fn},
-    borrow::{Borrow, BorrowMut},
-    cmp::min,
-    sync::Arc,
-};
+use std::sync::Arc;
 
-use ndarray::ArrayViewMut;
 use openvm_circuit::{
     arch::*,
     system::memory::{
         offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
-        online::TracingMemory,
         MemoryAuxColsFactory,
     },
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::AlignedBytesBorrow;
-use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode,
-};
-use openvm_rv32im_circuit::adapters::{read_rv32_register, tracing_read, tracing_write};
+use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use openvm_sha2_air::set_arrayview_from_u8_slice;
-use openvm_sha2_transpiler::Rv32Sha2Opcode;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::{cpu::CpuBackend, types::AirProvingContext},
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     Chip,
 };
 
 use crate::{
-    Sha2ColsRef, Sha2ColsRefMut, Sha2Config, Sha2MainChip, Sha2Metadata, Sha2RecordHeader,
-    Sha2RecordLayout, Sha2RecordMut, Sha2SharedRecords, SHA2_WRITE_SIZE,
+    Sha2ColsRefMut, Sha2Config, Sha2MainChip, Sha2Metadata, Sha2RecordLayout, Sha2RecordMut,
+    Sha2SharedRecords, SHA2_WRITE_SIZE,
 };
 
 // We will allocate a new trace matrix instead of using the record arena directly,

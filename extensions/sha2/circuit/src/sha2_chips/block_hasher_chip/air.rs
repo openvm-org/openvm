@@ -1,17 +1,9 @@
-use std::{cmp::max, iter::once, marker::PhantomData};
-
-use ndarray::s;
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupBus,
-    encoder::Encoder,
-    utils::{not, select},
-    SubAir,
-};
-use openvm_sha2_air::{compose, Sha2BlockHasherSubAir, Sha2DigestColsRef, Sha2RoundColsRef};
+use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, SubAir};
+use openvm_sha2_air::{compose, Sha2BlockHasherSubAir};
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, FieldAlgebra},
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };

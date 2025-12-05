@@ -8,7 +8,6 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_sha2_transpiler::Rv32Sha2Opcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{Sha2Config, Sha2VmExecutor, SHA2_READ_SIZE};

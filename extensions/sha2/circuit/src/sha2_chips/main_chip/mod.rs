@@ -11,12 +11,11 @@ use std::{
 pub use air::*;
 pub use columns::*;
 pub use config::*;
-use openvm_circuit::{arch::VmChipWrapper, system::memory::SharedMemoryHelper};
+use openvm_circuit::system::memory::SharedMemoryHelper;
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
-use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
-pub use trace::*;
+use openvm_stark_backend::p3_matrix::dense::RowMajorMatrix;
 
-use crate::{Sha2BlockHasherChip, Sha2Config};
+use crate::Sha2Config;
 
 // Record struct for sharing between the main chip and the block hasher chip
 pub struct Sha2SharedRecords<F> {
