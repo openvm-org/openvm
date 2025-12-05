@@ -3,8 +3,7 @@ use core::hint::black_box;
 
 use hex::FromHex;
 use openvm as _;
-
-
+use tiny_keccak::Hasher;
 
 // [!endregion imports]
 
@@ -24,11 +23,15 @@ pub fn main() {
         let input = Vec::from_hex(input).unwrap();
         let expected_output = Vec::from_hex(expected_output).unwrap();
 
-        // let output = keccak256(&black_box(input));
-        // if output != *expected_output {
-        //     panic!();
-        // }
-
+        let mut hasher = tiny_keccak::Keccak::v256();
+        hasher.update(&input);
+        let mut output = [0u8; 32];
+        hasher.finalize(&mut output);
+        if output != *expected_output {
+            panic!();
+        }
     }
+
+    println!("good");
 }
 // [!endregion main]
