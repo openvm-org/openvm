@@ -134,7 +134,7 @@ pub fn curve_declare(input: TokenStream) -> TokenStream {
                         let point_modulus_bytes = <<Self::Point as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
                         let p1 = scalar_modulus_bytes.as_ref();
                         let p2 = [point_modulus_bytes.as_ref(), point_modulus_bytes.as_ref()].concat();
-                        let mut uninit: core::mem::MaybeUninit<[Self::Scalar, Self::Point]> = core::mem::MaybeUninit::uninit();
+                        let mut uninit: core::mem::MaybeUninit<(Self::Scalar, Self::Point)> = core::mem::MaybeUninit::uninit();
 
                         unsafe { #curve_setup_extern_func(uninit.as_mut_ptr() as *mut core::ffi::c_void, p1.as_ptr(), p2.as_ptr()); }
                         <Self::Scalar as openvm_algebra_guest::IntMod>::set_up_once();

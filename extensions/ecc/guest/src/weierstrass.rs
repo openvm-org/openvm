@@ -136,7 +136,10 @@ pub trait IntrinsicCurve {
     /// Multi-scalar multiplication.
     /// The implementation may be specialized to use properties of the curve
     /// (e.g., if the curve order is prime).
-    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point;
+    fn msm<const CHECK_SETUP: bool>(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point;
+
+    /// Setup the curve.
+    fn set_up_once();
 }
 
 // MSM using preprocessed table (windowed method)

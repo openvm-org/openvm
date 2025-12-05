@@ -1,15 +1,10 @@
-use core::ops::{Add, Neg};
+use core::ops::Neg;
 
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
 use openvm_algebra_moduli_macros::moduli_declare;
-use openvm_ecc_guest::{
-    weierstrass::{CachedMulTable, IntrinsicCurve, WeierstrassPoint},
-    CyclicGroup, Group,
-};
+use openvm_ecc_guest::{weierstrass::WeierstrassPoint, CyclicGroup, Group};
 use openvm_ecc_sw_macros::sw_declare;
-
-use crate::Secp256k1;
 
 // --- Define the OpenVM modular arithmetic and ecc types ---
 
@@ -50,24 +45,6 @@ impl CyclicGroup for Secp256k1Point {
             "7727EF046F2FB863E6AB7A59B74BE80257F7EEF103045BA29A3B5CD98825C5B7"
         )),
     };
-}
-
-impl IntrinsicCurve for Secp256k1 {
-    type Scalar = Secp256k1Scalar;
-    type Point = Secp256k1Point;
-
-    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point
-    where
-        for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
-    {
-        // heuristic
-        if coeffs.len() < 25 {
-            let table = CachedMulTable::<Self>::new_with_prime_order(bases, 4);
-            table.windowed_mul(coeffs)
-        } else {
-            openvm_ecc_guest::msm(coeffs, bases)
-        }
-    }
 }
 
 // --- Implement helpful methods mimicking the structs in k256 ---

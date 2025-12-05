@@ -4,7 +4,7 @@ use core::ops::Neg;
 
 use openvm_algebra_guest::IntMod;
 use openvm_algebra_moduli_macros::moduli_declare;
-use openvm_ecc_guest::{weierstrass::IntrinsicCurve, CyclicGroup, Group};
+use openvm_ecc_guest::{CyclicGroup, Group};
 
 mod fp12;
 mod fp2;
@@ -64,15 +64,8 @@ impl CyclicGroup for G1Affine {
     };
 }
 
-pub struct Bls12_381;
-
-impl IntrinsicCurve for Bls12_381 {
-    type Scalar = Scalar;
-    type Point = G1Affine;
-
-    fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point {
-        openvm_ecc_guest::msm(coeffs, bases)
-    }
+openvm_ecc_curve_macros::curve_declare! {
+    Bls12_381 { point_type = G1Affine, scalar_type = Scalar },
 }
 
 // Define a G2Affine struct that implements curve operations using `Fp2` intrinsics
