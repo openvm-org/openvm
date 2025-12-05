@@ -168,8 +168,7 @@ impl SizedRecord<Sha2RecordLayout> for Sha2RecordMut<'_> {
     }
 
     fn alignment(_layout: &Sha2RecordLayout) -> usize {
-        // TODO: is this correct?
-        align_of::<Sha2RecordHeader>()
+        align_of::<Sha2RecordHeader>() // 4-byte alignment
     }
 }
 

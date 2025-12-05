@@ -210,7 +210,6 @@ impl<C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig> Sha2MainAir<C> {
         }
 
         // range check the memory pointers
-        // TODO: do I need to consider the length of the input or state?
         let shift = AB::Expr::from_canonical_usize(
             1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.ptr_max_bits),
         );
