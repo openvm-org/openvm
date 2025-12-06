@@ -31,7 +31,5 @@ pub fn main() {
             panic!();
         }
     }
-
-    println!("good");
 }
 // [!endregion main]
