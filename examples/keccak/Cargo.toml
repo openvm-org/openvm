@@ -10,8 +10,8 @@ members = []
 openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
     "std",
 ] }
-openvm-keccak256 = { git = "https://github.com/openvm-org/openvm.git" }
 hex = { version = "0.4.3" }
+tiny-keccak = { git = "https://github.com/openvm-org/tiny-keccak.git", features = ["keccak"] }
 
 [features]
 default = []
@@ -19,4 +19,4 @@ default = []
 # remove this if copying example outside of monorepo
 [patch."https://github.com/openvm-org/openvm.git"]
 openvm = { path = "../../crates/toolchain/openvm" }
-openvm-keccak256 = { path = "../../guest-libs/keccak256" }
+
