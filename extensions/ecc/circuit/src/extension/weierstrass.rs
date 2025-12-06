@@ -118,11 +118,11 @@ pub enum WeierstrassExtensionExecutor {
     // 32 limbs prime
     EcAddNeRv32_32(EcAddNeExecutor<2, 32>),
     EcDoubleRv32_32(EcDoubleExecutor<2, 32>),
-    EcMulRv32_32(EcMulExecutor<1, 2, 32, 32>),
+    EcMulRv32_32(EcMulExecutor<2, 1, 32, 32>),
     // 48 limbs prime
     EcAddNeRv32_48(EcAddNeExecutor<6, 16>),
     EcDoubleRv32_48(EcDoubleExecutor<6, 16>),
-    EcMulRv32_48(EcMulExecutor<1, 6, 32, 16>),
+    EcMulRv32_48(EcMulExecutor<6, 3, 16, 16>),
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
@@ -306,7 +306,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                 );
                 inventory.add_air(double);
 
-                let mul = get_ec_mul_air::<1, 2, 32, 32>(
+                let mul = get_ec_mul_air::<2, 1, 32, 32>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -347,7 +347,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                 );
                 inventory.add_air(double);
 
-                let mul = get_ec_mul_air::<1, 6, 32, 16>(
+                let mul = get_ec_mul_air::<6, 3, 16, 16>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -429,8 +429,8 @@ where
                 );
                 inventory.add_executor_chip(double);
 
-                inventory.next_air::<WeierstrassEcMulAir<1, 2, 32, 32>>()?;
-                let mul = get_ec_mul_chip::<Val<SC>, 1, 2, 32, 32>(
+                inventory.next_air::<WeierstrassEcMulAir<2, 1, 32, 32>>()?;
+                let mul = get_ec_mul_chip::<Val<SC>, 2, 1, 32, 32>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -467,8 +467,8 @@ where
                 );
                 inventory.add_executor_chip(double);
 
-                inventory.next_air::<WeierstrassEcMulAir<1, 6, 32, 16>>()?;
-                let mul = get_ec_mul_chip::<Val<SC>, 1, 6, 32, 16>(
+                inventory.next_air::<WeierstrassEcMulAir<6, 3, 16, 16>>()?;
+                let mul = get_ec_mul_chip::<Val<SC>, 6, 3, 16, 16>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),

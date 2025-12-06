@@ -45,10 +45,10 @@ use openvm_stark_backend::{
 #[derive(AlignedBorrow, Debug)]
 pub struct Rv32EcMulAdapterCols<
     T,
-    const BLOCKS_PER_SCALAR: usize,
     const BLOCKS_PER_POINT: usize,
-    const SCALAR_SIZE: usize,
+    const BLOCKS_PER_SCALAR: usize,
     const POINT_SIZE: usize,
+    const SCALAR_SIZE: usize,
 > {
     pub from_state: ExecutionState<T>,
 
@@ -61,18 +61,18 @@ pub struct Rv32EcMulAdapterCols<
     pub rs_read_aux: [MemoryReadAuxCols<T>; 2],
     pub rd_read_aux: MemoryReadAuxCols<T>,
 
-    pub reads_scalar_aux: [MemoryReadAuxCols<T>; BLOCKS_PER_SCALAR],
     pub reads_point_aux: [MemoryReadAuxCols<T>; BLOCKS_PER_POINT],
+    pub reads_scalar_aux: [MemoryReadAuxCols<T>; BLOCKS_PER_SCALAR],
     pub writes_aux: [MemoryWriteAuxCols<T, POINT_SIZE>; BLOCKS_PER_POINT],
 }
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Rv32EcMulAdapterAir<
-    const BLOCKS_PER_SCALAR: usize,
     const BLOCKS_PER_POINT: usize,
-    const SCALAR_SIZE: usize,
+    const BLOCKS_PER_SCALAR: usize,
     const POINT_SIZE: usize,
+    const SCALAR_SIZE: usize,
 > {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
@@ -83,33 +83,33 @@ pub struct Rv32EcMulAdapterAir<
 
 impl<
         F: Field,
-        const BLOCKS_PER_SCALAR: usize,
         const BLOCKS_PER_POINT: usize,
-        const SCALAR_SIZE: usize,
+        const BLOCKS_PER_SCALAR: usize,
         const POINT_SIZE: usize,
+        const SCALAR_SIZE: usize,
     > BaseAir<F>
-    for Rv32EcMulAdapterAir<BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE>
+    for Rv32EcMulAdapterAir<BLOCKS_PER_POINT, BLOCKS_PER_SCALAR, POINT_SIZE, SCALAR_SIZE>
 {
     fn width(&self) -> usize {
-        Rv32EcMulAdapterCols::<F, BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE>::width()
+        Rv32EcMulAdapterCols::<F, BLOCKS_PER_POINT, BLOCKS_PER_SCALAR, POINT_SIZE, SCALAR_SIZE>::width()
     }
 }
 
 impl<
         AB: InteractionBuilder,
-        const BLOCKS_PER_SCALAR: usize,
         const BLOCKS_PER_POINT: usize,
-        const SCALAR_SIZE: usize,
+        const BLOCKS_PER_SCALAR: usize,
         const POINT_SIZE: usize,
+        const SCALAR_SIZE: usize,
     > VmAdapterAir<AB>
-    for Rv32EcMulAdapterAir<BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE>
+    for Rv32EcMulAdapterAir<BLOCKS_PER_POINT, BLOCKS_PER_SCALAR, POINT_SIZE, SCALAR_SIZE>
 {
     type Interface = Rv32EcMulAdapterInterface<
         AB::Expr,
-        BLOCKS_PER_SCALAR,
         BLOCKS_PER_POINT,
-        SCALAR_SIZE,
+        BLOCKS_PER_SCALAR,
         POINT_SIZE,
+        SCALAR_SIZE,
     >;
 
     fn eval(
@@ -120,10 +120,10 @@ impl<
     ) {
         let cols: &Rv32EcMulAdapterCols<
             _,
-            BLOCKS_PER_SCALAR,
             BLOCKS_PER_POINT,
-            SCALAR_SIZE,
+            BLOCKS_PER_SCALAR,
             POINT_SIZE,
+            SCALAR_SIZE,
         > = local.borrow();
         let timestamp = cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
@@ -181,14 +181,14 @@ impl<
 
         let e = AB::F::from_canonical_u32(RV32_MEMORY_AS);
         // Reads from heap
-        // Scalar reads
-        let scalar_address = &rs_val_f[0];
-        for (i, (read, aux)) in zip(ctx.reads.0, &cols.reads_scalar_aux).enumerate() {
+        // Point reads
+        let point_address = &rs_val_f[0];
+        for (i, (read, aux)) in zip(ctx.reads.0, &cols.reads_point_aux).enumerate() {
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
                         e,
-                        scalar_address.clone() + AB::Expr::from_canonical_usize(i * SCALAR_SIZE),
+                        point_address.clone() + AB::Expr::from_canonical_usize(i * POINT_SIZE),
                     ),
                     read,
                     timestamp_pp(),
@@ -196,14 +196,14 @@ impl<
                 )
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
-        // Point reads
-        let point_address = &rs_val_f[1];
-        for (i, (read, aux)) in zip(ctx.reads.1, &cols.reads_point_aux).enumerate() {
+        // Scalar reads
+        let scalar_address = &rs_val_f[1];
+        for (i, (read, aux)) in zip(ctx.reads.1, &cols.reads_scalar_aux).enumerate() {
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
                         e,
-                        point_address.clone() + AB::Expr::from_canonical_usize(i * POINT_SIZE),
+                        scalar_address.clone() + AB::Expr::from_canonical_usize(i * SCALAR_SIZE),
                     ),
                     read,
                     timestamp_pp(),
@@ -253,10 +253,10 @@ impl<
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
         let cols: &Rv32EcMulAdapterCols<
             _,
-            BLOCKS_PER_SCALAR,
             BLOCKS_PER_POINT,
-            SCALAR_SIZE,
+            BLOCKS_PER_SCALAR,
             POINT_SIZE,
+            SCALAR_SIZE,
         > = local.borrow();
         cols.from_state.pc
     }
@@ -266,10 +266,10 @@ impl<
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct Rv32EcMulAdapterRecord<
-    const BLOCKS_PER_SCALAR: usize,
     const BLOCKS_PER_POINT: usize,
-    const SCALAR_SIZE: usize,
+    const BLOCKS_PER_SCALAR: usize,
     const POINT_SIZE: usize,
+    const SCALAR_SIZE: usize,
 > {
     pub from_pc: u32,
     pub from_timestamp: u32,
@@ -283,27 +283,27 @@ pub struct Rv32EcMulAdapterRecord<
     pub rs_read_aux: [MemoryReadAuxRecord; 2],
     pub rd_read_aux: MemoryReadAuxRecord,
 
-    pub reads_scalar_aux: [MemoryReadAuxRecord; BLOCKS_PER_SCALAR],
     pub reads_point_aux: [MemoryReadAuxRecord; BLOCKS_PER_POINT],
+    pub reads_scalar_aux: [MemoryReadAuxRecord; BLOCKS_PER_SCALAR],
     pub writes_aux: [MemoryWriteBytesAuxRecord<POINT_SIZE>; BLOCKS_PER_POINT],
 }
 
 #[derive(derive_new::new, Clone, Copy)]
 pub struct Rv32EcMulAdapterExecutor<
-    const BLOCKS_PER_SCALAR: usize,
     const BLOCKS_PER_POINT: usize,
-    const SCALAR_SIZE: usize,
+    const BLOCKS_PER_SCALAR: usize,
     const POINT_SIZE: usize,
+    const SCALAR_SIZE: usize,
 > {
     pointer_max_bits: usize,
 }
 
 #[derive(derive_new::new)]
 pub struct Rv32EcMulAdapterFiller<
-    const BLOCKS_PER_SCALAR: usize,
     const BLOCKS_PER_POINT: usize,
-    const SCALAR_SIZE: usize,
+    const BLOCKS_PER_SCALAR: usize,
     const POINT_SIZE: usize,
+    const SCALAR_SIZE: usize,
 > {
     pointer_max_bits: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
@@ -311,30 +311,30 @@ pub struct Rv32EcMulAdapterFiller<
 
 impl<
         F: PrimeField32,
-        const BLOCKS_PER_SCALAR: usize,
         const BLOCKS_PER_POINT: usize,
-        const SCALAR_SIZE: usize,
+        const BLOCKS_PER_SCALAR: usize,
         const POINT_SIZE: usize,
+        const SCALAR_SIZE: usize,
     > AdapterTraceExecutor<F>
-    for Rv32EcMulAdapterExecutor<BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE>
+    for Rv32EcMulAdapterExecutor<BLOCKS_PER_POINT, BLOCKS_PER_SCALAR, POINT_SIZE, SCALAR_SIZE>
 {
     const WIDTH: usize = Rv32EcMulAdapterCols::<
         F,
-        BLOCKS_PER_SCALAR,
         BLOCKS_PER_POINT,
-        SCALAR_SIZE,
+        BLOCKS_PER_SCALAR,
         POINT_SIZE,
+        SCALAR_SIZE,
     >::width();
     type ReadData = (
-        [[u8; SCALAR_SIZE]; BLOCKS_PER_SCALAR],
         [[u8; POINT_SIZE]; BLOCKS_PER_POINT],
+        [[u8; SCALAR_SIZE]; BLOCKS_PER_SCALAR],
     );
     type WriteData = [[u8; POINT_SIZE]; BLOCKS_PER_POINT];
     type RecordMut<'a> = &'a mut Rv32EcMulAdapterRecord<
-        BLOCKS_PER_SCALAR,
         BLOCKS_PER_POINT,
-        SCALAR_SIZE,
+        BLOCKS_PER_SCALAR,
         POINT_SIZE,
+        SCALAR_SIZE,
     >;
 
     #[inline(always)]
@@ -348,10 +348,10 @@ impl<
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut &mut Rv32EcMulAdapterRecord<
-            BLOCKS_PER_SCALAR,
             BLOCKS_PER_POINT,
-            SCALAR_SIZE,
+            BLOCKS_PER_SCALAR,
             POINT_SIZE,
+            SCALAR_SIZE,
         >,
     ) -> Self::ReadData {
         let &Instruction { a, b, c, d, e, .. } = instruction;
@@ -380,30 +380,30 @@ impl<
 
         // Read memory values
         debug_assert!(
-            (record.rs_vals[0] + (SCALAR_SIZE * BLOCKS_PER_SCALAR - 1) as u32)
-                < (1 << self.pointer_max_bits) as u32
-        );
-        let reads_scalar = from_fn(|i| {
-            tracing_read(
-                memory,
-                RV32_MEMORY_AS,
-                record.rs_vals[0] + (i * SCALAR_SIZE) as u32,
-                &mut record.reads_scalar_aux[i].prev_timestamp,
-            )
-        });
-        debug_assert!(
-            (record.rs_vals[1] + (POINT_SIZE * BLOCKS_PER_POINT - 1) as u32)
+            (record.rs_vals[0] + (POINT_SIZE * BLOCKS_PER_POINT - 1) as u32)
                 < (1 << self.pointer_max_bits) as u32
         );
         let reads_point = from_fn(|i| {
             tracing_read(
                 memory,
                 RV32_MEMORY_AS,
-                record.rs_vals[1] + (i * POINT_SIZE) as u32,
+                record.rs_vals[0] + (i * POINT_SIZE) as u32,
                 &mut record.reads_point_aux[i].prev_timestamp,
             )
         });
-        (reads_scalar, reads_point)
+        debug_assert!(
+            (record.rs_vals[1] + (SCALAR_SIZE * BLOCKS_PER_SCALAR - 1) as u32)
+                < (1 << self.pointer_max_bits) as u32
+        );
+        let reads_scalar = from_fn(|i| {
+            tracing_read(
+                memory,
+                RV32_MEMORY_AS,
+                record.rs_vals[1] + (i * SCALAR_SIZE) as u32,
+                &mut record.reads_scalar_aux[i].prev_timestamp,
+            )
+        });
+        (reads_point, reads_scalar)
     }
 
     fn write(
@@ -412,10 +412,10 @@ impl<
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut &mut Rv32EcMulAdapterRecord<
-            BLOCKS_PER_SCALAR,
             BLOCKS_PER_POINT,
-            SCALAR_SIZE,
+            BLOCKS_PER_SCALAR,
             POINT_SIZE,
+            SCALAR_SIZE,
         >,
     ) {
         debug_assert_eq!(instruction.e.as_canonical_u32(), RV32_MEMORY_AS);
@@ -441,19 +441,19 @@ impl<
 
 impl<
         F: PrimeField32,
-        const BLOCKS_PER_SCALAR: usize,
         const BLOCKS_PER_POINT: usize,
-        const SCALAR_SIZE: usize,
+        const BLOCKS_PER_SCALAR: usize,
         const POINT_SIZE: usize,
+        const SCALAR_SIZE: usize,
     > AdapterTraceFiller<F>
-    for Rv32EcMulAdapterFiller<BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE>
+    for Rv32EcMulAdapterFiller<BLOCKS_PER_POINT, BLOCKS_PER_SCALAR, POINT_SIZE, SCALAR_SIZE>
 {
     const WIDTH: usize = Rv32EcMulAdapterCols::<
         F,
-        BLOCKS_PER_SCALAR,
         BLOCKS_PER_POINT,
-        SCALAR_SIZE,
+        BLOCKS_PER_SCALAR,
         POINT_SIZE,
+        SCALAR_SIZE,
     >::width();
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
@@ -461,18 +461,18 @@ impl<
         // - caller ensures `adapter_row` contains a valid record representation that was previously
         //   written by the executor
         let record: &Rv32EcMulAdapterRecord<
-            BLOCKS_PER_SCALAR,
             BLOCKS_PER_POINT,
-            SCALAR_SIZE,
+            BLOCKS_PER_SCALAR,
             POINT_SIZE,
+            SCALAR_SIZE,
         > = unsafe { get_record_from_slice(&mut adapter_row, ()) };
 
         let cols: &mut Rv32EcMulAdapterCols<
             F,
-            BLOCKS_PER_SCALAR,
             BLOCKS_PER_POINT,
-            SCALAR_SIZE,
+            BLOCKS_PER_SCALAR,
             POINT_SIZE,
+            SCALAR_SIZE,
         > = adapter_row.borrow_mut();
 
         // Range checks:
@@ -509,18 +509,18 @@ impl<
             });
 
         record
-            .reads_point_aux
+            .reads_scalar_aux
             .iter()
-            .zip(cols.reads_point_aux.iter_mut())
+            .zip(cols.reads_scalar_aux.iter_mut())
             .rev()
             .for_each(|(read, cols_read)| {
                 mem_helper.fill(read.prev_timestamp, timestamp_mm(), cols_read.as_mut());
             });
 
         record
-            .reads_scalar_aux
+            .reads_point_aux
             .iter()
-            .zip(cols.reads_scalar_aux.iter_mut())
+            .zip(cols.reads_point_aux.iter_mut())
             .rev()
             .for_each(|(read, cols_read)| {
                 mem_helper.fill(read.prev_timestamp, timestamp_mm(), cols_read.as_mut());

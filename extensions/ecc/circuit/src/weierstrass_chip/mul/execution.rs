@@ -31,11 +31,11 @@ struct EcMulPreCompute<'a> {
 
 impl<
         'a,
-        const BLOCKS_PER_SCALAR: usize,
         const BLOCKS_PER_POINT: usize,
-        const SCALAR_SIZE: usize,
+        const BLOCKS_PER_SCALAR: usize,
         const POINT_SIZE: usize,
-    > EcMulExecutor<BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE>
+        const SCALAR_SIZE: usize,
+    > EcMulExecutor<BLOCKS_PER_POINT, BLOCKS_PER_SCALAR, POINT_SIZE, SCALAR_SIZE>
 {
     fn pre_compute_impl<F: PrimeField32>(
         &'a self,
@@ -106,80 +106,80 @@ macro_rules! dispatch {
                 (true, CurveType::K256) => Ok($execute_impl::<
                     _,
                     _,
-                    BLOCKS_PER_SCALAR,
                     BLOCKS_PER_POINT,
-                    SCALAR_SIZE,
+                    BLOCKS_PER_SCALAR,
                     POINT_SIZE,
+                    SCALAR_SIZE,
                     { CurveType::K256 as u8 },
                     true,
                 >),
                 (true, CurveType::P256) => Ok($execute_impl::<
                     _,
                     _,
-                    BLOCKS_PER_SCALAR,
                     BLOCKS_PER_POINT,
-                    SCALAR_SIZE,
+                    BLOCKS_PER_SCALAR,
                     POINT_SIZE,
+                    SCALAR_SIZE,
                     { CurveType::P256 as u8 },
                     true,
                 >),
                 (true, CurveType::BN254) => Ok($execute_impl::<
                     _,
                     _,
-                    BLOCKS_PER_SCALAR,
                     BLOCKS_PER_POINT,
-                    SCALAR_SIZE,
+                    BLOCKS_PER_SCALAR,
                     POINT_SIZE,
+                    SCALAR_SIZE,
                     { CurveType::BN254 as u8 },
                     true,
                 >),
                 (true, CurveType::BLS12_381) => Ok($execute_impl::<
                     _,
                     _,
-                    BLOCKS_PER_SCALAR,
                     BLOCKS_PER_POINT,
-                    SCALAR_SIZE,
+                    BLOCKS_PER_SCALAR,
                     POINT_SIZE,
+                    SCALAR_SIZE,
                     { CurveType::BLS12_381 as u8 },
                     true,
                 >),
                 (false, CurveType::K256) => Ok($execute_impl::<
                     _,
                     _,
-                    BLOCKS_PER_SCALAR,
                     BLOCKS_PER_POINT,
-                    SCALAR_SIZE,
+                    BLOCKS_PER_SCALAR,
                     POINT_SIZE,
+                    SCALAR_SIZE,
                     { CurveType::K256 as u8 },
                     false,
                 >),
                 (false, CurveType::P256) => Ok($execute_impl::<
                     _,
                     _,
-                    BLOCKS_PER_SCALAR,
                     BLOCKS_PER_POINT,
-                    SCALAR_SIZE,
+                    BLOCKS_PER_SCALAR,
                     POINT_SIZE,
+                    SCALAR_SIZE,
                     { CurveType::P256 as u8 },
                     false,
                 >),
                 (false, CurveType::BN254) => Ok($execute_impl::<
                     _,
                     _,
-                    BLOCKS_PER_SCALAR,
                     BLOCKS_PER_POINT,
-                    SCALAR_SIZE,
+                    BLOCKS_PER_SCALAR,
                     POINT_SIZE,
+                    SCALAR_SIZE,
                     { CurveType::BN254 as u8 },
                     false,
                 >),
                 (false, CurveType::BLS12_381) => Ok($execute_impl::<
                     _,
                     _,
-                    BLOCKS_PER_SCALAR,
                     BLOCKS_PER_POINT,
-                    SCALAR_SIZE,
+                    BLOCKS_PER_SCALAR,
                     POINT_SIZE,
+                    SCALAR_SIZE,
                     { CurveType::BLS12_381 as u8 },
                     false,
                 >),
@@ -188,10 +188,10 @@ macro_rules! dispatch {
             Ok($execute_impl::<
                 _,
                 _,
-                BLOCKS_PER_SCALAR,
                 BLOCKS_PER_POINT,
-                SCALAR_SIZE,
+                BLOCKS_PER_SCALAR,
                 POINT_SIZE,
+                SCALAR_SIZE,
                 { u8::MAX },
                 true,
             >)
@@ -199,10 +199,10 @@ macro_rules! dispatch {
             Ok($execute_impl::<
                 _,
                 _,
-                BLOCKS_PER_SCALAR,
                 BLOCKS_PER_POINT,
-                SCALAR_SIZE,
+                BLOCKS_PER_SCALAR,
                 POINT_SIZE,
+                SCALAR_SIZE,
                 { u8::MAX },
                 false,
             >)
@@ -212,12 +212,12 @@ macro_rules! dispatch {
 
 impl<
         F: PrimeField32,
-        const BLOCKS_PER_SCALAR: usize,
         const BLOCKS_PER_POINT: usize,
-        const SCALAR_SIZE: usize,
+        const BLOCKS_PER_SCALAR: usize,
         const POINT_SIZE: usize,
+        const SCALAR_SIZE: usize,
     > InterpreterExecutor<F>
-    for EcMulExecutor<BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE>
+    for EcMulExecutor<BLOCKS_PER_POINT, BLOCKS_PER_SCALAR, POINT_SIZE, SCALAR_SIZE>
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
@@ -259,12 +259,12 @@ impl<
 
 impl<
         F: PrimeField32,
-        const BLOCKS_PER_SCALAR: usize,
         const BLOCKS_PER_POINT: usize,
-        const SCALAR_SIZE: usize,
+        const BLOCKS_PER_SCALAR: usize,
         const POINT_SIZE: usize,
+        const SCALAR_SIZE: usize,
     > InterpreterMeteredExecutor<F>
-    for EcMulExecutor<BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE>
+    for EcMulExecutor<BLOCKS_PER_POINT, BLOCKS_PER_SCALAR, POINT_SIZE, SCALAR_SIZE>
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
@@ -314,10 +314,10 @@ impl<
 unsafe fn execute_e12_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
-    const BLOCKS_PER_SCALAR: usize,
     const BLOCKS_PER_POINT: usize,
-    const SCALAR_SIZE: usize,
+    const BLOCKS_PER_SCALAR: usize,
     const POINT_SIZE: usize,
+    const SCALAR_SIZE: usize,
     const CURVE_TYPE: u8,
     const IS_SETUP: bool,
 >(
@@ -331,10 +331,10 @@ unsafe fn execute_e12_impl<
         .map(|addr| u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, addr as u32)));
 
     // Read memory values for the scalar and point
-    let scalar_data: [[u8; SCALAR_SIZE]; BLOCKS_PER_SCALAR] =
-        from_fn(|i| exec_state.vm_read(RV32_MEMORY_AS, rs_vals[0] + (i * SCALAR_SIZE) as u32));
     let point_data: [[u8; POINT_SIZE]; BLOCKS_PER_POINT] =
-        from_fn(|i| exec_state.vm_read(RV32_MEMORY_AS, rs_vals[1] + (i * POINT_SIZE) as u32));
+        from_fn(|i| exec_state.vm_read(RV32_MEMORY_AS, rs_vals[0] + (i * POINT_SIZE) as u32));
+    let scalar_data: [[u8; SCALAR_SIZE]; BLOCKS_PER_SCALAR] =
+        from_fn(|i| exec_state.vm_read(RV32_MEMORY_AS, rs_vals[1] + (i * SCALAR_SIZE) as u32));
 
     // TODO: Check this later
     // if IS_SETUP {
@@ -372,9 +372,9 @@ unsafe fn execute_e12_impl<
     let output_data = if CURVE_TYPE == u8::MAX || IS_SETUP {
         point_data
     } else {
-        ec_mul::<CURVE_TYPE, BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE>(
-            scalar_data,
+        ec_mul::<CURVE_TYPE, BLOCKS_PER_POINT, BLOCKS_PER_SCALAR, POINT_SIZE, SCALAR_SIZE>(
             point_data,
+            scalar_data,
         )
     };
 
@@ -396,10 +396,10 @@ unsafe fn execute_e12_impl<
 unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
-    const BLOCKS_PER_SCALAR: usize,
     const BLOCKS_PER_POINT: usize,
-    const SCALAR_SIZE: usize,
+    const BLOCKS_PER_SCALAR: usize,
     const POINT_SIZE: usize,
+    const SCALAR_SIZE: usize,
     const CURVE_TYPE: u8,
     const IS_SETUP: bool,
 >(
@@ -411,10 +411,10 @@ unsafe fn execute_e1_impl<
     execute_e12_impl::<
         _,
         _,
-        BLOCKS_PER_SCALAR,
         BLOCKS_PER_POINT,
-        SCALAR_SIZE,
+        BLOCKS_PER_SCALAR,
         POINT_SIZE,
+        SCALAR_SIZE,
         CURVE_TYPE,
         IS_SETUP,
     >(pre_compute, exec_state)
@@ -425,10 +425,10 @@ unsafe fn execute_e1_impl<
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
-    const BLOCKS_PER_SCALAR: usize,
     const BLOCKS_PER_POINT: usize,
-    const SCALAR_SIZE: usize,
+    const BLOCKS_PER_SCALAR: usize,
     const POINT_SIZE: usize,
+    const SCALAR_SIZE: usize,
     const CURVE_TYPE: u8,
     const IS_SETUP: bool,
 >(
@@ -444,10 +444,10 @@ unsafe fn execute_e2_impl<
     execute_e12_impl::<
         _,
         _,
-        BLOCKS_PER_SCALAR,
         BLOCKS_PER_POINT,
-        SCALAR_SIZE,
+        BLOCKS_PER_SCALAR,
         POINT_SIZE,
+        SCALAR_SIZE,
         CURVE_TYPE,
         IS_SETUP,
     >(&e2_pre_compute.data, exec_state)

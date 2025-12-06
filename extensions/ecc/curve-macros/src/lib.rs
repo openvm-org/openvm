@@ -116,8 +116,8 @@ pub fn curve_declare(input: TokenStream) -> TokenStream {
                                     core::mem::MaybeUninit::uninit();
                                 #curve_ec_mul_extern_func(
                                     uninit.as_mut_ptr() as usize,
-                                    coeff as *const Self::Scalar as usize,
                                     base as *const Self::Point as usize,
+                                    coeff as *const Self::Scalar as usize,
                                 );
                                 acc.add_assign(&uninit.assume_init());
                             }
@@ -135,12 +135,12 @@ pub fn curve_declare(input: TokenStream) -> TokenStream {
                     static is_setup: ::openvm_ecc_guest::once_cell::race::OnceBool = ::openvm_ecc_guest::once_cell::race::OnceBool::new();
 
                     is_setup.get_or_init(|| {
-                        let scalar_modulus_bytes = <Self::Scalar as openvm_algebra_guest::IntMod>::MODULUS;
                         let point_modulus_bytes = <<Self::Point as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
-                        let p1 = scalar_modulus_bytes.as_ref();
                         let curve_a = <Self::Point as openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A;
-                        let p2 = [point_modulus_bytes.as_ref(), curve_a.as_le_bytes()].concat();
-                        let mut uninit: core::mem::MaybeUninit<(Self::Scalar, Self::Point)> = core::mem::MaybeUninit::uninit();
+                        let p1 = [point_modulus_bytes.as_ref(), curve_a.as_le_bytes()].concat();
+                        let scalar_modulus_bytes = <Self::Scalar as openvm_algebra_guest::IntMod>::MODULUS;
+                        let p2 = scalar_modulus_bytes.as_ref();
+                        let mut uninit: core::mem::MaybeUninit<Self::Point> = core::mem::MaybeUninit::uninit();
 
                         unsafe { #curve_setup_extern_func(uninit.as_mut_ptr() as *mut core::ffi::c_void, p1.as_ptr(), p2.as_ptr()); }
                         <Self::Scalar as openvm_algebra_guest::IntMod>::set_up_once();

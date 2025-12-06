@@ -32,9 +32,9 @@ pub fn ec_mul_expr(
     let builder = Rc::new(RefCell::new(builder));
 
     // Create inputs
-    let _scalar = ExprBuilder::new_input(builder.clone());
     let x1 = ExprBuilder::new_input(builder.clone());
     let y1 = ExprBuilder::new_input(builder.clone());
+    let _scalar = ExprBuilder::new_input(builder.clone());
 
     // Create dummy outputs: result x and result y
     // Note: The actual computation is done natively, but we need these for the AIR structure
@@ -49,36 +49,36 @@ pub fn ec_mul_expr(
 
 #[derive(Clone, PreflightExecutor, Deref, DerefMut)]
 pub struct EcMulExecutor<
-    const BLOCKS_PER_SCALAR: usize,
     const BLOCKS_PER_POINT: usize,
-    const SCALAR_SIZE: usize,
+    const BLOCKS_PER_SCALAR: usize,
     const POINT_SIZE: usize,
+    const SCALAR_SIZE: usize,
 >(
     FieldExpressionExecutor<
-        Rv32EcMulAdapterExecutor<BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE>,
+        Rv32EcMulAdapterExecutor<BLOCKS_PER_POINT, BLOCKS_PER_SCALAR, POINT_SIZE, SCALAR_SIZE>,
     >,
 );
 
 pub type WeierstrassEcMulAir<
-    const BLOCKS_PER_SCALAR: usize,
     const BLOCKS_PER_POINT: usize,
-    const SCALAR_SIZE: usize,
+    const BLOCKS_PER_SCALAR: usize,
     const POINT_SIZE: usize,
+    const SCALAR_SIZE: usize,
 > = VmAirWrapper<
-    Rv32EcMulAdapterAir<BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE>,
+    Rv32EcMulAdapterAir<BLOCKS_PER_POINT, BLOCKS_PER_SCALAR, POINT_SIZE, SCALAR_SIZE>,
     FieldExpressionCoreAir,
 >;
 
 pub type WeierstrassEcMulChip<
     F,
-    const BLOCKS_PER_SCALAR: usize,
     const BLOCKS_PER_POINT: usize,
-    const SCALAR_SIZE: usize,
+    const BLOCKS_PER_SCALAR: usize,
     const POINT_SIZE: usize,
+    const SCALAR_SIZE: usize,
 > = VmChipWrapper<
     F,
     FieldExpressionFiller<
-        Rv32EcMulAdapterFiller<BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE>,
+        Rv32EcMulAdapterFiller<BLOCKS_PER_POINT, BLOCKS_PER_SCALAR, POINT_SIZE, SCALAR_SIZE>,
     >,
 >;
 
@@ -98,10 +98,10 @@ fn gen_base_expr(
 }
 
 pub fn get_ec_mul_air<
-    const BLOCKS_PER_SCALAR: usize,
     const BLOCKS_PER_POINT: usize,
-    const SCALAR_SIZE: usize,
+    const BLOCKS_PER_SCALAR: usize,
     const POINT_SIZE: usize,
+    const SCALAR_SIZE: usize,
 >(
     exec_bridge: ExecutionBridge,
     mem_bridge: MemoryBridge,
@@ -111,7 +111,7 @@ pub fn get_ec_mul_air<
     pointer_max_bits: usize,
     offset: usize,
     a_biguint: BigUint,
-) -> WeierstrassEcMulAir<BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE> {
+) -> WeierstrassEcMulAir<BLOCKS_PER_POINT, BLOCKS_PER_SCALAR, POINT_SIZE, SCALAR_SIZE> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
     WeierstrassEcMulAir::new(
         Rv32EcMulAdapterAir::new(
@@ -125,17 +125,17 @@ pub fn get_ec_mul_air<
 }
 
 pub fn get_ec_mul_step<
-    const BLOCKS_PER_SCALAR: usize,
     const BLOCKS_PER_POINT: usize,
-    const SCALAR_SIZE: usize,
+    const BLOCKS_PER_SCALAR: usize,
     const POINT_SIZE: usize,
+    const SCALAR_SIZE: usize,
 >(
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,
     offset: usize,
     a_biguint: BigUint,
-) -> EcMulExecutor<BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE> {
+) -> EcMulExecutor<BLOCKS_PER_POINT, BLOCKS_PER_SCALAR, POINT_SIZE, SCALAR_SIZE> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
     EcMulExecutor(FieldExpressionExecutor::new(
         Rv32EcMulAdapterExecutor::new(pointer_max_bits),
@@ -149,10 +149,10 @@ pub fn get_ec_mul_step<
 
 pub fn get_ec_mul_chip<
     F,
-    const BLOCKS_PER_SCALAR: usize,
     const BLOCKS_PER_POINT: usize,
-    const SCALAR_SIZE: usize,
+    const BLOCKS_PER_SCALAR: usize,
     const POINT_SIZE: usize,
+    const SCALAR_SIZE: usize,
 >(
     config: ExprBuilderConfig,
     mem_helper: SharedMemoryHelper<F>,
@@ -160,7 +160,7 @@ pub fn get_ec_mul_chip<
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     pointer_max_bits: usize,
     a_biguint: BigUint,
-) -> WeierstrassEcMulChip<F, BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE> {
+) -> WeierstrassEcMulChip<F, BLOCKS_PER_POINT, BLOCKS_PER_SCALAR, POINT_SIZE, SCALAR_SIZE> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker.bus(), a_biguint);
     WeierstrassEcMulChip::new(
         FieldExpressionFiller::new(

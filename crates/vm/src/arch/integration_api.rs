@@ -326,24 +326,24 @@ impl<
 
 pub struct Rv32EcMulAdapterInterface<
     T,
-    const BLOCKS_PER_SCALAR: usize,
     const BLOCKS_PER_POINT: usize,
-    const SCALAR_SIZE: usize,
+    const BLOCKS_PER_SCALAR: usize,
     const POINT_SIZE: usize,
+    const SCALAR_SIZE: usize,
 >(PhantomData<T>);
 
 impl<
         T,
-        const BLOCKS_PER_SCALAR: usize,
         const BLOCKS_PER_POINT: usize,
-        const SCALAR_SIZE: usize,
+        const BLOCKS_PER_SCALAR: usize,
         const POINT_SIZE: usize,
+        const SCALAR_SIZE: usize,
     > VmAdapterInterface<T>
-    for Rv32EcMulAdapterInterface<T, BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE>
+    for Rv32EcMulAdapterInterface<T, BLOCKS_PER_POINT, BLOCKS_PER_SCALAR, POINT_SIZE, SCALAR_SIZE>
 {
     type Reads = (
-        [[T; SCALAR_SIZE]; BLOCKS_PER_SCALAR],
         [[T; POINT_SIZE]; BLOCKS_PER_POINT],
+        [[T; SCALAR_SIZE]; BLOCKS_PER_SCALAR],
     );
     type Writes = [[T; POINT_SIZE]; BLOCKS_PER_POINT];
     type ProcessedInstruction = MinimalInstruction<T>;
@@ -656,20 +656,20 @@ mod conversions {
     // AdapterAirContext: Rv32EcMulAdapterInterface -> DynAdapterInterface
     impl<
             T,
-            const BLOCKS_PER_SCALAR: usize,
             const BLOCKS_PER_POINT: usize,
-            const SCALAR_SIZE: usize,
+            const BLOCKS_PER_SCALAR: usize,
             const POINT_SIZE: usize,
+            const SCALAR_SIZE: usize,
         >
         From<
             AdapterAirContext<
                 T,
                 Rv32EcMulAdapterInterface<
                     T,
-                    BLOCKS_PER_SCALAR,
                     BLOCKS_PER_POINT,
-                    SCALAR_SIZE,
+                    BLOCKS_PER_SCALAR,
                     POINT_SIZE,
+                    SCALAR_SIZE,
                 >,
             >,
         > for AdapterAirContext<T, DynAdapterInterface<T>>
@@ -679,10 +679,10 @@ mod conversions {
                 T,
                 Rv32EcMulAdapterInterface<
                     T,
-                    BLOCKS_PER_SCALAR,
                     BLOCKS_PER_POINT,
-                    SCALAR_SIZE,
+                    BLOCKS_PER_SCALAR,
                     POINT_SIZE,
+                    SCALAR_SIZE,
                 >,
             >,
         ) -> Self {
@@ -697,19 +697,19 @@ mod conversions {
 
     impl<
             T,
-            const BLOCKS_PER_SCALAR: usize,
             const BLOCKS_PER_POINT: usize,
-            const SCALAR_SIZE: usize,
+            const BLOCKS_PER_SCALAR: usize,
             const POINT_SIZE: usize,
+            const SCALAR_SIZE: usize,
         > From<AdapterAirContext<T, DynAdapterInterface<T>>>
         for AdapterAirContext<
             T,
             Rv32EcMulAdapterInterface<
                 T,
-                BLOCKS_PER_SCALAR,
                 BLOCKS_PER_POINT,
-                SCALAR_SIZE,
+                BLOCKS_PER_SCALAR,
                 POINT_SIZE,
+                SCALAR_SIZE,
             >,
         >
     {
