@@ -118,6 +118,7 @@ mod tests {
         let config = test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone(),
                 CurveConfig {
                     struct_name: "CurvePoint5mod8".to_string(),
+                    curve_name: "Curve5mod8".to_string(),
                     modulus: BigUint::from_str("115792089237316195423570985008687907853269984665640564039457584007913129639501")
                         .unwrap(),
                     // unused, set to 10e9 + 7
@@ -128,6 +129,7 @@ mod tests {
                 },
                 CurveConfig {
                     struct_name: "CurvePoint1mod4".to_string(),
+                    curve_name: "Curve1mod4".to_string(),
                     modulus: BigUint::from_radix_be(&hex!("ffffffffffffffffffffffffffffffff000000000000000000000001"), 256)
                         .unwrap(),
                     scalar: BigUint::from_radix_be(&hex!("ffffffffffffffffffffffffffff16a2e0b8f03e13dd29455c5c2a3d"), 256)

@@ -257,6 +257,18 @@ impl<
     }
 }
 
+#[cfg(feature = "aot")]
+impl<
+        F: PrimeField32,
+        const BLOCKS_PER_POINT: usize,
+        const BLOCKS_PER_SCALAR: usize,
+        const POINT_SIZE: usize,
+        const SCALAR_SIZE: usize,
+    > AotExecutor<F>
+    for EcMulExecutor<BLOCKS_PER_POINT, BLOCKS_PER_SCALAR, POINT_SIZE, SCALAR_SIZE>
+{
+}
+
 impl<
         F: PrimeField32,
         const BLOCKS_PER_POINT: usize,
@@ -308,6 +320,18 @@ impl<
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute_pure)?;
         dispatch!(execute_e2_handler, pre_compute_pure, is_setup)
     }
+}
+
+#[cfg(feature = "aot")]
+impl<
+        F: PrimeField32,
+        const BLOCKS_PER_POINT: usize,
+        const BLOCKS_PER_SCALAR: usize,
+        const POINT_SIZE: usize,
+        const SCALAR_SIZE: usize,
+    > AotMeteredExecutor<F>
+    for EcMulExecutor<BLOCKS_PER_POINT, BLOCKS_PER_SCALAR, POINT_SIZE, SCALAR_SIZE>
+{
 }
 
 #[inline(always)]

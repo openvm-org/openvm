@@ -17,7 +17,7 @@
 
 use std::fs;
 
-use clap::{Parser, ValueEnum};
+use clap::{arg, Parser, ValueEnum};
 use eyre::Result;
 use openvm_benchmarks_utils::get_fixtures_dir;
 use openvm_circuit::arch::{

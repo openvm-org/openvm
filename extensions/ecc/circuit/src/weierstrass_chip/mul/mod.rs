@@ -97,6 +97,7 @@ fn gen_base_expr(
     (expr, local_opcode_idx)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn get_ec_mul_air<
     const BLOCKS_PER_POINT: usize,
     const BLOCKS_PER_SCALAR: usize,
