@@ -1,9 +1,11 @@
 mod add_ne;
 mod curves;
 mod double;
+mod mul;
 
 pub use add_ne::*;
 pub use double::*;
+pub use mul::*;
 
 #[cfg(test)]
 mod tests;

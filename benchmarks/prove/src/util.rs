@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{command, Parser};
+use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_utils::{build_elf, get_programs_dir};
 use openvm_circuit::{

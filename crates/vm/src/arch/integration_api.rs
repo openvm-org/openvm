@@ -324,6 +324,31 @@ impl<
     type ProcessedInstruction = MinimalInstruction<T>;
 }
 
+pub struct Rv32EcMulAdapterInterface<
+    T,
+    const BLOCKS_PER_SCALAR: usize,
+    const BLOCKS_PER_POINT: usize,
+    const SCALAR_SIZE: usize,
+    const POINT_SIZE: usize,
+>(PhantomData<T>);
+
+impl<
+        T,
+        const BLOCKS_PER_SCALAR: usize,
+        const BLOCKS_PER_POINT: usize,
+        const SCALAR_SIZE: usize,
+        const POINT_SIZE: usize,
+    > VmAdapterInterface<T>
+    for Rv32EcMulAdapterInterface<T, BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE>
+{
+    type Reads = (
+        [[T; SCALAR_SIZE]; BLOCKS_PER_SCALAR],
+        [[T; POINT_SIZE]; BLOCKS_PER_POINT],
+    );
+    type Writes = [[T; POINT_SIZE]; BLOCKS_PER_POINT];
+    type ProcessedInstruction = MinimalInstruction<T>;
+}
+
 /// Similar to `BasicAdapterInterface`, but it flattens the reads and writes into a single flat
 /// array for each
 pub struct FlatInterface<T, PI, const READ_CELLS: usize, const WRITE_CELLS: usize>(
@@ -628,6 +653,76 @@ mod conversions {
         }
     }
 
+    // AdapterAirContext: Rv32EcMulAdapterInterface -> DynAdapterInterface
+    impl<
+            T,
+            const BLOCKS_PER_SCALAR: usize,
+            const BLOCKS_PER_POINT: usize,
+            const SCALAR_SIZE: usize,
+            const POINT_SIZE: usize,
+        >
+        From<
+            AdapterAirContext<
+                T,
+                Rv32EcMulAdapterInterface<
+                    T,
+                    BLOCKS_PER_SCALAR,
+                    BLOCKS_PER_POINT,
+                    SCALAR_SIZE,
+                    POINT_SIZE,
+                >,
+            >,
+        > for AdapterAirContext<T, DynAdapterInterface<T>>
+    {
+        fn from(
+            ctx: AdapterAirContext<
+                T,
+                Rv32EcMulAdapterInterface<
+                    T,
+                    BLOCKS_PER_SCALAR,
+                    BLOCKS_PER_POINT,
+                    SCALAR_SIZE,
+                    POINT_SIZE,
+                >,
+            >,
+        ) -> Self {
+            AdapterAirContext {
+                to_pc: ctx.to_pc,
+                reads: ctx.reads.into(),
+                writes: ctx.writes.into(),
+                instruction: ctx.instruction.into(),
+            }
+        }
+    }
+
+    impl<
+            T,
+            const BLOCKS_PER_SCALAR: usize,
+            const BLOCKS_PER_POINT: usize,
+            const SCALAR_SIZE: usize,
+            const POINT_SIZE: usize,
+        > From<AdapterAirContext<T, DynAdapterInterface<T>>>
+        for AdapterAirContext<
+            T,
+            Rv32EcMulAdapterInterface<
+                T,
+                BLOCKS_PER_SCALAR,
+                BLOCKS_PER_POINT,
+                SCALAR_SIZE,
+                POINT_SIZE,
+            >,
+        >
+    {
+        fn from(ctx: AdapterAirContext<T, DynAdapterInterface<T>>) -> Self {
+            AdapterAirContext {
+                to_pc: ctx.to_pc,
+                reads: ctx.reads.into(),
+                writes: ctx.writes.into(),
+                instruction: ctx.instruction.into(),
+            }
+        }
+    }
+
     impl<T> From<Vec<T>> for DynArray<T> {
         fn from(v: Vec<T>) -> Self {
             Self(v)
@@ -677,26 +772,29 @@ mod conversions {
         }
     }
 
-    impl<T, const N: usize, const M1: usize, const M2: usize> From<([[T; N]; M1], [[T; N]; M2])>
-        for DynArray<T>
+    // From implementation for tuples with potentially different inner array sizes
+    impl<T, const M1: usize, const M2: usize, const N1: usize, const N2: usize>
+        From<([[T; N1]; M1], [[T; N2]; M2])> for DynArray<T>
     {
-        fn from(v: ([[T; N]; M1], [[T; N]; M2])) -> Self {
-            let vec =
-                v.0.into_iter()
-                    .flatten()
-                    .chain(v.1.into_iter().flatten())
-                    .collect();
+        fn from(v: ([[T; N1]; M1], [[T; N2]; M2])) -> Self {
+            let mut vec = Vec::new();
+            for block in v.0 {
+                vec.extend(block);
+            }
+            for block in v.1 {
+                vec.extend(block);
+            }
             Self(vec)
         }
     }
 
-    impl<T, const N: usize, const M1: usize, const M2: usize> From<DynArray<T>>
-        for ([[T; N]; M1], [[T; N]; M2])
+    impl<T, const M1: usize, const M2: usize, const N1: usize, const N2: usize> From<DynArray<T>>
+        for ([[T; N1]; M1], [[T; N2]; M2])
     {
         fn from(v: DynArray<T>) -> Self {
             assert_eq!(
                 v.0.len(),
-                N * (M1 + M2),
+                N1 * M1 + N2 * M2,
                 "Incorrect vector length {}",
                 v.0.len()
             );

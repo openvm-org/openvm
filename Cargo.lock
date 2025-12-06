@@ -6494,6 +6494,7 @@ dependencies = [
  "openvm-rv32-adapters",
  "openvm-stark-backend",
  "openvm-stark-sdk",
+ "pasta_curves 0.5.1",
  "rand 0.8.5",
  "serde",
  "serde_with",
@@ -6502,7 +6503,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-ecc-curve-macros"
-version = "1.4.1"
+version = "1.4.2-rc.1"
 dependencies = [
  "openvm-macros-common",
  "quote",

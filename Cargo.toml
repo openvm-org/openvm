@@ -258,6 +258,7 @@ num-traits = { version = "0.2.19", default-features = false }
 ff = { version = "0.13.1", default-features = false }
 sha2 = { version = "0.10", default-features = false }
 blstrs = { version = "0.7.1", default-features = true }
+pasta_curves = { version = "0.5.1", default-features = true }
 
 # specific to CUDA and GPU
 cuda-runtime-sys = "0.3.0-alpha.1"

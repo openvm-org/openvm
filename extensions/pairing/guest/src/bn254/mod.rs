@@ -37,6 +37,7 @@ pub const BN254_PSEUDO_BINARY_ENCODING: [i8; 66] = [
 #[cfg(not(target_os = "zkvm"))]
 // Used in WeierstrassExtension config
 pub const BN254_ECC_STRUCT_NAME: &str = "Bn254G1Affine";
+pub const BN254_CURVE_NAME: &str = "Bn254";
 
 #[cfg(not(target_os = "zkvm"))]
 // Used in Fp2Extension config

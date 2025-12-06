@@ -1,10 +1,16 @@
-use halo2curves_axiom::ff::{Field, PrimeField};
+use core::ops::Mul;
+
+use halo2curves_axiom::{
+    ff::{Field, PrimeField},
+    CurveAffineExt,
+};
 use num_bigint::BigUint;
 use num_traits::Num;
 use openvm_algebra_circuit::fields::{
     blocks_to_field_element, blocks_to_field_element_bls12_381_coordinate, field_element_to_blocks,
     field_element_to_blocks_bls12_381_coordinate, FieldType,
 };
+use pasta_curves::arithmetic::CurveAffine;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CurveType {
@@ -91,6 +97,58 @@ pub fn ec_double<const CURVE_TYPE: u8, const BLOCKS: usize, const BLOCK_SIZE: us
             ec_double_bls12_381::<BLOCKS, BLOCK_SIZE>(input_data)
         }
         _ => panic!("Unsupported curve type: {CURVE_TYPE}"),
+    }
+}
+
+#[inline(always)]
+pub fn ec_mul<
+    const CURVE_TYPE: u8,
+    const BLOCKS_PER_SCALAR: usize,
+    const BLOCKS_PER_POINT: usize,
+    const SCALAR_SIZE: usize,
+    const POINT_SIZE: usize,
+>(
+    scalar_data: [[u8; SCALAR_SIZE]; BLOCKS_PER_SCALAR],
+    point_data: [[u8; POINT_SIZE]; BLOCKS_PER_POINT],
+) -> [[u8; POINT_SIZE]; BLOCKS_PER_POINT] {
+    match CURVE_TYPE {
+        x if x == CurveType::K256 as u8 => ec_mul_256bit::<
+            halo2curves_axiom::secq256k1::Fq,
+            halo2curves_axiom::secq256k1::Fp,
+            halo2curves_axiom::secq256k1::Secq256k1,
+            halo2curves_axiom::secq256k1::Secq256k1Affine,
+            BLOCKS_PER_SCALAR,
+            BLOCKS_PER_POINT,
+            SCALAR_SIZE,
+            POINT_SIZE,
+        >(scalar_data, point_data),
+        x if x == CurveType::P256 as u8 => ec_mul_256bit::<
+            halo2curves_axiom::secp256r1::Fq,
+            halo2curves_axiom::secp256r1::Fp,
+            halo2curves_axiom::secp256r1::Secp256r1,
+            halo2curves_axiom::secp256r1::Secp256r1Affine,
+            BLOCKS_PER_SCALAR,
+            BLOCKS_PER_POINT,
+            SCALAR_SIZE,
+            POINT_SIZE,
+        >(scalar_data, point_data),
+        x if x == CurveType::BN254 as u8 => ec_mul_256bit::<
+            halo2curves_axiom::bn256::Fr,
+            halo2curves_axiom::bn256::Fq,
+            halo2curves_axiom::bn256::G1,
+            halo2curves_axiom::bn256::G1Affine,
+            BLOCKS_PER_SCALAR,
+            BLOCKS_PER_POINT,
+            SCALAR_SIZE,
+            POINT_SIZE,
+        >(scalar_data, point_data),
+        x if x == CurveType::BLS12_381 as u8 => {
+            ec_mul_bls12_381::<BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE>(
+                scalar_data,
+                point_data,
+            )
+        }
+        _ => panic!("Unsupported curve type: {}", CURVE_TYPE),
     }
 }
 
@@ -211,4 +269,68 @@ pub fn ec_double_impl<F: Field + From<u64>, const NEG_A: u64>(x1: F, y1: F) -> (
     let y3 = lambda * (x1 - x3) - y1;
 
     (x3, y3)
+}
+
+#[inline(always)]
+fn ec_mul_256bit<
+    Fr: PrimeField<Repr = [u8; 32]>,
+    Fq: PrimeField<Repr = [u8; 32]>,
+    CJ: for<'a> Mul<&'a Fr, Output = CJ> + From<CA>,
+    CA: CurveAffine<CurveExt = CJ, Base = Fq, ScalarExt = Fr> + CurveAffineExt + From<CJ>,
+    const BLOCKS_PER_SCALAR: usize,
+    const BLOCKS_PER_POINT: usize,
+    const SCALAR_SIZE: usize,
+    const POINT_SIZE: usize,
+>(
+    scalar_data: [[u8; SCALAR_SIZE]; BLOCKS_PER_SCALAR],
+    point_data: [[u8; POINT_SIZE]; BLOCKS_PER_POINT],
+) -> [[u8; POINT_SIZE]; BLOCKS_PER_POINT] {
+    // read scalar and point data
+    let scalar = blocks_to_field_element::<Fr>(scalar_data.as_flattened());
+    let x1 = blocks_to_field_element::<Fq>(point_data[..BLOCKS_PER_POINT / 2].as_flattened());
+    let y1 = blocks_to_field_element::<Fq>(point_data[BLOCKS_PER_POINT / 2..].as_flattened());
+
+    let point_jacobian: CJ = CA::from_xy(x1, y1).unwrap().into();
+
+    let output_affine: CA = (point_jacobian * &scalar).into();
+    let (x3, y3) = output_affine.into_coordinates();
+
+    // write output data to memory
+    let mut output = [[0u8; POINT_SIZE]; BLOCKS_PER_POINT];
+    field_element_to_blocks::<Fq, POINT_SIZE>(&x3, &mut output[..BLOCKS_PER_POINT / 2]);
+    field_element_to_blocks::<Fq, POINT_SIZE>(&y3, &mut output[BLOCKS_PER_POINT / 2..]);
+    output
+}
+
+#[inline(always)]
+fn ec_mul_bls12_381<
+    const BLOCKS_PER_SCALAR: usize,
+    const BLOCKS_PER_POINT: usize,
+    const SCALAR_SIZE: usize,
+    const POINT_SIZE: usize,
+>(
+    scalar_data: [[u8; SCALAR_SIZE]; BLOCKS_PER_SCALAR],
+    point_data: [[u8; POINT_SIZE]; BLOCKS_PER_POINT],
+) -> [[u8; POINT_SIZE]; BLOCKS_PER_POINT] {
+    // read scalar and point data
+    let scalar = blocks_to_field_element::<blstrs::Scalar>(scalar_data.as_flattened());
+    let x1 = blocks_to_field_element_bls12_381_coordinate(
+        point_data[..BLOCKS_PER_POINT / 2].as_flattened(),
+    );
+    let y1 = blocks_to_field_element_bls12_381_coordinate(
+        point_data[BLOCKS_PER_POINT / 2..].as_flattened(),
+    );
+
+    let point_jacobian: blstrs::G1Projective =
+        blstrs::G1Affine::from_raw_unchecked(x1, y1, false).into();
+
+    let output_affine: blstrs::G1Affine = (point_jacobian * scalar).into();
+    let x3 = output_affine.x();
+    let y3 = output_affine.y();
+
+    // write output data to memory
+    let mut output = [[0u8; POINT_SIZE]; BLOCKS_PER_POINT];
+    field_element_to_blocks_bls12_381_coordinate(&x3, &mut output[..BLOCKS_PER_POINT / 2]);
+    field_element_to_blocks_bls12_381_coordinate(&y3, &mut output[BLOCKS_PER_POINT / 2..]);
+    output
 }
