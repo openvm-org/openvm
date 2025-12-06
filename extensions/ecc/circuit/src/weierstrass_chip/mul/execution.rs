@@ -369,26 +369,14 @@ unsafe fn execute_e12_impl<
     // }
 
     // TODO: Check this later
-    // let output_data = if CURVE_TYPE == u8::MAX || IS_SETUP {
-    //     let scalar_data: DynArray<u8> = scalar_data.into();
-    //     let point_data: DynArray<u8> = point_data.into();
-    //     run_field_expression_precomputed::<true>(
-    //         pre_compute.expr,
-    //         pre_compute.flag_idx as usize,
-    //         &scalar_data.concat(&point_data).0,
-    //     )
-    //     .into()
-    // } else {
-    //     ec_mul::<CURVE_TYPE, BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE>(
-    //         scalar_data,
-    //         point_data,
-    //     )
-    // };
-    let output_data =
+    let output_data = if CURVE_TYPE == u8::MAX || IS_SETUP {
+        point_data
+    } else {
         ec_mul::<CURVE_TYPE, BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE>(
             scalar_data,
             point_data,
-        );
+        )
+    };
 
     let rd_val = u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));
     debug_assert!(rd_val as usize + POINT_SIZE * BLOCKS_PER_POINT - 1 < (1 << POINTER_MAX_BITS));

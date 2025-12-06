@@ -67,7 +67,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
                     F::ZERO,
                     F::ZERO,
                 ))
-            } else if base_funct7 == SwBaseFunct7::SwEcMul as u8 {
+            } else if base_funct7 == SwBaseFunct7::SwSetupMul as u8 {
                 Some(Instruction::new(
                     VmOpcode::from_usize(
                         Rv32WeierstrassOpcode::SETUP_EC_MUL

@@ -113,10 +113,10 @@ pub fn ec_mul<
 ) -> [[u8; POINT_SIZE]; BLOCKS_PER_POINT] {
     match CURVE_TYPE {
         x if x == CurveType::K256 as u8 => ec_mul_256bit::<
-            halo2curves_axiom::secq256k1::Fq,
-            halo2curves_axiom::secq256k1::Fp,
-            halo2curves_axiom::secq256k1::Secq256k1,
-            halo2curves_axiom::secq256k1::Secq256k1Affine,
+            halo2curves_axiom::secp256k1::Fq,
+            halo2curves_axiom::secp256k1::Fp,
+            halo2curves_axiom::secp256k1::Secp256k1,
+            halo2curves_axiom::secp256k1::Secp256k1Affine,
             BLOCKS_PER_SCALAR,
             BLOCKS_PER_POINT,
             SCALAR_SIZE,

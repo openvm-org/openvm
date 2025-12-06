@@ -1,6 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use derive_more::derive::{Deref, DerefMut};
+use num_bigint::BigUint;
 use openvm_circuit::{
     arch::*,
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
@@ -24,6 +25,7 @@ mod execution;
 pub fn ec_mul_expr(
     config: ExprBuilderConfig, // The coordinate field.
     range_bus: VariableRangeCheckerBus,
+    a_biguint: BigUint,
 ) -> FieldExpr {
     config.check_valid();
     let builder = ExprBuilder::new(config, range_bus.range_max_bits);
@@ -42,7 +44,7 @@ pub fn ec_mul_expr(
     y_out.save_output();
 
     let builder = (*builder).borrow().clone();
-    FieldExpr::new(builder, range_bus, false)
+    FieldExpr::new_with_setup_values(builder, range_bus, true, vec![a_biguint])
 }
 
 #[derive(Clone, PreflightExecutor, Deref, DerefMut)]
@@ -83,8 +85,9 @@ pub type WeierstrassEcMulChip<
 fn gen_base_expr(
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
+    a_biguint: BigUint,
 ) -> (FieldExpr, Vec<usize>) {
-    let expr = ec_mul_expr(config, range_checker_bus);
+    let expr = ec_mul_expr(config, range_checker_bus, a_biguint);
 
     let local_opcode_idx = vec![
         Rv32WeierstrassOpcode::EC_MUL as usize,
@@ -107,8 +110,9 @@ pub fn get_ec_mul_air<
     bitwise_lookup_bus: BitwiseOperationLookupBus,
     pointer_max_bits: usize,
     offset: usize,
+    a_biguint: BigUint,
 ) -> WeierstrassEcMulAir<BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE> {
-    let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus);
+    let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
     WeierstrassEcMulAir::new(
         Rv32EcMulAdapterAir::new(
             exec_bridge,
@@ -130,8 +134,9 @@ pub fn get_ec_mul_step<
     range_checker_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,
     offset: usize,
+    a_biguint: BigUint,
 ) -> EcMulExecutor<BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE> {
-    let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus);
+    let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
     EcMulExecutor(FieldExpressionExecutor::new(
         Rv32EcMulAdapterExecutor::new(pointer_max_bits),
         expr,
@@ -154,8 +159,9 @@ pub fn get_ec_mul_chip<
     range_checker: SharedVariableRangeCheckerChip,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     pointer_max_bits: usize,
+    a_biguint: BigUint,
 ) -> WeierstrassEcMulChip<F, BLOCKS_PER_SCALAR, BLOCKS_PER_POINT, SCALAR_SIZE, POINT_SIZE> {
-    let (expr, local_opcode_idx) = gen_base_expr(config, range_checker.bus());
+    let (expr, local_opcode_idx) = gen_base_expr(config, range_checker.bus(), a_biguint);
     WeierstrassEcMulChip::new(
         FieldExpressionFiller::new(
             Rv32EcMulAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),

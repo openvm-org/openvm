@@ -180,6 +180,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                     dummy_range_checker_bus,
                     pointer_max_bits,
                     start_offset,
+                    curve.a.clone(),
                 );
 
                 inventory.add_executor(
@@ -228,6 +229,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                     dummy_range_checker_bus,
                     pointer_max_bits,
                     start_offset,
+                    curve.a.clone(),
                 );
 
                 inventory.add_executor(
@@ -312,6 +314,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                     bitwise_lu,
                     pointer_max_bits,
                     start_offset,
+                    curve.a.clone(),
                 );
                 inventory.add_air(mul);
             } else if bytes <= 48 {
@@ -352,6 +355,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                     bitwise_lu,
                     pointer_max_bits,
                     start_offset,
+                    curve.a.clone(),
                 );
                 inventory.add_air(mul);
             } else {
@@ -432,6 +436,7 @@ where
                     range_checker.clone(),
                     bitwise_lu.clone(),
                     pointer_max_bits,
+                    curve.a.clone(),
                 );
                 inventory.add_executor_chip(mul);
             } else if bytes <= 48 {
@@ -469,6 +474,7 @@ where
                     range_checker.clone(),
                     bitwise_lu.clone(),
                     pointer_max_bits,
+                    curve.a.clone(),
                 );
                 inventory.add_executor_chip(mul);
             } else {
