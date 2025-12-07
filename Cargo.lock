@@ -4333,6 +4333,7 @@ name = "openvm-algebra-circuit"
 version = "1.4.1"
 dependencies = [
  "cfg-if",
+ "cuda-backend-v2",
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "eyre",
@@ -4357,6 +4358,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_with",
+ "stark-backend-v2",
  "strum",
  "test-case",
 ]
@@ -4432,6 +4434,7 @@ version = "1.4.1"
 dependencies = [
  "alloy-primitives 1.3.1",
  "cfg-if",
+ "cuda-backend-v2",
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "openvm-bigint-transpiler",
@@ -4450,6 +4453,7 @@ dependencies = [
  "openvm-stark-sdk",
  "rand 0.8.5",
  "serde",
+ "stark-backend-v2",
  "test-case",
 ]
 
@@ -4655,6 +4659,7 @@ name = "openvm-ecc-circuit"
 version = "1.4.1"
 dependencies = [
  "cfg-if",
+ "cuda-backend-v2",
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
@@ -4679,6 +4684,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_with",
+ "stark-backend-v2",
  "strum",
 ]
 
@@ -4820,6 +4826,7 @@ name = "openvm-keccak256-circuit"
 version = "1.4.1"
 dependencies = [
  "cfg-if",
+ "cuda-backend-v2",
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "hex",
@@ -4839,6 +4846,7 @@ dependencies = [
  "p3-keccak-air",
  "rand 0.8.5",
  "serde",
+ "stark-backend-v2",
  "strum",
  "tiny-keccak",
  "tokio",
@@ -4898,6 +4906,7 @@ name = "openvm-native-circuit"
 version = "1.4.1"
 dependencies = [
  "cfg-if",
+ "cuda-backend-v2",
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "eyre",
@@ -4922,6 +4931,7 @@ dependencies = [
  "p3-symmetric",
  "rand 0.8.5",
  "serde",
+ "stark-backend-v2",
  "static_assertions",
  "strum",
  "test-case",
@@ -4985,6 +4995,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "snark-verifier-sdk",
+ "stark-backend-v2",
  "tempfile",
  "tracing",
 ]
@@ -5041,6 +5052,7 @@ name = "openvm-pairing-circuit"
 version = "1.4.1"
 dependencies = [
  "cfg-if",
+ "cuda-backend-v2",
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "eyre",
@@ -5063,6 +5075,7 @@ dependencies = [
  "openvm-stark-sdk",
  "rand 0.8.5",
  "serde",
+ "stark-backend-v2",
  "strum",
 ]
 
@@ -5163,6 +5176,7 @@ name = "openvm-rv32im-circuit"
 version = "1.4.1"
 dependencies = [
  "cfg-if",
+ "cuda-backend-v2",
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "eyre",
@@ -5334,6 +5348,7 @@ name = "openvm-sha256-circuit"
 version = "1.4.1"
 dependencies = [
  "cfg-if",
+ "cuda-backend-v2",
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "hex",
@@ -5352,6 +5367,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "sha2 0.10.9",
+ "stark-backend-v2",
  "strum",
 ]
 
