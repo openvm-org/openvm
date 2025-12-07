@@ -119,10 +119,10 @@ jobs:
             git checkout main
           done
 
-          # Save results for Slack notification
-          echo "FAILED_BRANCHES=${FAILED_BRANCHES[*]}" >> $GITHUB_ENV
-          echo "SUCCEEDED_BRANCHES=${SUCCEEDED_BRANCHES[*]}" >> $GITHUB_ENV
-          echo "BACKED_UP_BRANCHES=${BACKED_UP_BRANCHES[*]}" >> $GITHUB_ENV
+          # Save results for Slack notification (using | as delimiter to preserve spaces in branch names)
+          IFS='|' eval 'echo "FAILED_BRANCHES=${FAILED_BRANCHES[*]}"' >> $GITHUB_ENV
+          IFS='|' eval 'echo "SUCCEEDED_BRANCHES=${SUCCEEDED_BRANCHES[*]}"' >> $GITHUB_ENV
+          IFS='|' eval 'echo "BACKED_UP_BRANCHES=${BACKED_UP_BRANCHES[*]}"' >> $GITHUB_ENV
           echo "TOTAL_FAILED=${#FAILED_BRANCHES[@]}" >> $GITHUB_ENV
           echo "TOTAL_SUCCEEDED=${#SUCCEEDED_BRANCHES[@]}" >> $GITHUB_ENV
           echo "TOTAL_BACKED_UP=${#BACKED_UP_BRANCHES[@]}" >> $GITHUB_ENV
@@ -141,17 +141,19 @@ jobs:
           COMMIT_MSG=$(git log -1 --pretty=format:'%s' ${{ github.sha }})
           COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an' ${{ github.sha }})
 
-          # Build branch list for Slack (using $'\n' for actual newlines)
+          # Build branch list for Slack (using | as delimiter to preserve spaces)
           FAILED_LIST=""
-          for branch in $FAILED_BRANCHES; do
-            FAILED_LIST="${FAILED_LIST}"$'\n'"• \`${branch}\`"
+          IFS='|' read -ra FAILED_ARRAY <<< "$FAILED_BRANCHES"
+          for branch in "${FAILED_ARRAY[@]}"; do
+            [ -n "$branch" ] && FAILED_LIST="${FAILED_LIST}"$'\n'"• \`${branch}\`"
           done
 
           BACKUP_INFO=""
           if [ "$TOTAL_BACKED_UP" != "0" ]; then
             BACKUP_INFO=$'\n\n'"*Backups created:*"
-            for backup in $BACKED_UP_BRANCHES; do
-              BACKUP_INFO="${BACKUP_INFO}"$'\n'"• \`${backup}\`"
+            IFS='|' read -ra BACKUP_ARRAY <<< "$BACKED_UP_BRANCHES"
+            for backup in "${BACKUP_ARRAY[@]}"; do
+              [ -n "$backup" ] && BACKUP_INFO="${BACKUP_INFO}"$'\n'"• \`${backup}\`"
             done
           fi
 
@@ -237,17 +239,19 @@ jobs:
         run: |
           REPO_URL="${{ github.server_url }}/${{ github.repository }}"
 
-          # Build branch list for Slack (using $'\n' for actual newlines)
+          # Build branch list for Slack (using | as delimiter to preserve spaces)
           SUCCESS_LIST=""
-          for branch in $SUCCEEDED_BRANCHES; do
-            SUCCESS_LIST="${SUCCESS_LIST}"$'\n'"• \`${branch}\`"
+          IFS='|' read -ra SUCCESS_ARRAY <<< "$SUCCEEDED_BRANCHES"
+          for branch in "${SUCCESS_ARRAY[@]}"; do
+            [ -n "$branch" ] && SUCCESS_LIST="${SUCCESS_LIST}"$'\n'"• \`${branch}\`"
           done
 
           BACKUP_INFO=""
           if [ "$TOTAL_BACKED_UP" != "0" ]; then
             BACKUP_INFO=$'\n\n'"*Backups created:*"
-            for backup in $BACKED_UP_BRANCHES; do
-              BACKUP_INFO="${BACKUP_INFO}"$'\n'"• \`${backup}\`"
+            IFS='|' read -ra BACKUP_ARRAY <<< "$BACKED_UP_BRANCHES"
+            for backup in "${BACKUP_ARRAY[@]}"; do
+              [ -n "$backup" ] && BACKUP_INFO="${BACKUP_INFO}"$'\n'"• \`${backup}\`"
             done
           fi
 
