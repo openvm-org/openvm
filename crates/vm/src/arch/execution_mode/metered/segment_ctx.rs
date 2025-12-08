@@ -199,11 +199,13 @@ impl SegmentationCtx {
             return false;
         }
 
+        let interaction_weight = self.config.interaction_cell_weight;
         let mut total_cells = 0;
-        for (i, ((padded_height, width), is_constant)) in trace_heights
+        for (i, (((padded_height, width), interactions), is_constant)) in trace_heights
             .iter()
             .map(|&height| height.next_power_of_two())
             .zip(self.widths.iter())
+            .zip(self.interactions.iter())
             .zip(is_trace_height_constant.iter())
             .enumerate()
         {
@@ -221,7 +223,7 @@ impl SegmentationCtx {
                 );
                 return true;
             }
-            total_cells += padded_height as usize * width;
+            total_cells += padded_height as usize * (width + interactions * interaction_weight);
         }
 
         if total_cells > self.config.limits.max_cells {
@@ -371,6 +373,27 @@ impl SegmentationCtx {
         });
     }
 
+    /// Calculate trace utilization: ratio of used cells to padded cells (as percentage).
+    /// This measures how efficiently the trace is packed before padding to power of two.
+    /// Note: this is an overestimate because memory-related trace heights are overestimated.
+    #[inline(always)]
+    fn calculate_trace_utilization(&self, trace_heights: &[u32]) -> f64 {
+        let (used, padded) = trace_heights
+            .iter()
+            .zip(self.widths.iter())
+            .map(|(&height, &width)| {
+                let used = height as usize * width;
+                let padded = height.next_power_of_two() as usize * width;
+                (used, padded)
+            })
+            .fold((0, 0), |(u, p), (used, padded)| (u + used, p + padded));
+        if padded == 0 {
+            0.0
+        } else {
+            100.0 * used as f64 / padded as f64
+        }
+    }
+
     /// Log segment information
     #[inline(always)]
     fn log_segment_info<const IS_FINAL: bool>(
@@ -382,11 +405,12 @@ impl SegmentationCtx {
         let (max_trace_height, air_name) = self.calculate_max_trace_height_with_name(trace_heights);
         let total_cells = self.calculate_total_cells(trace_heights);
         let total_interactions = self.calculate_total_interactions(trace_heights);
+        let utilization = self.calculate_trace_utilization(trace_heights);
 
         let final_marker = if IS_FINAL { " [TERMINATED]" } else { "" };
 
         tracing::info!(
-            "Segment {:3} | instret {:10} | {:8} instructions | {:10} cells | {:10} interactions | {:8} max height ({}){}",
+            "Segment {:3} | instret {:10} | {:8} instructions | {:10} cells | {:10} interactions | {:8} max height ({}) | {:.2}% utilization{}",
             self.segments.len(),
             instret_start,
             num_insns,
@@ -394,6 +418,7 @@ impl SegmentationCtx {
             total_interactions,
             max_trace_height,
             air_name,
+            utilization,
             final_marker
         );
     }
