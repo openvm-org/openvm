@@ -161,7 +161,7 @@ impl MetricDb {
     pub fn generate_gpu_memory_chart(&self) -> Option<String> {
         // (timestamp, tracked_gb, reserved_gb, device_gb)
         let mut data: Vec<(f64, f64, f64, f64)> = Vec::new();
-        // module -> [(tracked_gb, context_label)]
+        // module -> [(local_peak_gb, context_label)]
         let mut module_stats: HashMap<String, Vec<(f64, String)>> = HashMap::new();
 
         for (label_keys, metrics_dict) in &self.dict_by_label_types {
@@ -173,17 +173,17 @@ impl MetricDb {
             for (label_values, metrics) in metrics_dict {
                 let get = |name: &str| metrics.iter().find(|m| m.name == name).map(|m| m.value);
                 let ts = get("gpu_mem.timestamp_ms");
-                let tracked = get("gpu_mem.tracked_bytes");
+                let current = get("gpu_mem.current_bytes");
+                let local_peak = get("gpu_mem.local_peak_bytes");
                 let reserved = get("gpu_mem.reserved_bytes");
-                let device = get("gpu_mem.device_bytes");
 
-                if let (Some(ts), Some(tracked), Some(reserved), Some(device)) =
-                    (ts, tracked, reserved, device)
+                if let (Some(ts), Some(current), Some(local_peak), Some(reserved)) =
+                    (ts, current, local_peak, reserved)
                 {
-                    let tracked_gb = tracked / 1e9;
+                    let current_gb = current / 1e9;
+                    let local_peak_gb = local_peak / 1e9;
                     let reserved_gb = reserved / 1e9;
-                    let device_gb = device / 1e9;
-                    data.push((ts, tracked_gb, reserved_gb, device_gb));
+                    data.push((ts, current_gb, local_peak_gb, reserved_gb));
 
                     let module_name = label_values.get(module_idx).cloned().unwrap_or_default();
                     let context_label: String = label_keys
@@ -197,7 +197,7 @@ impl MetricDb {
                     module_stats
                         .entry(module_name)
                         .or_default()
-                        .push((tracked_gb, context_label));
+                        .push((local_peak_gb, context_label));
                 }
             }
         }
@@ -208,10 +208,10 @@ impl MetricDb {
 
         data.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 
-        let max_tracked = data.iter().map(|(_, t, _, _)| *t).fold(0.0_f64, f64::max);
-        let max_reserved = data.iter().map(|(_, _, r, _)| *r).fold(0.0_f64, f64::max);
-        let max_device = data.iter().map(|(_, _, _, d)| *d).fold(0.0_f64, f64::max);
-        let chart_max = max_tracked.max(max_reserved).max(max_device);
+        let max_current = data.iter().map(|(_, c, _, _)| *c).fold(0.0_f64, f64::max);
+        let max_local_peak = data.iter().map(|(_, _, lp, _)| *lp).fold(0.0_f64, f64::max);
+        let max_reserved = data.iter().map(|(_, _, _, r)| *r).fold(0.0_f64, f64::max);
+        let chart_max = max_current.max(max_local_peak).max(max_reserved);
 
         let mut chart = String::new();
         chart.push_str("```mermaid\n");
@@ -230,32 +230,32 @@ impl MetricDb {
             "    y-axis \"Memory (GB)\" 0 --> {:.1}\n",
             chart_max * 1.1
         ));
-        // Tracked memory line (blue)
+        // Current memory line (blue)
         chart.push_str("    line [");
         chart.push_str(
             &data
                 .iter()
-                .map(|(_, tracked, _, _)| format!("{:.2}", tracked))
+                .map(|(_, current, _, _)| format!("{:.2}", current))
                 .collect::<Vec<_>>()
                 .join(", "),
         );
         chart.push_str("]\n");
-        // Reserved memory line (green)
+        // Local peak memory line (green)
         chart.push_str("    line [");
         chart.push_str(
             &data
                 .iter()
-                .map(|(_, _, reserved, _)| format!("{:.2}", reserved))
+                .map(|(_, _, local_peak, _)| format!("{:.2}", local_peak))
                 .collect::<Vec<_>>()
                 .join(", "),
         );
         chart.push_str("]\n");
-        // Device memory line (red)
+        // Reserved memory line (red)
         chart.push_str("    line [");
         chart.push_str(
             &data
                 .iter()
-                .map(|(_, _, _, device)| format!("{:.2}", device))
+                .map(|(_, _, _, reserved)| format!("{:.2}", reserved))
                 .collect::<Vec<_>>()
                 .join(", "),
         );
@@ -263,9 +263,9 @@ impl MetricDb {
         chart.push_str("```\n");
 
         chart.push_str("\n> ");
-        chart.push_str("🔵 Tracked (Current) | ");
-        chart.push_str("🟢 Reserved (Pool) | ");
-        chart.push_str("🔴 Device\n");
+        chart.push_str("🔵 Current | ");
+        chart.push_str("🟢 Local Peak | ");
+        chart.push_str("🔴 Reserved (Pool)\n");
 
         // Per-module stats table
         chart.push_str("\n| Module | Max (GB) | Max At |\n");
