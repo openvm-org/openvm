@@ -1,4 +1,4 @@
-use getset::WithSetters;
+use getset::{Setters, WithSetters};
 use openvm_stark_backend::p3_field::PrimeField32;
 use p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
@@ -17,11 +17,18 @@ pub struct Segment {
     pub trace_heights: Vec<u32>,
 }
 
-#[derive(Clone, Copy, Debug, WithSetters)]
+#[derive(Clone, Copy, Debug, Default, WithSetters)]
+pub struct SegmentationConfig {
+    pub limits: SegmentationLimits,
+    /// Cells per row contributed by each interaction in cell count.
+    #[getset(set_with = "pub")]
+    pub interaction_cell_weight: usize,
+}
+
+#[derive(Clone, Copy, Debug, WithSetters, Setters)]
 pub struct SegmentationLimits {
-    #[getset(set_with = "pub")]
     pub max_trace_height: u32,
-    #[getset(set_with = "pub")]
+    #[getset(set = "pub", set_with = "pub")]
     pub max_cells: usize,
     #[getset(set_with = "pub")]
     pub max_interactions: usize,
@@ -50,6 +57,15 @@ impl SegmentationLimits {
         }
     }
 
+    pub fn with_max_trace_height(mut self, max_trace_height: u32) -> Self {
+        debug_assert!(
+            max_trace_height.is_power_of_two(),
+            "max_trace_height should be a power of two"
+        );
+        self.max_trace_height = max_trace_height;
+        self
+    }
+
     pub fn set_max_trace_height(&mut self, max_trace_height: u32) {
         debug_assert!(
             max_trace_height.is_power_of_two(),
@@ -65,7 +81,7 @@ pub struct SegmentationCtx {
     pub(crate) air_names: Vec<String>,
     pub(crate) widths: Vec<usize>,
     interactions: Vec<usize>,
-    pub(crate) segmentation_limits: SegmentationLimits,
+    pub(crate) config: SegmentationConfig,
     pub instret: u64,
     pub instrets_until_check: u64,
     pub(super) segment_check_insns: u64,
@@ -80,7 +96,7 @@ impl SegmentationCtx {
         air_names: Vec<String>,
         widths: Vec<usize>,
         interactions: Vec<usize>,
-        segmentation_limits: SegmentationLimits,
+        config: SegmentationConfig,
     ) -> Self {
         assert_eq!(air_names.len(), widths.len());
         assert_eq!(air_names.len(), interactions.len());
@@ -91,30 +107,7 @@ impl SegmentationCtx {
             air_names,
             widths,
             interactions,
-            segmentation_limits,
-            instret: 0,
-            instrets_until_check: DEFAULT_SEGMENT_CHECK_INSNS,
-            segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
-            checkpoint_trace_heights: vec![0; num_airs],
-            checkpoint_instret: 0,
-        }
-    }
-
-    pub fn new_with_default_segmentation_limits(
-        air_names: Vec<String>,
-        widths: Vec<usize>,
-        interactions: Vec<usize>,
-    ) -> Self {
-        assert_eq!(air_names.len(), widths.len());
-        assert_eq!(air_names.len(), interactions.len());
-
-        let num_airs = air_names.len();
-        Self {
-            segments: Vec::new(),
-            air_names,
-            widths,
-            interactions,
-            segmentation_limits: SegmentationLimits::default(),
+            config,
             instret: 0,
             instrets_until_check: DEFAULT_SEGMENT_CHECK_INSNS,
             segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
@@ -124,16 +117,19 @@ impl SegmentationCtx {
     }
 
     pub fn set_max_trace_height(&mut self, max_trace_height: u32) {
-        self.segmentation_limits
-            .set_max_trace_height(max_trace_height);
+        self.config.limits.set_max_trace_height(max_trace_height);
     }
 
     pub fn set_max_cells(&mut self, max_cells: usize) {
-        self.segmentation_limits.max_cells = max_cells;
+        self.config.limits.max_cells = max_cells;
     }
 
     pub fn set_max_interactions(&mut self, max_interactions: usize) {
-        self.segmentation_limits.max_interactions = max_interactions;
+        self.config.limits.max_interactions = max_interactions;
+    }
+
+    pub fn set_interaction_cell_weight(&mut self, weight: usize) {
+        self.config.interaction_cell_weight = weight;
     }
 
     /// Calculate the maximum trace height and corresponding air name
@@ -148,15 +144,21 @@ impl SegmentationCtx {
             .unwrap_or((0, "unknown"))
     }
 
-    /// Calculate the total cells used based on trace heights and widths
+    /// Calculate the total cells used based on trace heights and widths,
+    /// including weighted contribution from interactions if `interaction_cell_weight > 0`.
     #[inline(always)]
     fn calculate_total_cells(&self, trace_heights: &[u32]) -> usize {
         debug_assert_eq!(trace_heights.len(), self.widths.len());
 
+        let interaction_weight = self.config.interaction_cell_weight;
         trace_heights
             .iter()
             .zip(self.widths.iter())
-            .map(|(&height, &width)| height.next_power_of_two() as usize * width)
+            .zip(self.interactions.iter())
+            .map(|((&height, &width), &interactions)| {
+                let padded_height = height.next_power_of_two() as usize;
+                padded_height * (width + interactions * interaction_weight)
+            })
             .sum()
     }
 
@@ -207,13 +209,13 @@ impl SegmentationCtx {
         {
             // Only segment if the height is not constant and exceeds the maximum height after
             // padding
-            if !is_constant && padded_height > self.segmentation_limits.max_trace_height {
+            if !is_constant && padded_height > self.config.limits.max_trace_height {
                 let air_name = unsafe { self.air_names.get_unchecked(i) };
                 tracing::info!(
                     "instret {:10} | height ({:8}) > max ({:8}) | chip {:3} ({}) ",
                     instret,
                     padded_height,
-                    self.segmentation_limits.max_trace_height,
+                    self.config.limits.max_trace_height,
                     i,
                     air_name,
                 );
@@ -222,23 +224,23 @@ impl SegmentationCtx {
             total_cells += padded_height as usize * width;
         }
 
-        if total_cells > self.segmentation_limits.max_cells {
+        if total_cells > self.config.limits.max_cells {
             tracing::info!(
                 "instret {:10} | total cells ({:10}) > max ({:10})",
                 instret,
                 total_cells,
-                self.segmentation_limits.max_cells
+                self.config.limits.max_cells
             );
             return true;
         }
 
         let total_interactions = self.calculate_total_interactions(trace_heights);
-        if total_interactions > self.segmentation_limits.max_interactions {
+        if total_interactions > self.config.limits.max_interactions {
             tracing::info!(
                 "instret {:10} | total interactions ({:10}) > max ({:10})",
                 instret,
                 total_interactions,
-                self.segmentation_limits.max_interactions
+                self.config.limits.max_interactions
             );
             return true;
         }
