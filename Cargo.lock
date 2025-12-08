@@ -6999,6 +6999,7 @@ dependencies = [
  "openvm-stark-sdk",
  "rand 0.8.5",
  "serde",
+ "stark-backend-v2",
  "strum 0.26.3",
  "test-case",
 ]
