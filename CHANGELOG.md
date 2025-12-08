@@ -7,6 +7,19 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 
 ## Unreleased
 
+## v1.4.2 (2025-12-08)
+
+### Added
+- (Executor) Added ahead of time (AOT) compilation of OpenVM executables to host x86 binaries using x86 assembly and dynamic linking.
+
+### Changed
+- Workspace MSRV has been updated to Rust 1.90.0.
+- (Verifier) The formatting of the Solidity code generated for the EVM SNARK verifier has changed due to an update to `forge-fmt v1.5.0`. No other change to the smart contract besides formatting.
+- (Prover) Fix metered execution trace height estimations to account for uninitialized memory.
+- (Prover) More robust CUDA stream synchronization for memory merkle tree trace generation.
+- (Prover) Updated `cuda-backend` with fixes to virtual memory management for long running processes.
+- (Executor) Performance optimizations to elliptic curve host execution.
+
 ## v1.4.1 (2025-10-26)
 
 ### Added

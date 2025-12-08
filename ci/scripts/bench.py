@@ -1,7 +1,8 @@
 import argparse
-import subprocess
 import os
 import shutil
+import subprocess
+
 
 def run_cargo_command(
     bin_name,
@@ -13,14 +14,26 @@ def run_cargo_command(
     max_segment_length,
     output_path,
     kzg_params_dir,
-    profile="release"
+    profile="release",
 ):
-    toolchain = "+1.86"
+    toolchain = "+1.90"
     if "tco" in feature_flags:
         toolchain = "+nightly-2025-08-19"
     # Command to run (for best performance but slower builds, use --profile maxperf)
     command = [
-        "cargo", toolchain, "run", "--no-default-features", "-p", "openvm-benchmarks-prove", "--bin", bin_name, "--profile", profile, "--features", ",".join(feature_flags), "--"
+        "cargo",
+        toolchain,
+        "run",
+        "--no-default-features",
+        "-p",
+        "openvm-benchmarks-prove",
+        "--bin",
+        bin_name,
+        "--profile",
+        profile,
+        "--features",
+        ",".join(feature_flags),
+        "--",
     ]
 
     if app_log_blowup is not None:
@@ -65,18 +78,35 @@ def run_cargo_command(
 
 def bench():
     parser = argparse.ArgumentParser()
-    parser.add_argument('bench_name', type=str, help="Name of the benchmark to run")
-    parser.add_argument('--app_log_blowup', type=str, help="Application level log blowup")
-    parser.add_argument('--leaf_log_blowup', type=str, help="Leaf level log blowup")
-    parser.add_argument('--root_log_blowup', type=str, help="Root level log blowup")
-    parser.add_argument('--internal_log_blowup', type=str, help="Internal level log blowup")
-    parser.add_argument('--max_segment_length', type=str, help="Max segment length for continuations")
-    parser.add_argument('--kzg-params-dir', type=str, help="Directory containing KZG trusted setup files")
-    parser.add_argument('--features', type=str, help="Additional features")
-    parser.add_argument('--output_path', type=str, required=True, help="The path to write the metrics to")
+    parser.add_argument("bench_name", type=str, help="Name of the benchmark to run")
+    parser.add_argument(
+        "--app_log_blowup", type=str, help="Application level log blowup"
+    )
+    parser.add_argument("--leaf_log_blowup", type=str, help="Leaf level log blowup")
+    parser.add_argument("--root_log_blowup", type=str, help="Root level log blowup")
+    parser.add_argument(
+        "--internal_log_blowup", type=str, help="Internal level log blowup"
+    )
+    parser.add_argument(
+        "--max_segment_length", type=str, help="Max segment length for continuations"
+    )
+    parser.add_argument(
+        "--kzg-params-dir",
+        type=str,
+        help="Directory containing KZG trusted setup files",
+    )
+    parser.add_argument("--features", type=str, help="Additional features")
+    parser.add_argument(
+        "--output_path",
+        type=str,
+        required=True,
+        help="The path to write the metrics to",
+    )
     args = parser.parse_args()
 
-    feature_flags = ["metrics", "parallel"] + (args.features.split(",") if args.features else [])
+    feature_flags = ["metrics", "parallel"] + (
+        args.features.split(",") if args.features else []
+    )
     assert (feature_flags.count("mimalloc") + feature_flags.count("jemalloc")) == 1
 
     run_cargo_command(
@@ -88,9 +118,9 @@ def bench():
         args.internal_log_blowup,
         args.max_segment_length,
         args.output_path,
-        args.kzg_params_dir
+        args.kzg_params_dir,
     )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     bench()
