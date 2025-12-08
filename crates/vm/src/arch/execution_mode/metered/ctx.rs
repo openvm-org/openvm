@@ -72,6 +72,9 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             segmentation_ctx.air_names[memory_ctx.adapter_offset]
         );
 
+        let segmentation_ctx =
+            SegmentationCtx::new(air_names, widths, interactions, config.segmentation_config);
+
         let mut ctx = Self {
             trace_heights,
             is_trace_height_constant,
@@ -120,6 +123,11 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         self.memory_ctx.page_indices_since_checkpoint =
             vec![0; page_indices_since_checkpoint_cap].into_boxed_slice();
         self.memory_ctx.page_indices_since_checkpoint_len = 0;
+        self
+    }
+
+    pub fn with_interaction_cell_weight(mut self, weight: usize) -> Self {
+        self.segmentation_ctx.set_interaction_cell_weight(weight);
         self
     }
 
