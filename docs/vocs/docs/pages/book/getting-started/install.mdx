@@ -180,7 +180,7 @@ cargo openvm --version
 
 ## Installation with Experimental Features
 
-For the best execution performance, the CLI may be installed with optimizations that utilize [experimental Rust features](https://github.com/rust-lang/rust/issues/112788). These optimizations may be enabled on top of the standard CPU installation as well as the Nvidia GPU installation. We provide installation instructions for both versions, assuming the prerequisites ([CPU](#installation-prerequisites), [GPU](#installation-prerequisites-cuda)) are already met.
+For faster execution performance, the CLI may be installed with optimizations that utilize [experimental Rust features](https://github.com/rust-lang/rust/issues/112788). These optimizations may be enabled on top of the standard CPU installation as well as the Nvidia GPU installation. We provide installation instructions for both versions, assuming the prerequisites ([CPU](#installation-prerequisites), [GPU](#installation-prerequisites-cuda)) are already met.
 
 This installation requires a nightly Rust toolchain. To install the nightly toolchain, run:
 
@@ -224,6 +224,57 @@ cargo +nightly-2025-08-19 install --locked --force --path crates/cli --features 
 ```
 ```bash [Nvidia GPU]
 cargo +nightly-2025-08-19 install --locked --force --path crates/cli --features tco,cuda
+```
+:::
+
+This will globally install `cargo-openvm`. You can validate a successful installation with:
+
+```bash
+cargo openvm --version
+```
+
+## Installation with Ahead of Time Compilation
+
+On host machines with the `x86_64` architecture, the CLI may be installed with ahead of time (AOT) compilation of guest programs to host binaries. This feature provides the fastest execution performance. This feature may be enabled on top of the standard CPU installation as well as the Nvidia GPU installation. We provide installation instructions for both versions, assuming the prerequisites ([CPU](#installation-prerequisites), [GPU](#installation-prerequisites-cuda)) are already met.
+
+**Caution**: AOT execution currently runs in _unprotected_ mode, and it should only be used on trusted guest programs.
+
+### Option 1: Install Via Git URL (Recommended)
+
+Begin the installation:
+
+:::code-group
+```bash [Without GPU]
+cargo +1.90 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.2 --features aot cargo-openvm
+```
+```bash [Nvidia GPU]
+cargo +1.90 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.2 --features aot,cuda cargo-openvm
+```
+:::
+
+This will globally install `cargo-openvm`. You can validate a successful installation with:
+
+```bash
+cargo openvm --version
+```
+
+### Option 2: Build from source
+
+To build from source, first clone the repository.
+
+```bash
+git clone --branch v1.4.2 --single-branch https://github.com/openvm-org/openvm.git
+cd openvm
+```
+
+Then begin the installation:
+
+:::code-group
+```bash [Without GPU]
+cargo +1.90 install --locked --force --path crates/cli --features aot
+```
+```bash [Nvidia GPU]
+cargo +1.90 install --locked --force --path crates/cli --features aot,cuda
 ```
 :::
 
