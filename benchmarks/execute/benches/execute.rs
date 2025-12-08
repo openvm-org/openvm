@@ -252,7 +252,7 @@ fn create_default_transpiler() -> Transpiler<BabyBear> {
         .with_extension(Rv32IoTranspilerExtension)
         .with_extension(Rv32MTranspilerExtension)
         .with_extension(Int256TranspilerExtension)
-        .with_extension(Keccak256TranspilerExtension)
+        .with_extension(NewKeccakTranspilerExtension)
         .with_extension(Sha256TranspilerExtension)
         .with_extension(ModularTranspilerExtension)
         .with_extension(Fp2TranspilerExtension)

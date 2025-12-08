@@ -52,7 +52,7 @@ fn __native_xorin(buffer: *mut u8, input: *const u8, len: usize) {
     );
 }
 
-
+/* TODO: uncomment this
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
 #[no_mangle]
@@ -81,3 +81,4 @@ fn __native_keccakf(buffer: *mut u8) {
         rs2 = Const "x0",
     );
 }
+*/
