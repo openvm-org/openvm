@@ -949,9 +949,8 @@ fn test_single_segment_executor_no_segmentation() {
     setup_tracing();
 
     let mut config = test_native_config();
-    config
-        .system
-        .set_segmentation_limits(SegmentationLimits::default().with_max_trace_height(1));
+    config.system.segmentation_config.limits =
+        SegmentationLimits::default().with_max_trace_height(1);
 
     let engine = TestEngine::<DuplexSponge>::new(SystemParams::new_for_testing(20));
     let (vm, _) =

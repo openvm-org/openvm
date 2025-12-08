@@ -92,11 +92,16 @@ impl BenchmarkCli {
         if let Some(max_height) = self.max_segment_length {
             app_vm_config
                 .as_mut()
-                .segmentation_limits
+                .segmentation_config
+                .limits
                 .set_max_trace_height(max_height);
         }
         if let Some(max_cells) = self.segment_max_cells {
-            app_vm_config.as_mut().segmentation_limits.max_cells = max_cells;
+            app_vm_config
+                .as_mut()
+                .segmentation_config
+                .limits
+                .set_max_cells(max_cells);
         }
         AppConfig {
             app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
