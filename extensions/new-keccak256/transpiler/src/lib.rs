@@ -34,13 +34,15 @@ impl<F: PrimeField32> TranspilerExtension<F> for NewKeccakTranspilerExtension {
         }
         
         let dec_insn = RType::new(instruction_u32);
-        if dec_insn.funct7 != KECCAKF_FUNCT7 as u32 && dec_insn.funct7 != XORIN_FUNCT7 {
+
+        
+        if dec_insn.funct7 != KECCAKF_FUNCT7 as u32 && dec_insn.funct7 != XORIN_FUNCT7 as u32 {
             return None;
         }
 
         // TODO: what does e_as mean? 
-        let instruction = let instruction = from_r_type(
-            if dec_insn.funct7 == KECCAKF_FUNCT7 {
+        let instruction = from_r_type(
+            if dec_insn.funct7 == KECCAKF_FUNCT7 as u32 {
                 Rv32NewKeccakOpcode::KECCAKF.global_opcode().as_usize()
             } else {
                 Rv32NewKeccakOpcode::XORIN.global_opcode().as_usize()

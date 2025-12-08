@@ -6835,6 +6835,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-new-keccak256-transpiler"
+version = "1.4.2-rc.0"
+dependencies = [
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-new-keccak256-guest",
+ "openvm-stark-backend",
+ "openvm-transpiler",
+ "rrs-lib",
+ "strum",
+]
+
+[[package]]
 name = "openvm-pairing"
 version = "1.4.2"
 dependencies = [
