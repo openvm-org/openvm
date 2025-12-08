@@ -15,7 +15,7 @@ pub const KECCAK_WIDTH_BYTES: usize = 200;
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
 #[no_mangle]
-pub extern "C" fn native_xorin(buffer: *mut u8, input: *const u8, len: usize) {
+pub extern "C" fn native_xorin(mut buffer: *mut u8, input: *const u8, len: usize) {
     const MIN_ALIGN: usize = 4;
     unsafe {
         if buffer as usize % MIN_ALIGN != 0 {
@@ -41,7 +41,7 @@ pub extern "C" fn native_xorin(buffer: *mut u8, input: *const u8, len: usize) {
 
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
-fn __native_xorin(buffer: *mut u8, input: *const u8, len: usize) {
+fn __native_xorin(mut buffer: *mut u8, input: *const u8, len: usize) {
     openvm_platform::custom_insn_r!(
         opcode = OPCODE,
         funct3 = XORIN_FUNCT3,
@@ -52,7 +52,7 @@ fn __native_xorin(buffer: *mut u8, input: *const u8, len: usize) {
     );
 }
 
-/* TODO: uncomment this
+/*
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
 #[no_mangle]
@@ -60,7 +60,7 @@ pub extern "C" fn native_keccakf(buffer: *mut u8) {
     const MIN_ALIGN: usize = 4;
     unsafe {
         if buffer as usize % MIN_ALIGN != 0 {
-            let aligned_buffer = AlignedBuf::new(buffer, len, MIN_ALIGN);
+            let aligned_buffer = AlignedBuf::new(buffer, 200, MIN_ALIGN);
             __native_keccakf(aligned_buffer.ptr);
             core::ptr::copy_nonoverlapping(aligned_buffer.ptr as *const u8, buffer, KECCAK_WIDTH_BYTES);
         } else {

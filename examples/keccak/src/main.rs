@@ -9,27 +9,14 @@ use tiny_keccak::Hasher;
 
 // [!region main]
 pub fn main() {
-    let test_vectors = [
-        (
-            "",
-            "C5D2460186F7233C927E7DB2DCC703C0E500B653CA82273B7BFAD8045D85A470",
-        ),
-        (
-            "CC",
-            "EEAD6DBFC7340A56CAEDC044696A168870549A6A7F6F56961E84A54BD9970B8A",
-        ),
-    ];
-    for (input, expected_output) in test_vectors.iter() {
-        let input = Vec::from_hex(input).unwrap();
-        let expected_output = Vec::from_hex(expected_output).unwrap();
+    let mut buffer = [1u8; 136];
+    let input = [2u8; 136];
+    let output = [3u8; 136];
+    let len = 136;
 
-        let mut hasher = tiny_keccak::Keccak::v256();
-        hasher.update(&input);
-        let mut output = [0u8; 32];
-        hasher.finalize(&mut output);
-        if output != *expected_output {
-            panic!();
-        }
-    }
+    openvm_new_keccak256_guest::native_xorin(buffer.as_mut_ptr(), input.as_ptr(), len);
+
+    assert_eq!(buffer, output, "native_xorin is incorrect");
+
 }
 // [!endregion main]
