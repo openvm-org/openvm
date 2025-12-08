@@ -54,7 +54,6 @@ use crate::{
         RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     jalr::{run_jalr, Rv32JalrChip, Rv32JalrCoreCols, Rv32JalrExecutor},
-    test_utils::get_verification_error,
     Rv32JalrAir, Rv32JalrFiller,
 };
 
@@ -221,7 +220,6 @@ struct JalrPrankValues {
     pub imm_sign: Option<u32>,
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_negative_jalr_test(
     opcode: Rv32JalrOpcode,
     initial_pc: Option<u32>,
@@ -229,7 +227,6 @@ fn run_negative_jalr_test(
     initial_imm: Option<u32>,
     initial_imm_sign: Option<u32>,
     prank_vals: JalrPrankValues,
-    interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -279,7 +276,9 @@ fn run_negative_jalr_test(
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -294,7 +293,6 @@ fn invalid_cols_negative_tests() {
             imm_sign: Some(1),
             ..Default::default()
         },
-        false,
     );
 
     run_negative_jalr_test(
@@ -307,7 +305,6 @@ fn invalid_cols_negative_tests() {
             imm_sign: Some(0),
             ..Default::default()
         },
-        false,
     );
 
     run_negative_jalr_test(
@@ -320,7 +317,6 @@ fn invalid_cols_negative_tests() {
             to_pc_least_sig_bit: Some(0),
             ..Default::default()
         },
-        false,
     );
 }
 
@@ -336,7 +332,6 @@ fn overflow_negative_tests() {
             rd_data: Some([1, 0, 0]),
             ..Default::default()
         },
-        true,
     );
 
     run_negative_jalr_test(
@@ -352,7 +347,6 @@ fn overflow_negative_tests() {
             ]),
             ..Default::default()
         },
-        true,
     );
 }
 
