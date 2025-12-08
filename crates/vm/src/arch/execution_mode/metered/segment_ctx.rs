@@ -371,6 +371,7 @@ impl SegmentationCtx {
 
     /// Calculate trace utilization: ratio of used cells to padded cells (as percentage).
     /// This measures how efficiently the trace is packed before padding to power of two.
+    /// Note: this is an overestimate because memory-related trace heights are overestimated.
     #[inline(always)]
     fn calculate_trace_utilization(&self, trace_heights: &[u32]) -> f64 {
         let (used, padded) = trace_heights
