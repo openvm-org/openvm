@@ -6694,6 +6694,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-keccakf-guest"
+version = "1.4.2-rc.0"
+dependencies = [
+ "openvm-platform",
+]
+
+[[package]]
+name = "openvm-keccakf-transpiler"
+version = "1.4.2-rc.0"
+dependencies = [
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-keccakf-guest",
+ "openvm-stark-backend",
+ "openvm-transpiler",
+ "rrs-lib",
+ "strum",
+]
+
+[[package]]
 name = "openvm-macros-common"
 version = "1.4.2"
 dependencies = [
