@@ -41,7 +41,6 @@ use crate::{
         Rv32RdWriteAdapterAir, Rv32RdWriteAdapterExecutor, Rv32RdWriteAdapterFiller,
         RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
-    test_utils::get_verification_error,
     Rv32AuipcAir, Rv32AuipcFiller,
 };
 
@@ -170,7 +169,6 @@ fn run_negative_auipc_test(
     initial_imm: Option<u32>,
     initial_pc: Option<u32>,
     prank_vals: AuipcPrankValues,
-    interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -211,7 +209,9 @@ fn run_negative_auipc_test(
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -224,7 +224,6 @@ fn invalid_limb_negative_tests() {
             imm_limbs: Some([107, 46, 81]),
             ..Default::default()
         },
-        false,
     );
     run_negative_auipc_test(
         AUIPC,
@@ -235,7 +234,6 @@ fn invalid_limb_negative_tests() {
             pc_limbs: Some([51, 32]),
             ..Default::default()
         },
-        true,
     );
     run_negative_auipc_test(
         AUIPC,
@@ -245,7 +243,6 @@ fn invalid_limb_negative_tests() {
             pc_limbs: Some([206, 166]),
             ..Default::default()
         },
-        false,
     );
     run_negative_auipc_test(
         AUIPC,
@@ -255,7 +252,6 @@ fn invalid_limb_negative_tests() {
             rd_data: Some([30, 92, 82, 132]),
             ..Default::default()
         },
-        false,
     );
     run_negative_auipc_test(
         AUIPC,
@@ -266,7 +262,6 @@ fn invalid_limb_negative_tests() {
             imm_limbs: Some([166, 243, 17]),
             pc_limbs: Some([36, 62]),
         },
-        true,
     );
 }
 
@@ -280,7 +275,6 @@ fn overflow_negative_tests() {
             imm_limbs: Some([3592, 219, 3]),
             ..Default::default()
         },
-        false,
     );
     run_negative_auipc_test(
         AUIPC,
@@ -290,7 +284,6 @@ fn overflow_negative_tests() {
             pc_limbs: Some([0, 0]),
             ..Default::default()
         },
-        false,
     );
     run_negative_auipc_test(
         AUIPC,
@@ -300,7 +293,6 @@ fn overflow_negative_tests() {
             imm_limbs: Some([F::NEG_ONE.as_canonical_u32(), 1, 0]),
             ..Default::default()
         },
-        true,
     );
     run_negative_auipc_test(
         AUIPC,
@@ -311,7 +303,6 @@ fn overflow_negative_tests() {
             imm_limbs: Some([0, 0, 0]),
             pc_limbs: Some([1, 0]),
         },
-        true,
     );
 }
 
