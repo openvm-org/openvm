@@ -1,0 +1,17 @@
+[package]
+name = "openvm-keccak256-transpiler"
+description = "OpenVM transpiler extension for keccak256"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+openvm-stark-backend = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-transpiler = { workspace = true }
+rrs-lib = { workspace = true }
+openvm-keccak256-guest = { workspace = true }
+openvm-instructions-derive = { workspace = true }
+strum = { workspace = true }

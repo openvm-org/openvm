@@ -197,7 +197,7 @@ impl TranspilerConfig<F> for SdkVmConfig {
             transpiler = transpiler.with_extension(Rv32IoTranspilerExtension);
         }
         if self.keccak.is_some() {
-            transpiler = transpiler.with_extension(Keccak256TranspilerExtension);
+            transpiler = transpiler.with_extension(NewKeccakTranspilerExtension);
         }
         if self.sha256.is_some() {
             transpiler = transpiler.with_extension(Sha256TranspilerExtension);

@@ -53,6 +53,7 @@ members = [
     "extensions/keccak256/guest",
     "extensions/new-keccak256/circuit",
     "extensions/new-keccak256/guest",
+    "extensions/new-keccak256/transpiler",
     "extensions/sha256/circuit",
     "extensions/sha256/transpiler",
     "extensions/sha256/guest",
@@ -70,7 +71,7 @@ members = [
     "guest-libs/ruint/",
     "guest-libs/sha2/",
     "guest-libs/verify_stark/",
-    "scripts",
+    "scripts", 
 ]
 exclude = ["crates/sdk/example", "benchmarks/guest/**"]
 resolver = "2"
