@@ -6828,6 +6828,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-new-keccak256-guest"
+version = "1.4.2-rc.0"
+dependencies = [
+ "openvm-platform",
+]
+
+[[package]]
 name = "openvm-pairing"
 version = "1.4.2"
 dependencies = [
