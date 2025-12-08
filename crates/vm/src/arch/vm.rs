@@ -1520,7 +1520,7 @@ pub fn debug_proving_ctx<E, VB>(
     // vm.engine.debug(&airs, &pks, &proof_inputs);
 }
 
-#[cfg(feature = "metrics")]
+#[cfg(all(feature = "metrics", not(feature = "cuda")))]
 mod vm_metrics {
     use std::iter::zip;
 
