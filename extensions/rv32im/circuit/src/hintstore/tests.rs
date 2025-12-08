@@ -39,7 +39,7 @@ use {
 };
 
 use super::{Rv32HintStoreAir, Rv32HintStoreChip, Rv32HintStoreCols, Rv32HintStoreExecutor};
-use crate::{test_utils::get_verification_error, Rv32HintStoreFiller};
+use crate::Rv32HintStoreFiller;
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 4096;
@@ -194,11 +194,9 @@ fn rand_hintstore_test() {
 // part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
-#[allow(clippy::too_many_arguments)]
 fn run_negative_hintstore_test(
     opcode: Rv32HintStoreOpcode,
     prank_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
-    interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -227,12 +225,14 @@ fn run_negative_hintstore_test(
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
 fn negative_hintstore_tests() {
-    run_negative_hintstore_test(HINT_STOREW, Some([92, 187, 45, 280]), true);
+    run_negative_hintstore_test(HINT_STOREW, Some([92, 187, 45, 280]));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
