@@ -112,7 +112,7 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
         inventory.add_periphery_chip(range_checker.clone());
 
         let hasher_chip = if config.continuation_enabled {
-            let max_buffer_size = (config.segmentation_limits.max_trace_height as usize)
+            let max_buffer_size = (config.segmentation_config.limits.max_trace_height as usize)
                 .next_power_of_two() * 2 // seems like a reliable estimate
                 * (DIGEST_WIDTH * 2); // size of one record
             assert_eq!(inventory.chips().len(), POSEIDON2_INSERTION_IDX);

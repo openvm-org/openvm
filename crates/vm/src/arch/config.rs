@@ -22,7 +22,7 @@ use stark_backend_v2::StarkEngineV2 as StarkEngine;
 use super::{AnyEnum, VmChipComplex, PUBLIC_VALUES_AIR_ID};
 use crate::{
     arch::{
-        execution_mode::metered::segment_ctx::SegmentationLimits, AirInventory, AirInventoryError,
+        execution_mode::metered::segment_ctx::SegmentationConfig, AirInventory, AirInventoryError,
         Arena, ChipInventoryError, ExecutorInventory, ExecutorInventoryError,
     },
     system::{
@@ -273,12 +273,12 @@ pub struct SystemConfig {
     /// Whether to collect detailed profiling metrics.
     /// **Warning**: this slows down the runtime.
     pub profiling: bool,
-    /// Segmentation limits
+    /// Segmentation configuration
     /// This field is skipped in serde as it's only used in execution and
     /// not needed after any serialize/deserialize.
-    #[serde(skip, default = "SegmentationLimits::default")]
+    #[serde(skip, default)]
     #[getset(set = "pub")]
-    pub segmentation_limits: SegmentationLimits,
+    pub segmentation_config: SegmentationConfig,
 }
 
 impl SystemConfig {
@@ -298,7 +298,7 @@ impl SystemConfig {
             memory_config,
             num_public_values,
             profiling: false,
-            segmentation_limits: SegmentationLimits::default(),
+            segmentation_config: SegmentationConfig::default(),
         }
     }
 
@@ -327,7 +327,8 @@ impl SystemConfig {
     }
 
     pub fn with_max_segment_len(mut self, max_segment_len: usize) -> Self {
-        self.segmentation_limits
+        self.segmentation_config
+            .limits
             .set_max_trace_height(max_segment_len as u32);
         self
     }

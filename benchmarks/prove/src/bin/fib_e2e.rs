@@ -18,7 +18,8 @@ async fn main() -> Result<()> {
         SdkVmConfig::from_toml(include_str!("../../../guest/fibonacci/openvm.toml"))?.app_vm_config;
     config
         .as_mut()
-        .segmentation_limits
+        .segmentation_config
+        .limits
         .set_max_trace_height(max_segment_length);
     config.as_mut().num_public_values = NUM_PUBLIC_VALUES;
 
