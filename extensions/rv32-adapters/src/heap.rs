@@ -36,9 +36,11 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
+use openvm_circuit::arch::CONST_BLOCK_SIZE;
+
 /// Fixed memory block size for all heap adapter memory bus interactions.
-/// All reads and writes are sent in 4-byte chunks to avoid access adapters.
-pub const HEAP_ADAPTER_BLOCK_SIZE: usize = 4;
+/// All reads and writes are sent in CONST_BLOCK_SIZE-byte chunks to avoid access adapters.
+pub const HEAP_ADAPTER_BLOCK_SIZE: usize = CONST_BLOCK_SIZE;
 
 /// This adapter reads from NUM_READS <= 2 pointers and writes to 1 pointer.
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
@@ -81,8 +83,8 @@ pub struct Rv32HeapAdapterAir<
     const NUM_READS: usize,
     const READ_SIZE: usize,
     const WRITE_SIZE: usize,
-    const READ_BLOCKS: usize = { 8 },   // Default for 32-byte reads
-    const WRITE_BLOCKS: usize = { 8 },  // Default for 32-byte writes
+    const READ_BLOCKS: usize = { 8 },
+    const WRITE_BLOCKS: usize = { 8 },
 > {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
@@ -102,7 +104,8 @@ impl<
     for Rv32HeapAdapterAir<NUM_READS, READ_SIZE, WRITE_SIZE, READ_BLOCKS, WRITE_BLOCKS>
 {
     fn width(&self) -> usize {
-        Rv32HeapAdapterCols::<F, NUM_READS, READ_SIZE, WRITE_SIZE, READ_BLOCKS, WRITE_BLOCKS>::width()
+        Rv32HeapAdapterCols::<F, NUM_READS, READ_SIZE, WRITE_SIZE, READ_BLOCKS, WRITE_BLOCKS>::width(
+        )
     }
 }
 
@@ -134,8 +137,14 @@ impl<
         debug_assert_eq!(READ_BLOCKS, READ_SIZE / HEAP_ADAPTER_BLOCK_SIZE);
         debug_assert_eq!(WRITE_BLOCKS, WRITE_SIZE / HEAP_ADAPTER_BLOCK_SIZE);
 
-        let cols: &Rv32HeapAdapterCols<_, NUM_READS, READ_SIZE, WRITE_SIZE, READ_BLOCKS, WRITE_BLOCKS> =
-            local.borrow();
+        let cols: &Rv32HeapAdapterCols<
+            _,
+            NUM_READS,
+            READ_SIZE,
+            WRITE_SIZE,
+            READ_BLOCKS,
+            WRITE_BLOCKS,
+        > = local.borrow();
         let timestamp = cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
@@ -248,8 +257,14 @@ impl<
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv32HeapAdapterCols<_, NUM_READS, READ_SIZE, WRITE_SIZE, READ_BLOCKS, WRITE_BLOCKS> =
-            local.borrow();
+        let cols: &Rv32HeapAdapterCols<
+            _,
+            NUM_READS,
+            READ_SIZE,
+            WRITE_SIZE,
+            READ_BLOCKS,
+            WRITE_BLOCKS,
+        > = local.borrow();
         cols.from_state.pc
     }
 }
@@ -358,8 +373,14 @@ impl<
     > AdapterTraceExecutor<F>
     for Rv32HeapAdapterExecutor<NUM_READS, READ_SIZE, WRITE_SIZE, READ_BLOCKS, WRITE_BLOCKS>
 {
-    const WIDTH: usize =
-        Rv32HeapAdapterCols::<F, NUM_READS, READ_SIZE, WRITE_SIZE, READ_BLOCKS, WRITE_BLOCKS>::width();
+    const WIDTH: usize = Rv32HeapAdapterCols::<
+        F,
+        NUM_READS,
+        READ_SIZE,
+        WRITE_SIZE,
+        READ_BLOCKS,
+        WRITE_BLOCKS,
+    >::width();
     type ReadData = [[u8; READ_SIZE]; NUM_READS];
     type WriteData = [[u8; WRITE_SIZE]; 1];
     type RecordMut<'a> =
@@ -434,10 +455,10 @@ impl<
         // Write in 4-byte blocks
         for block_idx in 0..WRITE_BLOCKS {
             let block_start = block_idx * HEAP_ADAPTER_BLOCK_SIZE;
-            let block: [u8; HEAP_ADAPTER_BLOCK_SIZE] =
-                data[0][block_start..block_start + HEAP_ADAPTER_BLOCK_SIZE]
-                    .try_into()
-                    .unwrap();
+            let block: [u8; HEAP_ADAPTER_BLOCK_SIZE] = data[0]
+                [block_start..block_start + HEAP_ADAPTER_BLOCK_SIZE]
+                .try_into()
+                .unwrap();
             tracing_write(
                 memory,
                 RV32_MEMORY_AS,
@@ -460,15 +481,32 @@ impl<
     > AdapterTraceFiller<F>
     for Rv32HeapAdapterFiller<NUM_READS, READ_SIZE, WRITE_SIZE, READ_BLOCKS, WRITE_BLOCKS>
 {
-    const WIDTH: usize =
-        Rv32HeapAdapterCols::<F, NUM_READS, READ_SIZE, WRITE_SIZE, READ_BLOCKS, WRITE_BLOCKS>::width();
+    const WIDTH: usize = Rv32HeapAdapterCols::<
+        F,
+        NUM_READS,
+        READ_SIZE,
+        WRITE_SIZE,
+        READ_BLOCKS,
+        WRITE_BLOCKS,
+    >::width();
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
-        let record: &Rv32HeapAdapterRecord<NUM_READS, READ_SIZE, WRITE_SIZE, READ_BLOCKS, WRITE_BLOCKS> =
-            unsafe { get_record_from_slice(&mut adapter_row, ()) };
+        let record: &Rv32HeapAdapterRecord<
+            NUM_READS,
+            READ_SIZE,
+            WRITE_SIZE,
+            READ_BLOCKS,
+            WRITE_BLOCKS,
+        > = unsafe { get_record_from_slice(&mut adapter_row, ()) };
 
-        let cols: &mut Rv32HeapAdapterCols<F, NUM_READS, READ_SIZE, WRITE_SIZE, READ_BLOCKS, WRITE_BLOCKS> =
-            adapter_row.borrow_mut();
+        let cols: &mut Rv32HeapAdapterCols<
+            F,
+            NUM_READS,
+            READ_SIZE,
+            WRITE_SIZE,
+            READ_BLOCKS,
+            WRITE_BLOCKS,
+        > = adapter_row.borrow_mut();
 
         // Range checks
         debug_assert!(self.pointer_max_bits <= RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS);

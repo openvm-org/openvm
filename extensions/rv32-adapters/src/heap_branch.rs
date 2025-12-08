@@ -32,9 +32,11 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
+use openvm_circuit::arch::CONST_BLOCK_SIZE;
+
 /// Fixed memory block size for all heap branch adapter memory bus interactions.
-/// All reads are sent in 4-byte chunks to avoid access adapters.
-pub const HEAP_BRANCH_ADAPTER_BLOCK_SIZE: usize = 4;
+/// All reads are sent in CONST_BLOCK_SIZE-byte chunks to avoid access adapters.
+pub const HEAP_BRANCH_ADAPTER_BLOCK_SIZE: usize = CONST_BLOCK_SIZE;
 
 /// This adapter reads from NUM_READS <= 2 pointers (no writes).
 /// * The data is read from the heap (address space 2), and the pointers are read from registers
