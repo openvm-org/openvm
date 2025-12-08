@@ -16,6 +16,11 @@ jobs:
     steps:
       - uses: runs-on/action@v2
       - uses: actions/checkout@v5
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: codespell-project/actions-codespell@v2
         with:
           skip: Cargo.lock,./docs/vocs/pnpm-lock.yaml,*.txt,./crates/toolchain/openvm/src/memcpy.s,./crates/toolchain/openvm/src/memset.s,./audits/*.pdf,./guest-libs/ruint/*
@@ -112,4 +117,4 @@ jobs:
           echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-21 main" | sudo tee /etc/apt/sources.list.d/llvm-toolchain.list
           sudo apt-get update
           sudo apt-get install -y clang-tidy-21
-          cargo run -p openvm-scripts --features cuda --bin run-clang-tidy -- . --clang-tidy clang-tidy-21
+          ./scripts/run_clang_tidy.sh
