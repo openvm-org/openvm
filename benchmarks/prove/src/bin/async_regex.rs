@@ -19,11 +19,17 @@ async fn main() -> eyre::Result<()> {
         config
             .app_vm_config
             .as_mut()
-            .segmentation_limits
-            .max_trace_height = max_height;
+            .segmentation_config
+            .limits
+            .set_max_trace_height(max_height);
     }
     if let Some(max_cells) = args.segment_max_cells {
-        config.app_vm_config.as_mut().segmentation_limits.max_cells = max_cells;
+        config
+            .app_vm_config
+            .as_mut()
+            .segmentation_config
+            .limits
+            .set_max_cells(max_cells);
     }
 
     let sdk = Sdk::new(config)?;
