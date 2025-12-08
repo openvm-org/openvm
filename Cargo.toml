@@ -51,9 +51,6 @@ members = [
     "extensions/keccak256/circuit",
     "extensions/keccak256/transpiler",
     "extensions/keccak256/guest",
-    "extensions/keccak256/keccakf/circuit",
-    "extensions/keccak256/keccakf/guest",
-    "extensions/keccak256/keccakf/transpiler",
     "extensions/sha256/circuit",
     "extensions/sha256/transpiler",
     "extensions/sha256/guest",
@@ -72,7 +69,6 @@ members = [
     "guest-libs/sha2/",
     "guest-libs/verify_stark/",
     "scripts",
-    "extensions/keccak256/xorin",
 ]
 exclude = ["crates/sdk/example", "benchmarks/guest/**"]
 resolver = "2"
@@ -156,9 +152,6 @@ openvm-native-transpiler = { path = "extensions/native/transpiler", default-feat
 openvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
 openvm-keccak256-transpiler = { path = "extensions/keccak256/transpiler", default-features = false }
 openvm-keccak256-guest = { path = "extensions/keccak256/guest", default-features = false }
-openvm-keccakf-circuit = { path = "extensions/keccak256/keccakf/circuit", default-features = false }
-openvm-keccakf-transpiler = { path = "extensions/keccak256/keccakf/transpiler", default-features = false }
-openvm-keccakf-guest = { path = "extensions/keccak256/keccakf/guest", default-features = false }
 openvm-sha256-circuit = { path = "extensions/sha256/circuit", default-features = false }
 openvm-sha256-transpiler = { path = "extensions/sha256/transpiler", default-features = false }
 openvm-sha256-guest = { path = "extensions/sha256/guest", default-features = false }
