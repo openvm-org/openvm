@@ -71,7 +71,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         );
 
         let segmentation_ctx =
-            SegmentationCtx::new(air_names, widths, interactions, config.segmentation_limits);
+            SegmentationCtx::new(air_names, widths, interactions, config.segmentation_config);
 
         let mut ctx = Self {
             trace_heights,
@@ -111,6 +111,11 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
     pub fn with_max_interactions(mut self, max_interactions: usize) -> Self {
         self.segmentation_ctx.set_max_interactions(max_interactions);
+        self
+    }
+
+    pub fn with_interaction_cell_weight(mut self, weight: usize) -> Self {
+        self.segmentation_ctx.set_interaction_cell_weight(weight);
         self
     }
 

@@ -4,7 +4,7 @@ use clap::Parser;
 use eyre::Result;
 use openvm_circuit::arch::{
     execution_mode::metered::segment_ctx::{
-        SegmentationLimits, DEFAULT_MAX_CELLS, DEFAULT_MAX_TRACE_HEIGHT_BITS,
+        SegmentationConfig, SegmentationLimits, DEFAULT_MAX_CELLS, DEFAULT_MAX_TRACE_HEIGHT_BITS,
     },
     instructions::exe::VmExe,
 };
@@ -306,17 +306,19 @@ fn get_app_config(
         .vm_config
         .system
         .config
-        .set_segmentation_limits((*segmentation_args).into());
+        .set_segmentation_config((*segmentation_args).into());
     app_pk.app_config()
 }
 
-impl From<SegmentationArgs> for SegmentationLimits {
+impl From<SegmentationArgs> for SegmentationConfig {
     fn from(args: SegmentationArgs) -> Self {
-        SegmentationLimits {
-            max_trace_height: 1u32
-                .checked_shl(args.segment_max_height_bits as u32)
-                .expect("segment_max_height_bits too large"),
-            max_cells: args.segment_max_cells,
+        SegmentationConfig {
+            limits: SegmentationLimits::default()
+                .with_max_trace_height(
+                    1u32.checked_shl(args.segment_max_height_bits as u32)
+                        .expect("segment_max_height_bits too large"),
+                )
+                .with_max_cells(args.segment_max_cells),
             ..Default::default()
         }
     }
