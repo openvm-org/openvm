@@ -753,7 +753,7 @@ where
         system_records: SystemRecords<Val<E::SC>>,
         record_arenas: Vec<VB::RecordArena>,
     ) -> Result<ProvingContext<E::PB>, GenerationError> {
-        #[cfg(feature = "metrics")]
+        #[cfg(all(feature = "metrics", not(feature = "cuda")))]
         let mut current_trace_heights =
             self.get_trace_heights_from_arenas(&system_records, &record_arenas);
         // main tracegen call:
@@ -813,7 +813,7 @@ where
                 });
             }
         }
-        #[cfg(feature = "metrics")]
+        #[cfg(all(feature = "metrics", not(feature = "cuda")))]
         self.finalize_metrics(&mut current_trace_heights);
         #[cfg(feature = "stark-debug")]
         self.debug_proving_ctx(&ctx);
