@@ -2,6 +2,7 @@ pub mod execution;
 pub mod tests;
 pub mod trace;
 pub mod columns;
+pub mod air;
 
 const KECCAK_WORD_SIZE: usize = 4;
 
