@@ -30,6 +30,9 @@ pub struct AggregateMetrics {
     pub total_par_proof_time: MdTableCell,
     /// In seconds (bounded parallelism with NUM_PARALLEL_PROOFS slots)
     pub total_bounded_par_proof_time: MdTableCell,
+    /// Per-group bounded parallel proof time in seconds
+    #[serde(skip)]
+    pub bounded_par_by_group: HashMap<String, MdTableCell>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -178,39 +181,46 @@ impl GroupedMetrics {
             ..Default::default()
         };
         metrics.compute_total();
-        metrics.total_bounded_par_proof_time =
-            MdTableCell::new(self.compute_bounded_par_time(), Some(0.0));
+        let (total_bounded, per_group_bounded) = self.compute_bounded_par_times();
+        metrics.total_bounded_par_proof_time = MdTableCell::new(total_bounded, Some(0.0));
+        metrics.bounded_par_by_group = per_group_bounded
+            .into_iter()
+            .map(|(k, v)| (k, MdTableCell::new(v, Some(0.0))))
+            .collect();
 
         metrics
     }
 
     /// Compute parallel proof time with bounded parallelism (NUM_PARALLEL_PROOFS slots).
-    fn compute_bounded_par_time(&self) -> f64 {
+    /// Returns (total, per-group times).
+    fn compute_bounded_par_times(&self) -> (f64, HashMap<String, f64>) {
         let mut total = 0.0;
+        let mut per_group = HashMap::new();
 
-        // Collect proof times by group and sort by dependency order
-        let mut groups: Vec<_> = self
-            .by_group
-            .iter()
-            .filter(|(name, _)| !name.contains("keygen"))
-            .collect();
-        groups.sort_by_key(|(name, _)| group_weight(name));
+        for (group_name, metrics) in &self.by_group {
+            if group_name.contains("keygen") {
+                continue;
+            }
 
-        for (group_name, metrics) in &groups {
+            let mut group_time = 0.0;
+
             // Add serial execution time for app_proof
-            if *group_name == "app_proof" {
-                total += sum_metric_ms(metrics, EXECUTE_METERED_TIME_LABEL);
-                total += sum_metric_ms(metrics, EXECUTE_E1_TIME_LABEL);
+            if group_name == "app_proof" {
+                group_time += sum_metric_ms(metrics, EXECUTE_METERED_TIME_LABEL);
+                group_time += sum_metric_ms(metrics, EXECUTE_E1_TIME_LABEL);
             }
 
             // Schedule proofs in parallel
             if let Some(proof_times) = metrics.get(PROOF_TIME_LABEL) {
                 let times_s: Vec<f64> = proof_times.iter().map(|(ms, _)| ms / 1000.0).collect();
-                total += schedule_parallel(&times_s);
+                group_time += schedule_parallel(&times_s);
             }
+
+            per_group.insert(group_name.clone(), group_time);
+            total += group_time;
         }
 
-        total
+        (total, per_group)
     }
 }
 
@@ -518,9 +528,10 @@ impl AggregateMetrics {
     fn write_summary_markdown(&self, writer: &mut impl Write) -> Result<()> {
         writeln!(
             writer,
-            "| Summary | Proof Time (s) | Parallel Proof Time (s) |"
+            "| Summary | Proof Time (s) | Parallel Proof Time (s) | Parallel Proof Time ({} GPUs) (s) |",
+            NUM_PARALLEL_PROOFS
         )?;
-        writeln!(writer, "|:---|---:|---:|")?;
+        writeln!(writer, "|:---|---:|---:|---:|")?;
         let mut rows = Vec::new();
         for (group_name, summaries) in self.to_vec() {
             if group_name.contains("keygen") {
@@ -548,11 +559,19 @@ impl AggregateMetrics {
         }
         writeln!(
             writer,
-            "| Total | {} | {} |",
-            self.total_proof_time, self.total_par_proof_time
+            "| Total | {} | {} | {} |",
+            self.total_proof_time, self.total_par_proof_time, self.total_bounded_par_proof_time
         )?;
         for (group_name, proof_time, par_proof_time) in rows {
-            writeln!(writer, "| {group_name} | {proof_time} | {par_proof_time} |")?;
+            let bounded = self
+                .bounded_par_by_group
+                .get(&group_name)
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "-".to_string());
+            writeln!(
+                writer,
+                "| {group_name} | {proof_time} | {par_proof_time} | {bounded} |"
+            )?;
         }
         writeln!(writer)?;
         Ok(())
