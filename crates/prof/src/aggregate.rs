@@ -28,9 +28,7 @@ pub struct AggregateMetrics {
     pub total_proof_time: MdTableCell,
     /// In seconds (infinite parallelism)
     pub total_par_proof_time: MdTableCell,
-    /// In seconds (bounded parallelism with NUM_PARALLEL_PROOFS slots)
-    pub total_bounded_par_proof_time: MdTableCell,
-    /// Per-group bounded parallel proof time in seconds
+    /// Per-group bounded parallel proof time in seconds (NUM_PARALLEL_PROOFS slots)
     #[serde(skip)]
     pub bounded_par_by_group: HashMap<String, MdTableCell>,
 }
@@ -181,9 +179,8 @@ impl GroupedMetrics {
             ..Default::default()
         };
         metrics.compute_total();
-        let (total_bounded, per_group_bounded) = self.compute_bounded_par_times();
-        metrics.total_bounded_par_proof_time = MdTableCell::new(total_bounded, Some(0.0));
-        metrics.bounded_par_by_group = per_group_bounded
+        metrics.bounded_par_by_group = self
+            .compute_bounded_par_times()
             .into_iter()
             .map(|(k, v)| (k, MdTableCell::new(v, Some(0.0))))
             .collect();
@@ -191,10 +188,8 @@ impl GroupedMetrics {
         metrics
     }
 
-    /// Compute parallel proof time with bounded parallelism (NUM_PARALLEL_PROOFS slots).
-    /// Returns (total, per-group times).
-    fn compute_bounded_par_times(&self) -> (f64, HashMap<String, f64>) {
-        let mut total = 0.0;
+    /// Compute per-group parallel proof time with bounded parallelism (NUM_PARALLEL_PROOFS slots).
+    fn compute_bounded_par_times(&self) -> HashMap<String, f64> {
         let mut per_group = HashMap::new();
 
         for (group_name, metrics) in &self.by_group {
@@ -217,10 +212,9 @@ impl GroupedMetrics {
             }
 
             per_group.insert(group_name.clone(), group_time);
-            total += group_time;
         }
 
-        (total, per_group)
+        per_group
     }
 }
 
@@ -557,10 +551,11 @@ impl AggregateMetrics {
             }
             rows.push((group_name, sum, max));
         }
+        let total_bounded: f64 = self.bounded_par_by_group.values().map(|v| v.val).sum();
         writeln!(
             writer,
-            "| Total | {} | {} | {} |",
-            self.total_proof_time, self.total_par_proof_time, self.total_bounded_par_proof_time
+            "| Total | {} | {} | {:.2} |",
+            self.total_proof_time, self.total_par_proof_time, total_bounded
         )?;
         for (group_name, proof_time, par_proof_time) in rows {
             let bounded = self
