@@ -1,6 +1,7 @@
 pub mod execution;
 pub mod tests;
 pub mod trace;
+pub mod columns;
 
 const KECCAK_WORD_SIZE: usize = 4;
 
