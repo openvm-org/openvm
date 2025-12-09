@@ -12,7 +12,10 @@ use openvm_sha256_air::{get_sha256_num_blocks, SHA256_ROWS_PER_BLOCK};
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{sha256_solve, Sha256VmExecutor, SHA256_NUM_READ_ROWS, SHA256_READ_SIZE};
+use super::{
+    sha256_solve, Sha256VmExecutor, SHA256_NUM_READ_ROWS, SHA256_READ_SIZE, SHA256_READ_SUBBLOCKS,
+    SHA256_WRITE_SIZE,
+};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -128,10 +131,15 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
             // Reads happen on the first 4 rows of each block
             for row in 0..SHA256_NUM_READ_ROWS {
                 let read_idx = block_idx * SHA256_NUM_READ_ROWS + row;
-                let row_input: [u8; SHA256_READ_SIZE] = exec_state.vm_read(
-                    RV32_MEMORY_AS,
-                    src_u32 + (read_idx * SHA256_READ_SIZE) as u32,
-                );
+                let mut row_input = [0u8; SHA256_READ_SIZE];
+                for sub in 0..SHA256_READ_SUBBLOCKS {
+                    let chunk: [u8; CONST_BLOCK_SIZE] = exec_state.vm_read(
+                        RV32_MEMORY_AS,
+                        src_u32 + (read_idx * SHA256_READ_SIZE + sub * CONST_BLOCK_SIZE) as u32,
+                    );
+                    row_input[sub * CONST_BLOCK_SIZE..(sub + 1) * CONST_BLOCK_SIZE]
+                        .copy_from_slice(&chunk);
+                }
                 message.extend_from_slice(&row_input);
             }
         }
@@ -139,7 +147,15 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
         let height = num_blocks * SHA256_ROWS_PER_BLOCK as u32;
         (output, height)
     };
-    exec_state.vm_write(RV32_MEMORY_AS, dst_u32, &output);
+    for i in 0..SHA256_WRITE_SIZE / CONST_BLOCK_SIZE {
+        exec_state.vm_write::<u8, CONST_BLOCK_SIZE>(
+            RV32_MEMORY_AS,
+            dst_u32 + (i * CONST_BLOCK_SIZE) as u32,
+            &output[i * CONST_BLOCK_SIZE..(i + 1) * CONST_BLOCK_SIZE]
+                .try_into()
+                .unwrap(),
+        );
+    }
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));

@@ -1,7 +1,7 @@
 use std::{array, borrow::Borrow, cmp::min};
 
 use openvm_circuit::{
-    arch::ExecutionBridge,
+    arch::{ExecutionBridge, CONST_BLOCK_SIZE},
     system::{
         memory::{offline_checker::MemoryBridge, MemoryAddress},
         SystemPort,
@@ -29,7 +29,8 @@ use openvm_stark_backend::{
 
 use super::{
     Sha256VmDigestCols, Sha256VmRoundCols, SHA256VM_CONTROL_WIDTH, SHA256VM_DIGEST_WIDTH,
-    SHA256VM_ROUND_WIDTH, SHA256VM_WIDTH, SHA256_READ_SIZE,
+    SHA256VM_ROUND_WIDTH, SHA256VM_WIDTH, SHA256_NUM_READ_ROWS, SHA256_READ_SIZE,
+    SHA256_READ_SUBBLOCKS, SHA256_WRITE_SUBBLOCKS,
 };
 
 /// Sha256VmAir does all constraints related to message padding and
@@ -461,8 +462,10 @@ impl Sha256VmAir {
                 local_cols.control.read_ptr + read_ptr_delta,
             );
 
-        // Timestamp should increment by 1 for the first 4 rows and stay the same otherwise
-        let timestamp_delta = local_cols.inner.flags.is_first_4_rows * AB::Expr::ONE;
+        // Timestamp should increment by [SHA256_READ_SUBBLOCKS] for the first 4 rows and stay the
+        // same otherwise
+        let timestamp_delta = local_cols.inner.flags.is_first_4_rows
+            * AB::Expr::from_canonical_usize(SHA256_READ_SUBBLOCKS);
         builder
             .when_transition()
             .when(not::<AB::Expr>(is_last_row.clone()))
@@ -483,17 +486,22 @@ impl Sha256VmAir {
                 [i % (SHA256_WORD_U16S * 2)]
         });
 
-        self.memory_bridge
-            .read(
-                MemoryAddress::new(
-                    AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
-                    local_cols.control.read_ptr,
-                ),
-                message,
-                local_cols.control.cur_timestamp,
-                &local_cols.read_aux,
-            )
-            .eval(builder, local_cols.inner.flags.is_first_4_rows);
+        for sub in 0..SHA256_READ_SUBBLOCKS {
+            let chunk: [AB::Var; CONST_BLOCK_SIZE] =
+                array::from_fn(|i| message[sub * CONST_BLOCK_SIZE + i]);
+            self.memory_bridge
+                .read(
+                    MemoryAddress::new(
+                        AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
+                        local_cols.control.read_ptr
+                            + AB::Expr::from_canonical_usize(sub * CONST_BLOCK_SIZE),
+                    ),
+                    chunk,
+                    local_cols.control.cur_timestamp + AB::Expr::from_canonical_usize(sub),
+                    &local_cols.read_aux[sub],
+                )
+                .eval(builder, local_cols.inner.flags.is_first_4_rows);
+        }
     }
     /// Implement the constraints for the last row of a message
     fn eval_last_row<AB: InteractionBuilder>(&self, builder: &mut AB) {
@@ -563,11 +571,13 @@ impl Sha256VmAir {
             )
             .eval(builder, is_last_row.clone());
 
-        // the number of reads that happened to read the entire message: we do 4 reads per block
+        // the number of reads that happened to read the entire message: we do
+        // (SHA256_NUM_READ_ROWS * SHA256_READ_SUBBLOCKS) reads per block
         let time_delta = (local_cols.inner.flags.local_block_idx + AB::Expr::ONE)
-            * AB::Expr::from_canonical_usize(4);
-        // Every time we read the message we increment the read pointer by SHA256_READ_SIZE
-        let read_ptr_delta = time_delta.clone() * AB::Expr::from_canonical_usize(SHA256_READ_SIZE);
+            * AB::Expr::from_canonical_usize(SHA256_NUM_READ_ROWS * SHA256_READ_SUBBLOCKS);
+        // Every time we read a row we increment the read pointer by SHA256_READ_SIZE
+        let read_ptr_delta = (local_cols.inner.flags.local_block_idx + AB::Expr::ONE)
+            * AB::Expr::from_canonical_usize(SHA256_NUM_READ_ROWS * SHA256_READ_SIZE);
 
         let result: [AB::Var; SHA256_WORD_U8S * SHA256_HASH_WORDS] = array::from_fn(|i| {
             // The limbs are written in big endian order to the memory so need to be reversed
@@ -581,14 +591,22 @@ impl Sha256VmAir {
         // Note: revisit in the future to do 2 block writes of 16 cells instead of 1 block write of
         // 32 cells       This could be beneficial as the output is often an input for
         // another hash
-        self.memory_bridge
-            .write(
-                MemoryAddress::new(AB::Expr::from_canonical_u32(RV32_MEMORY_AS), dst_ptr_val),
-                result,
-                timestamp_pp() + time_delta.clone(),
-                &local_cols.writes_aux,
-            )
-            .eval(builder, is_last_row.clone());
+        for chunk in 0..SHA256_WRITE_SUBBLOCKS {
+            let data: [AB::Var; CONST_BLOCK_SIZE] =
+                array::from_fn(|i| result[chunk * CONST_BLOCK_SIZE + i]);
+            self.memory_bridge
+                .write(
+                    MemoryAddress::new(
+                        AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
+                        dst_ptr_val.clone()
+                            + AB::Expr::from_canonical_usize(chunk * CONST_BLOCK_SIZE),
+                    ),
+                    data,
+                    timestamp_pp() + time_delta.clone(),
+                    &local_cols.writes_aux[chunk],
+                )
+                .eval(builder, is_last_row.clone());
+        }
 
         self.execution_bridge
             .execute_and_increment_pc(

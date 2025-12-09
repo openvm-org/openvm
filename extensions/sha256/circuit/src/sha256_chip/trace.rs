@@ -36,7 +36,10 @@ use super::{
     SHA256VM_DIGEST_WIDTH,
 };
 use crate::{
-    sha256_chip::{PaddingFlags, SHA256_READ_SIZE, SHA256_REGISTER_READS, SHA256_WRITE_SIZE},
+    sha256_chip::{
+        PaddingFlags, CONST_BLOCK_SIZE, SHA256_READ_SIZE, SHA256_READ_SUBBLOCKS,
+        SHA256_REGISTER_READS, SHA256_WRITE_SIZE, SHA256_WRITE_SUBBLOCKS,
+    },
     sha256_solve, Sha256VmControlCols, Sha256VmFiller, SHA256VM_ROUND_WIDTH, SHA256VM_WIDTH,
     SHA256_BLOCK_CELLS, SHA256_MAX_MESSAGE_LEN, SHA256_NUM_READ_ROWS,
 };
@@ -68,7 +71,7 @@ pub struct Sha256VmRecordHeader {
     pub len: u32,
 
     pub register_reads_aux: [MemoryReadAuxRecord; SHA256_REGISTER_READS],
-    pub write_aux: MemoryWriteBytesAuxRecord<SHA256_WRITE_SIZE>,
+    pub write_aux: [MemoryWriteBytesAuxRecord<CONST_BLOCK_SIZE>; SHA256_WRITE_SUBBLOCKS],
 }
 
 pub struct Sha256VmRecordMut<'a> {
@@ -81,7 +84,8 @@ pub struct Sha256VmRecordMut<'a> {
 /// Custom borrowing that splits the buffer into a fixed `Sha256VmRecord` header
 /// followed by a slice of `u8`'s of length `SHA256_BLOCK_CELLS * num_blocks` where `num_blocks` is
 /// provided at runtime, followed by a slice of `MemoryReadAuxRecord`'s of length
-/// `SHA256_NUM_READ_ROWS * num_blocks`. Uses `align_to_mut()` to make sure the slice is properly
+/// `SHA256_NUM_READ_ROWS * SHA256_READ_SUBBLOCKS * num_blocks`. Uses `align_to_mut()` to make sure
+/// the slice is properly
 /// aligned to `MemoryReadAuxRecord`. Has debug assertions that check the size and alignment of the
 /// slices.
 impl<'a> CustomBorrow<'a, Sha256VmRecordMut<'a>, Sha256VmRecordLayout> for [u8] {
@@ -104,15 +108,16 @@ impl<'a> CustomBorrow<'a, Sha256VmRecordMut<'a>, Sha256VmRecordLayout> for [u8] 
         // SAFETY:
         // - rest is a valid mutable slice from the previous split
         // - align_to_mut guarantees the middle slice is properly aligned for MemoryReadAuxRecord
-        // - The subslice operation [..num_blocks * SHA256_NUM_READ_ROWS] validates sufficient
-        //   capacity
+        // - The subslice operation [..num_blocks * SHA256_NUM_READ_ROWS * SHA256_READ_SUBBLOCKS]
+        //   validates sufficient capacity
         // - Layout calculation ensures space for alignment padding plus required aux records
         let (_, read_aux_buf, _) = unsafe { rest.align_to_mut::<MemoryReadAuxRecord>() };
         Sha256VmRecordMut {
             inner: header_buf.borrow_mut(),
             input,
-            read_aux: &mut read_aux_buf
-                [..(layout.metadata.num_blocks as usize) * SHA256_NUM_READ_ROWS],
+            read_aux: &mut read_aux_buf[..(layout.metadata.num_blocks as usize)
+                * SHA256_NUM_READ_ROWS
+                * SHA256_READ_SUBBLOCKS],
         }
     }
 
@@ -134,6 +139,7 @@ impl SizedRecord<Sha256VmRecordLayout> for Sha256VmRecordMut<'_> {
         total_len = total_len.next_multiple_of(align_of::<MemoryReadAuxRecord>());
         total_len += layout.metadata.num_blocks as usize
             * SHA256_NUM_READ_ROWS
+            * SHA256_READ_SUBBLOCKS
             * size_of::<MemoryReadAuxRecord>();
         total_len
     }
@@ -218,26 +224,36 @@ where
             // Reads happen on the first 4 rows of each block
             for row in 0..SHA256_NUM_READ_ROWS {
                 let read_idx = block_idx * SHA256_NUM_READ_ROWS + row;
-                let row_input: [u8; SHA256_READ_SIZE] = tracing_read(
-                    state.memory,
-                    RV32_MEMORY_AS,
-                    record.inner.src_ptr + (read_idx * SHA256_READ_SIZE) as u32,
-                    &mut record.read_aux[read_idx].prev_timestamp,
-                );
+                let mut row_input = [0u8; SHA256_READ_SIZE];
+                for sub in 0..SHA256_READ_SUBBLOCKS {
+                    let chunk: [u8; CONST_BLOCK_SIZE] = tracing_read(
+                        state.memory,
+                        RV32_MEMORY_AS,
+                        record.inner.src_ptr
+                            + (read_idx * SHA256_READ_SIZE + sub * CONST_BLOCK_SIZE) as u32,
+                        &mut record.read_aux[read_idx * SHA256_READ_SUBBLOCKS + sub].prev_timestamp,
+                    );
+                    row_input[sub * CONST_BLOCK_SIZE..(sub + 1) * CONST_BLOCK_SIZE]
+                        .copy_from_slice(&chunk);
+                }
                 record.input[read_idx * SHA256_READ_SIZE..(read_idx + 1) * SHA256_READ_SIZE]
                     .copy_from_slice(&row_input);
             }
         }
 
         let output = sha256_solve(&record.input[..len as usize]);
-        tracing_write(
-            state.memory,
-            RV32_MEMORY_AS,
-            record.inner.dst_ptr,
-            output,
-            &mut record.inner.write_aux.prev_timestamp,
-            &mut record.inner.write_aux.prev_data,
-        );
+        for i in 0..SHA256_WRITE_SUBBLOCKS {
+            tracing_write(
+                state.memory,
+                RV32_MEMORY_AS,
+                record.inner.dst_ptr + (i * CONST_BLOCK_SIZE) as u32,
+                output[i * CONST_BLOCK_SIZE..(i + 1) * CONST_BLOCK_SIZE]
+                    .try_into()
+                    .unwrap(),
+                &mut record.inner.write_aux[i].prev_timestamp,
+                &mut record.inner.write_aux[i].prev_data,
+            );
+        }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -356,7 +372,8 @@ impl<F: PrimeField32> TraceFiller<F> for Sha256VmFiller {
                 }
                 // Copy the read aux records and input to another place to safely fill in the trace
                 // matrix without overwriting the record
-                let mut read_aux_records = Vec::with_capacity(SHA256_NUM_READ_ROWS * num_blocks);
+                let mut read_aux_records =
+                    Vec::with_capacity(SHA256_NUM_READ_ROWS * SHA256_READ_SUBBLOCKS * num_blocks);
                 read_aux_records.extend_from_slice(record.read_aux);
                 let vm_record = record.inner.clone();
 
@@ -381,8 +398,10 @@ impl<F: PrimeField32> TraceFiller<F> for Sha256VmFiller {
                         self.fill_block_trace::<F>(
                             block_slice,
                             &vm_record,
-                            &read_aux_records[block_idx * SHA256_NUM_READ_ROWS
-                                ..(block_idx + 1) * SHA256_NUM_READ_ROWS],
+                            &read_aux_records[block_idx
+                                * SHA256_NUM_READ_ROWS
+                                * SHA256_READ_SUBBLOCKS
+                                ..(block_idx + 1) * SHA256_NUM_READ_ROWS * SHA256_READ_SUBBLOCKS],
                             &input[block_idx * SHA256_BLOCK_CELLS
                                 ..(block_idx + 1) * SHA256_BLOCK_CELLS],
                             &padded_input[block_idx * SHA256_BLOCK_CELLS
@@ -426,14 +445,18 @@ impl Sha256VmFiller {
     ) {
         debug_assert_eq!(input.len(), SHA256_BLOCK_CELLS);
         debug_assert_eq!(padded_input.len(), SHA256_BLOCK_CELLS);
-        debug_assert_eq!(read_aux_records.len(), SHA256_NUM_READ_ROWS);
+        debug_assert_eq!(
+            read_aux_records.len(),
+            SHA256_NUM_READ_ROWS * SHA256_READ_SUBBLOCKS
+        );
 
         let padded_input = array::from_fn(|i| {
             u32::from_be_bytes(padded_input[i * 4..(i + 1) * 4].try_into().unwrap())
         });
 
-        let block_start_timestamp = record.timestamp
-            + (SHA256_REGISTER_READS + SHA256_NUM_READ_ROWS * local_block_idx) as u32;
+        let reads_per_block = SHA256_NUM_READ_ROWS * SHA256_READ_SUBBLOCKS;
+        let block_start_timestamp =
+            record.timestamp + (SHA256_REGISTER_READS + reads_per_block * local_block_idx) as u32;
 
         let read_cells = (SHA256_BLOCK_CELLS * local_block_idx) as u32;
         let block_start_read_ptr = record.src_ptr + read_cells;
@@ -487,15 +510,21 @@ impl Sha256VmFiller {
                             });
                         digest_cols
                             .writes_aux
-                            .set_prev_data(record.write_aux.prev_data.map(F::from_canonical_u8));
-                        // In the last block we do `SHA256_NUM_READ_ROWS` reads and then write the
-                        // result thus the timestamp of the write is
-                        // `block_start_timestamp + SHA256_NUM_READ_ROWS`
-                        mem_helper.fill(
-                            record.write_aux.prev_timestamp,
-                            block_start_timestamp + SHA256_NUM_READ_ROWS as u32,
-                            digest_cols.writes_aux.as_mut(),
-                        );
+                            .iter_mut()
+                            .zip(record.write_aux.iter())
+                            .enumerate()
+                            .for_each(|(chunk, (cols_write, record_write))| {
+                                cols_write.set_prev_data(
+                                    record_write.prev_data.map(F::from_canonical_u8),
+                                );
+                                mem_helper.fill(
+                                    record_write.prev_timestamp,
+                                    block_start_timestamp
+                                        + (SHA256_NUM_READ_ROWS * SHA256_READ_SUBBLOCKS) as u32
+                                        + chunk as u32,
+                                    cols_write.as_mut(),
+                                );
+                            });
                         // Need to range check the destination and source pointers
                         let msl_rshift: u32 =
                             ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS) as u32;
@@ -512,10 +541,10 @@ impl Sha256VmFiller {
                         digest_cols.register_reads_aux.iter_mut().for_each(|aux| {
                             mem_helper.fill_zero(aux.as_mut());
                         });
-                        digest_cols
-                            .writes_aux
-                            .set_prev_data([F::ZERO; SHA256_WRITE_SIZE]);
-                        mem_helper.fill_zero(digest_cols.writes_aux.as_mut());
+                        digest_cols.writes_aux.iter_mut().for_each(|aux| {
+                            aux.set_prev_data([F::ZERO; CONST_BLOCK_SIZE]);
+                            mem_helper.fill_zero(aux.as_mut());
+                        });
                     }
                     digest_cols.inner.flags.is_last_block = F::from_bool(is_last_block);
                     digest_cols.inner.flags.is_digest_row = F::from_bool(true);
@@ -538,13 +567,19 @@ impl Sha256VmFiller {
                             .for_each(|(cell, data)| {
                                 *cell = F::from_canonical_u8(*data);
                             });
-                        mem_helper.fill(
-                            read_aux_records[row_idx].prev_timestamp,
-                            block_start_timestamp + row_idx as u32,
-                            round_cols.read_aux.as_mut(),
-                        );
+                        for sub in 0..SHA256_READ_SUBBLOCKS {
+                            mem_helper.fill(
+                                read_aux_records[row_idx * SHA256_READ_SUBBLOCKS + sub]
+                                    .prev_timestamp,
+                                block_start_timestamp
+                                    + (row_idx * SHA256_READ_SUBBLOCKS + sub) as u32,
+                                round_cols.read_aux[sub].as_mut(),
+                            );
+                        }
                     } else {
-                        mem_helper.fill_zero(round_cols.read_aux.as_mut());
+                        round_cols.read_aux.iter_mut().for_each(|aux| {
+                            mem_helper.fill_zero(aux.as_mut());
+                        });
                     }
                 }
                 // Fill in the control cols, doesn't matter if it is a round or digest row
@@ -553,7 +588,8 @@ impl Sha256VmFiller {
                 control_cols.len = F::from_canonical_u32(record.len);
                 // Only the first `SHA256_NUM_READ_ROWS` rows increment the timestamp and read ptr
                 control_cols.cur_timestamp = F::from_canonical_u32(
-                    block_start_timestamp + min(row_idx, SHA256_NUM_READ_ROWS) as u32,
+                    block_start_timestamp
+                        + (SHA256_READ_SUBBLOCKS * min(row_idx, SHA256_NUM_READ_ROWS)) as u32,
                 );
                 control_cols.read_ptr = F::from_canonical_u32(
                     block_start_read_ptr
