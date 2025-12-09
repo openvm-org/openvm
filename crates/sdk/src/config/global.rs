@@ -16,8 +16,8 @@ use openvm_ecc_circuit::{
     SECP256K1_CONFIG,
 };
 use openvm_ecc_transpiler::EccTranspilerExtension;
-use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt};
-use openvm_new_keccak256_circuit::XorinVmExecutor;
+use openvm_new_keccak256_circuit::{Keccak256, Keccak256CpuProverExt};
+use openvm_new_keccak256_circuit::Keccak256Executor;
 use openvm_new_keccak256_transpiler::NewKeccakTranspilerExtension;
 use openvm_native_circuit::{
     CastFExtension, CastFExtensionExecutor, Native, NativeCpuProverExt, NativeExecutor,
@@ -44,25 +44,7 @@ use openvm_stark_backend::{
 };
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
-cfg_if::cfg_if! {
-    if #[cfg(feature = "cuda")] {
-        use openvm_algebra_circuit::AlgebraProverExt;
-        use openvm_bigint_circuit::Int256GpuProverExt;
-        use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};
-        use openvm_cuda_backend::{
-            engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend, types::SC,
-        };
-        use openvm_ecc_circuit::EccProverExt;
-        use openvm_keccak256_circuit::Keccak256GpuProverExt;
-        use openvm_native_circuit::NativeGpuProverExt;
-        use openvm_rv32im_circuit::Rv32ImGpuProverExt;
-        use openvm_sha256_circuit::Sha256GpuProverExt;
-        pub use SdkVmGpuBuilder as SdkVmBuilder;
-    } else {
-        pub use SdkVmCpuBuilder as SdkVmBuilder;
-    }
-}
-
+pub use SdkVmCpuBuilder as SdkVmBuilder;
 use super::AppFriParams;
 use crate::{
     config::{AppConfig, TranspilerConfig},
