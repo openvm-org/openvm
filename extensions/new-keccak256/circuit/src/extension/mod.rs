@@ -27,6 +27,10 @@ use serde::{Deserialize, Serialize};
 use openvm_new_keccak256_transpiler::Rv32NewKeccakOpcode;
 use crate::xorin::XorinVmExecutor;
 use strum::IntoEnumIterator;
+use openvm_circuit::system::SystemPort;
+use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupAir;
+use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
+use crate::xorin::air::XorinVmAir;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Keccak256Rv32Config {
@@ -131,6 +135,39 @@ impl<F> VmExecutionExtension<F> for Keccak256 {
 
 impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Keccak256 {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
+        let SystemPort {
+            execution_bus,
+            program_bus,
+            memory_bridge,
+        } = inventory.system().port();
+
+        let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
+        let pointer_max_bits = inventory.pointer_max_bits();
+
+        let bitwise_lu = {
+            let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
+            if let Some(air) = existing_air {
+                air.bus
+            } else {
+                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
+                let air = BitwiseOperationLookupAir::<8>::new(bus);
+                inventory.add_air(air);
+                air.bus
+            }
+        };
+
+        let xorin_air = XorinVmAir::new(
+            exec_bridge,
+            memory_bridge,
+            bitwise_lu,
+            pointer_max_bits,
+            Rv32NewKeccakOpcode::CLASS_OFFSET,
+        );
+
+        // todo: 
+        // implement trait bounds needed for
+        // inventory.add_air(xorin_air);
+
         Ok(())
     }
 }
