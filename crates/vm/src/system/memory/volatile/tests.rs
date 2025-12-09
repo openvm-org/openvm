@@ -1,4 +1,4 @@
-use std::{collections::HashSet, iter, sync::Arc};
+use std::{array, collections::HashSet, iter, sync::Arc};
 
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 use openvm_stark_backend::{
@@ -18,9 +18,12 @@ use openvm_stark_sdk::{
 use rand::Rng;
 use test_log::test;
 
-use crate::system::memory::{
-    offline_checker::MemoryBus, volatile::VolatileBoundaryChip, TimestampedEquipartition,
-    TimestampedValues,
+use crate::{
+    arch::CONST_BLOCK_SIZE,
+    system::memory::{
+        offline_checker::MemoryBus, volatile::VolatileBoundaryChip, TimestampedEquipartition,
+        TimestampedValues,
+    },
 };
 
 type Val = BabyBear;
@@ -41,7 +44,8 @@ fn boundary_air_test() {
     let mut distinct_addresses = HashSet::new();
     while distinct_addresses.len() < num_addresses {
         let addr_space = rng.gen_range(0..MAX_ADDRESS_SPACE);
-        let pointer = rng.gen_range(0..MAX_VAL);
+        let pointer =
+            rng.gen_range(0..(MAX_VAL / CONST_BLOCK_SIZE as u32)) * CONST_BLOCK_SIZE as u32;
         distinct_addresses.insert((addr_space, pointer));
     }
 
@@ -53,13 +57,13 @@ fn boundary_air_test() {
     let mut final_memory = TimestampedEquipartition::new();
 
     for (addr_space, pointer) in distinct_addresses.iter().cloned() {
-        let final_data = Val::from_canonical_u32(rng.gen_range(0..MAX_VAL));
+        let final_data = array::from_fn(|_| Val::from_canonical_u32(rng.gen_range(0..MAX_VAL)));
         let final_clk = rng.gen_range(1..MAX_VAL) as u32;
 
         final_memory.push((
             (addr_space, pointer),
             TimestampedValues {
-                values: [final_data],
+                values: final_data,
                 timestamp: final_clk,
             },
         ));
@@ -68,24 +72,23 @@ fn boundary_air_test() {
 
     let diff_height = num_addresses.next_power_of_two() - num_addresses;
 
-    let init_memory_dummy_air = DummyInteractionAir::new(4, false, MEMORY_BUS);
-    let final_memory_dummy_air = DummyInteractionAir::new(4, true, MEMORY_BUS);
+    let field_width = CONST_BLOCK_SIZE + 3;
+    let init_memory_dummy_air = DummyInteractionAir::new(field_width, false, MEMORY_BUS);
+    let final_memory_dummy_air = DummyInteractionAir::new(field_width, true, MEMORY_BUS);
 
     let init_memory_trace = Arc::new(RowMajorMatrix::new(
         distinct_addresses
             .iter()
             .flat_map(|(addr_space, pointer)| {
-                vec![
-                    Val::ONE,
-                    Val::from_canonical_u32(*addr_space),
-                    Val::from_canonical_u32(*pointer),
-                    Val::ZERO,
-                    Val::ZERO,
-                ]
+                iter::once(Val::ONE)
+                    .chain(iter::once(Val::from_canonical_u32(*addr_space)))
+                    .chain(iter::once(Val::from_canonical_u32(*pointer)))
+                    .chain(iter::repeat_n(Val::ZERO, CONST_BLOCK_SIZE))
+                    .chain(iter::once(Val::ZERO))
             })
-            .chain(iter::repeat_n(Val::ZERO, 5 * diff_height))
+            .chain(iter::repeat_n(Val::ZERO, (field_width + 1) * diff_height))
             .collect(),
-        5,
+        field_width + 1,
     ));
 
     let final_memory_trace = Arc::new(RowMajorMatrix::new(
@@ -97,17 +100,17 @@ fn boundary_air_test() {
                     .unwrap()]
                 .1;
 
-                vec![
-                    Val::ONE,
-                    Val::from_canonical_u32(*addr_space),
-                    Val::from_canonical_u32(*pointer),
-                    timestamped_value.values[0],
-                    Val::from_canonical_u32(timestamped_value.timestamp),
-                ]
+                iter::once(Val::ONE)
+                    .chain(iter::once(Val::from_canonical_u32(*addr_space)))
+                    .chain(iter::once(Val::from_canonical_u32(*pointer)))
+                    .chain(timestamped_value.values.into_iter())
+                    .chain(iter::once(Val::from_canonical_u32(
+                        timestamped_value.timestamp,
+                    )))
             })
-            .chain(iter::repeat_n(Val::ZERO, 5 * diff_height))
+            .chain(iter::repeat_n(Val::ZERO, (field_width + 1) * diff_height))
             .collect(),
-        5,
+        field_width + 1,
     ));
 
     boundary_chip.finalize(final_memory.clone());

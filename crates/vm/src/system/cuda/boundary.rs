@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use openvm_circuit::{
+    arch::CONST_BLOCK_SIZE,
     system::memory::{
         persistent::PersistentBoundaryCols, volatile::VolatileBoundaryCols,
         TimestampedEquipartition, TimestampedValues,
@@ -88,6 +89,11 @@ impl BoundaryChipGPU {
         match &mut self.fields {
             BoundaryFields::Persistent(_) => panic!("call `finalize_records_persistent`"),
             BoundaryFields::Volatile(fields) => {
+                debug_assert_eq!(
+                    CHUNK, CONST_BLOCK_SIZE,
+                    "Volatile boundary expects block size {}",
+                    CONST_BLOCK_SIZE
+                );
                 self.num_records = Some(final_memory.len());
                 self.trace_width = Some(VolatileBoundaryCols::<F>::width());
                 let records: Vec<_> = final_memory
@@ -175,12 +181,11 @@ impl<RA> Chip<RA, GpuBackend> for BoundaryChipGPU {
     }
 }
 
-#[cfg(test)]
 mod tests {
     use std::{collections::HashSet, sync::Arc};
 
     use openvm_circuit::{
-        arch::{testing::MEMORY_BUS, MemoryConfig, ADDR_SPACE_OFFSET},
+        arch::{testing::MEMORY_BUS, MemoryConfig, ADDR_SPACE_OFFSET, CONST_BLOCK_SIZE},
         system::memory::{
             offline_checker::MemoryBus, volatile::VolatileBoundaryChip, TimestampedEquipartition,
             TimestampedValues,
@@ -215,11 +220,12 @@ mod tests {
         let mut distinct_addresses = HashSet::new();
         while distinct_addresses.len() < NUM_ADDRESSES {
             let addr_space = rng.gen_range(0..MAX_ADDRESS_SPACE);
-            let pointer = rng.gen_range(0..(1 << LIMB_BITS));
+            let pointer =
+                rng.gen_range(0..((1 << LIMB_BITS) / CONST_BLOCK_SIZE)) * CONST_BLOCK_SIZE;
             distinct_addresses.insert((addr_space, pointer));
         }
 
-        let mut final_memory = TimestampedEquipartition::<F, 1>::new();
+        let mut final_memory = TimestampedEquipartition::<F, CONST_BLOCK_SIZE>::new();
         for (addr_space, pointer) in distinct_addresses.iter().cloned() {
             let final_data = F::from_canonical_u32(rng.gen_range(0..(1 << LIMB_BITS)));
             let final_clk = rng.gen_range(1..(1 << LIMB_BITS)) as u32;

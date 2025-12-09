@@ -29,9 +29,12 @@ use static_assertions::const_assert;
 use tracing::instrument;
 
 use super::TimestampedEquipartition;
-use crate::system::memory::{
-    offline_checker::{MemoryBus, AUX_LEN},
-    MemoryAddress,
+use crate::{
+    arch::CONST_BLOCK_SIZE,
+    system::memory::{
+        offline_checker::{MemoryBus, AUX_LEN},
+        MemoryAddress,
+    },
 };
 
 #[cfg(test)]
@@ -48,8 +51,8 @@ pub struct VolatileBoundaryCols<T> {
     pub addr_space_limbs: [T; NUM_AS_LIMBS],
     pub pointer_limbs: [T; AUX_LEN],
 
-    pub initial_data: T,
-    pub final_data: T,
+    pub initial_data: [T; CONST_BLOCK_SIZE],
+    pub final_data: [T; CONST_BLOCK_SIZE],
     pub final_timestamp: T,
 
     /// Boolean. `1` if a non-padding row with a valid touched address, `0` if it is a padding row.
@@ -164,7 +167,7 @@ impl<AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir {
         self.memory_bus
             .send(
                 MemoryAddress::new(addr_space.clone(), pointer.clone()),
-                vec![local.initial_data],
+                local.initial_data.map(Into::into).to_vec(),
                 AB::Expr::ZERO,
             )
             .eval(builder, local.is_valid);
@@ -173,7 +176,7 @@ impl<AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir {
         self.memory_bus
             .receive(
                 MemoryAddress::new(addr_space.clone(), pointer.clone()),
-                vec![local.final_data],
+                local.final_data.map(Into::into).to_vec(),
                 local.final_timestamp,
             )
             .eval(builder, local.is_valid);
@@ -184,7 +187,7 @@ pub struct VolatileBoundaryChip<F> {
     pub air: VolatileBoundaryAir,
     range_checker: SharedVariableRangeCheckerChip,
     overridden_height: Option<usize>,
-    pub final_memory: Option<TimestampedEquipartition<F, 1>>,
+    pub final_memory: Option<TimestampedEquipartition<F, CONST_BLOCK_SIZE>>,
     addr_space_max_bits: usize,
     pointer_max_bits: usize,
 }
@@ -218,9 +221,10 @@ impl<F: PrimeField32> VolatileBoundaryChip<F> {
         self.overridden_height = Some(overridden_height);
     }
     /// Volatile memory requires the starting and final memory to be in equipartition with block
-    /// size `1`. When block size is `1`, then the `label` is the same as the address pointer.
+    /// size `CONST_BLOCK_SIZE`. When block size is `CONST_BLOCK_SIZE`, then the `label` is the same
+    /// as the address pointer.
     #[instrument(name = "boundary_finalize", level = "debug", skip_all)]
-    pub fn finalize(&mut self, final_memory: TimestampedEquipartition<F, 1>) {
+    pub fn finalize(&mut self, final_memory: TimestampedEquipartition<F, CONST_BLOCK_SIZE>) {
         self.final_memory = Some(final_memory);
     }
 }
@@ -231,8 +235,7 @@ where
 {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         // Volatile memory requires the starting and final memory to be in equipartition with block
-        // size `1`. When block size is `1`, then the `label` is the same as the address
-        // pointer.
+        // size `CONST_BLOCK_SIZE`. The `label` is the same as the address pointer.
         let width = self.trace_width();
         let addr_lt_air = &self.air.addr_lt_air;
         // TEMP[jpw]: clone
@@ -261,8 +264,9 @@ where
             .zip(sorted_final_memory.par_iter())
             .enumerate()
             .for_each(|(i, (row, ((addr_space, ptr), timestamped_values)))| {
-                // `pointer` is the same as `label` since the equipartition has block size 1
-                let [data] = timestamped_values.values;
+                // `pointer` is the same as `label` since the equipartition has block size
+                // CONST_BLOCK_SIZE
+                let data = timestamped_values.values;
                 let row: &mut VolatileBoundaryCols<_> = row.borrow_mut();
                 range_checker.decompose(
                     *addr_space,
@@ -270,7 +274,7 @@ where
                     &mut row.addr_space_limbs,
                 );
                 range_checker.decompose(*ptr, self.pointer_max_bits, &mut row.pointer_limbs);
-                row.initial_data = Val::<SC>::ZERO;
+                row.initial_data = [Val::<SC>::ZERO; CONST_BLOCK_SIZE];
                 row.final_data = data;
                 row.final_timestamp = Val::<SC>::from_canonical_u32(timestamped_values.timestamp);
                 row.is_valid = Val::<SC>::ONE;
