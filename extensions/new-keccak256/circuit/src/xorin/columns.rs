@@ -17,10 +17,10 @@ pub struct XorinInstructionCols<T> {
     pub buffer_ptr: T,
     pub input_ptr: T,
     pub len_ptr: T,
-    pub buffer_limbs: [T; 2],
-    pub input_limbs: [T; 2],
-    pub len_limbs: [T; 2],
-    pub timestamp: T
+    pub buffer_limbs: [T; 4],
+    pub input_limbs: [T; 4],
+    pub len_limbs: [T; 4],
+    pub start_timestamp: T
 }
 
 #[repr(C)]
@@ -40,3 +40,5 @@ pub struct XorinMemoryCols<T> {
     pub buffer_bytes_read_aux_cols: [MemoryReadAuxCols<T>; 34],
     pub buffer_bytes_write_aux_cols: [MemoryWriteAuxCols<T, 4>; 34],
 }
+
+pub const NUM_XORIN_VM_COLS: usize = size_of::<XorinVmCols<u8>>();
