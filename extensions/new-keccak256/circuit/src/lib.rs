@@ -1,5 +1,6 @@
 pub mod execution;
 pub mod tests;
+pub mod trace;
 
 mod extension;
 
