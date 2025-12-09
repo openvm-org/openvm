@@ -8,10 +8,6 @@ use crate::types::{BencherValue, BenchmarkOutput, Labels, MdTableCell, MetricDb}
 type MetricName = String;
 type MetricsByName = HashMap<MetricName, Vec<(f64, Labels)>>;
 
-pub const NUM_DEVICES: usize = 16;
-pub const PROOFS_PER_DEVICE: usize = 3;
-pub const NUM_PARALLEL_PROOFS: usize = NUM_DEVICES * PROOFS_PER_DEVICE;
-
 #[derive(Clone, Debug, Default)]
 pub struct GroupedMetrics {
     /// "group" label => metrics with that "group" label, further grouped by metric name
@@ -28,7 +24,7 @@ pub struct AggregateMetrics {
     pub total_proof_time: MdTableCell,
     /// In seconds (infinite parallelism)
     pub total_par_proof_time: MdTableCell,
-    /// Per-group bounded parallel proof time in seconds (NUM_PARALLEL_PROOFS slots)
+    /// Per-group bounded parallel proof time in seconds
     #[serde(skip)]
     pub bounded_par_by_group: HashMap<String, MdTableCell>,
 }
@@ -144,7 +140,7 @@ impl GroupedMetrics {
         }
     }
 
-    pub fn aggregate(&self) -> AggregateMetrics {
+    pub fn aggregate(&self, num_parallel: usize) -> AggregateMetrics {
         let by_group: HashMap<String, _> = self
             .by_group
             .iter()
@@ -180,7 +176,7 @@ impl GroupedMetrics {
         };
         metrics.compute_total();
         metrics.bounded_par_by_group = self
-            .compute_bounded_par_times()
+            .compute_bounded_par_times(num_parallel, &metrics.by_group)
             .into_iter()
             .map(|(k, v)| (k, MdTableCell::new(v, Some(0.0))))
             .collect();
@@ -188,8 +184,12 @@ impl GroupedMetrics {
         metrics
     }
 
-    /// Compute per-group parallel proof time with bounded parallelism (NUM_PARALLEL_PROOFS slots).
-    fn compute_bounded_par_times(&self) -> HashMap<String, f64> {
+    /// Compute per-group parallel proof time with bounded parallelism.
+    fn compute_bounded_par_times(
+        &self,
+        num_parallel: usize,
+        stats_by_group: &HashMap<String, HashMap<MetricName, Stats>>,
+    ) -> HashMap<String, f64> {
         let mut per_group = HashMap::new();
 
         for (group_name, metrics) in &self.by_group {
@@ -201,14 +201,20 @@ impl GroupedMetrics {
 
             // Add serial execution time for app_proof
             if group_name == "app_proof" {
-                group_time += sum_metric_ms(metrics, EXECUTE_METERED_TIME_LABEL);
-                group_time += sum_metric_ms(metrics, EXECUTE_E1_TIME_LABEL);
+                if let Some(stats) = stats_by_group.get(group_name) {
+                    if let Some(metered) = stats.get(EXECUTE_METERED_TIME_LABEL) {
+                        group_time += metered.avg.val / 1000.0;
+                    }
+                    if let Some(e1) = stats.get(EXECUTE_E1_TIME_LABEL) {
+                        group_time += e1.avg.val / 1000.0;
+                    }
+                }
             }
 
             // Schedule proofs in parallel
             if let Some(proof_times) = metrics.get(PROOF_TIME_LABEL) {
                 let times_s: Vec<f64> = proof_times.iter().map(|(ms, _)| ms / 1000.0).collect();
-                group_time += schedule_parallel(&times_s);
+                group_time += schedule_parallel(&times_s, num_parallel);
             }
 
             per_group.insert(group_name.clone(), group_time);
@@ -218,22 +224,15 @@ impl GroupedMetrics {
     }
 }
 
-fn sum_metric_ms(metrics: &MetricsByName, label: &str) -> f64 {
-    metrics
-        .get(label)
-        .map(|v| v.iter().map(|(ms, _)| ms / 1000.0).sum())
-        .unwrap_or(0.0)
-}
-
-/// Round-robin assignment: proof i -> slot i % NUM_PARALLEL_PROOFS. Returns max slot time.
-fn schedule_parallel(proof_times: &[f64]) -> f64 {
-    if proof_times.is_empty() {
+/// Round-robin assignment: proof i -> slot i % num_parallel. Returns max slot time.
+fn schedule_parallel(proof_times: &[f64], num_parallel: usize) -> f64 {
+    if proof_times.is_empty() || num_parallel == 0 {
         return 0.0;
     }
 
-    let mut slot_times = vec![0.0_f64; NUM_PARALLEL_PROOFS];
+    let mut slot_times = vec![0.0_f64; num_parallel];
     for (i, duration) in proof_times.iter().enumerate() {
-        slot_times[i % NUM_PARALLEL_PROOFS] += duration;
+        slot_times[i % num_parallel] += duration;
     }
     slot_times.iter().cloned().fold(0.0_f64, f64::max)
 }
@@ -414,8 +413,13 @@ impl AggregateMetrics {
         }
     }
 
-    pub fn write_markdown(&self, writer: &mut impl Write, metric_names: &[&str]) -> Result<()> {
-        self.write_summary_markdown(writer)?;
+    pub fn write_markdown(
+        &self,
+        writer: &mut impl Write,
+        metric_names: &[&str],
+        num_parallel: usize,
+    ) -> Result<()> {
+        self.write_summary_markdown(writer, num_parallel)?;
         writeln!(writer)?;
 
         let metric_names = metric_names.to_vec();
@@ -519,11 +523,11 @@ impl AggregateMetrics {
         Ok(())
     }
 
-    fn write_summary_markdown(&self, writer: &mut impl Write) -> Result<()> {
+    fn write_summary_markdown(&self, writer: &mut impl Write, num_parallel: usize) -> Result<()> {
         writeln!(
             writer,
             "| Summary | Proof Time (s) | Parallel Proof Time (s) | Parallel Proof Time ({} GPUs) (s) |",
-            NUM_PARALLEL_PROOFS
+            num_parallel
         )?;
         writeln!(writer, "|:---|---:|---:|---:|")?;
         let mut rows = Vec::new();

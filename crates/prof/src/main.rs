@@ -38,6 +38,14 @@ struct Cli {
     /// Path to write the output JSON in BMF format
     #[arg(long)]
     output_json: Option<PathBuf>,
+
+    /// Number of devices for parallelism estimate
+    #[arg(long, default_value = "16")]
+    num_devices: usize,
+
+    /// Number of proofs per device for parallelism estimate
+    #[arg(long, default_value = "3")]
+    proofs_per_device: usize,
 }
 
 #[derive(Subcommand, Debug)]
@@ -83,13 +91,14 @@ fn main() -> Result<()> {
             GENERATE_BLOB_TIME_LABEL,
         );
         let grouped = GroupedMetrics::new(&db, "group")?;
-        let mut aggregated = grouped.aggregate();
+        let num_parallel = args.num_devices * args.proofs_per_device;
+        let mut aggregated = grouped.aggregate(num_parallel);
         let mut prev_aggregated = None;
         if let Some(prev_path) = prev_metrics_path {
             // If this is a new benchmark, prev_path will not exist
             if let Ok(prev_db) = MetricDb::new(&prev_path) {
                 let prev_grouped = GroupedMetrics::new(&prev_db, "group")?;
-                let prev_grouped_aggregated = prev_grouped.aggregate();
+                let prev_grouped_aggregated = prev_grouped.aggregate(num_parallel);
                 aggregated.set_diff(&prev_grouped_aggregated);
                 prev_aggregated = Some(prev_grouped_aggregated);
             }
@@ -99,7 +108,7 @@ fn main() -> Result<()> {
         }
         output.insert(name, aggregated.to_bencher_metrics());
         let mut writer = Vec::new();
-        aggregated.write_markdown(&mut writer, AGGREGATED_METRIC_NAMES)?;
+        aggregated.write_markdown(&mut writer, AGGREGATED_METRIC_NAMES, num_parallel)?;
 
         let mut markdown_output = String::from_utf8(writer)?;
 
