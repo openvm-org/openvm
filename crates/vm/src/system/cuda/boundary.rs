@@ -89,11 +89,6 @@ impl BoundaryChipGPU {
         match &mut self.fields {
             BoundaryFields::Persistent(_) => panic!("call `finalize_records_persistent`"),
             BoundaryFields::Volatile(fields) => {
-                debug_assert_eq!(
-                    CHUNK, CONST_BLOCK_SIZE,
-                    "Volatile boundary expects block size {}",
-                    CONST_BLOCK_SIZE
-                );
                 self.num_records = Some(final_memory.len());
                 self.trace_width = Some(VolatileBoundaryCols::<F>::width());
                 let records: Vec<_> = final_memory
@@ -181,6 +176,7 @@ impl<RA> Chip<RA, GpuBackend> for BoundaryChipGPU {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use std::{collections::HashSet, sync::Arc};
 

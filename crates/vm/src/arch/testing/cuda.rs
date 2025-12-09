@@ -54,7 +54,7 @@ use crate::{
             POSEIDON2_DIRECT_BUS, READ_INSTRUCTION_BUS,
         },
         Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState, MatrixRecordArena,
-        MemoryConfig, PreflightExecutor, Streams, VmStateMut,
+        MemoryConfig, PreflightExecutor, Streams, VmStateMut, CONST_BLOCK_SIZE,
     },
     system::{
         cuda::{poseidon2::Poseidon2PeripheryChipGPU, DIGEST_WIDTH},
@@ -275,7 +275,7 @@ impl GpuChipTestBuilder {
         )));
         Self {
             memory: DeviceMemoryTester::volatile(
-                default_tracing_memory(&mem_config, 1),
+                default_tracing_memory(&mem_config, CONST_BLOCK_SIZE),
                 mem_bus,
                 mem_config,
                 range_checker.clone(),

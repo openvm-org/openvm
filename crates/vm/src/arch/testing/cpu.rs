@@ -41,7 +41,7 @@ use crate::{
             MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS,
         },
         vm_poseidon2_config, Arena, ExecutionBridge, ExecutionBus, ExecutionState,
-        MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmStateMut,
+        MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmStateMut, CONST_BLOCK_SIZE,
     },
     system::{
         memory::{
@@ -376,7 +376,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
 
     pub fn volatile(mem_config: MemoryConfig) -> Self {
         setup_tracing_with_log_level(Level::INFO);
-        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, 1);
+        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CONST_BLOCK_SIZE);
         let memory_controller = MemoryController::with_volatile_memory(
             MemoryBus::new(MEMORY_BUS),
             mem_config,
