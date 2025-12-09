@@ -6,8 +6,8 @@ use openvm_instructions::riscv::{RV32_REGISTER_AS};
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use std::borrow::{Borrow, BorrowMut};
 use std::convert::TryInto;
+use std::mem::size_of;
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
-use openvm_instructions::program::DEFAULT_PC_STEP;
 use super::KECCAK_WORD_SIZE;
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -26,7 +26,7 @@ impl XorinVmExecutor {
         data: &mut XorinPreCompute,
     ) -> Result<(), StaticProgramError> {
         let Instruction {
-            opcode,
+            opcode: _,
             a,
             b,
             c,
@@ -96,10 +96,10 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for XorinVmExecutor {
     #[cfg(not(feature = "tco"))]
     fn metered_pre_compute<Ctx>(
         &self,
-        chip_idx: usize,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut [u8],
+        _chip_idx: usize,
+        _pc: u32,
+        _inst: &Instruction<F>,
+        _data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
@@ -110,10 +110,10 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for XorinVmExecutor {
     #[cfg(feature = "tco")]
     fn metered_handler<Ctx>(
         &self,
-        chip_idx: usize,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut [u8],
+        _chip_idx: usize,
+        _pc: u32,
+        _inst: &Instruction<F>,
+        _data: &mut [u8],
     ) -> Result<Handler<F, Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
@@ -189,6 +189,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
 
 #[create_handler]
 #[inline(always)]
+#[allow(dead_code)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
