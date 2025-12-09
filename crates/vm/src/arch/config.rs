@@ -430,7 +430,9 @@ impl SystemConfig {
     pub fn initial_block_size(&self) -> usize {
         match self.continuation_enabled {
             true => CHUNK,
-            false => 1,
+            // For volatile/non-continuation mode, we standardize on CONST_BLOCK_SIZE so all
+            // accesses match the boundary AIR block size and avoid adapter splits.
+            false => CONST_BLOCK_SIZE,
         }
     }
 
