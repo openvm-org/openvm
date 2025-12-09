@@ -29,7 +29,8 @@ use openvm_continuations::{
 use openvm_ecc_circuit::{EccCpuProverExt, WeierstrassExtension, WeierstrassExtensionExecutor};
 use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
-use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
+use openvm_new_keccak256_circuit::XorinVmExecutor;
+use openvm_new_keccak256_transpiler::NewKeccakTranspilerExtension;
 use openvm_native_circuit::NativeCpuBuilder;
 use openvm_native_recursion::hints::Hintable;
 use openvm_pairing_circuit::{

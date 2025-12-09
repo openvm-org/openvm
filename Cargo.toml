@@ -155,6 +155,7 @@ openvm-native-transpiler = { path = "extensions/native/transpiler", default-feat
 openvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
 openvm-keccak256-transpiler = { path = "extensions/keccak256/transpiler", default-features = false }
 openvm-keccak256-guest = { path = "extensions/keccak256/guest", default-features = false }
+openvm-new-keccak256-circuit = { path = "extensions/new-keccak256/circuit", default-features = false }
 openvm-new-keccak256-guest = { path = "extensions/new-keccak256/guest", default-features = false }
 openvm-new-keccak256-transpiler = { path = "extensions/new-keccak256/transpiler", default-features = false }
 openvm-sha256-circuit = { path = "extensions/sha256/circuit", default-features = false }
