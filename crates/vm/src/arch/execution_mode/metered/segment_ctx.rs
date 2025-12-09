@@ -17,7 +17,7 @@ pub struct Segment {
     pub trace_heights: Vec<u32>,
 }
 
-#[derive(Clone, Copy, Debug, Default, WithSetters)]
+#[derive(Clone, Debug, Default, WithSetters)]
 pub struct SegmentationConfig {
     pub limits: SegmentationLimits,
     /// Cells per row contributed by each interaction in cell count.
@@ -25,7 +25,7 @@ pub struct SegmentationConfig {
     pub interaction_cell_weight: usize,
 }
 
-#[derive(Clone, Copy, Debug, WithSetters, Setters)]
+#[derive(Clone, Debug, WithSetters, Setters)]
 pub struct SegmentationLimits {
     pub max_trace_height: u32,
     #[getset(set = "pub", set_with = "pub")]
