@@ -51,5 +51,10 @@ pub fn dummy_memory_helper<F: Field>(
 pub fn default_tracing_memory(mem_config: &MemoryConfig, init_block_size: usize) -> TracingMemory {
     let max_access_adapter_n = log2_strict_usize(mem_config.max_access_adapter_n);
     let arena_size_bound = arena_size_bound(&vec![1 << 16; max_access_adapter_n]);
-    TracingMemory::new(mem_config, init_block_size, arena_size_bound)
+    TracingMemory::new(
+        mem_config,
+        init_block_size,
+        arena_size_bound,
+        mem_config.access_adapters_enabled,
+    )
 }

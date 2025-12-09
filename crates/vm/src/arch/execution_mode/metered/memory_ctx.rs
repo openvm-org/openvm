@@ -140,6 +140,11 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
     }
 
     #[inline(always)]
+    pub fn access_adapters_enabled(&self) -> bool {
+        self.access_adapters_enabled
+    }
+
+    #[inline(always)]
     pub fn clear(&mut self) {
         self.page_indices.clear();
     }

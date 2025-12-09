@@ -24,17 +24,24 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type ModularAir<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAirWrapper<
-    Rv32VecHeapAdapterAir<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+/// CHUNKS = BLOCK_SIZE / 4 (the number of 4-byte chunks per block)
+pub type ModularAir<const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize> =
+    VmAirWrapper<
+        Rv32VecHeapAdapterAir<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE, CHUNKS, CHUNKS>,
     FieldExpressionCoreAir,
 >;
 
-pub type ModularExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize> =
-    FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, false>;
+/// CHUNKS = BLOCK_SIZE / 4 (the number of 4-byte chunks per block)
+pub type ModularExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize> =
+    FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, false, CHUNKS>;
 
-pub type ModularChip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> = VmChipWrapper<
+/// CHUNKS = BLOCK_SIZE / 4 (the number of 4-byte chunks per block)
+pub type ModularChip<F, const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize> =
+    VmChipWrapper<
     F,
-    FieldExpressionFiller<Rv32VecHeapAdapterFiller<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
+        FieldExpressionFiller<
+            Rv32VecHeapAdapterFiller<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE, CHUNKS, CHUNKS>,
+        >,
 >;
 
 // Must have TOTAL_LIMBS = NUM_LANES * LANE_SIZE

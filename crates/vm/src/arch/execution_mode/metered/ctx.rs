@@ -64,11 +64,13 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
                 air_names[merkle_tree_index]
             );
         }
-        debug_assert!(
-            air_names[memory_ctx.adapter_offset].contains("AccessAdapterAir<2>"),
-            "air_name={}",
-            air_names[memory_ctx.adapter_offset]
-        );
+        if memory_ctx.access_adapters_enabled() {
+            debug_assert!(
+                air_names[memory_ctx.adapter_offset].contains("AccessAdapterAir<2>"),
+                "air_name={}",
+                air_names[memory_ctx.adapter_offset]
+            );
+        }
 
         let segmentation_ctx =
             SegmentationCtx::new(air_names, widths, interactions, config.segmentation_limits);

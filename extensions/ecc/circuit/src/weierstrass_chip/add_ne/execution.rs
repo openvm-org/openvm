@@ -31,7 +31,7 @@ struct EcAddNePreCompute<'a> {
     flag_idx: u8,
 }
 
-impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeExecutor<BLOCKS, BLOCK_SIZE> {
+impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize> EcAddNeExecutor<BLOCKS, BLOCK_SIZE, CHUNKS> {
     fn pre_compute_impl<F: PrimeField32>(
         &'a self,
         pc: u32,
@@ -172,8 +172,8 @@ macro_rules! dispatch {
         }
     };
 }
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterExecutor<F>
-    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize> InterpreterExecutor<F>
+    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE, CHUNKS>
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
@@ -214,13 +214,13 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterE
 }
 
 #[cfg(feature = "aot")]
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> AotExecutor<F>
-    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize> AotExecutor<F>
+    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE, CHUNKS>
 {
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterMeteredExecutor<F>
-    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize> InterpreterMeteredExecutor<F>
+    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE, CHUNKS>
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
@@ -266,8 +266,8 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterM
     }
 }
 #[cfg(feature = "aot")]
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> AotMeteredExecutor<F>
-    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize> AotMeteredExecutor<F>
+    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE, CHUNKS>
 {
 }
 

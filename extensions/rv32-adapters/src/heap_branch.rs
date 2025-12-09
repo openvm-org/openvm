@@ -154,7 +154,7 @@ impl<
                 let block_start = block_idx * HEAP_BRANCH_ADAPTER_BLOCK_SIZE;
                 let block_data: [AB::Expr; HEAP_BRANCH_ADAPTER_BLOCK_SIZE] =
                     from_fn(|i| read_data[block_start + i].clone());
-                self.memory_bridge
+            self.memory_bridge
                     .read(
                         MemoryAddress::new(
                             e,
@@ -164,7 +164,7 @@ impl<
                         timestamp_pp(),
                         aux,
                     )
-                    .eval(builder, ctx.instruction.is_valid.clone());
+                .eval(builder, ctx.instruction.is_valid.clone());
             }
         }
 
@@ -288,8 +288,8 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const READ
             for block_idx in 0..READ_BLOCKS {
                 let block_start = block_idx * HEAP_BRANCH_ADAPTER_BLOCK_SIZE;
                 let block: [u8; HEAP_BRANCH_ADAPTER_BLOCK_SIZE] = tracing_read(
-                    memory,
-                    RV32_MEMORY_AS,
+                memory,
+                RV32_MEMORY_AS,
                     record.rs_vals[read_idx] + block_start as u32,
                     &mut record.heap_read_aux[read_idx][block_idx].prev_timestamp,
                 );
@@ -342,11 +342,11 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const READ
             for block_idx in (0..READ_BLOCKS).rev() {
                 let block_ts =
                     record.from_timestamp + ts_offset + (read_idx * READ_BLOCKS + block_idx) as u32;
-                mem_helper.fill(
+            mem_helper.fill(
                     record.heap_read_aux[read_idx][block_idx].prev_timestamp,
                     block_ts,
                     cols.heap_read_aux[read_idx][block_idx].as_mut(),
-                );
+            );
             }
         }
 

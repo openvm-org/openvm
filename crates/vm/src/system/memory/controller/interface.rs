@@ -7,10 +7,14 @@ use crate::system::memory::{
     MemoryImage, CHUNK,
 };
 
+/// Block size for volatile memory boundary AIR.
+/// Uses CHUNK (e.g. 8), and the AIR will split into CONST_BLOCK_SIZE segments on the bus.
+pub const VOLATILE_BOUNDARY_BLOCK_SIZE: usize = CHUNK;
+
 #[derive(Clone)]
 pub enum MemoryInterfaceAirs {
     Volatile {
-        boundary: VolatileBoundaryAir,
+        boundary: VolatileBoundaryAir<VOLATILE_BOUNDARY_BLOCK_SIZE>,
     },
     Persistent {
         boundary: PersistentBoundaryAir<CHUNK>,
@@ -21,7 +25,7 @@ pub enum MemoryInterfaceAirs {
 #[allow(clippy::large_enum_variant)]
 pub enum MemoryInterface<F> {
     Volatile {
-        boundary_chip: VolatileBoundaryChip<F>,
+        boundary_chip: VolatileBoundaryChip<F, VOLATILE_BOUNDARY_BLOCK_SIZE>,
     },
     Persistent {
         boundary_chip: PersistentBoundaryChip<F, CHUNK>,

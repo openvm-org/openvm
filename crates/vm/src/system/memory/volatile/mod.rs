@@ -29,9 +29,12 @@ use static_assertions::const_assert;
 use tracing::instrument;
 
 use super::TimestampedEquipartition;
-use crate::system::memory::{
-    offline_checker::{MemoryBus, AUX_LEN},
-    MemoryAddress,
+use crate::{
+    arch::CONST_BLOCK_SIZE,
+    system::memory::{
+        offline_checker::{MemoryBus, AUX_LEN},
+        MemoryAddress,
+    },
 };
 
 #[cfg(test)]
@@ -44,12 +47,12 @@ const_assert!(NUM_AS_LIMBS <= AUX_LEN);
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
-pub struct VolatileBoundaryCols<T> {
+pub struct VolatileBoundaryCols<T, const CHUNK: usize> {
     pub addr_space_limbs: [T; NUM_AS_LIMBS],
     pub pointer_limbs: [T; AUX_LEN],
 
-    pub initial_data: T,
-    pub final_data: T,
+    pub initial_data: [T; CHUNK],
+    pub final_data: [T; CHUNK],
     pub final_timestamp: T,
 
     /// Boolean. `1` if a non-padding row with a valid touched address, `0` if it is a padding row.
@@ -58,7 +61,7 @@ pub struct VolatileBoundaryCols<T> {
 }
 
 #[derive(Clone, Debug)]
-pub struct VolatileBoundaryAir {
+pub struct VolatileBoundaryAir<const CHUNK: usize> {
     pub memory_bus: MemoryBus,
     pub addr_lt_air: IsLtArrayWhenTransitionAir<ADDR_ELTS>,
 
@@ -66,7 +69,7 @@ pub struct VolatileBoundaryAir {
     pointer_limb_bits: [usize; AUX_LEN],
 }
 
-impl VolatileBoundaryAir {
+impl<const CHUNK: usize> VolatileBoundaryAir<CHUNK> {
     pub fn new(
         memory_bus: MemoryBus,
         addr_space_max_bits: usize,
@@ -104,21 +107,24 @@ impl VolatileBoundaryAir {
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for VolatileBoundaryAir {}
-impl<F: Field> PartitionedBaseAir<F> for VolatileBoundaryAir {}
-impl<F: Field> BaseAir<F> for VolatileBoundaryAir {
+impl<const CHUNK: usize, F: Field> BaseAirWithPublicValues<F>
+    for VolatileBoundaryAir<CHUNK>
+{
+}
+impl<const CHUNK: usize, F: Field> PartitionedBaseAir<F> for VolatileBoundaryAir<CHUNK> {}
+impl<const CHUNK: usize, F: Field> BaseAir<F> for VolatileBoundaryAir<CHUNK> {
     fn width(&self) -> usize {
-        VolatileBoundaryCols::<F>::width()
+        VolatileBoundaryCols::<F, CHUNK>::width()
     }
 }
 
-impl<AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir {
+impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir<CHUNK> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
         let [local, next] = [0, 1].map(|i| main.row_slice(i));
-        let local: &VolatileBoundaryCols<_> = (*local).borrow();
-        let next: &VolatileBoundaryCols<_> = (*next).borrow();
+        let local: &VolatileBoundaryCols<_, CHUNK> = (*local).borrow();
+        let next: &VolatileBoundaryCols<_, CHUNK> = (*next).borrow();
 
         builder.assert_bool(local.is_valid);
 
@@ -160,36 +166,59 @@ impl<AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir {
         self.addr_lt_air
             .eval(builder, (lt_io, (&local.addr_lt_aux).into()));
 
-        // Write the initial memory values at initial timestamps
-        self.memory_bus
-            .send(
-                MemoryAddress::new(addr_space.clone(), pointer.clone()),
-                vec![local.initial_data],
-                AB::Expr::ZERO,
-            )
-            .eval(builder, local.is_valid);
+        // Write the initial memory values at initial timestamps in CONST_BLOCK_SIZE chunks.
+        for block_idx in 0..(CHUNK / CONST_BLOCK_SIZE) {
+            let block_start = block_idx * CONST_BLOCK_SIZE;
+            let block_values: Vec<AB::Expr> = local.initial_data
+                [block_start..block_start + CONST_BLOCK_SIZE]
+                .iter()
+                .map(|&v| v.into())
+                .collect();
+            self.memory_bus
+                .send(
+                    MemoryAddress::new(
+                        addr_space.clone(),
+                        pointer.clone() + AB::F::from_canonical_usize(block_start),
+                    ),
+                    block_values,
+                    AB::Expr::ZERO,
+                )
+                .eval(builder, local.is_valid);
+        }
 
-        // Read the final memory values at last timestamps when written to
-        self.memory_bus
-            .receive(
-                MemoryAddress::new(addr_space.clone(), pointer.clone()),
-                vec![local.final_data],
-                local.final_timestamp,
-            )
-            .eval(builder, local.is_valid);
+        // Read the final memory values at last timestamps when written to, again in
+        // CONST_BLOCK_SIZE chunks.
+        for block_idx in 0..(CHUNK / CONST_BLOCK_SIZE) {
+            let block_start = block_idx * CONST_BLOCK_SIZE;
+            let block_values: Vec<AB::Expr> = local.final_data
+                [block_start..block_start + CONST_BLOCK_SIZE]
+                .iter()
+                .map(|&v| v.into())
+                .collect();
+            self.memory_bus
+                .receive(
+                    MemoryAddress::new(
+                        addr_space.clone(),
+                        pointer.clone() + AB::F::from_canonical_usize(block_start),
+                    ),
+                    block_values,
+                    local.final_timestamp,
+                )
+                .eval(builder, local.is_valid);
+        }
     }
 }
 
-pub struct VolatileBoundaryChip<F> {
-    pub air: VolatileBoundaryAir,
+pub struct VolatileBoundaryChip<F, const CHUNK: usize> {
+    pub air: VolatileBoundaryAir<CHUNK>,
     range_checker: SharedVariableRangeCheckerChip,
     overridden_height: Option<usize>,
-    pub final_memory: Option<TimestampedEquipartition<F, 1>>,
+    pub final_memory: Option<TimestampedEquipartition<F, CHUNK>>,
     addr_space_max_bits: usize,
     pointer_max_bits: usize,
 }
 
-impl<F> VolatileBoundaryChip<F> {
+impl<F, const CHUNK: usize> VolatileBoundaryChip<F, CHUNK> {
     pub fn new(
         memory_bus: MemoryBus,
         addr_space_max_bits: usize,
@@ -213,26 +242,28 @@ impl<F> VolatileBoundaryChip<F> {
     }
 }
 
-impl<F: PrimeField32> VolatileBoundaryChip<F> {
+impl<F: PrimeField32, const CHUNK: usize> VolatileBoundaryChip<F, CHUNK> {
     pub fn set_overridden_height(&mut self, overridden_height: usize) {
         self.overridden_height = Some(overridden_height);
     }
     /// Volatile memory requires the starting and final memory to be in equipartition with block
-    /// size `1`. When block size is `1`, then the `label` is the same as the address pointer.
+    /// size `CHUNK`. When block size is `CHUNK`, then the `label` is the same as the address pointer
+    /// divided by `CHUNK`.
     #[instrument(name = "boundary_finalize", level = "debug", skip_all)]
-    pub fn finalize(&mut self, final_memory: TimestampedEquipartition<F, 1>) {
+    pub fn finalize(&mut self, final_memory: TimestampedEquipartition<F, CHUNK>) {
         self.final_memory = Some(final_memory);
     }
 }
 
-impl<RA, SC: StarkGenericConfig> Chip<RA, CpuBackend<SC>> for VolatileBoundaryChip<Val<SC>>
+impl<RA, SC: StarkGenericConfig, const CHUNK: usize> Chip<RA, CpuBackend<SC>>
+    for VolatileBoundaryChip<Val<SC>, CHUNK>
 where
     Val<SC>: PrimeField32,
 {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         // Volatile memory requires the starting and final memory to be in equipartition with block
-        // size `1`. When block size is `1`, then the `label` is the same as the address
-        // pointer.
+        // size `CHUNK`. When block size is `CHUNK`, then the `label` is the same as the address
+        // pointer divided by `CHUNK`.
         let width = self.trace_width();
         let addr_lt_air = &self.air.addr_lt_air;
         // TEMP[jpw]: clone
@@ -261,18 +292,18 @@ where
             .zip(sorted_final_memory.par_iter())
             .enumerate()
             .for_each(|(i, (row, ((addr_space, ptr), timestamped_values)))| {
-                // `pointer` is the same as `label` since the equipartition has block size 1
-                let [data] = timestamped_values.values;
-                let row: &mut VolatileBoundaryCols<_> = row.borrow_mut();
+                // label is pointer / CHUNK
+                let row: &mut VolatileBoundaryCols<_, CHUNK> = row.borrow_mut();
                 range_checker.decompose(
                     *addr_space,
                     self.addr_space_max_bits,
                     &mut row.addr_space_limbs,
                 );
                 range_checker.decompose(*ptr, self.pointer_max_bits, &mut row.pointer_limbs);
-                row.initial_data = Val::<SC>::ZERO;
-                row.final_data = data;
-                row.final_timestamp = Val::<SC>::from_canonical_u32(timestamped_values.timestamp);
+                row.initial_data.fill(Val::<SC>::ZERO);
+                row.final_data = timestamped_values.values;
+                row.final_timestamp =
+                    Val::<SC>::from_canonical_u32(timestamped_values.max_timestamp());
                 row.is_valid = Val::<SC>::ONE;
 
                 // If next.is_valid == 1:
@@ -299,7 +330,8 @@ where
         // Always do a dummy range check on the last row due to wraparound
         if memory_len > 0 {
             let mut out = Val::<SC>::ZERO;
-            let row: &mut VolatileBoundaryCols<_> = rows[width * (trace_height - 1)..].borrow_mut();
+            let row: &mut VolatileBoundaryCols<_, CHUNK> =
+                rows[width * (trace_height - 1)..].borrow_mut();
             addr_lt_air.0.generate_subrow(
                 (
                     self.range_checker.as_ref(),
@@ -315,7 +347,7 @@ where
     }
 }
 
-impl<F: PrimeField32> ChipUsageGetter for VolatileBoundaryChip<F> {
+impl<F: PrimeField32, const CHUNK: usize> ChipUsageGetter for VolatileBoundaryChip<F, CHUNK> {
     fn air_name(&self) -> String {
         "Boundary".to_string()
     }
@@ -329,6 +361,6 @@ impl<F: PrimeField32> ChipUsageGetter for VolatileBoundaryChip<F> {
     }
 
     fn trace_width(&self) -> usize {
-        VolatileBoundaryCols::<F>::width()
+        VolatileBoundaryCols::<F, CHUNK>::width()
     }
 }

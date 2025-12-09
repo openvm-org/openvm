@@ -211,7 +211,7 @@ impl Default for MemoryConfig {
             timestamp_max_bits: 29,
             decomp: 17,
             max_access_adapter_n: 32,
-            access_adapters_enabled: true,
+            access_adapters_enabled: false,
         }
     }
 }
@@ -428,9 +428,12 @@ impl SystemConfig {
     }
 
     pub fn initial_block_size(&self) -> usize {
-        match self.continuation_enabled {
-            true => CHUNK,
-            false => 1,
+        if !self.memory_config.access_adapters_enabled {
+            CONST_BLOCK_SIZE
+        } else if self.continuation_enabled {
+            CHUNK
+        } else {
+            1
         }
     }
 

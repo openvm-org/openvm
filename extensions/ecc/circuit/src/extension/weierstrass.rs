@@ -9,7 +9,7 @@ use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
         ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
-        VmExecutionExtension, VmProverExtension,
+        VmExecutionExtension, VmProverExtension, CONST_BLOCK_SIZE,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
@@ -102,11 +102,11 @@ impl WeierstrassExtension {
 )]
 pub enum WeierstrassExtensionExecutor {
     // 32 limbs prime
-    EcAddNeRv32_32(EcAddNeExecutor<2, 32>),
-    EcDoubleRv32_32(EcDoubleExecutor<2, 32>),
+    EcAddNeRv32_32(EcAddNeExecutor<2, 32, { 32 / CONST_BLOCK_SIZE }>),
+    EcDoubleRv32_32(EcDoubleExecutor<2, 32, { 32 / CONST_BLOCK_SIZE }>),
     // 48 limbs prime
-    EcAddNeRv32_48(EcAddNeExecutor<6, 16>),
-    EcDoubleRv32_48(EcDoubleExecutor<6, 16>),
+    EcAddNeRv32_48(EcAddNeExecutor<6, 16, { 16 / CONST_BLOCK_SIZE }>),
+    EcDoubleRv32_48(EcDoubleExecutor<6, 16, { 16 / CONST_BLOCK_SIZE }>),
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
@@ -130,7 +130,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                     num_limbs: 32,
                     limb_bits: 8,
                 };
-                let addne = get_ec_addne_step(
+                let addne = get_ec_addne_step::<2, 32, { 32 / CONST_BLOCK_SIZE }>(
                     config.clone(),
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -144,7 +144,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let double = get_ec_double_step(
+                let double = get_ec_double_step::<2, 32, { 32 / CONST_BLOCK_SIZE }>(
                     config,
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -164,7 +164,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                     num_limbs: 48,
                     limb_bits: 8,
                 };
-                let addne = get_ec_addne_step(
+                let addne = get_ec_addne_step::<6, 16, { 16 / CONST_BLOCK_SIZE }>(
                     config.clone(),
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -178,7 +178,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let double = get_ec_double_step(
+                let double = get_ec_double_step::<6, 16, { 16 / CONST_BLOCK_SIZE }>(
                     config,
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -237,7 +237,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                     limb_bits: 8,
                 };
 
-                let addne = get_ec_addne_air::<2, 32>(
+                let addne = get_ec_addne_air::<2, 32, { 32 / CONST_BLOCK_SIZE }>(
                     exec_bridge,
                     memory_bridge,
                     config.clone(),
@@ -248,7 +248,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                 );
                 inventory.add_air(addne);
 
-                let double = get_ec_double_air::<2, 32>(
+                let double = get_ec_double_air::<2, 32, { 32 / CONST_BLOCK_SIZE }>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -266,7 +266,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                     limb_bits: 8,
                 };
 
-                let addne = get_ec_addne_air::<6, 16>(
+                let addne = get_ec_addne_air::<6, 16, { 16 / CONST_BLOCK_SIZE }>(
                     exec_bridge,
                     memory_bridge,
                     config.clone(),
@@ -277,7 +277,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                 );
                 inventory.add_air(addne);
 
-                let double = get_ec_double_air::<6, 16>(
+                let double = get_ec_double_air::<6, 16, { 16 / CONST_BLOCK_SIZE }>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -338,8 +338,8 @@ where
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<WeierstrassAir<2, 2, 32>>()?;
-                let addne = get_ec_addne_chip::<Val<SC>, 2, 32>(
+                inventory.next_air::<WeierstrassAir<2, 2, 32, { 32 / CONST_BLOCK_SIZE }>>()?;
+                let addne = get_ec_addne_chip::<Val<SC>, 2, 32, { 32 / CONST_BLOCK_SIZE }>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -348,8 +348,8 @@ where
                 );
                 inventory.add_executor_chip(addne);
 
-                inventory.next_air::<WeierstrassAir<1, 2, 32>>()?;
-                let double = get_ec_double_chip::<Val<SC>, 2, 32>(
+                inventory.next_air::<WeierstrassAir<1, 2, 32, { 32 / CONST_BLOCK_SIZE }>>()?;
+                let double = get_ec_double_chip::<Val<SC>, 2, 32, { 32 / CONST_BLOCK_SIZE }>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -365,8 +365,8 @@ where
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<WeierstrassAir<2, 6, 16>>()?;
-                let addne = get_ec_addne_chip::<Val<SC>, 6, 16>(
+                inventory.next_air::<WeierstrassAir<2, 6, 16, { 16 / CONST_BLOCK_SIZE }>>()?;
+                let addne = get_ec_addne_chip::<Val<SC>, 6, 16, { 16 / CONST_BLOCK_SIZE }>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -375,8 +375,8 @@ where
                 );
                 inventory.add_executor_chip(addne);
 
-                inventory.next_air::<WeierstrassAir<1, 6, 16>>()?;
-                let double = get_ec_double_chip::<Val<SC>, 6, 16>(
+                inventory.next_air::<WeierstrassAir<1, 6, 16, { 16 / CONST_BLOCK_SIZE }>>()?;
+                let double = get_ec_double_chip::<Val<SC>, 6, 16, { 16 / CONST_BLOCK_SIZE }>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),

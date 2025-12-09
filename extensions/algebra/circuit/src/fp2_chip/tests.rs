@@ -8,7 +8,7 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    Arena, PreflightExecutor,
+    Arena, PreflightExecutor, CONST_BLOCK_SIZE,
 };
 use openvm_circuit_primitives::{
     bigint::utils::secp256k1_coord_prime,
@@ -39,19 +39,19 @@ use crate::fp2_chip::{
 const LIMB_BITS: usize = 8;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
-type Harness<const BLOCKS: usize, const BLOCK_SIZE: usize> = TestChipHarness<
+type Harness<const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize> = TestChipHarness<
     F,
-    Fp2Executor<BLOCKS, BLOCK_SIZE>,
-    Fp2Air<BLOCKS, BLOCK_SIZE>,
-    Fp2Chip<F, BLOCKS, BLOCK_SIZE>,
+    Fp2Executor<BLOCKS, BLOCK_SIZE, CHUNKS>,
+    Fp2Air<BLOCKS, BLOCK_SIZE, CHUNKS>,
+    Fp2Chip<F, BLOCKS, BLOCK_SIZE, CHUNKS>,
 >;
 
-fn create_addsub_test_chips<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+fn create_addsub_test_chips<const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize>(
     tester: &mut VmChipTestBuilder<F>,
     config: ExprBuilderConfig,
     offset: usize,
 ) -> (
-    Harness<BLOCKS, BLOCK_SIZE>,
+    Harness<BLOCKS, BLOCK_SIZE, CHUNKS>,
     (
         BitwiseOperationLookupAir<RV32_CELL_BITS>,
         SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
@@ -62,7 +62,7 @@ fn create_addsub_test_chips<const BLOCKS: usize, const BLOCK_SIZE: usize>(
         bitwise_bus,
     ));
 
-    let air = get_fp2_addsub_air(
+    let air = get_fp2_addsub_air::<BLOCKS, BLOCK_SIZE, CHUNKS>(
         tester.execution_bridge(),
         tester.memory_bridge(),
         config.clone(),
@@ -71,13 +71,13 @@ fn create_addsub_test_chips<const BLOCKS: usize, const BLOCK_SIZE: usize>(
         tester.address_bits(),
         offset,
     );
-    let executor = get_fp2_addsub_step(
+    let executor = get_fp2_addsub_step::<BLOCKS, BLOCK_SIZE, CHUNKS>(
         config.clone(),
         tester.range_checker().bus(),
         tester.address_bits(),
         offset,
     );
-    let chip = get_fp2_addsub_chip(
+    let chip = get_fp2_addsub_chip::<_, BLOCKS, BLOCK_SIZE, CHUNKS>(
         config,
         tester.memory_helper(),
         tester.range_checker(),
@@ -89,12 +89,12 @@ fn create_addsub_test_chips<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
-fn create_muldiv_test_chips<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+fn create_muldiv_test_chips<const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize>(
     tester: &mut VmChipTestBuilder<F>,
     config: ExprBuilderConfig,
     offset: usize,
 ) -> (
-    Harness<BLOCKS, BLOCK_SIZE>,
+    Harness<BLOCKS, BLOCK_SIZE, CHUNKS>,
     (
         BitwiseOperationLookupAir<RV32_CELL_BITS>,
         SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
@@ -105,7 +105,7 @@ fn create_muldiv_test_chips<const BLOCKS: usize, const BLOCK_SIZE: usize>(
         bitwise_bus,
     ));
 
-    let air = get_fp2_muldiv_air(
+    let air = get_fp2_muldiv_air::<BLOCKS, BLOCK_SIZE, CHUNKS>(
         tester.execution_bridge(),
         tester.memory_bridge(),
         config.clone(),
@@ -114,7 +114,7 @@ fn create_muldiv_test_chips<const BLOCKS: usize, const BLOCK_SIZE: usize>(
         tester.address_bits(),
         offset,
     );
-    let executor = get_fp2_muldiv_step(
+    let executor = get_fp2_muldiv_step::<BLOCKS, BLOCK_SIZE, CHUNKS>(
         config.clone(),
         tester.range_checker().bus(),
         tester.address_bits(),
@@ -133,9 +133,15 @@ fn create_muldiv_test_chips<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute_fp2<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize, RA>(
+fn set_and_execute_fp2<
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+    const NUM_LIMBS: usize,
+    const CHUNKS: usize,
+    RA,
+>(
     tester: &mut impl TestBuilder<F>,
-    executor: &mut Fp2Executor<BLOCKS, BLOCK_SIZE>,
+    executor: &mut Fp2Executor<BLOCKS, BLOCK_SIZE, CHUNKS>,
     arena: &mut RA,
     rng: &mut StdRng,
     modulus: &BigUint,
@@ -144,7 +150,7 @@ fn set_and_execute_fp2<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_L
     offset: usize,
 ) where
     RA: Arena,
-    Fp2Executor<BLOCKS, BLOCK_SIZE>: PreflightExecutor<F, RA>,
+    Fp2Executor<BLOCKS, BLOCK_SIZE, CHUNKS>: PreflightExecutor<F, RA>,
 {
     let (a_c0, a_c1, b_c0, b_c1, op_local) = if is_setup {
         (
@@ -264,54 +270,64 @@ fn set_and_execute_fp2<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_L
 }
 
 #[derive(new)]
-struct TestConfig<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize> {
+struct TestConfig<
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+    const NUM_LIMBS: usize,
+    const CHUNKS: usize,
+> {
     pub modulus: BigUint,
     pub is_addsub: bool,
     pub num_ops: usize,
 }
 
-#[test_case(TestConfig::<2, 32, 32>::new(
+#[test_case(TestConfig::<2, 32, 32, {32 / CONST_BLOCK_SIZE}>::new(
     BigUint::from_str("357686312646216567629137").unwrap(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<2, 32, 32>::new(
+#[test_case(TestConfig::<2, 32, 32, {32 / CONST_BLOCK_SIZE}>::new(
     secp256k1_coord_prime(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<2, 32, 32>::new(
+#[test_case(TestConfig::<2, 32, 32, {32 / CONST_BLOCK_SIZE}>::new(
     BN254_MODULUS.clone(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<6, 16, 48>::new(
+#[test_case(TestConfig::<6, 16, 48, {48 / CONST_BLOCK_SIZE}>::new(
     BLS12_381_MODULUS.clone(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<2, 32, 32>::new(
+#[test_case(TestConfig::<2, 32, 32, {32 / CONST_BLOCK_SIZE}>::new(
     BigUint::from_str("357686312646216567629137").unwrap(),
     false,
     50,
 ))]
-#[test_case(TestConfig::<2, 32, 32>::new(
+#[test_case(TestConfig::<2, 32, 32, {32 / CONST_BLOCK_SIZE}>::new(
     secp256k1_coord_prime(),
     false,
     50,
 ))]
-#[test_case(TestConfig::<2, 32, 32>::new(
+#[test_case(TestConfig::<2, 32, 32, {32 / CONST_BLOCK_SIZE}>::new(
     BN254_MODULUS.clone(),
     false,
     50,
 ))]
-#[test_case(TestConfig::<6, 16, 48>::new(
+#[test_case(TestConfig::<6, 16, 48, {48 / CONST_BLOCK_SIZE}>::new(
     BLS12_381_MODULUS.clone(),
     false,
     50,
 ))]
-fn run_test_with_config<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize>(
-    test_config: TestConfig<BLOCKS, BLOCK_SIZE, NUM_LIMBS>,
+fn run_test_with_config<
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+    const NUM_LIMBS: usize,
+    const CHUNKS: usize,
+>(
+    test_config: TestConfig<BLOCKS, BLOCK_SIZE, NUM_LIMBS, CHUNKS>,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
@@ -324,13 +340,13 @@ fn run_test_with_config<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_
     let offset = Fp2Opcode::CLASS_OFFSET;
 
     let (mut harness, bitwise) = if test_config.is_addsub {
-        create_addsub_test_chips::<BLOCKS, BLOCK_SIZE>(&mut tester, config, offset)
+        create_addsub_test_chips::<BLOCKS, BLOCK_SIZE, CHUNKS>(&mut tester, config, offset)
     } else {
-        create_muldiv_test_chips::<BLOCKS, BLOCK_SIZE>(&mut tester, config, offset)
+        create_muldiv_test_chips::<BLOCKS, BLOCK_SIZE, CHUNKS>(&mut tester, config, offset)
     };
 
     for i in 0..test_config.num_ops {
-        set_and_execute_fp2::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
+        set_and_execute_fp2::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, CHUNKS, _>(
             &mut tester,
             &mut harness.executor,
             &mut harness.arena,

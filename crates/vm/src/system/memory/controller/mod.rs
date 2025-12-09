@@ -21,7 +21,7 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-use self::interface::MemoryInterface;
+use self::interface::{MemoryInterface, VOLATILE_BOUNDARY_BLOCK_SIZE};
 use super::{volatile::VolatileBoundaryChip, AddressMap};
 use crate::{
     arch::{DenseRecordArena, MemoryConfig, ADDR_SPACE_OFFSET},
@@ -55,6 +55,13 @@ pub type MemoryImage = AddressMap;
 pub struct TimestampedValues<T, const N: usize> {
     pub timestamp: u32,
     pub values: [T; N],
+}
+
+impl<T, const N: usize> TimestampedValues<T, N> {
+    /// Returns the maximum timestamp for this block. Currently the timestamp is uniform.
+    pub fn max_timestamp(&self) -> u32 {
+        self.timestamp
+    }
 }
 
 /// A sorted equipartition of memory, with timestamps and values.
@@ -145,7 +152,7 @@ impl<F: PrimeField32> MemoryController<F> {
         Self {
             memory_bus,
             interface_chip: MemoryInterface::Volatile {
-                boundary_chip: VolatileBoundaryChip::new(
+                boundary_chip: VolatileBoundaryChip::<F, VOLATILE_BOUNDARY_BLOCK_SIZE>::new(
                     memory_bus,
                     addr_space_max_bits,
                     mem_config.pointer_max_bits,

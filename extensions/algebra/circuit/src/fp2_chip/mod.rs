@@ -14,17 +14,23 @@ mod cuda;
 #[cfg(feature = "cuda")]
 pub use cuda::*;
 
-pub type Fp2Air<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAirWrapper<
-    Rv32VecHeapAdapterAir<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+/// CHUNKS = BLOCK_SIZE / 4 (the number of 4-byte chunks per block)
+pub type Fp2Air<const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize> = VmAirWrapper<
+    Rv32VecHeapAdapterAir<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE, CHUNKS, CHUNKS>,
     FieldExpressionCoreAir,
 >;
 
-pub type Fp2Executor<const BLOCKS: usize, const BLOCK_SIZE: usize> =
-    FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, true>;
+/// CHUNKS = BLOCK_SIZE / 4 (the number of 4-byte chunks per block)
+pub type Fp2Executor<const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize> =
+    FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, true, CHUNKS>;
 
-pub type Fp2Chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> = VmChipWrapper<
+/// CHUNKS = BLOCK_SIZE / 4 (the number of 4-byte chunks per block)
+pub type Fp2Chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize> =
+    VmChipWrapper<
     F,
-    FieldExpressionFiller<Rv32VecHeapAdapterFiller<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
+        FieldExpressionFiller<
+            Rv32VecHeapAdapterFiller<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE, CHUNKS, CHUNKS>,
+        >,
 >;
 
 #[cfg(test)]

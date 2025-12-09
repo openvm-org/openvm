@@ -45,7 +45,11 @@ pub fn test_system_config_without_continuations() -> SystemConfig {
     addr_spaces[RV32_MEMORY_AS as usize].num_cells = 1 << 22;
     addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = PAGE_SIZE;
     addr_spaces[NATIVE_AS as usize].num_cells = 1 << 25;
-    SystemConfig::new(3, MemoryConfig::new(2, addr_spaces, 29, 29, 17, 32), 32)
+    let memory_config = MemoryConfig::new(2, addr_spaces, 29, 29, 17, 32)
+        .with_auto_access_adapters()
+        .without_access_adapters();
+    SystemConfig::new(3, memory_config, 32)
+        .without_access_adapters()
         .without_continuations()
 }
 
@@ -53,7 +57,12 @@ pub fn test_system_config_without_continuations() -> SystemConfig {
 pub fn test_system_config() -> SystemConfig {
     let mut config = test_system_config_without_continuations();
     config.memory_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
-    config.with_continuations()
+    config.memory_config = config
+        .memory_config
+        .clone()
+        .with_auto_access_adapters()
+        .without_access_adapters();
+    config.without_access_adapters().with_continuations()
 }
 
 /// Generate a random message of a given length in bytes

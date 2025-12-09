@@ -115,7 +115,8 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
         let base_pointer: AB::Expr = local.leaf_label.into() * AB::F::from_canonical_usize(CHUNK);
         for block_idx in 0..(CHUNK / CONST_BLOCK_SIZE) {
             let block_start = block_idx * CONST_BLOCK_SIZE;
-            let block_values: Vec<AB::Expr> = local.values[block_start..block_start + CONST_BLOCK_SIZE]
+            let block_values: Vec<AB::Expr> = local.values
+                [block_start..block_start + CONST_BLOCK_SIZE]
                 .iter()
                 .map(|&v| v.into())
                 .collect();

@@ -12,16 +12,27 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionFiller};
 use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller};
 
-pub type WeierstrassAir<const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize> =
-    VmAirWrapper<
-        Rv32VecHeapAdapterAir<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+/// CHUNKS = BLOCK_SIZE / 4 (the number of 4-byte chunks per block)
+pub type WeierstrassAir<
+    const NUM_READS: usize,
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+    const CHUNKS: usize,
+> = VmAirWrapper<
+    Rv32VecHeapAdapterAir<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE, CHUNKS, CHUNKS>,
         FieldExpressionCoreAir,
     >;
 
-pub type WeierstrassChip<F, const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize> =
-    VmChipWrapper<
+/// CHUNKS = BLOCK_SIZE / 4 (the number of 4-byte chunks per block)
+pub type WeierstrassChip<
+    F,
+    const NUM_READS: usize,
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+    const CHUNKS: usize,
+> = VmChipWrapper<
         F,
         FieldExpressionFiller<
-            Rv32VecHeapAdapterFiller<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        Rv32VecHeapAdapterFiller<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE, CHUNKS, CHUNKS>,
         >,
     >;

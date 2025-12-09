@@ -438,6 +438,7 @@ pub struct TracingMemory {
     pub timestamp: u32,
     /// The initial block size -- this depends on the type of boundary chip.
     initial_block_size: usize,
+    access_adapters_enabled: bool,
     /// The underlying data memory, with memory cells typed by address space: see [AddressMap].
     #[getset(get = "pub")]
     pub data: GuestMemory,
@@ -462,9 +463,15 @@ impl TracingMemory {
         mem_config: &MemoryConfig,
         initial_block_size: usize,
         access_adapter_arena_size_bound: usize,
+        access_adapters_enabled: bool,
     ) -> Self {
         let image = GuestMemory::new(AddressMap::from_mem_config(mem_config));
-        Self::from_image(image, initial_block_size, access_adapter_arena_size_bound)
+        Self::from_image(
+            image,
+            initial_block_size,
+            access_adapter_arena_size_bound,
+            access_adapters_enabled,
+        )
     }
 
     /// Constructor from pre-existing memory image.
@@ -472,6 +479,7 @@ impl TracingMemory {
         image: GuestMemory,
         initial_block_size: usize,
         access_adapter_arena_size_bound: usize,
+        access_adapters_enabled: bool,
     ) -> Self {
         let (meta, min_block_size): (Vec<_>, Vec<_>) =
             zip_eq(image.memory.get_memory(), &image.memory.config)
@@ -490,6 +498,7 @@ impl TracingMemory {
             min_block_size,
             timestamp: INITIAL_TIMESTAMP + 1,
             initial_block_size,
+            access_adapters_enabled,
             access_adapter_records,
         }
     }
@@ -577,7 +586,7 @@ impl TracingMemory {
     }
 
     pub(crate) fn add_split_record(&mut self, header: AccessRecordHeader) {
-        if header.block_size == header.lowest_block_size {
+        if header.block_size == header.lowest_block_size || !self.access_adapters_enabled {
             return;
         }
         // SAFETY:
@@ -609,7 +618,7 @@ impl TracingMemory {
         data_slice: &[u8],
         prev_ts: &[u32],
     ) {
-        if header.block_size == header.lowest_block_size {
+        if header.block_size == header.lowest_block_size || !self.access_adapters_enabled {
             return;
         }
 
@@ -940,9 +949,11 @@ impl TracingMemory {
         let touched_blocks = self.touched_blocks();
 
         match is_persistent {
-            false => TouchedMemory::Volatile(
-                self.touched_blocks_to_equipartition::<F, 1>(touched_blocks),
-            ),
+            false => {
+                TouchedMemory::Volatile(self.touched_blocks_to_equipartition::<F, CHUNK>(
+                    touched_blocks,
+                ))
+            }
             true => TouchedMemory::Persistent(
                 self.touched_blocks_to_equipartition::<F, CHUNK>(touched_blocks),
             ),
@@ -994,9 +1005,103 @@ impl TracingMemory {
         touched_blocks: Vec<((u32, u32), AccessMetadata)>,
     ) {
         let mut current_values = vec![0u8; MAX_CELL_BYTE_SIZE * CHUNK];
-        let mut current_cnt = 0;
-        let mut current_address = MemoryAddress::new(0, 0);
-        let mut current_timestamps = vec![0; CHUNK];
+        let mut current_cnt = 0usize;
+        let mut current_address: Option<MemoryAddress<u32, u32>> = None;
+        let mut current_timestamps = vec![INITIAL_TIMESTAMP; CHUNK];
+        let mut current_min_block_size = 0usize;
+        let mut current_cell_size = 0usize;
+        let mut current_addr_space: Option<u32> = None;
+        let mut current_addr_space_config: Option<AddressSpaceHostConfig> = None;
+
+        let flush_chunk_with_padding = |this: &mut Self,
+                                            final_memory: &mut Vec<(
+                                                (u32, u32),
+                                                TimestampedValues<F, CHUNK>,
+                                            )>,
+                                            current_address: &mut Option<MemoryAddress<u32, u32>>,
+                                            current_addr_space_config: Option<AddressSpaceHostConfig>,
+                                            current_min_block_size: usize,
+                                            current_cell_size: usize,
+                                            current_cnt: &mut usize,
+                                            current_timestamps: &mut Vec<u32>,
+                                            current_values: &mut Vec<u8>| {
+            if *current_cnt == 0 {
+                *current_address = None;
+                return;
+            }
+            let addr = match current_address {
+                Some(addr) => *addr,
+                None => return,
+            };
+            let addr_space_config = match current_addr_space_config {
+                Some(cfg) => cfg,
+                None => return,
+            };
+            debug_assert!(current_min_block_size > 0);
+            let available_cells = addr_space_config
+                .num_cells
+                .saturating_sub(addr.pointer as usize)
+                .min(CHUNK);
+            for idx in *current_cnt..available_cells {
+                // SAFETY: idx within bounds of configured memory
+                let cell_data = unsafe {
+                    this.data.memory.get_u8_slice(
+                        addr.address_space,
+                        (addr.pointer as usize + idx) * current_cell_size,
+                        current_cell_size,
+                    )
+                };
+                current_values[idx * current_cell_size..(idx + 1) * current_cell_size]
+                    .copy_from_slice(cell_data);
+                if idx % current_min_block_size == 0 {
+                    current_timestamps[idx / current_min_block_size] = INITIAL_TIMESTAMP;
+                }
+            }
+            for idx in available_cells..CHUNK {
+                current_values[idx * current_cell_size..(idx + 1) * current_cell_size]
+                    .fill(0);
+                if idx % current_min_block_size == 0
+                    && idx / current_min_block_size < current_timestamps.len()
+                {
+                    current_timestamps[idx / current_min_block_size] = INITIAL_TIMESTAMP;
+                }
+            }
+
+            let ts_len = CHUNK / current_min_block_size;
+            let timestamp = current_timestamps[..ts_len]
+                .iter()
+                .copied()
+                .max()
+                .unwrap_or(INITIAL_TIMESTAMP);
+            this.add_merge_record(
+                AccessRecordHeader {
+                    timestamp_and_mask: timestamp,
+                    address_space: addr.address_space,
+                    pointer: addr.pointer,
+                    block_size: CHUNK as u32,
+                    lowest_block_size: current_min_block_size as u32,
+                    type_size: current_cell_size as u32,
+                },
+                &current_values[..CHUNK * current_cell_size],
+                &current_timestamps[..ts_len],
+            );
+            final_memory.push((
+                (addr.address_space, addr.pointer),
+                TimestampedValues {
+                    timestamp,
+                    values: from_fn(|i| unsafe {
+                        addr_space_config.layout.to_field(
+                            &current_values[i * current_cell_size
+                                ..i * current_cell_size + current_cell_size],
+                        )
+                    }),
+                },
+            ));
+            *current_cnt = 0;
+            *current_address = None;
+            current_timestamps.fill(INITIAL_TIMESTAMP);
+        };
+
         for ((addr_space, ptr), access_metadata) in touched_blocks {
             // SAFETY: addr_space of touched blocks are all in bounds
             let addr_space_config =
@@ -1005,22 +1110,29 @@ impl TracingMemory {
             let cell_size = addr_space_config.layout.size();
             let timestamp = access_metadata.timestamp();
             let block_size = access_metadata.block_size();
-            assert!(
-                current_cnt == 0
-                    || (current_address.address_space == addr_space
-                        && current_address.pointer + current_cnt as u32 == ptr),
-                "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`"
-            );
             debug_assert!(block_size >= min_block_size as u8);
             debug_assert!(ptr % min_block_size as u32 == 0);
 
-            if current_cnt == 0 {
-                assert_eq!(
-                    ptr & (CHUNK as u32 - 1),
-                    0,
-                    "The union of all touched blocks must consist of `CHUNK`-aligned blocks"
+            if current_addr_space != Some(addr_space) {
+                flush_chunk_with_padding(
+                    self,
+                    final_memory,
+                    &mut current_address,
+                    current_addr_space_config,
+                    current_min_block_size,
+                    current_cell_size,
+                    &mut current_cnt,
+                    &mut current_timestamps,
+                    &mut current_values,
                 );
-                current_address = MemoryAddress::new(addr_space, ptr);
+                current_addr_space = Some(addr_space);
+                current_min_block_size = min_block_size as usize;
+                current_cell_size = cell_size;
+                current_addr_space_config = Some(addr_space_config);
+                current_timestamps.fill(INITIAL_TIMESTAMP);
+                current_address = None;
+            } else {
+                debug_assert_eq!(current_min_block_size, min_block_size as usize);
             }
 
             if block_size > min_block_size as u8 {
@@ -1033,8 +1145,19 @@ impl TracingMemory {
                     type_size: cell_size as u32,
                 });
             }
-            if min_block_size > CHUNK {
-                assert_eq!(current_cnt, 0);
+
+            if min_block_size as usize > CHUNK {
+                flush_chunk_with_padding(
+                    self,
+                    final_memory,
+                    &mut current_address,
+                    current_addr_space_config,
+                    current_min_block_size,
+                    current_cell_size,
+                    &mut current_cnt,
+                    &mut current_timestamps,
+                    &mut current_values,
+                );
                 for i in (0..block_size as u32).step_by(min_block_size) {
                     self.add_split_record(AccessRecordHeader {
                         timestamp_and_mask: timestamp,
@@ -1071,62 +1194,104 @@ impl TracingMemory {
                         },
                     ));
                 }
-            } else {
-                for i in 0..block_size as u32 {
-                    // SAFETY: getting cell data
-                    let cell_data = unsafe {
-                        self.data.memory.get_u8_slice(
-                            addr_space,
-                            (ptr + i) as usize * cell_size,
-                            cell_size,
-                        )
-                    };
-                    current_values[current_cnt * cell_size..current_cnt * cell_size + cell_size]
-                        .copy_from_slice(cell_data);
-                    if current_cnt & (min_block_size - 1) == 0 {
-                        // SAFETY: current_cnt / min_block_size < CHUNK / min_block_size <= CHUNK
-                        unsafe {
-                            *current_timestamps.get_unchecked_mut(current_cnt / min_block_size) =
-                                timestamp;
+                continue;
+            }
+
+            let mut block_offset = 0usize;
+            while block_offset < block_size as usize {
+                let abs_ptr = ptr + block_offset as u32;
+
+                if let Some(addr) = current_address {
+                    if abs_ptr >= addr.pointer + CHUNK as u32 {
+                        flush_chunk_with_padding(
+                            self,
+                            final_memory,
+                            &mut current_address,
+                            current_addr_space_config,
+                            current_min_block_size,
+                            current_cell_size,
+                            &mut current_cnt,
+                            &mut current_timestamps,
+                            &mut current_values,
+                        );
+                    }
+                }
+                if current_address.is_none() {
+                    let chunk_start = abs_ptr & !((CHUNK as u32) - 1);
+                    current_address = Some(MemoryAddress::new(addr_space, chunk_start));
+                    current_timestamps.fill(INITIAL_TIMESTAMP);
+                    current_cnt = 0;
+                }
+
+                let chunk_start = current_address.unwrap().pointer;
+                let target_offset = (abs_ptr - chunk_start) as usize;
+
+                if target_offset > current_cnt {
+                    for idx in current_cnt..target_offset {
+                        let addr = chunk_start + idx as u32;
+                        // SAFETY: addresses come from touched blocks and are within bounds
+                        let cell_data = unsafe {
+                            self.data.memory.get_u8_slice(
+                                addr_space,
+                                addr as usize * cell_size,
+                                cell_size,
+                            )
+                        };
+                        current_values[idx * cell_size..(idx + 1) * cell_size]
+                            .copy_from_slice(cell_data);
+                        if idx % current_min_block_size == 0 {
+                            current_timestamps[idx / current_min_block_size] = INITIAL_TIMESTAMP;
                         }
                     }
-                    current_cnt += 1;
-                    if current_cnt == CHUNK {
-                        let timestamp = *current_timestamps[..CHUNK / min_block_size]
-                            .iter()
-                            .max()
-                            .unwrap();
-                        self.add_merge_record(
-                            AccessRecordHeader {
-                                timestamp_and_mask: timestamp,
-                                address_space: addr_space,
-                                pointer: current_address.pointer,
-                                block_size: CHUNK as u32,
-                                lowest_block_size: min_block_size as u32,
-                                type_size: cell_size as u32,
-                            },
-                            &current_values[..CHUNK * cell_size],
-                            &current_timestamps[..CHUNK / min_block_size],
-                        );
-                        final_memory.push((
-                            (current_address.address_space, current_address.pointer),
-                            TimestampedValues {
-                                timestamp,
-                                values: from_fn(|i| unsafe {
-                                    // SAFETY: cell_size is correct, and alignment is guaranteed
-                                    addr_space_config.layout.to_field(
-                                        &current_values[i * cell_size..i * cell_size + cell_size],
-                                    )
-                                }),
-                            },
-                        ));
-                        current_address.pointer += current_cnt as u32;
-                        current_cnt = 0;
-                    }
+                }
+
+                // SAFETY: getting cell data
+                let cell_data = unsafe {
+                    self.data.memory.get_u8_slice(
+                        addr_space,
+                        abs_ptr as usize * cell_size,
+                        cell_size,
+                    )
+                };
+                current_values[target_offset * cell_size..target_offset * cell_size + cell_size]
+                    .copy_from_slice(cell_data);
+                if target_offset % current_min_block_size == 0 {
+                    current_timestamps[target_offset / current_min_block_size] = timestamp;
+                }
+                current_cnt = target_offset + 1;
+                block_offset += 1;
+
+                if current_cnt == CHUNK {
+                    flush_chunk_with_padding(
+                        self,
+                        final_memory,
+                        &mut current_address,
+                        current_addr_space_config,
+                        current_min_block_size,
+                        current_cell_size,
+                        &mut current_cnt,
+                        &mut current_timestamps,
+                        &mut current_values,
+                    );
                 }
             }
         }
-        assert_eq!(current_cnt, 0, "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`");
+
+        flush_chunk_with_padding(
+            self,
+            final_memory,
+            &mut current_address,
+            current_addr_space_config,
+            current_min_block_size,
+            current_cell_size,
+            &mut current_cnt,
+            &mut current_timestamps,
+            &mut current_values,
+        );
+        assert_eq!(
+            current_cnt, 0,
+            "The union of all touched blocks must consist of blocks divisible by `CHUNK`"
+        );
     }
 
     pub fn address_space_alignment(&self) -> Vec<u8> {

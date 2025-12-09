@@ -8,7 +8,7 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    Arena, PreflightExecutor,
+    Arena, PreflightExecutor, CONST_BLOCK_SIZE,
 };
 use openvm_circuit_primitives::{
     bigint::utils::{secp256k1_coord_prime, secp256k1_scalar_prime},
@@ -60,28 +60,30 @@ mod addsub_tests {
 
     const ADD_LOCAL: usize = Rv32ModularArithmeticOpcode::ADD as usize;
 
-    type Harness<const BLOCKS: usize, const BLOCK_SIZE: usize> = TestChipHarness<
-        F,
-        ModularExecutor<BLOCKS, BLOCK_SIZE>,
-        ModularAir<BLOCKS, BLOCK_SIZE>,
-        ModularChip<F, BLOCKS, BLOCK_SIZE>,
-    >;
+    type Harness<const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize> =
+        TestChipHarness<
+            F,
+            ModularExecutor<BLOCKS, BLOCK_SIZE, CHUNKS>,
+            ModularAir<BLOCKS, BLOCK_SIZE, CHUNKS>,
+            ModularChip<F, BLOCKS, BLOCK_SIZE, CHUNKS>,
+        >;
 
     #[cfg(feature = "cuda")]
-    type GpuHarness<const BLOCKS: usize, const BLOCK_SIZE: usize> = GpuTestChipHarness<
-        F,
-        ModularExecutor<BLOCKS, BLOCK_SIZE>,
-        ModularAir<BLOCKS, BLOCK_SIZE>,
-        ModularAddSubChipGpu<BLOCKS, BLOCK_SIZE>,
-        ModularChip<F, BLOCKS, BLOCK_SIZE>,
-    >;
+    type GpuHarness<const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize> =
+        GpuTestChipHarness<
+            F,
+            ModularExecutor<BLOCKS, BLOCK_SIZE, CHUNKS>,
+            ModularAir<BLOCKS, BLOCK_SIZE, CHUNKS>,
+            ModularAddSubChipGpu<BLOCKS, BLOCK_SIZE>,
+            ModularChip<F, BLOCKS, BLOCK_SIZE, CHUNKS>,
+        >;
 
-    fn create_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    fn create_harness<const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize>(
         tester: &VmChipTestBuilder<F>,
         config: ExprBuilderConfig,
         offset: usize,
     ) -> (
-        Harness<BLOCKS, BLOCK_SIZE>,
+        Harness<BLOCKS, BLOCK_SIZE, CHUNKS>,
         (
             BitwiseOperationLookupAir<RV32_CELL_BITS>,
             SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
@@ -92,7 +94,7 @@ mod addsub_tests {
             bitwise_bus,
         ));
 
-        let air = get_modular_addsub_air(
+        let air = get_modular_addsub_air::<BLOCKS, BLOCK_SIZE, CHUNKS>(
             tester.execution_bridge(),
             tester.memory_bridge(),
             config.clone(),
@@ -101,13 +103,13 @@ mod addsub_tests {
             tester.address_bits(),
             offset,
         );
-        let executor = get_modular_addsub_step(
+        let executor = get_modular_addsub_step::<BLOCKS, BLOCK_SIZE, CHUNKS>(
             config.clone(),
             tester.range_checker().bus(),
             tester.address_bits(),
             offset,
         );
-        let chip = get_modular_addsub_chip(
+        let chip = get_modular_addsub_chip::<_, BLOCKS, BLOCK_SIZE, CHUNKS>(
             config,
             tester.memory_helper(),
             tester.range_checker(),
@@ -169,17 +171,18 @@ mod addsub_tests {
         const BLOCKS: usize,
         const BLOCK_SIZE: usize,
         const NUM_LIMBS: usize,
+        const CHUNKS: usize,
         RA: Arena,
     >(
         tester: &mut impl TestBuilder<F>,
-        executor: &mut ModularExecutor<BLOCKS, BLOCK_SIZE>,
+        executor: &mut ModularExecutor<BLOCKS, BLOCK_SIZE, CHUNKS>,
         arena: &mut RA,
         rng: &mut StdRng,
         modulus: &BigUint,
         is_setup: bool,
         offset: usize,
     ) where
-        ModularExecutor<BLOCKS, BLOCK_SIZE>: PreflightExecutor<F, RA>,
+        ModularExecutor<BLOCKS, BLOCK_SIZE, CHUNKS>: PreflightExecutor<F, RA>,
     {
         let (a, b, op) = if is_setup {
             (modulus.clone(), BigUint::zero(), ADD_LOCAL + 2)
@@ -262,7 +265,12 @@ mod addsub_tests {
         }
     }
 
-    fn run_addsub_test<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize>(
+    fn run_addsub_test<
+        const BLOCKS: usize,
+        const BLOCK_SIZE: usize,
+        const NUM_LIMBS: usize,
+        const CHUNKS: usize,
+    >(
         opcode_offset: usize,
         modulus: BigUint,
         num_ops: usize,
@@ -276,10 +284,11 @@ mod addsub_tests {
             limb_bits: LIMB_BITS,
         };
 
-        let (mut harness, bitwise) = create_harness::<BLOCKS, BLOCK_SIZE>(&tester, config, offset);
+        let (mut harness, bitwise) =
+            create_harness::<BLOCKS, BLOCK_SIZE, CHUNKS>(&tester, config, offset);
 
         for i in 0..num_ops {
-            set_and_execute_addsub::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
+            set_and_execute_addsub::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, CHUNKS, _>(
                 &mut tester,
                 &mut harness.executor,
                 &mut harness.arena,
@@ -300,7 +309,7 @@ mod addsub_tests {
 
     #[test]
     fn test_modular_addsub_1x32_small() {
-        run_addsub_test::<1, 32, 32>(
+        run_addsub_test::<1, 32, 32, { 32 / CONST_BLOCK_SIZE }>(
             0,
             BigUint::from_str("357686312646216567629137").unwrap(),
             50,
@@ -309,18 +318,18 @@ mod addsub_tests {
 
     #[test]
     fn test_modular_addsub_1x32_secp256k1() {
-        run_addsub_test::<1, 32, 32>(0, secp256k1_coord_prime(), 50);
-        run_addsub_test::<1, 32, 32>(4, secp256k1_scalar_prime(), 50);
+        run_addsub_test::<1, 32, 32, { 32 / CONST_BLOCK_SIZE }>(0, secp256k1_coord_prime(), 50);
+        run_addsub_test::<1, 32, 32, { 32 / CONST_BLOCK_SIZE }>(4, secp256k1_scalar_prime(), 50);
     }
 
     #[test]
     fn test_modular_addsub_1x32_bn254() {
-        run_addsub_test::<1, 32, 32>(0, BN254_MODULUS.clone(), 50);
+        run_addsub_test::<1, 32, 32, { 32 / CONST_BLOCK_SIZE }>(0, BN254_MODULUS.clone(), 50);
     }
 
     #[test]
     fn test_modular_addsub_3x16_bls12_381() {
-        run_addsub_test::<3, 16, 48>(0, BLS12_381_MODULUS.clone(), 50);
+        run_addsub_test::<3, 16, 48, { 16 / CONST_BLOCK_SIZE }>(0, BLS12_381_MODULUS.clone(), 50);
     }
 
     #[cfg(feature = "cuda")]
@@ -350,7 +359,7 @@ mod addsub_tests {
         let mut harness = create_cuda_harness::<BLOCKS, BLOCK_SIZE>(&tester, config, offset);
 
         for i in 0..num_ops {
-            set_and_execute_addsub::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
+            set_and_execute_addsub::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, CHUNKS, _>(
                 &mut tester,
                 &mut harness.executor,
                 &mut harness.dense_arena,
@@ -397,28 +406,30 @@ mod muldiv_tests {
     use super::*;
 
     const MUL_LOCAL: usize = Rv32ModularArithmeticOpcode::MUL as usize;
-    type Harness<const BLOCKS: usize, const BLOCK_SIZE: usize> = TestChipHarness<
-        F,
-        ModularExecutor<BLOCKS, BLOCK_SIZE>,
-        ModularAir<BLOCKS, BLOCK_SIZE>,
-        ModularChip<F, BLOCKS, BLOCK_SIZE>,
-    >;
+    type Harness<const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize> =
+        TestChipHarness<
+            F,
+            ModularExecutor<BLOCKS, BLOCK_SIZE, CHUNKS>,
+            ModularAir<BLOCKS, BLOCK_SIZE, CHUNKS>,
+            ModularChip<F, BLOCKS, BLOCK_SIZE, CHUNKS>,
+        >;
 
     #[cfg(feature = "cuda")]
-    type GpuHarness<const BLOCKS: usize, const BLOCK_SIZE: usize> = GpuTestChipHarness<
-        F,
-        ModularExecutor<BLOCKS, BLOCK_SIZE>,
-        ModularAir<BLOCKS, BLOCK_SIZE>,
-        ModularMulDivChipGpu<BLOCKS, BLOCK_SIZE>,
-        ModularChip<F, BLOCKS, BLOCK_SIZE>,
-    >;
+    type GpuHarness<const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize> =
+        GpuTestChipHarness<
+            F,
+            ModularExecutor<BLOCKS, BLOCK_SIZE, CHUNKS>,
+            ModularAir<BLOCKS, BLOCK_SIZE, CHUNKS>,
+            ModularMulDivChipGpu<BLOCKS, BLOCK_SIZE>,
+            ModularChip<F, BLOCKS, BLOCK_SIZE, CHUNKS>,
+        >;
 
-    fn create_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    fn create_harness<const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize>(
         tester: &VmChipTestBuilder<F>,
         config: ExprBuilderConfig,
         offset: usize,
     ) -> (
-        Harness<BLOCKS, BLOCK_SIZE>,
+        Harness<BLOCKS, BLOCK_SIZE, CHUNKS>,
         (
             BitwiseOperationLookupAir<RV32_CELL_BITS>,
             SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
@@ -429,7 +440,7 @@ mod muldiv_tests {
             bitwise_bus,
         ));
 
-        let air = get_modular_muldiv_air(
+        let air = get_modular_muldiv_air::<BLOCKS, BLOCK_SIZE, CHUNKS>(
             tester.execution_bridge(),
             tester.memory_bridge(),
             config.clone(),
@@ -439,14 +450,14 @@ mod muldiv_tests {
             offset,
         );
 
-        let executor = get_modular_muldiv_step(
+        let executor = get_modular_muldiv_step::<BLOCKS, BLOCK_SIZE, CHUNKS>(
             config.clone(),
             tester.range_checker().bus(),
             tester.address_bits(),
             offset,
         );
 
-        let chip = get_modular_muldiv_chip(
+        let chip = get_modular_muldiv_chip::<_, BLOCKS, BLOCK_SIZE, CHUNKS>(
             config,
             tester.memory_helper(),
             tester.range_checker(),
@@ -515,17 +526,18 @@ mod muldiv_tests {
         const BLOCKS: usize,
         const BLOCK_SIZE: usize,
         const NUM_LIMBS: usize,
+        const CHUNKS: usize,
         RA: Arena,
     >(
         tester: &mut impl TestBuilder<F>,
-        executor: &mut ModularExecutor<BLOCKS, BLOCK_SIZE>,
+        executor: &mut ModularExecutor<BLOCKS, BLOCK_SIZE, CHUNKS>,
         arena: &mut RA,
         rng: &mut StdRng,
         modulus: &BigUint,
         is_setup: bool,
         offset: usize,
     ) where
-        ModularExecutor<BLOCKS, BLOCK_SIZE>: PreflightExecutor<F, RA>,
+        ModularExecutor<BLOCKS, BLOCK_SIZE, CHUNKS>: PreflightExecutor<F, RA>,
     {
         let (a, b, op) = if is_setup {
             (modulus.clone(), BigUint::zero(), MUL_LOCAL + 2)
@@ -609,7 +621,12 @@ mod muldiv_tests {
         }
     }
 
-    fn run_test_muldiv<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize>(
+    fn run_test_muldiv<
+        const BLOCKS: usize,
+        const BLOCK_SIZE: usize,
+        const NUM_LIMBS: usize,
+        const CHUNKS: usize,
+    >(
         opcode_offset: usize,
         modulus: BigUint,
         num_ops: usize,
@@ -623,10 +640,11 @@ mod muldiv_tests {
         };
         let offset = Rv32ModularArithmeticOpcode::CLASS_OFFSET + opcode_offset;
 
-        let (mut harness, bitwise) = create_harness::<BLOCKS, BLOCK_SIZE>(&tester, config, offset);
+        let (mut harness, bitwise) =
+            create_harness::<BLOCKS, BLOCK_SIZE, CHUNKS>(&tester, config, offset);
 
         for i in 0..num_ops {
-            set_and_execute_muldiv::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
+            set_and_execute_muldiv::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, CHUNKS, _>(
                 &mut tester,
                 &mut harness.executor,
                 &mut harness.arena,
@@ -647,7 +665,7 @@ mod muldiv_tests {
 
     #[test]
     fn test_modular_muldiv_1x32_small() {
-        run_test_muldiv::<1, 32, 32>(
+        run_test_muldiv::<1, 32, 32, { 32 / CONST_BLOCK_SIZE }>(
             0,
             BigUint::from_str("357686312646216567629137").unwrap(),
             50,
@@ -656,18 +674,18 @@ mod muldiv_tests {
 
     #[test]
     fn test_modular_muldiv_1x32_secp256k1() {
-        run_test_muldiv::<1, 32, 32>(0, secp256k1_coord_prime(), 50);
-        run_test_muldiv::<1, 32, 32>(4, secp256k1_scalar_prime(), 50);
+        run_test_muldiv::<1, 32, 32, { 32 / CONST_BLOCK_SIZE }>(0, secp256k1_coord_prime(), 50);
+        run_test_muldiv::<1, 32, 32, { 32 / CONST_BLOCK_SIZE }>(4, secp256k1_scalar_prime(), 50);
     }
 
     #[test]
     fn test_modular_muldiv_1x32_bn254() {
-        run_test_muldiv::<1, 32, 32>(0, BN254_MODULUS.clone(), 50);
+        run_test_muldiv::<1, 32, 32, { 32 / CONST_BLOCK_SIZE }>(0, BN254_MODULUS.clone(), 50);
     }
 
     #[test]
     fn test_modular_muldiv_3x16_bls12_381() {
-        run_test_muldiv::<3, 16, 48>(0, BLS12_381_MODULUS.clone(), 50);
+        run_test_muldiv::<3, 16, 48, { 16 / CONST_BLOCK_SIZE }>(0, BLS12_381_MODULUS.clone(), 50);
     }
 
     #[cfg(feature = "cuda")]

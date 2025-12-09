@@ -340,7 +340,12 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         )));
         let max_access_adapter_n = log2_strict_usize(mem_config.max_access_adapter_n);
         let arena_size_bound = arena_size_bound(&vec![1 << 16; max_access_adapter_n]);
-        let memory = TracingMemory::new(mem_config, init_block_size, arena_size_bound);
+        let memory = TracingMemory::new(
+            mem_config,
+            init_block_size,
+            arena_size_bound,
+            mem_config.access_adapters_enabled,
+        );
 
         (range_checker, memory)
     }

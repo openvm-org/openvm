@@ -146,7 +146,7 @@ pub struct SystemRecords<F> {
 
 pub enum TouchedMemory<F> {
     Persistent(TimestampedEquipartition<F, CHUNK>),
-    Volatile(TimestampedEquipartition<F, 1>),
+    Volatile(TimestampedEquipartition<F, CHUNK>),
 }
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor, From)]

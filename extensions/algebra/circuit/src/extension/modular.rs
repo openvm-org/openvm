@@ -8,7 +8,7 @@ use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
         ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
-        VmExecutionExtension, VmProverExtension,
+        VmExecutionExtension, VmProverExtension, CONST_BLOCK_SIZE,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
@@ -78,13 +78,13 @@ impl ModularExtension {
 )]
 pub enum ModularExtensionExecutor {
     // 32 limbs prime
-    ModularAddSubRv32_32(ModularExecutor<1, 32>), // ModularAddSub
-    ModularMulDivRv32_32(ModularExecutor<1, 32>), // ModularMulDiv
-    ModularIsEqualRv32_32(VmModularIsEqualExecutor<1, 32, 32>), // ModularIsEqual
+    ModularAddSubRv32_32(ModularExecutor<1, 32, { 32 / CONST_BLOCK_SIZE }>), // ModularAddSub
+    ModularMulDivRv32_32(ModularExecutor<1, 32, { 32 / CONST_BLOCK_SIZE }>), // ModularMulDiv
+    ModularIsEqualRv32_32(VmModularIsEqualExecutor<1, 32, 32>),              // ModularIsEqual
     // 48 limbs prime
-    ModularAddSubRv32_48(ModularExecutor<3, 16>), // ModularAddSub
-    ModularMulDivRv32_48(ModularExecutor<3, 16>), // ModularMulDiv
-    ModularIsEqualRv32_48(VmModularIsEqualExecutor<3, 16, 48>), // ModularIsEqual
+    ModularAddSubRv32_48(ModularExecutor<3, 16, { 16 / CONST_BLOCK_SIZE }>), // ModularAddSub
+    ModularMulDivRv32_48(ModularExecutor<3, 16, { 16 / CONST_BLOCK_SIZE }>), // ModularMulDiv
+    ModularIsEqualRv32_48(VmModularIsEqualExecutor<3, 16, 48>),              // ModularIsEqual
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
@@ -109,7 +109,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                     num_limbs: 32,
                     limb_bits: 8,
                 };
-                let addsub = get_modular_addsub_step(
+                let addsub = get_modular_addsub_step::<1, 32, { 32 / CONST_BLOCK_SIZE }>(
                     config.clone(),
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -123,7 +123,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let muldiv = get_modular_muldiv_step(
+                let muldiv = get_modular_muldiv_step::<1, 32, { 32 / CONST_BLOCK_SIZE }>(
                     config,
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -163,7 +163,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                     num_limbs: 48,
                     limb_bits: 8,
                 };
-                let addsub = get_modular_addsub_step(
+                let addsub = get_modular_addsub_step::<3, 16, { 16 / CONST_BLOCK_SIZE }>(
                     config.clone(),
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -177,7 +177,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let muldiv = get_modular_muldiv_step(
+                let muldiv = get_modular_muldiv_step::<3, 16, { 16 / CONST_BLOCK_SIZE }>(
                     config,
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -269,7 +269,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for ModularExtension {
                     limb_bits: 8,
                 };
 
-                let addsub = get_modular_addsub_air::<1, 32>(
+                let addsub = get_modular_addsub_air::<1, 32, { 32 / CONST_BLOCK_SIZE }>(
                     exec_bridge,
                     memory_bridge,
                     config.clone(),
@@ -280,7 +280,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for ModularExtension {
                 );
                 inventory.add_air(addsub);
 
-                let muldiv = get_modular_muldiv_air::<1, 32>(
+                let muldiv = get_modular_muldiv_air::<1, 32, { 32 / CONST_BLOCK_SIZE }>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -308,7 +308,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for ModularExtension {
                     limb_bits: 8,
                 };
 
-                let addsub = get_modular_addsub_air::<3, 16>(
+                let addsub = get_modular_addsub_air::<3, 16, { 16 / CONST_BLOCK_SIZE }>(
                     exec_bridge,
                     memory_bridge,
                     config.clone(),
@@ -319,7 +319,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for ModularExtension {
                 );
                 inventory.add_air(addsub);
 
-                let muldiv = get_modular_muldiv_air::<3, 16>(
+                let muldiv = get_modular_muldiv_air::<3, 16, { 16 / CONST_BLOCK_SIZE }>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -395,8 +395,8 @@ where
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<ModularAir<1, 32>>()?;
-                let addsub = get_modular_addsub_chip::<Val<SC>, 1, 32>(
+                inventory.next_air::<ModularAir<1, 32, { 32 / CONST_BLOCK_SIZE }>>()?;
+                let addsub = get_modular_addsub_chip::<Val<SC>, 1, 32, { 32 / CONST_BLOCK_SIZE }>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -405,8 +405,8 @@ where
                 );
                 inventory.add_executor_chip(addsub);
 
-                inventory.next_air::<ModularAir<1, 32>>()?;
-                let muldiv = get_modular_muldiv_chip::<Val<SC>, 1, 32>(
+                inventory.next_air::<ModularAir<1, 32, { 32 / CONST_BLOCK_SIZE }>>()?;
+                let muldiv = get_modular_muldiv_chip::<Val<SC>, 1, 32, { 32 / CONST_BLOCK_SIZE }>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -440,8 +440,8 @@ where
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<ModularAir<3, 16>>()?;
-                let addsub = get_modular_addsub_chip::<Val<SC>, 3, 16>(
+                inventory.next_air::<ModularAir<3, 16, { 16 / CONST_BLOCK_SIZE }>>()?;
+                let addsub = get_modular_addsub_chip::<Val<SC>, 3, 16, { 16 / CONST_BLOCK_SIZE }>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -450,8 +450,8 @@ where
                 );
                 inventory.add_executor_chip(addsub);
 
-                inventory.next_air::<ModularAir<3, 16>>()?;
-                let muldiv = get_modular_muldiv_chip::<Val<SC>, 3, 16>(
+                inventory.next_air::<ModularAir<3, 16, { 16 / CONST_BLOCK_SIZE }>>()?;
+                let muldiv = get_modular_muldiv_chip::<Val<SC>, 3, 16, { 16 / CONST_BLOCK_SIZE }>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),

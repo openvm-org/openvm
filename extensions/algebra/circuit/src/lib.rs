@@ -23,12 +23,18 @@ mod extension;
 pub use extension::*;
 pub mod fields;
 
+/// CHUNKS = BLOCK_SIZE / 4 (the number of 4-byte chunks per block)
 #[derive(Clone, PreflightExecutor, Deref, DerefMut)]
 pub struct FieldExprVecHeapExecutor<
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
     const IS_FP2: bool,
->(FieldExpressionExecutor<Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>);
+    const CHUNKS: usize,
+>(
+    FieldExpressionExecutor<
+        Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE, CHUNKS, CHUNKS>,
+    >,
+);
 
 #[cfg(feature = "cuda")]
 pub(crate) type AlgebraRecord<
@@ -36,7 +42,16 @@ pub(crate) type AlgebraRecord<
     const NUM_READS: usize,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
+    const CHUNKS: usize,
 > = (
-    &'a mut Rv32VecHeapAdapterRecord<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+    &'a mut Rv32VecHeapAdapterRecord<
+        NUM_READS,
+        BLOCKS,
+        BLOCKS,
+        BLOCK_SIZE,
+        BLOCK_SIZE,
+        CHUNKS,
+        CHUNKS,
+    >,
     FieldExpressionCoreRecordMut<'a>,
 );

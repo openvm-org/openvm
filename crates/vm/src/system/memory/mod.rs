@@ -26,8 +26,12 @@ pub use online::{Address, AddressMap, INITIAL_TIMESTAMP};
 use crate::{
     arch::{MemoryConfig, ADDR_SPACE_OFFSET},
     system::memory::{
-        adapter::AccessAdapterAir, dimensions::MemoryDimensions, interface::MemoryInterfaceAirs,
-        merkle::MemoryMerkleAir, offline_checker::MemoryBridge, persistent::PersistentBoundaryAir,
+        adapter::AccessAdapterAir,
+        dimensions::MemoryDimensions,
+        interface::{MemoryInterfaceAirs, VOLATILE_BOUNDARY_BLOCK_SIZE},
+        merkle::MemoryMerkleAir,
+        offline_checker::MemoryBridge,
+        persistent::PersistentBoundaryAir,
         volatile::VolatileBoundaryAir,
     },
 };
@@ -110,7 +114,7 @@ impl<SC: StarkGenericConfig> MemoryAirInventory<SC> {
             assert!(addr_space_height < Val::<SC>::bits() - 2);
             let addr_space_max_bits =
                 log2_ceil_usize((ADDR_SPACE_OFFSET + 2u32.pow(addr_space_height as u32)) as usize);
-            let boundary = VolatileBoundaryAir::new(
+            let boundary = VolatileBoundaryAir::<VOLATILE_BOUNDARY_BLOCK_SIZE>::new(
                 memory_bus,
                 addr_space_max_bits,
                 mem_config.pointer_max_bits,

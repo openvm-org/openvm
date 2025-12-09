@@ -63,11 +63,12 @@ pub fn ec_double_ne_expr(
 
 /// BLOCK_SIZE: how many cells do we read at a time, must be a power of 2.
 /// BLOCKS: how many blocks do we need to represent one input or output
+/// CHUNKS: BLOCK_SIZE / 4 (the number of 4-byte chunks per block)
 /// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per
 /// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
 #[derive(Clone, PreflightExecutor, Deref, DerefMut)]
-pub struct EcDoubleExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    FieldExpressionExecutor<Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
+pub struct EcDoubleExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize>(
+    FieldExpressionExecutor<Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE, CHUNKS, CHUNKS>>,
 );
 
 fn gen_base_expr(
@@ -85,8 +86,9 @@ fn gen_base_expr(
     (expr, local_opcode_idx)
 }
 
+/// CHUNKS = BLOCK_SIZE / 4 (the number of 4-byte chunks per block)
 #[allow(clippy::too_many_arguments)]
-pub fn get_ec_double_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_ec_double_air<const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize>(
     exec_bridge: ExecutionBridge,
     mem_bridge: MemoryBridge,
     config: ExprBuilderConfig,
@@ -95,7 +97,7 @@ pub fn get_ec_double_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     pointer_max_bits: usize,
     offset: usize,
     a_biguint: BigUint,
-) -> WeierstrassAir<1, BLOCKS, BLOCK_SIZE> {
+) -> WeierstrassAir<1, BLOCKS, BLOCK_SIZE, CHUNKS> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
     WeierstrassAir::new(
         Rv32VecHeapAdapterAir::new(
@@ -108,13 +110,14 @@ pub fn get_ec_double_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     )
 }
 
-pub fn get_ec_double_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+/// CHUNKS = BLOCK_SIZE / 4 (the number of 4-byte chunks per block)
+pub fn get_ec_double_step<const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize>(
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,
     offset: usize,
     a_biguint: BigUint,
-) -> EcDoubleExecutor<BLOCKS, BLOCK_SIZE> {
+) -> EcDoubleExecutor<BLOCKS, BLOCK_SIZE, CHUNKS> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
     EcDoubleExecutor(FieldExpressionExecutor::new(
         Rv32VecHeapAdapterExecutor::new(pointer_max_bits),
@@ -126,14 +129,15 @@ pub fn get_ec_double_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     ))
 }
 
-pub fn get_ec_double_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+/// CHUNKS = BLOCK_SIZE / 4 (the number of 4-byte chunks per block)
+pub fn get_ec_double_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize, const CHUNKS: usize>(
     config: ExprBuilderConfig,
     mem_helper: SharedMemoryHelper<F>,
     range_checker: SharedVariableRangeCheckerChip,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     pointer_max_bits: usize,
     a_biguint: BigUint,
-) -> WeierstrassChip<F, 1, BLOCKS, BLOCK_SIZE> {
+) -> WeierstrassChip<F, 1, BLOCKS, BLOCK_SIZE, CHUNKS> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker.bus(), a_biguint);
     WeierstrassChip::new(
         FieldExpressionFiller::new(

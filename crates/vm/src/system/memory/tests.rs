@@ -90,7 +90,12 @@ where
     Standard: Distribution<T>,
 {
     let memory_config = MemoryConfig::default();
-    let mut memory = TracingMemory::new(&memory_config, BLOCK_SIZE, 0);
+    let mut memory = TracingMemory::new(
+        &memory_config,
+        BLOCK_SIZE,
+        0,
+        memory_config.access_adapters_enabled,
+    );
     let max_ptr = (memory_config.addr_spaces[address_space as usize].num_cells / BLOCK_SIZE) as u32;
 
     let mut rng = thread_rng();

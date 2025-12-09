@@ -160,8 +160,8 @@ struct FieldExpressionPreCompute<'a> {
     flag_idx: u8,
 }
 
-impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
-    FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2>
+impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool, const CHUNKS: usize>
+    FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2, CHUNKS>
 {
     fn pre_compute_impl<F: PrimeField32>(
         &'a self,
@@ -251,8 +251,13 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
     }
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
-    InterpreterExecutor<F> for FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2>
+impl<
+        F: PrimeField32,
+        const BLOCKS: usize,
+        const BLOCK_SIZE: usize,
+        const IS_FP2: bool,
+        const CHUNKS: usize,
+    > InterpreterExecutor<F> for FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2, CHUNKS>
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
@@ -305,13 +310,24 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
 }
 
 #[cfg(feature = "aot")]
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
-    AotExecutor<F> for FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2>
+impl<
+        F: PrimeField32,
+        const BLOCKS: usize,
+        const BLOCK_SIZE: usize,
+        const IS_FP2: bool,
+        const CHUNKS: usize,
+    > AotExecutor<F> for FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2, CHUNKS>
 {
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
-    InterpreterMeteredExecutor<F> for FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2>
+impl<
+        F: PrimeField32,
+        const BLOCKS: usize,
+        const BLOCK_SIZE: usize,
+        const IS_FP2: bool,
+        const CHUNKS: usize,
+    > InterpreterMeteredExecutor<F>
+    for FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2, CHUNKS>
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
@@ -372,8 +388,13 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
 }
 
 #[cfg(feature = "aot")]
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
-    AotMeteredExecutor<F> for FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2>
+impl<
+        F: PrimeField32,
+        const BLOCKS: usize,
+        const BLOCK_SIZE: usize,
+        const IS_FP2: bool,
+        const CHUNKS: usize,
+    > AotMeteredExecutor<F> for FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2, CHUNKS>
 {
 }
 
