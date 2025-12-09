@@ -15,7 +15,7 @@ use openvm_keccak256_transpiler::Rv32KeccakOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 use p3_keccak_air::NUM_ROUNDS;
 
-use super::{KeccakVmExecutor, KECCAK_WORD_SIZE};
+use super::{KeccakVmExecutor, KECCAK_DIGEST_WRITES, KECCAK_WORD_SIZE};
 use crate::utils::{keccak256, num_keccak_f};
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -149,26 +149,34 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     let src_u32 = u32::from_le_bytes(src);
     let len_u32 = u32::from_le_bytes(len);
 
+    let num_reads = (len_u32 as usize).div_ceil(KECCAK_WORD_SIZE);
+    let message: Vec<_> = (0..num_reads)
+        .flat_map(|i| {
+            exec_state.vm_read::<u8, KECCAK_WORD_SIZE>(
+                RV32_MEMORY_AS,
+                src_u32 + (i * KECCAK_WORD_SIZE) as u32,
+            )
+        })
+        .collect();
+
     let (output, height) = if IS_E1 {
-        // SAFETY: RV32_MEMORY_AS is memory address space of type u8
-        let message = exec_state.vm_read_slice(RV32_MEMORY_AS, src_u32, len_u32 as usize);
-        let output = keccak256(message);
+        let output = keccak256(&message[..len_u32 as usize]);
         (output, 0)
     } else {
-        let num_reads = (len_u32 as usize).div_ceil(KECCAK_WORD_SIZE);
-        let message: Vec<_> = (0..num_reads)
-            .flat_map(|i| {
-                exec_state.vm_read::<u8, KECCAK_WORD_SIZE>(
-                    RV32_MEMORY_AS,
-                    src_u32 + (i * KECCAK_WORD_SIZE) as u32,
-                )
-            })
-            .collect();
         let output = keccak256(&message[..len_u32 as usize]);
         let height = (num_keccak_f(len_u32 as usize) * NUM_ROUNDS) as u32;
         (output, height)
     };
-    exec_state.vm_write(RV32_MEMORY_AS, dst_u32, &output);
+
+    for i in 0..KECCAK_DIGEST_WRITES {
+        exec_state.vm_write::<u8, KECCAK_WORD_SIZE>(
+            RV32_MEMORY_AS,
+            dst_u32 + (i * KECCAK_WORD_SIZE) as u32,
+            &output[i * KECCAK_WORD_SIZE..(i + 1) * KECCAK_WORD_SIZE]
+                .try_into()
+                .unwrap(),
+        );
+    }
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));

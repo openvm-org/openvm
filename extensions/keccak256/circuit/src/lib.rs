@@ -5,6 +5,7 @@
 //! Stateful keccak256 hasher. Handles full keccak sponge (padding, absorb, keccak-f) on
 //! variable length inputs read from VM memory.
 
+use openvm_circuit::arch::CONST_BLOCK_SIZE;
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
 
 pub mod air;
@@ -29,7 +30,7 @@ use openvm_circuit::arch::*;
 /// Register reads to get dst, src, len
 const KECCAK_REGISTER_READS: usize = 3;
 /// Number of cells to read/write in a single memory access
-const KECCAK_WORD_SIZE: usize = 4;
+const KECCAK_WORD_SIZE: usize = CONST_BLOCK_SIZE;
 /// Memory reads for absorb per row
 const KECCAK_ABSORB_READS: usize = KECCAK_RATE_BYTES / KECCAK_WORD_SIZE;
 /// Memory writes for digest per row
