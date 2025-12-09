@@ -16,8 +16,9 @@ use openvm_ecc_circuit::{
     SECP256K1_CONFIG,
 };
 use openvm_ecc_transpiler::EccTranspilerExtension;
-use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
-use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
+use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt};
+use openvm_new_keccak256_circuit::XorinVmExecutor;
+use openvm_new_keccak256_transpiler::NewKeccakTranspilerExtension;
 use openvm_native_circuit::{
     CastFExtension, CastFExtensionExecutor, Native, NativeCpuProverExt, NativeExecutor,
 };
