@@ -10,8 +10,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::p3_field::PrimeField32;
-
-use crate::XorinVmExecutor;
+use crate::xorin::XorinVmExecutor;
 
 #[derive(Clone, Copy)]
 pub struct XorinVmMetadata {

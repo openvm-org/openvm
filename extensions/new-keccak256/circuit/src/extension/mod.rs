@@ -25,7 +25,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
 use openvm_new_keccak256_transpiler::Rv32NewKeccakOpcode;
-use crate::XorinVmExecutor;
+use crate::xorin::XorinVmExecutor;
 use strum::IntoEnumIterator;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
