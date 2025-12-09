@@ -159,7 +159,6 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
             )
         })
         .collect();
-    println!("buffer bytes {:?}", buffer_bytes.clone());
 
     let input_bytes: Vec<_> = (0..num_reads)
         .flat_map(|i| {
@@ -174,10 +173,6 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     for i in 0..output_bytes.len() {
         output_bytes[i] ^= input_bytes[i];
     }
-
-    
-    println!("input bytes {:?}", input_bytes.clone());
-    println!("output bytes {:?}", output_bytes.clone());
 
     // Write XOR result back to the buffer memory in KECCAK_WORD_SIZE chunks.
     // Note: this means output_bytes has to be multiple of KECCAK_WORD_SIZE 
