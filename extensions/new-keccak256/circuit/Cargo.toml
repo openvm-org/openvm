@@ -19,6 +19,7 @@ openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
 openvm-keccak256-transpiler = { workspace = true }
+openvm-new-keccak256-transpiler = { workspace = true }
 
 p3-keccak-air = { workspace = true }
 
