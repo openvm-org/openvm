@@ -9,6 +9,7 @@ use std::convert::TryInto;
 use std::mem::size_of;
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use super::KECCAK_WORD_SIZE;
+use openvm_instructions::program::DEFAULT_PC_STEP;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -158,6 +159,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
             )
         })
         .collect();
+    println!("buffer bytes {:?}", buffer_bytes.clone());
 
     let input_bytes: Vec<_> = (0..num_reads)
         .flat_map(|i| {
@@ -173,6 +175,10 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
         output_bytes[i] ^= input_bytes[i];
     }
 
+    
+    println!("input bytes {:?}", input_bytes.clone());
+    println!("output bytes {:?}", output_bytes.clone());
+
     // Write XOR result back to the buffer memory in KECCAK_WORD_SIZE chunks.
     // Note: this means output_bytes has to be multiple of KECCAK_WORD_SIZE 
     // Todo: recheck the above condition is okay
@@ -184,6 +190,9 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
             &chunk,
         );
     }
+
+    let pc = exec_state.pc();
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }
 
 

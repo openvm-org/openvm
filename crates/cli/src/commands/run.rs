@@ -278,31 +278,35 @@ impl RunCmd {
         // Create SDK
         let sdk = Sdk::new(app_config)?;
 
-        // For metered modes, load existing app pk from disk or generate it
-        if matches!(
-            self.run_args.mode,
-            ExecutionMode::Segment | ExecutionMode::Meter
-        ) {
-            let target_dir = get_target_dir(&self.cargo_args.target_dir, &manifest_path);
-            let app_pk_path = get_app_pk_path(&target_dir);
-            let app_vk_path = get_app_vk_path(&target_dir);
+        let output = sdk.execute(exe, inputs)?;
+        println!("Execution output: {output:?}");
 
-            // Generate app pk if it doesn't exist
-            if !app_pk_path.exists() {
-                let config_path = self
-                    .run_args
-                    .config
-                    .to_owned()
-                    .unwrap_or_else(|| manifest_dir.join("openvm.toml"));
-                keygen(&config_path, &app_pk_path, &app_vk_path, None::<&str>)?;
-            }
+        // // For metered modes, load existing app pk from disk or generate it
+        // if matches!(
+        //     self.run_args.mode,
+        //     ExecutionMode::Segment | ExecutionMode::Meter
+        // ) {
+        //     let target_dir = get_target_dir(&self.cargo_args.target_dir, &manifest_path);
+        //     let app_pk_path = get_app_pk_path(&target_dir);
+        //     let app_vk_path = get_app_vk_path(&target_dir);
 
-            // Load the app pk and set it
-            let app_pk: AppProvingKey<SdkVmConfig> = read_object_from_file(&app_pk_path)?;
-            sdk.set_app_pk(app_pk)
-                .map_err(|_| eyre::eyre!("Failed to set app pk"))?;
-        }
+        //     // Generate app pk if it doesn't exist
+        //     if !app_pk_path.exists() {
+        //         let config_path = self
+        //             .run_args
+        //             .config
+        //             .to_owned()
+        //             .unwrap_or_else(|| manifest_dir.join("openvm.toml"));
+        //         keygen(&config_path, &app_pk_path, &app_vk_path, None::<&str>)?;
+        //     }
 
+        //     // Load the app pk and set it
+        //     let app_pk: AppProvingKey<SdkVmConfig> = read_object_from_file(&app_pk_path)?;
+        //     sdk.set_app_pk(app_pk)
+        //         .map_err(|_| eyre::eyre!("Failed to set app pk"))?;
+        // }
+
+        /*
         match self.run_args.mode {
             ExecutionMode::Pure => {
                 let output = sdk.execute(exe, inputs)?;
@@ -324,6 +328,7 @@ impl RunCmd {
                 println!("Total segments: {}", segments.len());
             }
         }
+        */
 
         Ok(())
     }
