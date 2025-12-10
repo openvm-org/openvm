@@ -1,15 +1,12 @@
-use std::{
-    borrow::{Borrow, BorrowMut}, fmt::format, mem::{align_of, size_of}
-};
+use std::{borrow::BorrowMut, mem::{align_of, size_of}};
 
-use openvm_circuit::{arch::*, system::memory::{offline_checker::MemoryReadAuxCols, online::TracingMemory}};
+use openvm_circuit::{arch::*, system::memory::online::TracingMemory};
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::instruction::Instruction;
 use openvm_new_keccak256_transpiler::Rv32NewKeccakOpcode;
 use openvm_rv32im_circuit::adapters::{tracing_read, tracing_write};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_circuit::system::memory::offline_checker::MemoryReadAuxRecord;
-use openvm_circuit::system::memory::offline_checker::MemoryWriteAuxRecord;
 use openvm_circuit::system::memory::offline_checker::MemoryWriteBytesAuxRecord;
 use crate::xorin::trace::instructions::riscv::RV32_REGISTER_AS;
 use crate::xorin::trace::instructions::riscv::RV32_MEMORY_AS;
@@ -94,15 +91,7 @@ where
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
-        let &Instruction {
-            opcode,
-            a,
-            b,
-            c,
-            d,
-            e,
-            .. 
-        } = instruction;
+        let &Instruction { a, b, c, .. } = instruction;
 
         // Reading the length first without tracing to allocate a record of correct size
         let guest_mem = state.memory.data();
@@ -116,7 +105,7 @@ where
         let num_reads = len.div_ceil(4);
         let record = state
             .ctx 
-            .alloc(XorinVmRecordLayout::new(XorinVmMetadata { len }));
+            .alloc(XorinVmRecordLayout::new(XorinVmMetadata { }));
         
         record.inner.from_pc = *state.pc;
         record.inner.timestamp = state.memory.timestamp();
@@ -171,11 +160,15 @@ where
             record.inner.input_limbs[4*idx..4*(idx+1)].copy_from_slice(&read);
         }        
 
-        let result = [0u8; 136];
+        let mut result = [0u8; 136];
 
         // execute xorin
-        for idx in 0..4*num_reads {
-            result[idx] = record.inner.buffer_limbs[idx] ^ record.inner.input_limbs[idx];
+        for ((x_xor_y, &x), &y) in result
+            .iter_mut()
+            .zip(record.inner.buffer_limbs.iter())
+            .zip(record.inner.input_limbs.iter())
+        {
+            *x_xor_y = x ^ y;
         }
 
         for (i, word) in result.chunks_exact(4).enumerate() {
