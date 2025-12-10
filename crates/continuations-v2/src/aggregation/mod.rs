@@ -29,10 +29,10 @@ pub use utils::*;
 pub const MAX_NUM_PROOFS: usize = 4;
 
 pub trait AggregationProver<PB: ProverBackendV2> {
-    // Verifying key used to verify the result of agg_prove
+    /// Verifying key used to verify the result of agg_prove
     fn get_vk(&self) -> Arc<MultiStarkVerifyingKeyV2>;
-    // Commit of verifier circuit's cached trace
-    fn get_commit(&self) -> PB::Commitment;
+    /// Commit of verifier circuit's cached trace
+    fn get_cached_commit(&self, is_recursive: bool) -> PB::Commitment;
     fn generate_proving_ctx(
         &self,
         proofs: &[Proof],

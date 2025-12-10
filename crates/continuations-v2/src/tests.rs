@@ -14,10 +14,14 @@ use openvm_rv32im_transpiler::{
 };
 use openvm_stark_backend::interaction::LogUpSecurityParameters;
 use openvm_stark_sdk::{config::setup_tracing_with_log_level, p3_baby_bear::BabyBear};
-use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
-use openvm_transpiler::{FromElf, transpiler::Transpiler};
+use openvm_transpiler::{
+    FromElf, elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler,
+};
 use p3_field::{FieldAlgebra, PrimeField32};
-use stark_backend_v2::{F, StarkEngineV2, SystemParams, poseidon2::sponge::DuplexSponge};
+use stark_backend_v2::{
+    F, StarkEngineV2, SystemParams, keygen::types::MultiStarkVerifyingKeyV2,
+    poseidon2::sponge::DuplexSponge, proof::Proof,
+};
 use tracing::Level;
 
 use crate::aggregation::AggregationProver;
@@ -67,10 +71,14 @@ fn test_rv32im_config() -> Rv32ImConfig {
     }
 }
 
-fn run_leaf_aggregation(log_fib_input: usize) -> Result<()> {
+fn run_leaf_aggregation(log_fib_input: usize) -> Result<(Arc<MultiStarkVerifyingKeyV2>, Proof)> {
     let config = test_rv32im_config();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
     let exe = VmExe::from_elf(
-        build_example_program_at_path(get_programs_dir!(), "fibonacci", &config)?,
+        elf,
         Transpiler::<F>::default()
             .with_extension(Rv32ITranspilerExtension)
             .with_extension(Rv32MTranspilerExtension)
@@ -98,13 +106,14 @@ fn run_leaf_aggregation(log_fib_input: usize) -> Result<()> {
     let leaf_vk = leaf_prover.get_vk();
     let engine = Engine::new(leaf_vk.inner.params);
     engine.verify(&leaf_vk, &leaf_proof)?;
-    Ok(())
+    Ok((leaf_vk, leaf_proof))
 }
 
 #[test]
 fn test_single_segment_leaf_aggregation() -> Result<()> {
     setup_tracing_with_log_level(Level::INFO);
-    run_leaf_aggregation(5)
+    run_leaf_aggregation(5)?;
+    Ok(())
 }
 
 #[test]
@@ -112,7 +121,8 @@ fn test_single_segment_leaf_aggregation() -> Result<()> {
 fn test_two_segments_leaf_aggregation() -> Result<()> {
     // This test is too slow to run on CPU
     setup_tracing_with_log_level(Level::INFO);
-    run_leaf_aggregation(17)
+    run_leaf_aggregation(17)?;
+    Ok(())
 }
 
 #[test]
@@ -133,8 +143,42 @@ fn test_internal_recursive_vk_stabilization() -> Result<()> {
     let test_prover =
         NonRootProver::new::<Engine>(internal_1_prover.get_vk(), INTERNAL_SYSTEM_PARAMS, true);
     assert_eq!(
-        test_prover.get_commit(),
-        test_prover.self_vk_pcs_data.unwrap().commitment
+        test_prover.get_cached_commit(false),
+        test_prover.get_cached_commit(true)
     );
+    Ok(())
+}
+
+#[test]
+#[cfg(feature = "cuda")]
+fn test_internal_recursive_deep_layers() -> Result<()> {
+    // This test is too slow to run on CPU
+    setup_tracing_with_log_level(Level::INFO);
+    let (leaf_vk, leaf_proof) = run_leaf_aggregation(10)?;
+
+    let internal_for_leaf_prover =
+        NonRootProver::new::<Engine>(leaf_vk, INTERNAL_SYSTEM_PARAMS, false);
+    let internal_for_leaf_proof =
+        internal_for_leaf_prover.agg_prove::<Engine>(&[leaf_proof], None, false)?;
+
+    let internal_recursive_prover = NonRootProver::new::<Engine>(
+        internal_for_leaf_prover.get_vk(),
+        INTERNAL_SYSTEM_PARAMS,
+        true,
+    );
+    let mut internal_recursive_proof =
+        internal_recursive_prover.agg_prove::<Engine>(&[internal_for_leaf_proof], None, false)?;
+
+    let vk = internal_recursive_prover.get_vk();
+    let engine = Engine::new(vk.inner.params);
+
+    for _internal_recursive_layer in 1..4 {
+        internal_recursive_proof = internal_recursive_prover.agg_prove::<Engine>(
+            &[internal_recursive_proof],
+            None,
+            true,
+        )?;
+        engine.verify(&vk, &internal_recursive_proof)?;
+    }
     Ok(())
 }
