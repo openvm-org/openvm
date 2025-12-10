@@ -281,8 +281,9 @@ impl RunCmd {
         let output = sdk.execute(exe.clone(), inputs.clone())?;
         println!("Execution output: {output:?}");
 
-        let (output, segments) = sdk.execute_metered(exe, inputs)?;
-        println!("Execution output: {output:?}");
+        // Testing metered execution
+        println!("Testing metered execution");
+        let (public_values, segments) = sdk.execute_metered(exe.clone(), inputs.clone())?;
 
         // let total_instructions: u64 = segments.iter().map(|s| s.num_insns).sum();
         // println!("Number of instructions executed: {total_instructions}");

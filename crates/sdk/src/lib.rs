@@ -370,8 +370,10 @@ where
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
     ) -> Result<(Vec<u8>, Vec<Segment>), SdkError> {
-        let app_prover = self.app_prover(app_exe)?;
 
+        println!("it went inside execute_metered");
+
+        let app_prover = self.app_prover(app_exe)?;
         let vm = app_prover.vm();
         let exe = app_prover.exe();
 

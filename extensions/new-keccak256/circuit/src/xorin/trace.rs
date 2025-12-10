@@ -12,6 +12,12 @@ use crate::xorin::trace::instructions::riscv::RV32_REGISTER_AS;
 use crate::xorin::trace::instructions::riscv::RV32_MEMORY_AS;
 
 use crate::xorin::XorinVmExecutor;
+use crate::xorin::XorinVmFiller;
+use openvm_circuit::system::memory::MemoryAuxColsFactory;
+
+use openvm_stark_backend::{
+    p3_matrix::{dense::RowMajorMatrix}
+};
 
 #[derive(Clone, Copy)]
 pub struct XorinVmMetadata {
@@ -101,7 +107,7 @@ where
         // Safety: length has to be multiple of 4
         // This is enforced by how the guest program calls the xorin opcode
         // Xorin opcode is only called through the keccak update guest program
-        debug_assert!(len % 4 == 0);
+        debug_assert!(len.is_multiple_of(4));
         let num_reads = len.div_ceil(4);
         let record = state
             .ctx 
@@ -187,5 +193,16 @@ where
         state.memory.timestamp = record.inner.timestamp + 105;
 
         Ok(())
+    }
+}
+
+impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
+    fn fill_trace(
+        &self,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        trace_matrix: &mut RowMajorMatrix<F>,
+        rows_used: usize,
+    ) {
+        todo!()
     }
 }
