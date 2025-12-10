@@ -150,9 +150,9 @@ impl MetricDb {
                 if let (Some(ts), Some(current), Some(local_peak), Some(reserved)) =
                     (ts, current, local_peak, reserved)
                 {
-                    let current_gb = current / 1e9;
-                    let local_peak_gb = local_peak / 1e9;
-                    let reserved_gb = reserved / 1e9;
+                    let current_gb = current / f64::from(1 << 30);
+                    let local_peak_gb = local_peak / f64::from(1 << 30);
+                    let reserved_gb = reserved / f64::from(1 << 30);
                     data.push((ts, current_gb, local_peak_gb, reserved_gb));
 
                     let module_name = label_values.get(module_idx).cloned().unwrap_or_default();
