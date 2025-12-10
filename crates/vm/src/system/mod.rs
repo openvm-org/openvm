@@ -32,8 +32,7 @@ use crate::{
         ChipInventoryError, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState,
         ExecutorInventory, ExecutorInventoryError, MatrixRecordArena, PhantomSubExecutor,
         RowMajorMatrixArena, SystemConfig, VmAirWrapper, VmBuilder, VmChipComplex, VmChipWrapper,
-        VmCircuitConfig, VmExecutionConfig, CONST_BLOCK_SIZE, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
-        PUBLIC_VALUES_AIR_ID,
+        VmCircuitConfig, VmExecutionConfig, CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID,
     },
     system::{
         connector::VmConnectorChip,
@@ -147,7 +146,7 @@ pub struct SystemRecords<F> {
 
 pub enum TouchedMemory<F> {
     Persistent(TimestampedEquipartition<F, CHUNK>),
-    Volatile(TimestampedEquipartition<F, CONST_BLOCK_SIZE>),
+    Volatile(TimestampedEquipartition<F, 1>),
 }
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor, From)]

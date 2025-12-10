@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use openvm_circuit::{
-    arch::CONST_BLOCK_SIZE,
     system::memory::{
         persistent::PersistentBoundaryCols, volatile::VolatileBoundaryCols,
         TimestampedEquipartition, TimestampedValues,
@@ -181,7 +180,7 @@ mod tests {
     use std::{collections::HashSet, sync::Arc};
 
     use openvm_circuit::{
-        arch::{testing::MEMORY_BUS, MemoryConfig, ADDR_SPACE_OFFSET, CONST_BLOCK_SIZE},
+        arch::{testing::MEMORY_BUS, MemoryConfig, ADDR_SPACE_OFFSET},
         system::memory::{
             offline_checker::MemoryBus, volatile::VolatileBoundaryChip, TimestampedEquipartition,
             TimestampedValues,
@@ -216,12 +215,11 @@ mod tests {
         let mut distinct_addresses = HashSet::new();
         while distinct_addresses.len() < NUM_ADDRESSES {
             let addr_space = rng.gen_range(0..MAX_ADDRESS_SPACE);
-            let pointer =
-                rng.gen_range(0..((1 << LIMB_BITS) / CONST_BLOCK_SIZE)) * CONST_BLOCK_SIZE;
+            let pointer = rng.gen_range(0..(1 << LIMB_BITS));
             distinct_addresses.insert((addr_space, pointer));
         }
 
-        let mut final_memory = TimestampedEquipartition::<F, CONST_BLOCK_SIZE>::new();
+        let mut final_memory = TimestampedEquipartition::<F, 1>::new();
         for (addr_space, pointer) in distinct_addresses.iter().cloned() {
             let final_data = F::from_canonical_u32(rng.gen_range(0..(1 << LIMB_BITS)));
             let final_clk = rng.gen_range(1..(1 << LIMB_BITS)) as u32;
