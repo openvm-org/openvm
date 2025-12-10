@@ -14,9 +14,10 @@ use openvm_ecc_circuit::CurveConfig;
 use openvm_instructions::PhantomDiscriminant;
 use openvm_pairing_guest::{
     bls12_381::{
-        BLS12_381_ECC_STRUCT_NAME, BLS12_381_MODULUS, BLS12_381_ORDER, BLS12_381_XI_ISIZE,
+        BLS12_381_CURVE_NAME, BLS12_381_ECC_STRUCT_NAME, BLS12_381_MODULUS, BLS12_381_ORDER,
+        BLS12_381_XI_ISIZE,
     },
-    bn254::{BN254_ECC_STRUCT_NAME, BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
+    bn254::{BN254_CURVE_NAME, BN254_ECC_STRUCT_NAME, BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
 };
 use openvm_pairing_transpiler::PairingPhantom;
 use openvm_stark_backend::{config::StarkGenericConfig, engine::StarkEngine, p3_field::Field};
@@ -36,6 +37,7 @@ impl PairingCurve {
         match self {
             PairingCurve::Bn254 => CurveConfig::new(
                 BN254_ECC_STRUCT_NAME.to_string(),
+                BN254_CURVE_NAME.to_string(),
                 BN254_MODULUS.clone(),
                 BN254_ORDER.clone(),
                 BigUint::zero(),
@@ -43,6 +45,7 @@ impl PairingCurve {
             ),
             PairingCurve::Bls12_381 => CurveConfig::new(
                 BLS12_381_ECC_STRUCT_NAME.to_string(),
+                BLS12_381_CURVE_NAME.to_string(),
                 BLS12_381_MODULUS.clone(),
                 BLS12_381_ORDER.clone(),
                 BigUint::zero(),

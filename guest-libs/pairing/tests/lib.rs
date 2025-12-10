@@ -495,8 +495,8 @@ mod bls12_381 {
     };
     use openvm_pairing_guest::{
         bls12_381::{
-            BLS12_381_COMPLEX_STRUCT_NAME, BLS12_381_ECC_STRUCT_NAME, BLS12_381_MODULUS,
-            BLS12_381_ORDER,
+            BLS12_381_COMPLEX_STRUCT_NAME, BLS12_381_CURVE_NAME, BLS12_381_ECC_STRUCT_NAME,
+            BLS12_381_MODULUS, BLS12_381_ORDER,
         },
         halo2curves_shims::bls12_381::Bls12_381,
         pairing::{EvaluatedLine, FinalExp, LineMulMType, MillerStep, MultiMillerLoop},
@@ -541,6 +541,7 @@ mod bls12_381 {
     fn test_bls_ec() -> Result<()> {
         let curve = CurveConfig {
             struct_name: BLS12_381_ECC_STRUCT_NAME.to_string(),
+            curve_name: BLS12_381_CURVE_NAME.to_string(),
             modulus: BLS12_381_MODULUS.clone(),
             scalar: BLS12_381_ORDER.clone(),
             a: BigUint::ZERO,
