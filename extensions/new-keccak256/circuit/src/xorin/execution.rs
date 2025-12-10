@@ -212,7 +212,8 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     let pre_compute: &E2PreCompute<XorinPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<XorinPreCompute>>())
             .borrow();
+    execute_e12_impl::<F, CTX, false>(&pre_compute.data, exec_state);
     exec_state
         .ctx
-        .on_height_change(pre_compute.chip_idx as usize, 1);
+        .on_height_change(pre_compute.chip_idx as usize, 1);   
 }
