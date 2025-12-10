@@ -1,10 +1,9 @@
 //! Prover extension for the GPU backend which still does trace generation on CPU.
 
 use cuda_backend_v2::{
-    transport_air_proving_ctx_to_device,
     BabyBearPoseidon2GpuEngineV2 as GpuBabyBearPoseidon2Engine, GpuBackendV2 as GpuBackend,
 };
-use openvm_algebra_circuit::Rv32ModularHybridBuilder;
+use openvm_algebra_circuit::{cpu_proving_ctx_v1_to_gpu_v2, Rv32ModularHybridBuilder};
 use openvm_circuit::{
     arch::*,
     system::{
@@ -21,7 +20,9 @@ use openvm_cuda_backend::{
 };
 use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
 use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
-use openvm_stark_backend::p3_air::BaseAir;
+use openvm_stark_backend::{
+    p3_air::BaseAir, prover::cpu::CpuBackend as CpuBackendV1, Chip as ChipV1,
+};
 use stark_backend_v2::{prover::AirProvingContextV2 as AirProvingContext, ChipV2 as Chip};
 
 use crate::{
@@ -78,8 +79,8 @@ impl<const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize>
         let width = adapter_width + BaseAir::<F>::width(&self.cpu.inner.expr);
         let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, width);
         seeker.transfer_to_matrix_arena(&mut matrix_arena, layout);
-        let ctx = self.cpu.generate_proving_ctx(matrix_arena);
-        transport_air_proving_ctx_to_device(ctx)
+        let cpu_ctx = ChipV1::<_, CpuBackendV1<SC>>::generate_proving_ctx(&self.cpu, matrix_arena);
+        cpu_proving_ctx_v1_to_gpu_v2(cpu_ctx)
     }
 }
 
