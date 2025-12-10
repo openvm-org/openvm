@@ -60,9 +60,19 @@ where
         VerificationBaseline {
             app_exe_commit: self.app_prover.app_exe_commit(),
             memory_dimensions: self.app_prover.memory_dimensions(),
-            leaf_commit: self.agg_prover.leaf_prover.get_commit(),
-            internal_for_leaf_commit: self.agg_prover.internal_for_leaf_prover.get_commit(),
-            internal_recursive_commit: self.agg_prover.internal_recursive_prover.get_commit(),
+            app_vk_commit: self.agg_prover.leaf_prover.get_cached_commit(false),
+            leaf_vk_commit: self
+                .agg_prover
+                .internal_for_leaf_prover
+                .get_cached_commit(false),
+            internal_for_leaf_vk_commit: self
+                .agg_prover
+                .internal_recursive_prover
+                .get_cached_commit(false),
+            internal_recursive_vk_commit: self
+                .agg_prover
+                .internal_recursive_prover
+                .get_cached_commit(true),
         }
     }
 }

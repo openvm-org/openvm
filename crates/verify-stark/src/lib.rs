@@ -61,9 +61,11 @@ pub fn verify_vm_stark_proof_decoded(
         initial_root,
         final_root,
         internal_flag,
-        leaf_commit,
-        internal_for_leaf_commit,
-        internal_recursive_commit,
+        app_vk_commit,
+        leaf_vk_commit,
+        internal_for_leaf_vk_commit,
+        recursion_flag,
+        internal_recursive_vk_commit,
         ..
     } = proof.inner.public_values[VERIFIER_PVS_AIR_ID]
         .as_slice()
@@ -104,28 +106,48 @@ pub fn verify_vm_stark_proof_decoded(
         return Err(VerifyStarkError::InvalidInternalFlag(internal_flag));
     }
 
-    // Check leaf_commit against expected_commits.
-    if leaf_commit != vk.baseline.leaf_commit {
-        return Err(VerifyStarkError::LeafCommitMismatch {
-            expected: vk.baseline.leaf_commit,
-            actual: leaf_commit,
+    // Check app_vk_commit against expected_commits.
+    if app_vk_commit != vk.baseline.app_vk_commit {
+        return Err(VerifyStarkError::AppVkCommitMismatch {
+            expected: vk.baseline.app_vk_commit,
+            actual: app_vk_commit,
         });
     }
 
-    // Check internal_for_leaf_commit against expected_commits.
-    if internal_for_leaf_commit != vk.baseline.internal_for_leaf_commit {
-        return Err(VerifyStarkError::InternalForLeafCommitMismatch {
-            expected: vk.baseline.internal_for_leaf_commit,
-            actual: internal_for_leaf_commit,
+    // Check leaf_vk_commit against expected_commits.
+    if leaf_vk_commit != vk.baseline.leaf_vk_commit {
+        return Err(VerifyStarkError::LeafVkCommitMismatch {
+            expected: vk.baseline.leaf_vk_commit,
+            actual: leaf_vk_commit,
         });
     }
 
-    // Check internal_for_leaf_commit against expected_commits.
-    if internal_recursive_commit != vk.baseline.internal_recursive_commit {
-        return Err(VerifyStarkError::InternalRecursiveMismatch {
-            expected: vk.baseline.internal_recursive_commit,
-            actual: internal_recursive_commit,
+    // Check internal_for_leaf_vk_commit against expected_commits.
+    if internal_for_leaf_vk_commit != vk.baseline.internal_for_leaf_vk_commit {
+        return Err(VerifyStarkError::InternalForLeafVkCommitMismatch {
+            expected: vk.baseline.internal_for_leaf_vk_commit,
+            actual: internal_for_leaf_vk_commit,
         });
+    }
+
+    // Check that recursion_flag is 1 or 2. If recursion_flag == 1, then there was
+    // only 1 internal recursive layer and internal_recursive_vk_commit should not
+    // be set. Else, check internal_recursive_vk_commit against expected_commits.
+    if recursion_flag == F::ONE {
+        if internal_recursive_vk_commit != [F::ZERO; DIGEST_SIZE] {
+            return Err(VerifyStarkError::InternalRecursiveVkCommitDefined {
+                actual: internal_recursive_vk_commit,
+            });
+        }
+    } else if recursion_flag == F::TWO {
+        if internal_recursive_vk_commit != vk.baseline.internal_recursive_vk_commit {
+            return Err(VerifyStarkError::InternalRecursiveVkCommitMismatch {
+                expected: vk.baseline.internal_recursive_vk_commit,
+                actual: internal_recursive_vk_commit,
+            });
+        }
+    } else {
+        return Err(VerifyStarkError::InvalidRecursionFlag(recursion_flag));
     }
     Ok(())
 }
