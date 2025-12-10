@@ -39,7 +39,7 @@ pub struct NonRootAggregationProver<
     child_vk_pcs_data: CommittedTraceDataV2<PB>,
     circuit: Arc<AggregationCircuit<S>>,
 
-    pub(crate) self_vk_pcs_data: Option<CommittedTraceDataV2<PB>>,
+    self_vk_pcs_data: Option<CommittedTraceDataV2<PB>>,
 }
 
 impl<PB, S, T> AggregationProver<PB> for NonRootAggregationProver<PB, S, T>
@@ -53,8 +53,12 @@ where
         self.vk.clone()
     }
 
-    fn get_commit(&self) -> PB::Commitment {
-        self.child_vk_pcs_data.commitment.clone()
+    fn get_cached_commit(&self, is_recursive: bool) -> PB::Commitment {
+        if is_recursive {
+            self.self_vk_pcs_data.as_ref().unwrap().commitment.clone()
+        } else {
+            self.child_vk_pcs_data.commitment.clone()
+        }
     }
 
     #[instrument(name = "trace_gen", skip_all)]
@@ -66,7 +70,6 @@ where
     ) -> ProvingContextV2<PB> {
         assert!(proofs.len() <= MAX_NUM_PROOFS);
         let (child_vk, child_vk_commit) = if is_recursive {
-            assert!(self.self_vk_pcs_data.is_some());
             (&self.vk, self.self_vk_pcs_data.clone().unwrap())
         } else {
             (&self.child_vk, self.child_vk_pcs_data.clone())

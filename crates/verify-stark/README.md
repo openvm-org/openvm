@@ -22,7 +22,7 @@ The final internal-recursive proof will expose the following public values:
 - `initial_root`: Merkle root of VM memory at the start of app execution
 - `final_root`: Merkle root of VM memory after app execution
 - `internal_flag`: Internal aggregation layer indicator (0, 1, or 2)
-- `leaf_commit`, `internal_for_leaf_commit`, `internal_recursive_commit`: Cached trace commits for the leaf, internal-for-leaf, and internal-recursive verifier circuits respectively
+- `app_vk_commit`, `leaf_vk_commit`, `internal_for_leaf_vk_commit`, `internal_recursive_vk_commit`: Commits to the app, leaf, internal-for-leaf, and internal-recursive vk DAGs respectively via the cached trace commits of their parent verifier circuits
 
 ## Verification Checks
 
@@ -35,7 +35,7 @@ The final internal-recursive STARK proof is verified using the internal-recursiv
 Given a fixed VM and executable, we must certain exposed public values against a set of baseline artifacts (which can be generated ahead of time given the exe and VM, app, and aggregation configs).
 
 - `program_commit`, `initial_root`, and `initial_pc` are hash-compressed and compared against a baseline `app_exe_commit`, which is derived from the `VmConfig`, `VmExe`, `MemoryConfig`, and application `SystemParams`.
-- `leaf_commit`, `internal_for_leaf_commit`, and `internal_recursive_commit` are also compared against a pre-computed baseline
+- `app_vk_commit`, `leaf_vk_commit`, `internal_for_leaf_vk_commit`, and `internal_recursive_vk_commit` are also compared against a pre-computed baseline
 
 **Other Public Values Validation:**
 

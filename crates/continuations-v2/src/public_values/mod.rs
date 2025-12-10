@@ -21,9 +21,9 @@ pub mod verifier;
 #[derive(AlignedBorrow)]
 pub struct RootVerifierPvs<F> {
     pub app_commit: [F; DIGEST_SIZE],
-    pub leaf_commit: [F; DIGEST_SIZE],
-    pub internal_for_leaf_commit: [F; DIGEST_SIZE],
-    pub internal_recursive_commit: [F; DIGEST_SIZE],
+    pub app_vk_commit: [F; DIGEST_SIZE],
+    pub leaf_vk_commit: [F; DIGEST_SIZE],
+    pub internal_for_leaf_vk_commit: [F; DIGEST_SIZE],
 }
 
 pub trait AggNodeTraceGen<PB: ProverBackendV2> {

@@ -20,6 +20,7 @@ use stark_backend_v2::{
 
 use crate::aggregation::AggregationCircuit;
 
+// To use this with CUDA, you will likely need cuda_backend_v2::transport_proving_ctx_to_host
 pub fn debug<S: AggregationSubCircuit>(
     circuit: &AggregationCircuit<S>,
     ctxs: &[(usize, AirProvingContextV2<CpuBackendV2>)],
