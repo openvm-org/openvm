@@ -493,13 +493,7 @@ impl AggregateMetrics {
         if let Some(summary) = summary {
             // Special handling for execute_metered metrics (not aggregated across segments
             // in the app proof case)
-            if metric_name == EXECUTE_METERED_TIME_LABEL
-                && group_name != "leaf"
-                && group_name != "root"
-                && group_name != "halo2_outer"
-                && group_name != "halo2_wrapper"
-                && !group_name.starts_with("internal")
-            {
+            if metric_name == EXECUTE_METERED_TIME_LABEL && is_app_proof_group(group_name) {
                 writeln!(
                     writer,
                     "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
