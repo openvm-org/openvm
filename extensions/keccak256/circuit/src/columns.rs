@@ -1,6 +1,9 @@
 use core::mem::size_of;
 
-use openvm_circuit::system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols};
+use openvm_circuit::{
+    arch::CONST_BLOCK_SIZE,
+    system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
+};
 use openvm_circuit_primitives::utils::assert_array_eq;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
@@ -96,7 +99,7 @@ pub struct KeccakSpongeCols<T> {
 pub struct KeccakMemoryCols<T> {
     pub register_aux: [MemoryReadAuxCols<T>; KECCAK_REGISTER_READS],
     pub absorb_reads: [MemoryReadAuxCols<T>; KECCAK_ABSORB_READS],
-    pub digest_writes: [MemoryWriteAuxCols<T, KECCAK_WORD_SIZE>; KECCAK_DIGEST_WRITES],
+    pub digest_writes: [MemoryWriteAuxCols<T, CONST_BLOCK_SIZE>; KECCAK_DIGEST_WRITES],
     /// The input bytes are batch read in blocks of private constant KECCAK_WORD_SIZE bytes.
     /// However if the input length is not a multiple of KECCAK_WORD_SIZE, we read into
     /// `partial_block` more bytes than we need. On the other hand `block_bytes` expects

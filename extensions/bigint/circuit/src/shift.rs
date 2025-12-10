@@ -18,7 +18,7 @@ use openvm_rv32im_transpiler::ShiftOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
-    common::{bytes_to_u64_array, u64_array_to_bytes},
+    common::{bytes_to_u64_array, u64_array_to_bytes, vm_read_256, vm_write_256},
     Rv32Shift256Executor, INT256_NUM_LIMBS,
 };
 
@@ -138,12 +138,12 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>
     let rs1_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs2_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32);
     let rd_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
-    let rs1 =
-        exec_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
-    let rs2 =
-        exec_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
+    // Read 32 bytes using 8×4-byte reads to avoid access adapters
+    let rs1 = vm_read_256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
+    let rs2 = vm_read_256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
     let rd = OP::compute(rs1, rs2);
-    exec_state.vm_write(RV32_MEMORY_AS, u32::from_le_bytes(rd_ptr), &rd);
+    // Write 32 bytes using 8×4-byte writes to avoid access adapters
+    vm_write_256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rd_ptr), &rd);
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }

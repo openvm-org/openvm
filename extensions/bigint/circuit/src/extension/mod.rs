@@ -32,6 +32,10 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
     prover::cpu::{CpuBackend, CpuDevice},
 };
+use openvm_rv32_adapters::{
+    Rv32HeapAdapterAir, Rv32HeapAdapterExecutor, Rv32HeapAdapterFiller, Rv32HeapBranchAdapterAir,
+    Rv32HeapBranchAdapterExecutor, Rv32HeapBranchAdapterFiller,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::*;

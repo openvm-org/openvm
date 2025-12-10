@@ -1,14 +1,16 @@
 //! WARNING: the order of fields in the structs is important, do not change it
 
 use openvm_circuit::{
-    arch::ExecutionState,
+    arch::{ExecutionState, CONST_BLOCK_SIZE},
     system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 use openvm_circuit_primitives::AlignedBorrow;
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 use openvm_sha256_air::{Sha256DigestCols, Sha256RoundCols};
 
-use super::{SHA256_REGISTER_READS, SHA256_WRITE_SIZE};
+use super::{
+    SHA256_READ_SUBBLOCKS, SHA256_REGISTER_READS, SHA256_WRITE_SIZE, SHA256_WRITE_SUBBLOCKS,
+};
 
 /// the first 16 rows of every SHA256 block will be of type Sha256VmRoundCols and the last row will
 /// be of type Sha256VmDigestCols
@@ -17,7 +19,7 @@ use super::{SHA256_REGISTER_READS, SHA256_WRITE_SIZE};
 pub struct Sha256VmRoundCols<T> {
     pub control: Sha256VmControlCols<T>,
     pub inner: Sha256RoundCols<T>,
-    pub read_aux: MemoryReadAuxCols<T>,
+    pub read_aux: [MemoryReadAuxCols<T>; SHA256_READ_SUBBLOCKS],
 }
 
 #[repr(C)]
@@ -36,7 +38,7 @@ pub struct Sha256VmDigestCols<T> {
     pub src_ptr: [T; RV32_REGISTER_NUM_LIMBS],
     pub len_data: [T; RV32_REGISTER_NUM_LIMBS],
     pub register_reads_aux: [MemoryReadAuxCols<T>; SHA256_REGISTER_READS],
-    pub writes_aux: MemoryWriteAuxCols<T, SHA256_WRITE_SIZE>,
+    pub writes_aux: [MemoryWriteAuxCols<T, CONST_BLOCK_SIZE>; SHA256_WRITE_SUBBLOCKS],
 }
 
 /// These are the columns that are used on both round and digest rows

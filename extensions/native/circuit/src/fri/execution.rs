@@ -9,7 +9,9 @@ use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_native_compiler::conversion::AS;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{elem_to_ext, FriReducedOpeningExecutor};
+use super::{
+    elem_to_ext, FriReducedOpeningExecutor, FRI_READ_SUBBLOCKS, FRI_WRITE_SUBBLOCKS,
+};
 use crate::field_extension::{FieldExtension, EXT_DEG};
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -225,7 +227,14 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
             exec_state.vm_read(AS::Native as u32, a_ptr_i)
         };
         let b_ptr_i = (b_ptr + F::from_canonical_usize(EXT_DEG * i)).as_canonical_u32();
-        let b = exec_state.vm_read(AS::Native as u32, b_ptr_i);
+        let mut b = [F::ZERO; EXT_DEG];
+        for sub in 0..FRI_READ_SUBBLOCKS {
+            let chunk: [F; CONST_BLOCK_SIZE] = exec_state.vm_read(
+                AS::Native as u32,
+                b_ptr_i + (sub * CONST_BLOCK_SIZE) as u32,
+            );
+            b[sub * CONST_BLOCK_SIZE..][..CONST_BLOCK_SIZE].copy_from_slice(&chunk);
+        }
 
         as_and_bs.push((a, b));
     }
@@ -239,7 +248,15 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
         );
     }
 
-    exec_state.vm_write(AS::Native as u32, pre_compute.result_ptr, &result);
+    for sub in 0..FRI_WRITE_SUBBLOCKS {
+        let chunk: [F; CONST_BLOCK_SIZE] =
+            core::array::from_fn(|i| result[sub * CONST_BLOCK_SIZE + i]);
+        exec_state.vm_write(
+            AS::Native as u32,
+            pre_compute.result_ptr + (sub * CONST_BLOCK_SIZE) as u32,
+            &chunk,
+        );
+    }
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));

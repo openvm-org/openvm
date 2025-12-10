@@ -6,7 +6,7 @@ use std::{
 
 use itertools::zip_eq;
 use openvm_circuit::{
-    arch::*,
+    arch::{self, *},
     system::{
         memory::{
             offline_checker::{
@@ -38,6 +38,10 @@ use crate::{
     utils::const_max,
 };
 
+const_assert_eq!(EXT_DEG % arch::CONST_BLOCK_SIZE, 0);
+const FRI_READ_SUBBLOCKS: usize = EXT_DEG / arch::CONST_BLOCK_SIZE;
+const FRI_WRITE_SUBBLOCKS: usize = EXT_DEG / arch::CONST_BLOCK_SIZE;
+
 mod execution;
 
 #[cfg(feature = "cuda")]
@@ -56,10 +60,9 @@ struct WorkloadCols<T> {
     a_aux: MemoryWriteAuxCols<T, 1>,
     /// The value of `b` read.
     b: [T; EXT_DEG],
-    b_aux: MemoryReadAuxCols<T>,
+    b_aux: [MemoryReadAuxCols<T>; FRI_READ_SUBBLOCKS],
 }
 const WL_WIDTH: usize = WorkloadCols::<u8>::width();
-const_assert_eq!(WL_WIDTH, 27);
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
@@ -99,7 +102,7 @@ struct Instruction2Cols<T> {
     alpha_aux: MemoryReadAuxCols<T>,
 
     result_ptr: T,
-    result_aux: MemoryWriteAuxCols<T, EXT_DEG>,
+    result_aux: [MemoryWriteAuxCols<T, { arch::CONST_BLOCK_SIZE }>; FRI_WRITE_SUBBLOCKS],
 
     hint_id_ptr: T,
 
@@ -111,7 +114,6 @@ struct Instruction2Cols<T> {
     write_a_x_is_first: T,
 }
 const INS_2_WIDTH: usize = Instruction2Cols::<u8>::width();
-const_assert_eq!(INS_2_WIDTH, 26);
 const_assert_eq!(
     offset_of!(WorkloadCols<u8>, prefix) + offset_of!(PrefixCols<u8>, general),
     offset_of!(Instruction2Cols<u8>, general)
@@ -126,7 +128,6 @@ const_assert_eq!(
 );
 
 pub const OVERALL_WIDTH: usize = const_max(const_max(WL_WIDTH, INS_1_WIDTH), INS_2_WIDTH);
-const_assert_eq!(OVERALL_WIDTH, 27);
 
 /// Every row starts with these columns.
 #[repr(C)]
@@ -312,14 +313,35 @@ impl FriReducedOpeningAir {
             )
             .eval(builder, local_data.write_a * multiplicity);
         // read b
+        let first_b_chunk: [AB::Var; arch::CONST_BLOCK_SIZE] =
+            core::array::from_fn(|i| local.b[i]);
         self.memory_bridge
             .read(
                 MemoryAddress::new(native_as.clone(), next.data.b_ptr),
-                local.b,
+                first_b_chunk,
                 start_timestamp + ptr_reads + AB::Expr::ONE,
-                &local.b_aux,
+                &local.b_aux[0],
             )
-            .eval(builder, multiplicity);
+            .eval(builder, multiplicity.clone());
+        for sub in 1..FRI_READ_SUBBLOCKS {
+            let chunk: [AB::Var; arch::CONST_BLOCK_SIZE] = core::array::from_fn(|i| {
+                local.b[sub * arch::CONST_BLOCK_SIZE + i]
+            });
+            self.memory_bridge
+                .read(
+                    MemoryAddress::new(
+                        native_as.clone(),
+                        next.data.b_ptr
+                            + AB::Expr::from_canonical_usize(sub * arch::CONST_BLOCK_SIZE),
+                    ),
+                    chunk,
+                    start_timestamp
+                        + ptr_reads
+                        + AB::Expr::from_canonical_usize(sub + 1),
+                    &local.b_aux[sub],
+                )
+                .eval(builder, multiplicity.clone());
+        }
         {
             let mut when_transition = builder.when_transition();
             let mut builder = when_transition.when(local.prefix.general.is_workload_row);
@@ -489,11 +511,29 @@ impl FriReducedOpeningAir {
         self.memory_bridge
             .write(
                 MemoryAddress::new(native_as.clone(), next.result_ptr),
-                local_data.result,
-                write_timestamp,
-                &next.result_aux,
+                core::array::from_fn(|i| local_data.result[i]),
+                write_timestamp.clone(),
+                &next.result_aux[0],
             )
             .eval(builder, multiplicity.clone());
+        for sub in 1..FRI_WRITE_SUBBLOCKS {
+            let chunk: [AB::Var; arch::CONST_BLOCK_SIZE] = core::array::from_fn(|i| {
+                local_data.result[sub * arch::CONST_BLOCK_SIZE + i]
+            });
+            self.memory_bridge
+                .write(
+                    MemoryAddress::new(
+                        native_as.clone(),
+                        next.result_ptr
+                            + AB::Expr::from_canonical_usize(sub * arch::CONST_BLOCK_SIZE),
+                    ),
+                    chunk,
+                    write_timestamp.clone()
+                        + AB::Expr::from_canonical_usize(sub),
+                    &next.result_aux[sub],
+                )
+                .eval(builder, multiplicity.clone());
+        }
     }
 
     fn eval_instruction2_row<AB: InteractionBuilder>(
@@ -600,7 +640,7 @@ pub struct FriReducedOpeningCommonRecord<F> {
     pub alpha_aux: MemoryReadAuxRecord,
 
     pub result_ptr: F,
-    pub result_aux: MemoryWriteAuxRecord<F, EXT_DEG>,
+    pub result_aux: [MemoryWriteAuxRecord<F, { arch::CONST_BLOCK_SIZE }>; FRI_WRITE_SUBBLOCKS],
 
     pub hint_id_ptr: F,
 
@@ -619,7 +659,7 @@ pub struct FriReducedOpeningWorkloadRowRecord<F> {
     // b can be computed from a, alpha, result, and previous result:
     // b = result + a - prev_result * alpha
     pub result: [F; EXT_DEG],
-    pub b_aux: MemoryReadAuxRecord,
+    pub b_aux: [MemoryReadAuxRecord; FRI_READ_SUBBLOCKS],
 }
 
 // NOTE: Order for fields is important here to prevent overwriting.
@@ -855,11 +895,16 @@ where
                 )
             };
             let b_ptr_i = record.common.b_ptr + (EXT_DEG * i) as u32;
-            let b = tracing_read_native::<F, EXT_DEG>(
-                state.memory,
-                b_ptr_i,
-                &mut workload_row.b_aux.prev_timestamp,
-            );
+            let mut b = [F::ZERO; EXT_DEG];
+            for sub in 0..FRI_READ_SUBBLOCKS {
+                let chunk = tracing_read_native::<F, { arch::CONST_BLOCK_SIZE }>(
+                    state.memory,
+                    b_ptr_i + (sub * arch::CONST_BLOCK_SIZE) as u32,
+                    &mut workload_row.b_aux[sub].prev_timestamp,
+                );
+                b[sub * arch::CONST_BLOCK_SIZE..][..arch::CONST_BLOCK_SIZE]
+                    .copy_from_slice(&chunk);
+            }
 
             as_and_bs.push((a, b));
         }
@@ -878,13 +923,17 @@ where
         }
 
         let result_ptr = e.as_canonical_u32();
-        tracing_write_native(
-            state.memory,
-            result_ptr,
-            result,
-            &mut record.common.result_aux.prev_timestamp,
-            &mut record.common.result_aux.prev_data,
-        );
+        for sub in 0..FRI_WRITE_SUBBLOCKS {
+            let chunk: [F; arch::CONST_BLOCK_SIZE] =
+                core::array::from_fn(|i| result[sub * arch::CONST_BLOCK_SIZE + i]);
+            tracing_write_native(
+                state.memory,
+                result_ptr + (sub * arch::CONST_BLOCK_SIZE) as u32,
+                chunk,
+                &mut record.common.result_aux[sub].prev_timestamp,
+                &mut record.common.result_aux[sub].prev_data,
+            );
+        }
         record.common.result_ptr = e;
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
@@ -962,13 +1011,15 @@ impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
 
                 cols.hint_id_ptr = record.common.hint_id_ptr;
 
-                cols.result_aux
-                    .set_prev_data(record.common.result_aux.prev_data);
-                mem_helper.fill(
-                    record.common.result_aux.prev_timestamp,
-                    timestamp + 5 + 2 * length as u32,
-                    cols.result_aux.as_mut(),
-                );
+                for sub in 0..FRI_WRITE_SUBBLOCKS {
+                    cols.result_aux[sub]
+                        .set_prev_data(record.common.result_aux[sub].prev_data);
+                    mem_helper.fill(
+                        record.common.result_aux[sub].prev_timestamp,
+                        timestamp + 5 + 2 * length as u32 + sub as u32,
+                        cols.result_aux[sub].as_mut(),
+                    );
+                }
                 cols.result_ptr = record.common.result_ptr;
 
                 mem_helper.fill(
@@ -1058,11 +1109,13 @@ impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
                 let timestamp = timestamp + ((length - i) * 2) as u32;
 
                 // fill in reverse order
-                mem_helper.fill(
-                    workload_row.b_aux.prev_timestamp,
-                    timestamp + 4,
-                    cols.b_aux.as_mut(),
-                );
+                for sub in 0..FRI_READ_SUBBLOCKS {
+                    mem_helper.fill(
+                        workload_row.b_aux[sub].prev_timestamp,
+                        timestamp + 4 + sub as u32,
+                        cols.b_aux[sub].as_mut(),
+                    );
+                }
 
                 // We temporarily store the result here
                 // the correct value of b is computed during the serial pass below

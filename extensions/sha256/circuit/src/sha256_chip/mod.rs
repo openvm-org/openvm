@@ -33,6 +33,10 @@ const SHA256_REGISTER_READS: usize = 3;
 const SHA256_READ_SIZE: usize = 16;
 /// Number of cells to write in a single memory access
 const SHA256_WRITE_SIZE: usize = 32;
+/// Number of subreads per row (split into CONST_BLOCK_SIZE chunks)
+pub const SHA256_READ_SUBBLOCKS: usize = SHA256_READ_SIZE / CONST_BLOCK_SIZE;
+/// Number of subwrites to emit for the digest (split into CONST_BLOCK_SIZE chunks)
+pub const SHA256_WRITE_SUBBLOCKS: usize = SHA256_WRITE_SIZE / CONST_BLOCK_SIZE;
 /// Number of rv32 cells read in a SHA256 block
 pub const SHA256_BLOCK_CELLS: usize = SHA256_BLOCK_BITS / RV32_CELL_BITS;
 /// Number of rows we will do a read on for each SHA256 block
