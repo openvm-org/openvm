@@ -145,7 +145,6 @@ impl XorinVmAir {
         start_read_timestamp: AB::Expr,
         input_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>; 34],
         buffer_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>; 34],
-        buffer_bytes_write_aux_cols: &[MemoryWriteAuxCols<AB::Var, 4>; 34],
     ) -> AB::Expr {
         let mut timestamp = start_read_timestamp;
 
@@ -208,11 +207,43 @@ impl XorinVmAir {
             timestamp += AB::Expr::ONE;
         }
 
+        timestamp
+    }
+
+    pub fn constrain_xor<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB, 
+        local: &XorinVmCols<AB::Var>
+    ) {
+        let buffer_bytes = local.sponge.preimage_buffer_bytes;
+        let input_bytes = local.sponge.input_bytes;
+        let result_bytes = local.sponge.postimage_buffer_bytes;
+        let padding_bytes = local.sponge.is_padding_bytes;
+
+        for (x, y, x_xor_y, is_padding) in izip!(
+            buffer_bytes,
+            input_bytes,
+            result_bytes,
+            padding_bytes
+        )
+        {
+            self.bitwise_lookup_bus.send_xor(x, y, x_xor_y).eval(builder, is_padding);
+        }
+    }
+
+    pub fn constrain_output_write<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        local: &XorinVmCols<AB::Var>,
+        start_write_timestamp: AB::Expr,
+        mem_aux: &[MemoryWriteAuxCols<AB::Var, 4>; 34]
+    ) {
+        let mut timestamp = start_write_timestamp;
         // Constrain write of buffer bytes
         for (i, (input, is_padding, mem_aux)) in izip!(
             local.sponge.postimage_buffer_bytes.chunks_exact(4),
             local.sponge.is_padding_bytes,
-            buffer_bytes_write_aux_cols
+            mem_aux
         )
         .enumerate()
         {
@@ -234,7 +265,5 @@ impl XorinVmAir {
 
             timestamp += AB::Expr::ONE;
         }
-
-        timestamp
     }
 }
