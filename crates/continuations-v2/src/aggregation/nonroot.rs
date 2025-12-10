@@ -114,6 +114,8 @@ where
             trace_heights_tracing_info(&ctx.per_trace, &self.circuit.airs());
         }
         let engine = E::new(self.pk.params);
+        #[cfg(debug_assertions)]
+        crate::aggregation::debug_constraints(&self.circuit, &ctx.per_trace, &engine);
         let proof = engine.prove(
             &engine.device().transport_pk_to_device(self.pk.as_ref()),
             ctx,

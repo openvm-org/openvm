@@ -14,38 +14,50 @@ use openvm_stark_sdk::{
 };
 use recursion_circuit::system::AggregationSubCircuit;
 use stark_backend_v2::{
-    F,
-    prover::{AirProvingContextV2, CpuBackendV2, ProverBackendV2, StridedColMajorMatrixView},
+    F, StarkWhirEngine,
+    prover::{
+        AirProvingContextV2, ColMajorMatrix, DeviceDataTransporterV2, ProverBackendV2,
+        StridedColMajorMatrixView,
+    },
 };
 
 use crate::aggregation::AggregationCircuit;
 
-// To use this with CUDA, you will likely need cuda_backend_v2::transport_proving_ctx_to_host
-pub fn debug<S: AggregationSubCircuit>(
+pub fn debug_constraints<S, E>(
     circuit: &AggregationCircuit<S>,
-    ctxs: &[(usize, AirProvingContextV2<CpuBackendV2>)],
-) {
-    let transpose = |mat: StridedColMajorMatrixView<F>| Arc::new(mat.to_row_major_matrix());
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    ctxs: &[(usize, AirProvingContextV2<E::PB>)],
+    engine: &E,
+) where
+    S: AggregationSubCircuit,
+    E: StarkWhirEngine,
+{
+    let device = engine.device();
+    let transpose = |mat: ColMajorMatrix<F>| {
+        Arc::new(StridedColMajorMatrixView::from(mat.as_view()).to_row_major_matrix())
+    };
+    let cpu_engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let inputs = ctxs
         .iter()
-        .map(|(_, ctx)| AirProofRawInput {
-            cached_mains: ctx
-                .cached_mains
-                .iter()
-                .map(|cd| transpose(cd.data.mat_view(0)))
-                .collect_vec(),
-            common_main: Some(transpose(ctx.common_main.as_view().into())),
-            public_values: ctx.public_values.clone(),
+        .map(|(_, ctx)| {
+            let common_main = device.transport_matrix_from_device_to_host(&ctx.common_main);
+            AirProofRawInput {
+                cached_mains: ctx
+                    .cached_mains
+                    .iter()
+                    .map(|cd| transpose(device.transport_matrix_from_device_to_host(&cd.trace)))
+                    .collect_vec(),
+                common_main: Some(transpose(common_main)),
+                public_values: ctx.public_values.clone(),
+            }
         })
         .collect_vec();
-    let mut keygen_builder = engine.keygen_builder();
+    let mut keygen_builder = cpu_engine.keygen_builder();
     let airs = circuit.airs();
     for air in &airs {
         keygen_builder.add_air(air.clone());
     }
     trace_heights_tracing_info(ctxs, &airs);
-    engine.debug(&airs, &keygen_builder.generate_pk().per_air, &inputs);
+    cpu_engine.debug(&airs, &keygen_builder.generate_pk().per_air, &inputs);
 }
 
 pub(crate) fn trace_heights_tracing_info<PB: ProverBackendV2>(
