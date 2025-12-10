@@ -6,6 +6,9 @@ use revm::{
     Evm,
 };
 
+// Pull in the transpiler-generated intrinsic implementations (moduli/ecc setup)
+openvm::init!();
+
 const BYTES: &str = include_str!("snailtracer.hex");
 
 fn main() {
