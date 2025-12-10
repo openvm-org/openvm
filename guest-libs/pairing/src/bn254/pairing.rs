@@ -21,7 +21,7 @@ use {
     core::mem::MaybeUninit,
     openvm_pairing_guest::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
     openvm_platform::custom_insn_r,
-    openvm_rv32im_guest::hint_buffer_u32,
+    openvm_rv32im_guest::hint_buffer_chunked,
 };
 
 use super::{Bn254, Fp, Fp12, Fp2};
@@ -314,7 +314,7 @@ impl PairingCheck for Bn254 {
         }
         #[cfg(target_os = "zkvm")]
         {
-            let hint = MaybeUninit::<(Fp12, Fp12)>::uninit();
+            let mut hint = MaybeUninit::<(Fp12, Fp12)>::uninit();
             // We do not rely on the slice P's memory layout since rust does not guarantee it across
             // compiler versions.
             let p_fat_ptr = (P.as_ptr() as u32, P.len() as u32);
@@ -328,8 +328,8 @@ impl PairingCheck for Bn254 {
                     rs1 = In &p_fat_ptr,
                     rs2 = In &q_fat_ptr
                 );
-                let ptr = hint.as_ptr() as *const u8;
-                hint_buffer_u32!(ptr, (32 * 12 * 2) / 4);
+                let ptr = hint.as_mut_ptr() as *mut u8;
+                hint_buffer_chunked(ptr, (32 * 12 * 2) / 4 as usize);
                 hint.assume_init()
             }
         }

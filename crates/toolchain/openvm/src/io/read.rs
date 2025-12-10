@@ -2,7 +2,7 @@ use core::mem::MaybeUninit;
 
 use openvm_platform::WORD_SIZE;
 #[cfg(target_os = "zkvm")]
-use openvm_rv32im_guest::hint_buffer_u32;
+use openvm_rv32im_guest::hint_buffer_chunked;
 
 use super::hint_store_word;
 use crate::serde::WordRead;
@@ -31,7 +31,7 @@ impl WordRead for Reader {
         let num_words = words.len();
         if let Some(new_remaining) = self.bytes_remaining.checked_sub(num_words * WORD_SIZE) {
             #[cfg(target_os = "zkvm")]
-            hint_buffer_u32!(words.as_mut_ptr(), words.len());
+            hint_buffer_chunked(words.as_mut_ptr() as *mut u8, words.len());
             #[cfg(not(target_os = "zkvm"))]
             {
                 for w in words.iter_mut() {
@@ -51,7 +51,7 @@ impl WordRead for Reader {
         }
         let mut num_padded_bytes = bytes.len();
         #[cfg(target_os = "zkvm")]
-        hint_buffer_u32!(bytes as *mut [u8] as *mut u32, num_padded_bytes / WORD_SIZE);
+        hint_buffer_chunked(bytes.as_mut_ptr(), num_padded_bytes / WORD_SIZE);
         #[cfg(not(target_os = "zkvm"))]
         {
             let mut words = bytes.chunks_exact_mut(WORD_SIZE);
