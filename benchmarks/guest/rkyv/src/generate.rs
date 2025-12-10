@@ -83,7 +83,7 @@ impl<T: Generate> Generate for Option<T> {
 }
 
 pub fn generate_vec<R: Rng, T: Generate>(rng: &mut R, range: ops::Range<usize>) -> Vec<T> {
-    let len = rng.random_range(range);
+    let len = rng.gen_range(range);
     let mut result = Vec::with_capacity(len);
     for _ in 0..len {
         result.push(T::generate(rng));
