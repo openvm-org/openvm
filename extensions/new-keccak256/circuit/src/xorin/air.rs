@@ -44,6 +44,7 @@ impl<F> BaseAir<F> for XorinVmAir {
 }
 
 impl<AB: InteractionBuilder> Air<AB> for XorinVmAir {
+    // Increases timestamp by 105
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
@@ -61,6 +62,7 @@ impl<AB: InteractionBuilder> Air<AB> for XorinVmAir {
 }
 
 impl XorinVmAir {
+    // Increases timestamp by 3
     #[inline]
     pub fn eval_instruction<AB: InteractionBuilder>(
         &self,
@@ -105,6 +107,7 @@ impl XorinVmAir {
         let input_data = instruction.input_limbs.map(Into::into);
         let len_data = instruction.input_limbs.map(Into::into);
 
+        // Increases timestamp by 3
         for (ptr, value, aux) in izip!(
             [buffer_ptr, input_ptr, len_ptr],
             [buffer_data, input_data, len_data],
@@ -144,6 +147,7 @@ impl XorinVmAir {
         timestamp
     }
 
+    // Increases timestamp by 2 * 34 = 68
     #[inline]
     pub fn constrain_input_read<AB: InteractionBuilder>(
         &self,
@@ -161,6 +165,7 @@ impl XorinVmAir {
         }
 
         // Constrain read of input_bytes
+        // Timestamp increases by exactly (136/4) = 34
         for (i, (input, is_padding, mem_aux)) in izip!(
             local.sponge.input_bytes.chunks_exact(4),
             local.sponge.is_padding_bytes,
@@ -182,12 +187,13 @@ impl XorinVmAir {
                     timestamp.clone(),
                     mem_aux,
                 )
-                .eval(builder, is_padding);
+                .eval(builder, not(is_padding));
 
             timestamp += AB::Expr::ONE;
         }
 
         // Constrain read of buffer bytes
+        // Timestamp increases by exactly (136/4) = 34
         for (i, (input, is_padding, mem_aux)) in izip!(
             local.sponge.preimage_buffer_bytes.chunks_exact(4),
             local.sponge.is_padding_bytes,
@@ -209,7 +215,7 @@ impl XorinVmAir {
                     timestamp.clone(),
                     mem_aux,
                 )
-                .eval(builder, is_padding);
+                .eval(builder, not(is_padding));
 
             timestamp += AB::Expr::ONE;
         }
@@ -238,6 +244,7 @@ impl XorinVmAir {
         }
     }
 
+    // Increases timestamp by 34
     pub fn constrain_output_write<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
@@ -268,7 +275,7 @@ impl XorinVmAir {
                     timestamp.clone(),
                     mem_aux,
                 )
-                .eval(builder, is_padding);
+                .eval(builder, not(is_padding));
 
             timestamp += AB::Expr::ONE;
         }
