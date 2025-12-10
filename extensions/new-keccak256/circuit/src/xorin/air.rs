@@ -46,10 +46,17 @@ impl<F> BaseAir<F> for XorinVmAir {
 impl<AB: InteractionBuilder> Air<AB> for XorinVmAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
 
+        let local = main.row_slice(0);
         let local: &XorinVmCols<AB::Var> = (*local).borrow();
-        let next: &XorinVmCols<AB::Var> = (*next).borrow();
+
+        let mem = &local.mem_oc;
+
+        let start_read_timestamp = self.eval_instruction(builder, local, &mem.register_aux_cols);
+
+        let start_write_timestamp = self.constrain_input_read(builder, local, start_read_timestamp, &mem.input_bytes_read_aux_cols, &mem.buffer_bytes_read_aux_cols);
+
+        self.constrain_output_write(builder, local, start_write_timestamp, &mem.buffer_bytes_write_aux_cols);
     }
 }
 
@@ -90,7 +97,7 @@ impl XorinVmAir {
                 ExecutionState::new(instruction.pc, instruction.start_timestamp),
                 timestamp_change,
             )
-            .eval(builder, should_receive.clone());
+            .eval(builder, should_receive);
 
         let mut timestamp: AB::Expr = instruction.start_timestamp.into();
 
