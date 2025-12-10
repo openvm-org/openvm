@@ -1,19 +1,28 @@
 use std::{array::from_fn, borrow::Borrow, iter::zip};
-use openvm_circuit::arch::ExecutionBridge;
-use openvm_circuit::system::memory::offline_checker::MemoryBridge;
-use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
-use openvm_instructions::riscv::RV32_MEMORY_AS;
-use openvm_stark_backend::p3_matrix::Matrix;
-use openvm_stark_backend::rap::BaseAirWithPublicValues;
-use openvm_stark_backend::rap::PartitionedBaseAir;
-use openvm_stark_backend::p3_air::BaseAir;
-use openvm_stark_backend::p3_air::Air;
-use openvm_stark_backend::interaction::InteractionBuilder;
 
-use crate::xorin::columns::NUM_XORIN_VM_COLS;
-use crate::xorin::columns::XorinVmCols;
-use openvm_circuit::system::memory::offline_checker::MemoryReadAuxCols;
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use itertools::{izip, Itertools};
+use openvm_circuit::{
+    arch::{ExecutionBridge, ExecutionState},
+    system::memory::{
+        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        MemoryAddress,
+    },
+};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::BitwiseOperationLookupBus,
+    utils::{not, select},
+};
+use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS};
+use openvm_new_keccak256_transpiler::Rv32NewKeccakOpcode;
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    p3_air::{Air, BaseAir},
+    p3_field::FieldAlgebra,
+    p3_matrix::Matrix,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
+
+use crate::xorin::columns::{XorinVmCols, NUM_XORIN_VM_COLS};
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct XorinVmAir {
@@ -41,8 +50,6 @@ impl<AB: InteractionBuilder> Air<AB> for XorinVmAir {
 
         let local: &XorinVmCols<AB::Var> = (*local).borrow();
         let next: &XorinVmCols<AB::Var> = (*next).borrow();
-
-
     }
 }
 
@@ -53,38 +60,40 @@ impl XorinVmAir {
         builder: &mut AB,
         local: &XorinVmCols<AB::Var>,
         register_aux: &[MemoryReadAuxCols<AB::Var>; 3],
-    ) -> AB::Expr { // returns start_read_timestamp
+    ) -> AB::Expr {
+        // returns start_read_timestamp
         let instruction = local.instruction;
         let should_receive = local.instruction.is_enabled;
 
         let [buffer_ptr, input_ptr, len_ptr] = [
             instruction.buffer_ptr,
             instruction.input_ptr,
-            instruction.len_ptr
+            instruction.len_ptr,
         ];
 
         let reg_addr_sp = AB::F::ONE;
-        
+
         // todo: fill this in
-        let timestamp_change = ;
+        let timestamp_change =
+            local.instruction.len + local.instruction.len + local.instruction.len;
 
         self.execution_bridge
             .execute_and_increment_pc(
-                ::Expr::from_canonical_usize(Rv32NewKeccakOpcode::KECCAK256 as usize + self.offset),
+                AB::Expr::from_canonical_usize(Rv32NewKeccakOpcode::XORIN as usize + self.offset),
                 [
                     buffer_ptr.into(),
                     input_ptr.into(),
                     len_ptr.into(),
                     reg_addr_sp.into(),
-                    AB::Expr::from_canonical_u32(RV32_MEMORY_AS)
+                    AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
                 ],
                 ExecutionState::new(instruction.pc, instruction.start_timestamp),
-                timestamp_change
+                timestamp_change,
             )
             .eval(builder, should_receive.clone());
 
-        let mut timestamp = AB::Expr = instruction.start_timestamp.into();
-        
+        let mut timestamp: AB::Expr = instruction.start_timestamp.into();
+
         let buffer_data = instruction.buffer_limbs.map(Into::into);
         let input_data = instruction.input_limbs.map(Into::into);
         let len_data = instruction.input_limbs.map(Into::into);
@@ -123,6 +132,107 @@ impl XorinVmAir {
             self.bitwise_lookup_bus
                 .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
                 .eval(builder, should_receive.clone());
+        }
+
+        timestamp
+    }
+
+    #[inline]
+    pub fn constrain_input_read<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        local: &XorinVmCols<AB::Var>,
+        start_read_timestamp: AB::Expr,
+        input_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>; 34],
+        buffer_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>; 34],
+        buffer_bytes_write_aux_cols: &[MemoryWriteAuxCols<AB::Var, 4>; 34],
+    ) -> AB::Expr {
+        let mut timestamp = start_read_timestamp;
+
+        // Constrain that is_padding_bytes is boolean
+        for is_padding in local.sponge.is_padding_bytes {
+            builder.assert_bool(is_padding);
+        }
+
+        // Constrain read of input_bytes
+        for (i, (input, is_padding, mem_aux)) in izip!(
+            local.sponge.input_bytes.chunks_exact(4),
+            local.sponge.is_padding_bytes,
+            input_bytes_read_aux_cols
+        )
+        .enumerate()
+        {
+            let ptr = local.instruction.input + AB::F::from_canonical_usize(i * 4);
+
+            self.memory_bridge
+                .read(
+                    MemoryAddress::new(AB::Expr::from_canonical_u32(RV32_MEMORY_AS), ptr),
+                    [
+                        input[0].into(),
+                        input[1].into(),
+                        input[2].into(),
+                        input[3].into(),
+                    ],
+                    timestamp.clone(),
+                    mem_aux,
+                )
+                .eval(builder, is_padding);
+
+            timestamp += AB::Expr::ONE;
+        }
+
+        // Constrain read of buffer bytes
+        for (i, (input, is_padding, mem_aux)) in izip!(
+            local.sponge.preimage_buffer_bytes.chunks_exact(4),
+            local.sponge.is_padding_bytes,
+            buffer_bytes_read_aux_cols
+        )
+        .enumerate()
+        {
+            let ptr = local.instruction.buffer + AB::F::from_canonical_usize(i * 4);
+
+            self.memory_bridge
+                .read(
+                    MemoryAddress::new(AB::Expr::from_canonical_u32(RV32_MEMORY_AS), ptr),
+                    [
+                        input[0].into(),
+                        input[1].into(),
+                        input[2].into(),
+                        input[3].into(),
+                    ],
+                    timestamp.clone(),
+                    mem_aux,
+                )
+                .eval(builder, is_padding);
+
+            timestamp += AB::Expr::ONE;
+        }
+
+        // Constrain write of buffer bytes
+        for (i, (input, is_padding, mem_aux)) in izip!(
+            local.sponge.postimage_buffer_bytes.chunks_exact(4),
+            local.sponge.is_padding_bytes,
+            buffer_bytes_write_aux_cols
+        )
+        .enumerate()
+        {
+            let ptr = local.instruction.buffer + AB::F::from_canonical_usize(i * 4);
+
+            self.memory_bridge
+                .write(
+                    MemoryAddress::new(AB::Expr::from_canonical_u32(RV32_MEMORY_AS), ptr),
+                    [
+                        input[0].into(),
+                        input[1].into(),
+                        input[2].into(),
+                        input[3].into(),
+                    ],
+                    timestamp.clone(),
+                    mem_aux,
+                )
+                .eval(builder, is_padding);
+
+            timestamp += AB::Expr::ONE;
         }
 
         timestamp

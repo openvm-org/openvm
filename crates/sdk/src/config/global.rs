@@ -16,13 +16,12 @@ use openvm_ecc_circuit::{
     SECP256K1_CONFIG,
 };
 use openvm_ecc_transpiler::EccTranspilerExtension;
-use openvm_new_keccak256_circuit::{Keccak256, Keccak256CpuProverExt};
-use openvm_new_keccak256_circuit::Keccak256Executor;
-use openvm_new_keccak256_transpiler::NewKeccakTranspilerExtension;
 use openvm_native_circuit::{
     CastFExtension, CastFExtensionExecutor, Native, NativeCpuProverExt, NativeExecutor,
 };
 use openvm_native_transpiler::LongFormTranspilerExtension;
+use openvm_new_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
+use openvm_new_keccak256_transpiler::NewKeccakTranspilerExtension;
 use openvm_pairing_circuit::{
     PairingCurve, PairingExtension, PairingExtensionExecutor, PairingProverExt,
     BLS12_381_COMPLEX_STRUCT_NAME, BN254_COMPLEX_STRUCT_NAME,
@@ -45,6 +44,7 @@ use openvm_stark_backend::{
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
 pub use SdkVmCpuBuilder as SdkVmBuilder;
+
 use super::AppFriParams;
 use crate::{
     config::{AppConfig, TranspilerConfig},

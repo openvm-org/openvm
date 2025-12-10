@@ -3,13 +3,11 @@ use std::{
     mem::{align_of, size_of},
 };
 
-use openvm_circuit::{
-    arch::*,
-    system::memory::online::TracingMemory,
-};
+use openvm_circuit::{arch::*, system::memory::online::TracingMemory};
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::p3_field::PrimeField32;
+
 use crate::xorin::XorinVmExecutor;
 
 #[derive(Clone, Copy)]

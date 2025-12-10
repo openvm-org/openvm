@@ -1,8 +1,8 @@
+pub mod air;
+pub mod columns;
 pub mod execution;
 pub mod tests;
 pub mod trace;
-pub mod columns;
-pub mod air;
 
 const KECCAK_WORD_SIZE: usize = 4;
 
@@ -11,4 +11,3 @@ pub struct XorinVmExecutor {
     pub offset: usize,
     pub pointer_max_bits: usize,
 }
-

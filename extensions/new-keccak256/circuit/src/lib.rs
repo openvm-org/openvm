@@ -1,5 +1,5 @@
 mod keccakf;
-mod xorin; 
+mod xorin;
 
 mod extension;
 pub use extension::*;
