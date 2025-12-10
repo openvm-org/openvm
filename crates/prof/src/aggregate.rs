@@ -523,7 +523,7 @@ impl AggregateMetrics {
     fn write_summary_markdown(&self, writer: &mut impl Write, num_parallel: usize) -> Result<()> {
         writeln!(
             writer,
-            "| Summary | Proof Time (s) | Parallel Proof Time (s) | Parallel Proof Time ({} GPUs) (s) |",
+            "| Summary | Proof Time (s) | Parallel Proof Time (s) | Parallel Proof Time ({} provers) (s) |",
             num_parallel
         )?;
         writeln!(writer, "|:---|---:|---:|---:|")?;

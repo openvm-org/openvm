@@ -44,7 +44,7 @@ struct Cli {
     num_devices: usize,
 
     /// Number of proofs per device for parallelism estimate
-    #[arg(long, default_value = "3")]
+    #[arg(long, default_value = "2")]
     proofs_per_device: usize,
 }
 
