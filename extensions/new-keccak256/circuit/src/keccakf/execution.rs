@@ -1,14 +1,22 @@
-use openvm_circuit::arch::StaticProgramError;
-use openvm_instructions::{instruction::Instruction, riscv::RV32_MEMORY_AS};
-use openvm_stark_backend::p3_field::PrimeField32;
-use super::KeccakfVmExecutor;
-use openvm_instructions::riscv::{RV32_REGISTER_AS};
-use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
-use std::borrow::{Borrow, BorrowMut};
-use std::convert::TryInto;
-use std::mem::size_of;
+use std::{
+    borrow::{Borrow, BorrowMut},
+    convert::TryInto,
+    mem::size_of,
+};
+
+use openvm_circuit::{
+    arch::{StaticProgramError, *},
+    system::memory::online::GuestMemory,
+};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
-use openvm_instructions::program::DEFAULT_PC_STEP;
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+};
+use openvm_stark_backend::p3_field::PrimeField32;
+
+use super::KeccakfVmExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -19,7 +27,7 @@ struct KeccakfPreCompute {
 impl KeccakfVmExecutor {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
-        pc: u32, 
+        pc: u32,
         inst: &Instruction<F>,
         data: &mut KeccakfPreCompute,
     ) -> Result<(), StaticProgramError> {
@@ -31,7 +39,7 @@ impl KeccakfVmExecutor {
             d,
             e,
             ..
-        } = inst; 
+        } = inst;
 
         let e_u32 = e.as_canonical_u32();
         if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 != RV32_MEMORY_AS {
@@ -43,7 +51,6 @@ impl KeccakfVmExecutor {
         };
 
         Ok(())
-
     }
 }
 
@@ -59,7 +66,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for KeccakfVmExecutor {
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
-    where 
+    where
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut KeccakfPreCompute = data.borrow_mut();
@@ -118,7 +125,6 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakfVmExecutor {
     }
 }
 
-
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
@@ -140,7 +146,6 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }
-
 
 #[create_handler]
 #[inline(always)]

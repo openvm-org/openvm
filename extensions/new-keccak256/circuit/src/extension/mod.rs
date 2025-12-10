@@ -8,12 +8,14 @@ use openvm_circuit::{
         RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex, VmCircuitExtension,
         VmExecutionExtension, VmProverExtension,
     },
-    system::{
-        SystemChipInventory, SystemCpuBuilder, SystemExecutor,
-    },
+    system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor, SystemPort},
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor, VmConfig};
+use openvm_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupAir, BitwiseOperationLookupBus,
+};
 use openvm_instructions::LocalOpcode;
+use openvm_new_keccak256_transpiler::Rv32NewKeccakOpcode;
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
@@ -24,13 +26,9 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
-use openvm_new_keccak256_transpiler::Rv32NewKeccakOpcode;
-use crate::xorin::XorinVmExecutor;
 use strum::IntoEnumIterator;
-use openvm_circuit::system::SystemPort;
-use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupAir;
-use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
-use crate::xorin::air::XorinVmAir;
+
+use crate::xorin::{air::XorinVmAir, XorinVmExecutor};
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Keccak256Rv32Config {
@@ -123,9 +121,10 @@ impl<F> VmExecutionExtension<F> for Keccak256 {
         inventory: &mut ExecutorInventoryBuilder<F, Keccak256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
-        let xorin_executor = XorinVmExecutor::new(Rv32NewKeccakOpcode::CLASS_OFFSET, pointer_max_bits);
+        let xorin_executor =
+            XorinVmExecutor::new(Rv32NewKeccakOpcode::CLASS_OFFSET, pointer_max_bits);
         inventory.add_executor(
-            xorin_executor, 
+            xorin_executor,
             Rv32NewKeccakOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
@@ -164,7 +163,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Keccak256 {
             Rv32NewKeccakOpcode::CLASS_OFFSET,
         );
 
-        // todo: 
+        // todo:
         // implement trait bounds needed for
         // inventory.add_air(xorin_air);
 
