@@ -199,8 +199,8 @@ impl GroupedMetrics {
 
             let mut group_time = 0.0;
 
-            // Add serial execution time for app_proof
-            if group_name == "app_proof" {
+            // Add serial execution time for app_proof groups
+            if is_app_proof_group(group_name) {
                 if let Some(stats) = stats_by_group.get(group_name) {
                     if let Some(metered) = stats.get(EXECUTE_METERED_TIME_LABEL) {
                         group_time += metered.avg.val / 1000.0;
@@ -235,6 +235,14 @@ fn schedule_parallel(proof_times: &[f64], num_parallel: usize) -> f64 {
         slot_times[i % num_parallel] += duration;
     }
     slot_times.iter().cloned().fold(0.0_f64, f64::max)
+}
+
+fn is_app_proof_group(name: &str) -> bool {
+    name != "leaf"
+        && name != "root"
+        && name != "halo2_outer"
+        && name != "halo2_wrapper"
+        && !name.starts_with("internal")
 }
 
 // A hacky way to order the groups for display.
@@ -292,12 +300,7 @@ impl AggregateMetrics {
                     max.diff.unwrap_or(0.0);
 
                 // Account for the serial execute_metered and execute_e1 for app outside of segments
-                if group_name != "leaf"
-                    && group_name != "root"
-                    && group_name != "halo2_outer"
-                    && group_name != "halo2_wrapper"
-                    && !group_name.starts_with("internal")
-                {
+                if is_app_proof_group(group_name) {
                     if let Some(execute_metered_stats) = execute_metered_stats {
                         // For metered metrics without segment labels, we just use the value
                         // directly Count is 1, so avg = sum = max = min =
@@ -490,13 +493,7 @@ impl AggregateMetrics {
         if let Some(summary) = summary {
             // Special handling for execute_metered metrics (not aggregated across segments
             // in the app proof case)
-            if metric_name == EXECUTE_METERED_TIME_LABEL
-                && group_name != "leaf"
-                && group_name != "root"
-                && group_name != "halo2_outer"
-                && group_name != "halo2_wrapper"
-                && !group_name.starts_with("internal")
-            {
+            if metric_name == EXECUTE_METERED_TIME_LABEL && is_app_proof_group(group_name) {
                 writeln!(
                     writer,
                     "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
@@ -552,6 +549,17 @@ impl AggregateMetrics {
             }
             if let Some(diff) = &mut max.diff {
                 *diff /= 1000.0;
+            }
+            // Add serial execution time for app_proof groups
+            if is_app_proof_group(&group_name) {
+                if let Some(metered) = summaries.get(EXECUTE_METERED_TIME_LABEL) {
+                    sum.val += metered.avg.val / 1000.0;
+                    max.val += metered.avg.val / 1000.0;
+                }
+                if let Some(e1) = summaries.get(EXECUTE_E1_TIME_LABEL) {
+                    sum.val += e1.avg.val / 1000.0;
+                    max.val += e1.avg.val / 1000.0;
+                }
             }
             rows.push((group_name, sum, max));
         }
