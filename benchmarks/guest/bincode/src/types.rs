@@ -128,7 +128,7 @@ pub struct Players {
 
 impl Generate for GameType {
     fn generate<R: Rng>(rand: &mut R) -> Self {
-        match rand.random_range(0..4) {
+        match rand.gen_range(0..4) {
             0 => GameType::Survival,
             1 => GameType::Creative,
             2 => GameType::Adventure,
@@ -153,7 +153,7 @@ impl Generate for Item {
         Self {
             count: rng.gen(),
             slot: rng.gen(),
-            id: IDS[rng.random_range(0..IDS.len())].to_string(),
+            id: IDS[rng.gen_range(0..IDS.len())].to_string(),
         }
     }
 }
@@ -197,7 +197,7 @@ impl Generate for Entity {
         ];
 
         Self {
-            id: IDS[rng.random_range(0..IDS.len())].to_string(),
+            id: IDS[rng.gen_range(0..IDS.len())].to_string(),
             pos: Position::generate(rng),
             motion: Motion::generate(rng),
             rotation: Rotation::generate(rng),
@@ -210,7 +210,7 @@ impl Generate for Entity {
             portal_cooldown: rng.gen(),
             uuid: <[u32; 4] as Generate>::generate(rng),
             custom_name: <Option<()> as Generate>::generate(rng)
-                .map(|_| CUSTOM_NAMES[rng.random_range(0..CUSTOM_NAMES.len())].to_string()),
+                .map(|_| CUSTOM_NAMES[rng.gen_range(0..CUSTOM_NAMES.len())].to_string()),
             custom_name_visible: rng.gen_bool(0.5),
             silent: rng.gen_bool(0.5),
             glowing: rng.gen_bool(0.5),
@@ -249,11 +249,11 @@ impl Generate for RecipeBook {
         Self {
             recipes: generate_vec::<_, ()>(rng, 0..MAX_RECIPES)
                 .iter()
-                .map(|_| RECIPES[rng.random_range(0..RECIPES.len())].to_string())
+                .map(|_| RECIPES[rng.gen_range(0..RECIPES.len())].to_string())
                 .collect(),
             to_be_displayed: generate_vec::<_, ()>(rng, 0..MAX_DISPLAYED_RECIPES)
                 .iter()
-                .map(|_| RECIPES[rng.random_range(0..RECIPES.len())].to_string())
+                .map(|_| RECIPES[rng.gen_range(0..RECIPES.len())].to_string())
                 .collect(),
             is_filtering_craftable: rng.gen_bool(0.5),
             is_gui_open: rng.gen_bool(0.5),
@@ -276,11 +276,11 @@ impl Generate for Player {
             game_type: GameType::generate(rng),
             previous_game_type: GameType::generate(rng),
             score: rng.gen(),
-            dimension: DIMENSIONS[rng.random_range(0..DIMENSIONS.len())].to_string(),
+            dimension: DIMENSIONS[rng.gen_range(0..DIMENSIONS.len())].to_string(),
             selected_item_slot: rng.gen(),
             selected_item: Item::generate(rng),
             spawn_dimension: <Option<()> as Generate>::generate(rng)
-                .map(|_| DIMENSIONS[rng.random_range(0..DIMENSIONS.len())].to_string()),
+                .map(|_| DIMENSIONS[rng.gen_range(0..DIMENSIONS.len())].to_string()),
             spawn_x: rng.gen(),
             spawn_y: rng.gen(),
             spawn_z: rng.gen(),
