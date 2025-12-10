@@ -2,6 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use hex::FromHex;
 use itertools::Itertools;
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::DenseRecordArena;
 use openvm_circuit::{
     arch::{
         testing::{
@@ -20,6 +22,8 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_sha2_air::{word_into_u8_limbs, Sha256Config, Sha384Config, Sha512Config};
 use openvm_sha2_transpiler::Rv32Sha2Opcode;
+#[cfg(feature = "cuda")]
+use openvm_stark_backend::p3_air::BaseAir;
 use openvm_stark_backend::{
     interaction::BusIndex,
     p3_field::{Field, FieldAlgebra, PrimeField32},
@@ -31,10 +35,8 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::{trace::Sha2BlockHasherRecordMut, Sha2BlockHasherChipGpu},
-    openvm_circuit::arch::testing::{
-        default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
-    },
+    crate::{Sha2BlockHasherChipGpu, Sha2MainChipGpu},
+    openvm_circuit::arch::testing::{default_bitwise_lookup_bus, GpuChipTestBuilder},
 };
 
 use crate::{
@@ -570,46 +572,220 @@ fn negative_sha384_test_bad_final_hash() {
 // ////////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(feature = "cuda")]
-type GpuHarness =
-    GpuTestChipHarness<F, Sha256VmExecutor, Sha256VmAir, Sha256VmChipGpu, Sha256VmChip<F>>;
-
-#[cfg(feature = "cuda")]
-fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
-    const GPU_MAX_INS_CAPACITY: usize = 8192;
-
-    let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
-
-    let (air, executor, cpu_chip) = create_harness_fields(
-        tester.system_port(),
-        dummy_bitwise_chip,
-        tester.dummy_memory_helper(),
-        tester.address_bits(),
-    );
-    let gpu_chip = Sha256VmChipGpu::new(
-        tester.range_checker(),
-        tester.bitwise_op_lookup(),
-        tester.address_bits() as u32,
-        tester.timestamp_max_bits() as u32,
-    );
-
-    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, GPU_MAX_INS_CAPACITY)
+struct GpuHarness<C: Sha2Config> {
+    executor: Sha2VmExecutor<C>,
+    main_air: Sha2MainAir<C>,
+    main_gpu: Sha2MainChipGpu<C>,
+    dense_arena: DenseRecordArena,
+    block_air: Sha2BlockHasherVmAir<C>,
+    block_gpu: Sha2BlockHasherChipGpu<C>,
+    bitwise_air: BitwiseOperationLookupAir<RV32_CELL_BITS>,
+    bitwise_gpu: Arc<
+        openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChipGPU<RV32_CELL_BITS>,
+    >,
 }
 
 #[cfg(feature = "cuda")]
-#[test]
-fn test_cuda_sha256_tracegen() {
+fn create_cuda_harness<C: Sha2Config>(tester: &GpuChipTestBuilder) -> GpuHarness<C> {
+    const GPU_MAX_INS_CAPACITY: usize = 8192;
+
+    let bitwise_bus = default_bitwise_lookup_bus();
+    // Separate bitwise chips for GPU vs CPU tracegen to avoid double-counting lookup requests.
+    let bitwise_gpu_cpu = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+    let bitwise_gpu =
+        Arc::new(
+            openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChipGPU::<
+                RV32_CELL_BITS,
+            >::hybrid(bitwise_gpu_cpu.clone()),
+        );
+    let pointer_max_bits = tester.address_bits();
+    let timestamp_max_bits = tester.timestamp_max_bits();
+
+    // Build CPU chips (main + block) sharing records
+    let (main_cpu, block_cpu, _) = crate::cuda::make_hybrid_chips::<C>(
+        tester
+            .range_checker()
+            .cpu_chip
+            .clone()
+            .expect("hybrid range checker required"),
+        bitwise_gpu_cpu.clone(),
+        pointer_max_bits,
+        timestamp_max_bits,
+    );
+
+    let executor = Sha2VmExecutor::<C>::new(Rv32Sha2Opcode::CLASS_OFFSET, pointer_max_bits);
+    let main_air = Sha2MainAir::<C>::new(
+        tester.system_port(),
+        bitwise_gpu_cpu.bus(),
+        pointer_max_bits,
+        SHA2_BUS_IDX,
+        Rv32Sha2Opcode::CLASS_OFFSET,
+    );
+    let main_width = <Sha2MainAir<C> as BaseAir<F>>::width(&main_air);
+    let block_air =
+        Sha2BlockHasherVmAir::<C>::new(bitwise_gpu_cpu.bus(), SUBAIR_BUS_IDX, SHA2_BUS_IDX);
+
+    GpuHarness {
+        executor,
+        main_air,
+        main_gpu: Sha2MainChipGpu::new(main_cpu),
+        dense_arena: DenseRecordArena::with_capacity(GPU_MAX_INS_CAPACITY, main_width),
+        block_air,
+        block_gpu: Sha2BlockHasherChipGpu::new(block_cpu),
+        bitwise_air: bitwise_gpu_cpu.air,
+        bitwise_gpu,
+    }
+}
+
+#[cfg(feature = "cuda")]
+fn test_cuda_rand_sha2_multi_block<C: Sha2Config + 'static>() {
     let mut rng = create_seeded_rng();
     let mut tester =
         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
 
-    let mut harness = create_cuda_harness(&tester);
+    let mut harness = create_cuda_harness::<C>(&tester);
 
     let num_ops = 70;
-    for i in 1..=num_ops {
-        set_and_execute(
+    for _ in 1..=num_ops {
+        set_and_execute_full_message::<_, C, _>(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            C::OPCODE,
+            None,
+            None,
+        );
+    }
+
+    let mut tester = tester.build();
+    tester = tester.load(harness.main_air, harness.main_gpu, harness.dense_arena);
+    // No block-hasher arena needed; GPU block chip ignores the arena input.
+    tester = tester.load(
+        harness.block_air,
+        harness.block_gpu,
+        DenseRecordArena::with_byte_capacity(0),
+    );
+    tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
+    tester.finalize().simple_test().unwrap();
+}
+
+#[test]
+fn test_cuda_rand_sha256_multi_block() {
+    test_cuda_rand_sha2_multi_block::<Sha256Config>();
+}
+
+#[test]
+fn test_cuda_rand_sha512_multi_block() {
+    test_cuda_rand_sha2_multi_block::<Sha512Config>();
+}
+
+#[test]
+fn test_cuda_rand_sha384_multi_block() {
+    test_cuda_rand_sha2_multi_block::<Sha384Config>();
+}
+
+#[cfg(feature = "cuda")]
+fn test_cuda_sha2_known_vectors<C: Sha2Config + 'static>(test_vectors: &[(&str, &str)]) {
+    let mut rng = create_seeded_rng();
+    let mut tester =
+        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+
+    let mut harness = create_cuda_harness::<C>(&tester);
+
+    for (input, expected_hex) in test_vectors.iter() {
+        let input = Vec::from_hex(input).unwrap();
+        let expected = Vec::from_hex(expected_hex).unwrap();
+        // Sanity-check the expected digest matches the config’s hash.
+        assert_eq!(C::hash(&input).as_slice(), expected.as_slice());
+        set_and_execute_full_message::<_, C, _>(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            C::OPCODE,
+            Some(&input),
+            Some(input.len()),
+        );
+    }
+    // No block-hasher arena needed; GPU block chip ignores the arena input.
+    let mut tester = tester.build();
+    tester = tester.load(harness.main_air, harness.main_gpu, harness.dense_arena);
+    tester = tester.load(
+        harness.block_air,
+        harness.block_gpu,
+        DenseRecordArena::with_byte_capacity(0),
+    );
+    tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
+    tester.finalize().simple_test().unwrap();
+}
+
+#[test]
+fn test_cuda_sha256_known_vectors() {
+    let test_vectors = [
+        ("", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+        (
+            "98c1c0bdb7d5fea9a88859f06c6c439f",
+            "b6b2c9c9b6f30e5c66c977f1bd7ad97071bee739524aecf793384890619f2b05",
+        ),
+        ("5b58f4163e248467cc1cd3eecafe749e8e2baaf82c0f63af06df0526347d7a11327463c115210a46b6740244eddf370be89c", "ac0e25049870b91d78ef6807bb87fce4603c81abd3c097fba2403fd18b6ce0b7"),
+        ("9ad198539e3160194f38ac076a782bd5210a007560d1fce9ef78f8a4a5e4d78c6b96c250cff3520009036e9c6087d5dab587394edda862862013de49a12072485a6c01165ec0f28ffddf1873fbd53e47fcd02fb6a5ccc9622d5588a92429c663ce298cb71b50022fc2ec4ba9f5bbd250974e1a607b165fee16e8f3f2be20d7348b91a2f518ce928491900d56d9f86970611580350cee08daea7717fe28a73b8dcfdea22a65ed9f5a09198de38e4e4f2cc05b0ba3dd787a5363ab6c9f39dcb66c1a29209b1d6b1152769395df8150b4316658ea6ab19af94903d643fcb0ae4d598035ebe73c8b1b687df1ab16504f633c929569c6d0e5fae6eea43838fbc8ce2c2b43161d0addc8ccf945a9c4e06294e56a67df0000f561f61b630b1983ba403e775aaeefa8d339f669d1e09ead7eae979383eda983321e1743e5404b4b328da656de79ff52d179833a6bd5129f49432d74d001996c37c68d9ab49fcff8061d193576f396c20e1f0d9ee83a51290ba60efa9c3cb2e15b756321a7ca668cdbf63f95ec33b1c450aa100101be059dc00077245b25a6a66698dee81953ed4a606944076e2858b1420de0095a7f60b08194d6d9a997009d345c71f63a7034b976e409af8a9a040ac7113664609a7adedb76b2fadf04b0348392a1650526eb2a4d6ed5e4bbcda8aabc8488b38f4f5d9a398103536bb8250ed82a9b9825f7703c263f9e", "080ad71239852124fc26758982090611b9b19abf22d22db3a57f67a06e984a23")
+    ];
+    test_cuda_sha2_known_vectors::<Sha256Config>(&test_vectors);
+}
+
+#[test]
+fn test_cuda_sha512_known_vectors() {
+    let test_vectors = [
+        (
+            "",
+            "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e",
+        ),
+        (
+            "98c1c0bdb7d5fea9a88859f06c6c439f",
+            "eb576959c531f116842c0cc915a29c8f71d7a285c894c349b83469002ef093d51f9f14ce4248488bff143025e47ed27c12badb9cd43779cb147408eea062d583"
+        ),
+        (
+            "9ad198539e3160194f38ac076a782bd5210a007560d1fce9ef78f8a4a5e4d78c6b96c250cff3520009036e9c6087d5dab587394edda862862013de49a12072485a6c01165ec0f28ffddf1873fbd53e47fcd02fb6a5ccc9622d5588a92429c663ce298cb71b50022fc2ec4ba9f5bbd250974e1a607b165fee16e8f3f2be20d7348b91a2f518ce928491900d56d9f86970611580350cee08daea7717fe28a73b8dcfdea22a65ed9f5a09198de38e4e4f2cc05b0ba3dd787a5363ab6c9f39dcb66c1a29209b1d6b1152769395df8150b4316658ea6ab19af94903d643fcb0ae4d598035ebe73c8b1b687df1ab16504f633c929569c6d0e5fae6eea43838fbc8ce2c2b43161d0addc8ccf945a9c4e06294e56a67df0000f561f61b630b1983ba403e775aaeefa8d339f669d1e09ead7eae979383eda983321e1743e5404b4b328da656de79ff52d179833a6bd5129f49432d74d001996c37c68d9ab49fcff8061d193576f396c20e1f0d9ee83a51290ba60efa9c3cb2e15b756321a7ca668cdbf63f95ec33b1c450aa100101be059dc00077245b25a6a66698dee81953ed4a606944076e2858b1420de0095a7f60b08194d6d9a997009d345c71f63a7034b976e409af8a9a040ac7113664609a7adedb76b2fadf04b0348392a1650526eb2a4d6ed5e4bbcda8aabc8488b38f4f5d9a398103536bb8250ed82a9b9825f7703c263f9e", 
+            "8d215ee6dc26757c210db0dd00c1c6ed16cc34dbd4bb0fa10c1edb6b62d5ab16aea88c881001b173d270676daf2d6381b5eab8711fa2f5589c477c1d4b84774f"
+        ),
+    ];
+    test_cuda_sha2_known_vectors::<Sha512Config>(&test_vectors);
+}
+
+#[test]
+fn test_cuda_sha384_known_vectors() {
+    let test_vectors = [
+        (
+            "",
+            "38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b",
+        ),
+        (
+            "98c1c0bdb7d5fea9a88859f06c6c439f",
+            "63e3061aab01f335ea3a4e617b9d14af9b63a5240229164ee962f6d5335ff25f0f0bf8e46723e83c41b9d17413b6a3c7",
+        ),
+        (
+            "9ad198539e3160194f38ac076a782bd5210a007560d1fce9ef78f8a4a5e4d78c6b96c250cff3520009036e9c6087d5dab587394edda862862013de49a12072485a6c01165ec0f28ffddf1873fbd53e47fcd02fb6a5ccc9622d5588a92429c663ce298cb71b50022fc2ec4ba9f5bbd250974e1a607b165fee16e8f3f2be20d7348b91a2f518ce928491900d56d9f86970611580350cee08daea7717fe28a73b8dcfdea22a65ed9f5a09198de38e4e4f2cc05b0ba3dd787a5363ab6c9f39dcb66c1a29209b1d6b1152769395df8150b4316658ea6ab19af94903d643fcb0ae4d598035ebe73c8b1b687df1ab16504f633c929569c6d0e5fae6eea43838fbc8ce2c2b43161d0addc8ccf945a9c4e06294e56a67df0000f561f61b630b1983ba403e775aaeefa8d339f669d1e09ead7eae979383eda983321e1743e5404b4b328da656de79ff52d179833a6bd5129f49432d74d001996c37c68d9ab49fcff8061d193576f396c20e1f0d9ee83a51290ba60efa9c3cb2e15b756321a7ca668cdbf63f95ec33b1c450aa100101be059dc00077245b25a6a66698dee81953ed4a606944076e2858b1420de0095a7f60b08194d6d9a997009d345c71f63a7034b976e409af8a9a040ac7113664609a7adedb76b2fadf04b0348392a1650526eb2a4d6ed5e4bbcda8aabc8488b38f4f5d9a398103536bb8250ed82a9b9825f7703c263f9e", 
+            "904a90010d772a904a35572fdd4bdf1dd253742e47872c8a18e2255f66fa889e44781e65487a043f435daa53c496a53e",
+        ),
+    ];
+    test_cuda_sha2_known_vectors::<Sha384Config>(&test_vectors);
+}
+
+// GPU edge-case length tests mirroring the CPU suite.
+#[cfg(feature = "cuda")]
+fn cuda_sha2_edge_test_lengths<C: Sha2Config + 'static>() {
+    let mut rng = create_seeded_rng();
+    let mut tester =
+        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+
+    let mut harness = create_cuda_harness::<C>(&tester);
+
+    // check every possible input length modulo block size
+    for i in (C::BLOCK_BYTES + 1)..=(2 * C::BLOCK_BYTES) {
+        set_and_execute_full_message::<_, C, _>(
             &mut tester,
             &mut harness.executor,
             &mut harness.dense_arena,
@@ -620,61 +796,31 @@ fn test_cuda_sha256_tracegen() {
         );
     }
 
-    harness
-        .dense_arena
-        .get_record_seeker::<Sha256VmRecordMut, _>()
-        .transfer_to_matrix_arena(&mut harness.matrix_arena);
-
-    tester
-        .build()
-        .load_gpu_harness(harness)
-        .finalize()
-        .simple_test()
-        .unwrap();
+    let mut tester = tester.build();
+    tester = tester.load(harness.main_air, harness.main_gpu, harness.dense_arena);
+    tester = tester.load(
+        harness.block_air,
+        harness.block_gpu,
+        DenseRecordArena::with_byte_capacity(0),
+    );
+    tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
+    tester.finalize().simple_test().unwrap();
 }
 
 #[cfg(feature = "cuda")]
 #[test]
-fn test_cuda_sha256_known_vectors() {
-    let mut rng = create_seeded_rng();
-    let mut tester =
-        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+fn test_cuda_sha256_edge_test_lengths() {
+    cuda_sha2_edge_test_lengths::<Sha256Config>();
+}
 
-    let mut harness = create_cuda_harness(&tester);
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_sha512_edge_test_lengths() {
+    cuda_sha2_edge_test_lengths::<Sha512Config>();
+}
 
-    let test_vectors = [
-        ("", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
-        (
-            "98c1c0bdb7d5fea9a88859f06c6c439f",
-            "b6b2c9c9b6f30e5c66c977f1bd7ad97071bee739524aecf793384890619f2b05",
-        ),
-        ("5b58f4163e248467cc1cd3eecafe749e8e2baaf82c0f63af06df0526347d7a11327463c115210a46b6740244eddf370be89c", "ac0e25049870b91d78ef6807bb87fce4603c81abd3c097fba2403fd18b6ce0b7"),
-        ("9ad198539e3160194f38ac076a782bd5210a007560d1fce9ef78f8a4a5e4d78c6b96c250cff3520009036e9c6087d5dab587394edda862862013de49a12072485a6c01165ec0f28ffddf1873fbd53e47fcd02fb6a5ccc9622d5588a92429c663ce298cb71b50022fc2ec4ba9f5bbd250974e1a607b165fee16e8f3f2be20d7348b91a2f518ce928491900d56d9f86970611580350cee08daea7717fe28a73b8dcfdea22a65ed9f5a09198de38e4e4f2cc05b0ba3dd787a5363ab6c9f39dcb66c1a29209b1d6b1152769395df8150b4316658ea6ab19af94903d643fcb0ae4d598035ebe73c8b1b687df1ab16504f633c929569c6d0e5fae6eea43838fbc8ce2c2b43161d0addc8ccf945a9c4e06294e56a67df0000f561f61b630b1983ba403e775aaeefa8d339f669d1e09ead7eae979383eda983321e1743e5404b4b328da656de79ff52d179833a6bd5129f49432d74d001996c37c68d9ab49fcff8061d193576f396c20e1f0d9ee83a51290ba60efa9c3cb2e15b756321a7ca668cdbf63f95ec33b1c450aa100101be059dc00077245b25a6a66698dee81953ed4a606944076e2858b1420de0095a7f60b08194d6d9a997009d345c71f63a7034b976e409af8a9a040ac7113664609a7adedb76b2fadf04b0348392a1650526eb2a4d6ed5e4bbcda8aabc8488b38f4f5d9a398103536bb8250ed82a9b9825f7703c263f9e", "080ad71239852124fc26758982090611b9b19abf22d22db3a57f67a06e984a23")
-    ];
-
-    for (input, _) in test_vectors.iter() {
-        let input = Vec::from_hex(input).unwrap();
-
-        set_and_execute(
-            &mut tester,
-            &mut harness.executor,
-            &mut harness.dense_arena,
-            &mut rng,
-            SHA256,
-            Some(&input),
-            None,
-        );
-    }
-
-    harness
-        .dense_arena
-        .get_record_seeker::<Sha256VmRecordMut, _>()
-        .transfer_to_matrix_arena(&mut harness.matrix_arena);
-
-    tester
-        .build()
-        .load_gpu_harness(harness)
-        .finalize()
-        .simple_test()
-        .unwrap();
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_sha384_edge_test_lengths() {
+    cuda_sha2_edge_test_lengths::<Sha384Config>();
 }

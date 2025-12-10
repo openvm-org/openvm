@@ -38,8 +38,8 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         mod cuda;
         pub use self::cuda::*;
-        pub use self::cuda::Sha256GpuProverExt as Sha256ProverExt;
-        pub use self::cuda::Sha256Rv32GpuBuilder as Sha256Rv32Builder;
+        pub use self::cuda::Sha2GpuProverExt as Sha2ProverExt;
+        pub use self::cuda::Sha2Rv32GpuBuilder as Sha2Rv32Builder;
     } else {
         pub use self::Sha2CpuProverExt as Sha2ProverExt;
         pub use self::Sha2Rv32CpuBuilder as Sha2Rv32Builder;
