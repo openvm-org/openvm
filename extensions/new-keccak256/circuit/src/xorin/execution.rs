@@ -97,21 +97,24 @@ impl<F: PrimeField32> AotExecutor<F> for XorinVmExecutor {}
 
 impl<F: PrimeField32> InterpreterMeteredExecutor<F> for XorinVmExecutor {
     fn metered_pre_compute_size(&self) -> usize {
-        todo!()
+        size_of::<XorinPreCompute>()
     }
 
     #[cfg(not(feature = "tco"))]
     fn metered_pre_compute<Ctx>(
         &self,
-        _chip_idx: usize,
-        _pc: u32,
-        _inst: &Instruction<F>,
-        _data: &mut [u8],
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        todo!()
+        let data: &mut E2PreCompute<XorinPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        Ok(execute_e2_impl::<_, _>)
     }
 
     #[cfg(feature = "tco")]
@@ -125,7 +128,10 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for XorinVmExecutor {
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        todo!()
+        let data: &mut E2PreCompute<XorinPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        Ok(execute_e2_impl::<_, _>)
     }
 }
 

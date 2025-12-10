@@ -939,7 +939,6 @@ where
             .per_air
             .iter()
             .map(|pk| {
-                println!("hi?");
                 let constant_trace_height =
                     pk.preprocessed_data.as_ref().map(|pd| pd.trace.height());
                 let air_names = pk.air_name.clone();
