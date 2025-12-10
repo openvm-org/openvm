@@ -8,11 +8,11 @@ use openvm_circuit::{
         RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex, VmCircuitExtension,
         VmExecutionExtension, VmProverExtension,
     },
-    system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor, SystemPort},
+    system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor, SystemPort, memory::SharedMemoryHelper},
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor, VmConfig};
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus,
+    BitwiseOperationLookupAir, BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::LocalOpcode;
 use openvm_new_keccak256_transpiler::Rv32NewKeccakOpcode;
@@ -28,7 +28,10 @@ use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use crate::xorin::{air::XorinVmAir, XorinVmExecutor};
+use crate::xorin::{XorinVmExecutor, XorinVmFiller, air::XorinVmAir};
+use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
+use std::sync::Arc;
+use crate::xorin::XorinVmChip;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Keccak256Rv32Config {
@@ -99,6 +102,8 @@ where
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Keccak256;
 
+
+
 #[derive(Clone, Copy, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 #[cfg_attr(
     feature = "aot",
@@ -162,10 +167,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Keccak256 {
             pointer_max_bits,
             Rv32NewKeccakOpcode::CLASS_OFFSET,
         );
-
-        // todo:
-        // implement trait bounds needed for
-        // inventory.add_air(xorin_air);
+        inventory.add_air(xorin_air);
 
         Ok(())
     }
@@ -186,6 +188,32 @@ where
         _: &Keccak256,
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
+        let range_checker = inventory.range_checker()?.clone();
+        let timestamp_max_bits = inventory.timestamp_max_bits();
+        let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
+        let pointer_max_bits = inventory.airs().pointer_max_bits();
+
+        let bitwise_lu = {
+            let existing_chip = inventory.find_chip::<SharedBitwiseOperationLookupChip<8>>()
+            .next();
+            
+            if let Some(chip) = existing_chip {
+                chip.clone()
+            } else {
+                let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
+                let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
+                inventory.add_periphery_chip(chip.clone());
+                chip
+            }
+        };
+
+        inventory.next_air::<XorinVmAir>()?;
+        let xorin_chip = XorinVmChip::new(
+            XorinVmFiller::new(bitwise_lu, pointer_max_bits),
+            mem_helper,
+        );
+        inventory.add_executor_chip(xorin_chip);
+
         Ok(())
     }
 }
