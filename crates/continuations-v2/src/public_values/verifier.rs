@@ -72,8 +72,6 @@ pub fn generate_proving_ctx(
         cols.is_last = F::from_bool(proof_idx + 1 == num_proofs);
 
         if let Some(user_pv_commit) = user_pv_commit {
-            cols.has_verifier_pvs = F::ZERO;
-            cols.child_pvs.user_pv_commit = user_pv_commit;
             cols.child_pvs.program_commit = proof.trace_vdata[PROGRAM_AIR_ID]
                 .as_ref()
                 .unwrap()
@@ -89,6 +87,10 @@ pub fn generate_proving_ctx(
             cols.child_pvs.final_pc = final_pc;
             cols.child_pvs.exit_code = exit_code;
             cols.child_pvs.is_terminate = is_terminate;
+
+            if is_terminate != F::ZERO {
+                cols.child_pvs.user_pv_commit = user_pv_commit;
+            }
 
             let &MemoryMerklePvs::<_, DIGEST_SIZE> {
                 initial_root,
@@ -208,6 +210,12 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
                 local.child_pvs.exit_code,
                 AB::F::from_canonical_u32(DEFAULT_SUSPEND_EXIT_CODE),
             );
+
+        // constrain that user_pv_commit is unset for non-terminal segments
+        assert_zeros(
+            &mut builder.when(not(local.child_pvs.is_terminate)),
+            local.child_pvs.user_pv_commit,
+        );
 
         // when local and next are valid, constrain increasing proof_idx and adjacency
         let mut when_both = builder.when(and(local.is_valid, not(local.is_last)));
@@ -533,7 +541,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             .when(local.is_last)
             .assert_eq(local.child_pvs.exit_code, exit_code);
         assert_array_eq(
-            &mut builder.when(local.is_valid),
+            &mut builder.when(local.is_last),
             local.child_pvs.user_pv_commit,
             user_pv_commit,
         );
