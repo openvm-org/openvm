@@ -1,14 +1,14 @@
 use std::{borrow::BorrowMut, mem::{align_of, size_of}};
 
-use openvm_circuit::{arch::*, system::memory::online::TracingMemory};
+use openvm_circuit::{arch::*, system::{memory::online::TracingMemory, poseidon2::trace}};
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::instruction::Instruction;
 use openvm_new_keccak256_transpiler::Rv32NewKeccakOpcode;
 use openvm_rv32im_circuit::adapters::{tracing_read, tracing_write};
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{p3_field::PrimeField32, prover::metrics::TraceCells};
 use openvm_circuit::system::memory::offline_checker::MemoryReadAuxRecord;
 use openvm_circuit::system::memory::offline_checker::MemoryWriteBytesAuxRecord;
-use crate::xorin::trace::instructions::riscv::RV32_REGISTER_AS;
+use crate::xorin::{columns::XorinVmCols, trace::instructions::riscv::RV32_REGISTER_AS};
 use crate::xorin::trace::instructions::riscv::RV32_MEMORY_AS;
 
 use crate::xorin::XorinVmExecutor;
@@ -24,8 +24,9 @@ pub struct XorinVmMetadata {
 }
 
 impl MultiRowMetadata for XorinVmMetadata {
+    // todo: confirm that this is the number of rows in one opcode execute
     fn get_num_rows(&self) -> usize {
-        0
+        1
     }
 }
 
@@ -54,7 +55,7 @@ pub struct XorinVmRecordMut<'a> {
     pub inner: &'a mut XorinVmRecordHeader,
 }
 
-// Custom borrowing to split the buffer into a fixed `KeccakVmRecord` header
+// Custom borrowing to split the buffer into a fixed `XorinVmRecord` header
 impl<'a> CustomBorrow<'a, XorinVmRecordMut<'a>, XorinVmRecordLayout> for [u8] {
     fn custom_borrow(&'a mut self, _layout: XorinVmRecordLayout) -> XorinVmRecordMut<'a> {
         let (record_buf, _rest) = unsafe {
@@ -109,6 +110,12 @@ where
         // Xorin opcode is only called through the keccak update guest program
         debug_assert!(len.is_multiple_of(4));
         let num_reads = len.div_ceil(4);
+
+        // safety: the below alloc uses MultiRowLayout alloc implementation because XorinVmRecordLayout is a MultiRowLayout
+        // since get_num_rows() = 1, this will alloc_buffer of size width 
+        // where width is the width of the trace matrix 
+        // then it takes a prefix of this allocated buffer through custom borrow
+        // of length XorinVmRecordLayout size and return it as the below `record`
         let record = state
             .ctx 
             .alloc(XorinVmRecordLayout::new(XorinVmMetadata { }));
@@ -197,12 +204,105 @@ where
 }
 
 impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
-    fn fill_trace(
+    fn fill_trace_row(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
-        trace_matrix: &mut RowMajorMatrix<F>,
-        rows_used: usize,
+        mut row_slice: &mut [F],
     ) {
-        todo!()
+        let record: XorinVmRecordMut = unsafe {
+            get_record_from_slice(&mut row_slice, XorinVmRecordLayout {
+                metadata: XorinVmMetadata {
+                }
+            })
+        };
+
+        let trace_row: &mut XorinVmCols<F> = row_slice.borrow_mut();
+        let record = record.inner;
+        trace_row.instruction.pc = F::from_canonical_u32(record.from_pc);
+        trace_row.instruction.start_timestamp = F::from_canonical_u32(record.timestamp);
+        trace_row.instruction.buffer_ptr = F::from_canonical_u32(record.rd_ptr);
+        trace_row.instruction.input_ptr = F::from_canonical_u32(record.rs1_ptr);
+        trace_row.instruction.len_ptr = F::from_canonical_u32(record.rs2_ptr);
+        let buffer_u8: [u8; 4] = record.buffer.to_le_bytes();
+        let buffer_limbs: [F; 4] = [
+            F::from_canonical_u8(buffer_u8[0]), 
+            F::from_canonical_u8(buffer_u8[1]),
+            F::from_canonical_u8(buffer_u8[2]),
+            F::from_canonical_u8(buffer_u8[3])    
+        ];
+        trace_row.instruction.buffer_limbs = buffer_limbs;
+        let input_u8: [u8; 4] = record.input.to_le_bytes();
+        let input_limbs: [F; 4] = [
+            F::from_canonical_u8(input_u8[0]), 
+            F::from_canonical_u8(input_u8[1]),
+            F::from_canonical_u8(input_u8[2]),
+            F::from_canonical_u8(input_u8[3])    
+        ];
+        trace_row.instruction.input_limbs = input_limbs;
+        let len_u8: [u8; 4] = record.len.to_le_bytes();
+        let len_limbs: [F; 4] = [
+            F::from_canonical_u8(len_u8[0]),
+            F::from_canonical_u8(len_u8[1]),
+            F::from_canonical_u8(len_u8[2]),
+            F::from_canonical_u8(len_u8[3])
+        ];
+        trace_row.instruction.len_limbs = len_limbs; 
+        
+        for i in 0..record.len {
+            trace_row.sponge.is_padding_bytes[i as usize] = F::ZERO;
+        }
+        for i in record.len..34 {
+            trace_row.sponge.is_padding_bytes[i as usize] = F::ONE;
+        }
+
+        // todo: think if it is fine to leave the other record.len..34 bits empty
+        for i in 0..record.len {
+            trace_row.sponge.preimage_buffer_bytes[i as usize] = F::from_canonical_u8(record.buffer_limbs[i as usize]);
+            trace_row.sponge.input_bytes[i as usize] = F::from_canonical_u8(record.input_limbs[i as usize]);
+            trace_row.sponge.postimage_buffer_bytes[i as usize] = F::from_canonical_u8(record.buffer_limbs[i as usize] ^ record.input_limbs[i as usize]);
+            let b_val = record.input_limbs[i as usize] as u32; 
+            let c_val = record.buffer_limbs[i as usize] as u32; 
+            self.bitwise_lookup_chip.request_xor(b_val, c_val);
+        }
+
+        let mut timestamp = record.timestamp;
+
+        // todo: think if the order matters here (maybe due to timestamp things), but this should be fine since it is matched with the one in preflight
+        for t in 0..3 {
+            mem_helper.fill(
+                record.register_aux_cols[t].prev_timestamp,
+                timestamp, 
+                trace_row.mem_oc.register_aux_cols[t].as_mut() 
+            );
+
+            timestamp += 1;
+        }
+        
+        for t in 0..34 {
+            mem_helper.fill(
+                record.buffer_read_aux_cols[t].prev_timestamp,
+                timestamp,
+                trace_row.mem_oc.buffer_bytes_read_aux_cols[t].as_mut() 
+            );
+            timestamp += 1;
+        }
+
+        for t in 0..34 {
+            mem_helper.fill(
+                record.input_read_aux_cols[t].prev_timestamp,
+                timestamp,
+                trace_row.mem_oc.input_bytes_read_aux_cols[t].as_mut() 
+            );
+            timestamp += 1;
+        }
+
+        for t in 0..34 {
+            mem_helper.fill(
+                record.buffer_write_aux_cols[t].prev_timestamp,
+                timestamp,
+                trace_row.mem_oc.buffer_bytes_write_aux_cols[t].as_mut() 
+            );
+            timestamp += 1;
+        }        
     }
 }
