@@ -24,19 +24,17 @@ use stark_backend_v2::{
 };
 use tracing::Level;
 
-use crate::aggregation::AggregationProver;
+use crate::aggregation::{AggregationProver, DEFAULT_MAX_NUM_PROOFS};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        use crate::aggregation::NonRootGpuProver;
+        use crate::aggregation::NonRootGpuProver as NonRootProver;
         use cuda_backend_v2::{BabyBearPoseidon2GpuEngineV2};
         type Engine = BabyBearPoseidon2GpuEngineV2<DuplexSponge>;
-        type NonRootProver = NonRootGpuProver;
     } else {
-        use crate::aggregation::NonRootCpuProver;
+        use crate::aggregation::NonRootCpuProver as NonRootProver;
         use stark_backend_v2::BabyBearPoseidon2CpuEngineV2;
         type Engine = BabyBearPoseidon2CpuEngineV2<DuplexSponge>;
-        type NonRootProver = NonRootCpuProver;
     }
 }
 
@@ -95,8 +93,11 @@ fn run_leaf_aggregation(log_fib_input: usize) -> Result<(Arc<MultiStarkVerifying
     let mut instance = VmInstance::new(vm, exe.into(), cached_program_trace)?;
     let app_proof = instance.prove(vec![input])?;
 
-    let leaf_prover =
-        NonRootProver::new::<Engine>(Arc::new(app_pk.get_vk()), LEAF_SYSTEM_PARAMS, false);
+    let leaf_prover = NonRootProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
+        Arc::new(app_pk.get_vk()),
+        LEAF_SYSTEM_PARAMS,
+        false,
+    );
     let leaf_proof = leaf_prover.agg_prove::<Engine>(
         &app_proof.per_segment,
         Some(app_proof.user_public_values.public_values_commit),
@@ -133,15 +134,28 @@ fn test_internal_recursive_vk_stabilization() -> Result<()> {
     let engine = Engine::new(APP_SYSTEM_PARAMS);
     let (_, app_vk) = engine.keygen(&config.create_airs()?.into_airs().collect_vec());
 
-    let leaf_prover = NonRootProver::new::<Engine>(Arc::new(app_vk), LEAF_SYSTEM_PARAMS, false);
-    let internal_0_prover =
-        NonRootProver::new::<Engine>(leaf_prover.get_vk(), INTERNAL_SYSTEM_PARAMS, false);
-    let internal_1_prover =
-        NonRootProver::new::<Engine>(internal_0_prover.get_vk(), INTERNAL_SYSTEM_PARAMS, false);
+    let leaf_prover = NonRootProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
+        Arc::new(app_vk),
+        LEAF_SYSTEM_PARAMS,
+        false,
+    );
+    let internal_0_prover = NonRootProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
+        leaf_prover.get_vk(),
+        INTERNAL_SYSTEM_PARAMS,
+        false,
+    );
+    let internal_1_prover = NonRootProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
+        internal_0_prover.get_vk(),
+        INTERNAL_SYSTEM_PARAMS,
+        false,
+    );
 
     // The internal vk should stabilize at the second internal layer
-    let test_prover =
-        NonRootProver::new::<Engine>(internal_1_prover.get_vk(), INTERNAL_SYSTEM_PARAMS, true);
+    let test_prover = NonRootProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
+        internal_1_prover.get_vk(),
+        INTERNAL_SYSTEM_PARAMS,
+        true,
+    );
     assert_eq!(
         test_prover.get_cached_commit(false),
         test_prover.get_cached_commit(true)
@@ -156,12 +170,15 @@ fn test_internal_recursive_deep_layers() -> Result<()> {
     setup_tracing_with_log_level(Level::INFO);
     let (leaf_vk, leaf_proof) = run_leaf_aggregation(10)?;
 
-    let internal_for_leaf_prover =
-        NonRootProver::new::<Engine>(leaf_vk, INTERNAL_SYSTEM_PARAMS, false);
+    let internal_for_leaf_prover = NonRootProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
+        leaf_vk,
+        INTERNAL_SYSTEM_PARAMS,
+        false,
+    );
     let internal_for_leaf_proof =
         internal_for_leaf_prover.agg_prove::<Engine>(&[leaf_proof], None, false)?;
 
-    let internal_recursive_prover = NonRootProver::new::<Engine>(
+    let internal_recursive_prover = NonRootProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         internal_for_leaf_prover.get_vk(),
         INTERNAL_SYSTEM_PARAMS,
         true,

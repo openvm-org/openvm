@@ -26,7 +26,7 @@ pub use nonroot::*;
 pub use root::*;
 pub use utils::*;
 
-pub const MAX_NUM_PROOFS: usize = 4;
+pub const DEFAULT_MAX_NUM_PROOFS: usize = 4;
 
 pub trait AggregationProver<PB: ProverBackendV2> {
     /// Verifying key used to verify the result of agg_prove
@@ -47,10 +47,10 @@ pub trait AggregationProver<PB: ProverBackendV2> {
     ) -> Result<Proof>;
 }
 
-pub type NonRootCpuProver =
+pub type NonRootCpuProver<const MAX_NUM_PROOFS: usize> =
     NonRootAggregationProver<CpuBackendV2, VerifierSubCircuit<MAX_NUM_PROOFS>, NonRootTraceGen>;
 #[cfg(feature = "cuda")]
-pub type NonRootGpuProver =
+pub type NonRootGpuProver<const MAX_NUM_PROOFS: usize> =
     NonRootAggregationProver<GpuBackendV2, VerifierSubCircuit<MAX_NUM_PROOFS>, NonRootTraceGen>;
 
 #[derive(derive_new::new, Clone)]

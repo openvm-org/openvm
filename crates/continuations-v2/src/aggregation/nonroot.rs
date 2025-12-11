@@ -15,9 +15,7 @@ use stark_backend_v2::{
 use tracing::instrument;
 
 use crate::{
-    aggregation::{
-        AggregationCircuit, AggregationProver, MAX_NUM_PROOFS, trace_heights_tracing_info,
-    },
+    aggregation::{AggregationCircuit, AggregationProver, trace_heights_tracing_info},
     public_values::AggNodeTraceGen,
 };
 
@@ -68,7 +66,7 @@ where
         user_pv_commit: Option<[F; DIGEST_SIZE]>,
         is_recursive: bool,
     ) -> ProvingContextV2<PB> {
-        assert!(proofs.len() <= MAX_NUM_PROOFS);
+        assert!(proofs.len() <= self.circuit.verifier_circuit.max_num_proofs());
         let (child_vk, child_vk_commit) = if is_recursive {
             (&self.vk, self.self_vk_pcs_data.clone().unwrap())
         } else {
