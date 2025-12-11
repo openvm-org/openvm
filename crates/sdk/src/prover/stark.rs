@@ -99,7 +99,6 @@ where
 
     pub fn prove(&mut self, input: StdIn) -> Result<VmStarkProof<SC>, VirtualMachineError> {
         let app_proof = self.app_prover.prove(input)?;
-        println!("went out of the app_proof");
         let leaf_proofs = self.agg_prover.generate_leaf_proofs(&app_proof)?;
         self.agg_prover
             .aggregate_leaf_proofs(leaf_proofs, app_proof.user_public_values.public_values)

@@ -7126,8 +7126,6 @@ dependencies = [
  "openvm-native-compiler",
  "openvm-native-recursion",
  "openvm-native-transpiler",
- "openvm-new-keccak256-circuit",
- "openvm-new-keccak256-transpiler",
  "openvm-pairing-circuit",
  "openvm-pairing-transpiler",
  "openvm-rv32im-circuit",

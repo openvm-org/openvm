@@ -275,50 +275,34 @@ impl RunCmd {
         let exe: VmExe<F> = read_object_from_file(exe_path)?;
         let inputs = read_to_stdin(&self.run_args.input)?;
 
-        println!("debug executable {:?}", exe.program);
-
         // Create SDK
         let sdk = Sdk::new(app_config)?;
-        sdk.prove(exe, inputs);
 
-        // let output = sdk.execute(exe.clone(), inputs.clone())?;
-        // println!("Execution output: {output:?}");
+        // For metered modes, load existing app pk from disk or generate it
+        if matches!(
+            self.run_args.mode,
+            ExecutionMode::Segment | ExecutionMode::Meter
+        ) {
+            let target_dir = get_target_dir(&self.cargo_args.target_dir, &manifest_path);
+            let app_pk_path = get_app_pk_path(&target_dir);
+            let app_vk_path = get_app_vk_path(&target_dir);
 
-        // // Testing metered execution
-        // println!("Testing metered execution");
-        // let (public_values, segments) = sdk.execute_metered(exe.clone(), inputs.clone())?;
-        // let total_instructions: u64 = segments.iter().map(|s| s.num_insns).sum();
-        // println!("Number of instructions executed: {total_instructions}");
-        // println!("Total segments: {}", segments.len());
-        
-        
+            // Generate app pk if it doesn't exist
+            if !app_pk_path.exists() {
+                let config_path = self
+                    .run_args
+                    .config
+                    .to_owned()
+                    .unwrap_or_else(|| manifest_dir.join("openvm.toml"));
+                keygen(&config_path, &app_pk_path, &app_vk_path, None::<&str>)?;
+            }
 
-        // // For metered modes, load existing app pk from disk or generate it
-        // if matches!(
-        //     self.run_args.mode,
-        //     ExecutionMode::Segment | ExecutionMode::Meter
-        // ) {
-        //     let target_dir = get_target_dir(&self.cargo_args.target_dir, &manifest_path);
-        //     let app_pk_path = get_app_pk_path(&target_dir);
-        //     let app_vk_path = get_app_vk_path(&target_dir);
+            // Load the app pk and set it
+            let app_pk: AppProvingKey<SdkVmConfig> = read_object_from_file(&app_pk_path)?;
+            sdk.set_app_pk(app_pk)
+                .map_err(|_| eyre::eyre!("Failed to set app pk"))?;
+        }
 
-        //     // Generate app pk if it doesn't exist
-        //     if !app_pk_path.exists() {
-        //         let config_path = self
-        //             .run_args
-        //             .config
-        //             .to_owned()
-        //             .unwrap_or_else(|| manifest_dir.join("openvm.toml"));
-        //         keygen(&config_path, &app_pk_path, &app_vk_path, None::<&str>)?;
-        //     }
-
-        //     // Load the app pk and set it
-        //     let app_pk: AppProvingKey<SdkVmConfig> = read_object_from_file(&app_pk_path)?;
-        //     sdk.set_app_pk(app_pk)
-        //         .map_err(|_| eyre::eyre!("Failed to set app pk"))?;
-        // }
-
-        /*
         match self.run_args.mode {
             ExecutionMode::Pure => {
                 let output = sdk.execute(exe, inputs)?;
@@ -340,7 +324,6 @@ impl RunCmd {
                 println!("Total segments: {}", segments.len());
             }
         }
-        */
 
         Ok(())
     }
