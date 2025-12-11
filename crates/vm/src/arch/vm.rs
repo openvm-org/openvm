@@ -617,9 +617,6 @@ where
         let capacities = zip_eq(trace_heights, main_widths)
             .map(|(&h, w)| (h as usize, w))
             .collect::<Vec<_>>();
-
-        println!("debug capacities {:?}", capacities);
-
         let ctx = PreflightCtx::new_with_capacity(&capacities, num_insns);
 
         let system_config: &SystemConfig = self.config().as_ref();
@@ -945,9 +942,6 @@ where
                 let constant_trace_height =
                     pk.preprocessed_data.as_ref().map(|pd| pd.trace.height());
                 let air_names = pk.air_name.clone();
-
-                println!("air names {air_names}");
-
                 let width = pk
                     .vk
                     .params
@@ -1152,8 +1146,6 @@ where
             } = segment;
             let from_state = Option::take(&mut state).unwrap();
             vm.transport_init_memory_to_device(&from_state.memory);
-
-            println!("starting preflight for {seg_idx}");
             let PreflightExecutionOutput {
                 system_records,
                 record_arenas,
@@ -1165,12 +1157,8 @@ where
                 &trace_heights,
             )?;
             state = Some(to_state);
-            println!("finished preflight for {seg_idx}");
 
             let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
-
-            println!("generated_proving_ctx");
-
             modify_ctx(seg_idx, &mut ctx);
             let proof = vm.engine.prove(vm.pk(), ctx);
             proofs.push(proof);
