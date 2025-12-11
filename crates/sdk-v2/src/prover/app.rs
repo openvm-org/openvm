@@ -91,7 +91,7 @@ where
     }
 
     pub fn app_program_commit(&self) -> <E::PB as ProverBackendV2>::Commitment {
-        self.instance().program_commitment().clone()
+        *self.instance().program_commitment()
     }
 
     /// Returns commitment to the executable
@@ -168,7 +168,7 @@ pub fn verify_app_proof<E: StarkWhirEngine>(
     let VerifiedExecutionPayload {
         exe_commit,
         final_memory_root,
-    } = verify_segments(&engine, &vk, &proof.per_segment)?;
+    } = verify_segments(&engine, vk, &proof.per_segment)?;
 
     proof.user_public_values.verify(
         POSEIDON2_HASHER.get_or_init(vm_poseidon2_hasher),
