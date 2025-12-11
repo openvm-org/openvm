@@ -2,8 +2,6 @@ use std::{iter::once, sync::Arc};
 
 use eyre::Result;
 use itertools::Itertools;
-#[cfg(all(feature = "cuda", feature = "metrics"))]
-use openvm_cuda_common::stream::current_stream_sync;
 use recursion_circuit::system::{AggregationSubCircuit, VerifierTraceGen};
 use stark_backend_v2::{
     DIGEST_SIZE, F, SC, StarkWhirEngine, SystemParams,
@@ -95,8 +93,6 @@ where
                 .enumerate()
                 .collect_vec(),
         };
-        #[cfg(all(feature = "cuda", feature = "metrics"))]
-        current_stream_sync().unwrap();
         ret
     }
 
