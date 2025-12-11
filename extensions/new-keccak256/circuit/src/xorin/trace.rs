@@ -43,7 +43,7 @@ pub struct XorinVmRecordHeader {
     pub rs2_ptr: u32,
     pub buffer: u32,
     pub input: u32,
-    pub len: u32, 
+    pub len: u32,
     pub buffer_limbs: [u8; 136],
     pub input_limbs: [u8; 136],
     pub register_aux_cols: [MemoryReadAuxRecord; 3],
@@ -106,15 +106,11 @@ where
         let len = u32::from_le_bytes(unsafe {
             guest_mem.read::<u8, 4>(1, c.as_canonical_u32()) 
         }) as usize;
-
-        println!("len = {}", len);
         // Safety: length has to be multiple of 4
         // This is enforced by how the guest program calls the xorin opcode
         // Xorin opcode is only called through the keccak update guest program
         debug_assert!(len.is_multiple_of(4));
         let num_reads = len.div_ceil(4);
-
-        println!("instruction which called xorin {:?}", instruction);
 
         // safety: the below alloc uses MultiRowLayout alloc implementation because XorinVmRecordLayout is a MultiRowLayout
         // since get_num_rows() = 1, this will alloc_buffer of size width 
@@ -151,8 +147,6 @@ where
             record.inner.rs2_ptr, 
             &mut record.inner.register_aux_cols[2].prev_timestamp
         ));
-
-        println!("record.inner.len = {}", record.inner.len);
 
         debug_assert!(record.inner.buffer as usize + len <= (1 << self.pointer_max_bits));
         debug_assert!(record.inner.input as usize + len < (1 << self.pointer_max_bits));
@@ -225,12 +219,15 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         };
 
         let trace_row: &mut XorinVmCols<F> = row_slice.borrow_mut();
-        let record = record.inner.borrow_mut();
+        // Safety: the clone here is necessary because the XorinVmCols uses the same buffer
+        let record = record.inner.clone();
+
         trace_row.instruction.pc = F::from_canonical_u32(record.from_pc);
         trace_row.instruction.start_timestamp = F::from_canonical_u32(record.timestamp);
         trace_row.instruction.buffer_ptr = F::from_canonical_u32(record.rd_ptr);
         trace_row.instruction.input_ptr = F::from_canonical_u32(record.rs1_ptr);
         trace_row.instruction.len_ptr = F::from_canonical_u32(record.rs2_ptr);
+
         let buffer_u8: [u8; 4] = record.buffer.to_le_bytes();
         let buffer_limbs: [F; 4] = [
             F::from_canonical_u8(buffer_u8[0]), 
@@ -254,16 +251,13 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             F::from_canonical_u8(len_u8[2]),
             F::from_canonical_u8(len_u8[3])
         ];
-        trace_row.instruction.len_limbs = len_limbs; 
-        
+        trace_row.instruction.len_limbs = len_limbs;     
         for i in 0..(record.len/4) {
             trace_row.sponge.is_padding_bytes[i as usize] = F::ZERO;
         }
         for i in (record.len/4)..34 {
             trace_row.sponge.is_padding_bytes[i as usize] = F::ONE;
         }
-
-        println!("record.len = {}", record.len);
 
         // todo: think if it is fine to leave the other record.len..34 bits empty
         for i in 0..record.len {
