@@ -8,7 +8,9 @@ use tracing::info_span;
 use verify_stark::NonRootStarkProof;
 
 use crate::{
-    config::{AggregationConfig, AggregationTreeConfig},
+    config::{
+        AggregationConfig, AggregationTreeConfig, MAX_NUM_CHILDREN_INTERNAL, MAX_NUM_CHILDREN_LEAF,
+    },
     keygen::AggProvingKey,
 };
 
@@ -23,9 +25,9 @@ cfg_if::cfg_if! {
 }
 
 pub struct AggProver {
-    pub leaf_prover: NonRootAggregationProver,
-    pub internal_for_leaf_prover: NonRootAggregationProver,
-    pub internal_recursive_prover: NonRootAggregationProver,
+    pub leaf_prover: NonRootAggregationProver<MAX_NUM_CHILDREN_LEAF>,
+    pub internal_for_leaf_prover: NonRootAggregationProver<MAX_NUM_CHILDREN_INTERNAL>,
+    pub internal_recursive_prover: NonRootAggregationProver<MAX_NUM_CHILDREN_INTERNAL>,
     pub agg_tree_config: AggregationTreeConfig,
 }
 
@@ -35,6 +37,8 @@ impl AggProver {
         agg_config: AggregationConfig,
         agg_tree_config: AggregationTreeConfig,
     ) -> Self {
+        assert!(agg_tree_config.num_children_leaf <= MAX_NUM_CHILDREN_LEAF);
+        assert!(agg_tree_config.num_children_internal <= MAX_NUM_CHILDREN_INTERNAL);
         let leaf_prover = NonRootAggregationProver::new::<E>(app_vk, agg_config.params.leaf, false);
         let internal_for_leaf_prover = NonRootAggregationProver::new::<E>(
             leaf_prover.get_vk(),
