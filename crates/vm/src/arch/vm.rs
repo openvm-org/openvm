@@ -617,6 +617,9 @@ where
         let capacities = zip_eq(trace_heights, main_widths)
             .map(|(&h, w)| (h as usize, w))
             .collect::<Vec<_>>();
+
+        println!("debug capacities {:?}", capacities);
+
         let ctx = PreflightCtx::new_with_capacity(&capacities, num_insns);
 
         let system_config: &SystemConfig = self.config().as_ref();
@@ -1165,6 +1168,9 @@ where
             println!("finished preflight for {seg_idx}");
 
             let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
+
+            println!("generated_proving_ctx");
+
             modify_ctx(seg_idx, &mut ctx);
             let proof = vm.engine.prove(vm.pk(), ctx);
             proofs.push(proof);

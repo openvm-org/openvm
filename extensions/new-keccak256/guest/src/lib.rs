@@ -6,10 +6,10 @@ extern crate alloc;
 use openvm_platform::alloc::AlignedBuf;
 
 pub const OPCODE: u8 = 0x0b;
-pub const KECCAKF_FUNCT3: u8 = 0b100;
-pub const KECCAKF_FUNCT7: u8 = 0;
+// pub const KECCAKF_FUNCT3: u8 = 0b100;
+// pub const KECCAKF_FUNCT7: u8 = 0;
 pub const XORIN_FUNCT3: u8 = 0b100;
-pub const XORIN_FUNCT7: u8 = 1;
+pub const XORIN_FUNCT7: u8 = 0;
 pub const KECCAK_WIDTH_BYTES: usize = 200;
 
 #[cfg(target_os = "zkvm")]

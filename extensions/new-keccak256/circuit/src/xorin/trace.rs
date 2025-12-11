@@ -10,6 +10,7 @@ use openvm_circuit::system::memory::offline_checker::MemoryReadAuxRecord;
 use openvm_circuit::system::memory::offline_checker::MemoryWriteBytesAuxRecord;
 use crate::xorin::{columns::XorinVmCols, trace::instructions::riscv::RV32_REGISTER_AS};
 use crate::xorin::trace::instructions::riscv::RV32_MEMORY_AS;
+use crate::xorin::trace::instructions::program::DEFAULT_PC_STEP;
 
 use crate::xorin::XorinVmExecutor;
 use crate::xorin::XorinVmFiller;
@@ -105,11 +106,15 @@ where
         let len = u32::from_le_bytes(unsafe {
             guest_mem.read::<u8, 4>(1, c.as_canonical_u32()) 
         }) as usize;
+
+        println!("len = {}", len);
         // Safety: length has to be multiple of 4
         // This is enforced by how the guest program calls the xorin opcode
         // Xorin opcode is only called through the keccak update guest program
         debug_assert!(len.is_multiple_of(4));
         let num_reads = len.div_ceil(4);
+
+        println!("instruction which called xorin {:?}", instruction);
 
         // safety: the below alloc uses MultiRowLayout alloc implementation because XorinVmRecordLayout is a MultiRowLayout
         // since get_num_rows() = 1, this will alloc_buffer of size width 
@@ -146,6 +151,8 @@ where
             record.inner.rs2_ptr, 
             &mut record.inner.register_aux_cols[2].prev_timestamp
         ));
+
+        println!("record.inner.len = {}", record.inner.len);
 
         debug_assert!(record.inner.buffer as usize + len <= (1 << self.pointer_max_bits));
         debug_assert!(record.inner.input as usize + len < (1 << self.pointer_max_bits));
@@ -198,6 +205,7 @@ where
         // Due to the AIR constraints, the final memory timestamp should be the following 
         // Todo: use constants instead of number directly
         state.memory.timestamp = record.inner.timestamp + 105;
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
     }
@@ -217,7 +225,7 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         };
 
         let trace_row: &mut XorinVmCols<F> = row_slice.borrow_mut();
-        let record = record.inner;
+        let record = record.inner.borrow_mut();
         trace_row.instruction.pc = F::from_canonical_u32(record.from_pc);
         trace_row.instruction.start_timestamp = F::from_canonical_u32(record.timestamp);
         trace_row.instruction.buffer_ptr = F::from_canonical_u32(record.rd_ptr);
@@ -248,12 +256,14 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         ];
         trace_row.instruction.len_limbs = len_limbs; 
         
-        for i in 0..record.len {
+        for i in 0..(record.len/4) {
             trace_row.sponge.is_padding_bytes[i as usize] = F::ZERO;
         }
-        for i in record.len..34 {
+        for i in (record.len/4)..34 {
             trace_row.sponge.is_padding_bytes[i as usize] = F::ONE;
         }
+
+        println!("record.len = {}", record.len);
 
         // todo: think if it is fine to leave the other record.len..34 bits empty
         for i in 0..record.len {
