@@ -7,6 +7,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
 use rrs_lib::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
+use openvm_instructions::riscv::RV32_MEMORY_AS;
 
 #[derive(
     Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
@@ -40,10 +41,9 @@ impl<F: PrimeField32> TranspilerExtension<F> for NewKeccakTranspilerExtension {
             return None;
         }
 
-        // TODO: what does e_as mean?
         let instruction = from_r_type(
             Rv32NewKeccakOpcode::XORIN.global_opcode().as_usize(),
-            2,
+            RV32_MEMORY_AS as usize,
             &dec_insn,
             true,
         );

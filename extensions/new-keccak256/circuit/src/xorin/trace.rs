@@ -201,6 +201,8 @@ where
         state.memory.timestamp = record.inner.timestamp + 105;
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
+        println!("debug record {:?}", record.inner.clone());
+
         Ok(())
     }
 }
@@ -308,5 +310,7 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             );
             timestamp += 1;
         }        
+
+        println!("debug trace row {:?}", trace_row);
     }
 }

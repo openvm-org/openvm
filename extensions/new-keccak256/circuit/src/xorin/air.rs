@@ -57,6 +57,8 @@ impl<AB: InteractionBuilder> Air<AB> for XorinVmAir {
 
         let start_write_timestamp = self.constrain_input_read(builder, local, start_read_timestamp, &mem.input_bytes_read_aux_cols, &mem.buffer_bytes_read_aux_cols);
 
+        self.constrain_xor(builder, local);
+
         self.constrain_output_write(builder, local, start_write_timestamp, &mem.buffer_bytes_write_aux_cols);
     }
 }

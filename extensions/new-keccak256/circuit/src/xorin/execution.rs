@@ -144,6 +144,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
+    println!("xorin e1 got hit");
     let pre_compute: &XorinPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<XorinPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, true>(pre_compute, exec_state);
