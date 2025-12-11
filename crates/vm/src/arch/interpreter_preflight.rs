@@ -2,7 +2,7 @@ use std::{iter::repeat_n, sync::Arc};
 
 #[cfg(not(feature = "parallel"))]
 use itertools::Itertools;
-use openvm_instructions::{instruction::Instruction, program::Program, LocalOpcode, SystemOpcode};
+use openvm_instructions::{LocalOpcode, SystemOpcode, VmOpcode, instruction::Instruction, program::Program};
 use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
     p3_maybe_rayon::prelude::*,
@@ -177,6 +177,9 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
         tracing::trace!("pc: {pc:#x} | {:?}", pc_entry.insn);
 
         let opcode = pc_entry.insn.opcode;
+        if opcode == VmOpcode::new(784) {
+            println!("executor.id {}", pc_entry.executor_idx);
+        }
         let c = pc_entry.insn.c;
         // Handle termination instruction
         if opcode.as_usize() == SystemOpcode::CLASS_OFFSET + SystemOpcode::TERMINATE as usize {

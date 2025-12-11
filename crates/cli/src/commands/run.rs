@@ -275,8 +275,11 @@ impl RunCmd {
         let exe: VmExe<F> = read_object_from_file(exe_path)?;
         let inputs = read_to_stdin(&self.run_args.input)?;
 
+        println!("debug executable {:?}", exe.program);
+
         // Create SDK
         let sdk = Sdk::new(app_config)?;
+        sdk.prove(exe, inputs);
 
         // let output = sdk.execute(exe.clone(), inputs.clone())?;
         // println!("Execution output: {output:?}");
@@ -288,7 +291,7 @@ impl RunCmd {
         // println!("Number of instructions executed: {total_instructions}");
         // println!("Total segments: {}", segments.len());
         
-        sdk.prove(exe, inputs);
+        
 
         // // For metered modes, load existing app pk from disk or generate it
         // if matches!(

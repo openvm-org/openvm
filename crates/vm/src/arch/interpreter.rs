@@ -323,7 +323,7 @@ where
     /// program until either termination if `num_insns` is `None` or for exactly `num_insns`
     /// instructions if `num_insns` is `Some`.
     ///
-    /// Returns the final VM state when execution stops.
+    /// Returns the final VM state when xtion stops.
     pub fn execute_from_state(
         &self,
         from_state: VmState<F, GuestMemory>,
