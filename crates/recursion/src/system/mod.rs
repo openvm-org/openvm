@@ -69,6 +69,7 @@ pub trait AggregationSubCircuit {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>>;
     fn public_values_bus(&self) -> PublicValuesBus;
     fn cached_commit_bus(&self) -> CachedCommitBus;
+    fn max_num_proofs(&self) -> usize;
 }
 
 // TODO[jpw]: make this generic in <SC: StarkGenericConfig>
@@ -516,6 +517,10 @@ impl<const MAX_NUM_PROOFS: usize> AggregationSubCircuit for VerifierSubCircuit<M
 
     fn cached_commit_bus(&self) -> CachedCommitBus {
         self.bus_inventory.cached_commit_bus
+    }
+
+    fn max_num_proofs(&self) -> usize {
+        MAX_NUM_PROOFS
     }
 }
 

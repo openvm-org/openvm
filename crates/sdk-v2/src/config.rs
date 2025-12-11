@@ -9,9 +9,13 @@ pub const DEFAULT_APP_LOG_BLOWUP: usize = 1;
 pub const DEFAULT_LEAF_LOG_BLOWUP: usize = 2;
 pub const DEFAULT_INTERNAL_LOG_BLOWUP: usize = 2;
 
-// Aggregation Tree Defaults
-pub const DEFAULT_NUM_CHILDREN_LEAF: usize = 1;
-pub const DEFAULT_NUM_CHILDREN_INTERNAL: usize = 3;
+// WARNING: These currently serve as both the DEFAULT and MAXIMUM number of
+// children for the leaf and internal aggregation layers, as the max number
+// of children is a const generic in the recursion circuit. We may change
+// these as needed, but note that a disparity in max and actual number of
+// leaf/internal children will cause a performance loss.
+pub const MAX_NUM_CHILDREN_LEAF: usize = 1;
+pub const MAX_NUM_CHILDREN_INTERNAL: usize = 3;
 
 pub const DEFAULT_LEAF_PARAMS: SystemParams = default_leaf_params(DEFAULT_LEAF_LOG_BLOWUP);
 pub const DEFAULT_INTERNAL_PARAMS: SystemParams =
@@ -59,7 +63,7 @@ pub struct AggregationTreeConfig {
     /// Each leaf verifier circuit will aggregate this many App VM proofs.
     #[arg(
         long,
-        default_value_t = DEFAULT_NUM_CHILDREN_LEAF,
+        default_value_t = MAX_NUM_CHILDREN_LEAF,
         help = "Number of children per leaf verifier circuit",
         help_heading = "Aggregation Tree Options"
     )]
@@ -68,7 +72,7 @@ pub struct AggregationTreeConfig {
     /// where each proof may be of either leaf or internal verifier (self) circuit.
     #[arg(
         long,
-        default_value_t = DEFAULT_NUM_CHILDREN_INTERNAL,
+        default_value_t = MAX_NUM_CHILDREN_INTERNAL,
         help = "Number of children per internal verifier circuit",
         help_heading = "Aggregation Tree Options"
     )]
@@ -78,8 +82,8 @@ pub struct AggregationTreeConfig {
 impl Default for AggregationTreeConfig {
     fn default() -> Self {
         Self {
-            num_children_leaf: DEFAULT_NUM_CHILDREN_LEAF,
-            num_children_internal: DEFAULT_NUM_CHILDREN_INTERNAL,
+            num_children_leaf: MAX_NUM_CHILDREN_LEAF,
+            num_children_internal: MAX_NUM_CHILDREN_INTERNAL,
         }
     }
 }
