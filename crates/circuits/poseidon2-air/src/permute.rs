@@ -2,37 +2,34 @@ use std::marker::PhantomData;
 
 use derivative::Derivative;
 use openvm_stark_backend::p3_field::{Field, InjectiveMonomial, PrimeCharacteristicRing};
-use openvm_stark_sdk::p3_baby_bear::{BabyBearInternalLayerParameters, BabyBearParameters};
-use p3_monty_31::InternalLayerBaseParameters;
 use p3_poseidon2::{
     add_rc_and_sbox_generic, mds_light_permutation, ExternalLayer, ExternalLayerConstants,
     ExternalLayerConstructor, GenericPoseidon2LinearLayers, InternalLayer,
     InternalLayerConstructor, MDSMat4,
 };
 
-use super::BABY_BEAR_POSEIDON2_SBOX_DEGREE;
+use super::{
+    babybear_internal_linear_layer, BABY_BEAR_POSEIDON2_SBOX_DEGREE, INTERNAL_DIAG_MONTY_16,
+};
 
 const WIDTH: usize = crate::POSEIDON2_WIDTH;
 
-/// Linear layers for BabyBear Poseidon2 using the generic Plonky3 interfaces.
+/// Linear layers for BabyBear Poseidon2 using the Plonky3 interfaces, but with a
+/// hand-rolled internal layer to preserve the previous constraint DAG.
 #[derive(Debug, Clone)]
 pub struct BabyBearPoseidon2LinearLayers;
 
 impl GenericPoseidon2LinearLayers<16> for BabyBearPoseidon2LinearLayers {
     fn internal_linear_layer<R: PrimeCharacteristicRing>(state: &mut [R; WIDTH]) {
-        <BabyBearInternalLayerParameters as InternalLayerBaseParameters<
-            BabyBearParameters,
-            16,
-        >>::generic_internal_linear_layer(state);
+        // Use the old-style internal layer (sum + diag * state[i]) to keep the
+        // Poseidon2 AIR identical to the previous release.
+        babybear_internal_linear_layer(state, &INTERNAL_DIAG_MONTY_16);
     }
 
     fn external_linear_layer<R: PrimeCharacteristicRing>(state: &mut [R; WIDTH]) {
         mds_light_permutation(state, &MDSMat4);
     }
 }
-
-// Generic implementations of the Poseidon2 internal and external layers over any
-// PrimeCharacteristicRing.
 
 #[derive(Debug, Derivative)]
 #[derivative(Clone)]
