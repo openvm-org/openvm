@@ -1149,6 +1149,8 @@ where
             } = segment;
             let from_state = Option::take(&mut state).unwrap();
             vm.transport_init_memory_to_device(&from_state.memory);
+
+            println!("starting preflight for {seg_idx}");
             let PreflightExecutionOutput {
                 system_records,
                 record_arenas,
@@ -1160,6 +1162,7 @@ where
                 &trace_heights,
             )?;
             state = Some(to_state);
+            println!("finished preflight for {seg_idx}");
 
             let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
             modify_ctx(seg_idx, &mut ctx);

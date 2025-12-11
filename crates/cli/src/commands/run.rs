@@ -278,16 +278,17 @@ impl RunCmd {
         // Create SDK
         let sdk = Sdk::new(app_config)?;
 
-        let output = sdk.execute(exe.clone(), inputs.clone())?;
-        println!("Execution output: {output:?}");
+        // let output = sdk.execute(exe.clone(), inputs.clone())?;
+        // println!("Execution output: {output:?}");
 
-        // Testing metered execution
-        println!("Testing metered execution");
-        let (public_values, segments) = sdk.execute_metered(exe.clone(), inputs.clone())?;
-
+        // // Testing metered execution
+        // println!("Testing metered execution");
+        // let (public_values, segments) = sdk.execute_metered(exe.clone(), inputs.clone())?;
         // let total_instructions: u64 = segments.iter().map(|s| s.num_insns).sum();
         // println!("Number of instructions executed: {total_instructions}");
         // println!("Total segments: {}", segments.len());
+        
+        sdk.prove(exe, inputs);
 
         // // For metered modes, load existing app pk from disk or generate it
         // if matches!(
