@@ -83,10 +83,7 @@ impl XorinVmAir {
         ];
 
         let reg_addr_sp = AB::F::ONE;
-
-        // todo: fill this in
-        let timestamp_change =
-            local.instruction.len + local.instruction.len + local.instruction.len;
+        let timestamp_change = AB::Expr::from_canonical_u32(3 + 3 * 34);
 
         self.execution_bridge
             .execute_and_increment_pc(
