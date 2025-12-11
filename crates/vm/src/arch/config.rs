@@ -123,6 +123,11 @@ pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
 const DEFAULT_U8_BLOCK_SIZE: usize = 4;
 const DEFAULT_NATIVE_BLOCK_SIZE: usize = 1;
 
+/// The constant block size used for memory accesses when access adapters are disabled.
+/// All memory accesses for address spaces 1-3 must use this block size.
+/// This is also the block size used by the Boundary AIR for memory bus interactions.
+pub const CONST_BLOCK_SIZE: usize = 4;
+
 /// Trait for generating a init.rs file that contains a call to moduli_init!,
 /// complex_init!, sw_init! with the supported moduli and curves.
 /// Should be implemented by all VM config structs.
@@ -183,6 +188,11 @@ pub struct MemoryConfig {
     pub decomp: usize,
     /// Maximum N AccessAdapter AIR to support.
     pub max_access_adapter_n: usize,
+    /// Whether access adapters are enabled. When disabled, all memory accesses must be of the
+    /// standard block size (e.g., 4 for address spaces 1-3). This removes the need for access
+    /// adapter AIRs and simplifies the memory system.
+    #[new(value = "true")]
+    pub access_adapters_enabled: bool,
 }
 
 impl Default for MemoryConfig {
@@ -194,7 +204,15 @@ impl Default for MemoryConfig {
         addr_spaces[RV32_MEMORY_AS as usize].num_cells = MAX_CELLS;
         addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = DEFAULT_MAX_NUM_PUBLIC_VALUES;
         addr_spaces[NATIVE_AS as usize].num_cells = MAX_CELLS;
-        Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17, 32)
+        Self {
+            addr_space_height: 3,
+            addr_spaces,
+            pointer_max_bits: POINTER_MAX_BITS,
+            timestamp_max_bits: 29,
+            decomp: 17,
+            max_access_adapter_n: 32,
+            access_adapters_enabled: true,
+        }
     }
 }
 
@@ -244,6 +262,36 @@ impl MemoryConfig {
             .iter()
             .map(|addr_sp| log2_strict_usize(addr_sp.min_block_size) as u8)
             .collect()
+    }
+
+    /// Returns true if the Native address space (AS 4) is used.
+    /// Native AS is considered "used" if it has any allocated cells.
+    pub fn is_native_as_used(&self) -> bool {
+        self.addr_spaces
+            .get(NATIVE_AS as usize)
+            .is_some_and(|config| config.num_cells > 0)
+    }
+
+    /// Disables access adapters. When disabled, all memory accesses for address spaces 1-3
+    /// must use the constant block size (4). Access adapters will only be used for
+    /// address space 4 (Native) if it is enabled.
+    pub fn without_access_adapters(mut self) -> Self {
+        self.access_adapters_enabled = false;
+        self
+    }
+
+    /// Enables access adapters. This is the default behavior.
+    pub fn with_access_adapters(mut self) -> Self {
+        self.access_adapters_enabled = true;
+        self
+    }
+
+    /// Automatically sets `access_adapters_enabled` based on whether Native AS is used.
+    /// If Native AS is not used, access adapters are disabled since all other address spaces
+    /// use a fixed block size of 4.
+    pub fn with_auto_access_adapters(mut self) -> Self {
+        self.access_adapters_enabled = self.is_native_as_used();
+        self
     }
 }
 
@@ -375,6 +423,7 @@ impl SystemConfig {
             + num_memory_airs(
                 self.continuation_enabled,
                 self.memory_config.max_access_adapter_n,
+                self.memory_config.access_adapters_enabled,
             )
     }
 
@@ -383,6 +432,33 @@ impl SystemConfig {
             true => CHUNK,
             false => 1,
         }
+    }
+
+    /// Disables access adapters. When disabled, all memory accesses for address spaces 1-3
+    /// must use the constant block size (4). This simplifies the memory system by removing
+    /// access adapter AIRs.
+    pub fn without_access_adapters(mut self) -> Self {
+        self.memory_config.access_adapters_enabled = false;
+        self
+    }
+
+    /// Enables access adapters. This is the default behavior.
+    pub fn with_access_adapters(mut self) -> Self {
+        self.memory_config.access_adapters_enabled = true;
+        self
+    }
+
+    /// Automatically sets `access_adapters_enabled` based on whether Native AS is used.
+    /// If Native AS is not used, access adapters are disabled since all other address spaces
+    /// use a fixed block size of 4.
+    pub fn with_auto_access_adapters(mut self) -> Self {
+        self.memory_config = self.memory_config.with_auto_access_adapters();
+        self
+    }
+
+    /// Returns true if access adapters are enabled.
+    pub fn access_adapters_enabled(&self) -> bool {
+        self.memory_config.access_adapters_enabled
     }
 }
 

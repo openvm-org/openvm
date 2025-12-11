@@ -107,6 +107,7 @@ pub struct MemoryCtx<const PAGE_BITS: usize> {
     pub boundary_idx: usize,
     pub merkle_tree_index: Option<usize>,
     pub adapter_offset: usize,
+    access_adapters_enabled: bool,
     continuations_enabled: bool,
     chunk: u32,
     chunk_bits: u32,
@@ -134,6 +135,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             boundary_idx: config.memory_boundary_air_id(),
             merkle_tree_index: config.memory_merkle_air_id(),
             adapter_offset: config.access_adapter_air_id_offset(),
+            access_adapters_enabled: config.memory_config.access_adapters_enabled,
             chunk,
             chunk_bits,
             memory_dimensions,
@@ -232,6 +234,11 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         size_bits: u32,
         num: u32,
     ) {
+        // Skip if access adapters are disabled
+        if !self.access_adapters_enabled {
+            return;
+        }
+
         debug_assert!((address_space as usize) < self.min_block_size_bits.len());
 
         // SAFETY: address_space passed is usually a hardcoded constant or derived from an

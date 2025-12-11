@@ -18,6 +18,7 @@ pub const DEFAULT_MAX_COST: u64 = DEFAULT_MAX_SEGMENTS * DEFAULT_SEGMENT_MAX_CEL
 pub struct AccessAdapterCtx {
     min_block_size_bits: Vec<u8>,
     idx_offset: usize,
+    enabled: bool,
 }
 
 impl AccessAdapterCtx {
@@ -25,6 +26,7 @@ impl AccessAdapterCtx {
         Self {
             min_block_size_bits: config.memory_config.min_block_size_bits(),
             idx_offset: config.access_adapter_air_id_offset(),
+            enabled: config.memory_config.access_adapters_enabled,
         }
     }
 
@@ -36,6 +38,11 @@ impl AccessAdapterCtx {
         size_bits: u32,
         widths: &[usize],
     ) {
+        // Skip if access adapters are disabled
+        if !self.enabled {
+            return;
+        }
+
         debug_assert!((address_space as usize) < self.min_block_size_bits.len());
 
         // SAFETY: address_space passed is usually a hardcoded constant or derived from an
