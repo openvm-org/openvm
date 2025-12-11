@@ -13,7 +13,7 @@ use tracing::instrument;
 use crate::{
     arch::{
         AddressSpaceHostConfig, AddressSpaceHostLayout, DenseRecordArena, MemoryConfig,
-        RecordArena, MAX_CELL_BYTE_SIZE,
+        RecordArena, CONST_BLOCK_SIZE, MAX_CELL_BYTE_SIZE,
     },
     system::{
         memory::{
@@ -941,10 +941,10 @@ impl TracingMemory {
 
         match is_persistent {
             false => TouchedMemory::Volatile(
-                self.touched_blocks_to_equipartition::<F, 1>(touched_blocks),
+                self.touched_blocks_to_equipartition::<F, 1, 1>(touched_blocks),
             ),
             true => TouchedMemory::Persistent(
-                self.touched_blocks_to_equipartition::<F, CHUNK>(touched_blocks),
+                self.touched_blocks_to_equipartition::<F, CONST_BLOCK_SIZE, CHUNK>(touched_blocks),
             ),
         }
     }
@@ -974,29 +974,37 @@ impl TracingMemory {
 
     /// Returns the equipartition of the touched blocks.
     /// Modifies records and adds new to account for the initial/final segments.
-    fn touched_blocks_to_equipartition<F: Field, const CHUNK: usize>(
+    fn touched_blocks_to_equipartition<
+        F: Field,
+        const PARTITION_SIZE: usize,
+        const OUTPUT_SIZE: usize,
+    >(
         &mut self,
         touched_blocks: Vec<((u32, u32), AccessMetadata)>,
-    ) -> TimestampedEquipartition<F, CHUNK> {
+    ) -> TimestampedEquipartition<F, OUTPUT_SIZE> {
+        assert!(
+            OUTPUT_SIZE % PARTITION_SIZE == 0,
+            "Output size must be a multiple of the partition size"
+        );
         // [perf] We can `.with_capacity()` if we keep track of the number of segments we initialize
-        let mut final_memory = Vec::new();
+        let mut partitioned_memory = Vec::new();
 
         debug_assert!(touched_blocks.is_sorted_by_key(|(addr, _)| addr));
-        self.handle_touched_blocks::<F, CHUNK>(&mut final_memory, touched_blocks);
+        self.handle_touched_blocks::<F, PARTITION_SIZE>(&mut partitioned_memory, touched_blocks);
 
-        debug_assert!(final_memory.is_sorted_by_key(|(key, _)| *key));
-        final_memory
+        debug_assert!(partitioned_memory.is_sorted_by_key(|(key, _)| *key));
+        Self::rechunk_final_memory::<F, PARTITION_SIZE, OUTPUT_SIZE>(partitioned_memory)
     }
 
-    fn handle_touched_blocks<F: Field, const CHUNK: usize>(
+    fn handle_touched_blocks<F: Field, const PARTITION_SIZE: usize>(
         &mut self,
-        final_memory: &mut Vec<((u32, u32), TimestampedValues<F, CHUNK>)>,
+        final_memory: &mut Vec<((u32, u32), TimestampedValues<F, PARTITION_SIZE>)>,
         touched_blocks: Vec<((u32, u32), AccessMetadata)>,
     ) {
-        let mut current_values = vec![0u8; MAX_CELL_BYTE_SIZE * CHUNK];
+        let mut current_values = vec![0u8; MAX_CELL_BYTE_SIZE * PARTITION_SIZE];
         let mut current_cnt = 0;
         let mut current_address = MemoryAddress::new(0, 0);
-        let mut current_timestamps = vec![0; CHUNK];
+        let mut current_timestamps = vec![0; PARTITION_SIZE];
         for ((addr_space, ptr), access_metadata) in touched_blocks {
             // SAFETY: addr_space of touched blocks are all in bounds
             let addr_space_config =
@@ -1009,16 +1017,16 @@ impl TracingMemory {
                 current_cnt == 0
                     || (current_address.address_space == addr_space
                         && current_address.pointer + current_cnt as u32 == ptr),
-                "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`"
+                "The union of all touched blocks must consist of blocks with sizes divisible by the partition size"
             );
             debug_assert!(block_size >= min_block_size as u8);
             debug_assert!(ptr % min_block_size as u32 == 0);
 
             if current_cnt == 0 {
                 assert_eq!(
-                    ptr & (CHUNK as u32 - 1),
+                    ptr & (PARTITION_SIZE as u32 - 1),
                     0,
-                    "The union of all touched blocks must consist of `CHUNK`-aligned blocks"
+                    "The union of all touched blocks must consist of partition-aligned blocks"
                 );
                 current_address = MemoryAddress::new(addr_space, ptr);
             }
@@ -1033,7 +1041,7 @@ impl TracingMemory {
                     type_size: cell_size as u32,
                 });
             }
-            if min_block_size > CHUNK {
+            if min_block_size > PARTITION_SIZE {
                 assert_eq!(current_cnt, 0);
                 for i in (0..block_size as u32).step_by(min_block_size) {
                     self.add_split_record(AccessRecordHeader {
@@ -1041,7 +1049,7 @@ impl TracingMemory {
                         address_space: addr_space,
                         pointer: ptr + i,
                         block_size: min_block_size as u32,
-                        lowest_block_size: CHUNK as u32,
+                        lowest_block_size: PARTITION_SIZE as u32,
                         type_size: cell_size as u32,
                     });
                 }
@@ -1053,14 +1061,14 @@ impl TracingMemory {
                         block_size as usize * cell_size,
                     )
                 };
-                for i in (0..block_size as u32).step_by(CHUNK) {
+                for i in (0..block_size as u32).step_by(PARTITION_SIZE) {
                     final_memory.push((
                         (addr_space, ptr + i),
                         TimestampedValues {
                             timestamp,
                             values: from_fn(|j| {
                                 let byte_idx = (i as usize + j) * cell_size;
-                                // SAFETY: block_size is multiple of CHUNK and we are reading chunks
+                                // SAFETY: block_size is multiple of PARTITION_SIZE and we are reading chunks
                                 // of cells within bounds
                                 unsafe {
                                     addr_space_config
@@ -1084,15 +1092,15 @@ impl TracingMemory {
                     current_values[current_cnt * cell_size..current_cnt * cell_size + cell_size]
                         .copy_from_slice(cell_data);
                     if current_cnt & (min_block_size - 1) == 0 {
-                        // SAFETY: current_cnt / min_block_size < CHUNK / min_block_size <= CHUNK
+                        // SAFETY: current_cnt / min_block_size < PARTITION_SIZE / min_block_size <= PARTITION_SIZE
                         unsafe {
                             *current_timestamps.get_unchecked_mut(current_cnt / min_block_size) =
                                 timestamp;
                         }
                     }
                     current_cnt += 1;
-                    if current_cnt == CHUNK {
-                        let timestamp = *current_timestamps[..CHUNK / min_block_size]
+                    if current_cnt == PARTITION_SIZE {
+                        let timestamp = *current_timestamps[..PARTITION_SIZE / min_block_size]
                             .iter()
                             .max()
                             .unwrap();
@@ -1101,12 +1109,12 @@ impl TracingMemory {
                                 timestamp_and_mask: timestamp,
                                 address_space: addr_space,
                                 pointer: current_address.pointer,
-                                block_size: CHUNK as u32,
+                                block_size: PARTITION_SIZE as u32,
                                 lowest_block_size: min_block_size as u32,
                                 type_size: cell_size as u32,
                             },
-                            &current_values[..CHUNK * cell_size],
-                            &current_timestamps[..CHUNK / min_block_size],
+                            &current_values[..PARTITION_SIZE * cell_size],
+                            &current_timestamps[..PARTITION_SIZE / min_block_size],
                         );
                         final_memory.push((
                             (current_address.address_space, current_address.pointer),
@@ -1126,7 +1134,53 @@ impl TracingMemory {
                 }
             }
         }
-        assert_eq!(current_cnt, 0, "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`");
+        assert_eq!(
+            current_cnt, 0,
+            "The union of all touched blocks must consist of blocks with sizes divisible by the partition size"
+        );
+    }
+
+    fn rechunk_final_memory<F: Field, const PARTITION_SIZE: usize, const OUTPUT_SIZE: usize>(
+        partitioned_memory: Vec<((u32, u32), TimestampedValues<F, PARTITION_SIZE>)>,
+    ) -> TimestampedEquipartition<F, OUTPUT_SIZE> {
+        debug_assert!(OUTPUT_SIZE % PARTITION_SIZE == 0);
+        let merge_factor = OUTPUT_SIZE / PARTITION_SIZE;
+        let mut final_memory =
+            Vec::with_capacity(partitioned_memory.len().saturating_div(merge_factor));
+        let mut idx = 0;
+        while idx < partitioned_memory.len() {
+            debug_assert!(idx + merge_factor <= partitioned_memory.len());
+
+            let group = &partitioned_memory[idx..idx + merge_factor];
+            let ((addr_space, base_ptr), _) = group[0];
+            debug_assert_eq!(base_ptr % OUTPUT_SIZE as u32, 0);
+
+            for (j, ((curr_addr_space, ptr), _)) in group.iter().enumerate() {
+                debug_assert_eq!(*curr_addr_space, addr_space);
+                debug_assert_eq!(*ptr, base_ptr + (j * PARTITION_SIZE) as u32);
+            }
+
+            let timestamp = group
+                .iter()
+                .map(|(_, ts_values)| ts_values.timestamp)
+                .max()
+                .expect("Group is non-empty");
+            let values = from_fn(|i| {
+                let group_idx = i / PARTITION_SIZE;
+                let within_group_idx = i % PARTITION_SIZE;
+                group[group_idx].1.values[within_group_idx]
+            });
+
+            final_memory.push((
+                (addr_space, base_ptr),
+                TimestampedValues { timestamp, values },
+            ));
+
+            idx += merge_factor;
+        }
+
+        debug_assert!(final_memory.is_sorted_by_key(|(key, _)| *key));
+        final_memory
     }
 
     pub fn address_space_alignment(&self) -> Vec<u8> {
