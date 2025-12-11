@@ -902,6 +902,10 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
     let mut create_airs = Vec::new();
     let mut execution_where_predicates: Vec<syn::WherePredicate> = Vec::new();
     let mut circuit_where_predicates: Vec<syn::WherePredicate> = Vec::new();
+    execution_where_predicates.push(parse_quote! {
+        F: ::openvm_stark_backend::p3_field::PrimeField32
+            + ::openvm_stark_backend::p3_field::InjectiveMonomial<7>
+    });
 
     let source_field_ty = source_field.ty.clone();
 
