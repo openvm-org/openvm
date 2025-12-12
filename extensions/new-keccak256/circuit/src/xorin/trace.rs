@@ -155,6 +155,8 @@ where
         debug_assert!(record.inner.input as usize + len < (1 << self.pointer_max_bits));
         debug_assert!(record.inner.len < (1 << self.pointer_max_bits));
 
+        println!("timestamp before buffer read {}", state.memory.timestamp());
+
         // read buffer
         for idx in 0..num_reads {
             let read = tracing_read::<4>(
@@ -165,6 +167,8 @@ where
             );
             record.inner.buffer_limbs[4*idx..4*(idx+1)].copy_from_slice(&read);
         }        
+
+        println!("timestamp before input read {}", state.memory.timestamp());
 
         // read input 
         for idx in 0..num_reads {
@@ -188,20 +192,24 @@ where
             *x_xor_y = x ^ y;
         }
 
-        for (i, word) in result.chunks_exact(4).enumerate() {
+        println!("timestamp before input write {}", state.memory.timestamp());
+
+        // write result
+        for idx in 0..num_reads {
+            let mut word: [u8; 4] = [0u8; 4];
+            word.copy_from_slice(&result[4*idx..4*(idx+1)]);
             tracing_write(
                 state.memory, 
                 RV32_MEMORY_AS, 
-                record.inner.buffer + (i * 4) as u32, 
-                word.try_into().unwrap(), 
-                &mut record.inner.buffer_write_aux_cols[i].prev_timestamp, 
-                &mut record.inner.buffer_write_aux_cols[i].prev_data 
+                record.inner.buffer + (idx * 4) as u32, 
+                word,
+                &mut record.inner.buffer_write_aux_cols[idx].prev_timestamp, 
+                &mut record.inner.buffer_write_aux_cols[idx].prev_data 
             );
         }
 
-        // Due to the AIR constraints, the final memory timestamp should be the following 
         // Todo: use constants instead of number directly
-        state.memory.timestamp = record.inner.timestamp + 105;
+        state.memory.timestamp = state.memory.timestamp();
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         println!("debug record {:?}", record.inner.clone());
@@ -216,7 +224,6 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         mem_helper: &MemoryAuxColsFactory<F>,
         mut row_slice: &mut [F],
     ) {
-
         let record: XorinVmRecordMut = unsafe {
             get_record_from_slice(&mut row_slice, XorinVmRecordLayout {
                 metadata: XorinVmMetadata {
@@ -224,12 +231,11 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             })
         };
 
-        let trace_row: &mut XorinVmCols<F> = row_slice.borrow_mut();
-
-        println!("debug trace row {:?}", trace_row);
-
         // Safety: the clone here is necessary because the XorinVmCols uses the same buffer
         let record = record.inner.clone();
+        row_slice.fill(F::ZERO);
+
+        let trace_row: &mut XorinVmCols<F> = row_slice.borrow_mut();
 
         trace_row.instruction.pc = F::from_canonical_u32(record.from_pc);
         trace_row.instruction.is_enabled = F::ONE;
@@ -273,17 +279,10 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         for i in (record.len/4)..34 {
             trace_row.sponge.is_padding_bytes[i as usize] = F::ONE;
         }
-        // todo: think if it is fine to leave the other record.len..34 bits empty
-        for i in 0..record.len {
-            trace_row.sponge.preimage_buffer_bytes[i as usize] = F::from_canonical_u8(record.buffer_limbs[i as usize]);
-            trace_row.sponge.input_bytes[i as usize] = F::from_canonical_u8(record.input_limbs[i as usize]);
-            trace_row.sponge.postimage_buffer_bytes[i as usize] = F::from_canonical_u8(record.buffer_limbs[i as usize] ^ record.input_limbs[i as usize]);
-            let b_val = record.input_limbs[i as usize] as u32; 
-            let c_val = record.buffer_limbs[i as usize] as u32; 
-            self.bitwise_lookup_chip.request_xor(b_val, c_val);
-        }
 
         let mut timestamp = record.timestamp;
+        let record_len: usize = record.len as usize;
+        let num_reads: usize = record_len.div_ceil(4);
 
         // todo: think if the order matters here (maybe due to timestamp things), but this should be fine since it is matched with the one in preflight
         for t in 0..3 {
@@ -295,8 +294,10 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
 
             timestamp += 1;
         }
+
+        println!("timestamp before buffer read {}", timestamp);
         
-        for t in 0..34 {
+        for t in 0..num_reads {
             mem_helper.fill(
                 record.buffer_read_aux_cols[t].prev_timestamp,
                 timestamp,
@@ -305,7 +306,9 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             timestamp += 1;
         }
 
-        for t in 0..34 {
+        println!("timestamp before input read {}", timestamp);
+
+        for t in 0..num_reads {
             mem_helper.fill(
                 record.input_read_aux_cols[t].prev_timestamp,
                 timestamp,
@@ -314,7 +317,19 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             timestamp += 1;
         }
 
-        for t in 0..34 {
+        // todo: think if it is fine to leave the other record.len..34 bits empty
+        for i in 0..record_len {
+            trace_row.sponge.preimage_buffer_bytes[i] = F::from_canonical_u8(record.buffer_limbs[i]);
+            trace_row.sponge.input_bytes[i] = F::from_canonical_u8(record.input_limbs[i]);
+            trace_row.sponge.postimage_buffer_bytes[i] = F::from_canonical_u8(record.buffer_limbs[i] ^ record.input_limbs[i]);
+            let b_val = record.input_limbs[i] as u32; 
+            let c_val = record.buffer_limbs[i] as u32; 
+            self.bitwise_lookup_chip.request_xor(b_val, c_val);
+        }
+
+        println!("timestamp before input write {}", timestamp);
+
+        for t in 0..num_reads {
             mem_helper.fill(
                 record.buffer_write_aux_cols[t].prev_timestamp,
                 timestamp,
