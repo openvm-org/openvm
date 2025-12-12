@@ -111,6 +111,7 @@ where
         // Xorin opcode is only called through the keccak update guest program
         debug_assert!(len.is_multiple_of(4));
         let num_reads = len.div_ceil(4);
+        println!("debug preflight num_reads {}", num_reads);
 
         // safety: the below alloc uses MultiRowLayout alloc implementation because XorinVmRecordLayout is a MultiRowLayout
         // since get_num_rows() = 1, this will alloc_buffer of size width 
@@ -147,6 +148,8 @@ where
             record.inner.rs2_ptr, 
             &mut record.inner.register_aux_cols[2].prev_timestamp
         ));
+
+        println!("debug record.inner.len {}", record.inner.len);
 
         debug_assert!(record.inner.buffer as usize + len <= (1 << self.pointer_max_bits));
         debug_assert!(record.inner.input as usize + len < (1 << self.pointer_max_bits));
@@ -213,6 +216,7 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         mem_helper: &MemoryAuxColsFactory<F>,
         mut row_slice: &mut [F],
     ) {
+
         let record: XorinVmRecordMut = unsafe {
             get_record_from_slice(&mut row_slice, XorinVmRecordLayout {
                 metadata: XorinVmMetadata {
@@ -221,6 +225,9 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         };
 
         let trace_row: &mut XorinVmCols<F> = row_slice.borrow_mut();
+
+        println!("debug trace row {:?}", trace_row);
+
         // Safety: the clone here is necessary because the XorinVmCols uses the same buffer
         let record = record.inner.clone();
 
@@ -257,6 +264,8 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         ];
         trace_row.instruction.len_limbs = len_limbs;   
         trace_row.instruction.start_timestamp = F::from_canonical_u32(record.timestamp);
+
+        println!("debug trace row {:?}", trace_row);
 
         for i in 0..(record.len/4) {
             trace_row.sponge.is_padding_bytes[i as usize] = F::ZERO;
