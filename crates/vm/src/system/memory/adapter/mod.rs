@@ -58,21 +58,26 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         memory_bus: MemoryBus,
         memory_config: MemoryConfig,
     ) -> Self {
-        let rc = range_checker;
-        let mb = memory_bus;
-        let tmb = memory_config.timestamp_max_bits;
-        let maan = memory_config.max_access_adapter_n;
-        assert!(matches!(maan, 2 | 4 | 8 | 16 | 32));
-        let chips: Vec<_> = [
-            Self::create_access_adapter_chip::<2>(rc.clone(), mb, tmb, maan),
-            Self::create_access_adapter_chip::<4>(rc.clone(), mb, tmb, maan),
-            Self::create_access_adapter_chip::<8>(rc.clone(), mb, tmb, maan),
-            Self::create_access_adapter_chip::<16>(rc.clone(), mb, tmb, maan),
-            Self::create_access_adapter_chip::<32>(rc.clone(), mb, tmb, maan),
-        ]
-        .into_iter()
-        .flatten()
-        .collect();
+        // Only create adapter chips if access adapters are enabled
+        let chips: Vec<_> = if memory_config.access_adapters_enabled {
+            let rc = range_checker;
+            let mb = memory_bus;
+            let tmb = memory_config.timestamp_max_bits;
+            let maan = memory_config.max_access_adapter_n;
+            assert!(matches!(maan, 2 | 4 | 8 | 16 | 32));
+            [
+                Self::create_access_adapter_chip::<2>(rc.clone(), mb, tmb, maan),
+                Self::create_access_adapter_chip::<4>(rc.clone(), mb, tmb, maan),
+                Self::create_access_adapter_chip::<8>(rc.clone(), mb, tmb, maan),
+                Self::create_access_adapter_chip::<16>(rc.clone(), mb, tmb, maan),
+                Self::create_access_adapter_chip::<32>(rc.clone(), mb, tmb, maan),
+            ]
+            .into_iter()
+            .flatten()
+            .collect()
+        } else {
+            Vec::new()
+        };
         Self {
             memory_config,
             chips,
@@ -127,6 +132,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         while ptr < bytes.len() {
             let bytes_slice = &bytes[ptr..];
             let header: &AccessRecordHeader = bytes_slice.borrow();
+
             // SAFETY:
             // - bytes[ptr..] is a valid starting pointer to a previously allocated record
             // - The record contains self-describing layout information
