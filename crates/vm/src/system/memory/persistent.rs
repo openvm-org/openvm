@@ -22,7 +22,7 @@ use tracing::instrument;
 
 use super::{merkle::SerialReceiver, online::INITIAL_TIMESTAMP, TimestampedValues};
 use crate::{
-    arch::{hasher::Hasher, ADDR_SPACE_OFFSET},
+    arch::{hasher::Hasher, ADDR_SPACE_OFFSET, CONST_BLOCK_SIZE},
     system::memory::{
         dimensions::MemoryDimensions, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
         TimestampedEquipartition,
@@ -109,16 +109,23 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             local.expand_direction * local.expand_direction,
         );
 
-        self.memory_bus
-            .send(
-                MemoryAddress::new(
-                    local.address_space,
-                    local.leaf_label * AB::F::from_canonical_usize(CHUNK),
-                ),
-                local.values.to_vec(),
-                local.timestamp,
-            )
-            .eval(builder, local.expand_direction);
+        debug_assert_eq!(CHUNK % CONST_BLOCK_SIZE, 0);
+        let chunk_size_f = AB::F::from_canonical_usize(CHUNK);
+        for block_idx in 0..(CHUNK / CONST_BLOCK_SIZE) {
+            let offset = AB::F::from_canonical_usize(block_idx * CONST_BLOCK_SIZE);
+            // Split the 1xCHUNK leaf into CONST_BLOCK_SIZE-sized bus messages.
+            self.memory_bus
+                .send(
+                    MemoryAddress::new(
+                        local.address_space,
+                        local.leaf_label * chunk_size_f + offset,
+                    ),
+                    local.values[block_idx * CONST_BLOCK_SIZE..(block_idx + 1) * CONST_BLOCK_SIZE]
+                        .to_vec(),
+                    local.timestamp,
+                )
+                .eval(builder, local.expand_direction);
+        }
     }
 }
 

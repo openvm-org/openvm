@@ -1,4 +1,4 @@
-use std::{array::from_fn, fmt::Debug, num::NonZero};
+use std::{array::from_fn, backtrace::Backtrace, fmt::Debug, num::NonZero};
 
 use getset::Getters;
 use itertools::zip_eq;
@@ -440,7 +440,7 @@ pub struct TracingMemory {
     initial_block_size: usize,
     /// The underlying data memory, with memory cells typed by address space: see [AddressMap].
     #[getset(get = "pub")]
-    pub data: GuestMemory,
+    pub data: GuestMemory, // is this "initial memory"
     /// Maps addr_space to (ptr / min_block_size[addr_space] -> AccessMetadata) for latest access
     /// metadata. Uses paged storage for memory efficiency. AccessMetadata stores offset_to_start
     /// (in ALIGN units), block_size, and timestamp (latter two only valid at offset_to_start ==
@@ -577,6 +577,16 @@ impl TracingMemory {
     }
 
     pub(crate) fn add_split_record(&mut self, header: AccessRecordHeader) {
+        if header.block_size == 8 {
+            println!("-----SPLIT-----");
+            println!("Adding split record for size 8:");
+            println!("  Address space: {}", header.address_space);
+            println!("  Pointer: {}", header.pointer);
+            println!("  Timestamp: {}", header.timestamp_and_mask);
+
+            let bt = Backtrace::capture();
+            println!("{bt}");
+        }
         if header.block_size == header.lowest_block_size {
             return;
         }
@@ -602,6 +612,8 @@ impl TracingMemory {
         // we don't mind garbage values in prev_*
     }
 
+    //appears that we are initially still splitting, and merging memory
+    // is this from merkle tree?
     /// `data_slice` is the underlying data of the record in raw host memory format.
     pub(crate) fn add_merge_record(
         &mut self,
@@ -609,6 +621,16 @@ impl TracingMemory {
         data_slice: &[u8],
         prev_ts: &[u32],
     ) {
+        if header.block_size == 8 {
+            println!("-----MERGE-----");
+            println!("Adding merge record for size 8:");
+            println!("  Address space: {}", header.address_space);
+            println!("  Pointer: {}", header.pointer);
+            println!("  Timestamp: {}", header.timestamp_and_mask);
+
+            let bt = Backtrace::capture();
+            println!("{bt}");
+        }
         if header.block_size == header.lowest_block_size {
             return;
         }
@@ -695,6 +717,10 @@ impl TracingMemory {
                 AccessMetadata::new(timestamp, MIN_BLOCK_SIZE as u8, 0),
             );
         }
+        println!(
+            "BLOCK SIZE: {}, MIN_BLOCK_SIZE: {}",
+            block_size, MIN_BLOCK_SIZE
+        );
         self.add_split_record(AccessRecordHeader {
             timestamp_and_mask: timestamp,
             address_space: address_space as u32,
@@ -935,6 +961,7 @@ impl TracingMemory {
     }
 
     /// Finalize the boundary and merkle chips.
+    /// pass in initial memory,for rechunking
     #[instrument(name = "memory_finalize", skip_all)]
     pub fn finalize<F: Field>(&mut self, is_persistent: bool) -> TouchedMemory<F> {
         let touched_blocks = self.touched_blocks();
@@ -1148,9 +1175,10 @@ impl TracingMemory {
         let mut final_memory =
             Vec::with_capacity(partitioned_memory.len().saturating_div(merge_factor));
         let mut idx = 0;
-        while idx < partitioned_memory.len() {
-            debug_assert!(idx + merge_factor <= partitioned_memory.len());
+        //currently naively merging, but we need to consider incomplete blocks of PARTITION_SIZE, and make it into CHUNK
+        // with an initial PARTITION, keep on adding ind until it matches OUTPUT_SIZE; look at it mod OUTPUT_SIZE
 
+        while idx < partitioned_memory.len() {
             let group = &partitioned_memory[idx..idx + merge_factor];
             let ((addr_space, base_ptr), _) = group[0];
             debug_assert_eq!(base_ptr % OUTPUT_SIZE as u32, 0);

@@ -1,4 +1,5 @@
 use std::{
+    backtrace::Backtrace,
     fmt::Debug,
     ops::{Deref, DerefMut},
 };
@@ -13,7 +14,7 @@ use super::{create_memory_image, ExecutionError, Streams};
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::{execution_mode::ExecutionCtxTrait, SystemConfig, VmStateMut},
+    arch::{execution_mode::ExecutionCtxTrait, SystemConfig, VmStateMut, CONST_BLOCK_SIZE},
     system::memory::online::GuestMemory,
 };
 
@@ -187,6 +188,12 @@ where
         addr_space: u32,
         ptr: u32,
     ) -> [T; BLOCK_SIZE] {
+        if BLOCK_SIZE != CONST_BLOCK_SIZE {
+            println!(
+                "vm_read: addr_space = {}, ptr = {}, BLOCK_SIZE = {}",
+                addr_space, ptr, BLOCK_SIZE
+            );
+        }
         self.ctx
             .on_memory_operation(addr_space, ptr, BLOCK_SIZE as u32);
         self.host_read(addr_space, ptr)
@@ -200,6 +207,12 @@ where
         ptr: u32,
         data: &[T; BLOCK_SIZE],
     ) {
+        if BLOCK_SIZE != CONST_BLOCK_SIZE {
+            println!(
+                "vm_read: addr_space = {}, ptr = {}, BLOCK_SIZE = {}",
+                addr_space, ptr, BLOCK_SIZE
+            );
+        }
         self.ctx
             .on_memory_operation(addr_space, ptr, BLOCK_SIZE as u32);
         self.host_write(addr_space, ptr, data)
