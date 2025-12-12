@@ -212,7 +212,6 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         size_bits: u32,
         num: u32,
     ) {
-        // Skip if access adapters are disabled
         if !self.access_adapters_enabled {
             return;
         }

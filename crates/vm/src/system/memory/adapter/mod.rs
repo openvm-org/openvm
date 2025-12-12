@@ -1,5 +1,4 @@
 use std::{
-    backtrace::Backtrace,
     borrow::{Borrow, BorrowMut},
     marker::PhantomData,
     ptr::copy_nonoverlapping,
@@ -134,12 +133,6 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
             let bytes_slice = &bytes[ptr..];
             let header: &AccessRecordHeader = bytes_slice.borrow();
 
-            if header.block_size == 8 {
-                println!("Found size 8 access:");
-                println!("  Address space: {}", header.address_space);
-                println!("  Pointer: {}", header.pointer);
-                println!("  Timestamp: {}", header.timestamp_and_mask);
-            }
             // SAFETY:
             // - bytes[ptr..] is a valid starting pointer to a previously allocated record
             // - The record contains self-describing layout information
