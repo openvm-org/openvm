@@ -399,14 +399,7 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakVmFiller {
                     .par_chunks_exact_mut(NUM_ROUNDS * NUM_KECCAK_VM_COLS)
                     .enumerate()
                     .for_each(|(block_idx, block_slice)| {
-                        // We need to transpose state matrices due to a plonky3 issue: https://github.com/Plonky3/Plonky3/issues/672
-                        // Note: the fix for this issue will be a commit after the major Field crate refactor PR https://github.com/Plonky3/Plonky3/pull/640
-                        //       which will require a significant refactor to switch to.
-                        let state = from_fn(|i| {
-                            let x = i / 5;
-                            let y = i % 5;
-                            states[block_idx][x + 5 * y]
-                        });
+                        let state = states[block_idx];
 
                         // Note: we can call `generate_trace_rows` for each block separately because
                         // its trace only depends on the current `state`
