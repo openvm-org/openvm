@@ -6,7 +6,7 @@ use std::{
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig, Val},
     p3_commit::PolynomialSpace,
-    p3_field::{InjectiveMonomial, PrimeField32},
+    p3_field::PrimeField32,
     p3_matrix::dense::RowMajorMatrix,
     prover::{cpu::CpuBackend, types::AirProvingContext},
     ChipUsageGetter,
@@ -14,7 +14,7 @@ use openvm_stark_backend::{
 use tracing::instrument;
 
 use crate::{
-    arch::hasher::HasherChip,
+    arch::{hasher::HasherChip, VmField},
     system::{
         memory::{
             merkle::{tree::MerkleTree, FinalState, MemoryMerkleChip, MemoryMerkleCols},
@@ -108,8 +108,8 @@ pub trait SerialReceiver<T> {
     fn receive(&self, msg: T);
 }
 
-impl<'a, F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
-    SerialReceiver<&'a [F]> for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
+impl<'a, F: VmField, const SBOX_REGISTERS: usize> SerialReceiver<&'a [F]>
+    for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
 {
     /// Receives a permutation preimage, pads with zeros to the permutation width, and records.
     /// The permutation preimage must have length at most the permutation width (panics otherwise).
@@ -122,9 +122,7 @@ impl<'a, F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
     }
 }
 
-impl<'a, F: PrimeField32 + InjectiveMonomial<7>> SerialReceiver<&'a [F]>
-    for Poseidon2PeripheryChip<F>
-{
+impl<'a, F: VmField> SerialReceiver<&'a [F]> for Poseidon2PeripheryChip<F> {
     fn receive(&self, perm_preimage: &'a [F]) {
         match self {
             Poseidon2PeripheryChip::Register0(chip) => chip.receive(perm_preimage),

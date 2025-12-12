@@ -1,7 +1,8 @@
 use std::cmp::min;
 
-use openvm_circuit::arch::testing::{
-    memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, VmChipTester,
+use openvm_circuit::arch::{
+    testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, VmChipTester},
+    VmField,
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{
@@ -10,7 +11,7 @@ use openvm_native_compiler::{
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{Field, InjectiveMonomial, PrimeCharacteristicRing, PrimeField32, PrimeField64},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32, PrimeField64},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -56,7 +57,7 @@ type Harness<F, const SBOX_REGISTERS: usize> = TestChipHarness<
     NativePoseidon2Chip<F, SBOX_REGISTERS>,
 >;
 
-fn create_test_chip<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>(
+fn create_test_chip<F: VmField, const SBOX_REGISTERS: usize>(
     tester: &VmChipTestBuilder<F>,
 ) -> Harness<F, SBOX_REGISTERS> {
     let air = NativePoseidon2Air::new(

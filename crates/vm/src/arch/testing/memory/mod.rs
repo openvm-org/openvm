@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 
 use air::{MemoryDummyAir, MemoryDummyChip};
-use openvm_stark_backend::p3_field::{InjectiveMonomial, PrimeField32};
 use rand::Rng;
 
-use crate::system::memory::{online::TracingMemory, MemoryController};
+use crate::{
+    arch::VmField,
+    system::memory::{online::TracingMemory, MemoryController},
+};
 
 pub mod air;
 
@@ -17,14 +19,14 @@ pub use cuda::*;
 /// Stores a log of raw messages to send/receive to the [MemoryBus].
 ///
 /// It will create a [air::MemoryDummyAir] to add messages to MemoryBus.
-pub struct MemoryTester<F: PrimeField32 + InjectiveMonomial<7>> {
+pub struct MemoryTester<F: VmField> {
     /// Map from `block_size` to [MemoryDummyChip] of that block size
     pub chip_for_block: HashMap<usize, MemoryDummyChip<F>>,
     pub memory: TracingMemory,
     pub(super) controller: MemoryController<F>,
 }
 
-impl<F: PrimeField32 + InjectiveMonomial<7>> MemoryTester<F> {
+impl<F: VmField> MemoryTester<F> {
     pub fn new(controller: MemoryController<F>, memory: TracingMemory) -> Self {
         let bus = controller.memory_bus;
         let mut chip_for_block = HashMap::new();

@@ -9,7 +9,8 @@ use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
         ExecutorInventoryBuilder, ExecutorInventoryError, MatrixRecordArena, RowMajorMatrixArena,
-        VmBuilder, VmChipComplex, VmCircuitExtension, VmExecutionExtension, VmProverExtension,
+        VmBuilder, VmChipComplex, VmCircuitExtension, VmExecutionExtension, VmField,
+        VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemPort},
 };
@@ -29,7 +30,7 @@ use openvm_rv32im_circuit::Rv32ImCpuProverExt;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::StarkEngine,
-    p3_field::{InjectiveMonomial, PrimeField32},
+    p3_field::PrimeField32,
     prover::cpu::{CpuBackend, CpuDevice},
 };
 use serde::{Deserialize, Serialize};
@@ -355,7 +356,7 @@ impl<E, SC> VmBuilder<E> for Int256Rv32CpuBuilder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<SC>: PrimeField32 + InjectiveMonomial<7>,
+    Val<SC>: VmField,
 {
     type VmConfig = Int256Rv32Config;
     type SystemChipInventory = SystemChipInventory<SC>;

@@ -15,7 +15,7 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::StarkEngine,
     interaction::{LookupBus, PermutationCheckBus},
-    p3_field::{Field, InjectiveMonomial, PrimeField32},
+    p3_field::{Field, PrimeField32},
     prover::{
         cpu::{CpuBackend, CpuDevice},
         hal::{MatrixDimensions, ProverBackend},
@@ -32,7 +32,8 @@ use crate::{
         ChipInventoryError, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState,
         ExecutorInventory, ExecutorInventoryError, MatrixRecordArena, PhantomSubExecutor,
         RowMajorMatrixArena, SystemConfig, VmAirWrapper, VmBuilder, VmChipComplex, VmChipWrapper,
-        VmCircuitConfig, VmExecutionConfig, CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID,
+        VmCircuitConfig, VmExecutionConfig, VmField, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
+        PUBLIC_VALUES_AIR_ID,
     },
     system::{
         connector::VmConnectorChip,
@@ -296,7 +297,7 @@ impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
 impl<SC> VmCircuitConfig<SC> for SystemConfig
 where
     SC: StarkGenericConfig,
-    Val<SC>: PrimeField32 + InjectiveMonomial<7>,
+    Val<SC>: VmField,
 {
     /// Every VM circuit within the OpenVM circuit architecture **must** be initialized from the
     /// [SystemConfig].
@@ -361,7 +362,7 @@ where
 /// [SystemAirInventory].
 pub struct SystemChipInventory<SC: StarkGenericConfig>
 where
-    Val<SC>: PrimeField32 + InjectiveMonomial<7>,
+    Val<SC>: VmField,
 {
     pub program_chip: ProgramChip<SC>,
     pub connector_chip: VmConnectorChip<Val<SC>>,
@@ -374,7 +375,7 @@ where
 // the buses for tracegen. We leave it to use old interfaces.
 impl<SC: StarkGenericConfig> SystemChipInventory<SC>
 where
-    Val<SC>: PrimeField32 + InjectiveMonomial<7>,
+    Val<SC>: VmField,
 {
     pub fn new(
         config: &SystemConfig,
@@ -441,7 +442,7 @@ impl<RA, SC> SystemChipComplex<RA, CpuBackend<SC>> for SystemChipInventory<SC>
 where
     RA: RowMajorMatrixArena<Val<SC>>,
     SC: StarkGenericConfig,
-    Val<SC>: PrimeField32 + InjectiveMonomial<7>,
+    Val<SC>: VmField,
 {
     fn load_program(&mut self, cached_program_trace: CommittedTraceData<CpuBackend<SC>>) {
         let _ = self.program_chip.cached.replace(cached_program_trace);
@@ -555,7 +556,7 @@ impl<SC, E> VmBuilder<E> for SystemCpuBuilder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<SC>: PrimeField32 + InjectiveMonomial<7>,
+    Val<SC>: VmField,
 {
     type VmConfig = SystemConfig;
     type RecordArena = MatrixRecordArena<Val<SC>>;
@@ -630,7 +631,7 @@ where
 
 impl<SC: StarkGenericConfig> SystemWithFixedTraceHeights for SystemChipInventory<SC>
 where
-    Val<SC>: PrimeField32 + InjectiveMonomial<7>,
+    Val<SC>: VmField,
 {
     /// Warning: this does not set the override for the PublicValuesChip. The PublicValuesChip
     /// override must be set via the RecordArena.

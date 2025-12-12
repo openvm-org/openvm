@@ -18,7 +18,6 @@ use openvm_native_compiler::{
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip, Poseidon2SubCols};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{InjectiveMonomial, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelSliceMut, *},
 };
@@ -32,28 +31,20 @@ use crate::poseidon2::{
 };
 
 #[derive(Clone)]
-pub struct NativePoseidon2Executor<
-    F: PrimeField32 + InjectiveMonomial<7>,
-    const SBOX_REGISTERS: usize,
-> {
+pub struct NativePoseidon2Executor<F: VmField, const SBOX_REGISTERS: usize> {
     pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
     /// If true, `verify_batch` assumes the verification is always passed and skips poseidon2
     /// computation during execution for performance.
     optimistic: bool,
 }
 
-pub struct NativePoseidon2Filler<
-    F: PrimeField32 + InjectiveMonomial<7>,
-    const SBOX_REGISTERS: usize,
-> {
+pub struct NativePoseidon2Filler<F: VmField, const SBOX_REGISTERS: usize> {
     // pre-computed Poseidon2 sub cols for dummy rows.
     empty_poseidon2_sub_cols: Vec<F>,
     pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
 }
 
-impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
-    NativePoseidon2Executor<F, SBOX_REGISTERS>
-{
+impl<F: VmField, const SBOX_REGISTERS: usize> NativePoseidon2Executor<F, SBOX_REGISTERS> {
     pub fn new(poseidon2_config: Poseidon2Config<F>) -> Self {
         let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
         Self {
@@ -66,7 +57,7 @@ impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
     }
 }
 
-pub(crate) fn compress<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>(
+pub(crate) fn compress<F: VmField, const SBOX_REGISTERS: usize>(
     subchip: &Poseidon2SubChip<F, SBOX_REGISTERS>,
     left: [F; CHUNK],
     right: [F; CHUNK],
@@ -76,9 +67,7 @@ pub(crate) fn compress<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGIST
     (concatenated, std::array::from_fn(|i| permuted[i]))
 }
 
-impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
-    NativePoseidon2Filler<F, SBOX_REGISTERS>
-{
+impl<F: VmField, const SBOX_REGISTERS: usize> NativePoseidon2Filler<F, SBOX_REGISTERS> {
     pub fn new(poseidon2_config: Poseidon2Config<F>) -> Self {
         let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
         let empty_poseidon2_sub_cols = subchip.generate_trace(vec![[F::ZERO; CHUNK * 2]]).values;
@@ -110,7 +99,7 @@ pub struct NativePoseidon2RecordMut<'a, F, const SBOX_REGISTERS: usize>(
     &'a mut [NativePoseidon2Cols<F, SBOX_REGISTERS>],
 );
 
-impl<'a, F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
+impl<'a, F: VmField, const SBOX_REGISTERS: usize>
     CustomBorrow<'a, NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS>, NativePoseidon2RecordLayout>
     for [u8]
 {
@@ -141,8 +130,8 @@ impl<'a, F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
     }
 }
 
-impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
-    SizedRecord<NativePoseidon2RecordLayout> for NativePoseidon2RecordMut<'_, F, SBOX_REGISTERS>
+impl<F: VmField, const SBOX_REGISTERS: usize> SizedRecord<NativePoseidon2RecordLayout>
+    for NativePoseidon2RecordMut<'_, F, SBOX_REGISTERS>
 {
     fn size(layout: &NativePoseidon2RecordLayout) -> usize {
         layout.metadata.num_rows * size_of::<NativePoseidon2Cols<F, SBOX_REGISTERS>>()
@@ -153,8 +142,8 @@ impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
     }
 }
 
-impl<F: PrimeField32 + InjectiveMonomial<7>, RA, const SBOX_REGISTERS: usize>
-    PreflightExecutor<F, RA> for NativePoseidon2Executor<F, SBOX_REGISTERS>
+impl<F: VmField, RA, const SBOX_REGISTERS: usize> PreflightExecutor<F, RA>
+    for NativePoseidon2Executor<F, SBOX_REGISTERS>
 where
     for<'buf> RA: RecordArena<
         'buf,
@@ -666,7 +655,7 @@ where
     }
 }
 
-impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize> TraceFiller<F>
+impl<F: VmField, const SBOX_REGISTERS: usize> TraceFiller<F>
     for NativePoseidon2Filler<F, SBOX_REGISTERS>
 {
     fn fill_trace(
@@ -715,9 +704,7 @@ impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize> TraceF
     }
 }
 
-impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
-    NativePoseidon2Filler<F, SBOX_REGISTERS>
-{
+impl<F: VmField, const SBOX_REGISTERS: usize> NativePoseidon2Filler<F, SBOX_REGISTERS> {
     fn fill_simple_chunk(&self, mem_helper: &MemoryAuxColsFactory<F>, chunk_slice: &mut [F]) {
         {
             let inner_width = self.subchip.air.width();
@@ -968,7 +955,7 @@ impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
     }
 }
 
-fn tracing_read_native_helper<F: PrimeField32, const BLOCK_SIZE: usize>(
+fn tracing_read_native_helper<F: VmField, const BLOCK_SIZE: usize>(
     memory: &mut TracingMemory,
     ptr: u32,
     base_aux: &mut MemoryBaseAuxCols<F>,
@@ -980,7 +967,7 @@ fn tracing_read_native_helper<F: PrimeField32, const BLOCK_SIZE: usize>(
 }
 
 /// Fill `MemoryBaseAuxCols`, assuming that the `prev_timestamp` is already set in `base_aux`.
-fn mem_fill_helper<F: PrimeField32>(
+fn mem_fill_helper<F: VmField>(
     mem_helper: &MemoryAuxColsFactory<F>,
     timestamp: u32,
     base_aux: &mut MemoryBaseAuxCols<F>,

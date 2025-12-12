@@ -5,7 +5,7 @@
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, SystemConfig,
-        VmBuilder, VmChipComplex, VmProverExtension,
+        VmBuilder, VmChipComplex, VmField, VmProverExtension,
     },
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
@@ -13,7 +13,6 @@ use openvm_circuit_derive::{Executor, MeteredExecutor, PreflightExecutor, VmConf
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::StarkEngine,
-    p3_field::{InjectiveMonomial, PrimeField32},
     prover::cpu::{CpuBackend, CpuDevice},
 };
 use serde::{Deserialize, Serialize};
@@ -157,7 +156,7 @@ impl<E, SC> VmBuilder<E> for Rv32ICpuBuilder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<SC>: PrimeField32 + InjectiveMonomial<7>,
+    Val<SC>: VmField,
 {
     type VmConfig = Rv32IConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
@@ -187,7 +186,7 @@ impl<E, SC> VmBuilder<E> for Rv32ImCpuBuilder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<SC>: PrimeField32 + InjectiveMonomial<7>,
+    Val<SC>: VmField,
 {
     type VmConfig = Rv32ImConfig;
     type SystemChipInventory = SystemChipInventory<SC>;

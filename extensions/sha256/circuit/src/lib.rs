@@ -8,7 +8,7 @@ use std::result::Result;
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, SystemConfig,
-        VmBuilder, VmChipComplex, VmProverExtension,
+        VmBuilder, VmChipComplex, VmField, VmProverExtension,
     },
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
@@ -18,7 +18,6 @@ use openvm_rv32im_circuit::{
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    p3_field::{InjectiveMonomial, PrimeField32},
     prover::cpu::{CpuBackend, CpuDevice},
 };
 use openvm_stark_sdk::engine::StarkEngine;
@@ -80,7 +79,7 @@ impl<E, SC> VmBuilder<E> for Sha256Rv32CpuBuilder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<SC>: PrimeField32 + InjectiveMonomial<7>,
+    Val<SC>: VmField,
 {
     type VmConfig = Sha256Rv32Config;
     type SystemChipInventory = SystemChipInventory<SC>;
