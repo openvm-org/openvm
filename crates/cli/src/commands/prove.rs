@@ -3,10 +3,9 @@ use std::{path::PathBuf, sync::Arc};
 use clap::Parser;
 use eyre::Result;
 use openvm_circuit::arch::{
-    execution_mode::metered::segment_ctx::{
-        SegmentationLimits, DEFAULT_MAX_CELLS, DEFAULT_MAX_TRACE_HEIGHT_BITS,
-    },
-    instructions::exe::VmExe,
+    debug_proving_ctx, execution_mode::metered::segment_ctx::{
+        DEFAULT_MAX_CELLS, DEFAULT_MAX_TRACE_HEIGHT_BITS, SegmentationLimits
+    }, instructions::exe::VmExe
 };
 use openvm_sdk::{
     config::{AggregationTreeConfig, AppConfig, SdkVmConfig},
@@ -167,6 +166,7 @@ impl ProveCmd {
                 } else {
                     &PathBuf::from(target_name).with_extension("app.proof")
                 };
+
                 println!(
                     "App proof completed! Writing App proof to {}",
                     proof_path.display()

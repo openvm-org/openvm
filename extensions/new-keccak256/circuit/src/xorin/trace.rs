@@ -225,11 +225,11 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         let record = record.inner.clone();
 
         trace_row.instruction.pc = F::from_canonical_u32(record.from_pc);
-        trace_row.instruction.start_timestamp = F::from_canonical_u32(record.timestamp);
+        trace_row.instruction.is_enabled = F::ONE;
         trace_row.instruction.buffer_ptr = F::from_canonical_u32(record.rd_ptr);
         trace_row.instruction.input_ptr = F::from_canonical_u32(record.rs1_ptr);
         trace_row.instruction.len_ptr = F::from_canonical_u32(record.rs2_ptr);
-
+        trace_row.instruction.buffer = F::from_canonical_u32(record.buffer);
         let buffer_u8: [u8; 4] = record.buffer.to_le_bytes();
         let buffer_limbs: [F; 4] = [
             F::from_canonical_u8(buffer_u8[0]), 
@@ -238,6 +238,7 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             F::from_canonical_u8(buffer_u8[3])    
         ];
         trace_row.instruction.buffer_limbs = buffer_limbs;
+        trace_row.instruction.input = F::from_canonical_u32(record.input);
         let input_u8: [u8; 4] = record.input.to_le_bytes();
         let input_limbs: [F; 4] = [
             F::from_canonical_u8(input_u8[0]), 
@@ -246,6 +247,7 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             F::from_canonical_u8(input_u8[3])    
         ];
         trace_row.instruction.input_limbs = input_limbs;
+        trace_row.instruction.len = F::from_canonical_u32(record.len);
         let len_u8: [u8; 4] = record.len.to_le_bytes();
         let len_limbs: [F; 4] = [
             F::from_canonical_u8(len_u8[0]),
@@ -253,14 +255,15 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             F::from_canonical_u8(len_u8[2]),
             F::from_canonical_u8(len_u8[3])
         ];
-        trace_row.instruction.len_limbs = len_limbs;     
+        trace_row.instruction.len_limbs = len_limbs;   
+        trace_row.instruction.start_timestamp = F::from_canonical_u32(record.timestamp);
+
         for i in 0..(record.len/4) {
             trace_row.sponge.is_padding_bytes[i as usize] = F::ZERO;
         }
         for i in (record.len/4)..34 {
             trace_row.sponge.is_padding_bytes[i as usize] = F::ONE;
         }
-
         // todo: think if it is fine to leave the other record.len..34 bits empty
         for i in 0..record.len {
             trace_row.sponge.preimage_buffer_bytes[i as usize] = F::from_canonical_u8(record.buffer_limbs[i as usize]);
