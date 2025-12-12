@@ -29,8 +29,8 @@ __global__ void p3_inner_tracegen(
         for (auto x = 0; x < 5; x++) {
 #pragma unroll 5
             for (auto y = 0; y < 5; y++) {
-                current_state[x][y] = states[block_idx * KECCAK_STATE_SIZE + x + 5 * y];
-                initial_state[x][y] = current_state[x][y];
+                current_state[y][x] = states[block_idx * KECCAK_STATE_SIZE + x + 5 * y];
+                initial_state[y][x] = current_state[y][x];
             }
         }
     }
