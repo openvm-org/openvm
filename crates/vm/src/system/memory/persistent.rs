@@ -48,7 +48,8 @@ pub struct PersistentBoundaryCols<T, const CHUNK: usize> {
     pub values: [T; CHUNK],
     pub hash: [T; CHUNK],
     /// Per-block timestamps. Each CONST_BLOCK_SIZE block within the chunk has its own timestamp.
-    /// For untouched blocks, timestamp stays at 0 (balances: boundary sends at t=0 init, receives at t=0 final).
+    /// For untouched blocks, timestamp stays at 0 (balances: boundary sends at t=0 init, receives
+    /// at t=0 final).
     pub timestamps: [T; BLOCKS_PER_CHUNK],
 }
 
@@ -228,9 +229,10 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
 
     /// Finalize the boundary chip with per-block timestamped memory.
     ///
-    /// `final_memory` is at CONST_BLOCK_SIZE granularity (4 bytes per entry, single timestamp each).
-    /// This function rechunks into CHUNK-sized (8 bytes) groups with per-block timestamps.
-    /// Untouched blocks within a touched chunk get values from initial_memory and timestamp 0.
+    /// `final_memory` is at CONST_BLOCK_SIZE granularity (4 bytes per entry, single timestamp
+    /// each). This function rechunks into CHUNK-sized (8 bytes) groups with per-block
+    /// timestamps. Untouched blocks within a touched chunk get values from initial_memory and
+    /// timestamp 0.
     #[instrument(name = "boundary_finalize", level = "debug", skip_all)]
     pub(crate) fn finalize<H>(
         &mut self,

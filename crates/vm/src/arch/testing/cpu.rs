@@ -348,11 +348,6 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
 
     pub fn persistent(mem_config: MemoryConfig) -> Self {
         setup_tracing_with_log_level(Level::INFO);
-        /// ERRRMMM WHAT THE SIGMA not testing here
-        println!(
-            "PERSISTENT MEMORY TESTING, CONST_BLOCK_SIZE = {}",
-            CONST_BLOCK_SIZE
-        );
         let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CONST_BLOCK_SIZE);
         let hasher_chip = Arc::new(Poseidon2PeripheryChip::new(
             vm_poseidon2_config(),
@@ -476,7 +471,6 @@ where
             let mut memory_controller = memory_tester.controller;
             let is_persistent = memory_controller.continuation_enabled();
             let mut memory = memory_tester.memory;
-            // here? pass in initial memory for chunking
             let touched_memory = memory.finalize::<Val<SC>>(is_persistent);
             // Balance memory boundaries
             let range_checker = memory_controller.range_checker.clone();

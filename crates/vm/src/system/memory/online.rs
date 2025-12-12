@@ -440,7 +440,7 @@ pub struct TracingMemory {
     initial_block_size: usize,
     /// The underlying data memory, with memory cells typed by address space: see [AddressMap].
     #[getset(get = "pub")]
-    pub data: GuestMemory, // is this "initial memory"
+    pub data: GuestMemory,
     /// Maps addr_space to (ptr / min_block_size[addr_space] -> AccessMetadata) for latest access
     /// metadata. Uses paged storage for memory efficiency. AccessMetadata stores offset_to_start
     /// (in ALIGN units), block_size, and timestamp (latter two only valid at offset_to_start ==
@@ -577,16 +577,6 @@ impl TracingMemory {
     }
 
     pub(crate) fn add_split_record(&mut self, header: AccessRecordHeader) {
-        if header.block_size == 8 {
-            println!("-----SPLIT-----");
-            println!("Adding split record for size 8:");
-            println!("  Address space: {}", header.address_space);
-            println!("  Pointer: {}", header.pointer);
-            println!("  Timestamp: {}", header.timestamp_and_mask);
-
-            let bt = Backtrace::capture();
-            println!("{bt}");
-        }
         if header.block_size == header.lowest_block_size {
             return;
         }
@@ -612,8 +602,6 @@ impl TracingMemory {
         // we don't mind garbage values in prev_*
     }
 
-    //appears that we are initially still splitting, and merging memory
-    // is this from merkle tree?
     /// `data_slice` is the underlying data of the record in raw host memory format.
     pub(crate) fn add_merge_record(
         &mut self,
@@ -621,16 +609,6 @@ impl TracingMemory {
         data_slice: &[u8],
         prev_ts: &[u32],
     ) {
-        if header.block_size == 8 {
-            println!("-----MERGE-----");
-            println!("Adding merge record for size 8:");
-            println!("  Address space: {}", header.address_space);
-            println!("  Pointer: {}", header.pointer);
-            println!("  Timestamp: {}", header.timestamp_and_mask);
-
-            let bt = Backtrace::capture();
-            println!("{bt}");
-        }
         if header.block_size == header.lowest_block_size {
             return;
         }
@@ -717,10 +695,6 @@ impl TracingMemory {
                 AccessMetadata::new(timestamp, MIN_BLOCK_SIZE as u8, 0),
             );
         }
-        println!(
-            "BLOCK SIZE: {}, MIN_BLOCK_SIZE: {}",
-            block_size, MIN_BLOCK_SIZE
-        );
         self.add_split_record(AccessRecordHeader {
             timestamp_and_mask: timestamp,
             address_space: address_space as u32,
@@ -961,7 +935,6 @@ impl TracingMemory {
     }
 
     /// Finalize the boundary and merkle chips.
-    /// pass in initial memory,for rechunking
     #[instrument(name = "memory_finalize", skip_all)]
     pub fn finalize<F: Field>(&mut self, is_persistent: bool) -> TouchedMemory<F> {
         let touched_blocks = self.touched_blocks();
@@ -1013,7 +986,6 @@ impl TracingMemory {
 
         debug_assert!(partitioned_memory.is_sorted_by_key(|(key, _)| *key));
         partitioned_memory
-        // self.rechunk_final_memory::<F, PARTITION_SIZE, OUTPUT_SIZE>(partitioned_memory)
     }
 
     fn handle_touched_blocks<F: Field, const PARTITION_SIZE: usize>(
@@ -1088,8 +1060,9 @@ impl TracingMemory {
                             timestamp,
                             values: from_fn(|j| {
                                 let byte_idx = (i as usize + j) * cell_size;
-                                // SAFETY: block_size is multiple of PARTITION_SIZE and we are reading chunks
-                                // of cells within bounds
+                                // SAFETY: block_size is multiple of PARTITION_SIZE and we are
+                                // reading chunks of cells within
+                                // bounds
                                 unsafe {
                                     addr_space_config
                                         .layout
@@ -1112,7 +1085,8 @@ impl TracingMemory {
                     current_values[current_cnt * cell_size..current_cnt * cell_size + cell_size]
                         .copy_from_slice(cell_data);
                     if current_cnt & (min_block_size - 1) == 0 {
-                        // SAFETY: current_cnt / min_block_size < PARTITION_SIZE / min_block_size <= PARTITION_SIZE
+                        // SAFETY: current_cnt / min_block_size < PARTITION_SIZE / min_block_size <=
+                        // PARTITION_SIZE
                         unsafe {
                             *current_timestamps.get_unchecked_mut(current_cnt / min_block_size) =
                                 timestamp;

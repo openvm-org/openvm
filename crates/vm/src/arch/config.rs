@@ -187,8 +187,7 @@ pub struct MemoryConfig {
     /// Maximum N AccessAdapter AIR to support.
     pub max_access_adapter_n: usize,
     /// Whether access adapters are enabled. When disabled, all memory accesses must be of the
-    /// standard block size (e.g., 4 for address spaces 1-3). This removes the need for access
-    /// adapter AIRs and simplifies the memory system.
+    /// standard block size (e.g., 4 for address spaces 1-3).
     #[new(value = "true")]
     pub access_adapters_enabled: bool,
 }

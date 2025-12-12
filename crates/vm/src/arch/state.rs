@@ -1,5 +1,4 @@
 use std::{
-    backtrace::Backtrace,
     fmt::Debug,
     ops::{Deref, DerefMut},
 };
@@ -188,12 +187,6 @@ where
         addr_space: u32,
         ptr: u32,
     ) -> [T; BLOCK_SIZE] {
-        if BLOCK_SIZE != CONST_BLOCK_SIZE {
-            println!(
-                "vm_read: addr_space = {}, ptr = {}, BLOCK_SIZE = {}",
-                addr_space, ptr, BLOCK_SIZE
-            );
-        }
         self.ctx
             .on_memory_operation(addr_space, ptr, BLOCK_SIZE as u32);
         self.host_read(addr_space, ptr)
@@ -207,12 +200,6 @@ where
         ptr: u32,
         data: &[T; BLOCK_SIZE],
     ) {
-        if BLOCK_SIZE != CONST_BLOCK_SIZE {
-            println!(
-                "vm_read: addr_space = {}, ptr = {}, BLOCK_SIZE = {}",
-                addr_space, ptr, BLOCK_SIZE
-            );
-        }
         self.ctx
             .on_memory_operation(addr_space, ptr, BLOCK_SIZE as u32);
         self.host_write(addr_space, ptr, data)

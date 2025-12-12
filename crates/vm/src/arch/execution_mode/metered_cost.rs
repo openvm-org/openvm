@@ -38,7 +38,6 @@ impl AccessAdapterCtx {
         size_bits: u32,
         widths: &[usize],
     ) {
-        // Skip if access adapters are disabled
         if !self.enabled {
             return;
         }
