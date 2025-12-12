@@ -49,7 +49,7 @@ use crate::{
             adapter::records::arena_size_bound,
             offline_checker::{MemoryBridge, MemoryBus},
             online::TracingMemory,
-            MemoryAirInventory, MemoryController, SharedMemoryHelper, CHUNK,
+            MemoryAirInventory, MemoryController, SharedMemoryHelper,
         },
         poseidon2::Poseidon2PeripheryChip,
         program::ProgramBus,
