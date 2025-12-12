@@ -4,7 +4,7 @@ use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_air::BaseAir,
-    p3_field::{InjectiveMonomial, PrimeCharacteristicRing, PrimeField32},
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
     prover::{cpu::CpuBackend, types::AirProvingContext},
@@ -12,11 +12,12 @@ use openvm_stark_backend::{
 };
 
 use super::{columns::*, Poseidon2PeripheryBaseChip, PERIPHERY_POSEIDON2_WIDTH};
+use crate::arch::VmField;
 
 impl<RA, SC: StarkGenericConfig, const SBOX_REGISTERS: usize> Chip<RA, CpuBackend<SC>>
     for Poseidon2PeripheryBaseChip<Val<SC>, SBOX_REGISTERS>
 where
-    Val<SC>: PrimeField32 + InjectiveMonomial<7>,
+    Val<SC>: VmField,
 {
     /// Generates trace and clears internal records state.
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
@@ -61,7 +62,7 @@ where
     }
 }
 
-impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize> ChipUsageGetter
+impl<F: VmField, const SBOX_REGISTERS: usize> ChipUsageGetter
     for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
 {
     fn air_name(&self) -> String {

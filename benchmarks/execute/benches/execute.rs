@@ -56,7 +56,6 @@ use openvm_stark_sdk::{
         self,
         config::{StarkGenericConfig, Val},
         keygen::types::MultiStarkProvingKey,
-        p3_field::{InjectiveMonomial, PrimeField32},
         proof::Proof,
         prover::{
             cpu::{CpuBackend, CpuDevice},
@@ -195,7 +194,7 @@ impl<E, SC> VmBuilder<E> for ExecuteBuilder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<SC>: PrimeField32 + InjectiveMonomial<7>,
+    Val<SC>: VmField,
 {
     type VmConfig = ExecuteConfig;
     type SystemChipInventory = SystemChipInventory<SC>;

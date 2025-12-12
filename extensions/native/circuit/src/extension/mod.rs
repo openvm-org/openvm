@@ -8,7 +8,7 @@ use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
         ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
-        VmExecutionExtension, VmProverExtension,
+        VmExecutionExtension, VmField, VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
@@ -27,7 +27,6 @@ use openvm_stark_backend::{
     prover::cpu::{CpuBackend, CpuDevice},
 };
 use openvm_stark_sdk::engine::StarkEngine;
-use p3_field::InjectiveMonomial;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
@@ -93,7 +92,7 @@ pub struct Native;
         openvm_circuit_derive::AotMeteredExecutor
     )
 )]
-pub enum NativeExecutor<F: PrimeField32 + InjectiveMonomial<7>> {
+pub enum NativeExecutor<F: VmField> {
     LoadStore(NativeLoadStoreExecutor<1>),
     BlockLoadStore(NativeLoadStoreExecutor<BLOCK_LOAD_STORE_SIZE>),
     BranchEqual(NativeBranchEqExecutor),
@@ -104,7 +103,7 @@ pub enum NativeExecutor<F: PrimeField32 + InjectiveMonomial<7>> {
     VerifyBatch(NativePoseidon2Executor<F, 1>),
 }
 
-impl<F: PrimeField32 + InjectiveMonomial<7>> VmExecutionExtension<F> for Native {
+impl<F: VmField> VmExecutionExtension<F> for Native {
     type Executor = NativeExecutor<F>;
 
     fn extend_execution(
@@ -207,7 +206,7 @@ impl<F: PrimeField32 + InjectiveMonomial<7>> VmExecutionExtension<F> for Native 
 
 impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Native
 where
-    Val<SC>: PrimeField32 + InjectiveMonomial<7>,
+    Val<SC>: VmField,
 {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
@@ -281,7 +280,7 @@ where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     RA: RowMajorMatrixArena<Val<SC>>,
-    Val<SC>: PrimeField32 + InjectiveMonomial<7>,
+    Val<SC>: VmField,
 {
     fn extend_prover(
         &self,

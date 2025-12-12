@@ -74,8 +74,10 @@ use crate::{
 };
 
 /// Canonical field bound for VM execution/circuit code.
-pub trait VmField: PrimeField32 + InjectiveMonomial<7> {}
-impl<T> VmField for T where T: PrimeField32 + InjectiveMonomial<7> {}
+pub const BABYBEAR_S_BOX_DEGREE: u64 = 7;
+
+pub trait VmField: PrimeField32 + InjectiveMonomial<BABYBEAR_S_BOX_DEGREE> {}
+impl<T> VmField for T where T: PrimeField32 + InjectiveMonomial<BABYBEAR_S_BOX_DEGREE> {}
 
 #[derive(Error, Debug)]
 pub enum GenerationError {

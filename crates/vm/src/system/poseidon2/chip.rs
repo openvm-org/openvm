@@ -8,31 +8,26 @@ use std::{
 
 use dashmap::DashMap;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
-use openvm_stark_backend::{
-    interaction::{BusIndex, LookupBus},
-    p3_field::{InjectiveMonomial, PrimeField32},
-};
+use openvm_stark_backend::interaction::{BusIndex, LookupBus};
 use rustc_hash::FxBuildHasher;
 
 use super::{
     air::Poseidon2PeripheryAir, PERIPHERY_POSEIDON2_CHUNK_SIZE, PERIPHERY_POSEIDON2_WIDTH,
 };
-use crate::arch::hasher::{Hasher, HasherChip};
+use crate::arch::{
+    hasher::{Hasher, HasherChip},
+    VmField,
+};
 
 #[derive(Debug)]
-pub struct Poseidon2PeripheryBaseChip<
-    F: PrimeField32 + InjectiveMonomial<7>,
-    const SBOX_REGISTERS: usize,
-> {
+pub struct Poseidon2PeripheryBaseChip<F: VmField, const SBOX_REGISTERS: usize> {
     pub air: Arc<Poseidon2PeripheryAir<F, SBOX_REGISTERS>>,
     pub subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
     pub records: DashMap<[F; PERIPHERY_POSEIDON2_WIDTH], AtomicU32, FxBuildHasher>,
     pub nonempty: AtomicBool,
 }
 
-impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
-    Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
-{
+impl<F: VmField, const SBOX_REGISTERS: usize> Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS> {
     pub fn new(poseidon2_config: Poseidon2Config<F>, bus_idx: BusIndex) -> Self {
         let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
         Self {
@@ -47,8 +42,8 @@ impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
     }
 }
 
-impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
-    Hasher<PERIPHERY_POSEIDON2_CHUNK_SIZE, F> for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
+impl<F: VmField, const SBOX_REGISTERS: usize> Hasher<PERIPHERY_POSEIDON2_CHUNK_SIZE, F>
+    for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
 {
     fn compress(
         &self,
@@ -64,8 +59,7 @@ impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
     }
 }
 
-impl<F: PrimeField32 + InjectiveMonomial<7>, const SBOX_REGISTERS: usize>
-    HasherChip<PERIPHERY_POSEIDON2_CHUNK_SIZE, F>
+impl<F: VmField, const SBOX_REGISTERS: usize> HasherChip<PERIPHERY_POSEIDON2_CHUNK_SIZE, F>
     for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
 {
     /// Key method for Hasher trait.
