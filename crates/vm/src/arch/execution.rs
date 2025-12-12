@@ -5,7 +5,7 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
 };
 use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
@@ -448,7 +448,7 @@ impl ExecutionBridge {
         timestamp_change: impl Into<AB::Expr>,
     ) -> ExecutionBridgeInteractor<AB> {
         let to_state = ExecutionState {
-            pc: from_state.pc.clone().into() + AB::Expr::from_canonical_u32(DEFAULT_PC_STEP),
+            pc: from_state.pc.clone().into() + AB::Expr::from_u32(DEFAULT_PC_STEP),
             timestamp: from_state.timestamp.clone().into() + timestamp_change.into(),
         };
         self.execute(opcode, operands, from_state, to_state)
@@ -491,10 +491,10 @@ impl<AB: InteractionBuilder> ExecutionBridgeInteractor<AB> {
     }
 }
 
-impl<T: FieldAlgebra> From<(u32, Option<T>)> for PcIncOrSet<T> {
+impl<T: PrimeCharacteristicRing> From<(u32, Option<T>)> for PcIncOrSet<T> {
     fn from((pc_inc, to_pc): (u32, Option<T>)) -> Self {
         match to_pc {
-            None => PcIncOrSet::Inc(T::from_canonical_u32(pc_inc)),
+            None => PcIncOrSet::Inc(T::from_u32(pc_inc)),
             Some(to_pc) => PcIncOrSet::Set(to_pc),
         }
     }

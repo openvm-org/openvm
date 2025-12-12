@@ -8,7 +8,7 @@ use std::{
 
 use lazy_static::lazy_static;
 use once_cell::sync::Lazy;
-use rand::{prelude::StdRng, SeedableRng};
+use rand08::{prelude::StdRng, SeedableRng};
 use snark_verifier_sdk::{
     halo2::{PoseidonTranscript, POSEIDON_SPEC},
     snark_verifier::{

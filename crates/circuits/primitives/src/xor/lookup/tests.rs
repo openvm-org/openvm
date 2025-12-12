@@ -1,7 +1,7 @@
 use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
-    interaction::BusIndex, p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix,
+    interaction::BusIndex, p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*, utils::disable_debug_builder, verifier::VerificationError, AirRef,
 };
 use openvm_stark_sdk::{
@@ -33,8 +33,8 @@ fn test_xor_limbs_chip() {
         .map(|_| {
             (0..XOR_REQUESTS)
                 .map(|_| {
-                    let x = rng.gen::<u32>() % MAX_INPUT;
-                    let y = rng.gen::<u32>() % MAX_INPUT;
+                    let x = rng.random::<u32>() % MAX_INPUT;
+                    let y = rng.random::<u32>() % MAX_INPUT;
 
                     (1, vec![x, y])
                 })
@@ -58,7 +58,7 @@ fn test_xor_limbs_chip() {
                         let z = xor_chip.request(x, y);
                         iter::once(count).chain(fields).chain(iter::once(z))
                     })
-                    .map(FieldAlgebra::from_wrapped_u32)
+                    .map(PrimeCharacteristicRing::from_u32)
                     .collect(),
                 4,
             )
@@ -96,8 +96,8 @@ fn negative_test_xor_limbs_chip() {
 
     let pairs = (0..XOR_REQUESTS)
         .map(|_| {
-            let x = rng.gen::<u32>() % MAX_INPUT;
-            let y = rng.gen::<u32>() % MAX_INPUT;
+            let x = rng.random::<u32>() % MAX_INPUT;
+            let y = rng.random::<u32>() % MAX_INPUT;
 
             (1, vec![x, y])
         })
@@ -122,7 +122,7 @@ fn negative_test_xor_limbs_chip() {
                     iter::once(count).chain(fields).chain(iter::once(z))
                 }
             })
-            .map(FieldAlgebra::from_wrapped_u32)
+            .map(PrimeCharacteristicRing::from_u32)
             .collect(),
         4,
     );

@@ -9,7 +9,7 @@ use openvm_instructions::{
 use openvm_stark_backend::{
     config::StarkGenericConfig,
     engine::StarkEngine,
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
     prover::{cpu::CpuBackend, types::AirProvingContext},
 };
 use openvm_stark_sdk::{
@@ -43,7 +43,7 @@ fn test_vm_connector_happy_path() {
     test_impl(true, exit_code, |air_ctx| {
         let pvs: &VmConnectorPvs<F> = air_ctx.public_values.as_slice().borrow();
         assert_eq!(pvs.is_terminate, F::ONE);
-        assert_eq!(pvs.exit_code, F::from_canonical_u32(exit_code));
+        assert_eq!(pvs.exit_code, F::from_u32(exit_code));
     });
 }
 
@@ -52,7 +52,7 @@ fn test_vm_connector_wrong_exit_code() {
     let exit_code = 1789;
     test_impl(false, exit_code, |air_ctx| {
         let pvs: &mut VmConnectorPvs<F> = air_ctx.public_values.as_mut_slice().borrow_mut();
-        pvs.exit_code = F::from_canonical_u32(exit_code + 1);
+        pvs.exit_code = F::from_u32(exit_code + 1);
     });
 }
 

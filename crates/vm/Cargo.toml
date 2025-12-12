@@ -97,7 +97,6 @@ unprotected = []
 mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]
 jemalloc-prof = ["openvm-stark-backend/jemalloc-prof"]
-nightly-features = ["openvm-stark-sdk?/nightly-features"]
 cuda = [
     "dep:openvm-stark-sdk",           # for BabyBearPoseidon2Config
     "openvm-circuit-primitives/cuda",

@@ -1,4 +1,4 @@
-//! Halo2 implementation of poseidon2 perm for Bn254Fr
+//! Halo2 implementation of poseidon2 perm for Bn254
 //! sbox degree 5
 
 use snark_verifier_sdk::snark_verifier::halo2_base::{

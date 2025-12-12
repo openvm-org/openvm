@@ -9,7 +9,7 @@ use openvm_circuit_primitives::{
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::Matrix,
 };
 
@@ -74,7 +74,7 @@ impl Sha256Air {
     /// Implements some sanity constraints on the row index, flags, and work variables
     fn eval_row<AB: InteractionBuilder>(&self, builder: &mut AB, start_col: usize) {
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
 
         // Doesn't matter which column struct we use here as we are only interested in the common
         // columns
@@ -153,7 +153,7 @@ impl Sha256Air {
                     )
                     .assert_eq(
                         a_limb,
-                        AB::Expr::from_canonical_u32(
+                        AB::Expr::from_u32(
                             u32_into_u16s(SHA256_H[SHA256_ROUNDS_PER_ROW - i - 1])[j],
                         ),
                     );
@@ -165,7 +165,7 @@ impl Sha256Air {
                     )
                     .assert_eq(
                         e_limb,
-                        AB::Expr::from_canonical_u32(
+                        AB::Expr::from_u32(
                             u32_into_u16s(SHA256_H[SHA256_ROUNDS_PER_ROW - i + 3])[j],
                         ),
                     );
@@ -214,7 +214,7 @@ impl Sha256Air {
                 let final_hash_limb =
                     compose::<AB::Expr>(&next.final_hash[i][j * 2..(j + 1) * 2], 8);
 
-                carry = AB::Expr::from(AB::F::from_canonical_u32(1 << 16).inverse())
+                carry = AB::Expr::from(AB::F::from_u32(1 << 16).inverse())
                     * (next.prev_hash[i][j] + work_var_limb + carry - final_hash_limb);
                 builder
                     .when(next.flags.is_digest_row)
@@ -232,8 +232,8 @@ impl Sha256Air {
 
     fn eval_transitions<AB: InteractionBuilder>(&self, builder: &mut AB, start_col: usize) {
         let main = builder.main();
-        let local = main.row_slice(0);
-        let next = main.row_slice(1);
+        let local = main.row_slice(0).expect("window should have two elements");
+        let next = main.row_slice(1).expect("window should have two elements");
 
         // Doesn't matter what column structs we use here
         let local_cols: &Sha256RoundCols<AB::Var> =
@@ -281,7 +281,7 @@ impl Sha256Air {
         let delta = local_cols.flags.is_round_row * AB::Expr::ONE
             + local_cols.flags.is_digest_row
                 * next_cols.flags.is_round_row
-                * AB::Expr::from_canonical_u32(16)
+                * AB::Expr::from_u32(16)
                 * AB::Expr::NEG_ONE
             + local_cols.flags.is_digest_row * next_is_padding_row.clone() * AB::Expr::ONE;
 

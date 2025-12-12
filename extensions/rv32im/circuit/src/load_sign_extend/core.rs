@@ -23,7 +23,7 @@ use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 
@@ -106,11 +106,11 @@ where
         builder.assert_bool(data_most_sig_bit);
         builder.assert_bool(shift_most_sig_bit);
 
-        let expected_opcode = (is_loadb0 + is_loadb1) * AB::F::from_canonical_u8(LOADB as u8)
-            + is_loadh * AB::F::from_canonical_u8(LOADH as u8)
-            + AB::Expr::from_canonical_usize(Rv32LoadStoreOpcode::CLASS_OFFSET);
+        let expected_opcode = (is_loadb0 + is_loadb1) * AB::F::from_u8(LOADB as u8)
+            + is_loadh * AB::F::from_u8(LOADH as u8)
+            + AB::Expr::from_usize(Rv32LoadStoreOpcode::CLASS_OFFSET);
 
-        let limb_mask = data_most_sig_bit * AB::Expr::from_canonical_u32((1 << LIMB_BITS) - 1);
+        let limb_mask = data_most_sig_bit * AB::Expr::from_u32((1 << LIMB_BITS) - 1);
 
         // there are three parts to write_data:
         // - 1st limb is always shifted_read_data
@@ -134,8 +134,7 @@ where
 
         self.range_bus
             .range_check(
-                most_sig_limb
-                    - data_most_sig_bit * AB::Expr::from_canonical_u32(1 << (LIMB_BITS - 1)),
+                most_sig_limb - data_most_sig_bit * AB::Expr::from_u32(1 << (LIMB_BITS - 1)),
                 LIMB_BITS - 1,
             )
             .eval(builder, is_valid.clone());
@@ -292,8 +291,8 @@ where
         self.range_checker_chip
             .add_count((most_sig_limb - most_sig_bit) as u32, 7);
 
-        core_row.prev_data = record.prev_data.map(F::from_canonical_u8);
-        core_row.shifted_read_data = record.read_data.map(F::from_canonical_u8);
+        core_row.prev_data = record.prev_data.map(F::from_u8);
+        core_row.shifted_read_data = record.read_data.map(F::from_u8);
         core_row.shifted_read_data.rotate_left((shift & 2) as usize);
 
         core_row.data_most_sig_bit = F::from_bool(most_sig_bit != 0);

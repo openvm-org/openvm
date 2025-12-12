@@ -55,6 +55,7 @@ openvm-pairing-guest = { workspace = true, features = [
     "bls12_381",
     "bn254",
 ] }
+rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"] }
 
 [features]
 default = []

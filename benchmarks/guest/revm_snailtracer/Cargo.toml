@@ -5,6 +5,8 @@ edition.workspace = true
 
 [dependencies]
 openvm = { workspace = true, features = ["std"] }
+openvm-algebra-guest = { workspace = true }
+openvm-ecc-guest = { workspace = true }
 revm = { version = "18.0.0", default-features = false }
 # revm does not re-export this feature so we enable it here
 derive_more = { version = "1.0.0", default-features = false, features = [

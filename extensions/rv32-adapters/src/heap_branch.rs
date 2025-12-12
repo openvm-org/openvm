@@ -29,7 +29,7 @@ use openvm_rv32im_circuit::adapters::{tracing_read, RV32_CELL_BITS, RV32_REGISTE
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
 /// This adapter reads from NUM_READS <= 2 pointers.
@@ -81,11 +81,11 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const READ_SIZE: usize> VmA
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
-            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+            timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        let d = AB::F::from_canonical_u32(RV32_REGISTER_AS);
-        let e = AB::F::from_canonical_u32(RV32_MEMORY_AS);
+        let d = AB::F::from_u32(RV32_REGISTER_AS);
+        let e = AB::F::from_u32(RV32_MEMORY_AS);
 
         for (ptr, data, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
             self.memory_bridge
@@ -106,9 +106,8 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const READ_SIZE: usize> VmA
 
         // range checks constrain to RV32_CELL_BITS bits, so we need to shift the limbs to constrain
         // the correct amount of bits
-        let limb_shift = AB::F::from_canonical_usize(
-            1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits),
-        );
+        let limb_shift =
+            AB::F::from_usize(1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits));
 
         // Note: since limbs are read from memory we already know that limb[i] < 2^RV32_CELL_BITS
         //       thus range checking limb[i] * shift < 2^RV32_CELL_BITS, gives us that
@@ -124,7 +123,7 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const READ_SIZE: usize> VmA
 
         let heap_ptr = cols.rs_val.map(|r| {
             r.iter().rev().fold(AB::Expr::ZERO, |acc, limb| {
-                acc * AB::F::from_canonical_u32(1 << RV32_CELL_BITS) + (*limb)
+                acc * AB::F::from_u32(1 << RV32_CELL_BITS) + (*limb)
             })
         });
         for (ptr, data, aux) in izip!(heap_ptr, ctx.reads, &cols.heap_read_aux) {
@@ -150,7 +149,7 @@ impl<AB: InteractionBuilder, const NUM_READS: usize, const READ_SIZE: usize> VmA
                     e.into(),
                 ],
                 cols.from_state,
-                AB::F::from_canonical_usize(timestamp_delta),
+                AB::F::from_usize(timestamp_delta),
                 (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
@@ -309,7 +308,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterTra
             .rev()
             .zip(record.rs_vals.iter().rev())
             .for_each(|(col, record)| {
-                *col = record.to_le_bytes().map(F::from_canonical_u8);
+                *col = record.to_le_bytes().map(F::from_u8);
             });
 
         cols.rs_ptr
@@ -317,10 +316,10 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterTra
             .rev()
             .zip(record.rs_ptr.iter().rev())
             .for_each(|(col, record)| {
-                *col = F::from_canonical_u32(*record);
+                *col = F::from_u32(*record);
             });
 
-        cols.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
-        cols.from_state.pc = F::from_canonical_u32(record.from_pc);
+        cols.from_state.timestamp = F::from_u32(record.from_timestamp);
+        cols.from_state.pc = F::from_u32(record.from_pc);
     }
 }

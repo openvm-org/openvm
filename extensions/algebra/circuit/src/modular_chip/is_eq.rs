@@ -29,7 +29,7 @@ use openvm_rv32_adapters::Rv32IsEqualModAdapterExecutor;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 
@@ -171,21 +171,20 @@ where
         // If c_lt_mark is 1, then lt_marker_sum is 1
         builder
             .when(cols.is_valid - cols.is_setup)
-            .when_ne(cols.c_lt_mark, AB::F::from_canonical_u8(2))
+            .when_ne(cols.c_lt_mark, AB::F::from_u8(2))
             .assert_one(lt_marker_sum.clone());
 
         // If c_lt_mark is 2, then lt_marker_sum is 3
         builder
             .when(cols.is_valid - cols.is_setup)
             .when_ne(cols.c_lt_mark, AB::F::ONE)
-            .assert_eq(lt_marker_sum.clone(), AB::F::from_canonical_u8(3));
+            .assert_eq(lt_marker_sum.clone(), AB::F::from_u8(3));
 
         // This constraint, along with the constraint (below) that lt_marker[i] is 0, 1, or 2,
         // ensures that lt_marker has exactly one 2.
-        builder.when_ne(cols.c_lt_mark, AB::F::ONE).assert_eq(
-            lt_marker_one_check_sum,
-            cols.is_valid * AB::F::from_canonical_u8(2),
-        );
+        builder
+            .when_ne(cols.c_lt_mark, AB::F::ONE)
+            .assert_eq(lt_marker_one_check_sum, cols.is_valid * AB::F::from_u8(2));
 
         // Handle the setup row constraints.
         // When is_setup = 1, constrain c_lt_mark = 2 and lt_marker_sum = 2
@@ -194,13 +193,13 @@ where
         // instead of just for i > b_diff_idx.
         builder
             .when(cols.is_setup)
-            .assert_eq(cols.c_lt_mark, AB::F::from_canonical_u8(2));
+            .assert_eq(cols.c_lt_mark, AB::F::from_u8(2));
         builder
             .when(cols.is_setup)
-            .assert_eq(lt_marker_sum.clone(), AB::F::from_canonical_u8(2));
+            .assert_eq(lt_marker_sum.clone(), AB::F::from_u8(2));
 
         // Constrain that b, c < N (i.e. modulus).
-        let modulus = self.modulus_limbs.map(AB::F::from_canonical_u32);
+        let modulus = self.modulus_limbs.map(AB::F::from_u32);
         let mut prefix_sum = AB::Expr::ZERO;
 
         for i in (0..READ_LIMBS).rev() {
@@ -229,7 +228,7 @@ where
             // N[i] (i.e. i == b_diff_idx).
             builder
                 .when_ne(cols.lt_marker[i], AB::F::ZERO)
-                .when_ne(cols.lt_marker[i], AB::F::from_canonical_u8(2))
+                .when_ne(cols.lt_marker[i], AB::F::from_u8(2))
                 .assert_eq(AB::Expr::from(modulus[i]) - cols.b[i], cols.b_lt_diff);
 
             // Constrain c < N.
@@ -246,10 +245,7 @@ where
             // we have {0, 1, 2} \ {0, 3 - c_lt_mark} = {c_lt_mark}.
             builder
                 .when_ne(cols.lt_marker[i], AB::F::ZERO)
-                .when_ne(
-                    cols.lt_marker[i],
-                    AB::Expr::from_canonical_u8(3) - cols.c_lt_mark,
-                )
+                .when_ne(cols.lt_marker[i], AB::Expr::from_u8(3) - cols.c_lt_mark)
                 .assert_eq(AB::Expr::from(modulus[i]) - cols.c[i], cols.c_lt_diff);
         }
 
@@ -261,11 +257,11 @@ where
             )
             .eval(builder, cols.is_valid - cols.is_setup);
 
-        let expected_opcode = AB::Expr::from_canonical_usize(self.offset)
+        let expected_opcode = AB::Expr::from_usize(self.offset)
             + cols.is_setup
-                * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize)
+                * AB::Expr::from_usize(Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize)
             + (AB::Expr::ONE - cols.is_setup)
-                * AB::Expr::from_canonical_usize(Rv32ModularArithmeticOpcode::IS_EQ as usize);
+                * AB::Expr::from_usize(Rv32ModularArithmeticOpcode::IS_EQ as usize);
         let mut a: [AB::Expr; WRITE_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         a[0] = cols.cmp_result.into();
 
@@ -420,11 +416,9 @@ where
             F::TWO
         };
 
-        cols.c_lt_diff =
-            F::from_canonical_u8(self.modulus_limbs[c_diff_idx] - record.c[c_diff_idx]);
+        cols.c_lt_diff = F::from_u8(self.modulus_limbs[c_diff_idx] - record.c[c_diff_idx]);
         if !record.is_setup {
-            cols.b_lt_diff =
-                F::from_canonical_u8(self.modulus_limbs[b_diff_idx] - record.b[b_diff_idx]);
+            cols.b_lt_diff = F::from_u8(self.modulus_limbs[b_diff_idx] - record.b[b_diff_idx]);
             self.bitwise_lookup_chip.request_range(
                 (self.modulus_limbs[b_diff_idx] - record.b[b_diff_idx] - 1) as u32,
                 (self.modulus_limbs[c_diff_idx] - record.c[c_diff_idx] - 1) as u32,
@@ -443,8 +437,8 @@ where
             }
         });
 
-        cols.c = record.c.map(F::from_canonical_u8);
-        cols.b = record.b.map(F::from_canonical_u8);
+        cols.c = record.c.map(F::from_u8);
+        cols.b = record.b.map(F::from_u8);
         let sub_air = IsEqArraySubAir::<READ_LIMBS>;
         sub_air.generate_subrow(
             (&cols.b, &cols.c),

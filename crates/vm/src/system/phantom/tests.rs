@@ -1,5 +1,5 @@
 use openvm_instructions::{instruction::Instruction, SystemOpcode, VmOpcode};
-use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
+use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use super::PhantomExecutor;
@@ -30,7 +30,7 @@ fn run_phantom_test<E, RA>(
     for _ in 0..num_nops {
         tester.execute_with_pc(executor, arena, &nop, state.pc.as_canonical_u32());
         let new_state = tester.execution_final_state();
-        assert_eq!(state.pc + F::from_canonical_usize(4), new_state.pc);
+        assert_eq!(state.pc + F::from_usize(4), new_state.pc);
         assert_eq!(state.timestamp + F::ONE, new_state.timestamp);
         state = new_state;
     }

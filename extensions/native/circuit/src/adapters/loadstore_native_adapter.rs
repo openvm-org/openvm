@@ -30,7 +30,7 @@ use openvm_native_compiler::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
 pub struct NativeLoadStoreInstruction<T> {
@@ -92,14 +92,14 @@ impl<AB: InteractionBuilder, const NUM_CELLS: usize> VmAdapterAir<AB>
     ) {
         let cols: &NativeLoadStoreAdapterCols<_, NUM_CELLS> = local.borrow();
         let timestamp = cols.from_state.timestamp;
-        let mut timestamp_delta = AB::Expr::from_canonical_usize(0);
+        let mut timestamp_delta = AB::Expr::from_usize(0);
 
         let is_valid = ctx.instruction.is_valid;
         let is_loadw = ctx.instruction.is_loadw;
         let is_storew = ctx.instruction.is_storew;
         let is_hint_storew = ctx.instruction.is_hint_storew;
 
-        let native_as = AB::Expr::from_canonical_u32(AS::Native as u32);
+        let native_as = AB::Expr::from_u32(AS::Native as u32);
 
         let ptr = ctx.reads.0;
         // Here we ignore ctx.reads.1 and we use `ctx.writes` as the data for both the write and the
@@ -334,7 +334,7 @@ impl<F: PrimeField32, const NUM_CELLS: usize> AdapterTraceFiller<F>
         adapter_row.b = record.b;
         adapter_row.a = record.a;
 
-        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
-        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(record.from_pc);
+        adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
     }
 }

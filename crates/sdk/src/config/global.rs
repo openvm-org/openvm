@@ -38,7 +38,7 @@ use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::StarkEngine,
-    p3_field::{Field, PrimeField32},
+    p3_field::Field,
     prover::cpu::{CpuBackend, CpuDevice},
 };
 use openvm_transpiler::transpiler::Transpiler;
@@ -365,7 +365,7 @@ impl<E, SC> VmBuilder<E> for SdkVmCpuBuilder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<SC>: PrimeField32,
+    Val<SC>: VmField,
 {
     type VmConfig = SdkVmConfig;
     type SystemChipInventory = SystemChipInventory<SC>;

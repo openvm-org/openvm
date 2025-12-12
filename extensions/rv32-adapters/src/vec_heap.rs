@@ -35,7 +35,7 @@ use openvm_rv32im_circuit::adapters::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
 /// This adapter reads from R (R <= 2) pointers and writes to 1 pointer.
@@ -145,7 +145,7 @@ impl<
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
-            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+            timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
         // Read register values for rs, rd
@@ -156,7 +156,7 @@ impl<
         ))) {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(AB::F::from_canonical_u32(RV32_REGISTER_AS), ptr),
+                    MemoryAddress::new(AB::F::from_u32(RV32_REGISTER_AS), ptr),
                     val,
                     timestamp_pp(),
                     aux,
@@ -178,9 +178,8 @@ impl<
 
         // range checks constrain to RV32_CELL_BITS bits, so we need to shift the limbs to constrain
         // the correct amount of bits
-        let limb_shift = AB::F::from_canonical_usize(
-            1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits),
-        );
+        let limb_shift =
+            AB::F::from_usize(1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits));
 
         // Note: since limbs are read from memory we already know that limb[i] < 2^RV32_CELL_BITS
         //       thus range checking limb[i] * shift < 2^RV32_CELL_BITS, gives us that
@@ -195,7 +194,7 @@ impl<
         let rd_val_f: AB::Expr = abstract_compose(cols.rd_val);
         let rs_val_f: [AB::Expr; NUM_READS] = cols.rs_val.map(abstract_compose);
 
-        let e = AB::F::from_canonical_u32(RV32_MEMORY_AS);
+        let e = AB::F::from_u32(RV32_MEMORY_AS);
         // Reads from heap
         for (address, reads, reads_aux) in izip!(rs_val_f, ctx.reads, &cols.reads_aux,) {
             for (i, (read, aux)) in zip(reads, reads_aux).enumerate() {
@@ -203,7 +202,7 @@ impl<
                     .read(
                         MemoryAddress::new(
                             e,
-                            address.clone() + AB::Expr::from_canonical_usize(i * READ_SIZE),
+                            address.clone() + AB::Expr::from_usize(i * READ_SIZE),
                         ),
                         read,
                         timestamp_pp(),
@@ -217,10 +216,7 @@ impl<
         for (i, (write, aux)) in zip(ctx.writes, &cols.writes_aux).enumerate() {
             self.memory_bridge
                 .write(
-                    MemoryAddress::new(
-                        e,
-                        rd_val_f.clone() + AB::Expr::from_canonical_usize(i * WRITE_SIZE),
-                    ),
+                    MemoryAddress::new(e, rd_val_f.clone() + AB::Expr::from_usize(i * WRITE_SIZE)),
                     write,
                     timestamp_pp(),
                     aux,
@@ -241,11 +237,11 @@ impl<
                         .get(1)
                         .map(|&x| x.into())
                         .unwrap_or(AB::Expr::ZERO),
-                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
+                    AB::Expr::from_u32(RV32_REGISTER_AS),
                     e.into(),
                 ],
                 cols.from_state,
-                AB::F::from_canonical_usize(timestamp_delta),
+                AB::F::from_usize(timestamp_delta),
                 (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid.clone());
@@ -521,7 +517,7 @@ impl<
             .rev()
             .zip(cols.writes_aux.iter_mut().rev())
             .for_each(|(write, cols_write)| {
-                cols_write.set_prev_data(write.prev_data.map(F::from_canonical_u8));
+                cols_write.set_prev_data(write.prev_data.map(F::from_u8));
                 mem_helper.fill(write.prev_timestamp, timestamp_mm(), cols_write.as_mut());
             });
 
@@ -555,23 +551,23 @@ impl<
                 mem_helper.fill(aux.prev_timestamp, timestamp_mm(), cols_aux.as_mut());
             });
 
-        cols.rd_val = record.rd_val.to_le_bytes().map(F::from_canonical_u8);
+        cols.rd_val = record.rd_val.to_le_bytes().map(F::from_u8);
         cols.rs_val
             .iter_mut()
             .rev()
             .zip(record.rs_vals.iter().rev())
             .for_each(|(cols_val, val)| {
-                *cols_val = val.to_le_bytes().map(F::from_canonical_u8);
+                *cols_val = val.to_le_bytes().map(F::from_u8);
             });
-        cols.rd_ptr = F::from_canonical_u32(record.rd_ptr);
+        cols.rd_ptr = F::from_u32(record.rd_ptr);
         cols.rs_ptr
             .iter_mut()
             .rev()
             .zip(record.rs_ptrs.iter().rev())
             .for_each(|(cols_ptr, ptr)| {
-                *cols_ptr = F::from_canonical_u32(*ptr);
+                *cols_ptr = F::from_u32(*ptr);
             });
-        cols.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
-        cols.from_state.pc = F::from_canonical_u32(record.from_pc);
+        cols.from_state.timestamp = F::from_u32(record.from_timestamp);
+        cols.from_state.pc = F::from_u32(record.from_pc);
     }
 }

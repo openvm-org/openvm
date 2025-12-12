@@ -1,7 +1,7 @@
 use openvm_native_compiler::prelude::*;
 use openvm_stark_backend::{
-    p3_commit::{LagrangeSelectors, TwoAdicMultiplicativeCoset},
-    p3_field::{Field, FieldAlgebra, TwoAdicField},
+    p3_commit::LagrangeSelectors,
+    p3_field::{coset::TwoAdicMultiplicativeCoset, Field, PrimeCharacteristicRing, TwoAdicField},
 };
 
 use super::types::FriConfigVariable;
@@ -32,11 +32,11 @@ where
     type Constant = TwoAdicMultiplicativeCoset<C::F>;
 
     fn constant(value: Self::Constant, builder: &mut Builder<C>) -> Self {
-        let g_val = C::F::two_adic_generator(value.log_n);
+        let g_val = C::F::two_adic_generator(value.log_size());
         TwoAdicMultiplicativeCosetVariable::<C> {
             // builder.eval is necessary to assign a variable in the dynamic mode.
-            log_n: builder.eval(RVar::from(value.log_n)),
-            shift: builder.eval(value.shift),
+            log_n: builder.eval(RVar::from(value.log_size())),
+            shift: builder.eval(value.shift()),
             g: builder.eval(g_val),
         }
     }
@@ -70,11 +70,11 @@ where
             is_first_row: builder.eval(z_h / (unshifted_point - C::EF::ONE)),
             is_last_row: builder.eval(z_h / (unshifted_point - self.gen().inverse())),
             is_transition: builder.eval(unshifted_point - self.gen().inverse()),
-            inv_zeroifier: builder.eval(z_h.inverse()),
+            inv_vanishing: builder.eval(z_h.inverse()),
         }
     }
 
-    fn zp_at_point(
+    fn vanishing_poly_at_point(
         &self,
         builder: &mut Builder<C>,
         point: Ext<<C as Config>::F, <C as Config>::EF>,
@@ -119,8 +119,7 @@ where
 
     fn split_domains_const(&self, builder: &mut Builder<C>, log_num_chunks: usize) -> Vec<Self> {
         let num_chunks = 1 << log_num_chunks;
-        let log_n: Usize<_> =
-            builder.eval(self.log_n.clone() - C::N::from_canonical_usize(log_num_chunks));
+        let log_n: Usize<_> = builder.eval(self.log_n.clone() - C::N::from_usize(log_num_chunks));
 
         let g_dom = self.gen();
         let g = builder.exp_power_of_2_v::<Felt<C::F>>(g_dom, log_num_chunks);
@@ -163,11 +162,14 @@ pub(crate) mod tests {
         p3_commit::{Pcs, PolynomialSpace},
         p3_field::PrimeField,
     };
-    use openvm_stark_sdk::config::{
-        baby_bear_poseidon2::{config_from_perm, default_perm, BabyBearPoseidon2Config},
-        fri_params::SecurityParameters,
+    use openvm_stark_sdk::{
+        config::{
+            baby_bear_poseidon2::{config_from_perm, default_perm, BabyBearPoseidon2Config},
+            fri_params::SecurityParameters,
+        },
+        utils::create_seeded_rng,
     };
-    use rand::{thread_rng, Rng};
+    use rand::Rng;
 
     use super::*;
     use crate::utils::const_fri_config;
@@ -179,11 +181,8 @@ pub(crate) mod tests {
         zeta_val: C::EF,
     ) {
         // Assert the domain parameters are the same.
-        builder.assert_var_eq(
-            domain.log_n.clone(),
-            F::from_canonical_usize(domain_val.log_n),
-        );
-        builder.assert_felt_eq(domain.shift, domain_val.shift);
+        builder.assert_var_eq(domain.log_n.clone(), F::from_usize(domain_val.log_size()));
+        builder.assert_felt_eq(domain.shift, domain_val.shift());
 
         // Get a random point.
         let zeta: Ext<_, _> = builder.eval(zeta_val.cons());
@@ -195,8 +194,8 @@ pub(crate) mod tests {
         builder.assert_ext_eq(sels.is_last_row, sels_expected.is_last_row.cons());
         builder.assert_ext_eq(sels.is_transition, sels_expected.is_transition.cons());
 
-        let zp_val = domain_val.zp_at_point(zeta_val);
-        let zp = domain.zp_at_point(builder, zeta);
+        let zp_val = domain_val.vanishing_poly_at_point(zeta_val);
+        let zp = domain.vanishing_poly_at_point(builder, zeta);
         builder.assert_ext_eq(zp, zp_val.cons());
     }
 
@@ -207,7 +206,7 @@ pub(crate) mod tests {
         type Challenger = <SC as StarkGenericConfig>::Challenger;
         type ScPcs = <SC as StarkGenericConfig>::Pcs;
 
-        let mut rng = thread_rng();
+        let mut rng = create_seeded_rng();
         let security_params = SecurityParameters::standard_fast();
         let config = config_from_perm(&default_perm(), security_params.clone());
         let pcs = config.pcs();
@@ -230,7 +229,7 @@ pub(crate) mod tests {
             let domain = builder.constant(domain_val);
 
             // builder.assert_felt_eq(domain.shift, domain_val.shift);
-            let zeta_val = rng.gen::<EF>();
+            let zeta_val = rng.random::<EF>();
             domain_assertions(&mut builder, &domain, &domain_val, zeta_val);
 
             // Try a shifted domain.

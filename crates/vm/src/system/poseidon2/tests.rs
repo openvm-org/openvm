@@ -1,7 +1,7 @@
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     interaction::LookupBus,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     AirRef,
 };
 use openvm_stark_sdk::{
@@ -46,8 +46,8 @@ fn poseidon2_periphery_direct_test() {
         [BabyBear; PERIPHERY_POSEIDON2_CHUNK_SIZE],
     ); NUM_OPS] = std::array::from_fn(|_| {
         (
-            std::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
-            std::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
+            std::array::from_fn(|_| BabyBear::from_u32(rng.next_u32() % (1 << 30))),
+            std::array::from_fn(|_| BabyBear::from_u32(rng.next_u32() % (1 << 30))),
         )
     });
     let (air, chip) = create_test_chip();
@@ -94,8 +94,8 @@ fn poseidon2_periphery_duplicate_hashes_test() {
         [BabyBear; PERIPHERY_POSEIDON2_CHUNK_SIZE],
     ); NUM_OPS] = std::array::from_fn(|_| {
         (
-            std::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
-            std::array::from_fn(|_| BabyBear::from_canonical_u32(rng.next_u32() % (1 << 30))),
+            std::array::from_fn(|_| BabyBear::from_u32(rng.next_u32() % (1 << 30))),
+            std::array::from_fn(|_| BabyBear::from_u32(rng.next_u32() % (1 << 30))),
         )
     });
     let counts: [u32; NUM_OPS] = std::array::from_fn(|_| rng.next_u32() % 20);
@@ -104,7 +104,7 @@ fn poseidon2_periphery_duplicate_hashes_test() {
 
     let outs: [[BabyBear; PERIPHERY_POSEIDON2_CHUNK_SIZE]; NUM_OPS] = std::array::from_fn(|i| {
         for _ in 0..counts[i] {
-            chip.compress_and_record(&hashes[i].0, &hashes[i].1);
+            let _ = chip.compress_and_record(&hashes[i].0, &hashes[i].1);
         }
         chip.compress(&hashes[i].0, &hashes[i].1)
     });

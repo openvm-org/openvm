@@ -6,6 +6,8 @@ edition.workspace = true
 [dependencies]
 openvm = { workspace = true, features = ["std"] }
 openvm-keccak256.workspace = true
+openvm-algebra-guest = { workspace = true }
+openvm-ecc-guest = { workspace = true }
 revm = { version = "18.0.0", default-features = false }
 tracing = { version = "0.1.40", default-features = false }
 alloy-primitives = { version = "0.8.10", default-features = false, features = [

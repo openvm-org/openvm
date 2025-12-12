@@ -17,7 +17,7 @@ use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{conversion::AS, FieldExtensionOpcode};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{extension::BinomialExtensionField, FieldAlgebra, FieldExtensionAlgebra},
+    p3_field::{extension::BinomialExtensionField, BasedVectorSpace, PrimeCharacteristicRing},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -245,7 +245,7 @@ fn run_negative_field_extension_test(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<F>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).expect("row exists").to_vec();
         let core_cols: &mut FieldExtensionCoreCols<F> =
             values.split_at_mut(adapter_width).1.borrow_mut();
 
@@ -289,11 +289,11 @@ fn rand_negative_field_extension_test() {
         None,
         None,
         FieldExtensionPrankValues {
-            x: Some(array::from_fn(|_| rng.gen::<F>())),
-            y: Some(array::from_fn(|_| rng.gen::<F>())),
-            z: Some(array::from_fn(|_| rng.gen::<F>())),
-            opcode_flags: Some(array::from_fn(|_| rng.gen_bool(0.5))),
-            divisor_inv: Some(array::from_fn(|_| rng.gen::<F>())),
+            x: Some(array::from_fn(|_| rng.random::<F>())),
+            y: Some(array::from_fn(|_| rng.random::<F>())),
+            z: Some(array::from_fn(|_| rng.random::<F>())),
+            opcode_flags: Some(array::from_fn(|_| rng.random_bool(0.5))),
+            divisor_inv: Some(array::from_fn(|_| rng.random::<F>())),
         },
         VerificationError::OodEvaluationMismatch,
     );
@@ -346,15 +346,15 @@ fn new_field_extension_consistency_test() {
     let operands: Vec<([F; 4], [F; 4])> = (0..len_tests)
         .map(|_| {
             (
-                array::from_fn(|_| rng.gen::<F>()),
-                array::from_fn(|_| rng.gen::<F>()),
+                array::from_fn(|_| rng.random::<F>()),
+                array::from_fn(|_| rng.random::<F>()),
             )
         })
         .collect();
 
     for (a, b) in operands {
-        let a_ext = EF::from_base_slice(&a);
-        let b_ext = EF::from_base_slice(&b);
+        let a_ext = EF::from_basis_coefficients_slice(&a).unwrap();
+        let b_ext = EF::from_basis_coefficients_slice(&b).unwrap();
 
         let plonky_add = a_ext.add(b_ext);
         let plonky_sub = a_ext.sub(b_ext);
@@ -366,9 +366,9 @@ fn new_field_extension_consistency_test() {
         let my_mul = FieldExtension::multiply(a, b);
         let my_div = FieldExtension::divide(a, b);
 
-        assert_eq!(my_add, plonky_add.as_base_slice());
-        assert_eq!(my_sub, plonky_sub.as_base_slice());
-        assert_eq!(my_mul, plonky_mul.as_base_slice());
-        assert_eq!(my_div, plonky_div.as_base_slice());
+        assert_eq!(my_add, plonky_add.as_basis_coefficients_slice());
+        assert_eq!(my_sub, plonky_sub.as_basis_coefficients_slice());
+        assert_eq!(my_mul, plonky_mul.as_basis_coefficients_slice());
+        assert_eq!(my_div, plonky_div.as_basis_coefficients_slice());
     }
 }

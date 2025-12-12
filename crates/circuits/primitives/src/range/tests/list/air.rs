@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -28,7 +28,7 @@ impl<F: Field> BaseAir<F> for ListAir {
 impl<AB: InteractionBuilder> Air<AB> for ListAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local: &ListCols<AB::Var> = (*local).borrow();
 
         // We do not implement SubAirBridge trait for brevity

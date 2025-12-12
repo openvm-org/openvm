@@ -19,7 +19,7 @@ use openvm_rv32im_transpiler::ShiftOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 use strum::IntoEnumIterator;
@@ -114,16 +114,16 @@ where
         for i in 0..LIMB_BITS {
             builder.assert_bool(cols.bit_shift_marker[i]);
             bit_marker_sum += cols.bit_shift_marker[i].into();
-            bit_shift += AB::Expr::from_canonical_usize(i) * cols.bit_shift_marker[i];
+            bit_shift += AB::Expr::from_usize(i) * cols.bit_shift_marker[i];
 
             let mut when_bit_shift = builder.when(cols.bit_shift_marker[i]);
             when_bit_shift.assert_eq(
                 cols.bit_multiplier_left,
-                AB::Expr::from_canonical_usize(1 << i) * cols.opcode_sll_flag,
+                AB::Expr::from_usize(1 << i) * cols.opcode_sll_flag,
             );
             when_bit_shift.assert_eq(
                 cols.bit_multiplier_right,
-                AB::Expr::from_canonical_usize(1 << i) * right_shift.clone(),
+                AB::Expr::from_usize(1 << i) * right_shift.clone(),
             );
         }
         builder.when(is_valid.clone()).assert_one(bit_marker_sum);
@@ -135,7 +135,7 @@ where
         for i in 0..NUM_LIMBS {
             builder.assert_bool(cols.limb_shift_marker[i]);
             limb_marker_sum += cols.limb_shift_marker[i].into();
-            limb_shift += AB::Expr::from_canonical_usize(i) * cols.limb_shift_marker[i];
+            limb_shift += AB::Expr::from_usize(i) * cols.limb_shift_marker[i];
 
             let mut when_limb_shift = builder.when(cols.limb_shift_marker[i]);
 
@@ -149,7 +149,7 @@ where
                     } else {
                         cols.bit_shift_carry[j - i - 1].into() * cols.opcode_sll_flag
                     } + b[j - i] * cols.bit_multiplier_left
-                        - AB::Expr::from_canonical_usize(1 << LIMB_BITS)
+                        - AB::Expr::from_usize(1 << LIMB_BITS)
                             * cols.bit_shift_carry[j - i]
                             * cols.opcode_sll_flag;
                     when_limb_shift.assert_eq(a[j] * cols.opcode_sll_flag, expected_a_left);
@@ -159,14 +159,14 @@ where
                 if j + i > NUM_LIMBS - 1 {
                     when_limb_shift.assert_eq(
                         a[j] * right_shift.clone(),
-                        cols.b_sign * AB::F::from_canonical_usize((1 << LIMB_BITS) - 1),
+                        cols.b_sign * AB::F::from_usize((1 << LIMB_BITS) - 1),
                     );
                 } else {
                     let expected_a_right = if j + i == NUM_LIMBS - 1 {
                         cols.b_sign * (cols.bit_multiplier_right - AB::F::ONE)
                     } else {
                         cols.bit_shift_carry[j + i + 1].into() * right_shift.clone()
-                    } * AB::F::from_canonical_usize(1 << LIMB_BITS)
+                    } * AB::F::from_usize(1 << LIMB_BITS)
                         + right_shift.clone() * (b[j + i] - cols.bit_shift_carry[j + i]);
                     when_limb_shift.assert_eq(a[j] * cols.bit_multiplier_right, expected_a_right);
                 }
@@ -175,10 +175,10 @@ where
         builder.when(is_valid.clone()).assert_one(limb_marker_sum);
 
         // Check that bit_shift and limb_shift are correct.
-        let num_bits = AB::F::from_canonical_usize(NUM_LIMBS * LIMB_BITS);
+        let num_bits = AB::F::from_usize(NUM_LIMBS * LIMB_BITS);
         self.range_bus
             .range_check(
-                (c[0] - limb_shift * AB::F::from_canonical_usize(LIMB_BITS) - bit_shift.clone())
+                (c[0] - limb_shift * AB::F::from_usize(LIMB_BITS) - bit_shift.clone())
                     * num_bits.inverse(),
                 LIMB_BITS - ((NUM_LIMBS * LIMB_BITS) as u32).ilog2() as usize,
             )
@@ -190,13 +190,13 @@ where
             .when(not(cols.opcode_sra_flag))
             .assert_zero(cols.b_sign);
 
-        let mask = AB::F::from_canonical_u32(1 << (LIMB_BITS - 1));
+        let mask = AB::F::from_u32(1 << (LIMB_BITS - 1));
         let b_sign_shifted = cols.b_sign * mask;
         self.bitwise_lookup_bus
             .send_xor(
                 b[NUM_LIMBS - 1],
                 mask,
-                b[NUM_LIMBS - 1] + mask - (AB::Expr::from_canonical_u32(2) * b_sign_shifted),
+                b[NUM_LIMBS - 1] + mask - (AB::Expr::from_u32(2) * b_sign_shifted),
             )
             .eval(builder, cols.opcode_sra_flag);
 
@@ -218,7 +218,7 @@ where
                 .iter()
                 .zip(ShiftOpcode::iter())
                 .fold(AB::Expr::ZERO, |acc, (flag, opcode)| {
-                    acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
+                    acc + (*flag).into() * AB::Expr::from_u8(opcode as u8)
                 }),
         );
 
@@ -389,7 +389,7 @@ where
                     _ => record.b[i] % (1 << bit_shift),
                 };
                 self.range_checker_chip.add_count(carry as u32, bit_shift);
-                F::from_canonical_u8(carry)
+                F::from_u8(carry)
             })
         };
 
@@ -400,17 +400,17 @@ where
 
         core_row.b_sign = F::ZERO;
         if opcode == ShiftOpcode::SRA {
-            core_row.b_sign = F::from_canonical_u8(record.b[NUM_LIMBS - 1] >> (LIMB_BITS - 1));
+            core_row.b_sign = F::from_u8(record.b[NUM_LIMBS - 1] >> (LIMB_BITS - 1));
             self.bitwise_lookup_chip
                 .request_xor(record.b[NUM_LIMBS - 1] as u32, 1 << (LIMB_BITS - 1));
         }
 
         core_row.bit_multiplier_right = match opcode {
             ShiftOpcode::SLL => F::ZERO,
-            _ => F::from_canonical_usize(1 << bit_shift),
+            _ => F::from_usize(1 << bit_shift),
         };
         core_row.bit_multiplier_left = match opcode {
-            ShiftOpcode::SLL => F::from_canonical_usize(1 << bit_shift),
+            ShiftOpcode::SLL => F::from_usize(1 << bit_shift),
             _ => F::ZERO,
         };
 
@@ -418,9 +418,9 @@ where
         core_row.opcode_srl_flag = F::from_bool(opcode == ShiftOpcode::SRL);
         core_row.opcode_sll_flag = F::from_bool(opcode == ShiftOpcode::SLL);
 
-        core_row.c = record.c.map(F::from_canonical_u8);
-        core_row.b = record.b.map(F::from_canonical_u8);
-        core_row.a = a.map(F::from_canonical_u8);
+        core_row.c = record.c.map(F::from_u8);
+        core_row.b = record.b.map(F::from_u8);
+        core_row.a = a.map(F::from_u8);
     }
 }
 
