@@ -74,7 +74,8 @@ impl XorinVmAir {
     ) -> AB::Expr {
         // returns start_read_timestamp
         let instruction = local.instruction;
-        let should_receive = local.instruction.is_enabled;
+        let is_enabled = local.instruction.is_enabled;
+        builder.assert_bool(is_enabled);
 
         let [buffer_ptr, input_ptr, len_ptr] = [
             instruction.buffer_ptr,
@@ -98,7 +99,7 @@ impl XorinVmAir {
                 ExecutionState::new(instruction.pc, instruction.start_timestamp),
                 timestamp_change,
             )
-            .eval(builder, should_receive);
+            .eval(builder, is_enabled);
 
         let mut timestamp: AB::Expr = instruction.start_timestamp.into();
 
@@ -119,11 +120,12 @@ impl XorinVmAir {
                     timestamp.clone(),
                     aux,
                 )
-                .eval(builder, should_receive.clone());
+                .eval(builder, is_enabled);
 
             timestamp += AB::Expr::ONE;
         }
 
+        /*
         // todo: range check the buffer limbs, input limbs and length limbs
         let need_range_check = [
             *instruction.buffer_limbs.last().unwrap(),
@@ -143,6 +145,8 @@ impl XorinVmAir {
                 .eval(builder, should_receive.clone());
         }
 
+        */
+
         timestamp
     }
 
@@ -156,11 +160,12 @@ impl XorinVmAir {
         input_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>; 34],
         buffer_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>; 34],
     ) -> AB::Expr {
+        let is_enabled = local.instruction.is_enabled;
         let mut timestamp = start_read_timestamp;
 
         // Constrain that is_padding_bytes is boolean
         for is_padding in local.sponge.is_padding_bytes {
-            builder.assert_bool(is_padding);
+            builder.assert_bool(is_enabled * is_padding);
         }
 
         // Constrain read of input_bytes
@@ -173,6 +178,7 @@ impl XorinVmAir {
         .enumerate()
         {
             let ptr = local.instruction.input + AB::F::from_canonical_usize(i * 4);
+            let should_read = is_enabled * not(is_padding);
 
             self.memory_bridge
                 .read(
@@ -186,7 +192,7 @@ impl XorinVmAir {
                     timestamp.clone(),
                     mem_aux,
                 )
-                .eval(builder, not(is_padding));
+                .eval(builder, should_read);
 
             timestamp += AB::Expr::ONE;
         }
@@ -201,6 +207,7 @@ impl XorinVmAir {
         .enumerate()
         {
             let ptr = local.instruction.buffer + AB::F::from_canonical_usize(i * 4);
+            let should_read = is_enabled * not(is_padding);
 
             self.memory_bridge
                 .read(
@@ -214,7 +221,7 @@ impl XorinVmAir {
                     timestamp.clone(),
                     mem_aux,
                 )
-                .eval(builder, not(is_padding));
+                .eval(builder, should_read);
 
             timestamp += AB::Expr::ONE;
         }
@@ -231,6 +238,7 @@ impl XorinVmAir {
         let input_bytes = local.sponge.input_bytes;
         let result_bytes = local.sponge.postimage_buffer_bytes;
         let padding_bytes = local.sponge.is_padding_bytes;
+        let is_enabled = local.instruction.is_enabled;
 
         for (x, y, x_xor_y, is_padding) in izip!(
             buffer_bytes,
@@ -239,7 +247,8 @@ impl XorinVmAir {
             padding_bytes
         )
         {
-            self.bitwise_lookup_bus.send_xor(x, y, x_xor_y).eval(builder, is_padding);
+            let should_send= is_enabled * is_padding;
+            self.bitwise_lookup_bus.send_xor(x, y, x_xor_y).eval(builder, should_send);
         }
     }
 
@@ -252,6 +261,8 @@ impl XorinVmAir {
         mem_aux: &[MemoryWriteAuxCols<AB::Var, 4>; 34]
     ) {
         let mut timestamp = start_write_timestamp;
+        let is_enabled = local.instruction.is_enabled;
+        
         // Constrain write of buffer bytes
         for (i, (input, is_padding, mem_aux)) in izip!(
             local.sponge.postimage_buffer_bytes.chunks_exact(4),
@@ -260,6 +271,7 @@ impl XorinVmAir {
         )
         .enumerate()
         {
+            let should_write = is_enabled * not(is_padding);
             let ptr = local.instruction.buffer + AB::F::from_canonical_usize(i * 4);
 
             self.memory_bridge
@@ -274,7 +286,7 @@ impl XorinVmAir {
                     timestamp.clone(),
                     mem_aux,
                 )
-                .eval(builder, not(is_padding));
+                .eval(builder, should_write);
 
             timestamp += AB::Expr::ONE;
         }
