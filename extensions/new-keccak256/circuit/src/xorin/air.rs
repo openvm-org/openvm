@@ -86,7 +86,13 @@ impl XorinVmAir {
         ];
 
         let reg_addr_sp = AB::F::ONE;
-        let timestamp_change = AB::Expr::from_canonical_u32(3 + 3 * 34);
+        let mut timestamp_change = AB::Expr::from_canonical_u32(3);
+
+        for is_padding in local.sponge.is_padding_bytes {
+            timestamp_change += not(is_padding);
+            timestamp_change += not(is_padding);
+            timestamp_change += not(is_padding);
+        }
 
         self.execution_bridge
             .execute_and_increment_pc(
@@ -107,7 +113,7 @@ impl XorinVmAir {
 
         let buffer_data = instruction.buffer_limbs.map(Into::into);
         let input_data = instruction.input_limbs.map(Into::into);
-        let len_data = instruction.input_limbs.map(Into::into);
+        let len_data = instruction.len_limbs.map(Into::into);
 
         // Increases timestamp by 3
         for (ptr, value, aux) in izip!(
@@ -115,17 +121,19 @@ impl XorinVmAir {
             [buffer_data, input_data, len_data],
             register_aux
         ) {
-            // self.memory_bridge
-            //     .read(
-            //         MemoryAddress::new(reg_addr_sp, ptr),
-            //         value,
-            //         timestamp.clone(),
-            //         aux,
-            //     )
-            //     .eval(builder, is_enabled);
+            self.memory_bridge
+                .read(
+                    MemoryAddress::new(reg_addr_sp, ptr),
+                    value,
+                    timestamp.clone(),
+                    aux,
+                )
+                .eval(builder, is_enabled);
 
             timestamp += AB::Expr::ONE;
         }
+
+        
 
         /*
         // todo: range check the buffer limbs, input limbs and length limbs
@@ -227,6 +235,8 @@ impl XorinVmAir {
 
             timestamp += not(is_padding);
         }
+
+        
 
         timestamp
     }
