@@ -429,7 +429,7 @@ impl SystemConfig {
 
     pub fn initial_block_size(&self) -> usize {
         match self.continuation_enabled {
-            true => CHUNK,
+            true => CONST_BLOCK_SIZE,
             false => 1,
         }
     }
