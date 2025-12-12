@@ -18,7 +18,7 @@ use crate::{
     system::{
         memory::{
             adapter::records::{AccessLayout, AccessRecordHeader, MERGE_AND_NOT_SPLIT_FLAG},
-            MemoryAddress, TimestampedEquipartition, TimestampedValues, CHUNK,
+            MemoryAddress, TimestampedEquipartition, TimestampedValues,
         },
         TouchedMemory,
     },
@@ -971,7 +971,9 @@ impl TracingMemory {
                 self.touched_blocks_to_equipartition::<F, 1, 1>(touched_blocks),
             ),
             true => TouchedMemory::Persistent(
-                self.touched_blocks_to_equipartition::<F, CONST_BLOCK_SIZE, CHUNK>(touched_blocks),
+                self.touched_blocks_to_equipartition::<F, CONST_BLOCK_SIZE, CONST_BLOCK_SIZE>(
+                    touched_blocks,
+                ),
             ),
         }
     }
@@ -1017,10 +1019,11 @@ impl TracingMemory {
         let mut partitioned_memory = Vec::new();
 
         debug_assert!(touched_blocks.is_sorted_by_key(|(addr, _)| addr));
-        self.handle_touched_blocks::<F, PARTITION_SIZE>(&mut partitioned_memory, touched_blocks);
+        self.handle_touched_blocks::<F, OUTPUT_SIZE>(&mut partitioned_memory, touched_blocks);
 
         debug_assert!(partitioned_memory.is_sorted_by_key(|(key, _)| *key));
-        Self::rechunk_final_memory::<F, PARTITION_SIZE, OUTPUT_SIZE>(partitioned_memory)
+        partitioned_memory
+        // self.rechunk_final_memory::<F, PARTITION_SIZE, OUTPUT_SIZE>(partitioned_memory)
     }
 
     fn handle_touched_blocks<F: Field, const PARTITION_SIZE: usize>(
@@ -1165,50 +1168,6 @@ impl TracingMemory {
             current_cnt, 0,
             "The union of all touched blocks must consist of blocks with sizes divisible by the partition size"
         );
-    }
-
-    fn rechunk_final_memory<F: Field, const PARTITION_SIZE: usize, const OUTPUT_SIZE: usize>(
-        partitioned_memory: Vec<((u32, u32), TimestampedValues<F, PARTITION_SIZE>)>,
-    ) -> TimestampedEquipartition<F, OUTPUT_SIZE> {
-        debug_assert!(OUTPUT_SIZE % PARTITION_SIZE == 0);
-        let merge_factor = OUTPUT_SIZE / PARTITION_SIZE;
-        let mut final_memory =
-            Vec::with_capacity(partitioned_memory.len().saturating_div(merge_factor));
-        let mut idx = 0;
-        //currently naively merging, but we need to consider incomplete blocks of PARTITION_SIZE, and make it into CHUNK
-        // with an initial PARTITION, keep on adding ind until it matches OUTPUT_SIZE; look at it mod OUTPUT_SIZE
-
-        while idx < partitioned_memory.len() {
-            let group = &partitioned_memory[idx..idx + merge_factor];
-            let ((addr_space, base_ptr), _) = group[0];
-            debug_assert_eq!(base_ptr % OUTPUT_SIZE as u32, 0);
-
-            for (j, ((curr_addr_space, ptr), _)) in group.iter().enumerate() {
-                debug_assert_eq!(*curr_addr_space, addr_space);
-                debug_assert_eq!(*ptr, base_ptr + (j * PARTITION_SIZE) as u32);
-            }
-
-            let timestamp = group
-                .iter()
-                .map(|(_, ts_values)| ts_values.timestamp)
-                .max()
-                .expect("Group is non-empty");
-            let values = from_fn(|i| {
-                let group_idx = i / PARTITION_SIZE;
-                let within_group_idx = i % PARTITION_SIZE;
-                group[group_idx].1.values[within_group_idx]
-            });
-
-            final_memory.push((
-                (addr_space, base_ptr),
-                TimestampedValues { timestamp, values },
-            ));
-
-            idx += merge_factor;
-        }
-
-        debug_assert!(final_memory.is_sorted_by_key(|(key, _)| *key));
-        final_memory
     }
 
     pub fn address_space_alignment(&self) -> Vec<u8> {

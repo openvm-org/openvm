@@ -26,9 +26,7 @@ use crate::{
         Arena, ChipInventoryError, ExecutorInventory, ExecutorInventoryError,
     },
     system::{
-        memory::{
-            merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, CHUNK, POINTER_MAX_BITS,
-        },
+        memory::{merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, POINTER_MAX_BITS},
         SystemChipComplex,
     },
 };
