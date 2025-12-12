@@ -81,6 +81,9 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>> (
     let mut rand_input_arr = [0u8; LEN];
     rand_input_arr.copy_from_slice(&rand_input);
 
+    println!("rand_buffer_arr {:?}", rand_buffer_arr);
+    println!("rand_input_arr {:?}", rand_input_arr);
+
     use openvm_circuit::arch::testing::memory::gen_pointer;
     let rd = gen_pointer(rng, LEN);
     let rs1 = gen_pointer(rng, LEN);
@@ -112,10 +115,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>> (
     }   
 
     println!("preparing to read");
-    let mut actual_output = [F::ZERO; LEN];
-    for i in 0..LEN {
-        actual_output[i] = tester.read_cell(2, buffer_ptr + i);
-    }
+    let mut actual_output: [F; 4] = tester.read(2, buffer_ptr);
 
     for i in 0..LEN {
         assert_eq!(F::from_canonical_u8(expected_output[i]), actual_output[i]);
