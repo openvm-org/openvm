@@ -968,12 +968,10 @@ impl TracingMemory {
 
         match is_persistent {
             false => TouchedMemory::Volatile(
-                self.touched_blocks_to_equipartition::<F, 1, 1>(touched_blocks),
+                self.touched_blocks_to_equipartition::<F, 1>(touched_blocks),
             ),
             true => TouchedMemory::Persistent(
-                self.touched_blocks_to_equipartition::<F, CONST_BLOCK_SIZE, CONST_BLOCK_SIZE>(
-                    touched_blocks,
-                ),
+                self.touched_blocks_to_equipartition::<F, CONST_BLOCK_SIZE>(touched_blocks),
             ),
         }
     }
@@ -1003,23 +1001,15 @@ impl TracingMemory {
 
     /// Returns the equipartition of the touched blocks.
     /// Modifies records and adds new to account for the initial/final segments.
-    fn touched_blocks_to_equipartition<
-        F: Field,
-        const PARTITION_SIZE: usize,
-        const OUTPUT_SIZE: usize,
-    >(
+    fn touched_blocks_to_equipartition<F: Field, const CHUNK: usize>(
         &mut self,
         touched_blocks: Vec<((u32, u32), AccessMetadata)>,
-    ) -> TimestampedEquipartition<F, OUTPUT_SIZE> {
-        assert!(
-            OUTPUT_SIZE % PARTITION_SIZE == 0,
-            "Output size must be a multiple of the partition size"
-        );
+    ) -> TimestampedEquipartition<F, CHUNK> {
         // [perf] We can `.with_capacity()` if we keep track of the number of segments we initialize
         let mut partitioned_memory = Vec::new();
 
         debug_assert!(touched_blocks.is_sorted_by_key(|(addr, _)| addr));
-        self.handle_touched_blocks::<F, OUTPUT_SIZE>(&mut partitioned_memory, touched_blocks);
+        self.handle_touched_blocks::<F, CHUNK>(&mut partitioned_memory, touched_blocks);
 
         debug_assert!(partitioned_memory.is_sorted_by_key(|(key, _)| *key));
         partitioned_memory
