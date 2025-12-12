@@ -1,4 +1,4 @@
-use std::{array::from_fn, backtrace::Backtrace, fmt::Debug, num::NonZero};
+use std::{array::from_fn, fmt::Debug, num::NonZero};
 
 use getset::Getters;
 use itertools::zip_eq;
