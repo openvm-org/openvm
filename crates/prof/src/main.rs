@@ -126,10 +126,9 @@ fn main() -> Result<()> {
         }
 
         // TODO: calculate diffs for detailed metrics
-        // Add detailed metrics in a collapsible section
-        markdown_output.push_str("\n<details>\n<summary>Detailed Metrics</summary>\n\n");
-        markdown_output.push_str(&db.generate_markdown_tables());
-        markdown_output.push_str("</details>\n\n");
+        // Write detailed metrics to a separate file
+        let detailed_md_path = metrics_path.with_extension("detailed.md");
+        fs::write(&detailed_md_path, db.generate_markdown_tables())?;
 
         let md_path = metrics_path.with_extension("md");
         fs::write(&md_path, markdown_output)?;
