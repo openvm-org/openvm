@@ -133,8 +133,6 @@ impl XorinVmAir {
             timestamp += AB::Expr::ONE;
         }
 
-        
-
         /*
         // todo: range check the buffer limbs, input limbs and length limbs
         let need_range_check = [
