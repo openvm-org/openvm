@@ -4,16 +4,17 @@ use openvm_instructions::{LocalOpcode, instruction::Instruction};
 use openvm_new_keccak256_transpiler::Rv32NewKeccakOpcode;
 use std::sync::Arc;
 
-use crate::xorin::{XorinVmChip, XorinVmExecutor, XorinVmFiller, air::XorinVmAir};
+use crate::xorin::{XorinVmChip, XorinVmExecutor, XorinVmFiller, air::XorinVmAir, columns::{XorinInstructionCols, XorinMemoryCols, XorinSpongeCols}};
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use openvm_circuit::arch::Arena;
 use rand::{Rng, rngs::StdRng};
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_backend::{p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix};
 
 type F = BabyBear;
 type Harness = TestChipHarness<F, XorinVmExecutor, XorinVmAir, XorinVmChip<F>>;
 use openvm_new_keccak256_transpiler::Rv32NewKeccakOpcode::XORIN;
+use openvm_stark_backend::verifier::VerificationError;
 
 fn create_harness_fields(
     execution_bridge: ExecutionBridge,
@@ -149,13 +150,15 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>> (
 }   
 
 #[test] 
-fn test_new_keccak() {
-    let num_ops: usize = 1;
+fn xorin_chip_positive_tests() {
+    let num_ops: usize = 100;
     
     for _ in 0..num_ops {
         let mut rng = create_seeded_rng();
         let mut tester = VmChipTestBuilder::default();
         let (mut harness, bitwise) = create_test_harness(&mut tester);
+        
+        let buffer_length = Some(rng.gen_range(1..=34) * 4 as usize);
 
         set_and_execute(
             &mut tester,
@@ -163,7 +166,7 @@ fn test_new_keccak() {
             &mut harness.arena, 
             &mut rng, 
             XORIN,
-            None,
+            buffer_length,
         );
     
         let tester = tester
@@ -174,5 +177,63 @@ fn test_new_keccak() {
         tester.simple_test().expect("Verification failed");    
     }
 
+
+}
+
+
+fn run_xorin_chip_negative_tests(
+    prank_sponge: Option<XorinSpongeCols<F>>,
+    prank_instruction: Option<XorinInstructionCols<F>>,
+    prank_mem_oc: Option<XorinMemoryCols<F>>
+) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_test_harness(&mut tester);
+    
+    let buffer_length = Some(rng.gen_range(1..=34) * 4 as usize);
+
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena, 
+        &mut rng, 
+        XORIN,
+        buffer_length,
+    );
+
+    use openvm_stark_backend::p3_matrix::dense::DenseMatrix;
+    let modify_trace = |trace: &mut DenseMatrix<F>| {
+        use openvm_stark_backend::p3_matrix::Matrix;
+        use std::borrow::BorrowMut;
+        use crate::xorin::columns::XorinVmCols;
+
+        let mut values = trace.row_slice(0).to_vec();
+        let width = XorinVmCols::<F>::width();
+        // split_at_mut() to avoid the compiler saying that it is 
+        // unable to determine the size during compile time 
+        let cols: &mut XorinVmCols<F> = values.split_at_mut(width).0.borrow_mut();
+
+        if let Some(prank_sponge) = prank_sponge {
+            cols.sponge = prank_sponge;
+        }
+        if let Some(prank_instruction) = prank_instruction {
+            cols.instruction = prank_instruction;
+        }
+        if let Some(prank_mem_oc) = prank_mem_oc.clone() {
+            cols.mem_oc = prank_mem_oc;
+        }
+        *trace = RowMajorMatrix::new(values, trace.width());
+
+    };  
+
+    use openvm_stark_backend::utils::disable_debug_builder;
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test_with_expected_error(VerificationError::ChallengePhaseError);
 
 }
