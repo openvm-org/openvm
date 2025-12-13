@@ -13,12 +13,11 @@ use openvm_circuit::{
 use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
 use openvm_rv32im_circuit::Rv32ImGpuProverExt;
 use openvm_sha2_air::{Sha256Config, Sha512Config};
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use openvm_stark_sdk::engine::StarkEngine;
+use openvm_stark_sdk::{config::baby_bear_poseidon2::BabyBearPoseidon2Config, engine::StarkEngine};
 
 use super::*;
 use crate::{
-    cuda::{make_hybrid_chips, Sha2BlockHasherChipGpu, Sha2MainChipGpu},
+    cuda::{Sha2BlockHasherChipGpu, Sha2MainChipGpu},
     Sha2BlockHasherVmAir, Sha2MainAir,
 };
 
@@ -36,45 +35,42 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
         let range_checker_gpu = get_inventory_range_checker(inventory);
         let bitwise_gpu = get_or_create_bitwise_op_lookup(inventory)?;
 
-        let range_checker_cpu = range_checker_gpu
-            .cpu_chip
-            .clone()
-            .expect("Hybrid SHA-2 GPU chips require hybrid range checker");
-        let bitwise_cpu = bitwise_gpu
-            .cpu_chip
-            .clone()
-            .expect("Hybrid SHA-2 GPU chips require hybrid bitwise lookup");
-
         // SHA-256
         inventory.next_air::<Sha2BlockHasherVmAir<Sha256Config>>()?;
-        let (sha256_main_cpu, sha256_block_cpu, _sha256_records) =
-            make_hybrid_chips::<Sha256Config>(
-                range_checker_cpu.clone(),
-                bitwise_cpu.clone(),
-                pointer_max_bits,
-                timestamp_max_bits,
-            );
-        let sha256_block_gpu = Sha2BlockHasherChipGpu::new(sha256_block_cpu);
+        let sha256_block_gpu = Sha2BlockHasherChipGpu::<Sha256Config>::new(
+            range_checker_gpu.clone(),
+            bitwise_gpu.clone(),
+            pointer_max_bits as u32,
+            timestamp_max_bits as u32,
+        );
         inventory.add_periphery_chip(sha256_block_gpu);
 
         inventory.next_air::<Sha2MainAir<Sha256Config>>()?;
-        let sha256_main_gpu = Sha2MainChipGpu::new(sha256_main_cpu);
+        let sha256_main_gpu = Sha2MainChipGpu::<Sha256Config>::new(
+            range_checker_gpu.clone(),
+            bitwise_gpu.clone(),
+            pointer_max_bits as u32,
+            timestamp_max_bits as u32,
+        );
         inventory.add_executor_chip(sha256_main_gpu);
 
         // SHA-512 (also covers SHA-384 constraints)
         inventory.next_air::<Sha2BlockHasherVmAir<Sha512Config>>()?;
-        let (sha512_main_cpu, sha512_block_cpu, _records) =
-            make_hybrid_chips::<Sha512Config>(
-                range_checker_cpu,
-                bitwise_cpu,
-                pointer_max_bits,
-                timestamp_max_bits,
-            );
-        let sha512_block_gpu = Sha2BlockHasherChipGpu::new(sha512_block_cpu);
+        let sha512_block_gpu = Sha2BlockHasherChipGpu::<Sha512Config>::new(
+            range_checker_gpu.clone(),
+            bitwise_gpu.clone(),
+            pointer_max_bits as u32,
+            timestamp_max_bits as u32,
+        );
         inventory.add_periphery_chip(sha512_block_gpu);
 
         inventory.next_air::<Sha2MainAir<Sha512Config>>()?;
-        let sha512_main_gpu = Sha2MainChipGpu::new(sha512_main_cpu);
+        let sha512_main_gpu = Sha2MainChipGpu::<Sha512Config>::new(
+            range_checker_gpu,
+            bitwise_gpu,
+            pointer_max_bits as u32,
+            timestamp_max_bits as u32,
+        );
         inventory.add_executor_chip(sha512_main_gpu);
 
         Ok(())

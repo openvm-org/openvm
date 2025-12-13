@@ -7,9 +7,15 @@ fn main() {
         if !cuda_available() {
             return; // Skip CUDA compilation
         }
-        // Hybrid (CPU->GPU) path for SHA-2 uses CPU tracegen and does not require CUDA kernels
-        // while the new design is being ported. We still keep the build script for compatibility,
-        // but skip compiling any .cu files.
-        let _builder: CudaBuilder = CudaBuilder::new();
+        let builder: CudaBuilder = CudaBuilder::new()
+            .include_from_dep("DEP_CUDA_COMMON_INCLUDE")
+            .include("../../../crates/circuits/primitives/cuda/include")
+            .include("../../../crates/vm/cuda/include")
+            .include("cuda/include")
+            .library_name("tracegen_gpu_sha2")
+            .files_from_glob("cuda/src/*.cu");
+
+        builder.emit_link_directives();
+        builder.build();
     }
 }

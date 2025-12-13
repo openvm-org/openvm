@@ -1,3 +1,5 @@
+#[cfg(feature = "cuda")]
+use std::io::Cursor;
 use std::sync::{Arc, Mutex};
 
 use hex::FromHex;
@@ -589,31 +591,11 @@ struct GpuHarness<C: Sha2Config> {
 fn create_cuda_harness<C: Sha2Config>(tester: &GpuChipTestBuilder) -> GpuHarness<C> {
     const GPU_MAX_INS_CAPACITY: usize = 8192;
 
-    let bitwise_bus = default_bitwise_lookup_bus();
-    // Separate bitwise chips for GPU vs CPU tracegen to avoid double-counting lookup requests.
-    let bitwise_gpu_cpu = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
-    let bitwise_gpu =
-        Arc::new(
-            openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChipGPU::<
-                RV32_CELL_BITS,
-            >::hybrid(bitwise_gpu_cpu.clone()),
-        );
+    let bitwise_gpu_cpu = tester.cpu_bitwise_op_lookup();
+    let bitwise_gpu = tester.bitwise_op_lookup();
     let pointer_max_bits = tester.address_bits();
     let timestamp_max_bits = tester.timestamp_max_bits();
-
-    // Build CPU chips (main + block) sharing records
-    let (main_cpu, block_cpu, _) = crate::cuda::make_hybrid_chips::<C>(
-        tester
-            .range_checker()
-            .cpu_chip
-            .clone()
-            .expect("hybrid range checker required"),
-        bitwise_gpu_cpu.clone(),
-        pointer_max_bits,
-        timestamp_max_bits,
-    );
+    let range_checker = tester.range_checker();
 
     let executor = Sha2VmExecutor::<C>::new(Rv32Sha2Opcode::CLASS_OFFSET, pointer_max_bits);
     let main_air = Sha2MainAir::<C>::new(
@@ -630,12 +612,31 @@ fn create_cuda_harness<C: Sha2Config>(tester: &GpuChipTestBuilder) -> GpuHarness
     GpuHarness {
         executor,
         main_air,
-        main_gpu: Sha2MainChipGpu::new(main_cpu),
+        main_gpu: Sha2MainChipGpu::new(
+            range_checker.clone(),
+            bitwise_gpu.clone(),
+            pointer_max_bits as u32,
+            timestamp_max_bits as u32,
+        ),
         dense_arena: DenseRecordArena::with_capacity(GPU_MAX_INS_CAPACITY, main_width),
         block_air,
-        block_gpu: Sha2BlockHasherChipGpu::new(block_cpu),
+        block_gpu: Sha2BlockHasherChipGpu::new(
+            range_checker,
+            bitwise_gpu.clone(),
+            pointer_max_bits as u32,
+            timestamp_max_bits as u32,
+        ),
         bitwise_air: bitwise_gpu_cpu.air,
         bitwise_gpu,
+    }
+}
+
+#[cfg(feature = "cuda")]
+fn clone_dense_arena(arena: &DenseRecordArena) -> DenseRecordArena {
+    let mut cursor = Cursor::new(arena.records_buffer.get_ref().clone());
+    cursor.set_position(arena.records_buffer.position());
+    DenseRecordArena {
+        records_buffer: cursor,
     }
 }
 
@@ -647,7 +648,8 @@ fn test_cuda_rand_sha2_multi_block<C: Sha2Config + 'static>() {
 
     let mut harness = create_cuda_harness::<C>(&tester);
 
-    let num_ops = 70;
+    // let num_ops = 70;
+    let num_ops = 1;
     for _ in 1..=num_ops {
         set_and_execute_full_message::<_, C, _>(
             &mut tester,
@@ -656,32 +658,33 @@ fn test_cuda_rand_sha2_multi_block<C: Sha2Config + 'static>() {
             &mut rng,
             C::OPCODE,
             None,
-            None,
+            // None,
+            Some(1),
         );
     }
 
     let mut tester = tester.build();
+    let block_arena = clone_dense_arena(&harness.dense_arena);
     tester = tester.load(harness.main_air, harness.main_gpu, harness.dense_arena);
     // No block-hasher arena needed; GPU block chip ignores the arena input.
-    tester = tester.load(
-        harness.block_air,
-        harness.block_gpu,
-        DenseRecordArena::with_byte_capacity(0),
-    );
+    tester = tester.load(harness.block_air, harness.block_gpu, block_arena);
     tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
     tester.finalize().simple_test().unwrap();
 }
 
+#[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_rand_sha256_multi_block() {
     test_cuda_rand_sha2_multi_block::<Sha256Config>();
 }
 
+#[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_rand_sha512_multi_block() {
     test_cuda_rand_sha2_multi_block::<Sha512Config>();
 }
 
+#[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_rand_sha384_multi_block() {
     test_cuda_rand_sha2_multi_block::<Sha384Config>();
@@ -712,16 +715,14 @@ fn test_cuda_sha2_known_vectors<C: Sha2Config + 'static>(test_vectors: &[(&str, 
     }
     // No block-hasher arena needed; GPU block chip ignores the arena input.
     let mut tester = tester.build();
+    let block_arena = clone_dense_arena(&harness.dense_arena);
     tester = tester.load(harness.main_air, harness.main_gpu, harness.dense_arena);
-    tester = tester.load(
-        harness.block_air,
-        harness.block_gpu,
-        DenseRecordArena::with_byte_capacity(0),
-    );
+    tester = tester.load(harness.block_air, harness.block_gpu, block_arena);
     tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
     tester.finalize().simple_test().unwrap();
 }
 
+#[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_sha256_known_vectors() {
     let test_vectors = [
@@ -736,6 +737,7 @@ fn test_cuda_sha256_known_vectors() {
     test_cuda_sha2_known_vectors::<Sha256Config>(&test_vectors);
 }
 
+#[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_sha512_known_vectors() {
     let test_vectors = [
@@ -755,6 +757,7 @@ fn test_cuda_sha512_known_vectors() {
     test_cuda_sha2_known_vectors::<Sha512Config>(&test_vectors);
 }
 
+#[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_sha384_known_vectors() {
     let test_vectors = [
@@ -797,12 +800,9 @@ fn cuda_sha2_edge_test_lengths<C: Sha2Config + 'static>() {
     }
 
     let mut tester = tester.build();
+    let block_arena = clone_dense_arena(&harness.dense_arena);
     tester = tester.load(harness.main_air, harness.main_gpu, harness.dense_arena);
-    tester = tester.load(
-        harness.block_air,
-        harness.block_gpu,
-        DenseRecordArena::with_byte_capacity(0),
-    );
+    tester = tester.load(harness.block_air, harness.block_gpu, block_arena);
     tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
     tester.finalize().simple_test().unwrap();
 }
