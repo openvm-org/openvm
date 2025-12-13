@@ -198,6 +198,7 @@ where
         for idx in 0..num_reads {
             let mut word: [u8; 4] = [0u8; 4];
             word.copy_from_slice(&result[4*idx..4*(idx+1)]);
+            println!("word = {:?}", word);
             tracing_write(
                 state.memory, 
                 RV32_MEMORY_AS, 
@@ -327,7 +328,7 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             self.bitwise_lookup_chip.request_xor(b_val, c_val);
         }
 
-        println!("timestamp before input write {}", timestamp);
+        println!("timestamp before buffer write {}", timestamp);
 
         for t in 0..num_reads {
             mem_helper.fill(
@@ -335,6 +336,7 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
                 timestamp,
                 trace_row.mem_oc.buffer_bytes_write_aux_cols[t].as_mut() 
             );
+            trace_row.mem_oc.buffer_bytes_write_aux_cols[t].prev_data = record.buffer_write_aux_cols[t].prev_data.map(F::from_canonical_u8);
             timestamp += 1;
         }        
 
