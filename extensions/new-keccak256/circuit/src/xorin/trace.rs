@@ -322,8 +322,8 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             trace_row.sponge.preimage_buffer_bytes[i] = F::from_canonical_u8(record.buffer_limbs[i]);
             trace_row.sponge.input_bytes[i] = F::from_canonical_u8(record.input_limbs[i]);
             trace_row.sponge.postimage_buffer_bytes[i] = F::from_canonical_u8(record.buffer_limbs[i] ^ record.input_limbs[i]);
-            let b_val = record.input_limbs[i] as u32; 
-            let c_val = record.buffer_limbs[i] as u32; 
+            let b_val = record.buffer_limbs[i] as u32; 
+            let c_val = record.input_limbs[i] as u32; 
             self.bitwise_lookup_chip.request_xor(b_val, c_val);
         }
 
