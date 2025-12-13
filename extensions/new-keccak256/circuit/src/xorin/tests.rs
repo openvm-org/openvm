@@ -71,76 +71,108 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>> (
     arena: &mut RA, 
     rng: &mut StdRng, 
     opcode: Rv32NewKeccakOpcode,
+    buffer_length: Option<usize>
 ) {
-    const LEN: usize = 4;
-    let rand_buffer = get_random_message(rng, LEN);
-    let mut rand_buffer_arr = [0u8; LEN];
+    const MAX_LEN: usize = 136;
+
+    let buffer_length = match buffer_length {
+        Some(length) => {
+            length
+        }
+        None => {
+            MAX_LEN
+        }
+    };
+
+    assert!(buffer_length.is_multiple_of(4));
+
+    let rand_buffer = get_random_message(rng, MAX_LEN);
+    let mut rand_buffer_arr = [0u8; MAX_LEN];
     rand_buffer_arr.copy_from_slice(&rand_buffer);
 
-    let rand_input = get_random_message(rng, LEN);
-    let mut rand_input_arr = [0u8; LEN];
+    let rand_input = get_random_message(rng, MAX_LEN);
+    let mut rand_input_arr = [0u8; MAX_LEN];
     rand_input_arr.copy_from_slice(&rand_input);
 
+    use openvm_circuit::arch::testing::memory::gen_pointer;
+    let rd = gen_pointer(rng, 4);
+    let rs1 = gen_pointer(rng, 4);
+    let rs2 = gen_pointer(rng, 4);
+
+    let buffer_ptr = gen_pointer(rng, buffer_length);
+    let input_ptr = gen_pointer(rng, buffer_length);
+
+    println!("buffer_length {}", buffer_length);
     println!("rand_buffer_arr {:?}", rand_buffer_arr);
     println!("rand_input_arr {:?}", rand_input_arr);
 
-    use openvm_circuit::arch::testing::memory::gen_pointer;
-    let rd = gen_pointer(rng, LEN);
-    let rs1 = gen_pointer(rng, LEN);
-    let rs2 = gen_pointer(rng, LEN);
+    let rand_buffer_arr_f = rand_buffer_arr.map(F::from_canonical_u8);
+    let rand_input_arr_f = rand_input_arr.map(F::from_canonical_u8);
 
-    let buffer_ptr = gen_pointer(rng, LEN);
-    let input_ptr = gen_pointer(rng, LEN);
-    let length = LEN;
+    for i in 0..(buffer_length/4) {
+        let buffer_chunk: [F; 4] = rand_buffer_arr_f[4 * i..4 * i + 4]
+            .try_into()
+            .expect("slice has length 4");
+        tester.write(2, buffer_ptr + 4 * i, buffer_chunk);
 
-    println!("buffer_ptr {}", buffer_ptr);
-    println!("input_ptr {}", input_ptr);
+        let input_chunk: [F; 4] = rand_input_arr_f[4 * i..4 * i + 4]
+            .try_into()
+            .expect("slice has length 4");
+        tester.write(2, input_ptr + 4 * i, input_chunk);
+
+        tester.write(1, rd, buffer_ptr.to_le_bytes().map(F::from_canonical_u8));
+        tester.write(1, rs1, input_ptr.to_le_bytes().map(F::from_canonical_u8));
+        tester.write(1, rs2, buffer_length.to_le_bytes().map(F::from_canonical_u8));
+    }
     
-    tester.write(2, buffer_ptr, rand_buffer_arr.map(F::from_canonical_u8));
-    tester.write(2, input_ptr, rand_input_arr.map(F::from_canonical_u8));
-
-    tester.write(1, rd, buffer_ptr.to_le_bytes().map(F::from_canonical_u8));
-    tester.write(1, rs1, input_ptr.to_le_bytes().map(F::from_canonical_u8));
-    tester.write(1, rs2, length.to_le_bytes().map(F::from_canonical_u8));
-
     tester.execute(
         executor,
         arena,
         &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 2])
     );
 
-    let mut expected_output = [0u8; LEN];
-    for i in 0..LEN {
+    let mut expected_output = [0u8; MAX_LEN];
+    for i in 0..buffer_length {
         expected_output[i] = rand_buffer_arr[i] ^ rand_input_arr[i];
     }   
 
-    println!("preparing to read");
-    let mut actual_output: [F; 4] = tester.read(2, buffer_ptr);
+    let mut output_buffer = [F::from_canonical_u8(0); MAX_LEN];
 
-    for i in 0..LEN {
-        assert_eq!(F::from_canonical_u8(expected_output[i]), actual_output[i]);
+    for i in 0..(buffer_length/4) {
+        let output_chunk : [F; 4] = tester.read(2, buffer_ptr + 4 * i);
+        output_buffer[4 * i..4 * i + 4].copy_from_slice(&output_chunk);
+    }
+
+    for i in 0..buffer_length {
+        assert_eq!(F::from_canonical_u8(expected_output[i]), output_buffer[i]);
     }
 }   
 
-#[test]
+#[test] 
 fn test_new_keccak() {
-    let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_test_harness(&mut tester);
+    let num_ops: usize = 1;
+    
+    for _ in 0..num_ops {
+        let mut rng = create_seeded_rng();
+        let mut tester = VmChipTestBuilder::default();
+        let (mut harness, bitwise) = create_test_harness(&mut tester);
 
-    set_and_execute(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.arena, 
-        &mut rng, 
-        XORIN
-    );
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena, 
+            &mut rng, 
+            XORIN,
+            None,
+        );
+    
+        let tester = tester
+            .build()
+            .load(harness)
+            .load_periphery(bitwise)
+            .finalize();
+        tester.simple_test().expect("Verification failed");    
+    }
 
-    let tester = tester
-        .build()
-        .load(harness)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test().expect("Verification failed");    
 
 }
