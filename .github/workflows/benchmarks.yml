@@ -277,6 +277,11 @@ jobs:
             FLAMEGRAPHS=${{ github.event.inputs.flamegraphs || 'false' }}
             # Convert .json to .md
             md_path="${metric_path%.json}.md"
+            detailed_md_path="${md_path%.md}.detailed.md"
+            
+            echo "\n<details>\n<summary>Detailed Metrics</summary>\n" >> $md_path
+            cat $detailed_md_path >> $md_path
+            echo "</details>\n\n" >> $md_path
 
             add_metadata_and_flamegraphs \
               $metric_path \

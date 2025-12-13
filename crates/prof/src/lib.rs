@@ -127,9 +127,11 @@ impl MetricDb {
         }
     }
 
-    /// Generate a Mermaid XY chart for GPU memory usage over modules
-    pub fn generate_gpu_memory_chart(&self) -> Option<String> {
-        // (timestamp, tracked_gb, reserved_gb, device_gb)
+    /// Generate an SVG chart for GPU memory usage over modules.
+    /// Returns a tuple of (svg_string, markdown_table) where the SVG can be embedded
+    /// directly in HTML/markdown and the table provides per-module statistics.
+    pub fn generate_gpu_memory_chart(&self) -> Option<(String, String)> {
+        // (timestamp, current_gb, local_peak_gb, reserved_gb)
         let mut data: Vec<(f64, f64, f64, f64)> = Vec::new();
         // module -> [(local_peak_gb, context_label)]
         let mut module_stats: HashMap<String, Vec<(f64, String)>> = HashMap::new();
@@ -178,68 +180,25 @@ impl MetricDb {
 
         data.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 
-        let max_current = data.iter().map(|(_, c, _, _)| *c).fold(0.0_f64, f64::max);
-        let max_local_peak = data.iter().map(|(_, _, lp, _)| *lp).fold(0.0_f64, f64::max);
-        let max_reserved = data.iter().map(|(_, _, _, r)| *r).fold(0.0_f64, f64::max);
-        let chart_max = max_current.max(max_local_peak).max(max_reserved);
+        // Downsample if too many points (SVG handles ~1000 points well)
+        let max_points = 1000;
+        let data = if data.len() > max_points {
+            let step = data.len() / max_points;
+            data.into_iter()
+                .enumerate()
+                .filter(|(i, _)| i % step == 0)
+                .map(|(_, d)| d)
+                .collect::<Vec<_>>()
+        } else {
+            data
+        };
 
-        let mut chart = String::new();
-        chart.push_str("```mermaid\n");
-        chart.push_str("---\n");
-        chart.push_str("config:\n");
-        chart.push_str("    xyChart:\n");
-        chart.push_str("        xAxis:\n");
-        chart.push_str("            showLabel: false\n");
-        chart.push_str("    themeVariables:\n");
-        chart.push_str("        xyChart:\n");
-        chart.push_str("            plotColorPalette: \"#2563eb, #16a34a, #dc2626\"\n");
-        chart.push_str("---\n");
-        chart.push_str("xychart-beta\n");
-        chart.push_str("    title \"GPU Memory Usage\"\n");
-        chart.push_str(&format!(
-            "    y-axis \"Memory (GB)\" 0 --> {:.1}\n",
-            chart_max * 1.1
-        ));
-        // Current memory line (blue)
-        chart.push_str("    line [");
-        chart.push_str(
-            &data
-                .iter()
-                .map(|(_, current, _, _)| format!("{:.2}", current))
-                .collect::<Vec<_>>()
-                .join(", "),
-        );
-        chart.push_str("]\n");
-        // Local peak memory line (green)
-        chart.push_str("    line [");
-        chart.push_str(
-            &data
-                .iter()
-                .map(|(_, _, local_peak, _)| format!("{:.2}", local_peak))
-                .collect::<Vec<_>>()
-                .join(", "),
-        );
-        chart.push_str("]\n");
-        // Reserved memory line (red)
-        chart.push_str("    line [");
-        chart.push_str(
-            &data
-                .iter()
-                .map(|(_, _, _, reserved)| format!("{:.2}", reserved))
-                .collect::<Vec<_>>()
-                .join(", "),
-        );
-        chart.push_str("]\n");
-        chart.push_str("```\n");
-
-        chart.push_str("\n> ");
-        chart.push_str("🔵 Current | ");
-        chart.push_str("🟢 Local Peak | ");
-        chart.push_str("🔴 Reserved (Pool)\n");
+        let svg = Self::render_gpu_memory_svg(&data);
 
         // Per-module stats table
-        chart.push_str("\n| Module | Max (GB) | Max At |\n");
-        chart.push_str("| --- | ---: | --- |\n");
+        let mut table = String::new();
+        table.push_str("| Module | Max (GB) | Max At |\n");
+        table.push_str("| --- | ---: | --- |\n");
 
         let mut module_rows: Vec<_> = module_stats
             .iter()
@@ -255,13 +214,180 @@ impl MetricDb {
         module_rows.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         for (module, max_tracked, max_at) in module_rows {
-            chart.push_str(&format!(
-                "| {} | {:.2} | {} |\n",
-                module, max_tracked, max_at
-            ));
+            table.push_str(&format!("| {} | {:.2} | {} |\n", module, max_tracked, max_at));
         }
 
-        Some(chart)
+        Some((svg, table))
+    }
+
+    /// Render GPU memory data as an SVG chart
+    fn render_gpu_memory_svg(data: &[(f64, f64, f64, f64)]) -> String {
+        // Chart dimensions
+        let width = 800.0_f64;
+        let height = 400.0_f64;
+        let margin_left = 60.0_f64;
+        let margin_right = 20.0_f64;
+        let margin_top = 40.0_f64;
+        let margin_bottom = 50.0_f64;
+
+        let plot_width = width - margin_left - margin_right;
+        let plot_height = height - margin_top - margin_bottom;
+
+        // Calculate data ranges
+        let ts_min = data.iter().map(|(ts, _, _, _)| *ts).fold(f64::MAX, f64::min);
+        let ts_max = data.iter().map(|(ts, _, _, _)| *ts).fold(f64::MIN, f64::max);
+        let ts_range = if (ts_max - ts_min).abs() < f64::EPSILON {
+            1.0
+        } else {
+            ts_max - ts_min
+        };
+
+        let max_current = data.iter().map(|(_, c, _, _)| *c).fold(0.0_f64, f64::max);
+        let max_local_peak = data.iter().map(|(_, _, lp, _)| *lp).fold(0.0_f64, f64::max);
+        let max_reserved = data.iter().map(|(_, _, _, r)| *r).fold(0.0_f64, f64::max);
+        let y_max = max_current.max(max_local_peak).max(max_reserved) * 1.1;
+        let y_max = if y_max < f64::EPSILON { 1.0 } else { y_max };
+
+        // Helper to convert data coordinates to SVG coordinates
+        let to_svg_x = |ts: f64| -> f64 { margin_left + (ts - ts_min) / ts_range * plot_width };
+        let to_svg_y = |val: f64| -> f64 { margin_top + plot_height - (val / y_max) * plot_height };
+
+        // Build path strings for each series
+        let build_path = |series: &[(f64, f64)]| -> String {
+            series
+                .iter()
+                .enumerate()
+                .map(|(i, (x, y))| {
+                    let cmd = if i == 0 { "M" } else { "L" };
+                    format!("{}{:.1},{:.1}", cmd, x, y)
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+
+        let current_points: Vec<(f64, f64)> = data
+            .iter()
+            .map(|(ts, current, _, _)| (to_svg_x(*ts), to_svg_y(*current)))
+            .collect();
+        let local_peak_points: Vec<(f64, f64)> = data
+            .iter()
+            .map(|(ts, _, lp, _)| (to_svg_x(*ts), to_svg_y(*lp)))
+            .collect();
+        let reserved_points: Vec<(f64, f64)> = data
+            .iter()
+            .map(|(ts, _, _, r)| (to_svg_x(*ts), to_svg_y(*r)))
+            .collect();
+
+        let current_path = build_path(&current_points);
+        let local_peak_path = build_path(&local_peak_points);
+        let reserved_path = build_path(&reserved_points);
+
+        // Generate Y-axis ticks (5-6 ticks)
+        let y_tick_count = 5;
+        let y_tick_interval = y_max / y_tick_count as f64;
+        let y_ticks: Vec<f64> = (0..=y_tick_count).map(|i| i as f64 * y_tick_interval).collect();
+
+        // Generate gridlines and tick labels
+        let mut gridlines = String::new();
+        let mut tick_labels = String::new();
+        for y_val in &y_ticks {
+            let y_pos = to_svg_y(*y_val);
+            gridlines.push_str(&format!(
+                "<line x1=\"{:.1}\" y1=\"{:.1}\" x2=\"{:.1}\" y2=\"{:.1}\" stroke=\"#e5e7eb\" stroke-width=\"1\"/>",
+                margin_left,
+                y_pos,
+                width - margin_right,
+                y_pos
+            ));
+            gridlines.push('\n');
+            tick_labels.push_str(&format!(
+                "<text x=\"{:.1}\" y=\"{:.1}\" text-anchor=\"end\" font-size=\"12\" fill=\"#6b7280\">{:.1}</text>",
+                margin_left - 8.0,
+                y_pos + 4.0,
+                y_val
+            ));
+            tick_labels.push('\n');
+        }
+
+        // X-axis time labels (show duration)
+        let duration_sec = ts_range / 1000.0;
+        let duration_label = if duration_sec < 60.0 {
+            format!("{:.1}s", duration_sec)
+        } else if duration_sec < 3600.0 {
+            format!("{:.1}m", duration_sec / 60.0)
+        } else {
+            format!("{:.1}h", duration_sec / 3600.0)
+        };
+
+        // Colors
+        let color_current = "#2563eb"; // blue
+        let color_local_peak = "#16a34a"; // green
+        let color_reserved = "#dc2626"; // red
+
+        format!(
+            r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}">
+  <style>
+    .title {{ font: bold 16px sans-serif; }}
+    .axis-label {{ font: 12px sans-serif; fill: #6b7280; }}
+    .legend-text {{ font: 12px sans-serif; }}
+  </style>
+
+  <!-- Background -->
+  <rect width="{width}" height="{height}" fill="white"/>
+
+  <!-- Title -->
+  <text x="{title_x}" y="24" text-anchor="middle" class="title">GPU Memory Usage</text>
+
+  <!-- Gridlines -->
+  {gridlines}
+
+  <!-- Y-axis tick labels -->
+  {tick_labels}
+
+  <!-- Y-axis label -->
+  <text x="16" y="{y_label_y}" transform="rotate(-90, 16, {y_label_y})" text-anchor="middle" class="axis-label">Memory (GB)</text>
+
+  <!-- X-axis -->
+  <line x1="{margin_left}" y1="{x_axis_y}" x2="{x_axis_end}" y2="{x_axis_y}" stroke="#9ca3af" stroke-width="1"/>
+  <text x="{margin_left}" y="{x_label_y}" text-anchor="start" class="axis-label">0</text>
+  <text x="{x_axis_end}" y="{x_label_y}" text-anchor="end" class="axis-label">{duration_label}</text>
+
+  <!-- Data lines -->
+  <path d="{reserved_path}" fill="none" stroke="{color_reserved}" stroke-width="1.5" stroke-opacity="0.8"/>
+  <path d="{local_peak_path}" fill="none" stroke="{color_local_peak}" stroke-width="1.5" stroke-opacity="0.8"/>
+  <path d="{current_path}" fill="none" stroke="{color_current}" stroke-width="2"/>
+
+  <!-- Legend -->
+  <g transform="translate({legend_x}, {legend_y})">
+    <rect x="0" y="0" width="180" height="70" fill="white" fill-opacity="0.9" stroke="#e5e7eb" rx="4"/>
+    <line x1="10" y1="18" x2="30" y2="18" stroke="{color_current}" stroke-width="2"/>
+    <text x="38" y="22" class="legend-text">Current</text>
+    <line x1="10" y1="38" x2="30" y2="38" stroke="{color_local_peak}" stroke-width="1.5"/>
+    <text x="38" y="42" class="legend-text">Local Peak</text>
+    <line x1="10" y1="58" x2="30" y2="58" stroke="{color_reserved}" stroke-width="1.5"/>
+    <text x="38" y="62" class="legend-text">Reserved (Pool)</text>
+  </g>
+</svg>"##,
+            width = width,
+            height = height,
+            title_x = width / 2.0,
+            gridlines = gridlines,
+            tick_labels = tick_labels,
+            y_label_y = margin_top + plot_height / 2.0,
+            margin_left = margin_left,
+            x_axis_y = margin_top + plot_height,
+            x_axis_end = width - margin_right,
+            x_label_y = margin_top + plot_height + 20.0,
+            duration_label = duration_label,
+            reserved_path = reserved_path,
+            local_peak_path = local_peak_path,
+            current_path = current_path,
+            color_current = color_current,
+            color_local_peak = color_local_peak,
+            color_reserved = color_reserved,
+            legend_x = width - margin_right - 190.0,
+            legend_y = margin_top + 10.0,
+        )
     }
 
     pub fn sum_metric_grouped_by(
