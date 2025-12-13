@@ -177,7 +177,7 @@ impl XorinVmAir {
         }
 
         // Constrain read of buffer bytes
-        // Timestamp increases by exactly (136/4) = 34
+        // Timestamp increases by <= (136/4) = 34
         for (i, (input, is_padding, mem_aux)) in izip!(
             local.sponge.preimage_buffer_bytes.chunks_exact(4),
             local.sponge.is_padding_bytes,
@@ -250,15 +250,17 @@ impl XorinVmAir {
         let padding_bytes = local.sponge.is_padding_bytes;
         let is_enabled = local.instruction.is_enabled;
 
-        for (x, y, x_xor_y, is_padding) in izip!(
-            buffer_bytes,
-            input_bytes,
-            result_bytes,
+        for (x_chunks, y_chunks, x_xor_y_chunks, is_padding) in izip!(
+            buffer_bytes.chunks_exact(4),
+            input_bytes.chunks_exact(4),
+            result_bytes.chunks_exact(4),
             padding_bytes
         )
         {
-            let should_send= is_enabled * not(is_padding);
-            self.bitwise_lookup_bus.send_xor(x, y, x_xor_y).eval(builder, should_send);
+            let should_send = is_enabled * not(is_padding);
+            for (x, y, x_xor_y) in izip!(x_chunks, y_chunks, x_xor_y_chunks) {
+                self.bitwise_lookup_bus.send_xor(*x, *y, *x_xor_y).eval(builder, should_send.clone());
+            }
         }
     }
 
