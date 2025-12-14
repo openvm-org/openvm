@@ -94,6 +94,17 @@ impl XorinVmAir {
             timestamp_change += not(is_padding);
         }
 
+        let mut not_padding_sum = AB::Expr::ZERO;
+        for is_padding in local.sponge.is_padding_bytes {
+            not_padding_sum += not(is_padding);
+        }
+        not_padding_sum *= AB::Expr::from_canonical_u32(4);
+        builder.when(is_enabled).assert_eq(not_padding_sum, instruction.len);
+        // check that is_padding_bytes is of the form 0...0111...1
+        for i in 0..33 {
+            builder.when(is_enabled).assert_bool(local.sponge.is_padding_bytes[i+1] - local.sponge.is_padding_bytes[i]);
+        }
+
         self.execution_bridge
             .execute_and_increment_pc(
                 AB::Expr::from_canonical_usize(Rv32NewKeccakOpcode::XORIN as usize + self.offset),
@@ -173,11 +184,6 @@ impl XorinVmAir {
         let is_enabled = local.instruction.is_enabled;
         let mut timestamp = start_read_timestamp;
 
-        // Constrain that is_padding_bytes is boolean
-        for is_padding in local.sponge.is_padding_bytes {
-            builder.when(is_enabled).assert_bool(is_padding);
-        }
-
         // Constrain read of buffer bytes
         // Timestamp increases by <= (136/4) = 34
         for (i, (input, is_padding, mem_aux)) in izip!(
@@ -236,8 +242,6 @@ impl XorinVmAir {
             timestamp += not(is_padding);
         }
 
-        
-
         timestamp
     }
 
@@ -266,7 +270,6 @@ impl XorinVmAir {
         }
     }
 
-    // Increases timestamp by 34
     pub fn constrain_output_write<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
