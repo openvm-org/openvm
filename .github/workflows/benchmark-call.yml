@@ -262,7 +262,7 @@ jobs:
               echo "No guest symbols found, generating flamegraphs without symbols"
               python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH
             fi
-            s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.S3_PUBLIC_PATH_BASE }}/flamegraphs/${METRIC_NAME}-${current_sha}/"
+            s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.S3_PUBLIC_PATH_BASE }}/flamegraphs/${current_sha}/"
             echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
           fi
 
