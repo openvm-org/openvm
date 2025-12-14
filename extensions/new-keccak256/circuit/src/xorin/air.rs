@@ -13,7 +13,7 @@ use openvm_circuit_primitives::{
     utils::{not, select},
 };
 use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS};
-use openvm_new_keccak256_transpiler::Rv32NewKeccakOpcode;
+use openvm_new_keccak256_transpiler::XorinOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
@@ -107,7 +107,7 @@ impl XorinVmAir {
 
         self.execution_bridge
             .execute_and_increment_pc(
-                AB::Expr::from_canonical_usize(Rv32NewKeccakOpcode::XORIN as usize + self.offset),
+                AB::Expr::from_canonical_usize(XorinOpcode::XORIN as usize + self.offset),
                 [
                     buffer_ptr.into(),
                     input_ptr.into(),

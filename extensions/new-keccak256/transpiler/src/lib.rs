@@ -1,7 +1,9 @@
+use core::panic;
+
 use openvm_instructions::LocalOpcode;
 use openvm_instructions_derive::LocalOpcode;
 use openvm_new_keccak256_guest::{
-    OPCODE, XORIN_FUNCT3, XORIN_FUNCT7,
+    KECCAKF_FUNCT7, OPCODE, XORIN_FUNCT3, XORIN_FUNCT7
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
@@ -14,7 +16,16 @@ use openvm_instructions::riscv::RV32_MEMORY_AS;
 )]
 #[opcode_offset = 0x310]
 #[repr(usize)]
-pub enum Rv32NewKeccakOpcode {
+pub enum KeccakfOpcode {
+    KECCAKF,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
+)]
+#[opcode_offset = 0x311]
+#[repr(usize)]
+pub enum XorinOpcode {
     XORIN,
 }
 
@@ -22,7 +33,7 @@ pub enum Rv32NewKeccakOpcode {
 pub struct NewKeccakTranspilerExtension;
 
 impl<F: PrimeField32> TranspilerExtension<F> for NewKeccakTranspilerExtension {
-    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
+    fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {        
         if instruction_stream.is_empty() {
             return None;
         }
@@ -37,16 +48,27 @@ impl<F: PrimeField32> TranspilerExtension<F> for NewKeccakTranspilerExtension {
 
         let dec_insn = RType::new(instruction_u32);
 
-        if dec_insn.funct7 != XORIN_FUNCT7 as u32 {
+        if dec_insn.funct7 != XORIN_FUNCT7 as u32 && dec_insn.funct7 != KECCAKF_FUNCT7 as u32 {
             return None;
         }
 
-        let instruction = from_r_type(
-            Rv32NewKeccakOpcode::XORIN.global_opcode().as_usize(),
-            RV32_MEMORY_AS as usize,
-            &dec_insn,
-            true,
-        );
+        println!("debug dec_insn {:?}", dec_insn);
+
+        let instruction = if dec_insn.funct7 == XORIN_FUNCT7 as u32 {
+            from_r_type(
+                XorinOpcode::XORIN.global_opcode().as_usize(),
+                RV32_MEMORY_AS as usize,
+                &dec_insn,
+                true,
+            )
+        } else {
+            from_r_type(
+                KeccakfOpcode::KECCAKF.global_opcode().as_usize(),
+                RV32_MEMORY_AS as usize,
+                &dec_insn,
+                true,
+            )
+        };
 
         Some(TranspilerOutput::one_to_one(instruction))
     }

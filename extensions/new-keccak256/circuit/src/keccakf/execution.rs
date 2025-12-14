@@ -93,21 +93,24 @@ impl<F: PrimeField32> AotExecutor<F> for KeccakfVmExecutor {}
 
 impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakfVmExecutor {
     fn metered_pre_compute_size(&self) -> usize {
-        todo!()
+        size_of::<KeccakfPreCompute>()
     }
 
     #[cfg(not(feature = "tco"))]
     fn metered_pre_compute<Ctx>(
         &self,
-        _chip_idx: usize,
-        _pc: u32,
-        _inst: &Instruction<F>,
-        _data: &mut [u8],
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        todo!()
+        let data: &mut E2PreCompute<KeccakfPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        Ok(execute_e2_impl::<_, _>)
     }
 
     #[cfg(feature = "tco")]
@@ -141,7 +144,36 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     pre_compute: &KeccakfPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    // todo: implement this
+    println!("keccakf e1 was called");
+    use tiny_keccak::keccakf;
+
+    // the variable naming might be misleading
+    // buf_ptr is the pointer to the register which holds the actual pointer to the buffer 
+    let buf_ptr = pre_compute.a as u32;
+    let buffer_limbs: [u8; 4] = exec_state.vm_read(RV32_REGISTER_AS, buf_ptr);
+    let buffer = u32::from_le_bytes(buffer_limbs);
+    println!("debug message {:?}", buffer);
+    let message: &[u8] = exec_state.vm_read_slice(RV32_MEMORY_AS, buffer, 200);
+    println!("debug message u8 {:?}", message);
+    assert_eq!(message.len(), 200);
+
+    // todo: check if this is correct representation / conversion between u8 <-> u64
+    let mut message_u64= [0u64; 25];
+    for (i, message_chunk) in message.chunks_exact(8).enumerate() {
+        let message_chunk_u64 = u64::from_le_bytes(message_chunk.try_into().unwrap());
+        message_u64[i] = message_chunk_u64;
+    }
+    println!("debug message {:?}", message_u64);
+    keccakf(&mut message_u64);
+    println!("debug message after keccak {:?}", message_u64);
+
+    // let mut result: [u8; 200] = [0; 200];
+    // for (i, message) in message_u64.into_iter().enumerate() {
+    //     let message_bytes = message.to_be_bytes();
+    //     result[8 * i .. 8 * i + 8].copy_from_slice(&message_bytes);
+    // }
+
+    exec_state.vm_write(RV32_MEMORY_AS, buffer, &message_u64);
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));

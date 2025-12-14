@@ -3,7 +3,7 @@ use std::{borrow::BorrowMut, mem::{align_of, size_of}};
 use openvm_circuit::{arch::*, system::{memory::online::TracingMemory, poseidon2::trace}};
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::instruction::Instruction;
-use openvm_new_keccak256_transpiler::Rv32NewKeccakOpcode;
+use openvm_new_keccak256_transpiler::XorinOpcode;
 use openvm_rv32im_circuit::adapters::{tracing_read, tracing_write};
 use openvm_stark_backend::{p3_field::PrimeField32, prover::metrics::TraceCells};
 use openvm_circuit::system::memory::offline_checker::MemoryReadAuxRecord;
@@ -27,7 +27,6 @@ pub struct XorinVmMetadata {
 }
 
 impl MultiRowMetadata for XorinVmMetadata {
-    // todo: confirm that this is the number of rows in one opcode execute
     fn get_num_rows(&self) -> usize {
         1
     }
@@ -93,7 +92,7 @@ where
     for<'buf> RA: RecordArena<'buf, XorinVmRecordLayout, XorinVmRecordMut<'buf>>,
 {
     fn get_opcode_name(&self, _: usize) -> String {
-        format!("{:?}", Rv32NewKeccakOpcode::XORIN)
+        format!("{:?}", XorinOpcode::XORIN)
     }
 
     fn execute(

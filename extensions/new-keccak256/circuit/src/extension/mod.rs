@@ -15,7 +15,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::LocalOpcode;
-use openvm_new_keccak256_transpiler::Rv32NewKeccakOpcode;
+use openvm_new_keccak256_transpiler::{XorinOpcode, KeccakfOpcode};
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
@@ -28,7 +28,7 @@ use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use crate::xorin::{XorinVmExecutor, XorinVmFiller, air::XorinVmAir};
+use crate::{keccakf::KeccakfVmExecutor, xorin::{XorinVmExecutor, XorinVmFiller, air::XorinVmAir}};
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
 use std::sync::Arc;
 use crate::xorin::XorinVmChip;
@@ -113,8 +113,8 @@ pub struct Keccak256;
     )
 )]
 
-// todo: add keccaf vm executor
 pub enum Keccak256Executor {
+    Keccakf(KeccakfVmExecutor),
     Xorin(XorinVmExecutor),
 }
 
@@ -126,11 +126,18 @@ impl<F> VmExecutionExtension<F> for Keccak256 {
         inventory: &mut ExecutorInventoryBuilder<F, Keccak256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
+        
         let xorin_executor =
-            XorinVmExecutor::new(Rv32NewKeccakOpcode::CLASS_OFFSET, pointer_max_bits);
+            XorinVmExecutor::new(XorinOpcode::CLASS_OFFSET, pointer_max_bits);
         inventory.add_executor(
             xorin_executor,
-            Rv32NewKeccakOpcode::iter().map(|x| x.global_opcode()),
+            XorinOpcode::iter().map(|x| x.global_opcode()),
+        )?;
+
+        let keccak_executor = KeccakfVmExecutor::new(KeccakfOpcode::CLASS_OFFSET, pointer_max_bits);
+        inventory.add_executor(
+            keccak_executor,
+            KeccakfOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
         Ok(())
@@ -165,7 +172,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Keccak256 {
             memory_bridge,
             bitwise_lu,
             pointer_max_bits,
-            Rv32NewKeccakOpcode::CLASS_OFFSET,
+            XorinOpcode::CLASS_OFFSET,
         );
         inventory.add_air(xorin_air);
 

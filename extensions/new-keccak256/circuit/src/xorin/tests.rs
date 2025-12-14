@@ -1,7 +1,7 @@
 use openvm_circuit::{arch::{ExecutionBridge, PreflightExecutor, testing::{BITWISE_OP_LOOKUP_BUS, TestBuilder, TestChipHarness, VmChipTestBuilder}}, system::memory::{SharedMemoryHelper, offline_checker::MemoryBridge}, utils::get_random_message};
 use openvm_circuit_primitives::bitwise_op_lookup::{BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip, SharedBitwiseOperationLookupChip};
 use openvm_instructions::{LocalOpcode, instruction::Instruction};
-use openvm_new_keccak256_transpiler::Rv32NewKeccakOpcode;
+use openvm_new_keccak256_transpiler::XorinOpcode;
 use std::sync::Arc;
 
 use crate::xorin::{XorinVmChip, XorinVmExecutor, XorinVmFiller, air::XorinVmAir, columns::{XorinInstructionCols, XorinMemoryCols, XorinSpongeCols}};
@@ -13,7 +13,6 @@ use openvm_stark_backend::{p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMat
 
 type F = BabyBear;
 type Harness = TestChipHarness<F, XorinVmExecutor, XorinVmAir, XorinVmChip<F>>;
-use openvm_new_keccak256_transpiler::Rv32NewKeccakOpcode::XORIN;
 use openvm_stark_backend::verifier::VerificationError;
 
 fn create_harness_fields(
@@ -28,10 +27,10 @@ fn create_harness_fields(
         memory_bridge, 
         bitwise_chip.bus(), 
         address_bits,
-        Rv32NewKeccakOpcode::CLASS_OFFSET
+        XorinOpcode::CLASS_OFFSET
     );
 
-    let executor = XorinVmExecutor::new(Rv32NewKeccakOpcode::CLASS_OFFSET, address_bits);
+    let executor = XorinVmExecutor::new(XorinOpcode::CLASS_OFFSET, address_bits);
     let chip = XorinVmChip::new(
         XorinVmFiller::new(bitwise_chip, address_bits),
         memory_helper
@@ -71,7 +70,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>> (
     executor: &mut E, 
     arena: &mut RA, 
     rng: &mut StdRng, 
-    opcode: Rv32NewKeccakOpcode,
+    opcode: XorinOpcode,
     buffer_length: Option<usize>
 ) {
     const MAX_LEN: usize = 136;
@@ -165,7 +164,7 @@ fn xorin_chip_positive_tests() {
             &mut harness.executor,
             &mut harness.arena, 
             &mut rng, 
-            XORIN,
+            XorinOpcode::XORIN,
             buffer_length,
         );
     
@@ -197,7 +196,7 @@ fn run_xorin_chip_negative_tests(
         &mut harness.executor,
         &mut harness.arena, 
         &mut rng, 
-        XORIN,
+        XorinOpcode::XORIN,
         buffer_length,
     );
 
