@@ -161,7 +161,7 @@ where
         }
 
         let rows_used_blocks = num_records * C::ROWS_PER_BLOCK;
-        // Q: why +1?
+        // Ensure there is always at least one dummy row in the trace
         let rows_used_total = rows_used_blocks + 1;
         let trace_height = next_power_of_two_or_zero(rows_used_total);
         let trace = DeviceMatrix::<F>::with_capacity(trace_height, C::BLOCK_HASHER_WIDTH);
