@@ -8,7 +8,7 @@ namespace sha2 {
 
 // Common VM constants across SHA-2 variants.
 inline constexpr size_t SHA2_REGISTER_READS = 3;
-inline constexpr size_t SHA2_READ_SIZE = 16;
+inline constexpr size_t SHA2_READ_SIZE = 4;
 inline constexpr size_t SHA2_WRITE_SIZE = 4;
 inline constexpr size_t SHA2_MAIN_READ_SIZE = 4;
 

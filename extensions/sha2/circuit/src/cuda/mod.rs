@@ -72,7 +72,8 @@ where
         let d_record_offsets = record_offsets.to_device().unwrap();
 
         unsafe {
-            if C::MESSAGE_LENGTH_BITS == 64 {
+            match C::VARIANT {
+                Sha2Variant::Sha256 => {
                 cuda_abi::sha256::sha256_main_tracegen(
                     trace.buffer(),
                     trace_height,
@@ -86,7 +87,8 @@ where
                     self.timestamp_max_bits,
                 )
                 .unwrap();
-            } else {
+            }
+            Sha2Variant::Sha512 => {
                 cuda_abi::sha512::sha512_main_tracegen(
                     trace.buffer(),
                     trace_height,
@@ -101,6 +103,7 @@ where
                 )
                 .unwrap();
             }
+            Sha2Variant::Sha384 => unreachable!(),
         }
 
         AirProvingContext::simple_no_pis(trace)
@@ -143,11 +146,13 @@ where
                 );
             debug_assert!((record.inner.variant as u8) == (C::VARIANT as u8));
 
+            // Q: shouldn't this be .extend(repeat_n(record_offsets.len() as u32 - 1, num_blocks))?
             block_to_record_idx.push(record_offsets.len() as u32 - 1);
             num_blocks += 1;
         }
 
         let rows_used_blocks = num_blocks as usize * C::ROWS_PER_BLOCK;
+        // Q: why +1?
         let rows_used_total = rows_used_blocks + 1;
         let trace_height = next_power_of_two_or_zero(rows_used_total);
         let trace = DeviceMatrix::<F>::with_capacity(trace_height, C::BLOCK_HASHER_WIDTH);
@@ -274,7 +279,7 @@ impl<C: Sha2Config> Sha2BlockHasherChipGpu<C> {
     }
 }
 
-// Convenience aliases for the common BabyBear+SHA variants.
+// Convenience aliases for the common SHA-2 variants.
 pub type Sha256VmChipGpu = Sha2MainChipGpu<Sha256Config>;
 pub type Sha256BlockHasherChipGpu = Sha2BlockHasherChipGpu<Sha256Config>;
 pub type Sha512VmChipGpu = Sha2MainChipGpu<Sha512Config>;

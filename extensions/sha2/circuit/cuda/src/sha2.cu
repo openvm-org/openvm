@@ -289,7 +289,7 @@ __global__ void sha2_first_pass_tracegen(
         );
         RowSlice row_idx_flags = inner_row.slice_from(SHA2_COL_INDEX(V, Sha2RoundCols, flags.row_idx));
         row_idx_encoder.write_flag_pt(row_idx_flags, row_in_block);
-        SHA2INNER_WRITE_ROUND(V, inner_row, flags.global_block_idx, Fp(global_block_idx + 1));
+        SHA2INNER_WRITE_ROUND(V, inner_row, flags.global_block_idx, Fp(global_block_idx));
         SHA2INNER_WRITE_ROUND(V, inner_row, flags.local_block_idx, Fp(0));
 
         for (uint32_t j = 0; j < V::ROUNDS_PER_ROW; j++) {
@@ -423,9 +423,31 @@ __global__ void sha2_first_pass_tracegen(
         RowSlice row_idx_flags =
             inner_row.slice_from(SHA2_COL_INDEX(V, Sha2DigestCols, flags.row_idx));
         row_idx_encoder.write_flag_pt(row_idx_flags, digest_row_idx);
-        SHA2INNER_WRITE_DIGEST(V, inner_row, flags.global_block_idx, Fp(global_block_idx + 1));
+        SHA2INNER_WRITE_DIGEST(V, inner_row, flags.global_block_idx, Fp(global_block_idx));
         SHA2INNER_WRITE_DIGEST(V, inner_row, flags.local_block_idx, Fp(0));
         SHA2INNER_WRITE_DIGEST(V, inner_row, flags.is_digest_row, Fp::one());
+
+        // Fill digest row helper/intermediate values derived from the last round row.
+        uint32_t last_round_t_base = (V::ROUND_ROWS - 1) * V::ROUNDS_PER_ROW;
+        for (uint32_t j = 0; j < V::ROUNDS_PER_ROW; j++) {
+            typename V::Word w_cur = w_schedule[last_round_t_base + j];
+            typename V::Word w_next = (j + 1 < V::ROUNDS_PER_ROW)
+                                          ? w_schedule[last_round_t_base + j + 1]
+                                          : static_cast<typename V::Word>(0);
+            typename V::Word sig0_next = sha2::small_sig0<V>(w_next);
+            for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
+                SHA2INNER_WRITE_DIGEST(
+                    V,
+                    inner_row,
+                    schedule_helper.intermed_4[j][limb],
+                    Fp(word_to_u16_limb<V>(w_cur, limb) + word_to_u16_limb<V>(sig0_next, limb))
+                );
+                // Copy carries so constraint_word_addition on the preceding round row can use them.
+                uint32_t t_idx = last_round_t_base + j;
+                SHA2INNER_WRITE_DIGEST(V, inner_row, hash.carry_a[j][limb], Fp(carry_a[t_idx][limb]));
+                SHA2INNER_WRITE_DIGEST(V, inner_row, hash.carry_e[j][limb], Fp(carry_e[t_idx][limb]));
+            }
+        }
 
         for (uint32_t j = 0; j < V::ROUNDS_PER_ROW - 1; j++) {
             uint32_t idx = (V::ROUND_ROWS - 1) * V::ROUNDS_PER_ROW + j;
@@ -565,10 +587,11 @@ __global__ void sha2_second_pass_dependencies(Fp *trace, size_t trace_height, si
         return;
     }
 
-    uint32_t trace_start_row = block_idx * V::ROWS_PER_BLOCK;
-    // CPU second pass operates on rows ROUND_ROWS-2, ROUND_ROWS-1 (digest-1) and next block row 0.
-    uint32_t last_round_row = trace_start_row + V::ROUND_ROWS - 2;
-    uint32_t digest_row = trace_start_row + V::ROUND_ROWS - 1;
+    uint32_t block_row_base = block_idx * V::ROWS_PER_BLOCK;
+    // Match CPU generate_missing_cells: operate on the last round row, digest row, and first row of
+    // the next block (or the dummy row for the final block).
+    uint32_t last_round_row = block_row_base + (V::ROUND_ROWS - 1);
+    uint32_t digest_row = block_row_base + V::ROUND_ROWS;
     uint32_t next_block_row_base =
         (block_idx + 1 == total_blocks) ? total_blocks * V::ROWS_PER_BLOCK : (block_idx + 1) * V::ROWS_PER_BLOCK;
 
@@ -605,6 +628,62 @@ __global__ void sha2_second_pass_dependencies(Fp *trace, size_t trace_height, si
     for (uint32_t j = 0; j < V::ROUNDS_PER_ROW; j++) {
         w_vals[j] = read_w_word(last_round_inner, j);
         w_vals[j + V::ROUNDS_PER_ROW] = read_w_word(digest_inner, j);
+    }
+
+    // Fill intermed_4 and carries on the digest row (matches CPU generate_intermed_4/generate_carry_ae).
+    for (uint32_t i = 0; i < V::ROUNDS_PER_ROW; i++) {
+        typename V::Word sig_w = sha2::small_sig0<V>(w_vals[i + 1]);
+        for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
+            SHA2INNER_WRITE_DIGEST(
+                V,
+                digest_inner,
+                schedule_helper.intermed_4[i][limb],
+                Fp(word_to_u16_limb<V>(w_vals[i], limb) + word_to_u16_limb<V>(sig_w, limb))
+            );
+        }
+    }
+
+    typename V::Word a_rows[2 * V::ROUNDS_PER_ROW];
+    typename V::Word e_rows[2 * V::ROUNDS_PER_ROW];
+    for (uint32_t j = 0; j < V::ROUNDS_PER_ROW; j++) {
+        size_t a_base = SHA2_COL_INDEX(V, Sha2RoundCols, work_vars.a[j]);
+        size_t e_base = SHA2_COL_INDEX(V, Sha2RoundCols, work_vars.e[j]);
+        a_rows[j] = word_from_bits<V>(last_round_inner, a_base);
+        e_rows[j] = word_from_bits<V>(last_round_inner, e_base);
+        a_rows[j + V::ROUNDS_PER_ROW] = word_from_bits<V>(digest_inner, a_base);
+        e_rows[j + V::ROUNDS_PER_ROW] = word_from_bits<V>(digest_inner, e_base);
+    }
+    for (uint32_t i = 0; i < V::ROUNDS_PER_ROW; i++) {
+        typename V::Word cur_a = a_rows[i + 4];
+        typename V::Word cur_e = e_rows[i + 4];
+        typename V::Word sig_a = sha2::big_sig0<V>(a_rows[i + 3]);
+        typename V::Word sig_e = sha2::big_sig1<V>(e_rows[i + 3]);
+        typename V::Word maj_abc = sha2::maj<V>(a_rows[i + 3], a_rows[i + 2], a_rows[i + 1]);
+        typename V::Word ch_efg = sha2::ch<V>(e_rows[i + 3], e_rows[i + 2], e_rows[i + 1]);
+        typename V::Word d_val = a_rows[i];
+        typename V::Word h_val = e_rows[i];
+
+        uint32_t prev_carry_a = 0;
+        uint32_t prev_carry_e = 0;
+        for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
+            uint32_t t1_sum = word_to_u16_limb<V>(h_val, limb) +
+                              word_to_u16_limb<V>(sig_e, limb) +
+                              word_to_u16_limb<V>(ch_efg, limb);
+            uint32_t t2_sum = word_to_u16_limb<V>(sig_a, limb) +
+                              word_to_u16_limb<V>(maj_abc, limb);
+            uint32_t d_limb = word_to_u16_limb<V>(d_val, limb);
+            uint32_t cur_a_limb = word_to_u16_limb<V>(cur_a, limb);
+            uint32_t cur_e_limb = word_to_u16_limb<V>(cur_e, limb);
+
+            uint32_t e_sum = d_limb + t1_sum + prev_carry_e;
+            uint32_t a_sum = t1_sum + t2_sum + prev_carry_a;
+            uint32_t carry_e = (e_sum - cur_e_limb) >> 16;
+            uint32_t carry_a = (a_sum - cur_a_limb) >> 16;
+            SHA2INNER_WRITE_DIGEST(V, digest_inner, hash.carry_e[i][limb], Fp(carry_e));
+            SHA2INNER_WRITE_DIGEST(V, digest_inner, hash.carry_a[i][limb], Fp(carry_a));
+            prev_carry_e = carry_e;
+            prev_carry_a = carry_a;
+        }
     }
 
     // Fill intermed_12 on last_round_row using digest carries (mirror CPU generate_intermed_12).

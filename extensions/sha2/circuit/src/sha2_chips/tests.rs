@@ -663,6 +663,12 @@ fn test_cuda_rand_sha2_multi_block<C: Sha2Config + 'static>() {
         );
     }
 
+    // tester
+    //     .build()
+    //     .load_gpu_harness(harness)
+    //     .finalize()
+    //     .simple_test()
+    //     .unwrap();
     let mut tester = tester.build();
     let block_arena = clone_dense_arena(&harness.dense_arena);
     tester = tester.load(harness.main_air, harness.main_gpu, harness.dense_arena);
