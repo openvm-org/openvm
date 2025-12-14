@@ -605,25 +605,26 @@ fn create_cuda_harness<C: Sha2Config>(tester: &GpuChipTestBuilder) -> GpuHarness
         tester.address_bits(),
     );
 
-    let main_gpu_chip = Sha2MainChipGpu::new(
-        tester.range_checker(),
-        tester.bitwise_op_lookup(),
-        tester.address_bits() as u32,
-        tester.timestamp_max_bits() as u32,
-    );
-
-    let shared_records = main_chip.records.clone();
-
     let block_hasher_air =
         Sha2BlockHasherVmAir::new(bitwise_bus.clone(), SUBAIR_BUS_IDX, SHA2_BUS_IDX);
     let block_hasher_chip = Sha2BlockHasherChip::new(
         dummy_bitwise_chip.clone(),
         tester.address_bits(),
         tester.cpu_memory_helper(),
-        shared_records,
+        main_chip.records.clone(),
+    );
+
+    let shared_records_gpu = Arc::new(Mutex::new(None));
+    let main_gpu_chip = Sha2MainChipGpu::new(
+        shared_records_gpu.clone(),
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.address_bits() as u32,
+        tester.timestamp_max_bits() as u32,
     );
 
     let block_gpu_chip = Sha2BlockHasherChipGpu::new(
+        shared_records_gpu.clone(),
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.address_bits() as u32,
@@ -691,7 +692,13 @@ fn test_cuda_rand_sha2_multi_block<C: Sha2Config + 'static>() {
     let mut tester = tester.build();
     let block_arena = clone_dense_arena(&harness.main.dense_arena);
     tester = tester.load_gpu_harness(harness.main);
-    // tester = tester.load(harness.block_air, harness.block_gpu, block_arena);
+    tester = tester.load_and_compare(
+        harness.block_air,
+        harness.block_gpu,
+        (),
+        harness.block_cpu,
+        (),
+    );
     // tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
     // tester.finalize().simple_test().unwrap();
 }

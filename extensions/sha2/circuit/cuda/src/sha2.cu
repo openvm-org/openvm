@@ -173,7 +173,6 @@ __global__ void sha2_hash_computation(
     uint8_t *records,
     size_t num_records,
     size_t *record_offsets,
-    uint32_t * /*block_offsets*/,
     typename V::Word *prev_hashes,
     uint32_t total_num_blocks
 ) {
@@ -203,7 +202,6 @@ __global__ void sha2_first_pass_tracegen(
     uint8_t *records,
     size_t num_records,
     size_t *record_offsets,
-    uint32_t * /*block_offsets*/,
     uint32_t *block_to_record_idx,
     uint32_t total_num_blocks,
     typename V::Word *prev_hashes,
@@ -289,7 +287,7 @@ __global__ void sha2_first_pass_tracegen(
         );
         RowSlice row_idx_flags = inner_row.slice_from(SHA2_COL_INDEX(V, Sha2RoundCols, flags.row_idx));
         row_idx_encoder.write_flag_pt(row_idx_flags, row_in_block);
-        SHA2INNER_WRITE_ROUND(V, inner_row, flags.global_block_idx, Fp(global_block_idx));
+        SHA2INNER_WRITE_ROUND(V, inner_row, flags.global_block_idx, Fp(global_block_idx + 1));
         SHA2INNER_WRITE_ROUND(V, inner_row, flags.local_block_idx, Fp(0));
 
         for (uint32_t j = 0; j < V::ROUNDS_PER_ROW; j++) {
@@ -423,7 +421,7 @@ __global__ void sha2_first_pass_tracegen(
         RowSlice row_idx_flags =
             inner_row.slice_from(SHA2_COL_INDEX(V, Sha2DigestCols, flags.row_idx));
         row_idx_encoder.write_flag_pt(row_idx_flags, digest_row_idx);
-        SHA2INNER_WRITE_DIGEST(V, inner_row, flags.global_block_idx, Fp(global_block_idx));
+        SHA2INNER_WRITE_DIGEST(V, inner_row, flags.global_block_idx, Fp(global_block_idx + 1));
         SHA2INNER_WRITE_DIGEST(V, inner_row, flags.local_block_idx, Fp(0));
         SHA2INNER_WRITE_DIGEST(V, inner_row, flags.is_digest_row, Fp::one());
 
@@ -815,14 +813,13 @@ int launch_sha2_hash_computation(
     uint8_t *d_records,
     size_t num_records,
     size_t *d_record_offsets,
-    uint32_t *d_block_offsets,
     typename V::Word *d_prev_hashes,
     uint32_t total_num_blocks
 ) {
     auto [grid_size, block_size] = kernel_launch_params(num_records, 256);
 
     sha2_hash_computation<V><<<grid_size, block_size>>>(
-        d_records, num_records, d_record_offsets, d_block_offsets, d_prev_hashes, total_num_blocks
+        d_records, num_records, d_record_offsets, d_prev_hashes, total_num_blocks
     );
 
     return CHECK_KERNEL();
@@ -835,7 +832,6 @@ int launch_sha2_first_pass_tracegen(
     uint8_t *d_records,
     size_t num_records,
     size_t *d_record_offsets,
-    uint32_t *d_block_offsets,
     uint32_t *d_block_to_record_idx,
     uint32_t total_num_blocks,
     typename V::Word *d_prev_hashes,
@@ -854,7 +850,6 @@ int launch_sha2_first_pass_tracegen(
         d_records,
         num_records,
         d_record_offsets,
-        d_block_offsets,
         d_block_to_record_idx,
         total_num_blocks,
         d_prev_hashes,
@@ -954,7 +949,6 @@ int launch_sha256_hash_computation(
     uint8_t *d_records,
     size_t num_records,
     size_t *d_record_offsets,
-    uint32_t *d_block_offsets,
     uint32_t *d_prev_hashes,
     uint32_t total_num_blocks
 ) {
@@ -962,7 +956,6 @@ int launch_sha256_hash_computation(
         d_records,
         num_records,
         d_record_offsets,
-        d_block_offsets,
         reinterpret_cast<uint32_t *>(d_prev_hashes),
         total_num_blocks
     );
@@ -972,12 +965,11 @@ int launch_sha512_hash_computation(
     uint8_t *d_records,
     size_t num_records,
     size_t *d_record_offsets,
-    uint32_t *d_block_offsets,
     uint64_t *d_prev_hashes,
     uint32_t total_num_blocks
 ) {
     return launch_sha2_hash_computation<Sha512Variant>(
-        d_records, num_records, d_record_offsets, d_block_offsets, d_prev_hashes, total_num_blocks
+        d_records, num_records, d_record_offsets, d_prev_hashes, total_num_blocks
     );
 }
 
@@ -987,7 +979,6 @@ int launch_sha256_first_pass_tracegen(
     uint8_t *d_records,
     size_t num_records,
     size_t *d_record_offsets,
-    uint32_t *d_block_offsets,
     uint32_t *d_block_to_record_idx,
     uint32_t total_num_blocks,
     uint32_t *d_prev_hashes,
@@ -1004,7 +995,6 @@ int launch_sha256_first_pass_tracegen(
         d_records,
         num_records,
         d_record_offsets,
-        d_block_offsets,
         d_block_to_record_idx,
         total_num_blocks,
         reinterpret_cast<uint32_t *>(d_prev_hashes),
@@ -1023,7 +1013,6 @@ int launch_sha512_first_pass_tracegen(
     uint8_t *d_records,
     size_t num_records,
     size_t *d_record_offsets,
-    uint32_t *d_block_offsets,
     uint32_t *d_block_to_record_idx,
     uint32_t total_num_blocks,
     uint64_t *d_prev_hashes,
@@ -1040,7 +1029,6 @@ int launch_sha512_first_pass_tracegen(
         d_records,
         num_records,
         d_record_offsets,
-        d_block_offsets,
         d_block_to_record_idx,
         total_num_blocks,
         d_prev_hashes,

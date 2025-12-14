@@ -1,5 +1,9 @@
-use std::{marker::PhantomData, sync::Arc};
+use std::{
+    marker::PhantomData,
+    sync::{Arc, Mutex},
+};
 
+use itertools::repeat_n;
 use openvm_circuit::{
     arch::{DenseRecordArena, RecordSeeker},
     utils::next_power_of_two_or_zero,
@@ -18,7 +22,14 @@ use crate::{Sha2Config, Sha2RecordLayout, Sha2RecordMut};
 
 mod cuda_abi;
 
+pub struct Sha2SharedRecordsGpu {
+    d_records: DeviceBuffer<u8>,
+    d_record_offsets: DeviceBuffer<usize>,
+    num_records: usize,
+}
+
 pub struct Sha2MainChipGpu<C: Sha2Config> {
+    records: Arc<Mutex<Option<Sha2SharedRecordsGpu>>>,
     range_checker: Arc<VariableRangeCheckerChipGPU>,
     bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<8>>,
     pointer_max_bits: u32,
@@ -28,12 +39,14 @@ pub struct Sha2MainChipGpu<C: Sha2Config> {
 
 impl<C: Sha2Config> Sha2MainChipGpu<C> {
     pub fn new(
+        records: Arc<Mutex<Option<Sha2SharedRecordsGpu>>>,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
         bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<8>>,
         pointer_max_bits: u32,
         timestamp_max_bits: u32,
     ) -> Self {
         Self {
+            records,
             range_checker,
             bitwise_lookup,
             pointer_max_bits,
@@ -106,12 +119,21 @@ where
                 Sha2Variant::Sha384 => unreachable!(),
             }
         }
+
+        // Pass the records to Sha2BlockHasherChip
+        *self.records.lock().unwrap() = Some(Sha2SharedRecordsGpu {
+            d_records,
+            d_record_offsets,
+            num_records,
+        });
+
         AirProvingContext::simple_no_pis(trace)
     }
 }
 
 /// Generic hybrid GPU wrapper that reuses CPU block-hasher tracegen.
 pub struct Sha2BlockHasherChipGpu<C: Sha2Config> {
+    records: Arc<Mutex<Option<Sha2SharedRecordsGpu>>>,
     range_checker: Arc<VariableRangeCheckerChipGPU>,
     bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<8>>,
     pointer_max_bits: u32,
@@ -119,49 +141,38 @@ pub struct Sha2BlockHasherChipGpu<C: Sha2Config> {
     _marker: PhantomData<C>,
 }
 
-impl<C> Chip<DenseRecordArena, GpuBackend> for Sha2BlockHasherChipGpu<C>
+impl<C, R> Chip<R, GpuBackend> for Sha2BlockHasherChipGpu<C>
 where
     C: Sha2Config,
 {
-    fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        let records = arena.allocated_mut();
-        if records.is_empty() {
+    /// We don't use the record arena associated with this chip. Instead, we will use the record
+    /// arena provided by the main chip, which will be passed to this chip after the main chip's
+    /// tracegen is done.
+    fn generate_proving_ctx(&self, _: R) -> AirProvingContext<GpuBackend> {
+        let mut records = self.records.lock().unwrap();
+        let Sha2SharedRecordsGpu {
+            d_records,
+            d_record_offsets,
+            num_records,
+        } = records.take().unwrap();
+
+        if num_records == 0 {
             return get_empty_air_proving_ctx::<GpuBackend>();
         }
 
-        let mut record_offsets = Vec::<usize>::new();
-        let mut block_offsets = Vec::<u32>::new();
-        let mut block_to_record_idx = Vec::<u32>::new();
-        let mut offset = 0usize;
-        let mut num_blocks = 0u32;
-
-        while offset < records.len() {
-            record_offsets.push(offset);
-            block_offsets.push(num_blocks);
-
-            let record =
-                RecordSeeker::<DenseRecordArena, Sha2RecordMut, Sha2RecordLayout>::get_record_at(
-                    &mut offset,
-                    records,
-                );
-            debug_assert!((record.inner.variant as u8) == (C::VARIANT as u8));
-
-            // Q: shouldn't this be .extend(repeat_n(record_offsets.len() as u32 - 1, num_blocks))?
-            block_to_record_idx.push(record_offsets.len() as u32 - 1);
-            num_blocks += 1;
-        }
-
-        let rows_used_blocks = num_blocks as usize * C::ROWS_PER_BLOCK;
+        let rows_used_blocks = num_records * C::ROWS_PER_BLOCK;
         // Q: why +1?
         let rows_used_total = rows_used_blocks + 1;
         let trace_height = next_power_of_two_or_zero(rows_used_total);
         let trace = DeviceMatrix::<F>::with_capacity(trace_height, C::BLOCK_HASHER_WIDTH);
 
-        let records_num = record_offsets.len();
-        let d_records = records.to_device().unwrap();
-        let d_record_offsets = record_offsets.to_device().unwrap();
-        let d_block_offsets = block_offsets.to_device().unwrap();
+        let block_to_record_idx = (0..num_records)
+            .flat_map(|i| repeat_n(i as u32, C::ROWS_PER_BLOCK))
+            .collect::<Vec<_>>();
         let d_block_to_record_idx = block_to_record_idx.to_device().unwrap();
+
+        // one record per block, right now
+        let num_blocks: u32 = num_records as u32;
 
         // prev_hashes
         unsafe {
@@ -171,9 +182,8 @@ where
                         DeviceBuffer::<u32>::with_capacity(num_blocks as usize * C::HASH_WORDS);
                     cuda_abi::sha256::sha256_hash_computation(
                         &d_records,
-                        records_num,
+                        num_records,
                         &d_record_offsets,
-                        &d_block_offsets,
                         &d_prev_hashes,
                         num_blocks,
                     )
@@ -183,9 +193,8 @@ where
                         trace.buffer(),
                         trace_height,
                         &d_records,
-                        records_num,
+                        num_records,
                         &d_record_offsets,
-                        &d_block_offsets,
                         &d_block_to_record_idx,
                         num_blocks,
                         &d_prev_hashes,
@@ -215,9 +224,8 @@ where
                         DeviceBuffer::<u64>::with_capacity(num_blocks as usize * C::HASH_WORDS);
                     cuda_abi::sha512::sha512_hash_computation(
                         &d_records,
-                        records_num,
+                        num_records,
                         &d_record_offsets,
-                        &d_block_offsets,
                         &d_prev_hashes,
                         num_blocks,
                     )
@@ -227,9 +235,8 @@ where
                         trace.buffer(),
                         trace_height,
                         &d_records,
-                        records_num,
+                        num_records,
                         &d_record_offsets,
-                        &d_block_offsets,
                         &d_block_to_record_idx,
                         num_blocks,
                         &d_prev_hashes,
@@ -264,12 +271,14 @@ where
 
 impl<C: Sha2Config> Sha2BlockHasherChipGpu<C> {
     pub fn new(
+        records: Arc<Mutex<Option<Sha2SharedRecordsGpu>>>,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
         bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<8>>,
         pointer_max_bits: u32,
         timestamp_max_bits: u32,
     ) -> Self {
         Self {
+            records,
             range_checker,
             bitwise_lookup,
             pointer_max_bits,

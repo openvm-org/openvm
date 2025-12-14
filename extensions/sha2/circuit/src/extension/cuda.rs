@@ -37,7 +37,9 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
 
         // SHA-256
         inventory.next_air::<Sha2BlockHasherVmAir<Sha256Config>>()?;
+        let sha256_shared_records = Arc::new(Mutex::new(None));
         let sha256_block_gpu = Sha2BlockHasherChipGpu::<Sha256Config>::new(
+            sha256_shared_records.clone(),
             range_checker_gpu.clone(),
             bitwise_gpu.clone(),
             pointer_max_bits as u32,
@@ -47,6 +49,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
 
         inventory.next_air::<Sha2MainAir<Sha256Config>>()?;
         let sha256_main_gpu = Sha2MainChipGpu::<Sha256Config>::new(
+            sha256_shared_records,
             range_checker_gpu.clone(),
             bitwise_gpu.clone(),
             pointer_max_bits as u32,
@@ -56,7 +59,9 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
 
         // SHA-512 (also covers SHA-384 constraints)
         inventory.next_air::<Sha2BlockHasherVmAir<Sha512Config>>()?;
+        let sha512_shared_records = Arc::new(Mutex::new(None));
         let sha512_block_gpu = Sha2BlockHasherChipGpu::<Sha512Config>::new(
+            sha512_shared_records.clone(),
             range_checker_gpu.clone(),
             bitwise_gpu.clone(),
             pointer_max_bits as u32,
@@ -66,6 +71,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha2> for S
 
         inventory.next_air::<Sha2MainAir<Sha512Config>>()?;
         let sha512_main_gpu = Sha2MainChipGpu::<Sha512Config>::new(
+            sha512_shared_records,
             range_checker_gpu,
             bitwise_gpu,
             pointer_max_bits as u32,
