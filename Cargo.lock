@@ -6616,23 +6616,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-keccak256"
-version = "1.4.2"
-dependencies = [
- "eyre",
- "openvm-circuit",
- "openvm-instructions",
- "openvm-keccak256-circuit",
- "openvm-keccak256-guest",
- "openvm-keccak256-transpiler",
- "openvm-rv32im-transpiler",
- "openvm-stark-sdk",
- "openvm-toolchain-tests",
- "openvm-transpiler",
- "tiny-keccak",
-]
-
-[[package]]
 name = "openvm-keccak256-circuit"
 version = "1.4.2"
 dependencies = [
@@ -6813,6 +6796,56 @@ dependencies = [
  "openvm-instructions",
  "openvm-transpiler",
  "p3-field",
+]
+
+[[package]]
+name = "openvm-new-keccak256-circuit"
+version = "1.4.2"
+dependencies = [
+ "cfg-if",
+ "derive-new 0.6.0",
+ "derive_more 1.0.0",
+ "hex",
+ "itertools 0.14.0",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
+ "openvm-cuda-backend",
+ "openvm-cuda-builder",
+ "openvm-cuda-common",
+ "openvm-instructions",
+ "openvm-keccak256-transpiler",
+ "openvm-new-keccak256-transpiler",
+ "openvm-rv32im-circuit",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "p3-keccak-air",
+ "rand 0.8.5",
+ "serde",
+ "strum 0.26.3",
+ "tiny-keccak",
+ "tokio",
+]
+
+[[package]]
+name = "openvm-new-keccak256-guest"
+version = "1.4.2"
+dependencies = [
+ "openvm-platform",
+]
+
+[[package]]
+name = "openvm-new-keccak256-transpiler"
+version = "1.4.2"
+dependencies = [
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-new-keccak256-guest",
+ "openvm-stark-backend",
+ "openvm-transpiler",
+ "rrs-lib",
+ "strum 0.26.3",
 ]
 
 [[package]]
@@ -7087,12 +7120,12 @@ dependencies = [
  "openvm-cuda-backend",
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
- "openvm-keccak256-circuit",
- "openvm-keccak256-transpiler",
  "openvm-native-circuit",
  "openvm-native-compiler",
  "openvm-native-recursion",
  "openvm-native-transpiler",
+ "openvm-new-keccak256-circuit",
+ "openvm-new-keccak256-transpiler",
  "openvm-pairing-circuit",
  "openvm-pairing-transpiler",
  "openvm-rv32im-circuit",

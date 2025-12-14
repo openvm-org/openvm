@@ -3,28 +3,19 @@ use core::hint::black_box;
 
 use hex::FromHex;
 use openvm as _;
-use openvm_keccak256::keccak256;
+use openvm::io::reveal_u32;
 // [!endregion imports]
 
 // [!region main]
 pub fn main() {
-    let test_vectors = [
-        (
-            "",
-            "C5D2460186F7233C927E7DB2DCC703C0E500B653CA82273B7BFAD8045D85A470",
-        ),
-        (
-            "CC",
-            "EEAD6DBFC7340A56CAEDC044696A168870549A6A7F6F56961E84A54BD9970B8A",
-        ),
-    ];
-    for (input, expected_output) in test_vectors.iter() {
-        let input = Vec::from_hex(input).unwrap();
-        let expected_output = Vec::from_hex(expected_output).unwrap();
-        let output = keccak256(&black_box(input));
-        if output != *expected_output {
-            panic!();
-        }
-    }
+    let mut buffer = [1u8; 136];
+    let input = [2u8; 136];
+    let output = [3u8; 136];
+
+    let len: usize = 136;
+    openvm_new_keccak256_guest::native_xorin(buffer.as_mut_ptr(), input.as_ptr(), len);
+
+    assert_eq!(buffer, output);
+
 }
 // [!endregion main]
