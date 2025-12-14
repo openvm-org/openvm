@@ -9,7 +9,7 @@ pub struct KeccakfVmCols<T> {
 }
 
 #[repr(C)]
-#[derive(Debug, AlignedBorrow)]
+#[derive(Copy, Clone, Debug, Default, AlignedBorrow, derive_new::new)]
 pub struct KeccakfInstructionCols<T> {
     pub pc: T,
     pub is_enabled: T, 
@@ -20,9 +20,11 @@ pub struct KeccakfInstructionCols<T> {
 }
 
 #[repr(C)]
-#[derive(Debug, AlignedBorrow)]
+#[derive(Clone, Debug, AlignedBorrow)]
 pub struct KeccakfMemoryCols<T> {
-    pub register_aux: [MemoryReadAuxCols<T>; 1],
+    pub register_aux_cols: [MemoryReadAuxCols<T>; 1],
     pub buffer_bytes_read_aux_cols: [MemoryReadAuxCols<T>; 200/4],
     pub buffer_bytes_write_aux_cols: [MemoryWriteAuxCols<T, 4>; 200/4],
 }
+
+pub const NUM_KECCAKF_VM_COLS: usize = size_of::<KeccakfVmCols<u8>>();

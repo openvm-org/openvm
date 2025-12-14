@@ -24,6 +24,7 @@ use openvm_stark_backend::{
 
 use crate::xorin::columns::{XorinVmCols, NUM_XORIN_VM_COLS};
 use openvm_stark_backend::p3_air::AirBuilder;
+use openvm_instructions::riscv::RV32_REGISTER_AS;
 
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
@@ -112,7 +113,7 @@ impl XorinVmAir {
                     buffer_ptr.into(),
                     input_ptr.into(),
                     len_ptr.into(),
-                    reg_addr_sp.into(),
+                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
                     AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
                 ],
                 ExecutionState::new(instruction.pc, instruction.start_timestamp),
@@ -245,6 +246,7 @@ impl XorinVmAir {
         timestamp
     }
 
+    #[inline]
     pub fn constrain_xor<AB: InteractionBuilder>(
         &self,
         builder: &mut AB, 
@@ -270,6 +272,7 @@ impl XorinVmAir {
         }
     }
 
+    #[inline]
     pub fn constrain_output_write<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,

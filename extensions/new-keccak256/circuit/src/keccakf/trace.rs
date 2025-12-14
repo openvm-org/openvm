@@ -5,7 +5,6 @@ use core::convert::TryInto;
 use openvm_circuit::{arch::*, system::{memory::online::TracingMemory, poseidon2::trace}};
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
-use openvm_new_keccak256_transpiler::XorinOpcode;
 use openvm_rv32im_circuit::adapters::{tracing_read, tracing_write};
 use openvm_stark_backend::{p3_field::PrimeField32, prover::metrics::TraceCells};
 use openvm_circuit::system::memory::offline_checker::MemoryReadAuxRecord;
@@ -14,9 +13,11 @@ use openvm_instructions::riscv::{RV32_REGISTER_AS, RV32_MEMORY_AS};
 
 use crate::{keccakf::KeccakfVmExecutor};
 use openvm_new_keccak256_transpiler::KeccakfOpcode;
-use crate::xorin::XorinVmFiller;
+use crate::keccakf::KeccakfVmFiller;
 use openvm_circuit::system::memory::MemoryAuxColsFactory;
+use crate::keccakf::columns::KeccakfVmCols;
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
+use openvm_instructions::riscv::RV32_CELL_BITS;
 
 use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix}
@@ -143,5 +144,75 @@ where
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
+    }
+}
+
+impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
+    fn fill_trace_row(
+        &self,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        mut row_slice: &mut [F],
+    ) {
+
+        let record: KeccakfVmRecordMut = unsafe {
+            get_record_from_slice(&mut row_slice, KeccakfVmRecordLayout {
+                metadata: KeccakfVmMetadata {
+                }
+            })
+        };
+
+        let record = record.inner.clone();
+        row_slice.fill(F::ZERO);
+        let trace_row: &mut KeccakfVmCols<F> = row_slice.borrow_mut();
+
+        trace_row.instruction.pc = F::from_canonical_u32(record.pc);
+        trace_row.instruction.is_enabled = F::ONE;
+        trace_row.instruction.start_timestamp = F::from_canonical_u32(record.timestamp);
+        trace_row.instruction.buffer_ptr = F::from_canonical_u32(record.rd_ptr);
+        trace_row.instruction.buffer = F::from_canonical_u32(record.buffer);
+        trace_row.instruction.buffer_limbs = record.buffer.to_le_bytes().map(F::from_canonical_u8);
+        
+        let mut timestamp = record.timestamp;
+
+        mem_helper.fill(
+            record.register_aux_cols[0].prev_timestamp,
+            record.timestamp,
+            trace_row.mem_oc.register_aux_cols[0].as_mut()
+        );
+
+        for t in 0..50 {
+            mem_helper.fill(
+                record.buffer_read_aux_cols[t].prev_timestamp,
+                timestamp, 
+                trace_row.mem_oc.buffer_bytes_read_aux_cols[t].as_mut()
+            );
+
+            timestamp += 1;
+        }
+
+        // todo: communicate with the KeccakfPermWrapperAir with some interactions 
+
+        for t in 0..50 {
+            mem_helper.fill(
+                record.buffer_write_aux_cols[t].prev_timestamp,
+                timestamp,
+                trace_row.mem_oc.buffer_bytes_write_aux_cols[t].as_mut()
+            );
+            trace_row.mem_oc.buffer_bytes_write_aux_cols[t].prev_data = record.buffer_write_aux_cols[t].prev_data.map(F::from_canonical_u8);
+            timestamp += 1;
+        }
+
+        // safety: the following approach only works when self.pointer_max_bits >= 24
+        let limb_shift = 1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits);
+        let buffer_limbs = record.buffer.to_le_bytes();
+        let need_range_check = [
+            buffer_limbs.last().unwrap(),
+            buffer_limbs.last().unwrap()
+        ];
+
+        for pair in need_range_check.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range((pair[0] * limb_shift) as u32, (pair[1] * limb_shift) as u32);
+        }
     }
 }
