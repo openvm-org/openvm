@@ -15,6 +15,8 @@ use crate::xorin::trace::instructions::program::DEFAULT_PC_STEP;
 use crate::xorin::XorinVmExecutor;
 use crate::xorin::XorinVmFiller;
 use openvm_circuit::system::memory::MemoryAuxColsFactory;
+use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
+use crate::xorin::trace::instructions::riscv::RV32_CELL_BITS;
 
 use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix}
@@ -235,7 +237,6 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         // Safety: the clone here is necessary because the XorinVmCols uses the same buffer
         let record = record.inner.clone();
         row_slice.fill(F::ZERO);
-
         let trace_row: &mut XorinVmCols<F> = row_slice.borrow_mut();
 
         trace_row.instruction.pc = F::from_canonical_u32(record.from_pc);
@@ -272,8 +273,6 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         trace_row.instruction.len_limbs = len_limbs;   
         trace_row.instruction.start_timestamp = F::from_canonical_u32(record.timestamp);
 
-        println!("debug trace row {:?}", trace_row);
-
         for i in 0..(record.len/4) {
             trace_row.sponge.is_padding_bytes[i as usize] = F::ZERO;
         }
@@ -296,8 +295,6 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             timestamp += 1;
         }
 
-        println!("timestamp before buffer read {}", timestamp);
-        
         for t in 0..num_reads {
             mem_helper.fill(
                 record.buffer_read_aux_cols[t].prev_timestamp,
@@ -306,8 +303,6 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             );
             timestamp += 1;
         }
-
-        println!("timestamp before input read {}", timestamp);
 
         for t in 0..num_reads {
             mem_helper.fill(
@@ -318,7 +313,8 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             timestamp += 1;
         }
 
-        // todo: think if it is fine to leave the other record.len..34 bits empty
+        // safety note: we leave the upper record_len..134 bytes with zeroes 
+        // because they are just padding bytes and unused by the chip 
         for i in 0..record_len {
             trace_row.sponge.preimage_buffer_bytes[i] = F::from_canonical_u8(record.buffer_limbs[i]);
             trace_row.sponge.input_bytes[i] = F::from_canonical_u8(record.input_limbs[i]);
@@ -328,8 +324,6 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             self.bitwise_lookup_chip.request_xor(b_val, c_val);
         }
 
-        println!("timestamp before buffer write {}", timestamp);
-
         for t in 0..num_reads {
             mem_helper.fill(
                 record.buffer_write_aux_cols[t].prev_timestamp,
@@ -338,8 +332,25 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             );
             trace_row.mem_oc.buffer_bytes_write_aux_cols[t].prev_data = record.buffer_write_aux_cols[t].prev_data.map(F::from_canonical_u8);
             timestamp += 1;
-        }        
+        }    
 
-        println!("debug trace row {:?}", trace_row);
+        let buffer_limbs = record.buffer.to_le_bytes();
+        let input_limbs = record.input.to_le_bytes();
+        let len_limbs = record.len.to_le_bytes();    
+
+        let need_range_check = [
+            buffer_limbs.last().unwrap(),
+            input_limbs.last().unwrap(),
+            len_limbs.last().unwrap(),
+            len_limbs.last().unwrap(),
+        ];
+        
+        let limb_shift = 1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits);
+
+        for pair in need_range_check.chunks_exact(2) {
+            self.bitwise_lookup_chip
+                .request_range((pair[0] * limb_shift) as u32 , (pair[1] * limb_shift) as u32);
+        }
+
     }
 }

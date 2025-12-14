@@ -132,33 +132,35 @@ impl XorinVmAir {
 
             timestamp += AB::Expr::ONE;
         }
-
-        /*
-        // todo: range check the buffer limbs, input limbs and length limbs
+        
+        // SAFETY: this approach only works when self.ptr_max_bits >= 24
+        // because we are only range checking the last limb 
         let need_range_check = [
             *instruction.buffer_limbs.last().unwrap(),
             *instruction.input_limbs.last().unwrap(),
             *instruction.len_limbs.last().unwrap(),
             *instruction.len_limbs.last().unwrap(),
         ];
-
-        // todo: recheck if this safety needs to be fixed
-        // SAFETY: this approach does not work when self.ptr_max_bits < 24
+        
         let limb_shift = AB::F::from_canonical_usize(
             1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.ptr_max_bits),
         );
         for pair in need_range_check.chunks_exact(2) {
             self.bitwise_lookup_bus
                 .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
-                .eval(builder, should_receive.clone());
+                .eval(builder, is_enabled);
         }
 
-        */
+        builder.assert_eq(instruction.buffer, instruction.buffer_limbs[0] + instruction.buffer_limbs[1] * AB::F::from_canonical_u32(1 << 8) + instruction.buffer_limbs[2] * AB::F::from_canonical_u32(1 << 16) + instruction.buffer_limbs[3] * AB::F::from_canonical_u32(1 << 24));
+
+        builder.assert_eq(instruction.input, instruction.input_limbs[0] + instruction.input_limbs[1] * AB::F::from_canonical_u32(1 << 8) + instruction.input_limbs[2] * AB::F::from_canonical_u32(1 << 16) + instruction.input_limbs[3] * AB::F::from_canonical_u32(1 << 24));
+
+        builder.assert_eq(instruction.len, instruction.len_limbs[0] + instruction.len_limbs[1] * AB::F::from_canonical_u32(1 << 8) + instruction.len_limbs[2] * AB::F::from_canonical_u32(1 << 16) + instruction.len_limbs[3] * AB::F::from_canonical_u32(1 << 24));
 
         timestamp
     }
 
-    // Increases timestamp by 2 * 34 = 68
+    // Increases timestamp by <= 2 * 34 = 68
     #[inline]
     pub fn constrain_input_read<AB: InteractionBuilder>(
         &self,

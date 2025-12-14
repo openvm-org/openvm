@@ -180,11 +180,11 @@ fn xorin_chip_positive_tests() {
 
 }
 
-
 fn run_xorin_chip_negative_tests(
     prank_sponge: Option<XorinSpongeCols<F>>,
     prank_instruction: Option<XorinInstructionCols<F>>,
-    prank_mem_oc: Option<XorinMemoryCols<F>>
+    prank_mem_oc: Option<XorinMemoryCols<F>>,
+    interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -229,11 +229,17 @@ fn run_xorin_chip_negative_tests(
     use openvm_stark_backend::utils::disable_debug_builder;
 
     disable_debug_builder();
+
     let tester = tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(VerificationError::ChallengePhaseError);
+
+    if interaction_error {            
+        tester.simple_test_with_expected_error(VerificationError::ChallengePhaseError);
+    } else {
+        tester.simple_test_with_expected_error(VerificationError::OodEvaluationMismatch);
+    }
 
 }
