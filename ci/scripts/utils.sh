@@ -4,7 +4,7 @@ add_metadata_and_flamegraphs() {
     local matrix="$3"
     local commit_url="$4"
     local benchmark_workflow_url="$5"
-    # vars: $FLAMEGRAPHS, $S3_PATH_BASE, $S3_PUBLIC_URL_BASE, $CURRENT_SHA
+    # vars: $FLAMEGRAPHS, $S3_PUBLIC_PATH_BASE, $S3_PUBLIC_URL_BASE, $CURRENT_SHA
 
     id=${metric_path%%-*} # first part before -
     echo "id: $id"
@@ -22,7 +22,7 @@ add_metadata_and_flamegraphs() {
     local svg_path="${metric_path%.json}.memory.svg"
     if [ -f "$svg_path" ]; then
       benchmark_name=$(basename "$metric_path" | cut -d'-' -f1)
-      s3_svg_path="${S3_PATH_BASE}/charts/${benchmark_name}-${CURRENT_SHA}/$(basename "$svg_path")"
+      s3_svg_path="${S3_PUBLIC_PATH_BASE}/charts/${benchmark_name}-${CURRENT_SHA}/$(basename "$svg_path")"
       s5cmd cp "$svg_path" "$s3_svg_path"
       svg_url="${S3_PUBLIC_URL_BASE}/charts/${benchmark_name}-${CURRENT_SHA}/$(basename "$svg_path")"
       # Replace local SVG reference with S3 URL in the markdown
@@ -52,7 +52,7 @@ add_metadata() {
     local memory_allocator="$4"
     local commit_url="$5"
     local benchmark_workflow_url="$6"
-    # vars: $FLAMEGRAPHS, $S3_PATH_BASE, $S3_PUBLIC_URL_BASE, $CURRENT_SHA
+    # vars: $FLAMEGRAPHS, $S3_PUBLIC_PATH_BASE, $S3_PUBLIC_URL_BASE, $CURRENT_SHA
 
     echo "" >> $result_path
     if [[ "$FLAMEGRAPHS" == 'true' ]]; then
@@ -60,7 +60,7 @@ add_metadata() {
         echo "<summary>Flamegraphs</summary>" >> $result_path
         echo "" >> $result_path
         benchmark_name=$(basename "$result_path" | cut -d'-' -f1)
-        flamegraph_files=$(s5cmd ls ${S3_PATH_BASE}/flamegraphs/${benchmark_name}-${CURRENT_SHA}/*.svg | awk '{print $4}' | xargs -n1 basename)
+        flamegraph_files=$(s5cmd ls ${S3_PUBLIC_PATH_BASE}/flamegraphs/${benchmark_name}-${CURRENT_SHA}/*.svg | awk '{print $4}' | xargs -n1 basename)
         for file in $flamegraph_files; do
             flamegraph_url=${S3_PUBLIC_URL_BASE}/flamegraphs/${benchmark_name}-${CURRENT_SHA}/${file}
             echo "[![]($flamegraph_url)]($flamegraph_url)" >> $result_path
