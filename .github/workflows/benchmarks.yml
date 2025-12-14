@@ -59,7 +59,8 @@ env:
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
   S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
   S3_MD_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/results
-  S3_FLAMEGRAPHS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
+  S3_PATH_BASE: s3://openvm-public-data-sandbox-us-east-1/benchmark/github
+  S3_PUBLIC_URL_BASE: https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github
   FEATURE_FLAGS: ""
 
 permissions:
