@@ -1,8 +1,8 @@
 #pragma once
 
-#include "primitives/constants.h"
 #include "system/memory/offline_checker.cuh"
 #include "variant.cuh"
+#include <cstdint>
 
 namespace sha2 {
 
@@ -57,9 +57,8 @@ template <typename V> struct Sha2BlockRecordMut {
         state_reads_aux = reinterpret_cast<MemoryReadAuxRecord *>(record_buf + offset);
         offset += V::STATE_READS * sizeof(MemoryReadAuxRecord);
 
-        offset = next_multiple_of(
-            offset, alignof(MemoryWriteBytesAuxRecord<sha2::SHA2_WRITE_SIZE>)
-        );
+        offset =
+            next_multiple_of(offset, alignof(MemoryWriteBytesAuxRecord<sha2::SHA2_WRITE_SIZE>));
         write_aux = reinterpret_cast<MemoryWriteBytesAuxRecord<sha2::SHA2_WRITE_SIZE> *>(
             record_buf + offset
         );

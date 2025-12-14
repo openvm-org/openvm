@@ -1,8 +1,8 @@
 #pragma once
 
-#include "primitives/constants.h"
+#include "block_hasher/variant.cuh"
 #include "system/memory/offline_checker.cuh"
-#include "variant.cuh"
+#include <cstdint>
 
 namespace sha2 {
 

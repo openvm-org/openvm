@@ -690,7 +690,6 @@ fn test_cuda_rand_sha2_multi_block<C: Sha2Config + 'static>() {
         .transfer_to_matrix_arena(&mut harness.main.matrix_arena);
 
     let mut tester = tester.build();
-    let block_arena = clone_dense_arena(&harness.main.dense_arena);
     tester = tester.load_gpu_harness(harness.main);
     tester = tester.load_and_compare(
         harness.block_air,

@@ -1,14 +1,10 @@
 #pragma once
 
 #include "columns.cuh"
-#include "record.cuh"
-#include "variant.cuh"
+#include "fp.h"
 #include "primitives/trace_access.h"
-#include "primitives/constants.h"
-#include "primitives/utils.cuh"
-#include "launcher.cuh"
-#include "primitives/histogram.cuh"
-#include "primitives/encoder.cuh"
+#include <cstddef>
+#include <cstdint>
 
 // NOTE: This is a stubbed tracegen implementation to get the CUDA pipeline compiling again.
 // It fills rows with zeros and basic flags/request_id; the full round/digest population
@@ -75,4 +71,3 @@ __global__ void sha2_block_tracegen_stub(
 }
 
 } // namespace sha2
-

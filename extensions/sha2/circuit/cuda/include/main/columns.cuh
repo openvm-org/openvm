@@ -1,9 +1,11 @@
 #pragma once
 
+#include "block_hasher/variant.cuh"
 #include "primitives/constants.h"
 #include "primitives/execution.h"
 #include "system/memory/offline_checker.cuh"
-#include "variant.cuh"
+#include <cstddef>
+#include <cstdint>
 
 using namespace riscv;
 
