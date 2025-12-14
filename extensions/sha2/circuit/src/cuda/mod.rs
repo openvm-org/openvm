@@ -74,38 +74,38 @@ where
         unsafe {
             match C::VARIANT {
                 Sha2Variant::Sha256 => {
-                cuda_abi::sha256::sha256_main_tracegen(
-                    trace.buffer(),
-                    trace_height,
-                    &d_records,
-                    num_records,
-                    &d_record_offsets,
-                    self.pointer_max_bits,
-                    &self.range_checker.count,
-                    &self.bitwise_lookup.count,
-                    8,
-                    self.timestamp_max_bits,
-                )
-                .unwrap();
+                    cuda_abi::sha256::sha256_main_tracegen(
+                        trace.buffer(),
+                        trace_height,
+                        &d_records,
+                        num_records,
+                        &d_record_offsets,
+                        self.pointer_max_bits,
+                        &self.range_checker.count,
+                        &self.bitwise_lookup.count,
+                        8,
+                        self.timestamp_max_bits,
+                    )
+                    .unwrap();
+                }
+                Sha2Variant::Sha512 => {
+                    cuda_abi::sha512::sha512_main_tracegen(
+                        trace.buffer(),
+                        trace_height,
+                        &d_records,
+                        num_records,
+                        &d_record_offsets,
+                        self.pointer_max_bits,
+                        &self.range_checker.count,
+                        &self.bitwise_lookup.count,
+                        8,
+                        self.timestamp_max_bits,
+                    )
+                    .unwrap();
+                }
+                Sha2Variant::Sha384 => unreachable!(),
             }
-            Sha2Variant::Sha512 => {
-                cuda_abi::sha512::sha512_main_tracegen(
-                    trace.buffer(),
-                    trace_height,
-                    &d_records,
-                    num_records,
-                    &d_record_offsets,
-                    self.pointer_max_bits,
-                    &self.range_checker.count,
-                    &self.bitwise_lookup.count,
-                    8,
-                    self.timestamp_max_bits,
-                )
-                .unwrap();
-            }
-            Sha2Variant::Sha384 => unreachable!(),
         }
-
         AirProvingContext::simple_no_pis(trace)
     }
 }

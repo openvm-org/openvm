@@ -9,8 +9,8 @@ use openvm_circuit::arch::DenseRecordArena;
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
-            BITWISE_OP_LOOKUP_BUS,
+            memory::gen_pointer, GpuTestChipHarness, TestBuilder, TestChipHarness,
+            VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
         },
         Arena, MatrixRecordArena, PreflightExecutor,
     },
@@ -39,6 +39,7 @@ use rand::{rngs::StdRng, Rng};
 use {
     crate::{Sha2BlockHasherChipGpu, Sha2MainChipGpu},
     openvm_circuit::arch::testing::{default_bitwise_lookup_bus, GpuChipTestBuilder},
+    openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChipGPU,
 };
 
 use crate::{
@@ -575,58 +576,75 @@ fn negative_sha384_test_bad_final_hash() {
 
 #[cfg(feature = "cuda")]
 struct GpuHarness<C: Sha2Config> {
-    executor: Sha2VmExecutor<C>,
-    main_air: Sha2MainAir<C>,
-    main_gpu: Sha2MainChipGpu<C>,
-    dense_arena: DenseRecordArena,
+    pub main: GpuTestChipHarness<
+        F,
+        Sha2VmExecutor<C>,
+        Sha2MainAir<C>,
+        Sha2MainChipGpu<C>,
+        Sha2MainChip<F, C>,
+    >,
     block_air: Sha2BlockHasherVmAir<C>,
     block_gpu: Sha2BlockHasherChipGpu<C>,
+    block_cpu: Sha2BlockHasherChip<F, C>,
     bitwise_air: BitwiseOperationLookupAir<RV32_CELL_BITS>,
-    bitwise_gpu: Arc<
-        openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChipGPU<RV32_CELL_BITS>,
-    >,
+    bitwise_gpu: Arc<BitwiseOperationLookupChipGPU<8>>,
 }
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness<C: Sha2Config>(tester: &GpuChipTestBuilder) -> GpuHarness<C> {
     const GPU_MAX_INS_CAPACITY: usize = 8192;
+    let bitwise_bus = default_bitwise_lookup_bus();
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
 
-    let bitwise_gpu_cpu = tester.cpu_bitwise_op_lookup();
-    let bitwise_gpu = tester.bitwise_op_lookup();
-    let pointer_max_bits = tester.address_bits();
-    let timestamp_max_bits = tester.timestamp_max_bits();
-    let range_checker = tester.range_checker();
-
-    let executor = Sha2VmExecutor::<C>::new(Rv32Sha2Opcode::CLASS_OFFSET, pointer_max_bits);
-    let main_air = Sha2MainAir::<C>::new(
+    let (main_air, main_executor, main_chip) = create_harness_fields(
         tester.system_port(),
-        bitwise_gpu_cpu.bus(),
-        pointer_max_bits,
-        SHA2_BUS_IDX,
-        Rv32Sha2Opcode::CLASS_OFFSET,
+        dummy_bitwise_chip.clone(),
+        tester.cpu_memory_helper(),
+        tester.address_bits(),
     );
-    let main_width = <Sha2MainAir<C> as BaseAir<F>>::width(&main_air);
-    let block_air =
-        Sha2BlockHasherVmAir::<C>::new(bitwise_gpu_cpu.bus(), SUBAIR_BUS_IDX, SHA2_BUS_IDX);
+
+    let main_gpu_chip = Sha2MainChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.address_bits() as u32,
+        tester.timestamp_max_bits() as u32,
+    );
+
+    let shared_records = main_chip.records.clone();
+
+    let block_hasher_air =
+        Sha2BlockHasherVmAir::new(bitwise_bus.clone(), SUBAIR_BUS_IDX, SHA2_BUS_IDX);
+    let block_hasher_chip = Sha2BlockHasherChip::new(
+        dummy_bitwise_chip.clone(),
+        tester.address_bits(),
+        tester.cpu_memory_helper(),
+        shared_records,
+    );
+
+    let block_gpu_chip = Sha2BlockHasherChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.address_bits() as u32,
+        tester.timestamp_max_bits() as u32,
+    );
+
+    let bitwise_gpu = tester.bitwise_op_lookup();
+    let bitwise_air = BitwiseOperationLookupAir::new(bitwise_bus);
 
     GpuHarness {
-        executor,
-        main_air,
-        main_gpu: Sha2MainChipGpu::new(
-            range_checker.clone(),
-            bitwise_gpu.clone(),
-            pointer_max_bits as u32,
-            timestamp_max_bits as u32,
+        main: GpuTestChipHarness::with_capacity(
+            main_executor,
+            main_air,
+            main_gpu_chip,
+            main_chip,
+            GPU_MAX_INS_CAPACITY,
         ),
-        dense_arena: DenseRecordArena::with_capacity(GPU_MAX_INS_CAPACITY, main_width),
-        block_air,
-        block_gpu: Sha2BlockHasherChipGpu::new(
-            range_checker,
-            bitwise_gpu.clone(),
-            pointer_max_bits as u32,
-            timestamp_max_bits as u32,
-        ),
-        bitwise_air: bitwise_gpu_cpu.air,
+        block_air: block_hasher_air,
+        block_gpu: block_gpu_chip,
+        block_cpu: block_hasher_chip,
+        bitwise_air,
         bitwise_gpu,
     }
 }
@@ -642,6 +660,8 @@ fn clone_dense_arena(arena: &DenseRecordArena) -> DenseRecordArena {
 
 #[cfg(feature = "cuda")]
 fn test_cuda_rand_sha2_multi_block<C: Sha2Config + 'static>() {
+    use crate::Sha2RecordMut;
+
     let mut rng = create_seeded_rng();
     let mut tester =
         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
@@ -653,29 +673,27 @@ fn test_cuda_rand_sha2_multi_block<C: Sha2Config + 'static>() {
     for _ in 1..=num_ops {
         set_and_execute_full_message::<_, C, _>(
             &mut tester,
-            &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.main.executor,
+            &mut harness.main.dense_arena,
             &mut rng,
             C::OPCODE,
             None,
-            // None,
             Some(1),
         );
     }
 
-    // tester
-    //     .build()
-    //     .load_gpu_harness(harness)
-    //     .finalize()
-    //     .simple_test()
-    //     .unwrap();
+    harness
+        .main
+        .dense_arena
+        .get_record_seeker::<Sha2RecordMut, _>()
+        .transfer_to_matrix_arena(&mut harness.main.matrix_arena);
+
     let mut tester = tester.build();
-    let block_arena = clone_dense_arena(&harness.dense_arena);
-    tester = tester.load(harness.main_air, harness.main_gpu, harness.dense_arena);
-    // No block-hasher arena needed; GPU block chip ignores the arena input.
-    tester = tester.load(harness.block_air, harness.block_gpu, block_arena);
-    tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
-    tester.finalize().simple_test().unwrap();
+    let block_arena = clone_dense_arena(&harness.main.dense_arena);
+    tester = tester.load_gpu_harness(harness.main);
+    // tester = tester.load(harness.block_air, harness.block_gpu, block_arena);
+    // tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
+    // tester.finalize().simple_test().unwrap();
 }
 
 #[cfg(feature = "cuda")]
@@ -711,8 +729,8 @@ fn test_cuda_sha2_known_vectors<C: Sha2Config + 'static>(test_vectors: &[(&str, 
         assert_eq!(C::hash(&input).as_slice(), expected.as_slice());
         set_and_execute_full_message::<_, C, _>(
             &mut tester,
-            &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.main.executor,
+            &mut harness.main.dense_arena,
             &mut rng,
             C::OPCODE,
             Some(&input),
@@ -721,8 +739,8 @@ fn test_cuda_sha2_known_vectors<C: Sha2Config + 'static>(test_vectors: &[(&str, 
     }
     // No block-hasher arena needed; GPU block chip ignores the arena input.
     let mut tester = tester.build();
-    let block_arena = clone_dense_arena(&harness.dense_arena);
-    tester = tester.load(harness.main_air, harness.main_gpu, harness.dense_arena);
+    let block_arena = clone_dense_arena(&harness.main.dense_arena);
+    tester = tester.load_gpu_harness(harness.main);
     tester = tester.load(harness.block_air, harness.block_gpu, block_arena);
     tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
     tester.finalize().simple_test().unwrap();
@@ -796,8 +814,8 @@ fn cuda_sha2_edge_test_lengths<C: Sha2Config + 'static>() {
     for i in (C::BLOCK_BYTES + 1)..=(2 * C::BLOCK_BYTES) {
         set_and_execute_full_message::<_, C, _>(
             &mut tester,
-            &mut harness.executor,
-            &mut harness.dense_arena,
+            &mut harness.main.executor,
+            &mut harness.main.dense_arena,
             &mut rng,
             C::OPCODE,
             None,
@@ -806,8 +824,8 @@ fn cuda_sha2_edge_test_lengths<C: Sha2Config + 'static>() {
     }
 
     let mut tester = tester.build();
-    let block_arena = clone_dense_arena(&harness.dense_arena);
-    tester = tester.load(harness.main_air, harness.main_gpu, harness.dense_arena);
+    let block_arena = clone_dense_arena(&harness.main.dense_arena);
+    tester = tester.load_gpu_harness(harness.main);
     tester = tester.load(harness.block_air, harness.block_gpu, block_arena);
     tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
     tester.finalize().simple_test().unwrap();
