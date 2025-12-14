@@ -1,7 +1,28 @@
-use core::mem::size_of;
-
 use openvm_circuit::system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols};
-use openvm_circuit_primitives::utils::assert_array_eq;
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
-use openvm_stark_backend::p3_air::AirBuilder;
+
+#[repr(C)]
+#[derive(Debug, AlignedBorrow)]
+pub struct KeccakfVmCols<T> {
+    pub instruction: KeccakfInstructionCols<T>,
+    pub mem_oc: KeccakfMemoryCols<T>,
+}
+
+#[repr(C)]
+#[derive(Debug, AlignedBorrow)]
+pub struct KeccakfInstructionCols<T> {
+    pub pc: T,
+    pub is_enabled: T, 
+    pub start_timestamp: T,
+    pub buffer_ptr: T,
+    pub buffer: T,
+    pub buffer_limbs: [T; 4],
+}
+
+#[repr(C)]
+#[derive(Debug, AlignedBorrow)]
+pub struct KeccakfMemoryCols<T> {
+    pub register_aux: [MemoryReadAuxCols<T>; 1],
+    pub buffer_bytes_read_aux_cols: [MemoryReadAuxCols<T>; 200/4],
+    pub buffer_bytes_write_aux_cols: [MemoryWriteAuxCols<T, 4>; 200/4],
+}
