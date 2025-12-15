@@ -7,6 +7,16 @@ pub struct KeccakfVmCols<T> {
     pub sponge: KeccakfSpongeCols<T>,
     pub instruction: KeccakfInstructionCols<T>,
     pub mem_oc: KeccakfMemoryCols<T>,
+    pub request_id: T,
+}
+
+use p3_keccak_air::KeccakCols as KeccakPermCols;
+
+#[repr(C)]
+#[derive(Debug, AlignedBorrow)]
+pub struct KeccakfWrapperCols<T> {
+    pub inner: KeccakPermCols<T>,
+    pub request_id: T,
 }
 
 #[repr(C)]

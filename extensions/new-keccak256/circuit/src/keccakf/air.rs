@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::{borrow::Borrow, iter::once};
 use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionState},
     system::memory::{
@@ -8,7 +8,6 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus,
-    utils::{not, select},
 };
 use openvm_instructions::riscv::RV32_MEMORY_AS;
 use openvm_stark_backend::{
@@ -21,6 +20,7 @@ use openvm_stark_backend::{
 use crate::keccakf::columns::{KeccakfVmCols, NUM_KECCAKF_VM_COLS};
 use openvm_new_keccak256_transpiler::KeccakfOpcode;
 use openvm_instructions::riscv::RV32_REGISTER_AS;
+use openvm_stark_backend::interaction::PermutationCheckBus;
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct KeccakfVmAir {
@@ -29,6 +29,11 @@ pub struct KeccakfVmAir {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub ptr_max_bits: usize,
     pub(super) offset: usize,
+    pub keccak_bus: PermutationCheckBus,
+}
+
+pub struct KeccakfWrapperAir {
+    pub keccak_bus: PermutationCheckBus
 }
 
 impl<F> BaseAirWithPublicValues<F> for KeccakfVmAir {}
@@ -55,6 +60,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfVmAir {
         self.constrain_input_read(builder, local, &mut timestamp, &mem_oc.buffer_bytes_read_aux_cols);
 
         // todo: call communicate with keccak bus here
+        self.communicate_with_keccakbus(builder, local);
 
         // increases timestamp by 50
         self.constrain_output_write(builder, local, &mut timestamp, &mem_oc.buffer_bytes_write_aux_cols);
@@ -134,9 +140,28 @@ impl KeccakfVmAir {
         &self,
         builder: &mut AB,
         local: &KeccakfVmCols<AB::Var>,
-        start_timestamp: &mut AB::Expr
     ) {
-        todo!()
+        let is_enabled = local.instruction.is_enabled;
+        self.keccak_bus.send(
+            builder,
+            local
+                .sponge
+                .preimage_buffer_bytes
+                .into_iter()
+                .map(Into::into)
+                .chain(once(local.request_id.into())),
+            is_enabled,
+        );
+        self.keccak_bus.receive(
+            builder, 
+            local
+                .sponge
+                .postimage_buffer_bytes
+                .into_iter()
+                .map(Into::into)
+                .chain(once(local.request_id.into())),
+            is_enabled
+        );
     }
 
     #[inline]
