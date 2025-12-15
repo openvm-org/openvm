@@ -178,6 +178,7 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
         let mut preimage_buffer_bytes_u64: [u64; 25] = [0; 25];
 
         let p3_trace: RowMajorMatrix<F> = generate_trace_rows(vec![preimage_buffer_bytes_u64], 0);
+        let mut timestamp = record.timestamp;
 
         slice
             .chunks_exact_mut(NUM_ROUNDS * NUM_KECCAKF_VM_COLS)
@@ -217,7 +218,6 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                         .request_range((pair[0] * limb_shift) as u32, (pair[1] * limb_shift) as u32);
                 }
                 
-                let mut timestamp = record.timestamp;
                 if row_idx == 0 {
                     mem_helper.fill(
                         record.register_aux_cols[0].prev_timestamp,

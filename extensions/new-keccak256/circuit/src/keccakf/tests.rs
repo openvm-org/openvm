@@ -1,19 +1,21 @@
 use openvm_circuit::{arch::{ExecutionBridge, PreflightExecutor, testing::{BITWISE_OP_LOOKUP_BUS, TestBuilder, TestChipHarness, VmChipTestBuilder}}, system::memory::{SharedMemoryHelper, offline_checker::MemoryBridge}, utils::get_random_message};
 use openvm_circuit_primitives::bitwise_op_lookup::{BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip, SharedBitwiseOperationLookupChip};
 use openvm_instructions::{LocalOpcode, instruction::Instruction};
-use openvm_new_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
+use openvm_new_keccak256_transpiler::KeccakfOpcode;
 use std::sync::Arc;
 
-use crate::xorin::{XorinVmChip, XorinVmExecutor, XorinVmFiller, air::XorinVmAir, columns::{XorinInstructionCols, XorinMemoryCols, XorinSpongeCols}};
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use openvm_circuit::arch::Arena;
 use rand::{Rng, rngs::StdRng};
 use openvm_stark_backend::{p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix};
+use crate::keccakf::air::KeccakfVmAir;
+use super::KeccakfVmFiller;
 
 type F = BabyBear;
-type Harness = TestChipHarness<F, XorinVmExecutor, XorinVmAir, XorinVmChip<F>>;
-use openvm_stark_backend::verifier::VerificationError;
+type Harness = TestChipHarness<F, KeccakfVmExecutor, KeccakfVmAir, KeccakfVmChip<F>>;
+
+use crate::keccakf::{KeccakfVmChip, KeccakfVmExecutor};
 
 fn create_harness_fields(
     execution_bridge: ExecutionBridge,
@@ -21,18 +23,18 @@ fn create_harness_fields(
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
-) -> (XorinVmAir, XorinVmExecutor, XorinVmChip<F>) {
-    let air = XorinVmAir::new(
+) -> (KeccakfVmAir, KeccakfVmExecutor, KeccakfVmChip<F>) {
+    let air = KeccakfVmAir::new(
         execution_bridge, 
         memory_bridge, 
         bitwise_chip.bus(), 
         address_bits,
-        XorinOpcode::CLASS_OFFSET
+        KeccakfOpcode::CLASS_OFFSET
     );
 
-    let executor = XorinVmExecutor::new(XorinOpcode::CLASS_OFFSET, address_bits);
-    let chip = XorinVmChip::new(
-        XorinVmFiller::new(bitwise_chip, address_bits),
+    let executor = KeccakfVmExecutor::new(KeccakfOpcode::CLASS_OFFSET, address_bits);
+    let chip = KeccakfVmChip::new(
+        KeccakfVmFiller::new(bitwise_chip, address_bits),
         memory_helper
     );
     (air, executor, chip)
