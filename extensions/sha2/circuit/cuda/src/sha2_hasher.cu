@@ -176,9 +176,11 @@ __global__ void sha2_first_pass_tracegen(
             flags.is_first_4_rows,
             (row_in_block < static_cast<uint32_t>(V::MESSAGE_ROWS)) ? Fp::one() : Fp::zero()
         );
+        SHA2INNER_WRITE_ROUND(V, inner_row, flags.is_digest_row, Fp::zero());
         RowSlice row_idx_flags =
             inner_row.slice_from(SHA2_COL_INDEX(V, Sha2RoundCols, flags.row_idx));
         row_idx_encoder.write_flag_pt(row_idx_flags, row_in_block);
+        // The air expects global_block_idx to be 1-indexed
         SHA2INNER_WRITE_ROUND(V, inner_row, flags.global_block_idx, Fp(global_block_idx + 1));
         SHA2INNER_WRITE_ROUND(V, inner_row, flags.local_block_idx, Fp(0));
 
@@ -422,6 +424,46 @@ __global__ void sha2_first_pass_tracegen(
                         V, inner_row, schedule_helper.w_3[j][limb], Fp(w_3[row_in_block][j][limb])
                     );
                 }
+            }
+        }
+    }
+
+    // Fill intermed_12 for the early message rows (rows 0..MESSAGE_ROWS-2) using the next row's
+    // carries, matching CPU generate_intermed_12 for those special cases.
+    for (uint32_t r = 0; r + 1 < V::MESSAGE_ROWS && r + 1 < V::ROUND_ROWS; r++) {
+        uint32_t cur_row = trace_start_row + r;
+        uint32_t next_row = trace_start_row + r + 1;
+        if (next_row >= trace_height) {
+            return;
+        }
+        RowSlice cur_inner = RowSlice(trace + cur_row, trace_height).slice_from(Sha2Layout<V>::INNER_COLUMN_OFFSET);
+        uint32_t base_t = r * V::ROUNDS_PER_ROW;
+        for (uint32_t i = 0; i < V::ROUNDS_PER_ROW; i++) {
+            typename V::Word sig_w2 = sha2::small_sig1<V>(w_schedule[base_t + i + 2]);
+            typename V::Word w7;
+            if (i < 3 && r > 0) {
+                typename V::Word acc = 0;
+                for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
+                    acc |= static_cast<typename V::Word>(w_3[r][i][limb]) << (16 * limb);
+                }
+                w7 = acc;
+            } else if (i >= 3) {
+                w7 = w_schedule[base_t + i - 3];
+            } else {
+                w7 = 0;
+            }
+            typename V::Word w_cur = w_schedule[base_t + i + 4];
+            uint32_t t_next = base_t + V::ROUNDS_PER_ROW + i;
+            for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
+                uint32_t carry = carry_w[t_next][limb];
+                uint32_t prev_carry = (limb > 0) ? carry_w[t_next][limb - 1] : 0;
+                int64_t sum = static_cast<int64_t>(word_to_u16_limb<V>(sig_w2, limb)) +
+                              static_cast<int64_t>(word_to_u16_limb<V>(w7, limb)) -
+                              static_cast<int64_t>(carry << 16) -
+                              static_cast<int64_t>(word_to_u16_limb<V>(w_cur, limb)) +
+                              static_cast<int64_t>(prev_carry);
+                uint32_t intermed = static_cast<uint32_t>(-sum);
+                SHA2INNER_WRITE_ROUND(V, cur_inner, schedule_helper.intermed_12[i][limb], Fp(intermed));
             }
         }
     }
