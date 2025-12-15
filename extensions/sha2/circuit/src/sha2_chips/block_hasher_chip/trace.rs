@@ -43,7 +43,7 @@ where
         let mut cols_first_row = super::Sha2BlockHasherRoundColsRefMut::<Val<SC>>::from::<C>(
             &mut trace_matrix.values[..C::BLOCK_HASHER_WIDTH],
         );
-        cols_first_row.inner.schedule_helper.intermed_12.row_mut(3)[1] = Val::<SC>::ONE;
+        // cols_first_row.inner.schedule_helper.intermed_12.row_mut(3)[1] = Val::<SC>::ONE;
 
         AirProvingContext::simple(Arc::new(trace_matrix), vec![])
     }

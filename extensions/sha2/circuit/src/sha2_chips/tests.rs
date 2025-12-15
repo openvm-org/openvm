@@ -679,7 +679,7 @@ fn test_cuda_rand_sha2_multi_block<C: Sha2Config + 'static>() {
             &mut rng,
             C::OPCODE,
             None,
-            Some(1),
+            Some(1000),
         );
     }
 
