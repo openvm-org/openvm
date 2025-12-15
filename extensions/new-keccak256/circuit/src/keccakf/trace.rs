@@ -10,6 +10,7 @@ use openvm_stark_backend::{p3_field::PrimeField32, prover::metrics::TraceCells};
 use openvm_circuit::system::memory::offline_checker::MemoryReadAuxRecord;
 use openvm_circuit::system::memory::offline_checker::MemoryWriteBytesAuxRecord;
 use openvm_instructions::riscv::{RV32_REGISTER_AS, RV32_MEMORY_AS};
+use p3_keccak_air::generate_trace_rows;
 
 use crate::{keccakf::KeccakfVmExecutor};
 use openvm_new_keccak256_transpiler::KeccakfOpcode;
@@ -18,6 +19,7 @@ use openvm_circuit::system::memory::MemoryAuxColsFactory;
 use crate::keccakf::columns::KeccakfVmCols;
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 use openvm_instructions::riscv::RV32_CELL_BITS;
+use crate::keccakf::columns::NUM_KECCAK_PERM_COLS;
 
 use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix}
@@ -107,7 +109,6 @@ where
         }
 
         let preimage_buffer_bytes = record.inner.preimage_buffer_bytes;
-        // todo: check if this conversion needs to be constrained
         let mut preimage_buffer_bytes_u64: [u64; 25] = [0; 25];
 
         // todo: define constants instead of number directly
@@ -121,7 +122,6 @@ where
 
         // result is placed in preimage_buffer_bytes_u64
         // convert back to blocks of u8's 
-        // todo: think if this conversion needs to be constrained
         let mut result_u8 : [u8; 200] = [0; 200];
         for idx in 0..(200/8) {
             let chunk: [u8; 8] = preimage_buffer_bytes_u64[idx].to_be_bytes();
@@ -163,7 +163,30 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
 
         let record = record.inner.clone();
         row_slice.fill(F::ZERO);
+        // todo: trace gen for KeccakPermCols 
+        let preimage_buffer_bytes = record.preimage_buffer_bytes;
+        let mut preimage_buffer_bytes_u64: [u64; 25] = [0; 25];
+
+        let p3_trace: RowMajorMatrix<F> = generate_trace_rows(vec![preimage_buffer_bytes_u64], 0);
+        row_slice[..NUM_KECCAK_PERM_COLS].copy_from_slice(
+            &p3_trace.values[..NUM_KECCAK_PERM_COLS]
+        );
+
         let trace_row: &mut KeccakfVmCols<F> = row_slice.borrow_mut();
+
+        // todo: define constants instead of number directly
+        for idx in 0..(200/8) {
+            preimage_buffer_bytes_u64[idx] = u64::from_le_bytes(
+                preimage_buffer_bytes[8 * idx..8 * idx + 8].try_into().unwrap()
+            );
+        }
+        for idx in 0..100 {
+            trace_row.preimage_state_hi[idx] = F::from_canonical_u8(preimage_buffer_bytes[2 * idx + 1]);
+        }
+        tiny_keccak::keccakf(&mut preimage_buffer_bytes_u64);
+        for idx in 0..100 {
+            trace_row.postimage_state_hi[idx] = F::from_canonical_u8(preimage_buffer_bytes[2 * idx + 1]);
+        }
 
         trace_row.instruction.pc = F::from_canonical_u32(record.pc);
         trace_row.instruction.is_enabled = F::ONE;
@@ -189,8 +212,6 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
 
             timestamp += 1;
         }
-
-        // todo: communicate with the KeccakfPermWrapperAir with some interactions 
 
         for t in 0..50 {
             mem_helper.fill(

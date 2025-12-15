@@ -7,8 +7,8 @@ use p3_keccak_air::KeccakCols as KeccakPermCols;
 pub struct KeccakfVmCols<T> {
     pub inner: KeccakPermCols<T>,
     // postimage_buffer_bytes is needed as a separate column because 
-    pub preimage_state_hi: [T; 200],
-    pub postimage_state_hi: [T; 200],
+    pub preimage_state_hi: [T; 100],
+    pub postimage_state_hi: [T; 100],
     pub instruction: KeccakfInstructionCols<T>,
     pub mem_oc: KeccakfMemoryCols<T>,
 }
@@ -33,3 +33,4 @@ pub struct KeccakfMemoryCols<T> {
 }
 
 pub const NUM_KECCAKF_VM_COLS: usize = size_of::<KeccakfVmCols<u8>>();
+pub const NUM_KECCAK_PERM_COLS: usize = size_of::<KeccakPermCols<u8>>();
