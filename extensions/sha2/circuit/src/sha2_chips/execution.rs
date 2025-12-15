@@ -2,6 +2,8 @@ use std::borrow::{Borrow, BorrowMut};
 
 #[cfg(not(feature = "tco"))]
 use openvm_circuit::arch::{ExecutionCtxTrait, MeteredExecutionCtxTrait};
+#[cfg(feature = "aot")]
+use openvm_circuit::arch::{AotExecutor, AotMeteredExecutor};
 use openvm_circuit::{
     arch::{
         E2PreCompute, ExecuteFunc, InterpreterExecutor, InterpreterMeteredExecutor,
