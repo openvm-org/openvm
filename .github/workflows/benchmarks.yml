@@ -59,7 +59,8 @@ env:
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
   S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
   S3_MD_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/results
-  S3_FLAMEGRAPHS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
+  S3_PUBLIC_PATH_BASE: s3://openvm-public-data-sandbox-us-east-1/benchmark/github
+  S3_PUBLIC_URL_BASE: https://openvm-public-data-sandbox-us-east-1.s3.us-east-1.amazonaws.com/benchmark/github
   FEATURE_FLAGS: ""
 
 permissions:
@@ -277,6 +278,11 @@ jobs:
             FLAMEGRAPHS=${{ github.event.inputs.flamegraphs || 'false' }}
             # Convert .json to .md
             md_path="${metric_path%.json}.md"
+            detailed_md_path="${md_path%.md}.detailed.md"
+            
+            echo -e "\n<details>\n<summary>Detailed Metrics</summary>\n" >> $md_path
+            cat $detailed_md_path >> $md_path
+            echo -e "</details>\n\n" >> $md_path
 
             add_metadata_and_flamegraphs \
               $metric_path \

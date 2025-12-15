@@ -116,7 +116,7 @@ on:
 
 env:
   S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
-  S3_FLAMEGRAPHS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
+  S3_PUBLIC_PATH_BASE: s3://openvm-public-data-sandbox-us-east-1/benchmark/github
   FEATURE_FLAGS: "metrics,parallel,tco"
   INPUT_ARGS: ""
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
@@ -262,7 +262,7 @@ jobs:
               echo "No guest symbols found, generating flamegraphs without symbols"
               python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH
             fi
-            s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.S3_FLAMEGRAPHS_PATH }}/${METRIC_NAME}-${current_sha}/"
+            s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.S3_PUBLIC_PATH_BASE }}/flamegraphs/${current_sha}/"
             echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
           fi
 
