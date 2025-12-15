@@ -65,13 +65,6 @@ jobs:
         run: |
           cargo nextest run ${{ env.NEXTEST_ARGS }}
 
-        # No gpu tests in these crates
-      - name: Run tests for sha2-air
-        if: ${{ !contains(matrix.platform.runner, 'gpu') }}
-        working-directory: crates/circuits/sha2-air
-        run: |
-          cargo nextest run ${{ env.NEXTEST_ARGS }}
-
       - name: Run tests for mod-builder
         if: ${{ !contains(matrix.platform.runner, 'gpu') }}
         working-directory: crates/circuits/mod-builder
