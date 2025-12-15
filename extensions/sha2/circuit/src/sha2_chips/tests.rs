@@ -5,12 +5,12 @@ use std::sync::{Arc, Mutex};
 use hex::FromHex;
 use itertools::Itertools;
 #[cfg(feature = "cuda")]
-use openvm_circuit::arch::DenseRecordArena;
+use openvm_circuit::arch::{testing::GpuTestChipHarness, DenseRecordArena};
 use openvm_circuit::{
     arch::{
         testing::{
-            memory::gen_pointer, GpuTestChipHarness, TestBuilder, TestChipHarness,
-            VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+            BITWISE_OP_LOOKUP_BUS,
         },
         Arena, MatrixRecordArena, PreflightExecutor,
     },
