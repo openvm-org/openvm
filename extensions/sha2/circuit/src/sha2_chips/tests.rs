@@ -37,7 +37,7 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::{Sha2BlockHasherChipGpu, Sha2MainChipGpu},
+    crate::{Sha2BlockHasherChipGpu, Sha2MainChipGpu, Sha2RecordMut},
     openvm_circuit::arch::testing::{default_bitwise_lookup_bus, GpuChipTestBuilder},
     openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChipGPU,
 };
@@ -661,8 +661,6 @@ fn clone_dense_arena(arena: &DenseRecordArena) -> DenseRecordArena {
 
 #[cfg(feature = "cuda")]
 fn test_cuda_rand_sha2_multi_block<C: Sha2Config + 'static>() {
-    use crate::Sha2RecordMut;
-
     let mut rng = create_seeded_rng();
     let mut tester =
         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
@@ -743,10 +741,21 @@ fn test_cuda_sha2_known_vectors<C: Sha2Config + 'static>(test_vectors: &[(&str, 
         );
     }
     // No block-hasher arena needed; GPU block chip ignores the arena input.
+    harness
+        .main
+        .dense_arena
+        .get_record_seeker::<Sha2RecordMut, _>()
+        .transfer_to_matrix_arena(&mut harness.main.matrix_arena);
+
     let mut tester = tester.build();
-    let block_arena = clone_dense_arena(&harness.main.dense_arena);
     tester = tester.load_gpu_harness(harness.main);
-    tester = tester.load(harness.block_air, harness.block_gpu, block_arena);
+    tester = tester.load_and_compare(
+        harness.block_air,
+        harness.block_gpu,
+        (),
+        harness.block_cpu,
+        (),
+    );
     tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
     tester.finalize().simple_test().unwrap();
 }
@@ -828,10 +837,21 @@ fn cuda_sha2_edge_test_lengths<C: Sha2Config + 'static>() {
         );
     }
 
+    harness
+        .main
+        .dense_arena
+        .get_record_seeker::<Sha2RecordMut, _>()
+        .transfer_to_matrix_arena(&mut harness.main.matrix_arena);
+
     let mut tester = tester.build();
-    let block_arena = clone_dense_arena(&harness.main.dense_arena);
     tester = tester.load_gpu_harness(harness.main);
-    tester = tester.load(harness.block_air, harness.block_gpu, block_arena);
+    tester = tester.load_and_compare(
+        harness.block_air,
+        harness.block_gpu,
+        (),
+        harness.block_cpu,
+        (),
+    );
     tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
     tester.finalize().simple_test().unwrap();
 }
