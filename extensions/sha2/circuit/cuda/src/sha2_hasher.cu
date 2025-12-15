@@ -457,8 +457,8 @@ template <typename V> struct Sha2TraceHelper {
         for (uint32_t i = 0; i < V::ROUNDS_PER_ROW; i++) {
             uint32_t a_idx = V::ROUNDS_PER_ROW - i - 1;
             uint32_t e_idx = V::ROUNDS_PER_ROW - i + 3;
-            SHA2INNER_WRITE_ROUND(V, inner_row, work_vars.a[i], first_block_prev_hash[a_idx]);
-            SHA2INNER_WRITE_ROUND(V, inner_row, work_vars.e[i], first_block_prev_hash[e_idx]);
+            SHA2INNER_WRITE_BITS_ROUND(V, inner_row, work_vars.a[i], first_block_prev_hash[a_idx]);
+            SHA2INNER_WRITE_BITS_ROUND(V, inner_row, work_vars.e[i], first_block_prev_hash[e_idx]);
         }
 
         if (carry_a && carry_e) {
@@ -486,7 +486,7 @@ template <typename V> struct Sha2TraceHelper {
         size_t trace_height,
         uint32_t block_idx
     ) const {
-        trace += 1;
+        trace += 1; // skip the first row of the trace
         uint32_t block_row_base = block_idx * V::ROWS_PER_BLOCK;
         uint32_t last_round_row = block_row_base + (V::ROUND_ROWS - 2);
         uint32_t digest_row = block_row_base + (V::ROUND_ROWS - 1);
@@ -844,15 +844,7 @@ __global__ void sha2_first_pass_tracegen(
 
 template <typename V>
 __global__ void sha2_fill_first_dummy_row(Fp *trace, size_t trace_height, size_t rows_used) {
-    uint32_t thread_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    uint32_t row_idx = rows_used + thread_idx;
-    if (row_idx >= trace_height) {
-        return;
-    }
-
-    if (row_idx != rows_used) {
-        return;
-    }
+    uint32_t row_idx = rows_used;
 
     uint32_t digest_row = V::ROUND_ROWS;
     if (digest_row >= trace_height) {
@@ -903,7 +895,7 @@ __global__ void sha2_fill_invalid_rows(Fp *d_trace, size_t trace_height, size_t 
         return;
     }
 
-    RowSlice src(d_trace + rows_used - 1, trace_height);
+    RowSlice src(d_trace + rows_used, trace_height);
     RowSlice dst(d_trace + row_idx, trace_height);
     for (size_t c = 0; c < Sha2Layout<V>::WIDTH; c++) {
         dst[c] = src[c];
@@ -967,13 +959,6 @@ int launch_sha2_first_pass_tracegen(
 }
 
 template <typename V>
-int launch_sha2_fill_first_dummy_row(Fp *d_trace, size_t trace_height, size_t rows_used) {
-    auto [grid_size, block_size] = kernel_launch_params(trace_height - rows_used, 256);
-    sha2_fill_first_dummy_row<V><<<grid_size, block_size>>>(d_trace, trace_height, rows_used);
-    return CHECK_KERNEL();
-}
-
-template <typename V>
 int launch_sha2_second_pass_dependencies(Fp *d_trace, size_t trace_height, size_t rows_used) {
     size_t total_blocks = rows_used / V::ROWS_PER_BLOCK;
     auto [grid_size, block_size] = kernel_launch_params(total_blocks, 256);
@@ -984,6 +969,11 @@ int launch_sha2_second_pass_dependencies(Fp *d_trace, size_t trace_height, size_
 
 template <typename V>
 int launch_sha2_fill_invalid_rows(Fp *d_trace, size_t trace_height, size_t rows_used) {
+    sha2_fill_first_dummy_row<V><<<1, 1>>>(d_trace, trace_height, rows_used);
+    if (CHECK_KERNEL() != 0) {
+        return -1;
+    }
+
     auto [grid_size, block_size] = kernel_launch_params(trace_height - rows_used, 256);
     sha2_fill_invalid_rows<V><<<grid_size, block_size>>>(d_trace, trace_height, rows_used);
     return CHECK_KERNEL();
@@ -1081,13 +1071,6 @@ int launch_sha512_first_pass_tracegen(
         bitwise_num_bits,
         timestamp_max_bits
     );
-}
-
-int launch_sha256_fill_first_dummy_row(Fp *d_trace, size_t trace_height, size_t rows_used) {
-    return launch_sha2_fill_first_dummy_row<Sha256Variant>(d_trace, trace_height, rows_used);
-}
-int launch_sha512_fill_first_dummy_row(Fp *d_trace, size_t trace_height, size_t rows_used) {
-    return launch_sha2_fill_first_dummy_row<Sha512Variant>(d_trace, trace_height, rows_used);
 }
 
 int launch_sha256_second_pass_dependencies(Fp *d_trace, size_t trace_height, size_t rows_used) {

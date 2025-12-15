@@ -160,10 +160,8 @@ where
             return get_empty_air_proving_ctx::<GpuBackend>();
         }
 
-        let rows_used_blocks = num_records * C::ROWS_PER_BLOCK;
-        // Ensure there is always at least one dummy row in the trace
-        let rows_used_total = rows_used_blocks + 1;
-        let trace_height = next_power_of_two_or_zero(rows_used_total);
+        let rows_used = num_records * C::ROWS_PER_BLOCK;
+        let trace_height = next_power_of_two_or_zero(rows_used);
         let trace = DeviceMatrix::<F>::with_capacity(trace_height, C::BLOCK_HASHER_WIDTH);
 
         trace.buffer().fill_zero();
@@ -205,13 +203,13 @@ where
                     cuda_abi::sha256::sha256_second_pass_dependencies(
                         trace.buffer(),
                         trace_height,
-                        rows_used_blocks,
+                        rows_used,
                     )
                     .unwrap();
                     cuda_abi::sha256::sha256_fill_invalid_rows(
                         trace.buffer(),
                         trace_height,
-                        rows_used_total,
+                        rows_used,
                     )
                     .unwrap();
                 }
@@ -246,13 +244,13 @@ where
                     cuda_abi::sha512::sha512_second_pass_dependencies(
                         trace.buffer(),
                         trace_height,
-                        rows_used_blocks,
+                        rows_used,
                     )
                     .unwrap();
                     cuda_abi::sha512::sha512_fill_invalid_rows(
                         trace.buffer(),
                         trace_height,
-                        rows_used_total,
+                        rows_used,
                     )
                     .unwrap();
                 }

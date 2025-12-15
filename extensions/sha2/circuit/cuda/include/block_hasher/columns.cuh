@@ -105,3 +105,7 @@ template <typename V> struct Sha2Layout {
     SHA2_WRITE_ARRAY(V, row, Sha2DigestCols, FIELD, VALUES)
 #define SHA2INNER_FILL_ZERO_ROUND(V, row, FIELD) SHA2_FILL_ZERO(V, row, Sha2RoundCols, FIELD)
 #define SHA2INNER_FILL_ZERO_DIGEST(V, row, FIELD) SHA2_FILL_ZERO(V, row, Sha2DigestCols, FIELD)
+#define SHA2INNER_WRITE_BITS_ROUND(V, row, FIELD, VALUE)                                           \
+    SHA2_WRITE_BITS(V, row, Sha2RoundCols, FIELD, VALUE)
+#define SHA2INNER_WRITE_BITS_DIGEST(V, row, FIELD, VALUE)                                          \
+    SHA2_WRITE_BITS(V, row, Sha2DigestCols, FIELD, VALUE)
