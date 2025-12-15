@@ -114,7 +114,8 @@ where
                     let trace = engine
                         .device()
                         .transport_matrix_from_device_to_host(&com.trace);
-                    let (commitment, data) = cpu_engine.device().commit(&[trace.clone()]);
+                    let (commitment, data) =
+                        cpu_engine.device().commit(std::slice::from_ref(&trace));
                     cpu_engine
                         .device()
                         .transport_committed_trace_to_device(commitment, &trace, &data.data)

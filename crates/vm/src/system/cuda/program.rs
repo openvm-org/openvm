@@ -77,7 +77,7 @@ impl ProgramChipGPU {
         trace: DeviceMatrix<F>,
         device: &GpuDevice,
     ) -> CommittedTraceData<GpuBackend> {
-        let (root, pcs_data) = device.commit(&[trace.clone()]);
+        let (root, pcs_data) = device.commit(std::slice::from_ref(&trace));
         CommittedTraceData {
             commitment: root,
             trace,

@@ -8,7 +8,7 @@ pub fn main() {
     let mut count: u32 = 0;
 
     while count < 1000 && x != 1 {
-        if x % 2 == 0 {
+        if x.is_multiple_of(2) {
             x /= 2;
         } else {
             x = 3 * x + 1;

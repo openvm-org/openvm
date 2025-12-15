@@ -263,8 +263,14 @@ impl Default for GpuChipTestBuilder {
 
 impl GpuChipTestBuilder {
     pub fn new() -> Self {
-        // TODO: allow for custom test builder configuration
         Self::default()
+    }
+
+    pub fn new_persistent() -> Self {
+        let mut mem_config = MemoryConfig::default();
+        // Currently tests still use gen_pointer for the full 1<<29 range of address space 1.
+        mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
+        Self::persistent(mem_config, default_var_range_checker_bus())
     }
 
     pub fn volatile(mem_config: MemoryConfig, bus: VariableRangeCheckerBus) -> Self {
