@@ -21,6 +21,7 @@ use crate::keccakf::columns::{KeccakfVmCols, NUM_KECCAKF_VM_COLS};
 use openvm_new_keccak256_transpiler::KeccakfOpcode;
 use openvm_instructions::riscv::RV32_REGISTER_AS;
 use openvm_stark_backend::interaction::PermutationCheckBus;
+use p3_keccak_air::KeccakAir;
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct KeccakfVmAir {
@@ -30,10 +31,6 @@ pub struct KeccakfVmAir {
     pub ptr_max_bits: usize,
     pub(super) offset: usize,
     pub keccak_bus: PermutationCheckBus,
-}
-
-pub struct KeccakfWrapperAir {
-    pub keccak_bus: PermutationCheckBus
 }
 
 impl<F> BaseAirWithPublicValues<F> for KeccakfVmAir {}
@@ -59,7 +56,6 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfVmAir {
         // increases timestamp by 50
         self.constrain_input_read(builder, local, &mut timestamp, &mem_oc.buffer_bytes_read_aux_cols);
 
-        // todo: call communicate with keccak bus here
         self.communicate_with_keccakbus(builder, local);
 
         // increases timestamp by 50
@@ -189,3 +185,5 @@ impl KeccakfVmAir {
     }
 
 }
+
+

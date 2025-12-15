@@ -10,15 +10,6 @@ pub struct KeccakfVmCols<T> {
     pub request_id: T,
 }
 
-use p3_keccak_air::KeccakCols as KeccakPermCols;
-
-#[repr(C)]
-#[derive(Debug, AlignedBorrow)]
-pub struct KeccakfWrapperCols<T> {
-    pub inner: KeccakPermCols<T>,
-    pub request_id: T,
-}
-
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, AlignedBorrow, derive_new::new)]
 pub struct KeccakfInstructionCols<T> {
