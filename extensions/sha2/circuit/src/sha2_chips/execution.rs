@@ -1,6 +1,17 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
+#[cfg(not(feature = "tco"))]
+use openvm_circuit::arch::{ExecutionCtxTrait, MeteredExecutionCtxTrait};
+#[cfg(feature = "aot")]
+use openvm_circuit::arch::{AotExecutor, AotMeteredExecutor};
+use openvm_circuit::{
+    arch::{
+        E2PreCompute, ExecuteFunc, InterpreterExecutor, InterpreterMeteredExecutor,
+        StaticProgramError, VmExecState,
+    },
+    system::memory::online::GuestMemory,
+};
+use openvm_circuit_derive::create_handler;
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
