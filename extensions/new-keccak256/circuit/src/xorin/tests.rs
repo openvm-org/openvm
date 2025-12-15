@@ -119,12 +119,11 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>> (
             .try_into()
             .expect("slice has length 4");
         tester.write(2, input_ptr + 4 * i, input_chunk);
-
-        tester.write(1, rd, buffer_ptr.to_le_bytes().map(F::from_canonical_u8));
-        tester.write(1, rs1, input_ptr.to_le_bytes().map(F::from_canonical_u8));
-        tester.write(1, rs2, buffer_length.to_le_bytes().map(F::from_canonical_u8));
     }
     
+    tester.write(1, rd, buffer_ptr.to_le_bytes().map(F::from_canonical_u8));
+    tester.write(1, rs1, input_ptr.to_le_bytes().map(F::from_canonical_u8));
+    tester.write(1, rs2, buffer_length.to_le_bytes().map(F::from_canonical_u8));
     tester.execute(
         executor,
         arena,
