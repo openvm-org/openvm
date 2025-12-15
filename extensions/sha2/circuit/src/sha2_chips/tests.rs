@@ -669,8 +669,7 @@ fn test_cuda_rand_sha2_multi_block<C: Sha2Config + 'static>() {
 
     let mut harness = create_cuda_harness::<C>(&tester);
 
-    // let num_ops = 70;
-    let num_ops = 1;
+    let num_ops = 70;
     for _ in 1..=num_ops {
         set_and_execute_full_message::<_, C, _>(
             &mut tester,
@@ -679,7 +678,7 @@ fn test_cuda_rand_sha2_multi_block<C: Sha2Config + 'static>() {
             &mut rng,
             C::OPCODE,
             None,
-            Some(1000),
+            None,
         );
     }
 

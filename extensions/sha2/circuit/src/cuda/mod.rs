@@ -101,7 +101,7 @@ where
                     )
                     .unwrap();
                 }
-                Sha2Variant::Sha512 => {
+                Sha2Variant::Sha512 | Sha2Variant::Sha384 => {
                     cuda_abi::sha512::sha512_main_tracegen(
                         trace.buffer(),
                         trace_height,
@@ -116,7 +116,6 @@ where
                     )
                     .unwrap();
                 }
-                Sha2Variant::Sha384 => unreachable!(),
             }
         }
 
@@ -214,7 +213,7 @@ where
                     )
                     .unwrap();
                 }
-                Sha2Variant::Sha512 => {
+                Sha2Variant::Sha512 | Sha2Variant::Sha384 => {
                     let d_prev_hashes =
                         DeviceBuffer::<u64>::with_capacity(num_blocks as usize * C::HASH_WORDS);
                     cuda_abi::sha512::sha512_hash_computation(
@@ -256,7 +255,6 @@ where
                     )
                     .unwrap();
                 }
-                Sha2Variant::Sha384 => unreachable!(),
             }
         }
 
