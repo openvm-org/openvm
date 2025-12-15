@@ -55,6 +55,7 @@ pub mod sha256 {
             d_trace: *mut F,
             trace_height: usize,
             rows_used: usize,
+            d_prev_hashes: *const u32,
         ) -> i32;
     }
 
@@ -151,8 +152,14 @@ pub mod sha256 {
         d_trace: &DeviceBuffer<F>,
         height: usize,
         rows_used: usize,
+        d_prev_hashes: &DeviceBuffer<u32>,
     ) -> Result<(), CudaError> {
-        let result = launch_sha256_fill_invalid_rows(d_trace.as_mut_ptr(), height, rows_used);
+        let result = launch_sha256_fill_invalid_rows(
+            d_trace.as_mut_ptr(),
+            height,
+            rows_used,
+            d_prev_hashes.as_ptr(),
+        );
         CudaError::from_result(result)
     }
 }
@@ -209,6 +216,7 @@ pub mod sha512 {
             d_trace: *mut F,
             trace_height: usize,
             rows_used: usize,
+            d_prev_hashes: *const u64,
         ) -> i32;
     }
 
@@ -305,8 +313,14 @@ pub mod sha512 {
         d_trace: &DeviceBuffer<F>,
         height: usize,
         rows_used: usize,
+        d_prev_hashes: &DeviceBuffer<u64>,
     ) -> Result<(), CudaError> {
-        let result = launch_sha512_fill_invalid_rows(d_trace.as_mut_ptr(), height, rows_used);
+        let result = launch_sha512_fill_invalid_rows(
+            d_trace.as_mut_ptr(),
+            height,
+            rows_used,
+            d_prev_hashes.as_ptr(),
+        );
         CudaError::from_result(result)
     }
 }

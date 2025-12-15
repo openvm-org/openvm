@@ -210,6 +210,7 @@ where
                         trace.buffer(),
                         trace_height,
                         rows_used,
+                        &d_prev_hashes,
                     )
                     .unwrap();
                 }
@@ -251,6 +252,7 @@ where
                         trace.buffer(),
                         trace_height,
                         rows_used,
+                        &d_prev_hashes,
                     )
                     .unwrap();
                 }

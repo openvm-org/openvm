@@ -447,8 +447,9 @@ template <typename V> struct Sha2TraceHelper {
     __device__ void generate_default_row(
         RowSlice inner_row,
         const typename V::Word *first_block_prev_hash,
-        const uint32_t *carry_a,
-        const uint32_t *carry_e
+        Fp *carry_a,
+        Fp *carry_e,
+        size_t trace_height
     ) const {
         RowSlice row_idx_flags =
             inner_row.slice_from(SHA2_COL_INDEX(V, Sha2RoundCols, flags.row_idx));
@@ -468,13 +469,13 @@ template <typename V> struct Sha2TraceHelper {
                         V,
                         inner_row,
                         work_vars.carry_a[i][limb],
-                        Fp(carry_a[i * V::WORD_U16S + limb])
+                        carry_a[(i * V::WORD_U16S + limb) * trace_height]
                     );
                     SHA2INNER_WRITE_ROUND(
                         V,
                         inner_row,
                         work_vars.carry_e[i][limb],
-                        Fp(carry_e[i * V::WORD_U16S + limb])
+                        carry_e[(i * V::WORD_U16S + limb) * trace_height]
                     );
                 }
             }
@@ -866,12 +867,17 @@ __global__ void sha2_fill_first_dummy_row(Fp *trace, size_t trace_height, size_t
     }
 
     RowSlice row(trace + row_idx, trace_height);
-    row.fill_zero(0, Sha2Layout<V>::WIDTH);
+    uint32_t intermed_4_offset =
+        SHA2_COL_INDEX(V, Sha2BlockHasherRoundCols, inner.schedule_helper.intermed_4);
+    uint32_t intermed_8_offset =
+        SHA2_COL_INDEX(V, Sha2BlockHasherRoundCols, inner.schedule_helper.intermed_8);
+    row.fill_zero(0, intermed_4_offset);
+    row.fill_zero(intermed_8_offset, Sha2Layout<V>::WIDTH - intermed_8_offset);
     SHA2_WRITE_ROUND(V, row, request_id, Fp::zero());
     RowSlice inner_row = row.slice_from(Sha2Layout<V>::INNER_COLUMN_OFFSET);
 
     Sha2TraceHelper<V> helper;
-    helper.generate_default_row(inner_row, prev_hash, nullptr, nullptr);
+    helper.generate_default_row(inner_row, prev_hash, nullptr, nullptr, trace_height);
 
     helper.generate_carry_ae(inner_row, inner_row, false);
 }
@@ -888,18 +894,35 @@ __global__ void sha2_second_pass_dependencies(Fp *trace, size_t trace_height, si
 }
 
 template <typename V>
-__global__ void sha2_fill_invalid_rows(Fp *d_trace, size_t trace_height, size_t rows_used) {
+__global__ void sha2_fill_invalid_rows(
+    Fp *d_trace,
+    size_t trace_height,
+    size_t rows_used,
+    typename V::Word *d_prev_hashes
+) {
     uint32_t thread_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    uint32_t row_idx = rows_used + thread_idx;
+    uint32_t first_dummy_row_idx = rows_used;
+    // skip the first dummy row, since it is already filled
+    uint32_t row_idx = first_dummy_row_idx + thread_idx + 1;
     if (row_idx >= trace_height) {
         return;
     }
 
-    RowSlice src(d_trace + rows_used, trace_height);
+    RowSlice first_dummy_row(d_trace + first_dummy_row_idx, trace_height);
+    RowSlice first_dummy_row_inner = first_dummy_row.slice_from(Sha2Layout<V>::INNER_COLUMN_OFFSET);
+
+    Fp *first_dummy_row_carry_a =
+        &first_dummy_row_inner[SHA2_COL_INDEX(V, Sha2RoundCols, work_vars.carry_a)];
+    Fp *first_dummy_row_carry_e =
+        &first_dummy_row_inner[SHA2_COL_INDEX(V, Sha2RoundCols, work_vars.carry_e)];
+
     RowSlice dst(d_trace + row_idx, trace_height);
-    for (size_t c = 0; c < Sha2Layout<V>::WIDTH; c++) {
-        dst[c] = src[c];
-    }
+    RowSlice dst_inner = dst.slice_from(Sha2Layout<V>::INNER_COLUMN_OFFSET);
+
+    Sha2TraceHelper<V> helper;
+    helper.generate_default_row(
+        dst_inner, &d_prev_hashes[0], first_dummy_row_carry_a, first_dummy_row_carry_e, trace_height
+    );
 }
 
 // ===== HOST LAUNCHER FUNCTIONS =====
@@ -968,14 +991,20 @@ int launch_sha2_second_pass_dependencies(Fp *d_trace, size_t trace_height, size_
 }
 
 template <typename V>
-int launch_sha2_fill_invalid_rows(Fp *d_trace, size_t trace_height, size_t rows_used) {
+int launch_sha2_fill_invalid_rows(
+    Fp *d_trace,
+    size_t trace_height,
+    size_t rows_used,
+    typename V::Word *d_prev_hashes
+) {
     sha2_fill_first_dummy_row<V><<<1, 1>>>(d_trace, trace_height, rows_used);
     if (CHECK_KERNEL() != 0) {
         return -1;
     }
 
     auto [grid_size, block_size] = kernel_launch_params(trace_height - rows_used, 256);
-    sha2_fill_invalid_rows<V><<<grid_size, block_size>>>(d_trace, trace_height, rows_used);
+    sha2_fill_invalid_rows<V>
+        <<<grid_size, block_size>>>(d_trace, trace_height, rows_used, d_prev_hashes);
     return CHECK_KERNEL();
 }
 
@@ -1031,7 +1060,7 @@ int launch_sha256_first_pass_tracegen(
         num_records,
         d_record_offsets,
         total_num_blocks,
-        reinterpret_cast<uint32_t *>(d_prev_hashes),
+        d_prev_hashes,
         ptr_max_bits,
         d_range_checker,
         range_checker_num_bins,
@@ -1079,10 +1108,24 @@ int launch_sha256_second_pass_dependencies(Fp *d_trace, size_t trace_height, siz
 int launch_sha512_second_pass_dependencies(Fp *d_trace, size_t trace_height, size_t rows_used) {
     return launch_sha2_second_pass_dependencies<Sha512Variant>(d_trace, trace_height, rows_used);
 }
-int launch_sha256_fill_invalid_rows(Fp *d_trace, size_t trace_height, size_t rows_used) {
-    return launch_sha2_fill_invalid_rows<Sha256Variant>(d_trace, trace_height, rows_used);
+int launch_sha256_fill_invalid_rows(
+    Fp *d_trace,
+    size_t trace_height,
+    size_t rows_used,
+    uint32_t *d_prev_hashes
+) {
+    return launch_sha2_fill_invalid_rows<Sha256Variant>(
+        d_trace, trace_height, rows_used, d_prev_hashes
+    );
 }
-int launch_sha512_fill_invalid_rows(Fp *d_trace, size_t trace_height, size_t rows_used) {
-    return launch_sha2_fill_invalid_rows<Sha512Variant>(d_trace, trace_height, rows_used);
+int launch_sha512_fill_invalid_rows(
+    Fp *d_trace,
+    size_t trace_height,
+    size_t rows_used,
+    uint64_t *d_prev_hashes
+) {
+    return launch_sha2_fill_invalid_rows<Sha512Variant>(
+        d_trace, trace_height, rows_used, d_prev_hashes
+    );
 }
 }
