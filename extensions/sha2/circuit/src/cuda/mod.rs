@@ -148,6 +148,10 @@ where
     /// tracegen is done.
     fn generate_proving_ctx(&self, _: R) -> AirProvingContext<GpuBackend> {
         let mut records = self.records.lock().unwrap();
+        if records.is_none() {
+            return get_empty_air_proving_ctx::<GpuBackend>();
+        }
+
         let Sha2SharedRecordsGpu {
             d_records,
             d_record_offsets,
@@ -196,13 +200,13 @@ where
                     )
                     .unwrap();
 
-                cuda_abi::sha256::sha256_fill_invalid_rows(
-                    trace.buffer(),
-                    trace_height,
-                    rows_used,
-                    &d_prev_hashes,
-                )
-                .unwrap();
+                    cuda_abi::sha256::sha256_fill_invalid_rows(
+                        trace.buffer(),
+                        trace_height,
+                        rows_used,
+                        &d_prev_hashes,
+                    )
+                    .unwrap();
                     cuda_abi::sha256::sha256_second_pass_dependencies(
                         trace.buffer(),
                         trace_height,

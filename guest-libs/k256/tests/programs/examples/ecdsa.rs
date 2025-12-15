@@ -3,13 +3,14 @@
 
 extern crate alloc;
 
+use core::hint::black_box;
 use ecdsa::RecoveryId;
 use hex_literal::hex;
 use openvm_k256::ecdsa::{Signature, VerifyingKey};
 // clippy thinks this is unused, but it's used in the init! macro
 #[allow(unused)]
 use openvm_k256::Secp256k1Point;
-use openvm_sha2::sha256;
+use openvm_sha2::{Digest, Sha256};
 
 openvm::init!("openvm_init_ecdsa.rs");
 
@@ -49,7 +50,9 @@ const RECOVERY_TEST_VECTORS: &[RecoveryTestVector] = &[
 // Test public key recovery
 fn main() {
     for vector in RECOVERY_TEST_VECTORS {
-        let digest = sha256(vector.msg);
+        let mut hasher = Sha256::new();
+        hasher.update(black_box(&vector.msg));
+        let digest = hasher.finalize();
         let sig = Signature::try_from(vector.sig.as_slice()).unwrap();
         let recid = vector.recid;
         let pk = VerifyingKey::recover_from_prehash(digest.as_slice(), &sig, recid).unwrap();
