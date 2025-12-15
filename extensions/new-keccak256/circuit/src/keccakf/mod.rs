@@ -3,7 +3,6 @@ pub mod columns;
 pub mod execution;
 pub mod tests;
 pub mod trace;
-pub mod wrapper;
 
 use openvm_circuit::arch::VmChipWrapper;
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;

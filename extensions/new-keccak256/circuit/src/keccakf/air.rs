@@ -17,10 +17,12 @@ use openvm_stark_backend::{
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
+use strum::IntoEnumIterator;
 use crate::keccakf::columns::{KeccakfVmCols, NUM_KECCAKF_VM_COLS};
 use openvm_new_keccak256_transpiler::KeccakfOpcode;
 use openvm_instructions::riscv::RV32_REGISTER_AS;
 use openvm_stark_backend::interaction::PermutationCheckBus;
+use p3_keccak_air::U64_LIMBS;
 use p3_keccak_air::KeccakAir;
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
@@ -56,7 +58,8 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfVmAir {
         // increases timestamp by 50
         self.constrain_input_read(builder, local, &mut timestamp, &mem_oc.buffer_bytes_read_aux_cols);
 
-        self.communicate_with_keccakbus(builder, local);
+        let keccak_f_air = KeccakAir {};
+        keccak_f_air.eval(builder);
 
         // increases timestamp by 50
         self.constrain_output_write(builder, local, &mut timestamp, &mem_oc.buffer_bytes_write_aux_cols);
@@ -117,47 +120,40 @@ impl KeccakfVmAir {
         buffer_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>; 200/4]
     ) {
         let is_enabled = local.instruction.is_enabled;
-        for idx in 0..50 {
-            let chunk: [AB::Var; 4] = local.sponge.preimage_buffer_bytes[4 * idx .. 4 * idx + 4].try_into().unwrap();
-            self.memory_bridge
-                .read(
-                    MemoryAddress::new(AB::Expr::from_canonical_u32(RV32_MEMORY_AS), local.instruction.buffer + AB::F::from_canonical_usize(idx * 4)),
-                    chunk,
-                    start_timestamp.clone(),
-                    &buffer_bytes_read_aux_cols[idx]
-                ).eval(builder, is_enabled);
+        
+        const PREIMAGE_BYTES: usize = 25 * U64_LIMBS * 2;
+        let local_preimage_bytes: [AB::Expr; PREIMAGE_BYTES] = std::array::from_fn(|byte_idx| {
+            // `preimage` is represented as 5 * 5 * U64_LIMBS u16 limbs; each u16 limb is split into 2 bytes.
+            let u16_idx = byte_idx / 2;
+            let is_hi_byte = (byte_idx % 2) == 1;
+
+            let i = u16_idx / U64_LIMBS;
+            let limb = u16_idx % U64_LIMBS;
+            let y = i / 5;
+            let x = i % 5;
+
+            let state_limb: AB::Expr = local.inner.preimage[y][x][limb].into();
+            let hi: AB::Expr = local.preimage_state_hi[i * U64_LIMBS + limb].into();
+            let lo: AB::Expr = state_limb - hi.clone() * AB::F::from_canonical_u64(1 << 8);
+
+            if is_hi_byte { hi } else { lo }
+        });
+
+        for idx in 0..(PREIMAGE_BYTES / 4) {
+            let read_chunk: [AB::Expr; 4] =
+                std::array::from_fn(|j| local_preimage_bytes[4 * idx + j].clone());
+            
+            let ptr = local.instruction.buffer + AB::Expr::from_canonical_usize(idx * 4);
+
+            self.memory_bridge.read(
+                MemoryAddress::new(AB::Expr::from_canonical_u32(RV32_MEMORY_AS), ptr),
+                read_chunk,
+                start_timestamp.clone(),
+                &buffer_bytes_read_aux_cols[idx]
+            ).eval(builder, is_enabled);
 
             *start_timestamp += AB::Expr::ONE;
         }
-    }
-
-    #[inline]
-    pub fn communicate_with_keccakbus<AB: InteractionBuilder>(
-        &self,
-        builder: &mut AB,
-        local: &KeccakfVmCols<AB::Var>,
-    ) {
-        let is_enabled = local.instruction.is_enabled;
-        self.keccak_bus.send(
-            builder,
-            local
-                .sponge
-                .preimage_buffer_bytes
-                .into_iter()
-                .map(Into::into)
-                .chain(once(local.request_id.into())),
-            is_enabled,
-        );
-        self.keccak_bus.receive(
-            builder, 
-            local
-                .sponge
-                .postimage_buffer_bytes
-                .into_iter()
-                .map(Into::into)
-                .chain(once(local.request_id.into())),
-            is_enabled
-        );
     }
 
     #[inline]
@@ -169,19 +165,41 @@ impl KeccakfVmAir {
         buffer_bytes_write_aux_cols: &[MemoryWriteAuxCols<AB::Var, 4>; 200/4]
     ) {
         let is_enabled = local.instruction.is_enabled;
-        for idx in 0..50 {
-            let chunk: [AB::Var; 4] = local.sponge.postimage_buffer_bytes[4 * idx .. 4 * idx + 4].try_into().unwrap();
-            self.memory_bridge
-                .write(
-                    MemoryAddress::new(AB::Expr::from_canonical_u32(RV32_MEMORY_AS), local.instruction.buffer + AB::F::from_canonical_usize(idx * 4)),
-                    chunk,
-                    start_timestamp.clone(),
-                    &buffer_bytes_write_aux_cols[idx]
-                )
-                .eval(builder, is_enabled);
+        
+        const PREIMAGE_BYTES: usize = 25 * U64_LIMBS * 2;
+        let local_preimage_bytes: [AB::Expr; PREIMAGE_BYTES] = std::array::from_fn(|byte_idx| {
+            // `preimage` is represented as 5 * 5 * U64_LIMBS u16 limbs; each u16 limb is split into 2 bytes.
+            let u16_idx = byte_idx / 2;
+            let is_hi_byte = (byte_idx % 2) == 1;
+
+            let i = u16_idx / U64_LIMBS;
+            let limb = u16_idx % U64_LIMBS;
+            let y = i / 5;
+            let x = i % 5;
+
+            let state_limb: AB::Expr = local.inner.a_prime_prime[y][x][limb].into();
+            let hi: AB::Expr = local.postimage_state_hi[i * U64_LIMBS + limb].into();
+            let lo: AB::Expr = state_limb - hi.clone() * AB::F::from_canonical_u64(1 << 8);
+
+            if is_hi_byte { hi } else { lo }
+        });
+
+        for idx in 0..(PREIMAGE_BYTES / 4) {
+            let read_chunk: [AB::Expr; 4] =
+                std::array::from_fn(|j| local_preimage_bytes[4 * idx + j].clone());
+            
+            let ptr = local.instruction.buffer + AB::Expr::from_canonical_usize(idx * 4);
+
+            self.memory_bridge.write(
+                MemoryAddress::new(AB::Expr::from_canonical_u32(RV32_MEMORY_AS), ptr),
+                read_chunk,
+                start_timestamp.clone(),
+                &buffer_bytes_write_aux_cols[idx]
+            ).eval(builder, is_enabled);
 
             *start_timestamp += AB::Expr::ONE;
         }
+
     }
 
 }

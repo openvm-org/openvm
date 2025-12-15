@@ -1,12 +1,14 @@
 use openvm_circuit::system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols};
 use openvm_circuit_primitives_derive::AlignedBorrow;
+use p3_keccak_air::KeccakCols as KeccakPermCols;
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
 pub struct KeccakfVmCols<T> {
     pub inner: KeccakPermCols<T>,
     // postimage_buffer_bytes is needed as a separate column because 
-    pub postimage_buffer_bytes: [T; 200],
+    pub preimage_state_hi: [T; 200],
+    pub postimage_state_hi: [T; 200],
     pub instruction: KeccakfInstructionCols<T>,
     pub mem_oc: KeccakfMemoryCols<T>,
 }

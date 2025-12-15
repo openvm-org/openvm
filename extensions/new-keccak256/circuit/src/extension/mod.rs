@@ -28,14 +28,12 @@ use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use crate::{keccakf::{KeccakfVmChip, KeccakfVmExecutor, KeccakfVmFiller, wrapper::air::KeccakfWrapperAir}, xorin::{XorinVmExecutor, XorinVmFiller, air::XorinVmAir}};
+use crate::{keccakf::{KeccakfVmChip, KeccakfVmExecutor, KeccakfVmFiller}, xorin::{XorinVmExecutor, XorinVmFiller, air::XorinVmAir}};
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
 use std::sync::Arc;
 use crate::xorin::XorinVmChip;
 use crate::keccakf::air::KeccakfVmAir;
 use openvm_stark_backend::interaction::PermutationCheckBus;
-use crate::keccakf::wrapper::KeccakfWrapperChip;
-use crate::keccakf::wrapper::KeccakfWrapperFiller;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Keccak256Rv32Config {
@@ -192,11 +190,6 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Keccak256 {
         );
         inventory.add_air(keccak_air);
 
-        let keccak_wrapper_air = KeccakfWrapperAir::new(
-            keccak_bus,
-        );
-        inventory.add_air(keccak_wrapper_air);
-
         Ok(())
     }
 }
@@ -248,10 +241,6 @@ where
             mem_helper.clone(),
         );
         inventory.add_executor_chip(keccak_chip);
-
-        inventory.next_air::<KeccakfWrapperAir>()?;
-        let keccak_wrapper_chip = KeccakfWrapperChip::new(KeccakfWrapperFiller::new(), mem_helper);
-        inventory.add_executor_chip(keccak_wrapper_chip);
 
         Ok(())
     }
