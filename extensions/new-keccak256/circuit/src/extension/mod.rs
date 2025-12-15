@@ -28,12 +28,14 @@ use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use crate::{keccakf::{KeccakfVmExecutor, wrapper::air::KeccakfWrapperAir}, xorin::{XorinVmExecutor, XorinVmFiller, air::XorinVmAir}};
+use crate::{keccakf::{KeccakfVmChip, KeccakfVmExecutor, KeccakfVmFiller, wrapper::air::KeccakfWrapperAir}, xorin::{XorinVmExecutor, XorinVmFiller, air::XorinVmAir}};
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
 use std::sync::Arc;
 use crate::xorin::XorinVmChip;
 use crate::keccakf::air::KeccakfVmAir;
 use openvm_stark_backend::interaction::PermutationCheckBus;
+use crate::keccakf::wrapper::KeccakfWrapperChip;
+use crate::keccakf::wrapper::KeccakfWrapperFiller;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Keccak256Rv32Config {
@@ -235,10 +237,21 @@ where
 
         inventory.next_air::<XorinVmAir>()?;
         let xorin_chip = XorinVmChip::new(
-            XorinVmFiller::new(bitwise_lu, pointer_max_bits),
-            mem_helper,
+            XorinVmFiller::new(bitwise_lu.clone(), pointer_max_bits),
+            mem_helper.clone(),
         );
         inventory.add_executor_chip(xorin_chip);
+
+        inventory.next_air::<KeccakfVmAir>()?;
+        let keccak_chip = KeccakfVmChip::new(
+            KeccakfVmFiller::new(bitwise_lu, pointer_max_bits),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(keccak_chip);
+
+        inventory.next_air::<KeccakfWrapperAir>()?;
+        let keccak_wrapper_chip = KeccakfWrapperChip::new(KeccakfWrapperFiller::new(), mem_helper);
+        inventory.add_executor_chip(keccak_wrapper_chip);
 
         Ok(())
     }

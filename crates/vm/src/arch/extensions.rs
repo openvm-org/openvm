@@ -33,6 +33,7 @@ use openvm_stark_backend::{
     rap::AnyRap,
     AirRef, AnyChip, Chip,
 };
+use openvm_stark_sdk::dummy_airs::fib_air::chip;
 use rustc_hash::FxHashMap;
 use tracing::info_span;
 
@@ -182,7 +183,7 @@ where
     ///
     /// Note: if public values chip exists, then it will be the first entry and point to
     /// `usize::MAX`. This entry should never be used.
-    pub executor_idx_to_insertion_idx: Vec<usize>,
+    pub executor_idx_to_insertion_idx: Vec<(usize, usize)>,
 }
 
 /// The collection of all chips in the VM. The chips should correspond 1-to-1 with the associated
@@ -559,8 +560,16 @@ where
     /// the [VmExecutionExtension] implementation.
     pub fn add_executor_chip<C: Chip<RA, PB> + 'static>(&mut self, chip: C) {
         tracing::debug!("add_executor_chip: {}", type_name::<C>());
-        self.executor_idx_to_insertion_idx.push(self.chips.len());
+        self.executor_idx_to_insertion_idx.push((self.chips.len(), self.chips.len()));
         self.chips.push(Box::new(chip));
+    }
+
+    pub fn add_executor_multi_chip<C: Chip<RA, PB> + 'static>(&mut self, chip_list: Vec<C>) {
+        let start_chips_len = self.chips.len();
+        for chip in chip_list {
+            self.chips.push(Box::new(chip));
+        }
+        self.executor_idx_to_insertion_idx.push((start_chips_len, self.chips.len()));
     }
 
     /// Returns the mapping from executor index to the AIR index, where AIR index is the index of
@@ -579,6 +588,7 @@ where
         self.executor_idx_to_insertion_idx
             .iter()
             .map(|insertion_idx| {
+                // num_airs - (insertion_idx + 1)
                 num_airs
                     .checked_sub(insertion_idx.checked_add(1).unwrap())
                     .unwrap_or_else(|| {
