@@ -166,6 +166,8 @@ where
         let trace_height = next_power_of_two_or_zero(rows_used_total);
         let trace = DeviceMatrix::<F>::with_capacity(trace_height, C::BLOCK_HASHER_WIDTH);
 
+        trace.buffer().fill_zero();
+
         let block_to_record_idx = (0..num_records)
             .flat_map(|i| repeat_n(i as u32, C::ROWS_PER_BLOCK))
             .collect::<Vec<_>>();

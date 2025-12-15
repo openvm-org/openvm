@@ -101,9 +101,15 @@ template <typename V> struct Sha2TraceHelper {
         return word_from_bits<V>(inner, base_e(is_digest, row_idx));
     }
 
-    __device__ __forceinline__ typename V::Word read_w(RowSlice inner, uint32_t j) const {
+    __device__ __forceinline__ void read_w(RowSlice inner, uint32_t j, Fp *w_limbs) const {
         size_t base = SHA2_COL_INDEX(V, Sha2RoundCols, message_schedule.w[j]);
-        return word_from_bits<V>(inner, base);
+        for (int limb = 0; limb < V::WORD_U16S; limb++) {
+            w_limbs[limb] = Fp::zero();
+            for (int bit = 0; bit < 16; bit++) {
+                w_limbs[limb] += inner[base + bit] * Fp(1 << bit);
+            }
+            base += 16;
+        }
     }
 
     __device__ __forceinline__ Fp read_carry_fp(RowSlice inner, uint32_t i, uint32_t limb) const {
@@ -111,6 +117,142 @@ template <typename V> struct Sha2TraceHelper {
         Fp low = inner[base + limb * 2];
         Fp high = inner[base + limb * 2 + 1];
         return low + high + high; // low + 2 * high
+    }
+
+    __device__ __forceinline__ void read_word_bits(
+        RowSlice inner,
+        size_t base,
+        Fp *dst_bits
+    ) const {
+#pragma unroll
+        for (uint32_t bit = 0; bit < V::WORD_BITS; bit++) {
+            dst_bits[bit] = inner[base + bit];
+        }
+    }
+
+    __device__ __forceinline__ void read_w_bits(RowSlice inner, uint32_t j, Fp *dst_bits) const {
+        read_word_bits(inner, SHA2_COL_INDEX(V, Sha2RoundCols, message_schedule.w[j]), dst_bits);
+    }
+
+    __device__ __forceinline__ Fp xor_fp(Fp a, Fp b) const { return a + b - Fp(2) * a * b; }
+
+    __device__ __forceinline__ Fp xor_fp(Fp a, Fp b, Fp c) const { return xor_fp(xor_fp(a, b), c); }
+
+    __device__ __forceinline__ Fp ch_fp(Fp x, Fp y, Fp z) const { return x * y + z - x * z; }
+
+    __device__ __forceinline__ Fp maj_fp(Fp x, Fp y, Fp z) const {
+        return x * y + x * z + y * z - Fp(2) * x * y * z;
+    }
+
+    __device__ __forceinline__ void rotr_bits(const Fp *src, uint32_t rot, Fp *dst) const {
+#pragma unroll
+        for (uint32_t bit = 0; bit < V::WORD_BITS; bit++) {
+            dst[bit] = src[(bit + rot) % V::WORD_BITS];
+        }
+    }
+
+    __device__ __forceinline__ void shr_bits(const Fp *src, uint32_t shift, Fp *dst) const {
+#pragma unroll
+        for (uint32_t bit = 0; bit < V::WORD_BITS; bit++) {
+            dst[bit] = (bit + shift < V::WORD_BITS) ? src[bit + shift] : Fp::zero();
+        }
+    }
+
+    __device__ __forceinline__ void big_sig0_bits(const Fp *src, Fp *dst) const {
+        if (V::WORD_BITS == 32) {
+            Fp r2[V::WORD_BITS], r13[V::WORD_BITS], r22[V::WORD_BITS];
+            rotr_bits(src, 2, r2);
+            rotr_bits(src, 13, r13);
+            rotr_bits(src, 22, r22);
+#pragma unroll
+            for (uint32_t bit = 0; bit < V::WORD_BITS; bit++) {
+                dst[bit] = xor_fp(r2[bit], r13[bit], r22[bit]);
+            }
+        } else {
+            Fp r28[V::WORD_BITS], r34[V::WORD_BITS], r39[V::WORD_BITS];
+            rotr_bits(src, 28, r28);
+            rotr_bits(src, 34, r34);
+            rotr_bits(src, 39, r39);
+#pragma unroll
+            for (uint32_t bit = 0; bit < V::WORD_BITS; bit++) {
+                dst[bit] = xor_fp(r28[bit], r34[bit], r39[bit]);
+            }
+        }
+    }
+
+    __device__ __forceinline__ void big_sig1_bits(const Fp *src, Fp *dst) const {
+        if (V::WORD_BITS == 32) {
+            Fp r6[V::WORD_BITS], r11[V::WORD_BITS], r25[V::WORD_BITS];
+            rotr_bits(src, 6, r6);
+            rotr_bits(src, 11, r11);
+            rotr_bits(src, 25, r25);
+#pragma unroll
+            for (uint32_t bit = 0; bit < V::WORD_BITS; bit++) {
+                dst[bit] = xor_fp(r6[bit], r11[bit], r25[bit]);
+            }
+        } else {
+            Fp r14[V::WORD_BITS], r18[V::WORD_BITS], r41[V::WORD_BITS];
+            rotr_bits(src, 14, r14);
+            rotr_bits(src, 18, r18);
+            rotr_bits(src, 41, r41);
+#pragma unroll
+            for (uint32_t bit = 0; bit < V::WORD_BITS; bit++) {
+                dst[bit] = xor_fp(r14[bit], r18[bit], r41[bit]);
+            }
+        }
+    }
+
+    __device__ __forceinline__ void small_sig0_bits(const Fp *src, Fp *dst) const {
+        if (V::WORD_BITS == 32) {
+            Fp r7[V::WORD_BITS], r18[V::WORD_BITS], s3[V::WORD_BITS];
+            rotr_bits(src, 7, r7);
+            rotr_bits(src, 18, r18);
+            shr_bits(src, 3, s3);
+#pragma unroll
+            for (uint32_t bit = 0; bit < V::WORD_BITS; bit++) {
+                dst[bit] = xor_fp(r7[bit], r18[bit], s3[bit]);
+            }
+        } else {
+            Fp r1[V::WORD_BITS], r8[V::WORD_BITS], s7[V::WORD_BITS];
+            rotr_bits(src, 1, r1);
+            rotr_bits(src, 8, r8);
+            shr_bits(src, 7, s7);
+#pragma unroll
+            for (uint32_t bit = 0; bit < V::WORD_BITS; bit++) {
+                dst[bit] = xor_fp(r1[bit], r8[bit], s7[bit]);
+            }
+        }
+    }
+
+    __device__ __forceinline__ void small_sig1_bits(const Fp *src, Fp *dst) const {
+        if (V::WORD_BITS == 32) {
+            Fp r17[V::WORD_BITS], r19[V::WORD_BITS], s10[V::WORD_BITS];
+            rotr_bits(src, 17, r17);
+            rotr_bits(src, 19, r19);
+            shr_bits(src, 10, s10);
+#pragma unroll
+            for (uint32_t bit = 0; bit < V::WORD_BITS; bit++) {
+                dst[bit] = xor_fp(r17[bit], r19[bit], s10[bit]);
+            }
+        } else {
+            Fp r19[V::WORD_BITS], r61[V::WORD_BITS], s6[V::WORD_BITS];
+            rotr_bits(src, 19, r19);
+            rotr_bits(src, 61, r61);
+            shr_bits(src, 6, s6);
+#pragma unroll
+            for (uint32_t bit = 0; bit < V::WORD_BITS; bit++) {
+                dst[bit] = xor_fp(r19[bit], r61[bit], s6[bit]);
+            }
+        }
+    }
+
+    __device__ __forceinline__ Fp compose_u16_limb(const Fp *bits, uint32_t limb) const {
+        Fp acc = Fp::zero();
+#pragma unroll
+        for (uint32_t bit = 0; bit < 16; bit++) {
+            acc += bits[limb * 16 + bit] * Fp(1u << bit);
+        }
+        return acc;
     }
 
     __device__ void write_flags_round(
@@ -153,44 +295,47 @@ template <typename V> struct Sha2TraceHelper {
         RowSlice next_inner,
         bool next_is_digest
     ) const {
-        typename V::Word a_rows[2 * V::ROUNDS_PER_ROW];
-        typename V::Word e_rows[2 * V::ROUNDS_PER_ROW];
+        Fp a_bits[2 * V::ROUNDS_PER_ROW][V::WORD_BITS];
+        Fp e_bits[2 * V::ROUNDS_PER_ROW][V::WORD_BITS];
 #pragma unroll
         for (uint32_t i = 0; i < V::ROUNDS_PER_ROW; i++) {
-            typename V::Word a_val = read_a(local_inner, i, false);
-            typename V::Word e_val = read_e(local_inner, i, false);
-            a_rows[i] = a_val;
-            a_rows[i + V::ROUNDS_PER_ROW] = read_a(next_inner, i, next_is_digest);
-            e_rows[i] = e_val;
-            e_rows[i + V::ROUNDS_PER_ROW] = read_e(next_inner, i, next_is_digest);
+            read_word_bits(local_inner, base_a(false, i), a_bits[i]);
+            read_word_bits(next_inner, base_a(next_is_digest, i), a_bits[i + V::ROUNDS_PER_ROW]);
+            read_word_bits(local_inner, base_e(false, i), e_bits[i]);
+            read_word_bits(next_inner, base_e(next_is_digest, i), e_bits[i + V::ROUNDS_PER_ROW]);
         }
 
         const Fp pow16_inv = inv(Fp(1u << 16));
 
         for (uint32_t i = 0; i < V::ROUNDS_PER_ROW; i++) {
-            typename V::Word cur_a = a_rows[i + 4];
-            typename V::Word cur_e = e_rows[i + 4];
-            typename V::Word sig_a = sha2::big_sig0<V>(a_rows[i + 3]);
-            typename V::Word sig_e = sha2::big_sig1<V>(e_rows[i + 3]);
-            typename V::Word maj_abc = sha2::maj<V>(a_rows[i + 3], a_rows[i + 2], a_rows[i + 1]);
-            typename V::Word ch_efg = sha2::ch<V>(e_rows[i + 3], e_rows[i + 2], e_rows[i + 1]);
-            typename V::Word d_val = a_rows[i];
-            typename V::Word h_val = e_rows[i];
+            Fp sig_a[V::WORD_BITS];
+            Fp sig_e[V::WORD_BITS];
+            Fp maj_abc[V::WORD_BITS];
+            Fp ch_efg[V::WORD_BITS];
+
+            big_sig0_bits(a_bits[i + 3], sig_a);
+            big_sig1_bits(e_bits[i + 3], sig_e);
+            for (uint32_t bit = 0; bit < V::WORD_BITS; bit++) {
+                maj_abc[bit] = maj_fp(a_bits[i + 3][bit], a_bits[i + 2][bit], a_bits[i + 1][bit]);
+                ch_efg[bit] = ch_fp(e_bits[i + 3][bit], e_bits[i + 2][bit], e_bits[i + 1][bit]);
+            }
 
             Fp prev_carry_a = Fp::zero();
             Fp prev_carry_e = Fp::zero();
             for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
-                Fp t1_sum = Fp(word_to_u16_limb<V>(h_val, limb)) +
-                            Fp(word_to_u16_limb<V>(sig_e, limb)) +
-                            Fp(word_to_u16_limb<V>(ch_efg, limb));
-                Fp t2_sum =
-                    Fp(word_to_u16_limb<V>(sig_a, limb)) + Fp(word_to_u16_limb<V>(maj_abc, limb));
-                Fp d_limb = Fp(word_to_u16_limb<V>(d_val, limb));
-                Fp cur_a_limb = Fp(word_to_u16_limb<V>(cur_a, limb));
-                Fp cur_e_limb = Fp(word_to_u16_limb<V>(cur_e, limb));
+                Fp t1_sum = compose_u16_limb(e_bits[i], limb) + compose_u16_limb(sig_e, limb) +
+                            compose_u16_limb(ch_efg, limb);
+                Fp t2_sum = compose_u16_limb(sig_a, limb) + compose_u16_limb(maj_abc, limb);
+                Fp d_limb = compose_u16_limb(a_bits[i], limb);
+                Fp cur_a_limb = compose_u16_limb(a_bits[i + 4], limb);
+                Fp cur_e_limb = compose_u16_limb(e_bits[i + 4], limb);
 
-                Fp e_sum = d_limb + t1_sum + prev_carry_e;
-                Fp a_sum = t1_sum + t2_sum + prev_carry_a;
+                Fp e_sum = d_limb + t1_sum +
+                           (limb == 0 ? Fp::zero()
+                                      : next_inner[base_carry_e(next_is_digest, i) + limb - 1]);
+                Fp a_sum = t1_sum + t2_sum +
+                           (limb == 0 ? Fp::zero()
+                                      : next_inner[base_carry_a(next_is_digest, i) + limb - 1]);
                 Fp carry_e = (e_sum - cur_e_limb) * pow16_inv;
                 Fp carry_a = (a_sum - cur_a_limb) * pow16_inv;
 
@@ -213,19 +358,30 @@ template <typename V> struct Sha2TraceHelper {
         RowSlice next_inner,
         bool next_is_digest
     ) const {
-        typename V::Word w_vals[2 * V::ROUNDS_PER_ROW];
+        Fp w_bits[2 * V::ROUNDS_PER_ROW][V::WORD_BITS];
+        Fp w_limbs[2 * V::ROUNDS_PER_ROW][V::WORD_U16S];
 #pragma unroll
         for (uint32_t j = 0; j < V::ROUNDS_PER_ROW; j++) {
-            w_vals[j] = read_w(local_inner, j);
-            w_vals[j + V::ROUNDS_PER_ROW] = read_w(next_inner, j);
+            read_w_bits(local_inner, j, w_bits[j]);
+            read_w_bits(next_inner, j, w_bits[j + V::ROUNDS_PER_ROW]);
+            for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
+                w_limbs[j][limb] = compose_u16_limb(w_bits[j], limb);
+                w_limbs[j + V::ROUNDS_PER_ROW][limb] =
+                    compose_u16_limb(w_bits[j + V::ROUNDS_PER_ROW], limb);
+            }
         }
 
         for (uint32_t i = 0; i < V::ROUNDS_PER_ROW; i++) {
-            typename V::Word sig_w = sha2::small_sig0<V>(w_vals[i + 1]);
+            Fp sig_bits[V::WORD_BITS];
+            Fp sig_limbs[V::WORD_U16S];
+
+            small_sig0_bits(w_bits[i + 1], sig_bits);
+            for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
+                sig_limbs[limb] = compose_u16_limb(sig_bits, limb);
+            }
 #pragma unroll
             for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
-                Fp val =
-                    Fp(word_to_u16_limb<V>(w_vals[i], limb)) + Fp(word_to_u16_limb<V>(sig_w, limb));
+                Fp val = w_limbs[i][limb] + sig_limbs[limb];
                 if (next_is_digest) {
                     SHA2INNER_WRITE_DIGEST(V, next_inner, schedule_helper.intermed_4[i][limb], val);
                 } else {
@@ -240,32 +396,40 @@ template <typename V> struct Sha2TraceHelper {
         RowSlice next_inner,
         bool local_is_digest
     ) const {
-        typename V::Word w_vals[2 * V::ROUNDS_PER_ROW];
+        Fp w_bits[2 * V::ROUNDS_PER_ROW][V::WORD_BITS];
+        Fp w_limbs[2 * V::ROUNDS_PER_ROW][V::WORD_U16S];
 #pragma unroll
-        // TODO: compose the message_schedule.w elements into u16 limbs
         for (uint32_t j = 0; j < V::ROUNDS_PER_ROW; j++) {
-            w_vals[j] = read_w(local_inner, j);
-            w_vals[j + V::ROUNDS_PER_ROW] = read_w(next_inner, j);
+            read_w_bits(local_inner, j, w_bits[j]);
+            read_w_bits(next_inner, j, w_bits[j + V::ROUNDS_PER_ROW]);
+            for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
+                w_limbs[j][limb] = compose_u16_limb(w_bits[j], limb);
+                w_limbs[j + V::ROUNDS_PER_ROW][limb] =
+                    compose_u16_limb(w_bits[j + V::ROUNDS_PER_ROW], limb);
+            }
         }
 
         for (uint32_t i = 0; i < V::ROUNDS_PER_ROW; i++) {
-            typename V::Word sig_w2 = sha2::small_sig1<V>(w_vals[i + 2]);
-            typename V::Word w7 = (i < 3) ? [=]() {
-                typename V::Word acc = 0;
-                for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
-                    size_t base = SHA2_COL_INDEX(V, Sha2RoundCols, schedule_helper.w_3[i][limb]);
-                    uint32_t limb_val = local_inner[base].asUInt32();
-                    acc |= static_cast<typename V::Word>(limb_val) << (16 * limb);
-                }
-                return acc;
-            }()
-                                          : w_vals[i - 3];
-            typename V::Word w_cur = w_vals[i + 4];
+            Fp sig_bits[V::WORD_BITS];
+            Fp sig_limbs[V::WORD_U16S];
+
+            small_sig1_bits(w_bits[i + 2], sig_bits);
+            for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
+                sig_limbs[limb] = compose_u16_limb(sig_bits, limb);
+            }
             for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
                 Fp carry = read_carry_fp(next_inner, i, limb);
                 Fp prev_carry = (limb > 0) ? read_carry_fp(next_inner, i, limb - 1) : Fp::zero();
-                Fp sum = Fp(word_to_u16_limb<V>(sig_w2, limb)) + Fp(word_to_u16_limb<V>(w7, limb)) -
-                         carry * Fp(1u << 16) - Fp(word_to_u16_limb<V>(w_cur, limb)) + prev_carry;
+                Fp w7_limb =
+                    (i < 3) ? (local_is_digest ? next_inner[SHA2_COL_INDEX(
+                                                     V, Sha2DigestCols, schedule_helper.w_3[i][limb]
+                                                 )]
+                                               : local_inner[SHA2_COL_INDEX(
+                                                     V, Sha2RoundCols, schedule_helper.w_3[i][limb]
+                                                 )])
+                            : w_limbs[i - 3][limb];
+                Fp w_cur = w_limbs[i + 4][limb];
+                Fp sum = sig_limbs[limb] + w7_limb - carry * Fp(1u << 16) - w_cur + prev_carry;
                 Fp intermed = -sum;
                 if (local_is_digest) {
                     SHA2INNER_WRITE_DIGEST(
@@ -573,8 +737,7 @@ __global__ void sha2_first_pass_tracegen(
             helper.write_flags_digest(inner_row, digest_row_idx, global_block_idx + 1);
 
             for (uint32_t j = 0; j < V::ROUNDS_PER_ROW - 1; j++) {
-                uint32_t idx = (V::ROUND_ROWS - 1) * V::ROUNDS_PER_ROW + j;
-                typename V::Word val = w_schedule[idx - 3];
+                typename V::Word val = w_schedule[row_in_block * V::ROUNDS_PER_ROW + j - 3];
                 for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
                     SHA2INNER_WRITE_DIGEST(
                         V,
