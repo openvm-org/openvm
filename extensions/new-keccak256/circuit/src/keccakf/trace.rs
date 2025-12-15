@@ -1,12 +1,12 @@
 
-use std::{borrow::BorrowMut, mem::{align_of, size_of}};
+use std::{borrow::BorrowMut, mem::size_of};
 use core::convert::TryInto;
 
-use openvm_circuit::{arch::*, system::{memory::online::TracingMemory, poseidon2::trace}};
+use openvm_circuit::{arch::*, system::memory::online::TracingMemory};
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_rv32im_circuit::adapters::{tracing_read, tracing_write};
-use openvm_stark_backend::{p3_field::PrimeField32, prover::metrics::TraceCells};
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_circuit::system::memory::offline_checker::MemoryReadAuxRecord;
 use openvm_circuit::system::memory::offline_checker::MemoryWriteBytesAuxRecord;
 use openvm_instructions::riscv::{RV32_REGISTER_AS, RV32_MEMORY_AS};
@@ -162,7 +162,7 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
 
         let trace = &mut trace_matrix.values[..];
 
-        let (mut slice, rest) = trace.split_at_mut(NUM_KECCAKF_VM_COLS * NUM_ROUNDS);
+        let (mut slice, _rest) = trace.split_at_mut(NUM_KECCAKF_VM_COLS * NUM_ROUNDS);
 
         let record: KeccakfVmRecordMut = unsafe {
             get_record_from_slice(&mut slice, KeccakfVmRecordLayout {
@@ -181,7 +181,9 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
         let mut timestamp = record.timestamp;
 
         slice
-            .chunks_exact_mut(NUM_ROUNDS * NUM_KECCAKF_VM_COLS)
+            // Each Keccak-f round corresponds to exactly one trace row of width NUM_KECCAKF_VM_COLS.
+            // We already reserved NUM_ROUNDS rows above (NUM_ROUNDS * NUM_KECCAKF_VM_COLS elements).
+            .chunks_exact_mut(NUM_KECCAKF_VM_COLS)
             .enumerate()
             .for_each(|(row_idx, row)| { // each round takes up one row in the trace matrix
                 row[..NUM_KECCAK_PERM_COLS].copy_from_slice(

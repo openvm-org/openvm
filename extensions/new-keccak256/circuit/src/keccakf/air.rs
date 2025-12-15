@@ -18,7 +18,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use strum::IntoEnumIterator;
-use crate::keccakf::columns::{KeccakfVmCols, NUM_KECCAKF_VM_COLS};
+use crate::keccakf::columns::{KeccakfVmCols, NUM_KECCAKF_VM_COLS, NUM_KECCAK_PERM_COLS};
 use openvm_new_keccak256_transpiler::KeccakfOpcode;
 use openvm_instructions::riscv::RV32_REGISTER_AS;
 use openvm_stark_backend::interaction::PermutationCheckBus;
@@ -27,6 +27,8 @@ use p3_keccak_air::KeccakAir;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 use p3_keccak_air::NUM_ROUNDS;
+use openvm_stark_backend::air_builders::sub::SubAirBuilder;
+
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct KeccakfVmAir {
@@ -61,7 +63,9 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfVmAir {
         self.constrain_input_read(builder, local, &mut timestamp, &mem_oc.buffer_bytes_read_aux_cols);
 
         let keccak_f_air = KeccakAir {};
-        keccak_f_air.eval(builder);
+        let mut sub_builder =
+            SubAirBuilder::<AB, KeccakAir, AB::Var>::new(builder, 0..NUM_KECCAK_PERM_COLS);
+        keccak_f_air.eval(&mut sub_builder);
 
         // increases timestamp by 50
         self.constrain_output_write(builder, local, &mut timestamp, &mem_oc.buffer_bytes_write_aux_cols);
