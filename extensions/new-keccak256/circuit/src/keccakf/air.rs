@@ -24,6 +24,9 @@ use openvm_instructions::riscv::RV32_REGISTER_AS;
 use openvm_stark_backend::interaction::PermutationCheckBus;
 use p3_keccak_air::U64_LIMBS;
 use p3_keccak_air::KeccakAir;
+use openvm_instructions::riscv::RV32_CELL_BITS;
+use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
+use p3_keccak_air::NUM_ROUNDS;
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct KeccakfVmAir {
@@ -62,7 +65,6 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfVmAir {
 
         // increases timestamp by 50
         self.constrain_output_write(builder, local, &mut timestamp, &mem_oc.buffer_bytes_write_aux_cols);
-
     }       
 }
 
@@ -77,13 +79,20 @@ impl KeccakfVmAir {
     ) {
         let instruction = local.instruction;
         let is_enabled = instruction.is_enabled;
+        let is_first_round = local.inner.step_flags[0];
+        let is_final_round = local.inner.step_flags[NUM_ROUNDS - 1];
+
         builder.assert_bool(is_enabled);
         let reg_addr_sp = AB::F::ONE;
 
         let buffer_ptr = instruction.buffer_ptr;
         let buffer_data = instruction.buffer_limbs.map(Into::into);
         // 50 buffer reads and 50 buffer writes and 1 register read
-        let timestamp_change = AB::Expr::from_canonical_u32(2 * 50 + 1);
+        let mut timestamp_change = AB::Expr::from_canonical_u32(0);
+        timestamp_change += is_first_round * AB::Expr::from_canonical_u32(1 + 50);
+        timestamp_change += is_final_round * AB::Expr::from_canonical_u32(50);
+
+        let should_read = is_enabled * is_first_round;
 
         // todo: check if the below operands are correct. do i need to make the second and third operands be
         // zero instead and make the 4th and 5th be the current 2nd and 3rd?
@@ -91,12 +100,14 @@ impl KeccakfVmAir {
             AB::Expr::from_canonical_usize(KeccakfOpcode::KECCAKF as usize + self.offset), 
             [
                 buffer_ptr.into(),
+                AB::Expr::ZERO,
+                AB::Expr::ZERO,
                 AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
                 AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
             ], 
             ExecutionState::new(instruction.pc, instruction.start_timestamp),
             timestamp_change,
-        ).eval(builder, is_enabled);
+        ).eval(builder, should_read.clone());
 
         self.memory_bridge
             .read(MemoryAddress::new(reg_addr_sp, buffer_ptr), 
@@ -104,10 +115,23 @@ impl KeccakfVmAir {
                 start_timestamp.clone(),
                 &register_aux[0],
             )   
-            .eval(builder, is_enabled);
-        *start_timestamp += AB::Expr::ONE;
+            .eval(builder, should_read.clone());
+        *start_timestamp += should_read.clone();
         
         builder.assert_eq(instruction.buffer, instruction.buffer_limbs[0] + instruction.buffer_limbs[1] * AB::F::from_canonical_u32(1 << 8) + instruction.buffer_limbs[2] * AB::F::from_canonical_u32(1 << 16) + instruction.buffer_limbs[3] * AB::F::from_canonical_u32(1 << 24));
+
+        let limb_shift = AB::F::from_canonical_usize(
+            1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.ptr_max_bits),
+        );
+        let need_range_check = [
+            *instruction.buffer_limbs.last().unwrap(),
+            *instruction.buffer_limbs.last().unwrap()
+        ];
+        for pair in need_range_check.chunks_exact(2) {
+            self.bitwise_lookup_bus
+                .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
+                .eval(builder, should_read.clone());
+        }
     }
 
     #[inline]
@@ -119,6 +143,8 @@ impl KeccakfVmAir {
         buffer_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>; 200/4]
     ) {
         let is_enabled = local.instruction.is_enabled;
+        let is_first_round = local.inner.step_flags[0];
+        let should_read = is_enabled * is_first_round;
         
         const PREIMAGE_BYTES: usize = 25 * U64_LIMBS * 2;
         let local_preimage_bytes: [AB::Expr; PREIMAGE_BYTES] = std::array::from_fn(|byte_idx| {
@@ -149,9 +175,9 @@ impl KeccakfVmAir {
                 read_chunk,
                 start_timestamp.clone(),
                 &buffer_bytes_read_aux_cols[idx]
-            ).eval(builder, is_enabled);
+            ).eval(builder, should_read.clone());
 
-            *start_timestamp += AB::Expr::ONE;
+            *start_timestamp += should_read.clone();
         }
     }
 
@@ -164,6 +190,8 @@ impl KeccakfVmAir {
         buffer_bytes_write_aux_cols: &[MemoryWriteAuxCols<AB::Var, 4>; 200/4]
     ) {
         let is_enabled = local.instruction.is_enabled;
+        let is_final_round = local.inner.step_flags[0];
+        let should_write = is_enabled * is_final_round;
         
         const PREIMAGE_BYTES: usize = 25 * U64_LIMBS * 2;
         let local_preimage_bytes: [AB::Expr; PREIMAGE_BYTES] = std::array::from_fn(|byte_idx| {
@@ -194,9 +222,9 @@ impl KeccakfVmAir {
                 read_chunk,
                 start_timestamp.clone(),
                 &buffer_bytes_write_aux_cols[idx]
-            ).eval(builder, is_enabled);
+            ).eval(builder, should_write.clone());
 
-            *start_timestamp += AB::Expr::ONE;
+            *start_timestamp += should_write.clone();
         }
 
     }

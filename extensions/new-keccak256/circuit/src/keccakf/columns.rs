@@ -34,3 +34,4 @@ pub struct KeccakfMemoryCols<T> {
 
 pub const NUM_KECCAKF_VM_COLS: usize = size_of::<KeccakfVmCols<u8>>();
 pub const NUM_KECCAK_PERM_COLS: usize = size_of::<KeccakPermCols<u8>>();
+pub const NUM_ROUNDS: usize = 24;

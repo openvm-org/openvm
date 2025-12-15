@@ -20,6 +20,8 @@ use crate::keccakf::columns::KeccakfVmCols;
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use crate::keccakf::columns::NUM_KECCAK_PERM_COLS;
+use crate::keccakf::columns::NUM_KECCAKF_VM_COLS;
+use crate::keccakf::columns::NUM_ROUNDS;
 
 use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix}
@@ -148,31 +150,103 @@ where
 }
 
 impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
-    fn fill_trace_row(
+    fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
-        mut row_slice: &mut [F],
+        trace_matrix: &mut RowMajorMatrix<F>,
+        rows_used: usize,
     ) {
+        if rows_used == 0 {
+            return;
+        }
+
+        let trace = &mut trace_matrix.values[..];
+
+        let (mut slice, rest) = trace.split_at_mut(NUM_KECCAKF_VM_COLS * NUM_ROUNDS);
 
         let record: KeccakfVmRecordMut = unsafe {
-            get_record_from_slice(&mut row_slice, KeccakfVmRecordLayout {
+            get_record_from_slice(&mut slice, KeccakfVmRecordLayout {
                 metadata: KeccakfVmMetadata {
                 }
             })
         };
 
         let record = record.inner.clone();
-        row_slice.fill(F::ZERO);
+        slice.fill(F::ZERO);
         // todo: trace gen for KeccakPermCols 
         let preimage_buffer_bytes = record.preimage_buffer_bytes;
         let mut preimage_buffer_bytes_u64: [u64; 25] = [0; 25];
 
         let p3_trace: RowMajorMatrix<F> = generate_trace_rows(vec![preimage_buffer_bytes_u64], 0);
-        row_slice[..NUM_KECCAK_PERM_COLS].copy_from_slice(
-            &p3_trace.values[..NUM_KECCAK_PERM_COLS]
-        );
 
-        let trace_row: &mut KeccakfVmCols<F> = row_slice.borrow_mut();
+        slice
+            .chunks_exact_mut(NUM_ROUNDS * NUM_KECCAKF_VM_COLS)
+            .enumerate()
+            .for_each(|(row_idx, row)| { // each round takes up one row in the trace matrix
+                row[..NUM_KECCAK_PERM_COLS].copy_from_slice(
+                    &p3_trace.values[row_idx * NUM_KECCAK_PERM_COLS..(row_idx + 1) * NUM_KECCAK_PERM_COLS],
+                );
+
+                let cols: &mut KeccakfVmCols<F> = row.borrow_mut();
+
+                for idx in 0..100 {
+                    cols.preimage_state_hi[idx] = F::from_canonical_u8(preimage_buffer_bytes[2 * idx + 1]);
+                }
+                tiny_keccak::keccakf(&mut preimage_buffer_bytes_u64);
+                for idx in 0..100 {
+                    cols.postimage_state_hi[idx] = F::from_canonical_u8(preimage_buffer_bytes[2 * idx + 1]);
+                }
+        
+                cols.instruction.pc = F::from_canonical_u32(record.pc);
+                cols.instruction.is_enabled = F::ONE;
+                cols.instruction.start_timestamp = F::from_canonical_u32(record.timestamp);
+                cols.instruction.buffer_ptr = F::from_canonical_u32(record.rd_ptr);
+                cols.instruction.buffer = F::from_canonical_u32(record.buffer);
+                cols.instruction.buffer_limbs = record.buffer.to_le_bytes().map(F::from_canonical_u8);
+
+                // safety: the following approach only works when self.pointer_max_bits >= 24
+                let limb_shift = 1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits);
+                let buffer_limbs = record.buffer.to_le_bytes();
+                let need_range_check = [
+                    buffer_limbs.last().unwrap(),
+                    buffer_limbs.last().unwrap()
+                ];
+        
+                for pair in need_range_check.chunks_exact(2) {
+                    self.bitwise_lookup_chip
+                        .request_range((pair[0] * limb_shift) as u32, (pair[1] * limb_shift) as u32);
+                }
+                
+                let mut timestamp = record.timestamp;
+                if row_idx == 0 {
+                    mem_helper.fill(
+                        record.register_aux_cols[0].prev_timestamp,
+                        record.timestamp,
+                        cols.mem_oc.register_aux_cols[0].as_mut()
+                    );
+                    timestamp += 1;
+                    for t in 0..50 {
+                        mem_helper.fill(
+                            record.buffer_read_aux_cols[t].prev_timestamp,
+                            timestamp, 
+                            cols.mem_oc.buffer_bytes_read_aux_cols[t].as_mut()
+                        );
+                        timestamp += 1;
+                    }
+                }
+
+                if row_idx == NUM_ROUNDS - 1 {
+                    for t in 0..50 {
+                        mem_helper.fill(
+                            record.buffer_write_aux_cols[t].prev_timestamp,
+                            timestamp,
+                            cols.mem_oc.buffer_bytes_write_aux_cols[t].as_mut()
+                        );
+                        cols.mem_oc.buffer_bytes_write_aux_cols[t].prev_data = record.buffer_write_aux_cols[t].prev_data.map(F::from_canonical_u8);
+                        timestamp += 1;
+                    }
+                }
+            });
 
         // todo: define constants instead of number directly
         for idx in 0..(200/8) {
@@ -180,60 +254,6 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                 preimage_buffer_bytes[8 * idx..8 * idx + 8].try_into().unwrap()
             );
         }
-        for idx in 0..100 {
-            trace_row.preimage_state_hi[idx] = F::from_canonical_u8(preimage_buffer_bytes[2 * idx + 1]);
-        }
-        tiny_keccak::keccakf(&mut preimage_buffer_bytes_u64);
-        for idx in 0..100 {
-            trace_row.postimage_state_hi[idx] = F::from_canonical_u8(preimage_buffer_bytes[2 * idx + 1]);
-        }
-
-        trace_row.instruction.pc = F::from_canonical_u32(record.pc);
-        trace_row.instruction.is_enabled = F::ONE;
-        trace_row.instruction.start_timestamp = F::from_canonical_u32(record.timestamp);
-        trace_row.instruction.buffer_ptr = F::from_canonical_u32(record.rd_ptr);
-        trace_row.instruction.buffer = F::from_canonical_u32(record.buffer);
-        trace_row.instruction.buffer_limbs = record.buffer.to_le_bytes().map(F::from_canonical_u8);
         
-        let mut timestamp = record.timestamp;
-
-        mem_helper.fill(
-            record.register_aux_cols[0].prev_timestamp,
-            record.timestamp,
-            trace_row.mem_oc.register_aux_cols[0].as_mut()
-        );
-
-        for t in 0..50 {
-            mem_helper.fill(
-                record.buffer_read_aux_cols[t].prev_timestamp,
-                timestamp, 
-                trace_row.mem_oc.buffer_bytes_read_aux_cols[t].as_mut()
-            );
-
-            timestamp += 1;
-        }
-
-        for t in 0..50 {
-            mem_helper.fill(
-                record.buffer_write_aux_cols[t].prev_timestamp,
-                timestamp,
-                trace_row.mem_oc.buffer_bytes_write_aux_cols[t].as_mut()
-            );
-            trace_row.mem_oc.buffer_bytes_write_aux_cols[t].prev_data = record.buffer_write_aux_cols[t].prev_data.map(F::from_canonical_u8);
-            timestamp += 1;
-        }
-
-        // safety: the following approach only works when self.pointer_max_bits >= 24
-        let limb_shift = 1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits);
-        let buffer_limbs = record.buffer.to_le_bytes();
-        let need_range_check = [
-            buffer_limbs.last().unwrap(),
-            buffer_limbs.last().unwrap()
-        ];
-
-        for pair in need_range_check.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range((pair[0] * limb_shift) as u32, (pair[1] * limb_shift) as u32);
-        }
     }
 }
