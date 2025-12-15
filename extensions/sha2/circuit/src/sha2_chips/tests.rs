@@ -1,11 +1,7 @@
-#[cfg(feature = "cuda")]
-use std::io::Cursor;
 use std::sync::{Arc, Mutex};
 
 use hex::FromHex;
 use itertools::Itertools;
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::{testing::GpuTestChipHarness, DenseRecordArena};
 use openvm_circuit::{
     arch::{
         testing::{
@@ -24,8 +20,6 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_sha2_air::{word_into_u8_limbs, Sha256Config, Sha384Config, Sha512Config};
 use openvm_sha2_transpiler::Rv32Sha2Opcode;
-#[cfg(feature = "cuda")]
-use openvm_stark_backend::p3_air::BaseAir;
 use openvm_stark_backend::{
     interaction::BusIndex,
     p3_field::{Field, FieldAlgebra, PrimeField32},
@@ -38,7 +32,9 @@ use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
     crate::{Sha2BlockHasherChipGpu, Sha2MainChipGpu, Sha2RecordMut},
-    openvm_circuit::arch::testing::{default_bitwise_lookup_bus, GpuChipTestBuilder},
+    openvm_circuit::arch::testing::{
+        default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
+    },
     openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChipGPU,
 };
 
@@ -647,15 +643,6 @@ fn create_cuda_harness<C: Sha2Config>(tester: &GpuChipTestBuilder) -> GpuHarness
         block_cpu: block_hasher_chip,
         bitwise_air,
         bitwise_gpu,
-    }
-}
-
-#[cfg(feature = "cuda")]
-fn clone_dense_arena(arena: &DenseRecordArena) -> DenseRecordArena {
-    let mut cursor = Cursor::new(arena.records_buffer.get_ref().clone());
-    cursor.set_position(arena.records_buffer.position());
-    DenseRecordArena {
-        records_buffer: cursor,
     }
 }
 

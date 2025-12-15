@@ -3,7 +3,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use itertools::repeat_n;
 use openvm_circuit::{
     arch::{DenseRecordArena, RecordSeeker},
     utils::next_power_of_two_or_zero,
@@ -163,8 +162,6 @@ where
         let trace_height = next_power_of_two_or_zero(rows_used);
         let trace = DeviceMatrix::<F>::with_capacity(trace_height, C::BLOCK_HASHER_WIDTH);
 
-        trace.buffer().fill_zero();
-
         // one record per block, right now
         let num_blocks: u32 = num_records as u32;
 
@@ -199,17 +196,17 @@ where
                     )
                     .unwrap();
 
+                cuda_abi::sha256::sha256_fill_invalid_rows(
+                    trace.buffer(),
+                    trace_height,
+                    rows_used,
+                    &d_prev_hashes,
+                )
+                .unwrap();
                     cuda_abi::sha256::sha256_second_pass_dependencies(
                         trace.buffer(),
                         trace_height,
                         rows_used,
-                    )
-                    .unwrap();
-                    cuda_abi::sha256::sha256_fill_invalid_rows(
-                        trace.buffer(),
-                        trace_height,
-                        rows_used,
-                        &d_prev_hashes,
                     )
                     .unwrap();
                 }
@@ -241,17 +238,17 @@ where
                     )
                     .unwrap();
 
-                    cuda_abi::sha512::sha512_second_pass_dependencies(
-                        trace.buffer(),
-                        trace_height,
-                        rows_used,
-                    )
-                    .unwrap();
                     cuda_abi::sha512::sha512_fill_invalid_rows(
                         trace.buffer(),
                         trace_height,
                         rows_used,
                         &d_prev_hashes,
+                    )
+                    .unwrap();
+                    cuda_abi::sha512::sha512_second_pass_dependencies(
+                        trace.buffer(),
+                        trace_height,
+                        rows_used,
                     )
                     .unwrap();
                 }

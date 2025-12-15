@@ -181,7 +181,7 @@ where
         &self,
         first_dummy_row_mut: &mut [F],
         first_block_prev_hash: &[C::Word],
-    ) -> Sha2RoundColsRef<F> {
+    ) -> Sha2RoundColsRef<'_, F> {
         let first_dummy_row_const =
             unsafe { slice::from_raw_parts(first_dummy_row_mut.as_ptr(), C::BLOCK_HASHER_WIDTH) };
         let first_dummy_row_cols_const = Sha2RoundColsRef::from::<C>(

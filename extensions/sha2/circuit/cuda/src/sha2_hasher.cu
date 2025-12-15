@@ -915,6 +915,7 @@ __global__ void sha2_fill_invalid_rows(
         &first_dummy_row_inner[SHA2_COL_INDEX(V, Sha2RoundCols, work_vars.carry_e)];
 
     RowSlice dst(d_trace + row_idx, trace_height);
+    dst.fill_zero(0, Sha2Layout<V>::WIDTH);
     RowSlice dst_inner = dst.slice_from(Sha2Layout<V>::INNER_COLUMN_OFFSET);
 
     Sha2TraceHelper<V> helper;
