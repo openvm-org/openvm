@@ -260,10 +260,9 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
         // We set the global block index to 0 for padding rows
 
         // Global block index is 1 on first row
-        // TODO: uncomment
-        // builder
-        //     .when_first_row()
-        //     .assert_one(*local_cols.flags.global_block_idx);
+        builder
+            .when_first_row()
+            .assert_one(*local_cols.flags.global_block_idx);
 
         // Global block index is constant on all rows in a block
         builder.when(*local_cols.flags.is_round_row).assert_eq(
@@ -399,10 +398,9 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
             let expected_w_3 = next.schedule_helper.w_3.row(i);
             for j in 0..C::WORD_U16S {
                 let w_3_limb = compose::<AB::Expr>(&w_3[j * 16..(j + 1) * 16], 1);
-                // TODO: uncomment
-                // builder
-                //     .when(*local.flags.is_round_row)
-                //     .assert_eq(w_3_limb, expected_w_3[j].into());
+                builder
+                    .when(*local.flags.is_round_row)
+                    .assert_eq(w_3_limb, expected_w_3[j].into());
             }
         }
 
@@ -433,23 +431,20 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
                 // check because the degree is already 3. So we must fill in `intermed_4` with dummy
                 // values on the first round row and the digest row (rows 0 and 16 for SHA-256) to
                 // ensure the constraint holds on these rows.
-                // TODO: uncomment
-                // builder.when_transition().assert_eq(
-                //     next.schedule_helper.intermed_4[[i, j]],
-                //     w_idx_limb + sig_w_limb,
-                // );
+                builder.when_transition().assert_eq(
+                    next.schedule_helper.intermed_4[[i, j]],
+                    w_idx_limb + sig_w_limb,
+                );
 
-                // TODO: uncomment
-                // builder.when(is_row_intermed_8.clone()).assert_eq(
-                //     next.schedule_helper.intermed_8[[i, j]],
-                //     local.schedule_helper.intermed_4[[i, j]],
-                // );
+                builder.when(is_row_intermed_8.clone()).assert_eq(
+                    next.schedule_helper.intermed_8[[i, j]],
+                    local.schedule_helper.intermed_4[[i, j]],
+                );
 
-                // TODO: uncomment
-                // builder.when(is_row_intermed_12.clone()).assert_eq(
-                //     next.schedule_helper.intermed_12[[i, j]],
-                //     local.schedule_helper.intermed_8[[i, j]],
-                // );
+                builder.when(is_row_intermed_12.clone()).assert_eq(
+                    next.schedule_helper.intermed_12[[i, j]],
+                    local.schedule_helper.intermed_8[[i, j]],
+                );
             }
         }
 
