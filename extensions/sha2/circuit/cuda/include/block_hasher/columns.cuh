@@ -10,7 +10,6 @@ template <typename V, typename T> struct Sha2FlagsCols {
     T is_digest_row;
     T row_idx[V::ROW_VAR_CNT];
     T global_block_idx;
-    T local_block_idx;
 };
 
 template <typename V, typename T> struct Sha2MessageHelperCols {

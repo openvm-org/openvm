@@ -31,14 +31,12 @@ __device__ inline void write_round_stub(
         );
         SHA2INNER_WRITE_ROUND(V, inner, flags.is_digest_row, Fp::zero());
         SHA2INNER_WRITE_ROUND(V, inner, flags.global_block_idx, global_block_idx);
-        SHA2INNER_WRITE_ROUND(V, inner, flags.local_block_idx, 0);
     } else {
         // digest rows
         SHA2INNER_WRITE_DIGEST(V, inner, flags.is_round_row, Fp::zero());
         SHA2INNER_WRITE_DIGEST(V, inner, flags.is_first_4_rows, Fp::zero());
         SHA2INNER_WRITE_DIGEST(V, inner, flags.is_digest_row, Fp::one());
         SHA2INNER_WRITE_DIGEST(V, inner, flags.global_block_idx, global_block_idx);
-        SHA2INNER_WRITE_DIGEST(V, inner, flags.local_block_idx, 0);
     }
     // Write request_id in the wrapper column
     SHA2_WRITE_ROUND(V, row, request_id, Fp(request_id));

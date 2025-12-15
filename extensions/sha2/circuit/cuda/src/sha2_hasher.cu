@@ -272,7 +272,6 @@ template <typename V> struct Sha2TraceHelper {
             inner_row.slice_from(SHA2_COL_INDEX(V, Sha2RoundCols, flags.row_idx));
         row_idx_encoder.write_flag_pt(row_idx_flags, row_idx);
         SHA2INNER_WRITE_ROUND(V, inner_row, flags.global_block_idx, Fp(global_block_idx));
-        SHA2INNER_WRITE_ROUND(V, inner_row, flags.local_block_idx, Fp(0));
     }
 
     __device__ void write_flags_digest(
@@ -287,7 +286,6 @@ template <typename V> struct Sha2TraceHelper {
             inner_row.slice_from(SHA2_COL_INDEX(V, Sha2DigestCols, flags.row_idx));
         row_idx_encoder.write_flag_pt(row_idx_flags, row_idx);
         SHA2INNER_WRITE_DIGEST(V, inner_row, flags.global_block_idx, Fp(global_block_idx));
-        SHA2INNER_WRITE_DIGEST(V, inner_row, flags.local_block_idx, Fp(0));
     }
 
     __device__ void generate_carry_ae(

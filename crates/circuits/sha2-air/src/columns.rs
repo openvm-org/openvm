@@ -144,8 +144,6 @@ pub struct Sha2FlagsCols<T, const ROW_VAR_CNT: usize> {
     pub row_idx: [T; ROW_VAR_CNT],
     /// The global index of the current block
     pub global_block_idx: T,
-    /// Will store the index of the current block in the current message starting from 0
-    pub local_block_idx: T,
 }
 
 impl<O, T> Sha2FlagsColsRef<'_, T>

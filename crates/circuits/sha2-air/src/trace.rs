@@ -110,7 +110,6 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherFillerHelper<C> {
                     get_flag_pt_array(&self.row_idx_encoder, i),
                 );
                 *cols.flags.global_block_idx = F::from_canonical_u32(global_block_idx);
-                *cols.flags.local_block_idx = F::from_canonical_u32(0);
 
                 // W_idx = M_idx
                 if i < C::MESSAGE_ROWS {
@@ -285,7 +284,6 @@ impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherFillerHelper<C> {
                 );
                 *cols.flags.global_block_idx = F::from_canonical_u32(global_block_idx);
 
-                *cols.flags.local_block_idx = F::from_canonical_u32(0);
                 let final_hash: Vec<C::Word> = (0..C::HASH_WORDS)
                     .map(|i| work_vars[i].wrapping_add(prev_hash[i]))
                     .collect();
