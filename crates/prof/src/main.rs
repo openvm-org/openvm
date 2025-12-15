@@ -113,10 +113,16 @@ fn main() -> Result<()> {
         let mut markdown_output = String::from_utf8(writer)?;
 
         // Add GPU memory chart if available
-        if let Some(chart) = db.generate_gpu_memory_chart() {
+        if let Some((svg, table)) = db.generate_gpu_memory_chart() {
+            // Write SVG to separate file (metrics.memory.svg for metrics.md)
+            let svg_path = metrics_path.with_extension("memory.svg");
+            fs::write(&svg_path, &svg)?;
+
+            // Reference the SVG file in markdown
+            let svg_filename = svg_path.file_name().unwrap().to_string_lossy();
             markdown_output.push_str("\n## GPU Memory Usage\n\n");
-            markdown_output.push_str(&chart);
-            markdown_output.push('\n');
+            markdown_output.push_str(&format!("![GPU Memory Usage]({})\n\n", svg_filename));
+            markdown_output.push_str(&table);
         }
 
         // Add instruction count table aggregated by segment
@@ -128,10 +134,9 @@ fn main() -> Result<()> {
         }
 
         // TODO: calculate diffs for detailed metrics
-        // Add detailed metrics in a collapsible section
-        markdown_output.push_str("\n<details>\n<summary>Detailed Metrics</summary>\n\n");
-        markdown_output.push_str(&db.generate_markdown_tables());
-        markdown_output.push_str("</details>\n\n");
+        // Write detailed metrics to a separate file
+        let detailed_md_path = metrics_path.with_extension("detailed.md");
+        fs::write(&detailed_md_path, db.generate_markdown_tables())?;
 
         let md_path = metrics_path.with_extension("md");
         fs::write(&md_path, markdown_output)?;
