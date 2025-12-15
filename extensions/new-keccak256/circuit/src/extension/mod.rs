@@ -178,15 +178,12 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Keccak256 {
         );
         inventory.add_air(xorin_air);
 
-        let keccak_bus = PermutationCheckBus::new(inventory.new_bus_idx());
-
         let keccak_air = KeccakfVmAir::new(
             exec_bridge,
             memory_bridge,
             bitwise_lu,
             pointer_max_bits,
             KeccakfOpcode::CLASS_OFFSET,
-            keccak_bus,
         );
         inventory.add_air(keccak_air);
 

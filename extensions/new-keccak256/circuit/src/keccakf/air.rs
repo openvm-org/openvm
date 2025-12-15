@@ -32,7 +32,6 @@ pub struct KeccakfVmAir {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub ptr_max_bits: usize,
     pub(super) offset: usize,
-    pub keccak_bus: PermutationCheckBus,
 }
 
 impl<F> BaseAirWithPublicValues<F> for KeccakfVmAir {}
