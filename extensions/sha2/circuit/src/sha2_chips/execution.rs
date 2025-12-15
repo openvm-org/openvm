@@ -4,8 +4,8 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit::arch::{ExecutionCtxTrait, MeteredExecutionCtxTrait};
 use openvm_circuit::{
     arch::{
-        E2PreCompute, ExecuteFunc, InterpreterExecutor, InterpreterMeteredExecutor,
-        StaticProgramError, VmExecState,
+        AotExecutor, AotMeteredExecutor, E2PreCompute, ExecuteFunc, InterpreterExecutor,
+        InterpreterMeteredExecutor, StaticProgramError, VmExecState,
     },
     system::memory::online::GuestMemory,
 };
@@ -181,6 +181,12 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, C: Sha
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, height);
 }
+
+#[cfg(feature = "aot")]
+impl<F: PrimeField32, C: Sha2Config> AotExecutor<F> for Sha2VmExecutor<C> {}
+
+#[cfg(feature = "aot")]
+impl<F: PrimeField32, C: Sha2Config> AotMeteredExecutor<F> for Sha2VmExecutor<C> {}
 
 impl<C: Sha2Config> Sha2VmExecutor<C> {
     fn pre_compute_impl<F: PrimeField32>(
