@@ -1,10 +1,5 @@
 use std::sync::{Arc, Mutex};
 
-use crate::{
-    add_padding_to_message, read_slice_from_memory, write_slice_to_memory, Sha2BlockHasherChip,
-    Sha2BlockHasherDigestColsRefMut, Sha2BlockHasherVmAir, Sha2Config, Sha2MainAir, Sha2MainChip,
-    Sha2VmExecutor,
-};
 use hex::FromHex;
 use itertools::Itertools;
 use openvm_circuit::{
@@ -34,7 +29,6 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
-
 #[cfg(feature = "cuda")]
 use {
     crate::{Sha2BlockHasherChipGpu, Sha2MainChipGpu, Sha2RecordMut},
@@ -42,6 +36,12 @@ use {
         default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
     openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChipGPU,
+};
+
+use crate::{
+    add_padding_to_message, read_slice_from_memory, write_slice_to_memory, Sha2BlockHasherChip,
+    Sha2BlockHasherDigestColsRefMut, Sha2BlockHasherVmAir, Sha2Config, Sha2MainAir, Sha2MainChip,
+    Sha2VmExecutor,
 };
 
 const SHA2_BUS_IDX: BusIndex = 28;

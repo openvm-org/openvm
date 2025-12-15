@@ -46,18 +46,6 @@ __device__ __forceinline__ uint32_t word_to_u8_limb(typename V::Word w, int limb
     return static_cast<uint32_t>((w >> (8 * limb)) & static_cast<typename V::Word>(0xFF));
 }
 
-// Read a word from bits stored in a row slice
-template <typename V>
-__device__ __forceinline__ typename V::Word word_from_bits(RowSlice row, size_t col_index) {
-    typename V::Word result = 0;
-#pragma unroll
-    for (size_t i = 0; i < V::WORD_BITS; i++) {
-        Fp bit = row[col_index + i];
-        result |= (static_cast<typename V::Word>(bit.asUInt32()) << i);
-    }
-    return result;
-}
-
 // === Shared helpers mirroring the CPU tracegen structure ===
 template <typename V> struct Sha2TraceHelper {
     Encoder row_idx_encoder;
@@ -65,40 +53,20 @@ template <typename V> struct Sha2TraceHelper {
     __device__ Sha2TraceHelper()
         : row_idx_encoder(static_cast<uint32_t>(V::ROWS_PER_BLOCK + 1), 2, false) {}
 
-    __device__ __forceinline__ size_t base_a(bool is_digest, uint32_t row_idx) const {
-        return is_digest ? SHA2_COL_INDEX(V, Sha2DigestCols, hash.a[row_idx])
-                         : SHA2_COL_INDEX(V, Sha2RoundCols, work_vars.a[row_idx]);
+    __device__ __forceinline__ size_t base_a(uint32_t row_idx) const {
+        return SHA2_COL_INDEX(V, Sha2RoundCols, work_vars.a[row_idx]);
     }
 
-    __device__ __forceinline__ size_t base_e(bool is_digest, uint32_t row_idx) const {
-        return is_digest ? SHA2_COL_INDEX(V, Sha2DigestCols, hash.e[row_idx])
-                         : SHA2_COL_INDEX(V, Sha2RoundCols, work_vars.e[row_idx]);
+    __device__ __forceinline__ size_t base_e(uint32_t row_idx) const {
+        return SHA2_COL_INDEX(V, Sha2RoundCols, work_vars.e[row_idx]);
     }
 
-    __device__ __forceinline__ size_t base_carry_a(bool is_digest, uint32_t row_idx) const {
-        return is_digest ? SHA2_COL_INDEX(V, Sha2DigestCols, hash.carry_a[row_idx])
-                         : SHA2_COL_INDEX(V, Sha2RoundCols, work_vars.carry_a[row_idx]);
+    __device__ __forceinline__ size_t base_carry_a(uint32_t row_idx) const {
+        return SHA2_COL_INDEX(V, Sha2RoundCols, work_vars.carry_a[row_idx]);
     }
 
-    __device__ __forceinline__ size_t base_carry_e(bool is_digest, uint32_t row_idx) const {
-        return is_digest ? SHA2_COL_INDEX(V, Sha2DigestCols, hash.carry_e[row_idx])
-                         : SHA2_COL_INDEX(V, Sha2RoundCols, work_vars.carry_e[row_idx]);
-    }
-
-    __device__ __forceinline__ typename V::Word read_a(
-        RowSlice inner,
-        uint32_t row_idx,
-        bool is_digest
-    ) const {
-        return word_from_bits<V>(inner, base_a(is_digest, row_idx));
-    }
-
-    __device__ __forceinline__ typename V::Word read_e(
-        RowSlice inner,
-        uint32_t row_idx,
-        bool is_digest
-    ) const {
-        return word_from_bits<V>(inner, base_e(is_digest, row_idx));
+    __device__ __forceinline__ size_t base_carry_e(uint32_t row_idx) const {
+        return SHA2_COL_INDEX(V, Sha2RoundCols, work_vars.carry_e[row_idx]);
     }
 
     __device__ __forceinline__ void read_w(RowSlice inner, uint32_t j, Fp *w_limbs) const {
@@ -288,19 +256,15 @@ template <typename V> struct Sha2TraceHelper {
         SHA2INNER_WRITE_DIGEST(V, inner_row, flags.global_block_idx, Fp(global_block_idx));
     }
 
-    __device__ void generate_carry_ae(
-        RowSlice local_inner,
-        RowSlice next_inner,
-        bool next_is_digest
-    ) const {
+    __device__ void generate_carry_ae(RowSlice local_inner, RowSlice next_inner) const {
         Fp a_bits[2 * V::ROUNDS_PER_ROW][V::WORD_BITS];
         Fp e_bits[2 * V::ROUNDS_PER_ROW][V::WORD_BITS];
 #pragma unroll
         for (uint32_t i = 0; i < V::ROUNDS_PER_ROW; i++) {
-            read_word_bits(local_inner, base_a(false, i), a_bits[i]);
-            read_word_bits(next_inner, base_a(next_is_digest, i), a_bits[i + V::ROUNDS_PER_ROW]);
-            read_word_bits(local_inner, base_e(false, i), e_bits[i]);
-            read_word_bits(next_inner, base_e(next_is_digest, i), e_bits[i + V::ROUNDS_PER_ROW]);
+            read_word_bits(local_inner, base_a(i), a_bits[i]);
+            read_word_bits(next_inner, base_a(i), a_bits[i + V::ROUNDS_PER_ROW]);
+            read_word_bits(local_inner, base_e(i), e_bits[i]);
+            read_word_bits(next_inner, base_e(i), e_bits[i + V::ROUNDS_PER_ROW]);
         }
 
         const Fp pow16_inv = inv(Fp(1u << 16));
@@ -329,21 +293,14 @@ template <typename V> struct Sha2TraceHelper {
                 Fp cur_e_limb = compose_u16_limb(e_bits[i + 4], limb);
 
                 Fp e_sum = d_limb + t1_sum +
-                           (limb == 0 ? Fp::zero()
-                                      : next_inner[base_carry_e(next_is_digest, i) + limb - 1]);
+                           (limb == 0 ? Fp::zero() : next_inner[base_carry_e(i) + limb - 1]);
                 Fp a_sum = t1_sum + t2_sum +
-                           (limb == 0 ? Fp::zero()
-                                      : next_inner[base_carry_a(next_is_digest, i) + limb - 1]);
+                           (limb == 0 ? Fp::zero() : next_inner[base_carry_a(i) + limb - 1]);
                 Fp carry_e = (e_sum - cur_e_limb) * pow16_inv;
                 Fp carry_a = (a_sum - cur_a_limb) * pow16_inv;
 
-                if (next_is_digest) {
-                    SHA2INNER_WRITE_DIGEST(V, next_inner, hash.carry_e[i][limb], Fp(carry_e));
-                    SHA2INNER_WRITE_DIGEST(V, next_inner, hash.carry_a[i][limb], Fp(carry_a));
-                } else {
-                    SHA2INNER_WRITE_ROUND(V, next_inner, work_vars.carry_e[i][limb], Fp(carry_e));
-                    SHA2INNER_WRITE_ROUND(V, next_inner, work_vars.carry_a[i][limb], Fp(carry_a));
-                }
+                SHA2INNER_WRITE_ROUND(V, next_inner, work_vars.carry_e[i][limb], Fp(carry_e));
+                SHA2INNER_WRITE_ROUND(V, next_inner, work_vars.carry_a[i][limb], Fp(carry_a));
 
                 prev_carry_e = carry_e;
                 prev_carry_a = carry_a;
@@ -351,11 +308,7 @@ template <typename V> struct Sha2TraceHelper {
         }
     }
 
-    __device__ void generate_intermed_4(
-        RowSlice local_inner,
-        RowSlice next_inner,
-        bool next_is_digest
-    ) const {
+    __device__ void generate_intermed_4(RowSlice local_inner, RowSlice next_inner) const {
         Fp w_bits[2 * V::ROUNDS_PER_ROW][V::WORD_BITS];
         Fp w_limbs[2 * V::ROUNDS_PER_ROW][V::WORD_U16S];
 #pragma unroll
@@ -380,20 +333,12 @@ template <typename V> struct Sha2TraceHelper {
 #pragma unroll
             for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
                 Fp val = w_limbs[i][limb] + sig_limbs[limb];
-                if (next_is_digest) {
-                    SHA2INNER_WRITE_DIGEST(V, next_inner, schedule_helper.intermed_4[i][limb], val);
-                } else {
-                    SHA2INNER_WRITE_ROUND(V, next_inner, schedule_helper.intermed_4[i][limb], val);
-                }
+                SHA2INNER_WRITE_ROUND(V, next_inner, schedule_helper.intermed_4[i][limb], val);
             }
         }
     }
 
-    __device__ void generate_intermed_12(
-        RowSlice local_inner,
-        RowSlice next_inner,
-        bool local_is_digest
-    ) const {
+    __device__ void generate_intermed_12(RowSlice local_inner, RowSlice next_inner) const {
         Fp w_bits[2 * V::ROUNDS_PER_ROW][V::WORD_BITS];
         Fp w_limbs[2 * V::ROUNDS_PER_ROW][V::WORD_U16S];
 #pragma unroll
@@ -418,26 +363,17 @@ template <typename V> struct Sha2TraceHelper {
             for (uint32_t limb = 0; limb < V::WORD_U16S; limb++) {
                 Fp carry = read_carry_fp(next_inner, i, limb);
                 Fp prev_carry = (limb > 0) ? read_carry_fp(next_inner, i, limb - 1) : Fp::zero();
-                Fp w7_limb =
-                    (i < 3) ? (local_is_digest ? next_inner[SHA2_COL_INDEX(
-                                                     V, Sha2DigestCols, schedule_helper.w_3[i][limb]
-                                                 )]
-                                               : local_inner[SHA2_COL_INDEX(
-                                                     V, Sha2RoundCols, schedule_helper.w_3[i][limb]
-                                                 )])
-                            : w_limbs[i - 3][limb];
+                Fp w7_limb = (i < 3)
+                                 ? local_inner[SHA2_COL_INDEX(
+                                       V, Sha2RoundCols, schedule_helper.w_3[i][limb]
+                                   )]
+                                 : w_limbs[i - 3][limb];
                 Fp w_cur = w_limbs[i + 4][limb];
                 Fp sum = sig_limbs[limb] + w7_limb - carry * Fp(1u << 16) - w_cur + prev_carry;
                 Fp intermed = -sum;
-                if (local_is_digest) {
-                    SHA2INNER_WRITE_DIGEST(
-                        V, local_inner, schedule_helper.intermed_12[i][limb], intermed
-                    );
-                } else {
-                    SHA2INNER_WRITE_ROUND(
-                        V, local_inner, schedule_helper.intermed_12[i][limb], intermed
-                    );
-                }
+                SHA2INNER_WRITE_ROUND(
+                    V, local_inner, schedule_helper.intermed_12[i][limb], intermed
+                );
             }
         }
     }
@@ -504,9 +440,9 @@ template <typename V> struct Sha2TraceHelper {
         RowSlice next_row_slice(trace + next_block_row_base, trace_height);
         RowSlice next_inner = next_row_slice.slice_from(Sha2Layout<V>::INNER_COLUMN_OFFSET);
 
-        generate_intermed_12(last_round_inner, digest_inner, false);
-        generate_intermed_12(digest_inner, next_inner, false);
-        generate_intermed_4(digest_inner, next_inner, false);
+        generate_intermed_12(last_round_inner, digest_inner);
+        generate_intermed_12(digest_inner, next_inner);
+        generate_intermed_4(digest_inner, next_inner);
     }
 };
 
@@ -831,12 +767,12 @@ __global__ void sha2_first_pass_tracegen(
         }
 
         if (row_in_block == V::ROWS_PER_BLOCK - 2) {
-            helper.generate_carry_ae(local_inner, next_inner, false);
-            helper.generate_intermed_4(local_inner, next_inner, false);
+            helper.generate_carry_ae(local_inner, next_inner);
+            helper.generate_intermed_4(local_inner, next_inner);
         }
 
         if (row_in_block < V::MESSAGE_ROWS - 1) {
-            helper.generate_intermed_12(local_inner, next_inner, false);
+            helper.generate_intermed_12(local_inner, next_inner);
         }
     }
 }
@@ -877,7 +813,7 @@ __global__ void sha2_fill_first_dummy_row(Fp *trace, size_t trace_height, size_t
     Sha2TraceHelper<V> helper;
     helper.generate_default_row(inner_row, prev_hash, nullptr, nullptr, trace_height);
 
-    helper.generate_carry_ae(inner_row, inner_row, false);
+    helper.generate_carry_ae(inner_row, inner_row);
 }
 
 template <typename V>
