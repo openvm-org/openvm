@@ -33,7 +33,7 @@ pub struct KeccakfVmMetadata {
 
 impl MultiRowMetadata for KeccakfVmMetadata {
     fn get_num_rows(&self) -> usize {
-        1
+        NUM_ROUNDS
     }
 }
 
