@@ -168,11 +168,6 @@ where
 
         trace.buffer().fill_zero();
 
-        let block_to_record_idx = (0..num_records)
-            .flat_map(|i| repeat_n(i as u32, C::ROWS_PER_BLOCK))
-            .collect::<Vec<_>>();
-        let d_block_to_record_idx = block_to_record_idx.to_device().unwrap();
-
         // one record per block, right now
         let num_blocks: u32 = num_records as u32;
 
@@ -197,7 +192,6 @@ where
                         &d_records,
                         num_records,
                         &d_record_offsets,
-                        &d_block_to_record_idx,
                         num_blocks,
                         &d_prev_hashes,
                         self.pointer_max_bits,
@@ -239,7 +233,6 @@ where
                         &d_records,
                         num_records,
                         &d_record_offsets,
-                        &d_block_to_record_idx,
                         num_blocks,
                         &d_prev_hashes,
                         self.pointer_max_bits,

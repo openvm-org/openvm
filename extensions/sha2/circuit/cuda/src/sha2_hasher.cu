@@ -545,7 +545,6 @@ __global__ void sha2_first_pass_tracegen(
     uint8_t *records,
     size_t num_records,
     size_t *record_offsets,
-    uint32_t *block_to_record_idx,
     uint32_t total_num_blocks,
     typename V::Word *prev_hashes,
     uint32_t /*ptr_max_bits*/,
@@ -560,7 +559,7 @@ __global__ void sha2_first_pass_tracegen(
         return;
     }
 
-    uint32_t record_idx = block_to_record_idx[global_block_idx];
+    uint32_t record_idx = global_block_idx;
     if (record_idx >= num_records) {
         return;
     }
@@ -937,7 +936,6 @@ int launch_sha2_first_pass_tracegen(
     uint8_t *d_records,
     size_t num_records,
     size_t *d_record_offsets,
-    uint32_t *d_block_to_record_idx,
     uint32_t total_num_blocks,
     typename V::Word *d_prev_hashes,
     uint32_t ptr_max_bits,
@@ -955,7 +953,6 @@ int launch_sha2_first_pass_tracegen(
         d_records,
         num_records,
         d_record_offsets,
-        d_block_to_record_idx,
         total_num_blocks,
         d_prev_hashes,
         ptr_max_bits,
@@ -1028,7 +1025,6 @@ int launch_sha256_first_pass_tracegen(
     uint8_t *d_records,
     size_t num_records,
     size_t *d_record_offsets,
-    uint32_t *d_block_to_record_idx,
     uint32_t total_num_blocks,
     uint32_t *d_prev_hashes,
     uint32_t ptr_max_bits,
@@ -1044,7 +1040,6 @@ int launch_sha256_first_pass_tracegen(
         d_records,
         num_records,
         d_record_offsets,
-        d_block_to_record_idx,
         total_num_blocks,
         reinterpret_cast<uint32_t *>(d_prev_hashes),
         ptr_max_bits,
@@ -1062,7 +1057,6 @@ int launch_sha512_first_pass_tracegen(
     uint8_t *d_records,
     size_t num_records,
     size_t *d_record_offsets,
-    uint32_t *d_block_to_record_idx,
     uint32_t total_num_blocks,
     uint64_t *d_prev_hashes,
     uint32_t ptr_max_bits,
@@ -1078,7 +1072,6 @@ int launch_sha512_first_pass_tracegen(
         d_records,
         num_records,
         d_record_offsets,
-        d_block_to_record_idx,
         total_num_blocks,
         d_prev_hashes,
         ptr_max_bits,
