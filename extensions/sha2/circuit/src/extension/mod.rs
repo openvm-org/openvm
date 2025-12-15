@@ -112,6 +112,13 @@ where
 pub struct Sha2;
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
+#[cfg_attr(
+    feature = "aot",
+    derive(
+        openvm_circuit_derive::AotExecutor,
+        openvm_circuit_derive::AotMeteredExecutor
+    )
+)]
 pub enum Sha2Executor {
     Sha256(Sha2VmExecutor<Sha256Config>),
     Sha512(Sha2VmExecutor<Sha512Config>),

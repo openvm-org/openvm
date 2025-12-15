@@ -4,8 +4,8 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit::arch::{ExecutionCtxTrait, MeteredExecutionCtxTrait};
 use openvm_circuit::{
     arch::{
-        AotExecutor, AotMeteredExecutor, E2PreCompute, ExecuteFunc, InterpreterExecutor,
-        InterpreterMeteredExecutor, StaticProgramError, VmExecState,
+        E2PreCompute, ExecuteFunc, InterpreterExecutor, InterpreterMeteredExecutor,
+        StaticProgramError, VmExecState,
     },
     system::memory::online::GuestMemory,
 };
