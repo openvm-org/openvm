@@ -601,7 +601,7 @@ fn create_cuda_harness<C: Sha2Config>(tester: &GpuChipTestBuilder) -> GpuHarness
     let (main_air, main_executor, main_chip) = create_harness_fields(
         tester.system_port(),
         dummy_bitwise_chip.clone(),
-        tester.cpu_memory_helper(),
+        tester.dummy_memory_helper(),
         tester.address_bits(),
     );
 
@@ -610,7 +610,7 @@ fn create_cuda_harness<C: Sha2Config>(tester: &GpuChipTestBuilder) -> GpuHarness
     let block_hasher_chip = Sha2BlockHasherChip::new(
         dummy_bitwise_chip.clone(),
         tester.address_bits(),
-        tester.cpu_memory_helper(),
+        tester.dummy_memory_helper(),
         main_chip.records.clone(),
     );
 
@@ -698,8 +698,8 @@ fn test_cuda_rand_sha2_multi_block<C: Sha2Config + 'static>() {
         harness.block_cpu,
         (),
     );
-    // tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
-    // tester.finalize().simple_test().unwrap();
+    tester = tester.load_periphery(harness.bitwise_air, harness.bitwise_gpu);
+    tester.finalize().simple_test().unwrap();
 }
 
 #[cfg(feature = "cuda")]
