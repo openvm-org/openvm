@@ -1,13 +1,9 @@
 use openvm as _;
-
 use revm::{
     db::BenchmarkDB,
     primitives::{address, bytes, hex, Bytecode, Bytes, TxKind},
     Evm,
 };
-
-// Pull in the transpiler-generated intrinsic implementations (moduli/ecc setup)
-openvm::init!();
 
 const BYTES: &str = include_str!("snailtracer.hex");
 
