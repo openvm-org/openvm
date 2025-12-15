@@ -1,7 +1,8 @@
 # SHA-2 VM Extension
 
 This crate contains circuits for the SHA-2 family of hash functions.
-We support SHA-256, SHA-512, and SHA-384.
+We support constraining the block compression functions for SHA-256 and SHA-512.
+It is also possible to use this crate to constrain the SHA-384 algorithm, as described in the next section.
 
 ## SHA-2 Algorithms Summary
 
@@ -25,19 +26,42 @@ The differences with the SHA-512 algorithm are that:
 - the initial hash state is different.
 
 The SHA-384 algorithm is a truncation of the SHA-512 output to 384 bits, and the only difference is that the initial hash state is different.
+In particular, SHA-384 shares its compression function with SHA-512, so users may write guest code that supports SHA-384 by using this crate's SHA-512 compression function.
 
 ## Design Overview
 
-We reuse the same AIR code to produce circuits for all three algorithms.
+We support the `SHA256_UPDATE` and `SHA512_UPDATE` intrinsic instructions, each of which takes three operands, `dst`, `state`, and `input`.
+- `input` is a pointer to exactly one block of message bytes (the size of a block varies for each SHA-2 variant.)
+- `state` is a pointer to the current hasher state (8 words in big endian). Word size varies by SHA-2 variant.
+- `dst` is a pointer where the updated state should be stored. `dst` may be equal to `state`.
+
+The `SHA256_UPDATE` and `SHA512_UPDATE` instructions write the value of the updated hasher state after consuming the input to `dst`.
+Note that these instructions do not pad the input.
+
+### Chips
+
+The SHA-2 extension consists of 2 chips: `Sha2MainChip` and `Sha2BlockHasherChip`.  
+
+The main chip constraints reading `state` and `input` from memory and writing the new state into `dst`.
+The main chip sends the operands to the the block hasher chip via interactions.
+The trace of the main chip consists of one row per instruction.
+
+The block hasher chip constraints the SHA-2 compression algorithm for one block at a time.
+More specifically, the trace of the block hasher chip consists of groups of 17 consecutive rows (21 for SHA-512) which together constrain the 64 (resp. 80) rounds of the SHA-2 compression algorithm for one block of input
+Each block receives the previous hasher state and the input bytes from the main chip and sends the updated state to the main chip via interactions.
+Note that the block hasher chip consists of a SubAir, which constrains all the SHA-2 logic, while the block hasher chip itself only constrains its interactions with the main chip.
+
+
+### Air Design
+
+We reuse the same AIR code to produce circuits for SHA-256 and SHA-512.
 To achieve this, we parameterize the AIR by constants (such as the word size, number of rounds, and block size) that are specific to each algorithm.
 
-This chip produces an AIR that consists of $R+1$ rows for each block of the message, and no more rows
+The block hasher AIR consists of $R+1$ rows for each instruction, and no more rows
 (for SHA-256, $R = 16$ and for SHA-512 and SHA-384, $R = 20$).
 The first $R$ rows of each block are called 'round rows', and each of them constrains four rounds of the hash algorithm.
 Each row constrains updates to the working variables on each round, and also constrains the message schedule words based on previous rounds.
 The final row of each block is called a 'digest row' and it produces a final hash for the block, computed as the sum of the working variables and the previous block's final hash.
-
-Note that this chip only supports messages of length less than $2^{29}$ bytes.
 
 ### Storing working variables
 
@@ -61,49 +85,9 @@ Since we can only constrain two rows at a time, we cannot access data from more 
 So, we maintain intermediate values that we call `intermed_4`, `intermed_8` and `intermed_12`, where `intermed_i = w_i + sig_0(w_{i+1})` where `w_i` is the value of `w` from `i` rounds ago and `sig_0` denotes the `sigma_0` function from the FIPS spec.
 Since we can reliably constrain values from four rounds ago, we can build up `intermed_16` from these values, which is needed for computing the message schedule.
 
-### Note about `is_last_block`
-
-The last block of every message should have the `is_last_block` flag set to `1`.
-Note that `is_last_block` is not constrained to be true for the last block of every message, instead it *defines* what the last block of a message is.
-For instance, if we produce a trace with 10 blocks and only the last block has `is_last_block = 1` then the constraints will interpret it as a single message of length 10 blocks.
-If, however, we set `is_last_block` to true for the 6th block, the trace will be interpreted as hashing two messages, each of length 5 blocks.
-
-Note that we do constrain, however, that the very last block of the trace has `is_last_block = 1`.
 
 ### Dummy values
 
 Some constraints have degree three, and so we cannot restrict them to particular rows due to the limitation of the maximum constraint degree.
 We must enforce them on all rows, and in order to ensure they hold on the remaining rows we must fill in some cells with appropriate dummy values.
 We use this trick in several places in this chip.
-
-### Block index counter variables
-
-There are two "block index" counter variables in each row named `global_block_idx` and `local_block_idx`.
-Both of these variables take on the same value on all $R+1$ rows in a block. 
-
-The `global_block_idx` is the index of the block in the entire trace.
-The very first block in the trace will have `global_block_idx = 1` on each row and the counter will increment by 1 between blocks.  
-The padding rows will all have `global_block_idx = 0`.
-The `global_block_idx` is used in interaction constraints to constrain the value of `hash` between blocks.
-
-The  `local_block_idx` is the index of the block in the current message.
-It starts at 0 for the first block of each message and increments by 1 for each block.
-The `local_block_idx` is reset to 0 after each message.
-The padding rows will all have `local_block_idx = 0`.
-The `local_block_idx` is used to calculate the length of the message processed so far when the first padding row is encountered.
-
-### VM air vs SubAir
-
-The SHA-2 VM extension chip uses the `Sha2Air` SubAir to help constrain the appropriate SHA-2 hash algorithm.
-The SubAir is also parameterized by the specific SHA-2 variant's constants.
-The VM extension AIR constrains the correctness of the message padding, while the SubAir adds all other constraints related to the hash algorithm.
-The VM extension AIR also constrains memory reads and writes.
-
-### A gotcha about padding rows
-
-There are two senses of the word padding used in the context of this chip and this can be confusing.
-First, we use padding to refer to the extra bits added to the message that is input to the hash algorithm in order to make the input's length a multiple of the block size.
-So, we may use the term 'padding rows' to refer to round rows that correspond to the padded bits of a message (as in `Sha2VmAir::eval_padding_row`).
-Second, the dummy rows that are added to the trace to make the trace height a power of 2 are also called padding rows (see the `is_padding_row` flag).
-In the SubAir, padding row probably means dummy row.
-In the VM air, it probably refers to the message padding.
