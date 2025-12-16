@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use stark_backend_v2::SystemParams;
 
 pub const DEFAULT_APP_LOG_BLOWUP: usize = 1;
+pub const DEFAULT_APP_L_SKIP: usize = 4;
 pub const DEFAULT_LEAF_LOG_BLOWUP: usize = 2;
 pub const DEFAULT_INTERNAL_LOG_BLOWUP: usize = 2;
 
