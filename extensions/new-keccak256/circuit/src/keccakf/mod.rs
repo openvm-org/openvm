@@ -1,7 +1,7 @@
 pub mod air;
 pub mod columns;
 pub mod execution;
-#[cfg(test)]
+#[cfg(all(test, feature = "test-utils"))]
 pub mod tests;
 pub mod trace;
 pub mod utils;

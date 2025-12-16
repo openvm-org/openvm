@@ -25,13 +25,17 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Keccak256>
         inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let pointer_max_bits = inventory.airs().pointer_max_bits();
-        
+        let timestamp_max_bits = inventory.timestamp_max_bits();
+
+        let range_checker = get_inventory_range_checker(inventory);
         let bitwise_lu = get_or_create_bitwise_op_lookup(inventory)?;
 
         inventory.next_air::<XorinVmAir>()?;
         let xorin_chip = XorinVmChipGpu::new(
-            bitwise_lu.clone(),
+            range_checker,
+            bitwise_lu,
             pointer_max_bits,
+            timestamp_max_bits as u32,
         );
         inventory.add_executor_chip(xorin_chip);
 

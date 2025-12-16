@@ -15,9 +15,12 @@ pub mod xorin {
             height: usize,
             width: usize,
             d_records: DeviceBufferView,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
             d_bitwise_lookup: *const u32,
             bitwise_num_bits: usize,
             pointer_max_bits: u32,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -26,9 +29,11 @@ pub mod xorin {
         d_trace: &DeviceBuffer<F>,
         height: usize,
         d_records: &DeviceBuffer<u8>,
+        d_range_checker: &DeviceBuffer<F>,
         d_bitwise_lookup: &DeviceBuffer<F>,
         bitwise_num_bits: usize,
         pointer_max_bits: u32,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_xorin_tracegen(
@@ -36,9 +41,12 @@ pub mod xorin {
             height,
             d_trace.len() / height,
             d_records.view(),
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
             pointer_max_bits,
+            timestamp_max_bits,
         ))
     }
 }
