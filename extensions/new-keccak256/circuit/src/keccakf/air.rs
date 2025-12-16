@@ -194,12 +194,12 @@ impl KeccakfVmAir {
         buffer_bytes_write_aux_cols: &[MemoryWriteAuxCols<AB::Var, 4>; 200/4]
     ) {
         let is_enabled = local.instruction.is_enabled;
-        let is_final_round = local.inner.step_flags[0];
+        let is_final_round = local.inner.step_flags[NUM_ROUNDS - 1];
         let should_write = is_enabled * is_final_round;
         
-        const PREIMAGE_BYTES: usize = 25 * U64_LIMBS * 2;
-        let local_preimage_bytes: [AB::Expr; PREIMAGE_BYTES] = std::array::from_fn(|byte_idx| {
-            // `preimage` is represented as 5 * 5 * U64_LIMBS u16 limbs; each u16 limb is split into 2 bytes.
+        const POSTIMAGE_BYTES: usize = 25 * U64_LIMBS * 2;
+        let local_postimage_bytes: [AB::Expr; POSTIMAGE_BYTES] = std::array::from_fn(|byte_idx| {
+            // `postimage` is represented as 5 * 5 * U64_LIMBS u16 limbs; each u16 limb is split into 2 bytes.
             let u16_idx = byte_idx / 2;
             let is_hi_byte = (byte_idx % 2) == 1;
 
@@ -215,9 +215,9 @@ impl KeccakfVmAir {
             if is_hi_byte { hi } else { lo }
         });
 
-        for idx in 0..(PREIMAGE_BYTES / 4) {
+        for idx in 0..(POSTIMAGE_BYTES / 4) {
             let read_chunk: [AB::Expr; 4] =
-                std::array::from_fn(|j| local_preimage_bytes[4 * idx + j].clone());
+                std::array::from_fn(|j| local_postimage_bytes[4 * idx + j].clone());
             
             let ptr = local.instruction.buffer + AB::Expr::from_canonical_usize(idx * 4);
 
