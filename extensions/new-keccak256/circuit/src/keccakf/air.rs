@@ -249,22 +249,24 @@ impl KeccakfVmAir {
         next: &KeccakfVmCols<AB::Var>,
         timestamp: AB::Expr,
     ) {
+        let is_final_round = local.inner.step_flags[NUM_ROUNDS - 1];
+        let is_enabled = local.instruction.is_enabled; 
+        let need_check = is_enabled * not(is_final_round);
         // todo: check if this needs to be only on when_transition 
         for idx in 0..100 {
-            builder.assert_eq(local.preimage_state_hi[idx], next.preimage_state_hi[idx]);
-            builder.assert_eq(local.postimage_state_hi[idx], next.postimage_state_hi[idx]);
-            builder.assert_eq(local.instruction.pc, next.instruction.pc);
-            builder.assert_eq(local.instruction.is_enabled, next.instruction.is_enabled);
-            builder.assert_eq(local.instruction.buffer_ptr, next.instruction.buffer_ptr);
-            builder.assert_eq(local.instruction.buffer, next.instruction.buffer);
+            builder.when(need_check.clone()).assert_eq(local.preimage_state_hi[idx], next.preimage_state_hi[idx]);
+            builder.when(need_check.clone()).assert_eq(local.postimage_state_hi[idx], next.postimage_state_hi[idx]);
+            builder.when(need_check.clone()).assert_eq(local.instruction.pc, next.instruction.pc);
+            builder.when(need_check.clone()).assert_eq(local.instruction.is_enabled, next.instruction.is_enabled);
+            builder.when(need_check.clone()).assert_eq(local.instruction.buffer_ptr, next.instruction.buffer_ptr);
+            builder.when(need_check.clone()).assert_eq(local.instruction.buffer, next.instruction.buffer);
             for limb in 0..4 {
-                builder.assert_eq(local.instruction.buffer_limbs[limb], next.instruction.buffer_limbs[limb]);
+                builder.when(need_check.clone()).assert_eq(local.instruction.buffer_limbs[limb], next.instruction.buffer_limbs[limb]);
             }
         }
         // safety: mem_oc does not need to be checked here because in the rows which is not first or last it is not used
-        // and in the first or last rows, the mem_oc fields which is used is already constraiend by the interactions 
-        let is_final_round = local.inner.step_flags[NUM_ROUNDS - 1];
-        builder.when(not(is_final_round)).assert_eq(timestamp, next.timestamp);
+        // and in the first or last rows, the mem_oc fields which is used is already constraiend by the interactions     
+        builder.when(need_check.clone()).assert_eq(timestamp, next.timestamp);
     }
 
 }
