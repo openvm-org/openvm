@@ -571,14 +571,17 @@ fn negative_sha384_test_bad_final_hash() {
 // ////////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(feature = "cuda")]
+type Sha2GpuTestChip<C> = GpuTestChipHarness<
+    F,
+    Sha2VmExecutor<C>,
+    Sha2MainAir<C>,
+    Sha2MainChipGpu<C>,
+    Sha2MainChip<F, C>,
+>;
+
+#[cfg(feature = "cuda")]
 struct GpuHarness<C: Sha2Config> {
-    pub main: GpuTestChipHarness<
-        F,
-        Sha2VmExecutor<C>,
-        Sha2MainAir<C>,
-        Sha2MainChipGpu<C>,
-        Sha2MainChip<F, C>,
-    >,
+    pub main: Sha2GpuTestChip<C>,
     block_air: Sha2BlockHasherVmAir<C>,
     block_gpu: Sha2BlockHasherChipGpu<C>,
     block_cpu: Sha2BlockHasherChip<F, C>,
@@ -601,8 +604,7 @@ fn create_cuda_harness<C: Sha2Config>(tester: &GpuChipTestBuilder) -> GpuHarness
         tester.address_bits(),
     );
 
-    let block_hasher_air =
-        Sha2BlockHasherVmAir::new(bitwise_bus.clone(), SUBAIR_BUS_IDX, SHA2_BUS_IDX);
+    let block_hasher_air = Sha2BlockHasherVmAir::new(bitwise_bus, SUBAIR_BUS_IDX, SHA2_BUS_IDX);
     let block_hasher_chip = Sha2BlockHasherChip::new(
         dummy_bitwise_chip.clone(),
         tester.address_bits(),

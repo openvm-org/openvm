@@ -53,7 +53,7 @@ impl<F: PrimeField32, C: Sha2Config> InterpreterExecutor<F> for Sha2VmExecutor<C
     {
         let data: &mut Sha2PreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_handler::<_, _>)
+        Ok(execute_e1_handler::<_, _, C>)
     }
 }
 

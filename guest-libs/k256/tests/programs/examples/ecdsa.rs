@@ -4,6 +4,7 @@
 extern crate alloc;
 
 use core::hint::black_box;
+
 use ecdsa::RecoveryId;
 use hex_literal::hex;
 use openvm_k256::ecdsa::{Signature, VerifyingKey};
@@ -55,7 +56,7 @@ fn main() {
         let digest = hasher.finalize();
         let sig = Signature::try_from(vector.sig.as_slice()).unwrap();
         let recid = vector.recid;
-        let pk = VerifyingKey::recover_from_prehash(digest.as_slice(), &sig, recid).unwrap();
+        let pk = VerifyingKey::recover_from_prehash(&digest, &sig, recid).unwrap();
         assert_eq!(&vector.pk[..], &pk.to_sec1_bytes(true));
     }
 }

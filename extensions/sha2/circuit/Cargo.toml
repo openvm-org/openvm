@@ -26,9 +26,7 @@ rand.workspace = true
 serde.workspace = true
 sha2 = { version = "0.10", features = ["compress"] }
 ndarray = { workspace = true, default-features = false }
-strum = { workspace = true }
 cfg-if.workspace = true
-num_enum = { workspace = true }
 itertools = { workspace = true }
 
 [dev-dependencies]

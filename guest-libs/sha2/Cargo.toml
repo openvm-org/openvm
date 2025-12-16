@@ -21,7 +21,6 @@ openvm-circuit = { workspace = true, features = ["test-utils", "parallel"] }
 openvm-transpiler = { workspace = true }
 openvm-sha2-transpiler = { workspace = true }
 openvm-sha2-circuit = { workspace = true }
-openvm-sha2-air = { workspace = true }
 openvm-rv32im-transpiler = { workspace = true }
 openvm-toolchain-tests = { workspace = true }
 eyre = { workspace = true }

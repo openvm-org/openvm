@@ -7153,7 +7153,6 @@ dependencies = [
  "openvm-circuit",
  "openvm-instructions",
  "openvm-rv32im-transpiler",
- "openvm-sha2-air",
  "openvm-sha2-circuit",
  "openvm-sha2-guest",
  "openvm-sha2-transpiler",
@@ -7167,14 +7166,11 @@ dependencies = [
 name = "openvm-sha2-air"
 version = "1.4.2"
 dependencies = [
- "itertools 0.14.0",
  "ndarray",
  "num_enum",
- "openvm-circuit",
  "openvm-circuit-primitives",
  "openvm-circuit-primitives-derive",
  "openvm-stark-backend",
- "openvm-stark-sdk",
  "rand 0.8.5",
  "sha2 0.10.9",
 ]
@@ -7189,7 +7185,6 @@ dependencies = [
  "hex",
  "itertools 0.14.0",
  "ndarray",
- "num_enum",
  "openvm-circuit",
  "openvm-circuit-derive",
  "openvm-circuit-primitives",
@@ -7206,7 +7201,6 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "sha2 0.10.9",
- "strum 0.26.3",
 ]
 
 [[package]]
