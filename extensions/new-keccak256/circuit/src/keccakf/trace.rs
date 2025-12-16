@@ -127,7 +127,7 @@ where
         // convert back to blocks of u8's 
         let mut result_u8 : [u8; 200] = [0; 200];
         for idx in 0..(200/8) {
-            let chunk: [u8; 8] = preimage_buffer_bytes_u64[idx].to_be_bytes();
+            let chunk: [u8; 8] = preimage_buffer_bytes_u64[idx].to_le_bytes();
             result_u8[8 * idx .. 8 * idx + 8].copy_from_slice(&chunk);
         }
 
@@ -143,7 +143,6 @@ where
             );
         }
 
-        state.memory.timestamp = state.memory.timestamp();
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         Ok(())
@@ -182,6 +181,12 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
         }
         let mut postimage_buffer_bytes_u64 = preimage_buffer_bytes_u64;
         tiny_keccak::keccakf(&mut postimage_buffer_bytes_u64);
+
+        let mut postimage_buffer_bytes: [u8; 200] = [0u8; 200];
+        for idx in 0..25 {
+            let chunk: [u8; 8] = postimage_buffer_bytes_u64[idx].to_le_bytes();
+            postimage_buffer_bytes[8 * idx .. 8 * idx + 8].copy_from_slice(&chunk);
+        }
 
         trace
             // Each Keccak-f round corresponds to exactly one trace row of width NUM_KECCAKF_VM_COLS.
@@ -222,6 +227,7 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                 row[..NUM_KECCAK_PERM_COLS].copy_from_slice(
                     &p3_trace.values[row_idx * NUM_KECCAK_PERM_COLS..(row_idx + 1) * NUM_KECCAK_PERM_COLS],
                 );
+
                 // fills in preimage_state_hi
                 let cols: &mut KeccakfVmCols<F> = row.borrow_mut();
                 for idx in 0..100 {
@@ -229,32 +235,27 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                 }
                 // fills in postimage_state_hi
                 for idx in 0..100 {
-                    cols.postimage_state_hi[idx] = F::from_canonical_u8(preimage_buffer_bytes[2 * idx + 1]);
+                    cols.postimage_state_hi[idx] = F::from_canonical_u8(postimage_buffer_bytes[2 * idx + 1]);
                 }
                 // fills in instruction
                 cols.instruction.pc = F::from_canonical_u32(record.pc);
                 cols.instruction.is_enabled = F::ONE;
+                println!("row_idx: {row_idx}, timestamp: {timestamp}");
                 cols.timestamp = F::from_canonical_u32(timestamp);
                 cols.instruction.buffer_ptr = F::from_canonical_u32(record.rd_ptr);
                 cols.instruction.buffer = F::from_canonical_u32(record.buffer);
                 cols.instruction.buffer_limbs = record.buffer.to_le_bytes().map(F::from_canonical_u8);
 
-                // safety: the following approach only works when self.pointer_max_bits >= 24
-                let limb_shift = 1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits);
-                let buffer_limbs = record.buffer.to_le_bytes();
-                let need_range_check = [
-                    buffer_limbs.last().unwrap(),
-                    buffer_limbs.last().unwrap()
-                ];
-                for pair in need_range_check.chunks_exact(2) {
-                    self.bitwise_lookup_chip
-                        .request_range((pair[0] * limb_shift) as u32, (pair[1] * limb_shift) as u32);
-                }
+                const U64_LIMBS: usize = 4;
+                const PREIMAGE_BYTES: usize = 25 * U64_LIMBS * 2;
+        
+                
+
                 // fills in memory offline checker
                 if row_idx == 0 {
                     mem_helper.fill(
                         record.register_aux_cols[0].prev_timestamp,
-                        record.timestamp,
+                        timestamp,
                         cols.mem_oc.register_aux_cols[0].as_mut()
                     );
                     timestamp += 1;
@@ -266,6 +267,18 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                         );
                         timestamp += 1;
                     }
+
+                    // safety: the following approach only works when self.pointer_max_bits >= 24
+                    // let limb_shift = 1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits);
+                    // let buffer_limbs = record.buffer.to_le_bytes();
+                    // let need_range_check = [
+                    //     buffer_limbs.last().unwrap(),
+                    //     buffer_limbs.last().unwrap()
+                    // ];
+                    // for pair in need_range_check.chunks_exact(2) {
+                    //     self.bitwise_lookup_chip
+                    //         .request_range((pair[0] * limb_shift) as u32, (pair[1] * limb_shift) as u32);
+                    // }
                 }
 
                 if row_idx == NUM_ROUNDS - 1 {
@@ -279,10 +292,6 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                         timestamp += 1;
                     }
                 }
-
-
-                println!("row_idx: {}", row_idx);
-                println!("trace rows: {:?}", cols);
             });
     }
 }

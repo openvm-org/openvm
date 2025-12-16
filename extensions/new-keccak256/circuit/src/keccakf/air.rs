@@ -69,7 +69,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfVmAir {
             SubAirBuilder::<AB, KeccakAir, AB::Var>::new(builder, 0..NUM_KECCAK_PERM_COLS);
         keccak_f_air.eval(&mut sub_builder);
 
-        // only active during the last round in each instruction 
+        // // only active during the last round in each instruction 
         self.constrain_output_write(builder, local, &mut timestamp, &mem_oc.buffer_bytes_write_aux_cols);
 
         self.constrain_rounds_transition(builder, local, next, timestamp);
@@ -130,18 +130,18 @@ impl KeccakfVmAir {
             instruction.buffer_limbs[3] * AB::F::from_canonical_u32(1 << 24)
         );
 
-        let limb_shift = AB::F::from_canonical_usize(
-            1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.ptr_max_bits),
-        );
-        let need_range_check = [
-            *instruction.buffer_limbs.last().unwrap(),
-            *instruction.buffer_limbs.last().unwrap()
-        ];
-        for pair in need_range_check.chunks_exact(2) {
-            self.bitwise_lookup_bus
-                .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
-                .eval(builder, should_eval.clone());
-        }
+        // let limb_shift = AB::F::from_canonical_usize(
+        //     1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.ptr_max_bits),
+        // );
+        // let need_range_check = [
+        //     *instruction.buffer_limbs.last().unwrap(),
+        //     *instruction.buffer_limbs.last().unwrap()
+        // ];
+        // for pair in need_range_check.chunks_exact(2) {
+        //     self.bitwise_lookup_bus
+        //         .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
+        //         .eval(builder, should_eval.clone());
+        // }
     }
 
     #[inline]
@@ -164,8 +164,8 @@ impl KeccakfVmAir {
 
             let i = u16_idx / U64_LIMBS;
             let limb = u16_idx % U64_LIMBS;
-            let y = i / 5;
-            let x = i % 5;
+            let x = i / 5;
+            let y = i % 5;
 
             let state_limb: AB::Expr = local.inner.preimage[y][x][limb].into();
             let hi: AB::Expr = local.preimage_state_hi[i * U64_LIMBS + limb].into();
@@ -202,17 +202,17 @@ impl KeccakfVmAir {
         let is_enabled = local.instruction.is_enabled;
         let is_final_round = local.inner.step_flags[NUM_ROUNDS - 1];
         let should_write = is_enabled * is_final_round;
-        
-        const POSTIMAGE_BYTES: usize = 25 * U64_LIMBS * 2;
+
+        const POSTIMAGE_BYTES: usize = 25 * 4 * 2;
         let local_postimage_bytes: [AB::Expr; POSTIMAGE_BYTES] = std::array::from_fn(|byte_idx| {
-            // `postimage` is represented as 5 * 5 * U64_LIMBS u16 limbs; each u16 limb is split into 2 bytes.
+            // `preimage` is represented as 5 * 5 * U64_LIMBS u16 limbs; each u16 limb is split into 2 bytes.
             let u16_idx = byte_idx / 2;
             let is_hi_byte = (byte_idx % 2) == 1;
 
             let i = u16_idx / U64_LIMBS;
             let limb = u16_idx % U64_LIMBS;
-            let y = i / 5;
-            let x = i % 5;
+            let x = i / 5;
+            let y = i % 5;
 
             let state_limb: AB::Expr = local.inner.a_prime_prime[y][x][limb].into();
             let hi: AB::Expr = local.postimage_state_hi[i * U64_LIMBS + limb].into();
@@ -221,22 +221,21 @@ impl KeccakfVmAir {
             if is_hi_byte { hi } else { lo }
         });
 
-        for idx in 0..(POSTIMAGE_BYTES / 4) {
-            let read_chunk: [AB::Expr; 4] =
+        for idx in 0..(200 / 4) {
+            let write_chunk: [AB::Expr; 4] =
                 std::array::from_fn(|j| local_postimage_bytes[4 * idx + j].clone());
             
             let ptr = local.instruction.buffer + AB::Expr::from_canonical_usize(idx * 4);
 
             self.memory_bridge.write(
                 MemoryAddress::new(AB::Expr::from_canonical_u32(RV32_MEMORY_AS), ptr),
-                read_chunk,
+                write_chunk,
                 start_timestamp.clone(),
                 &buffer_bytes_write_aux_cols[idx]
             ).eval(builder, should_write.clone());
 
             *start_timestamp += should_write.clone();
         }
-
     }
 
     // responsible for constraining everything that needs to be constrained between rows in the same instruction
