@@ -136,14 +136,15 @@ pub const fn generic_system_params(
     }
 }
 
-// TODO: these are conjectural security
-const WHIR_POW_BITS: usize = 16;
+// TODO: move to stark-backend-v2
+const WHIR_POW_BITS: usize = 20;
+/// Targeting 100 bits of provable security within the unique decoding regime (UDR).
 const fn num_whir_queries(log_blowup: usize) -> usize {
     match log_blowup {
-        1 => 100,
-        2 => 44,
-        3 => 30,
-        4 => 23,
+        1 => 193,
+        2 => 118,
+        3 => 97,
+        4 => 88,
         _ => unreachable!(),
     }
 }
