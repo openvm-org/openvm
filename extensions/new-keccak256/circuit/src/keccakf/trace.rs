@@ -234,7 +234,7 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                 // fills in instruction
                 cols.instruction.pc = F::from_canonical_u32(record.pc);
                 cols.instruction.is_enabled = F::ONE;
-                cols.instruction.start_timestamp = F::from_canonical_u32(record.timestamp);
+                cols.timestamp = F::from_canonical_u32(timestamp);
                 cols.instruction.buffer_ptr = F::from_canonical_u32(record.rd_ptr);
                 cols.instruction.buffer = F::from_canonical_u32(record.buffer);
                 cols.instruction.buffer_limbs = record.buffer.to_le_bytes().map(F::from_canonical_u8);
@@ -279,6 +279,10 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                         timestamp += 1;
                     }
                 }
+
+
+                println!("row_idx: {}", row_idx);
+                println!("trace rows: {:?}", cols);
             });
     }
 }

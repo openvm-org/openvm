@@ -10,6 +10,7 @@ pub struct KeccakfVmCols<T> {
     pub postimage_state_hi: [T; 100],
     pub instruction: KeccakfInstructionCols<T>,
     pub mem_oc: KeccakfMemoryCols<T>,
+    pub timestamp: T,
 }
 
 #[repr(C)]
@@ -17,7 +18,6 @@ pub struct KeccakfVmCols<T> {
 pub struct KeccakfInstructionCols<T> {
     pub pc: T,
     pub is_enabled: T, 
-    pub start_timestamp: T,
     pub buffer_ptr: T,
     pub buffer: T,
     pub buffer_limbs: [T; 4],
