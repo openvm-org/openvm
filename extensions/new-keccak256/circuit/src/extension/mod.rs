@@ -37,6 +37,9 @@ use crate::{
     xorin::{air::XorinVmAir, XorinVmChip, XorinVmExecutor, XorinVmFiller},
 };
 
+#[cfg(feature = "cuda")]
+pub mod cuda;
+
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct NewKeccak256Rv32Config {
     #[config(executor = "SystemExecutor<F>")]
