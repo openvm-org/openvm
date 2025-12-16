@@ -161,16 +161,37 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
             return;
         }
 
-        let trace = &mut trace_matrix.values[..];
+        let mut trace = &mut trace_matrix.values[..];
+
+        // Safety: the initial prefix of the buffer of size NUM_KECCAKF_VM_COLS * NUM_ROUNDS holds the record header
+        let record: KeccakfVmRecordMut = unsafe {
+            get_record_from_slice(&mut trace, KeccakfVmRecordLayout {
+                metadata: KeccakfVmMetadata {
+                }
+            })
+        };
+        let record = record.inner.clone();
+        let mut timestamp = record.timestamp;
+
+        // compute u64 preimage and postimage to not have to recompute per row
+        let preimage_buffer_bytes = record.preimage_buffer_bytes;
+        let mut preimage_buffer_bytes_u64: [u64; 25] = [0; 25];
+        for idx in 0..25 {
+            let le_bytes: [u8; 8] = preimage_buffer_bytes[8 * idx .. 8 * idx + 8].try_into().unwrap();
+            preimage_buffer_bytes_u64[idx] = u64::from_le_bytes(le_bytes);
+        }
+        let mut postimage_buffer_bytes_u64 = preimage_buffer_bytes_u64;
+        tiny_keccak::keccakf(&mut postimage_buffer_bytes_u64);
 
         trace
             // Each Keccak-f round corresponds to exactly one trace row of width NUM_KECCAKF_VM_COLS.
             // We already reserved NUM_ROUNDS rows above (NUM_ROUNDS * NUM_KECCAKF_VM_COLS elements).
             .chunks_exact_mut(NUM_KECCAKF_VM_COLS)
             .enumerate()
-            .for_each(|(row_idx, mut row)| { // each round takes up one row in the trace matrix
+            .for_each(|(row_idx, row)| { // each round takes up one row in the trace matrix
                 if row_idx >= rows_used {
                     let p3_trace: RowMajorMatrix<F> = generate_trace_rows(vec![[0u64; 25]; 1], 0);
+                    println!("debug dummy rows trace {:?}", &p3_trace.values);
                     row[..NUM_KECCAK_PERM_COLS].copy_from_slice(
                         &p3_trace.values
                             [row_idx * NUM_KECCAK_PERM_COLS..(row_idx + 1) * NUM_KECCAK_PERM_COLS],
@@ -196,34 +217,21 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                     return;
                 }
 
-                let record: KeccakfVmRecordMut = unsafe {
-                    get_record_from_slice(&mut row, KeccakfVmRecordLayout {
-                        metadata: KeccakfVmMetadata {
-                        }
-                    })
-                };
-                let record = record.inner.clone();
-                let mut timestamp = record.timestamp;
-
-                let preimage_buffer_bytes = record.preimage_buffer_bytes;
-                let mut preimage_buffer_bytes_u64: [u64; 25] = [0; 25];
-
+                // fills in inner
                 let p3_trace: RowMajorMatrix<F> = generate_trace_rows(vec![preimage_buffer_bytes_u64], 0);
-
                 row[..NUM_KECCAK_PERM_COLS].copy_from_slice(
                     &p3_trace.values[row_idx * NUM_KECCAK_PERM_COLS..(row_idx + 1) * NUM_KECCAK_PERM_COLS],
                 );
-
+                // fills in preimage_state_hi
                 let cols: &mut KeccakfVmCols<F> = row.borrow_mut();
-
                 for idx in 0..100 {
                     cols.preimage_state_hi[idx] = F::from_canonical_u8(preimage_buffer_bytes[2 * idx + 1]);
                 }
-                tiny_keccak::keccakf(&mut preimage_buffer_bytes_u64);
+                // fills in postimage_state_hi
                 for idx in 0..100 {
                     cols.postimage_state_hi[idx] = F::from_canonical_u8(preimage_buffer_bytes[2 * idx + 1]);
                 }
-        
+                // fills in instruction
                 cols.instruction.pc = F::from_canonical_u32(record.pc);
                 cols.instruction.is_enabled = F::ONE;
                 cols.instruction.start_timestamp = F::from_canonical_u32(record.timestamp);
@@ -238,12 +246,11 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                     buffer_limbs.last().unwrap(),
                     buffer_limbs.last().unwrap()
                 ];
-        
                 for pair in need_range_check.chunks_exact(2) {
                     self.bitwise_lookup_chip
                         .request_range((pair[0] * limb_shift) as u32, (pair[1] * limb_shift) as u32);
                 }
-                
+                // fills in memory offline checker
                 if row_idx == 0 {
                     mem_helper.fill(
                         record.register_aux_cols[0].prev_timestamp,
@@ -271,13 +278,6 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                         cols.mem_oc.buffer_bytes_write_aux_cols[t].prev_data = record.buffer_write_aux_cols[t].prev_data.map(F::from_canonical_u8);
                         timestamp += 1;
                     }
-                }
-
-                // todo: define constants instead of number directly
-                for idx in 0..(200/8) {
-                    preimage_buffer_bytes_u64[idx] = u64::from_le_bytes(
-                        preimage_buffer_bytes[8 * idx..8 * idx + 8].try_into().unwrap()
-                    );
                 }
             });
     }

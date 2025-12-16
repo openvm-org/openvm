@@ -6,7 +6,6 @@ use p3_keccak_air::KeccakCols as KeccakPermCols;
 #[derive(Debug, AlignedBorrow)]
 pub struct KeccakfVmCols<T> {
     pub inner: KeccakPermCols<T>,
-    // postimage_buffer_bytes is needed as a separate column because 
     pub preimage_state_hi: [T; 100],
     pub postimage_state_hi: [T; 100],
     pub instruction: KeccakfInstructionCols<T>,
