@@ -22,6 +22,7 @@ use openvm_instructions::riscv::RV32_CELL_BITS;
 use crate::keccakf::columns::NUM_KECCAK_PERM_COLS;
 use crate::keccakf::columns::NUM_KECCAKF_VM_COLS;
 use crate::keccakf::columns::NUM_ROUNDS;
+use openvm_stark_backend::p3_matrix::Matrix;
 
 use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix}
@@ -162,30 +163,53 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
 
         let trace = &mut trace_matrix.values[..];
 
-        let (mut slice, _rest) = trace.split_at_mut(NUM_KECCAKF_VM_COLS * NUM_ROUNDS);
-
-        let record: KeccakfVmRecordMut = unsafe {
-            get_record_from_slice(&mut slice, KeccakfVmRecordLayout {
-                metadata: KeccakfVmMetadata {
-                }
-            })
-        };
-
-        let record = record.inner.clone();
-        slice.fill(F::ZERO);
-        // todo: trace gen for KeccakPermCols 
-        let preimage_buffer_bytes = record.preimage_buffer_bytes;
-        let mut preimage_buffer_bytes_u64: [u64; 25] = [0; 25];
-
-        let p3_trace: RowMajorMatrix<F> = generate_trace_rows(vec![preimage_buffer_bytes_u64], 0);
-        let mut timestamp = record.timestamp;
-
-        slice
+        trace
             // Each Keccak-f round corresponds to exactly one trace row of width NUM_KECCAKF_VM_COLS.
             // We already reserved NUM_ROUNDS rows above (NUM_ROUNDS * NUM_KECCAKF_VM_COLS elements).
             .chunks_exact_mut(NUM_KECCAKF_VM_COLS)
             .enumerate()
-            .for_each(|(row_idx, row)| { // each round takes up one row in the trace matrix
+            .for_each(|(row_idx, mut row)| { // each round takes up one row in the trace matrix
+                if row_idx >= rows_used {
+                    let p3_trace: RowMajorMatrix<F> = generate_trace_rows(vec![[0u64; 25]; 1], 0);
+                    row[..NUM_KECCAK_PERM_COLS].copy_from_slice(
+                        &p3_trace.values
+                            [row_idx * NUM_KECCAK_PERM_COLS..(row_idx + 1) * NUM_KECCAK_PERM_COLS],
+                    );
+                    // Need to get rid of the accidental garbage data that might overflow
+                    // the F's prime field. Unfortunately, there
+                    // is no good way around this
+                    // SAFETY:
+                    // - row has exactly NUM_KECCAK_VM_COLS elements
+                    // - NUM_KECCAK_PERM_COLS offset is less than NUM_KECCAK_VM_COLS by
+                    //   design
+                    // - We're zeroing the remaining (NUM_KECCAK_VM_COLS -
+                    //   NUM_KECCAK_PERM_COLS) elements to clear any garbage data that might
+                    //   overflow the field
+                    unsafe {
+                        std::ptr::write_bytes(
+                            row.as_mut_ptr().add(NUM_KECCAK_PERM_COLS) as *mut u8,
+                            0,
+                            (NUM_KECCAKF_VM_COLS - NUM_KECCAK_PERM_COLS) * size_of::<F>(),
+                        );
+                    }
+
+                    return;
+                }
+
+                let record: KeccakfVmRecordMut = unsafe {
+                    get_record_from_slice(&mut row, KeccakfVmRecordLayout {
+                        metadata: KeccakfVmMetadata {
+                        }
+                    })
+                };
+                let record = record.inner.clone();
+                let mut timestamp = record.timestamp;
+
+                let preimage_buffer_bytes = record.preimage_buffer_bytes;
+                let mut preimage_buffer_bytes_u64: [u64; 25] = [0; 25];
+
+                let p3_trace: RowMajorMatrix<F> = generate_trace_rows(vec![preimage_buffer_bytes_u64], 0);
+
                 row[..NUM_KECCAK_PERM_COLS].copy_from_slice(
                     &p3_trace.values[row_idx * NUM_KECCAK_PERM_COLS..(row_idx + 1) * NUM_KECCAK_PERM_COLS],
                 );
@@ -248,14 +272,13 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                         timestamp += 1;
                     }
                 }
-            });
 
-        // todo: define constants instead of number directly
-        for idx in 0..(200/8) {
-            preimage_buffer_bytes_u64[idx] = u64::from_le_bytes(
-                preimage_buffer_bytes[8 * idx..8 * idx + 8].try_into().unwrap()
-            );
-        }
-        
+                // todo: define constants instead of number directly
+                for idx in 0..(200/8) {
+                    preimage_buffer_bytes_u64[idx] = u64::from_le_bytes(
+                        preimage_buffer_bytes[8 * idx..8 * idx + 8].try_into().unwrap()
+                    );
+                }
+            });
     }
 }
