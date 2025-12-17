@@ -81,11 +81,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>> (
     
     use openvm_circuit::arch::testing::memory::gen_pointer;
     let rd = gen_pointer(rng, 4);
-
     let buffer_ptr = gen_pointer(rng, MAX_LEN);
-    
-    println!("rand_buffer_arr {:?}", rand_buffer_arr);
-    
+    tester.write(1, rd, buffer_ptr.to_le_bytes().map(F::from_canonical_u8));
     let rand_buffer_arr_f = rand_buffer_arr.map(F::from_canonical_u8);
     
     for i in 0..(MAX_LEN/4) {
@@ -95,8 +92,18 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>> (
         tester.write(2, buffer_ptr + 4 * i, buffer_chunk);
     }
 
-    tester.write(1, rd, buffer_ptr.to_le_bytes().map(F::from_canonical_u8));
-    
+    tester.execute(
+        executor,
+        arena,
+        &Instruction::from_usize(opcode.global_opcode(), [rd, 0, 0, 1, 2])
+    );
+
+    tester.execute(
+        executor,
+        arena,
+        &Instruction::from_usize(opcode.global_opcode(), [rd, 0, 0, 1, 2])
+    );
+
     tester.execute(
         executor,
         arena,
