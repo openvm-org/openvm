@@ -86,14 +86,14 @@ where
         let agg_other_ctxs = self
             .agg_node_tracegen
             .generate_other_proving_ctxs(proofs, user_pv_commit);
-        let ret = ProvingContextV2 {
+
+        ProvingContextV2 {
             per_trace: once(verifier_pvs_ctx)
                 .chain(subcircuit_ctxs)
                 .chain(agg_other_ctxs)
                 .enumerate()
                 .collect_vec(),
-        };
-        ret
+        }
     }
 
     #[instrument(name = "total_proof", skip_all)]

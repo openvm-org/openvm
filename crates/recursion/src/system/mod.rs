@@ -476,7 +476,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
     {
         let mut preflight = Preflight::default();
         // NOTE: it is not required that we group preflight into modules
-        let preflight_modules = vec![
+        let preflight_modules = [
             TraceModuleRef::ProofShape(&self.proof_shape),
             TraceModuleRef::Gkr(&self.gkr),
             TraceModuleRef::BatchConstraint(&self.batch_constraint),
@@ -484,7 +484,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             TraceModuleRef::Whir(&self.whir),
         ];
         preflight_modules.iter().for_each(|module| {
-            module.run_preflight(&child_vk, proof, &mut preflight, &mut sponge);
+            module.run_preflight(child_vk, proof, &mut preflight, &mut sponge);
         });
 
         preflight.transcript = sponge.into_log();
