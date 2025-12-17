@@ -113,10 +113,6 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let buffer_ptr = gen_pointer(rng, buffer_length);
     let input_ptr = gen_pointer(rng, buffer_length);
 
-    println!("buffer_length {}", buffer_length);
-    println!("rand_buffer_arr {:?}", rand_buffer_arr);
-    println!("rand_input_arr {:?}", rand_input_arr);
-
     let rand_buffer_arr_f = rand_buffer_arr.map(F::from_canonical_u8);
     let rand_input_arr_f = rand_input_arr.map(F::from_canonical_u8);
 

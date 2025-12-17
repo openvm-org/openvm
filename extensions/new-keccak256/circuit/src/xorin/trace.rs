@@ -112,7 +112,6 @@ where
         // Xorin opcode is only called through the keccak update guest program
         debug_assert!(len.is_multiple_of(4));
         let num_reads = len.div_ceil(4);
-        println!("debug preflight num_reads {}", num_reads);
 
         // safety: the below alloc uses MultiRowLayout alloc implementation because
         // XorinVmRecordLayout is a MultiRowLayout since get_num_rows() = 1, this will
@@ -150,13 +149,9 @@ where
             &mut record.inner.register_aux_cols[2].prev_timestamp,
         ));
 
-        println!("debug record.inner.len {}", record.inner.len);
-
         debug_assert!(record.inner.buffer as usize + len <= (1 << self.pointer_max_bits));
         debug_assert!(record.inner.input as usize + len < (1 << self.pointer_max_bits));
         debug_assert!(record.inner.len < (1 << self.pointer_max_bits));
-
-        println!("timestamp before buffer read {}", state.memory.timestamp());
 
         // read buffer
         for idx in 0..num_reads {
@@ -168,8 +163,6 @@ where
             );
             record.inner.buffer_limbs[4 * idx..4 * (idx + 1)].copy_from_slice(&read);
         }
-
-        println!("timestamp before input read {}", state.memory.timestamp());
 
         // read input
         for idx in 0..num_reads {
@@ -193,13 +186,10 @@ where
             *x_xor_y = x ^ y;
         }
 
-        println!("timestamp before input write {}", state.memory.timestamp());
-
         // write result
         for idx in 0..num_reads {
             let mut word: [u8; 4] = [0u8; 4];
             word.copy_from_slice(&result[4 * idx..4 * (idx + 1)]);
-            println!("word = {:?}", word);
             tracing_write(
                 state.memory,
                 RV32_MEMORY_AS,
@@ -211,8 +201,6 @@ where
         }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
-        println!("debug record {:?}", record.inner.clone());
 
         Ok(())
     }

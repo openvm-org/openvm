@@ -49,8 +49,6 @@ impl<F: PrimeField32> TranspilerExtension<F> for NewKeccakTranspilerExtension {
             return None;
         }
 
-        println!("debug dec_insn {:?}", dec_insn);
-
         let instruction = if dec_insn.funct7 == XORIN_FUNCT7 as u32 {
             from_r_type(
                 XorinOpcode::XORIN.global_opcode().as_usize(),
