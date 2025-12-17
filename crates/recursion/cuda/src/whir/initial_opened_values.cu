@@ -46,8 +46,8 @@ __global__ void initial_opened_values_tracegen(
     size_t height,
     InitialOpenedValuesData *records,
     size_t k_whir,
-    size_t num_whir_queries,
-    size_t num_whir_rounds,
+    size_t num_initial_queries,
+    size_t total_queries,
     Fp omega_k,
     FpExt *mus_per_proof,
     Fp *zis_per_proof,
@@ -92,7 +92,7 @@ __global__ void initial_opened_values_tracegen(
     const size_t coset_span = (1 << k_whir);
 
     const size_t coset_idx = (record_idx / records_per_coset_idx) % coset_span;
-    const size_t query_idx = (record_idx / (records_per_coset_idx * coset_span)) % num_whir_queries;
+    const size_t query_idx = (record_idx / (records_per_coset_idx * coset_span)) % num_initial_queries;
 
     const size_t local_chunk_idx = record_idx % records_per_coset_idx;
     const size_t absolute_chunk_idx = chunks_before_proof + local_chunk_idx;
@@ -147,8 +147,8 @@ __global__ void initial_opened_values_tracegen(
     Fp twiddle = pow(omega_k, coset_idx);
     COL_WRITE_VALUE(row, InitialOpenedValuesCols, twiddle, twiddle);
 
-    const size_t proof_round_offset = proof_idx * num_whir_rounds * num_whir_queries;
-    const size_t proof_query_idx = proof_round_offset + query_idx;
+    // For round 0, query_idx indexes directly (no round offset needed)
+    const size_t proof_query_idx = proof_idx * total_queries + query_idx;
 
     COL_WRITE_ARRAY(row, InitialOpenedValuesCols, codeword_value_acc, record.codeword_slice_val_acc.elems);
     COL_WRITE_VALUE(row, InitialOpenedValuesCols, zi, zis_per_proof[proof_query_idx]);
@@ -158,7 +158,7 @@ __global__ void initial_opened_values_tracegen(
         row,
         InitialOpenedValuesCols,
         merkle_idx_bit_src,
-        raw_queries[proof_round_offset + query_idx]
+        raw_queries[proof_query_idx]
     );
 
     FpExt mu = mus_per_proof[proof_idx];
@@ -184,8 +184,8 @@ extern "C" int _initial_opened_values_tracegen(
     size_t height,
     InitialOpenedValuesData *records_d,
     size_t k_whir,
-    size_t num_whir_queries,
-    size_t num_whir_rounds,
+    size_t num_initial_queries,
+    size_t total_queries,
     Fp omega_k,
     FpExt *mu_per_proof,
     Fp *zi_d,
@@ -208,8 +208,8 @@ extern "C" int _initial_opened_values_tracegen(
         height,
         records_d,
         k_whir,
-        num_whir_queries,
-        num_whir_rounds,
+        num_initial_queries,
+        total_queries,
         omega_k,
         mu_per_proof,
         zi_d,

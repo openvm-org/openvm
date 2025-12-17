@@ -381,18 +381,23 @@ pub(in crate::whir) struct FinalPolyQueryEvalRecord {
 }
 
 pub(in crate::whir) fn build_final_poly_query_eval_records(
-    params: SystemParams,
+    params: &SystemParams,
     proofs: &[&Proof],
     preflights: &[&Preflight],
 ) -> Vec<FinalPolyQueryEvalRecord> {
     debug_assert_eq!(proofs.len(), preflights.len());
-    let k_whir = params.k_whir;
-    let num_in_domain_queries = params.num_whir_queries;
-    let final_poly_len = 1usize << params.log_final_poly_len;
+    let k_whir = params.k_whir();
+    let num_queries_per_round: Vec<usize> =
+        params.whir.rounds.iter().map(|r| r.num_queries).collect();
+    let final_poly_len = 1usize << params.log_final_poly_len();
     let num_whir_rounds = params.num_whir_rounds();
-    let query_count = num_in_domain_queries + 1;
-    let rows_per_proof = query_count
-        * (k_whir * num_whir_rounds * (num_whir_rounds - 1) / 2 + num_whir_rounds * final_poly_len);
+
+    let mut rows_per_proof = 0usize;
+    for (whir_round, &num_queries) in num_queries_per_round.iter().enumerate() {
+        let eq_phase_len = k_whir * (num_whir_rounds - (whir_round + 1));
+        let query_count = num_queries + 1;
+        rows_per_proof += query_count * (eq_phase_len + final_poly_len);
+    }
     let mut records = Vec::with_capacity(rows_per_proof * proofs.len());
 
     for (proof_idx, proof) in proofs.iter().enumerate() {
@@ -412,6 +417,7 @@ pub(in crate::whir) fn build_final_poly_query_eval_records(
             let gamma = gammas[whir_round];
             let mut gamma_pow = gamma;
 
+            let query_count = num_queries_per_round[whir_round] + 1;
             for query_idx in 0..query_count {
                 let mut eq_acc = EF::ONE;
                 let mut horner_acc = EF::ZERO;
@@ -472,14 +478,14 @@ pub(in crate::whir) fn compute_round_offsets(
     num_whir_rounds: usize,
     k_whir: usize,
     final_poly_len: usize,
-    num_in_domain_queries: usize,
+    num_queries_per_round: &[usize],
 ) -> Vec<usize> {
-    let query_count = num_in_domain_queries + 1;
     let mut offsets = Vec::with_capacity(num_whir_rounds + 1);
     offsets.push(0);
     let mut rows_acc = 0;
-    for whir_round in 0..num_whir_rounds {
+    for (whir_round, &num_queries) in num_queries_per_round.iter().enumerate() {
         let eq_phase_len = k_whir * (num_whir_rounds - (whir_round + 1));
+        let query_count = num_queries + 1;
         let rows_per_round = query_count * (eq_phase_len + final_poly_len);
         rows_acc += rows_per_round;
         offsets.push(rows_acc);
@@ -492,7 +498,8 @@ fn compute_indices_from_row_idx(
     row_idx: usize,
     rows_per_proof: usize,
     round_offsets: &[usize],
-    query_count: usize,
+    num_whir_rounds: usize,
+    k_whir: usize,
     final_poly_len: usize,
 ) -> (usize, usize, usize, usize, usize, usize) {
     debug_assert!(rows_per_proof > 0);
@@ -509,12 +516,9 @@ fn compute_indices_from_row_idx(
 
     let round_start = round_offsets[round_idx];
     let row_in_round = row_in_proof - round_start;
-    let rows_per_round = round_offsets[round_idx + 1] - round_start;
-    debug_assert!(rows_per_round % query_count == 0);
 
-    let rows_per_query = rows_per_round / query_count;
-    debug_assert!(rows_per_query >= final_poly_len);
-    let eq_phase_len_round = rows_per_query - final_poly_len;
+    let eq_phase_len_round = k_whir * (num_whir_rounds - (round_idx + 1));
+    let rows_per_query = eq_phase_len_round + final_poly_len;
 
     let query_idx = row_in_round / rows_per_query;
     let row_in_query = row_in_round % rows_per_query;
@@ -541,23 +545,23 @@ pub(crate) fn generate_trace(
     _proofs: &[&Proof],
     records: &[FinalPolyQueryEvalRecord],
 ) -> RowMajorMatrix<F> {
-    let params = mvk.inner.params;
-    let k_whir = params.k_whir;
-    let num_in_domain_queries = params.num_whir_queries;
-    let final_poly_len = 1usize << params.log_final_poly_len;
+    let params = &mvk.inner.params;
+    let k_whir = params.k_whir();
+    let num_queries_per_round: Vec<usize> =
+        params.whir.rounds.iter().map(|r| r.num_queries).collect();
+    let final_poly_len = 1usize << params.log_final_poly_len();
     let num_whir_rounds = params.num_whir_rounds();
 
     let round_offsets = compute_round_offsets(
         num_whir_rounds,
         k_whir,
         final_poly_len,
-        num_in_domain_queries,
+        &num_queries_per_round,
     );
     let rows_per_proof = *round_offsets
         .last()
         .expect("round offsets vector must include sentinel");
     debug_assert!(rows_per_proof > 0);
-    let query_count = num_in_domain_queries + 1;
     let total_valid_rows = records.len();
     let height = total_valid_rows.next_power_of_two();
     let width = FinalyPolyQueryEvalCols::<F>::width();
@@ -572,7 +576,8 @@ pub(crate) fn generate_trace(
                     row_idx,
                     rows_per_proof,
                     &round_offsets,
-                    query_count,
+                    num_whir_rounds,
+                    k_whir,
                     final_poly_len,
                 );
 
@@ -581,6 +586,7 @@ pub(crate) fn generate_trace(
             let is_first_in_round = is_first_in_query && query_idx == 0;
             let is_first_in_proof = is_first_in_round && whir_round == 0;
 
+            let num_in_domain_queries = num_queries_per_round[whir_round];
             let is_same_phase = if phase_idx == 0 {
                 eval_idx + 1 < num_alphas
             } else {

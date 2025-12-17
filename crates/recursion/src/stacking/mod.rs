@@ -74,8 +74,15 @@ impl StackingModule {
             eq_bits_lookup_bus: EqBitsLookupBus::new(b.new_bus_idx()),
             l_skip: child_vk.inner.params.l_skip,
             n_stack: child_vk.inner.params.n_stack,
-            stacking_index_mult: child_vk.inner.params.num_whir_queries
-                << child_vk.inner.params.k_whir,
+            stacking_index_mult: child_vk
+                .inner
+                .params
+                .whir
+                .rounds
+                .first()
+                .map(|round| round.num_queries)
+                .unwrap_or(0)
+                << child_vk.inner.params.k_whir(),
         }
     }
 

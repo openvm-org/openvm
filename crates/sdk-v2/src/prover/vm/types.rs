@@ -13,6 +13,6 @@ pub struct VmProvingKey<VC> {
 
 impl<VC> VmProvingKey<VC> {
     pub fn get_params(&self) -> SystemParams {
-        self.vm_pk.params
+        self.vm_pk.params.clone()
     }
 }

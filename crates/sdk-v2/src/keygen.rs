@@ -86,7 +86,7 @@ where
     pub fn app_config(&self) -> AppConfig<VC> {
         AppConfig {
             app_vm_config: self.vm_config().clone(),
-            system_params: self.app_vm_pk.vm_pk.params,
+            system_params: self.app_vm_pk.vm_pk.params.clone(),
         }
     }
 }

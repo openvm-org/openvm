@@ -26,7 +26,6 @@ use stark_backend_v2::{
         test_system_params_small, test_system_params_small_with_poly_len,
     },
 };
-
 use test_case::{test_case, test_matrix};
 use tracing::Level;
 
@@ -215,7 +214,7 @@ fn test_preflight_single_fib_sponge(
 #[test_case(5, 6, 4)]
 fn test_preflight_cached_trace(l_skip: usize, n_stack: usize, k_whir: usize) {
     let params = test_system_params_small(l_skip, n_stack, k_whir);
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params.clone());
     let fx = CachedFixture11::new(params);
     let (vk, proof) = fx.keygen_and_prove(&engine);
 
@@ -292,7 +291,7 @@ fn test_preflight_mixture_trace(
     log_trace_height: usize,
 ) {
     let params = test_system_params_small(l_skip, n_stack, k_whir);
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params.clone());
     let fx = MixtureFixture::standard(log_trace_height, params);
     let (vk, proof) = fx.keygen_and_prove(&engine);
 
@@ -503,7 +502,7 @@ fn test_recursion_circuit_multiple_interactions() {
 #[test]
 fn test_recursion_circuit_two_cached() {
     let params = default_test_params_small();
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params.clone());
 
     let fx = CachedFixture11::new(params);
     let (vk, proof) = fx.keygen_and_prove(&engine);
@@ -521,7 +520,7 @@ fn test_recursion_circuit_two_cached() {
 #[test]
 fn test_recursion_circuit_multiple_cached() {
     let params = default_test_params_small();
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params.clone());
 
     let fx = CachedFixture11::new(params);
     let (vk, proof) = fx.keygen_and_prove(&engine);
@@ -580,9 +579,9 @@ fn test_neg_hypercube_cached(num_proofs: usize) {
     let params = default_test_params_small();
     // NOTE: the CachedFixture's cached trace needs correct params, run_negative_hypercube_test will
     // +3 to params.l_skip
-    let mut fx_params = params;
+    let mut fx_params = params.clone();
     fx_params.l_skip += 3;
-    let fx = CachedFixture11::new(fx_params);
+    let fx = CachedFixture11::new(fx_params.clone());
     run_negative_hypercube_test(fx, params, num_proofs);
 }
 
@@ -613,7 +612,7 @@ fn test_neg_hypercube_mixture(num_proofs: usize) {
     let params = default_test_params_small();
     // NOTE: the CachedFixture's cached trace needs correct params, run_negative_hypercube_test will
     // +3 to params.l_skip
-    let mut fx_params = params;
+    let mut fx_params = params.clone();
     fx_params.l_skip += 3;
     let fx = MixtureFixture::standard(3, fx_params);
     run_negative_hypercube_test(fx, params, num_proofs);
@@ -642,7 +641,7 @@ mod cuda {
         num_proofs: usize,
     ) {
         setup_tracing_with_log_level(Level::INFO);
-        let cpu_engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+        let cpu_engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params.clone());
         let gpu_engine = BabyBearPoseidon2GpuEngineV2::new(params);
         let (pk, vk) = fx.keygen(&cpu_engine);
         assert!(num_proofs <= 5);
@@ -771,7 +770,7 @@ mod cuda {
     )]
     fn test_cuda_tracegen_cached(l_skip: usize, n_stack: usize, k_whir: usize, num_proofs: usize) {
         let params = test_system_params_small(l_skip, n_stack, k_whir);
-        let fx = CachedFixture11::new(params);
+        let fx = CachedFixture11::new(params.clone());
         compare_cpu_tracegen_vs_gpu_tracegen(fx, params, num_proofs);
     }
 
@@ -833,7 +832,7 @@ mod cuda {
     ) {
         let n_stack = 12 - l_skip;
         let params = test_system_params_small(l_skip, n_stack, k_whir);
-        let fx = MixtureFixture::standard(log_trace_degree, params);
+        let fx = MixtureFixture::standard(log_trace_degree, params.clone());
         compare_cpu_tracegen_vs_gpu_tracegen(fx, params, num_proofs);
     }
 }

@@ -1,12 +1,11 @@
 use clap::Args;
 use openvm_sdk_config::SdkVmConfig;
-use openvm_stark_backend::{interaction::LogUpSecurityParameters, p3_field::PrimeField32};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::config::log_up_params::log_up_security_params_baby_bear_100_bits;
 use serde::{Deserialize, Serialize};
-use stark_backend_v2::SystemParams;
+use stark_backend_v2::{SystemParams, WhirConfig, WhirParams};
 
-pub const DEFAULT_APP_LOG_BLOWUP: usize = 1;
 pub const DEFAULT_APP_L_SKIP: usize = 4;
+pub const DEFAULT_APP_LOG_BLOWUP: usize = 1;
 pub const DEFAULT_LEAF_LOG_BLOWUP: usize = 2;
 pub const DEFAULT_INTERNAL_LOG_BLOWUP: usize = 2;
 
@@ -17,10 +16,6 @@ pub const DEFAULT_INTERNAL_LOG_BLOWUP: usize = 2;
 // leaf/internal children will cause a performance loss.
 pub const MAX_NUM_CHILDREN_LEAF: usize = 1;
 pub const MAX_NUM_CHILDREN_INTERNAL: usize = 3;
-
-pub const DEFAULT_LEAF_PARAMS: SystemParams = default_leaf_params(DEFAULT_LEAF_LOG_BLOWUP);
-pub const DEFAULT_INTERNAL_PARAMS: SystemParams =
-    default_internal_params(DEFAULT_INTERNAL_LOG_BLOWUP);
 
 #[derive(Clone, Debug, Serialize, Deserialize, derive_new::new)]
 pub struct AppConfig<VC> {
@@ -38,13 +33,13 @@ impl AppConfig<SdkVmConfig> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AggregationConfig {
     pub max_num_user_public_values: usize,
     pub params: AggregationSystemParams,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AggregationSystemParams {
     pub leaf: SystemParams,
     pub internal: SystemParams,
@@ -53,8 +48,8 @@ pub struct AggregationSystemParams {
 impl Default for AggregationSystemParams {
     fn default() -> Self {
         Self {
-            leaf: DEFAULT_LEAF_PARAMS,
-            internal: DEFAULT_INTERNAL_PARAMS,
+            leaf: default_leaf_params(DEFAULT_LEAF_LOG_BLOWUP),
+            internal: default_internal_params(DEFAULT_INTERNAL_LOG_BLOWUP),
         }
     }
 }
@@ -93,13 +88,13 @@ impl Default for AggregationTreeConfig {
 /// `l_skip` is tuned separately for performance.
 /// `log_final_poly_len` is determined from `l_skip, n_stack` and adjusted in multiples of `k_whir`
 /// to be <= 10;
-pub const fn default_app_params(log_blowup: usize, l_skip: usize, n_stack: usize) -> SystemParams {
+pub fn default_app_params(log_blowup: usize, l_skip: usize, n_stack: usize) -> SystemParams {
     let k_whir = 4;
     let max_constraint_degree = 4;
     generic_system_params(log_blowup, l_skip, n_stack, k_whir, max_constraint_degree)
 }
 
-pub const fn default_leaf_params(log_blowup: usize) -> SystemParams {
+pub fn default_leaf_params(log_blowup: usize) -> SystemParams {
     let l_skip = 2;
     let n_stack = 17;
     let k_whir = 4;
@@ -107,7 +102,7 @@ pub const fn default_leaf_params(log_blowup: usize) -> SystemParams {
     generic_system_params(log_blowup, l_skip, n_stack, k_whir, max_constraint_degree)
 }
 
-pub const fn default_internal_params(log_blowup: usize) -> SystemParams {
+pub fn default_internal_params(log_blowup: usize) -> SystemParams {
     let l_skip = 2;
     let n_stack = 17;
     let k_whir = 4;
@@ -115,54 +110,30 @@ pub const fn default_internal_params(log_blowup: usize) -> SystemParams {
     generic_system_params(log_blowup, l_skip, n_stack, k_whir, max_constraint_degree)
 }
 
-pub const fn generic_system_params(
+pub fn generic_system_params(
     log_blowup: usize,
     l_skip: usize,
     n_stack: usize,
     k_whir: usize,
     max_constraint_degree: usize,
 ) -> SystemParams {
-    let log_final_poly_len = find_log_final_poly_len(l_skip, n_stack, k_whir);
+    let whir_params = WhirParams {
+        k: k_whir,
+        log_final_poly_len: WHIR_MAX_LOG_FINAL_POLY_LEN,
+        query_phase_pow_bits: WHIR_POW_BITS,
+    };
+    let whir_config = WhirConfig::new(log_blowup, l_skip + n_stack, whir_params, SECURITY_LEVEL);
     SystemParams {
         l_skip,
         n_stack,
         log_blowup,
-        k_whir,
-        num_whir_queries: num_whir_queries(log_blowup),
-        log_final_poly_len,
+        whir: whir_config,
         logup: log_up_security_params_baby_bear_100_bits(),
-        whir_pow_bits: WHIR_POW_BITS,
         max_constraint_degree,
     }
 }
 
 // TODO: move to stark-backend-v2
+const WHIR_MAX_LOG_FINAL_POLY_LEN: usize = 10;
 const WHIR_POW_BITS: usize = 20;
-/// Targeting 100 bits of provable security within the unique decoding regime (UDR).
-const fn num_whir_queries(log_blowup: usize) -> usize {
-    match log_blowup {
-        1 => 193,
-        2 => 118,
-        3 => 97,
-        4 => 88,
-        _ => unreachable!(),
-    }
-}
-
-// TODO[jpw]: clean this up
-const fn log_up_security_params_baby_bear_100_bits() -> LogUpSecurityParameters {
-    LogUpSecurityParameters {
-        max_interaction_count: BabyBear::ORDER_U32,
-        log_max_message_length: 7,
-        pow_bits: 16,
-    }
-}
-
-const fn find_log_final_poly_len(l_skip: usize, n_stack: usize, k_whir: usize) -> usize {
-    // log_final_poly_len \cong (l_skip + n_stack) mod k_whir
-    let mut log_final_poly_len = (l_skip + n_stack) % k_whir;
-    while log_final_poly_len + k_whir <= 10 {
-        log_final_poly_len += k_whir;
-    }
-    log_final_poly_len
-}
+const SECURITY_LEVEL: usize = 100;

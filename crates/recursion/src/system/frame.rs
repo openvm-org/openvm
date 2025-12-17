@@ -46,7 +46,7 @@ impl From<&StarkVerifyingKeyV2<F, Digest>> for StarkVkeyFrame {
 impl From<&MultiStarkVerifyingKeyV2> for MultiStarkVkeyFrame {
     fn from(mvk: &MultiStarkVerifyingKeyV2) -> Self {
         Self {
-            params: mvk.inner.params,
+            params: mvk.inner.params.clone(),
             per_air: mvk.inner.per_air.iter().map(Into::into).collect_vec(),
             max_constraint_degree: mvk.max_constraint_degree(),
         }

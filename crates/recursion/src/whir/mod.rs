@@ -2,6 +2,7 @@ use core::{cmp, iter::zip};
 use std::sync::Arc;
 
 use itertools::{Itertools, izip};
+use openvm_circuit_primitives::encoder::Encoder;
 use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdicField};
@@ -10,7 +11,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 use p3_symmetric::Permutation;
 use stark_backend_v2::{
-    EF, F, SystemParams,
+    EF, F, SystemParams, WhirConfig,
     keygen::types::MultiStarkVerifyingKeyV2,
     poly_common::{Squarable, interpolate_quadratic_at_012},
     poseidon2::{
@@ -58,6 +59,28 @@ mod query;
 mod sumcheck;
 mod whir_round;
 
+pub(crate) fn num_queries_per_round(params: &SystemParams) -> Vec<usize> {
+    params
+        .whir
+        .rounds
+        .iter()
+        .map(|round| round.num_queries)
+        .collect()
+}
+
+pub(crate) fn query_offsets(num_queries_per_round: &[usize]) -> Vec<usize> {
+    let mut offsets = Vec::with_capacity(num_queries_per_round.len() + 1);
+    offsets.push(0);
+    for &num_queries in num_queries_per_round {
+        offsets.push(offsets.last().copied().unwrap() + num_queries);
+    }
+    offsets
+}
+
+pub(crate) fn total_num_queries(num_queries_per_round: &[usize]) -> usize {
+    num_queries_per_round.iter().sum()
+}
+
 #[cfg(feature = "cuda")]
 mod cuda_abi;
 
@@ -101,7 +124,7 @@ impl WhirModule {
         let final_poly_bus = WhirFinalPolyBus::new(b.new_bus_idx());
         let final_poly_folding_bus = FinalPolyFoldingBus::new(b.new_bus_idx());
         Self {
-            params: child_vk.inner.params,
+            params: child_vk.inner.params.clone(),
             bus_inventory,
             sumcheck_bus,
             verify_queries_bus,
@@ -139,14 +162,19 @@ impl WhirModule {
             final_poly,
         } = &proof.whir_proof;
 
-        let SystemParams {
+        let &SystemParams {
             l_skip,
             n_stack,
-            k_whir,
-            num_whir_queries,
+            whir:
+                WhirConfig {
+                    k: k_whir,
+                    query_phase_pow_bits: _,
+                    ..
+                },
             log_blowup,
             ..
-        } = self.params;
+        } = &self.params;
+        let num_queries_per_round = num_queries_per_round(&self.params);
 
         let mut sumcheck_poly_iter = whir_sumcheck_polys.iter();
         let all_openings = proof
@@ -196,6 +224,7 @@ impl WhirModule {
             initial_claim_per_round.push(claim);
             tidx_per_round.push(ts.len());
 
+            let num_round_queries = num_queries_per_round[i];
             for j in 0..k_whir {
                 let evals = sumcheck_poly_iter.next().unwrap();
                 let &[ev1, ev2] = evals;
@@ -228,7 +257,7 @@ impl WhirModule {
 
             query_tidx_per_round.push(ts.len());
             let mut round_queries = vec![];
-            for _ in 0..num_whir_queries {
+            for _ in 0..num_round_queries {
                 let sample = ts.sample();
                 round_queries.push(sample);
             }
@@ -355,8 +384,11 @@ impl WhirModule {
         let f = Mle::from_coeffs(final_poly.clone());
         let t = k_whir * num_whir_rounds;
         let final_poly_at_u = f.eval_at_point(&u[t..]);
+        let query_offsets = query_offsets(&num_queries_per_round);
 
         preflight.whir = WhirPreflight {
+            num_queries_per_round,
+            query_offsets,
             alphas,
             z0s,
             zj_roots,
@@ -391,10 +423,17 @@ struct WhirBlobCpu {
 
 impl AirModule for WhirModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
-        let params = self.params;
+        let params = &self.params;
         let initial_log_domain_size = params.n_stack + params.l_skip + params.log_blowup;
 
-        let whir_round_air = WhirRoundAir {
+        let num_rounds = params.num_whir_rounds();
+        let num_queries_per_round: Vec<usize> =
+            params.whir.rounds.iter().map(|r| r.num_queries).collect();
+
+        // Encoder requires at least 2 flags to work correctly
+        let whir_round_encoder = Encoder::new(num_rounds.max(2), 2, false);
+
+        let whir_round_air: AirRef<BabyBearPoseidon2Config> = Arc::new(WhirRoundAir {
             whir_module_bus: self.bus_inventory.whir_module_bus,
             commitments_bus: self.bus_inventory.commitments_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
@@ -405,20 +444,21 @@ impl AirModule for WhirModule {
             final_poly_query_eval_bus: self.final_poly_query_eval_bus,
             query_bus: self.query_bus,
             gamma_bus: self.gamma_bus,
-            k: params.k_whir,
-            num_queries: params.num_whir_queries,
-            num_rounds: params.num_whir_rounds(),
-            final_poly_len: 1 << params.log_final_poly_len,
-            pow_bits: params.whir_pow_bits,
+            k: params.k_whir(),
+            num_rounds,
+            final_poly_len: 1 << params.log_final_poly_len(),
+            pow_bits: params.whir.query_phase_pow_bits,
             generator: F::GENERATOR,
-        };
+            whir_round_encoder,
+            num_queries_per_round: num_queries_per_round.clone(),
+        });
         let whir_sumcheck_air = SumcheckAir {
             sumcheck_bus: self.sumcheck_bus,
             whir_opening_point_bus: self.bus_inventory.whir_opening_point_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
             alpha_bus: self.alpha_bus,
             eq_alpha_u_bus: self.eq_alpha_u_bus,
-            k: params.k_whir,
+            k: params.k_whir(),
         };
         let initial_round_opened_values_air = InitialOpenedValuesAir {
             stacking_indices_bus: self.bus_inventory.stacking_indices_bus,
@@ -426,7 +466,7 @@ impl AirModule for WhirModule {
             folding_bus: self.folding_bus,
             poseidon_bus: self.bus_inventory.poseidon2_bus,
             merkle_verify_bus: self.bus_inventory.merkle_verify_bus,
-            k: params.k_whir,
+            k: params.k_whir(),
             initial_log_domain_size,
         };
         let non_initial_round_opened_values_air = NonInitialOpenedValuesAir {
@@ -434,7 +474,7 @@ impl AirModule for WhirModule {
             folding_bus: self.folding_bus,
             poseidon_bus: self.bus_inventory.poseidon2_bus,
             merkle_verify_bus: self.bus_inventory.merkle_verify_bus,
-            k: params.k_whir,
+            k: params.k_whir(),
             initial_log_domain_size,
         };
         let query_air = WhirQueryAir {
@@ -443,14 +483,13 @@ impl AirModule for WhirModule {
             query_bus: self.query_bus,
             verify_queries_bus: self.verify_queries_bus,
             verify_query_bus: self.verify_query_bus,
-            num_queries: params.num_whir_queries,
-            k: params.k_whir,
+            k: params.k_whir(),
             initial_log_domain_size,
         };
         let folding_air = WhirFoldingAir {
             alpha_bus: self.alpha_bus,
             folding_bus: self.folding_bus,
-            k: params.k_whir,
+            k: params.k_whir(),
         };
         let final_poly_mle_eval_air = FinalPolyMleEvalAir {
             whir_opening_point_bus: self.bus_inventory.whir_opening_point_bus,
@@ -459,10 +498,15 @@ impl AirModule for WhirModule {
             eq_alpha_u_bus: self.eq_alpha_u_bus,
             final_poly_bus: self.final_poly_bus,
             folding_bus: self.final_poly_folding_bus,
-            num_vars: params.log_final_poly_len,
+            num_vars: params.log_final_poly_len(),
             num_sumcheck_rounds: params.num_whir_sumcheck_rounds(),
             num_whir_rounds: params.num_whir_rounds(),
-            num_whir_queries: params.num_whir_queries,
+            total_whir_queries: params
+                .whir
+                .rounds
+                .iter()
+                .map(|cfg| cfg.num_queries + 1)
+                .sum(),
         };
         let final_poly_query_eval_air = FinalPolyQueryEvalAir {
             query_bus: self.query_bus,
@@ -471,11 +515,11 @@ impl AirModule for WhirModule {
             final_poly_bus: self.final_poly_bus,
             final_poly_query_eval_bus: self.final_poly_query_eval_bus,
             num_whir_rounds: params.num_whir_rounds(),
-            k_whir: params.k_whir,
-            log_final_poly_len: params.log_final_poly_len,
+            k_whir: params.k_whir(),
+            log_final_poly_len: params.log_final_poly_len(),
         };
         vec![
-            Arc::new(whir_round_air),
+            whir_round_air,
             Arc::new(whir_sumcheck_air),
             Arc::new(query_air),
             Arc::new(initial_round_opened_values_air),
@@ -501,13 +545,18 @@ impl WhirModule {
         let SystemParams {
             l_skip,
             n_stack,
-            k_whir,
-            num_whir_queries,
+            whir,
             log_blowup,
-            log_final_poly_len: _,
-            whir_pow_bits,
             ..
-        } = child_vk.inner.params;
+        } = &child_vk.inner.params;
+        let WhirConfig {
+            k: k_whir,
+            rounds: _,
+            query_phase_pow_bits,
+            folding_pow_bits: _,
+        } = whir;
+        let num_queries_per_round = num_queries_per_round(&child_vk.inner.params);
+        let num_initial_queries = *num_queries_per_round.first().unwrap_or(&0);
         let perm = poseidon2_perm();
 
         let mut initial_opened_values_records = vec![];
@@ -521,12 +570,12 @@ impl WhirModule {
         let mut mu_pows = vec![];
         let final_poly_query_eval_records =
             final_poly_query_eval::build_final_poly_query_eval_records(
-                child_vk.inner.params,
+                &child_vk.inner.params,
                 proofs,
                 preflights,
             );
         let non_initial_opened_values_records =
-            build_non_initial_opened_value_records(child_vk.inner.params, proofs);
+            build_non_initial_opened_value_records(&child_vk.inner.params, proofs);
 
         let mut total_iov_rows = 0;
         let mut total_commits = 0;
@@ -537,18 +586,14 @@ impl WhirModule {
                     .whir
                     .pow_samples
                     .iter()
-                    .copied()
-                    .map(|pow_sample| (F::GENERATOR, pow_sample, whir_pow_bits)),
+                    .map(|pow_sample| (F::GENERATOR, *pow_sample, *query_phase_pow_bits)),
             );
 
             let mut log_rs_domain_size = l_skip + n_stack + log_blowup;
-            let num_whir_rounds = self.params.num_whir_rounds();
-            for round_queries in preflight
-                .whir
-                .queries
-                .chunks(num_whir_queries)
-                .take(num_whir_rounds)
-            {
+            for window in preflight.whir.query_offsets.windows(2) {
+                let start = window[0];
+                let end = window[1];
+                let round_queries = &preflight.whir.queries[start..end];
                 let omega = F::two_adic_generator(log_rs_domain_size);
                 exp_bits_len_gen.add_requests(
                     round_queries
@@ -580,14 +625,14 @@ impl WhirModule {
             total_commits += num_commits_for_proof;
             commits_per_proof_psums.push(total_commits);
 
-            total_iov_rows += (total_chunks_for_proof * num_whir_queries) << k_whir;
+            total_iov_rows += (total_chunks_for_proof * num_initial_queries) << k_whir;
             iov_rows_per_proof_psums.push(total_iov_rows);
 
             let mu = preflight.stacking.stacking_batching_challenge;
             let mu_pow_offset = mu_pows.len();
             mu_pows.extend(mu.powers().take(total_width_for_proof));
 
-            for query_idx in 0..num_whir_queries {
+            for query_idx in 0..num_initial_queries {
                 let mut codeword_vals = EF::zero_vec(1 << k_whir);
                 for (coset_idx, codeword_val) in codeword_vals.iter_mut().enumerate() {
                     let mut base = 0;
@@ -751,7 +796,7 @@ impl WhirModuleChip {
             Sumcheck => sumcheck::generate_trace(child_vk, proofs, preflights),
             Query => query::generate_trace(child_vk, proofs, preflights),
             InitialOpenedValues => initial_opened_values::generate_trace(
-                child_vk.inner.params,
+                &child_vk.inner.params,
                 proofs,
                 preflights,
                 &blob.initial_opened_values_records,
@@ -919,16 +964,16 @@ mod cuda_tracegen {
                 WhirModuleChip::InitialOpenedValues => initial_opened_values::cuda::generate_trace(
                     proofs_cpu.len(),
                     &blob,
-                    child_vk.system_params,
+                    &child_vk.system_params,
                 ),
                 WhirModuleChip::NonInitialOpenedValues => {
-                    non_initial_opened_values::cuda::generate_trace(&blob, child_vk.system_params)
+                    non_initial_opened_values::cuda::generate_trace(&blob, &child_vk.system_params)
                 }
                 WhirModuleChip::FinalPolyQueryEval => {
-                    final_poly_query_eval::cuda::generate_trace(&blob, child_vk.system_params)
+                    final_poly_query_eval::cuda::generate_trace(&blob, &child_vk.system_params)
                 }
                 WhirModuleChip::Folding => {
-                    folding::cuda::generate_trace(&blob, child_vk.system_params, proofs_cpu.len())
+                    folding::cuda::generate_trace(&blob, &child_vk.system_params, proofs_cpu.len())
                 }
                 _ => {
                     // Fall back to CPU impl.

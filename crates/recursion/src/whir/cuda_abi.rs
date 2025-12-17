@@ -13,8 +13,8 @@ extern "C" {
         height: usize,
         records_d: *const InitialOpenedValueRecord,
         k_whir: usize,
-        num_whir_queries: usize,
-        num_whir_rounds: usize,
+        num_initial_queries: usize,
+        total_queries: usize,
         omega_k: F,
         mus_d: *const EF,
         zi_d: *const F,
@@ -38,7 +38,7 @@ extern "C" {
         rows_per_proof: usize,
         round_offsets_d: *const usize,
         log_final_poly_len: usize,
-        num_whir_queries: usize,
+        num_queries_per_round_d: *const usize,
     ) -> i32;
 
     fn _non_initial_opened_values_tracegen(
@@ -47,13 +47,16 @@ extern "C" {
         height: usize,
         records_d: *const NonInitialOpenedValueRecord,
         num_whir_rounds: usize,
-        num_whir_queries: usize,
         k_whir: usize,
         omega_k: F,
         zis_d: *const F,
         zi_roots_d: *const F,
         yis_d: *const EF,
         raw_queries_d: *const F,
+        round_row_offsets_d: *const usize,
+        rows_per_proof: usize,
+        query_offsets_d: *const usize,
+        total_queries: usize,
     ) -> i32;
 
     fn _whir_folding_tracegen(
@@ -62,7 +65,7 @@ extern "C" {
         height: u32,
         records_d: *const FoldRecord,
         num_rounds: u32,
-        num_queries: u32,
+        total_queries: u32,
         k_whir: u32,
     ) -> i32;
 }
@@ -74,17 +77,17 @@ pub unsafe fn initial_opened_values_tracegen(
     height: usize,
     records_d: &DeviceBuffer<InitialOpenedValueRecord>,
     k_whir: usize,
-    num_whir_queries: usize,
-    num_whir_rounds: usize,
+    num_initial_queries: usize,
+    total_queries: usize,
     omega_k: F,
     mus_d: &DeviceBuffer<EF>,
-    // Flattened across proofs; num_queries per proof
+    // Flattened across proofs; total_queries per proof
     zi_d: &DeviceBuffer<F>,
-    // Flattened across proofs; num_queries per proof
+    // Flattened across proofs; total_queries per proof
     zi_root_d: &DeviceBuffer<F>,
-    // Flattened across proofs; num_queries per proof
+    // Flattened across proofs; total_queries per proof
     yi_d: &DeviceBuffer<EF>,
-    // Flattened across proofs; num_queries per proof
+    // Flattened across proofs; total_queries per proof
     raw_queries_d: &DeviceBuffer<F>,
     rows_per_proof_psums: &DeviceBuffer<usize>,
     commits_per_proof_psums: &DeviceBuffer<usize>,
@@ -99,8 +102,8 @@ pub unsafe fn initial_opened_values_tracegen(
         height,
         records_d.as_ptr(),
         k_whir,
-        num_whir_queries,
-        num_whir_rounds,
+        num_initial_queries,
+        total_queries,
         omega_k,
         mus_d.as_ptr(),
         zi_d.as_ptr(),
@@ -125,7 +128,7 @@ pub unsafe fn final_poly_query_eval_tracegen(
     rows_per_proof: usize,
     round_offsets_d: &DeviceBuffer<usize>,
     log_final_poly_len: usize,
-    num_whir_queries: usize,
+    num_queries_per_round_d: &DeviceBuffer<usize>,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_final_poly_query_eval_tracegen(
         trace_d.as_mut_ptr(),
@@ -136,7 +139,7 @@ pub unsafe fn final_poly_query_eval_tracegen(
         rows_per_proof,
         round_offsets_d.as_ptr(),
         log_final_poly_len,
-        num_whir_queries,
+        num_queries_per_round_d.as_ptr(),
     ))
 }
 
@@ -146,13 +149,16 @@ pub unsafe fn non_initial_opened_values_tracegen(
     height: usize,
     records_d: &DeviceBuffer<NonInitialOpenedValueRecord>,
     num_whir_rounds: usize,
-    num_whir_queries: usize,
     k_whir: usize,
     omega_k: F,
     zis_d: &DeviceBuffer<F>,
     zi_roots_d: &DeviceBuffer<F>,
     yis_d: &DeviceBuffer<EF>,
     raw_queries_d: &DeviceBuffer<F>,
+    round_row_offsets_d: &DeviceBuffer<usize>,
+    rows_per_proof: usize,
+    query_offsets_d: &DeviceBuffer<usize>,
+    total_queries: usize,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_non_initial_opened_values_tracegen(
         trace_d.as_mut_ptr(),
@@ -160,13 +166,16 @@ pub unsafe fn non_initial_opened_values_tracegen(
         height,
         records_d.as_ptr(),
         num_whir_rounds,
-        num_whir_queries,
         k_whir,
         omega_k,
         zis_d.as_ptr(),
         zi_roots_d.as_ptr(),
         yis_d.as_ptr(),
         raw_queries_d.as_ptr(),
+        round_row_offsets_d.as_ptr(),
+        rows_per_proof,
+        query_offsets_d.as_ptr(),
+        total_queries,
     ))
 }
 

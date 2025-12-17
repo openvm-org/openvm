@@ -323,7 +323,7 @@ pub struct InitialOpenedValueRecord {
 
 #[tracing::instrument(skip_all)]
 pub(crate) fn generate_trace(
-    params: SystemParams,
+    params: &SystemParams,
     proofs: &[&Proof],
     preflights: &[&Preflight],
     records: &[InitialOpenedValueRecord],
@@ -335,7 +335,7 @@ pub(crate) fn generate_trace(
 ) -> RowMajorMatrix<F> {
     debug_assert_eq!(proofs.len(), preflights.len());
 
-    let k_whir = params.k_whir;
+    let k_whir = params.k_whir();
 
     let omega_k = F::two_adic_generator(k_whir);
     let height = records.len().next_power_of_two();
@@ -363,8 +363,8 @@ pub(crate) fn generate_trace(
             let records_per_coset_idx = chunks_after_proof - chunks_before_proof;
 
             let coset_idx = (record_idx / records_per_coset_idx) % (1 << k_whir);
-            let query_idx =
-                (record_idx / (records_per_coset_idx << k_whir)) % params.num_whir_queries;
+            let num_initial_queries = params.whir.rounds.first().unwrap().num_queries;
+            let query_idx = (record_idx / (records_per_coset_idx << k_whir)) % num_initial_queries;
 
             let local_chunk_idx = record_idx % records_per_coset_idx;
             let absolute_chunk_idx = chunks_before_proof + local_chunk_idx;
