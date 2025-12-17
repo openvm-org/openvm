@@ -56,7 +56,7 @@ jobs:
             native:
               - "extensions/native/**"
             keccak256:
-              - "extensions/keccak256/**"
+              - "extensions/new-keccak256/**"
             sha256:
               - "extensions/sha256/**"
             bigint:
