@@ -85,7 +85,9 @@ impl<F: PrimeField32> InterpreterExecutor<F> for KeccakfVmExecutor {
     where
         Ctx: ExecutionCtxTrait,
     {
-        todo!()
+        let data: &mut KeccakfPreCompute = data.borrow_mut();
+        self.pre_compute_impl(pc, inst, data)?;
+        Ok(execute_e1_impl)
     }
 }
 
@@ -117,15 +119,18 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakfVmExecutor {
     #[cfg(feature = "tco")]
     fn metered_handler<Ctx>(
         &self,
-        _chip_idx: usize,
-        _pc: u32,
-        _inst: &Instruction<F>,
-        _data: &mut [u8],
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
     ) -> Result<Handler<F, Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        todo!()
+        let data: &mut E2PreCompute<KeccakfPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        Ok(execute_e2_handler)
     }
 }
 

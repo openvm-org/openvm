@@ -88,7 +88,9 @@ impl<F: PrimeField32> InterpreterExecutor<F> for XorinVmExecutor {
     where
         Ctx: ExecutionCtxTrait,
     {
-        todo!()
+        let data: &mut XorinPreCompute = data.borrow_mut();
+        self.pre_compute_impl(pc, inst, data)?;
+        Ok(execute_e1_impl)
     }
 }
 
@@ -120,10 +122,10 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for XorinVmExecutor {
     #[cfg(feature = "tco")]
     fn metered_handler<Ctx>(
         &self,
-        _chip_idx: usize,
-        _pc: u32,
-        _inst: &Instruction<F>,
-        _data: &mut [u8],
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
     ) -> Result<Handler<F, Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
@@ -131,7 +133,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for XorinVmExecutor {
         let data: &mut E2PreCompute<XorinPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_impl::<_, _>)
+        Ok(execute_e2_impl)
     }
 }
 
@@ -144,7 +146,6 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    println!("xorin e1 got hit");
     let pre_compute: &XorinPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<XorinPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, true>(pre_compute, exec_state);
