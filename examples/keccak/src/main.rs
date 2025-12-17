@@ -13,11 +13,8 @@ pub fn main() {
     let output = [3u8; 136];
 
     let len: usize = 136;
-    println!("buffer pointer {:?}", buffer.as_mut_ptr());
     openvm_new_keccak256_guest::native_xorin(buffer.as_mut_ptr(), input.as_ptr(), len);
     assert_eq!(buffer[..136], output);
-    println!("buffer pointer {:?}", buffer.as_mut_ptr());
     openvm_new_keccak256_guest::native_keccakf(buffer.as_mut_ptr());
-    println!("{:?}", buffer);
 }
 // [!endregion main]

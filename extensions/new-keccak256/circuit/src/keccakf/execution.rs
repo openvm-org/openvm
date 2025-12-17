@@ -15,6 +15,7 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
 use openvm_stark_backend::p3_field::PrimeField32;
+use p3_keccak_air::NUM_ROUNDS;
 
 use super::KeccakfVmExecutor;
 
@@ -144,7 +145,6 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     pre_compute: &KeccakfPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    println!("keccakf e1 was called");
     use tiny_keccak::keccakf;
 
     // the variable naming might be misleading
@@ -187,5 +187,6 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
             .borrow();
     exec_state
         .ctx
-        .on_height_change(pre_compute.chip_idx as usize, 1);
+        .on_height_change(pre_compute.chip_idx as usize, NUM_ROUNDS as u32);
+    execute_e12_impl::<F, CTX, false>(&pre_compute.data, exec_state);
 }
