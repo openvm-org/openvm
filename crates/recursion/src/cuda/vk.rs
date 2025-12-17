@@ -37,7 +37,7 @@ impl VerifyingKeyGpu {
         Self {
             cpu: vk.clone(),
             per_air,
-            system_params: vk.inner.params,
+            system_params: vk.inner.params.clone(),
             pre_hash: vk.pre_hash,
         }
     }

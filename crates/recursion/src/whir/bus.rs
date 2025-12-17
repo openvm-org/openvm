@@ -36,6 +36,7 @@ define_typed_per_proof_permutation_bus!(WhirQueryBus, WhirQueryBusMessage);
 pub struct VerifyQueriesBusMessage<T> {
     pub tidx: T,
     pub whir_round: T,
+    pub num_queries: T,
     pub gamma: [T; D_EF],
     pub pre_claim: [T; D_EF],
     pub post_claim: [T; D_EF],

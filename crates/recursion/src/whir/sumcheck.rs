@@ -226,8 +226,8 @@ pub(crate) fn generate_trace(
 ) -> RowMajorMatrix<F> {
     debug_assert_eq!(proofs.len(), preflights.len());
 
-    let params = vk.inner.params;
-    let k_whir = params.k_whir;
+    let params = &vk.inner.params;
+    let k_whir = params.k_whir();
     let num_whir_rounds = params.num_whir_rounds();
 
     let whir_opening_point_per_proof = preflights
@@ -242,13 +242,16 @@ pub(crate) fn generate_trace(
         })
         .collect_vec();
 
+    let num_queries_per_round: Vec<usize> =
+        params.whir.rounds.iter().map(|r| r.num_queries).collect();
     let mut alpha_lookup_counts = vec![0usize; params.num_whir_sumcheck_rounds()];
-    let q = params.num_whir_queries;
+    let mut base = 0usize;
     for r in 0..num_whir_rounds {
-        let base = r * (q + 1);
+        let q = num_queries_per_round[r];
         for j in 0..k_whir {
             alpha_lookup_counts[r * k_whir + j] = base + q * (1 << (k_whir - 1 - j));
         }
+        base += q + 1; // OOD query (or final poly) + in-domain queries
     }
 
     let rows_per_proof = params.num_whir_sumcheck_rounds();
