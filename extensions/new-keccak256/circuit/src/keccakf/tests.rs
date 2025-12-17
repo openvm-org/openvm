@@ -92,23 +92,13 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>> (
         tester.write(2, buffer_ptr + 4 * i, buffer_chunk);
     }
 
-    tester.execute(
-        executor,
-        arena,
-        &Instruction::from_usize(opcode.global_opcode(), [rd, 0, 0, 1, 2])
-    );
-
-    tester.execute(
-        executor,
-        arena,
-        &Instruction::from_usize(opcode.global_opcode(), [rd, 0, 0, 1, 2])
-    );
-
-    tester.execute(
-        executor,
-        arena,
-        &Instruction::from_usize(opcode.global_opcode(), [rd, 0, 0, 1, 2])
-    );
+    for it in 0..100 {
+        tester.execute(
+            executor,
+            arena,
+            &Instruction::from_usize(opcode.global_opcode(), [rd, 0, 0, 1, 2])
+        );
+    }
 
     let mut output_buffer = [F::from_canonical_u8(0); MAX_LEN];
 
@@ -116,13 +106,11 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>> (
         let output_chunk : [F; 4] = tester.read(2, buffer_ptr + 4 * i);
         output_buffer[4 * i..4 * i + 4].copy_from_slice(&output_chunk);
     }
-
-    println!("completed keccakf set and execute");
 }   
 
 #[test] 
 fn keccakf_chip_positive_tests() {
-    let num_ops: usize = 1;
+    let num_ops: usize = 10;
     
     for _ in 0..num_ops {
         let mut rng = create_seeded_rng();
