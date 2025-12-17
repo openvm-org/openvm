@@ -241,8 +241,6 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                         // so transpose of transpose fixes it 
                         let p3_trace: RowMajorMatrix<F> = generate_trace_rows(vec![preimage_buffer_bytes_u64_transpose], 0);
         
-                        println!("row_idx {row_idx}");
-        
                         row[..NUM_KECCAK_PERM_COLS].copy_from_slice(
                             &p3_trace.values[row_idx * NUM_KECCAK_PERM_COLS..(row_idx + 1) * NUM_KECCAK_PERM_COLS],
                         );
@@ -263,6 +261,11 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                         cols.instruction.buffer_ptr = F::from_canonical_u32(record.rd_ptr);
                         cols.instruction.buffer = F::from_canonical_u32(record.buffer);
                         cols.instruction.buffer_limbs = record.buffer.to_le_bytes().map(F::from_canonical_u8);
+                        
+                        let is_first_round = cols.inner.step_flags[0];
+                        let is_final_round = cols.inner.step_flags[NUM_ROUNDS - 1];
+                        cols.is_enabled_is_first_round = is_first_round;
+                        cols.is_enabled_is_final_round = is_final_round;
                 
                         // fills in memory offline checker
                         if row_idx == 0 {

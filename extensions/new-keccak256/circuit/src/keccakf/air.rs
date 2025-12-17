@@ -69,7 +69,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfVmAir {
             SubAirBuilder::<AB, KeccakAir, AB::Var>::new(builder, 0..NUM_KECCAK_PERM_COLS);
         keccak_f_air.eval(&mut sub_builder);
 
-        // // only active during the last round in each instruction 
+        // only active during the last round in each instruction 
         self.constrain_output_write(builder, local, &mut timestamp, &mem_oc.buffer_bytes_write_aux_cols);
 
         self.constrain_rounds_transition(builder, local, next, timestamp);
@@ -87,15 +87,19 @@ impl KeccakfVmAir {
     ) {
         let instruction = local.instruction;
         let is_enabled = instruction.is_enabled;
-        let is_first_round = local.inner.step_flags[0];
-        let should_eval = is_enabled * is_first_round;
         builder.assert_bool(is_enabled);
+        let is_first_round = local.inner.step_flags[0];
+        let is_final_round = local.inner.step_flags[NUM_ROUNDS - 1];
+        let is_enabled_is_first_round = is_enabled * is_first_round;
+        let is_enabled_is_final_round = is_enabled * is_final_round;
+        builder.assert_eq(is_enabled_is_first_round, is_first_round * is_enabled);
+        builder.assert_eq(is_enabled_is_final_round, is_final_round * is_enabled);
 
         let reg_addr_sp = AB::F::ONE;
         let buffer_ptr = instruction.buffer_ptr;
         let buffer_data = instruction.buffer_limbs.map(Into::into);
         // 50 buffer reads and 50 buffer writes and 1 register read
-        let timestamp_change = should_eval.clone() * AB::Expr::from_canonical_u32(1 + 50 + 50);
+        let timestamp_change = local.is_enabled_is_first_round * AB::F::from_canonical_u32(1 + 50 + 50);
 
         // safety: it is safe to use timestamp instead of storing a separate instruction.start_timestamp
         // because the execution_bridge interaction is only enabled in the first row, so timestamp = start_timestamp
@@ -111,7 +115,7 @@ impl KeccakfVmAir {
             ], 
             ExecutionState::new(instruction.pc, local.timestamp),
             timestamp_change,
-        ).eval(builder, should_eval.clone());
+        ).eval(builder, local.is_enabled_is_first_round);
 
         self.memory_bridge
             .read(MemoryAddress::new(reg_addr_sp, buffer_ptr), 
@@ -119,8 +123,8 @@ impl KeccakfVmAir {
                 start_timestamp.clone(),
                 &register_aux[0],
             )   
-            .eval(builder, should_eval.clone());
-        *start_timestamp += should_eval.clone();
+            .eval(builder, local.is_enabled_is_first_round);
+        *start_timestamp += local.is_enabled_is_first_round.into();
         
         builder.assert_eq(
             instruction.buffer, 
@@ -140,7 +144,7 @@ impl KeccakfVmAir {
         for pair in need_range_check.chunks_exact(2) {
             self.bitwise_lookup_bus
                 .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
-                .eval(builder, should_eval.clone());
+                .eval(builder, local.is_enabled_is_first_round);
         }
     }
 
@@ -152,10 +156,6 @@ impl KeccakfVmAir {
         start_timestamp: &mut AB::Expr,
         buffer_bytes_read_aux_cols: &[MemoryReadAuxCols<AB::Var>; 200/4]
     ) {
-        let is_enabled = local.instruction.is_enabled;
-        let is_first_round = local.inner.step_flags[0];
-        let should_read = is_enabled * is_first_round;
-        
         const PREIMAGE_BYTES: usize = 25 * U64_LIMBS * 2;
         let local_preimage_bytes: [AB::Expr; PREIMAGE_BYTES] = std::array::from_fn(|byte_idx| {
             // `preimage` is represented as 5 * 5 * U64_LIMBS u16 limbs; each u16 limb is split into 2 bytes.
@@ -186,9 +186,9 @@ impl KeccakfVmAir {
                 read_chunk,
                 start_timestamp.clone(),
                 &buffer_bytes_read_aux_cols[idx]
-            ).eval(builder, should_read.clone());
+            ).eval(builder, local.is_enabled_is_first_round);
 
-            *start_timestamp += should_read.clone();
+            *start_timestamp += local.is_enabled_is_first_round.into();
         }
     }
 
@@ -200,10 +200,6 @@ impl KeccakfVmAir {
         start_timestamp: &mut AB::Expr,
         buffer_bytes_write_aux_cols: &[MemoryWriteAuxCols<AB::Var, 4>; 200/4]
     ) {
-        let is_enabled = local.instruction.is_enabled;
-        let is_final_round = local.inner.step_flags[NUM_ROUNDS - 1];
-        let should_write = is_enabled * is_final_round;
-
         const POSTIMAGE_BYTES: usize = 25 * 4 * 2;
         let local_postimage_bytes: [AB::Expr; POSTIMAGE_BYTES] = std::array::from_fn(|byte_idx| {
             // `preimage` is represented as 5 * 5 * U64_LIMBS u16 limbs; each u16 limb is split into 2 bytes.
@@ -233,9 +229,9 @@ impl KeccakfVmAir {
                 write_chunk,
                 start_timestamp.clone(),
                 &buffer_bytes_write_aux_cols[idx]
-            ).eval(builder, should_write.clone());
+            ).eval(builder, local.is_enabled_is_final_round);
 
-            *start_timestamp += should_write.clone();
+            *start_timestamp += local.is_enabled_is_final_round.into();
         }
     }
 

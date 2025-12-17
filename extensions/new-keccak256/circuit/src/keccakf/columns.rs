@@ -11,6 +11,8 @@ pub struct KeccakfVmCols<T> {
     pub instruction: KeccakfInstructionCols<T>,
     pub mem_oc: KeccakfMemoryCols<T>,
     pub timestamp: T,
+    pub is_enabled_is_first_round: T,
+    pub is_enabled_is_final_round: T,
 }
 
 #[repr(C)]

@@ -92,7 +92,10 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>> (
         tester.write(2, buffer_ptr + 4 * i, buffer_chunk);
     }
 
-    for it in 0..100 {
+    // Safety note: If you would like to increase this further, make sure to count if it will
+    // exceed the MAX_TRACE_ROWS of the test harness configs or not
+    // currently it does not because 100 * 24 < 4096
+    for _ in 0..100 {
         tester.execute(
             executor,
             arena,
