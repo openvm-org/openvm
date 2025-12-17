@@ -28,3 +28,18 @@ pub struct AirData {
     pub num_interactions_per_row: usize,
     pub has_preprocessed: bool,
 }
+
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy)]
+pub struct MerkleVerifyRecord {
+    pub proof_idx: u16,
+    pub merkle_proof_idx: u16,
+    pub start_row: u32,
+    pub num_rows: u32,
+    pub depth: u16,
+    pub merkle_idx: u32,
+    pub commit_major: u16,
+    pub commit_minor: u16,
+    pub leaf_hash_offset: u32,
+    pub siblings_offset: u32,
+}
