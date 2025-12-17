@@ -6,10 +6,10 @@ use std::{
 use openvm_circuit::{
     arch::*,
     system::memory::{
-            offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
-            online::TracingMemory,
-            MemoryAuxColsFactory,
-        },
+        offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
+        online::TracingMemory,
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS};
@@ -210,8 +210,6 @@ where
             );
         }
 
-        // Todo: use constants instead of number directly
-        state.memory.timestamp = state.memory.timestamp();
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
         println!("debug record {:?}", record.inner.clone());
@@ -281,8 +279,6 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         let record_len: usize = record.len as usize;
         let num_reads: usize = record_len.div_ceil(4);
 
-        // todo: think if the order matters here (maybe due to timestamp things), but this should be
-        // fine since it is matched with the one in preflight
         for t in 0..3 {
             mem_helper.fill(
                 record.register_aux_cols[t].prev_timestamp,

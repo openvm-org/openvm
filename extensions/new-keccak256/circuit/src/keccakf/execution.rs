@@ -160,7 +160,6 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     let message: &[u8] = exec_state.vm_read_slice(RV32_MEMORY_AS, buffer, 200);
     assert_eq!(message.len(), 200);
 
-    // todo: check if this is correct representation / conversion between u8 <-> u64
     let mut message_u64 = [0u64; 25];
     for (i, message_chunk) in message.chunks_exact(8).enumerate() {
         let message_chunk_u64 = u64::from_le_bytes(message_chunk.try_into().unwrap());

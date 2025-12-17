@@ -270,7 +270,7 @@ impl KeccakfVmAir {
         let is_final_round = local.inner.step_flags[NUM_ROUNDS - 1];
         let is_enabled = local.instruction.is_enabled;
         let need_check = is_enabled * not(is_final_round);
-        // todo: check if this needs to be only on when_transition
+
         for idx in 0..100 {
             builder
                 .when(need_check.clone())

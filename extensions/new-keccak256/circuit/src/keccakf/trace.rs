@@ -17,14 +17,12 @@ use openvm_instructions::{
 };
 use openvm_new_keccak256_transpiler::KeccakfOpcode;
 use openvm_rv32im_circuit::adapters::{tracing_read, tracing_write};
-use openvm_stark_backend::{
-    p3_field::PrimeField32,
-    p3_matrix::dense::RowMajorMatrix,
-};
+use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 use p3_keccak_air::generate_trace_rows;
 
 use crate::keccakf::{
     columns::{KeccakfVmCols, NUM_KECCAKF_VM_COLS, NUM_KECCAK_PERM_COLS, NUM_ROUNDS},
+    utils::{KECCAK_WIDTH_U32_LIMBS, KECCAK_WIDTH_U64_LIMBS, KECCAK_WIDTH_BYTES},
     KeccakfVmExecutor, KeccakfVmFiller,
 };
 
@@ -102,7 +100,7 @@ where
             &mut record.inner.register_aux_cols[0].prev_timestamp,
         ));
 
-        for idx in 0..(200 / 4) {
+        for idx in 0..KECCAK_WIDTH_U32_LIMBS {
             let read = tracing_read::<4>(
                 state.memory,
                 RV32_MEMORY_AS,
@@ -114,10 +112,10 @@ where
         }
 
         let preimage_buffer_bytes = record.inner.preimage_buffer_bytes;
-        let mut preimage_buffer_bytes_u64: [u64; 25] = [0; 25];
+        let mut preimage_buffer_bytes_u64: [u64; KECCAK_WIDTH_U64_LIMBS] =
+            [0; KECCAK_WIDTH_U64_LIMBS];
 
-        // todo: define constants instead of number directly
-        for idx in 0..(200 / 8) {
+        for idx in 0..KECCAK_WIDTH_U64_LIMBS {
             preimage_buffer_bytes_u64[idx] = u64::from_le_bytes(
                 preimage_buffer_bytes[8 * idx..8 * idx + 8]
                     .try_into()
@@ -129,13 +127,13 @@ where
 
         // result is placed in preimage_buffer_bytes_u64
         // convert back to blocks of u8's
-        let mut result_u8: [u8; 200] = [0; 200];
-        for idx in 0..(200 / 8) {
+        let mut result_u8: [u8; KECCAK_WIDTH_BYTES] = [0; KECCAK_WIDTH_BYTES];
+        for idx in 0..KECCAK_WIDTH_U64_LIMBS {
             let chunk: [u8; 8] = preimage_buffer_bytes_u64[idx].to_le_bytes();
             result_u8[8 * idx..8 * idx + 8].copy_from_slice(&chunk);
         }
 
-        for idx in 0..(200 / 4) {
+        for idx in 0..KECCAK_WIDTH_U32_LIMBS {
             let chunk: [u8; 4] = result_u8[4 * idx..4 * idx + 4].try_into().unwrap();
             tracing_write(
                 state.memory,
@@ -148,7 +146,6 @@ where
         }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
         Ok(())
     }
 }
@@ -168,7 +165,8 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
             .values
             .split_at_mut(rows_used * NUM_KECCAKF_VM_COLS);
 
-        let p3_dummy_trace: RowMajorMatrix<F> = generate_trace_rows(vec![[0u64; 25]; 1], 0);
+        let p3_dummy_trace: RowMajorMatrix<F> =
+            generate_trace_rows(vec![[0u64; KECCAK_WIDTH_U64_LIMBS]; 1], 0);
 
         dummy_trace
             // Each Keccak-f round corresponds to exactly one trace row of width
@@ -221,15 +219,17 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
 
                 // compute u64 preimage and postimage to not have to recompute per row
                 let preimage_buffer_bytes = record.preimage_buffer_bytes;
-                let mut preimage_buffer_bytes_u64: [u64; 25] = [0; 25];
-                for idx in 0..25 {
+                let mut preimage_buffer_bytes_u64: [u64; KECCAK_WIDTH_U64_LIMBS] =
+                    [0; KECCAK_WIDTH_U64_LIMBS];
+                for idx in 0..KECCAK_WIDTH_U64_LIMBS {
                     let le_bytes: [u8; 8] = preimage_buffer_bytes[8 * idx..8 * idx + 8]
                         .try_into()
                         .unwrap();
                     preimage_buffer_bytes_u64[idx] = u64::from_le_bytes(le_bytes);
                 }
 
-                let mut preimage_buffer_bytes_u64_transpose: [u64; 25] = [0; 25];
+                let mut preimage_buffer_bytes_u64_transpose: [u64; KECCAK_WIDTH_U64_LIMBS] =
+                    [0; KECCAK_WIDTH_U64_LIMBS];
                 for y in 0..5 {
                     for x in 0..5 {
                         preimage_buffer_bytes_u64_transpose[x + 5 * y] =
@@ -240,8 +240,9 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                 let mut postimage_buffer_bytes_u64 = preimage_buffer_bytes_u64;
                 tiny_keccak::keccakf(&mut postimage_buffer_bytes_u64);
 
-                let mut postimage_buffer_bytes: [u8; 200] = [0u8; 200];
-                for idx in 0..25 {
+                let mut postimage_buffer_bytes: [u8; KECCAK_WIDTH_BYTES] =
+                    [0u8; KECCAK_WIDTH_BYTES];
+                for idx in 0..KECCAK_WIDTH_U64_LIMBS {
                     let chunk: [u8; 8] = postimage_buffer_bytes_u64[idx].to_le_bytes();
                     postimage_buffer_bytes[8 * idx..8 * idx + 8].copy_from_slice(&chunk);
                 }
@@ -263,12 +264,12 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
 
                         // fills in preimage_state_hi
                         let cols: &mut KeccakfVmCols<F> = row.borrow_mut();
-                        for idx in 0..100 {
+                        for idx in 0..KECCAK_WIDTH_BYTES / 2 {
                             cols.preimage_state_hi[idx] =
                                 F::from_canonical_u8(preimage_buffer_bytes[2 * idx + 1]);
                         }
                         // fills in postimage_state_hi
-                        for idx in 0..100 {
+                        for idx in 0..KECCAK_WIDTH_BYTES / 2 {
                             cols.postimage_state_hi[idx] =
                                 F::from_canonical_u8(postimage_buffer_bytes[2 * idx + 1]);
                         }
@@ -294,7 +295,7 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                                 cols.mem_oc.register_aux_cols[0].as_mut(),
                             );
                             timestamp += 1;
-                            for t in 0..50 {
+                            for t in 0..KECCAK_WIDTH_U32_LIMBS {
                                 mem_helper.fill(
                                     record.buffer_read_aux_cols[t].prev_timestamp,
                                     timestamp,
@@ -320,7 +321,7 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                         }
 
                         if row_idx == NUM_ROUNDS - 1 {
-                            for t in 0..50 {
+                            for t in 0..KECCAK_WIDTH_U32_LIMBS {
                                 mem_helper.fill(
                                     record.buffer_write_aux_cols[t].prev_timestamp,
                                     timestamp,
