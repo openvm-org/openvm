@@ -39,15 +39,16 @@ impl AggProver {
     ) -> Self {
         assert!(agg_tree_config.num_children_leaf <= MAX_NUM_CHILDREN_LEAF);
         assert!(agg_tree_config.num_children_internal <= MAX_NUM_CHILDREN_INTERNAL);
-        let leaf_prover = NonRootAggregationProver::new::<E>(app_vk, agg_config.params.leaf, false);
+        let leaf_prover =
+            NonRootAggregationProver::new::<E>(app_vk, agg_config.params.leaf.clone(), false);
         let internal_for_leaf_prover = NonRootAggregationProver::new::<E>(
             leaf_prover.get_vk(),
-            agg_config.params.internal,
+            agg_config.params.internal.clone(),
             false,
         );
         let internal_recursive_prover = NonRootAggregationProver::new::<E>(
             internal_for_leaf_prover.get_vk(),
-            agg_config.params.internal,
+            agg_config.params.internal.clone(),
             true,
         );
         Self {
