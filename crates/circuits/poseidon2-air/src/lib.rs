@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use openvm_stark_backend::{
-    p3_field::{InjectiveMonomial, PrimeCharacteristicRing, PrimeField},
+    p3_field::{InjectiveMonomial, PrimeField},
     p3_matrix::dense::RowMajorMatrix,
 };
 pub use openvm_stark_sdk::p3_baby_bear;
@@ -47,7 +47,7 @@ pub const BABY_BEAR_POSEIDON2_SBOX_DEGREE: u64 = 7;
 /// details.
 #[derive(Debug, Clone)]
 pub struct Poseidon2SubChip<
-    F: PrimeField + PrimeCharacteristicRing + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
+    F: PrimeField + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
     const SBOX_REGISTERS: usize,
 > {
     // This is Arc purely because Poseidon2Air cannot derive Clone
@@ -57,7 +57,7 @@ pub struct Poseidon2SubChip<
 }
 
 impl<
-        F: PrimeField + PrimeCharacteristicRing + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
+        F: PrimeField + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
         const SBOX_REGISTERS: usize,
     > Poseidon2SubChip<F, SBOX_REGISTERS>
 {
@@ -87,6 +87,12 @@ impl<
         F: PrimeField,
     {
         match self.air.as_ref() {
+            // The third argument `extra_capacity_bits` pre-allocates Vec capacity for
+            // the LDE blowup during PCS commit (capacity = size << extra_capacity_bits).
+            // This optimization only helps if the returned matrix flows directly to
+            // the prover. Currently in OpenVM, this sub-trace is copied into wider
+            // matrices that include additional columns, so the extra capacity would
+            // be discarded.
             Poseidon2SubAir::BabyBearMds(_) => generate_trace_rows::<
                 F,
                 BabyBearPoseidon2LinearLayers,
@@ -95,22 +101,17 @@ impl<
                 SBOX_REGISTERS,
                 BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS,
                 BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS,
-            >(inputs, &self.constants, 0), // TODO: pass extra capacity bits
+            >(inputs, &self.constants, 0),
         }
     }
 }
 
 #[derive(Clone, Debug)]
-pub enum Poseidon2Executor<
-    F: PrimeField + PrimeCharacteristicRing + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
-> {
+pub enum Poseidon2Executor<F: PrimeField + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>> {
     BabyBearMds(Plonky3Poseidon2Executor<F, BabyBearPoseidon2LinearLayers>),
 }
 
-impl<
-        F: PrimeField + PrimeCharacteristicRing + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
-    > Poseidon2Executor<F>
-{
+impl<F: PrimeField + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>> Poseidon2Executor<F> {
     pub fn new(
         external_constants: ExternalLayerConstants<F, POSEIDON2_WIDTH>,
         internal_constants: Vec<F>,

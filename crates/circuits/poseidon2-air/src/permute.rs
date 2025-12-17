@@ -50,7 +50,7 @@ impl<F: Field + PrimeCharacteristicRing, LinearLayers> InternalLayerConstructor<
 }
 
 impl<
-        F: Field + PrimeCharacteristicRing + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
+        F: Field + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
         LinearLayers,
         const W: usize,
     > InternalLayer<F, W, BABY_BEAR_POSEIDON2_SBOX_DEGREE>
@@ -86,7 +86,7 @@ impl<F: Field + PrimeCharacteristicRing, LinearLayers, const W: usize>
 }
 
 impl<
-        F: Field + PrimeCharacteristicRing + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
+        F: Field + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
         LinearLayers,
         const W: usize,
     > ExternalLayer<F, W, BABY_BEAR_POSEIDON2_SBOX_DEGREE>
@@ -108,7 +108,7 @@ where
 }
 
 fn external_permute_state<
-    F: Field + PrimeCharacteristicRing + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
+    F: Field + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
     LinearLayers,
     const W: usize,
 >(
