@@ -130,18 +130,18 @@ impl KeccakfVmAir {
             instruction.buffer_limbs[3] * AB::F::from_canonical_u32(1 << 24)
         );
 
-        // let limb_shift = AB::F::from_canonical_usize(
-        //     1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.ptr_max_bits),
-        // );
-        // let need_range_check = [
-        //     *instruction.buffer_limbs.last().unwrap(),
-        //     *instruction.buffer_limbs.last().unwrap()
-        // ];
-        // for pair in need_range_check.chunks_exact(2) {
-        //     self.bitwise_lookup_bus
-        //         .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
-        //         .eval(builder, should_eval.clone());
-        // }
+        let limb_shift = AB::F::from_canonical_usize(
+            1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.ptr_max_bits),
+        );
+        let need_range_check = [
+            *instruction.buffer_limbs.last().unwrap(),
+            *instruction.buffer_limbs.last().unwrap()
+        ];
+        for pair in need_range_check.chunks_exact(2) {
+            self.bitwise_lookup_bus
+                .send_range(pair[0] * limb_shift, pair[1] * limb_shift)
+                .eval(builder, should_eval.clone());
+        }
     }
 
     #[inline]

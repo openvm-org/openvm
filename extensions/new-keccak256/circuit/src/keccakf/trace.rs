@@ -282,16 +282,16 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                             }
         
                             // safety: the following approach only works when self.pointer_max_bits >= 24
-                            // let limb_shift = 1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits);
-                            // let buffer_limbs = record.buffer.to_le_bytes();
-                            // let need_range_check = [
-                            //     buffer_limbs.last().unwrap(),
-                            //     buffer_limbs.last().unwrap()
-                            // ];
-                            // for pair in need_range_check.chunks_exact(2) {
-                            //     self.bitwise_lookup_chip
-                            //         .request_range((pair[0] * limb_shift) as u32, (pair[1] * limb_shift) as u32);
-                            // }
+                            let limb_shift = 1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits);
+                            let buffer_limbs = record.buffer.to_le_bytes();
+                            let need_range_check = [
+                                buffer_limbs.last().unwrap(),
+                                buffer_limbs.last().unwrap()
+                            ];
+                            for pair in need_range_check.chunks_exact(2) {
+                                self.bitwise_lookup_chip
+                                    .request_range((pair[0] * limb_shift) as u32, (pair[1] * limb_shift) as u32);
+                            }
                         }
         
                         if row_idx == NUM_ROUNDS - 1 {
