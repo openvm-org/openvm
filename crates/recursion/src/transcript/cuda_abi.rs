@@ -1,7 +1,10 @@
 #![allow(clippy::missing_safety_doc)]
 
-use openvm_cuda_backend::prelude::F;
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
 use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
+use openvm_stark_backend::prover::MatrixDimensions;
+
+use crate::cuda::types::MerkleVerifyRecord;
 
 extern "C" {
     fn _poseidon2_tracegen(
@@ -29,6 +32,23 @@ extern "C" {
         d_num_records: *mut usize,
         d_temp_storage: *mut std::ffi::c_void,
         temp_storage_bytes: usize,
+    ) -> i32;
+
+    fn _merkle_verify_tracegen(
+        d_trace: *mut F,
+        height: usize,
+        width: usize,
+        d_records: *const MerkleVerifyRecord,
+        num_records: usize,
+        d_leaf_hashes: *const F,
+        d_siblings: *const F,
+        num_leaves: usize,
+        k: usize,
+        d_poseidon_inputs: *mut F,
+        num_valid_rows: usize,
+        d_proof_start_rows: *const usize,
+        num_proofs: usize,
+        d_leaf_scratch: *mut F,
     ) -> i32;
 }
 
@@ -83,5 +103,37 @@ pub unsafe fn poseidon2_deduplicate_records(
         d_num_records.as_mut_ptr(),
         d_temp_storage.as_mut_ptr() as *mut std::ffi::c_void,
         temp_storage_bytes,
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub unsafe fn merkle_verify_tracegen(
+    d_trace: &mut DeviceMatrix<F>,
+    d_records: &DeviceBuffer<MerkleVerifyRecord>,
+    d_leaf_hashes: &DeviceBuffer<F>,
+    d_siblings: &DeviceBuffer<F>,
+    num_leaves: usize,
+    k: usize,
+    d_poseidon_inputs: &mut DeviceBuffer<F>,
+    num_valid_rows: usize,
+    d_proof_start_rows: &DeviceBuffer<usize>,
+    num_proofs: usize,
+    d_leaf_scratch: &mut DeviceBuffer<F>,
+) -> Result<(), CudaError> {
+    CudaError::from_result(_merkle_verify_tracegen(
+        d_trace.buffer().as_mut_ptr(),
+        d_trace.height(),
+        d_trace.width(),
+        d_records.as_ptr(),
+        d_records.len(),
+        d_leaf_hashes.as_ptr(),
+        d_siblings.as_ptr(),
+        num_leaves,
+        k,
+        d_poseidon_inputs.as_mut_ptr(),
+        num_valid_rows,
+        d_proof_start_rows.as_ptr(),
+        num_proofs,
+        d_leaf_scratch.as_mut_ptr(),
     ))
 }

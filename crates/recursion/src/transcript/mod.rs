@@ -212,7 +212,7 @@ impl TranscriptModule {
         let mut counts = Vec::new();
         let mut last_key: Option<[u32; POSEIDON2_WIDTH]> = None;
         for (key, state) in keyed_states {
-            if last_key.map_or(false, |prev| prev == key) {
+            if last_key == Some(key) {
                 if let Some(last) = counts.last_mut() {
                     *last += 1;
                 }
@@ -279,9 +279,9 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
 
         let poseidon2_trace =
             info_span!("wrapper.generate_trace", air = "Poseidon2").in_scope(|| {
-                // TODO: This is unfortunately how we propagate span fields given our current tracing
-                // system. It would be extraordinarily helpful to update our metric outputs to contain
-                // the fields they define as labels.
+                // TODO: This is unfortunately how we propagate span fields given our current
+                // tracing system. It would be extraordinarily helpful to update our
+                // metric outputs to contain the fields they define as labels.
                 info_span!("generate_trace").in_scope(|| {
                     let (mut poseidon_states, mut poseidon_counts) =
                         Self::dedup_poseidon_inputs(poseidon_inputs);
@@ -325,9 +325,11 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
 
 #[cfg(feature = "cuda")]
 mod cuda_tracegen {
-    use cuda_backend_v2::{GpuBackendV2, transport_matrix_h2d_col_major};
+    use cuda_backend_v2::GpuBackendV2;
     use itertools::Itertools;
-    use openvm_cuda_backend::{base::DeviceMatrix, types::F as CudaF};
+    use openvm_cuda_backend::{
+        base::DeviceMatrix, data_transporter::transport_matrix_to_device, types::F as CudaF,
+    };
     use openvm_cuda_common::{
         copy::{MemCopyD2H, MemCopyH2D},
         d_buffer::DeviceBuffer,
@@ -337,7 +339,7 @@ mod cuda_tracegen {
     use super::*;
     use crate::{
         cuda::{GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
-        transcript::cuda_abi,
+        transcript::{cuda_abi, merkle_verify},
     };
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for TranscriptModule {
@@ -356,10 +358,10 @@ mod cuda_tracegen {
                 .iter()
                 .map(|preflight| preflight.cpu.clone())
                 .collect_vec();
-            let (merkle_trace, poseidon_inputs) =
+            let (merkle_trace_gpu, poseidon_inputs) =
                 tracing::info_span!("wrapper.generate_trace", air = "MerkleVerify").in_scope(
                     || {
-                        merkle_verify::generate_trace(
+                        merkle_verify::cuda::generate_trace(
                             &child_vk.cpu,
                             &proofs_cpu,
                             &preflights_cpu,
@@ -373,13 +375,7 @@ mod cuda_tracegen {
             } = tracing::info_span!("wrapper.generate_trace", air = "Transcript")
                 .in_scope(|| self.build_trace_artifacts(&preflights_cpu, poseidon_inputs));
 
-            let transcript_trace_gpu =
-                transport_matrix_h2d_col_major(&ColMajorMatrix::from_row_major(&transcript_trace))
-                    .unwrap();
-            let merkle_trace_gpu = transport_matrix_h2d_col_major(&ColMajorMatrix::from_row_major(
-                &RowMajorMatrix::new(merkle_trace, MerkleVerifyCols::<F>::width()),
-            ))
-            .unwrap();
+            let transcript_trace_gpu = transport_matrix_to_device(Arc::new(transcript_trace));
 
             let poseidon_trace_gpu = info_span!("wrapper.generate_trace", air = "Poseidon2")
                 .in_scope(|| {

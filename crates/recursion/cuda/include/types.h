@@ -33,3 +33,16 @@ typedef struct {
     size_t num_interactions_per_row;
     bool has_preprocessed;
 } AirData;
+
+typedef struct {
+    uint16_t proof_idx;
+    uint16_t merkle_proof_idx;
+    uint32_t start_row;
+    uint32_t num_rows;
+    uint16_t depth;
+    uint32_t merkle_idx;
+    uint16_t commit_major;
+    uint16_t commit_minor;
+    uint32_t leaf_hash_offset;
+    uint32_t siblings_offset;
+} MerkleVerifyRecord;
