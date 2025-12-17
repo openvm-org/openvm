@@ -38,7 +38,9 @@ use crate::{
 };
 
 #[cfg(feature = "cuda")]
-pub mod cuda;
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct NewKeccak256Rv32Config {

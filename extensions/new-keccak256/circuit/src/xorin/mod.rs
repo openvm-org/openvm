@@ -7,9 +7,7 @@ pub mod trace;
 pub mod utils;
 
 #[cfg(feature = "cuda")]
-pub mod cuda {
-    pub use crate::cuda::XorinVmChipGpu;
-}
+pub mod cuda {}
 
 use openvm_circuit::arch::VmChipWrapper;
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;

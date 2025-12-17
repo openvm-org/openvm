@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use openvm_circuit::{
     arch::DenseRecordArena,
     system::cuda::{
@@ -12,7 +14,7 @@ use openvm_rv32im_circuit::Rv32ImGpuProverExt;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use super::*;
-use crate::cuda::XorinVmChipGpu;
+use crate::cuda::{KeccakfVmChipGpu, XorinVmChipGpu};
 
 pub struct Keccak256GpuProverExt;
 
@@ -32,12 +34,21 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Keccak256>
 
         inventory.next_air::<XorinVmAir>()?;
         let xorin_chip = XorinVmChipGpu::new(
+            range_checker.clone(),
+            bitwise_lu.clone(),
+            pointer_max_bits,
+            timestamp_max_bits as u32,
+        );
+        inventory.add_executor_chip(xorin_chip);
+
+        inventory.next_air::<KeccakfVmAir>()?;
+        let keccakf_chip = KeccakfVmChipGpu::new(
             range_checker,
             bitwise_lu,
             pointer_max_bits,
             timestamp_max_bits as u32,
         );
-        inventory.add_executor_chip(xorin_chip);
+        inventory.add_executor_chip(keccakf_chip);
 
         Ok(())
     }
