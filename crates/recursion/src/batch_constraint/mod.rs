@@ -451,7 +451,7 @@ impl BatchConstraintModule {
         preflights: &[Preflight],
     ) -> BatchConstraintBlobCpu {
         let child_vk = &child_vk.inner;
-        let params = child_vk.params;
+        let params = &child_vk.params;
 
         let mut expr_evals_per_proof = MultiVecWithBounds::new();
         let mut eq_r_one_counts_per_proof = MultiVecWithBounds::new();

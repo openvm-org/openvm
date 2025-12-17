@@ -107,7 +107,7 @@ where
         if tracing::enabled!(tracing::Level::INFO) {
             trace_heights_tracing_info(&ctx.per_trace, &self.circuit.airs());
         }
-        let engine = E::new(self.pk.params);
+        let engine = E::new(self.pk.params.clone());
         #[cfg(debug_assertions)]
         crate::aggregation::debug_constraints(&self.circuit, &ctx.per_trace, &engine);
         let proof = engine.prove(
@@ -155,7 +155,7 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ag
         is_recursive: bool,
     ) -> Self {
         let verifier_circuit = S::new(child_vk.clone(), true);
-        let engine = E::new(pk.params);
+        let engine = E::new(pk.params.clone());
         let child_vk_pcs_data: CommittedTraceDataV2<PB> =
             verifier_circuit.commit_child_vk(&engine, &child_vk);
         let circuit = Arc::new(AggregationCircuit::new(Arc::new(verifier_circuit)));

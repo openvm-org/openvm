@@ -418,7 +418,7 @@ where
             .get_or_init(|| {
                 Arc::new(AggProver::new(
                     Arc::new(app_pk.app_vm_pk.vm_pk.get_vk()),
-                    self.agg_config,
+                    self.agg_config.clone(),
                     self.agg_tree_config,
                 ))
             })

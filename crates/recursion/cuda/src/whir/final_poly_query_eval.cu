@@ -55,7 +55,7 @@ __global__ void final_poly_query_eval_tracegen(
     size_t rows_per_proof,
     const size_t *round_offsets,
     size_t log_final_poly_len,
-    size_t num_in_domain_queries
+    const size_t *num_queries_per_round
 ) {
     uint32_t row_idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (row_idx >= height)
@@ -71,13 +71,14 @@ __global__ void final_poly_query_eval_tracegen(
     const size_t row_idx_usize = static_cast<size_t>(row_idx);
     const FinalPolyQueryEvalRecord record = records[row_idx_usize];
     const size_t final_poly_len = 1ull << log_final_poly_len;
-    const size_t query_count = num_in_domain_queries + 1;
     assert(rows_per_proof > 0);
     const size_t proof_idx = row_idx_usize / rows_per_proof;
     const size_t row_in_proof = row_idx_usize - proof_idx * rows_per_proof;
 
     const size_t whir_round_idx =
         partition_point_leq(round_offsets + 1, num_whir_rounds, row_in_proof);
+    const size_t num_in_domain_queries = num_queries_per_round[whir_round_idx];
+    const size_t query_count = num_in_domain_queries + 1;
     const size_t round_start = round_offsets[whir_round_idx];
     const size_t row_in_round = row_in_proof - round_start;
     const size_t rows_per_round = round_offsets[whir_round_idx + 1] - round_start;
@@ -160,7 +161,7 @@ extern "C" int _final_poly_query_eval_tracegen(
     size_t rows_per_proof,
     const size_t *round_offsets_d,
     size_t log_final_poly_len,
-    size_t num_whir_queries
+    const size_t *num_queries_per_round_d
 ) {
     assert((height & (height - 1)) == 0);
     auto [grid, block] = kernel_launch_params(height, 512);
@@ -174,7 +175,7 @@ extern "C" int _final_poly_query_eval_tracegen(
         rows_per_proof,
         round_offsets_d,
         log_final_poly_len,
-        num_whir_queries
+        num_queries_per_round_d
     );
     return CHECK_KERNEL();
 }
