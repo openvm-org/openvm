@@ -1,4 +1,4 @@
-use std::result::Result;
+use std::{result::Result, sync::Arc};
 
 use derive_more::derive::From;
 use openvm_circuit::{
@@ -8,19 +8,24 @@ use openvm_circuit::{
         RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex, VmCircuitExtension,
         VmExecutionExtension, VmProverExtension,
     },
-    system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor, SystemPort, memory::SharedMemoryHelper},
+    system::{
+        memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemExecutor,
+        SystemPort,
+    },
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor, VmConfig};
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
+    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::LocalOpcode;
-use openvm_new_keccak256_transpiler::{XorinOpcode, KeccakfOpcode};
+use openvm_new_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
+    interaction::PermutationCheckBus,
     p3_field::PrimeField32,
     prover::cpu::{CpuBackend, CpuDevice},
 };
@@ -28,12 +33,10 @@ use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use crate::{keccakf::{KeccakfVmChip, KeccakfVmExecutor, KeccakfVmFiller}, xorin::{XorinVmExecutor, XorinVmFiller, air::XorinVmAir}};
-use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
-use std::sync::Arc;
-use crate::xorin::XorinVmChip;
-use crate::keccakf::air::KeccakfVmAir;
-use openvm_stark_backend::interaction::PermutationCheckBus;
+use crate::{
+    keccakf::{air::KeccakfVmAir, KeccakfVmChip, KeccakfVmExecutor, KeccakfVmFiller},
+    xorin::{air::XorinVmAir, XorinVmChip, XorinVmExecutor, XorinVmFiller},
+};
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Keccak256Rv32Config {
@@ -104,8 +107,6 @@ where
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Keccak256;
 
-
-
 #[derive(Clone, Copy, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 #[cfg_attr(
     feature = "aot",
@@ -128,9 +129,8 @@ impl<F> VmExecutionExtension<F> for Keccak256 {
         inventory: &mut ExecutorInventoryBuilder<F, Keccak256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
-        
-        let xorin_executor =
-            XorinVmExecutor::new(XorinOpcode::CLASS_OFFSET, pointer_max_bits);
+
+        let xorin_executor = XorinVmExecutor::new(XorinOpcode::CLASS_OFFSET, pointer_max_bits);
         inventory.add_executor(
             xorin_executor,
             XorinOpcode::iter().map(|x| x.global_opcode()),
@@ -212,9 +212,10 @@ where
         let pointer_max_bits = inventory.airs().pointer_max_bits();
 
         let bitwise_lu = {
-            let existing_chip = inventory.find_chip::<SharedBitwiseOperationLookupChip<8>>()
-            .next();
-            
+            let existing_chip = inventory
+                .find_chip::<SharedBitwiseOperationLookupChip<8>>()
+                .next();
+
             if let Some(chip) = existing_chip {
                 chip.clone()
             } else {

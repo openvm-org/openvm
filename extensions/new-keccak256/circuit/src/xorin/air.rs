@@ -12,20 +12,19 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus,
     utils::{not, select},
 };
-use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS};
+use openvm_instructions::riscv::{
+    RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
+};
 use openvm_new_keccak256_transpiler::XorinOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    p3_air::{Air, BaseAir},
+    p3_air::{Air, AirBuilder, BaseAir},
     p3_field::FieldAlgebra,
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 
 use crate::xorin::columns::{XorinVmCols, NUM_XORIN_VM_COLS};
-use openvm_stark_backend::p3_air::AirBuilder;
-use openvm_instructions::riscv::RV32_REGISTER_AS;
-
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct XorinVmAir {
@@ -58,11 +57,22 @@ impl<AB: InteractionBuilder> Air<AB> for XorinVmAir {
 
         let start_read_timestamp = self.eval_instruction(builder, local, &mem.register_aux_cols);
 
-        let start_write_timestamp = self.constrain_input_read(builder, local, start_read_timestamp, &mem.input_bytes_read_aux_cols, &mem.buffer_bytes_read_aux_cols);
+        let start_write_timestamp = self.constrain_input_read(
+            builder,
+            local,
+            start_read_timestamp,
+            &mem.input_bytes_read_aux_cols,
+            &mem.buffer_bytes_read_aux_cols,
+        );
 
         self.constrain_xor(builder, local);
 
-        self.constrain_output_write(builder, local, start_write_timestamp, &mem.buffer_bytes_write_aux_cols);
+        self.constrain_output_write(
+            builder,
+            local,
+            start_write_timestamp,
+            &mem.buffer_bytes_write_aux_cols,
+        );
     }
 }
 
@@ -100,10 +110,14 @@ impl XorinVmAir {
             not_padding_sum += not(is_padding);
         }
         not_padding_sum *= AB::Expr::from_canonical_u32(4);
-        builder.when(is_enabled).assert_eq(not_padding_sum, instruction.len);
+        builder
+            .when(is_enabled)
+            .assert_eq(not_padding_sum, instruction.len);
         // check that is_padding_bytes is of the form 0...0111...1
         for i in 0..33 {
-            builder.when(is_enabled).assert_bool(local.sponge.is_padding_bytes[i+1] - local.sponge.is_padding_bytes[i]);
+            builder.when(is_enabled).assert_bool(
+                local.sponge.is_padding_bytes[i + 1] - local.sponge.is_padding_bytes[i],
+            );
         }
 
         self.execution_bridge
@@ -144,16 +158,16 @@ impl XorinVmAir {
 
             timestamp += AB::Expr::ONE;
         }
-        
+
         // SAFETY: this approach only works when self.ptr_max_bits >= 24
-        // because we are only range checking the last limb 
+        // because we are only range checking the last limb
         let need_range_check = [
             *instruction.buffer_limbs.last().unwrap(),
             *instruction.input_limbs.last().unwrap(),
             *instruction.len_limbs.last().unwrap(),
             *instruction.len_limbs.last().unwrap(),
         ];
-        
+
         let limb_shift = AB::F::from_canonical_usize(
             1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.ptr_max_bits),
         );
@@ -163,11 +177,29 @@ impl XorinVmAir {
                 .eval(builder, is_enabled);
         }
 
-        builder.assert_eq(instruction.buffer, instruction.buffer_limbs[0] + instruction.buffer_limbs[1] * AB::F::from_canonical_u32(1 << 8) + instruction.buffer_limbs[2] * AB::F::from_canonical_u32(1 << 16) + instruction.buffer_limbs[3] * AB::F::from_canonical_u32(1 << 24));
+        builder.assert_eq(
+            instruction.buffer,
+            instruction.buffer_limbs[0]
+                + instruction.buffer_limbs[1] * AB::F::from_canonical_u32(1 << 8)
+                + instruction.buffer_limbs[2] * AB::F::from_canonical_u32(1 << 16)
+                + instruction.buffer_limbs[3] * AB::F::from_canonical_u32(1 << 24),
+        );
 
-        builder.assert_eq(instruction.input, instruction.input_limbs[0] + instruction.input_limbs[1] * AB::F::from_canonical_u32(1 << 8) + instruction.input_limbs[2] * AB::F::from_canonical_u32(1 << 16) + instruction.input_limbs[3] * AB::F::from_canonical_u32(1 << 24));
+        builder.assert_eq(
+            instruction.input,
+            instruction.input_limbs[0]
+                + instruction.input_limbs[1] * AB::F::from_canonical_u32(1 << 8)
+                + instruction.input_limbs[2] * AB::F::from_canonical_u32(1 << 16)
+                + instruction.input_limbs[3] * AB::F::from_canonical_u32(1 << 24),
+        );
 
-        builder.assert_eq(instruction.len, instruction.len_limbs[0] + instruction.len_limbs[1] * AB::F::from_canonical_u32(1 << 8) + instruction.len_limbs[2] * AB::F::from_canonical_u32(1 << 16) + instruction.len_limbs[3] * AB::F::from_canonical_u32(1 << 24));
+        builder.assert_eq(
+            instruction.len,
+            instruction.len_limbs[0]
+                + instruction.len_limbs[1] * AB::F::from_canonical_u32(1 << 8)
+                + instruction.len_limbs[2] * AB::F::from_canonical_u32(1 << 16)
+                + instruction.len_limbs[3] * AB::F::from_canonical_u32(1 << 24),
+        );
 
         timestamp
     }
@@ -249,8 +281,8 @@ impl XorinVmAir {
     #[inline]
     pub fn constrain_xor<AB: InteractionBuilder>(
         &self,
-        builder: &mut AB, 
-        local: &XorinVmCols<AB::Var>
+        builder: &mut AB,
+        local: &XorinVmCols<AB::Var>,
     ) {
         let buffer_bytes = local.sponge.preimage_buffer_bytes;
         let input_bytes = local.sponge.input_bytes;
@@ -263,11 +295,12 @@ impl XorinVmAir {
             input_bytes.chunks_exact(4),
             result_bytes.chunks_exact(4),
             padding_bytes
-        )
-        {
+        ) {
             let should_send = is_enabled * not(is_padding);
             for (x, y, x_xor_y) in izip!(x_chunks, y_chunks, x_xor_y_chunks) {
-                self.bitwise_lookup_bus.send_xor(*x, *y, *x_xor_y).eval(builder, should_send.clone());
+                self.bitwise_lookup_bus
+                    .send_xor(*x, *y, *x_xor_y)
+                    .eval(builder, should_send.clone());
             }
         }
     }
@@ -278,11 +311,11 @@ impl XorinVmAir {
         builder: &mut AB,
         local: &XorinVmCols<AB::Var>,
         start_write_timestamp: AB::Expr,
-        mem_aux: &[MemoryWriteAuxCols<AB::Var, 4>; 34]
+        mem_aux: &[MemoryWriteAuxCols<AB::Var, 4>; 34],
     ) {
         let mut timestamp = start_write_timestamp;
         let is_enabled = local.instruction.is_enabled;
-        
+
         // Constrain write of buffer bytes
         for (i, (output, is_padding, mem_aux)) in izip!(
             local.sponge.postimage_buffer_bytes.chunks_exact(4),

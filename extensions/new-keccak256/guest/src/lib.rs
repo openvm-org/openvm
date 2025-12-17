@@ -61,7 +61,11 @@ pub extern "C" fn native_keccakf(mut buffer: *mut u8) {
         if buffer as usize % MIN_ALIGN != 0 {
             let aligned_buffer = AlignedBuf::new(buffer, KECCAK_WIDTH_BYTES, MIN_ALIGN);
             __native_keccakf(aligned_buffer.ptr);
-            core::ptr::copy_nonoverlapping(aligned_buffer.ptr as *const u8, buffer, KECCAK_WIDTH_BYTES);
+            core::ptr::copy_nonoverlapping(
+                aligned_buffer.ptr as *const u8,
+                buffer,
+                KECCAK_WIDTH_BYTES,
+            );
         } else {
             __native_keccakf(buffer);
         };

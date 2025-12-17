@@ -3,9 +3,11 @@ use std::{path::PathBuf, sync::Arc};
 use clap::Parser;
 use eyre::Result;
 use openvm_circuit::arch::{
-    debug_proving_ctx, execution_mode::metered::segment_ctx::{
-        DEFAULT_MAX_CELLS, DEFAULT_MAX_TRACE_HEIGHT_BITS, SegmentationLimits
-    }, instructions::exe::VmExe
+    debug_proving_ctx,
+    execution_mode::metered::segment_ctx::{
+        SegmentationLimits, DEFAULT_MAX_CELLS, DEFAULT_MAX_TRACE_HEIGHT_BITS,
+    },
+    instructions::exe::VmExe,
 };
 use openvm_sdk::{
     config::{AggregationTreeConfig, AppConfig, SdkVmConfig},

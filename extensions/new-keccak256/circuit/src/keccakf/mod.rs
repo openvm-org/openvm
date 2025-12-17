@@ -16,7 +16,7 @@ pub struct KeccakfVmExecutor {
 #[derive(derive_new::new)]
 pub struct KeccakfVmFiller {
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
-    pub pointer_max_bits: usize 
+    pub pointer_max_bits: usize,
 }
 
 pub type KeccakfVmChip<F> = VmChipWrapper<F, KeccakfVmFiller>;

@@ -148,7 +148,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     use tiny_keccak::keccakf;
 
     // the variable naming might be misleading
-    // buf_ptr is the pointer to the register which holds the actual pointer to the buffer 
+    // buf_ptr is the pointer to the register which holds the actual pointer to the buffer
     let buf_ptr = pre_compute.a as u32;
     let buffer_limbs: [u8; 4] = exec_state.vm_read(RV32_REGISTER_AS, buf_ptr);
     let buffer = u32::from_le_bytes(buffer_limbs);
@@ -156,7 +156,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     assert_eq!(message.len(), 200);
 
     // todo: check if this is correct representation / conversion between u8 <-> u64
-    let mut message_u64= [0u64; 25];
+    let mut message_u64 = [0u64; 25];
     for (i, message_chunk) in message.chunks_exact(8).enumerate() {
         let message_chunk_u64 = u64::from_le_bytes(message_chunk.try_into().unwrap());
         message_u64[i] = message_chunk_u64;
@@ -166,7 +166,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     let mut result: [u8; 200] = [0; 200];
     for (i, message) in message_u64.into_iter().enumerate() {
         let message_bytes = message.to_be_bytes();
-        result[8 * i .. 8 * i + 8].copy_from_slice(&message_bytes);
+        result[8 * i..8 * i + 8].copy_from_slice(&message_bytes);
     }
 
     exec_state.vm_write(RV32_MEMORY_AS, buffer, &result);

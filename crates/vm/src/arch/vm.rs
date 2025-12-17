@@ -1175,7 +1175,6 @@ where
         );
         self.state = Some(to_state);
 
-        
         Ok(ContinuationVmProof {
             per_segment: proofs,
             user_public_values,
