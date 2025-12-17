@@ -21,6 +21,8 @@ use rand::rngs::StdRng;
 use super::KeccakfVmFiller;
 use crate::keccakf::air::KeccakfVmAir;
 
+use openvm_stark_sdk::utils::create_seeded_rng;
+
 type F = BabyBear;
 type Harness = TestChipHarness<F, KeccakfVmExecutor, KeccakfVmAir, KeccakfVmChip<F>>;
 
