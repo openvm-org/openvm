@@ -164,7 +164,7 @@ pub fn verify_app_proof<E: StarkWhirEngine>(
     proof: &ContinuationVmProof<E::SC>,
 ) -> Result<Digest, VmVerificationError> {
     static POSEIDON2_HASHER: OnceLock<Poseidon2Hasher<F>> = OnceLock::new();
-    let engine = E::new(vk.inner.params);
+    let engine = E::new(vk.inner.params.clone());
     let VerifiedExecutionPayload {
         exe_commit,
         final_memory_root,

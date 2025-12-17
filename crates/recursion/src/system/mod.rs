@@ -258,6 +258,8 @@ pub struct StackingPreflight {
 
 #[derive(Clone, Debug, Default)]
 pub struct WhirPreflight {
+    pub num_queries_per_round: Vec<usize>,
+    pub query_offsets: Vec<usize>,
     pub alphas: Vec<EF>,
     pub z0s: Vec<EF>,
     pub zj_roots: Vec<Vec<F>>,
@@ -430,7 +432,8 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             range_bus: bus_inventory.range_checker_bus,
         });
 
-        let transcript = TranscriptModule::new(bus_inventory.clone(), child_mvk.inner.params);
+        let transcript =
+            TranscriptModule::new(bus_inventory.clone(), child_mvk.inner.params.clone());
         let child_mvk_frame = child_mvk.as_ref().into();
         let proof_shape = ProofShapeModule::new(
             &child_mvk_frame,

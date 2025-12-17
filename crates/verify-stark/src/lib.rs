@@ -49,7 +49,7 @@ pub fn verify_vm_stark_proof_decoded(
     proof: &NonRootStarkProof,
 ) -> Result<(), VerifyStarkError> {
     // Verify the STARK proof.
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(vk.mvk.inner.params);
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(vk.mvk.inner.params.clone());
     engine.verify(&vk.mvk, &proof.inner)?;
 
     let &NonRootVerifierPvs::<F> {

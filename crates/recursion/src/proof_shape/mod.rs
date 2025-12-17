@@ -133,7 +133,7 @@ impl ProofShapeModule {
             idx_encoder,
             min_cached_idx,
             max_cached,
-            commit_mult: mvk.params.num_whir_queries,
+            commit_mult: mvk.params.whir.rounds.first().unwrap().num_queries,
             range_checker,
             pow_checker,
             continuations_enabled,

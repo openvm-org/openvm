@@ -62,7 +62,7 @@ pub struct FinalPolyMleEvalAir {
     pub num_vars: usize,
     pub num_sumcheck_rounds: usize,
     pub num_whir_rounds: usize,
-    pub num_whir_queries: usize,
+    pub total_whir_queries: usize,
 }
 
 impl BaseAirWithPublicValues<F> for FinalPolyMleEvalAir {}
@@ -204,8 +204,7 @@ where
             is_leaf.clone(),
         );
 
-        let total_whir_queries =
-            AB::Expr::from_canonical_usize(self.num_whir_rounds * (self.num_whir_queries + 1));
+        let total_whir_queries = AB::Expr::from_canonical_usize(self.total_whir_queries);
         self.final_poly_bus.send(
             builder,
             local.proof_idx,
@@ -245,8 +244,8 @@ pub(crate) fn generate_trace(
 ) -> RowMajorMatrix<F> {
     debug_assert_eq!(proofs.len(), preflights.len());
 
-    let params = mvk.inner.params;
-    let num_vars = params.log_final_poly_len;
+    let params = &mvk.inner.params;
+    let num_vars = params.log_final_poly_len();
 
     let rows_per_proof = (1 << (num_vars + 1)) - 1;
     let total_valid_rows = rows_per_proof * proofs.len();
@@ -255,7 +254,7 @@ pub(crate) fn generate_trace(
 
     let mut trace = vec![F::ZERO; height * width];
 
-    let tidx_base_offset = params.k_whir * D_EF * 3;
+    let tidx_base_offset = params.k_whir() * D_EF * 3;
     let mut global_row = 0usize;
 
     for (proof_idx, proof) in proofs.iter().enumerate() {

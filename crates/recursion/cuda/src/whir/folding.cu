@@ -49,7 +49,7 @@ __global__ void whir_folding_tracegen_kernel(
     uint32_t height,
     const FoldRecord *records,
     uint32_t num_rounds,
-    uint32_t num_queries,
+    uint32_t total_queries,
     uint32_t k_whir
 ) {
     uint32_t row_idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -66,8 +66,7 @@ __global__ void whir_folding_tracegen_kernel(
 
     const FoldRecord record = records[row_idx];
 
-    const uint32_t rows_per_proof =
-        num_rounds * num_queries * ((1 << k_whir) - 1);
+    const uint32_t rows_per_proof = total_queries * ((1 << k_whir) - 1);
     assert(rows_per_proof > 0);
     const uint32_t proof_idx = row_idx / rows_per_proof;
 
@@ -100,7 +99,7 @@ extern "C" int _whir_folding_tracegen(
     uint32_t height,
     const FoldRecord *records,
     uint32_t num_rounds,
-    uint32_t num_queries,
+    uint32_t total_queries,
     uint32_t k_whir
 ) {
     if (height == 0) {
@@ -114,7 +113,7 @@ extern "C" int _whir_folding_tracegen(
         height,
         records,
         num_rounds,
-        num_queries,
+        total_queries,
         k_whir
     );
     return CHECK_KERNEL();

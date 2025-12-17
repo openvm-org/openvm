@@ -37,13 +37,16 @@ __global__ void non_initial_opened_values_tracegen(
     size_t height,
     const NonInitialOpenedValueRecord *records,
     size_t num_whir_rounds,
-    size_t num_whir_queries,
     size_t k_whir,
     Fp omega_k,
     const Fp *zis,
     const Fp *zi_roots,
     const FpExt *yis,
-    const Fp *raw_queries
+    const Fp *raw_queries,
+    const size_t *round_row_offsets,
+    size_t rows_per_proof,
+    const size_t *query_offsets,
+    size_t total_queries
 ) {
     uint32_t row_idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (row_idx >= height)
@@ -57,26 +60,29 @@ __global__ void non_initial_opened_values_tracegen(
     }
 
     const size_t rows_per_query = 1ull << k_whir;
-    const size_t rows_per_round = rows_per_query * num_whir_queries;
-    const size_t rows_per_proof =
-        (num_whir_rounds > 0 ? num_whir_rounds - 1 : 0) * rows_per_round;
     assert(rows_per_proof > 0);
 
     const size_t row_idx_usize = static_cast<size_t>(row_idx);
     const size_t proof_idx = row_idx_usize / rows_per_proof;
     const size_t row_in_proof = row_idx_usize - proof_idx * rows_per_proof;
-    const size_t whir_round = row_in_proof / rows_per_round + 1;
-    const size_t row_in_round = row_in_proof - (whir_round - 1) * rows_per_round;
+
+    // Find whir_round using round_row_offsets (num_whir_rounds - 1 entries for rounds 1..num_rounds)
+    const size_t round_minus_1 =
+        partition_point_leq(round_row_offsets + 1, num_whir_rounds - 1, row_in_proof);
+    const size_t whir_round = round_minus_1 + 1;
+    const size_t row_in_round = row_in_proof - round_row_offsets[round_minus_1];
+
     const size_t query_idx = row_in_round / rows_per_query;
-    const size_t coset_idx = row_in_round - query_idx * rows_per_query;
+    const size_t coset_idx = row_in_round % rows_per_query;
 
     const bool is_first_in_proof = row_in_proof == 0;
     const bool is_first_in_query = coset_idx == 0;
     const bool is_first_in_round = is_first_in_query && query_idx == 0;
 
-    const size_t per_proof_offset = proof_idx * num_whir_rounds * num_whir_queries;
+    // Use query_offsets for proper indexing into flattened arrays
+    const size_t per_proof_offset = proof_idx * total_queries;
     const size_t round_query_idx =
-        per_proof_offset + whir_round * num_whir_queries + query_idx;
+        per_proof_offset + query_offsets[whir_round] + query_idx;
 
     const NonInitialOpenedValueRecord record = records[row_idx];
 
@@ -113,13 +119,16 @@ extern "C" int _non_initial_opened_values_tracegen(
     size_t height,
     const NonInitialOpenedValueRecord *records_d,
     size_t num_whir_rounds,
-    size_t num_whir_queries,
     size_t k_whir,
     Fp omega_k,
     const Fp *zis_d,
     const Fp *zi_roots_d,
     const FpExt *yis_d,
-    const Fp *raw_queries_d
+    const Fp *raw_queries_d,
+    const size_t *round_row_offsets_d,
+    size_t rows_per_proof,
+    const size_t *query_offsets_d,
+    size_t total_queries
 ) {
     assert((height & (height - 1)) == 0);
     auto [grid, block] = kernel_launch_params(height);
@@ -130,13 +139,16 @@ extern "C" int _non_initial_opened_values_tracegen(
         height,
         records_d,
         num_whir_rounds,
-        num_whir_queries,
         k_whir,
         omega_k,
         zis_d,
         zi_roots_d,
         yis_d,
-        raw_queries_d
+        raw_queries_d,
+        round_row_offsets_d,
+        rows_per_proof,
+        query_offsets_d,
+        total_queries
     );
     return CHECK_KERNEL();
 }

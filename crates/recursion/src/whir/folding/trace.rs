@@ -5,7 +5,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use stark_backend_v2::{EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 
 use super::WhirFoldingCols;
-use crate::system::Preflight;
+use crate::{system::Preflight, whir::total_num_queries};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
@@ -69,14 +69,14 @@ pub fn generate_trace(
     _proofs: &[&Proof],
     preflights: &[&Preflight],
 ) -> RowMajorMatrix<F> {
-    let params = mvk.inner.params;
+    let params = &mvk.inner.params;
 
-    let num_rounds = params.num_whir_rounds();
-    let num_queries = params.num_whir_queries;
-    let k_whir = params.k_whir;
+    let num_queries_per_round: Vec<usize> =
+        params.whir.rounds.iter().map(|r| r.num_queries).collect();
+    let k_whir = params.k_whir();
     let internal_nodes = (1 << k_whir) - 1;
 
-    let num_rows_per_proof = num_rounds * num_queries * internal_nodes;
+    let num_rows_per_proof = total_num_queries(&num_queries_per_round) * internal_nodes;
     let num_valid_rows = num_rows_per_proof * preflights.len();
     let height = num_valid_rows.next_power_of_two();
     let width = WhirFoldingCols::<F>::width();

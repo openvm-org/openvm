@@ -238,16 +238,16 @@ where
 }
 
 pub(in crate::whir) fn build_non_initial_opened_value_records(
-    params: SystemParams,
+    params: &SystemParams,
     proofs: &[&Proof],
 ) -> Vec<NonInitialOpenedValueRecord> {
     let perm = poseidon2_perm();
-    let num_rounds = params.num_whir_rounds();
-    let num_queries = params.num_whir_queries;
+    let num_queries_per_round: Vec<usize> =
+        params.whir.rounds.iter().map(|r| r.num_queries).collect();
 
     let mut records = Vec::new();
     for proof in proofs {
-        for whir_round in 1..num_rounds {
+        for (whir_round, &num_queries) in num_queries_per_round.iter().enumerate().skip(1) {
             for query_idx in 0..num_queries {
                 let opened_values =
                     proof.whir_proof.codeword_opened_values[whir_round - 1][query_idx].clone();
@@ -278,16 +278,23 @@ pub(crate) fn generate_trace(
     preflights: &[&Preflight],
     records: &[NonInitialOpenedValueRecord],
 ) -> RowMajorMatrix<F> {
-    let params = mvk.inner.params;
+    let params = &mvk.inner.params;
 
     let num_rounds = params.num_whir_rounds();
-    let num_queries = params.num_whir_queries;
-    let k_whir = params.k_whir;
+    let num_queries_per_round: Vec<usize> =
+        params.whir.rounds.iter().map(|r| r.num_queries).collect();
+    let k_whir = params.k_whir();
     let omega_k = F::two_adic_generator(k_whir);
     let rows_per_query = 1 << k_whir;
-    let rows_per_round = rows_per_query * num_queries;
 
-    let num_rows_per_proof: usize = (num_rounds - 1) * rows_per_round;
+    let mut round_row_offsets = Vec::with_capacity(num_rounds);
+    round_row_offsets.push(0usize);
+    for &num_queries in num_queries_per_round.iter().skip(1) {
+        let rows_this_round = num_queries * rows_per_query;
+        round_row_offsets.push(round_row_offsets.last().unwrap() + rows_this_round);
+    }
+    let num_rows_per_proof = *round_row_offsets.last().unwrap();
+
     let num_valid_rows = num_rows_per_proof * preflights.len();
     let num_rows = num_valid_rows.next_power_of_two();
     let width = NonInitialOpenedValuesCols::<F>::width();
@@ -309,15 +316,14 @@ pub(crate) fn generate_trace(
             cols.is_enabled = F::ONE;
             cols.proof_idx = F::from_canonical_usize(proof_idx);
 
-            let coset_idx = i % rows_per_query;
-            let query_idx = (i / rows_per_query) % num_queries;
-            let whir_round = if rows_per_round == 0 {
-                1
-            } else {
-                (i / rows_per_round) + 1
-            };
-            let row_in_proof = i;
-            let is_first_in_proof = row_in_proof == 0;
+            let round_minus_1 = round_row_offsets[1..].partition_point(|&offset| offset <= i);
+            let whir_round = round_minus_1 + 1;
+            let row_in_round = i - round_row_offsets[round_minus_1];
+
+            let coset_idx = row_in_round % rows_per_query;
+            let query_idx = row_in_round / rows_per_query;
+
+            let is_first_in_proof = i == 0;
             let is_first_in_query = coset_idx == 0;
             let is_first_in_round = is_first_in_query && query_idx == 0;
 
@@ -331,7 +337,8 @@ pub(crate) fn generate_trace(
             cols.zi_root = preflight.whir.zj_roots[whir_round][query_idx];
             cols.value_hash = record.value_hash;
             cols.value.copy_from_slice(&record.value);
-            cols.merkle_idx_bit_src = preflight.whir.queries[whir_round * num_queries + query_idx];
+            let query_offset = preflight.whir.query_offsets[whir_round];
+            cols.merkle_idx_bit_src = preflight.whir.queries[query_offset + query_idx];
             cols.zi = preflight.whir.zjs[whir_round][query_idx];
             cols.yi
                 .copy_from_slice(preflight.whir.yjs[whir_round][query_idx].as_base_slice());

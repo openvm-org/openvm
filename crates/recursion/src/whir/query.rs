@@ -38,6 +38,7 @@ struct WhirQueryCols<T> {
     is_first_in_proof: T,
     is_first_in_round: T,
     tidx: T,
+    num_queries: T,
     omega: T,
     sample: T,
     zi_root: T,
@@ -55,7 +56,6 @@ pub struct WhirQueryAir {
     pub query_bus: WhirQueryBus,
     pub verify_query_bus: VerifyQueryBus,
     pub exp_bits_len_bus: ExpBitsLenBus,
-    pub num_queries: usize,
     pub k: usize,
     pub initial_log_domain_size: usize,
 }
@@ -124,17 +124,16 @@ where
 
         builder
             .when(local.is_enabled - is_same_round.clone())
-            .assert_eq(
-                local.query_idx,
-                AB::Expr::from_canonical_usize(self.num_queries - 1),
-            );
+            .assert_eq(local.query_idx + AB::Expr::ONE, local.num_queries);
 
+        // num_queries is constrained via the bus interaction with WhirRoundAir
         self.verify_queries_bus.receive(
             builder,
             proof_idx,
             VerifyQueriesBusMessage {
                 tidx: local.tidx,
                 whir_round: local.whir_round,
+                num_queries: local.num_queries,
                 gamma: local.gamma,
                 pre_claim: local.pre_claim,
                 post_claim: local.post_claim,
@@ -225,10 +224,20 @@ pub(crate) fn generate_trace(
 ) -> RowMajorMatrix<F> {
     debug_assert_eq!(proofs.len(), preflights.len());
 
-    let params = mvk.inner.params;
+    let params = &mvk.inner.params;
     let m = params.n_stack + params.l_skip + params.log_blowup;
 
-    let num_rows_per_proof = params.num_whir_rounds() * params.num_whir_queries;
+    let num_queries_per_round: Vec<usize> =
+        params.whir.rounds.iter().map(|r| r.num_queries).collect();
+    let num_whir_rounds = params.num_whir_rounds();
+
+    let mut round_row_offsets = Vec::with_capacity(num_whir_rounds + 1);
+    round_row_offsets.push(0usize);
+    for &num_queries in &num_queries_per_round {
+        round_row_offsets.push(round_row_offsets.last().unwrap() + num_queries);
+    }
+    let num_rows_per_proof = *round_row_offsets.last().unwrap();
+
     let num_valid_rows: usize = num_rows_per_proof * preflights.len();
 
     let height = num_valid_rows.next_power_of_two();
@@ -242,10 +251,13 @@ pub(crate) fn generate_trace(
         .for_each(|(row_idx, row)| {
             let proof_idx = row_idx / num_rows_per_proof;
             let i = row_idx % num_rows_per_proof;
-            let whir_round = i / params.num_whir_queries;
-            let query_idx = i % params.num_whir_queries;
+
+            let whir_round = round_row_offsets[1..].partition_point(|&offset| offset <= i);
+            let query_idx = i - round_row_offsets[whir_round];
+            let num_queries = num_queries_per_round[whir_round];
 
             let preflight = &preflights[proof_idx];
+            let query_offset = preflight.whir.query_offsets[whir_round];
 
             let cols: &mut WhirQueryCols<F> = row.borrow_mut();
             cols.is_enabled = F::ONE;
@@ -255,9 +267,10 @@ pub(crate) fn generate_trace(
             cols.tidx = F::from_canonical_usize(
                 preflight.whir.query_tidx_per_round[whir_round] + query_idx,
             );
-            cols.sample = preflight.whir.queries[i];
+            cols.sample = preflight.whir.queries[query_offset + query_idx];
             cols.whir_round = F::from_canonical_usize(whir_round);
             cols.query_idx = F::from_canonical_usize(query_idx);
+            cols.num_queries = F::from_canonical_usize(num_queries);
             cols.omega = F::two_adic_generator(m - whir_round);
             cols.zi = preflight.whir.zjs[whir_round][query_idx];
             cols.zi_root = preflight.whir.zj_roots[whir_round][query_idx];
@@ -271,7 +284,7 @@ pub(crate) fn generate_trace(
             for (q, gamma_pow) in gamma.powers().skip(2).take(query_idx).enumerate() {
                 pre_claim += gamma_pow * preflight.whir.yjs[whir_round][q];
             }
-            if query_idx == params.num_whir_queries - 1 {
+            if query_idx == num_queries - 1 {
                 debug_assert_eq!(
                     pre_claim + gamma_pow * preflight.whir.yjs[whir_round][query_idx],
                     preflight.whir.initial_claim_per_round[whir_round + 1]

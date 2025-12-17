@@ -6,31 +6,34 @@ use stark_backend_v2::SystemParams;
 
 use crate::whir::{
     cuda_abi::initial_opened_values_tracegen, cuda_tracegen::WhirBlobGpu,
-    initial_opened_values::InitialOpenedValuesCols,
+    initial_opened_values::InitialOpenedValuesCols, num_queries_per_round, total_num_queries,
 };
 
 #[tracing::instrument(skip_all)]
 pub(in crate::whir) fn generate_trace(
     num_proofs: usize,
     blob: &WhirBlobGpu,
-    params: SystemParams,
+    params: &SystemParams,
 ) -> DeviceMatrix<F> {
     let mem = MemTracker::start("tracegen.whir_initial_opened_values");
     let num_valid_rows = blob.initial_opened_values_records.len();
-    let omega_k = F::two_adic_generator(params.k_whir);
+    let omega_k = F::two_adic_generator(params.k_whir());
     let height = num_valid_rows.next_power_of_two();
     let width = InitialOpenedValuesCols::<F>::width();
     let trace_d = DeviceMatrix::with_capacity(height, width);
 
+    let num_queries_per_round = num_queries_per_round(&params);
+    let num_initial_queries = num_queries_per_round.first().copied().unwrap_or(0);
+    let total_queries = total_num_queries(&num_queries_per_round);
     unsafe {
         initial_opened_values_tracegen(
             trace_d.buffer(),
             num_valid_rows,
             height,
             &blob.initial_opened_values_records,
-            params.k_whir,
-            params.num_whir_queries,
-            params.num_whir_rounds(),
+            params.k_whir(),
+            num_initial_queries,
+            total_queries,
             omega_k,
             &blob.mus,
             &blob.zis,
