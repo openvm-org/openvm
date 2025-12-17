@@ -65,15 +65,11 @@ pub struct MerkleVerifyCols<T> {
     /// The merkle idx, of the current level
     pub idx: T,
     pub idx_parity: T, // 0 for even, 1 for odd, of the merkle idx
-    /// Total depth of the merkle proof including the leaves part, equal to merkle_proof.len() + 1
-    /// + k
+    /// Total depth of the merkle proof including the leaves part = merkle_proof.len() + 1 + k
     pub total_depth: T,
     /// 0 -> total_depth - 1, where leaves are at height 0, combined leaf hash is at height k
     pub height: T,
 
-    // pub cur_hash: [T; DIGEST_SIZE],
-    // // it's the commit if is_last_merkle, otherwise it's the sibling merkle proof
-    // pub sibling: [T; DIGEST_SIZE],
     pub left: [T; DIGEST_SIZE],
     pub right: [T; DIGEST_SIZE],
 
@@ -354,7 +350,7 @@ pub fn generate_trace(
         // 0th layer: [0, num_leaves / 2)
         // 1st layer: [num_leaves / 2, num_leaves / 2 + num_leaves / 4)
         // kth layer: 1 final hash (that goes into merkle proof)
-        let combination_indices = f(k, i);
+        let combination_indices = compute_combination_indices(k, i);
 
         cols.is_valid = F::ONE;
         cols.proof_idx = F::from_canonical_usize(proof_idx);
@@ -470,7 +466,7 @@ pub struct CombinationIndices {
 /// # Returns
 /// An `Option<CombinationIndices>` containing the location of the operation, or `None` if `i` is
 /// out of bounds.
-pub fn f(k: usize, i: usize) -> Option<CombinationIndices> {
+pub fn compute_combination_indices(k: usize, i: usize) -> Option<CombinationIndices> {
     if k == 0 {
         // A tree with 2^0 = 1 leaf has no combining operations.
         return None;
@@ -519,4 +515,167 @@ pub fn f(k: usize, i: usize) -> Option<CombinationIndices> {
 
     // This line should technically be unreachable due to the initial i < total_operations check.
     None
+}
+
+#[cfg(feature = "cuda")]
+pub mod cuda {
+    use core::convert::TryInto;
+
+    use itertools::Itertools;
+    use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
+    use openvm_cuda_common::{
+        copy::{MemCopyD2H, MemCopyH2D},
+        d_buffer::DeviceBuffer,
+    };
+
+    use super::*;
+    use crate::{cuda::types::MerkleVerifyRecord, transcript::cuda_abi};
+
+    const MAX_SUPPORTED_K: usize = 4;
+
+    #[tracing::instrument(name = "generate_trace_cuda(MerkleVerifyAir)", skip_all)]
+    pub fn generate_trace(
+        mvk: &MultiStarkVerifyingKeyV2,
+        proofs: &[Proof],
+        preflights: &[Preflight],
+        k: usize,
+    ) -> (DeviceMatrix<F>, Vec<[F; POSEIDON2_WIDTH]>) {
+        assert_eq!(proofs.len(), preflights.len());
+        assert!(
+            k <= MAX_SUPPORTED_K,
+            "unsupported k={} for CUDA merkle verify (max {})",
+            k,
+            MAX_SUPPORTED_K
+        );
+        let num_leaves = 1 << k;
+        let trace_width = MerkleVerifyCols::<F>::width();
+
+        let mut records = Vec::new();
+        let mut leaf_hashes = Vec::new();
+        let mut sibling_hashes = Vec::new();
+        let mut proof_row_starts = Vec::with_capacity(proofs.len());
+
+        let stacking_commits_per_proof = proofs
+            .iter()
+            .zip(preflights)
+            .map(|(proof, preflight)| build_stacking_commits(mvk, proof, preflight))
+            .collect_vec();
+
+        let mut total_rows = 0usize;
+        for (proof_idx, (proof, preflight)) in proofs.iter().zip(preflights).enumerate() {
+            proof_row_starts.push(total_rows);
+            for (merkle_proof_idx, log) in preflight.merkle_verify_logs.iter().enumerate() {
+                assert_eq!(
+                    log.leaf_hashes.len(),
+                    num_leaves,
+                    "unexpected number of leaves for merkle proof"
+                );
+                let num_rows = log.depth + num_leaves;
+                let leaf_offset = leaf_hashes.len();
+                for leaf in &log.leaf_hashes {
+                    leaf_hashes.extend_from_slice(leaf);
+                }
+                let path = build_merkle_path(log, proof, &stacking_commits_per_proof[proof_idx]);
+                let sibling_offset = sibling_hashes.len();
+                for sibling in path {
+                    sibling_hashes.extend_from_slice(&sibling);
+                }
+                records.push(MerkleVerifyRecord {
+                    proof_idx: proof_idx as u16,
+                    merkle_proof_idx: merkle_proof_idx as u16,
+                    start_row: total_rows as u32,
+                    num_rows: num_rows as u32,
+                    depth: log.depth as u16,
+                    merkle_idx: log.merkle_idx as u32,
+                    commit_major: log.commit_major as u16,
+                    commit_minor: log.commit_minor as u16,
+                    leaf_hash_offset: leaf_offset as u32,
+                    siblings_offset: sibling_offset as u32,
+                });
+                total_rows += num_rows;
+            }
+        }
+
+        let trace_height = total_rows.next_power_of_two().max(1);
+        let mut trace = DeviceMatrix::with_capacity(trace_height, trace_width);
+        trace.buffer().fill_zero().unwrap();
+
+        if total_rows == 0 || records.is_empty() {
+            return (trace, Vec::new());
+        }
+
+        let d_records = records.to_device().unwrap();
+        let d_leaf_hashes = leaf_hashes.to_device().unwrap();
+        let d_siblings = sibling_hashes.to_device().unwrap();
+        let d_proof_row_starts = proof_row_starts.to_device().unwrap();
+        let poseidon_buf_len = total_rows * POSEIDON2_WIDTH;
+        let mut d_poseidon_inputs = DeviceBuffer::<F>::with_capacity(poseidon_buf_len);
+        d_poseidon_inputs.fill_zero().unwrap();
+        let scratch_len = records.len() * num_leaves * DIGEST_SIZE;
+        let mut d_leaf_scratch = DeviceBuffer::<F>::with_capacity(scratch_len);
+        d_leaf_scratch.fill_zero().unwrap();
+
+        unsafe {
+            cuda_abi::merkle_verify_tracegen(
+                &mut trace,
+                &d_records,
+                &d_leaf_hashes,
+                &d_siblings,
+                num_leaves,
+                k,
+                &mut d_poseidon_inputs,
+                total_rows,
+                &d_proof_row_starts,
+                proofs.len(),
+                &mut d_leaf_scratch,
+            )
+            .expect("failed to launch merkle verify tracegen");
+        }
+
+        let poseidon_inputs = d_poseidon_inputs
+            .to_host()
+            .expect("failed to copy poseidon inputs from device");
+        let poseidon_inputs = poseidon_inputs[..poseidon_buf_len]
+            .chunks_exact(POSEIDON2_WIDTH)
+            .map(|chunk| chunk.try_into().unwrap())
+            .collect_vec();
+
+        (trace, poseidon_inputs)
+    }
+
+    fn build_stacking_commits(
+        mvk: &MultiStarkVerifyingKeyV2,
+        proof: &Proof,
+        preflight: &Preflight,
+    ) -> Vec<[F; DIGEST_SIZE]> {
+        let mut commits = vec![proof.common_main_commit];
+        for (air_id, data) in &preflight.proof_shape.sorted_trace_vdata {
+            if let Some(pdata) = mvk.inner.per_air[*air_id].preprocessed_data.as_ref() {
+                commits.push(pdata.commit);
+            }
+            commits.extend(data.cached_commitments.iter());
+        }
+        commits
+    }
+
+    fn build_merkle_path(
+        log: &MerkleVerifyLog,
+        proof: &Proof,
+        stacking_commits: &[[F; DIGEST_SIZE]],
+    ) -> Vec<[F; DIGEST_SIZE]> {
+        let whir_proof = &proof.whir_proof;
+        (0..=log.depth)
+            .map(|pos| {
+                let is_last = pos == log.depth;
+                match (log.commit_major, is_last) {
+                    (0, true) => stacking_commits[log.commit_minor],
+                    (0, false) => {
+                        whir_proof.initial_round_merkle_proofs[log.commit_minor][log.query_idx][pos]
+                    }
+                    (idx, true) => whir_proof.codeword_commits[idx - 1],
+                    (idx, false) => whir_proof.codeword_merkle_proofs[idx - 1][log.query_idx][pos],
+                }
+            })
+            .collect()
+    }
 }
