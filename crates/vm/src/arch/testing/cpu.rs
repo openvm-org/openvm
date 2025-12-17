@@ -567,7 +567,7 @@ impl VmChipTester<BabyBearPoseidon2Config> {
 
 impl VmChipTester<BabyBearBlake3Config> {
     pub fn simple_test(self) -> Result<VerificationData<BabyBearBlake3Config>, VerificationError> {
-        self.test(|| BabyBearBlake3Engine::new(FriParameters::new_for_testing(1)))
+        self.test(|| BabyBearBlake3Engine::new(FriParameters::new_for_testing(2)))
     }
 
     pub fn simple_test_with_expected_error(self, expected_error: VerificationError) {

@@ -179,6 +179,14 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
             let le_bytes: [u8; 8] = preimage_buffer_bytes[8 * idx .. 8 * idx + 8].try_into().unwrap();
             preimage_buffer_bytes_u64[idx] = u64::from_le_bytes(le_bytes);
         }
+
+        let mut preimage_buffer_bytes_u64_transpose: [u64; 25] = [0; 25];
+        for y in 0..5 {
+            for x in 0..5 {
+                preimage_buffer_bytes_u64_transpose[x + 5 * y] = preimage_buffer_bytes_u64[y + 5 * x];
+            }
+        }
+
         let mut postimage_buffer_bytes_u64 = preimage_buffer_bytes_u64;
         tiny_keccak::keccakf(&mut postimage_buffer_bytes_u64);
 
@@ -196,7 +204,6 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
             .for_each(|(row_idx, row)| { // each round takes up one row in the trace matrix
                 if row_idx >= rows_used {
                     let p3_trace: RowMajorMatrix<F> = generate_trace_rows(vec![[0u64; 25]; 1], 0);
-                    println!("debug dummy rows trace {:?}", &p3_trace.values);
                     row[..NUM_KECCAK_PERM_COLS].copy_from_slice(
                         &p3_trace.values
                             [row_idx * NUM_KECCAK_PERM_COLS..(row_idx + 1) * NUM_KECCAK_PERM_COLS],
@@ -223,7 +230,9 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                 }
 
                 // fills in inner
-                let p3_trace: RowMajorMatrix<F> = generate_trace_rows(vec![preimage_buffer_bytes_u64], 0);
+                // the reason we give the transpose instead is inside, plonky3 transpose the input
+                // so transpose of transpose fixes it 
+                let p3_trace: RowMajorMatrix<F> = generate_trace_rows(vec![preimage_buffer_bytes_u64_transpose], 0);
                 row[..NUM_KECCAK_PERM_COLS].copy_from_slice(
                     &p3_trace.values[row_idx * NUM_KECCAK_PERM_COLS..(row_idx + 1) * NUM_KECCAK_PERM_COLS],
                 );
@@ -240,17 +249,11 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                 // fills in instruction
                 cols.instruction.pc = F::from_canonical_u32(record.pc);
                 cols.instruction.is_enabled = F::ONE;
-                println!("row_idx: {row_idx}, timestamp: {timestamp}");
                 cols.timestamp = F::from_canonical_u32(timestamp);
                 cols.instruction.buffer_ptr = F::from_canonical_u32(record.rd_ptr);
                 cols.instruction.buffer = F::from_canonical_u32(record.buffer);
                 cols.instruction.buffer_limbs = record.buffer.to_le_bytes().map(F::from_canonical_u8);
-
-                const U64_LIMBS: usize = 4;
-                const PREIMAGE_BYTES: usize = 25 * U64_LIMBS * 2;
         
-                
-
                 // fills in memory offline checker
                 if row_idx == 0 {
                     mem_helper.fill(

@@ -164,8 +164,9 @@ impl KeccakfVmAir {
 
             let i = u16_idx / U64_LIMBS;
             let limb = u16_idx % U64_LIMBS;
-            let x = i / 5;
-            let y = i % 5;
+
+            let y = i / 5;
+            let x = i % 5;
 
             let state_limb: AB::Expr = local.inner.preimage[y][x][limb].into();
             let hi: AB::Expr = local.preimage_state_hi[i * U64_LIMBS + limb].into();
@@ -211,10 +212,10 @@ impl KeccakfVmAir {
 
             let i = u16_idx / U64_LIMBS;
             let limb = u16_idx % U64_LIMBS;
-            let x = i / 5;
-            let y = i % 5;
+            let y = i / 5;
+            let x = i % 5;
 
-            let state_limb: AB::Expr = local.inner.a_prime_prime[y][x][limb].into();
+            let state_limb: AB::Expr = local.inner.a_prime_prime_prime(y, x, limb).into();
             let hi: AB::Expr = local.postimage_state_hi[i * U64_LIMBS + limb].into();
             let lo: AB::Expr = state_limb - hi.clone() * AB::F::from_canonical_u64(1 << 8);
 
