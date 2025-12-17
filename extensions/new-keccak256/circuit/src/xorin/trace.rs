@@ -5,22 +5,17 @@ use std::{
 
 use openvm_circuit::{
     arch::*,
-    system::{
-        memory::{
+    system::memory::{
             offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
             online::TracingMemory,
             MemoryAuxColsFactory,
         },
-        poseidon2::trace,
-    },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS};
 use openvm_new_keccak256_transpiler::XorinOpcode;
 use openvm_rv32im_circuit::adapters::{tracing_read, tracing_write};
-use openvm_stark_backend::{
-    p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, prover::metrics::TraceCells,
-};
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::xorin::{
     columns::XorinVmCols,

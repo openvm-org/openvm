@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, iter::once};
+use std::borrow::Borrow;
 
 use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionState},
@@ -14,14 +14,13 @@ use openvm_instructions::riscv::{
 use openvm_new_keccak256_transpiler::KeccakfOpcode;
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
-    interaction::{InteractionBuilder, PermutationCheckBus},
+    interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::FieldAlgebra,
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_keccak_air::{KeccakAir, NUM_ROUNDS, U64_LIMBS};
-use strum::IntoEnumIterator;
 
 use crate::keccakf::columns::{KeccakfVmCols, NUM_KECCAKF_VM_COLS, NUM_KECCAK_PERM_COLS};
 

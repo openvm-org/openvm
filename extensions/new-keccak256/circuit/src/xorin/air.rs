@@ -1,6 +1,6 @@
-use std::{array::from_fn, borrow::Borrow, iter::zip};
+use std::borrow::Borrow;
 
-use itertools::{izip, Itertools};
+use itertools::izip;
 use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionState},
     system::memory::{
@@ -10,7 +10,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus,
-    utils::{not, select},
+    utils::not,
 };
 use openvm_instructions::riscv::{
     RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,

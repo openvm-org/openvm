@@ -25,7 +25,6 @@ use openvm_rv32im_circuit::{
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    interaction::PermutationCheckBus,
     p3_field::PrimeField32,
     prover::cpu::{CpuBackend, CpuDevice},
 };

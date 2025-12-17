@@ -3,7 +3,6 @@ use std::{path::PathBuf, sync::Arc};
 use clap::Parser;
 use eyre::Result;
 use openvm_circuit::arch::{
-    debug_proving_ctx,
     execution_mode::metered::segment_ctx::{
         SegmentationLimits, DEFAULT_MAX_CELLS, DEFAULT_MAX_TRACE_HEIGHT_BITS,
     },

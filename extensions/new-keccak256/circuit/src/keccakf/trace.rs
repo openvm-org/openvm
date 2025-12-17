@@ -19,7 +19,7 @@ use openvm_new_keccak256_transpiler::KeccakfOpcode;
 use openvm_rv32im_circuit::adapters::{tracing_read, tracing_write};
 use openvm_stark_backend::{
     p3_field::PrimeField32,
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_matrix::dense::RowMajorMatrix,
 };
 use p3_keccak_air::generate_trace_rows;
 

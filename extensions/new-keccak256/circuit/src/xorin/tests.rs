@@ -201,7 +201,7 @@ fn run_xorin_chip_negative_tests(
     let mut tester = VmChipTestBuilder::default();
     let (mut harness, bitwise) = create_test_harness(&mut tester);
 
-    let buffer_length = Some(rng.gen_range(1..=34) * 4 as usize);
+    let buffer_length = Some(rng.gen_range(1..=34) * 4_usize);
 
     set_and_execute(
         &mut tester,
