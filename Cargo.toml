@@ -51,6 +51,9 @@ members = [
     "extensions/keccak256/circuit",
     "extensions/keccak256/transpiler",
     "extensions/keccak256/guest",
+    "extensions/new-keccak256/circuit",
+    "extensions/new-keccak256/guest",
+    "extensions/new-keccak256/transpiler",
     "extensions/sha2/circuit",
     "extensions/sha2/transpiler",
     "extensions/sha2/guest",
@@ -153,6 +156,9 @@ openvm-native-transpiler = { path = "extensions/native/transpiler", default-feat
 openvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
 openvm-keccak256-transpiler = { path = "extensions/keccak256/transpiler", default-features = false }
 openvm-keccak256-guest = { path = "extensions/keccak256/guest", default-features = false }
+openvm-new-keccak256-circuit = { path = "extensions/new-keccak256/circuit", default-features = false }
+openvm-new-keccak256-guest = { path = "extensions/new-keccak256/guest", default-features = false }
+openvm-new-keccak256-transpiler = { path = "extensions/new-keccak256/transpiler", default-features = false }
 openvm-sha2-circuit = { path = "extensions/sha2/circuit", default-features = false }
 openvm-sha2-transpiler = { path = "extensions/sha2/transpiler", default-features = false }
 openvm-sha2-guest = { path = "extensions/sha2/guest", default-features = false }
