@@ -56,7 +56,7 @@ lazy_static! {
 }
 
 /// The vector `[-2, 1, 2, 1/2, 3, 4, -1/2, -3, -4, 1/2^8, 1/4, 1/8, 1/2^27, -1/2^8, -1/16,
-/// -1/2^27]` saved as an array of BabyBear elements. Copied from the previous Poseidon2
+/// -1/2^27]` saved as an array of BabyBear elements. Copied from plonky3's Poseidon2
 /// implementation to preserve the exact constraint structure.
 pub const INTERNAL_DIAG_MONTY_16: [BabyBear; 16] = BabyBear::new_array([
     BabyBear::ORDER_U32 - 2,

@@ -101,6 +101,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     // **ATTENTION**: always check shape of user inputs.
     builder.assert_usize_eq(proof.query_proofs.len(), RVar::from(config.num_queries));
     builder.assert_usize_eq(proof.commit_phase_commits.len(), log_max_height);
+    builder.assert_usize_eq(proof.commit_pow_witnesses.len(), log_max_height);
     let betas: Array<C, Ext<C::F, C::EF>> = builder.array(log_max_height);
     let betas_squared: Array<C, Ext<C::F, C::EF>> = builder.array(log_max_height);
     // `i_plus_one_arr[i] = i + 1`. This is needed to add "enumerate" to `iter_zip!`

@@ -207,7 +207,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         let is_store = is_valid.clone() - is_load.clone();
         // constrain mem_as to be in {0, 1, 2} if the instruction is a load,
         // and in {2, 3, 4} if the instruction is a store
-        assert_tern(builder, local_cols.mem_as - is_store * AB::Expr::TWO);
+        builder.assert_tern(local_cols.mem_as - is_store * AB::Expr::TWO);
         builder
             .when(not::<AB::Expr>(is_valid.clone()))
             .assert_zero(local_cols.mem_as);
@@ -286,11 +286,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
         let local_cols: &Rv32LoadStoreAdapterCols<AB::Var> = local.borrow();
         local_cols.from_state.pc
     }
-}
-
-fn assert_tern<AB: AirBuilder>(builder: &mut AB, x: impl Into<AB::Expr>) {
-    let x = x.into();
-    builder.assert_zero(x.clone() * (x.clone() - AB::Expr::ONE) * (x - AB::Expr::TWO));
 }
 
 #[repr(C)]

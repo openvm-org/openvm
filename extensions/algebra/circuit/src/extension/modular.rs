@@ -713,19 +713,23 @@ pub fn find_non_qr(modulus: &BigUint, rng: &mut impl RngCore) -> BigUint {
         // since 2^((p-1)/2) = (-1)^((p^2-1)/8)
         BigUint::from_u8(2u8).unwrap()
     } else {
+        // Sample uniformly from [2, modulus - 1) using rejection sampling
+        let range = modulus - 3u32; // number of values in [2, modulus-1)
         let mut buf = vec![0u8; modulus.to_bytes_be().len()];
-        let lower = BigUint::from_u8(2).unwrap();
-        let upper = modulus - BigUint::one();
-        rng.fill_bytes(&mut buf);
-        let mut non_qr = BigUint::from_bytes_be(&buf) % &upper + &lower;
-        // To check if non_qr is a quadratic nonresidue, we compute non_qr^((p-1)/2)
-        // If the result is p-1, then non_qr is a quadratic nonresidue
-        // Otherwise, non_qr is a quadratic residue
         let exponent = (modulus - BigUint::one()) >> 1;
-        while non_qr.modpow(&exponent, modulus) != modulus - BigUint::one() {
+        loop {
+            // Rejection sample for uniform distribution
             rng.fill_bytes(&mut buf);
-            non_qr = BigUint::from_bytes_be(&buf) % &upper + &lower;
+            let val = BigUint::from_bytes_be(&buf);
+            if val >= range {
+                continue;
+            }
+            let non_qr = val + 2u32;
+            // To check if non_qr is a quadratic nonresidue, we compute non_qr^((p-1)/2)
+            // If the result is p-1, then non_qr is a quadratic nonresidue
+            if non_qr.modpow(&exponent, modulus) == modulus - BigUint::one() {
+                return non_qr;
+            }
         }
-        non_qr
     }
 }
