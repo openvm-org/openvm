@@ -228,7 +228,7 @@ __global__ void group_by_parent(
     // Do we need to mark the sibling as absent?
     {
         uint32_t const sibling_id = gid + (siblings_place - my_place);
-        if (sibling_id >= num_children || current_layer_ptrs[sibling_id] != (ptr + (siblings_place - my_place))) {
+        if (sibling_id >= num_children || parent_ids[sibling_id] != parent_ids[gid]) {
             child_ptrs[siblings_place] = MISSING_CHILD;
         }
     }
@@ -259,7 +259,7 @@ __device__ void fill_merkle_trace_row(
     COL_WRITE_VALUE(row, MerkleCols, right_direction_different, right_new != new_values);
 }
 
-__device__ digest_t const *layer_value_on_height(
+__device__ __forceinline__ digest_t const *layer_value_on_height(
     digest_t const *subtree_layer,
     digest_t const *zero_hash,
     uint32_t const height,
@@ -546,9 +546,6 @@ extern "C" int _calculate_zero_hash(digest_t *zero_hash, const size_t size) {
 /// We go layer by layer, from the leaves to the root,
 /// without reordering the layer and only updating its digests,
 /// and maintaining the indices of its values that are still relevant.
-/// On each layer, we first compute the number of their parents serially
-/// (it is possible to do it in parallel), and then update the values in `subtrees`
-/// and write to the trace.
 ///
 /// After we reach the address space subtree roots, we call a single `update_to_root` function
 /// to do the remaining work there.
@@ -593,6 +590,9 @@ extern "C" int _update_merkle_tree(
         {
             auto [grid, block] = kernel_launch_params(num_children);
             set_parent_id_adjacent_differences<<<grid, block>>>(child_buf, parent_ids, layer, num_children, h);
+            if (int err = CHECK_KERNEL(); err) {
+                return err;
+            }
         }
         // Then, convert it to the partial sum
         {
@@ -613,6 +613,9 @@ extern "C" int _update_merkle_tree(
                 cudaStreamPerThread
             );
             cudaFreeAsync(d_temp_storage, cudaStreamPerThread);
+            if (int err = CHECK_KERNEL(); err) {
+                return err;
+            }
         }
         // Finally, reorder the children
         {
@@ -625,6 +628,9 @@ extern "C" int _update_merkle_tree(
                 num_children,
                 h
             );
+            if (int err = CHECK_KERNEL(); err) {
+                return err;
+            }
         }
         uint32_t num_parents;
         cudaMemcpyAsync(
@@ -635,6 +641,7 @@ extern "C" int _update_merkle_tree(
             cudaStreamPerThread
         );
         cudaStreamSynchronize(cudaStreamPerThread);
+        ++num_parents;
         {
             auto [grid, block] = kernel_launch_params(num_subtrees);
             adjust_subtrees_before_layer_update<<<grid, block>>>(
