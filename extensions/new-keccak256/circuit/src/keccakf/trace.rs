@@ -70,6 +70,17 @@ impl<'a> CustomBorrow<'a, KeccakfVmRecordMut<'a>, KeccakfVmRecordLayout> for [u8
     }
 }
 
+// todo: check with Ayush if this is correct
+impl SizedRecord<KeccakfVmRecordLayout> for KeccakfVmRecordMut<'_> {
+    fn size(_layout: &KeccakfVmRecordLayout) -> usize {
+        size_of::<KeccakfVmRecordHeader>()
+    }
+
+    fn alignment(_layout: &KeccakfVmRecordLayout) -> usize {
+        align_of::<KeccakfVmRecordHeader>()
+    }
+}
+
 impl<F, RA> PreflightExecutor<F, RA> for KeccakfVmExecutor
 where
     F: PrimeField32,
