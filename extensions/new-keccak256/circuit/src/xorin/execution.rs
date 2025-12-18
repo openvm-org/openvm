@@ -189,8 +189,6 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     }
 
     // Write XOR result back to the buffer memory in KECCAK_WORD_SIZE chunks.
-    // Note: this means output_bytes has to be multiple of KECCAK_WORD_SIZE
-    // Todo: recheck the above condition is okay
     for (i, chunk) in output_bytes.chunks_exact(KECCAK_WORD_SIZE).enumerate() {
         let chunk: [u8; KECCAK_WORD_SIZE] = chunk.try_into().unwrap();
         exec_state.vm_write::<u8, KECCAK_WORD_SIZE>(

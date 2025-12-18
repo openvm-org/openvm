@@ -157,7 +157,6 @@ mod tests {
 
         // Test specific length edge cases
         for len in [4, 8, 16, 32, 64, 128, 136] {
-            println!("Testing length: {len}");
             set_and_execute(
                 &mut tester,
                 &mut harness.executor,

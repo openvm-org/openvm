@@ -4,7 +4,6 @@ pub mod execution;
 #[cfg(all(test, feature = "test-utils"))]
 pub mod tests;
 pub mod trace;
-pub mod utils;
 
 #[cfg(feature = "cuda")]
 pub mod cuda {}

@@ -3,7 +3,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 use p3_keccak_air::KeccakCols as KeccakPermCols;
 
-use crate::{keccakf::utils::KECCAK_WIDTH_BYTES, xorin::utils::KECCAK_WORD_SIZE};
+use crate::keccakf::utils::{KECCAK_WIDTH_BYTES, KECCAK_WORD_SIZE};
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
