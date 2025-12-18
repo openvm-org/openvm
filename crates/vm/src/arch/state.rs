@@ -13,7 +13,7 @@ use super::{create_memory_image, ExecutionError, Streams};
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::{execution_mode::ExecutionCtxTrait, SystemConfig, VmStateMut, CONST_BLOCK_SIZE},
+    arch::{execution_mode::ExecutionCtxTrait, SystemConfig, VmStateMut},
     system::memory::online::GuestMemory,
 };
 

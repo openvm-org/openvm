@@ -333,7 +333,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
 
     fn range_checker_and_memory(
         mem_config: &MemoryConfig,
-        init_block_size: usize, // modify this to CONST_BLOCK_SIZE
+        init_block_size: usize,
     ) -> (SharedVariableRangeCheckerChip, TracingMemory) {
         let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             RANGE_CHECKER_BUS,

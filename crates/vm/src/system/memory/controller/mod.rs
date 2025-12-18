@@ -289,7 +289,6 @@ impl<F: PrimeField32> MemoryController<F> {
                 TouchedMemory::Persistent(final_memory),
             ) => {
                 let hasher = self.hasher_chip.as_ref().unwrap();
-                // boundary_chip.finalize takes CONST_BLOCK_SIZE granularity and rechunks internally
                 boundary_chip.finalize(initial_memory, &final_memory, hasher.as_ref());
 
                 // Rechunk CONST_BLOCK_SIZE blocks into CHUNK-sized blocks for merkle_chip
