@@ -46,7 +46,6 @@ pub(in crate::whir::final_poly_query_eval) struct FinalyPolyQueryEvalCols<T> {
     alpha: [T; D_EF],
     gamma: [T; D_EF],
     gamma_pow: [T; D_EF],
-    eq_acc: [T; D_EF],
     final_poly_coeff: [T; D_EF],
     final_value_acc: [T; D_EF],
     gamma_eq_acc: [T; D_EF],
@@ -191,9 +190,6 @@ where
             local.query_pow,
         );
 
-        // The value of eq_acc *after* this inner-most loop iteration, if we are in eq_phase.
-        // Degree 3.
-        let post_eq_acc = ext_field_multiply(local.eq_acc, eq_1(local.alpha, local.query_pow));
         // The value of post_horner_acc *after* this inner-most loop iteration, if we are not in
         // eq_phase. Degree 2.
         let post_horner_acc = ext_field_add(
@@ -201,22 +197,6 @@ where
             local.final_poly_coeff,
         );
 
-        assert_array_eq(
-            &mut builder.when(local.is_first_in_query),
-            local.eq_acc,
-            [AB::F::ONE, AB::F::ZERO, AB::F::ZERO, AB::F::ZERO],
-        );
-        assert_array_eq(
-            &mut builder.when(local_is_eq_phase.clone()),
-            next.eq_acc,
-            post_eq_acc.clone(),
-        );
-        assert_array_eq(
-            &mut builder
-                .when((local.is_enabled - local_is_eq_phase.clone()) * is_same_query.clone()),
-            next.eq_acc,
-            local.eq_acc,
-        );
         assert_array_eq(
             &mut builder.when(local.is_first_in_query),
             local.gamma_eq_acc,
@@ -279,8 +259,7 @@ where
                 * (AB::Expr::ONE - local.is_query_zero * local.is_last_round),
         );
 
-        let eq_post = ext_field_multiply::<AB::Expr>(local.eq_acc, post_horner_acc.clone());
-        let gamma_eq_post = ext_field_multiply::<AB::Expr>(local.gamma_pow, eq_post.clone());
+        let gamma_eq_post = ext_field_multiply(local.gamma_eq_acc, post_horner_acc.clone());
 
         assert_array_eq(
             &mut builder.when(local_is_eq_phase.clone()),
@@ -372,7 +351,7 @@ where
 pub(in crate::whir) struct FinalPolyQueryEvalRecord {
     pub alpha: EF,
     pub query_pow: EF,
-    pub eq_acc: EF,
+    pub gamma_eq_acc: EF,
     pub horner_acc: EF,
     pub final_poly_coeff: EF,
     pub final_value_acc: EF,
@@ -419,7 +398,7 @@ pub(in crate::whir) fn build_final_poly_query_eval_records(
 
             let query_count = num_queries_per_round[whir_round] + 1;
             for query_idx in 0..query_count {
-                let mut eq_acc = EF::ONE;
+                let mut gamma_eq_acc = gamma_pow;
                 let mut horner_acc = EF::ZERO;
                 let mut query_pow = if query_idx == 0 {
                     if whir_round < num_whir_rounds - 1 {
@@ -436,14 +415,14 @@ pub(in crate::whir) fn build_final_poly_query_eval_records(
                     records.push(FinalPolyQueryEvalRecord {
                         alpha,
                         query_pow,
-                        eq_acc,
+                        gamma_eq_acc,
                         horner_acc,
                         final_poly_coeff: EF::ZERO,
                         final_value_acc,
                         gamma,
                         gamma_pow,
                     });
-                    eq_acc *= EF::ONE - query_pow - alpha + query_pow * alpha.double();
+                    gamma_eq_acc *= EF::ONE - query_pow - alpha + query_pow * alpha.double();
                     query_pow *= query_pow;
                 }
 
@@ -451,7 +430,7 @@ pub(in crate::whir) fn build_final_poly_query_eval_records(
                     records.push(FinalPolyQueryEvalRecord {
                         alpha: EF::ZERO,
                         query_pow,
-                        eq_acc,
+                        gamma_eq_acc,
                         horner_acc,
                         final_poly_coeff,
                         final_value_acc,
@@ -462,7 +441,7 @@ pub(in crate::whir) fn build_final_poly_query_eval_records(
                 }
 
                 if query_idx != 0 || whir_round != num_whir_rounds - 1 {
-                    final_value_acc += gamma_pow * eq_acc * horner_acc;
+                    final_value_acc += gamma_eq_acc * horner_acc;
                 }
 
                 gamma_pow *= gamma;
@@ -614,8 +593,8 @@ pub(crate) fn generate_trace(
             let do_carry = (!is_same_query) && is_same_proof && !is_q0_last;
             cols.do_carry = F::from_bool(do_carry);
 
-            let geq_acc = record.gamma_pow * record.eq_acc;
-            cols.gamma_eq_acc.copy_from_slice(geq_acc.as_base_slice());
+            cols.gamma_eq_acc
+                .copy_from_slice(record.gamma_eq_acc.as_base_slice());
 
             cols.alpha.copy_from_slice(record.alpha.as_base_slice());
             cols.gamma.copy_from_slice(record.gamma.as_base_slice());
@@ -628,7 +607,6 @@ pub(crate) fn generate_trace(
                 .copy_from_slice(record.final_poly_coeff.as_base_slice());
             cols.final_value_acc
                 .copy_from_slice(record.final_value_acc.as_base_slice());
-            cols.eq_acc.copy_from_slice(record.eq_acc.as_base_slice());
             cols.horner_acc
                 .copy_from_slice(record.horner_acc.as_base_slice());
         });
