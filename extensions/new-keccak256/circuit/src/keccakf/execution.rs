@@ -17,7 +17,7 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 use p3_keccak_air::NUM_ROUNDS;
 
-use crate::keccakf::utils::{KECCAK_WIDTH_BYTES, KECCAK_WIDTH_U64_LIMBS};
+use crate::keccakf::utils::{KECCAK_WORD_SIZE, KECCAK_WIDTH_BYTES, KECCAK_WIDTH_U32_LIMBS, KECCAK_WIDTH_U64_LIMBS};
 
 use super::KeccakfVmExecutor;
 
@@ -162,7 +162,26 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     let buf_ptr = pre_compute.a as u32;
     let buffer_limbs: [u8; 4] = exec_state.vm_read(RV32_REGISTER_AS, buf_ptr);
     let buffer = u32::from_le_bytes(buffer_limbs);
-    let message: &[u8] = exec_state.vm_read_slice(RV32_MEMORY_AS, buffer, KECCAK_WIDTH_BYTES);
+
+    let message_vec: Option<Vec<u8>> = if IS_E1 {
+        None
+    } else {
+        Some(
+            (0..KECCAK_WIDTH_U32_LIMBS)
+                .flat_map(|i| {
+                    exec_state.vm_read::<u8, KECCAK_WORD_SIZE>(
+                        RV32_MEMORY_AS,
+                        buffer + (i * KECCAK_WORD_SIZE) as u32,
+                    )
+                })
+                .collect(),
+        )
+    };
+
+    let message: &[u8] = match message_vec.as_deref() {
+        Some(v) => &v[..KECCAK_WIDTH_BYTES],
+        None => exec_state.vm_read_slice(RV32_MEMORY_AS, buffer, KECCAK_WIDTH_BYTES),
+    };
     assert_eq!(message.len(), KECCAK_WIDTH_BYTES);
 
     let mut message_u64 = [0u64; KECCAK_WIDTH_U64_LIMBS];
