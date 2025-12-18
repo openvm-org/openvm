@@ -3,7 +3,7 @@ use core::marker::PhantomData;
 use std::{cell::RefCell, collections::HashMap, hash::Hash};
 
 use openvm_stark_backend::p3_field::{
-    ExtensionField, Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField,
+    BasedVectorSpace, ExtensionField, Field, PrimeCharacteristicRing, PrimeField,
 };
 use serde::{Deserialize, Serialize};
 
@@ -137,7 +137,7 @@ impl<N: PrimeField> From<Var<N>> for Usize<N> {
 
 impl<N: PrimeField> From<usize> for Usize<N> {
     fn from(c: usize) -> Self {
-        Usize::Const(Rc::new(RefCell::new(N::from_canonical_usize(c))))
+        Usize::Const(Rc::new(RefCell::new(N::from_usize(c))))
     }
 }
 
@@ -200,7 +200,7 @@ impl<F, EF> Ext<F, EF> {
 
     pub fn inverse(&self) -> SymbolicExt<F, EF>
     where
-        F: Field,
+        F: PrimeField,
         EF: ExtensionField<F>,
     {
         SymbolicExt::<F, EF>::ONE / *self
@@ -848,9 +848,7 @@ impl<F: Field, EF: ExtensionField<F>> Ext<F, EF> {
         match src {
             SymbolicExt::Base(v, _) => match &*v {
                 SymbolicFelt::Const(c, _) => {
-                    builder
-                        .operations
-                        .push(DslIr::ImmE(*self, C::EF::from_base(*c)));
+                    builder.operations.push(DslIr::ImmE(*self, (*c).into()));
                 }
                 SymbolicFelt::Val(v, _) => {
                     builder
@@ -879,7 +877,7 @@ impl<F: Field, EF: ExtensionField<F>> Ext<F, EF> {
                 }
                 (SymbolicExt::Const(lhs, _), SymbolicExt::Base(rhs, _)) => match rhs.as_ref() {
                     SymbolicFelt::Const(rhs, _) => {
-                        let sum = *lhs + C::EF::from_base(*rhs);
+                        let sum = *lhs + EF::from(*rhs);
                         builder.operations.push(DslIr::ImmE(*self, sum));
                     }
                     SymbolicFelt::Val(rhs, _) => {
@@ -1205,7 +1203,7 @@ impl<C: Config> Variable<C> for Ext<C::F, C::EF> {
 
 impl<C: Config> MemVariable<C> for Ext<C::F, C::EF> {
     fn size_of() -> usize {
-        C::EF::D
+        C::EF::DIMENSION
     }
 
     fn load(&self, ptr: Ptr<C::N>, index: MemIndex<C::N>, builder: &mut Builder<C>) {

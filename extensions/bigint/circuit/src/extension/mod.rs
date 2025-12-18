@@ -9,7 +9,8 @@ use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
         ExecutorInventoryBuilder, ExecutorInventoryError, MatrixRecordArena, RowMajorMatrixArena,
-        VmBuilder, VmChipComplex, VmCircuitExtension, VmExecutionExtension, VmProverExtension,
+        VmBuilder, VmChipComplex, VmCircuitExtension, VmExecutionExtension, VmField,
+        VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemPort},
 };
@@ -355,7 +356,7 @@ impl<E, SC> VmBuilder<E> for Int256Rv32CpuBuilder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<SC>: PrimeField32,
+    Val<SC>: VmField,
 {
     type VmConfig = Int256Rv32Config;
     type SystemChipInventory = SystemChipInventory<SC>;

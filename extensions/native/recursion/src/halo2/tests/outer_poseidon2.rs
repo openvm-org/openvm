@@ -1,7 +1,7 @@
 use openvm_native_compiler::ir::{Builder, Felt, Var, Witness};
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2_root::root_perm, p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr,
+    config::baby_bear_poseidon2_root::root_perm, p3_baby_bear::BabyBear, p3_bn254::Bn254,
 };
 use p3_symmetric::{CryptographicHasher, Permutation, PseudoCompressionFunction};
 
@@ -15,11 +15,7 @@ use crate::{
 #[test]
 fn test_p2_permute_mut() {
     let poseidon2 = root_perm();
-    let input: [Bn254Fr; 3] = [
-        Bn254Fr::from_canonical_u32(0),
-        Bn254Fr::from_canonical_u32(1),
-        Bn254Fr::from_canonical_u32(2),
-    ];
+    let input: [Bn254; 3] = [Bn254::from_u32(0), Bn254::from_u32(1), Bn254::from_u32(2)];
     let mut output = input;
     poseidon2.permute_mut(&mut output);
 
@@ -49,13 +45,13 @@ fn test_p2_hash() {
     let hasher = OuterHash::new(perm.clone()).unwrap();
 
     let input: [BabyBear; 7] = [
-        BabyBear::from_canonical_u32(0),
-        BabyBear::from_canonical_u32(1),
-        BabyBear::from_canonical_u32(2),
-        BabyBear::from_canonical_u32(2),
-        BabyBear::from_canonical_u32(2),
-        BabyBear::from_canonical_u32(2),
-        BabyBear::from_canonical_u32(2),
+        BabyBear::from_u32(0),
+        BabyBear::from_u32(1),
+        BabyBear::from_u32(2),
+        BabyBear::from_u32(2),
+        BabyBear::from_u32(2),
+        BabyBear::from_u32(2),
+        BabyBear::from_u32(2),
     ];
     let output = hasher.hash_iter(input);
 
@@ -85,8 +81,8 @@ fn test_p2_compress() {
     let perm = root_perm();
     let compressor = OuterCompress::new(perm.clone());
 
-    let a: [Bn254Fr; 1] = [Bn254Fr::TWO];
-    let b: [Bn254Fr; 1] = [Bn254Fr::TWO];
+    let a: [Bn254; 1] = [Bn254::TWO];
+    let b: [Bn254; 1] = [Bn254::TWO];
     let gt = compressor.compress([a, b]);
 
     let mut builder = Builder::<OuterConfig>::default();

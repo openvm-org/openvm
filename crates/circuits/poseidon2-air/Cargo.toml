@@ -9,7 +9,6 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-p3-monty-31 = { workspace = true }
 p3-symmetric = { workspace = true }
 p3-poseidon2 = { workspace = true }
 p3-poseidon2-air = { workspace = true }

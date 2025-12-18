@@ -1,6 +1,6 @@
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, LookupBus},
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -53,7 +53,7 @@ pub struct RangeTupleCheckerBusInteraction<T> {
     pub is_lookup: bool,
 }
 
-impl<T: FieldAlgebra> RangeTupleCheckerBusInteraction<T> {
+impl<T: PrimeCharacteristicRing> RangeTupleCheckerBusInteraction<T> {
     pub fn eval<AB>(self, builder: &mut AB, count: impl Into<AB::Expr>)
     where
         AB: InteractionBuilder<Expr = T>,

@@ -27,7 +27,7 @@ use openvm_native_compiler::conversion::AS;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
 #[repr(C)]
@@ -69,10 +69,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for AluNativeAdapterAir {
         let mut timestamp_delta = 0usize;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
-            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+            timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        let native_as = AB::Expr::from_canonical_u32(AS::Native as u32);
+        let native_as = AB::Expr::from_u32(AS::Native as u32);
 
         // TODO: we assume address space is either 0 or 4, should we add a
         //       constraint for that?
@@ -115,7 +115,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for AluNativeAdapterAir {
                     cols.f_as.into(),
                 ],
                 cols.from_state,
-                AB::F::from_canonical_usize(timestamp_delta),
+                AB::F::from_usize(timestamp_delta),
                 (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
@@ -219,7 +219,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for AluNativeAdapterFiller {
             adapter_row.write_aux.as_mut(),
         );
 
-        let native_as = F::from_canonical_u32(AS::Native as u32);
+        let native_as = F::from_u32(AS::Native as u32);
         for ((i, read_record), read_cols) in record
             .reads_aux
             .iter()
@@ -254,7 +254,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for AluNativeAdapterFiller {
         adapter_row.b_pointer = record.b;
         adapter_row.a_pointer = record.a_ptr;
 
-        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
-        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
+        adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(record.from_pc);
     }
 }

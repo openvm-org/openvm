@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use openvm_stark_backend::{
-    p3_field::{Field, PrimeField},
+    p3_field::{InjectiveMonomial, PrimeField},
     p3_matrix::dense::RowMajorMatrix,
 };
 pub use openvm_stark_sdk::p3_baby_bear;
@@ -46,14 +46,21 @@ pub const BABY_BEAR_POSEIDON2_SBOX_DEGREE: u64 = 7;
 /// `SBOX_REGISTERS` affects the max constraint degree of the AIR. See [p3_poseidon2_air] for more
 /// details.
 #[derive(Debug, Clone)]
-pub struct Poseidon2SubChip<F: Field, const SBOX_REGISTERS: usize> {
+pub struct Poseidon2SubChip<
+    F: PrimeField + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
+    const SBOX_REGISTERS: usize,
+> {
     // This is Arc purely because Poseidon2Air cannot derive Clone
     pub air: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
     pub(crate) executor: Poseidon2Executor<F>,
     pub(crate) constants: Plonky3RoundConstants<F>,
 }
 
-impl<F: PrimeField, const SBOX_REGISTERS: usize> Poseidon2SubChip<F, SBOX_REGISTERS> {
+impl<
+        F: PrimeField + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
+        const SBOX_REGISTERS: usize,
+    > Poseidon2SubChip<F, SBOX_REGISTERS>
+{
     pub fn new(constants: Poseidon2Constants<F>) -> Self {
         let (external_constants, internal_constants) = constants.to_external_internal_constants();
         Self {
@@ -80,6 +87,12 @@ impl<F: PrimeField, const SBOX_REGISTERS: usize> Poseidon2SubChip<F, SBOX_REGIST
         F: PrimeField,
     {
         match self.air.as_ref() {
+            // The third argument `extra_capacity_bits` pre-allocates Vec capacity for
+            // the LDE blowup during PCS commit (capacity = size << extra_capacity_bits).
+            // This optimization only helps if the returned matrix flows directly to
+            // the prover. Currently in OpenVM, this sub-trace is copied into wider
+            // matrices that include additional columns, so the extra capacity would
+            // be discarded.
             Poseidon2SubAir::BabyBearMds(_) => generate_trace_rows::<
                 F,
                 BabyBearPoseidon2LinearLayers,
@@ -88,17 +101,17 @@ impl<F: PrimeField, const SBOX_REGISTERS: usize> Poseidon2SubChip<F, SBOX_REGIST
                 SBOX_REGISTERS,
                 BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS,
                 BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS,
-            >(inputs, &self.constants),
+            >(inputs, &self.constants, 0),
         }
     }
 }
 
 #[derive(Clone, Debug)]
-pub enum Poseidon2Executor<F: Field> {
+pub enum Poseidon2Executor<F: PrimeField + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>> {
     BabyBearMds(Plonky3Poseidon2Executor<F, BabyBearPoseidon2LinearLayers>),
 }
 
-impl<F: PrimeField> Poseidon2Executor<F> {
+impl<F: PrimeField + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>> Poseidon2Executor<F> {
     pub fn new(
         external_constants: ExternalLayerConstants<F, POSEIDON2_WIDTH>,
         internal_constants: Vec<F>,
@@ -111,7 +124,7 @@ impl<F: PrimeField> Poseidon2Executor<F> {
 }
 
 pub type Plonky3Poseidon2Executor<F, LinearLayers> = Poseidon2<
-    <F as Field>::Packing,
+    F,
     Poseidon2ExternalLayer<F, LinearLayers, POSEIDON2_WIDTH>,
     Poseidon2InternalLayer<F, LinearLayers>,
     POSEIDON2_WIDTH,

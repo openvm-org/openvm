@@ -15,7 +15,7 @@ use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcod
 use openvm_rv32im_transpiler::Rv32JalLuiOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -110,13 +110,13 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     imm: Option<i32>,
     initial_pc: Option<u32>,
 ) {
-    let imm: i32 = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
+    let imm: i32 = imm.unwrap_or(rng.random_range(0..(1 << IMM_BITS)));
     let imm = match opcode {
         JAL => ((imm >> 1) << 2) - (1 << IMM_BITS),
         LUI => imm,
     };
 
-    let a = rng.gen_range((opcode == LUI) as usize..32) << 2;
+    let a = rng.random_range((opcode == LUI) as usize..32) << 2;
     let needs_write = a != 0 || opcode == LUI;
 
     tester.execute_with_pc(
@@ -132,7 +132,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
             needs_write as isize,
             0,
         ),
-        initial_pc.unwrap_or(rng.gen_range(imm.unsigned_abs()..(1 << PC_BITS))),
+        initial_pc.unwrap_or(rng.random_range(imm.unsigned_abs()..(1 << PC_BITS))),
     );
     let initial_pc = tester.last_from_pc().as_canonical_u32();
     let final_pc = tester.last_to_pc().as_canonical_u32();
@@ -141,7 +141,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let rd_data = if needs_write { rd_data } else { [0; 4] };
 
     assert_eq!(next_pc, final_pc);
-    assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<4>(1, a));
+    assert_eq!(rd_data.map(F::from_u8), tester.read::<4>(1, a));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -217,19 +217,19 @@ fn run_negative_jal_lui_test(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
+        let mut trace_row = trace.row_slice(0).expect("row exists").to_vec();
         let (adapter_row, core_row) = trace_row.split_at_mut(adapter_width);
         let adapter_cols: &mut Rv32CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
         let core_cols: &mut Rv32JalLuiCoreCols<F> = core_row.borrow_mut();
 
         if let Some(data) = prank_vals.rd_data {
-            core_cols.rd_data = data.map(F::from_canonical_u32);
+            core_cols.rd_data = data.map(F::from_u32);
         }
         if let Some(imm) = prank_vals.imm {
             core_cols.imm = if imm < 0 {
-                F::NEG_ONE * F::from_canonical_u32((-imm) as u32)
+                F::NEG_ONE * F::from_u32((-imm) as u32)
             } else {
-                F::from_canonical_u32(imm as u32)
+                F::from_u32(imm as u32)
             };
         }
         if let Some(is_jal) = prank_vals.is_jal {
