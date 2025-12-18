@@ -187,7 +187,7 @@ pub struct MemoryConfig {
     /// Maximum N AccessAdapter AIR to support.
     pub max_access_adapter_n: usize,
     /// Whether access adapters are enabled. When disabled, all memory accesses must be of the
-    /// standard block size (e.g., 4 for address spaces 1-3).
+    /// standard block size (ie, 4 for address spaces 1-3).
     #[new(value = "true")]
     pub access_adapters_enabled: bool,
 }
@@ -261,8 +261,8 @@ impl MemoryConfig {
             .collect()
     }
 
-    /// Returns true if the Native address space (AS 4) is used.
-    /// Native AS is considered "used" if it has any allocated cells.
+    /// Returns true if the Native address space (AS 4) is used
+    /// Native AS is considered "used" if it has any allocated cells
     pub fn is_native_as_used(&self) -> bool {
         self.addr_spaces
             .get(NATIVE_AS as usize)
@@ -277,7 +277,7 @@ impl MemoryConfig {
         self
     }
 
-    /// Enables access adapters. This is the default behavior.
+    /// Enables access adapters. This is the default behavior
     pub fn with_access_adapters(mut self) -> Self {
         self.access_adapters_enabled = true;
         self
@@ -285,7 +285,7 @@ impl MemoryConfig {
 
     /// Automatically sets `access_adapters_enabled` based on whether Native AS is used.
     /// If Native AS is not used, access adapters are disabled since all other address spaces
-    /// use a fixed block size of 4.
+    /// use a fixed block size of 4
     pub fn with_auto_access_adapters(mut self) -> Self {
         self.access_adapters_enabled = self.is_native_as_used();
         self
@@ -432,8 +432,7 @@ impl SystemConfig {
     }
 
     /// Disables access adapters. When disabled, all memory accesses for address spaces 1-3
-    /// must use the constant block size (4). This simplifies the memory system by removing
-    /// access adapter AIRs.
+    /// must use the constant block size (4)
     pub fn without_access_adapters(mut self) -> Self {
         self.memory_config.access_adapters_enabled = false;
         self
