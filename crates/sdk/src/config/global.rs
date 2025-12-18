@@ -22,9 +22,7 @@ use openvm_native_circuit::{
     CastFExtension, CastFExtensionExecutor, Native, NativeCpuProverExt, NativeExecutor,
 };
 use openvm_native_transpiler::LongFormTranspilerExtension;
-use openvm_new_keccak256_circuit::{
-    NewKeccak256, NewKeccak256CpuProverExt, NewKeccak256Executor,
-};
+use openvm_new_keccak256_circuit::{NewKeccak256, NewKeccak256CpuProverExt, NewKeccak256Executor};
 use openvm_new_keccak256_transpiler::NewKeccakTranspilerExtension;
 use openvm_pairing_circuit::{
     PairingCurve, PairingExtension, PairingExtensionExecutor, PairingProverExt,

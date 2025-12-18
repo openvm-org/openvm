@@ -22,7 +22,7 @@ use p3_keccak_air::generate_trace_rows;
 
 use crate::keccakf::{
     columns::{KeccakfVmCols, NUM_KECCAKF_VM_COLS, NUM_KECCAK_PERM_COLS, NUM_ROUNDS},
-    utils::{KECCAK_WIDTH_U32_LIMBS, KECCAK_WIDTH_U64_LIMBS, KECCAK_WIDTH_BYTES},
+    utils::{KECCAK_WIDTH_BYTES, KECCAK_WIDTH_U32_LIMBS, KECCAK_WIDTH_U64_LIMBS},
     KeccakfVmExecutor, KeccakfVmFiller,
 };
 
