@@ -134,6 +134,9 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakfVmExecutor {
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F: PrimeField32> AotMeteredExecutor<F> for KeccakfVmExecutor {}
+
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
