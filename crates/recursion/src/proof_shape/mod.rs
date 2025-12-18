@@ -140,7 +140,7 @@ impl ProofShapeModule {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn run_preflight<TS>(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -297,7 +297,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for ProofShapeModule {
                 .map(|chip| chip.generate_trace(child_vk, proofs, preflights, &blob))
                 .collect::<Vec<_>>(),
         );
-        tracing::info_span!("wrapper.generate_trace", air = "RangeChecker").in_scope(|| {
+        tracing::trace_span!("wrapper.generate_trace", air = "RangeChecker").in_scope(|| {
             ctxs.push(ColMajorMatrix::from_row_major(
                 &self.range_checker.generate_trace_row_major(),
             ));
@@ -317,7 +317,12 @@ enum ProofShapeModuleChip {
 impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for ProofShapeModuleChip {
     type ModuleSpecificCtx = ProofShapeBlob;
 
-    #[tracing::instrument(name = "wrapper.generate_trace", skip_all, fields(air = %self))]
+    #[tracing::instrument(
+        name = "wrapper.generate_trace",
+        level = "trace",
+        skip_all,
+        fields(air = %self)
+    )]
     fn generate_trace(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -388,7 +393,7 @@ mod cuda_tracegen {
             );
             // Caution: proof_shape **must** finish trace gen before range_checker or pow_checker
             // can start trace gen with the correct multiplicities
-            tracing::info_span!("wrapper.generate_trace", air = "RangeChecker").in_scope(|| {
+            tracing::trace_span!("wrapper.generate_trace", air = "RangeChecker").in_scope(|| {
                 ctxs.push(Arc::try_unwrap(range_checker_gpu).unwrap().generate_trace());
             });
             let pow_trace = Arc::try_unwrap(pow_checker_gpu).unwrap().generate_trace();
@@ -410,7 +415,12 @@ mod cuda_tracegen {
         // Empty blob so no difference in type between cpu and gpu
         type ModuleSpecificCtx = ProofShapeBlob;
 
-        #[tracing::instrument(name = "wrapper.generate_trace", skip_all, fields(air = %self))]
+        #[tracing::instrument(
+            name = "wrapper.generate_trace",
+            level = "trace",
+            skip_all,
+            fields(air = %self)
+        )]
         fn generate_trace(
             &self,
             child_vk: &VerifyingKeyGpu,

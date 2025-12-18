@@ -99,7 +99,7 @@ pub struct SumcheckRoundsCols<F> {
 pub struct SumcheckRoundsTraceGenerator;
 
 impl SumcheckRoundsTraceGenerator {
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn generate_trace(
         vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],

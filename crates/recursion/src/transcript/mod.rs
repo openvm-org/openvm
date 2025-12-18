@@ -16,7 +16,7 @@ use stark_backend_v2::{
     proof::Proof,
     prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
 };
-use tracing::info_span;
+use tracing::trace_span;
 
 use crate::{
     system::{AirModule, BusInventory, GlobalCtxCpu, Preflight, TraceGenModule},
@@ -58,7 +58,7 @@ impl TranscriptModule {
 
     // Builds trace for transcript and merkle verify AIRs (and records poseidon2 permutations).
     // Also combines in the poseidon2 permutations from preflight (from WHIR).
-    #[tracing::instrument(name = "generate_trace", skip_all)]
+    #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
     fn build_trace_artifacts(
         &self,
         preflights: &[Preflight],
@@ -266,7 +266,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
         _ctx: &(),
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         let (merkle_verify_trace_vec, poseidon_inputs) =
-            tracing::info_span!("wrapper.generate_trace", air = "MerkleVerify").in_scope(|| {
+            tracing::trace_span!("wrapper.generate_trace", air = "MerkleVerify").in_scope(|| {
                 merkle_verify::generate_trace(child_vk, proofs, preflights, self.params.k_whir())
             });
         let merkle_verify_trace =
@@ -274,15 +274,15 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
         let TranscriptTraceArtifacts {
             transcript_trace,
             poseidon_inputs,
-        } = tracing::info_span!("wrapper.generate_trace", air = "Transcript")
+        } = tracing::trace_span!("wrapper.generate_trace", air = "Transcript")
             .in_scope(|| self.build_trace_artifacts(preflights, poseidon_inputs));
 
         let poseidon2_trace =
-            info_span!("wrapper.generate_trace", air = "Poseidon2").in_scope(|| {
+            trace_span!("wrapper.generate_trace", air = "Poseidon2").in_scope(|| {
                 // TODO: This is unfortunately how we propagate span fields given our current
                 // tracing system. It would be extraordinarily helpful to update our
                 // metric outputs to contain the fields they define as labels.
-                info_span!("generate_trace").in_scope(|| {
+                trace_span!("generate_trace").in_scope(|| {
                     let (mut poseidon_states, mut poseidon_counts) =
                         Self::dedup_poseidon_inputs(poseidon_inputs);
                     let poseidon2_valid_rows = poseidon_states.len();
@@ -359,7 +359,7 @@ mod cuda_tracegen {
                 .map(|preflight| preflight.cpu.clone())
                 .collect_vec();
             let (merkle_trace_gpu, poseidon_inputs) =
-                tracing::info_span!("wrapper.generate_trace", air = "MerkleVerify").in_scope(
+                tracing::trace_span!("wrapper.generate_trace", air = "MerkleVerify").in_scope(
                     || {
                         merkle_verify::cuda::generate_trace(
                             &child_vk.cpu,
@@ -372,14 +372,14 @@ mod cuda_tracegen {
             let TranscriptTraceArtifacts {
                 transcript_trace,
                 poseidon_inputs,
-            } = tracing::info_span!("wrapper.generate_trace", air = "Transcript")
+            } = tracing::trace_span!("wrapper.generate_trace", air = "Transcript")
                 .in_scope(|| self.build_trace_artifacts(&preflights_cpu, poseidon_inputs));
 
             let transcript_trace_gpu = transport_matrix_to_device(Arc::new(transcript_trace));
 
-            let poseidon_trace_gpu = info_span!("wrapper.generate_trace", air = "Poseidon2")
+            let poseidon_trace_gpu = trace_span!("wrapper.generate_trace", air = "Poseidon2")
                 .in_scope(|| {
-                    info_span!("generate_trace").in_scope(|| {
+                    trace_span!("generate_trace").in_scope(|| {
                         let poseidon2_width = Poseidon2Cols::<F, SBOX_REGISTERS>::width();
                         let poseidon2_valid_rows = poseidon_inputs.len();
                         let poseidon_inputs_flat: Vec<CudaF> = poseidon_inputs

@@ -7,7 +7,7 @@ use crate::{
     proof_shape::{cuda_abi::public_values_tracegen, pvs::PublicValuesCols},
 };
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(level = "trace", skip_all)]
 pub(in crate::proof_shape) fn generate_trace(
     proofs_gpu: &[ProofGpu],
     preflights_gpu: &[PreflightGpu],

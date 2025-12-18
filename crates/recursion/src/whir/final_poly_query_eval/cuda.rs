@@ -11,7 +11,7 @@ use crate::{
     },
 };
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(level = "trace", skip_all)]
 pub(in crate::whir) fn generate_trace(
     blob: &WhirBlobGpu,
     params: &SystemParams,

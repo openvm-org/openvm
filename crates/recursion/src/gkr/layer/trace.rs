@@ -51,7 +51,7 @@ impl GkrLayerRecord {
     }
 }
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(level = "trace", skip_all)]
 pub fn generate_trace(
     gkr_layer_records: &[GkrLayerRecord],
     mus: &[Vec<EF>],

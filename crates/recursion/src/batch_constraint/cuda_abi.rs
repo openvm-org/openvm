@@ -145,7 +145,7 @@ pub unsafe fn eq_3b_tracegen(
     ))
 }
 
-#[tracing::instrument(name = "generate_trace", skip_all)]
+#[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
 pub fn generate_sym_expr_trace(
     child_vk: &MultiStarkVerifyingKeyV2,
     proofs: &[ProofGpu],
@@ -308,7 +308,7 @@ pub fn generate_sym_expr_trace(
     trace
 }
 
-#[tracing::instrument(name = "generate_trace", skip_all)]
+#[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
 pub fn generate_eq_3b_trace(
     child_vk: &MultiStarkVerifyingKeyV2,
     blob: &Eq3bBlob,

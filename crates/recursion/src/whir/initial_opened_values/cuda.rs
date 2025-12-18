@@ -9,7 +9,7 @@ use crate::whir::{
     initial_opened_values::InitialOpenedValuesCols, num_queries_per_round, total_num_queries,
 };
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(level = "trace", skip_all)]
 pub(in crate::whir) fn generate_trace(
     num_proofs: usize,
     blob: &WhirBlobGpu,

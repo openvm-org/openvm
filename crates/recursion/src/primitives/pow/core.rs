@@ -81,7 +81,7 @@ impl<const BASE: usize, const N: usize> PowerCheckerCpuTraceGenerator<BASE, N> {
         }
     }
 
-    #[tracing::instrument(name = "generate_trace", skip_all)]
+    #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
     pub fn generate_trace_row_major(&self) -> RowMajorMatrix<F> {
         let mut current_pow = F::ONE;
         let trace = self

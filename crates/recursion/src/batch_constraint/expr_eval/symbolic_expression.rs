@@ -338,7 +338,7 @@ where
 }
 
 /// Returns the common main trace.
-#[tracing::instrument(name = "generate_trace", skip_all)]
+#[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
 pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
     child_vk: &MultiStarkVerifyingKeyV2,
     proofs: &[Proof],

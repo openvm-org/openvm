@@ -63,7 +63,7 @@ impl FoldRecord {
     }
 }
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(level = "trace", skip_all)]
 pub fn generate_trace(
     mvk: &MultiStarkVerifyingKeyV2,
     _proofs: &[&Proof],

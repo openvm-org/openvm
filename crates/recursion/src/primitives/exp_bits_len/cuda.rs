@@ -23,7 +23,7 @@ impl ExpBitsLenGpuTraceGenerator {
         self.0.generate_trace_row_major()
     }
 
-    #[tracing::instrument(name = "generate_trace", skip_all)]
+    #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
     pub fn generate_trace_device(self) -> DeviceMatrix<F> {
         let mem = MemTracker::start("tracegen.exp_bits_len");
         let records = self.0.requests.into_inner().unwrap();

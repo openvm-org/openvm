@@ -19,7 +19,7 @@ pub struct GkrInputRecord {
     pub input_layer_claim: [EF; 2],
 }
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(level = "trace", skip_all)]
 pub fn generate_trace(gkr_input_records: &[GkrInputRecord], q0_claims: &[EF]) -> RowMajorMatrix<F> {
     debug_assert_eq!(gkr_input_records.len(), q0_claims.len());
 

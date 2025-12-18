@@ -140,7 +140,7 @@ pub(in crate::proof_shape) struct ProofShapeChip<const NUM_LIMBS: usize, const L
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, LIMB_BITS> {
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub(in crate::proof_shape) fn generate_trace(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,

@@ -258,7 +258,7 @@ fn compute_cum_sum<T>(values: &[T], f: impl Fn(&T) -> usize) -> Vec<usize> {
         .collect()
 }
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(level = "trace", skip_all)]
 pub fn generate_trace(
     mvk: &MultiStarkVerifyingKeyV2,
     proofs: &[Proof],
@@ -533,7 +533,11 @@ pub mod cuda {
 
     const MAX_SUPPORTED_K: usize = 4;
 
-    #[tracing::instrument(name = "generate_trace_cuda(MerkleVerifyAir)", skip_all)]
+    #[tracing::instrument(
+        name = "generate_trace_cuda(MerkleVerifyAir)",
+        level = "trace",
+        skip_all
+    )]
     pub fn generate_trace(
         mvk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],

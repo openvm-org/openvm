@@ -343,7 +343,12 @@ enum TraceModuleRef<'a> {
 }
 
 impl<'a> TraceModuleRef<'a> {
-    #[tracing::instrument(name = "wrapper.run_preflight", skip_all, fields(air_module = %self))]
+    #[tracing::instrument(
+        name = "wrapper.run_preflight",
+        level = "trace",
+        skip_all,
+        fields(air_module = %self)
+    )]
     fn run_preflight<TS>(
         self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -367,7 +372,12 @@ impl<'a> TraceModuleRef<'a> {
         }
     }
 
-    #[tracing::instrument(name = "wrapper.generate_proving_ctxs", skip_all, fields(air_module = %self))]
+    #[tracing::instrument(
+        name = "wrapper.generate_proving_ctxs",
+        level = "trace",
+        skip_all,
+        fields(air_module = %self)
+    )]
     fn generate_cpu_ctxs(
         self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -583,9 +593,9 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
             vec![child_vk_pcs_data];
         let mut ctx_per_trace = ctxs_by_module.into_iter().flatten().collect::<Vec<_>>();
         // Caution: this must be done after GKR and WHIR tracegen
-        tracing::info_span!("wrapper.generate_proving_ctxs", air_module = "Primitives",).in_scope(
+        tracing::trace_span!("wrapper.generate_proving_ctxs", air_module = "Primitives",).in_scope(
             || {
-                tracing::info_span!("wrapper.generate_trace", air = "PowerChecker").in_scope(
+                tracing::trace_span!("wrapper.generate_trace", air = "PowerChecker").in_scope(
                     || {
                         ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
                             ColMajorMatrix::from_row_major(
@@ -594,7 +604,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
                         ));
                     },
                 );
-                tracing::info_span!("wrapper.generate_trace", air = "ExpBitsLen").in_scope(|| {
+                tracing::trace_span!("wrapper.generate_trace", air = "ExpBitsLen").in_scope(|| {
                     ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
                         ColMajorMatrix::from_row_major(
                             &exp_bits_len_gen.generate_trace_row_major(),
@@ -618,7 +628,12 @@ pub mod cuda_tracegen {
     use crate::cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu};
 
     impl<'a> TraceModuleRef<'a> {
-        #[tracing::instrument(name = "wrapper.generate_proving_ctxs", skip_all, fields(air_module = %self))]
+        #[tracing::instrument(
+            name = "wrapper.generate_proving_ctxs",
+            level = "trace",
+            skip_all,
+            fields(air_module = %self)
+        )]
         fn generate_gpu_ctxs(
             self,
             child_vk: &VerifyingKeyGpu,
@@ -723,9 +738,9 @@ pub mod cuda_tracegen {
                 .cached_mains = vec![child_vk_pcs_data];
             let mut ctx_per_trace = ctxs_by_module.into_iter().flatten().collect::<Vec<_>>();
             // Caution: this must be done after GKR and WHIR tracegen
-            tracing::info_span!("wrapper.generate_proving_ctxs", air_module = "Primitives",)
+            tracing::trace_span!("wrapper.generate_proving_ctxs", air_module = "Primitives",)
                 .in_scope(|| {
-                    tracing::info_span!("wrapper.generate_trace", air = "PowerChecker").in_scope(
+                    tracing::trace_span!("wrapper.generate_trace", air = "PowerChecker").in_scope(
                         || {
                             let pow_bits_trace = ColMajorMatrix::from_row_major(
                                 &self.power_checker_trace.generate_trace_row_major(),
@@ -735,7 +750,7 @@ pub mod cuda_tracegen {
                             ));
                         },
                     );
-                    tracing::info_span!("wrapper.generate_trace", air = "ExpBitsLen").in_scope(
+                    tracing::trace_span!("wrapper.generate_trace", air = "ExpBitsLen").in_scope(
                         || {
                             let exp_bits_trace = exp_bits_len_gen.generate_trace_device();
                             ctx_per_trace.push(AirProvingContextV2::simple_no_pis(exp_bits_trace));

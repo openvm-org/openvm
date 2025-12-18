@@ -9,7 +9,7 @@ use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, pro
 use super::UnivariateSumcheckCols;
 use crate::system::Preflight;
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(level = "trace", skip_all)]
 pub(crate) fn generate_trace(
     vk: &MultiStarkVerifyingKeyV2,
     proofs: &[Proof],
