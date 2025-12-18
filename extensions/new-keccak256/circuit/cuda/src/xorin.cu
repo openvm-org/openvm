@@ -51,17 +51,17 @@ __global__ void xorin_tracegen(
         // Fill instruction columns
         XORIN_WRITE(instruction.pc, rec.from_pc);
         XORIN_WRITE(instruction.is_enabled, 1);
-        XORIN_WRITE(instruction.buffer_ptr, rec.rd_ptr);
-        XORIN_WRITE(instruction.input_ptr, rec.rs1_ptr);
-        XORIN_WRITE(instruction.len_ptr, rec.rs2_ptr);
-        XORIN_WRITE(instruction.buffer, rec.buffer);
-        XORIN_WRITE(instruction.input, rec.input);
+        XORIN_WRITE(instruction.buffer_reg_ptr, rec.rd_ptr);
+        XORIN_WRITE(instruction.input_reg_ptr, rec.rs1_ptr);
+        XORIN_WRITE(instruction.len_reg_ptr, rec.rs2_ptr);
+        XORIN_WRITE(instruction.buffer_ptr, rec.buffer);
+        XORIN_WRITE(instruction.input_ptr, rec.input);
         XORIN_WRITE(instruction.len, rec.len);
         XORIN_WRITE(instruction.start_timestamp, rec.timestamp);
 
         // Fill buffer/input/len limbs
-        XORIN_WRITE_ARRAY(instruction.buffer_limbs, reinterpret_cast<const uint8_t*>(&rec.buffer));
-        XORIN_WRITE_ARRAY(instruction.input_limbs, reinterpret_cast<const uint8_t*>(&rec.input));
+        XORIN_WRITE_ARRAY(instruction.buffer_ptr_limbs, reinterpret_cast<const uint8_t*>(&rec.buffer));
+        XORIN_WRITE_ARRAY(instruction.input_ptr_limbs, reinterpret_cast<const uint8_t*>(&rec.input));
         XORIN_WRITE_ARRAY(instruction.len_limbs, reinterpret_cast<const uint8_t*>(&rec.len));
 
         // Fill is_padding_bytes

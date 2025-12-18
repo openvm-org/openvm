@@ -15,13 +15,13 @@ template <typename T>
 struct XorinInstructionCols {
     T pc;
     T is_enabled;
+    T buffer_reg_ptr;
+    T input_reg_ptr;
+    T len_reg_ptr;
     T buffer_ptr;
+    T buffer_ptr_limbs[4];
     T input_ptr;
-    T len_ptr;
-    T buffer;
-    T buffer_limbs[4];
-    T input;
-    T input_limbs[4];
+    T input_ptr_limbs[4];
     T len;
     T len_limbs[4];
     T start_timestamp;

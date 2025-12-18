@@ -33,9 +33,9 @@ template <typename T>
 struct KeccakfInstructionCols {
     T pc;
     T is_enabled;
+    T rd_ptr;
     T buffer_ptr;
-    T buffer;
-    T buffer_limbs[4];
+    T buffer_ptr_limbs[4];
 };
 
 template <typename T>

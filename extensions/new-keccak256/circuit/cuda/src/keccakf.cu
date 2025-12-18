@@ -306,9 +306,9 @@ __global__ void keccakf_vm_tracegen(
             // Fill the instruction columns
             KECCAKF_WRITE(instruction.pc, rec.pc);
             KECCAKF_WRITE(instruction.is_enabled, 1);
-            KECCAKF_WRITE(instruction.buffer_ptr, rec.rd_ptr);
-            KECCAKF_WRITE(instruction.buffer, rec.buffer);
-            KECCAKF_WRITE_ARRAY(instruction.buffer_limbs, reinterpret_cast<const uint8_t *>(&rec.buffer));
+            KECCAKF_WRITE(instruction.rd_ptr, rec.rd_ptr);
+            KECCAKF_WRITE(instruction.buffer_ptr, rec.buffer);
+            KECCAKF_WRITE_ARRAY(instruction.buffer_ptr_limbs, reinterpret_cast<const uint8_t *>(&rec.buffer));
 
             // Fill timestamp - matches Rust's timestamp tracking across rows
             KECCAKF_WRITE(timestamp, round_idx > 0 ? rec.timestamp + 1 + NUM_BUFFER_WORDS : rec.timestamp);
