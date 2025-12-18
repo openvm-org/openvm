@@ -3,7 +3,7 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -49,11 +49,15 @@ impl<F: Field> BaseAir<F> for IsZeroTestAir {
         IsZeroCols::<F>::width()
     }
 }
-impl<AB: AirBuilder> Air<AB> for IsZeroTestAir {
+impl<AB> Air<AB> for IsZeroTestAir
+where
+    AB: AirBuilder<Var: Copy>,
+    AB::F: Field,
+{
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local: &IsZeroCols<_> = (*local).borrow();
         let io = IsZeroIo::new(local.x.into(), local.out.into(), AB::Expr::ONE);
 
@@ -92,11 +96,14 @@ impl<F: Field> IsZeroChip<F> {
 #[test_case(97 ; "97 => 0")]
 #[test_case(0 ; "0 => 1")]
 fn test_single_is_zero(x: u32) {
-    let chip = IsZeroChip::new(vec![BabyBear::from_canonical_u32(x)]);
+    let chip = IsZeroChip::new(vec![BabyBear::from_u32(x)]);
     let air = chip.air;
     let trace = chip.generate_trace();
 
-    assert_eq!(trace.get(0, 1), FieldAlgebra::from_bool(x == 0));
+    assert_eq!(
+        trace.get(0, 1).expect("matrix index out of bounds"),
+        PrimeCharacteristicRing::from_bool(x == 0)
+    );
 
     BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
         .expect("Verification failed");
@@ -107,7 +114,7 @@ fn test_single_is_zero(x: u32) {
 fn test_vec_is_zero(x_vec: [u32; 4], expected: [u32; 4]) {
     let x_vec = x_vec
         .into_iter()
-        .map(FieldAlgebra::from_canonical_u32)
+        .map(PrimeCharacteristicRing::from_u32)
         .collect();
     let chip = IsZeroChip::new(x_vec);
     let air = chip.air;
@@ -116,7 +123,7 @@ fn test_vec_is_zero(x_vec: [u32; 4], expected: [u32; 4]) {
     for (i, value) in expected.iter().enumerate() {
         assert_eq!(
             trace.values[3 * i + 1],
-            FieldAlgebra::from_canonical_u32(*value)
+            PrimeCharacteristicRing::from_u32(*value)
         );
     }
 
@@ -127,7 +134,7 @@ fn test_vec_is_zero(x_vec: [u32; 4], expected: [u32; 4]) {
 #[test_case(97 ; "97 => 0")]
 #[test_case(0 ; "0 => 1")]
 fn test_single_is_zero_fail(x: u32) {
-    let x = FieldAlgebra::from_canonical_u32(x);
+    let x = PrimeCharacteristicRing::from_u32(x);
     let chip = IsZeroChip::new(vec![x]);
     let air = chip.air;
     let mut trace = chip.generate_trace();
@@ -145,10 +152,7 @@ fn test_single_is_zero_fail(x: u32) {
 #[test_case([1, 2, 7, 0], [0, 0, 0, 1] ; "1, 2, 7, 0 => 0, 0, 0, 1")]
 #[test_case([97, 0, 179, 0], [0, 1, 0, 1] ; "97, 0, 179, 0 => 0, 1, 0, 1")]
 fn test_vec_is_zero_fail(x_vec: [u32; 4], expected: [u32; 4]) {
-    let x_vec: Vec<BabyBear> = x_vec
-        .into_iter()
-        .map(BabyBear::from_canonical_u32)
-        .collect();
+    let x_vec: Vec<BabyBear> = x_vec.into_iter().map(BabyBear::from_u32).collect();
     let chip = IsZeroChip::new(x_vec);
     let air = chip.air;
     let mut trace = chip.generate_trace();
@@ -177,13 +181,13 @@ fn test_cuda_is_zero_against_cpu_full() {
         let n = 1 << log_height;
         let vec_x: Vec<F> = (0..n)
             .map(|_| {
-                if rng.gen_bool(0.5) {
+                if rng.random_bool(0.5) {
                     0 // 50% chance to be zero
                 } else {
-                    rng.gen_range(0..F::ORDER_U32) // 50% chance to be random
+                    rng.random_range(0..F::ORDER_U32) // 50% chance to be random
                 }
             })
-            .map(F::from_canonical_u32)
+            .map(F::from_u32)
             .collect();
 
         let input_buffer = vec_x.as_slice().to_device().unwrap();

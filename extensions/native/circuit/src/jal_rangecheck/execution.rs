@@ -42,7 +42,7 @@ impl JalRangeCheckExecutor {
         }
 
         let a = a.as_canonical_u32();
-        let return_pc = F::from_canonical_u32(pc.wrapping_add(DEFAULT_PC_STEP));
+        let return_pc = F::from_u32(pc.wrapping_add(DEFAULT_PC_STEP));
 
         *jal_data = JalPreCompute { a, b, return_pc };
         Ok(())
@@ -220,7 +220,7 @@ unsafe fn execute_jal_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     // TODO(ayush): better way to do this
 
     let mut pc = exec_state.pc();
-    pc = (F::from_canonical_u32(pc) + pre_compute.b).as_canonical_u32();
+    pc = (F::from_u32(pc) + pre_compute.b).as_canonical_u32();
     exec_state.set_pc(pc);
 }
 

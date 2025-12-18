@@ -99,8 +99,8 @@ impl<F: PrimeField32> TranspilerExtension<F> for ModularTranspilerExtension {
                         VmOpcode::from_usize(
                             local_opcode.global_opcode().as_usize() + mod_idx_shift,
                         ),
-                        F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
-                        F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                        F::from_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
+                        F::from_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
                         F::ZERO, // rs2 = 0
                         F::ONE,  // d_as = 1
                         F::TWO,  // e_as = 2
@@ -123,7 +123,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for ModularTranspilerExtension {
                 assert_eq!(dec_insn.rs2, 0);
                 Some(Instruction::phantom(
                     PhantomDiscriminant(ModularPhantom::HintSqrt as u16),
-                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                    F::from_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
                     F::ZERO,
                     mod_idx as u16,
                 ))
@@ -201,8 +201,8 @@ impl<F: PrimeField32> TranspilerExtension<F> for Fp2TranspilerExtension {
                     VmOpcode::from_usize(
                         local_opcode.global_opcode().as_usize() + complex_idx_shift,
                     ),
-                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
-                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                    F::from_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
+                    F::from_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
                     F::ZERO, // rs2 = 0
                     F::ONE,  // d_as = 1
                     F::TWO,  // e_as = 2

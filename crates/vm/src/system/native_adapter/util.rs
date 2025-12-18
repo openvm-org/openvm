@@ -164,7 +164,7 @@ pub fn tracing_write_native_inplace<F, const BLOCK_SIZE: usize>(
     F: PrimeField32,
 {
     let (t_prev, data_prev) = timed_write_native(memory, ptr, vals);
-    cols.base.set_prev(F::from_canonical_u32(t_prev));
+    cols.base.set_prev(F::from_u32(t_prev));
     cols.prev_data = data_prev;
 }
 
@@ -181,7 +181,7 @@ where
     F: PrimeField32,
 {
     debug_assert!(
-        addr_space == F::ZERO || addr_space == F::from_canonical_u32(NATIVE_AS),
+        addr_space == F::ZERO || addr_space == F::from_u32(NATIVE_AS),
         "addr_space={addr_space} is not valid"
     );
 

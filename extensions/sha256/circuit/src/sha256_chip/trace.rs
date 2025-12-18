@@ -464,14 +464,14 @@ impl Sha256VmFiller {
                     // This is a digest row
                     let digest_cols: &mut Sha256VmDigestCols<F> =
                         row_slice[..SHA256VM_DIGEST_WIDTH].borrow_mut();
-                    digest_cols.from_state.timestamp = F::from_canonical_u32(record.timestamp);
-                    digest_cols.from_state.pc = F::from_canonical_u32(record.from_pc);
-                    digest_cols.rd_ptr = F::from_canonical_u32(record.rd_ptr);
-                    digest_cols.rs1_ptr = F::from_canonical_u32(record.rs1_ptr);
-                    digest_cols.rs2_ptr = F::from_canonical_u32(record.rs2_ptr);
-                    digest_cols.dst_ptr = record.dst_ptr.to_le_bytes().map(F::from_canonical_u8);
-                    digest_cols.src_ptr = record.src_ptr.to_le_bytes().map(F::from_canonical_u8);
-                    digest_cols.len_data = record.len.to_le_bytes().map(F::from_canonical_u8);
+                    digest_cols.from_state.timestamp = F::from_u32(record.timestamp);
+                    digest_cols.from_state.pc = F::from_u32(record.from_pc);
+                    digest_cols.rd_ptr = F::from_u32(record.rd_ptr);
+                    digest_cols.rs1_ptr = F::from_u32(record.rs1_ptr);
+                    digest_cols.rs2_ptr = F::from_u32(record.rs2_ptr);
+                    digest_cols.dst_ptr = record.dst_ptr.to_le_bytes().map(F::from_u8);
+                    digest_cols.src_ptr = record.src_ptr.to_le_bytes().map(F::from_u8);
+                    digest_cols.len_data = record.len.to_le_bytes().map(F::from_u8);
                     if is_last_block {
                         digest_cols
                             .register_reads_aux
@@ -487,7 +487,7 @@ impl Sha256VmFiller {
                             });
                         digest_cols
                             .writes_aux
-                            .set_prev_data(record.write_aux.prev_data.map(F::from_canonical_u8));
+                            .set_prev_data(record.write_aux.prev_data.map(F::from_u8));
                         // In the last block we do `SHA256_NUM_READ_ROWS` reads and then write the
                         // result thus the timestamp of the write is
                         // `block_start_timestamp + SHA256_NUM_READ_ROWS`
@@ -536,7 +536,7 @@ impl Sha256VmFiller {
                                     .iter(),
                             )
                             .for_each(|(cell, data)| {
-                                *cell = F::from_canonical_u8(*data);
+                                *cell = F::from_u8(*data);
                             });
                         mem_helper.fill(
                             read_aux_records[row_idx].prev_timestamp,
@@ -550,12 +550,11 @@ impl Sha256VmFiller {
                 // Fill in the control cols, doesn't matter if it is a round or digest row
                 let control_cols: &mut Sha256VmControlCols<F> =
                     row_slice[..SHA256VM_CONTROL_WIDTH].borrow_mut();
-                control_cols.len = F::from_canonical_u32(record.len);
+                control_cols.len = F::from_u32(record.len);
                 // Only the first `SHA256_NUM_READ_ROWS` rows increment the timestamp and read ptr
-                control_cols.cur_timestamp = F::from_canonical_u32(
-                    block_start_timestamp + min(row_idx, SHA256_NUM_READ_ROWS) as u32,
-                );
-                control_cols.read_ptr = F::from_canonical_u32(
+                control_cols.cur_timestamp =
+                    F::from_u32(block_start_timestamp + min(row_idx, SHA256_NUM_READ_ROWS) as u32);
+                control_cols.read_ptr = F::from_u32(
                     block_start_read_ptr
                         + (SHA256_READ_SIZE * min(row_idx, SHA256_NUM_READ_ROWS)) as u32,
                 );
@@ -568,7 +567,7 @@ impl Sha256VmFiller {
                             &self.padding_encoder,
                             PaddingFlags::NotPadding as usize,
                         )
-                        .map(F::from_canonical_u32);
+                        .map(F::from_u32);
                     } else if row_idx as i32 == first_padding_row {
                         let len = message_left - row_idx * SHA256_READ_SIZE;
                         control_cols.pad_flags = get_flag_pt_array(
@@ -580,7 +579,7 @@ impl Sha256VmFiller {
                             } as usize
                                 + len,
                         )
-                        .map(F::from_canonical_u32);
+                        .map(F::from_u32);
                     } else {
                         control_cols.pad_flags = get_flag_pt_array(
                             &self.padding_encoder,
@@ -590,14 +589,14 @@ impl Sha256VmFiller {
                                 PaddingFlags::EntirePadding
                             } as usize,
                         )
-                        .map(F::from_canonical_u32);
+                        .map(F::from_u32);
                     }
                 } else {
                     control_cols.pad_flags = get_flag_pt_array(
                         &self.padding_encoder,
                         PaddingFlags::NotConsidered as usize,
                     )
-                    .map(F::from_canonical_u32);
+                    .map(F::from_u32);
                 }
                 if is_last_block && row_idx == SHA256_ROWS_PER_BLOCK - 1 {
                     // If last digest row, then we set padding_occurred = 0
