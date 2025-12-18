@@ -96,9 +96,7 @@ impl XorinVmAir {
         let mut timestamp_change = AB::Expr::from_canonical_u32(3);
 
         for is_padding in local.sponge.is_padding_bytes {
-            timestamp_change += not(is_padding);
-            timestamp_change += not(is_padding);
-            timestamp_change += not(is_padding);
+            timestamp_change += AB::Expr::from_canonical_u32(3) * not(is_padding);
         }
 
         let mut not_padding_sum = AB::Expr::ZERO;
