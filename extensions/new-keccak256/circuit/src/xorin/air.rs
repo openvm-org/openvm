@@ -104,6 +104,7 @@ impl XorinVmAir {
         let mut not_padding_sum = AB::Expr::ZERO;
         for is_padding in local.sponge.is_padding_bytes {
             not_padding_sum += not(is_padding);
+            builder.assert_bool(is_padding);
         }
         not_padding_sum *= AB::Expr::from_canonical_u32(4);
         builder
