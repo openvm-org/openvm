@@ -1,7 +1,8 @@
 use openvm_circuit::system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use crate::xorin::utils::{KECCAK_RATE_BYTES, KECCAK_WORD_SIZE};
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
+
+use crate::xorin::utils::{KECCAK_RATE_BYTES, KECCAK_WORD_SIZE};
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
@@ -47,7 +48,8 @@ pub struct XorinMemoryCols<T> {
     pub register_aux_cols: [MemoryReadAuxCols<T>; 3],
     pub input_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_BYTES / KECCAK_WORD_SIZE],
     pub buffer_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_BYTES / KECCAK_WORD_SIZE],
-    pub buffer_bytes_write_aux_cols: [MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>; KECCAK_RATE_BYTES / KECCAK_WORD_SIZE],
+    pub buffer_bytes_write_aux_cols:
+        [MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>; KECCAK_RATE_BYTES / KECCAK_WORD_SIZE],
 }
 
 pub const NUM_XORIN_VM_COLS: usize = size_of::<XorinVmCols<u8>>();

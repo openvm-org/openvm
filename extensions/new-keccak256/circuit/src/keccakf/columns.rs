@@ -1,7 +1,8 @@
 use openvm_circuit::system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use p3_keccak_air::KeccakCols as KeccakPermCols;
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
+use p3_keccak_air::KeccakCols as KeccakPermCols;
+
 use crate::{keccakf::utils::KECCAK_WIDTH_BYTES, xorin::utils::KECCAK_WORD_SIZE};
 
 #[repr(C)]
@@ -32,7 +33,8 @@ pub struct KeccakfInstructionCols<T> {
 pub struct KeccakfMemoryCols<T> {
     pub register_aux_cols: [MemoryReadAuxCols<T>; 1],
     pub buffer_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_WIDTH_BYTES / KECCAK_WORD_SIZE],
-    pub buffer_bytes_write_aux_cols: [MemoryWriteAuxCols<T, KECCAK_WORD_SIZE>; KECCAK_WIDTH_BYTES / KECCAK_WORD_SIZE],
+    pub buffer_bytes_write_aux_cols:
+        [MemoryWriteAuxCols<T, KECCAK_WORD_SIZE>; KECCAK_WIDTH_BYTES / KECCAK_WORD_SIZE],
 }
 
 pub const NUM_KECCAKF_VM_COLS: usize = size_of::<KeccakfVmCols<u8>>();

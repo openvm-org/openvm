@@ -290,7 +290,8 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                         cols.timestamp = F::from_canonical_u32(timestamp);
                         cols.instruction.rd_ptr = F::from_canonical_u32(record.rd_ptr);
                         cols.instruction.buffer_ptr = F::from_canonical_u32(record.buffer);
-                        cols.instruction.buffer_ptr_limbs = record.buffer.to_le_bytes().map(F::from_canonical_u8);
+                        cols.instruction.buffer_ptr_limbs =
+                            record.buffer.to_le_bytes().map(F::from_canonical_u8);
 
                         let is_first_round = cols.inner.step_flags[0];
                         let is_final_round = cols.inner.step_flags[NUM_ROUNDS - 1];
