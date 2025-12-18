@@ -1,5 +1,6 @@
 #![cfg_attr(feature = "tco", allow(incomplete_features))]
 #![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
+
 use std::{
     fs::read,
     marker::PhantomData,
@@ -14,6 +15,9 @@ use keygen::{AppProvingKey, AppVerifyingKey};
 use openvm_build::{
     GuestOptions, TargetFilter, build_guest_package, find_unique_executable, get_package,
 };
+// Re-exports
+pub use openvm_build::{cargo_command, get_rustup_toolchain_name};
+pub use openvm_circuit;
 use openvm_circuit::{
     arch::{
         Executor, InitFileGenerator, MeteredExecutor, PreflightExecutor, VirtualMachineError,
