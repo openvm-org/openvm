@@ -11,7 +11,7 @@ use openvm_pairing_guest::{
     bn254::{BN254_MODULUS, BN254_ORDER},
     pairing::{FinalExp, MultiMillerLoop, PairingCheck, PairingIntrinsics},
 };
-use rand::{rngs::StdRng, SeedableRng};
+use rand08::{rngs::StdRng, SeedableRng};
 
 use super::{Fp, Fp12, Fp2};
 use crate::{

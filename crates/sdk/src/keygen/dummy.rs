@@ -37,7 +37,7 @@ use openvm_stark_sdk::{
         FriParameters,
     },
     engine::StarkFriEngine,
-    openvm_stark_backend::{p3_field::FieldAlgebra, proof::Proof},
+    openvm_stark_backend::{p3_field::PrimeCharacteristicRing, proof::Proof},
 };
 
 use crate::{

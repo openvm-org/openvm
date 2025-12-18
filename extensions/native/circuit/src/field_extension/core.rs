@@ -16,7 +16,7 @@ use openvm_native_compiler::FieldExtensionOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 
@@ -93,7 +93,7 @@ where
             builder.assert_bool(flag);
 
             is_valid += flag.into();
-            expected_opcode += flag * AB::F::from_canonical_usize(opcode.local_usize());
+            expected_opcode += flag * AB::F::from_usize(opcode.local_usize());
 
             for (j, result_part) in result.into_iter().enumerate() {
                 expected_result[j] += flag * result_part;
@@ -270,7 +270,7 @@ impl FieldExtension {
 
     pub(crate) fn multiply<V, E>(x: [V; EXT_DEG], y: [V; EXT_DEG]) -> [E; EXT_DEG]
     where
-        E: FieldAlgebra,
+        E: PrimeCharacteristicRing,
         V: Copy,
         V: Mul<V, Output = E>,
         E: Mul<V, Output = E>,
@@ -280,9 +280,9 @@ impl FieldExtension {
         let [x0, x1, x2, x3] = x;
         let [y0, y1, y2, y3] = y;
         [
-            x0 * y0 + (x1 * y3 + x2 * y2 + x3 * y1) * E::from_canonical_usize(BETA),
-            x0 * y1 + x1 * y0 + (x2 * y3 + x3 * y2) * E::from_canonical_usize(BETA),
-            x0 * y2 + x1 * y1 + x2 * y0 + (x3 * y3) * E::from_canonical_usize(BETA),
+            x0 * y0 + (x1 * y3 + x2 * y2 + x3 * y1) * E::from_usize(BETA),
+            x0 * y1 + x1 * y0 + (x2 * y3 + x3 * y2) * E::from_usize(BETA),
+            x0 * y2 + x1 * y1 + x2 * y0 + (x3 * y3) * E::from_usize(BETA),
             x0 * y3 + x1 * y2 + x2 * y1 + x3 * y0,
         ]
     }
@@ -301,7 +301,7 @@ impl FieldExtension {
 
         let [a0, a1, a2, a3] = a;
 
-        let beta = F::from_canonical_usize(BETA);
+        let beta = F::from_usize(BETA);
 
         let mut b0 = a0 * a0 - beta * (F::TWO * a1 * a3 - a2 * a2);
         let mut b2 = F::TWO * a0 * a2 - a1 * a1 - beta * a3 * a3;

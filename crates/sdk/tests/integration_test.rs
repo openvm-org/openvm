@@ -32,7 +32,7 @@ use openvm_stark_sdk::{
         setup_tracing, FriParameters,
     },
     engine::StarkFriEngine,
-    openvm_stark_backend::p3_field::FieldAlgebra,
+    openvm_stark_backend::p3_field::PrimeCharacteristicRing,
     p3_baby_bear::BabyBear,
 };
 #[cfg(feature = "evm-verify")]
@@ -50,7 +50,7 @@ use {
         vars::StarkProofVariable,
     },
     openvm_sdk::types::{EvmHalo2Verifier, EvmProof},
-    openvm_stark_sdk::p3_bn254_fr::Bn254Fr,
+    openvm_stark_sdk::p3_bn254::Bn254,
     snark_verifier_sdk::evm::evm_verify,
 };
 
@@ -187,10 +187,7 @@ fn test_public_values_and_leaf_verification() -> eyre::Result<()> {
 
         assert_eq!(leaf_vm_pvs.app_commit, expected_app_commit);
         assert_eq!(leaf_vm_pvs.connector.is_terminate, F::ZERO);
-        assert_eq!(
-            leaf_vm_pvs.connector.initial_pc,
-            F::from_canonical_u32(pc_start)
-        );
+        assert_eq!(leaf_vm_pvs.connector.initial_pc, F::from_u32(pc_start));
         (
             leaf_vm_pvs.connector.final_pc,
             leaf_vm_pvs.memory.final_root,
@@ -334,8 +331,8 @@ fn test_static_verifier_custom_pv_handler() -> eyre::Result<()> {
 
     // Define custom public values handler and implement StaticVerifierPvHandler trait on it
     pub struct CustomPvHandler {
-        pub exe_commit: Bn254Fr,
-        pub leaf_verifier_commit: Bn254Fr,
+        pub exe_commit: Bn254,
+        pub leaf_verifier_commit: Bn254,
     }
 
     impl StaticVerifierPvHandler for CustomPvHandler {
@@ -361,8 +358,8 @@ fn test_static_verifier_custom_pv_handler() -> eyre::Result<()> {
             println!("self.exe_commit: {:?}", self.exe_commit);
             println!("self.leaf_verifier_commit: {:?}", self.leaf_verifier_commit);
 
-            let expected_exe_commit: Var<Bn254Fr> = builder.constant(self.exe_commit);
-            let expected_leaf_commit: Var<Bn254Fr> = builder.constant(self.leaf_verifier_commit);
+            let expected_exe_commit: Var<Bn254> = builder.constant(self.exe_commit);
+            let expected_leaf_commit: Var<Bn254> = builder.constant(self.leaf_verifier_commit);
 
             builder.assert_var_eq(exe_commit, expected_exe_commit);
             builder.assert_var_eq(leaf_commit, expected_leaf_commit);

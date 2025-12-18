@@ -11,7 +11,7 @@ use openvm_instructions::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, AirBuilderWithPublicValues, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 
@@ -81,7 +81,7 @@ impl<AB: InteractionBuilder + AirBuilderWithPublicValues> VmCoreAir<AB, AdapterI
         let mut match_public_value_index = AB::Expr::ZERO;
         let mut match_public_value = AB::Expr::ZERO;
         for (i, flag) in flags.iter().enumerate() {
-            match_public_value_index += flag.clone() * AB::F::from_canonical_usize(i);
+            match_public_value_index += flag.clone() * AB::F::from_usize(i);
             match_public_value += flag.clone() * builder.public_values()[i].into();
         }
         builder.assert_eq(is_valid, self.encoder.is_valid::<AB>(&vars));
@@ -96,7 +96,7 @@ impl<AB: InteractionBuilder + AirBuilderWithPublicValues> VmCoreAir<AB, AdapterI
             writes: [],
             instruction: MinimalInstruction {
                 is_valid: is_valid.into(),
-                opcode: AB::Expr::from_canonical_usize(PUBLISH.global_opcode().as_usize()),
+                opcode: AB::Expr::from_usize(PUBLISH.global_opcode().as_usize()),
             },
         }
     }
@@ -232,7 +232,7 @@ where
             .into_iter()
             .zip(pt.iter())
             .for_each(|(var, &val)| {
-                *var = F::from_canonical_u32(val);
+                *var = F::from_u32(val);
             });
 
         *cols.index = record.index;

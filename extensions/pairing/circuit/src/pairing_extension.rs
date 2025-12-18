@@ -218,7 +218,7 @@ pub(crate) mod phantom {
                         .chain(u.to_coeffs())
                         .flat_map(|fp2| fp2.to_coeffs())
                         .flat_map(|fp| fp.to_bytes())
-                        .map(F::from_canonical_u8),
+                        .map(F::from_u8),
                 );
             }
             Some(PairingCurve::Bls12_381) => {
@@ -260,7 +260,7 @@ pub(crate) mod phantom {
                         .chain(u.to_coeffs())
                         .flat_map(|fp2| fp2.to_coeffs())
                         .flat_map(|fp| fp.to_bytes())
-                        .map(F::from_canonical_u8),
+                        .map(F::from_u8),
                 );
             }
             _ => {

@@ -19,7 +19,7 @@ use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 use strum::IntoEnumIterator;
@@ -96,7 +96,7 @@ where
         // carry[i] is (a[i] + c[i] - b[i] + carry[i - 1]) / 2^LIMB_BITS.
         let mut carry_add: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         let mut carry_sub: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
-        let carry_divide = AB::F::from_canonical_usize(1 << LIMB_BITS).inverse();
+        let carry_divide = AB::F::from_usize(1 << LIMB_BITS).inverse();
 
         for i in 0..NUM_LIMBS {
             // We explicitly separate the constraints for ADD and SUB in order to keep degree
@@ -131,8 +131,8 @@ where
             let x = not::<AB::Expr>(bitwise.clone()) * a[i] + bitwise.clone() * b[i];
             let y = not::<AB::Expr>(bitwise.clone()) * a[i] + bitwise.clone() * c[i];
             let x_xor_y = cols.opcode_xor_flag * a[i]
-                + cols.opcode_or_flag * ((AB::Expr::from_canonical_u32(2) * a[i]) - b[i] - c[i])
-                + cols.opcode_and_flag * (b[i] + c[i] - (AB::Expr::from_canonical_u32(2) * a[i]));
+                + cols.opcode_or_flag * ((AB::Expr::from_u32(2) * a[i]) - b[i] - c[i])
+                + cols.opcode_and_flag * (b[i] + c[i] - (AB::Expr::from_u32(2) * a[i]));
             self.bus
                 .send_xor(x, y, x_xor_y)
                 .eval(builder, is_valid.clone());
@@ -143,7 +143,7 @@ where
             flags.iter().zip(BaseAluOpcode::iter()).fold(
                 AB::Expr::ZERO,
                 |acc, (flag, local_opcode)| {
-                    acc + (*flag).into() * AB::Expr::from_canonical_u8(local_opcode as u8)
+                    acc + (*flag).into() * AB::Expr::from_u8(local_opcode as u8)
                 },
             ),
         );
@@ -282,9 +282,9 @@ where
                     .request_xor(b_val as u32, c_val as u32);
             }
         }
-        core_row.c = record.c.map(F::from_canonical_u8);
-        core_row.b = record.b.map(F::from_canonical_u8);
-        core_row.a = a.map(F::from_canonical_u8);
+        core_row.c = record.c.map(F::from_u8);
+        core_row.b = record.b.map(F::from_u8);
+        core_row.a = a.map(F::from_u8);
     }
 }
 

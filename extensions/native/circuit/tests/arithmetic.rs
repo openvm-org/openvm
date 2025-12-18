@@ -7,17 +7,18 @@ use openvm_native_compiler::{
     ir::{Builder, Ext, ExtConst, Felt, SymbolicExt, Var},
 };
 use openvm_stark_backend::p3_field::{
-    extension::BinomialExtensionField, Field, FieldAlgebra, FieldExtensionAlgebra,
+    extension::BinomialExtensionField, Field, PrimeCharacteristicRing,
 };
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
-use rand::{thread_rng, Rng};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use p3_field::BasedVectorSpace;
+use rand::Rng;
 
 const WORD_SIZE: usize = 1;
 
 #[test]
 fn test_compiler_arithmetic() {
     let num_tests = 3;
-    let mut rng = thread_rng();
+    let mut rng = create_seeded_rng();
     type F = BabyBear;
     type EF = BinomialExtensionField<BabyBear, 4>;
     let mut builder = AsmBuilder::<F, EF>::default();
@@ -48,8 +49,8 @@ fn test_compiler_arithmetic() {
     builder.assert_ext_eq(two_ext / one_ext, (EF::TWO / EF::ONE).cons());
 
     for _ in 0..num_tests {
-        let a_var_val = rng.gen::<F>();
-        let b_var_val = rng.gen::<F>();
+        let a_var_val = rng.random::<F>();
+        let b_var_val = rng.random::<F>();
         let a_var: Var<_> = builder.eval(a_var_val);
         let b_var: Var<_> = builder.eval(b_var_val);
         builder.assert_var_eq(a_var + b_var, a_var_val + b_var_val);
@@ -57,8 +58,8 @@ fn test_compiler_arithmetic() {
         builder.assert_var_eq(a_var - b_var, a_var_val - b_var_val);
         builder.assert_var_eq(-a_var, -a_var_val);
 
-        let a_felt_val = rng.gen::<F>();
-        let b_felt_val = rng.gen::<F>();
+        let a_felt_val = rng.random::<F>();
+        let b_felt_val = rng.random::<F>();
         let a: Felt<_> = builder.eval(a_felt_val);
         let b: Felt<_> = builder.eval(b_felt_val);
         builder.assert_felt_eq(a + b, a_felt_val + b_felt_val);
@@ -68,8 +69,8 @@ fn test_compiler_arithmetic() {
         builder.assert_felt_eq(a / b, a_felt_val / b_felt_val);
         builder.assert_felt_eq(-a, -a_felt_val);
 
-        let a_ext_val = rng.gen::<EF>();
-        let b_ext_val = rng.gen::<EF>();
+        let a_ext_val = rng.random::<EF>();
+        let b_ext_val = rng.random::<EF>();
 
         let a_ext: Ext<_, _> = builder.eval(a_ext_val.cons());
         let b_ext: Ext<_, _> = builder.eval(b_ext_val.cons());
@@ -103,12 +104,13 @@ fn test_compiler_arithmetic_2() {
     type EF = BinomialExtensionField<BabyBear, 4>;
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let ef = EF::from_base_slice(&[
-        F::from_canonical_u32(1163664312),
-        F::from_canonical_u32(1251518712),
-        F::from_canonical_u32(1133200680),
-        F::from_canonical_u32(1689596134),
-    ]);
+    let ef = EF::from_basis_coefficients_slice(&[
+        F::from_u32(1163664312),
+        F::from_u32(1251518712),
+        F::from_u32(1133200680),
+        F::from_u32(1689596134),
+    ])
+    .unwrap();
 
     let x: Ext<_, _> = builder.constant(ef);
     let xinv: Ext<_, _> = builder.constant(ef.inverse());
@@ -127,12 +129,13 @@ fn test_in_place_arithmetic() {
 
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let ef = EF::from_base_slice(&[
-        F::from_canonical_u32(1163664312),
-        F::from_canonical_u32(1251518712),
-        F::from_canonical_u32(1133200680),
-        F::from_canonical_u32(1689596134),
-    ]);
+    let ef = EF::from_basis_coefficients_slice(&[
+        F::from_u32(1163664312),
+        F::from_u32(1251518712),
+        F::from_u32(1133200680),
+        F::from_u32(1689596134),
+    ])
+    .unwrap();
 
     let x: Ext<_, _> = builder.constant(ef);
     builder.assign(&x, x + x);
@@ -163,10 +166,10 @@ fn test_field_immediate() {
 
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let mut rng = thread_rng();
+    let mut rng = create_seeded_rng();
 
-    let a = rng.gen();
-    let b = rng.gen();
+    let a = rng.random();
+    let b = rng.random();
 
     let v: Felt<_> = builder.constant(a);
 
@@ -188,14 +191,15 @@ fn test_ext_immediate() {
 
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let f = F::from_canonical_u32(314159265);
+    let f = F::from_u32(314159265);
 
-    let ef = EF::from_base_slice(&[
-        F::from_canonical_u32(1163664312),
-        F::from_canonical_u32(1251518712),
-        F::from_canonical_u32(1133200680),
-        F::from_canonical_u32(1689596134),
-    ]);
+    let ef = EF::from_basis_coefficients_slice(&[
+        F::from_u32(1163664312),
+        F::from_u32(1251518712),
+        F::from_u32(1133200680),
+        F::from_u32(1689596134),
+    ])
+    .unwrap();
 
     let ext: Ext<_, _> = builder.constant(ef);
 
@@ -263,14 +267,15 @@ fn test_ext_felt_arithmetic() {
 
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let f = F::from_canonical_u32(314159265);
+    let f = F::from_u32(314159265);
 
-    let ef = EF::from_base_slice(&[
-        F::from_canonical_u32(1163664312),
-        F::from_canonical_u32(1251518712),
-        F::from_canonical_u32(1133200680),
-        F::from_canonical_u32(1689596134),
-    ]);
+    let ef = EF::from_basis_coefficients_slice(&[
+        F::from_u32(1163664312),
+        F::from_u32(1251518712),
+        F::from_u32(1133200680),
+        F::from_u32(1689596134),
+    ])
+    .unwrap();
 
     let felt: Felt<_> = builder.constant(f);
     let ext: Ext<_, _> = builder.constant(ef);
@@ -295,10 +300,10 @@ fn test_ext_felt_arithmetic() {
     builder.assert_ext_eq(x, (ef * f).cons());
 
     builder.assign(&x, ext / felt);
-    builder.assert_ext_eq(x, (ef / EF::from_base(f)).cons());
+    builder.assert_ext_eq(x, (ef / EF::from(f)).cons());
 
     builder.assign(&x, ext / f);
-    builder.assert_ext_eq(x, (ef / EF::from_base(f)).cons());
+    builder.assert_ext_eq(x, (ef / EF::from(f)).cons());
 
     builder.halt();
 
@@ -314,8 +319,8 @@ fn test_felt_equality() {
     type F = BabyBear;
     type EF = BinomialExtensionField<BabyBear, 4>;
 
-    let mut rng = thread_rng();
-    let f = rng.gen::<F>();
+    let mut rng = create_seeded_rng();
+    let f = rng.random::<F>();
 
     let mut builder = AsmBuilder::<F, EF>::default();
 
@@ -341,8 +346,8 @@ fn test_felt_equality_negative() {
     type F = BabyBear;
     type EF = BinomialExtensionField<BabyBear, 4>;
 
-    let mut rng = thread_rng();
-    let f = rng.gen::<F>();
+    let mut rng = create_seeded_rng();
+    let f = rng.random::<F>();
 
     let mut builder = AsmBuilder::<F, EF>::default();
     let a: Felt<_> = builder.constant(f);
@@ -357,8 +362,8 @@ fn test_ext_equality() {
     type F = BabyBear;
     type EF = BinomialExtensionField<BabyBear, 4>;
 
-    let mut rng = thread_rng();
-    let a_ext = rng.gen::<EF>();
+    let mut rng = create_seeded_rng();
+    let a_ext = rng.random::<EF>();
 
     let mut builder = AsmBuilder::<F, EF>::default();
 
@@ -378,8 +383,8 @@ fn test_ext_equality_negative() {
     type F = BabyBear;
     type EF = BinomialExtensionField<BabyBear, 4>;
 
-    let mut rng = thread_rng();
-    let a_ext = rng.gen::<EF>();
+    let mut rng = create_seeded_rng();
+    let a_ext = rng.random::<EF>();
 
     let mut builder = AsmBuilder::<F, EF>::default();
     let a: Ext<_, _> = builder.constant(a_ext);

@@ -1,6 +1,6 @@
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, LookupBus},
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
 };
 
 /// Represents a bus for `x` where `x` must lie in the range `[0, range_max)`.
@@ -22,16 +22,16 @@ impl RangeCheckBus {
     ///
     /// This can be used when `2^max_bits < self.range_max` **if `2 * self.range_max` is less than
     /// the field modulus**.
-    pub fn range_check<T: FieldAlgebra>(
+    pub fn range_check<R: PrimeCharacteristicRing>(
         &self,
-        x: impl Into<T>,
+        x: impl Into<R>,
         max_bits: usize,
-    ) -> BitsCheckBusInteraction<T>
+    ) -> BitsCheckBusInteraction<R>
     where
-        T::F: PrimeField32,
+        R::PrimeSubfield: PrimeField32,
     {
         debug_assert!((1 << max_bits) <= self.range_max);
-        debug_assert!(self.range_max < T::F::ORDER_U32 / 2);
+        debug_assert!(self.range_max < R::PrimeSubfield::ORDER_U32 / 2);
         let shift = self.range_max - (1 << max_bits);
         BitsCheckBusInteraction {
             x: x.into(),
@@ -76,7 +76,7 @@ pub struct RangeCheckBusInteraction<T> {
     pub is_lookup: bool,
 }
 
-impl<T: FieldAlgebra> RangeCheckBusInteraction<T> {
+impl<T: PrimeCharacteristicRing> RangeCheckBusInteraction<T> {
     /// Finalizes and sends/receives over the RangeCheck bus.
     pub fn eval<AB>(self, builder: &mut AB, count: impl Into<AB::Expr>)
     where
@@ -90,7 +90,7 @@ impl<T: FieldAlgebra> RangeCheckBusInteraction<T> {
     }
 }
 
-impl<T: FieldAlgebra> BitsCheckBusInteraction<T> {
+impl<T: PrimeCharacteristicRing> BitsCheckBusInteraction<T> {
     /// Send interaction(s) to range check for max bits over the RangeCheck bus.
     pub fn eval<AB>(self, builder: &mut AB, count: impl Into<AB::Expr>)
     where
@@ -107,7 +107,7 @@ impl<T: FieldAlgebra> BitsCheckBusInteraction<T> {
             //   implies `x < 2^max_bits`.
             self.bus.lookup_key(
                 builder,
-                [self.x.clone() + AB::Expr::from_canonical_u32(self.shift)],
+                [self.x.clone() + AB::Expr::from_u32(self.shift)],
                 count.clone(),
             );
         }

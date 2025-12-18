@@ -1,7 +1,7 @@
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::AirBuilder,
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, PrimeCharacteristicRing},
 };
 
 use crate::{
@@ -108,7 +108,7 @@ impl IsLtSubAir {
     /// Constraints between `io` and `aux` are only enforced when `condition != 0`.
     /// This means `aux` can be all zero independent on what `io` is by setting `condition = 0`.
     #[inline(always)]
-    pub(crate) fn eval_without_range_checks<AB: AirBuilder>(
+    pub(crate) fn eval_without_range_checks<AB: AirBuilder<Var: Copy>>(
         &self,
         builder: &mut AB,
         y_minus_x: impl Into<AB::Expr>,
@@ -119,8 +119,7 @@ impl IsLtSubAir {
         assert_eq!(lower_decomp.len(), self.decomp_limbs);
         // this is the desired intermediate value (i.e. y - x - 1)
         // deg(intermed_val) = deg(io)
-        let intermed_val =
-            y_minus_x.into() + AB::Expr::from_canonical_usize((1 << self.max_bits) - 1);
+        let intermed_val = y_minus_x.into() + AB::Expr::from_usize((1 << self.max_bits) - 1);
 
         // Construct lower from lower_decomp:
         // - each limb of lower_decomp will be range checked
@@ -129,12 +128,12 @@ impl IsLtSubAir {
             .iter()
             .enumerate()
             .fold(AB::Expr::ZERO, |acc, (i, &val)| {
-                acc + val * AB::Expr::from_canonical_usize(1 << (i * self.range_max_bits()))
+                acc + val * AB::Expr::from_usize(1 << (i * self.range_max_bits()))
             });
 
         let out = out.into();
         // constrain that the lower + out * 2^max_bits is the correct intermediate sum
-        let check_val = lower + out.clone() * AB::Expr::from_canonical_usize(1 << self.max_bits);
+        let check_val = lower + out.clone() * AB::Expr::from_usize(1 << self.max_bits);
         // the degree of this constraint is expected to be deg(count) + max(deg(intermed_val),
         // deg(lower))
         builder.when(condition).assert_eq(intermed_val, check_val);

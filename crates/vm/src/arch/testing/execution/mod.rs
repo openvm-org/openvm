@@ -3,7 +3,7 @@ use std::{borrow::BorrowMut, mem::size_of, sync::Arc};
 use air::DummyExecutionInteractionCols;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     prover::{cpu::CpuBackend, types::AirProvingContext},
     Chip, ChipUsageGetter,
@@ -38,8 +38,8 @@ impl<F: PrimeField32> ExecutionTester<F> {
     ) {
         self.records.push(DummyExecutionInteractionCols {
             count: F::NEG_ONE, // send
-            initial_state: initial_state.map(F::from_canonical_u32),
-            final_state: final_state.map(F::from_canonical_u32),
+            initial_state: initial_state.map(F::from_u32),
+            final_state: final_state.map(F::from_u32),
         })
     }
 
