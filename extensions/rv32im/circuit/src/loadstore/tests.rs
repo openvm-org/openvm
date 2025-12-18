@@ -10,7 +10,9 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
-use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode, NATIVE_AS};
+use openvm_instructions::{
+    instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode, NATIVE_AS,
+};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
