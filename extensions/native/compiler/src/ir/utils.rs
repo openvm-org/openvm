@@ -1,7 +1,7 @@
 use std::ops::{Add, Mul};
 
 use openvm_native_compiler_derive::iter_zip;
-use openvm_stark_backend::p3_field::{FieldAlgebra, FieldExtensionAlgebra, PrimeField};
+use openvm_stark_backend::p3_field::{BasedVectorSpace, PrimeCharacteristicRing, PrimeField};
 
 use super::{
     Array, ArrayLike, Builder, CanSelect, Config, DslIr, Ext, Felt, MemIndex, RVar, SymbolicExt,
@@ -27,7 +27,7 @@ impl<C: Config> Builder<C> {
     ///
     /// Reference: [`openvm_stark_sdk::p3_baby_bear::BabyBear`]
     pub fn generator(&mut self) -> Felt<C::F> {
-        self.eval(C::F::from_canonical_u32(31))
+        self.eval(C::F::from_u32(31))
     }
 
     /// Select a variable based on a condition.
@@ -82,7 +82,7 @@ impl<C: Config> Builder<C> {
     /// Example: if power_bits = [1, 0, 1, 0], then the result should be x^8 * x^2 = x^10.
     pub fn exp_bits_big_endian<V>(&mut self, x: V, power_bits: &Array<C, Var<C::N>>) -> V
     where
-        V::Expression: FieldAlgebra,
+        V::Expression: PrimeCharacteristicRing,
         V: Copy + Mul<Output = V::Expression> + Variable<C> + CanSelect<C>,
     {
         let result: V = self.eval(V::Expression::ONE);
@@ -129,10 +129,13 @@ impl<C: Config> Builder<C> {
 
     /// Creates an ext from a slice of felts.
     pub fn ext_from_base_slice(&mut self, arr: &[Felt<C::F>]) -> Ext<C::F, C::EF> {
-        assert!(arr.len() <= <C::EF as FieldExtensionAlgebra<C::F>>::D);
-        let mut res = SymbolicExt::from_f(C::EF::ZERO);
+        assert!(arr.len() <= <C::EF as BasedVectorSpace<C::F>>::DIMENSION);
+        let mut res: SymbolicExt<C::F, C::EF> = SymbolicExt::ZERO;
         for i in 0..arr.len() {
-            res += arr[i] * SymbolicExt::from_f(C::EF::monomial(i));
+            let basis_elem =
+                C::EF::ith_basis_element(i).expect("basis element index out of bounds");
+            let basis = SymbolicExt::<C::F, C::EF>::Const(basis_elem, basis_elem.into());
+            res += arr[i] * basis;
         }
         self.eval(res)
     }
@@ -150,11 +153,11 @@ impl<C: Config> Builder<C> {
             let felts = self.ext2felt_circuit(value);
             self.vec(felts.to_vec())
         } else {
-            let result = self.array(C::EF::D);
+            let result = self.array(C::EF::DIMENSION);
             let index = MemIndex {
                 index: RVar::zero(),
                 offset: 0,
-                size: C::EF::D,
+                size: C::EF::DIMENSION,
             };
             if let Array::Dyn(ptr, _) = &result {
                 self.store(*ptr, index, value);

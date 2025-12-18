@@ -5,7 +5,7 @@ use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use openvm_stark_backend::p3_field::{
     extension::{BinomialExtensionField, BinomiallyExtendable},
-    Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField32, PrimeField64,
+    BasedVectorSpace, Field, PrimeCharacteristicRing, PrimeField32, PrimeField64,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use snark_verifier_sdk::snark_verifier::{
@@ -26,13 +26,13 @@ const RESERVED_HIGH_BITS: usize = 2;
 
 #[derive(Copy, Clone, Debug)]
 pub struct AssignedBabyBear {
-    /// Logically `value` is a signed integer represented as `Bn254Fr`.
+    /// Logically `value` is a signed integer represented as `Bn254`.
     /// Invariants:
-    /// - `|value|` never overflows `Bn254Fr`
+    /// - `|value|` never overflows `Bn254`
     /// - `|value| < 2^max_bits` and `max_bits <= Fr::CAPACITY - RESERVED_HIGH_BITS`
     ///
     /// Basically `value` could do arithmetic operations without extra constraints as long as the
-    /// result doesn't overflow `Bn254Fr`. And it's easy to track `max_bits` of the result.
+    /// result doesn't overflow `Bn254`. And it's easy to track `max_bits` of the result.
     pub value: AssignedValue<Fr>,
     /// The value is guaranteed to be less than 2^max_bits.
     pub max_bits: usize,
@@ -44,7 +44,7 @@ impl AssignedBabyBear {
         if b_int < BigInt::from(0) {
             b_int += BabyBear::ORDER_U32;
         }
-        BabyBear::from_canonical_u32(b_int.try_into().unwrap())
+        BabyBear::from_u32(b_int.try_into().unwrap())
     }
 }
 
@@ -448,7 +448,7 @@ pub type BabyBearExt4 = BinomialExtensionField<BabyBear, 4>;
 impl AssignedBabyBearExt4 {
     pub fn to_extension_field(&self) -> BabyBearExt4 {
         let b_val = (0..4).map(|i| self.0[i].to_baby_bear()).collect_vec();
-        BabyBearExt4::from_base_slice(&b_val)
+        BabyBearExt4::from_basis_coefficients_slice(&b_val).unwrap()
     }
 }
 
@@ -459,7 +459,7 @@ impl BabyBearExt4Chip {
     pub fn load_witness(&self, ctx: &mut Context<Fr>, value: BabyBearExt4) -> AssignedBabyBearExt4 {
         AssignedBabyBearExt4(
             value
-                .as_base_slice()
+                .as_basis_coefficients_slice()
                 .iter()
                 .map(|x| self.base.load_witness(ctx, *x))
                 .collect_vec()
@@ -474,7 +474,7 @@ impl BabyBearExt4Chip {
     ) -> AssignedBabyBearExt4 {
         AssignedBabyBearExt4(
             value
-                .as_base_slice()
+                .as_basis_coefficients_slice()
                 .iter()
                 .map(|x| self.base.load_constant(ctx, *x))
                 .collect_vec()

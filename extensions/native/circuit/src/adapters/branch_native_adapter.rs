@@ -24,7 +24,7 @@ use openvm_native_compiler::conversion::AS;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
 #[repr(C)]
@@ -67,20 +67,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for BranchNativeAdapterAir {
         let mut timestamp_delta = 0usize;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
-            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+            timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
         // check that d and e are in {0, 4}
         let d = cols.reads_aux[0].address.address_space;
         let e = cols.reads_aux[1].address.address_space;
-        builder.assert_eq(
-            d * (d - AB::F::from_canonical_u32(AS::Native as u32)),
-            AB::F::ZERO,
-        );
-        builder.assert_eq(
-            e * (e - AB::F::from_canonical_u32(AS::Native as u32)),
-            AB::F::ZERO,
-        );
+        builder.assert_eq(d * (d - AB::F::from_u32(AS::Native as u32)), AB::F::ZERO);
+        builder.assert_eq(e * (e - AB::F::from_u32(AS::Native as u32)), AB::F::ZERO);
 
         self.memory_bridge
             .read_or_immediate(
@@ -111,7 +105,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for BranchNativeAdapterAir {
                     cols.reads_aux[1].address.address_space.into(),
                 ],
                 cols.from_state,
-                AB::F::from_canonical_usize(timestamp_delta),
+                AB::F::from_usize(timestamp_delta),
                 (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
@@ -197,7 +191,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for BranchNativeAdapterFiller {
 
         // Writing in reverse order to avoid overwriting the `record`
 
-        let native_as = F::from_canonical_u32(AS::Native as u32);
+        let native_as = F::from_u32(AS::Native as u32);
         for ((i, read_record), read_cols) in record
             .reads_aux
             .iter()
@@ -229,7 +223,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for BranchNativeAdapterFiller {
             }
         }
 
-        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
-        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
+        adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(record.from_pc);
     }
 }

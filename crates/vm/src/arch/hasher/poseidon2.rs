@@ -4,7 +4,7 @@ use std::{
 };
 
 use openvm_poseidon2_air::p3_symmetric::Permutation;
-use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
+use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_baby_bear::{BabyBear, Poseidon2BabyBear};
 
 use crate::{
@@ -33,12 +33,12 @@ impl<F: PrimeField32> Hasher<{ CHUNK }, F> for Poseidon2Hasher<F> {
     fn compress(&self, lhs: &[F; CHUNK], rhs: &[F; CHUNK]) -> [F; CHUNK] {
         let mut state = from_fn(|i| {
             if i < CHUNK {
-                BabyBear::from_canonical_u32(lhs[i].as_canonical_u32())
+                BabyBear::from_u32(lhs[i].as_canonical_u32())
             } else {
-                BabyBear::from_canonical_u32(rhs[i - CHUNK].as_canonical_u32())
+                BabyBear::from_u32(rhs[i - CHUNK].as_canonical_u32())
             }
         });
         self.poseidon2.permute_mut(&mut state);
-        array::from_fn(|i| F::from_canonical_u32(state[i].as_canonical_u32()))
+        array::from_fn(|i| F::from_u32(state[i].as_canonical_u32()))
     }
 }

@@ -13,7 +13,7 @@ use openvm_rv32im_transpiler::BranchEqualOpcode::*;
 use openvm_stark_backend::{
     config::StarkGenericConfig,
     engine::StarkEngine,
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProvingContext,
     Chip,
@@ -75,8 +75,8 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
         let option = program.get_instruction_and_debug_info(index);
         if let Some((instruction, _)) = option {
             program_cells.extend([
-                BabyBear::from_canonical_u32(frequency),
-                BabyBear::from_canonical_usize(index * (DEFAULT_PC_STEP as usize)),
+                BabyBear::from_u32(frequency),
+                BabyBear::from_usize(index * (DEFAULT_PC_STEP as usize)),
                 instruction.opcode.to_field(),
                 instruction.a,
                 instruction.b,
@@ -216,8 +216,8 @@ fn test_program_negative() {
     let mut program_rows = vec![];
     for (pc_idx, instruction) in instructions.iter().enumerate() {
         program_rows.extend(vec![
-            BabyBear::from_canonical_u32(execution_frequencies[pc_idx]),
-            BabyBear::from_canonical_usize(pc_idx * DEFAULT_PC_STEP as usize),
+            BabyBear::from_u32(execution_frequencies[pc_idx]),
+            BabyBear::from_usize(pc_idx * DEFAULT_PC_STEP as usize),
             instruction.opcode.to_field(),
             instruction.a,
             instruction.b,

@@ -1,7 +1,7 @@
 //! Fixed-exponent variable-base exponentiation using addition chains.
 
 use addchain::{build_addition_chain, Step};
-use num_bigint::BigUint;
+use num_bigint03::BigUint;
 use quote::quote;
 use syn::Ident;
 

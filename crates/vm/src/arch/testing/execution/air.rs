@@ -36,7 +36,7 @@ impl<F: Field> BaseAir<F> for ExecutionDummyAir {
 impl<AB: InteractionBuilder> Air<AB> for ExecutionDummyAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("row 0 present");
         let local: &DummyExecutionInteractionCols<AB::Var> = (*local).borrow();
         self.bus
             .execute(builder, local.count, local.initial_state, local.final_state);

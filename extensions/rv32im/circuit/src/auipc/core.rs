@@ -21,7 +21,7 @@ use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 
@@ -89,13 +89,12 @@ where
                 .iter()
                 .enumerate()
                 .fold(AB::Expr::ZERO, |acc, (i, &val)| {
-                    acc + val * AB::Expr::from_canonical_u32(1 << ((i + 1) * RV32_CELL_BITS))
+                    acc + val * AB::Expr::from_u32(1 << ((i + 1) * RV32_CELL_BITS))
                 });
 
         // Compute the most significant limb of PC
         let pc_msl = (from_pc - intermed_val)
-            * AB::F::from_canonical_usize(1 << (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1)))
-                .inverse();
+            * AB::F::from_usize(1 << (RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1))).inverse();
 
         // The vector pc_limbs contains the actual limbs of PC in little endian order
         let pc_limbs = [rd_data[0]]
@@ -106,7 +105,7 @@ where
             .collect::<Vec<AB::Expr>>();
 
         let mut carry: [AB::Expr; RV32_REGISTER_NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
-        let carry_divide = AB::F::from_canonical_usize(1 << RV32_CELL_BITS).inverse();
+        let carry_divide = AB::F::from_usize(1 << RV32_CELL_BITS).inverse();
 
         // Don't need to constrain the least significant limb of the addition
         // since we already know that rd_data[0] = pc_limbs[0] and the least significant limb of imm
@@ -145,9 +144,7 @@ where
                 // 2^{PC_BITS-(RV32_REGISTER_NUM_LIMBS-1)*RV32_CELL_BITS})
                 need_range_check.push(
                     (*limb).clone()
-                        * AB::Expr::from_canonical_usize(
-                            1 << (pc_limbs.len() * RV32_CELL_BITS - PC_BITS),
-                        ),
+                        * AB::Expr::from_usize(1 << (pc_limbs.len() * RV32_CELL_BITS - PC_BITS)),
                 );
             } else {
                 need_range_check.push((*limb).clone());
@@ -168,7 +165,7 @@ where
             .iter()
             .enumerate()
             .fold(AB::Expr::ZERO, |acc, (i, &val)| {
-                acc + val * AB::Expr::from_canonical_u32(1 << (i * RV32_CELL_BITS))
+                acc + val * AB::Expr::from_u32(1 << (i * RV32_CELL_BITS))
             });
         let expected_opcode = VmCoreAir::<AB, I>::opcode_to_global_expr(self, AUIPC);
         AdapterAirContext {
@@ -280,10 +277,10 @@ where
                 .request_range(pair[0] as u32, pair[1] as u32);
         }
         // Writing in reverse order
-        core_row.rd_data = rd_data.map(F::from_canonical_u8);
+        core_row.rd_data = rd_data.map(F::from_u8);
         // only the middle 2 limbs:
-        core_row.pc_limbs = from_fn(|i| F::from_canonical_u8(pc_limbs[i + 1]));
-        core_row.imm_limbs = from_fn(|i| F::from_canonical_u8(imm_limbs[i]));
+        core_row.pc_limbs = from_fn(|i| F::from_u8(pc_limbs[i + 1]));
+        core_row.imm_limbs = from_fn(|i| F::from_u8(imm_limbs[i]));
 
         core_row.is_valid = F::ONE;
     }

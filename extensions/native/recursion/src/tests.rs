@@ -120,7 +120,8 @@ fn test_fibonacci() {
             log_blowup: 3,
             log_final_poly_len: 0,
             num_queries: 2,
-            proof_of_work_bits: 0,
+            commit_proof_of_work_bits: 0,
+            query_proof_of_work_bits: 0,
         },
     )
 }

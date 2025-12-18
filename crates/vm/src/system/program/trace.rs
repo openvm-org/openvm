@@ -11,7 +11,7 @@ use openvm_instructions::{
 use openvm_stark_backend::{
     config::{Com, PcsProverData, StarkGenericConfig, Val},
     p3_commit::Pcs,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     p3_util::log2_strict_usize,
@@ -114,7 +114,7 @@ impl<SC: StarkGenericConfig> VmCommittedExe<SC> {
             &hasher,
             app_program_commit,
             &init_memory_commit,
-            Val::<SC>::from_canonical_u32(exe.pc_start),
+            Val::<SC>::from_u32(exe.pc_start),
         ))
     }
 }
@@ -132,7 +132,7 @@ impl<RA, SC: StarkGenericConfig> Chip<RA, CpuBackend<SC>> for ProgramChip<SC> {
         freqs
             .par_iter_mut()
             .zip(self.filtered_exec_frequencies.par_iter())
-            .for_each(|(f, x)| *f = Val::<SC>::from_canonical_u32(*x));
+            .for_each(|(f, x)| *f = Val::<SC>::from_u32(*x));
         let common_trace = RowMajorMatrix::new_col(freqs);
         AirProvingContext {
             cached_mains: vec![cached],
@@ -185,7 +185,7 @@ pub(crate) fn generate_cached_trace<F: Field>(program: &Program<F>) -> RowMajorM
         .for_each(|(row, (pc, instruction))| {
             let row: &mut ProgramExecutionCols<F> = row.borrow_mut();
             *row = ProgramExecutionCols {
-                pc: F::from_canonical_u32(pc),
+                pc: F::from_u32(pc),
                 opcode: instruction.opcode.to_field(),
                 a: instruction.a,
                 b: instruction.b,

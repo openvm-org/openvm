@@ -25,7 +25,9 @@ use openvm_stark_backend::{
     config::{Com, StarkGenericConfig, Val},
     engine::StarkEngine,
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
-    p3_field::{FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdicField},
+    p3_field::{
+        BasedVectorSpace, InjectiveMonomial, PrimeCharacteristicRing, PrimeField32, TwoAdicField,
+    },
     p3_util::{log2_ceil_usize, log2_strict_usize},
     proof::Proof,
     prover::{
@@ -70,6 +72,12 @@ use crate::{
         SystemChipComplex, SystemRecords, SystemWithFixedTraceHeights,
     },
 };
+
+/// Canonical field bound for VM execution/circuit code.
+pub const BABYBEAR_S_BOX_DEGREE: u64 = 7;
+
+pub trait VmField: PrimeField32 + InjectiveMonomial<BABYBEAR_S_BOX_DEGREE> {}
+impl<T> VmField for T where T: PrimeField32 + InjectiveMonomial<BABYBEAR_S_BOX_DEGREE> {}
 
 #[derive(Error, Debug)]
 pub enum GenerationError {
@@ -946,7 +954,7 @@ where
                     .vk
                     .params
                     .width
-                    .total_width(<<E::SC as StarkGenericConfig>::Challenge>::D);
+                    .total_width(<<E::SC as StarkGenericConfig>::Challenge>::DIMENSION);
                 let num_interactions = pk.vk.symbolic_constraints.interactions.len();
                 (constant_trace_height, air_names, width, num_interactions)
             })
@@ -977,7 +985,7 @@ where
                 pk.vk
                     .params
                     .width
-                    .total_width(<<E::SC as StarkGenericConfig>::Challenge>::D)
+                    .total_width(<<E::SC as StarkGenericConfig>::Challenge>::DIMENSION)
             })
             .collect();
 
@@ -1325,7 +1333,7 @@ where
                 prev_final_pc = Some(pvs.final_pc);
 
                 let expected_is_terminate = i == proofs.len() - 1;
-                if pvs.is_terminate != FieldAlgebra::from_bool(expected_is_terminate) {
+                if pvs.is_terminate != PrimeCharacteristicRing::from_bool(expected_is_terminate) {
                     return Err(VmVerificationError::IsTerminateMismatch {
                         expected: expected_is_terminate,
                         actual: pvs.is_terminate.as_canonical_u32() != 0,
@@ -1337,7 +1345,7 @@ where
                 } else {
                     DEFAULT_SUSPEND_EXIT_CODE
                 };
-                if pvs.exit_code != FieldAlgebra::from_canonical_u32(expected_exit_code) {
+                if pvs.exit_code != PrimeCharacteristicRing::from_u32(expected_exit_code) {
                     return Err(VmVerificationError::ExitCodeMismatch {
                         expected: expected_exit_code,
                         actual: pvs.exit_code.as_canonical_u32(),
@@ -1539,8 +1547,9 @@ mod vm_metrics {
             for (pk, height) in zip(&self.pk.per_air, heights.iter()) {
                 let width = &pk.vk.params.width;
                 main_cells_used += width.main_width() * *height;
-                total_cells_used +=
-                    width.total_width(<E::SC as StarkGenericConfig>::Challenge::D) * *height;
+                total_cells_used += width
+                    .total_width(<E::SC as StarkGenericConfig>::Challenge::DIMENSION)
+                    * *height;
             }
             tracing::debug!(?heights);
             tracing::info!(main_cells_used, total_cells_used);

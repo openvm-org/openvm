@@ -143,8 +143,8 @@ impl<F: PrimeField32> TranspilerExtension<F> for Int256TranspilerExtension {
                         BranchEqualOpcode::BEQ.local_usize()
                             + Rv32BranchEqual256Opcode::CLASS_OFFSET,
                     ),
-                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
-                    F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
+                    F::from_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                    F::from_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
                     isize_to_field(dec_insn.imm as isize),
                     F::ONE,
                     F::TWO,
