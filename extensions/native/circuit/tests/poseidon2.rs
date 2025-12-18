@@ -4,28 +4,30 @@ use openvm_native_compiler::{
     ir::{Array, Var, PERMUTATION_WIDTH},
     prelude::RVar,
 };
-use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
-use openvm_stark_sdk::{config::baby_bear_poseidon2::default_perm, p3_baby_bear::BabyBear};
+use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, PrimeCharacteristicRing};
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::default_perm, p3_baby_bear::BabyBear, utils::create_seeded_rng,
+};
 use p3_symmetric::Permutation;
-use rand::{thread_rng, Rng};
+use rand::Rng;
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
 
 #[test]
 fn test_compiler_poseidon2_permute() {
-    let mut rng = thread_rng();
+    let mut rng = create_seeded_rng();
 
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let random_state_vals: [F; PERMUTATION_WIDTH] = rng.gen();
+    let random_state_vals: [F; PERMUTATION_WIDTH] = rng.random();
     // Execute the reference permutation
     let perm = default_perm();
     let expected_result = perm.permute(random_state_vals);
 
     // Execute the permutation in the VM
     // Initialize an array and populate it with the entries.
-    let var_width: Var<F> = builder.eval(F::from_canonical_usize(PERMUTATION_WIDTH));
+    let var_width: Var<F> = builder.eval(F::from_usize(PERMUTATION_WIDTH));
     let random_state = builder.array(var_width);
     for (i, val) in random_state_vals.iter().enumerate() {
         builder.set(&random_state, i, *val);
@@ -54,11 +56,11 @@ fn test_compiler_poseidon2_permute() {
 
 #[test]
 fn test_compiler_poseidon2_hash_1() {
-    let mut rng = thread_rng();
+    let mut rng = create_seeded_rng();
 
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let random_state_vals: [F; 42] = rng.gen();
+    let random_state_vals: [F; 42] = rng.random();
     println!("{random_state_vals:?}");
     let rlen = random_state_vals.len();
     let random_state_v2 = builder.dyn_array(rlen);

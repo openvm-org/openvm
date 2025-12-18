@@ -3,7 +3,7 @@ use openvm_native_compiler::{
     asm::{AsmBuilder, AsmCompiler},
     conversion::{convert_program, CompilerOptions},
 };
-use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
+use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, PrimeCharacteristicRing};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 type F = BabyBear;
@@ -38,7 +38,7 @@ fn test_io() {
     let witness_stream: Vec<Vec<F>> = vec![
         vec![F::ZERO, F::ZERO, F::ONE],
         vec![F::ZERO, F::ZERO, F::TWO],
-        vec![F::from_canonical_usize(3)],
+        vec![F::from_usize(3)],
         vec![
             F::ZERO,
             F::ZERO,

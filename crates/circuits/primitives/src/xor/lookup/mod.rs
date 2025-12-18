@@ -71,7 +71,7 @@ impl<F: Field, const M: usize> BaseAir<F> for XorLookupAir<M> {
                 let x = i / (1 << M);
                 let y = i % (1 << M);
                 let z = x ^ y;
-                [x, y, z].map(F::from_canonical_u32)
+                [x, y, z].map(F::from_u32)
             })
             .collect();
 
@@ -87,9 +87,9 @@ where
         let main = builder.main();
         let preprocessed = builder.preprocessed();
 
-        let prep_local = preprocessed.row_slice(0);
+        let prep_local = preprocessed.row_slice(0).unwrap();
         let prep_local: &XorLookupPreprocessedCols<AB::Var> = (*prep_local).borrow();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local: &XorLookupCols<AB::Var> = (*local).borrow();
 
         self.bus
@@ -162,7 +162,7 @@ impl<const M: usize> XorLookupChip<M> {
                 debug_assert_eq!(count_x.len(), 1 << M);
                 count_x
                     .iter()
-                    .map(|count_xy| F::from_canonical_u32(count_xy.load(atomic::Ordering::SeqCst)))
+                    .map(|count_xy| F::from_u32(count_xy.load(atomic::Ordering::SeqCst)))
             })
             .collect();
 

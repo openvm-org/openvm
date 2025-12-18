@@ -9,7 +9,7 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir, PairBuilder},
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
@@ -70,13 +70,8 @@ impl<F: Field, const NUM_BITS: usize> BaseAir<F> for BitwiseOperationLookupAir<N
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
         let rows: Vec<F> = (0..(1 << NUM_BITS))
             .flat_map(|x: u32| {
-                (0..(1 << NUM_BITS)).flat_map(move |y: u32| {
-                    [
-                        F::from_canonical_u32(x),
-                        F::from_canonical_u32(y),
-                        F::from_canonical_u32(x ^ y),
-                    ]
-                })
+                (0..(1 << NUM_BITS))
+                    .flat_map(move |y: u32| [F::from_u32(x), F::from_u32(y), F::from_u32(x ^ y)])
             })
             .collect();
         Some(RowMajorMatrix::new(
@@ -91,11 +86,13 @@ impl<AB: InteractionBuilder + PairBuilder, const NUM_BITS: usize> Air<AB>
 {
     fn eval(&self, builder: &mut AB) {
         let preprocessed = builder.preprocessed();
-        let prep_local = preprocessed.row_slice(0);
+        let prep_local = preprocessed
+            .row_slice(0)
+            .expect("window should have two elements");
         let prep_local: &BitwiseOperationLookupPreprocessedCols<AB::Var> = (*prep_local).borrow();
 
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local: &BitwiseOperationLookupCols<AB::Var> = (*local).borrow();
 
         self.bus
@@ -167,12 +164,10 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChip<NUM_BITS> {
         let mut rows = F::zero_vec(self.count_range.len() * NUM_BITWISE_OP_LOOKUP_COLS);
         for (n, row) in rows.chunks_mut(NUM_BITWISE_OP_LOOKUP_COLS).enumerate() {
             let cols: &mut BitwiseOperationLookupCols<F> = row.borrow_mut();
-            cols.mult_range = F::from_canonical_u32(
-                self.count_range[n].swap(0, std::sync::atomic::Ordering::SeqCst),
-            );
-            cols.mult_xor = F::from_canonical_u32(
-                self.count_xor[n].swap(0, std::sync::atomic::Ordering::SeqCst),
-            );
+            cols.mult_range =
+                F::from_u32(self.count_range[n].swap(0, std::sync::atomic::Ordering::SeqCst));
+            cols.mult_xor =
+                F::from_u32(self.count_xor[n].swap(0, std::sync::atomic::Ordering::SeqCst));
         }
         RowMajorMatrix::new(rows, NUM_BITWISE_OP_LOOKUP_COLS)
     }

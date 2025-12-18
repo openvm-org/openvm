@@ -2,7 +2,7 @@ use std::{fs::read, path::PathBuf, str::FromStr};
 
 use eyre::Result;
 use openvm_sdk::{StdIn, F};
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 
 /// Input can be either:
 /// (1) one single hex string
@@ -68,7 +68,7 @@ pub fn read_bytes_into_stdin(stdin: &mut StdIn, bytes: &[u8]) -> Result<()> {
             let mut fields = Vec::with_capacity(data.len() / 4);
             for chunk in data.chunks_exact(4) {
                 let value = u32::from_le_bytes(chunk.try_into().unwrap());
-                fields.push(F::from_canonical_u32(value));
+                fields.push(F::from_u32(value));
             }
             stdin.write_field(&fields);
             Ok(())

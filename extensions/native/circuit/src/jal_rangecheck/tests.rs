@@ -22,7 +22,7 @@ use openvm_native_compiler::{
 #[cfg(feature = "cuda")]
 use openvm_native_compiler::{NativeJalOpcode, NativeRangeCheckOpcode};
 use openvm_stark_backend::{
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -99,10 +99,10 @@ fn set_and_execute<E, RA>(
     RA: Arena,
 {
     if opcode == JAL.global_opcode() {
-        let initial_pc = rng.gen_range(0..(1 << PC_BITS));
+        let initial_pc = rng.random_range(0..(1 << PC_BITS));
         let a = gen_pointer(rng, 1);
-        let final_pc = F::from_canonical_u32(rng.gen_range(0..(1 << PC_BITS)));
-        let b = b.unwrap_or((final_pc - F::from_canonical_u32(initial_pc)).as_canonical_u32());
+        let final_pc = F::from_u32(rng.random_range(0..(1 << PC_BITS)));
+        let b = b.unwrap_or((final_pc - F::from_u32(initial_pc)).as_canonical_u32());
         tester.execute_with_pc(
             executor,
             arena,
@@ -111,21 +111,21 @@ fn set_and_execute<E, RA>(
         );
 
         let final_pc = tester.execution_final_state().pc;
-        let expected_final_pc = F::from_canonical_u32(initial_pc) + F::from_canonical_u32(b);
+        let expected_final_pc = F::from_u32(initial_pc) + F::from_u32(b);
         assert_eq!(final_pc, expected_final_pc);
         let result_a_val = tester.read::<1>(AS::Native as usize, a)[0].as_canonical_u32();
         let expected_a_val = initial_pc + DEFAULT_PC_STEP;
         assert_eq!(result_a_val, expected_a_val);
     } else {
-        let a_val = a_val.unwrap_or(rng.gen_range(0..(1 << 30)));
-        let a = write_native_array(tester, rng, Some([F::from_canonical_u32(a_val)])).1;
+        let a_val = a_val.unwrap_or(rng.random_range(0..(1 << 30)));
+        let a = write_native_array(tester, rng, Some([F::from_u32(a_val)])).1;
         let x = a_val & 0xffff;
         let y = a_val >> 16;
 
         let min_b = 32 - x.leading_zeros();
         let min_c = 32 - y.leading_zeros();
-        let b = b.unwrap_or(rng.gen_range(min_b..=16));
-        let c = c.unwrap_or(rng.gen_range(min_c..=14));
+        let b = b.unwrap_or(rng.random_range(min_b..=16));
+        let c = c.unwrap_or(rng.random_range(min_c..=14));
         tester.execute(
             executor,
             arena,
@@ -231,7 +231,7 @@ fn range_check_edge_cases_test() {
     );
 
     // x = 0
-    let a = rng.gen_range(0..(1 << 14)) << 16;
+    let a = rng.random_range(0..(1 << 14)) << 16;
     set_and_execute(
         &mut tester,
         &mut harness.executor,
@@ -244,7 +244,7 @@ fn range_check_edge_cases_test() {
     );
 
     // y = 0
-    let a = rng.gen_range(0..(1 << 16));
+    let a = rng.random_range(0..(1 << 16));
     set_and_execute(
         &mut tester,
         &mut harness.executor,
@@ -299,7 +299,7 @@ fn run_negative_jal_range_check_test(
     );
 
     let modify_trace = |trace: &mut DenseMatrix<F>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).expect("row exists").to_vec();
         let cols: &mut JalRangeCheckCols<F> = values[..].borrow_mut();
 
         if let Some(flags) = prank_vals.flags {
@@ -307,18 +307,17 @@ fn run_negative_jal_range_check_test(
             cols.is_range_check = F::from_bool(flags[1]);
         }
         if let Some(a_val) = prank_vals.a_val {
-            cols.writes_aux
-                .set_prev_data([F::from_canonical_u32(a_val)]);
+            cols.writes_aux.set_prev_data([F::from_u32(a_val)]);
         }
 
         if let Some(b) = prank_vals.b {
-            cols.b = F::from_canonical_u32(b);
+            cols.b = F::from_u32(b);
         }
         if let Some(c) = prank_vals.c {
-            cols.c = F::from_canonical_u32(c);
+            cols.c = F::from_u32(c);
         }
         if let Some(y) = prank_vals.y {
-            cols.y = F::from_canonical_u32(y);
+            cols.y = F::from_u32(y);
         }
 
         *trace = RowMajorMatrix::new(values, trace.width());

@@ -1,5 +1,5 @@
 use openvm_native_compiler_derive::iter_zip;
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 
 use super::{Array, ArrayLike, Builder, Config, DslIr, Ext, Felt, MemIndex, Ptr, Usize, Var};
 
@@ -88,7 +88,7 @@ impl<C: Config> Builder<C> {
 
         let address = self.eval(state.ptr().address);
         let start: Var<_> = self.eval(address);
-        let end: Var<_> = self.eval(address + C::N::from_canonical_usize(HASH_RATE));
+        let end: Var<_> = self.eval(address + C::N::from_usize(HASH_RATE));
         iter_zip!(self, array).for_each(|idx_vec, builder| {
             let subarray = builder.iter_ptr_get(array, idx_vec[0]);
             iter_zip!(builder, subarray).for_each(|ptr_vec, builder| {
@@ -145,7 +145,7 @@ impl<C: Config> Builder<C> {
                     builder.set_value(&state, idx, felt);
                     builder.assign(&idx, idx + C::N::ONE);
                     builder
-                        .if_eq(idx, C::N::from_canonical_usize(HASH_RATE))
+                        .if_eq(idx, C::N::from_usize(HASH_RATE))
                         .then(|builder| {
                             builder.poseidon2_permute_mut(&state);
                             builder.assign(&idx, C::N::ZERO);

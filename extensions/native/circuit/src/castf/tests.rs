@@ -19,7 +19,7 @@ use openvm_instructions::{
 use openvm_native_compiler::{conversion::AS, CastfOpcode};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -95,7 +95,7 @@ fn set_and_execute<E, RA>(
     E: PreflightExecutor<F, RA>,
     RA: Arena,
 {
-    let b_val = b.unwrap_or(F::from_canonical_u32(rng.gen_range(0..1 << CASTF_MAX_BITS)));
+    let b_val = b.unwrap_or(F::from_u32(rng.random_range(0..1 << CASTF_MAX_BITS)));
     let b_ptr = write_native_array(tester, rng, Some([b_val])).1;
 
     let a = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
@@ -217,7 +217,7 @@ fn run_negative_castf_test(prank_vals: CastFPrankValues, b: Option<F>, error: Ve
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
 
     let modify_trace = |trace: &mut DenseMatrix<F>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).expect("row exists").to_vec();
         let (adapter_row, core_row) = values.split_at_mut(adapter_width);
         let core_cols: &mut CastFCoreCols<F> = core_row.borrow_mut();
         let adapter_cols: &mut ConvertAdapterCols<F, READ_SIZE, WRITE_SIZE> =
@@ -225,16 +225,16 @@ fn run_negative_castf_test(prank_vals: CastFPrankValues, b: Option<F>, error: Ve
 
         if let Some(in_val) = prank_vals.in_val {
             // TODO: in_val is actually never used in the AIR, should remove it
-            core_cols.in_val = F::from_canonical_u32(in_val);
+            core_cols.in_val = F::from_u32(in_val);
         }
         if let Some(out_val) = prank_vals.out_val {
-            core_cols.out_val = out_val.map(F::from_canonical_u32);
+            core_cols.out_val = out_val.map(F::from_u32);
         }
         if let Some(a_pointer) = prank_vals.a_pointer {
-            adapter_cols.a_pointer = F::from_canonical_u32(a_pointer);
+            adapter_cols.a_pointer = F::from_u32(a_pointer);
         }
         if let Some(b_pointer) = prank_vals.b_pointer {
-            adapter_cols.b_pointer = F::from_canonical_u32(b_pointer);
+            adapter_cols.b_pointer = F::from_u32(b_pointer);
         }
         *trace = RowMajorMatrix::new(values, trace.width());
     };
@@ -254,7 +254,7 @@ fn casf_invalid_out_val_test() {
             out_val: Some([2 << LIMB_BITS, 0, 0, 0]),
             ..Default::default()
         },
-        Some(F::from_canonical_u32(2 << LIMB_BITS)),
+        Some(F::from_u32(2 << LIMB_BITS)),
         VerificationError::ChallengePhaseError,
     );
 
