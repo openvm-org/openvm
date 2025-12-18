@@ -105,7 +105,7 @@ pub struct MemoryCtx<const PAGE_BITS: usize> {
     pub boundary_idx: usize,
     pub merkle_tree_index: Option<usize>,
     pub adapter_offset: usize,
-    access_adapters_enabled: bool,
+    pub access_adapters_enabled: bool,
     continuations_enabled: bool,
     chunk: u32,
     chunk_bits: u32,
