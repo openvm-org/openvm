@@ -19,7 +19,7 @@ use openvm_instructions::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
 use super::RV32_REGISTER_NUM_LIMBS;
@@ -101,10 +101,7 @@ impl Rv32RdWriteAdapterAir {
         };
         self.memory_bridge
             .write(
-                MemoryAddress::new(
-                    AB::F::from_canonical_u32(RV32_REGISTER_AS),
-                    local_cols.rd_ptr,
-                ),
+                MemoryAddress::new(AB::F::from_u32(RV32_REGISTER_AS), local_cols.rd_ptr),
                 ctx.writes[0].clone(),
                 timestamp,
                 &local_cols.rd_aux_cols,
@@ -113,7 +110,7 @@ impl Rv32RdWriteAdapterAir {
 
         let to_pc = ctx
             .to_pc
-            .unwrap_or(local_cols.from_state.pc + AB::F::from_canonical_u32(DEFAULT_PC_STEP));
+            .unwrap_or(local_cols.from_state.pc + AB::F::from_u32(DEFAULT_PC_STEP));
         // regardless of `needs_write`, must always execute instruction when `is_valid`.
         self.execution_bridge
             .execute(
@@ -122,14 +119,14 @@ impl Rv32RdWriteAdapterAir {
                     local_cols.rd_ptr.into(),
                     AB::Expr::ZERO,
                     ctx.instruction.immediate,
-                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
+                    AB::Expr::from_u32(RV32_REGISTER_AS),
                     AB::Expr::ZERO,
                     f,
                 ],
                 local_cols.from_state,
                 ExecutionState {
                     pc: to_pc,
-                    timestamp: timestamp + AB::F::from_canonical_usize(timestamp_delta),
+                    timestamp: timestamp + AB::F::from_usize(timestamp_delta),
                 },
             )
             .eval(builder, ctx.instruction.is_valid);
@@ -269,15 +266,15 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32RdWriteAdapterFiller {
 
         adapter_row
             .rd_aux_cols
-            .set_prev_data(record.rd_aux_record.prev_data.map(F::from_canonical_u8));
+            .set_prev_data(record.rd_aux_record.prev_data.map(F::from_u8));
         mem_helper.fill(
             record.rd_aux_record.prev_timestamp,
             record.from_timestamp,
             adapter_row.rd_aux_cols.as_mut(),
         );
-        adapter_row.rd_ptr = F::from_canonical_u32(record.rd_ptr);
-        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
-        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
+        adapter_row.rd_ptr = F::from_u32(record.rd_ptr);
+        adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(record.from_pc);
     }
 }
 
@@ -377,8 +374,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32CondRdWriteAdapterFiller {
         } else {
             adapter_cols.inner.rd_ptr = F::ZERO;
             mem_helper.fill_zero(adapter_cols.inner.rd_aux_cols.as_mut());
-            adapter_cols.inner.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
-            adapter_cols.inner.from_state.pc = F::from_canonical_u32(record.from_pc);
+            adapter_cols.inner.from_state.timestamp = F::from_u32(record.from_timestamp);
+            adapter_cols.inner.from_state.pc = F::from_u32(record.from_pc);
         }
     }
 }

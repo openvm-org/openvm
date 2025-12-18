@@ -37,7 +37,7 @@ impl<F: Field> Instruction<F> {
     }
 
     pub fn from_usize<const N: usize>(opcode: VmOpcode, operands: [usize; N]) -> Self {
-        let mut operands = operands.map(F::from_canonical_usize).to_vec();
+        let mut operands = operands.map(F::from_usize).to_vec();
         operands.resize(NUM_OPERANDS, F::ZERO);
         Self {
             opcode,
@@ -79,7 +79,7 @@ impl<F: Field> Instruction<F> {
             opcode: SystemOpcode::PHANTOM.global_opcode(),
             a,
             b,
-            c: F::from_canonical_u32((discriminant.0 as u32) | ((c_upper as u32) << 16)),
+            c: F::from_u32((discriminant.0 as u32) | ((c_upper as u32) << 16)),
             ..Default::default()
         }
     }
@@ -87,7 +87,7 @@ impl<F: Field> Instruction<F> {
     pub fn debug(discriminant: PhantomDiscriminant) -> Self {
         Self {
             opcode: SystemOpcode::PHANTOM.global_opcode(),
-            c: F::from_canonical_u32(discriminant.0 as u32),
+            c: F::from_u32(discriminant.0 as u32),
             ..Default::default()
         }
     }

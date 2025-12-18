@@ -96,10 +96,9 @@ impl Sha256FillerHelper {
                 cols.flags.is_first_4_rows = if i < 4 { F::ONE } else { F::ZERO };
                 cols.flags.is_digest_row = F::ZERO;
                 cols.flags.is_last_block = F::from_bool(is_last_block);
-                cols.flags.row_idx =
-                    get_flag_pt_array(&self.row_idx_encoder, i).map(F::from_canonical_u32);
-                cols.flags.global_block_idx = F::from_canonical_u32(global_block_idx);
-                cols.flags.local_block_idx = F::from_canonical_u32(local_block_idx);
+                cols.flags.row_idx = get_flag_pt_array(&self.row_idx_encoder, i).map(F::from_u32);
+                cols.flags.global_block_idx = F::from_u32(global_block_idx);
+                cols.flags.local_block_idx = F::from_u32(local_block_idx);
 
                 // W_idx = M_idx
                 if i < 4 {
@@ -134,9 +133,9 @@ impl Sha256FillerHelper {
                             }
                             let carry = (sum - w_limbs[k]) >> 16;
                             cols.message_schedule.carry_or_buffer[j][k * 2] =
-                                F::from_canonical_u32(carry & 1);
+                                F::from_u32(carry & 1);
                             cols.message_schedule.carry_or_buffer[j][k * 2 + 1] =
-                                F::from_canonical_u32(carry >> 1);
+                                F::from_u32(carry >> 1);
                         }
                         // update the message schedule
                         message_schedule[idx] = w;
@@ -183,8 +182,8 @@ impl Sha256FillerHelper {
                         }
                         let carry_a = (a_limb - a_limbs[k]) >> 16;
                         let carry_e = (e_limb - e_limbs[k]) >> 16;
-                        cols.work_vars.carry_a[j][k] = F::from_canonical_u32(carry_a);
-                        cols.work_vars.carry_e[j][k] = F::from_canonical_u32(carry_e);
+                        cols.work_vars.carry_a[j][k] = F::from_u32(carry_a);
+                        cols.work_vars.carry_e[j][k] = F::from_u32(carry_e);
                         bitwise_lookup_chip.request_range(carry_a, carry_e);
                     }
 
@@ -206,11 +205,10 @@ impl Sha256FillerHelper {
                         let w_4 = u32_into_u16s(message_schedule[idx - 4]);
                         let sig_0_w_3 = u32_into_u16s(small_sig0(message_schedule[idx - 3]));
                         cols.schedule_helper.intermed_4[j] =
-                            array::from_fn(|k| F::from_canonical_u32(w_4[k] + sig_0_w_3[k]));
+                            array::from_fn(|k| F::from_u32(w_4[k] + sig_0_w_3[k]));
                         if j < SHA256_ROUNDS_PER_ROW - 1 {
                             let w_3 = message_schedule[idx - 3];
-                            cols.schedule_helper.w_3[j] =
-                                u32_into_u16s(w_3).map(F::from_canonical_u32);
+                            cols.schedule_helper.w_3[j] = u32_into_u16s(w_3).map(F::from_u32);
                         }
                     }
                 }
@@ -221,17 +219,16 @@ impl Sha256FillerHelper {
                     row[get_range(trace_start_col, SHA256_DIGEST_WIDTH)].borrow_mut();
                 for j in 0..SHA256_ROUNDS_PER_ROW - 1 {
                     let w_3 = message_schedule[i * SHA256_ROUNDS_PER_ROW + j - 3];
-                    cols.schedule_helper.w_3[j] = u32_into_u16s(w_3).map(F::from_canonical_u32);
+                    cols.schedule_helper.w_3[j] = u32_into_u16s(w_3).map(F::from_u32);
                 }
                 cols.flags.is_round_row = F::ZERO;
                 cols.flags.is_first_4_rows = F::ZERO;
                 cols.flags.is_digest_row = F::ONE;
                 cols.flags.is_last_block = F::from_bool(is_last_block);
-                cols.flags.row_idx =
-                    get_flag_pt_array(&self.row_idx_encoder, 16).map(F::from_canonical_u32);
-                cols.flags.global_block_idx = F::from_canonical_u32(global_block_idx);
+                cols.flags.row_idx = get_flag_pt_array(&self.row_idx_encoder, 16).map(F::from_u32);
+                cols.flags.global_block_idx = F::from_u32(global_block_idx);
 
-                cols.flags.local_block_idx = F::from_canonical_u32(local_block_idx);
+                cols.flags.local_block_idx = F::from_u32(local_block_idx);
                 let final_hash: [u32; SHA256_HASH_WORDS] =
                     array::from_fn(|i| work_vars[i].wrapping_add(prev_hash[i]));
                 let final_hash_limbs: [[u8; SHA256_WORD_U8S]; SHA256_HASH_WORDS] =
@@ -244,10 +241,9 @@ impl Sha256FillerHelper {
                         bitwise_lookup_chip.request_range(chunk[0] as u32, chunk[1] as u32);
                     }
                 }
-                cols.final_hash = array::from_fn(|i| {
-                    array::from_fn(|j| F::from_canonical_u8(final_hash_limbs[i][j]))
-                });
-                cols.prev_hash = prev_hash.map(|f| u32_into_u16s(f).map(F::from_canonical_u32));
+                cols.final_hash =
+                    array::from_fn(|i| array::from_fn(|j| F::from_u8(final_hash_limbs[i][j])));
+                cols.prev_hash = prev_hash.map(|f| u32_into_u16s(f).map(F::from_u32));
                 let hash = if is_last_block {
                     SHA256_H.map(u32_into_bits_field::<F>)
                 } else {
@@ -337,8 +333,7 @@ impl Sha256FillerHelper {
         self: &Sha256FillerHelper,
         cols: &mut Sha256RoundCols<F>,
     ) {
-        cols.flags.row_idx =
-            get_flag_pt_array(&self.row_idx_encoder, 17).map(F::from_canonical_u32);
+        cols.flags.row_idx = get_flag_pt_array(&self.row_idx_encoder, 17).map(F::from_u32);
 
         let hash = SHA256_H.map(u32_into_bits_field::<F>);
 
@@ -347,12 +342,10 @@ impl Sha256FillerHelper {
             cols.work_vars.e[i] = hash[SHA256_ROUNDS_PER_ROW - i + 3];
         }
 
-        cols.work_vars.carry_a = array::from_fn(|i| {
-            array::from_fn(|j| F::from_canonical_u32(SHA256_INVALID_CARRY_A[i][j]))
-        });
-        cols.work_vars.carry_e = array::from_fn(|i| {
-            array::from_fn(|j| F::from_canonical_u32(SHA256_INVALID_CARRY_E[i][j]))
-        });
+        cols.work_vars.carry_a =
+            array::from_fn(|i| array::from_fn(|j| F::from_u32(SHA256_INVALID_CARRY_A[i][j])));
+        cols.work_vars.carry_e =
+            array::from_fn(|i| array::from_fn(|j| F::from_u32(SHA256_INVALID_CARRY_E[i][j])));
     }
 
     /// The following functions do the calculations in native field since they will be called on
@@ -394,7 +387,7 @@ impl Sha256FillerHelper {
                         next_cols.work_vars.carry_e[i][j - 1]
                     }
                     - cur_e_limb;
-                let carry_e = sum * (F::from_canonical_u32(1 << 16).inverse());
+                let carry_e = sum * (F::from_u32(1 << 16).inverse());
 
                 let sum = t1_limb_sum
                     + t2_limb_sum
@@ -404,7 +397,7 @@ impl Sha256FillerHelper {
                         next_cols.work_vars.carry_a[i][j - 1]
                     }
                     - cur_a_limb;
-                let carry_a = sum * (F::from_canonical_u32(1 << 16).inverse());
+                let carry_a = sum * (F::from_u32(1 << 16).inverse());
                 next_cols.work_vars.carry_e[i][j] = carry_e;
                 next_cols.work_vars.carry_a[i][j] = carry_a;
             }
@@ -457,10 +450,10 @@ impl Sha256FillerHelper {
             for j in 0..SHA256_WORD_U16S {
                 let carry = next_cols.message_schedule.carry_or_buffer[i][j * 2]
                     + F::TWO * next_cols.message_schedule.carry_or_buffer[i][j * 2 + 1];
-                let sum = sig_w_2[j] + w_7[j] - carry * F::from_canonical_u32(1 << 16) - w_cur[j]
+                let sum = sig_w_2[j] + w_7[j] - carry * F::from_u32(1 << 16) - w_cur[j]
                     + if j > 0 {
                         next_cols.message_schedule.carry_or_buffer[i][j * 2 - 2]
-                            + F::from_canonical_u32(2)
+                            + F::from_u32(2)
                                 * next_cols.message_schedule.carry_or_buffer[i][j * 2 - 1]
                     } else {
                         F::ZERO

@@ -902,6 +902,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
     let mut create_airs = Vec::new();
     let mut execution_where_predicates: Vec<syn::WherePredicate> = Vec::new();
     let mut circuit_where_predicates: Vec<syn::WherePredicate> = Vec::new();
+    execution_where_predicates.push(parse_quote! { F: ::openvm_circuit::arch::VmField });
 
     let source_field_ty = source_field.ty.clone();
 
@@ -952,13 +953,13 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
             ::openvm_circuit::derive::PreflightExecutor,
         )]
         #[cfg_attr(feature = "aot", derive(::openvm_circuit::derive::AotExecutor, ::openvm_circuit::derive::AotMeteredExecutor))]
-        pub enum #executor_type<F: openvm_stark_backend::p3_field::Field> {
+        pub enum #executor_type<F: ::openvm_circuit::arch::VmField> #execution_where_clause {
             #[any_enum]
             #source_name_upper(#source_executor_type),
             #(#executor_enum_fields)*
         }
 
-        impl<F: openvm_stark_backend::p3_field::Field> ::openvm_circuit::arch::VmExecutionConfig<F> for #name #execution_where_clause {
+        impl<F: ::openvm_circuit::arch::VmField> ::openvm_circuit::arch::VmExecutionConfig<F> for #name #execution_where_clause {
             type Executor = #executor_type<F>;
 
             fn create_executors(

@@ -13,6 +13,7 @@ openvm-native-recursion.workspace = true
 openvm-stark-backend.workspace = true
 openvm-stark-sdk.workspace = true
 openvm-circuit.workspace = true
+p3-bn254.workspace = true
 
 derivative.workspace = true
 serde.workspace = true

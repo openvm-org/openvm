@@ -26,7 +26,7 @@ use openvm_stark_backend::{
     config::Val,
     interaction::{LookupBus, PermutationCheckBus},
     p3_air::BaseAir,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::AnyRap,
     utils::disable_debug_builder,
@@ -111,7 +111,7 @@ impl TestBuilder<F> for GpuChipTestBuilder {
         E: PreflightExecutor<F, RA>,
         RA: Arena,
     {
-        let initial_pc = self.rng.gen_range(0..(1 << PC_BITS));
+        let initial_pc = self.rng.random_range(0..(1 << PC_BITS));
         self.execute_with_pc(executor, arena, instruction, initial_pc);
     }
 
@@ -177,7 +177,7 @@ impl TestBuilder<F> for GpuChipTestBuilder {
         pointer: usize,
         value: [usize; N],
     ) {
-        self.write(address_space, pointer, value.map(F::from_canonical_usize));
+        self.write(address_space, pointer, value.map(F::from_usize));
     }
 
     fn address_bits(&self) -> usize {
@@ -217,7 +217,7 @@ impl TestBuilder<F> for GpuChipTestBuilder {
     ) -> (usize, usize) {
         let register = self.get_default_register(reg_increment);
         let pointer = self.get_default_pointer(pointer_increment);
-        self.write(1, register, pointer.to_le_bytes().map(F::from_canonical_u8));
+        self.write(1, register, pointer.to_le_bytes().map(F::from_u8));
         (register, pointer)
     }
 
@@ -375,11 +375,7 @@ impl GpuChipTestBuilder {
         pointer: usize,
         writes: Vec<[F; NUM_LIMBS]>,
     ) {
-        self.write(
-            1usize,
-            register,
-            pointer.to_le_bytes().map(F::from_canonical_u8),
-        );
+        self.write(1usize, register, pointer.to_le_bytes().map(F::from_u8));
         if NUM_LIMBS.is_power_of_two() {
             for (i, &write) in writes.iter().enumerate() {
                 self.write(2usize, pointer + i * NUM_LIMBS, write);

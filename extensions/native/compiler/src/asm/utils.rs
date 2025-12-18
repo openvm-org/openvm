@@ -11,15 +11,13 @@ pub enum IndexTriple<F> {
 impl<F: PrimeField32> MemIndex<F> {
     pub fn fp(&self) -> IndexTriple<F> {
         match &self.index {
-            RVar::Const(index) => IndexTriple::Const(
-                *index,
-                F::from_canonical_usize(self.offset),
-                F::from_canonical_usize(self.size),
-            ),
+            RVar::Const(index) => {
+                IndexTriple::Const(*index, F::from_usize(self.offset), F::from_usize(self.size))
+            }
             RVar::Val(index) => IndexTriple::Var(
                 index.fp(),
-                F::from_canonical_usize(self.offset),
-                F::from_canonical_usize(self.size),
+                F::from_usize(self.offset),
+                F::from_usize(self.size),
             ),
         }
     }
