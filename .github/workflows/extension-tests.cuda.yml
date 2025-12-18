@@ -55,6 +55,8 @@ jobs:
               - "extensions/rv32im/**"
             native:
               - "extensions/native/**"
+            new-keccak256:
+              - "extensions/new-keccak256/**"
             keccak256:
               - "extensions/keccak256/**"
             sha256:
