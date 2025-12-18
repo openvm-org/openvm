@@ -86,7 +86,7 @@ impl StackingModule {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn run_preflight<TS>(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS)
     where
         TS: FiatShamirTranscript + TranscriptHistory,
@@ -256,7 +256,12 @@ impl StackingModuleChip {
 impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for StackingModuleChip {
     type ModuleSpecificCtx = ();
 
-    #[tracing::instrument(name = "wrapper.generate_trace", skip_all, fields(air = %self))]
+    #[tracing::instrument(
+        name = "wrapper.generate_trace",
+        level = "trace",
+        skip_all,
+        fields(air = %self)
+    )]
     fn generate_trace(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -318,7 +323,12 @@ mod cuda_tracegen {
     impl ModuleChip<GlobalCtxGpu, GpuBackendV2> for StackingModuleChip {
         type ModuleSpecificCtx = ();
 
-        #[tracing::instrument(name = "wrapper.generate_trace", skip_all, fields(air = %self))]
+        #[tracing::instrument(
+            name = "wrapper.generate_trace",
+            level = "trace",
+            skip_all,
+            fields(air = %self)
+        )]
         fn generate_trace(
             &self,
             child_vk: &VerifyingKeyGpu,

@@ -275,7 +275,7 @@ pub(in crate::batch_constraint) fn generate_constraints_folding_blob(
     }
 }
 
-#[tracing::instrument(name = "generate_trace", skip_all)]
+#[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
 pub(in crate::batch_constraint) fn generate_constraints_folding_trace(
     blob: &ConstraintsFoldingBlob,
     preflights: &[Preflight],
