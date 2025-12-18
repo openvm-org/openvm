@@ -25,7 +25,6 @@ template <typename T> struct FinalPolyQueryEvalCols {
     T alpha[D_EF];
     T gamma[D_EF];
     T gamma_pow[D_EF];
-    T eq_acc[D_EF];
     T final_poly_coeff[D_EF];
     T final_value_acc[D_EF];
     T gamma_eq_acc[D_EF];
@@ -36,7 +35,7 @@ template <typename T> struct FinalPolyQueryEvalCols {
 typedef struct {
     FpExt alpha;
     FpExt query_pow;
-    FpExt eq_acc;
+    FpExt gamma_eq_acc;
     FpExt horner_acc;
     // TODO: Read this from proof.
     FpExt final_poly_coeff;
@@ -129,7 +128,6 @@ __global__ void final_poly_query_eval_tracegen(
     COL_WRITE_ARRAY(row, FinalPolyQueryEvalCols, alpha, record.alpha.elems);
     COL_WRITE_ARRAY(row, FinalPolyQueryEvalCols, gamma, record.gamma.elems);
     COL_WRITE_ARRAY(row, FinalPolyQueryEvalCols, gamma_pow, record.gamma_pow.elems);
-    COL_WRITE_ARRAY(row, FinalPolyQueryEvalCols, eq_acc, record.eq_acc.elems);
     COL_WRITE_ARRAY(
         row,
         FinalPolyQueryEvalCols,
@@ -142,12 +140,11 @@ __global__ void final_poly_query_eval_tracegen(
         final_value_acc,
         record.final_value_acc.elems
     );
-    FpExt gamma_pow_eq_acc = record.gamma_pow * record.eq_acc;
     COL_WRITE_ARRAY(
         row,
         FinalPolyQueryEvalCols,
         gamma_eq_acc,
-        gamma_pow_eq_acc.elems
+        record.gamma_eq_acc.elems
     );
     COL_WRITE_ARRAY(row, FinalPolyQueryEvalCols, horner_acc, record.horner_acc.elems);
 }
