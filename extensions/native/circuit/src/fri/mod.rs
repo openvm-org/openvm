@@ -26,7 +26,7 @@ use openvm_native_compiler::{conversion::AS, FriOpcode::FRI_REDUCED_OPENING};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -240,8 +240,8 @@ impl<F: Field> PartitionedBaseAir<F> for FriReducedOpeningAir {}
 impl<AB: InteractionBuilder> Air<AB> for FriReducedOpeningAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
-        let next = main.row_slice(1);
+        let local = main.row_slice(0).expect("window should have two elements");
+        let next = main.row_slice(1).expect("window should have two elements");
         let local_slice = local.deref();
         let next_slice = next.deref();
         self.eval_general(builder, local_slice, next_slice);
@@ -287,8 +287,8 @@ impl FriReducedOpeningAir {
         let start_timestamp = next.general.timestamp;
         let multiplicity = local.prefix.general.is_workload_row;
         // a_ptr/b_ptr/length/result
-        let ptr_reads = AB::F::from_canonical_usize(INSTRUCTION_READS);
-        let native_as = AB::Expr::from_canonical_u32(AS::Native as u32);
+        let ptr_reads = AB::F::from_usize(INSTRUCTION_READS);
+        let native_as = AB::Expr::from_u32(AS::Native as u32);
         // write_a itself could be anything on non-workload row, but on workload row, it must be
         // boolean. write_a on last workflow row will be constrained to equal write_a on
         // instruction1 row, implying the latter is boolean.
@@ -340,7 +340,7 @@ impl FriReducedOpeningAir {
             // local.b_ptr = next.b_ptr + EXT_DEG
             builder.assert_eq(
                 local_data.b_ptr,
-                next.data.b_ptr + AB::F::from_canonical_usize(EXT_DEG),
+                next.data.b_ptr + AB::F::from_usize(EXT_DEG),
             );
             // local.timestamp = next.timestamp + 2
             builder.assert_eq(
@@ -417,14 +417,13 @@ impl FriReducedOpeningAir {
         let length = local.prefix.data.idx;
         let multiplicity = local.prefix.general.is_ins_row * local.prefix.a_or_is_first;
         let start_timestamp = local.prefix.general.timestamp;
-        let write_timestamp = start_timestamp
-            + AB::Expr::TWO * length
-            + AB::Expr::from_canonical_usize(INSTRUCTION_READS);
+        let write_timestamp =
+            start_timestamp + AB::Expr::TWO * length + AB::Expr::from_usize(INSTRUCTION_READS);
         let end_timestamp = write_timestamp.clone() + AB::Expr::ONE;
-        let native_as = AB::Expr::from_canonical_u32(AS::Native as u32);
+        let native_as = AB::Expr::from_u32(AS::Native as u32);
         self.execution_bridge
             .execute(
-                AB::F::from_canonical_usize(FRI_REDUCED_OPENING.global_opcode().as_usize()),
+                AB::F::from_usize(FRI_REDUCED_OPENING.global_opcode().as_usize()),
                 [
                     local.a_ptr_ptr.into(),
                     local.b_ptr_ptr.into(),
@@ -436,7 +435,7 @@ impl FriReducedOpeningAir {
                 ],
                 ExecutionState::new(local.pc, local.prefix.general.timestamp),
                 ExecutionState::<AB::Expr>::new(
-                    AB::Expr::from_canonical_u32(DEFAULT_PC_STEP) + local.pc,
+                    AB::Expr::from_u32(DEFAULT_PC_STEP) + local.pc,
                     end_timestamp.clone(),
                 ),
             )
@@ -473,7 +472,7 @@ impl FriReducedOpeningAir {
             .read(
                 MemoryAddress::new(native_as.clone(), local.b_ptr_ptr),
                 [local_data.b_ptr],
-                start_timestamp + AB::Expr::from_canonical_u32(3),
+                start_timestamp + AB::Expr::from_u32(3),
                 &local.b_ptr_aux,
             )
             .eval(builder, multiplicity.clone());
@@ -482,7 +481,7 @@ impl FriReducedOpeningAir {
             .read(
                 MemoryAddress::new(native_as.clone(), next.is_init_ptr),
                 [AB::Expr::ONE - local_data.write_a],
-                start_timestamp + AB::Expr::from_canonical_u32(4),
+                start_timestamp + AB::Expr::from_u32(4),
                 &next.is_init_aux,
             )
             .eval(builder, multiplicity.clone());
@@ -987,7 +986,7 @@ impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
 
                 cols.is_first = F::ZERO;
 
-                cols.general.timestamp = F::from_canonical_u32(timestamp);
+                cols.general.timestamp = F::from_u32(timestamp);
                 cols.general.is_ins_row = F::ONE;
                 cols.general.is_workload_row = F::ZERO;
 
@@ -1014,18 +1013,18 @@ impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
                 );
                 cols.a_ptr_ptr = record.common.a_ptr_ptr;
 
-                cols.pc = F::from_canonical_u32(record.common.from_pc);
+                cols.pc = F::from_u32(record.common.from_pc);
 
                 cols.prefix.data.alpha = alpha;
                 cols.prefix.data.result = record.workload.last().unwrap().result;
-                cols.prefix.data.idx = F::from_canonical_usize(length);
-                cols.prefix.data.b_ptr = F::from_canonical_u32(b_ptr);
+                cols.prefix.data.idx = F::from_usize(length);
+                cols.prefix.data.b_ptr = F::from_u32(b_ptr);
                 cols.prefix.data.write_a = write_a;
-                cols.prefix.data.a_ptr = F::from_canonical_u32(a_ptr);
+                cols.prefix.data.a_ptr = F::from_u32(a_ptr);
 
                 cols.prefix.a_or_is_first = F::ONE;
 
-                cols.prefix.general.timestamp = F::from_canonical_u32(timestamp);
+                cols.prefix.general.timestamp = F::from_u32(timestamp);
                 cols.prefix.general.is_ins_row = F::ONE;
                 cols.prefix.general.is_workload_row = F::ZERO;
                 ins1_chunk[INS_1_WIDTH..OVERALL_WIDTH].fill(F::ZERO);
@@ -1093,11 +1092,10 @@ impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
                     }
 
                     // DataCols
-                    cols.prefix.data.a_ptr = F::from_canonical_u32(a_ptr + (length - i) as u32);
+                    cols.prefix.data.a_ptr = F::from_u32(a_ptr + (length - i) as u32);
                     cols.prefix.data.write_a = write_a;
-                    cols.prefix.data.b_ptr =
-                        F::from_canonical_u32(b_ptr + ((length - i) * EXT_DEG) as u32);
-                    cols.prefix.data.idx = F::from_canonical_usize(i);
+                    cols.prefix.data.b_ptr = F::from_u32(b_ptr + ((length - i) * EXT_DEG) as u32);
+                    cols.prefix.data.idx = F::from_usize(i);
                     if i == 0 {
                         cols.prefix.data.result = [F::ZERO; EXT_DEG];
                     }
@@ -1108,7 +1106,7 @@ impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
                     cols.prefix.general.is_ins_row = F::ZERO;
 
                     // WorkloadCols
-                    cols.prefix.general.timestamp = F::from_canonical_u32(timestamp);
+                    cols.prefix.general.timestamp = F::from_u32(timestamp);
 
                     cols.b = FieldExtension::subtract(
                         FieldExtension::add(cols.b, elem_to_ext(cols.prefix.a_or_is_first)),

@@ -7,7 +7,7 @@ use openvm_native_compiler::{
     prelude::MemVariable,
 };
 use openvm_native_compiler_derive::iter_zip;
-use openvm_stark_backend::p3_field::{FieldAlgebra, TwoAdicField};
+use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, TwoAdicField};
 pub use two_adic_pcs::*;
 
 use self::types::{DimensionsVariable, FriConfigVariable, FriQueryProofVariable};

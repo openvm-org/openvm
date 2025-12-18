@@ -9,7 +9,6 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::VerificationData,
     interaction::PermutationCheckBus,
-    p3_field::{Field, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     p3_util::log2_strict_usize,
     prover::{
@@ -41,7 +40,7 @@ use crate::{
             MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS,
         },
         vm_poseidon2_config, Arena, ExecutionBridge, ExecutionBus, ExecutionState,
-        MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmStateMut,
+        MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmField, VmStateMut,
     },
     system::{
         memory::{
@@ -56,7 +55,7 @@ use crate::{
     },
 };
 
-pub struct VmChipTestBuilder<F: Field> {
+pub struct VmChipTestBuilder<F: VmField> {
     pub memory: MemoryTester<F>,
     pub streams: Streams<F>,
     pub rng: StdRng,
@@ -70,7 +69,7 @@ pub struct VmChipTestBuilder<F: Field> {
 
 impl<F> TestBuilder<F> for VmChipTestBuilder<F>
 where
-    F: PrimeField32,
+    F: VmField,
 {
     fn execute<E, RA>(&mut self, executor: &mut E, arena: &mut RA, instruction: &Instruction<F>)
     where
@@ -135,7 +134,7 @@ where
         value: [usize; N],
     ) {
         self.memory
-            .write(address_space, pointer, value.map(F::from_canonical_usize));
+            .write(address_space, pointer, value.map(F::from_usize));
     }
 
     fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
@@ -183,7 +182,7 @@ where
     ) -> (usize, usize) {
         let register = self.get_default_register(reg_increment);
         let pointer = self.get_default_pointer(pointer_increment);
-        self.write(1, register, pointer.to_le_bytes().map(F::from_canonical_u8));
+        self.write(1, register, pointer.to_le_bytes().map(F::from_u8));
         (register, pointer)
     }
 
@@ -200,7 +199,7 @@ where
     }
 }
 
-impl<F: PrimeField32> VmChipTestBuilder<F> {
+impl<F: VmField> VmChipTestBuilder<F> {
     pub fn new(
         controller: MemoryController<F>,
         memory: TracingMemory,
@@ -238,11 +237,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         pointer: usize,
         writes: Vec<[F; NUM_LIMBS]>,
     ) {
-        self.write(
-            1usize,
-            register,
-            pointer.to_le_bytes().map(F::from_canonical_u8),
-        );
+        self.write(1usize, register, pointer.to_le_bytes().map(F::from_u8));
         if NUM_LIMBS.is_power_of_two() {
             for (i, &write) in writes.iter().enumerate() {
                 self.write(2usize, pointer + i * NUM_LIMBS, write);
@@ -318,7 +313,7 @@ impl VmChipTestBuilder<BabyBear> {
     }
 }
 
-impl<F: PrimeField32> VmChipTestBuilder<F> {
+impl<F: VmField> VmChipTestBuilder<F> {
     pub fn default_persistent() -> Self {
         let mut mem_config = MemoryConfig::default();
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
@@ -396,7 +391,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     }
 }
 
-impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
+impl<F: VmField> Default for VmChipTestBuilder<F> {
     fn default() -> Self {
         let mut mem_config = MemoryConfig::default();
         // TODO[jpw]: this is because old tests use `gen_pointer` on address space 1; this can be
@@ -407,12 +402,19 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
     }
 }
 
-pub struct VmChipTester<SC: StarkGenericConfig> {
+pub struct VmChipTester<SC: StarkGenericConfig>
+where
+    Val<SC>: VmField,
+{
     pub memory: Option<MemoryTester<Val<SC>>>,
     pub air_ctxs: Vec<(AirRef<SC>, AirProvingContext<CpuBackend<SC>>)>,
 }
 
-impl<SC: StarkGenericConfig> Default for VmChipTester<SC> {
+impl<SC> Default for VmChipTester<SC>
+where
+    SC: StarkGenericConfig,
+    Val<SC>: VmField,
+{
     fn default() -> Self {
         Self {
             memory: None,
@@ -421,9 +423,10 @@ impl<SC: StarkGenericConfig> Default for VmChipTester<SC> {
     }
 }
 
-impl<SC: StarkGenericConfig> VmChipTester<SC>
+impl<SC> VmChipTester<SC>
 where
-    Val<SC>: PrimeField32,
+    SC: StarkGenericConfig,
+    Val<SC>: VmField,
 {
     pub fn load<E, A, C>(
         mut self,

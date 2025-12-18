@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use openvm_native_circuit::execute_program;
 use openvm_native_compiler::{asm::AsmBuilder, conversion::CompilerOptions, ir::Var};
-use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
+use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, PrimeCharacteristicRing};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 type F = BabyBear;
@@ -16,8 +16,8 @@ fn test_cycle_tracker() {
 
     builder.cycle_tracker_start("test_outer");
 
-    let n_val = F::from_canonical_u32(10);
-    let m_val = F::from_canonical_u32(20);
+    let n_val = F::from_u32(10);
+    let m_val = F::from_u32(20);
 
     let n: Var<_> = builder.eval(n_val);
     let m: Var<_> = builder.eval(m_val);

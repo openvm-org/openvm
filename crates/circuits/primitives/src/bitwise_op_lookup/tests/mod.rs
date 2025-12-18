@@ -2,7 +2,7 @@ use std::{iter, sync::Arc};
 
 use dummy::DummyAir;
 use openvm_stark_backend::{
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
     utils::disable_debug_builder,
@@ -52,12 +52,12 @@ fn generate_rng_values(
         .map(|_| {
             (0..list_len)
                 .map(|_| {
-                    let op = match rng.gen_range(0..2) {
+                    let op = match rng.random_range(0..2) {
                         0 => BitwiseOperation::Range,
                         _ => BitwiseOperation::Xor,
                     };
-                    let x = rng.gen_range(0..(1 << NUM_BITS));
-                    let y = rng.gen_range(0..(1 << NUM_BITS));
+                    let x = rng.random_range(0..(1 << NUM_BITS));
+                    let y = rng.random_range(0..(1 << NUM_BITS));
                     let z = match op {
                         BitwiseOperation::Range => 0,
                         BitwiseOperation::Xor => x ^ y,
@@ -103,7 +103,7 @@ fn test_bitwise_operation_lookup() {
                         };
                         [x, y, z, op as u32].into_iter()
                     })
-                    .map(FieldAlgebra::from_canonical_u32)
+                    .map(PrimeCharacteristicRing::from_u32)
                     .collect(),
                 4,
             )
@@ -137,7 +137,7 @@ fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperation)) {
                     };
                     [x, y, z, op as u32].into_iter()
                 })
-                .map(FieldAlgebra::from_canonical_u32)
+                .map(PrimeCharacteristicRing::from_u32)
                 .collect(),
             4,
         ),
@@ -201,9 +201,9 @@ fn test_cuda_bitwise_op_lookup() {
 
     let random_values = (0..NUM_INPUTS)
         .flat_map(|_| {
-            let x = rng.gen::<u32>() & BIT_MASK;
-            let y = rng.gen::<u32>() & BIT_MASK;
-            let op = rng.gen_bool(0.5);
+            let x = rng.random::<u32>() & BIT_MASK;
+            let y = rng.random::<u32>() & BIT_MASK;
+            let op = rng.random_bool(0.5);
             [x, y, op as u32]
         })
         .collect::<Vec<_>>();
@@ -239,9 +239,9 @@ fn test_cuda_bitwise_op_lookup_hybrid() {
 
     let gpu_random_values = (0..NUM_INPUTS)
         .flat_map(|_| {
-            let x = rng.gen::<u32>() & BIT_MASK;
-            let y = rng.gen::<u32>() & BIT_MASK;
-            let op = rng.gen_bool(0.5);
+            let x = rng.random::<u32>() & BIT_MASK;
+            let y = rng.random::<u32>() & BIT_MASK;
+            let op = rng.random_bool(0.5);
             [x, y, op as u32]
         })
         .collect::<Vec<_>>();
@@ -250,9 +250,9 @@ fn test_cuda_bitwise_op_lookup_hybrid() {
     let cpu_chip = bitwise.cpu_chip.clone().unwrap();
     let cpu_values = (0..NUM_INPUTS)
         .map(|_| {
-            let x = rng.gen::<u32>() & BIT_MASK;
-            let y = rng.gen::<u32>() & BIT_MASK;
-            let op_xor = rng.gen_bool(0.5);
+            let x = rng.random::<u32>() & BIT_MASK;
+            let y = rng.random::<u32>() & BIT_MASK;
+            let op_xor = rng.random_bool(0.5);
             let z = if op_xor {
                 cpu_chip.request_xor(x, y)
             } else {
@@ -267,10 +267,10 @@ fn test_cuda_bitwise_op_lookup_hybrid() {
         .chain(
             cpu_values
                 .iter()
-                .map(|v| F::from_canonical_u32(v[0]))
-                .chain(cpu_values.iter().map(|v| F::from_canonical_u32(v[1])))
-                .chain(cpu_values.iter().map(|v| F::from_canonical_u32(v[2])))
-                .chain(cpu_values.iter().map(|v| F::from_canonical_u32(v[3]))),
+                .map(|v| F::from_u32(v[0]))
+                .chain(cpu_values.iter().map(|v| F::from_u32(v[1])))
+                .chain(cpu_values.iter().map(|v| F::from_u32(v[2])))
+                .chain(cpu_values.iter().map(|v| F::from_u32(v[3]))),
         )
         .collect::<Vec<_>>()
         .to_device()

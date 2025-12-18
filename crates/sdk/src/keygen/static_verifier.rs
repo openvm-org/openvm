@@ -10,7 +10,7 @@ use openvm_native_recursion::{
     hints::Hintable,
     witness::Witnessable,
 };
-use openvm_stark_sdk::openvm_stark_backend::{p3_field::FieldAlgebra, proof::Proof};
+use openvm_stark_sdk::openvm_stark_backend::{p3_field::PrimeCharacteristicRing, proof::Proof};
 
 use crate::{keygen::RootVerifierProvingKey, prover::RootVerifierLocalProver, RootSC, F, SC};
 

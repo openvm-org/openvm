@@ -9,7 +9,9 @@ use openvm_native_recursion::{
 use openvm_stark_backend::proof::Proof;
 use openvm_stark_sdk::{
     config::FriParameters,
-    openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, p3_field::FieldAlgebra},
+    openvm_stark_backend::{
+        keygen::types::MultiStarkVerifyingKey, p3_field::PrimeCharacteristicRing,
+    },
 };
 
 use crate::{
@@ -78,17 +80,15 @@ impl RootVmVerifierConfig {
         let num_public_values = self.num_user_public_values + DIGEST_SIZE * 2;
         let num_bytes = num_public_values * BYTE_PER_WORD;
         // Move heap pointer in order to keep input arguments from address space 2.
-        let heap_addr: Var<F> = builder.eval(F::from_canonical_u32(
-            HEAP_START_ADDRESS as u32 + num_bytes as u32,
-        ));
+        let heap_addr: Var<F> =
+            builder.eval(F::from_u32(HEAP_START_ADDRESS as u32 + num_bytes as u32));
         builder.store_heap_ptr(Ptr { address: heap_addr });
         let expected_pvs: Vec<Felt<_>> = (0..num_public_values)
             .map(|i| {
                 let fs: [Felt<_>; BYTE_PER_WORD] = array::from_fn(|j| {
                     let ptr = Ptr {
-                        address: builder.eval(F::from_canonical_u32(
-                            HEAP_START_ADDRESS as u32 + (i * 4) as u32,
-                        )),
+                        address: builder
+                            .eval(F::from_u32(HEAP_START_ADDRESS as u32 + (i * 4) as u32)),
                     };
                     let idx = MemIndex {
                         index: RVar::from(j),
@@ -101,9 +101,9 @@ impl RootVmVerifierConfig {
                 });
                 builder.eval(
                     fs[0]
-                        + fs[1] * F::from_canonical_u32(1 << 8)
-                        + fs[2] * F::from_canonical_u32(1 << 16)
-                        + fs[3] * F::from_canonical_u32(1 << 24),
+                        + fs[1] * F::from_u32(1 << 8)
+                        + fs[2] * F::from_u32(1 << 16)
+                        + fs[3] * F::from_u32(1 << 24),
                 )
             })
             .collect();

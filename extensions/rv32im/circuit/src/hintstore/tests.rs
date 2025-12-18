@@ -21,7 +21,7 @@ use openvm_instructions::{
 };
 use openvm_rv32im_transpiler::Rv32HintStoreOpcode::{self, *};
 use openvm_stark_backend::{
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -107,7 +107,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 ) {
     let num_words = match opcode {
         HINT_STOREW => 1,
-        HINT_BUFFER => rng.gen_range(1..28),
+        HINT_BUFFER => rng.random_range(1..28),
     } as u32;
 
     let a = if opcode == HINT_BUFFER {
@@ -115,7 +115,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         tester.write(
             RV32_REGISTER_AS as usize,
             a,
-            num_words.to_le_bytes().map(F::from_canonical_u8),
+            num_words.to_le_bytes().map(F::from_u8),
         );
         a
     } else {
@@ -124,11 +124,11 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let mem_ptr = gen_pointer(rng, 4) as u32;
     let b = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
-    tester.write(1, b, mem_ptr.to_le_bytes().map(F::from_canonical_u8));
+    tester.write(1, b, mem_ptr.to_le_bytes().map(F::from_u8));
 
     let mut input = Vec::with_capacity(num_words as usize * 4);
     for _ in 0..num_words {
-        let data = rng.next_u32().to_le_bytes().map(F::from_canonical_u8);
+        let data = rng.next_u32().to_le_bytes().map(F::from_u8);
         input.extend(data);
         tester.streams_mut().hint_stream.extend(data);
     }
@@ -165,7 +165,7 @@ fn rand_hintstore_test() {
     let (mut harness, bitwise) = create_harness(&mut tester);
     let num_ops: usize = 100;
     for _ in 0..num_ops {
-        let opcode = if rng.gen_bool(0.5) {
+        let opcode = if rng.random_bool(0.5) {
             HINT_STOREW
         } else {
             HINT_BUFFER
@@ -213,10 +213,10 @@ fn run_negative_hintstore_test(
     );
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
+        let mut trace_row = trace.row_slice(0).expect("row exists").to_vec();
         let cols: &mut Rv32HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
         if let Some(data) = prank_data {
-            cols.data = data.map(F::from_canonical_u32);
+            cols.data = data.map(F::from_u32);
         }
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
@@ -310,7 +310,7 @@ fn test_cuda_rand_hintstore_tracegen() {
     let mut harness = create_cuda_harness(&tester);
     let num_ops = 50;
     for _ in 0..num_ops {
-        let opcode = if rng.gen_bool(0.5) {
+        let opcode = if rng.random_bool(0.5) {
             HINT_STOREW
         } else {
             HINT_BUFFER

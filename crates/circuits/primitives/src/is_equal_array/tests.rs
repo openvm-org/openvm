@@ -6,7 +6,7 @@ use std::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -52,10 +52,14 @@ impl<F: Field, const N: usize> BaseAir<F> for IsEqArrayTestAir<N> {
         IsEqArrayCols::<F, N>::width()
     }
 }
-impl<AB: AirBuilder, const N: usize> Air<AB> for IsEqArrayTestAir<N> {
+impl<AB: AirBuilder, const N: usize> Air<AB> for IsEqArrayTestAir<N>
+where
+    AB::Var: Copy,
+    AB::F: Field,
+{
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local: &IsEqArrayCols<AB::Var, N> = (*local).borrow();
         let io = IsEqArrayIo {
             x: local.x.map(Into::into),
@@ -102,15 +106,15 @@ impl<F: Field, const N: usize> IsEqArrayChip<F, N> {
 #[test_case([92, 27, 32], [92, 27, 32], 1; "92, 27, 32 == 92, 27, 32")]
 #[test_case([1, 27, 4], [1, 2, 43], 0; "1, 27, 4 != 1, 2, 43")]
 fn test_is_eq_array_single_row(x: [u32; 3], y: [u32; 3], is_equal: u32) {
-    let x = x.map(FieldAlgebra::from_canonical_u32);
-    let y = y.map(FieldAlgebra::from_canonical_u32);
+    let x = x.map(PrimeCharacteristicRing::from_u32);
+    let y = y.map(PrimeCharacteristicRing::from_u32);
 
     let chip = IsEqArrayChip::new(vec![(x, y)]);
     let air = chip.air;
     let trace = chip.generate_trace();
     let row: &IsEqArrayCols<BabyBear, 3> = trace.values.as_slice().borrow();
 
-    assert_eq!(row.out, FieldAlgebra::from_canonical_u32(is_equal));
+    assert_eq!(row.out, PrimeCharacteristicRing::from_u32(is_equal));
 
     BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
         .expect("Verification failed");
@@ -127,8 +131,8 @@ fn test_is_eq_array_multi_rows() {
     .into_iter()
     .map(|(x, y)| {
         (
-            x.map(FieldAlgebra::from_canonical_u32),
-            y.map(FieldAlgebra::from_canonical_u32),
+            x.map(PrimeCharacteristicRing::from_u32),
+            y.map(PrimeCharacteristicRing::from_u32),
         )
     })
     .collect();
@@ -149,8 +153,8 @@ fn test_is_eq_array_multi_rows() {
 #[test_case([92, 27, 32], [92, 27, 32]; "92, 27, 32 == 92, 27, 32")]
 #[test_case([1, 27, 4], [1, 2, 43]; "1, 27, 4 != 1, 2, 43")]
 fn test_is_eq_array_single_row_fail(x: [u32; 3], y: [u32; 3]) {
-    let x = x.map(FieldAlgebra::from_canonical_u32);
-    let y = y.map(FieldAlgebra::from_canonical_u32);
+    let x = x.map(PrimeCharacteristicRing::from_u32);
+    let y = y.map(PrimeCharacteristicRing::from_u32);
 
     let chip = IsEqArrayChip::new(vec![(x, y)]);
     let air = chip.air;
@@ -174,7 +178,7 @@ fn test_is_eq_array_fail_rand() {
     let mut rng = create_seeded_rng();
     let pairs: Vec<_> = (0..height)
         .map(|_| {
-            let x = from_fn(|_| FieldAlgebra::from_wrapped_u32(rng.gen::<u32>()));
+            let x = from_fn(|_| BabyBear::from_u32(rng.random::<u32>()));
             (x, x)
         })
         .collect();
@@ -186,7 +190,7 @@ fn test_is_eq_array_fail_rand() {
     for i in 0..height {
         for j in 0..N {
             let mut prank_trace = trace.clone();
-            prank_trace.row_mut(i)[j] += FieldAlgebra::from_wrapped_u32(rng.gen::<u32>() + 1);
+            prank_trace.row_mut(i)[j] += BabyBear::from_u32(rng.random::<u32>() + 1);
             assert_eq!(
                 BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
                     any_rap_arc_vec![air],
@@ -209,14 +213,14 @@ fn test_cuda_simple_is_equal_array_tracegen() {
 
     let vec_x: Vec<F> = vec![1u32, 2, 3, 4, 5, 6, 7, 8, 9u32, 10, 11, 12, 13, 14, 15, 16]
         .into_iter()
-        .map(F::from_canonical_u32)
+        .map(F::from_u32)
         .collect();
 
     let vec_y: Vec<F> = vec![
         1u32, 3, 3, 4, 5, 6, 10, 8, 9u32, 10, 11, 12, 13, 200, 15, 16,
     ]
     .into_iter()
-    .map(F::from_canonical_u32)
+    .map(F::from_u32)
     .collect();
 
     let inputs_x = vec_x.as_slice().to_device().unwrap();
@@ -255,11 +259,11 @@ fn test_cuda_random_is_equal_array_tracegen() {
         let n = 1 << log_height;
 
         let vec_x: Vec<F> = (0..n * ARRAY_LEN)
-            .map(|_| F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32)))
+            .map(|_| F::from_u32(rng.random_range(0..F::ORDER_U32)))
             .collect();
 
         let vec_y: Vec<F> = (0..n * ARRAY_LEN)
-            .map(|_| F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32)))
+            .map(|_| F::from_u32(rng.random_range(0..F::ORDER_U32)))
             .collect();
 
         let inputs_x = vec_x.as_slice().to_device().unwrap();

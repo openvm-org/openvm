@@ -18,7 +18,7 @@ use openvm_rv32im_transpiler::Rv32JalLuiOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 
@@ -89,7 +89,7 @@ where
 
         let last_limb_bits = PC_BITS - RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);
         let additional_bits = (last_limb_bits..RV32_CELL_BITS).fold(0, |acc, x| acc + (1 << x));
-        let additional_bits = AB::F::from_canonical_u32(additional_bits);
+        let additional_bits = AB::F::from_u32(additional_bits);
         self.bus
             .send_xor(rd[3], additional_bits, rd[3] + additional_bits)
             .eval(builder, is_jal);
@@ -99,29 +99,27 @@ where
             .skip(1)
             .enumerate()
             .fold(AB::Expr::ZERO, |acc, (i, &val)| {
-                acc + val * AB::Expr::from_canonical_u32(1 << (i * RV32_CELL_BITS))
+                acc + val * AB::Expr::from_u32(1 << (i * RV32_CELL_BITS))
             });
 
         // Constrain that imm * 2^4 is the correct composition of intermed_val in case of LUI
         builder.when(is_lui).assert_eq(
             intermed_val.clone(),
-            imm * AB::F::from_canonical_u32(1 << (12 - RV32_CELL_BITS)),
+            imm * AB::F::from_u32(1 << (12 - RV32_CELL_BITS)),
         );
 
-        let intermed_val = rd[0] + intermed_val * AB::Expr::from_canonical_u32(1 << RV32_CELL_BITS);
+        let intermed_val = rd[0] + intermed_val * AB::Expr::from_u32(1 << RV32_CELL_BITS);
         // Constrain that from_pc + DEFAULT_PC_STEP is the correct composition of intermed_val in
         // case of JAL
-        builder.when(is_jal).assert_eq(
-            intermed_val,
-            from_pc + AB::F::from_canonical_u32(DEFAULT_PC_STEP),
-        );
+        builder
+            .when(is_jal)
+            .assert_eq(intermed_val, from_pc + AB::F::from_u32(DEFAULT_PC_STEP));
 
-        let to_pc = from_pc + is_lui * AB::F::from_canonical_u32(DEFAULT_PC_STEP) + is_jal * imm;
+        let to_pc = from_pc + is_lui * AB::F::from_u32(DEFAULT_PC_STEP) + is_jal * imm;
 
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
-            is_lui * AB::F::from_canonical_u32(LUI as u32)
-                + is_jal * AB::F::from_canonical_u32(JAL as u32),
+            is_lui * AB::F::from_u32(LUI as u32) + is_jal * AB::F::from_u32(JAL as u32),
         );
 
         AdapterAirContext {
@@ -235,8 +233,8 @@ where
         // Writing in reverse order
         core_row.is_lui = F::from_bool(!record.is_jal);
         core_row.is_jal = F::from_bool(record.is_jal);
-        core_row.rd_data = record.rd_data.map(F::from_canonical_u8);
-        core_row.imm = F::from_canonical_u32(record.imm);
+        core_row.rd_data = record.rd_data.map(F::from_u8);
+        core_row.imm = F::from_u32(record.imm);
     }
 }
 
