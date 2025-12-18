@@ -26,16 +26,12 @@ template <typename T> struct NonInitialOpenedValuesCols {
     T yi[D_EF];
 };
 
-typedef struct {
-    Fp value[D_EF];
-    Fp value_hash[WIDTH];
-} NonInitialOpenedValueRecord;
-
 __global__ void non_initial_opened_values_tracegen(
     Fp *trace,
     size_t num_valid_rows,
     size_t height,
-    const NonInitialOpenedValueRecord *records,
+    const FpExt *codeword_opened_values,
+    const Fp *codeword_states,
     size_t num_whir_rounds,
     size_t k_whir,
     Fp omega_k,
@@ -84,8 +80,6 @@ __global__ void non_initial_opened_values_tracegen(
     const size_t round_query_idx =
         per_proof_offset + query_offsets[whir_round] + query_idx;
 
-    const NonInitialOpenedValueRecord record = records[row_idx];
-
     COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, is_enabled, Fp::one());
     COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, proof_idx, proof_idx);
     COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, whir_round, whir_round);
@@ -106,8 +100,8 @@ __global__ void non_initial_opened_values_tracegen(
     Fp twiddle = pow(omega_k, coset_idx);
     COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, twiddle, twiddle);
 
-    COL_WRITE_ARRAY(row, NonInitialOpenedValuesCols, value, record.value);
-    COL_WRITE_ARRAY(row, NonInitialOpenedValuesCols, value_hash, record.value_hash);
+    COL_WRITE_ARRAY(row, NonInitialOpenedValuesCols, value, codeword_opened_values[row_idx].elems);
+    COL_WRITE_ARRAY(row, NonInitialOpenedValuesCols, value_hash, codeword_states + row_idx * WIDTH);
 
     const FpExt yi = yis[round_query_idx];
     COL_WRITE_ARRAY(row, NonInitialOpenedValuesCols, yi, yi.elems);
@@ -117,7 +111,8 @@ extern "C" int _non_initial_opened_values_tracegen(
     Fp *trace_d,
     size_t num_valid_rows,
     size_t height,
-    const NonInitialOpenedValueRecord *records_d,
+    const FpExt *codeword_opened_values_d,
+    const Fp *codeword_states_d,
     size_t num_whir_rounds,
     size_t k_whir,
     Fp omega_k,
@@ -137,7 +132,8 @@ extern "C" int _non_initial_opened_values_tracegen(
         trace_d,
         num_valid_rows,
         height,
-        records_d,
+        codeword_opened_values_d,
+        codeword_states_d,
         num_whir_rounds,
         k_whir,
         omega_k,

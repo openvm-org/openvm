@@ -266,8 +266,8 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
         _ctx: &(),
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         let (merkle_verify_trace_vec, poseidon_inputs) =
-            tracing::trace_span!("wrapper.generate_trace", air = "MerkleVerify").in_scope(|| {
-                merkle_verify::generate_trace(child_vk, proofs, preflights, self.params.k_whir())
+            tracing::info_span!("wrapper.generate_trace", air = "MerkleVerify").in_scope(|| {
+                merkle_verify::generate_trace(child_vk, proofs, preflights, &self.params)
             });
         let merkle_verify_trace =
             RowMajorMatrix::new(merkle_verify_trace_vec, MerkleVerifyCols::<F>::width());
@@ -365,7 +365,7 @@ mod cuda_tracegen {
                             &child_vk.cpu,
                             &proofs_cpu,
                             &preflights_cpu,
-                            self.params.k_whir(),
+                            &self.params,
                         )
                     },
                 );
