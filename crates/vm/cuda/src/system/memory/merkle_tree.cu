@@ -3,6 +3,8 @@
 #include "primitives/shared_buffer.cuh"
 #include "primitives/trace_access.h"
 
+#include <cub/cub.cuh>
+
 using poseidon2::poseidon2_mix;
 
 struct alignas(32) digest_t {
@@ -182,40 +184,54 @@ __global__ void prepare_for_updating(
     leaves[gid].label /= CELLS_OUT;
 }
 
+__global__ void set_parent_id_adjacent_differences(
+    uint32_t const *current_layer_ptrs,
+    uint32_t *parent_ids,
+    LabeledDigest const *layer,
+    uint32_t const num_children,
+    uint32_t const h
+) {
+    auto gid = blockDim.x * blockIdx.x + threadIdx.x;
+    if (gid >= num_children) {
+        return;
+    }
+    if (gid == 0) {
+        parent_ids[gid] = 0;
+    } else {
+        auto const ptr1 = current_layer_ptrs[gid - 1];
+        auto const ptr2 = current_layer_ptrs[gid];
+        parent_ids[gid] = layer[ptr1].address_space_idx != layer[ptr2].address_space_idx
+            || (layer[ptr1].label >> h) != (layer[ptr2].label >> h);
+    }
+}
+
 uint32_t const MISSING_CHILD = UINT_MAX;
 
-__global__ void mark_parents(
+__global__ void group_by_parent(
     uint32_t const *current_layer_ptrs,
+    uint32_t const *parent_ids,
     uint32_t *child_ptrs,
     LabeledDigest const *layer,
     uint32_t const num_children,
-    uint32_t const h,
-    uint32_t *out_num_parents
+    uint32_t const h
 ) {
-    uint32_t num_parents = 1;
-    for (uint32_t i = 1; i < num_children; ++i) {
-        auto const ptr1 = current_layer_ptrs[i - 1];
-        auto const ptr2 = current_layer_ptrs[i];
-        if (layer[ptr1].address_space_idx != layer[ptr2].address_space_idx ||
-            (layer[ptr1].label >> h) != (layer[ptr2].label >> h)) {
-            ++num_parents;
+    auto gid = blockDim.x * blockIdx.x + threadIdx.x;
+    if (gid >= num_children) {
+        return;
+    }
+
+    uint32_t const ptr = current_layer_ptrs[gid];
+    uint32_t const my_place = parent_ids[gid] * 2 + (layer[ptr].label >> (h - 1)) % 2;
+    uint32_t const siblings_place = my_place ^ 1;
+
+    child_ptrs[my_place] = ptr;
+    // Do we need to mark the sibling as absent?
+    {
+        uint32_t const sibling_id = gid + (siblings_place - my_place);
+        if (sibling_id >= num_children || current_layer_ptrs[sibling_id] != (ptr + (siblings_place - my_place))) {
+            child_ptrs[siblings_place] = MISSING_CHILD;
         }
     }
-    for (uint32_t i = 0, j = 0; i < num_parents; ++i) {
-        child_ptrs[2 * i] = child_ptrs[2 * i + 1] = MISSING_CHILD;
-        auto const address_space_idx = layer[current_layer_ptrs[j]].address_space_idx;
-        auto const label = layer[current_layer_ptrs[j]].label >> h;
-        while (j < num_children) {
-            auto const ptr = current_layer_ptrs[j];
-            if (layer[ptr].address_space_idx != address_space_idx ||
-                (layer[ptr].label >> h) != label) {
-                break;
-            }
-            child_ptrs[2 * i + (layer[ptr].label >> (h - 1)) % 2] = ptr;
-            ++j;
-        }
-    }
-    *out_num_parents = num_parents;
 }
 
 __device__ void fill_merkle_trace_row(
@@ -570,15 +586,50 @@ extern "C" int _update_merkle_tree(
         );
     }
 
-    uint32_t *d_num_parents;
     uint32_t merkle_trace_offset = unpadded_trace_height;
-    cudaMallocAsync(&d_num_parents, sizeof(uint32_t), cudaStreamPerThread);
     for (uint32_t h = 1; h <= subtree_height; ++h) {
+        uint32_t* parent_ids = tmp_buf + 2 * num_children;
+        // First, find for each child whether it has a different parent from the previous one
+        {
+            auto [grid, block] = kernel_launch_params(num_children);
+            set_parent_id_adjacent_differences<<<grid, block>>>(child_buf, parent_ids, layer, num_children, h);
+        }
+        // Then, convert it to the partial sum
+        {
+            // Use cub::DeviceScan::InclusiveSum to compute the partial sums (inclusive scan) in-place on parent_ids.
+            void* d_temp_storage = nullptr;
+            size_t temp_storage_bytes = 0;
+            // First, get required temporary storage size
+            cub::DeviceScan::InclusiveSum(
+                d_temp_storage, temp_storage_bytes,
+                parent_ids, parent_ids, num_children,
+                cudaStreamPerThread
+            );
+            cudaMallocAsync(&d_temp_storage, temp_storage_bytes, cudaStreamPerThread);
+            // Now, perform the inclusive sum in-place
+            cub::DeviceScan::InclusiveSum(
+                d_temp_storage, temp_storage_bytes,
+                parent_ids, parent_ids, num_children,
+                cudaStreamPerThread
+            );
+            cudaFreeAsync(d_temp_storage, cudaStreamPerThread);
+        }
+        // Finally, reorder the children
+        {
+            auto [grid, block] = kernel_launch_params(num_children);
+            group_by_parent<<<grid, block>>>(
+                child_buf,
+                parent_ids,
+                tmp_buf,
+                layer,
+                num_children,
+                h
+            );
+        }
         uint32_t num_parents;
-        mark_parents<<<1, 1>>>(child_buf, tmp_buf, layer, num_children, h, d_num_parents);
         cudaMemcpyAsync(
             &num_parents,
-            d_num_parents,
+            parent_ids + (num_children - 1),
             sizeof(uint32_t),
             cudaMemcpyDeviceToHost,
             cudaStreamPerThread
@@ -609,7 +660,6 @@ extern "C" int _update_merkle_tree(
         );
         num_children = num_parents;
     }
-    cudaFreeAsync(d_num_parents, cudaStreamPerThread);
     update_to_root<<<1, 1>>>(
         child_buf,
         layer,

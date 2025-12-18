@@ -125,7 +125,7 @@ pub mod merkle_tree {
     ) -> Result<(), CudaError> {
         let num_leaves = touched_blocks.len() / TIMESTAMPED_BLOCK_WIDTH;
         let num_subtrees = subtree_ptrs.len();
-        let tmp_buffer = DeviceBuffer::<u32>::with_capacity(4 * num_leaves);
+        let tmp_buffer = DeviceBuffer::<u32>::with_capacity(5 * num_leaves);
         let actual_heights = actual_heights.to_device().unwrap();
         CudaError::from_result(_update_merkle_tree(
             num_leaves,
