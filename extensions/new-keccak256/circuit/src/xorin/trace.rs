@@ -105,7 +105,7 @@ where
 
         // Reading the length first without tracing to allocate a record of correct size
         let guest_mem = state.memory.data();
-        let len = read_rv32_register(guest_mem, c.as_canonical_u32());
+        let len = read_rv32_register(guest_mem, c.as_canonical_u32()) as usize;
         // Safety: length has to be multiple of 4
         // This is enforced by how the guest program calls the xorin opcode
         // Xorin opcode is only called through the keccak update guest program
