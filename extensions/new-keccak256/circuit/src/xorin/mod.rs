@@ -4,6 +4,7 @@ pub mod execution;
 #[cfg(test)]
 pub mod tests;
 pub mod trace;
+pub mod utils;
 
 use openvm_circuit::arch::VmChipWrapper;
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;

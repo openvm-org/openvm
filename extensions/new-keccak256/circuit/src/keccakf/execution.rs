@@ -17,6 +17,8 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 use p3_keccak_air::NUM_ROUNDS;
 
+use crate::keccakf::utils::{KECCAK_WIDTH_BYTES, KECCAK_WIDTH_U64_LIMBS};
+
 use super::KeccakfVmExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -160,17 +162,17 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     let buf_ptr = pre_compute.a as u32;
     let buffer_limbs: [u8; 4] = exec_state.vm_read(RV32_REGISTER_AS, buf_ptr);
     let buffer = u32::from_le_bytes(buffer_limbs);
-    let message: &[u8] = exec_state.vm_read_slice(RV32_MEMORY_AS, buffer, 200);
-    assert_eq!(message.len(), 200);
+    let message: &[u8] = exec_state.vm_read_slice(RV32_MEMORY_AS, buffer, KECCAK_WIDTH_BYTES);
+    assert_eq!(message.len(), KECCAK_WIDTH_BYTES);
 
-    let mut message_u64 = [0u64; 25];
+    let mut message_u64 = [0u64; KECCAK_WIDTH_U64_LIMBS];
     for (i, message_chunk) in message.chunks_exact(8).enumerate() {
         let message_chunk_u64 = u64::from_le_bytes(message_chunk.try_into().unwrap());
         message_u64[i] = message_chunk_u64;
     }
     keccakf(&mut message_u64);
 
-    let mut result: [u8; 200] = [0; 200];
+    let mut result: [u8; KECCAK_WIDTH_BYTES] = [0; KECCAK_WIDTH_BYTES];
     for (i, message) in message_u64.into_iter().enumerate() {
         let message_bytes = message.to_be_bytes();
         result[8 * i..8 * i + 8].copy_from_slice(&message_bytes);

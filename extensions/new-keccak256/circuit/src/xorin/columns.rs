@@ -1,5 +1,7 @@
 use openvm_circuit::system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols};
 use openvm_circuit_primitives_derive::AlignedBorrow;
+use crate::xorin::utils::{KECCAK_RATE_BYTES, KECCAK_WORD_SIZE};
+use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
@@ -19,11 +21,11 @@ pub struct XorinInstructionCols<T> {
     pub input_reg_ptr: T,
     pub len_reg_ptr: T,
     pub buffer_ptr: T,
-    pub buffer_ptr_limbs: [T; 4],
+    pub buffer_ptr_limbs: [T; RV32_REGISTER_NUM_LIMBS],
     pub input_ptr: T,
-    pub input_ptr_limbs: [T; 4],
+    pub input_ptr_limbs: [T; RV32_REGISTER_NUM_LIMBS],
     pub len: T,
-    pub len_limbs: [T; 4],
+    pub len_limbs: [T; RV32_REGISTER_NUM_LIMBS],
     pub start_timestamp: T,
 }
 
@@ -33,19 +35,19 @@ pub struct XorinSpongeCols<T> {
     // is_padding_bytes is a boolean where is_padding_bytes[i] = 1 if 4*(i+1) >= len
     // and is_padding_bytes[i] = 0 otherwise
     // safety: notice that each 4 bytes has to have equal is_padding_bytes value
-    pub is_padding_bytes: [T; 136 / 4],
-    pub preimage_buffer_bytes: [T; 136],
-    pub input_bytes: [T; 136],
-    pub postimage_buffer_bytes: [T; 136],
+    pub is_padding_bytes: [T; KECCAK_RATE_BYTES / KECCAK_WORD_SIZE],
+    pub preimage_buffer_bytes: [T; KECCAK_RATE_BYTES],
+    pub input_bytes: [T; KECCAK_RATE_BYTES],
+    pub postimage_buffer_bytes: [T; KECCAK_RATE_BYTES],
 }
 
 #[repr(C)]
 #[derive(Clone, Debug, AlignedBorrow)]
 pub struct XorinMemoryCols<T> {
     pub register_aux_cols: [MemoryReadAuxCols<T>; 3],
-    pub input_bytes_read_aux_cols: [MemoryReadAuxCols<T>; 34],
-    pub buffer_bytes_read_aux_cols: [MemoryReadAuxCols<T>; 34],
-    pub buffer_bytes_write_aux_cols: [MemoryWriteAuxCols<T, 4>; 34],
+    pub input_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_BYTES / KECCAK_WORD_SIZE],
+    pub buffer_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_RATE_BYTES / KECCAK_WORD_SIZE],
+    pub buffer_bytes_write_aux_cols: [MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS>; KECCAK_RATE_BYTES / KECCAK_WORD_SIZE],
 }
 
 pub const NUM_XORIN_VM_COLS: usize = size_of::<XorinVmCols<u8>>();

@@ -1,13 +1,15 @@
 use openvm_circuit::system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use p3_keccak_air::KeccakCols as KeccakPermCols;
+use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
+use crate::{keccakf::utils::KECCAK_WIDTH_BYTES, xorin::utils::KECCAK_WORD_SIZE};
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
 pub struct KeccakfVmCols<T> {
     pub inner: KeccakPermCols<T>,
-    pub preimage_state_hi: [T; 100],
-    pub postimage_state_hi: [T; 100],
+    pub preimage_state_hi: [T; KECCAK_WIDTH_BYTES / 2],
+    pub postimage_state_hi: [T; KECCAK_WIDTH_BYTES / 2],
     pub instruction: KeccakfInstructionCols<T>,
     pub mem_oc: KeccakfMemoryCols<T>,
     pub timestamp: T,
@@ -22,15 +24,15 @@ pub struct KeccakfInstructionCols<T> {
     pub is_enabled: T,
     pub rd_ptr: T,
     pub buffer_ptr: T,
-    pub buffer_ptr_limbs: [T; 4],
+    pub buffer_ptr_limbs: [T; RV32_REGISTER_NUM_LIMBS],
 }
 
 #[repr(C)]
 #[derive(Clone, Debug, AlignedBorrow)]
 pub struct KeccakfMemoryCols<T> {
     pub register_aux_cols: [MemoryReadAuxCols<T>; 1],
-    pub buffer_bytes_read_aux_cols: [MemoryReadAuxCols<T>; 200 / 4],
-    pub buffer_bytes_write_aux_cols: [MemoryWriteAuxCols<T, 4>; 200 / 4],
+    pub buffer_bytes_read_aux_cols: [MemoryReadAuxCols<T>; KECCAK_WIDTH_BYTES / KECCAK_WORD_SIZE],
+    pub buffer_bytes_write_aux_cols: [MemoryWriteAuxCols<T, KECCAK_WORD_SIZE>; KECCAK_WIDTH_BYTES / KECCAK_WORD_SIZE],
 }
 
 pub const NUM_KECCAKF_VM_COLS: usize = size_of::<KeccakfVmCols<u8>>();
