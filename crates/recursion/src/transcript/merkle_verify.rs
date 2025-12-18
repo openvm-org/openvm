@@ -10,10 +10,10 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{Field, FieldAlgebra};
+use p3_field::{Field, FieldAlgebra, PrimeField32};
 use p3_matrix::Matrix;
 use stark_backend_v2::{
-    DIGEST_SIZE, F,
+    DIGEST_SIZE, F, SystemParams,
     keygen::types::MultiStarkVerifyingKeyV2,
     poseidon2::{CHUNK, sponge::poseidon2_compress_with_capacity},
     proof::Proof,
@@ -25,7 +25,7 @@ use crate::{
         CommitmentsBus, CommitmentsBusMessage, MerkleVerifyBus, MerkleVerifyBusMessage,
         Poseidon2Bus, Poseidon2BusMessage,
     },
-    system::{MerkleVerifyLog, Preflight},
+    system::Preflight,
 };
 
 /// There are two parts in the merkle proof: hashing leaves and the (standard) merkle proof.
@@ -81,6 +81,17 @@ pub struct MerkleVerifyCols<T> {
     pub commit_minor: T,
 
     pub output: [T; POSEIDON2_WIDTH],
+}
+
+#[derive(Clone, Debug)]
+struct MerkleVerifyLog {
+    merkle_idx: usize,
+    depth: usize,
+    query_idx: usize,
+    /// For round 0, this is 0. For rounds > 0, this is the round index.
+    commit_major: usize,
+    /// For round 0, this is the commit index. For rounds > 0, this is 0.
+    commit_minor: usize,
 }
 
 pub struct MerkleVerifyAir {
@@ -263,17 +274,23 @@ pub fn generate_trace(
     mvk: &MultiStarkVerifyingKeyV2,
     proofs: &[Proof],
     preflights: &[Preflight],
-    k: usize, // 2^k rows to be hashed together
+    params: &SystemParams,
 ) -> (Vec<F>, Vec<[F; POSEIDON2_WIDTH]>) {
+    let k = params.k_whir();
     let width = MerkleVerifyCols::<F>::width();
     let num_leaves: usize = 1 << k;
     let mut poseidon2_inputs = vec![];
+    let logs_per_proof =
+        preflights
+        .iter()
+        .map(|preflight| build_merkle_logs(preflight, params))
+        .collect_vec();
     // vec of vec, index by proof and then merkle_proof
     let num_rows_per_proof_per_merkle = preflights
         .iter()
-        .map(|preflight| {
-            preflight
-                .merkle_verify_logs
+        .enumerate()
+        .map(|(proof_idx, _)| {
+            logs_per_proof[proof_idx]
                 .iter()
                 .map(|log| log.depth + num_leaves) // (d + 1) + (num_leaves - 1)
                 .collect_vec()
@@ -318,16 +335,30 @@ pub fn generate_trace(
         };
 
         let &MerkleVerifyLog {
-            ref leaf_hashes,
             merkle_idx,
             depth,
             query_idx,
             commit_major,
             commit_minor,
-        } = &preflight.merkle_verify_logs[merkle_proof_idx];
+        } = &logs_per_proof[proof_idx][merkle_proof_idx];
 
         if i == 0 {
-            leaf_tree[0].copy_from_slice(leaf_hashes);
+            if commit_major == 0 {
+                for (coset_idx, states) in preflight.initial_row_states[commit_minor][query_idx]
+                    .iter()
+                    .enumerate()
+                {
+                    let post_state = states.last().unwrap();
+                    leaf_tree[0][coset_idx].copy_from_slice(&post_state[..CHUNK]);
+                }
+            } else {
+                for (coset_idx, state) in preflight.codeword_states[commit_major - 1][query_idx]
+                    .iter()
+                    .enumerate()
+                {
+                    leaf_tree[0][coset_idx].copy_from_slice(&state[..CHUNK]);
+                }
+            }
         }
 
         let mut stacking_commits = vec![proof.common_main_commit];
@@ -439,6 +470,46 @@ pub fn generate_trace(
     (trace, poseidon2_inputs)
 }
 
+fn build_merkle_logs(preflight: &Preflight, params: &SystemParams) -> Vec<MerkleVerifyLog> {
+    let num_whir_rounds = params.num_whir_rounds();
+    let mut logs = Vec::new();
+    let mut log_rs_domain_size = params.l_skip + params.n_stack + params.log_blowup;
+    let mut query_offset = 0;
+    for round_idx in 0..num_whir_rounds {
+        let num_queries = params.whir.rounds[round_idx].num_queries;
+        for query_idx in 0..num_queries {
+            let sample = preflight.whir.queries[query_offset];
+            let merkle_idx = sample.as_canonical_u32() as usize;
+            let depth = log_rs_domain_size - params.k_whir();
+
+            if round_idx == 0 {
+                for commit_minor in 0..preflight.initial_row_states.len() {
+                    logs.push(MerkleVerifyLog {
+                        merkle_idx,
+                        depth,
+                        query_idx,
+                        commit_major: 0,
+                        commit_minor,
+                    });
+                }
+            } else {
+                logs.push(MerkleVerifyLog {
+                    merkle_idx,
+                    depth,
+                    query_idx,
+                    commit_major: round_idx,
+                    commit_minor: 0,
+                });
+            }
+
+            query_offset += 1;
+        }
+        log_rs_domain_size -= 1;
+    }
+
+    logs
+}
+
 // Represents the necessary indices for a single combining operation:
 // combining arr[source_layer][left_source_index] and arr[source_layer][right_source_index]
 // to produce arr[result_layer][result_index].
@@ -542,9 +613,10 @@ pub mod cuda {
         mvk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
         preflights: &[Preflight],
-        k: usize,
+        params: &SystemParams,
     ) -> (DeviceMatrix<F>, Vec<[F; POSEIDON2_WIDTH]>) {
         assert_eq!(proofs.len(), preflights.len());
+        let k = params.k_whir();
         assert!(
             k <= MAX_SUPPORTED_K,
             "unsupported k={} for CUDA merkle verify (max {})",
@@ -565,19 +637,29 @@ pub mod cuda {
             .map(|(proof, preflight)| build_stacking_commits(mvk, proof, preflight))
             .collect_vec();
 
+        let logs_per_proof: Vec<_> = preflights
+            .iter()
+            .map(|preflight| build_merkle_logs(preflight, params))
+            .collect();
+
         let mut total_rows = 0usize;
-        for (proof_idx, (proof, preflight)) in proofs.iter().zip(preflights).enumerate() {
+        for (proof_idx, proof) in proofs.iter().enumerate() {
+            let preflight = &preflights[proof_idx];
             proof_row_starts.push(total_rows);
-            for (merkle_proof_idx, log) in preflight.merkle_verify_logs.iter().enumerate() {
-                assert_eq!(
-                    log.leaf_hashes.len(),
-                    num_leaves,
-                    "unexpected number of leaves for merkle proof"
-                );
+            for (merkle_proof_idx, log) in logs_per_proof[proof_idx].iter().enumerate() {
                 let num_rows = log.depth + num_leaves;
                 let leaf_offset = leaf_hashes.len();
-                for leaf in &log.leaf_hashes {
-                    leaf_hashes.extend_from_slice(leaf);
+                for coset_idx in 0..num_leaves {
+                    if log.commit_major == 0 {
+                        let states =
+                            &preflight.initial_row_states[log.commit_minor][log.query_idx][coset_idx];
+                        let post_state = states.last().unwrap();
+                        leaf_hashes.extend_from_slice(&post_state[..CHUNK]);
+                    } else {
+                        let state = &preflight.codeword_states[log.commit_major - 1][log.query_idx]
+                            [coset_idx];
+                        leaf_hashes.extend_from_slice(&state[..CHUNK]);
+                    }
                 }
                 let path = build_merkle_path(log, proof, &stacking_commits_per_proof[proof_idx]);
                 let sibling_offset = sibling_hashes.len();
