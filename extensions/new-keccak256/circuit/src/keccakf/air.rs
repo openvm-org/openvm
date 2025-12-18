@@ -178,7 +178,9 @@ impl KeccakfVmAir {
 
             let state_limb: AB::Expr = local.inner.preimage[y][x][limb].into();
             let hi: AB::Expr = local.preimage_state_hi[i * U64_LIMBS + limb].into();
-            let lo: AB::Expr = state_limb - hi.clone() * AB::F::from_canonical_u64(1 << 8);
+            let lo: AB::Expr = state_limb.clone() - hi.clone() * AB::F::from_canonical_u64(1 << 8);
+
+            builder.assert_eq(state_limb, lo.clone() + hi.clone() * AB::F::from_canonical_u64(1 << 8));
 
             if is_hi_byte {
                 hi
@@ -228,7 +230,9 @@ impl KeccakfVmAir {
 
             let state_limb: AB::Expr = local.inner.a_prime_prime_prime(y, x, limb).into();
             let hi: AB::Expr = local.postimage_state_hi[i * U64_LIMBS + limb].into();
-            let lo: AB::Expr = state_limb - hi.clone() * AB::F::from_canonical_u64(1 << 8);
+            let lo: AB::Expr = state_limb.clone() - hi.clone() * AB::F::from_canonical_u64(1 << 8);
+
+            builder.assert_eq(state_limb, lo.clone() + hi.clone() * AB::F::from_canonical_u64(1 << 8));
 
             if is_hi_byte {
                 hi
