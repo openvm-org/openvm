@@ -16,6 +16,8 @@ use openvm_ecc_circuit::{
     SECP256K1_CONFIG,
 };
 use openvm_ecc_transpiler::EccTranspilerExtension;
+use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
+use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use openvm_native_circuit::{
     CastFExtension, CastFExtensionExecutor, Native, NativeCpuProverExt, NativeExecutor,
 };
@@ -81,6 +83,7 @@ pub struct SdkVmConfig {
     pub rv32i: Option<UnitStruct>,
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
+    pub new_keccak: Option<UnitStruct>,
     pub sha256: Option<UnitStruct>,
     pub native: Option<UnitStruct>,
     pub castf: Option<UnitStruct>,
@@ -197,6 +200,9 @@ impl TranspilerConfig<F> for SdkVmConfig {
             transpiler = transpiler.with_extension(Rv32IoTranspilerExtension);
         }
         if self.keccak.is_some() {
+            transpiler = transpiler.with_extension(Keccak256TranspilerExtension);
+        }
+        if self.new_keccak.is_some() {
             transpiler = transpiler.with_extension(NewKeccakTranspilerExtension);
         }
         if self.sha256.is_some() {
@@ -592,6 +598,7 @@ struct SdkVmConfigWithDefaultDeser {
     pub rv32i: Option<UnitStruct>,
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
+    pub new_keccak: Option<UnitStruct>,
     pub sha256: Option<UnitStruct>,
     pub native: Option<UnitStruct>,
     pub castf: Option<UnitStruct>,
@@ -611,6 +618,7 @@ impl From<SdkVmConfigWithDefaultDeser> for SdkVmConfig {
             rv32i: config.rv32i,
             io: config.io,
             keccak: config.keccak,
+            new_keccak: config.new_keccak,
             sha256: config.sha256,
             native: config.native,
             castf: config.castf,

@@ -167,7 +167,6 @@ impl ProveCmd {
                 } else {
                     &PathBuf::from(target_name).with_extension("app.proof")
                 };
-
                 println!(
                     "App proof completed! Writing App proof to {}",
                     proof_path.display()

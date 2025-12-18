@@ -1,0 +1,24 @@
+[workspace]
+[package]
+name = "openvm-keccak256-test-programs"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+openvm = { path = "../../../../crates/toolchain/openvm" }
+openvm-keccak256 = { path = "../../" }
+
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+serde = { version = "1.0", default-features = false, features = [
+    "alloc",
+    "derive",
+] }
+
+[features]
+default = []
+std = ["serde/std", "openvm/std"]
+
+[profile.release]
+panic = "abort"
+lto = "thin"    # turn on lto = fat to decrease binary size, but this optimizes out some missing extern links so we shouldn't use it for testing
+# strip = "symbols"

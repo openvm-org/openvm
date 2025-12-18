@@ -31,7 +31,7 @@ jobs:
       matrix:
         crate:
           - { name: "sha2", path: "sha2" }
-          - { name: "keccak256", path: "new-keccak256" }
+          - { name: "keccak256", path: "keccak256" }
           - { name: "ff_derive", path: "ff_derive" }
           - { name: "k256", path: "k256" }
           - { name: "p256", path: "p256" }

@@ -425,9 +425,7 @@ impl KeccakVmAir {
             instruction.len_ptr,
         ];
         let reg_addr_sp = AB::F::ONE;
-
         let timestamp_change: AB::Expr = Self::timestamp_change(instruction.remaining_len);
-
         self.execution_bridge
             .execute_and_increment_pc(
                 AB::Expr::from_canonical_usize(Rv32KeccakOpcode::KECCAK256 as usize + self.offset),

@@ -3,6 +3,7 @@ use core::hint::black_box;
 
 use hex::FromHex;
 use openvm as _;
+use openvm_keccak256::keccak256;
 use openvm::io::reveal_u32;
 // [!endregion imports]
 
