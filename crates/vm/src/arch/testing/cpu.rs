@@ -404,7 +404,7 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
         // removed when tests are updated.
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
         mem_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
-        Self::volatile(mem_config)
+        Self::persistent(mem_config)
     }
 }
 

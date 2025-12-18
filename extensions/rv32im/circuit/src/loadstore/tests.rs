@@ -10,7 +10,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
-use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode, NATIVE_AS};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -131,7 +131,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let mem_as = mem_as.unwrap_or(if is_load {
         2
     } else {
-        *[2, 3, 4].choose(rng).unwrap()
+        // Avoid Native AS while access adapters are disabled.
+        *[2, 3].choose(rng).unwrap()
     });
 
     let shift_amount = ptr_val % 4;
@@ -215,10 +216,13 @@ fn rand_loadstore_test(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
     mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
+    mem_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
     if [STOREW, STOREB, STOREH].contains(&opcode) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     }
-    let mut tester = VmChipTestBuilder::volatile(mem_config);
+    // Use persistent memory so initial block size matches the 4-byte alignment and
+    // avoids access-adapter split/merge paths when adapters are disabled.
+    let mut tester = VmChipTestBuilder::persistent(mem_config);
     let mut harness = create_harness(&mut tester);
 
     for _ in 0..num_ops {
@@ -268,10 +272,12 @@ fn run_negative_loadstore_test(
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
     mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
+    mem_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
     if [STOREW, STOREB, STOREH].contains(&opcode) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     }
-    let mut tester = VmChipTestBuilder::volatile(mem_config);
+    // Use persistent memory so the min block size matches alignment without needing adapters.
+    let mut tester = VmChipTestBuilder::persistent(mem_config);
     let mut harness = create_harness(&mut tester);
 
     set_and_execute(
