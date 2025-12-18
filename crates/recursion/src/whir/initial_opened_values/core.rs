@@ -314,19 +314,12 @@ where
     }
 }
 
-#[repr(C)]
-pub struct InitialOpenedValueRecord {
-    pub codeword_slice_val_acc: EF,
-    pub pre_state: [F; WIDTH],
-    pub post_state: [F; WIDTH],
-}
-
 #[tracing::instrument(level = "trace", skip_all)]
 pub(crate) fn generate_trace(
     params: &SystemParams,
     proofs: &[&Proof],
     preflights: &[&Preflight],
-    records: &[InitialOpenedValueRecord],
+    codeword_value_accs: &[EF],
     rows_per_proof_psums: &[usize],
     commits_per_proof_psums: &[usize],
     stacking_chunks_psums: &[usize], // proof x commit
@@ -338,17 +331,17 @@ pub(crate) fn generate_trace(
     let k_whir = params.k_whir();
 
     let omega_k = F::two_adic_generator(k_whir);
-    let height = records.len().next_power_of_two();
+    let height = codeword_value_accs.len().next_power_of_two();
     let width = InitialOpenedValuesCols::<F>::width();
     let mut trace = vec![F::ZERO; height * width];
 
-    let num_valid_rows = records.len();
+    let num_valid_rows = codeword_value_accs.len();
     trace
         .par_chunks_exact_mut(width)
         .take(num_valid_rows)
-        .zip(records)
+        .zip(codeword_value_accs)
         .enumerate()
-        .for_each(|(row_idx, (row, record))| {
+        .for_each(|(row_idx, (row, &codeword_value_acc))| {
             let proof_idx = rows_per_proof_psums[1..].partition_point(|&x| x <= row_idx);
             let preflight = &preflights[proof_idx];
 
@@ -414,7 +407,7 @@ pub(crate) fn generate_trace(
             }
             cols.twiddle = omega_k.exp_u64(coset_idx as u64);
             cols.codeword_value_acc
-                .copy_from_slice(record.codeword_slice_val_acc.as_base_slice());
+                .copy_from_slice(codeword_value_acc.as_base_slice());
             cols.zi_root = preflight.whir.zj_roots[0][query_idx];
             cols.zi = preflight.whir.zjs[0][query_idx];
             cols.yi
@@ -432,8 +425,22 @@ pub(crate) fn generate_trace(
                 let mu_pow = mu_pows[width_before_proof + exponent];
                 cols.mu_pows[offset].copy_from_slice(mu_pow.as_base_slice());
             }
-            cols.pre_state = record.pre_state;
-            cols.post_state = record.post_state;
+
+            let states = &preflight.initial_row_states[commit_idx][query_idx][coset_idx];
+            let opened_row = &proofs[proof_idx]
+                .whir_proof
+                .initial_round_opened_rows[commit_idx][query_idx][coset_idx];
+            let chunk_start = chunk_idx * CHUNK;
+
+            // Reconstruct pre_state: start from previous post_state, overwrite with chunk data
+            cols.pre_state = if chunk_idx > 0 {
+                states[chunk_idx - 1]
+            } else {
+                [F::ZERO; WIDTH]
+            };
+            cols.pre_state[..chunk_len]
+                .copy_from_slice(&opened_row[chunk_start..chunk_start + chunk_len]);
+            cols.post_state = states[chunk_idx];
         });
 
     RowMajorMatrix::new(trace, width)

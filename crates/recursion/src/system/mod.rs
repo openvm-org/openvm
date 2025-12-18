@@ -6,14 +6,12 @@ use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{AirRef, interaction::BusIndex};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use p3_field::FieldExtensionAlgebra;
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
-    DIGEST_SIZE, EF, F, SC, StarkEngineV2,
+    EF, F, SC, StarkEngineV2,
     keygen::types::MultiStarkVerifyingKeyV2,
-    poseidon2::{
-        WIDTH,
-        sponge::{FiatShamirTranscript, TranscriptHistory, TranscriptLog},
-    },
+    poseidon2::{WIDTH, sponge::{FiatShamirTranscript, TranscriptHistory, TranscriptLog}},
     proof::{Proof, TraceVData},
     prover::{
         AirProvingContextV2, ColMajorMatrix, CommittedTraceDataV2, CpuBackendV2, ProverBackendV2,
@@ -38,6 +36,7 @@ use crate::{
     proof_shape::ProofShapeModule,
     stacking::StackingModule,
     transcript::TranscriptModule,
+    utils::poseidon2_hash_slice_with_states,
     whir::{WhirModule, folding::FoldRecord},
 };
 
@@ -203,9 +202,10 @@ pub struct Preflight {
     pub batch_constraint: BatchConstraintPreflight,
     pub stacking: StackingPreflight,
     pub whir: WhirPreflight,
-    // Merkle bus message + actual commitment
-    pub merkle_verify_logs: Vec<MerkleVerifyLog>,
     pub poseidon_inputs: Vec<[F; WIDTH]>,
+    pub initial_row_states: Vec<Vec<Vec<Vec<[F; WIDTH]>>>>,
+    /// Indexed by [round][query][coset]. Stores post-permutation state.
+    pub codeword_states: Vec<Vec<Vec<[F; WIDTH]>>>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -278,16 +278,6 @@ pub struct WhirPreflight {
     pub final_poly_at_u: EF,
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct MerkleVerifyLog {
-    pub leaf_hashes: Vec<[F; DIGEST_SIZE]>,
-    pub merkle_idx: usize,
-    pub depth: usize,
-    pub query_idx: usize,
-    pub commit_major: usize,
-    pub commit_minor: usize,
-}
-
 impl BusInventory {
     pub(crate) fn new(b: &mut BusIndexManager) -> Self {
         Self {
@@ -330,6 +320,20 @@ impl BusInventory {
             cached_commit_bus: CachedCommitBus::new(b.new_bus_idx()),
         }
     }
+}
+
+/// A pre-state/post-state pair for a single Poseidon permutation.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct PoseidonStatePair {
+    pub pre_state: [F; WIDTH],
+    pub post_state: [F; WIDTH],
+}
+
+struct MerklePrecomputation {
+    poseidon_inputs: Vec<[F; WIDTH]>,
+    initial_row_states: Vec<Vec<Vec<Vec<[F; WIDTH]>>>>,
+    codeword_states: Vec<Vec<Vec<[F; WIDTH]>>>,
 }
 
 #[derive(Clone, Copy, strum_macros::Display)]
@@ -488,20 +492,104 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         TS: FiatShamirTranscript + TranscriptHistory,
     {
         let mut preflight = Preflight::default();
-        // NOTE: it is not required that we group preflight into modules
-        let preflight_modules = [
-            TraceModuleRef::ProofShape(&self.proof_shape),
-            TraceModuleRef::Gkr(&self.gkr),
-            TraceModuleRef::BatchConstraint(&self.batch_constraint),
-            TraceModuleRef::Stacking(&self.stacking),
-            TraceModuleRef::Whir(&self.whir),
-        ];
-        preflight_modules.iter().for_each(|module| {
-            module.run_preflight(child_vk, proof, &mut preflight, &mut sponge);
+
+        std::thread::scope(|s| {
+            // Spawn merkle precomputation in a separate thread while running preflight in main thread
+            let merkle_handle = s.spawn(|| Self::compute_merkle_precomputation(proof));
+
+            // NOTE: it is not required that we group preflight into modules
+            let preflight_modules = [
+                TraceModuleRef::ProofShape(&self.proof_shape),
+                TraceModuleRef::Gkr(&self.gkr),
+                TraceModuleRef::BatchConstraint(&self.batch_constraint),
+                TraceModuleRef::Stacking(&self.stacking),
+                TraceModuleRef::Whir(&self.whir),
+            ];
+            preflight_modules.iter().for_each(|module| {
+                module.run_preflight(child_vk, proof, &mut preflight, &mut sponge);
+            });
+            preflight.transcript = sponge.into_log();
+
+            let merkle_precomputation =
+                merkle_handle.join().expect("merkle precomputation panicked");
+            preflight.poseidon_inputs = merkle_precomputation.poseidon_inputs;
+            preflight.initial_row_states = merkle_precomputation.initial_row_states;
+            preflight.codeword_states = merkle_precomputation.codeword_states;
         });
 
-        preflight.transcript = sponge.into_log();
         preflight
+    }
+
+    #[tracing::instrument(name = "compute_merkle_precomputation", level = "info", skip_all)]
+    fn compute_merkle_precomputation(proof: &Proof) -> MerklePrecomputation {
+        use stark_backend_v2::poseidon2::CHUNK;
+
+        let initial_chunks: usize = proof
+            .whir_proof
+            .initial_round_opened_rows
+            .iter()
+            .flat_map(|c| c.iter().flat_map(|q| q.iter()))
+            .map(|row| row.len().div_ceil(CHUNK))
+            .sum();
+        let codeword_chunks: usize = proof
+            .whir_proof
+            .codeword_opened_values
+            .iter()
+            .map(|r| r.iter().map(|q| q.len()).sum::<usize>())
+            .sum();
+
+        let mut poseidon_inputs = Vec::with_capacity(initial_chunks + codeword_chunks);
+
+        let initial_row_states: Vec<Vec<Vec<Vec<[F; WIDTH]>>>> = proof
+            .whir_proof
+            .initial_round_opened_rows
+            .iter()
+            .map(|opened_rows_per_commit| {
+                opened_rows_per_commit
+                    .iter()
+                    .map(|opened_rows_per_query| {
+                        opened_rows_per_query
+                            .iter()
+                            .map(|opened_row| {
+                                let (_leaf_hash, pre_states, post_states) =
+                                    poseidon2_hash_slice_with_states(opened_row);
+                                poseidon_inputs.extend(pre_states);
+                                post_states
+                            })
+                            .collect()
+                    })
+                    .collect()
+            })
+            .collect();
+
+        let codeword_states = proof
+            .whir_proof
+            .codeword_opened_values
+            .iter()
+            .map(|round_values| {
+                round_values
+                    .iter()
+                    .map(|opened_values_per_query| {
+                        opened_values_per_query
+                            .iter()
+                            .map(|opened_value| {
+                                let (_leaf_hash, pre_states, post_states) =
+                                    poseidon2_hash_slice_with_states(opened_value.as_base_slice());
+                                poseidon_inputs.extend(pre_states);
+                                debug_assert_eq!(post_states.len(), 1);
+                                post_states.into_iter().next().unwrap()
+                            })
+                            .collect()
+                    })
+                    .collect()
+            })
+            .collect();
+
+        MerklePrecomputation {
+            poseidon_inputs,
+            initial_row_states,
+            codeword_states,
+        }
     }
 }
 

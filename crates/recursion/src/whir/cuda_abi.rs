@@ -1,17 +1,17 @@
 use cuda_backend_v2::{EF, F};
 use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
 
-use crate::whir::{
-    InitialOpenedValueRecord, final_poly_query_eval::FinalPolyQueryEvalRecord, folding::FoldRecord,
-    non_initial_opened_values::NonInitialOpenedValueRecord,
-};
+use crate::whir::{final_poly_query_eval::FinalPolyQueryEvalRecord, folding::FoldRecord};
+
+pub use crate::system::PoseidonStatePair;
 
 extern "C" {
     fn _initial_opened_values_tracegen(
         trace_d: *mut F,
         num_valid_rows: usize,
         height: usize,
-        records_d: *const InitialOpenedValueRecord,
+        codeword_value_accs_d: *const EF,
+        poseidon_states_d: *const PoseidonStatePair,
         k_whir: usize,
         num_initial_queries: usize,
         total_queries: usize,
@@ -45,7 +45,8 @@ extern "C" {
         trace_d: *mut F,
         num_valid_rows: usize,
         height: usize,
-        records_d: *const NonInitialOpenedValueRecord,
+        codeword_opened_values_d: *const EF,
+        codeword_states_d: *const F,
         num_whir_rounds: usize,
         k_whir: usize,
         omega_k: F,
@@ -75,7 +76,8 @@ pub unsafe fn initial_opened_values_tracegen(
     trace_d: &DeviceBuffer<F>,
     num_valid_rows: usize,
     height: usize,
-    records_d: &DeviceBuffer<InitialOpenedValueRecord>,
+    codeword_value_accs_d: &DeviceBuffer<EF>,
+    poseidon_states_d: &DeviceBuffer<PoseidonStatePair>,
     k_whir: usize,
     num_initial_queries: usize,
     total_queries: usize,
@@ -100,7 +102,8 @@ pub unsafe fn initial_opened_values_tracegen(
         trace_d.as_mut_ptr(),
         num_valid_rows,
         height,
-        records_d.as_ptr(),
+        codeword_value_accs_d.as_ptr(),
+        poseidon_states_d.as_ptr(),
         k_whir,
         num_initial_queries,
         total_queries,
@@ -147,7 +150,8 @@ pub unsafe fn non_initial_opened_values_tracegen(
     trace_d: &DeviceBuffer<F>,
     num_valid_rows: usize,
     height: usize,
-    records_d: &DeviceBuffer<NonInitialOpenedValueRecord>,
+    codeword_opened_values_d: &DeviceBuffer<EF>,
+    codeword_states_d: &DeviceBuffer<F>,
     num_whir_rounds: usize,
     k_whir: usize,
     omega_k: F,
@@ -164,7 +168,8 @@ pub unsafe fn non_initial_opened_values_tracegen(
         trace_d.as_mut_ptr(),
         num_valid_rows,
         height,
-        records_d.as_ptr(),
+        codeword_opened_values_d.as_ptr(),
+        codeword_states_d.as_ptr(),
         num_whir_rounds,
         k_whir,
         omega_k,

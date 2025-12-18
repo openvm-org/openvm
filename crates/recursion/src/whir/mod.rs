@@ -5,17 +5,16 @@ use itertools::{Itertools, izip};
 use openvm_circuit_primitives::encoder::Encoder;
 use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdicField};
+use p3_field::{Field, FieldAlgebra, PrimeField32, TwoAdicField};
 use p3_matrix::dense::RowMajorMatrix;
 #[cfg(not(debug_assertions))]
 use p3_maybe_rayon::prelude::*;
-use p3_symmetric::Permutation;
 use stark_backend_v2::{
     EF, F, SystemParams, WhirConfig,
     keygen::types::MultiStarkVerifyingKeyV2,
     poly_common::{Squarable, interpolate_quadratic_at_012},
     poseidon2::{
-        CHUNK, WIDTH, poseidon2_perm,
+        CHUNK,
         sponge::{FiatShamirTranscript, TranscriptHistory},
     },
     proof::{Proof, WhirProof},
@@ -25,10 +24,9 @@ use stark_backend_v2::{
 use crate::{
     primitives::exp_bits_len::ExpBitsLenTraceGenerator,
     system::{
-        AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, MerkleVerifyLog, ModuleChip,
-        Preflight, TraceGenModule, WhirPreflight,
+        AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, ModuleChip, Preflight,
+        TraceGenModule, WhirPreflight,
     },
-    utils::poseidon2_hash_slice_with_records,
     whir::{
         bus::{
             FinalPolyFoldingBus, FinalPolyMleEvalBus, FinalPolyQueryEvalBus, VerifyQueriesBus,
@@ -38,11 +36,8 @@ use crate::{
         final_poly_mle_eval::FinalPolyMleEvalAir,
         final_poly_query_eval::{FinalPolyQueryEvalAir, FinalPolyQueryEvalRecord},
         folding::{FoldRecord, WhirFoldingAir},
-        initial_opened_values::{InitialOpenedValueRecord, InitialOpenedValuesAir},
-        non_initial_opened_values::{
-            NonInitialOpenedValueRecord, NonInitialOpenedValuesAir,
-            build_non_initial_opened_value_records,
-        },
+        initial_opened_values::InitialOpenedValuesAir,
+        non_initial_opened_values::NonInitialOpenedValuesAir,
         query::WhirQueryAir,
         sumcheck::SumcheckAir,
         whir_round::WhirRoundAir,
@@ -213,7 +208,6 @@ impl WhirModule {
         let mut eq_partials = vec![];
         let mut eq_partial = EF::ONE;
         let mut fold_records = vec![];
-        let mut merkle_verify_logs = vec![];
 
         let mut log_rs_domain_size = l_skip + n_stack + log_blowup;
 
@@ -285,12 +279,7 @@ impl WhirModule {
                 let yj = if i == 0 {
                     let mut codeword_vals = vec![EF::ZERO; 1 << k_whir];
                     let mut mu_pow_iter = mu_pows.iter();
-                    for (commit_idx, opened_rows_per_query) in proof
-                        .whir_proof
-                        .initial_round_opened_rows
-                        .iter()
-                        .enumerate()
-                    {
+                    for opened_rows_per_query in proof.whir_proof.initial_round_opened_rows.iter() {
                         let opened_rows = &opened_rows_per_query[query_idx];
                         let width = opened_rows[0].len();
 
@@ -300,26 +289,6 @@ impl WhirModule {
                                 codeword_vals[j] += *mu_pow * opened_rows[j][c];
                             }
                         }
-
-                        let leaf_hashes_and_records = opened_rows
-                            .iter()
-                            .map(|opened_row| poseidon2_hash_slice_with_records(opened_row))
-                            .collect_vec();
-
-                        let mut leaf_hashes = vec![];
-                        for (leaf_hash, input_states) in leaf_hashes_and_records {
-                            leaf_hashes.push(leaf_hash);
-                            preflight.poseidon_inputs.extend(input_states);
-                        }
-
-                        merkle_verify_logs.push(MerkleVerifyLog {
-                            leaf_hashes,
-                            merkle_idx: sample.as_canonical_u32() as usize,
-                            query_idx,
-                            depth: log_rs_domain_size - k_whir,
-                            commit_major: 0,
-                            commit_minor: commit_idx,
-                        });
                     }
                     binary_k_fold(
                         codeword_vals,
@@ -332,25 +301,6 @@ impl WhirModule {
                 } else {
                     let opened_values =
                         proof.whir_proof.codeword_opened_values[i - 1][query_idx].clone();
-                    let leaf_hashes_and_records = opened_values
-                        .iter()
-                        .map(|opened_value| {
-                            poseidon2_hash_slice_with_records(opened_value.as_base_slice())
-                        })
-                        .collect_vec();
-                    let mut leaf_hashes = vec![];
-                    for (leaf_hash, input_states) in leaf_hashes_and_records {
-                        leaf_hashes.push(leaf_hash);
-                        preflight.poseidon_inputs.extend(input_states);
-                    }
-                    merkle_verify_logs.push(MerkleVerifyLog {
-                        leaf_hashes,
-                        merkle_idx: sample.as_canonical_u32() as usize,
-                        query_idx,
-                        depth: log_rs_domain_size - k_whir,
-                        commit_major: i,
-                        commit_minor: 0,
-                    });
                     binary_k_fold(
                         opened_values,
                         &alphas[alphas.len() - k_whir..],
@@ -406,19 +356,17 @@ impl WhirModule {
             fold_records,
             final_poly_at_u,
         };
-        preflight.merkle_verify_logs = merkle_verify_logs;
     }
 }
 
 struct WhirBlobCpu {
-    initial_opened_values_records: Vec<InitialOpenedValueRecord>,
+    codeword_value_accs: Vec<EF>,
     iov_rows_per_proof_psums: Vec<usize>,
     commits_per_proof_psums: Vec<usize>,
     stacking_chunks_psums: Vec<usize>,
     stacking_widths_psums: Vec<usize>,
     mu_pows: Vec<EF>, // flattened over proofs
     final_poly_query_eval_records: Vec<FinalPolyQueryEvalRecord>,
-    non_initial_opened_values_records: Vec<NonInitialOpenedValueRecord>,
 }
 
 impl AirModule for WhirModule {
@@ -557,9 +505,21 @@ impl WhirModule {
         } = whir;
         let num_queries_per_round = num_queries_per_round(&child_vk.inner.params);
         let num_initial_queries = *num_queries_per_round.first().unwrap_or(&0);
-        let perm = poseidon2_perm();
+        let num_cosets = 1 << k_whir;
 
-        let mut initial_opened_values_records = vec![];
+        let codeword_value_accs_capacity: usize = proofs
+            .iter()
+            .map(|proof| {
+                let total_chunks: usize = proof
+                    .whir_proof
+                    .initial_round_opened_rows
+                    .iter()
+                    .map(|c| c[0][0].len().div_ceil(CHUNK))
+                    .sum();
+                num_initial_queries * num_cosets * total_chunks
+            })
+            .sum();
+        let mut codeword_value_accs = Vec::with_capacity(codeword_value_accs_capacity);
 
         let mut iov_rows_per_proof_psums = vec![0];
         let mut commits_per_proof_psums = vec![0];
@@ -574,8 +534,6 @@ impl WhirModule {
                 proofs,
                 preflights,
             );
-        let non_initial_opened_values_records =
-            build_non_initial_opened_value_records(&child_vk.inner.params, proofs);
 
         let mut total_iov_rows = 0;
         let mut total_commits = 0;
@@ -638,11 +596,9 @@ impl WhirModule {
                     let mut base = 0;
                     for opened_rows_per_query in proof.whir_proof.initial_round_opened_rows.iter() {
                         let opened_rows = &opened_rows_per_query[query_idx];
-
                         let width = opened_rows[0].len();
                         let num_chunks = width.div_ceil(CHUNK);
 
-                        let mut state = [F::ZERO; WIDTH];
                         for chunk_idx in 0..num_chunks {
                             let chunk_start = chunk_idx * CHUNK;
                             let chunk_len = cmp::min(CHUNK, width - chunk_start);
@@ -650,15 +606,7 @@ impl WhirModule {
                             let opened_chunk =
                                 &opened_rows[coset_idx][chunk_start..chunk_start + chunk_len];
 
-                            state[..chunk_len].copy_from_slice(opened_chunk);
-                            let pre_state = state;
-                            perm.permute_mut(&mut state);
-
-                            initial_opened_values_records.push(InitialOpenedValueRecord {
-                                codeword_slice_val_acc: *codeword_val,
-                                pre_state,
-                                post_state: state,
-                            });
+                            codeword_value_accs.push(*codeword_val);
 
                             for (offset, &val) in opened_chunk.iter().enumerate() {
                                 *codeword_val +=
@@ -671,14 +619,13 @@ impl WhirModule {
             }
         }
         WhirBlobCpu {
-            initial_opened_values_records,
+            codeword_value_accs,
             iov_rows_per_proof_psums,
             commits_per_proof_psums,
             stacking_chunks_psums,
             stacking_widths_psums,
             mu_pows,
             final_poly_query_eval_records,
-            non_initial_opened_values_records,
         }
     }
 }
@@ -799,7 +746,7 @@ impl WhirModuleChip {
                 &child_vk.inner.params,
                 proofs,
                 preflights,
-                &blob.initial_opened_values_records,
+                &blob.codeword_value_accs,
                 &blob.iov_rows_per_proof_psums,
                 &blob.commits_per_proof_psums,
                 &blob.stacking_chunks_psums,
@@ -808,8 +755,8 @@ impl WhirModuleChip {
             ),
             NonInitialOpenedValues => non_initial_opened_values::generate_trace(
                 child_vk,
+                proofs,
                 preflights,
-                &blob.non_initial_opened_values_records,
             ),
             Folding => folding::generate_trace(child_vk, proofs, preflights),
             FinalPolyMleEval => final_poly_mle_eval::generate_trace(child_vk, proofs, preflights),
@@ -852,22 +799,25 @@ impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for WhirModuleChip {
 #[cfg(feature = "cuda")]
 mod cuda_tracegen {
     use cuda_backend_v2::GpuBackendV2;
-    use itertools::Itertools;
     use openvm_cuda_backend::{base::DeviceMatrix, data_transporter::transport_matrix_to_device};
     use openvm_cuda_common::d_buffer::DeviceBuffer;
+    use stark_backend_v2::poseidon2::{CHUNK, WIDTH};
+    use std::cmp;
 
     use super::*;
     use crate::cuda::{
         GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr,
         vk::VerifyingKeyGpu,
     };
+    use crate::whir::cuda_abi::PoseidonStatePair;
 
     pub(in crate::whir) struct WhirBlobGpu {
         pub zis: DeviceBuffer<F>,
         pub zi_roots: DeviceBuffer<F>,
         pub yis: DeviceBuffer<EF>,
         pub raw_queries: DeviceBuffer<F>,
-        pub initial_opened_values_records: DeviceBuffer<InitialOpenedValueRecord>,
+        pub codeword_value_accs: DeviceBuffer<EF>,
+        pub poseidon_states: DeviceBuffer<PoseidonStatePair>,
         pub iov_rows_per_proof_psums: DeviceBuffer<usize>,
         pub commits_per_proof_psums: DeviceBuffer<usize>,
         pub stacking_chunks_psums: DeviceBuffer<usize>,
@@ -875,13 +825,68 @@ mod cuda_tracegen {
         pub mus: DeviceBuffer<EF>,
         pub mu_pows: DeviceBuffer<EF>,
         pub final_poly_query_eval_records: DeviceBuffer<FinalPolyQueryEvalRecord>,
-        pub non_initial_opened_values_records: DeviceBuffer<NonInitialOpenedValueRecord>,
+        pub codeword_opened_values: DeviceBuffer<EF>,
+        pub codeword_states: DeviceBuffer<F>,
         pub folding_records: DeviceBuffer<FoldRecord>,
+    }
+
+    fn build_initial_poseidon_state_pairs(
+        proofs: &[&Proof],
+        preflights: &[&Preflight],
+    ) -> Vec<PoseidonStatePair> {
+        let expected_pairs: usize = preflights
+            .iter()
+            .flat_map(|preflight| {
+                preflight
+                    .initial_row_states
+                    .iter()
+                    .flat_map(|commit| commit.iter().flat_map(|query| query.iter()))
+            })
+            .map(|coset_states| coset_states.len())
+            .sum();
+
+        let mut pairs = Vec::with_capacity(expected_pairs);
+        for (proof, preflight) in proofs.iter().zip(preflights) {
+            if preflight.initial_row_states.is_empty() {
+                continue;
+            }
+            let num_commits = preflight.initial_row_states.len();
+            let num_queries = preflight.initial_row_states[0].len();
+            let num_cosets = preflight.initial_row_states[0][0].len();
+
+            for query_idx in 0..num_queries {
+                for coset_idx in 0..num_cosets {
+                    for commit_idx in 0..num_commits {
+                        let chunk_states =
+                            &preflight.initial_row_states[commit_idx][query_idx][coset_idx];
+                        let opened_row = &proof.whir_proof.initial_round_opened_rows[commit_idx]
+                            [query_idx][coset_idx];
+                        for (chunk_idx, &post_state) in chunk_states.iter().enumerate() {
+                            let mut pre_state = if chunk_idx > 0 {
+                                chunk_states[chunk_idx - 1]
+                            } else {
+                                [F::ZERO; WIDTH]
+                            };
+                            let chunk_start = chunk_idx * CHUNK;
+                            let chunk_len = cmp::min(CHUNK, opened_row.len() - chunk_start);
+                            pre_state[..chunk_len].copy_from_slice(
+                                &opened_row[chunk_start..chunk_start + chunk_len],
+                            );
+                            pairs.push(PoseidonStatePair {
+                                pre_state,
+                                post_state,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        pairs
     }
 
     impl WhirBlobGpu {
         // TODO: Receive PreflightGPU?
-        fn new(preflights: &[&Preflight], blob: &WhirBlobCpu) -> Self {
+        fn new(proofs: &[&Proof], preflights: &[&Preflight], blob: &WhirBlobCpu) -> Self {
             let mus = to_device_or_nullptr(
                 &preflights
                     .iter()
@@ -924,24 +929,64 @@ mod cuda_tracegen {
             let stacking_chunks_psums = to_device_or_nullptr(&blob.stacking_chunks_psums).unwrap();
             let stacking_widths_psums = to_device_or_nullptr(&blob.stacking_widths_psums).unwrap();
             let mu_pows = to_device_or_nullptr(&blob.mu_pows).unwrap();
-            let initial_opened_values_records =
-                to_device_or_nullptr(&blob.initial_opened_values_records).unwrap();
-            let folding_records_host = preflights
+            let codeword_value_accs = to_device_or_nullptr(&blob.codeword_value_accs).unwrap();
+
+            // Build poseidon state pairs in kernel order: [query][coset][commit][chunk]
+            let poseidon_states_host = build_initial_poseidon_state_pairs(proofs, preflights);
+            let poseidon_states = to_device_or_nullptr(&poseidon_states_host).unwrap();
+
+            let folding_records_cap: usize = preflights
                 .iter()
-                .flat_map(|preflight| preflight.whir.fold_records.iter().copied())
-                .collect_vec();
+                .map(|p| p.whir.fold_records.len())
+                .sum();
+            let mut folding_records_host = Vec::with_capacity(folding_records_cap);
+            for preflight in preflights.iter() {
+                folding_records_host.extend_from_slice(&preflight.whir.fold_records);
+            }
             let folding_records = to_device_or_nullptr(&folding_records_host).unwrap();
             let final_poly_query_eval_records =
                 to_device_or_nullptr(&blob.final_poly_query_eval_records).unwrap();
-            let non_initial_opened_values_records =
-                to_device_or_nullptr(&blob.non_initial_opened_values_records).unwrap();
+
+            let codeword_opened_values_cap: usize = proofs
+                .iter()
+                .map(|p| {
+                    p.whir_proof
+                        .codeword_opened_values
+                        .iter()
+                        .map(|r| r.iter().map(|q| q.len()).sum::<usize>())
+                        .sum::<usize>()
+                })
+                .sum();
+            let mut codeword_opened_values_host = Vec::with_capacity(codeword_opened_values_cap);
+            for proof in proofs.iter() {
+                for round in proof.whir_proof.codeword_opened_values.iter() {
+                    for query in round.iter() {
+                        codeword_opened_values_host.extend_from_slice(query);
+                    }
+                }
+            }
+            let codeword_opened_values = to_device_or_nullptr(&codeword_opened_values_host).unwrap();
+
+            // Must be in same order as codeword_opened_values
+            let mut codeword_states_host = Vec::with_capacity(codeword_opened_values_cap * WIDTH);
+            for preflight in preflights.iter() {
+                for round in preflight.codeword_states.iter() {
+                    for query in round.iter() {
+                        for state in query.iter() {
+                            codeword_states_host.extend_from_slice(state);
+                        }
+                    }
+                }
+            }
+            let codeword_states = to_device_or_nullptr(&codeword_states_host).unwrap();
 
             WhirBlobGpu {
                 zis,
                 zi_roots,
                 yis,
                 raw_queries,
-                initial_opened_values_records,
+                codeword_value_accs,
+                poseidon_states,
                 iov_rows_per_proof_psums,
                 commits_per_proof_psums,
                 stacking_chunks_psums,
@@ -950,7 +995,8 @@ mod cuda_tracegen {
                 mu_pows,
                 final_poly_query_eval_records,
                 folding_records,
-                non_initial_opened_values_records,
+                codeword_opened_values,
+                codeword_states,
             }
         }
     }
@@ -1018,7 +1064,7 @@ mod cuda_tracegen {
 
             let blob =
                 self.generate_blob(&child_vk.cpu, proofs_cpu, preflights_cpu, exp_bits_len_gen);
-            let blob_gpu = WhirBlobGpu::new(preflights_cpu, &blob);
+            let blob_gpu = WhirBlobGpu::new(proofs_cpu, preflights_cpu, &blob);
 
             [
                 WhirModuleChip::WhirRound,
