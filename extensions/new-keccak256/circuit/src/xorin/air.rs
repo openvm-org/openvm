@@ -87,13 +87,12 @@ impl XorinVmAir {
         let is_enabled = local.instruction.is_enabled;
         builder.assert_bool(is_enabled);
 
-        let [buffer_ptr, input_ptr, len_ptr] = [
-            instruction.buffer_ptr,
-            instruction.input_ptr,
-            instruction.len_ptr,
+        let [buffer_reg_ptr, input_reg_ptr, len_reg_ptr] = [
+            instruction.buffer_reg_ptr,
+            instruction.input_reg_ptr,
+            instruction.len_reg_ptr,
         ];
 
-        let reg_addr_sp = AB::F::ONE;
         let mut timestamp_change = AB::Expr::from_canonical_u32(3);
 
         for is_padding in local.sponge.is_padding_bytes {
@@ -121,9 +120,9 @@ impl XorinVmAir {
             .execute_and_increment_pc(
                 AB::Expr::from_canonical_usize(XorinOpcode::XORIN as usize + self.offset),
                 [
-                    buffer_ptr.into(),
-                    input_ptr.into(),
-                    len_ptr.into(),
+                    buffer_reg_ptr.into(),
+                    input_reg_ptr.into(),
+                    len_reg_ptr.into(),
                     AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
                     AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
                 ],
@@ -134,19 +133,19 @@ impl XorinVmAir {
 
         let mut timestamp: AB::Expr = instruction.start_timestamp.into();
 
-        let buffer_data = instruction.buffer_limbs.map(Into::into);
-        let input_data = instruction.input_limbs.map(Into::into);
-        let len_data = instruction.len_limbs.map(Into::into);
+        let buffer_ptr_limbs = instruction.buffer_ptr_limbs.map(Into::into);
+        let input_ptr_limbs = instruction.input_ptr_limbs.map(Into::into);
+        let len_limbs = instruction.len_limbs.map(Into::into);
 
         // Increases timestamp by 3
         for (ptr, value, aux) in izip!(
-            [buffer_ptr, input_ptr, len_ptr],
-            [buffer_data, input_data, len_data],
+            [buffer_reg_ptr, input_reg_ptr, len_reg_ptr],
+            [buffer_ptr_limbs, input_ptr_limbs, len_limbs],
             register_aux
         ) {
             self.memory_bridge
                 .read(
-                    MemoryAddress::new(reg_addr_sp, ptr),
+                    MemoryAddress::new(AB::Expr::from_canonical_u32(RV32_REGISTER_AS), ptr),
                     value,
                     timestamp.clone(),
                     aux,
@@ -159,8 +158,8 @@ impl XorinVmAir {
         // SAFETY: this approach only works when self.ptr_max_bits >= 24
         // because we are only range checking the last limb
         let need_range_check = [
-            *instruction.buffer_limbs.last().unwrap(),
-            *instruction.input_limbs.last().unwrap(),
+            *instruction.buffer_ptr_limbs.last().unwrap(),
+            *instruction.input_ptr_limbs.last().unwrap(),
             *instruction.len_limbs.last().unwrap(),
             *instruction.len_limbs.last().unwrap(),
         ];
@@ -175,19 +174,19 @@ impl XorinVmAir {
         }
 
         builder.assert_eq(
-            instruction.buffer,
-            instruction.buffer_limbs[0]
-                + instruction.buffer_limbs[1] * AB::F::from_canonical_u32(1 << 8)
-                + instruction.buffer_limbs[2] * AB::F::from_canonical_u32(1 << 16)
-                + instruction.buffer_limbs[3] * AB::F::from_canonical_u32(1 << 24),
+            instruction.buffer_ptr,
+            instruction.buffer_ptr_limbs[0]
+                + instruction.buffer_ptr_limbs[1] * AB::F::from_canonical_u32(1 << 8)
+                + instruction.buffer_ptr_limbs[2] * AB::F::from_canonical_u32(1 << 16)
+                + instruction.buffer_ptr_limbs[3] * AB::F::from_canonical_u32(1 << 24),
         );
 
         builder.assert_eq(
-            instruction.input,
-            instruction.input_limbs[0]
-                + instruction.input_limbs[1] * AB::F::from_canonical_u32(1 << 8)
-                + instruction.input_limbs[2] * AB::F::from_canonical_u32(1 << 16)
-                + instruction.input_limbs[3] * AB::F::from_canonical_u32(1 << 24),
+            instruction.input_ptr,
+            instruction.input_ptr_limbs[0]
+                + instruction.input_ptr_limbs[1] * AB::F::from_canonical_u32(1 << 8)
+                + instruction.input_ptr_limbs[2] * AB::F::from_canonical_u32(1 << 16)
+                + instruction.input_ptr_limbs[3] * AB::F::from_canonical_u32(1 << 24),
         );
 
         builder.assert_eq(
@@ -223,7 +222,7 @@ impl XorinVmAir {
         )
         .enumerate()
         {
-            let ptr = local.instruction.buffer + AB::F::from_canonical_usize(i * 4);
+            let ptr = local.instruction.buffer_ptr + AB::F::from_canonical_usize(i * 4);
             let should_read = is_enabled * not(is_padding);
 
             self.memory_bridge
@@ -252,7 +251,7 @@ impl XorinVmAir {
         )
         .enumerate()
         {
-            let ptr = local.instruction.input + AB::F::from_canonical_usize(i * 4);
+            let ptr = local.instruction.input_ptr + AB::F::from_canonical_usize(i * 4);
             let should_read = is_enabled * not(is_padding);
 
             self.memory_bridge
@@ -322,7 +321,7 @@ impl XorinVmAir {
         .enumerate()
         {
             let should_write = is_enabled * not(is_padding);
-            let ptr = local.instruction.buffer + AB::F::from_canonical_usize(i * 4);
+            let ptr = local.instruction.buffer_ptr + AB::F::from_canonical_usize(i * 4);
 
             self.memory_bridge
                 .write(

@@ -224,27 +224,27 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
 
         trace_row.instruction.pc = F::from_canonical_u32(record.from_pc);
         trace_row.instruction.is_enabled = F::ONE;
-        trace_row.instruction.buffer_ptr = F::from_canonical_u32(record.rd_ptr);
-        trace_row.instruction.input_ptr = F::from_canonical_u32(record.rs1_ptr);
-        trace_row.instruction.len_ptr = F::from_canonical_u32(record.rs2_ptr);
-        trace_row.instruction.buffer = F::from_canonical_u32(record.buffer);
-        let buffer_u8: [u8; 4] = record.buffer.to_le_bytes();
-        let buffer_limbs: [F; 4] = [
-            F::from_canonical_u8(buffer_u8[0]),
-            F::from_canonical_u8(buffer_u8[1]),
-            F::from_canonical_u8(buffer_u8[2]),
-            F::from_canonical_u8(buffer_u8[3]),
+        trace_row.instruction.buffer_reg_ptr = F::from_canonical_u32(record.rd_ptr);
+        trace_row.instruction.input_reg_ptr = F::from_canonical_u32(record.rs1_ptr);
+        trace_row.instruction.len_reg_ptr = F::from_canonical_u32(record.rs2_ptr);
+        trace_row.instruction.buffer_ptr = F::from_canonical_u32(record.buffer);
+        let buffer_ptr_u8: [u8; 4] = record.buffer.to_le_bytes();
+        let buffer_ptr_limbs: [F; 4] = [
+            F::from_canonical_u8(buffer_ptr_u8[0]),
+            F::from_canonical_u8(buffer_ptr_u8[1]),
+            F::from_canonical_u8(buffer_ptr_u8[2]),
+            F::from_canonical_u8(buffer_ptr_u8[3]),
         ];
-        trace_row.instruction.buffer_limbs = buffer_limbs;
-        trace_row.instruction.input = F::from_canonical_u32(record.input);
-        let input_u8: [u8; 4] = record.input.to_le_bytes();
-        let input_limbs: [F; 4] = [
-            F::from_canonical_u8(input_u8[0]),
-            F::from_canonical_u8(input_u8[1]),
-            F::from_canonical_u8(input_u8[2]),
-            F::from_canonical_u8(input_u8[3]),
+        trace_row.instruction.buffer_ptr_limbs = buffer_ptr_limbs;
+        trace_row.instruction.input_ptr = F::from_canonical_u32(record.input);
+        let input_ptr_u8: [u8; 4] = record.input.to_le_bytes();
+        let input_ptr_limbs: [F; 4] = [
+            F::from_canonical_u8(input_ptr_u8[0]),
+            F::from_canonical_u8(input_ptr_u8[1]),
+            F::from_canonical_u8(input_ptr_u8[2]),
+            F::from_canonical_u8(input_ptr_u8[3]),
         ];
-        trace_row.instruction.input_limbs = input_limbs;
+        trace_row.instruction.input_ptr_limbs = input_ptr_limbs;
         trace_row.instruction.len = F::from_canonical_u32(record.len);
         let len_u8: [u8; 4] = record.len.to_le_bytes();
         let len_limbs: [F; 4] = [
@@ -321,13 +321,13 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
             timestamp += 1;
         }
 
-        let buffer_limbs = record.buffer.to_le_bytes();
-        let input_limbs = record.input.to_le_bytes();
+        let buffer_ptr_limbs = record.buffer.to_le_bytes();
+        let input_ptr_limbs = record.input.to_le_bytes();
         let len_limbs = record.len.to_le_bytes();
 
         let need_range_check = [
-            buffer_limbs.last().unwrap(),
-            input_limbs.last().unwrap(),
+            buffer_ptr_limbs.last().unwrap(),
+            input_ptr_limbs.last().unwrap(),
             len_limbs.last().unwrap(),
             len_limbs.last().unwrap(),
         ];
