@@ -580,7 +580,6 @@ impl TracingMemory {
         if header.block_size == header.lowest_block_size {
             return;
         }
-        assert_eq!(1, 0);
         // SAFETY:
         // - header.address_space is validated during instruction decoding and within bounds
         // - header.pointer and header.type_size define valid memory bounds within the address space
@@ -613,7 +612,6 @@ impl TracingMemory {
         if header.block_size == header.lowest_block_size {
             return;
         }
-        assert_eq!(1, 0);
         let record_mut = self
             .access_adapter_records
             .alloc(AccessLayout::from_record_header(&header));
@@ -1010,7 +1008,7 @@ impl TracingMemory {
                 current_cnt == 0
                     || (current_address.address_space == addr_space
                         && current_address.pointer + current_cnt as u32 == ptr),
-                "The union of all touched blocks must consist of blocks with sizes divisible by the `CHUNK`"
+                "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`"
             );
             debug_assert!(block_size >= min_block_size as u8);
             debug_assert!(ptr % min_block_size as u32 == 0);
@@ -1061,9 +1059,8 @@ impl TracingMemory {
                             timestamp,
                             values: from_fn(|j| {
                                 let byte_idx = (i as usize + j) * cell_size;
-                                // SAFETY: block_size is multiple of CHUNK and we are
-                                // reading chunks of cells within
-                                // bounds
+                                // SAFETY: block_size is multiple of CHUNK and we are reading chunks
+                                // of cells within bounds
                                 unsafe {
                                     addr_space_config
                                         .layout
@@ -1086,8 +1083,7 @@ impl TracingMemory {
                     current_values[current_cnt * cell_size..current_cnt * cell_size + cell_size]
                         .copy_from_slice(cell_data);
                     if current_cnt & (min_block_size - 1) == 0 {
-                        // SAFETY: current_cnt / min_block_size < CHUNK / min_block_size <=
-                        // CHUNKs
+                        // SAFETY: current_cnt / min_block_size < CHUNK / min_block_size <= CHUNK
                         unsafe {
                             *current_timestamps.get_unchecked_mut(current_cnt / min_block_size) =
                                 timestamp;
@@ -1129,10 +1125,7 @@ impl TracingMemory {
                 }
             }
         }
-        assert_eq!(
-            current_cnt, 0,
-            "The union of all touched blocks must consist of blocks with sizes divisible by the `CHUNK`"
-        );
+        assert_eq!(current_cnt, 0, "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`");
     }
 
     pub fn address_space_alignment(&self) -> Vec<u8> {
