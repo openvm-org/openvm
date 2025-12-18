@@ -20,9 +20,9 @@ pub struct KeccakfVmCols<T> {
 pub struct KeccakfInstructionCols<T> {
     pub pc: T,
     pub is_enabled: T,
+    pub rd_ptr: T,
     pub buffer_ptr: T,
-    pub buffer: T,
-    pub buffer_limbs: [T; 4],
+    pub buffer_ptr_limbs: [T; 4],
 }
 
 #[repr(C)]

@@ -98,9 +98,8 @@ impl KeccakfVmAir {
         builder.assert_eq(is_enabled_is_first_round, is_first_round * is_enabled);
         builder.assert_eq(is_enabled_is_final_round, is_final_round * is_enabled);
 
-        let reg_addr_sp = AB::F::ONE;
-        let buffer_ptr = instruction.buffer_ptr;
-        let buffer_data = instruction.buffer_limbs.map(Into::into);
+        let rd_ptr = instruction.rd_ptr;
+        let buffer_ptr_limbs = instruction.buffer_ptr_limbs.map(Into::into);
         // 50 buffer reads and 50 buffer writes and 1 register read
         let timestamp_change =
             local.is_enabled_is_first_round * AB::F::from_canonical_u32(1 + 50 + 50);
@@ -113,7 +112,7 @@ impl KeccakfVmAir {
             .execute_and_increment_pc(
                 AB::Expr::from_canonical_usize(KeccakfOpcode::KECCAKF as usize + self.offset),
                 [
-                    buffer_ptr.into(),
+                    rd_ptr.into(),
                     AB::Expr::ZERO,
                     AB::Expr::ZERO,
                     AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
@@ -126,8 +125,8 @@ impl KeccakfVmAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(reg_addr_sp, buffer_ptr),
-                buffer_data,
+                MemoryAddress::new(AB::Expr::from_canonical_u32(RV32_REGISTER_AS), rd_ptr),
+                buffer_ptr_limbs,
                 start_timestamp.clone(),
                 &register_aux[0],
             )
@@ -135,19 +134,19 @@ impl KeccakfVmAir {
         *start_timestamp += local.is_enabled_is_first_round.into();
 
         builder.assert_eq(
-            instruction.buffer,
-            instruction.buffer_limbs[0]
-                + instruction.buffer_limbs[1] * AB::F::from_canonical_u32(1 << 8)
-                + instruction.buffer_limbs[2] * AB::F::from_canonical_u32(1 << 16)
-                + instruction.buffer_limbs[3] * AB::F::from_canonical_u32(1 << 24),
+            instruction.buffer_ptr,
+            instruction.buffer_ptr_limbs[0]
+                + instruction.buffer_ptr_limbs[1] * AB::F::from_canonical_u32(1 << 8)
+                + instruction.buffer_ptr_limbs[2] * AB::F::from_canonical_u32(1 << 16)
+                + instruction.buffer_ptr_limbs[3] * AB::F::from_canonical_u32(1 << 24),
         );
 
         let limb_shift = AB::F::from_canonical_usize(
             1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.ptr_max_bits),
         );
         let need_range_check = [
-            *instruction.buffer_limbs.last().unwrap(),
-            *instruction.buffer_limbs.last().unwrap(),
+            *instruction.buffer_ptr_limbs.last().unwrap(),
+            *instruction.buffer_ptr_limbs.last().unwrap(),
         ];
         for pair in need_range_check.chunks_exact(2) {
             self.bitwise_lookup_bus
@@ -192,7 +191,7 @@ impl KeccakfVmAir {
             let read_chunk: [AB::Expr; 4] =
                 std::array::from_fn(|j| local_preimage_bytes[4 * idx + j].clone());
 
-            let ptr = local.instruction.buffer + AB::Expr::from_canonical_usize(idx * 4);
+            let ptr = local.instruction.buffer_ptr + AB::Expr::from_canonical_usize(idx * 4);
 
             self.memory_bridge
                 .read(
@@ -242,7 +241,7 @@ impl KeccakfVmAir {
             let write_chunk: [AB::Expr; 4] =
                 std::array::from_fn(|j| local_postimage_bytes[4 * idx + j].clone());
 
-            let ptr = local.instruction.buffer + AB::Expr::from_canonical_usize(idx * 4);
+            let ptr = local.instruction.buffer_ptr + AB::Expr::from_canonical_usize(idx * 4);
 
             self.memory_bridge
                 .write(
@@ -286,14 +285,14 @@ impl KeccakfVmAir {
                 .assert_eq(local.instruction.is_enabled, next.instruction.is_enabled);
             builder
                 .when(need_check.clone())
-                .assert_eq(local.instruction.buffer_ptr, next.instruction.buffer_ptr);
+                .assert_eq(local.instruction.rd_ptr, next.instruction.rd_ptr);
             builder
                 .when(need_check.clone())
-                .assert_eq(local.instruction.buffer, next.instruction.buffer);
+                .assert_eq(local.instruction.buffer_ptr, next.instruction.buffer_ptr);
             for limb in 0..4 {
                 builder.when(need_check.clone()).assert_eq(
-                    local.instruction.buffer_limbs[limb],
-                    next.instruction.buffer_limbs[limb],
+                    local.instruction.buffer_ptr_limbs[limb],
+                    next.instruction.buffer_ptr_limbs[limb],
                 );
             }
         }
