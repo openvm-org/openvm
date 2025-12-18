@@ -38,7 +38,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
-pub struct Keccak256Rv32Config {
+pub struct NewKeccak256Rv32Config {
     #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
@@ -48,40 +48,40 @@ pub struct Keccak256Rv32Config {
     #[extension]
     pub io: Rv32Io,
     #[extension]
-    pub keccak: Keccak256,
+    pub keccak: NewKeccak256,
 }
 
-impl Default for Keccak256Rv32Config {
+impl Default for NewKeccak256Rv32Config {
     fn default() -> Self {
         Self {
             system: SystemConfig::default(),
             rv32i: Rv32I,
             rv32m: Rv32M::default(),
             io: Rv32Io,
-            keccak: Keccak256,
+            keccak: NewKeccak256,
         }
     }
 }
 
 // Default implementation uses no init file
-impl InitFileGenerator for Keccak256Rv32Config {}
+impl InitFileGenerator for NewKeccak256Rv32Config {}
 
 #[derive(Clone)]
-pub struct Keccak256Rv32CpuBuilder;
+pub struct NewKeccak256Rv32CpuBuilder;
 
-impl<E, SC> VmBuilder<E> for Keccak256Rv32CpuBuilder
+impl<E, SC> VmBuilder<E> for NewKeccak256Rv32CpuBuilder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: PrimeField32,
 {
-    type VmConfig = Keccak256Rv32Config;
+    type VmConfig = NewKeccak256Rv32Config;
     type SystemChipInventory = SystemChipInventory<SC>;
     type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
-        config: &Keccak256Rv32Config,
+        config: &NewKeccak256Rv32Config,
         circuit: AirInventory<SC>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
@@ -94,7 +94,7 @@ where
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
-            &Keccak256CpuProverExt,
+            &NewKeccak256CpuProverExt,
             &config.keccak,
             inventory,
         )?;
@@ -104,7 +104,7 @@ where
 
 // =================================== VM Extension Implementation =================================
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
-pub struct Keccak256;
+pub struct NewKeccak256;
 
 #[derive(Clone, Copy, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 #[cfg_attr(
@@ -114,18 +114,17 @@ pub struct Keccak256;
         openvm_circuit_derive::AotMeteredExecutor
     )
 )]
-
-pub enum Keccak256Executor {
+pub enum NewKeccak256Executor {
     Keccakf(KeccakfVmExecutor),
     Xorin(XorinVmExecutor),
 }
 
-impl<F> VmExecutionExtension<F> for Keccak256 {
-    type Executor = Keccak256Executor;
+impl<F> VmExecutionExtension<F> for NewKeccak256 {
+    type Executor = NewKeccak256Executor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, Keccak256Executor>,
+        inventory: &mut ExecutorInventoryBuilder<F, NewKeccak256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
 
@@ -145,7 +144,7 @@ impl<F> VmExecutionExtension<F> for Keccak256 {
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Keccak256 {
+impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for NewKeccak256 {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
@@ -190,10 +189,10 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Keccak256 {
     }
 }
 
-pub struct Keccak256CpuProverExt;
+pub struct NewKeccak256CpuProverExt;
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, SC, RA> VmProverExtension<E, RA, Keccak256> for Keccak256CpuProverExt
+impl<E, SC, RA> VmProverExtension<E, RA, NewKeccak256> for NewKeccak256CpuProverExt
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
@@ -202,7 +201,7 @@ where
 {
     fn extend_prover(
         &self,
-        _: &Keccak256,
+        _: &NewKeccak256,
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
