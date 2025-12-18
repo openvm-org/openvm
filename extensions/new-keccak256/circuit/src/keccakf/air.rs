@@ -277,24 +277,24 @@ impl KeccakfVmAir {
             builder
                 .when(need_check.clone())
                 .assert_eq(local.postimage_state_hi[idx], next.postimage_state_hi[idx]);
-            builder
-                .when(need_check.clone())
-                .assert_eq(local.instruction.pc, next.instruction.pc);
-            builder
-                .when(need_check.clone())
-                .assert_eq(local.instruction.is_enabled, next.instruction.is_enabled);
-            builder
-                .when(need_check.clone())
-                .assert_eq(local.instruction.rd_ptr, next.instruction.rd_ptr);
-            builder
-                .when(need_check.clone())
-                .assert_eq(local.instruction.buffer_ptr, next.instruction.buffer_ptr);
-            for limb in 0..4 {
-                builder.when(need_check.clone()).assert_eq(
-                    local.instruction.buffer_ptr_limbs[limb],
-                    next.instruction.buffer_ptr_limbs[limb],
-                );
-            }
+        }
+        builder
+            .when(need_check.clone())
+            .assert_eq(local.instruction.pc, next.instruction.pc);
+        builder
+            .when(need_check.clone())
+            .assert_eq(local.instruction.is_enabled, next.instruction.is_enabled);
+        builder
+            .when(need_check.clone())
+            .assert_eq(local.instruction.rd_ptr, next.instruction.rd_ptr);
+        builder
+            .when(need_check.clone())
+            .assert_eq(local.instruction.buffer_ptr, next.instruction.buffer_ptr);
+        for limb in 0..4 {
+            builder.when(need_check.clone()).assert_eq(
+                local.instruction.buffer_ptr_limbs[limb],
+                next.instruction.buffer_ptr_limbs[limb],
+            );
         }
         // safety: mem_oc does not need to be checked here because in the rows which is not first or
         // last it is not used and in the first or last rows, the mem_oc fields which is
