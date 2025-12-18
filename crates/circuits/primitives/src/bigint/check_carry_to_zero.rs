@@ -1,6 +1,6 @@
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder},
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, PrimeCharacteristicRing},
 };
 
 use super::{utils::range_check, OverflowInt};
@@ -90,7 +90,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryToZeroSubAir {
                 self.range_checker_bus,
                 self.decomp,
                 carry_abs_bits,
-                carry + AB::F::from_canonical_usize(carry_min_value_abs),
+                carry + AB::F::from_usize(carry_min_value_abs),
                 is_valid.clone(),
             );
         }
@@ -100,7 +100,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for CheckCarryToZeroSubAir {
         for (i, limb) in expr.limbs.iter().enumerate() {
             builder.assert_eq(
                 limb.clone() + previous_carry.clone(),
-                cols.carries[i] * AB::F::from_canonical_usize(1 << self.limb_bits),
+                cols.carries[i] * AB::F::from_usize(1 << self.limb_bits),
             );
             previous_carry = cols.carries[i].into();
         }

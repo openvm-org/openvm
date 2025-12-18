@@ -24,7 +24,7 @@ use openvm_native_compiler::{conversion::AS, NativeJalOpcode, NativeRangeCheckOp
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -81,7 +81,7 @@ where
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local_slice = local.deref();
         let local: &JalRangeCheckCols<AB::Var> = local_slice.borrow();
         builder.assert_bool(local.is_jal);
@@ -89,11 +89,10 @@ where
         let is_valid = local.is_jal + local.is_range_check;
         builder.assert_bool(is_valid.clone());
 
-        let d = AB::Expr::from_canonical_u32(Native as u32);
+        let d = AB::Expr::from_u32(Native as u32);
         let a_val = local.writes_aux.prev_data()[0];
         // if is_jal, write pc + DEFAULT_PC_STEP, else if is_range_check, read a_val.
-        let write_val = local.is_jal
-            * (local.state.pc + AB::Expr::from_canonical_u32(DEFAULT_PC_STEP))
+        let write_val = local.is_jal * (local.state.pc + AB::Expr::from_u32(DEFAULT_PC_STEP))
             + local.is_range_check * a_val;
         self.memory_bridge
             .write(
@@ -105,16 +104,16 @@ where
             .eval(builder, is_valid.clone());
 
         let opcode = local.is_jal
-            * AB::F::from_canonical_usize(NativeJalOpcode::JAL.global_opcode().as_usize())
+            * AB::F::from_usize(NativeJalOpcode::JAL.global_opcode().as_usize())
             + local.is_range_check
-                * AB::F::from_canonical_usize(
+                * AB::F::from_usize(
                     NativeRangeCheckOpcode::RANGE_CHECK
                         .global_opcode()
                         .as_usize(),
                 );
         // Increment pc by b if is_jal, else by DEFAULT_PC_STEP if is_range_check.
-        let pc_inc = local.is_jal * local.b
-            + local.is_range_check * AB::F::from_canonical_u32(DEFAULT_PC_STEP);
+        let pc_inc =
+            local.is_jal * local.b + local.is_range_check * AB::F::from_u32(DEFAULT_PC_STEP);
         builder.when(local.is_jal).assert_zero(local.c);
         self.execution_bridge
             .execute_and_increment_or_set_pc(
@@ -128,7 +127,7 @@ where
 
         // Range check specific:
         // a_val = x + y * (1 << 16)
-        let x = a_val - local.y * AB::Expr::from_canonical_u32(1 << 16);
+        let x = a_val - local.y * AB::Expr::from_u32(1 << 16);
         self.range_bus
             .send(x.clone(), local.b)
             .eval(builder, local.is_range_check);
@@ -210,13 +209,11 @@ where
             tracing_write_native(
                 state.memory,
                 a.as_canonical_u32(),
-                [F::from_canonical_u32(
-                    state.pc.wrapping_add(DEFAULT_PC_STEP),
-                )],
+                [F::from_u32(state.pc.wrapping_add(DEFAULT_PC_STEP))],
                 &mut record.write.prev_timestamp,
                 &mut record.write.prev_data,
             );
-            *state.pc = (F::from_canonical_u32(*state.pc) + b).as_canonical_u32();
+            *state.pc = (F::from_u32(*state.pc) + b).as_canonical_u32();
         } else if opcode == NativeRangeCheckOpcode::RANGE_CHECK.global_opcode() {
             record.is_jal = false;
             record.c = c;
@@ -256,8 +253,8 @@ impl<F: PrimeField32> TraceFiller<F> for JalRangeCheckFiller {
                 record.from_timestamp,
                 cols.writes_aux.as_mut(),
             );
-            cols.state.timestamp = F::from_canonical_u32(record.from_timestamp);
-            cols.state.pc = F::from_canonical_u32(record.from_pc);
+            cols.state.timestamp = F::from_u32(record.from_timestamp);
+            cols.state.pc = F::from_u32(record.from_pc);
             cols.a_pointer = record.a;
             cols.is_range_check = F::ZERO;
             cols.is_jal = F::ONE;
@@ -278,7 +275,7 @@ impl<F: PrimeField32> TraceFiller<F> for JalRangeCheckFiller {
             self.range_checker_chip.add_count(x, b as usize);
             self.range_checker_chip.add_count(y, c as usize);
 
-            cols.y = F::from_canonical_u32(y);
+            cols.y = F::from_u32(y);
             cols.c = record.c;
             cols.b = record.b;
             cols.writes_aux.set_prev_data(record.write.prev_data);
@@ -287,8 +284,8 @@ impl<F: PrimeField32> TraceFiller<F> for JalRangeCheckFiller {
                 record.from_timestamp,
                 cols.writes_aux.as_mut(),
             );
-            cols.state.timestamp = F::from_canonical_u32(record.from_timestamp);
-            cols.state.pc = F::from_canonical_u32(record.from_pc);
+            cols.state.timestamp = F::from_u32(record.from_timestamp);
+            cols.state.pc = F::from_u32(record.from_pc);
             cols.a_pointer = record.a;
             cols.is_range_check = F::ONE;
             cols.is_jal = F::ZERO;

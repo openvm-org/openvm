@@ -33,7 +33,7 @@ fn test_list_range_checker() {
     let lists_vals = (0..num_lists)
         .map(|_| {
             (0..LIST_LEN)
-                .map(|_| rng.gen::<u32>() % MAX)
+                .map(|_| rng.random::<u32>() % MAX)
                 .collect::<Vec<u32>>()
         })
         .collect::<Vec<Vec<u32>>>();

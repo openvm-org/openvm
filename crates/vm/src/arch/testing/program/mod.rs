@@ -3,7 +3,7 @@ use std::{borrow::BorrowMut, mem::size_of, sync::Arc};
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     prover::{cpu::CpuBackend, types::AirProvingContext},
     Chip, ChipUsageGetter,
@@ -36,7 +36,7 @@ impl<F: PrimeField32> ProgramTester<F> {
 
     pub fn execute(&mut self, instruction: &Instruction<F>, initial_state: &ExecutionState<u32>) {
         self.records.push(ProgramExecutionCols {
-            pc: F::from_canonical_u32(initial_state.pc),
+            pc: F::from_u32(initial_state.pc),
             opcode: instruction.opcode.to_field(),
             a: instruction.a,
             b: instruction.b,

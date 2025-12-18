@@ -1,6 +1,6 @@
 use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::Field,
+    p3_field::{Field, PrimeCharacteristicRing},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_poseidon2_air::{Poseidon2Air, Poseidon2Cols};
@@ -31,17 +31,21 @@ pub type Plonky3Poseidon2Air<F, LinearLayers, const SBOX_REGISTERS: usize> = Pos
 >;
 
 #[derive(Debug)]
-pub enum Poseidon2SubAir<F: Field, const SBOX_REGISTERS: usize> {
+pub enum Poseidon2SubAir<F: Field + PrimeCharacteristicRing, const SBOX_REGISTERS: usize> {
     BabyBearMds(Plonky3Poseidon2Air<F, BabyBearPoseidon2LinearLayers, SBOX_REGISTERS>),
 }
 
-impl<F: Field, const SBOX_REGISTERS: usize> Poseidon2SubAir<F, SBOX_REGISTERS> {
+impl<F: Field + PrimeCharacteristicRing, const SBOX_REGISTERS: usize>
+    Poseidon2SubAir<F, SBOX_REGISTERS>
+{
     pub fn new(constants: Plonky3RoundConstants<F>) -> Self {
         Self::BabyBearMds(Plonky3Poseidon2Air::new(constants))
     }
 }
 
-impl<F: Field, const SBOX_REGISTERS: usize> BaseAir<F> for Poseidon2SubAir<F, SBOX_REGISTERS> {
+impl<F: Field + PrimeCharacteristicRing, const SBOX_REGISTERS: usize> BaseAir<F>
+    for Poseidon2SubAir<F, SBOX_REGISTERS>
+{
     fn width(&self) -> usize {
         match self {
             Self::BabyBearMds(air) => air.width(),
@@ -49,17 +53,18 @@ impl<F: Field, const SBOX_REGISTERS: usize> BaseAir<F> for Poseidon2SubAir<F, SB
     }
 }
 
-impl<F: Field, const SBOX_REGISTERS: usize> BaseAirWithPublicValues<F>
+impl<F: Field + PrimeCharacteristicRing, const SBOX_REGISTERS: usize> BaseAirWithPublicValues<F>
     for Poseidon2SubAir<F, SBOX_REGISTERS>
 {
 }
-impl<F: Field, const SBOX_REGISTERS: usize> PartitionedBaseAir<F>
+impl<F: Field + PrimeCharacteristicRing, const SBOX_REGISTERS: usize> PartitionedBaseAir<F>
     for Poseidon2SubAir<F, SBOX_REGISTERS>
 {
 }
 
-impl<AB: AirBuilder, const SBOX_REGISTERS: usize> Air<AB>
-    for Poseidon2SubAir<AB::F, SBOX_REGISTERS>
+impl<AB: AirBuilder, const SBOX_REGISTERS: usize> Air<AB> for Poseidon2SubAir<AB::F, SBOX_REGISTERS>
+where
+    AB::F: Field + PrimeCharacteristicRing,
 {
     fn eval(&self, builder: &mut AB) {
         match self {

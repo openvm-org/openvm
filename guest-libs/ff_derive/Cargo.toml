@@ -20,7 +20,7 @@ proc-macro = true
 
 [dependencies]
 addchain = "0.2"
-num-bigint = "0.3"
+num-bigint03 = { package = "num-bigint", version = "0.3.3" }
 num-traits = "0.2"
 num-integer = "0.1"
 proc-macro2 = "1"

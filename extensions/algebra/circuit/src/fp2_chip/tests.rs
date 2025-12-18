@@ -26,7 +26,7 @@ use openvm_mod_circuit_builder::{
     test_utils::generate_random_biguint, utils::biguint_to_limbs_vec, ExprBuilderConfig,
 };
 use openvm_pairing_guest::{bls12_381::BLS12_381_MODULUS, bn254::BN254_MODULUS};
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
@@ -165,7 +165,7 @@ fn set_and_execute_fp2<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_L
         let b_c0 = generate_random_biguint(modulus);
         let b_c1 = generate_random_biguint(modulus);
 
-        let op = rng.gen_range(0..2);
+        let op = rng.random_range(0..2);
         let op = if is_addsub {
             match op {
                 0 => Fp2Opcode::ADD as usize,
@@ -196,34 +196,34 @@ fn set_and_execute_fp2<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_L
     tester.write::<RV32_REGISTER_NUM_LIMBS>(
         ptr_as,
         rs1_ptr,
-        a_base_addr.to_le_bytes().map(F::from_canonical_u8),
+        a_base_addr.to_le_bytes().map(F::from_u8),
     );
     tester.write::<RV32_REGISTER_NUM_LIMBS>(
         ptr_as,
         rs2_ptr,
-        b_base_addr.to_le_bytes().map(F::from_canonical_u8),
+        b_base_addr.to_le_bytes().map(F::from_u8),
     );
     tester.write::<RV32_REGISTER_NUM_LIMBS>(
         ptr_as,
         rd_ptr,
-        result_base_addr.to_le_bytes().map(F::from_canonical_u8),
+        result_base_addr.to_le_bytes().map(F::from_u8),
     );
 
     let a_c0_limbs: Vec<F> = biguint_to_limbs_vec(&a_c0, NUM_LIMBS)
         .into_iter()
-        .map(F::from_canonical_u8)
+        .map(F::from_u8)
         .collect();
     let a_c1_limbs: Vec<F> = biguint_to_limbs_vec(&a_c1, NUM_LIMBS)
         .into_iter()
-        .map(F::from_canonical_u8)
+        .map(F::from_u8)
         .collect();
     let b_c0_limbs: Vec<F> = biguint_to_limbs_vec(&b_c0, NUM_LIMBS)
         .into_iter()
-        .map(F::from_canonical_u8)
+        .map(F::from_u8)
         .collect();
     let b_c1_limbs: Vec<F> = biguint_to_limbs_vec(&b_c1, NUM_LIMBS)
         .into_iter()
-        .map(F::from_canonical_u8)
+        .map(F::from_u8)
         .collect();
 
     for i in (0..NUM_LIMBS).step_by(BLOCK_SIZE) {

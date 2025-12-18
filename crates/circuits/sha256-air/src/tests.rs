@@ -15,7 +15,7 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::{BusIndex, InteractionBuilder},
     p3_air::{Air, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -92,12 +92,12 @@ where
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
         bitwise_bus,
     ));
-    let len = rng.gen_range(1..100);
+    let len = rng.random_range(1..100);
     let random_records: Vec<_> = (0..len)
         .map(|i| {
             (
-                array::from_fn(|_| rng.gen::<u8>()),
-                rng.gen::<bool>() || i == len - 1,
+                array::from_fn(|_| rng.random::<u8>()),
+                rng.random::<bool>() || i == len - 1,
             )
         })
         .collect();
@@ -134,7 +134,7 @@ fn negative_sha256_test_bad_final_hash() {
     // Set the final_hash to all zeros
     let modify_trace = |trace: &mut RowMajorMatrix<F>| {
         trace.row_chunks_exact_mut(1).for_each(|row| {
-            let mut row_slice = row.row_slice(0).to_vec();
+            let mut row_slice = row.row_slice(0).expect("row exists").to_vec();
             let cols: &mut Sha256DigestCols<F> = row_slice[..SHA256_DIGEST_WIDTH].borrow_mut();
             if cols.flags.is_last_block.is_one() && cols.flags.is_digest_row.is_one() {
                 for i in 0..SHA256_HASH_WORDS {

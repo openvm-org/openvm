@@ -6,7 +6,7 @@ extern crate proc_macro2;
 
 use std::{iter, str::FromStr};
 
-use num_bigint::BigUint;
+use num_bigint03::BigUint;
 use num_integer::Integer;
 use num_traits::{One, ToPrimitive, Zero};
 use quote::{quote, TokenStreamExt};

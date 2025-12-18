@@ -3,7 +3,7 @@ use std::{borrow::Borrow, iter};
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir},
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -34,7 +34,10 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &MemoryMerkleCols<_, CHUNK> = (*local).borrow();
         let next: &MemoryMerkleCols<_, CHUNK> = (*next).borrow();
 
@@ -81,14 +84,14 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
             .when_transition()
             .when_ne(
                 local.parent_height,
-                AB::F::from_canonical_usize(self.memory_dimensions.address_height + 1),
+                AB::F::from_usize(self.memory_dimensions.address_height + 1),
             )
             .assert_eq(local.height_section, next.height_section);
         builder
             .when_transition()
             .when_ne(
                 next.parent_height,
-                AB::F::from_canonical_usize(self.memory_dimensions.address_height),
+                AB::F::from_usize(self.memory_dimensions.address_height),
             )
             .assert_eq(local.height_section, next.height_section);
         // two adjacent rows with `is_root` = 1 should have
@@ -101,7 +104,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder + AirBuilderWithPublicValues> Ai
         // roots should have correct height
         builder.when(local.is_root).assert_eq(
             local.parent_height,
-            AB::Expr::from_canonical_usize(self.memory_dimensions.overall_height()),
+            AB::Expr::from_usize(self.memory_dimensions.overall_height()),
         );
 
         // constrain public values

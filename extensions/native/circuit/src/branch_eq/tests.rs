@@ -22,7 +22,7 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -114,12 +114,17 @@ fn set_and_execute<E, RA>(
     E: PreflightExecutor<F, RA>,
     RA: Arena,
 {
-    let a_val = a.unwrap_or(rng.gen());
-    let b_val = b.unwrap_or(if rng.gen_bool(0.5) { a_val } else { rng.gen() });
-    let imm = imm.unwrap_or(rng.gen_range((-ABS_MAX_IMM)..ABS_MAX_IMM));
+    let a_val = a.unwrap_or(rng.random());
+    let b_val = b.unwrap_or(if rng.random_bool(0.5) {
+        a_val
+    } else {
+        rng.random()
+    });
+    let imm = imm.unwrap_or(rng.random_range((-ABS_MAX_IMM)..ABS_MAX_IMM));
     let (a, a_as) = write_native_or_imm(tester, rng, a_val, None);
     let (b, b_as) = write_native_or_imm(tester, rng, b_val, None);
-    let initial_pc = rng.gen_range(imm.unsigned_abs()..(1 << (PC_BITS - 1)) - imm.unsigned_abs());
+    let initial_pc =
+        rng.random_range(imm.unsigned_abs()..(1 << (PC_BITS - 1)) - imm.unsigned_abs());
 
     tester.execute_with_pc(
         executor,
@@ -129,8 +134,8 @@ fn set_and_execute<E, RA>(
             a,
             b,
             isize_to_field::<F>(imm as isize),
-            F::from_canonical_usize(a_as),
-            F::from_canonical_usize(b_as),
+            F::from_usize(a_as),
+            F::from_usize(b_as),
             F::ZERO,
             F::ZERO,
         ),
@@ -257,7 +262,7 @@ fn run_negative_branch_eq_test(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).expect("row exists").to_vec();
         let cols: &mut BranchEqualCoreCols<F, 1> =
             values.split_at_mut(adapter_width).1.borrow_mut();
         if let Some(cmp_result) = prank_cmp_result {
@@ -281,8 +286,8 @@ fn run_negative_branch_eq_test(
 fn rv32_beq_wrong_cmp_negative_test() {
     run_negative_branch_eq_test(
         BranchEqualOpcode::BEQ,
-        F::from_canonical_u32(7 << 16),
-        F::from_canonical_u32(7 << 24),
+        F::from_u32(7 << 16),
+        F::from_u32(7 << 24),
         Some(true),
         None,
         VerificationError::OodEvaluationMismatch,
@@ -290,8 +295,8 @@ fn rv32_beq_wrong_cmp_negative_test() {
 
     run_negative_branch_eq_test(
         BranchEqualOpcode::BEQ,
-        F::from_canonical_u32(7 << 16),
-        F::from_canonical_u32(7 << 16),
+        F::from_u32(7 << 16),
+        F::from_u32(7 << 16),
         Some(false),
         None,
         VerificationError::OodEvaluationMismatch,
@@ -302,8 +307,8 @@ fn rv32_beq_wrong_cmp_negative_test() {
 fn rv32_beq_zero_inv_marker_negative_test() {
     run_negative_branch_eq_test(
         BranchEqualOpcode::BEQ,
-        F::from_canonical_u32(7 << 16),
-        F::from_canonical_u32(7 << 24),
+        F::from_u32(7 << 16),
+        F::from_u32(7 << 24),
         Some(true),
         Some(F::ZERO),
         VerificationError::OodEvaluationMismatch,
@@ -314,10 +319,10 @@ fn rv32_beq_zero_inv_marker_negative_test() {
 fn rv32_beq_invalid_inv_marker_negative_test() {
     run_negative_branch_eq_test(
         BranchEqualOpcode::BEQ,
-        F::from_canonical_u32(7 << 16),
-        F::from_canonical_u32(7 << 24),
+        F::from_u32(7 << 16),
+        F::from_u32(7 << 24),
         Some(false),
-        Some(F::from_canonical_u32(1 << 16)),
+        Some(F::from_u32(1 << 16)),
         VerificationError::OodEvaluationMismatch,
     );
 }
@@ -326,8 +331,8 @@ fn rv32_beq_invalid_inv_marker_negative_test() {
 fn rv32_bne_wrong_cmp_negative_test() {
     run_negative_branch_eq_test(
         BranchEqualOpcode::BNE,
-        F::from_canonical_u32(7 << 16),
-        F::from_canonical_u32(7 << 24),
+        F::from_u32(7 << 16),
+        F::from_u32(7 << 24),
         Some(false),
         None,
         VerificationError::OodEvaluationMismatch,
@@ -335,8 +340,8 @@ fn rv32_bne_wrong_cmp_negative_test() {
 
     run_negative_branch_eq_test(
         BranchEqualOpcode::BNE,
-        F::from_canonical_u32(7 << 16),
-        F::from_canonical_u32(7 << 16),
+        F::from_u32(7 << 16),
+        F::from_u32(7 << 16),
         Some(true),
         None,
         VerificationError::OodEvaluationMismatch,
@@ -347,8 +352,8 @@ fn rv32_bne_wrong_cmp_negative_test() {
 fn rv32_bne_zero_inv_marker_negative_test() {
     run_negative_branch_eq_test(
         BranchEqualOpcode::BNE,
-        F::from_canonical_u32(7 << 16),
-        F::from_canonical_u32(7 << 24),
+        F::from_u32(7 << 16),
+        F::from_u32(7 << 24),
         Some(false),
         Some(F::ZERO),
         VerificationError::OodEvaluationMismatch,
@@ -359,10 +364,10 @@ fn rv32_bne_zero_inv_marker_negative_test() {
 fn rv32_bne_invalid_inv_marker_negative_test() {
     run_negative_branch_eq_test(
         BranchEqualOpcode::BNE,
-        F::from_canonical_u32(7 << 16),
-        F::from_canonical_u32(7 << 24),
+        F::from_u32(7 << 16),
+        F::from_u32(7 << 24),
         Some(true),
-        Some(F::from_canonical_u32(1 << 16)),
+        Some(F::from_u32(1 << 16)),
         VerificationError::OodEvaluationMismatch,
     );
 }
@@ -379,8 +384,8 @@ fn execute_roundtrip_sanity_test() {
     let mut tester = VmChipTestBuilder::default_native();
     let mut harness = create_test_chip(&mut tester);
 
-    let x = F::from_canonical_u32(u32::from_le_bytes([19, 4, 179, 60]));
-    let y = F::from_canonical_u32(u32::from_le_bytes([19, 32, 180, 60]));
+    let x = F::from_u32(u32::from_le_bytes([19, 4, 179, 60]));
+    let y = F::from_u32(u32::from_le_bytes([19, 32, 180, 60]));
     set_and_execute(
         &mut tester,
         &mut harness.executor,
@@ -406,7 +411,7 @@ fn execute_roundtrip_sanity_test() {
 
 #[test]
 fn run_eq_sanity_test() {
-    let x = F::from_canonical_u32(u32::from_le_bytes([19, 4, 17, 60]));
+    let x = F::from_u32(u32::from_le_bytes([19, 4, 17, 60]));
     let (cmp_result, diff_val) = run_eq(true, x, x);
     assert!(cmp_result);
     assert_eq!(diff_val, F::ZERO);
@@ -418,8 +423,8 @@ fn run_eq_sanity_test() {
 
 #[test]
 fn run_ne_sanity_test() {
-    let x = F::from_canonical_u32(u32::from_le_bytes([19, 4, 17, 60]));
-    let y = F::from_canonical_u32(u32::from_le_bytes([19, 32, 18, 60]));
+    let x = F::from_u32(u32::from_le_bytes([19, 4, 17, 60]));
+    let y = F::from_u32(u32::from_le_bytes([19, 32, 18, 60]));
     let (cmp_result, diff_val) = run_eq(true, x, y);
     assert!(!cmp_result);
     assert_eq!(diff_val * (x - y), F::ONE);
