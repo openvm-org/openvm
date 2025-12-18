@@ -16,7 +16,7 @@ pub(in crate::whir) fn generate_trace(
     params: &SystemParams,
 ) -> DeviceMatrix<F> {
     let mem = MemTracker::start("tracegen.whir_initial_opened_values");
-    let num_valid_rows = blob.initial_opened_values_records.len();
+    let num_valid_rows = blob.codeword_value_accs.len();
     let omega_k = F::two_adic_generator(params.k_whir());
     let height = num_valid_rows.next_power_of_two();
     let width = InitialOpenedValuesCols::<F>::width();
@@ -30,7 +30,8 @@ pub(in crate::whir) fn generate_trace(
             trace_d.buffer(),
             num_valid_rows,
             height,
-            &blob.initial_opened_values_records,
+            &blob.codeword_value_accs,
+            &blob.poseidon_states,
             params.k_whir(),
             num_initial_queries,
             total_queries,

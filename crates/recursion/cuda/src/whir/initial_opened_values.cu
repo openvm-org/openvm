@@ -34,17 +34,17 @@ template <typename T> struct InitialOpenedValuesCols {
 };
 
 typedef struct {
-    FpExt codeword_slice_val_acc;
     Fp pre_state[WIDTH];
     Fp post_state[WIDTH];
-} InitialOpenedValuesData;
+} PoseidonStatePair;
 
 template <size_t NUM_PROOFS>
 __global__ void initial_opened_values_tracegen(
     Fp *trace,
     size_t num_valid_rows,
     size_t height,
-    InitialOpenedValuesData *records,
+    FpExt *codeword_value_accs,
+    PoseidonStatePair *poseidon_states,
     size_t k_whir,
     size_t num_initial_queries,
     size_t total_queries,
@@ -70,8 +70,6 @@ __global__ void initial_opened_values_tracegen(
         row.fill_zero(0, sizeof(InitialOpenedValuesCols<uint8_t>));
         return;
     }
-
-    InitialOpenedValuesData record = records[row_idx];
 
     // rows_per_proof_psums has length NUM_PROOFS + 1, with psums[0] = 0.
     const size_t proof_idx = partition_point_leq(
@@ -150,7 +148,7 @@ __global__ void initial_opened_values_tracegen(
     // For round 0, query_idx indexes directly (no round offset needed)
     const size_t proof_query_idx = proof_idx * total_queries + query_idx;
 
-    COL_WRITE_ARRAY(row, InitialOpenedValuesCols, codeword_value_acc, record.codeword_slice_val_acc.elems);
+    COL_WRITE_ARRAY(row, InitialOpenedValuesCols, codeword_value_acc, codeword_value_accs[row_idx].elems);
     COL_WRITE_VALUE(row, InitialOpenedValuesCols, zi, zis_per_proof[proof_query_idx]);
     COL_WRITE_VALUE(row, InitialOpenedValuesCols, zi_root, zi_roots_per_proof[proof_query_idx]);
     COL_WRITE_ARRAY(row, InitialOpenedValuesCols, yi, yis_per_proof[proof_query_idx].elems);
@@ -174,15 +172,17 @@ __global__ void initial_opened_values_tracegen(
         COL_WRITE_ARRAY(row, InitialOpenedValuesCols, mu_pows[i], mu_pow.elems);
     }
 
-    COL_WRITE_ARRAY(row, InitialOpenedValuesCols, pre_state, record.pre_state);
-    COL_WRITE_ARRAY(row, InitialOpenedValuesCols, post_state, record.post_state);
+    PoseidonStatePair state_pair = poseidon_states[row_idx];
+    COL_WRITE_ARRAY(row, InitialOpenedValuesCols, pre_state, state_pair.pre_state);
+    COL_WRITE_ARRAY(row, InitialOpenedValuesCols, post_state, state_pair.post_state);
 }
 
 extern "C" int _initial_opened_values_tracegen(
     Fp *trace_d,
     size_t num_valid_rows,
     size_t height,
-    InitialOpenedValuesData *records_d,
+    FpExt *codeword_value_accs_d,
+    PoseidonStatePair *poseidon_states_d,
     size_t k_whir,
     size_t num_initial_queries,
     size_t total_queries,
@@ -206,7 +206,8 @@ extern "C" int _initial_opened_values_tracegen(
         trace_d,
         num_valid_rows,
         height,
-        records_d,
+        codeword_value_accs_d,
+        poseidon_states_d,
         k_whir,
         num_initial_queries,
         total_queries,

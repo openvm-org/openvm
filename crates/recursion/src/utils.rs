@@ -290,8 +290,9 @@ where
     )
 }
 
-pub fn poseidon2_hash_slice_with_records(vals: &[F]) -> ([F; CHUNK], Vec<[F; WIDTH]>) {
-    let mut permuted_states = Vec::with_capacity(vals.len().div_ceil(CHUNK));
+pub fn poseidon2_hash_slice(vals: &[F]) -> ([F; CHUNK], Vec<[F; WIDTH]>) {
+    let num_chunks = vals.len().div_ceil(CHUNK);
+    let mut pre_states = Vec::with_capacity(num_chunks);
     let perm = poseidon2_perm();
     let mut state = [F::ZERO; WIDTH];
     let mut i = 0;
@@ -299,14 +300,40 @@ pub fn poseidon2_hash_slice_with_records(vals: &[F]) -> ([F; CHUNK], Vec<[F; WID
         state[i] = val;
         i += 1;
         if i == CHUNK {
-            permuted_states.push(state);
+            pre_states.push(state);
             perm.permute_mut(&mut state);
             i = 0;
         }
     }
     if i != 0 {
-        permuted_states.push(state);
+        pre_states.push(state);
         perm.permute_mut(&mut state);
     }
-    (state[..CHUNK].try_into().unwrap(), permuted_states)
+    (state[..CHUNK].try_into().unwrap(), pre_states)
+}
+
+#[inline]
+pub fn poseidon2_hash_slice_with_states(vals: &[F]) -> ([F; CHUNK], Vec<[F; WIDTH]>, Vec<[F; WIDTH]>) {
+    let num_chunks = vals.len().div_ceil(CHUNK);
+    let mut pre_states = Vec::with_capacity(num_chunks);
+    let mut post_states = Vec::with_capacity(num_chunks);
+    let perm = poseidon2_perm();
+    let mut state = [F::ZERO; WIDTH];
+    let mut i = 0;
+    for &val in vals {
+        state[i] = val;
+        i += 1;
+        if i == CHUNK {
+            pre_states.push(state);
+            perm.permute_mut(&mut state);
+            post_states.push(state);
+            i = 0;
+        }
+    }
+    if i != 0 {
+        pre_states.push(state);
+        perm.permute_mut(&mut state);
+        post_states.push(state);
+    }
+    (state[..CHUNK].try_into().unwrap(), pre_states, post_states)
 }

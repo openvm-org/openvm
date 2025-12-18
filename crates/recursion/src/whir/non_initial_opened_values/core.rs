@@ -10,11 +10,10 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra, TwoAdicField};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
-use p3_symmetric::Permutation;
 use stark_backend_v2::{
-    D_EF, F, SystemParams,
+    D_EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
-    poseidon2::{WIDTH, poseidon2_perm},
+    poseidon2::WIDTH,
     proof::Proof,
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -47,13 +46,6 @@ pub(in crate::whir::non_initial_opened_values) struct NonInitialOpenedValuesCols
     value: [T; D_EF],
     value_hash: [T; WIDTH],
     yi: [T; D_EF],
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
-pub(in crate::whir) struct NonInitialOpenedValueRecord {
-    pub value: [F; D_EF],
-    pub value_hash: [F; WIDTH],
 }
 
 pub struct NonInitialOpenedValuesAir {
@@ -237,46 +229,11 @@ where
     }
 }
 
-pub(in crate::whir) fn build_non_initial_opened_value_records(
-    params: &SystemParams,
-    proofs: &[&Proof],
-) -> Vec<NonInitialOpenedValueRecord> {
-    let perm = poseidon2_perm();
-    let num_queries_per_round: Vec<usize> =
-        params.whir.rounds.iter().map(|r| r.num_queries).collect();
-
-    let mut records = Vec::new();
-    for proof in proofs {
-        for (whir_round, &num_queries) in num_queries_per_round.iter().enumerate().skip(1) {
-            for query_idx in 0..num_queries {
-                let opened_values =
-                    proof.whir_proof.codeword_opened_values[whir_round - 1][query_idx].clone();
-
-                for opened_value in opened_values {
-                    let mut state = [F::ZERO; WIDTH];
-                    state[..D_EF].copy_from_slice(opened_value.as_base_slice());
-                    perm.permute_mut(&mut state);
-
-                    let mut value = [F::ZERO; D_EF];
-                    value.copy_from_slice(opened_value.as_base_slice());
-
-                    records.push(NonInitialOpenedValueRecord {
-                        value,
-                        value_hash: state,
-                    });
-                }
-            }
-        }
-    }
-
-    records
-}
-
 #[tracing::instrument(level = "trace", skip_all)]
 pub(crate) fn generate_trace(
     mvk: &MultiStarkVerifyingKeyV2,
+    proofs: &[&Proof],
     preflights: &[&Preflight],
-    records: &[NonInitialOpenedValueRecord],
 ) -> RowMajorMatrix<F> {
     let params = &mvk.inner.params;
 
@@ -299,17 +256,17 @@ pub(crate) fn generate_trace(
     let num_rows = num_valid_rows.next_power_of_two();
     let width = NonInitialOpenedValuesCols::<F>::width();
 
-    debug_assert_eq!(records.len(), num_valid_rows);
     let mut trace = vec![F::ZERO; num_rows * width];
 
     trace
         .par_chunks_exact_mut(width)
-        .zip(records)
+        .take(num_valid_rows)
         .enumerate()
-        .for_each(|(row_idx, (row, record))| {
+        .for_each(|(row_idx, row)| {
             let proof_idx = row_idx / num_rows_per_proof;
             let i = row_idx % num_rows_per_proof;
 
+            let proof = &proofs[proof_idx];
             let preflight = &preflights[proof_idx];
 
             let cols: &mut NonInitialOpenedValuesCols<F> = row.borrow_mut();
@@ -335,8 +292,9 @@ pub(crate) fn generate_trace(
             cols.is_first_in_round = F::from_bool(is_first_in_round);
             cols.is_first_in_query = F::from_bool(is_first_in_query);
             cols.zi_root = preflight.whir.zj_roots[whir_round][query_idx];
-            cols.value_hash = record.value_hash;
-            cols.value.copy_from_slice(&record.value);
+            cols.value_hash = preflight.codeword_states[whir_round - 1][query_idx][coset_idx];
+            let value = &proof.whir_proof.codeword_opened_values[whir_round - 1][query_idx][coset_idx];
+            cols.value.copy_from_slice(value.as_base_slice());
             let query_offset = preflight.whir.query_offsets[whir_round];
             cols.merkle_idx_bit_src = preflight.whir.queries[query_offset + query_idx];
             cols.zi = preflight.whir.zjs[whir_round][query_idx];
