@@ -33,7 +33,7 @@ mod tests {
     fn test_rv32im_config() -> Rv32ImConfig {
         Rv32ImConfig {
             rv32i: Rv32IConfig {
-                system: test_system_config().without_access_adapters(),
+                system: test_system_config(),
                 ..Default::default()
             },
             ..Default::default()
