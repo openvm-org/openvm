@@ -11,6 +11,7 @@ pub struct XorinVmCols<T> {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, AlignedBorrow, derive_new::new)]
+#[allow(clippy::too_many_arguments)]
 pub struct XorinInstructionCols<T> {
     pub pc: T,
     pub is_enabled: T,

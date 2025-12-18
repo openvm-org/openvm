@@ -1,6 +1,7 @@
 pub mod air;
 pub mod columns;
 pub mod execution;
+#[cfg(test)]
 pub mod tests;
 pub mod trace;
 

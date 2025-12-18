@@ -14,19 +14,14 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 };
 use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_new_keccak256_transpiler::XorinOpcode;
-use openvm_stark_backend::{p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix};
+use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use crate::xorin::{
-    air::XorinVmAir,
-    columns::{XorinInstructionCols, XorinMemoryCols, XorinSpongeCols},
-    XorinVmChip, XorinVmExecutor, XorinVmFiller,
-};
+use crate::xorin::{air::XorinVmAir, XorinVmChip, XorinVmExecutor, XorinVmFiller};
 
 type F = BabyBear;
 type Harness = TestChipHarness<F, XorinVmExecutor, XorinVmAir, XorinVmChip<F>>;
-use openvm_stark_backend::verifier::VerificationError;
 
 fn create_harness_fields(
     execution_bridge: ExecutionBridge,
@@ -167,7 +162,7 @@ fn xorin_chip_positive_tests() {
         let mut tester = VmChipTestBuilder::default();
         let (mut harness, bitwise) = create_test_harness(&mut tester);
 
-        let buffer_length = Some(rng.gen_range(1..=34) * 4 as usize);
+        let buffer_length = Some(rng.gen_range(1..=34) * 4);
 
         set_and_execute(
             &mut tester,
@@ -187,6 +182,9 @@ fn xorin_chip_positive_tests() {
     }
 }
 
+// todo: complete the negative test (currently wip)
+/*
+#[allow(clippy::too_many_arguments)]
 fn run_xorin_chip_negative_tests(
     prank_sponge: Option<XorinSpongeCols<F>>,
     prank_instruction: Option<XorinInstructionCols<F>>,
@@ -250,3 +248,4 @@ fn run_xorin_chip_negative_tests(
         tester.simple_test_with_expected_error(VerificationError::OodEvaluationMismatch);
     }
 }
+*/

@@ -35,8 +35,8 @@ impl KeccakfVmExecutor {
         let Instruction {
             opcode: _,
             a,
-            b,
-            c,
+            b: _,
+            c: _,
             d,
             e,
             ..
