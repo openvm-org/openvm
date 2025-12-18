@@ -258,16 +258,16 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                     postimage_buffer_bytes[8 * idx..8 * idx + 8].copy_from_slice(&chunk);
                 }
 
+                // fills in inner
+                // the reason we give the transpose instead is inside, plonky3 transpose the
+                // input so transpose of transpose fixes it
+                let p3_trace: RowMajorMatrix<F> =
+                    generate_trace_rows(vec![preimage_buffer_bytes_u64_transpose], 0);
+
                 round_slice
                     .chunks_exact_mut(NUM_KECCAKF_VM_COLS)
                     .enumerate()
                     .for_each(|(row_idx, row)| {
-                        // fills in inner
-                        // the reason we give the transpose instead is inside, plonky3 transpose the
-                        // input so transpose of transpose fixes it
-                        let p3_trace: RowMajorMatrix<F> =
-                            generate_trace_rows(vec![preimage_buffer_bytes_u64_transpose], 0);
-
                         row[..NUM_KECCAK_PERM_COLS].copy_from_slice(
                             &p3_trace.values[row_idx * NUM_KECCAK_PERM_COLS
                                 ..(row_idx + 1) * NUM_KECCAK_PERM_COLS],
