@@ -132,7 +132,6 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         while ptr < bytes.len() {
             let bytes_slice = &bytes[ptr..];
             let header: &AccessRecordHeader = bytes_slice.borrow();
-
             // SAFETY:
             // - bytes[ptr..] is a valid starting pointer to a previously allocated record
             // - The record contains self-describing layout information
