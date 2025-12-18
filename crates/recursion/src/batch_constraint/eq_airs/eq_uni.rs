@@ -172,7 +172,7 @@ where
     }
 }
 
-#[tracing::instrument(name = "generate_trace", skip_all)]
+#[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
 pub(crate) fn generate_eq_uni_trace(
     vk: &MultiStarkVerifyingKeyV2,
     _proofs: &[Proof],

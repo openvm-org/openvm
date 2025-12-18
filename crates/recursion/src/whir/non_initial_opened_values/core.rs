@@ -272,7 +272,7 @@ pub(in crate::whir) fn build_non_initial_opened_value_records(
     records
 }
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(level = "trace", skip_all)]
 pub(crate) fn generate_trace(
     mvk: &MultiStarkVerifyingKeyV2,
     preflights: &[&Preflight],
