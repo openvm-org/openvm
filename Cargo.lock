@@ -6819,20 +6819,14 @@ dependencies = [
 name = "openvm-new-keccak256-circuit"
 version = "1.4.2"
 dependencies = [
- "cfg-if",
  "derive-new 0.6.0",
  "derive_more 1.0.0",
- "hex",
  "itertools 0.14.0",
  "openvm-circuit",
  "openvm-circuit-derive",
  "openvm-circuit-primitives",
  "openvm-circuit-primitives-derive",
- "openvm-cuda-backend",
- "openvm-cuda-builder",
- "openvm-cuda-common",
  "openvm-instructions",
- "openvm-keccak256-transpiler",
  "openvm-new-keccak256-transpiler",
  "openvm-rv32im-circuit",
  "openvm-stark-backend",
@@ -6842,7 +6836,6 @@ dependencies = [
  "serde",
  "strum 0.26.3",
  "tiny-keccak",
- "tokio",
 ]
 
 [[package]]
