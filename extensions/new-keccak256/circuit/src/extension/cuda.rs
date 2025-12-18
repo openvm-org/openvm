@@ -39,7 +39,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, NewKeccak25
         );
         inventory.add_executor_chip(xorin_chip);
 
-        // Skip KeccakfVmAir for xorin-only branch
         inventory.next_air::<KeccakfVmAir>()?;
 
         Ok(())
