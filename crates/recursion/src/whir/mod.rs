@@ -143,7 +143,7 @@ impl WhirModule {
 }
 
 impl WhirModule {
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn run_preflight<TS: FiatShamirTranscript + TranscriptHistory>(
         &self,
         proof: &Proof,
@@ -825,7 +825,12 @@ impl WhirModuleChip {
 impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for WhirModuleChip {
     type ModuleSpecificCtx = WhirBlobCpu;
 
-    #[tracing::instrument(name = "wrapper.generate_trace", skip_all, fields(air = %self))]
+    #[tracing::instrument(
+        name = "wrapper.generate_trace",
+        level = "trace",
+        skip_all,
+        fields(air = %self)
+    )]
     fn generate_trace(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
@@ -951,7 +956,12 @@ mod cuda_tracegen {
     }
 
     impl WhirModuleChip {
-        #[tracing::instrument(name = "wrapper.generate_trace", skip_all, fields(air = %self))]
+        #[tracing::instrument(
+            name = "wrapper.generate_trace",
+            level = "trace",
+            skip_all,
+            fields(air = %self)
+        )]
         fn generate_gpu_trace(
             &self,
             child_vk: &VerifyingKeyGpu,
