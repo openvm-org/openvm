@@ -612,6 +612,7 @@ impl TracingMemory {
         if header.block_size == header.lowest_block_size {
             return;
         }
+
         let record_mut = self
             .access_adapter_records
             .alloc(AccessLayout::from_record_header(&header));
