@@ -12,19 +12,16 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
-use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+};
 use openvm_new_keccak256_transpiler::XorinOpcode;
 use openvm_rv32im_circuit::adapters::{read_rv32_register, tracing_read, tracing_write};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::xorin::{
-    columns::XorinVmCols,
-    trace::instructions::{
-        program::DEFAULT_PC_STEP,
-        riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
-    },
-    XorinVmExecutor, XorinVmFiller,
-};
+use crate::xorin::{columns::XorinVmCols, XorinVmExecutor, XorinVmFiller};
 
 #[derive(Clone, Copy)]
 pub struct XorinVmMetadata {}

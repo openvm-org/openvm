@@ -1,12 +1,14 @@
 #include "keccakf/keccakf.cuh"
 #include "launcher.cuh"
 #include "primitives/buffer_view.cuh"
+#include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
 #include "system/memory/controller.cuh"
 
 using namespace keccakf;
+using namespace riscv;
 
 // Keccak round constants
 __device__ __constant__ uint64_t KECCAK_RC[NUM_ROUNDS] = {
@@ -171,7 +173,13 @@ __global__ void keccakf_p3_tracegen(
     }
 }
 
+#define KECCAKF_WRITE(FIELD, VALUE) COL_WRITE_VALUE(row, KeccakfVmCols, FIELD, VALUE)
+#define KECCAKF_WRITE_ARRAY(FIELD, VALUES) COL_WRITE_ARRAY(row, KeccakfVmCols, FIELD, VALUES)
+#define KECCAKF_FILL_ZERO(FIELD) COL_FILL_ZERO(row, KeccakfVmCols, FIELD)
+#define KECCAKF_SLICE(FIELD) row.slice_from(COL_INDEX(KeccakfVmCols, FIELD))
+
 // Kernel that fills VM-specific columns (instruction, memory aux, etc.)
+// Processes one record (24 rows) per thread to avoid redundant keccakf computation
 __global__ void keccakf_vm_tracegen(
     Fp *d_trace,
     size_t height,
@@ -184,76 +192,75 @@ __global__ void keccakf_vm_tracegen(
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
-    uint32_t row_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (row_idx >= height) {
+    auto record_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    auto num_records = d_records.len();
+    auto total_blocks = (height + NUM_ROUNDS - 1) / NUM_ROUNDS;
+
+    if (record_idx >= total_blocks) {
         return;
     }
 
-    RowSlice row(d_trace + row_idx, height);
+    MemoryAuxColsFactory mem_helper(
+        VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins),
+        timestamp_max_bits
+    );
+    auto bitwise_lookup = BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits);
 
-    if (row_idx < rows_used) {
-        uint32_t record_idx = row_idx / NUM_ROUNDS;
-        uint32_t round_idx = row_idx % NUM_ROUNDS;
+    // Compute postimage once per record (instead of once per row)
+    uint8_t postimage_bytes[KECCAK_STATE_BYTES] = {0};
 
-        if (record_idx >= d_records.len()) {
-            return;
-        }
-
+    if (record_idx < num_records) {
         auto const &rec = d_records[record_idx];
 
-        MemoryAuxColsFactory mem_helper(
-            VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins),
-            timestamp_max_bits
-        );
-        BitwiseOperationLookup bitwise_lookup(d_bitwise_lookup_ptr, bitwise_num_bits);
-
-        // Fill preimage_state_hi (high bytes of u16 limbs)
-        for (int i = 0; i < KECCAK_STATE_U16; i++) {
-            COL_WRITE_VALUE(row, KeccakfVmCols, preimage_state_hi[i],
-                static_cast<uint8_t>(rec.preimage_buffer_bytes[2 * i + 1]));
-        }
-
-        // Compute postimage for filling postimage_state_hi
+        // Compute postimage for this record
         uint64_t postimage_u64[25];
-        for (int i = 0; i < 25; i++) {
+#pragma unroll 5
+        for (auto i = 0; i < 25; i++) {
             postimage_u64[i] = 0;
-            for (int j = 0; j < 8; j++) {
+            for (auto j = 0; j < 8; j++) {
                 postimage_u64[i] |= static_cast<uint64_t>(rec.preimage_buffer_bytes[i * 8 + j]) << (j * 8);
             }
         }
 
-        // Keccakf permutation
-        for (int round = 0; round < NUM_ROUNDS; round++) {
+        // Keccakf permutation (computed ONCE per record)
+        for (auto round = 0; round < NUM_ROUNDS; round++) {
             // Theta
             uint64_t c[5];
-            for (int x = 0; x < 5; x++) {
+#pragma unroll 5
+            for (auto x = 0; x < 5; x++) {
                 c[x] = postimage_u64[x] ^ postimage_u64[x + 5] ^ postimage_u64[x + 10] ^
                        postimage_u64[x + 15] ^ postimage_u64[x + 20];
             }
             uint64_t d[5];
-            for (int x = 0; x < 5; x++) {
+#pragma unroll 5
+            for (auto x = 0; x < 5; x++) {
                 d[x] = c[(x + 4) % 5] ^ ROTL64(c[(x + 1) % 5], 1);
             }
-            for (int i = 0; i < 25; i++) {
+#pragma unroll 5
+            for (auto i = 0; i < 25; i++) {
                 postimage_u64[i] ^= d[i % 5];
             }
 
             // Rho and Pi
             uint64_t temp[25];
-            for (int y = 0; y < 5; y++) {
-                for (int x = 0; x < 5; x++) {
-                    int idx = x + 5 * y;
-                    int new_x = y;
-                    int new_y = (2 * x + 3 * y) % 5;
-                    int new_idx = new_x + 5 * new_y;
+#pragma unroll 5
+            for (auto y = 0; y < 5; y++) {
+#pragma unroll 5
+                for (auto x = 0; x < 5; x++) {
+                    auto idx = x + 5 * y;
+                    auto new_x = y;
+                    auto new_y = (2 * x + 3 * y) % 5;
+                    auto new_idx = new_x + 5 * new_y;
                     temp[new_idx] = ROTL64(postimage_u64[idx], KECCAK_RHO[x][y]);
                 }
             }
 
             // Chi
-            for (int y = 0; y < 5; y++) {
-                for (int x = 0; x < 5; x++) {
-                    int idx = x + 5 * y;
+#pragma unroll 5
+            for (auto y = 0; y < 5; y++) {
+#pragma unroll 5
+                for (auto x = 0; x < 5; x++) {
+                    auto idx = x + 5 * y;
                     postimage_u64[idx] = temp[idx] ^ ((~temp[(x + 1) % 5 + 5 * y]) & temp[(x + 2) % 5 + 5 * y]);
                 }
             }
@@ -262,109 +269,121 @@ __global__ void keccakf_vm_tracegen(
             postimage_u64[0] ^= KECCAK_RC[round];
         }
 
-        // Fill postimage_state_hi
-        uint8_t postimage_bytes[KECCAK_STATE_BYTES];
-        for (int i = 0; i < 25; i++) {
-            for (int j = 0; j < 8; j++) {
+        // Convert postimage to bytes
+#pragma unroll 5
+        for (auto i = 0; i < 25; i++) {
+            for (auto j = 0; j < 8; j++) {
                 postimage_bytes[i * 8 + j] = static_cast<uint8_t>(postimage_u64[i] >> (j * 8));
             }
         }
-        for (int i = 0; i < KECCAK_STATE_U16; i++) {
-            COL_WRITE_VALUE(row, KeccakfVmCols, postimage_state_hi[i], postimage_bytes[2 * i + 1]);
-        }
+    }
 
-        // Fill instruction columns
-        COL_WRITE_VALUE(row, KeccakfVmCols, instruction.pc, rec.pc);
-        COL_WRITE_VALUE(row, KeccakfVmCols, instruction.is_enabled, 1);
-        COL_WRITE_VALUE(row, KeccakfVmCols, instruction.buffer_ptr, rec.rd_ptr);
-        COL_WRITE_VALUE(row, KeccakfVmCols, instruction.buffer, rec.buffer);
+    // Fill all 24 rows for this record
+    auto base_row_idx = record_idx * NUM_ROUNDS;
+    auto last_valid_round = (record_idx == total_blocks - 1)
+        ? (height - base_row_idx)
+        : NUM_ROUNDS;
 
-        uint8_t buffer_bytes[4];
-        memcpy(buffer_bytes, &rec.buffer, 4);
-        COL_WRITE_ARRAY(row, KeccakfVmCols, instruction.buffer_limbs, buffer_bytes);
+    for (auto round_idx = 0u; round_idx < last_valid_round; round_idx++) {
+        RowSlice row(d_trace + base_row_idx + round_idx, height);
 
-        // Fill timestamp - matches Rust's timestamp tracking across rows
-        // After first round, timestamp has been incremented by all first-round memory operations
-        uint32_t col_timestamp = rec.timestamp;
-        if (round_idx > 0) {
-            col_timestamp = rec.timestamp + 1 + NUM_BUFFER_WORDS;  // 1 register + 50 buffer reads = 51
-        }
-        COL_WRITE_VALUE(row, KeccakfVmCols, timestamp, col_timestamp);
+        if (record_idx < num_records) {
+            auto const &rec = d_records[record_idx];
+            auto is_first_round = (round_idx == 0);
+            auto is_final_round = (round_idx == NUM_ROUNDS - 1);
 
-        // Fill step flag derivatives
-        bool is_first_round = (round_idx == 0);
-        bool is_final_round = (round_idx == NUM_ROUNDS - 1);
-        COL_WRITE_VALUE(row, KeccakfVmCols, is_enabled_is_first_round, is_first_round ? 1 : 0);
-        COL_WRITE_VALUE(row, KeccakfVmCols, is_enabled_is_final_round, is_final_round ? 1 : 0);
+            // Fill the state hi columns
+#pragma unroll 8
+            for (auto i = 0; i < KECCAK_STATE_U16; i++) {
+                KECCAKF_WRITE(preimage_state_hi[i],
+                    static_cast<uint8_t>(rec.preimage_buffer_bytes[2 * i + 1]));
+            }
+#pragma unroll 8
+            for (auto i = 0; i < KECCAK_STATE_U16; i++) {
+                KECCAKF_WRITE(postimage_state_hi[i], postimage_bytes[2 * i + 1]);
+            }
 
-        // Export flag - should be 0 for keccakf
-        COL_WRITE_VALUE(row, KeccakfVmCols, inner._export, 0);
+            // Fill the instruction columns
+            KECCAKF_WRITE(instruction.pc, rec.pc);
+            KECCAKF_WRITE(instruction.is_enabled, 1);
+            KECCAKF_WRITE(instruction.buffer_ptr, rec.rd_ptr);
+            KECCAKF_WRITE(instruction.buffer, rec.buffer);
+            KECCAKF_WRITE_ARRAY(instruction.buffer_limbs, reinterpret_cast<const uint8_t *>(&rec.buffer));
 
-        // Fill memory auxiliary columns
-        uint32_t timestamp = rec.timestamp;
+            // Fill timestamp - matches Rust's timestamp tracking across rows
+            KECCAKF_WRITE(timestamp, round_idx > 0 ? rec.timestamp + 1 + NUM_BUFFER_WORDS : rec.timestamp);
 
-        if (is_first_round) {
-            // Register read
-            mem_helper.fill(
-                row.slice_from(COL_INDEX(KeccakfVmCols, mem_oc.register_aux_cols[0].base)),
-                rec.register_aux_cols[0].prev_timestamp,
-                timestamp
-            );
-            timestamp++;
+            KECCAKF_WRITE(is_enabled_is_first_round, is_first_round);
+            KECCAKF_WRITE(is_enabled_is_final_round, is_final_round);
+            KECCAKF_WRITE(inner._export, Fp::zero());
 
-            // Buffer reads (50 words of 4 bytes each)
-            for (uint32_t t = 0; t < NUM_BUFFER_WORDS; t++) {
+            // Fill the register reads
+            if (is_first_round) {
+                auto timestamp = rec.timestamp;
                 mem_helper.fill(
-                    row.slice_from(COL_INDEX(KeccakfVmCols, mem_oc.buffer_bytes_read_aux_cols[t].base)),
-                    rec.buffer_read_aux_cols[t].prev_timestamp,
+                    KECCAKF_SLICE(mem_oc.register_aux_cols[0].base),
+                    rec.register_aux_cols[0].prev_timestamp,
                     timestamp
                 );
                 timestamp++;
-            }
 
-            // Range check for buffer pointer
-            uint32_t msl_rshift = 24;  // RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1)
-            uint32_t msl_lshift = 32 - pointer_max_bits;
-            bitwise_lookup.add_range(
-                (rec.buffer >> msl_rshift) << msl_lshift,
-                (rec.buffer >> msl_rshift) << msl_lshift
-            );
-        } else {
-            // Zero fill register aux cols for non-first rounds
-            mem_helper.fill_zero(row.slice_from(COL_INDEX(KeccakfVmCols, mem_oc.register_aux_cols[0].base)));
-            for (uint32_t t = 0; t < NUM_BUFFER_WORDS; t++) {
-                mem_helper.fill_zero(row.slice_from(COL_INDEX(KeccakfVmCols, mem_oc.buffer_bytes_read_aux_cols[t].base)));
-            }
-        }
+                // Buffer reads (50 words of 4 bytes each)
+                for (auto t = 0u; t < NUM_BUFFER_WORDS; t++) {
+                    mem_helper.fill(
+                        KECCAKF_SLICE(mem_oc.buffer_bytes_read_aux_cols[t].base),
+                        rec.buffer_read_aux_cols[t].prev_timestamp,
+                        timestamp
+                    );
+                    timestamp++;
+                }
 
-        if (is_final_round) {
-            // Buffer writes (50 words of 4 bytes each)
-            uint32_t write_timestamp = rec.timestamp + 1 + NUM_BUFFER_WORDS;
-            for (uint32_t t = 0; t < NUM_BUFFER_WORDS; t++) {
-                mem_helper.fill(
-                    row.slice_from(COL_INDEX(KeccakfVmCols, mem_oc.buffer_bytes_write_aux_cols[t].base)),
-                    rec.buffer_write_aux_cols[t].prev_timestamp,
-                    write_timestamp
+                // Range check for buffer pointer
+                constexpr uint32_t MSL_RSHIFT = RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);
+                constexpr uint32_t RV32_TOTAL_BITS = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS;
+                bitwise_lookup.add_range(
+                    (rec.buffer >> MSL_RSHIFT) << (RV32_TOTAL_BITS - pointer_max_bits),
+                    (rec.buffer >> MSL_RSHIFT) << (RV32_TOTAL_BITS - pointer_max_bits)
                 );
-                COL_WRITE_ARRAY(row, KeccakfVmCols, mem_oc.buffer_bytes_write_aux_cols[t].prev_data,
-                    rec.buffer_write_aux_cols[t].prev_data);
-                write_timestamp++;
+            } else {
+                mem_helper.fill_zero(KECCAKF_SLICE(mem_oc.register_aux_cols[0].base));
+                for (auto t = 0u; t < NUM_BUFFER_WORDS; t++) {
+                    mem_helper.fill_zero(KECCAKF_SLICE(mem_oc.buffer_bytes_read_aux_cols[t].base));
+                }
+            }
+
+            // Fill the buffer writes
+            if (is_final_round) {
+                auto write_timestamp = rec.timestamp + 1 + NUM_BUFFER_WORDS;
+                for (auto t = 0u; t < NUM_BUFFER_WORDS; t++) {
+                    mem_helper.fill(
+                        KECCAKF_SLICE(mem_oc.buffer_bytes_write_aux_cols[t].base),
+                        rec.buffer_write_aux_cols[t].prev_timestamp,
+                        write_timestamp
+                    );
+                    KECCAKF_WRITE_ARRAY(mem_oc.buffer_bytes_write_aux_cols[t].prev_data,
+                        rec.buffer_write_aux_cols[t].prev_data);
+                    write_timestamp++;
+                }
+            } else {
+                for (auto t = 0u; t < NUM_BUFFER_WORDS; t++) {
+                    KECCAKF_FILL_ZERO(mem_oc.buffer_bytes_write_aux_cols[t]);
+                }
             }
         } else {
-            // Zero fill write aux cols for non-final rounds
-            for (uint32_t t = 0; t < NUM_BUFFER_WORDS; t++) {
-                COL_FILL_ZERO(row, KeccakfVmCols, mem_oc.buffer_bytes_write_aux_cols[t]);
-            }
+            // Dummy rows - VM columns filled with zeros
+            // p3 columns are filled by keccakf_p3_tracegen
+            row.fill_zero(
+                COL_INDEX(KeccakfVmCols, preimage_state_hi),
+                sizeof(KeccakfVmCols<uint8_t>) - COL_INDEX(KeccakfVmCols, preimage_state_hi)
+            );
         }
-    } else {
-        // Dummy rows - just need to fill VM columns with zeros
-        // p3 columns are filled by keccakf_p3_tracegen
-        row.fill_zero(
-            COL_INDEX(KeccakfVmCols, preimage_state_hi),
-            sizeof(KeccakfVmCols<uint8_t>) - COL_INDEX(KeccakfVmCols, preimage_state_hi)
-        );
     }
 }
+
+#undef KECCAKF_WRITE
+#undef KECCAKF_WRITE_ARRAY
+#undef KECCAKF_FILL_ZERO
+#undef KECCAKF_SLICE
 
 extern "C" int _keccakf_tracegen(
     Fp *d_trace,
@@ -399,9 +418,9 @@ extern "C" int _keccakf_tracegen(
         if (err != 0) return err;
     }
 
-    // Second pass: fill VM-specific columns (one thread per row)
+    // Second pass: fill VM-specific columns (one thread per record/block of 24 rows)
     {
-        auto [grid, block] = kernel_launch_params(height, 256);
+        auto [grid, block] = kernel_launch_params(blocks_to_fill, 256);
         keccakf_vm_tracegen<<<grid, block>>>(
             d_trace,
             height,
