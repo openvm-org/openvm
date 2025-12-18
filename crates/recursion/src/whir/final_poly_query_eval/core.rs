@@ -539,7 +539,7 @@ fn compute_indices_from_row_idx(
     )
 }
 
-#[tracing::instrument(skip_all)]
+#[tracing::instrument(level = "trace", skip_all)]
 pub(crate) fn generate_trace(
     mvk: &MultiStarkVerifyingKeyV2,
     _proofs: &[&Proof],

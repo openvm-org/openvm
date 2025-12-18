@@ -77,7 +77,7 @@ pub struct EqNegCols<F> {
 pub struct EqNegTraceGenerator;
 
 impl EqNegTraceGenerator {
-    #[tracing::instrument(skip_all)]
+    #[tracing::instrument(level = "trace", skip_all)]
     pub fn generate_trace(
         vk: &MultiStarkVerifyingKeyV2,
         preflights: &[Preflight],

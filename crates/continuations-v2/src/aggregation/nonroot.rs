@@ -104,7 +104,7 @@ where
         is_recursive: bool,
     ) -> Result<Proof> {
         let ctx = self.generate_proving_ctx(proofs, user_pv_commit, is_recursive);
-        if tracing::enabled!(tracing::Level::INFO) {
+        if tracing::enabled!(tracing::Level::DEBUG) {
             trace_heights_tracing_info(&ctx.per_trace, &self.circuit.airs());
         }
         let engine = E::new(self.pk.params.clone());
