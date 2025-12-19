@@ -27,7 +27,7 @@ use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
     p3_air::BaseAir,
     p3_field::{FieldAlgebra, PrimeField32},
-    prover::{cpu::CpuBackend, types::AirProvingContext},
+    prover::{cpu::CpuBackend, types::AirProvingContext, MatrixDimensions},
     rap::AnyRap,
     utils::disable_debug_builder,
     AirRef, Chip,
@@ -527,7 +527,7 @@ impl GpuChipTester {
         G: Chip<RA, GpuBackend>,
     {
         let proving_ctx = gpu_chip.generate_proving_ctx(gpu_arena);
-        if proving_ctx.common_main.is_some() {
+        if matches!(proving_ctx.common_main.as_ref(), Some(trace) if trace.height() > 0) {
             self = self.load_air_proving_ctx(Arc::new(air) as AirRef<SC>, proving_ctx);
         }
         self
