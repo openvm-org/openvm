@@ -37,12 +37,16 @@ pub mod merkle_tree {
             stream: cudaStream_t,
         ) -> i32;
 
+        fn _get_prefix_scan_temp_bytes(d_arr: *mut u32, n: usize, temp_n: *mut usize) -> i32;
+
         fn _update_merkle_tree(
             num_leaves: usize,
             layer: *mut u32, // are actually `(u32, u32, u32, H)`s
             subtree_height: usize,
             child_buf: *mut u32,
             tmp_buf: *mut u32,
+            tmp_storage: *mut u8,
+            need_tmp_storage_bytes: usize,
             merkle_trace: *mut u32,
             trace_height: usize,
             num_subtrees: usize,
@@ -111,6 +115,22 @@ pub mod merkle_tree {
         ))
     }
 
+    /*
+     * Stores the minimum temporary buffer size (in bytes) required to call prefix_scan
+     * on size_n DeviceBuffer d_arr.
+     */
+    pub unsafe fn get_prefix_scan_temp_bytes<u32>(
+        d_arr: &DeviceBuffer<u32>,
+        n: usize,
+        temp_n: &mut usize,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_get_prefix_scan_temp_bytes(
+            d_arr.as_mut_ptr(),
+            n,
+            temp_n as *mut usize,
+        ))
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn update_merkle_tree<T>(
         trace: &DeviceMatrix<T>,
@@ -126,6 +146,13 @@ pub mod merkle_tree {
         let num_leaves = touched_blocks.len() / TIMESTAMPED_BLOCK_WIDTH;
         let num_subtrees = subtree_ptrs.len();
         let tmp_buffer = DeviceBuffer::<u32>::with_capacity(5 * num_leaves);
+        let mut need_tmp_storage_bytes = 0;
+        CudaError::from_result(get_prefix_scan_temp_bytes(
+            &tmp,
+            2 * num_leaves,
+            &mut need_tmp_storage_bytes,
+        ))?;
+        let tmp_storage = DeviceBuffer::<u8>::with_capacity(need_tmp_storage_bytes);
         let actual_heights = actual_heights.to_device().unwrap();
         CudaError::from_result(_update_merkle_tree(
             num_leaves,
@@ -133,6 +160,8 @@ pub mod merkle_tree {
             subtree_height,
             tmp_buffer.as_mut_ptr(),
             tmp_buffer.as_mut_ptr().add(2 * num_leaves),
+            tmp_storage.as_mut_ptr(),
+            need_tmp_storage_bytes,
             trace.buffer().as_ptr() as *mut u32,
             unpadded_height,
             num_subtrees,

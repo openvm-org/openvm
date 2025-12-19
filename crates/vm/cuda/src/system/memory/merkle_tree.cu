@@ -225,7 +225,7 @@ __global__ void group_by_parent(
     uint32_t const siblings_place = my_place ^ 1;
 
     child_ptrs[my_place] = ptr;
-    // Do we need to mark the sibling as absent?
+    // Mark the sibling as absent if we are the only child
     {
         uint32_t const sibling_id = gid + (siblings_place - my_place);
         if (sibling_id >= num_children || parent_ids[sibling_id] != parent_ids[gid]) {
@@ -540,6 +540,13 @@ extern "C" int _calculate_zero_hash(digest_t *zero_hash, const size_t size) {
     return CHECK_KERNEL();
 }
 
+extern "C" int _get_prefix_scan_temp_bytes(uint32_t *d_arr, size_t n, size_t *h_temp_n) {
+    size_t temp_bytes = 0;
+    cub::DeviceScan::InclusiveSum(nullptr, temp_bytes, d_arr, d_arr, n, cudaStreamPerThread);
+    *h_temp_n = temp_bytes;
+    return CHECK_KERNEL();
+}
+
 /// Updates the digests in `subtrees`, replacing them with the new ones,
 /// while also producing the trace.
 /// Here, `layer` is obtained from the touched memory.
@@ -555,6 +562,8 @@ extern "C" int _update_merkle_tree(
     size_t subtree_height,
     uint32_t *child_buf,
     uint32_t *tmp_buf,
+    uint8_t *d_temp_storage,
+    size_t need_tmp_storage_bytes,
     Fp *const merkle_trace,
     size_t const unpadded_trace_height,
     size_t const num_subtrees,
@@ -596,23 +605,12 @@ extern "C" int _update_merkle_tree(
         }
         // Then, convert it to the partial sum
         {
-            // Use cub::DeviceScan::InclusiveSum to compute the partial sums (inclusive scan) in-place on parent_ids.
-            void* d_temp_storage = nullptr;
-            size_t temp_storage_bytes = 0;
-            // First, get required temporary storage size
-            cub::DeviceScan::InclusiveSum(
-                d_temp_storage, temp_storage_bytes,
-                parent_ids, parent_ids, num_children,
-                cudaStreamPerThread
-            );
-            cudaMallocAsync(&d_temp_storage, temp_storage_bytes, cudaStreamPerThread);
             // Now, perform the inclusive sum in-place
             cub::DeviceScan::InclusiveSum(
-                d_temp_storage, temp_storage_bytes,
+                d_temp_storage, need_tmp_storage_bytes,
                 parent_ids, parent_ids, num_children,
                 cudaStreamPerThread
             );
-            cudaFreeAsync(d_temp_storage, cudaStreamPerThread);
             if (int err = CHECK_KERNEL(); err) {
                 return err;
             }
@@ -640,6 +638,9 @@ extern "C" int _update_merkle_tree(
             cudaMemcpyDeviceToHost,
             cudaStreamPerThread
         );
+        if (int err = CHECK_KERNEL(); err) {
+            return err;
+        }
         cudaStreamSynchronize(cudaStreamPerThread);
         ++num_parents;
         {
