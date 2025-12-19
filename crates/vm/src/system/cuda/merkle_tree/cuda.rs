@@ -147,7 +147,7 @@ pub mod merkle_tree {
         let num_subtrees = subtree_ptrs.len();
         let tmp_buffer = DeviceBuffer::<u32>::with_capacity(5 * num_leaves);
         let mut need_tmp_storage_bytes = 0;
-        get_prefix_scan_temp_bytes(&tmp_buffer, 2 * num_leaves, &mut need_tmp_storage_bytes)?;
+        get_prefix_scan_temp_bytes(&tmp_buffer, num_leaves, &mut need_tmp_storage_bytes)?;
         let tmp_storage = DeviceBuffer::<u8>::with_capacity(need_tmp_storage_bytes);
         let actual_heights = actual_heights.to_device().unwrap();
         CudaError::from_result(_update_merkle_tree(
