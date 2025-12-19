@@ -370,8 +370,8 @@ __global__ void keccakf_vm_tracegen(
                 }
             }
         } else {
-            // Dummy rows - VM columns filled with zeros
-            // p3 columns are filled by keccakf_p3_tracegen
+            // inner rows are filled in p3_tracegen kernel. Ensure export flag is 0
+            KECCAKF_WRITE(inner._export, Fp::zero());
             row.fill_zero(
                 COL_INDEX(KeccakfVmCols, preimage_state_hi),
                 sizeof(KeccakfVmCols<uint8_t>) - COL_INDEX(KeccakfVmCols, preimage_state_hi)
