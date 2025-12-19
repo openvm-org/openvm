@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use itertools::zip_eq;
+use openvm_circuit::arch::CONST_BLOCK_SIZE;
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
 };
@@ -48,7 +49,7 @@ use crate::{
             adapter::records::arena_size_bound,
             offline_checker::{MemoryBridge, MemoryBus},
             online::TracingMemory,
-            MemoryAirInventory, MemoryController, SharedMemoryHelper, CHUNK,
+            MemoryAirInventory, MemoryController, SharedMemoryHelper,
         },
         poseidon2::Poseidon2PeripheryChip,
         program::ProgramBus,
@@ -323,6 +324,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         let mut mem_config = MemoryConfig::default();
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
         mem_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
+        // TODO: Check if need to revert to volatile memory, after access adapters are removed
         Self::persistent(mem_config)
     }
 
@@ -347,7 +349,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
 
     pub fn persistent(mem_config: MemoryConfig) -> Self {
         setup_tracing_with_log_level(Level::INFO);
-        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CHUNK);
+        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CONST_BLOCK_SIZE);
         let hasher_chip = Arc::new(Poseidon2PeripheryChip::new(
             vm_poseidon2_config(),
             POSEIDON2_DIRECT_BUS,
@@ -403,7 +405,7 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
         // removed when tests are updated.
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
         mem_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
-        Self::volatile(mem_config)
+        Self::persistent(mem_config)
     }
 }
 
