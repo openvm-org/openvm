@@ -63,12 +63,36 @@ pub extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
 fn __native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
-    openvm_platform::custom_insn_r!(
-        opcode = OPCODE,
-        funct3 = KECCAK256_FUNCT3,
-        funct7 = KECCAK256_FUNCT7,
-        rd = In output,
-        rs1 = In bytes,
-        rs2 = In len
-    );
+    let mut buffer: [u8; 200] = [0u8; 200];
+    let buffer_ptr = buffer.as_mut_ptr();
+    let mut remaining = len;
+    let mut offset = 0usize;
+    while remaining >= 136 {
+        // SAFETY: caller guarantees `bytes` points to an input buffer at least `len` long,
+        // and `offset + 136 <= len` here.
+        unsafe {
+            openvm_new_keccak256_guest::native_xorin(buffer_ptr, bytes.add(offset), 136);
+        }
+        remaining -= 136;
+        offset += 136;
+    }
+
+    let mut input_buffer: [u8; 136] = [0u8; 136];
+    // SAFETY: caller guarantees `bytes` points to an input buffer at least `len` long,
+    // and `offset + remaining == len` here.
+    unsafe {
+        core::ptr::copy_nonoverlapping(bytes.add(offset), input_buffer.as_mut_ptr(), remaining);
+    }
+
+    let padded_len = if remaining % 4 == 0 {
+        remaining
+    } else {
+        remaining + 4 - (remaining % 4)
+    };
+
+    openvm_new_keccak256_guest::native_xorin(buffer_ptr, input_buffer.as_ptr(), padded_len);
+    openvm_new_keccak256_guest::native_keccakf(buffer_ptr);
+    unsafe {
+        core::ptr::copy_nonoverlapping(buffer_ptr as *const u8, output, 32);
+    }
 }

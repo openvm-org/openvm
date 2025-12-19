@@ -1,0 +1,24 @@
+[package]
+name = "new-keccak-example"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]
+members = []
+
+[dependencies]
+openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
+    "std",
+] }
+openvm-keccak256 = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-new-keccak256-guest = { path = "../../extensions/new-keccak256/guest" }
+openvm-keccak256-guest = { path = "../../extensions/keccak256/guest" }
+
+[features]
+default = []
+
+# remove this if copying example outside of monorepo
+[patch."https://github.com/openvm-org/openvm.git"]
+openvm = { path = "../../crates/toolchain/openvm" }
+openvm-keccak256 = { path = "../../guest-libs/keccak256" }
+

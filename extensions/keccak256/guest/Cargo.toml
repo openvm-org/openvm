@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 openvm-platform = { workspace = true }
+openvm-new-keccak256-guest = { path = "../../new-keccak256/guest" }
 
 [features]
 default = []
