@@ -22,5 +22,20 @@ fn main() {
 
         xorin_builder.emit_link_directives();
         xorin_builder.build();
+
+        // Build keccakf CUDA library
+        let keccakf_builder = CudaBuilder::new()
+            .include_from_dep("DEP_CUDA_COMMON_INCLUDE")
+            .include("../../../crates/circuits/primitives/cuda/include")
+            .include("../../../crates/vm/cuda/include")
+            .include("cuda/include")
+            .watch("cuda")
+            .watch("../../../crates/circuits/primitives/cuda")
+            .watch("../../../crates/vm/cuda")
+            .library_name("tracegen_gpu_keccakf")
+            .file("cuda/src/keccakf.cu");
+
+        keccakf_builder.emit_link_directives();
+        keccakf_builder.build();
     }
 }
