@@ -109,7 +109,7 @@ pub fn check_aot_equivalence<E, VB>(
     input: &Streams<Val<E::SC>>,
 ) -> eyre::Result<()>
 where
-    E: StarkFriEngine,
+    E: StarkEngine,
     Val<E::SC>: PrimeField32,
     VB: VmBuilder<E>,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
