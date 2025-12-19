@@ -1,4 +1,54 @@
+use std::convert::TryInto;
+
+use openvm_circuit::{
+    arch::{ExecutionCtxTrait, VmExecState, CONST_BLOCK_SIZE},
+    system::memory::online::GuestMemory,
+};
+use openvm_instructions::riscv::RV32_MEMORY_AS;
+use openvm_stark_backend::p3_field::PrimeField32;
+
 use crate::{INT256_NUM_LIMBS, RV32_CELL_BITS};
+
+pub const INT256_CHUNK_BYTES: usize = CONST_BLOCK_SIZE;
+pub const INT256_BLOCKS_PER_ACCESS: usize = INT256_NUM_LIMBS / INT256_CHUNK_BYTES;
+
+#[inline(always)]
+pub fn vm_read_int256<F: PrimeField32, CTX: ExecutionCtxTrait>(
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    ptr: u32,
+) -> [u8; INT256_NUM_LIMBS] {
+    let mut out = [0u8; INT256_NUM_LIMBS];
+    for (i, chunk) in out
+        .chunks_exact_mut(INT256_CHUNK_BYTES)
+        .enumerate()
+    {
+        let data = exec_state.vm_read::<u8, INT256_CHUNK_BYTES>(
+            RV32_MEMORY_AS,
+            ptr + (i * INT256_CHUNK_BYTES) as u32,
+        );
+        chunk.copy_from_slice(&data);
+    }
+    out
+}
+
+#[inline(always)]
+pub fn vm_write_int256<F: PrimeField32, CTX: ExecutionCtxTrait>(
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    ptr: u32,
+    data: &[u8; INT256_NUM_LIMBS],
+) {
+    for (i, chunk) in data
+        .chunks_exact(INT256_CHUNK_BYTES)
+        .enumerate()
+    {
+        let chunk: &[u8; INT256_CHUNK_BYTES] = chunk.try_into().expect("chunk size");
+        exec_state.vm_write::<u8, INT256_CHUNK_BYTES>(
+            RV32_MEMORY_AS,
+            ptr + (i * INT256_CHUNK_BYTES) as u32,
+            chunk,
+        );
+    }
+}
 
 #[inline(always)]
 pub fn bytes_to_u64_array(bytes: [u8; INT256_NUM_LIMBS]) -> [u64; 4] {

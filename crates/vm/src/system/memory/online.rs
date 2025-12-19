@@ -580,6 +580,7 @@ impl TracingMemory {
         if header.block_size == header.lowest_block_size {
             return;
         }
+        assert_eq!(1, 0);
         // SAFETY:
         // - header.address_space is validated during instruction decoding and within bounds
         // - header.pointer and header.type_size define valid memory bounds within the address space
@@ -612,7 +613,7 @@ impl TracingMemory {
         if header.block_size == header.lowest_block_size {
             return;
         }
-
+        assert_eq!(1, 0);
         let record_mut = self
             .access_adapter_records
             .alloc(AccessLayout::from_record_header(&header));
