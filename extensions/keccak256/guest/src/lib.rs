@@ -62,37 +62,37 @@ pub extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8
 /// - `bytes` and `output` must be 4-byte aligned.
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
-fn __native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
+fn __native_keccak256(input: *const u8, mut len: usize, output: *mut u8) {
     let mut buffer: [u8; 200] = [0u8; 200];
     let buffer_ptr = buffer.as_mut_ptr();
-    let mut remaining = len;
-    let mut offset = 0usize;
-    while remaining >= 136 {
-        // SAFETY: caller guarantees `bytes` points to an input buffer at least `len` long,
-        // and `offset + 136 <= len` here.
+
+    let mut ip = 0;
+    let mut rate = 136;
+    while len >= rate {
         unsafe {
-            openvm_new_keccak256_guest::native_xorin(buffer_ptr, bytes.add(offset), 136);
+            openvm_new_keccak256_guest::native_xorin(buffer_ptr, input.add(ip), rate);
+            openvm_new_keccak256_guest::native_keccakf(buffer_ptr);
         }
-        remaining -= 136;
-        offset += 136;
+        ip += rate;
+        len -= rate; 
     }
 
-    let mut input_buffer: [u8; 136] = [0u8; 136];
-    // SAFETY: caller guarantees `bytes` points to an input buffer at least `len` long,
-    // and `offset + remaining == len` here.
     unsafe {
-        core::ptr::copy_nonoverlapping(bytes.add(offset), input_buffer.as_mut_ptr(), remaining);
-    }
-
-    let padded_len = if remaining % 4 == 0 {
-        remaining
-    } else {
-        remaining + 4 - (remaining % 4)
+        openvm_new_keccak256_guest::native_xorin(buffer_ptr, input.add(ip), len)
     };
 
-    openvm_new_keccak256_guest::native_xorin(buffer_ptr, input_buffer.as_ptr(), padded_len);
+    // self.buffer.pad(self.offset, self.delim, self.rate)
+    buffer[len] ^= 0x01;
+    buffer[rate - 1] ^= 0x80;
+
+    // self.fill_block()
+    // which is:
+    // self.keccak();
+    // self.offset = 0;
     openvm_new_keccak256_guest::native_keccakf(buffer_ptr);
+    
+    // self.buffer.setout(&mut output[0..], 0, 32)
     unsafe {
-        core::ptr::copy_nonoverlapping(buffer_ptr as *const u8, output, 32);
-    }
+        core::ptr::copy_nonoverlapping(buffer_ptr, output, 32)
+    };
 }

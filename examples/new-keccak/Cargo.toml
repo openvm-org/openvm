@@ -13,6 +13,8 @@ openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
 openvm-keccak256 = { git = "https://github.com/openvm-org/openvm.git" }
 openvm-new-keccak256-guest = { path = "../../extensions/new-keccak256/guest" }
 openvm-keccak256-guest = { path = "../../extensions/keccak256/guest" }
+hex-literal = "1.1.0"
+revm-primitives = "21.0.2"
 
 [features]
 default = []

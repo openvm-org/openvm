@@ -23,6 +23,9 @@ use openvm_keccak256_transpiler::Rv32KeccakOpcode;
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
+use openvm_new_keccak256_circuit::{
+    NewKeccak256, NewKeccak256Executor, NewKeccak256CpuProverExt
+};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::PrimeField32,
@@ -61,7 +64,7 @@ pub struct Keccak256Rv32Config {
     #[extension]
     pub io: Rv32Io,
     #[extension]
-    pub keccak: Keccak256,
+    pub keccak: NewKeccak256,
 }
 
 impl Default for Keccak256Rv32Config {
@@ -71,7 +74,7 @@ impl Default for Keccak256Rv32Config {
             rv32i: Rv32I,
             rv32m: Rv32M::default(),
             io: Rv32Io,
-            keccak: Keccak256,
+            keccak: NewKeccak256,
         }
     }
 }
@@ -107,7 +110,7 @@ where
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
-            &Keccak256CpuProverExt,
+            &NewKeccak256CpuProverExt,
             &config.keccak,
             inventory,
         )?;
