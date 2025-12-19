@@ -335,7 +335,7 @@ fn cuda_set_and_execute(
         for (j, &byte) in chunk.iter().enumerate() {
             word[j] = F::from_canonical_u8(byte);
         }
-        tester.write(2, buffer_ptr as usize + i * 4, word);
+        tester.write(2, buffer_ptr + i * 4, word);
     }
 
     let input_data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
@@ -344,7 +344,7 @@ fn cuda_set_and_execute(
         for (j, &byte) in chunk.iter().enumerate() {
             word[j] = F::from_canonical_u8(byte);
         }
-        tester.write(2, input_ptr as usize + i * 4, word);
+        tester.write(2, input_ptr + i * 4, word);
     }
 
     let instruction = Instruction::from_usize(
