@@ -77,14 +77,25 @@ fn __native_keccak256(input: *const u8, mut len: usize, output: *mut u8) {
         len -= rate; 
     }
 
-    let mut adjusted_len = len;
     if len % 4 != 0 {
+        let mut adjusted_len = len;
         adjusted_len += 4 - (len % 4);
+
+        let mut new_input: [u8; 136] = [0; 136];
+        for i in 0..len {
+            new_input[i] = unsafe {
+                *input.add(i)
+            };
+        }
+        unsafe {
+            openvm_new_keccak256_guest::native_xorin(buffer_ptr, new_input.as_ptr(), adjusted_len)
+        };
+    } else {
+        unsafe {
+            openvm_new_keccak256_guest::native_xorin(buffer_ptr, input.add(ip), len)
+        };
     }
 
-    unsafe {
-        openvm_new_keccak256_guest::native_xorin(buffer_ptr, input.add(ip), adjusted_len)
-    };
 
     // self.buffer.pad(self.offset, self.delim, self.rate)
     buffer[len] ^= 0x01;
