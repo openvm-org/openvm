@@ -81,9 +81,8 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfVmChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let num_records = records.len() / RECORD_SIZE;
-        let rows_used = num_records * NUM_ROUNDS;
         let trace_width = NUM_KECCAKF_VM_COLS;
-        let trace_height = next_power_of_two_or_zero(rows_used);
+        let trace_height = next_power_of_two_or_zero(num_records * NUM_ROUNDS);
 
         let d_records = records.to_device().unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
@@ -93,7 +92,6 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfVmChipGpu {
                 d_trace.buffer(),
                 trace_height,
                 &d_records,
-                rows_used,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
                 RV32_CELL_BITS,
