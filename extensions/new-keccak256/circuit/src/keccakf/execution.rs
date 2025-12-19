@@ -203,11 +203,11 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     } else {
         for i in 0..KECCAK_WIDTH_U32_LIMBS {
             let mut write_chunk: [u8; 4] = [0; 4];
-            write_chunk.copy_from_slice(&result[4 * i .. 4 * i + 4]);
+            write_chunk.copy_from_slice(&result[4 * i..4 * i + 4]);
             exec_state.vm_write::<u8, KECCAK_WORD_SIZE>(
                 RV32_MEMORY_AS,
                 buffer + (i * KECCAK_WORD_SIZE) as u32,
-                &write_chunk
+                &write_chunk,
             );
         }
     }
