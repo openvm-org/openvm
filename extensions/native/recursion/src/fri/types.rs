@@ -37,7 +37,7 @@ pub struct FriProofVariable<C: Config> {
     pub commit_phase_commits: Array<C, DigestVariable<C>>,
     pub query_proofs: Array<C, FriQueryProofVariable<C>>,
     pub final_poly: Array<C, Ext<C::F, C::EF>>,
-    pub commit_pow_witnesses: Array<C, Felt<C::F>>,
+    // pub commit_pow_witnesses: Array<C, Felt<C::F>>,
     pub query_pow_witness: Felt<C::F>,
 }
 

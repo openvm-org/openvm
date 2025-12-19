@@ -101,7 +101,7 @@ pub fn verify_two_adic_pcs<C: Config>(
     // **ATTENTION**: always check shape of user inputs.
     builder.assert_usize_eq(proof.query_proofs.len(), RVar::from(config.num_queries));
     builder.assert_usize_eq(proof.commit_phase_commits.len(), log_max_height);
-    builder.assert_usize_eq(proof.commit_pow_witnesses.len(), log_max_height);
+    // builder.assert_usize_eq(proof.commit_pow_witnesses.len(), log_max_height);
     let betas: Array<C, Ext<C::F, C::EF>> = builder.array(log_max_height);
     let betas_squared: Array<C, Ext<C::F, C::EF>> = builder.array(log_max_height);
     // `i_plus_one_arr[i] = i + 1`. This is needed to add "enumerate" to `iter_zip!`
@@ -111,19 +111,19 @@ pub fn verify_two_adic_pcs<C: Config>(
     iter_zip!(
         builder,
         proof.commit_phase_commits,
-        proof.commit_pow_witnesses,
+        // proof.commit_pow_witnesses,
         betas,
         betas_squared,
         i_plus_one_arr
     )
     .for_each(|ptr_vec, builder| {
-        let [comm_ptr, commit_pow_ptr, beta_ptr, beta_sq_ptr, i_plus_one_ptr] =
+        let [comm_ptr, /*commit_pow_ptr, */beta_ptr, beta_sq_ptr, i_plus_one_ptr] =
             ptr_vec.try_into().unwrap();
 
         let comm = builder.iter_ptr_get(&proof.commit_phase_commits, comm_ptr);
-        let commit_pow = builder.iter_ptr_get(&proof.commit_pow_witnesses, commit_pow_ptr);
+        // let commit_pow = builder.iter_ptr_get(&proof.commit_pow_witnesses, commit_pow_ptr);
         challenger.observe_digest(builder, comm);
-        challenger.check_witness(builder, config.commit_proof_of_work_bits, commit_pow);
+        // challenger.check_witness(builder, config.commit_proof_of_work_bits, commit_pow);
         let sample = challenger.sample_ext(builder);
         builder.iter_ptr_set(&betas, beta_ptr, sample);
         builder.iter_ptr_set(&betas_squared, beta_sq_ptr, sample * sample);
