@@ -151,9 +151,7 @@ fn __native_keccak256(input: *const u8, mut len: usize, output: *mut u8) {
         for i in 0..len {
             new_input[i] = unsafe { *input.add(i) };
         }
-        unsafe {
-            native_xorin(buffer_ptr, new_input.as_ptr(), adjusted_len)
-        };
+        unsafe { native_xorin(buffer_ptr, new_input.as_ptr(), adjusted_len) };
     } else {
         unsafe { native_xorin(buffer_ptr, input.add(ip), len) };
     }
