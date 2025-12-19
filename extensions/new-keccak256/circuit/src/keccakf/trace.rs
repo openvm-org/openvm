@@ -1,5 +1,8 @@
 use core::convert::TryInto;
-use std::{borrow::BorrowMut, mem::size_of};
+use std::{
+    borrow::BorrowMut,
+    mem::{align_of, size_of},
+};
 
 use openvm_circuit::{
     arch::*,
@@ -70,7 +73,6 @@ impl<'a> CustomBorrow<'a, KeccakfVmRecordMut<'a>, KeccakfVmRecordLayout> for [u8
     }
 }
 
-// todo: check with Ayush if this is correct
 impl SizedRecord<KeccakfVmRecordLayout> for KeccakfVmRecordMut<'_> {
     fn size(_layout: &KeccakfVmRecordLayout) -> usize {
         size_of::<KeccakfVmRecordHeader>()
