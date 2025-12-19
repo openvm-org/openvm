@@ -35,7 +35,7 @@ jobs:
       matrix:
         extensions: # group extensions on the same runner based on test time
           - "rv32im native"
-          - "keccak256 sha2 bigint algebra ecc pairing"
+          - "keccak256 new-keccak256 sha2 bigint algebra ecc pairing"
     runs-on:
       - runs-on=${{ github.run_id }}-extension-tests-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.machine_type || 'test-gpu-nvidia/family=g6+g6e' }}
 
@@ -80,7 +80,7 @@ jobs:
           # Check if any extension in the current matrix group changed
           ANY_EXT_CHANGED=false
           for ext in ${{ matrix.extensions }}; do
-            ext_changed=$(echo $FILTER_OUTPUTS | jq -r .$ext)
+            ext_changed=$(echo $FILTER_OUTPUTS | jq -r --arg ext "$ext" '.[$ext]')
             if [[ "$ext_changed" == "true" ]]; then
               ANY_EXT_CHANGED=true
               break
@@ -116,7 +116,7 @@ jobs:
           COMMON_CHANGED=$(echo $FILTER_OUTPUTS | jq -r .common)
 
           for ext in ${{ matrix.extensions }}; do
-            ext_changed=$(echo $FILTER_OUTPUTS | jq -r .$ext)
+            ext_changed=$(echo $FILTER_OUTPUTS | jq -r --arg ext "$ext" '.[$ext]')
             if [[ "$COMMON_CHANGED" == "true" || "$ext_changed" == "true" ]]; then
               echo "::group::Running tests for $ext"
 
