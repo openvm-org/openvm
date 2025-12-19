@@ -622,7 +622,13 @@ where
         let system_config: &SystemConfig = self.config().as_ref();
         let adapter_offset = system_config.access_adapter_air_id_offset();
         // ATTENTION: this must agree with `num_memory_airs`
-        let num_adapters = log2_strict_usize(system_config.memory_config.max_access_adapter_n);
+
+        let num_adapters = if system_config.memory_config.access_adapters_enabled {
+            log2_strict_usize(system_config.memory_config.max_access_adapter_n)
+        } else {
+            0
+        };
+
         assert_eq!(adapter_offset + num_adapters, system_config.num_airs());
         let access_adapter_arena_size_bound = records::arena_size_bound(
             &trace_heights[adapter_offset..adapter_offset + num_adapters],

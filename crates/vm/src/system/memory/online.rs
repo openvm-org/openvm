@@ -13,12 +13,12 @@ use tracing::instrument;
 use crate::{
     arch::{
         AddressSpaceHostConfig, AddressSpaceHostLayout, DenseRecordArena, MemoryConfig,
-        RecordArena, MAX_CELL_BYTE_SIZE,
+        RecordArena, CONST_BLOCK_SIZE, MAX_CELL_BYTE_SIZE,
     },
     system::{
         memory::{
             adapter::records::{AccessLayout, AccessRecordHeader, MERGE_AND_NOT_SPLIT_FLAG},
-            MemoryAddress, TimestampedEquipartition, TimestampedValues, CHUNK,
+            MemoryAddress, TimestampedEquipartition, TimestampedValues,
         },
         TouchedMemory,
     },
@@ -580,6 +580,7 @@ impl TracingMemory {
         if header.block_size == header.lowest_block_size {
             return;
         }
+        assert_eq!(1, 0);
         // SAFETY:
         // - header.address_space is validated during instruction decoding and within bounds
         // - header.pointer and header.type_size define valid memory bounds within the address space
@@ -612,7 +613,7 @@ impl TracingMemory {
         if header.block_size == header.lowest_block_size {
             return;
         }
-
+        assert_eq!(1, 0);
         let record_mut = self
             .access_adapter_records
             .alloc(AccessLayout::from_record_header(&header));
@@ -944,7 +945,7 @@ impl TracingMemory {
                 self.touched_blocks_to_equipartition::<F, 1>(touched_blocks),
             ),
             true => TouchedMemory::Persistent(
-                self.touched_blocks_to_equipartition::<F, CHUNK>(touched_blocks),
+                self.touched_blocks_to_equipartition::<F, CONST_BLOCK_SIZE>(touched_blocks),
             ),
         }
     }

@@ -301,7 +301,7 @@ pub struct Rv32VecHeapAdapterExecutor<
     pointer_max_bits: usize,
 }
 
-#[derive(derive_new::new)]
+#[derive(Clone, derive_new::new)]
 pub struct Rv32VecHeapAdapterFiller<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
