@@ -134,6 +134,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         2
     } else {
         // Avoid Native AS while access adapters are disabled.
+        // TODO: Revert this to [2, 3, 4] when access adapters are removed
         *[2, 3].choose(rng).unwrap()
     });
 
