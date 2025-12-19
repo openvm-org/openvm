@@ -154,7 +154,7 @@ pub fn main() {
         for &(input, expected) in KECCAK_TEST_CASES {
             let mut input = input.to_vec();
             let mut output = [0u8; 32];
-            openvm_keccak256_guest::native_keccak256(
+            openvm_new_keccak256_guest::native_keccak256(
                 input.as_ptr(),
                 input.len(),
                 output.as_mut_ptr(),

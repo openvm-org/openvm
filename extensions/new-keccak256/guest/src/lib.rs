@@ -136,8 +136,8 @@ fn __native_keccak256(input: *const u8, mut len: usize, output: *mut u8) {
     let mut rate = 136;
     while len >= rate {
         unsafe {
-            openvm_new_keccak256_guest::native_xorin(buffer_ptr, input.add(ip), rate);
-            openvm_new_keccak256_guest::native_keccakf(buffer_ptr);
+            native_xorin(buffer_ptr, input.add(ip), rate);
+            native_keccakf(buffer_ptr);
         }
         ip += rate;
         len -= rate;
@@ -152,10 +152,10 @@ fn __native_keccak256(input: *const u8, mut len: usize, output: *mut u8) {
             new_input[i] = unsafe { *input.add(i) };
         }
         unsafe {
-            openvm_new_keccak256_guest::native_xorin(buffer_ptr, new_input.as_ptr(), adjusted_len)
+            native_xorin(buffer_ptr, new_input.as_ptr(), adjusted_len)
         };
     } else {
-        unsafe { openvm_new_keccak256_guest::native_xorin(buffer_ptr, input.add(ip), len) };
+        unsafe { native_xorin(buffer_ptr, input.add(ip), len) };
     }
 
     // self.buffer.pad(self.offset, self.delim, self.rate)
@@ -166,7 +166,7 @@ fn __native_keccak256(input: *const u8, mut len: usize, output: *mut u8) {
     // which is:
     // self.keccak();
     // self.offset = 0;
-    openvm_new_keccak256_guest::native_keccakf(buffer_ptr);
+    native_keccakf(buffer_ptr);
 
     // self.buffer.setout(&mut output[0..], 0, 32)
     unsafe { core::ptr::copy_nonoverlapping(buffer_ptr, output, 32) };
