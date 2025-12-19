@@ -16,7 +16,9 @@ use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, Local
 use openvm_new_keccak256_transpiler::KeccakfOpcode;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use rand::{rngs::StdRng, Rng};
+use rand::rngs::StdRng;
+#[cfg(feature = "cuda")]
+use rand::Rng;
 
 use super::KeccakfVmFiller;
 use crate::keccakf::air::KeccakfVmAir;
