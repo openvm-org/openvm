@@ -324,6 +324,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         let mut mem_config = MemoryConfig::default();
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
         mem_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
+        // TODO: Check if need to revert to volatile memory, after access adapters are removed
         Self::persistent(mem_config)
     }
 

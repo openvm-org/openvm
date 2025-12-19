@@ -124,7 +124,7 @@ const DEFAULT_NATIVE_BLOCK_SIZE: usize = 1;
 /// The constant block size used for memory accesses when access adapters are disabled.
 /// All memory accesses for address spaces 1-3 must use this block size.
 /// This is also the block size used by the Boundary AIR for memory bus interactions.
-pub const CONST_BLOCK_SIZE: usize = 4;
+pub const CONST_BLOCK_SIZE: usize = DEFAULT_U8_BLOCK_SIZE;
 
 /// Trait for generating a init.rs file that contains a call to moduli_init!,
 /// complex_init!, sw_init! with the supported moduli and curves.

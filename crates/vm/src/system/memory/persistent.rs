@@ -24,15 +24,15 @@ use super::{merkle::SerialReceiver, online::INITIAL_TIMESTAMP};
 use crate::{
     arch::{hasher::Hasher, ADDR_SPACE_OFFSET, CONST_BLOCK_SIZE},
     system::memory::{
-        dimensions::MemoryDimensions, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
-        TimestampedEquipartition,
+        controller::CHUNK, dimensions::MemoryDimensions, offline_checker::MemoryBus, MemoryAddress,
+        MemoryImage, TimestampedEquipartition,
     },
 };
 
 /// Number of CONST_BLOCK_SIZE blocks per CHUNK (e.g., 2 for 8/4).
 /// Blocks are on the same row only for Merkle tree hashing (8 bytes at a time).
 /// Memory bus interactions use per-block timestamps.
-pub const BLOCKS_PER_CHUNK: usize = 2;
+pub const BLOCKS_PER_CHUNK: usize = CHUNK / CONST_BLOCK_SIZE;
 
 /// The values describe aligned chunk of memory of size `CHUNK`---the data together with the last
 /// accessed timestamp---in either the initial or final memory state.
@@ -119,8 +119,6 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             local.expand_direction * local.expand_direction,
         );
 
-        debug_assert_eq!(CHUNK % CONST_BLOCK_SIZE, 0);
-        debug_assert_eq!(CHUNK / CONST_BLOCK_SIZE, BLOCKS_PER_CHUNK);
         let chunk_size_f = AB::F::from_canonical_usize(CHUNK);
         for block_idx in 0..BLOCKS_PER_CHUNK {
             let offset = AB::F::from_canonical_usize(block_idx * CONST_BLOCK_SIZE);
@@ -243,43 +241,48 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
     ) where
         H: Hasher<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
-        // Group CONST_BLOCK_SIZE blocks into CHUNK-sized groups
-        // Key: (addr_space, chunk_label), Value: per-block timestamps and values
-        use std::collections::BTreeMap;
-        let mut chunk_map: BTreeMap<(u32, u32), ([u32; BLOCKS_PER_CHUNK], [F; CHUNK])> =
-            BTreeMap::new();
+        type BlockInfo<F> = (usize, u32, [F; CONST_BLOCK_SIZE]); // (block_idx, timestamp, values)
+        type EnrichedEntry<F> = ((u32, u32), BlockInfo<F>); // (chunk_key, block_info)
 
-        for &((addr_space, ptr), ts_values) in final_memory.iter() {
-            let chunk_label = ptr / CHUNK as u32;
-            let block_idx_in_chunk = ((ptr % CHUNK as u32) / CONST_BLOCK_SIZE as u32) as usize;
+        let enriched: Vec<EnrichedEntry<F>> = final_memory
+            .par_iter()
+            .map(|&((addr_space, ptr), ts_values)| {
+                let chunk_label = ptr / CHUNK as u32;
+                let block_idx = ((ptr % CHUNK as u32) / CONST_BLOCK_SIZE as u32) as usize;
+                let key = (addr_space, chunk_label);
+                let block_info = (block_idx, ts_values.timestamp, ts_values.values);
+                (key, block_info)
+            })
+            .collect();
 
-            let entry = chunk_map
-                .entry((addr_space, chunk_label))
-                .or_insert_with(|| {
-                    // Initialize with values from initial memory and timestamps at 0
-                    let chunk_ptr = chunk_label * CHUNK as u32;
-                    let init_values: [F; CHUNK] = array::from_fn(|i| unsafe {
-                        initial_memory.get_f::<F>(addr_space, chunk_ptr + i as u32)
-                    });
-                    ([0u32; BLOCKS_PER_CHUNK], init_values)
-                });
+        let chunk_groups: Vec<_> = enriched
+            .chunk_by(|a, b| a.0 == b.0)
+            .map(|group| {
+                let key = group[0].0;
+                let blocks: Vec<BlockInfo<F>> = group.iter().map(|&(_, info)| info).collect();
+                (key, blocks)
+            })
+            .collect();
 
-            // Set per-block timestamp
-            entry.0[block_idx_in_chunk] = ts_values.timestamp;
-            // Copy values for this block
-            for (i, &val) in ts_values.values.iter().enumerate() {
-                entry.1[block_idx_in_chunk * CONST_BLOCK_SIZE + i] = val;
-            }
-        }
-
-        let final_touched_labels: Vec<_> = chunk_map
+        let final_touched_labels: Vec<_> = chunk_groups
             .into_par_iter()
-            .map(|((addr_space, chunk_label), (timestamps, final_values))| {
+            .map(|((addr_space, chunk_label), blocks)| {
                 let chunk_ptr = chunk_label * CHUNK as u32;
                 // SAFETY: addr_space from `final_memory` are all in bounds
                 let init_values: [F; CHUNK] = array::from_fn(|i| unsafe {
                     initial_memory.get_f::<F>(addr_space, chunk_ptr + i as u32)
                 });
+
+                let mut final_values = init_values;
+                let mut timestamps = [0u32; BLOCKS_PER_CHUNK];
+
+                for (block_idx, ts, values) in blocks {
+                    timestamps[block_idx] = ts;
+                    for (i, &val) in values.iter().enumerate() {
+                        final_values[block_idx * CONST_BLOCK_SIZE + i] = val;
+                    }
+                }
+
                 let initial_hash = hasher.hash(&init_values);
                 let final_hash = hasher.hash(&final_values);
                 FinalTouchedLabel {
