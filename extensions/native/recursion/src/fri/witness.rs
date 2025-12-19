@@ -61,13 +61,13 @@ impl Witnessable<C> for OuterFriProof {
 
     fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {
         let commit_phase_commits = self.commit_phase_commits.read(builder);
-        let commit_pow_witnesses = self.commit_pow_witnesses.read(builder);
+        // let commit_pow_witnesses = self.commit_pow_witnesses.read(builder);
         let query_proofs = self.query_proofs.read(builder);
         let final_poly = self.final_poly.read(builder);
         let query_pow_witness = self.query_pow_witness.read(builder);
         Self::WitnessVariable {
             commit_phase_commits,
-            commit_pow_witnesses,
+            // commit_pow_witnesses,
             query_proofs,
             final_poly,
             query_pow_witness,
@@ -76,7 +76,7 @@ impl Witnessable<C> for OuterFriProof {
 
     fn write(&self, witness: &mut Witness<OuterConfig>) {
         self.commit_phase_commits.write(witness);
-        self.commit_pow_witnesses.write(witness);
+        // self.commit_pow_witnesses.write(witness);
         <Vec<_> as Witnessable<C>>::write(&self.query_proofs, witness);
         self.final_poly.write(witness);
         self.query_pow_witness.write(witness);
