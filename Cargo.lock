@@ -6328,7 +6328,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "1.2.2"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v1.3.0#40e0be820e8b889e00b67f7a679f1ec3480b7c84"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=audit%2Fdevelop-v1.3.0#69d9b9ab0971bb1d65b42e62ae200af45cd77b48"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -6360,7 +6360,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "1.2.2"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v1.3.0#40e0be820e8b889e00b67f7a679f1ec3480b7c84"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=audit%2Fdevelop-v1.3.0#69d9b9ab0971bb1d65b42e62ae200af45cd77b48"
 dependencies = [
  "cc",
  "glob",
@@ -6369,7 +6369,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "1.2.2"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v1.3.0#40e0be820e8b889e00b67f7a679f1ec3480b7c84"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=audit%2Fdevelop-v1.3.0#69d9b9ab0971bb1d65b42e62ae200af45cd77b48"
 dependencies = [
  "bytesize",
  "ctor",
@@ -7121,7 +7121,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.2.2"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v1.3.0#40e0be820e8b889e00b67f7a679f1ec3480b7c84"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=audit%2Fdevelop-v1.3.0#69d9b9ab0971bb1d65b42e62ae200af45cd77b48"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -7151,7 +7151,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.2.2"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v1.3.0#40e0be820e8b889e00b67f7a679f1ec3480b7c84"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=audit%2Fdevelop-v1.3.0#69d9b9ab0971bb1d65b42e62ae200af45cd77b48"
 dependencies = [
  "dashmap",
  "derivative",
@@ -7317,8 +7317,8 @@ dependencies = [
 
 [[package]]
 name = "p3-air"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "p3-field",
  "p3-matrix",
@@ -7326,8 +7326,8 @@ dependencies = [
 
 [[package]]
 name = "p3-baby-bear"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "p3-challenger",
  "p3-field",
@@ -7340,8 +7340,8 @@ dependencies = [
 
 [[package]]
 name = "p3-blake3"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "blake3",
  "p3-symmetric",
@@ -7350,8 +7350,8 @@ dependencies = [
 
 [[package]]
 name = "p3-bn254"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "num-bigint 0.4.6",
  "p3-field",
@@ -7365,8 +7365,8 @@ dependencies = [
 
 [[package]]
 name = "p3-challenger"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "p3-field",
  "p3-maybe-rayon",
@@ -7378,8 +7378,8 @@ dependencies = [
 
 [[package]]
 name = "p3-commit"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "itertools 0.14.0",
  "p3-challenger",
@@ -7392,8 +7392,8 @@ dependencies = [
 
 [[package]]
 name = "p3-dft"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "itertools 0.14.0",
  "p3-field",
@@ -7406,8 +7406,8 @@ dependencies = [
 
 [[package]]
 name = "p3-field"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "itertools 0.14.0",
  "num-bigint 0.4.6",
@@ -7421,8 +7421,8 @@ dependencies = [
 
 [[package]]
 name = "p3-fri"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "itertools 0.14.0",
  "p3-challenger",
@@ -7441,8 +7441,8 @@ dependencies = [
 
 [[package]]
 name = "p3-goldilocks"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "num-bigint 0.4.6",
  "p3-challenger",
@@ -7459,8 +7459,8 @@ dependencies = [
 
 [[package]]
 name = "p3-interpolation"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "p3-field",
  "p3-matrix",
@@ -7470,8 +7470,8 @@ dependencies = [
 
 [[package]]
 name = "p3-keccak"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "p3-field",
  "p3-symmetric",
@@ -7481,8 +7481,8 @@ dependencies = [
 
 [[package]]
 name = "p3-keccak-air"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "p3-air",
  "p3-field",
@@ -7495,8 +7495,8 @@ dependencies = [
 
 [[package]]
 name = "p3-koala-bear"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "p3-challenger",
  "p3-field",
@@ -7508,8 +7508,8 @@ dependencies = [
 
 [[package]]
 name = "p3-matrix"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "itertools 0.14.0",
  "p3-field",
@@ -7523,16 +7523,16 @@ dependencies = [
 
 [[package]]
 name = "p3-maybe-rayon"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "rayon",
 ]
 
 [[package]]
 name = "p3-mds"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "p3-dft",
  "p3-field",
@@ -7543,8 +7543,8 @@ dependencies = [
 
 [[package]]
 name = "p3-merkle-tree"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "itertools 0.14.0",
  "p3-commit",
@@ -7561,8 +7561,8 @@ dependencies = [
 
 [[package]]
 name = "p3-monty-31"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "itertools 0.14.0",
  "num-bigint 0.4.6",
@@ -7584,8 +7584,8 @@ dependencies = [
 
 [[package]]
 name = "p3-poseidon"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "p3-field",
  "p3-mds",
@@ -7595,8 +7595,8 @@ dependencies = [
 
 [[package]]
 name = "p3-poseidon2"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "p3-field",
  "p3-mds",
@@ -7607,8 +7607,8 @@ dependencies = [
 
 [[package]]
 name = "p3-poseidon2-air"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "p3-air",
  "p3-field",
@@ -7621,8 +7621,8 @@ dependencies = [
 
 [[package]]
 name = "p3-symmetric"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "itertools 0.14.0",
  "p3-field",
@@ -7631,8 +7631,8 @@ dependencies = [
 
 [[package]]
 name = "p3-uni-stark"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "itertools 0.14.0",
  "p3-air",
@@ -7650,8 +7650,8 @@ dependencies = [
 
 [[package]]
 name = "p3-util"
-version = "0.4.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=1eed8e6#1eed8e6dd4ef6d29868dd5c25e525b49c07ec5ad"
+version = "0.4.1"
+source = "git+https://github.com/Plonky3/Plonky3.git?branch=openvm%2Fkeccak3-cmp#9a7bb854a219f5cb8d863c6b91cc483f7ff1d607"
 dependencies = [
  "serde",
 ]
