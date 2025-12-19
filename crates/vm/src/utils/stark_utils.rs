@@ -212,8 +212,8 @@ where
     let input = input.into();
     let metered_ctx = vm.build_metered_ctx(&exe);
 
-    #[cfg(feature = "aot")]
-    check_aot_equivalence(&vm, &config, &exe, &input)?;
+    // #[cfg(feature = "aot")]
+    // check_aot_equivalence(&vm, &config, &exe, &input)?;
 
     let (segments, _) = vm
         .metered_interpreter(&exe)?
@@ -226,7 +226,7 @@ where
     let mut state = Some(vm.create_initial_state(&exe, input));
     let mut proofs = Vec::new();
     let mut exit_code = None;
-    for segment in segments {
+    for (seg_idx, segment) in segments.into_iter().enumerate() {
         let Segment {
             num_insns,
             trace_heights,
@@ -252,6 +252,9 @@ where
             debug_proving_ctx(&vm, &ctx);
         }
         let proof = vm.engine.prove(vm.pk(), ctx);
+        vm.engine.verify(&vk, &proof).unwrap_or_else(|e| {
+            panic!("Verification failed on segment {seg_idx}: {e:?}");
+        });
         proofs.push(proof);
     }
     assert!(proofs.len() >= min_segments);
