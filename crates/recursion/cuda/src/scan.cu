@@ -19,14 +19,14 @@ __host__ int prefix_scan(Fp *d_arr, size_t n, void *d_temp, size_t temp_n, cudaS
     return CHECK_KERNEL();
 }
 
-extern "C" int _get_prefix_scan_temp_bytes(Fp *d_arr, size_t n, size_t *h_temp_n) {
+extern "C" int _get_fp_prefix_scan_temp_bytes(Fp *d_arr, size_t n, size_t *h_temp_n) {
     size_t temp_bytes = 0;
     cub::DeviceScan::InclusiveSum(nullptr, temp_bytes, d_arr, d_arr, n, cudaStreamPerThread);
     *h_temp_n = temp_bytes;
     return CHECK_KERNEL();
 }
 
-extern "C" int _prefix_scan(Fp *d_arr, size_t n, void *d_temp, size_t temp_n) {
+extern "C" int _fp_prefix_scan(Fp *d_arr, size_t n, void *d_temp, size_t temp_n) {
     prefix_scan(d_arr, n, d_temp, temp_n, cudaStreamPerThread);
     return CHECK_KERNEL();
 }

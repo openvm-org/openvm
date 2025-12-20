@@ -402,7 +402,7 @@ fn test_recursion_circuit_two_preprocessed(
         return;
     }
     let params =
-        test_system_params_small_with_poly_len(l_skip, n_stack, k_whir, log_final_poly_len);
+        test_system_params_small_with_poly_len(l_skip, n_stack, k_whir, log_final_poly_len, 3);
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
 
     let height = 1 << log_trace_height;
