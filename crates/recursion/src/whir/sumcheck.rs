@@ -17,6 +17,7 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{TranscriptBus, WhirOpeningPointBus, WhirOpeningPointMessage},
+    primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     utils::{eq_1, ext_field_multiply, interpolate_quadratic},
@@ -44,6 +45,8 @@ struct SumcheckCols<T> {
     tidx: T,
     ev1: [T; D_EF],
     ev2: [T; D_EF],
+    folding_pow_witness: T,
+    folding_pow_sample: T,
     alpha: [T; D_EF],
     u: [T; D_EF],
     /// The claim at the beginning of the sumcheck round.
@@ -63,7 +66,10 @@ pub struct SumcheckAir {
     pub eq_alpha_u_bus: WhirEqAlphaUBus,
     pub whir_opening_point_bus: WhirOpeningPointBus,
     pub transcript_bus: TranscriptBus,
+    pub exp_bits_len_bus: ExpBitsLenBus,
     pub k: usize,
+    pub folding_pow_bits: usize,
+    pub generator: F,
 }
 
 impl BaseAirWithPublicValues<F> for SumcheckAir {}
@@ -75,7 +81,7 @@ impl<F> BaseAir<F> for SumcheckAir {
     }
 }
 
-impl<AB: AirBuilder + InteractionBuilder> Air<AB> for SumcheckAir
+impl<AB: AirBuilder<F = F> + InteractionBuilder> Air<AB> for SumcheckAir
 where
     <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
 {
@@ -158,7 +164,7 @@ where
         );
         when_sumcheck_transition.assert_eq(
             next.tidx,
-            local.tidx + AB::Expr::from_canonical_usize(3 * D_EF),
+            local.tidx + AB::Expr::from_canonical_usize(3 * D_EF + 2),
         );
         assert_array_eq(
             &mut when_sumcheck_transition,
@@ -181,11 +187,36 @@ where
             local.ev2,
             is_enabled,
         );
-        self.transcript_bus.sample_ext(
+        self.transcript_bus.observe(
             builder,
             proof_idx,
             local.tidx + AB::Expr::from_canonical_usize(2 * D_EF),
+            local.folding_pow_witness,
+            is_enabled,
+        );
+        self.transcript_bus.sample(
+            builder,
+            proof_idx,
+            local.tidx + AB::Expr::from_canonical_usize(2 * D_EF + 1),
+            local.folding_pow_sample,
+            is_enabled,
+        );
+        self.transcript_bus.sample_ext(
+            builder,
+            proof_idx,
+            local.tidx + AB::Expr::from_canonical_usize(2 * D_EF + 2),
             local.alpha,
+            is_enabled,
+        );
+
+        self.exp_bits_len_bus.lookup_key(
+            builder,
+            ExpBitsLenMessage {
+                base: self.generator.into(),
+                bit_src: local.folding_pow_sample.into(),
+                num_bits: AB::Expr::from_canonical_usize(self.folding_pow_bits),
+                result: AB::Expr::ONE,
+            },
             is_enabled,
         );
 
@@ -280,7 +311,7 @@ pub(crate) fn generate_trace(
 
             let is_first_in_group = j == 0;
             let last_group_row_idx = (whir_round + 1) * k_whir - 1;
-            let tidx = whir.tidx_per_round[whir_round] + 3 * D_EF * j;
+            let tidx = whir.tidx_per_round[whir_round] + (3 * D_EF + 2) * j;
 
             let cols: &mut SumcheckCols<F> = row.borrow_mut();
             cols.is_enabled = F::ONE;
@@ -293,6 +324,8 @@ pub(crate) fn generate_trace(
             let sumcheck_polys = &proof.whir_proof.whir_sumcheck_polys[i];
             cols.ev1.copy_from_slice(sumcheck_polys[0].as_base_slice());
             cols.ev2.copy_from_slice(sumcheck_polys[1].as_base_slice());
+            cols.folding_pow_witness = proof.whir_proof.folding_pow_witnesses[i];
+            cols.folding_pow_sample = whir.folding_pow_samples[i];
             cols.eq_partial
                 .copy_from_slice(whir.eq_partials[i].as_base_slice());
             cols.alpha.copy_from_slice(whir.alphas[i].as_base_slice());

@@ -41,8 +41,8 @@ struct WhirRoundCols<T, const ENC_WIDTH: usize> {
     y0: [T; D_EF],
     commit: [T; DIGEST_SIZE],
     final_poly_mle_eval: [T; D_EF],
-    pow_witness: T,
-    pow_sample: T,
+    query_pow_witness: T,
+    query_pow_sample: T,
     gamma: [T; D_EF],
     // TODO: This doesn't really belong here; it should be sent directly to InitialOpenedValuesAir.
     mu: [T; D_EF],
@@ -216,7 +216,7 @@ impl WhirRoundAir {
             is_enabled,
         );
 
-        let post_sumcheck_offset = 3 * self.k * D_EF;
+        let post_sumcheck_offset = (3 * D_EF + 2) * self.k;
         let mut non_final_round_offset = post_sumcheck_offset;
 
         self.transcript_bus.observe_commit(
@@ -285,14 +285,14 @@ impl WhirRoundAir {
             builder,
             proof_idx,
             pow_tidx.clone(),
-            local.pow_witness,
+            local.query_pow_witness,
             is_enabled,
         );
         self.transcript_bus.sample(
             builder,
             proof_idx,
             pow_tidx.clone() + AB::Expr::ONE,
-            local.pow_sample,
+            local.query_pow_sample,
             is_enabled,
         );
 
@@ -301,7 +301,7 @@ impl WhirRoundAir {
             builder,
             ExpBitsLenMessage {
                 base: self.generator.into(),
-                bit_src: local.pow_sample.into(),
+                bit_src: local.query_pow_sample.into(),
                 num_bits: AB::Expr::from_canonical_usize(self.pow_bits),
                 result: AB::Expr::ONE,
             },
@@ -432,8 +432,8 @@ fn generate_trace_impl<const ENC_WIDTH: usize>(
             cols.post_sumcheck_claim
                 .copy_from_slice(whir.post_sumcheck_claims[post_sumcheck_idx].as_base_slice());
             cols.gamma.copy_from_slice(whir.gammas[i].as_base_slice());
-            cols.pow_witness = whir_proof.whir_pow_witnesses[i];
-            cols.pow_sample = whir.pow_samples[i];
+            cols.query_pow_witness = whir_proof.query_phase_pow_witnesses[i];
+            cols.query_pow_sample = whir.query_pow_samples[i];
 
             if i < rows_per_proof - 1 {
                 cols.commit = whir_proof.codeword_commits[i];
