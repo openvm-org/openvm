@@ -11,7 +11,10 @@ use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
     EF, F, SC, StarkEngineV2,
     keygen::types::MultiStarkVerifyingKeyV2,
-    poseidon2::{WIDTH, sponge::{FiatShamirTranscript, TranscriptHistory, TranscriptLog}},
+    poseidon2::{
+        CHUNK, WIDTH,
+        sponge::{FiatShamirTranscript, TranscriptHistory, TranscriptLog},
+    },
     proof::{Proof, TraceVData},
     prover::{
         AirProvingContextV2, ColMajorMatrix, CommittedTraceDataV2, CpuBackendV2, ProverBackendV2,
@@ -494,37 +497,33 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
     {
         let mut preflight = Preflight::default();
 
-        std::thread::scope(|s| {
-            // Spawn merkle precomputation in a separate thread while running preflight in main thread
-            let merkle_handle = s.spawn(|| Self::compute_merkle_precomputation(proof));
+        // NOTE: it is not required that we group preflight into modules
+        let preflight_modules = [
+            TraceModuleRef::ProofShape(&self.proof_shape),
+            TraceModuleRef::Gkr(&self.gkr),
+            TraceModuleRef::BatchConstraint(&self.batch_constraint),
+            TraceModuleRef::Stacking(&self.stacking),
+            TraceModuleRef::Whir(&self.whir),
+        ];
+        for module in &preflight_modules {
+            module.run_preflight(child_vk, proof, &mut preflight, &mut sponge);
+        }
+        preflight.transcript = sponge.into_log();
 
-            // NOTE: it is not required that we group preflight into modules
-            let preflight_modules = [
-                TraceModuleRef::ProofShape(&self.proof_shape),
-                TraceModuleRef::Gkr(&self.gkr),
-                TraceModuleRef::BatchConstraint(&self.batch_constraint),
-                TraceModuleRef::Stacking(&self.stacking),
-                TraceModuleRef::Whir(&self.whir),
-            ];
-            preflight_modules.iter().for_each(|module| {
-                module.run_preflight(child_vk, proof, &mut preflight, &mut sponge);
-            });
-            preflight.transcript = sponge.into_log();
+        #[cfg(feature = "cuda")]
+        let merkle_precomputation = Self::compute_merkle_precomputation_cuda(proof);
+        #[cfg(not(feature = "cuda"))]
+        let merkle_precomputation = Self::compute_merkle_precomputation(proof);
 
-            let merkle_precomputation =
-                merkle_handle.join().expect("merkle precomputation panicked");
-            preflight.poseidon_inputs = merkle_precomputation.poseidon_inputs;
-            preflight.initial_row_states = merkle_precomputation.initial_row_states;
-            preflight.codeword_states = merkle_precomputation.codeword_states;
-        });
+        preflight.poseidon_inputs = merkle_precomputation.poseidon_inputs;
+        preflight.initial_row_states = merkle_precomputation.initial_row_states;
+        preflight.codeword_states = merkle_precomputation.codeword_states;
 
         preflight
     }
 
     #[tracing::instrument(name = "compute_merkle_precomputation", level = "info", skip_all)]
     fn compute_merkle_precomputation(proof: &Proof) -> MerklePrecomputation {
-        use stark_backend_v2::poseidon2::CHUNK;
-
         let initial_chunks: usize = proof
             .whir_proof
             .initial_round_opened_rows
@@ -585,6 +584,176 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
                     .collect()
             })
             .collect();
+
+        MerklePrecomputation {
+            poseidon_inputs,
+            initial_row_states,
+            codeword_states,
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    #[tracing::instrument(name = "compute_merkle_precomputation_cuda", level = "info", skip_all)]
+    fn compute_merkle_precomputation_cuda(proof: &Proof) -> MerklePrecomputation {
+        use openvm_cuda_common::{
+            copy::{MemCopyD2H, MemCopyH2D},
+            d_buffer::DeviceBuffer,
+        };
+
+        use crate::cuda::abi::{VectorDescriptor, merkle_precomputation_hash_vectors};
+
+        let num_chunks = |len: usize| len.div_ceil(CHUNK);
+
+        let mut num_vectors = 0usize;
+        let mut total_data_len = 0usize;
+        let mut total_chunks = 0usize;
+
+        for row in proof
+            .whir_proof
+            .initial_round_opened_rows
+            .iter()
+            .flat_map(|per_commit| per_commit.iter().flat_map(|per_query| per_query.iter()))
+        {
+            num_vectors += 1;
+            total_data_len += row.len();
+            total_chunks += num_chunks(row.len());
+        }
+        for opened_value in proof
+            .whir_proof
+            .codeword_opened_values
+            .iter()
+            .flat_map(|per_round| per_round.iter().flat_map(|per_query| per_query.iter()))
+        {
+            let len = <EF as FieldExtensionAlgebra<F>>::as_base_slice(opened_value).len();
+            num_vectors += 1;
+            total_data_len += len;
+            total_chunks += num_chunks(len);
+        }
+
+        let mut flat_data = Vec::with_capacity(total_data_len);
+        let mut descriptors = Vec::with_capacity(num_vectors);
+        let mut output_offset_chunks = 0usize;
+
+        let mut push_vector = |data: &[F]| {
+            let len = data.len();
+            let chunks = num_chunks(len);
+            descriptors.push(VectorDescriptor {
+                data_offset: flat_data.len(),
+                len,
+                output_offset: output_offset_chunks,
+            });
+            output_offset_chunks += chunks;
+            flat_data.extend_from_slice(data);
+        };
+
+        for row in proof
+            .whir_proof
+            .initial_round_opened_rows
+            .iter()
+            .flat_map(|per_commit| per_commit.iter().flat_map(|per_query| per_query.iter()))
+        {
+            push_vector(row);
+        }
+        for opened_value in proof
+            .whir_proof
+            .codeword_opened_values
+            .iter()
+            .flat_map(|per_round| per_round.iter().flat_map(|per_query| per_query.iter()))
+        {
+            push_vector(opened_value.as_base_slice());
+        }
+
+        debug_assert_eq!(descriptors.len(), num_vectors);
+        debug_assert_eq!(flat_data.len(), total_data_len);
+        debug_assert_eq!(output_offset_chunks, total_chunks);
+
+        // Upload to GPU and run kernel
+        let d_data = flat_data.to_device().expect("failed to upload data");
+        let d_descriptors = descriptors
+            .to_device()
+            .expect("failed to upload descriptors");
+        let d_pre_states = DeviceBuffer::<F>::with_capacity(total_chunks * WIDTH);
+        let d_post_states = DeviceBuffer::<F>::with_capacity(total_chunks * WIDTH);
+
+        unsafe {
+            merkle_precomputation_hash_vectors(
+                &d_data,
+                &d_descriptors,
+                num_vectors,
+                &d_pre_states,
+                &d_post_states,
+            )
+            .expect("hash_vectors kernel failed");
+        }
+
+        // Download results
+        let pre_states_flat = d_pre_states
+            .to_host()
+            .expect("failed to download pre_states");
+        let post_states_flat = d_post_states
+            .to_host()
+            .expect("failed to download post_states");
+        debug_assert_eq!(pre_states_flat.len(), total_chunks * WIDTH);
+        debug_assert_eq!(post_states_flat.len(), total_chunks * WIDTH);
+
+        // Reshape pre_states into poseidon_inputs
+        let poseidon_inputs: Vec<[F; WIDTH]> = pre_states_flat
+            .chunks_exact(WIDTH)
+            .map(|chunk| chunk.try_into().unwrap())
+            .collect();
+
+        let mut post_iter = post_states_flat.chunks_exact(WIDTH);
+
+        let initial_row_states: Vec<Vec<Vec<Vec<[F; WIDTH]>>>> = proof
+            .whir_proof
+            .initial_round_opened_rows
+            .iter()
+            .map(|per_commit| {
+                per_commit
+                    .iter()
+                    .map(|per_query| {
+                        per_query
+                            .iter()
+                            .map(|row| {
+                                (0..num_chunks(row.len()))
+                                    .map(|_| post_iter.next().unwrap().try_into().unwrap())
+                                    .collect()
+                            })
+                            .collect()
+                    })
+                    .collect()
+            })
+            .collect();
+
+        let codeword_states: Vec<Vec<Vec<[F; WIDTH]>>> = proof
+            .whir_proof
+            .codeword_opened_values
+            .iter()
+            .map(|per_round| {
+                per_round
+                    .iter()
+                    .map(|per_query| {
+                        per_query
+                            .iter()
+                            .map(|opened_value| {
+                                debug_assert_eq!(
+                                    num_chunks(
+                                        <EF as FieldExtensionAlgebra<F>>::as_base_slice(
+                                            opened_value
+                                        )
+                                        .len()
+                                    ),
+                                    1
+                                );
+                                post_iter.next().unwrap().try_into().unwrap()
+                            })
+                            .collect()
+                    })
+                    .collect()
+            })
+            .collect();
+
+        debug_assert_eq!(post_iter.len(), 0);
 
         MerklePrecomputation {
             poseidon_inputs,
