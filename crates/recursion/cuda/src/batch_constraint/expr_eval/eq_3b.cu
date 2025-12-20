@@ -196,7 +196,7 @@ extern "C" int _eq_3b_tracegen(
     const size_t *xi_bounds_d
 ) {
     assert((height & (height - 1)) == 0);
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 512);
     eq_3b_tracegen<<<grid, block>>>(
         trace_d,
         num_valid_rows,
