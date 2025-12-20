@@ -4,8 +4,13 @@ use openvm_cuda_backend::prelude::F;
 use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
 
 extern "C" {
-    fn _get_prefix_scan_temp_bytes(d_arr: *mut F, n: usize, temp_n: *mut usize) -> i32;
-    fn _prefix_scan(d_arr: *mut F, n: usize, d_temp: *mut std::ffi::c_void, temp_n: usize) -> i32;
+    fn _get_fp_prefix_scan_temp_bytes(d_arr: *mut F, n: usize, temp_n: *mut usize) -> i32;
+    fn _fp_prefix_scan(
+        d_arr: *mut F,
+        n: usize,
+        d_temp: *mut std::ffi::c_void,
+        temp_n: usize,
+    ) -> i32;
 }
 
 /*
@@ -17,7 +22,7 @@ pub unsafe fn get_prefix_scan_temp_bytes(
     n: usize,
     temp_n: &mut usize,
 ) -> Result<(), CudaError> {
-    CudaError::from_result(_get_prefix_scan_temp_bytes(
+    CudaError::from_result(_get_fp_prefix_scan_temp_bytes(
         d_arr.as_mut_ptr(),
         n,
         temp_n as *mut usize,
@@ -35,7 +40,7 @@ pub unsafe fn prefix_scan(
     d_temp: &DeviceBuffer<u8>,
     temp_n: usize,
 ) -> Result<(), CudaError> {
-    CudaError::from_result(_prefix_scan(
+    CudaError::from_result(_fp_prefix_scan(
         d_arr.as_mut_ptr(),
         n,
         d_temp.as_mut_ptr() as *mut std::ffi::c_void,
