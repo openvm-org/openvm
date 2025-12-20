@@ -254,7 +254,7 @@ pub(crate) fn generate_trace(
 
     let mut trace = vec![F::ZERO; height * width];
 
-    let tidx_base_offset = params.k_whir() * D_EF * 3;
+    let tidx_base_offset = params.k_whir() * (D_EF * 3 + 2);
     let mut global_row = 0usize;
 
     for (proof_idx, proof) in proofs.iter().enumerate() {

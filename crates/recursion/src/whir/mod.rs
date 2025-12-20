@@ -153,7 +153,8 @@ impl WhirModule {
             initial_round_merkle_proofs: _,
             codeword_opened_values: _,
             codeword_merkle_proofs: _,
-            whir_pow_witnesses,
+            folding_pow_witnesses,
+            query_phase_pow_witnesses,
             final_poly,
         } = &proof.whir_proof;
 
@@ -191,11 +192,12 @@ impl WhirModule {
             .chain(preflight.stacking.sumcheck_rnd[1..].iter().copied())
             .collect_vec();
 
-        let num_whir_rounds = whir_pow_witnesses.len();
+        let num_whir_rounds = self.params.num_whir_rounds();
         let mut gammas = vec![];
         let mut z0s = vec![];
         let mut alphas = vec![];
-        let mut pow_samples = vec![];
+        let mut folding_pow_samples = vec![];
+        let mut query_pow_samples = vec![];
         let mut queries = vec![];
         let mut tidx_per_round = vec![];
         let mut query_tidx_per_round = vec![];
@@ -224,6 +226,10 @@ impl WhirModule {
                 let &[ev1, ev2] = evals;
                 ts.observe_ext(ev1);
                 ts.observe_ext(ev2);
+
+                ts.observe(folding_pow_witnesses[i * k_whir + j]);
+                folding_pow_samples.push(ts.sample());
+
                 let ev0 = claim - ev1;
                 let alpha = ts.sample_ext();
                 alphas.push(alpha);
@@ -245,9 +251,8 @@ impl WhirModule {
                 }
             };
 
-            ts.observe(whir_pow_witnesses[i]);
-            let pow_sample = ts.sample();
-            pow_samples.push(pow_sample);
+            ts.observe(query_phase_pow_witnesses[i]);
+            query_pow_samples.push(ts.sample());
 
             query_tidx_per_round.push(ts.len());
             let mut round_queries = vec![];
@@ -345,7 +350,8 @@ impl WhirModule {
             zjs,
             yjs,
             gammas,
-            pow_samples,
+            folding_pow_samples,
+            query_pow_samples,
             queries,
             tidx_per_round,
             query_tidx_per_round,
@@ -404,9 +410,12 @@ impl AirModule for WhirModule {
             sumcheck_bus: self.sumcheck_bus,
             whir_opening_point_bus: self.bus_inventory.whir_opening_point_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
+            exp_bits_len_bus: self.bus_inventory.exp_bits_len_bus,
             alpha_bus: self.alpha_bus,
             eq_alpha_u_bus: self.eq_alpha_u_bus,
             k: params.k_whir(),
+            folding_pow_bits: params.whir.folding_pow_bits,
+            generator: F::GENERATOR,
         };
         let initial_round_opened_values_air = InitialOpenedValuesAir {
             stacking_indices_bus: self.bus_inventory.stacking_indices_bus,
@@ -501,7 +510,7 @@ impl WhirModule {
             k: k_whir,
             rounds: _,
             query_phase_pow_bits,
-            folding_pow_bits: _,
+            folding_pow_bits,
         } = whir;
         let num_queries_per_round = num_queries_per_round(&child_vk.inner.params);
         let num_initial_queries = *num_queries_per_round.first().unwrap_or(&0);
@@ -542,7 +551,14 @@ impl WhirModule {
             exp_bits_len_gen.add_requests(
                 preflight
                     .whir
-                    .pow_samples
+                    .folding_pow_samples
+                    .iter()
+                    .map(|pow_sample| (F::GENERATOR, *pow_sample, *folding_pow_bits)),
+            );
+            exp_bits_len_gen.add_requests(
+                preflight
+                    .whir
+                    .query_pow_samples
                     .iter()
                     .map(|pow_sample| (F::GENERATOR, *pow_sample, *query_phase_pow_bits)),
             );
