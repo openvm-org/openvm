@@ -6819,16 +6819,7 @@ dependencies = [
 name = "openvm-new-keccak256"
 version = "1.4.2"
 dependencies = [
- "eyre",
- "openvm-circuit",
- "openvm-instructions",
- "openvm-new-keccak256-circuit",
  "openvm-new-keccak256-guest",
- "openvm-new-keccak256-transpiler",
- "openvm-rv32im-transpiler",
- "openvm-stark-sdk",
- "openvm-toolchain-tests",
- "openvm-transpiler",
  "tiny-keccak",
 ]
 
