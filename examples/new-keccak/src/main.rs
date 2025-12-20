@@ -2,12 +2,13 @@
 // [!endregion imports]
 
 // [!region main]
+#[cfg(target_os = "zkvm")]
 use hex_literal::hex;
 use openvm as _;
-use revm_primitives::keccak256;
 
 /// Vector of test cases for Keccak-256 hash function.
 /// Each test case consists of (input_bytes, expected_hash_result).
+#[cfg(target_os = "zkvm")]
 const KECCAK_TEST_CASES: &[(&[u8], [u8; 32])] = &[
     (
         b"",
