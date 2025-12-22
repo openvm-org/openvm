@@ -643,9 +643,9 @@ where
 
     #[cfg(feature = "evm-prove")]
     pub fn halo2_pk(&self) -> &Halo2ProvingKey {
-        let (agg_pk, dummy_internal_proof) = self.agg_pk_and_dummy_internal_proof();
         // TODO[jpw]: use `get_or_try_init` once it is stable
         self.halo2_pk.get_or_init(|| {
+            let (agg_pk, dummy_internal_proof) = self.agg_pk_and_dummy_internal_proof();
             Halo2ProvingKey::keygen(
                 self.halo2_config,
                 self.halo2_params_reader(),
