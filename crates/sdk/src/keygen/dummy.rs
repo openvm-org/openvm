@@ -40,6 +40,7 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
+    config::DEFAULT_APP_LOG_BLOWUP,
     prover::vm::{new_local_prover, types::VmProvingKey},
     F, SC,
 };
@@ -118,17 +119,16 @@ pub(super) fn dummy_internal_proof_riscv_app_vm(
     internal_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
     internal_exe: Arc<VmCommittedExe<SC>>,
     num_public_values: usize,
-    app_fri_params: FriParameters,
 ) -> Result<Proof<SC>, VirtualMachineError> {
-    let leaf_proof = dummy_leaf_proof_riscv_app_vm(leaf_vm_pk, num_public_values, app_fri_params)?;
+    let leaf_proof = dummy_leaf_proof_riscv_app_vm(leaf_vm_pk, num_public_values)?;
     dummy_internal_proof(internal_vm_pk, internal_exe, leaf_proof)
 }
 
 pub(super) fn dummy_leaf_proof_riscv_app_vm(
     leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
     num_public_values: usize,
-    app_fri_params: FriParameters,
 ) -> Result<Proof<SC>, VirtualMachineError> {
+    let app_fri_params = FriParameters::standard_with_100_bits_security(DEFAULT_APP_LOG_BLOWUP);
     let app_vm_pk = Arc::new(dummy_riscv_app_vm_pk(num_public_values, app_fri_params)?);
     let app_proof = dummy_app_proof(Rv32ImCpuBuilder, app_vm_pk.clone())?;
     dummy_leaf_proof(leaf_vm_pk, app_vm_pk, &app_proof)

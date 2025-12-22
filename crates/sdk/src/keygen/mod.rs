@@ -360,7 +360,6 @@ impl AggProvingKey {
             internal_vm_pk.clone(),
             internal_committed_exe.clone(),
             config.max_num_user_public_values,
-            config.leaf_fri_params,
         )?;
 
         let root_verifier_pk = {
