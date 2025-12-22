@@ -9,9 +9,12 @@ fn main() {
         }
         let builder: CudaBuilder = CudaBuilder::new()
             .include_from_dep("DEP_CUDA_COMMON_INCLUDE")
+            .include("cuda/include")
             .include("../../../crates/circuits/primitives/cuda/include")
             .include("../../../crates/vm/cuda/include")
-            .include("cuda/include")
+            .watch("cuda")
+            .watch("../../../crates/circuits/primitives/cuda")
+            .watch("../../../crates/vm/cuda")
             .library_name("tracegen_gpu_sha2")
             .files_from_glob("cuda/src/*.cu");
 
