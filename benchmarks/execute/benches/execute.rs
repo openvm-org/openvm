@@ -47,8 +47,8 @@ use openvm_sdk::{
     commit::VmCommittedExe,
     config::{AggregationConfig, DEFAULT_NUM_CHILDREN_INTERNAL, DEFAULT_NUM_CHILDREN_LEAF},
 };
-use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha2CpuProverExt};
-use openvm_sha256_transpiler::Sha256TranspilerExtension;
+use openvm_sha2_circuit::{Sha2, Sha2CpuProverExt, Sha2Executor};
+use openvm_sha2_transpiler::Sha2TranspilerExtension;
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::{StarkEngine, StarkFriEngine},
@@ -144,7 +144,7 @@ pub struct ExecuteConfig {
     #[extension]
     pub keccak: Keccak256,
     #[extension]
-    pub sha256: Sha256,
+    pub sha2: Sha2,
     #[extension]
     pub modular: ModularExtension,
     #[extension]
@@ -165,7 +165,7 @@ impl Default for ExecuteConfig {
             io: Rv32Io,
             bigint: Int256::default(),
             keccak: Keccak256,
-            sha256: Sha256,
+            sha2: Sha2,
             modular: ModularExtension::new(vec![
                 bn_config.modulus.clone(),
                 bn_config.scalar.clone(),
@@ -225,7 +225,7 @@ where
             &config.keccak,
             inventory,
         )?;
-        VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, &config.sha256, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, &config.sha2, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
             &AlgebraCpuProverExt,
             &config.modular,
@@ -253,7 +253,7 @@ fn create_default_transpiler() -> Transpiler<BabyBear> {
         .with_extension(Rv32MTranspilerExtension)
         .with_extension(Int256TranspilerExtension)
         .with_extension(Keccak256TranspilerExtension)
-        .with_extension(Sha256TranspilerExtension)
+        .with_extension(Sha2TranspilerExtension)
         .with_extension(ModularTranspilerExtension)
         .with_extension(Fp2TranspilerExtension)
         .with_extension(EccTranspilerExtension)
