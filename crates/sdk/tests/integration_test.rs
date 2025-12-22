@@ -140,7 +140,9 @@ fn small_test_app_config(app_log_blowup: usize) -> AppConfig<SdkVmConfig> {
     AppConfig {
         app_fri_params: FriParameters::new_for_testing(app_log_blowup).into(),
         app_vm_config: app_vm_config_for_test(),
-        leaf_fri_params: FriParameters::new_for_testing(LEAF_LOG_BLOWUP).into(),
+        // Don't use trivial leaf FRI parameters as it can cause the Root fixed heights to be too
+        // small
+        leaf_fri_params: FriParameters::standard_with_100_bits_security(LEAF_LOG_BLOWUP).into(),
         compiler_options: CompilerOptions {
             enable_cycle_tracker: true,
             ..Default::default()
@@ -372,9 +374,6 @@ fn test_static_verifier_custom_pv_handler() -> eyre::Result<()> {
     println!("test setup");
     let app_log_blowup = 1;
     let mut app_config = small_test_app_config(app_log_blowup);
-    // Don't use trivial leaf params as that makes the root fixed heights too small
-    app_config.leaf_fri_params =
-        FriParameters::standard_with_100_bits_security(LEAF_LOG_BLOWUP).into();
     println!("app_config: {:?}", app_config.app_vm_config);
     let sdk = Sdk::new(app_config)?;
     let app_exe = app_exe_for_test();
