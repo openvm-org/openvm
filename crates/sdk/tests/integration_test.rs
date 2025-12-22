@@ -371,7 +371,10 @@ fn test_static_verifier_custom_pv_handler() -> eyre::Result<()> {
     // Test setup
     println!("test setup");
     let app_log_blowup = 1;
-    let app_config = small_test_app_config(app_log_blowup);
+    let mut app_config = small_test_app_config(app_log_blowup);
+    // Don't use trivial leaf params as that makes the root fixed heights too small
+    app_config.leaf_fri_params =
+        FriParameters::standard_with_100_bits_security(LEAF_LOG_BLOWUP).into();
     println!("app_config: {:?}", app_config.app_vm_config);
     let sdk = Sdk::new(app_config)?;
     let app_exe = app_exe_for_test();
