@@ -33,7 +33,6 @@ use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
         baby_bear_poseidon2_root::{BabyBearPoseidon2RootConfig, BabyBearPoseidon2RootEngine},
-        fri_params::standard_fri_params_with_100_bits_conjectured_security,
         FriParameters,
     },
     engine::StarkFriEngine,
@@ -41,6 +40,7 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
+    config::DEFAULT_APP_LOG_BLOWUP,
     prover::vm::{new_local_prover, types::VmProvingKey},
     F, SC,
 };
@@ -120,16 +120,15 @@ pub(super) fn dummy_internal_proof_riscv_app_vm(
     internal_exe: Arc<VmCommittedExe<SC>>,
     num_public_values: usize,
 ) -> Result<Proof<SC>, VirtualMachineError> {
-    let fri_params = standard_fri_params_with_100_bits_conjectured_security(1);
-    let leaf_proof = dummy_leaf_proof_riscv_app_vm(leaf_vm_pk, num_public_values, fri_params)?;
+    let leaf_proof = dummy_leaf_proof_riscv_app_vm(leaf_vm_pk, num_public_values)?;
     dummy_internal_proof(internal_vm_pk, internal_exe, leaf_proof)
 }
 
 pub(super) fn dummy_leaf_proof_riscv_app_vm(
     leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
     num_public_values: usize,
-    app_fri_params: FriParameters,
 ) -> Result<Proof<SC>, VirtualMachineError> {
+    let app_fri_params = FriParameters::standard_with_100_bits_security(DEFAULT_APP_LOG_BLOWUP);
     let app_vm_pk = Arc::new(dummy_riscv_app_vm_pk(num_public_values, app_fri_params)?);
     let app_proof = dummy_app_proof(Rv32ImCpuBuilder, app_vm_pk.clone())?;
     dummy_leaf_proof(leaf_vm_pk, app_vm_pk, &app_proof)
@@ -190,7 +189,8 @@ fn dummy_app_proof<VB, VC>(
 where
     VB: VmBuilder<BabyBearPoseidon2Engine, VmConfig = VC, RecordArena = MatrixRecordArena<F>>,
     VC: VmExecutionConfig<F>,
-    <VC as VmExecutionConfig<F>>::Executor: Executor<F> + MeteredExecutor<F> + PreflightExecutor<F>,
+    <VC as VmExecutionConfig<F>>::Executor:
+        Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, MatrixRecordArena<F>>,
 {
     let dummy_exe = Arc::new(VmExe::new(dummy_app_program()));
     let mut app_prover =

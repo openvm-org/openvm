@@ -52,8 +52,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Config,
-        fri_params::standard_fri_params_with_100_bits_conjectured_security, setup_tracing,
-        FriParameters,
+        fri_params::standard_fri_params_with_100_bits_security, setup_tracing, FriParameters,
     },
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
@@ -182,7 +181,7 @@ fn test_vm_1_optional_air() -> eyre::Result<()> {
     // Aggregation VmConfig has Core/Poseidon2/FieldArithmetic/FieldExtension chips. The program
     // only uses Core and FieldArithmetic. All other chips should not have AIR proof inputs.
     let config = NativeConfig::aggregation(4, 3);
-    let engine = TestEngine::new(standard_fri_params_with_100_bits_conjectured_security(3));
+    let engine = TestEngine::new(standard_fri_params_with_100_bits_security(3));
     let (vm, pk) = VirtualMachine::new_with_keygen(engine, NativeBuilder::default(), config)?;
     let num_airs = pk.per_air.len();
 
@@ -217,7 +216,7 @@ fn test_vm_public_values() -> eyre::Result<()> {
     let num_public_values = 100;
     let config = test_system_config_without_continuations().with_public_values(num_public_values);
     assert!(!config.continuation_enabled);
-    let engine = TestEngine::new(standard_fri_params_with_100_bits_conjectured_security(3));
+    let engine = TestEngine::new(standard_fri_params_with_100_bits_security(3));
     let (vm, pk) = VirtualMachine::new_with_keygen(engine, SystemBuilder, config)?;
 
     let instructions = vec![
