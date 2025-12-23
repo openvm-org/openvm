@@ -191,4 +191,241 @@ impl MetricDb {
 
         markdown_output
     }
+
+    /// Aggregate trace dimension metrics by (group, idx/segment), then by group.
+    ///
+    /// For each (group, idx/segment) pair, computes:
+    /// - sum of main_cols
+    /// - sum of perm_cols
+    /// - total_cols = main_cols + 4 * perm_cols
+    /// - max rows
+    /// - sum of cells
+    ///
+    /// Then for each group, aggregates over all idx/segment values to get avg/max/sum.
+    pub fn aggregate_trace_dimensions(&self) -> TraceDimensionAggregates {
+        // First pass: group by (group, idx_or_segment) and aggregate metrics
+        // We use either "idx" or "segment" as the second grouping key
+        let mut by_group_idx: HashMap<(String, String), TraceDimGroupIdxStats> = HashMap::new();
+
+        for (labels, metrics) in &self.flat_dict {
+            let group = labels.get("group");
+            // Use idx if present, otherwise use segment
+            let idx_or_segment = labels.get("idx").or_else(|| labels.get("segment"));
+
+            // Only process entries that have both group and idx/segment labels
+            if let (Some(group), Some(idx)) = (group, idx_or_segment) {
+                let key = (group.to_string(), idx.to_string());
+                let entry = by_group_idx.entry(key).or_default();
+
+                for metric in metrics {
+                    match metric.name.as_str() {
+                        "main_cols" => entry.main_cols_sum += metric.value,
+                        "perm_cols" => entry.perm_cols_sum += metric.value,
+                        "rows" => {
+                            if metric.value > entry.rows_max {
+                                entry.rows_max = metric.value;
+                            }
+                        }
+                        "cells" => entry.cells_sum += metric.value,
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        // Calculate total_cols for each (group, idx) pair
+        for stats in by_group_idx.values_mut() {
+            stats.total_cols = stats.main_cols_sum + 4.0 * stats.perm_cols_sum;
+        }
+
+        // Second pass: group by group and aggregate over all idx values
+        let mut by_group: HashMap<String, TraceDimGroupStats> = HashMap::new();
+
+        for ((group, _idx), stats) in &by_group_idx {
+            let entry = by_group.entry(group.clone()).or_default();
+            entry.push(stats);
+        }
+
+        // Finalize the group stats
+        for stats in by_group.values_mut() {
+            stats.finalize();
+        }
+
+        TraceDimensionAggregates {
+            by_group_idx,
+            by_group,
+        }
+    }
+
+    pub fn generate_trace_dimension_tables(&self) -> String {
+        let aggregates = self.aggregate_trace_dimensions();
+
+        if aggregates.by_group_idx.is_empty() {
+            return String::new();
+        }
+
+        let mut output = String::new();
+
+        // Table 1: Per (group, idx/segment) aggregates
+        output.push_str("### Trace Dimensions by (group, idx/segment)\n\n");
+        output.push_str("| group | idx/segment | main_cols | perm_cols | total_cols | rows | cells |\n");
+        output.push_str("| --- | --- | --- | --- | --- | --- | --- |\n");
+
+        // Sort by group, then by idx (numerically if possible)
+        let mut sorted_keys: Vec<_> = aggregates.by_group_idx.keys().collect();
+        sorted_keys.sort_by(|a, b| {
+            let group_cmp = a.0.cmp(&b.0);
+            if group_cmp != std::cmp::Ordering::Equal {
+                return group_cmp;
+            }
+            // Try to sort idx numerically
+            match (a.1.parse::<i64>(), b.1.parse::<i64>()) {
+                (Ok(a_idx), Ok(b_idx)) => a_idx.cmp(&b_idx),
+                _ => a.1.cmp(&b.1),
+            }
+        });
+
+        for key in sorted_keys {
+            let stats = &aggregates.by_group_idx[key];
+            output.push_str(&format!(
+                "| {} | {} | {} | {} | {} | {} | {} |\n",
+                key.0,
+                key.1,
+                Self::format_number(stats.main_cols_sum),
+                Self::format_number(stats.perm_cols_sum),
+                Self::format_number(stats.total_cols),
+                Self::format_number(stats.rows_max),
+                Self::format_number(stats.cells_sum),
+            ));
+        }
+        output.push('\n');
+
+        // Table 2: Per group aggregates (avg, max, sum over all idx/segment)
+        output.push_str("### Trace Dimensions by group (aggregated over idx/segment)\n\n");
+        output.push_str("| group | metric | avg | max | sum |\n");
+        output.push_str("| --- | --- | --- | --- | --- |\n");
+
+        // Sort groups
+        let mut sorted_groups: Vec<_> = aggregates.by_group.keys().collect();
+        sorted_groups.sort();
+
+        for group in sorted_groups {
+            let stats = &aggregates.by_group[group];
+            // main_cols
+            output.push_str(&format!(
+                "| {} | main_cols | {} | {} | {} |\n",
+                group,
+                Self::format_number(stats.main_cols.avg),
+                Self::format_number(stats.main_cols.max),
+                Self::format_number(stats.main_cols.sum),
+            ));
+            // perm_cols
+            output.push_str(&format!(
+                "| {} | perm_cols | {} | {} | {} |\n",
+                group,
+                Self::format_number(stats.perm_cols.avg),
+                Self::format_number(stats.perm_cols.max),
+                Self::format_number(stats.perm_cols.sum),
+            ));
+            // total_cols
+            output.push_str(&format!(
+                "| {} | total_cols | {} | {} | {} |\n",
+                group,
+                Self::format_number(stats.total_cols.avg),
+                Self::format_number(stats.total_cols.max),
+                Self::format_number(stats.total_cols.sum),
+            ));
+            // rows
+            output.push_str(&format!(
+                "| {} | rows | {} | {} | {} |\n",
+                group,
+                Self::format_number(stats.rows.avg),
+                Self::format_number(stats.rows.max),
+                Self::format_number(stats.rows.sum),
+            ));
+            // cells
+            output.push_str(&format!(
+                "| {} | cells | {} | {} | {} |\n",
+                group,
+                Self::format_number(stats.cells.avg),
+                Self::format_number(stats.cells.max),
+                Self::format_number(stats.cells.sum),
+            ));
+        }
+        output.push('\n');
+
+        output
+    }
+}
+
+/// Statistics for a single (group, idx) pair
+#[derive(Debug, Clone, Default)]
+pub struct TraceDimGroupIdxStats {
+    pub main_cols_sum: f64,
+    pub perm_cols_sum: f64,
+    pub total_cols: f64, // main_cols + 4 * perm_cols
+    pub rows_max: f64,
+    pub cells_sum: f64,
+}
+
+/// Aggregate statistics (avg, max, sum) for a metric
+#[derive(Debug, Clone, Default)]
+pub struct MetricAggregate {
+    pub avg: f64,
+    pub max: f64,
+    pub sum: f64,
+    count: usize,
+}
+
+impl MetricAggregate {
+    fn push(&mut self, value: f64) {
+        self.sum += value;
+        self.count += 1;
+        if value > self.max {
+            self.max = value;
+        }
+    }
+
+    fn finalize(&mut self) {
+        if self.count > 0 {
+            self.avg = self.sum / self.count as f64;
+        }
+    }
+}
+
+/// Statistics for a group (aggregated over all idx values)
+#[derive(Debug, Clone, Default)]
+pub struct TraceDimGroupStats {
+    pub main_cols: MetricAggregate,
+    pub perm_cols: MetricAggregate,
+    pub total_cols: MetricAggregate,
+    pub rows: MetricAggregate,
+    pub cells: MetricAggregate,
+}
+
+impl TraceDimGroupStats {
+    fn push(&mut self, stats: &TraceDimGroupIdxStats) {
+        self.main_cols.push(stats.main_cols_sum);
+        self.perm_cols.push(stats.perm_cols_sum);
+        self.total_cols.push(stats.total_cols);
+        self.rows.push(stats.rows_max);
+        self.cells.push(stats.cells_sum);
+    }
+
+    fn finalize(&mut self) {
+        self.main_cols.finalize();
+        self.perm_cols.finalize();
+        self.total_cols.finalize();
+        self.rows.finalize();
+        self.cells.finalize();
+    }
+}
+
+/// Container for all trace dimension aggregates
+#[derive(Debug, Clone, Default)]
+pub struct TraceDimensionAggregates {
+    /// Stats per (group, idx) pair
+    pub by_group_idx: HashMap<(String, String), TraceDimGroupIdxStats>,
+    /// Stats per group (aggregated over all idx)
+    pub by_group: HashMap<String, TraceDimGroupStats>,
 }

@@ -107,6 +107,15 @@ fn main() -> Result<()> {
 
         let mut markdown_output = String::from_utf8(writer)?;
 
+        // Add trace dimension aggregates
+        let trace_dim_tables = db.generate_trace_dimension_tables();
+        if !trace_dim_tables.is_empty() {
+            markdown_output
+                .push_str("\n<details>\n<summary>Trace Dimension Aggregates</summary>\n\n");
+            markdown_output.push_str(&trace_dim_tables);
+            markdown_output.push_str("</details>\n\n");
+        }
+
         // TODO: calculate diffs for detailed metrics
         // Add detailed metrics in a collapsible section
         markdown_output.push_str("\n<details>\n<summary>Detailed Metrics</summary>\n\n");
