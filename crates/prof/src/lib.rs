@@ -139,6 +139,15 @@ impl MetricDb {
                 // flamegraphs
                 continue;
             }
+            // Skip wide tables with group + block_number that have too many metrics
+            if label_keys.contains(&"group".to_string())
+                && label_keys.contains(&"block_number".to_string())
+                && !label_keys.contains(&"idx".to_string())
+                && !label_keys.contains(&"segment".to_string())
+                && !label_keys.contains(&"air_id".to_string())
+            {
+                continue;
+            }
             let metrics_dict = &self.dict_by_label_types[&label_keys];
             let mut metric_names: Vec<String> = metrics_dict
                 .values()
@@ -227,6 +236,16 @@ impl MetricDb {
                             }
                         }
                         "cells" => entry.cells_sum += metric.value,
+                        "total_constraint_count" => {
+                            if metric.value > entry.total_constraint_count {
+                                entry.total_constraint_count = metric.value;
+                            }
+                        }
+                        "batch_size" => {
+                            if metric.value > entry.batch_size {
+                                entry.batch_size = metric.value;
+                            }
+                        }
                         _ => {}
                     }
                 }
@@ -327,17 +346,34 @@ impl MetricDb {
         }
         output.push('\n');
 
-        // Table 2: Per group aggregates (avg, max, sum over all idx/segment)
-        output.push_str("### Trace Dimensions by group (aggregated over idx/segment)\n\n");
-        output.push_str("| group | metric | avg | max | sum |\n");
-        output.push_str("| --- | --- | --- | --- | --- |\n");
-
         // Sort groups
         let mut sorted_groups: Vec<_> = aggregates.by_group.keys().collect();
         sorted_groups.sort();
 
-        for group in sorted_groups {
-            let stats = &aggregates.by_group[group];
+        // Table 2a: Max total_constraint_count and batch_size per group
+        output.push_str("### Constraint Count and Batch Size by group\n\n");
+        output.push_str("| group | max(total_constraint_count) | max(batch_size) |\n");
+        output.push_str("| --- | --- | --- |\n");
+        for group in &sorted_groups {
+            let stats = &aggregates.by_group[*group];
+            if stats.total_constraint_count_max > 0.0 || stats.batch_size_max > 0.0 {
+                output.push_str(&format!(
+                    "| {} | {} | {} |\n",
+                    group,
+                    Self::format_number(stats.total_constraint_count_max),
+                    Self::format_number(stats.batch_size_max),
+                ));
+            }
+        }
+        output.push('\n');
+
+        // Table 2b: Per group aggregates (avg, max, sum over all idx/segment)
+        output.push_str("### Trace Dimensions by group (aggregated over idx/segment)\n\n");
+        output.push_str("| group | metric | avg | max | sum |\n");
+        output.push_str("| --- | --- | --- | --- | --- |\n");
+
+        for group in &sorted_groups {
+            let stats = &aggregates.by_group[*group];
             // main_cols
             output.push_str(&format!(
                 "| {} | main_cols | {} | {} | {} |\n",
@@ -425,6 +461,8 @@ pub struct TraceDimGroupIdxStats {
     pub total_cols: f64, // main_cols + 4 * perm_cols
     pub rows_max: f64,
     pub cells_sum: f64,
+    pub total_constraint_count: f64,
+    pub batch_size: f64,
 }
 
 /// Statistics for a single (group, air_id) pair
@@ -467,6 +505,8 @@ pub struct TraceDimGroupStats {
     pub total_cols: MetricAggregate,
     pub rows: MetricAggregate,
     pub cells: MetricAggregate,
+    pub total_constraint_count_max: f64,
+    pub batch_size_max: f64,
 }
 
 impl TraceDimGroupStats {
@@ -476,6 +516,12 @@ impl TraceDimGroupStats {
         self.total_cols.push(stats.total_cols);
         self.rows.push(stats.rows_max);
         self.cells.push(stats.cells_sum);
+        if stats.total_constraint_count > self.total_constraint_count_max {
+            self.total_constraint_count_max = stats.total_constraint_count;
+        }
+        if stats.batch_size > self.batch_size_max {
+            self.batch_size_max = stats.batch_size;
+        }
     }
 
     fn finalize(&mut self) {
