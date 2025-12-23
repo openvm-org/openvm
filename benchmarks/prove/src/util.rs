@@ -99,15 +99,9 @@ impl BenchmarkCli {
             app_vm_config.as_mut().segmentation_limits.max_cells = max_cells;
         }
         AppConfig {
-            app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
-                app_log_blowup,
-            )
-            .into(),
+            app_fri_params: FriParameters::standard_with_100_bits_security(app_log_blowup).into(),
             app_vm_config,
-            leaf_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
-                leaf_log_blowup,
-            )
-            .into(),
+            leaf_fri_params: FriParameters::standard_with_100_bits_security(leaf_log_blowup).into(),
             compiler_options: CompilerOptions {
                 enable_cycle_tracker: self.profiling,
                 ..Default::default()
@@ -124,7 +118,7 @@ impl BenchmarkCli {
 
         let [leaf_fri_params, internal_fri_params, root_fri_params] =
             [leaf_log_blowup, internal_log_blowup, root_log_blowup]
-                .map(FriParameters::standard_with_100_bits_conjectured_security);
+                .map(FriParameters::standard_with_100_bits_security);
 
         AggregationConfig {
             leaf_fri_params,
