@@ -137,12 +137,11 @@ fn app_vm_config_for_test() -> SdkVmConfig {
 }
 
 fn small_test_app_config(app_log_blowup: usize) -> AppConfig<SdkVmConfig> {
+    let leaf_fri_params = FriParameters::new_for_testing(LEAF_LOG_BLOWUP);
     AppConfig {
         app_fri_params: FriParameters::new_for_testing(app_log_blowup).into(),
         app_vm_config: app_vm_config_for_test(),
-        // Don't use trivial leaf FRI parameters as it can cause the Root fixed heights to be too
-        // small
-        leaf_fri_params: FriParameters::standard_with_100_bits_security(LEAF_LOG_BLOWUP).into(),
+        leaf_fri_params: leaf_fri_params.into(),
         compiler_options: CompilerOptions {
             enable_cycle_tracker: true,
             ..Default::default()
@@ -375,7 +374,7 @@ fn test_static_verifier_custom_pv_handler() -> eyre::Result<()> {
     let app_log_blowup = 1;
     let app_config = small_test_app_config(app_log_blowup);
     println!("app_config: {:?}", app_config.app_vm_config);
-    let sdk = Sdk::new(app_config)?;
+    let sdk = Sdk::new(app_config)?.with_agg_config(agg_config_for_test());
     let app_exe = app_exe_for_test();
 
     // Generate PK using custom PV handler
@@ -423,7 +422,7 @@ fn test_static_verifier_custom_pv_handler() -> eyre::Result<()> {
 fn test_e2e_proof_generation_and_verification_with_pvs() -> eyre::Result<()> {
     let app_log_blowup = 1;
     let app_config = small_test_app_config(app_log_blowup);
-    let sdk = Sdk::new(app_config)?;
+    let sdk = Sdk::new(app_config)?.with_agg_config(agg_config_for_test());
 
     let evm_verifier = sdk.generate_halo2_verifier_solidity()?;
     let evm_proof = sdk.prove_evm(app_exe_for_test(), StdIn::default())?;
