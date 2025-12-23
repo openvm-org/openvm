@@ -6323,7 +6323,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "1.2.2"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v1.3.0#40e0be820e8b889e00b67f7a679f1ec3480b7c84"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v1.3.0#222e5df31a0cc5cf5e95082da4fd463c87d2c048"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -6355,7 +6355,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "1.2.2"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v1.3.0#40e0be820e8b889e00b67f7a679f1ec3480b7c84"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v1.3.0#222e5df31a0cc5cf5e95082da4fd463c87d2c048"
 dependencies = [
  "cc",
  "glob",
@@ -6364,7 +6364,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "1.2.2"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v1.3.0#40e0be820e8b889e00b67f7a679f1ec3480b7c84"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v1.3.0#222e5df31a0cc5cf5e95082da4fd463c87d2c048"
 dependencies = [
  "bytesize",
  "ctor",
@@ -7116,7 +7116,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.2.2"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v1.3.0#40e0be820e8b889e00b67f7a679f1ec3480b7c84"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v1.3.0#222e5df31a0cc5cf5e95082da4fd463c87d2c048"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -7146,7 +7146,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.2.2"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v1.3.0#40e0be820e8b889e00b67f7a679f1ec3480b7c84"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v1.3.0#222e5df31a0cc5cf5e95082da4fd463c87d2c048"
 dependencies = [
  "dashmap",
  "derivative",
@@ -9991,7 +9991,7 @@ dependencies = [
  "derive_more 2.0.1",
  "dunce",
  "inturn",
- "itertools 0.10.5",
+ "itertools 0.11.0",
  "itoa",
  "normalize-path",
  "once_map",
@@ -10002,7 +10002,7 @@ dependencies = [
  "solar-config",
  "solar-data-structures",
  "solar-macros",
- "thiserror 1.0.69",
+ "thiserror 2.0.15",
  "tracing",
  "unicode-width 0.2.2",
 ]
@@ -10027,7 +10027,7 @@ dependencies = [
  "alloy-primitives",
  "bitflags",
  "bumpalo",
- "itertools 0.10.5",
+ "itertools 0.11.0",
  "memchr",
  "num-bigint 0.4.6",
  "num-rational",
@@ -10360,7 +10360,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.15",
  "url",
  "zip",
 ]
