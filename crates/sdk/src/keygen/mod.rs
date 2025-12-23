@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use derivative::Derivative;
-// use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use openvm_circuit::{
     arch::{AirInventoryError, SystemConfig, VirtualMachine, VirtualMachineError, VmCircuitConfig},
     system::memory::dimensions::MemoryDimensions,
