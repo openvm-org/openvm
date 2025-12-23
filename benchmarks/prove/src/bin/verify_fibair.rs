@@ -37,7 +37,7 @@ fn main() -> Result<()> {
 
     let n = 1 << 15; // STARK to calculate (2 ** 15)th Fibonacci number.
     let fib_chip = FibonacciChip::new(0, 1, n);
-    let engine = Poseidon2Engine::new(FriParameters::standard_with_100_bits_conjectured_security(
+    let engine = Poseidon2Engine::new(FriParameters::standard_with_100_bits_security(
         app_log_blowup,
     ));
 
@@ -52,8 +52,7 @@ fn main() -> Result<()> {
         let fib_ctx = fib_ctx.into_iter().map(cpu_proving_ctx_to_gpu).collect();
         let vdata = engine.run_test(fib_air, fib_ctx).unwrap();
         // Unlike other apps, this "app" does not have continuations enabled.
-        let app_fri_params =
-            FriParameters::standard_with_100_bits_conjectured_security(leaf_log_blowup);
+        let app_fri_params = FriParameters::standard_with_100_bits_security(leaf_log_blowup);
         let mut app_vm_config = NativeConfig::aggregation(
             DEFAULT_MAX_NUM_PUBLIC_VALUES,
             app_fri_params.max_constraint_degree().min(7),

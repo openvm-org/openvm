@@ -7,7 +7,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        fri_params::standard_fri_params_with_100_bits_conjectured_security,
+        fri_params::standard_fri_params_with_100_bits_security,
     },
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
@@ -41,7 +41,7 @@ fn run_poseidon2_subchip_test(subchip: Arc<Poseidon2SubChip<BabyBear, 0>>, rng: 
         .collect();
     let mut poseidon2_trace = subchip.generate_trace(states.clone());
 
-    let fri_params = standard_fri_params_with_100_bits_conjectured_security(3); // max constraint degree = 7 requires log blowup = 3
+    let fri_params = standard_fri_params_with_100_bits_security(3); // max constraint degree = 7 requires log blowup = 3
     let engine = BabyBearPoseidon2Engine::new(fri_params);
 
     // positive test
