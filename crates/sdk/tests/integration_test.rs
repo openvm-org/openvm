@@ -373,7 +373,7 @@ fn test_static_verifier_custom_pv_handler() -> eyre::Result<()> {
     // Test setup
     println!("test setup");
     let app_log_blowup = 1;
-    let mut app_config = small_test_app_config(app_log_blowup);
+    let app_config = small_test_app_config(app_log_blowup);
     println!("app_config: {:?}", app_config.app_vm_config);
     let sdk = Sdk::new(app_config)?;
     let app_exe = app_exe_for_test();
@@ -423,8 +423,7 @@ fn test_static_verifier_custom_pv_handler() -> eyre::Result<()> {
 fn test_e2e_proof_generation_and_verification_with_pvs() -> eyre::Result<()> {
     let app_log_blowup = 1;
     let app_config = small_test_app_config(app_log_blowup);
-    let mut sdk = Sdk::new(app_config)?;
-    sdk.agg_config_mut().leaf_fri_params = FriParameters::new_for_testing(LEAF_LOG_BLOWUP);
+    let sdk = Sdk::new(app_config)?;
 
     let evm_verifier = sdk.generate_halo2_verifier_solidity()?;
     let evm_proof = sdk.prove_evm(app_exe_for_test(), StdIn::default())?;
