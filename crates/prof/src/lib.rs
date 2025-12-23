@@ -251,9 +251,36 @@ impl MetricDb {
             stats.finalize();
         }
 
+        // Third pass: group by (group, air_id) and sum cells over all idx/segment
+        let mut by_group_air: HashMap<(String, String), TraceDimAirStats> = HashMap::new();
+
+        for (labels, metrics) in &self.flat_dict {
+            let group = labels.get("group");
+            let air_id = labels.get("air_id");
+            let air_name = labels.get("air_name");
+
+            // Only process entries that have group, air_id, and air_name labels
+            if let (Some(group), Some(air_id), Some(air_name)) = (group, air_id, air_name) {
+                let key = (group.to_string(), air_id.to_string());
+                let entry = by_group_air.entry(key).or_default();
+
+                // Set air_name (should be consistent for same air_id)
+                if entry.air_name.is_empty() {
+                    entry.air_name = air_name.to_string();
+                }
+
+                for metric in metrics {
+                    if metric.name == "cells" {
+                        entry.cells_sum += metric.value;
+                    }
+                }
+            }
+        }
+
         TraceDimensionAggregates {
             by_group_idx,
             by_group,
+            by_group_air,
         }
     }
 
@@ -354,6 +381,38 @@ impl MetricDb {
         }
         output.push('\n');
 
+        // Table 3: Per (group, air_id) - cells summed over all idx/segment
+        output.push_str("### Cells by (group, air_id)\n\n");
+        output.push_str("| group | air_id | air_name | cells |\n");
+        output.push_str("| --- | --- | --- | --- |\n");
+
+        // Sort by group, then by cells descending
+        let mut sorted_air_keys: Vec<_> = aggregates.by_group_air.keys().collect();
+        sorted_air_keys.sort_by(|a, b| {
+            let group_cmp = a.0.cmp(&b.0);
+            if group_cmp != std::cmp::Ordering::Equal {
+                return group_cmp;
+            }
+            // Sort by cells descending within each group
+            let a_cells = aggregates.by_group_air[*a].cells_sum;
+            let b_cells = aggregates.by_group_air[*b].cells_sum;
+            b_cells
+                .partial_cmp(&a_cells)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        for key in sorted_air_keys {
+            let stats = &aggregates.by_group_air[key];
+            output.push_str(&format!(
+                "| {} | {} | {} | {} |\n",
+                key.0,
+                key.1,
+                stats.air_name,
+                Self::format_number(stats.cells_sum),
+            ));
+        }
+        output.push('\n');
+
         output
     }
 }
@@ -365,6 +424,13 @@ pub struct TraceDimGroupIdxStats {
     pub perm_cols_sum: f64,
     pub total_cols: f64, // main_cols + 4 * perm_cols
     pub rows_max: f64,
+    pub cells_sum: f64,
+}
+
+/// Statistics for a single (group, air_id) pair
+#[derive(Debug, Clone, Default)]
+pub struct TraceDimAirStats {
+    pub air_name: String,
     pub cells_sum: f64,
 }
 
@@ -424,8 +490,10 @@ impl TraceDimGroupStats {
 /// Container for all trace dimension aggregates
 #[derive(Debug, Clone, Default)]
 pub struct TraceDimensionAggregates {
-    /// Stats per (group, idx) pair
+    /// Stats per (group, idx/segment) pair
     pub by_group_idx: HashMap<(String, String), TraceDimGroupIdxStats>,
-    /// Stats per group (aggregated over all idx)
+    /// Stats per group (aggregated over all idx/segment)
     pub by_group: HashMap<String, TraceDimGroupStats>,
+    /// Stats per (group, air_id) - cells summed over all idx/segment
+    pub by_group_air: HashMap<(String, String), TraceDimAirStats>,
 }
