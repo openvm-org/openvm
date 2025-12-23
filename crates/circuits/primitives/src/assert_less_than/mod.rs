@@ -3,7 +3,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::AirBuilder,
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, PrimeCharacteristicRing},
 };
 
 use crate::{
@@ -109,7 +109,7 @@ impl AssertLtSubAir {
     /// Constraints between `io` and `aux` are only enforced when `count != 0`.
     /// This means `aux` can be all zero independent on what `io` is by setting `count = 0`.
     #[inline(always)]
-    fn eval_without_range_checks<AB: AirBuilder>(
+    fn eval_without_range_checks<AB: AirBuilder<Var: Copy>>(
         &self,
         builder: &mut AB,
         io: AssertLessThanIo<AB::Expr>,
@@ -127,7 +127,7 @@ impl AssertLtSubAir {
             .iter()
             .enumerate()
             .fold(AB::Expr::ZERO, |acc, (i, &val)| {
-                acc + val * AB::Expr::from_canonical_usize(1 << (i * self.range_max_bits()))
+                acc + val * AB::Expr::from_usize(1 << (i * self.range_max_bits()))
             });
 
         // constrain that y - x - 1 is equal to the constructed lower value.

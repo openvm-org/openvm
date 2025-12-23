@@ -18,7 +18,7 @@ on:
       machine_type:
         description: "Runner machine type (e.g. test-gpu-nvidia/cpu=8+32)"
         required: false
-        default: test-gpu-nvidia/family=g6+g5+g6e
+        default: test-gpu-nvidia/family=g6+g6e
 
 concurrency:
   group: ${{ github.workflow_ref }}-extension-tests-cuda-${{ github.event.pull_request.number || github.sha }}

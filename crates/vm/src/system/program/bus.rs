@@ -2,7 +2,7 @@ use std::iter;
 
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, LookupBus},
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
 };
 
 #[derive(Debug, Clone, Copy)]

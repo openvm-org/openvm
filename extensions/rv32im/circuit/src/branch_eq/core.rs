@@ -11,7 +11,7 @@ use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 use strum::IntoEnumIterator;
@@ -103,13 +103,13 @@ where
             .iter()
             .zip(BranchEqualOpcode::iter())
             .fold(AB::Expr::ZERO, |acc, (flag, opcode)| {
-                acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
+                acc + (*flag).into() * AB::Expr::from_u8(opcode as u8)
             })
-            + AB::Expr::from_canonical_usize(self.offset);
+            + AB::Expr::from_usize(self.offset);
 
         let to_pc = from_pc
             + cols.cmp_result * cols.imm
-            + not(cols.cmp_result) * AB::Expr::from_canonical_u32(self.pc_step);
+            + not(cols.cmp_result) * AB::Expr::from_u32(self.pc_step);
 
         AdapterAirContext {
             to_pc: Some(to_pc),
@@ -194,7 +194,7 @@ where
         core_record.local_opcode = branch_eq_opcode as u8;
 
         if fast_run_eq(branch_eq_opcode, &rs1, &rs2) {
-            *state.pc = (F::from_canonical_u32(*state.pc) + imm).as_canonical_u32();
+            *state.pc = (F::from_u32(*state.pc) + imm).as_canonical_u32();
         } else {
             *state.pc = state.pc.wrapping_add(self.pc_step);
         }
@@ -232,11 +232,11 @@ where
         core_row.opcode_beq_flag =
             F::from_bool(record.local_opcode == BranchEqualOpcode::BEQ as u8);
 
-        core_row.imm = F::from_canonical_u32(record.imm);
+        core_row.imm = F::from_u32(record.imm);
         core_row.cmp_result = F::from_bool(cmp_result);
 
-        core_row.b = record.b.map(F::from_canonical_u8);
-        core_row.a = record.a.map(F::from_canonical_u8);
+        core_row.b = record.b.map(F::from_u8);
+        core_row.a = record.a.map(F::from_u8);
     }
 }
 
@@ -265,11 +265,7 @@ where
 {
     for i in 0..NUM_LIMBS {
         if x[i] != y[i] {
-            return (
-                !is_beq,
-                i,
-                (F::from_canonical_u8(x[i]) - F::from_canonical_u8(y[i])).inverse(),
-            );
+            return (!is_beq, i, (F::from_u8(x[i]) - F::from_u8(y[i])).inverse());
         }
     }
     (is_beq, 0, F::ZERO)

@@ -4,7 +4,7 @@ use openvm_algebra_circuit::{Rv32ModularConfig, Rv32ModularConfigExecutor, Rv32M
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, SystemConfig,
-        VmBuilder, VmChipComplex, VmProverExtension,
+        VmBuilder, VmChipComplex, VmField, VmProverExtension,
     },
     system::SystemChipInventory,
 };
@@ -12,7 +12,6 @@ use openvm_circuit_derive::VmConfig;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::StarkEngine,
-    p3_field::PrimeField32,
     prover::cpu::{CpuBackend, CpuDevice},
 };
 use serde::{Deserialize, Serialize};
@@ -77,7 +76,7 @@ impl<E, SC> VmBuilder<E> for Rv32WeierstrassCpuBuilder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<SC>: PrimeField32,
+    Val<SC>: VmField,
 {
     type VmConfig = Rv32WeierstrassConfig;
     type SystemChipInventory = SystemChipInventory<SC>;

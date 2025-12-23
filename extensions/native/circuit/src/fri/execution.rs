@@ -217,14 +217,14 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     let mut as_and_bs = Vec::with_capacity(length);
     #[allow(clippy::needless_range_loop)]
     for i in 0..length {
-        let a_ptr_i = (a_ptr + F::from_canonical_usize(i)).as_canonical_u32();
+        let a_ptr_i = (a_ptr + F::from_usize(i)).as_canonical_u32();
         let [a]: [F; 1] = if is_init == 0 {
             exec_state.vm_write(AS::Native as u32, a_ptr_i, &[data[i]]);
             [data[i]]
         } else {
             exec_state.vm_read(AS::Native as u32, a_ptr_i)
         };
-        let b_ptr_i = (b_ptr + F::from_canonical_usize(EXT_DEG * i)).as_canonical_u32();
+        let b_ptr_i = (b_ptr + F::from_usize(EXT_DEG * i)).as_canonical_u32();
         let b = exec_state.vm_read(AS::Native as u32, b_ptr_i);
 
         as_and_bs.push((a, b));

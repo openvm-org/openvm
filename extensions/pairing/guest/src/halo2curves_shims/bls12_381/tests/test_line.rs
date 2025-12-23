@@ -3,7 +3,7 @@ use halo2curves_axiom::{
     ff::Field,
 };
 use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
-use rand::{rngs::StdRng, SeedableRng};
+use rand08::{rngs::StdRng, SeedableRng};
 
 use crate::{
     halo2curves_shims::bls12_381::{tangent_line_023, Bls12_381},

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use openvm_cuda_backend::{
     base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, types::F,
 };
-use openvm_stark_backend::{p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix};
+use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix};
 
 use crate::{cuda_abi::encoder, encoder::Encoder};
 
@@ -23,7 +23,7 @@ fn test_cuda_encoder_with_invalid_row() {
     let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
         values
             .into_iter()
-            .flat_map(|v| v.into_iter().map(F::from_canonical_u32))
+            .flat_map(|v| v.into_iter().map(F::from_u32))
             .collect(),
         expected_k,
     ));
@@ -58,7 +58,7 @@ fn test_cuda_encoder_without_invalid_row() {
     let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
         values
             .into_iter()
-            .flat_map(|v| v.into_iter().map(F::from_canonical_u32))
+            .flat_map(|v| v.into_iter().map(F::from_u32))
             .collect(),
         expected_k,
     ));

@@ -1,6 +1,6 @@
 use std::{any::TypeId, array};
 
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use super::{Array, Builder, Config, DslIr, Felt, MemIndex, Var};
@@ -31,7 +31,7 @@ impl<C: Config> Builder<C> {
 
             let bit = self.get(&output, i);
             self.assert_felt_eq(bit * (bit - C::F::ONE), C::F::ZERO);
-            self.assign(&sum, sum + bit * C::F::from_canonical_u32(1 << i));
+            self.assign(&sum, sum + bit * C::F::from_u32(1 << i));
             if i == 26 {
                 self.assign(&prefix_sum, sum);
             }
@@ -53,7 +53,7 @@ impl<C: Config> Builder<C> {
         //    * if `num_bits >= 27`, then we must check: if `suffix_bit_sum = b[27] + ... + b[30] =
         //      4`, then `prefix_sum = b[0] + ... + b[26] * 2^26 = 0`
         let suffix_bit_sum_var = self.cast_felt_to_var(suffix_bit_sum);
-        self.if_eq(suffix_bit_sum_var, C::N::from_canonical_u32(4))
+        self.if_eq(suffix_bit_sum_var, C::N::from_u32(4))
             .then(|builder| {
                 builder.assert_felt_eq(prefix_sum, C::F::ZERO);
             });
@@ -78,7 +78,7 @@ impl<C: Config> Builder<C> {
     pub fn bits2num_v_circuit(&mut self, bits: &[Var<C::N>]) -> Var<C::N> {
         let result: Var<_> = self.eval(C::N::ZERO);
         for i in 0..bits.len() {
-            self.assign(&result, result + bits[i] * C::N::from_canonical_u32(1 << i));
+            self.assign(&result, result + bits[i] * C::N::from_u32(1 << i));
         }
         result
     }

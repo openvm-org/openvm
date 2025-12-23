@@ -114,11 +114,13 @@ mod guest_tests {
         };
         #[cfg(not(feature = "cuda"))]
         use {
-            openvm_circuit::{arch::MatrixRecordArena, system::SystemChipInventory},
+            openvm_circuit::{
+                arch::{MatrixRecordArena, VmField},
+                system::SystemChipInventory,
+            },
             openvm_stark_backend::{
                 config::{StarkGenericConfig, Val},
                 engine::StarkEngine,
-                p3_field::PrimeField32,
                 prover::cpu::{CpuBackend, CpuDevice},
             },
         };
@@ -158,7 +160,7 @@ mod guest_tests {
         where
             SC: StarkGenericConfig,
             E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-            Val<SC>: PrimeField32,
+            Val<SC>: VmField,
         {
             type VmConfig = EcdsaConfig;
             type SystemChipInventory = SystemChipInventory<SC>;

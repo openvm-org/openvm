@@ -34,20 +34,16 @@ pub fn default_evm_halo2_verifier_path() -> String {
 
 pub fn default_app_config() -> AppConfig<SdkVmConfig> {
     AppConfig {
-        app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
-            DEFAULT_APP_LOG_BLOWUP,
-        )
-        .into(),
+        app_fri_params: FriParameters::standard_with_100_bits_security(DEFAULT_APP_LOG_BLOWUP)
+            .into(),
         app_vm_config: SdkVmConfig::builder()
             .system(Default::default())
             .rv32i(Default::default())
             .rv32m(Default::default())
             .io(Default::default())
             .build(),
-        leaf_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
-            DEFAULT_LEAF_LOG_BLOWUP,
-        )
-        .into(),
+        leaf_fri_params: FriParameters::standard_with_100_bits_security(DEFAULT_LEAF_LOG_BLOWUP)
+            .into(),
         compiler_options: Default::default(),
     }
 }

@@ -15,7 +15,7 @@ pub fn parse_biguint_auto(s: &str) -> Option<BigUint> {
 
 pub fn isize_to_field<F: Field>(value: isize) -> F {
     if value < 0 {
-        return F::NEG_ONE * F::from_canonical_usize(value.unsigned_abs());
+        return F::NEG_ONE * F::from_usize(value.unsigned_abs());
     }
-    F::from_canonical_usize(value as usize)
+    F::from_usize(value as usize)
 }

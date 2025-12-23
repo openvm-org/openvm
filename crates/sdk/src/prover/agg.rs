@@ -232,7 +232,20 @@ where
                 break;
             }
             if wrapper_layers >= max_internal_wrapper_layers {
-                panic!("The heights of the root verifier still exceed the required heights after {max_internal_wrapper_layers} wrapper layers");
+                let fixed = root_prover.fixed_air_heights();
+                let exceeding: Vec<_> = actual_air_heights
+                    .iter()
+                    .zip(fixed.iter())
+                    .enumerate()
+                    .filter(|(_, (actual, fixed))| actual > fixed)
+                    .map(|(i, (actual, fixed))| format!("AIR {i}: actual={actual}, fixed={fixed}"))
+                    .collect();
+                panic!(
+                    "The heights of the root verifier still exceed the required heights after {max_internal_wrapper_layers} wrapper layers.\n\
+                    Exceeding AIRs: {exceeding:?}\n\
+                    All actual heights: {actual_air_heights:?}\n\
+                    All fixed heights: {fixed:?}"
+                );
             }
             wrapper_layers += 1;
             let input = InternalVmVerifierInput {

@@ -127,13 +127,13 @@ impl Default for AggregationConfig {
     fn default() -> Self {
         Self {
             max_num_user_public_values: DEFAULT_MAX_NUM_PUBLIC_VALUES,
-            leaf_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
+            leaf_fri_params: FriParameters::standard_with_100_bits_security(
                 DEFAULT_LEAF_LOG_BLOWUP,
             ),
-            internal_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
+            internal_fri_params: FriParameters::standard_with_100_bits_security(
                 DEFAULT_INTERNAL_LOG_BLOWUP,
             ),
-            root_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
+            root_fri_params: FriParameters::standard_with_100_bits_security(
                 DEFAULT_ROOT_LOG_BLOWUP,
             ),
             profiling: false,
@@ -161,9 +161,7 @@ pub struct AppFriParams {
 impl Default for AppFriParams {
     fn default() -> Self {
         Self {
-            fri_params: FriParameters::standard_with_100_bits_conjectured_security(
-                DEFAULT_APP_LOG_BLOWUP,
-            ),
+            fri_params: FriParameters::standard_with_100_bits_security(DEFAULT_APP_LOG_BLOWUP),
         }
     }
 }
@@ -182,9 +180,7 @@ pub struct LeafFriParams {
 impl Default for LeafFriParams {
     fn default() -> Self {
         Self {
-            fri_params: FriParameters::standard_with_100_bits_conjectured_security(
-                DEFAULT_LEAF_LOG_BLOWUP,
-            ),
+            fri_params: FriParameters::standard_with_100_bits_security(DEFAULT_LEAF_LOG_BLOWUP),
         }
     }
 }

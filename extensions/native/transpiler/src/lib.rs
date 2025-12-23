@@ -25,7 +25,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for LongFormTranspilerExtension {
             let mut operands = vec![];
             let mut j = 3;
             for _ in 0..num_operands {
-                operands.push(F::from_canonical_u32(instruction_stream[j]));
+                operands.push(F::from_u32(instruction_stream[j]));
                 j += 1;
             }
             while operands.len() < 7 {

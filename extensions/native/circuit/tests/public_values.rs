@@ -1,7 +1,7 @@
 use openvm_circuit::{arch::PUBLIC_VALUES_AIR_ID, utils::air_test_impl};
 use openvm_native_circuit::{execute_program_with_config, test_native_config, NativeCpuBuilder};
 use openvm_native_compiler::{asm::AsmBuilder, prelude::*};
-use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
+use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, PrimeCharacteristicRing};
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     p3_baby_bear::BabyBear,
@@ -12,15 +12,15 @@ type EF = BinomialExtensionField<BabyBear, 4>;
 
 #[test]
 fn test_compiler_public_values() {
-    let public_value_0 = F::from_canonical_u32(10);
-    let public_value_1 = F::from_canonical_u32(20);
+    let public_value_0 = F::from_u32(10);
+    let public_value_1 = F::from_u32(20);
     let mut builder = AsmBuilder::<F, EF>::default();
 
     {
         let a: Felt<_> = builder.constant(public_value_0);
         let b: Felt<_> = builder.constant(public_value_1);
 
-        let dyn_len: Var<_> = builder.eval(F::from_canonical_usize(2));
+        let dyn_len: Var<_> = builder.eval(F::from_usize(2));
         let var_array = builder.dyn_array::<Felt<_>>(dyn_len);
         builder.set(&var_array, RVar::zero(), a);
         builder.set(&var_array, RVar::one(), b);
@@ -58,13 +58,13 @@ fn test_compiler_public_values() {
 fn test_compiler_public_values_no_initial() {
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let public_value_0 = F::from_canonical_u32(10);
-    let public_value_1 = F::from_canonical_u32(20);
+    let public_value_0 = F::from_u32(10);
+    let public_value_1 = F::from_u32(20);
 
     let a: Felt<_> = builder.constant(public_value_0);
     let b: Felt<_> = builder.constant(public_value_1);
 
-    let dyn_len: Var<_> = builder.eval(F::from_canonical_usize(2));
+    let dyn_len: Var<_> = builder.eval(F::from_usize(2));
     let var_array = builder.dyn_array::<Felt<_>>(dyn_len);
     builder.set(&var_array, RVar::zero(), a);
     builder.set(&var_array, RVar::one(), b);

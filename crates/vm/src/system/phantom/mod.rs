@@ -16,7 +16,7 @@ use openvm_instructions::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -72,7 +72,7 @@ impl<F: Field> BaseAirWithPublicValues<F> for PhantomAir {}
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let &PhantomCols {
             pc,
             operands,
@@ -86,7 +86,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
                 operands,
                 ExecutionState::<AB::Expr>::new(pc, timestamp),
                 AB::Expr::ONE,
-                PcIncOrSet::Inc(AB::Expr::from_canonical_u32(DEFAULT_PC_STEP)),
+                PcIncOrSet::Inc(AB::Expr::from_u32(DEFAULT_PC_STEP)),
             )
             .eval(builder, is_valid);
     }
@@ -206,11 +206,11 @@ impl<F: Field> TraceFiller<F> for PhantomFiller {
         // SAFETY: must assign in reverse order of column struct to prevent overwriting
         // borrowed data
         row.is_valid = F::ONE;
-        row.timestamp = F::from_canonical_u32(record.timestamp);
-        row.operands[2] = F::from_canonical_u32(record.operands[2]);
-        row.operands[1] = F::from_canonical_u32(record.operands[1]);
-        row.operands[0] = F::from_canonical_u32(record.operands[0]);
-        row.pc = F::from_canonical_u32(record.pc)
+        row.timestamp = F::from_u32(record.timestamp);
+        row.operands[2] = F::from_u32(record.operands[2]);
+        row.operands[1] = F::from_u32(record.operands[1]);
+        row.operands[0] = F::from_u32(record.operands[0]);
+        row.pc = F::from_u32(record.pc)
     }
 }
 

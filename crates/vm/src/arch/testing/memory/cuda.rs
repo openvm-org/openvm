@@ -14,7 +14,7 @@ use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRang
 use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types::F};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::{
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     prover::types::AirProvingContext,
     Chip, ChipUsageGetter,
 };
@@ -103,7 +103,7 @@ impl DeviceMemoryTester {
         let (t_prev, data) = if addr_space <= 3 {
             let (t_prev, data) =
                 unsafe { self.memory.read::<u8, N, 4>(addr_space as u32, ptr as u32) };
-            (t_prev, data.map(F::from_canonical_u8))
+            (t_prev, data.map(F::from_u8))
         } else {
             unsafe { self.memory.read::<F, N, 1>(addr_space as u32, ptr as u32) }
         };
@@ -130,7 +130,7 @@ impl DeviceMemoryTester {
                     data.map(|x| x.as_canonical_u32() as u8),
                 )
             };
-            (t_prev, data_prev.map(F::from_canonical_u8))
+            (t_prev, data_prev.map(F::from_u8))
         } else {
             unsafe {
                 self.memory

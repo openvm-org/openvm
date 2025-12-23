@@ -11,7 +11,6 @@ repository.workspace = true
 openvm = { workspace = true }
 serde = { workspace = true }
 itertools = { workspace = true, features = ["use_alloc"] }
-rand.workspace = true
 strum_macros.workspace = true
 hex-literal = { workspace = true }
 openvm-algebra-guest = { workspace = true }
@@ -22,6 +21,9 @@ openvm-custom-insn = { workspace = true }
 # Used for `halo2curves` feature
 halo2curves-axiom = { workspace = true, optional = true }
 blstrs = { workspace = true, optional = true }
+
+[dev-dependencies]
+rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"] }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint.workspace = true

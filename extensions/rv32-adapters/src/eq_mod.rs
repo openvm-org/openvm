@@ -34,7 +34,7 @@ use openvm_rv32im_circuit::adapters::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
 /// This adapter reads from NUM_READS <= 2 pointers and writes to a register.
@@ -120,12 +120,12 @@ impl<
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
-            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+            timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
         // Address spaces
-        let d = AB::F::from_canonical_u32(RV32_REGISTER_AS);
-        let e = AB::F::from_canonical_u32(RV32_MEMORY_AS);
+        let d = AB::F::from_u32(RV32_REGISTER_AS);
+        let e = AB::F::from_u32(RV32_MEMORY_AS);
 
         // Read register values for rs
         for (ptr, val, aux) in izip!(cols.rs_ptr, cols.rs_val, &cols.rs_read_aux) {
@@ -138,7 +138,7 @@ impl<
         // a range check on the highest limb.
         let rs_val_f = cols.rs_val.map(|decomp| {
             decomp.iter().rev().fold(AB::Expr::ZERO, |acc, &limb| {
-                acc * AB::Expr::from_canonical_usize(1 << RV32_CELL_BITS) + limb
+                acc * AB::Expr::from_usize(1 << RV32_CELL_BITS) + limb
             })
         });
 
@@ -150,9 +150,8 @@ impl<
             }
         });
 
-        let limb_shift = AB::F::from_canonical_usize(
-            1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits),
-        );
+        let limb_shift =
+            AB::F::from_usize(1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.address_bits));
 
         self.bus
             .send_range(
@@ -168,8 +167,7 @@ impl<
                 let mut r_it = r.into_iter();
                 from_fn(|_| from_fn(|_| r_it.next().unwrap()))
             });
-        let block_ptr_offset: [_; BLOCKS_PER_READ] =
-            from_fn(|i| AB::F::from_canonical_usize(i * BLOCK_SIZE));
+        let block_ptr_offset: [_; BLOCKS_PER_READ] = from_fn(|i| AB::F::from_usize(i * BLOCK_SIZE));
 
         for (ptr, block_data, block_aux) in izip!(rs_val_f, read_block_data, &cols.heap_read_aux) {
             for (offset, data, aux) in izip!(block_ptr_offset, block_data, block_aux) {
@@ -211,7 +209,7 @@ impl<
                     e.into(),
                 ],
                 cols.from_state,
-                AB::F::from_canonical_usize(timestamp_delta),
+                AB::F::from_usize(timestamp_delta),
                 (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid.clone());
@@ -417,13 +415,13 @@ impl<
         );
         // Writing in reverse order
         cols.writes_aux
-            .set_prev_data(record.writes_aux.prev_data.map(F::from_canonical_u8));
+            .set_prev_data(record.writes_aux.prev_data.map(F::from_u8));
         mem_helper.fill(
             record.writes_aux.prev_timestamp,
             timestamp_mm(),
             cols.writes_aux.as_mut(),
         );
-        cols.rd_ptr = F::from_canonical_u32(record.rd_ptr);
+        cols.rd_ptr = F::from_u32(record.rd_ptr);
 
         // **NOTE**: Must iterate everything in reverse order to avoid overwriting the records
         cols.heap_read_aux
@@ -448,12 +446,10 @@ impl<
                 mem_helper.fill(record.prev_timestamp, timestamp_mm(), col.as_mut());
             });
 
-        cols.rs_val = record
-            .rs_val
-            .map(|val| val.to_le_bytes().map(F::from_canonical_u8));
-        cols.rs_ptr = record.rs_ptr.map(|ptr| F::from_canonical_u32(ptr));
+        cols.rs_val = record.rs_val.map(|val| val.to_le_bytes().map(F::from_u8));
+        cols.rs_ptr = record.rs_ptr.map(|ptr| F::from_u32(ptr));
 
-        cols.from_state.timestamp = F::from_canonical_u32(record.timestamp);
-        cols.from_state.pc = F::from_canonical_u32(record.from_pc);
+        cols.from_state.timestamp = F::from_u32(record.timestamp);
+        cols.from_state.pc = F::from_u32(record.from_pc);
     }
 }

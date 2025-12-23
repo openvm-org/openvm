@@ -53,7 +53,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
         self.subair.eval(&mut sub_builder);
 
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("row 0 present");
         let cols: &Poseidon2PeripheryCols<AB::Var, SBOX_REGISTERS> = (*local).borrow();
 
         let input: [AB::Var; POSEIDON2_WIDTH] = cols.inner.inputs;

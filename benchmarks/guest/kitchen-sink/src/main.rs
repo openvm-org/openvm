@@ -23,8 +23,6 @@ use {
 
 // Note: these will all currently be represented as bytes32 even though they could be smaller
 openvm_algebra_guest::moduli_macros::moduli_declare! {
-    Seven { modulus = "7" },
-    Mod1e18 { modulus = "1000000000000000003" },
     Mersenne61 { modulus = "0x1fffffffffffffff" },
 }
 
@@ -67,7 +65,6 @@ fn materialize_ecc_chip<T: WeierstrassPoint + CyclicGroup>() {
 pub fn main() {
     // Since we don't explicitly call setup functions anymore, we must ensure every declared modulus
     // and curve chip is materialized.
-    materialize_modular_chip::<Mod1e18>();
     materialize_modular_chip::<Secp256k1Coord>();
     materialize_modular_chip::<Secp256k1Scalar>();
     materialize_modular_chip::<P256Coord>();
@@ -77,7 +74,6 @@ pub fn main() {
     materialize_modular_chip::<Bls12_381Fp>();
     materialize_modular_chip::<Bls12_381Scalar>();
     materialize_modular_chip::<Mersenne61>();
-    materialize_modular_chip::<Seven>();
 
     materialize_complex_chip!(Bn254Fp2, Bn254Fp);
     materialize_complex_chip!(Bls12_381Fp2, Bls12_381Fp);
@@ -86,14 +82,6 @@ pub fn main() {
     materialize_ecc_chip::<P256Point>();
     materialize_ecc_chip::<Bn254G1Affine>();
     materialize_ecc_chip::<Bls12_381G1Affine>();
-
-    let [one, six] = [1, 6].map(Seven::from_u32);
-    assert_eq!(one + six, Seven::ZERO);
-
-    let y = Mod1e18::from_u32(100);
-    let y = (&y * &y) * &y;
-    let y = y.clone() * y.clone() * y.clone();
-    assert_eq!(y + Mod1e18::from_u32(3), Mod1e18::ZERO);
 
     let mut bytes = [0u8; 32];
     bytes[7] = 1 << 5; // 2^61 = modulus + 1

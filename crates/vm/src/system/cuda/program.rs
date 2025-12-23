@@ -16,7 +16,7 @@ use openvm_stark_backend::{
     },
     Chip,
 };
-use p3_field::FieldAlgebra;
+use p3_field::PrimeCharacteristicRing;
 
 use crate::cuda_abi::program;
 
@@ -35,7 +35,7 @@ impl ProgramChipGPU {
             .into_iter()
             .map(|(pc, instruction, _)| {
                 [
-                    F::from_canonical_u32(pc),
+                    F::from_u32(pc),
                     instruction.opcode.to_field(),
                     instruction.a,
                     instruction.b,
@@ -105,7 +105,7 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
 
         filtered_exec_freqs
             .into_iter()
-            .map(F::from_canonical_u32)
+            .map(F::from_u32)
             .collect::<Vec<_>>()
             .copy_to(&mut buffer)
             .unwrap();

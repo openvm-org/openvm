@@ -1,7 +1,9 @@
 use std::array::from_fn;
 
 use lazy_static::lazy_static;
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_backend::p3_field::{
+    integers::QuotientMap, PrimeCharacteristicRing, PrimeField32,
+};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use zkhash::{
     ark_ff::PrimeField as _, fields::babybear::FpBabyBear as HorizenBabyBear,
@@ -14,7 +16,7 @@ use super::{
 };
 
 pub(crate) fn horizen_to_p3_babybear(horizen_babybear: HorizenBabyBear) -> BabyBear {
-    BabyBear::from_canonical_u64(horizen_babybear.into_bigint().0[0])
+    BabyBear::from_u64(horizen_babybear.into_bigint().0[0])
 }
 
 pub(crate) fn horizen_round_consts() -> Poseidon2Constants<BabyBear> {
@@ -53,12 +55,36 @@ lazy_static! {
         horizen_round_consts().ending_full_round_constants;
 }
 
-pub(crate) fn babybear_internal_linear_layer<FA: FieldAlgebra, const WIDTH: usize>(
-    state: &mut [FA; WIDTH],
-    int_diag_m1_matrix: &[FA::F; WIDTH],
+/// The vector `[-2, 1, 2, 1/2, 3, 4, -1/2, -3, -4, 1/2^8, 1/4, 1/8, 1/2^27, -1/2^8, -1/16,
+/// -1/2^27]` saved as an array of BabyBear elements. Copied from plonky3's Poseidon2
+/// implementation to preserve the exact constraint structure.
+pub const INTERNAL_DIAG_MONTY_16: [BabyBear; 16] = BabyBear::new_array([
+    BabyBear::ORDER_U32 - 2,
+    1,
+    2,
+    (BabyBear::ORDER_U32 + 1) >> 1,
+    3,
+    4,
+    (BabyBear::ORDER_U32 - 1) >> 1,
+    BabyBear::ORDER_U32 - 3,
+    BabyBear::ORDER_U32 - 4,
+    BabyBear::ORDER_U32 - ((BabyBear::ORDER_U32 - 1) >> 8),
+    BabyBear::ORDER_U32 - ((BabyBear::ORDER_U32 - 1) >> 2),
+    BabyBear::ORDER_U32 - ((BabyBear::ORDER_U32 - 1) >> 3),
+    BabyBear::ORDER_U32 - 15,
+    (BabyBear::ORDER_U32 - 1) >> 8,
+    (BabyBear::ORDER_U32 - 1) >> 4,
+    15,
+]);
+
+pub(crate) fn babybear_internal_linear_layer<R: PrimeCharacteristicRing>(
+    state: &mut [R; POSEIDON2_WIDTH],
+    diag_m1_matrix: &[BabyBear; POSEIDON2_WIDTH],
 ) {
-    let sum = state.iter().cloned().sum::<FA>();
-    for (input, diag_m1) in state.iter_mut().zip(int_diag_m1_matrix) {
-        *input = sum.clone() + FA::from_f(*diag_m1) * input.clone();
+    let sum: R = state.iter().cloned().sum();
+    for (val, &diag_elem) in state.iter_mut().zip(diag_m1_matrix.iter()) {
+        let diag_sub = R::PrimeSubfield::from_int(diag_elem.as_canonical_u32());
+        let diag_r = R::from_prime_subfield(diag_sub);
+        *val = sum.clone() + diag_r * val.clone();
     }
 }

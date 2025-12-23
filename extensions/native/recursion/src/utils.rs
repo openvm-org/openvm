@@ -1,7 +1,6 @@
 use openvm_native_compiler::ir::{Builder, CanSelect, Config, Felt, MemVariable, Var};
-use openvm_stark_backend::{
-    p3_commit::TwoAdicMultiplicativeCoset,
-    p3_field::{FieldAlgebra, TwoAdicField},
+use openvm_stark_backend::p3_field::{
+    coset::TwoAdicMultiplicativeCoset, PrimeCharacteristicRing, TwoAdicField,
 };
 use openvm_stark_sdk::config::FriParameters;
 
@@ -18,10 +17,7 @@ pub fn const_fri_config<C: Config>(
         let constant_generator = C::F::two_adic_generator(i);
         builder.set(&generators, i, constant_generator);
 
-        let constant_domain = TwoAdicMultiplicativeCoset {
-            log_n: i,
-            shift: C::F::ONE,
-        };
+        let constant_domain = TwoAdicMultiplicativeCoset::new(C::F::ONE, i).unwrap();
         let domain_value: TwoAdicMultiplicativeCosetVariable<_> = builder.constant(constant_domain);
         // ATTENTION: here must use `builder.set_value`. `builder.set` will convert `Usize::Const`
         // to `Usize::Var` because it calls `builder.eval`.
@@ -32,7 +28,8 @@ pub fn const_fri_config<C: Config>(
         blowup: 1 << params.log_blowup,
         log_final_poly_len: params.log_final_poly_len,
         num_queries: params.num_queries,
-        proof_of_work_bits: params.proof_of_work_bits,
+        commit_proof_of_work_bits: params.commit_proof_of_work_bits,
+        query_proof_of_work_bits: params.query_proof_of_work_bits,
         subgroups,
         generators,
     }
@@ -45,7 +42,7 @@ pub fn reduce_32<C: Config>(builder: &mut Builder<C>, vals: &[Felt<C::F>]) -> Va
     for val in vals.iter() {
         let val = builder.cast_felt_to_var(*val);
         builder.assign(&result, result + val * power);
-        power *= C::N::from_canonical_usize(1usize << 32);
+        power *= C::N::from_usize(1usize << 32);
     }
     result
 }

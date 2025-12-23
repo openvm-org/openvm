@@ -39,7 +39,7 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
-use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
+use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
@@ -336,11 +336,11 @@ fn set_and_execute_rand<RA: Arena, E: PreflightExecutor<F, RA>>(
     let b = generate_long_number::<INT256_NUM_LIMBS, RV32_CELL_BITS>(rng);
     let c = generate_long_number::<INT256_NUM_LIMBS, RV32_CELL_BITS>(rng);
     if branch {
-        let imm = rng.gen_range((-ABS_MAX_BRANCH)..ABS_MAX_BRANCH);
+        let imm = rng.random_range((-ABS_MAX_BRANCH)..ABS_MAX_BRANCH);
         let instruction = rv32_heap_branch_default(
             tester,
-            vec![b.map(F::from_canonical_u32)],
-            vec![c.map(F::from_canonical_u32)],
+            vec![b.map(F::from_u32)],
+            vec![c.map(F::from_u32)],
             imm as isize,
             opcode,
         );
@@ -349,7 +349,7 @@ fn set_and_execute_rand<RA: Arena, E: PreflightExecutor<F, RA>>(
             executor,
             arena,
             &instruction,
-            rng.gen_range((ABS_MAX_BRANCH as u32)..(1 << (PC_BITS - 1))),
+            rng.random_range((ABS_MAX_BRANCH as u32)..(1 << (PC_BITS - 1))),
         );
 
         let cmp_result = branch_fn.unwrap()(opcode, &b, &c);
@@ -359,8 +359,8 @@ fn set_and_execute_rand<RA: Arena, E: PreflightExecutor<F, RA>>(
     } else {
         let instruction = rv32_write_heap_default(
             tester,
-            vec![b.map(F::from_canonical_u32)],
-            vec![c.map(F::from_canonical_u32)],
+            vec![b.map(F::from_u32)],
+            vec![c.map(F::from_u32)],
             opcode,
         );
         tester.execute(executor, arena, &instruction);

@@ -25,8 +25,12 @@ impl<F: Field> BaseAir<F> for ProgramDummyAir {
 impl<AB: InteractionBuilder> Air<AB> for ProgramDummyAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
-        let local = local.iter().map(|x| (*x).into()).collect::<Vec<AB::Expr>>();
+        let local = main.row_slice(0).expect("row 0 present");
+        let local = local
+            .iter()
+            .cloned()
+            .map(Into::into)
+            .collect::<Vec<AB::Expr>>();
         self.bus.inner.add_key_with_lookups(
             builder,
             local[..local.len() - 1].iter().cloned(),

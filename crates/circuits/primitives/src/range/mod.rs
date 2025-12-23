@@ -63,7 +63,7 @@ impl<F: Field> BaseAir<F> for RangeCheckerAir {
 
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
         // Create lookup table with all values 0..range_max
-        let column = (0..self.range_max()).map(F::from_canonical_u32).collect();
+        let column = (0..self.range_max()).map(F::from_u32).collect();
         Some(RowMajorMatrix::new_col(column))
     }
 }
@@ -71,10 +71,12 @@ impl<F: Field> BaseAir<F> for RangeCheckerAir {
 impl<AB: InteractionBuilder + PairBuilder> Air<AB> for RangeCheckerAir {
     fn eval(&self, builder: &mut AB) {
         let preprocessed = builder.preprocessed();
-        let prep_local = preprocessed.row_slice(0);
+        let prep_local = preprocessed
+            .row_slice(0)
+            .expect("window should have two elements");
         let prep_local: &RangePreprocessedCols<AB::Var> = (*prep_local).borrow();
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local: &RangeCols<AB::Var> = (*local).borrow();
         // Omit creating separate bridge.rs file for brevity
         self.bus
@@ -121,8 +123,7 @@ impl RangeCheckerChip {
         for (n, row) in rows.chunks_exact_mut(NUM_RANGE_COLS).enumerate() {
             let cols: &mut RangeCols<F> = (*row).borrow_mut();
             // Set multiplicity for each value in range
-            cols.mult =
-                F::from_canonical_u32(self.count[n].swap(0, std::sync::atomic::Ordering::Relaxed));
+            cols.mult = F::from_u32(self.count[n].swap(0, std::sync::atomic::Ordering::Relaxed));
         }
         RowMajorMatrix::new(rows, NUM_RANGE_COLS)
     }

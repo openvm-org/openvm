@@ -5,9 +5,9 @@ use openvm_native_compiler::{
     ir::{Builder, Witness},
 };
 use openvm_stark_backend::p3_field::{
-    reduce_32 as reduce_32_gt, split_32 as split_32_gt, FieldAlgebra,
+    reduce_32 as reduce_32_gt, split_32 as split_32_gt, PrimeCharacteristicRing,
 };
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254::Bn254};
 use snark_verifier_sdk::{
     halo2::{gen_dummy_snark_from_vk, gen_snark_shplonk},
     snark_verifier::{
@@ -78,7 +78,7 @@ fn test_publish() {
     let mut builder = Builder::<OuterConfig>::default();
     builder.flags.static_only = true;
     let value_u32 = 1345237507;
-    let value_fr = Bn254Fr::from_canonical_u32(value_u32);
+    let value_fr = Bn254::from_u32(value_u32);
     let value = builder.eval(value_fr);
     builder.static_commit_public_value(0, value);
 
@@ -95,9 +95,9 @@ fn test_publish() {
 
 #[test]
 fn test_reduce_32() {
-    let value_1 = BabyBear::from_canonical_u32(1345237507);
-    let value_2 = BabyBear::from_canonical_u32(1000001);
-    let gt: Bn254Fr = reduce_32_gt(&[value_1, value_2]);
+    let value_1 = BabyBear::from_u32(1345237507);
+    let value_2 = BabyBear::from_u32(1000001);
+    let gt: Bn254 = reduce_32_gt(&[value_1, value_2]);
 
     let mut builder = Builder::<OuterConfig>::default();
     builder.flags.static_only = true;
@@ -140,9 +140,9 @@ fn test_split_32() {
             Witness::default(),
         );
     };
-    let modulus = Bn254Fr::ZERO - Bn254Fr::ONE;
-    f(Bn254Fr::from_canonical_u32(1345237507));
-    f(Bn254Fr::ZERO);
+    let modulus = Bn254::ZERO - Bn254::ONE;
+    f(Bn254::from_u32(1345237507));
+    f(Bn254::ZERO);
     f(modulus);
 }
 

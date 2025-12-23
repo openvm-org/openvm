@@ -168,7 +168,7 @@ mod tests {
     };
     use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
     use openvm_cuda_backend::{data_transporter::assert_eq_host_and_device_matrix, prelude::SC};
-    use openvm_stark_backend::{p3_field::FieldAlgebra, prover::hal::MatrixDimensions};
+    use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::hal::MatrixDimensions};
     use rand::{rngs::StdRng, Rng, SeedableRng};
 
     use super::*;
@@ -191,36 +191,36 @@ mod tests {
         let max_log_block_size = 4;
         let its = 1000;
         for _ in 0..its {
-            let addr_sp = rng.gen_range(1..=aligns.len());
+            let addr_sp = rng.random_range(1..=aligns.len());
             let align: usize = aligns[addr_sp - 1];
             let value_bound: u32 = value_bounds[addr_sp - 1];
-            let ptr = rng.gen_range(0..max_ptr / align) * align;
-            let log_len = rng.gen_range(align.trailing_zeros()..=max_log_block_size);
+            let ptr = rng.random_range(0..max_ptr / align) * align;
+            let log_len = rng.random_range(align.trailing_zeros()..=max_log_block_size);
             match log_len {
                 0 => tester.write::<1>(
                     addr_sp,
                     ptr,
-                    array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..value_bound))),
+                    array::from_fn(|_| F::from_u32(rng.random_range(0..value_bound))),
                 ),
                 1 => tester.write::<2>(
                     addr_sp,
                     ptr,
-                    array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..value_bound))),
+                    array::from_fn(|_| F::from_u32(rng.random_range(0..value_bound))),
                 ),
                 2 => tester.write::<4>(
                     addr_sp,
                     ptr,
-                    array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..value_bound))),
+                    array::from_fn(|_| F::from_u32(rng.random_range(0..value_bound))),
                 ),
                 3 => tester.write::<8>(
                     addr_sp,
                     ptr,
-                    array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..value_bound))),
+                    array::from_fn(|_| F::from_u32(rng.random_range(0..value_bound))),
                 ),
                 4 => tester.write::<16>(
                     addr_sp,
                     ptr,
-                    array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..value_bound))),
+                    array::from_fn(|_| F::from_u32(rng.random_range(0..value_bound))),
                 ),
                 _ => unreachable!(),
             }

@@ -1,5 +1,5 @@
 use openvm_native_compiler::ir::{Array, Builder, Config, Ext, Felt, RVar, Var};
-use openvm_stark_backend::p3_field::{Field, FieldAlgebra};
+use openvm_stark_backend::p3_field::{Field, PrimeCharacteristicRing};
 
 use crate::{
     challenger::{
@@ -97,9 +97,12 @@ impl<C: Config> MultiField32ChallengerVariable<C> {
     }
 
     pub fn check_witness(&mut self, builder: &mut Builder<C>, bits: usize, witness: Felt<C::F>) {
+        if bits == 0 {
+            return;
+        }
         self.observe(builder, witness);
         let element = self.sample_bits(builder, bits);
-        builder.assert_var_eq(element, C::N::from_canonical_usize(0));
+        builder.assert_var_eq(element, C::N::from_usize(0));
     }
 }
 

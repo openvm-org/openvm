@@ -50,7 +50,6 @@ aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot"]
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
-nightly-features = ["openvm-circuit/nightly-features"]
 cuda = [
     "dep:openvm-cuda-backend",
     "dep:openvm-cuda-common",
