@@ -141,11 +141,11 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         );
 
         if did_segment {
-            // Reset segment context for new segment
+            // Initialize segment context for new segment
             self.segmentation_ctx
-                .reset_segment(&mut self.trace_heights, &self.is_trace_height_constant);
-            // Reset memory context for new segment
-            self.memory_ctx.reset_segment(&mut self.trace_heights);
+                .initialize_segment(&mut self.trace_heights, &self.is_trace_height_constant);
+            // Initialize memory context for new segment
+            self.memory_ctx.initialize_segment(&mut self.trace_heights);
             // Add merkle height contributions for all registers
             self.memory_ctx.add_register_merkle_heights();
         } else {
