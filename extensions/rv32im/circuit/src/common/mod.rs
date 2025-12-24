@@ -275,67 +275,87 @@ mod aot {
                 MemoryCtx<DEFAULT_PAGE_BITS>,
                 addr_space_access_count_pending
             );
-        let inserted_label = format!(".asm_execute_pc_{pc}_inserted");
-        let not_inserted_label = format!(".asm_execute_pc_{pc}_not_inserted");
-        // The next section is the implementation of `BitSet::insert` in ASM.
-        // pub fn insert(&mut self, index: usize) -> bool {
-        //     let word_index = index >> 6;
-        //     let bit_index = index & 63;
-        //     let mask = 1u64 << bit_index;
-        //     let word = unsafe { self.words.get_unchecked_mut(word_index) };
-        //     let was_set = (*word & mask) != 0;
-        //     *word |= mask;
-        //     !was_set
+        let page_indices_pending_ptr_offset =
+            memory_ctx_offset + offset_of!(MemoryCtx<DEFAULT_PAGE_BITS>, page_indices_pending);
+        let done_label = format!(".asm_execute_pc_{pc}_done");
+        let pending_label = format!(".asm_execute_pc_{pc}_pending");
+        // The next section implements the two-bitset insert logic in ASM.
+        // Optimized for the common case where both inserts return false (bit already set).
+        //
+        // if self.page_indices.insert(page_id as usize) {
+        //     self.addr_space_access_count[address_space] += 1;
+        // } else if self.page_indices_pending.insert(page_id as usize) {
+        //     self.addr_space_access_count_pending[address_space] += 1;
         // }
 
-        // Start with `ptr_reg = index`
-        // `reg1 = word_index`
+        // Start with `ptr_reg = page_id`
+        // `reg1 = word_index = page_id >> 6`
         asm_str += &format!("    mov {reg1}, {ptr_reg}\n");
         asm_str += &format!("    shr {reg1}, 6\n");
-        // `ptr_reg = bit_index = index & 63`
+        // Save word_index on stack for potential second attempt
+        asm_str += &format!("    push {reg1}\n");
+        // `ptr_reg = bit_index = page_id & 63`
         asm_str += &format!("    and {ptr_reg}, 63\n");
         // `reg2 = mask = 1u64 << bit_index`
         asm_str += &format!("    mov {reg2}, 1\n");
         asm_str += &format!("    shlx {reg2}, {reg2}, {ptr_reg}\n");
+
+        // First attempt: try to insert into page_indices
         // `ptr_reg = self.page_indices.ptr`
         asm_str +=
             &format!("    mov {ptr_reg}, [{REG_EXEC_STATE_PTR} + {page_indices_ptr_offset}]\n");
-
-        // `reg1 = word_ptr = &self.words.get_unchecked_mut(word_index)`
+        // `reg1 = word_ptr = &page_indices.words[word_index]`
         asm_str += &format!("    lea {reg1}, [{ptr_reg} + {reg1} * 8]\n");
         // `ptr_reg = word = *word_ptr`
         asm_str += &format!("    mov {ptr_reg}, [{reg1}]\n");
-
-        // `test (*word & mask)`
+        // Test if bit is already set
         asm_str += &format!("    test {ptr_reg}, {reg2}\n");
-        asm_str += &format!("    jnz {not_inserted_label}\n");
-        // When (*word & mask) == 0 (new page inserted)
-        // `*word += mask`
-        asm_str += &format!("    add {ptr_reg}, {reg2}\n");
+        asm_str += &format!("    jnz {pending_label}\n");
+
+        // Bit not set in page_indices, set it
+        asm_str += &format!("    or {ptr_reg}, {reg2}\n");
         asm_str += &format!("    mov [{reg1}], {ptr_reg}\n");
-        // reg1 = &self.page_access_count`
+        // Clean up stack
+        asm_str += &format!("    add rsp, 8\n");
+        // Update page_access_count
         asm_str +=
             &format!("    lea {reg1}, [{REG_EXEC_STATE_PTR} + {page_access_count_offset}]\n");
-        // self.page_access_count += 1;
         asm_str += &format!("    add dword ptr [{reg1}], 1\n");
-        // reg1 = &addr_space_access_count.as_ptr()
+        // Update addr_space_access_count[address_space]
         asm_str += &format!(
             "    lea {reg1}, [{REG_EXEC_STATE_PTR} + {addr_space_access_count_ptr_offset}]\n"
         );
         asm_str += &format!("    mov {reg1}, [{reg1}]\n");
-        // self.addr_space_access_count[address_space] += 1;
         asm_str += &format!("    add dword ptr [{reg1} + {address_space} * 4], 1\n");
-        asm_str += &format!("    jmp {inserted_label}\n");
-        asm_str += &format!("{not_inserted_label}:\n");
-        // When (*word & mask) != 0 (page already exists)
-        // reg1 = &addr_space_access_count_pending.as_ptr()
+        asm_str += &format!("    jmp {done_label}\n");
+
+        // Second attempt: try to insert into page_indices_pending
+        asm_str += &format!("{pending_label}:\n");
+        // Restore word_index from stack
+        asm_str += &format!("    pop {reg1}\n");
+        // `ptr_reg = self.page_indices_pending.ptr`
+        asm_str += &format!(
+            "    mov {ptr_reg}, [{REG_EXEC_STATE_PTR} + {page_indices_pending_ptr_offset}]\n"
+        );
+        // `reg1 = word_ptr = &page_indices_pending.words[word_index]`
+        asm_str += &format!("    lea {reg1}, [{ptr_reg} + {reg1} * 8]\n");
+        // `ptr_reg = word = *word_ptr`
+        asm_str += &format!("    mov {ptr_reg}, [{reg1}]\n");
+        // Test if bit is already set (reg2 still contains mask)
+        asm_str += &format!("    test {ptr_reg}, {reg2}\n");
+        asm_str += &format!("    jnz {done_label}\n");
+
+        // Bit not set in page_indices_pending, set it
+        asm_str += &format!("    or {ptr_reg}, {reg2}\n");
+        asm_str += &format!("    mov [{reg1}], {ptr_reg}\n");
+        // Update addr_space_access_count_pending[address_space]
         asm_str += &format!(
             "    lea {reg1}, [{REG_EXEC_STATE_PTR} + {addr_space_access_count_pending_ptr_offset}]\n"
         );
         asm_str += &format!("    mov {reg1}, [{reg1}]\n");
-        // self.addr_space_access_count_pending[address_space] += 1;
         asm_str += &format!("    add dword ptr [{reg1} + {address_space} * 4], 1\n");
-        asm_str += &format!("{inserted_label}:\n");
+
+        asm_str += &format!("{done_label}:\n");
         // Done
 
         Ok(asm_str)
