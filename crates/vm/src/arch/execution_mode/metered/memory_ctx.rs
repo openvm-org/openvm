@@ -108,6 +108,7 @@ pub struct MemoryCtx<const PAGE_BITS: usize> {
     chunk: u32,
     chunk_bits: u32,
     pub page_indices: BitSet,
+    pub page_indices_pending: BitSet,
     pub page_access_count: usize,
     pub addr_space_access_count: RVec<usize>,
     pub addr_space_access_count_pending: RVec<usize>,
@@ -134,6 +135,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             memory_dimensions,
             continuations_enabled: config.continuation_enabled,
             page_indices: BitSet::new(bitset_size),
+            page_indices_pending: BitSet::new(bitset_size),
             page_access_count: 0,
             addr_space_access_count: vec![0; addr_space_size].into(),
             addr_space_access_count_pending: vec![0; addr_space_size].into(),
@@ -178,7 +180,6 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
 
         for page_id in start_page_id..end_page_id {
             if self.page_indices.insert(page_id as usize) {
-                self.page_access_count += 1;
                 // SAFETY: address_space passed is usually a hardcoded constant or derived from an
                 // Instruction where it is bounds checked before passing
                 unsafe {
@@ -186,7 +187,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
                         .addr_space_access_count
                         .get_unchecked_mut(address_space as usize) += 1;
                 }
-            } else {
+            } else if self.page_indices_pending.insert(page_id as usize) {
                 // SAFETY: address_space passed is usually a hardcoded constant or derived from an
                 // Instruction where it is bounds checked before passing
                 unsafe {
@@ -276,6 +277,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
                 self.addr_space_access_count_pending.len(),
             );
         }
+        self.page_indices_pending.clear();
         self.page_indices.clear();
     }
 
@@ -290,6 +292,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
                 self.addr_space_access_count_pending.len(),
             );
         }
+        self.page_indices_pending.clear();
     }
 
     /// Apply height updates given page counts
@@ -347,9 +350,10 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
     /// Resolve all lazy updates of each memory access for memory adapters/poseidon2/merkle chip.
     #[inline(always)]
     pub(crate) fn lazy_update_boundary_heights(&mut self, trace_heights: &mut [u32]) {
+        let page_access_count = self.addr_space_access_count.iter().sum();
         self.apply_height_updates(
             trace_heights,
-            self.page_access_count,
+            page_access_count,
             &self.addr_space_access_count,
         );
         self.page_access_count = 0;
