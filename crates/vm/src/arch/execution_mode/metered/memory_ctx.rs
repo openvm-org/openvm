@@ -279,10 +279,27 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         }
     }
 
-    /// Reset memory context state for a new segment
+    /// Initialize state for a new segment
     #[inline(always)]
-    pub(crate) fn reset_segment(&mut self, trace_heights: &mut [u32]) {
-        // Update trace heights with all pages accessed since last checkpoint
+    pub(crate) fn initialize_segment(&mut self, trace_heights: &mut [u32]) {
+        // Reset trace heights for memory chips
+        // SAFETY: boundary_idx is a compile time constant within bounds
+        unsafe {
+            *trace_heights.get_unchecked_mut(self.boundary_idx) = 0;
+        }
+        if let Some(merkle_tree_idx) = self.merkle_tree_index {
+            // SAFETY: merkle_tree_idx is guaranteed to be in bounds
+            unsafe {
+                *trace_heights.get_unchecked_mut(merkle_tree_idx) = 0;
+            }
+            let poseidon2_idx = trace_heights.len() - 2;
+            // SAFETY: poseidon2_idx is trace_heights.len() - 2, guaranteed to be in bounds
+            unsafe {
+                *trace_heights.get_unchecked_mut(poseidon2_idx) = 0;
+            }
+        }
+
+        // Apply height updates for all pages accessed since last checkpoint
         self.apply_height_updates(
             trace_heights,
             self.page_access_count,

@@ -293,9 +293,9 @@ impl SegmentationCtx {
         self.create_segment::<false>(instret_start, num_insns, segment_heights);
     }
 
-    /// Reset segment context state for a new segment
+    /// Initialize state for a new segment
     #[inline(always)]
-    pub(crate) fn reset_segment(
+    pub(crate) fn initialize_segment(
         &mut self,
         trace_heights: &mut [u32],
         is_trace_height_constant: &[bool],
