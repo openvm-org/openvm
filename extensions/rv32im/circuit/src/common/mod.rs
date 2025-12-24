@@ -270,7 +270,13 @@ mod aot {
             memory_ctx_offset + offset_of!(MemoryCtx<DEFAULT_PAGE_BITS>, page_access_count);
         let addr_space_access_count_ptr_offset =
             memory_ctx_offset + offset_of!(MemoryCtx<DEFAULT_PAGE_BITS>, addr_space_access_count);
+        let addr_space_access_count_pending_ptr_offset = memory_ctx_offset
+            + offset_of!(
+                MemoryCtx<DEFAULT_PAGE_BITS>,
+                addr_space_access_count_pending
+            );
         let inserted_label = format!(".asm_execute_pc_{pc}_inserted");
+        let not_inserted_label = format!(".asm_execute_pc_{pc}_not_inserted");
         // The next section is the implementation of `BitSet::insert` in ASM.
         // pub fn insert(&mut self, index: usize) -> bool {
         //     let word_index = index >> 6;
@@ -302,8 +308,8 @@ mod aot {
 
         // `test (*word & mask)`
         asm_str += &format!("    test {ptr_reg}, {reg2}\n");
-        asm_str += &format!("    jnz {inserted_label}\n");
-        // When (*word & mask) == 0
+        asm_str += &format!("    jnz {not_inserted_label}\n");
+        // When (*word & mask) == 0 (new page inserted)
         // `*word += mask`
         asm_str += &format!("    add {ptr_reg}, {reg2}\n");
         asm_str += &format!("    mov [{reg1}], {ptr_reg}\n");
@@ -319,8 +325,18 @@ mod aot {
         asm_str += &format!("    mov {reg1}, [{reg1}]\n");
         // self.addr_space_access_count[address_space] += 1;
         asm_str += &format!("    add dword ptr [{reg1} + {address_space} * 4], 1\n");
+        asm_str += &format!("    jmp {inserted_label}\n");
+        asm_str += &format!("{not_inserted_label}:\n");
+        // When (*word & mask) != 0 (page already exists)
+        // reg1 = &addr_space_access_count_pending.as_ptr()
+        asm_str += &format!(
+            "    lea {reg1}, [{REG_EXEC_STATE_PTR} + {addr_space_access_count_pending_ptr_offset}]\n"
+        );
+        asm_str += &format!("    mov {reg1}, [{reg1}]\n");
+        // self.addr_space_access_count_pending[address_space] += 1;
+        asm_str += &format!("    add dword ptr [{reg1} + {address_space} * 4], 1\n");
         asm_str += &format!("{inserted_label}:\n");
-        // Inserted, do nothing
+        // Done
 
         Ok(asm_str)
     }
