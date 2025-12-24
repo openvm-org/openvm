@@ -528,7 +528,7 @@ dependencies = [
  "alloy-rlp",
  "alloy-serde",
  "alloy-sol-types",
- "itertools 0.14.0",
+ "itertools 0.13.0",
  "serde",
  "serde_json",
  "serde_with",
@@ -3791,7 +3791,7 @@ dependencies = [
  "dyn-clone",
  "foundry-compilers-artifacts",
  "foundry-compilers-core",
- "itertools 0.14.0",
+ "itertools 0.13.0",
  "path-slash",
  "rayon",
  "semver 1.0.26",
@@ -6405,7 +6405,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "1.2.2"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.2#972f5dbecb6ab3ff7e3e978e9087235ad17c1de9"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fvpmm-sync#97be4b6b08e0d835ab85397810166899659f4f0a"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -6437,7 +6437,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "1.2.2"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.2#972f5dbecb6ab3ff7e3e978e9087235ad17c1de9"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fvpmm-sync#97be4b6b08e0d835ab85397810166899659f4f0a"
 dependencies = [
  "cc",
  "glob",
@@ -6446,7 +6446,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "1.2.2"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.2#972f5dbecb6ab3ff7e3e978e9087235ad17c1de9"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fvpmm-sync#97be4b6b08e0d835ab85397810166899659f4f0a"
 dependencies = [
  "bytesize",
  "ctor",
@@ -7195,7 +7195,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.2.2"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.2#972f5dbecb6ab3ff7e3e978e9087235ad17c1de9"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fvpmm-sync#97be4b6b08e0d835ab85397810166899659f4f0a"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -7225,7 +7225,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.2.2"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.2#972f5dbecb6ab3ff7e3e978e9087235ad17c1de9"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fvpmm-sync#97be4b6b08e0d835ab85397810166899659f4f0a"
 dependencies = [
  "dashmap",
  "derivative",
@@ -10102,7 +10102,7 @@ dependencies = [
  "derive_more 2.0.1",
  "dunce",
  "inturn",
- "itertools 0.14.0",
+ "itertools 0.11.0",
  "itoa",
  "normalize-path",
  "once_map",
@@ -10138,7 +10138,7 @@ dependencies = [
  "alloy-primitives",
  "bitflags",
  "bumpalo",
- "itertools 0.14.0",
+ "itertools 0.11.0",
  "memchr",
  "num-bigint 0.4.6",
  "num-rational",
