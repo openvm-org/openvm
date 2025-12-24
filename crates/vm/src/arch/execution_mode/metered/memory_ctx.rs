@@ -32,52 +32,6 @@ impl BitSet {
         !was_set
     }
 
-    #[inline(always)]
-    pub fn merge_from(&mut self, other: &Self) {
-        debug_assert_eq!(self.words.len(), other.words.len());
-        for (word, other_word) in self.words.iter_mut().zip(other.words.iter()) {
-            *word |= *other_word;
-        }
-    }
-
-    /// Count bits that are set in self but not in other, and call a function for each.
-    /// Returns the total count of such bits.
-    #[inline(always)]
-    pub fn count_diff_with<F>(&self, other: &Self, mut f: F) -> usize
-    where
-        F: FnMut(usize),
-    {
-        debug_assert_eq!(self.words.len(), other.words.len());
-        let mut count = 0;
-
-        for (word_idx, (&word, &other_word)) in
-            self.words.iter().zip(other.words.iter()).enumerate()
-        {
-            if word == other_word {
-                continue;
-            }
-
-            let diff_bits = word & !other_word;
-            if diff_bits == 0 {
-                continue;
-            }
-
-            count += diff_bits.count_ones() as usize;
-
-            // Call function for each bit in diff
-            let mut remaining_bits = diff_bits;
-            while remaining_bits != 0 {
-                let bit_pos = remaining_bits.trailing_zeros();
-                remaining_bits &= remaining_bits - 1; // Clear lowest set bit
-
-                let bit_index = (word_idx << 6) + bit_pos as usize;
-                f(bit_index);
-            }
-        }
-
-        count
-    }
-
     /// Set all bits within [start, end) to 1, return the number of flipped bits.
     /// Assumes start < end and end <= self.words.len() * 64.
     #[inline(always)]
