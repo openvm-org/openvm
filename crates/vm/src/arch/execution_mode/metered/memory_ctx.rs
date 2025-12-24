@@ -154,9 +154,9 @@ pub struct MemoryCtx<const PAGE_BITS: usize> {
     chunk: u32,
     chunk_bits: u32,
     pub(crate) page_indices_checkpoint: BitSet,
-    pub(crate) page_indices: BitSet,
-    page_access_count: usize,
-    addr_space_access_count: RVec<usize>,
+    pub page_indices: BitSet,
+    pub page_access_count: usize,
+    pub addr_space_access_count: RVec<usize>,
 }
 
 impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
