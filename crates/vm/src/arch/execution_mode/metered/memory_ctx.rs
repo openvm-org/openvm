@@ -32,6 +32,52 @@ impl BitSet {
         !was_set
     }
 
+    #[inline(always)]
+    pub fn merge_from(&mut self, other: &Self) {
+        debug_assert_eq!(self.words.len(), other.words.len());
+        for (word, other_word) in self.words.iter_mut().zip(other.words.iter()) {
+            *word |= *other_word;
+        }
+    }
+
+    /// Count bits that are set in self but not in other, and call a function for each.
+    /// Returns the total count of such bits.
+    #[inline(always)]
+    pub fn count_diff_with<F>(&self, other: &Self, mut f: F) -> usize
+    where
+        F: FnMut(usize),
+    {
+        debug_assert_eq!(self.words.len(), other.words.len());
+        let mut count = 0;
+
+        for (word_idx, (&word, &other_word)) in
+            self.words.iter().zip(other.words.iter()).enumerate()
+        {
+            if word == other_word {
+                continue;
+            }
+
+            let diff_bits = word & !other_word;
+            if diff_bits == 0 {
+                continue;
+            }
+
+            count += diff_bits.count_ones() as usize;
+
+            // Call function for each bit in diff
+            let mut remaining_bits = diff_bits;
+            while remaining_bits != 0 {
+                let bit_pos = remaining_bits.trailing_zeros();
+                remaining_bits &= remaining_bits - 1; // Clear lowest set bit
+
+                let bit_index = (word_idx << 6) + bit_pos as usize;
+                f(bit_index);
+            }
+        }
+
+        count
+    }
+
     /// Set all bits within [start, end) to 1, return the number of flipped bits.
     /// Assumes start < end and end <= self.words.len() * 64.
     #[inline(always)]
@@ -99,7 +145,6 @@ impl BitSet {
 
 #[derive(Clone, Debug)]
 pub struct MemoryCtx<const PAGE_BITS: usize> {
-    pub page_indices: BitSet,
     memory_dimensions: MemoryDimensions,
     min_block_size_bits: Vec<u8>,
     pub boundary_idx: usize,
@@ -108,9 +153,10 @@ pub struct MemoryCtx<const PAGE_BITS: usize> {
     continuations_enabled: bool,
     chunk: u32,
     chunk_bits: u32,
-    pub page_access_count: usize,
-    // Note: 32 is the maximum access adapter size.
-    pub addr_space_access_count: RVec<usize>,
+    pub(crate) page_indices_checkpoint: BitSet,
+    pub(crate) page_indices: BitSet,
+    page_access_count: usize,
+    addr_space_access_count: RVec<usize>,
 }
 
 impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
@@ -121,9 +167,10 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         let memory_dimensions = config.memory_config.memory_dimensions();
         let merkle_height = memory_dimensions.overall_height();
 
+        let bitset_size = 1 << (merkle_height.saturating_sub(PAGE_BITS));
+        let addr_space_size = (1 << memory_dimensions.addr_space_height) + 1;
+
         Self {
-            // Address height already considers `chunk_bits`.
-            page_indices: BitSet::new(1 << (merkle_height.saturating_sub(PAGE_BITS))),
             min_block_size_bits: config.memory_config.min_block_size_bits(),
             boundary_idx: config.memory_boundary_air_id(),
             merkle_tree_index: config.memory_merkle_air_id(),
@@ -132,14 +179,11 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             chunk_bits,
             memory_dimensions,
             continuations_enabled: config.continuation_enabled,
+            page_indices_checkpoint: BitSet::new(bitset_size),
+            page_indices: BitSet::new(bitset_size),
             page_access_count: 0,
-            addr_space_access_count: vec![0; (1 << memory_dimensions.addr_space_height) + 1].into(),
+            addr_space_access_count: vec![0; addr_space_size].into(),
         }
-    }
-
-    #[inline(always)]
-    pub fn clear(&mut self) {
-        self.page_indices.clear();
     }
 
     #[inline(always)]
@@ -235,13 +279,79 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         }
     }
 
-    /// Resolve all lazy updates of each memory access for memory adapters/poseidon2/merkle chip.
+    /// Reset memory context state for a new segment
     #[inline(always)]
-    pub(crate) fn lazy_update_boundary_heights(&mut self, trace_heights: &mut [u32]) {
-        debug_assert!(self.boundary_idx < trace_heights.len());
+    pub(crate) fn reset_segment(&mut self, trace_heights: &mut [u32]) {
+        // Update trace heights with all pages accessed since last checkpoint
+        self.apply_height_updates(
+            trace_heights,
+            self.page_access_count,
+            &self.addr_space_access_count,
+        );
 
+        // Replace checkpoint with current pages and clear current
+        std::mem::swap(&mut self.page_indices_checkpoint, &mut self.page_indices);
+        self.page_indices.clear();
+        self.page_access_count = 0;
+        // SAFETY: Resetting array elements to 0 is always safe
+        unsafe {
+            std::ptr::write_bytes(
+                self.addr_space_access_count.as_mut_ptr(),
+                0,
+                self.addr_space_access_count.len(),
+            );
+        }
+    }
+
+    /// Updates the checkpoint with current safe state
+    #[inline(always)]
+    pub(crate) fn update_checkpoint(&mut self) {
+        // Merge current pages into checkpoint
+        self.page_indices_checkpoint.merge_from(&self.page_indices);
+        // Clear current pages to track next checkpoint period
+        self.page_indices.clear();
+        // Reset access counts
+        self.page_access_count = 0;
+        // SAFETY: Resetting array elements to 0 is always safe
+        unsafe {
+            std::ptr::write_bytes(
+                self.addr_space_access_count.as_mut_ptr(),
+                0,
+                self.addr_space_access_count.len(),
+            );
+        }
+    }
+
+    /// Calculate pages per address space relative to a checkpoint
+    #[inline(always)]
+    fn calculate_new_pages_per_addr_space(&self, checkpoint: &BitSet) -> (usize, Box<[usize]>) {
+        let mut addr_space_counts =
+            vec![0usize; self.addr_space_access_count.len()].into_boxed_slice();
+
+        let total_pages = self.page_indices.count_diff_with(checkpoint, |page_id| {
+            let block_id = (page_id << PAGE_BITS) as u64;
+            let (addr_space, _) = self.memory_dimensions.index_to_label(block_id);
+
+            debug_assert!((addr_space as usize) < addr_space_counts.len());
+            // SAFETY: addr_space is bounds checked in debug mode
+            unsafe {
+                *addr_space_counts.get_unchecked_mut(addr_space as usize) += 1;
+            }
+        });
+
+        (total_pages, addr_space_counts)
+    }
+
+    /// Apply height updates given page counts
+    #[inline(always)]
+    fn apply_height_updates(
+        &self,
+        trace_heights: &mut [u32],
+        page_count: usize,
+        addr_space_counts: &[usize],
+    ) {
         // On page fault, assume we add all leaves in a page
-        let leaves = (self.page_access_count << PAGE_BITS) as u32;
+        let leaves = (page_count << PAGE_BITS) as u32;
         // SAFETY: boundary_idx is a compile time constant within bounds
         unsafe {
             *trace_heights.get_unchecked_mut(self.boundary_idx) += leaves;
@@ -261,15 +371,12 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             let nodes = (((1 << PAGE_BITS) - 1) + (merkle_height - PAGE_BITS)) as u32;
             // SAFETY: merkle_tree_idx is guaranteed to be in bounds
             unsafe {
-                *trace_heights.get_unchecked_mut(poseidon2_idx) += nodes * 2;
-                *trace_heights.get_unchecked_mut(merkle_tree_idx) += nodes * 2;
+                *trace_heights.get_unchecked_mut(poseidon2_idx) += nodes * page_count as u32 * 2;
+                *trace_heights.get_unchecked_mut(merkle_tree_idx) += nodes * page_count as u32 * 2;
             }
         }
-        self.page_access_count = 0;
 
-        for address_space in 0..self.addr_space_access_count.len() {
-            // SAFETY: address_space is from 0 to len(), guaranteed to be in bounds
-            let x = unsafe { *self.addr_space_access_count.get_unchecked(address_space) };
+        for (address_space, &x) in addr_space_counts.iter().enumerate() {
             if x > 0 {
                 // Initial **and** final handling of touched pages requires send (resp. receive) in
                 // chunk-sized units for the merkle chip
@@ -281,14 +388,17 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
                     self.chunk_bits,
                     (x << (PAGE_BITS + 1)) as u32,
                 );
-                // SAFETY: address_space is from 0 to len(), guaranteed to be in bounds
-                unsafe {
-                    *self
-                        .addr_space_access_count
-                        .get_unchecked_mut(address_space) = 0;
-                }
             }
         }
+    }
+
+    /// Resolve all lazy updates of each memory access for memory adapters/poseidon2/merkle chip.
+    #[inline(always)]
+    pub(crate) fn lazy_update_boundary_heights(&mut self, trace_heights: &mut [u32]) {
+        // Calculate diff between current and checkpoint
+        let (page_count, addr_space_counts) =
+            self.calculate_new_pages_per_addr_space(&self.page_indices_checkpoint);
+        self.apply_height_updates(trace_heights, page_count, &addr_space_counts);
     }
 }
 
