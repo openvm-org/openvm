@@ -3,6 +3,8 @@ use openvm_instructions::riscv::{RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGI
 
 use crate::{arch::SystemConfig, system::memory::dimensions::MemoryDimensions};
 
+const MAX_MEMORY_OPS_PER_INSN: usize = 1 << 16;
+
 #[derive(Clone, Debug)]
 pub struct BitSet {
     words: Box<[u64]>,
@@ -104,18 +106,18 @@ pub struct MemoryCtx<const PAGE_BITS: usize> {
     pub boundary_idx: usize,
     pub merkle_tree_index: Option<usize>,
     pub adapter_offset: usize,
-    continuations_enabled: bool,
+    pub continuations_enabled: bool,
     chunk: u32,
     chunk_bits: u32,
     pub page_indices: BitSet,
-    pub page_indices_pending: BitSet,
     pub page_access_count: usize,
     pub addr_space_access_count: RVec<usize>,
-    pub addr_space_access_count_pending: RVec<usize>,
+    pub page_indices_since_checkpoint: Box<[u32]>,
+    pub page_indices_since_checkpoint_len: usize,
 }
 
 impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
-    pub fn new(config: &SystemConfig) -> Self {
+    pub fn new(config: &SystemConfig, segment_check_insns: u64) -> Self {
         let chunk = config.initial_block_size() as u32;
         let chunk_bits = chunk.ilog2();
 
@@ -124,6 +126,12 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
 
         let bitset_size = 1 << (merkle_height.saturating_sub(PAGE_BITS));
         let addr_space_size = (1 << memory_dimensions.addr_space_height) + 1;
+        let segment_check_insns = if segment_check_insns == u64::MAX {
+            0
+        } else {
+            segment_check_insns as usize
+        };
+        let page_indices_since_checkpoint_cap = segment_check_insns * MAX_MEMORY_OPS_PER_INSN;
 
         Self {
             min_block_size_bits: config.memory_config.min_block_size_bits(),
@@ -135,10 +143,11 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             memory_dimensions,
             continuations_enabled: config.continuation_enabled,
             page_indices: BitSet::new(bitset_size),
-            page_indices_pending: BitSet::new(bitset_size),
             page_access_count: 0,
             addr_space_access_count: vec![0; addr_space_size].into(),
-            addr_space_access_count_pending: vec![0; addr_space_size].into(),
+            page_indices_since_checkpoint: vec![0; page_indices_since_checkpoint_cap]
+                .into_boxed_slice(),
+            page_indices_since_checkpoint_len: 0,
         }
     }
 
@@ -187,14 +196,17 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
                         .addr_space_access_count
                         .get_unchecked_mut(address_space as usize) += 1;
                 }
-            } else if self.page_indices_pending.insert(page_id as usize) {
-                // SAFETY: address_space passed is usually a hardcoded constant or derived from an
-                // Instruction where it is bounds checked before passing
+            }
+
+            if self.continuations_enabled {
+                // Append page_id to page_indices_since_checkpoint
+                let len = self.page_indices_since_checkpoint_len;
+                debug_assert!(len < self.page_indices_since_checkpoint.len());
+                // SAFETY: len is within bounds, and we extend length by 1 after writing.
                 unsafe {
-                    *self
-                        .addr_space_access_count_pending
-                        .get_unchecked_mut(address_space as usize) += 1;
+                    *self.page_indices_since_checkpoint.as_mut_ptr().add(len) = page_id;
                 }
+                self.page_indices_since_checkpoint_len = len + 1;
             }
         }
     }
@@ -262,37 +274,40 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             }
         }
 
-        // Apply height updates for all pages accessed since last checkpoint
-        let page_access_count = self.addr_space_access_count_pending.iter().sum();
-        self.apply_height_updates(
-            trace_heights,
-            page_access_count,
-            &self.addr_space_access_count_pending,
-        );
-        // SAFETY: Resetting array elements to 0 is always safe
-        unsafe {
-            std::ptr::write_bytes(
-                self.addr_space_access_count_pending.as_mut_ptr(),
-                0,
-                self.addr_space_access_count_pending.len(),
-            );
-        }
-        self.page_indices_pending.clear();
+        // Apply height updates for all pages accessed since last checkpoint, and
+        // initialize page_indices for the new segment.
+        let mut addr_space_access_count = vec![0; self.addr_space_access_count.len()];
+        let mut page_access_count = 0;
         self.page_indices.clear();
+
+        let pages_len = self.page_indices_since_checkpoint_len;
+        for i in 0..pages_len {
+            // SAFETY: i is within 0..pages_len and pages_len is the slice length.
+            let page_id = unsafe { *self.page_indices_since_checkpoint.get_unchecked(i) } as usize;
+            if self.page_indices.insert(page_id) {
+                page_access_count += 1;
+                let (addr_space, _) = self
+                    .memory_dimensions
+                    .index_to_label((page_id as u64) << PAGE_BITS);
+                let addr_space_idx = addr_space as usize;
+                debug_assert!(addr_space_idx < addr_space_access_count.len());
+                // SAFETY: addr_space_idx is bounds checked in debug and derived from a valid page
+                // id.
+                unsafe {
+                    *addr_space_access_count.get_unchecked_mut(addr_space_idx) += 1;
+                }
+            }
+        }
+
+        self.apply_height_updates(trace_heights, page_access_count, &addr_space_access_count);
+
+        self.page_indices_since_checkpoint_len = 0;
     }
 
     /// Updates the checkpoint with current safe state
     #[inline(always)]
     pub(crate) fn update_checkpoint(&mut self) {
-        // SAFETY: Resetting array elements to 0 is always safe
-        unsafe {
-            std::ptr::write_bytes(
-                self.addr_space_access_count_pending.as_mut_ptr(),
-                0,
-                self.addr_space_access_count_pending.len(),
-            );
-        }
-        self.page_indices_pending.clear();
+        self.page_indices_since_checkpoint_len = 0;
     }
 
     /// Apply height updates given page counts
