@@ -16,9 +16,8 @@ pub const KECCAK_OUTPUT_SIZE: usize = 32;
 pub const MIN_ALIGN: usize = 4;
 
 #[cfg(target_os = "zkvm")]
-#[inline(always)]
 #[no_mangle]
-pub extern "C" fn native_xorin(mut buffer: *mut u8, input: *const u8, len: usize) {
+pub extern "C" fn native_xorin(buffer: *mut u8, input: *const u8, len: usize) {
     if len == 0 {
         return;
     }
@@ -49,9 +48,8 @@ pub extern "C" fn native_xorin(mut buffer: *mut u8, input: *const u8, len: usize
 }
 
 #[cfg(target_os = "zkvm")]
-#[inline(always)]
 #[no_mangle]
-pub extern "C" fn native_keccakf(mut buffer: *mut u8) {
+pub extern "C" fn native_keccakf(buffer: *mut u8) {
     unsafe {
         if buffer as usize % MIN_ALIGN == 0 {
             __native_keccakf(buffer);
@@ -80,7 +78,6 @@ pub extern "C" fn native_keccakf(mut buffer: *mut u8) {
 /// [`sha3`]: https://docs.rs/sha3/latest/sha3/
 /// [`tiny_keccak`]: https://docs.rs/tiny-keccak/latest/tiny_keccak/
 #[cfg(target_os = "zkvm")]
-#[inline(always)]
 #[no_mangle]
 pub extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
     // SAFETY: assuming safety assumptions of the inputs, we handle all cases where `bytes` or
@@ -103,7 +100,7 @@ pub extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8
             aligned_output.ptr
         };
 
-        __native_keccak256(actual_bytes, len, actual_output);
+        keccak256_impl(actual_bytes, len, actual_output);
 
         if output as usize % MIN_ALIGN != 0 {
             core::ptr::copy_nonoverlapping(actual_output as *const u8, output, KECCAK_OUTPUT_SIZE);
@@ -113,46 +110,15 @@ pub extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8
 
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
-fn __native_xorin(mut buffer: *mut u8, input: *const u8, len: usize) {
-    openvm_platform::custom_insn_r!(
-        opcode = OPCODE,
-        funct3 = XORIN_FUNCT3,
-        funct7 = XORIN_FUNCT7,
-        rd = InOut buffer,
-        rs1 = In input,
-        rs2 = In len
-    );
-}
-
-#[cfg(target_os = "zkvm")]
-#[inline(always)]
-fn __native_keccakf(mut buffer: *mut u8) {
-    openvm_platform::custom_insn_r!(
-        opcode = OPCODE,
-        funct3 = KECCAKF_FUNCT3,
-        funct7 = KECCAKF_FUNCT7,
-        rd = InOut buffer,
-        rs1 = Const "x0",
-        rs2 = Const "x0",
-    );
-}
-
-#[cfg(target_os = "zkvm")]
-#[inline(always)]
-fn __native_keccak256(input: *const u8, mut len: usize, output: *mut u8) {
-    // Stack-allocated arrays are properly aligned
-    let mut buffer = [0u8; KECCAK_WIDTH_BYTES];
+fn keccak_update(buffer: &mut [u8; KECCAK_WIDTH_BYTES], input: *const u8, mut len: usize) -> usize {
     let buffer_ptr = buffer.as_mut_ptr();
-
     let mut offset = 0;
     let input_aligned = input as usize % MIN_ALIGN == 0;
 
     // Absorb full blocks
     while len >= KECCAK_RATE {
         if input_aligned {
-            unsafe {
-                __native_xorin(buffer_ptr, input.add(offset), KECCAK_RATE);
-            }
+            __native_xorin(buffer_ptr, unsafe { input.add(offset) }, KECCAK_RATE);
         } else {
             let mut block = [0u8; KECCAK_RATE];
             unsafe {
@@ -182,15 +148,59 @@ fn __native_keccak256(input: *const u8, mut len: usize, output: *mut u8) {
         }
     }
 
+    len
+}
+
+#[cfg(target_os = "zkvm")]
+#[inline(always)]
+fn keccak_finalize(
+    buffer: &mut [u8; KECCAK_WIDTH_BYTES],
+    remaining: usize,
+    output: *mut u8,
+) {
     // Apply Keccak padding (pad10*1)
-    buffer[len] ^= 0x01;
+    buffer[remaining] ^= 0x01;
     buffer[KECCAK_RATE - 1] ^= 0x80;
 
     // Final permutation
     unsafe {
-        __native_keccakf(buffer_ptr);
+        __native_keccakf(buffer.as_mut_ptr());
 
         // Extract output
-        core::ptr::copy_nonoverlapping(buffer_ptr, output, KECCAK_OUTPUT_SIZE);
+        core::ptr::copy_nonoverlapping(buffer.as_ptr(), output, KECCAK_OUTPUT_SIZE);
     }
+}
+
+#[cfg(target_os = "zkvm")]
+#[inline(always)]
+fn keccak256_impl(input: *const u8, len: usize, output: *mut u8) {
+    let mut buffer = [0u8; KECCAK_WIDTH_BYTES];
+    let remaining = keccak_update(&mut buffer, input, len);
+    keccak_finalize(&mut buffer, remaining, output);
+}
+
+#[cfg(target_os = "zkvm")]
+#[inline(always)]
+fn __native_xorin(mut buffer: *mut u8, input: *const u8, len: usize) {
+    openvm_platform::custom_insn_r!(
+        opcode = OPCODE,
+        funct3 = XORIN_FUNCT3,
+        funct7 = XORIN_FUNCT7,
+        rd = InOut buffer,
+        rs1 = In input,
+        rs2 = In len
+    );
+}
+
+#[cfg(target_os = "zkvm")]
+#[inline(always)]
+fn __native_keccakf(mut buffer: *mut u8) {
+    openvm_platform::custom_insn_r!(
+        opcode = OPCODE,
+        funct3 = KECCAKF_FUNCT3,
+        funct7 = KECCAKF_FUNCT7,
+        rd = InOut buffer,
+        rs1 = Const "x0",
+        rs2 = Const "x0",
+    );
 }
