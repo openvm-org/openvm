@@ -49,29 +49,29 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
                 })
                 .unzip();
 
-        let memory_ctx = MemoryCtx::new(config);
+        // Assert that the indices are correct
+        let segmentation_ctx =
+            SegmentationCtx::new(air_names, widths, interactions, config.segmentation_limits);
+        let memory_ctx = MemoryCtx::new(config, segmentation_ctx.segment_check_insns);
 
         // Assert that the indices are correct
         debug_assert!(
-            air_names[memory_ctx.boundary_idx].contains("Boundary"),
+            segmentation_ctx.air_names[memory_ctx.boundary_idx].contains("Boundary"),
             "air_name={}",
-            air_names[memory_ctx.boundary_idx]
+            segmentation_ctx.air_names[memory_ctx.boundary_idx]
         );
         if let Some(merkle_tree_index) = memory_ctx.merkle_tree_index {
             debug_assert!(
-                air_names[merkle_tree_index].contains("Merkle"),
+                segmentation_ctx.air_names[merkle_tree_index].contains("Merkle"),
                 "air_name={}",
-                air_names[merkle_tree_index]
+                segmentation_ctx.air_names[merkle_tree_index]
             );
         }
         debug_assert!(
-            air_names[memory_ctx.adapter_offset].contains("AccessAdapterAir<2>"),
+            segmentation_ctx.air_names[memory_ctx.adapter_offset].contains("AccessAdapterAir<2>"),
             "air_name={}",
-            air_names[memory_ctx.adapter_offset]
+            segmentation_ctx.air_names[memory_ctx.adapter_offset]
         );
-
-        let segmentation_ctx =
-            SegmentationCtx::new(air_names, widths, interactions, config.segmentation_limits);
 
         let mut ctx = Self {
             trace_heights,
@@ -122,12 +122,6 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         self.segmentation_ctx.segments
     }
 
-    fn reset_segment(&mut self) {
-        self.memory_ctx.clear();
-        // Add merkle height contributions for all registers
-        self.memory_ctx.add_register_merkle_heights();
-    }
-
     #[inline(always)]
     pub fn check_and_segment(&mut self) -> bool {
         // We track the segmentation check by instrets_until_check instead of instret in order to
@@ -147,7 +141,19 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         );
 
         if did_segment {
-            self.reset_segment();
+            // Initialize segment context for new segment
+            self.segmentation_ctx
+                .initialize_segment(&mut self.trace_heights, &self.is_trace_height_constant);
+            // Initialize memory context for new segment
+            self.memory_ctx.initialize_segment(&mut self.trace_heights);
+            // Add merkle height contributions for all registers
+            self.memory_ctx.add_register_merkle_heights();
+        } else {
+            // Update checkpoint for trace heights
+            self.segmentation_ctx
+                .update_checkpoint(self.segmentation_ctx.instret, &self.trace_heights);
+            // Update checkpoint for page indices
+            self.memory_ctx.update_checkpoint();
         }
         did_segment
     }
