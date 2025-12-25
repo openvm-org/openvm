@@ -119,14 +119,15 @@ pub extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8
 fn keccak_update(
     buffer: &mut AlignedStackBuf<KECCAK_WIDTH_BYTES>,
     input: *const u8,
-    mut len: usize,
+    len: usize,
 ) -> usize {
     let buffer_ptr = buffer.data.as_mut_ptr();
     let mut offset = 0;
+    let mut remaining = len;
     let input_aligned = input as usize % MIN_ALIGN == 0;
 
     // Absorb full blocks
-    while len >= KECCAK_RATE {
+    while remaining >= KECCAK_RATE {
         if input_aligned {
             __native_xorin(buffer_ptr, unsafe { input.add(offset) }, KECCAK_RATE);
         } else {
@@ -146,42 +147,41 @@ fn keccak_update(
             __native_keccakf(buffer_ptr);
         }
         offset += KECCAK_RATE;
-        len -= KECCAK_RATE;
+        remaining -= KECCAK_RATE;
     }
 
     // Handle remaining bytes
-    if len > 0 {
+    if remaining > 0 {
         unsafe {
-            if input_aligned && len % MIN_ALIGN == 0 {
-                __native_xorin(buffer_ptr, input.add(offset), len);
+            if input_aligned && remaining % MIN_ALIGN == 0 {
+                __native_xorin(buffer_ptr, input.add(offset), remaining);
             } else {
-                // Copy to aligned buffer, and pad length to MIN_ALIGN if needed.
-                let adjusted_len = len.next_multiple_of(MIN_ALIGN);
+                let adjusted_len = remaining.next_multiple_of(MIN_ALIGN);
                 let mut padded_input = AlignedStackBuf::<KECCAK_RATE> {
                     data: [0u8; KECCAK_RATE],
                 };
                 core::ptr::copy_nonoverlapping(
                     input.add(offset),
                     padded_input.data.as_mut_ptr(),
-                    len,
+                    remaining,
                 );
                 __native_xorin(buffer_ptr, padded_input.data.as_ptr(), adjusted_len);
             }
         }
     }
 
-    len
+    remaining
 }
 
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
 fn keccak_finalize(
     buffer: &mut AlignedStackBuf<KECCAK_WIDTH_BYTES>,
-    remaining: usize,
+    remaining_len: usize,
     output: *mut u8,
 ) {
     // Apply Keccak padding (pad10*1)
-    buffer.data[remaining] ^= 0x01;
+    buffer.data[remaining_len] ^= 0x01;
     buffer.data[KECCAK_RATE - 1] ^= 0x80;
 
     // Final permutation
@@ -199,8 +199,8 @@ fn keccak256_impl(input: *const u8, len: usize, output: *mut u8) {
     let mut buffer = AlignedStackBuf::<KECCAK_WIDTH_BYTES> {
         data: [0u8; KECCAK_WIDTH_BYTES],
     };
-    let remaining = keccak_update(&mut buffer, input, len);
-    keccak_finalize(&mut buffer, remaining, output);
+    let remaining_len = keccak_update(&mut buffer, input, len);
+    keccak_finalize(&mut buffer, remaining_len, output);
 }
 
 #[cfg(target_os = "zkvm")]
