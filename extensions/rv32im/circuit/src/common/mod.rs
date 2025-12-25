@@ -266,97 +266,92 @@ mod aot {
             + offset_of!(MeteredCtx, memory_ctx);
         let page_indices_ptr_offset =
             memory_ctx_offset + offset_of!(MemoryCtx<DEFAULT_PAGE_BITS>, page_indices);
-        let page_access_count_offset =
-            memory_ctx_offset + offset_of!(MemoryCtx<DEFAULT_PAGE_BITS>, page_access_count);
         let addr_space_access_count_ptr_offset =
             memory_ctx_offset + offset_of!(MemoryCtx<DEFAULT_PAGE_BITS>, addr_space_access_count);
-        let addr_space_access_count_pending_ptr_offset = memory_ctx_offset
+        let page_indices_since_checkpoint_ptr_offset = memory_ctx_offset
+            + offset_of!(MemoryCtx<DEFAULT_PAGE_BITS>, page_indices_since_checkpoint);
+        let page_indices_since_checkpoint_len_offset = memory_ctx_offset
             + offset_of!(
                 MemoryCtx<DEFAULT_PAGE_BITS>,
-                addr_space_access_count_pending
+                page_indices_since_checkpoint_len
             );
-        let page_indices_pending_ptr_offset =
-            memory_ctx_offset + offset_of!(MemoryCtx<DEFAULT_PAGE_BITS>, page_indices_pending);
+        let continuations_enabled_offset =
+            memory_ctx_offset + offset_of!(MemoryCtx<DEFAULT_PAGE_BITS>, continuations_enabled);
+        let inserted_label = format!(".asm_execute_pc_{pc}_inserted");
         let done_label = format!(".asm_execute_pc_{pc}_done");
-        let pending_label = format!(".asm_execute_pc_{pc}_pending");
-        // The next section implements the two-bitset insert logic in ASM.
-        // Optimized for the common case where both inserts return false (bit already set).
-        //
-        // if self.page_indices.insert(page_id as usize) {
-        //     self.addr_space_access_count[address_space] += 1;
-        // } else if self.page_indices_pending.insert(page_id as usize) {
-        //     self.addr_space_access_count_pending[address_space] += 1;
+        let skip_append_label = format!(".asm_execute_pc_{pc}_skip_append");
+        // The next section is the implementation of `BitSet::insert` in ASM.
+        // pub fn insert(&mut self, index: usize) -> bool {
+        //     let word_index = index >> 6;
+        //     let bit_index = index & 63;
+        //     let mask = 1u64 << bit_index;
+        //     let word = unsafe { self.words.get_unchecked_mut(word_index) };
+        //     let was_set = (*word & mask) != 0;
+        //     *word |= mask;
+        //     !was_set
         // }
+        // self.page_indices_since_checkpoint.push(page_id);
 
-        // Start with `ptr_reg = page_id`
-        // `reg1 = word_index = page_id >> 6`
+        // Start with `ptr_reg = index`
+        asm_str += &format!("    push {ptr_reg}\n");
+        // `reg1 = word_index`
         asm_str += &format!("    mov {reg1}, {ptr_reg}\n");
         asm_str += &format!("    shr {reg1}, 6\n");
-        // Save word_index on stack for potential second attempt
-        asm_str += &format!("    push {reg1}\n");
-        // `ptr_reg = bit_index = page_id & 63`
+        // `ptr_reg = bit_index = index & 63`
         asm_str += &format!("    and {ptr_reg}, 63\n");
         // `reg2 = mask = 1u64 << bit_index`
         asm_str += &format!("    mov {reg2}, 1\n");
         asm_str += &format!("    shlx {reg2}, {reg2}, {ptr_reg}\n");
-
-        // First attempt: try to insert into page_indices
         // `ptr_reg = self.page_indices.ptr`
         asm_str +=
             &format!("    mov {ptr_reg}, [{REG_EXEC_STATE_PTR} + {page_indices_ptr_offset}]\n");
-        // `reg1 = word_ptr = &page_indices.words[word_index]`
+
+        // `reg1 = word_ptr = &self.words.get_unchecked_mut(word_index)`
         asm_str += &format!("    lea {reg1}, [{ptr_reg} + {reg1} * 8]\n");
         // `ptr_reg = word = *word_ptr`
         asm_str += &format!("    mov {ptr_reg}, [{reg1}]\n");
-        // Test if bit is already set
-        asm_str += &format!("    test {ptr_reg}, {reg2}\n");
-        asm_str += &format!("    jnz {pending_label}\n");
 
-        // Bit not set in page_indices, set it
-        asm_str += &format!("    or {ptr_reg}, {reg2}\n");
+        // `test (*word & mask)`
+        asm_str += &format!("    test {ptr_reg}, {reg2}\n");
+        asm_str += &format!("    jnz {inserted_label}\n");
+        // When (*word & mask) == 0
+        // `*word += mask`
+        asm_str += &format!("    add {ptr_reg}, {reg2}\n");
         asm_str += &format!("    mov [{reg1}], {ptr_reg}\n");
-        // Clean up stack
-        asm_str += &format!("    add rsp, 8\n");
-        // Update page_access_count
-        asm_str +=
-            &format!("    lea {reg1}, [{REG_EXEC_STATE_PTR} + {page_access_count_offset}]\n");
-        asm_str += &format!("    add dword ptr [{reg1}], 1\n");
-        // Update addr_space_access_count[address_space]
+        // reg1 = &addr_space_access_count.as_ptr()
         asm_str += &format!(
             "    lea {reg1}, [{REG_EXEC_STATE_PTR} + {addr_space_access_count_ptr_offset}]\n"
         );
         asm_str += &format!("    mov {reg1}, [{reg1}]\n");
+        // self.addr_space_access_count[address_space] += 1;
         asm_str += &format!("    add dword ptr [{reg1} + {address_space} * 4], 1\n");
+        asm_str += &format!("{inserted_label}:\n");
+        // Skip append if continuations are disabled
+        asm_str += &format!(
+            "    cmp byte ptr [{REG_EXEC_STATE_PTR} + {continuations_enabled_offset}], 0\n"
+        );
+        asm_str += &format!("    je {skip_append_label}\n");
+        // Append page_id to page_indices_since_checkpoint
+        asm_str += &format!("    pop {ptr_reg}\n");
+        asm_str += &format!(
+            "    mov {reg1}, [{REG_EXEC_STATE_PTR} + {page_indices_since_checkpoint_len_offset}]\n"
+        );
+        asm_str += &format!(
+            "    mov {reg2}, [{REG_EXEC_STATE_PTR} + {page_indices_since_checkpoint_ptr_offset}]\n"
+        );
+        let ptr_reg_32 = convert_x86_reg(ptr_reg, Width::W32).ok_or_else(|| {
+            AotError::Other(format!("unsupported ptr_reg for 32-bit store: {ptr_reg}"))
+        })?;
+        asm_str += &format!("    mov dword ptr [{reg2} + {reg1} * 4], {ptr_reg_32}\n");
+        asm_str += &format!("    add {reg1}, 1\n");
+        asm_str += &format!(
+            "    mov [{REG_EXEC_STATE_PTR} + {page_indices_since_checkpoint_len_offset}], {reg1}\n"
+        );
         asm_str += &format!("    jmp {done_label}\n");
-
-        // Second attempt: try to insert into page_indices_pending
-        asm_str += &format!("{pending_label}:\n");
-        // Restore word_index from stack
-        asm_str += &format!("    pop {reg1}\n");
-        // `ptr_reg = self.page_indices_pending.ptr`
-        asm_str += &format!(
-            "    mov {ptr_reg}, [{REG_EXEC_STATE_PTR} + {page_indices_pending_ptr_offset}]\n"
-        );
-        // `reg1 = word_ptr = &page_indices_pending.words[word_index]`
-        asm_str += &format!("    lea {reg1}, [{ptr_reg} + {reg1} * 8]\n");
-        // `ptr_reg = word = *word_ptr`
-        asm_str += &format!("    mov {ptr_reg}, [{reg1}]\n");
-        // Test if bit is already set (reg2 still contains mask)
-        asm_str += &format!("    test {ptr_reg}, {reg2}\n");
-        asm_str += &format!("    jnz {done_label}\n");
-
-        // Bit not set in page_indices_pending, set it
-        asm_str += &format!("    or {ptr_reg}, {reg2}\n");
-        asm_str += &format!("    mov [{reg1}], {ptr_reg}\n");
-        // Update addr_space_access_count_pending[address_space]
-        asm_str += &format!(
-            "    lea {reg1}, [{REG_EXEC_STATE_PTR} + {addr_space_access_count_pending_ptr_offset}]\n"
-        );
-        asm_str += &format!("    mov {reg1}, [{reg1}]\n");
-        asm_str += &format!("    add dword ptr [{reg1} + {address_space} * 4], 1\n");
-
+        asm_str += &format!("{skip_append_label}:\n");
+        // Discard pushed page_id
+        asm_str += &format!("    pop {ptr_reg}\n");
         asm_str += &format!("{done_label}:\n");
-        // Done
 
         Ok(asm_str)
     }
