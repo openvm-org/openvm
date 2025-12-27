@@ -522,6 +522,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         preflight
     }
 
+    #[cfg_attr(feature = "cuda", allow(dead_code))]
     #[tracing::instrument(name = "compute_merkle_precomputation", level = "info", skip_all)]
     fn compute_merkle_precomputation(proof: &Proof) -> MerklePrecomputation {
         let initial_chunks: usize = proof
