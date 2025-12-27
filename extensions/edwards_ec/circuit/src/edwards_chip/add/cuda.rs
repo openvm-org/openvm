@@ -1,27 +1,31 @@
 use std::sync::Arc;
 
 use derive_new::new;
+use num_bigint::BigUint;
 use openvm_circuit::arch::{AdapterCoreLayout, DenseRecordArena, RecordSeeker};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_backend::{chip::get_empty_air_proving_ctx, prover_backend::GpuBackend, types::F};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_ecc_transpiler::Rv32EdwardsOpcode;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
     ExprBuilderConfig, FieldExpressionChipGPU, FieldExpressionCoreAir, FieldExpressionMetadata,
 };
 use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
+use openvm_te_transpiler::Rv32EdwardsOpcode;
 
-use crate::{ec_add_ne_expr, EccRecord};
+use crate::{te_add_expr, EdwardsRecord};
 
+#[allow(clippy::too_many_arguments)]
 #[derive(new)]
 pub struct TeAddChipGpu<const BLOCKS: usize, const BLOCK_SIZE: usize> {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
     pub config: ExprBuilderConfig,
+    pub a: BigUint,
+    pub d: BigUint,
     pub offset: usize,
     pub pointer_max_bits: u32,
     pub timestamp_max_bits: u32,
@@ -32,7 +36,12 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
 {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         let range_bus = self.range_checker.cpu_chip.as_ref().unwrap().bus();
-        let expr = ec_add_ne_expr(self.config.clone(), range_bus);
+        let expr = te_add_expr(
+            self.config.clone(),
+            range_bus,
+            self.a.clone(),
+            self.d.clone(),
+        );
 
         let total_input_limbs = expr.builder.num_input * expr.canonical_num_limbs();
         let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
@@ -42,7 +51,7 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
 
         let record_size = RecordSeeker::<
             DenseRecordArena,
-            EccRecord<2, BLOCKS, BLOCK_SIZE>,
+            EdwardsRecord<2, BLOCKS, BLOCK_SIZE>,
             _,
         >::get_aligned_record_size(&layout);
 

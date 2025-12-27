@@ -28,6 +28,9 @@ use super::{utils::jacobi, EdwardsAir, EdwardsChip};
 mod cuda;
 mod execution;
 
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+
 pub fn te_add_expr(
     config: ExprBuilderConfig, // The coordinate field.
     range_bus: VariableRangeCheckerBus,

@@ -29,8 +29,7 @@ use rand::{rngs::StdRng, Rng};
 use {
     crate::{edwards_chip::TeAddChipGpu, EdwardsRecord},
     openvm_circuit::arch::testing::{
-        default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
-        GpuTestChipHarness,
+        default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
 };
@@ -232,13 +231,15 @@ fn create_cuda_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
         dummy_range_checker_chip,
         dummy_bitwise_chip,
         tester.address_bits(),
-        a_biguint,
-        d_biguint,
+        a_biguint.clone(),
+        d_biguint.clone(),
     );
     let gpu_chip = TeAddChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         config,
+        a_biguint,
+        d_biguint,
         offset,
         tester.address_bits() as u32,
         tester.timestamp_max_bits() as u32,
@@ -474,8 +475,13 @@ fn run_cuda_ec_add<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS
         limb_bits: LIMB_BITS,
     };
 
-    let mut harness =
-        create_cuda_harness::<BLOCKS, BLOCK_SIZE>(&tester, config, offset, a_biguint, d_biguint);
+    let mut harness = create_cuda_harness::<BLOCKS, BLOCK_SIZE>(
+        &tester,
+        config,
+        offset,
+        a_biguint.clone(),
+        d_biguint.clone(),
+    );
 
     set_and_execute_ec_add::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
         &mut tester,
@@ -483,8 +489,8 @@ fn run_cuda_ec_add<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS
         &mut harness.dense_arena,
         &mut rng,
         &modulus,
-        a_biguint,
-        d_biguint,
+        a_biguint.clone(),
+        d_biguint.clone(),
         true,
         offset,
         None,
@@ -497,8 +503,8 @@ fn run_cuda_ec_add<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS
         &mut harness.dense_arena,
         &mut rng,
         &modulus,
-        a_biguint,
-        d_biguint,
+        a_biguint.clone(),
+        d_biguint.clone(),
         false,
         offset,
         Some(SampleEcPoints[0].clone()),
@@ -521,7 +527,7 @@ fn run_cuda_ec_add<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS
 
     harness
         .dense_arena
-        .get_record_seeker::<EccRecord<2, BLOCKS, BLOCK_SIZE>, _>()
+        .get_record_seeker::<EdwardsRecord<2, BLOCKS, BLOCK_SIZE>, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
             harness.executor.get_record_layout::<F>(),

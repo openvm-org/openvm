@@ -22,8 +22,8 @@ use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
 use openvm_stark_backend::{p3_air::BaseAir, prover::types::AirProvingContext, Chip};
 
 use crate::{
-    get_ec_addne_chip, get_ec_double_chip, EdwardsAir, EdwardsChip, EdwardsExtension,
-    EdwardsRecord, Rv32EdwardsConfig,
+    edwards_chip::get_te_add_chip, EdwardsAir, EdwardsChip, EdwardsExtension, EdwardsRecord,
+    Rv32EdwardsConfig,
 };
 
 #[derive(derive_new::new)]
@@ -111,14 +111,16 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, EdwardsExte
                 };
 
                 inventory.next_air::<EdwardsAir<2, 2, 32>>()?;
-                let addne = get_ec_addne_chip::<F, 2, 32>(
+                let add = get_te_add_chip::<F, 2, 32>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
                     pointer_max_bits,
+                    curve.a.clone(),
+                    curve.d.clone(),
                 );
-                inventory.add_executor_chip(HybridEdwardsChip::new(addne));
+                inventory.add_executor_chip(HybridEdwardsChip::new(add));
             } else {
                 panic!("Modulus too large");
             }

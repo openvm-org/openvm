@@ -10,13 +10,13 @@ use openvm_circuit::{
     },
 };
 use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
-use openvm_ecc_transpiler::Rv32EdwardsOpcode;
 use openvm_instructions::LocalOpcode;
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use openvm_te_transpiler::Rv32EdwardsOpcode;
 use strum::EnumCount;
 
-use crate::{EdwardsGpuProverExt, Rv32EdwardsConfig};
+use crate::{edwards_chip::TeAddChipGpu, EdwardsAir, EdwardsExtension, Rv32EdwardsConfig};
 
 #[derive(Clone)]
 pub struct EdwardsGpuProverExt;
@@ -51,15 +51,17 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, EdwardsExte
                 };
 
                 inventory.next_air::<EdwardsAir<2, 2, 32>>()?;
-                let addne = EdwardsAddNeChipGpu::<2, 32>::new(
+                let add = TeAddChipGpu::<2, 32>::new(
                     range_checker.clone(),
                     bitwise_lu.clone(),
                     config.clone(),
+                    curve.a.clone(),
+                    curve.d.clone(),
                     start_offset,
                     pointer_max_bits as u32,
                     timestamp_max_bits as u32,
                 );
-                inventory.add_executor_chip(addne);
+                inventory.add_executor_chip(add);
             } else {
                 panic!("Modulus too large");
             }

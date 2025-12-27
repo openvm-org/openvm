@@ -33,14 +33,11 @@ rand = { workspace = true }
 serde = { workspace = true }
 serde_with = { workspace = true }
 lazy_static = { workspace = true }
-hex-literal = { workspace = true }
 cfg-if = { workspace = true }
 
 halo2curves-axiom = { workspace = true }
-blstrs = { workspace = true }
 
 [dev-dependencies]
-openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
 openvm-stark-sdk = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }

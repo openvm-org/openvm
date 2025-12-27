@@ -11,8 +11,6 @@ repository.workspace = true
 openvm = { workspace = true }
 serde = { workspace = true }
 strum_macros.workspace = true
-ecdsa-core = { workspace = true, features = ["verifying"] }
-elliptic-curve = { workspace = true, features = ["arithmetic", "sec1"] }
 openvm-custom-insn = { workspace = true }
 openvm-rv32im-guest = { workspace = true }
 openvm-algebra-guest = { workspace = true }
@@ -25,7 +23,6 @@ hex-literal = { workspace = true }
 
 # Used for `halo2curves` feature
 halo2curves-axiom = { workspace = true, optional = true }
-group = "0.13.0"
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 lazy_static = { workspace = true }
