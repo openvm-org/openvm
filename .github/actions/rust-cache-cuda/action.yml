@@ -1,0 +1,35 @@
+name: "Rust Cache with CUDA Architecture"
+description: "Wraps Swatinem/rust-cache with GPU architecture in cache key to avoid CUDA library conflicts"
+
+inputs:
+  cache-on-failure:
+    description: "Cache even if the build fails"
+    required: false
+    default: "true"
+  key:
+    description: "Additional cache key suffix"
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Detect GPU architecture
+      id: gpu-arch
+      shell: bash
+      run: |
+        if command -v nvidia-smi &> /dev/null; then
+          # Get compute capability (e.g., "8.9" -> "89")
+          CUDA_ARCH=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d '.' || echo "unknown")
+          echo "cuda_arch=$CUDA_ARCH" >> $GITHUB_OUTPUT
+          echo "Detected CUDA architecture: $CUDA_ARCH"
+        else
+          echo "cuda_arch=no-gpu" >> $GITHUB_OUTPUT
+          echo "No GPU detected"
+        fi
+
+    - name: Rust cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        cache-on-failure: ${{ inputs.cache-on-failure }}
+        key: ${{ inputs.key }}${{ inputs.key && '-' || '' }}cuda-${{ steps.gpu-arch.outputs.cuda_arch }}

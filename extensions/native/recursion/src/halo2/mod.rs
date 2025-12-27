@@ -76,7 +76,7 @@ impl RawEvmProof {
     /// Return bytes calldata to be passed to the verifier contract.
     #[cfg(feature = "evm-prove")]
     pub fn verifier_calldata(&self) -> Vec<u8> {
-        snark_verifier_sdk::evm::encode_calldata(&[self.instances.clone()], &self.proof)
+        snark_verifier_sdk::evm::encode_calldata(std::slice::from_ref(&self.instances), &self.proof)
     }
 }
 
@@ -141,7 +141,7 @@ impl Halo2Prover {
         let mut builder = Self::populate(builder, dsl_operations, witness, true);
 
         let public_instances = builder.instances();
-        println!("Public instances: {:?}", public_instances);
+        println!("Public instances: {public_instances:?}");
 
         builder.calculate_params(Some(20));
 
@@ -164,16 +164,6 @@ impl Halo2Prover {
         let mut builder = Self::populate(builder, dsl_operations, witness, true);
         builder.calculate_params(Some(20));
 
-        // let break_points;
-        // // if pk already exists, read break points from file
-        // let pk = if Path::new("halo2_final.pk").exists() {
-        //     let file = File::open("halo2_final.json").unwrap();
-        //     break_points = serde_json::from_reader(file).unwrap();
-        //     gen_pk(&params, &builder, Some(Path::new("halo2_final.pk")))
-        // } else {
-        //
-        //     pk
-        // };
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
         let pk = keygen_pk2(params, &builder, false).unwrap();
@@ -188,8 +178,6 @@ impl Halo2Prover {
             .map(|x| x.len())
             .collect_vec();
 
-        // let file = File::create("halo2_final.json").unwrap();
-        // serde_json::to_writer(file, &break_points).unwrap();
         Halo2ProvingPinning {
             pk,
             metadata: Halo2ProvingMetadata {
@@ -267,7 +255,7 @@ impl<'de> Deserialize<'de> for Halo2ProvingPinning {
             SerdeFormat::RawBytes,
             metadata.config_params.clone(),
         )
-        .map_err(|e| de::Error::custom(format!("invalid bytes for proving key: {}", e)))?;
+        .map_err(|e| de::Error::custom(format!("invalid bytes for proving key: {e}")))?;
 
         Ok(Halo2ProvingPinning { pk, metadata })
     }

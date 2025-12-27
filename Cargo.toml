@@ -1,7 +1,7 @@
 [workspace.package]
-version = "1.4.0-rc.2"
+version = "1.4.2"
 edition = "2021"
-rust-version = "1.86.0"
+rust-version = "1.90.0"
 authors = ["OpenVM Authors"]
 homepage = "https://openvm.dev"
 repository = "https://github.com/openvm-org/"
@@ -54,12 +54,16 @@ members = [
     "extensions/sha256/circuit",
     "extensions/sha256/transpiler",
     "extensions/sha256/guest",
-    "extensions/ecc/circuit",
-    "extensions/ecc/transpiler",
-    "extensions/ecc/guest",
-    "extensions/ecc/sw-macros",
-    "extensions/ecc/te-macros",
-    "extensions/ecc/tests",
+    "extensions/weierstrass_ec/circuit",
+    "extensions/weierstrass_ec/transpiler",
+    "extensions/weierstrass_ec/guest",
+    "extensions/weierstrass_ec/sw-macros",
+    "extensions/weierstrass_ec/tests",
+    "extensions/edwards_ec/circuit",
+    "extensions/edwards_ec/transpiler",
+    "extensions/edwards_ec/guest",
+    "extensions/edwards_ec/te-macros",
+    "extensions/edwards_ec/tests",
     "extensions/pairing/circuit",
     "extensions/pairing/guest",
     "guest-libs/ff_derive/",
@@ -70,6 +74,7 @@ members = [
     "guest-libs/ruint/",
     "guest-libs/sha2/",
     "guest-libs/verify_stark/",
+    "scripts",
 ]
 exclude = ["crates/sdk/example", "benchmarks/guest/**"]
 resolver = "2"
@@ -113,8 +118,11 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.0-rc.1", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.0-rc.1", default-features = false }
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.2", default-features = false }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.2", default-features = false }
+openvm-cuda-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.2", default-features = false }
+openvm-cuda-builder = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.2", default-features = false }
+openvm-cuda-common = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.2", default-features = false }
 
 # OpenVM
 openvm-sdk = { path = "crates/sdk", default-features = false }
@@ -161,11 +169,14 @@ openvm-algebra-transpiler = { path = "extensions/algebra/transpiler", default-fe
 openvm-algebra-guest = { path = "extensions/algebra/guest", default-features = false }
 openvm-algebra-moduli-macros = { path = "extensions/algebra/moduli-macros", default-features = false }
 openvm-algebra-complex-macros = { path = "extensions/algebra/complex-macros", default-features = false }
-openvm-ecc-circuit = { path = "extensions/ecc/circuit", default-features = false }
-openvm-ecc-transpiler = { path = "extensions/ecc/transpiler", default-features = false }
-openvm-ecc-guest = { path = "extensions/ecc/guest", default-features = false }
-openvm-ecc-sw-macros = { path = "extensions/ecc/sw-macros", default-features = false }
-openvm-ecc-te-macros = { path = "extensions/ecc/te-macros", default-features = false }
+openvm-ecc-circuit = { path = "extensions/weierstrass_ec/circuit", default-features = false }
+openvm-ecc-transpiler = { path = "extensions/weierstrass_ec/transpiler", default-features = false }
+openvm-ecc-guest = { path = "extensions/weierstrass_ec/guest", default-features = false }
+openvm-ecc-sw-macros = { path = "extensions/weierstrass_ec/sw-macros", default-features = false }
+openvm-te-circuit = { path = "extensions/edwards_ec/circuit", default-features = false }
+openvm-te-transpiler = { path = "extensions/edwards_ec/transpiler", default-features = false }
+openvm-te-guest = { path = "extensions/edwards_ec/guest", default-features = false }
+openvm-ecc-te-macros = { path = "extensions/edwards_ec/te-macros", default-features = false }
 openvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features = false }
 openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
@@ -187,16 +198,13 @@ p3-poseidon2-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539b
 p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539bbc84085efb609f4f62cb03cf49588388abdb", default-features = false }
 
 zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
-snark-verifier-sdk = { version = "0.2.0", default-features = false, features = [
-    "loader_halo2",
-    "halo2-axiom",
-] }
+snark-verifier-sdk = { version = "0.2.0", default-features = false, features = ["loader_halo2", "halo2-axiom"] }
 snark-verifier = { version = "0.2.0", default-features = false }
-halo2curves-axiom = "0.7.0"
+halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git", tag = "v0.7.2" }
 
-forge-fmt = "0.2.0"
+forge-fmt = { git = "https://github.com/foundry-rs/foundry.git", tag = "v1.5.0" }
 cargo_metadata = "0.18"
-alloy-sol-types = "0.8.25"
+alloy-sol-types = "1.4.1"
 tracing = "0.1.40"
 bon = "3.2.0"
 serde_json = "1.0.117"
@@ -205,9 +213,7 @@ clap = "4.5.23"
 toml = "0.8.14"
 lazy_static = "1.5.0"
 derive-new = "0.6.0"
-derive_more = { version = "1.0.0", features = [
-    "display",
-], default-features = false }
+derive_more = { version = "1.0.0", features = ["display"], default-features = false }
 derivative = "2.2.0"
 strum_macros = "0.26.4"
 strum = { version = "0.26.3", features = ["derive"] }
@@ -229,7 +235,11 @@ hex = { version = "0.4.3", default-features = false }
 serde-big-array = "0.5.1"
 dashmap = "6.1.0"
 memmap2 = "0.9.5"
-tracing-subscriber = { version = "0.3.17", features = ["std", "env-filter"] }
+libc = "0.2.175"
+libloading = "0.8"
+tracing-subscriber = { version = "0.3.20", features = ["std", "env-filter"] }
+tokio = "1" # >=1.0.0 to allow downstream flexibility
+abi_stable = "0.11.3"
 
 # default-features = false for no_std for use in guest programs
 itertools = { version = "0.14.0", default-features = false }
@@ -249,6 +259,10 @@ num-integer = { version = "0.1.46", default-features = false }
 num-traits = { version = "0.2.19", default-features = false }
 ff = { version = "0.13.1", default-features = false }
 sha2 = { version = "0.10", default-features = false }
+blstrs = { version = "0.7.1", default-features = true }
+
+# specific to CUDA and GPU
+cuda-runtime-sys = "0.3.0-alpha.1"
 
 # For local development. Add to your `.cargo/config.toml`
 # [patch."https://github.com/Plonky3/Plonky3.git"]

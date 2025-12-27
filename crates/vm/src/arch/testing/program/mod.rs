@@ -15,6 +15,10 @@ use crate::{
 };
 
 pub mod air;
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
 
 #[derive(Debug)]
 pub struct ProgramTester<F: Field> {

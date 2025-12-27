@@ -22,7 +22,7 @@ mod config;
 /// The rustc compiler [target](https://doc.rust-lang.org/rustc/targets/index.html).
 pub const RUSTC_TARGET: &str = "riscv32im-risc0-zkvm-elf";
 /// The default Rust toolchain name to use if OPENVM_RUST_TOOLCHAIN is not set
-pub const DEFAULT_RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2025-02-14";
+pub const DEFAULT_RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2025-08-02";
 
 /// Get the Rust toolchain name from environment variable or default
 pub fn get_rustup_toolchain_name() -> String {
@@ -513,7 +513,7 @@ fn ensure_toolchain_installed(toolchain: &str, components: &[&str]) -> Result<()
         .args(["toolchain", "list"])
         .output()
         .map_err(|e| {
-            tty_println(&format!("Failed to check toolchains: {}", e));
+            tty_println(&format!("Failed to check toolchains: {e}"));
             e.raw_os_error().unwrap_or(1)
         })?;
 
@@ -523,17 +523,17 @@ fn ensure_toolchain_installed(toolchain: &str, components: &[&str]) -> Result<()
 
     // Install toolchain if missing
     if !toolchain_installed {
-        tty_println(&format!("Installing required toolchain: {}", toolchain));
+        tty_println(&format!("Installing required toolchain: {toolchain}"));
         let status = Command::new("rustup")
             .args(["toolchain", "install", toolchain])
             .status()
             .map_err(|e| {
-                tty_println(&format!("Failed to install toolchain: {}", e));
+                tty_println(&format!("Failed to install toolchain: {e}"));
                 e.raw_os_error().unwrap_or(1)
             })?;
 
         if !status.success() {
-            tty_println(&format!("Failed to install toolchain {}", toolchain));
+            tty_println(&format!("Failed to install toolchain {toolchain}"));
             return Err(status.code().unwrap_or(1));
         }
     }
@@ -544,7 +544,7 @@ fn ensure_toolchain_installed(toolchain: &str, components: &[&str]) -> Result<()
             .args(["component", "list", "--toolchain", toolchain])
             .output()
             .map_err(|e| {
-                tty_println(&format!("Failed to check components: {}", e));
+                tty_println(&format!("Failed to check components: {e}"));
                 e.raw_os_error().unwrap_or(1)
             })?;
 
@@ -554,21 +554,19 @@ fn ensure_toolchain_installed(toolchain: &str, components: &[&str]) -> Result<()
 
         if !is_installed {
             tty_println(&format!(
-                "Installing component {} for toolchain {}",
-                component, toolchain
+                "Installing component {component} for toolchain {toolchain}"
             ));
             let status = Command::new("rustup")
                 .args(["component", "add", component, "--toolchain", toolchain])
                 .status()
                 .map_err(|e| {
-                    tty_println(&format!("Failed to install component: {}", e));
+                    tty_println(&format!("Failed to install component: {e}"));
                     e.raw_os_error().unwrap_or(1)
                 })?;
 
             if !status.success() {
                 tty_println(&format!(
-                    "Failed to install component {} for toolchain {}",
-                    component, toolchain
+                    "Failed to install component {component} for toolchain {toolchain}"
                 ));
                 return Err(status.code().unwrap_or(1));
             }

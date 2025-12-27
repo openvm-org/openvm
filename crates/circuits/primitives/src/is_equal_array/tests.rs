@@ -19,6 +19,16 @@ use openvm_stark_sdk::{
 };
 use rand::Rng;
 use test_case::test_case;
+#[cfg(feature = "cuda")]
+use {
+    crate::cuda_abi::is_equal,
+    openvm_cuda_backend::{
+        base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, types::F,
+    },
+    openvm_cuda_common::copy::MemCopyH2D as _,
+    openvm_stark_backend::p3_field::PrimeField32,
+    std::sync::Arc,
+};
 
 use super::{IsEqArrayAuxCols, IsEqArrayIo, IsEqArraySubAir};
 use crate::{SubAir, TraceSubRowGenerator};
@@ -187,5 +197,96 @@ fn test_is_eq_array_fail_rand() {
                 "Expected constraint to fail"
             );
         }
+    }
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_simple_is_equal_array_tracegen() {
+    const ARRAY_LEN: usize = 4;
+    let n = 4;
+    let trace = DeviceMatrix::<F>::with_capacity(n, ARRAY_LEN + 1);
+
+    let vec_x: Vec<F> = vec![1u32, 2, 3, 4, 5, 6, 7, 8, 9u32, 10, 11, 12, 13, 14, 15, 16]
+        .into_iter()
+        .map(F::from_canonical_u32)
+        .collect();
+
+    let vec_y: Vec<F> = vec![
+        1u32, 3, 3, 4, 5, 6, 10, 8, 9u32, 10, 11, 12, 13, 200, 15, 16,
+    ]
+    .into_iter()
+    .map(F::from_canonical_u32)
+    .collect();
+
+    let inputs_x = vec_x.as_slice().to_device().unwrap();
+    let inputs_y = vec_y.as_slice().to_device().unwrap();
+
+    unsafe {
+        is_equal::dummy_tracegen_array(trace.buffer(), &inputs_x, &inputs_y, ARRAY_LEN).unwrap()
+    };
+
+    let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
+        (0..n)
+            .flat_map(|i| {
+                let cur_x: [F; ARRAY_LEN] = std::array::from_fn(|k| vec_x[i + k * n]);
+                let cur_y: [F; ARRAY_LEN] = std::array::from_fn(|k| vec_y[i + k * n]);
+
+                let mut cur_inv: [F; ARRAY_LEN] = [F::ONE; ARRAY_LEN];
+                let mut cur_out = F::ONE;
+                IsEqArraySubAir.generate_subrow((&cur_x, &cur_y), (&mut cur_inv, &mut cur_out));
+
+                cur_inv.into_iter().chain(std::iter::once(cur_out))
+            })
+            .collect::<Vec<_>>(),
+        ARRAY_LEN + 1,
+    ));
+
+    assert_eq_host_and_device_matrix(cpu_matrix, &trace);
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_random_is_equal_array_tracegen() {
+    let mut rng = create_seeded_rng();
+    const ARRAY_LEN: usize = 64;
+
+    for log_height in 1..=16 {
+        let n = 1 << log_height;
+
+        let vec_x: Vec<F> = (0..n * ARRAY_LEN)
+            .map(|_| F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32)))
+            .collect();
+
+        let vec_y: Vec<F> = (0..n * ARRAY_LEN)
+            .map(|_| F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32)))
+            .collect();
+
+        let inputs_x = vec_x.as_slice().to_device().unwrap();
+        let inputs_y = vec_y.as_slice().to_device().unwrap();
+
+        let gpu_matrix = DeviceMatrix::<F>::with_capacity(n, ARRAY_LEN + 1);
+        unsafe {
+            is_equal::dummy_tracegen_array(gpu_matrix.buffer(), &inputs_x, &inputs_y, ARRAY_LEN)
+                .unwrap();
+        }
+
+        let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
+            (0..n)
+                .flat_map(|i| {
+                    let cur_x: [F; ARRAY_LEN] = std::array::from_fn(|k| vec_x[i + k * n]);
+                    let cur_y: [F; ARRAY_LEN] = std::array::from_fn(|k| vec_y[i + k * n]);
+
+                    let mut cur_inv: [F; ARRAY_LEN] = [F::ONE; ARRAY_LEN];
+                    let mut cur_out = F::ONE;
+                    IsEqArraySubAir.generate_subrow((&cur_x, &cur_y), (&mut cur_inv, &mut cur_out));
+
+                    cur_inv.into_iter().chain(std::iter::once(cur_out))
+                })
+                .collect::<Vec<_>>(),
+            ARRAY_LEN + 1,
+        ));
+
+        assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix);
     }
 }

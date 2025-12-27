@@ -51,7 +51,7 @@ impl Halo2WrapperProvingKey {
     /// Auto select k to let Wrapper circuit only have 1 advice column.
     pub fn keygen_auto_tune(reader: &impl Halo2ParamsReader, dummy_snark: Snark) -> Self {
         let k = Self::select_k(dummy_snark.clone());
-        tracing::info!("Selected k: {}", k);
+        tracing::info!("Selected k: {k}");
         let params = reader.read_params(k);
         Self::keygen(&params, dummy_snark)
     }
@@ -176,6 +176,7 @@ impl Halo2WrapperProvingKey {
                 "Snark has multiple phases"
             );
             if circuit.builder.config_params.num_advice_per_phase[0] == 1 {
+                circuit.builder.clear();
                 break;
             }
             if first_run {
@@ -186,6 +187,8 @@ impl Halo2WrapperProvingKey {
                 k += 1;
             }
             first_run = false;
+            // Prevent drop warnings
+            circuit.builder.clear();
         }
         k
     }

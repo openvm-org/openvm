@@ -1,13 +1,11 @@
 use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
-use openvm_circuit::arch::instructions::exe::VmExe;
 use openvm_sdk::{
-    config::{SdkVmConfig, SdkVmCpuBuilder},
+    config::{SdkVmBuilder, SdkVmConfig},
     StdIn,
 };
 use openvm_stark_sdk::bench::run_with_metric_collection;
-use openvm_transpiler::FromElf;
 
 fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
@@ -15,16 +13,14 @@ fn main() -> Result<()> {
     let config =
         SdkVmConfig::from_toml(include_str!("../../../guest/regex/openvm.toml"))?.app_vm_config;
     let elf = args.build_bench_program("regex", &config, None)?;
-    let exe = VmExe::from_elf(elf.clone(), config.transpiler())?;
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         let data = include_str!("../../../guest/regex/regex_email.txt");
 
         let fe_bytes = data.to_owned().into_bytes();
-        args.bench_from_exe(
+        args.bench_from_exe::<SdkVmBuilder, _>(
             "regex_program",
-            SdkVmCpuBuilder,
             config,
-            exe,
+            elf,
             StdIn::from_bytes(&fe_bytes),
         )
     })

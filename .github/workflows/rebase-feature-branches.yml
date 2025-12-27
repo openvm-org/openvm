@@ -1,0 +1,278 @@
+name: Auto Rebase Feature Branches
+# Long-running feature branches should be added to the corresponding repository ruleset:
+# - PRs should be squash merged into the feature branch
+# - This workflow will keep the feature branch rebased against main
+# - It will only ever do auto rebase when there are no conflicts. It will trigger a slack notification if there is a conflict that requires manual resolution.
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  rebase:
+    runs-on:
+      - runs-on=${{ github.run_id }}/runner=1cpu-linux-x64
+    steps:
+      # This step exchanges your app credentials for a temporary token
+      - name: Generate GitHub App Token
+        id: app_token
+        uses: actions/create-github-app-token@v2.2.0
+        with:
+          app-id: ${{ secrets.REBASE_APP_ID }}
+          private-key: ${{ secrets.REBASE_APP_PRIVATE_KEY }}
+
+      # Use the generated token for git operations
+      - uses: actions/checkout@v6.0.1
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app_token.outputs.token }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "branch-rebase-bot[bot]"
+          git config user.email "branch-rebase-bot[bot]@users.noreply.github.com"
+
+      - name: Rebase Feature Branches
+        run: |
+          # List of feature branches to maintain
+          FEATURE_BRANCHES=("develop-v2" "develop-v1.5.0" "develop-v1.6.0" "develop-new-keccak")
+
+          FAILED_BRANCHES=()
+          SUCCEEDED_BRANCHES=()
+          BACKED_UP_BRANCHES=()
+
+          # Generate timestamp for backups
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+
+          for branch in "${FEATURE_BRANCHES[@]}"; do
+            echo "Processing $branch..."
+
+            # Fetch latest
+            git fetch origin "$branch" || {
+              echo "Failed to fetch $branch, skipping..."
+              continue
+            }
+
+            # Check if branch exists
+            if ! git rev-parse --verify "origin/$branch" >/dev/null 2>&1; then
+              echo "Branch $branch does not exist, skipping..."
+              continue
+            fi
+
+            # Store the original commit hash
+            ORIGINAL_COMMIT=$(git rev-parse "origin/$branch")
+            echo "Original commit for $branch: $ORIGINAL_COMMIT"
+
+            # Checkout and rebase
+            git checkout "$branch"
+
+            if git rebase origin/main; then
+              echo "✓ Rebase successful for $branch"
+
+              # Get the new commit hash after rebase
+              NEW_COMMIT=$(git rev-parse HEAD)
+              echo "New commit for $branch: $NEW_COMMIT"
+
+              # Check if rebase actually changed anything
+              if [ "$ORIGINAL_COMMIT" != "$NEW_COMMIT" ]; then
+                echo "⚠️  Rebase changed history, creating backup..."
+
+                # Create backup branch from the original commit
+                BACKUP_BRANCH="${branch}-backup-${TIMESTAMP}"
+                git branch "$BACKUP_BRANCH" "$ORIGINAL_COMMIT"
+
+                # Push backup branch
+                if git push origin "$BACKUP_BRANCH"; then
+                  echo "✓ Backup created: $BACKUP_BRANCH"
+                  BACKED_UP_BRANCHES+=("$branch → $BACKUP_BRANCH")
+
+                  # Only force push the rebased branch if backup succeeded
+                  if git push origin "$branch" --force-with-lease; then
+                    echo "✓ Force push successful for $branch"
+                    SUCCEEDED_BRANCHES+=("$branch")
+                  else
+                    echo "✗ Push failed for $branch"
+                    FAILED_BRANCHES+=("$branch (push failed)")
+                  fi
+                else
+                  echo "✗ Failed to create backup for $branch - ABORTING force push"
+                  FAILED_BRANCHES+=("$branch (backup creation failed - not force pushed)")
+                  # Restore original state since we can't safely force push
+                  git checkout "$branch"
+                  git reset --hard "$ORIGINAL_COMMIT"
+                fi
+              else
+                echo "ℹ️  No changes from rebase, skipping force push"
+                SUCCEEDED_BRANCHES+=("$branch (no changes)")
+              fi
+            else
+              echo "✗ Rebase failed for $branch"
+              FAILED_BRANCHES+=("$branch (rebase conflict)")
+              git rebase --abort
+            fi
+
+            # Clean up for next iteration
+            git checkout main
+          done
+
+          # Save results for Slack notification (using | as delimiter to preserve spaces in branch names)
+          IFS='|' eval 'echo "FAILED_BRANCHES=${FAILED_BRANCHES[*]}"' >> $GITHUB_ENV
+          IFS='|' eval 'echo "SUCCEEDED_BRANCHES=${SUCCEEDED_BRANCHES[*]}"' >> $GITHUB_ENV
+          IFS='|' eval 'echo "BACKED_UP_BRANCHES=${BACKED_UP_BRANCHES[*]}"' >> $GITHUB_ENV
+          echo "TOTAL_FAILED=${#FAILED_BRANCHES[@]}" >> $GITHUB_ENV
+          echo "TOTAL_SUCCEEDED=${#SUCCEEDED_BRANCHES[@]}" >> $GITHUB_ENV
+          echo "TOTAL_BACKED_UP=${#BACKED_UP_BRANCHES[@]}" >> $GITHUB_ENV
+
+      - name: Send Slack Notification on Failure
+        if: env.TOTAL_FAILED != '0'
+        env:
+          FAILED_BRANCHES: ${{ env.FAILED_BRANCHES }}
+          BACKED_UP_BRANCHES: ${{ env.BACKED_UP_BRANCHES }}
+          TOTAL_FAILED: ${{ env.TOTAL_FAILED }}
+          TOTAL_SUCCEEDED: ${{ env.TOTAL_SUCCEEDED }}
+          TOTAL_BACKED_UP: ${{ env.TOTAL_BACKED_UP }}
+        run: |
+          REPO_URL="${{ github.server_url }}/${{ github.repository }}"
+          COMMIT_URL="$REPO_URL/commit/${{ github.sha }}"
+          COMMIT_MSG=$(git log -1 --pretty=format:'%s' ${{ github.sha }})
+          COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an' ${{ github.sha }})
+
+          # Build branch list for Slack (using | as delimiter to preserve spaces)
+          FAILED_LIST=""
+          IFS='|' read -ra FAILED_ARRAY <<< "$FAILED_BRANCHES"
+          for branch in "${FAILED_ARRAY[@]}"; do
+            [ -n "$branch" ] && FAILED_LIST="${FAILED_LIST}"$'\n'"• \`${branch}\`"
+          done
+
+          BACKUP_INFO=""
+          if [ "$TOTAL_BACKED_UP" != "0" ]; then
+            BACKUP_INFO=$'\n\n'"*Backups created:*"
+            IFS='|' read -ra BACKUP_ARRAY <<< "$BACKED_UP_BRANCHES"
+            for backup in "${BACKUP_ARRAY[@]}"; do
+              [ -n "$backup" ] && BACKUP_INFO="${BACKUP_INFO}"$'\n'"• \`${backup}\`"
+            done
+          fi
+
+          # Construct Slack message using jq for proper JSON escaping
+          SLACK_PAYLOAD=$(jq -n \
+            --arg repo "${{ github.repository }}" \
+            --arg repo_url "$REPO_URL" \
+            --arg commit_author "$COMMIT_AUTHOR" \
+            --arg total_failed "$TOTAL_FAILED" \
+            --arg total_succeeded "$TOTAL_SUCCEEDED" \
+            --arg failed_list "*Branches requiring manual intervention:*${FAILED_LIST}${BACKUP_INFO}" \
+            --arg commit_url "$COMMIT_URL" \
+            --arg commit_msg "${COMMIT_MSG:0:100}" \
+            '{
+              text: "⚠️ Rebase Conflicts Detected",
+              blocks: [
+                {
+                  type: "header",
+                  text: {
+                    type: "plain_text",
+                    text: "⚠️ Automatic Rebase Failed",
+                    emoji: true
+                  }
+                },
+                {
+                  type: "section",
+                  text: {
+                    type: "mrkdwn",
+                    text: ("*Repository:* <" + $repo_url + "|" + $repo + ">\n*Trigger:* Push to `main` by " + $commit_author)
+                  }
+                },
+                {
+                  type: "section",
+                  fields: [
+                    {
+                      type: "mrkdwn",
+                      text: ("*Failed Branches:*\n" + $total_failed)
+                    },
+                    {
+                      type: "mrkdwn",
+                      text: ("*Succeeded:*\n" + $total_succeeded)
+                    }
+                  ]
+                },
+                {
+                  type: "section",
+                  text: {
+                    type: "mrkdwn",
+                    text: $failed_list
+                  }
+                },
+                {
+                  type: "section",
+                  text: {
+                    type: "mrkdwn",
+                    text: ("*Latest commit:*\n<" + $commit_url + "|" + $commit_msg + ">")
+                  }
+                },
+                {
+                  type: "context",
+                  elements: [
+                    {
+                      type: "mrkdwn",
+                      text: "Run manual rebase: `git checkout <branch> && git rebase origin/main && git push --force-with-lease`"
+                    }
+                  ]
+                }
+              ]
+            }')
+
+          # Send to Slack
+          curl -sf -X POST \
+            -H 'Content-type: application/json' \
+            --data "$SLACK_PAYLOAD" \
+            "${{ secrets.SLACK_WEBHOOK_URL }}" || echo "::warning::Failed to send Slack notification"
+
+      - name: Send Slack Success Notification
+        if: env.TOTAL_FAILED == '0' && env.TOTAL_SUCCEEDED != '0'
+        env:
+          SUCCEEDED_BRANCHES: ${{ env.SUCCEEDED_BRANCHES }}
+          BACKED_UP_BRANCHES: ${{ env.BACKED_UP_BRANCHES }}
+          TOTAL_BACKED_UP: ${{ env.TOTAL_BACKED_UP }}
+        run: |
+          REPO_URL="${{ github.server_url }}/${{ github.repository }}"
+
+          # Build branch list for Slack (using | as delimiter to preserve spaces)
+          SUCCESS_LIST=""
+          IFS='|' read -ra SUCCESS_ARRAY <<< "$SUCCEEDED_BRANCHES"
+          for branch in "${SUCCESS_ARRAY[@]}"; do
+            [ -n "$branch" ] && SUCCESS_LIST="${SUCCESS_LIST}"$'\n'"• \`${branch}\`"
+          done
+
+          BACKUP_INFO=""
+          if [ "$TOTAL_BACKED_UP" != "0" ]; then
+            BACKUP_INFO=$'\n\n'"*Backups created:*"
+            IFS='|' read -ra BACKUP_ARRAY <<< "$BACKED_UP_BRANCHES"
+            for backup in "${BACKUP_ARRAY[@]}"; do
+              [ -n "$backup" ] && BACKUP_INFO="${BACKUP_INFO}"$'\n'"• \`${backup}\`"
+            done
+          fi
+
+          # Construct Slack message using jq for proper JSON escaping
+          CONTENT="✅ *Auto-rebase completed* for <$REPO_URL|${{ github.repository }}>"$'\n\n'"*Rebased branches:*${SUCCESS_LIST}${BACKUP_INFO}"
+          SLACK_PAYLOAD=$(jq -n \
+            --arg content "$CONTENT" \
+            '{
+              text: "✅ Feature Branches Rebased Successfully",
+              blocks: [
+                {
+                  type: "section",
+                  text: {
+                    type: "mrkdwn",
+                    text: $content
+                  }
+                }
+              ]
+            }')
+
+          curl -sf -X POST \
+            -H 'Content-type: application/json' \
+            --data "$SLACK_PAYLOAD" \
+            "${{ secrets.SLACK_WEBHOOK_URL }}" || echo "::warning::Failed to send Slack notification"

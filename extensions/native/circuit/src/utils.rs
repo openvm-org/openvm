@@ -11,12 +11,12 @@ pub mod test_utils {
 
     use openvm_circuit::{
         arch::{
-            execution_mode::metered::Segment,
-            testing::{memory::gen_pointer, VmChipTestBuilder},
-            MatrixRecordArena, PreflightExecutionOutput, Streams, VirtualMachine,
-            VirtualMachineError, VmBuilder, VmState,
+            execution_mode::Segment,
+            testing::{memory::gen_pointer, TestBuilder},
+            PreflightExecutionOutput, PreflightExecutor, Streams, VirtualMachine,
+            VirtualMachineError, VmBuilder, VmExecutionConfig, VmState,
         },
-        utils::test_system_config,
+        utils::test_system_config_without_continuations,
     };
     use openvm_instructions::{
         exe::VmExe,
@@ -39,7 +39,7 @@ pub mod test_utils {
     // If immediate, returns (value, AS::Immediate). Otherwise, writes to native memory and returns
     // (ptr, AS::Native). If is_imm is None, randomizes it.
     pub fn write_native_or_imm<F: PrimeField32>(
-        tester: &mut VmChipTestBuilder<F>,
+        tester: &mut impl TestBuilder<F>,
         rng: &mut StdRng,
         value: F,
         is_imm: Option<bool>,
@@ -57,7 +57,7 @@ pub mod test_utils {
     // Writes value to native memory and returns a pointer to the first element together with the
     // value If `value` is None, randomizes it.
     pub fn write_native_array<F: PrimeField32, const N: usize>(
-        tester: &mut VmChipTestBuilder<F>,
+        tester: &mut impl TestBuilder<F>,
         rng: &mut StdRng,
         value: Option<[F; N]>,
     ) -> ([F; N], usize)
@@ -80,7 +80,7 @@ pub mod test_utils {
         config: VB::VmConfig,
     ) -> Result<
         (
-            PreflightExecutionOutput<BabyBear, MatrixRecordArena<BabyBear>>,
+            PreflightExecutionOutput<BabyBear, <VB as VmBuilder<E>>::RecordArena>,
             VirtualMachine<E, VB>,
         ),
         VirtualMachineError,
@@ -88,21 +88,21 @@ pub mod test_utils {
     where
         E: StarkFriEngine,
         Domain<E::SC>: PolynomialSpace<Val = BabyBear>,
-        VB: VmBuilder<E, VmConfig = NativeConfig, RecordArena = MatrixRecordArena<BabyBear>>,
+        VB: VmBuilder<E, VmConfig = NativeConfig>,
+        <VB::VmConfig as VmExecutionConfig<BabyBear>>::Executor:
+            PreflightExecutor<BabyBear, VB::RecordArena>,
     {
         setup_tracing();
         assert!(!config.as_ref().continuation_enabled);
         let input = input_stream.into();
 
         let engine = E::new(FriParameters::new_for_testing(1));
-        let (vm, _) = VirtualMachine::new_with_keygen(engine, builder, config)?;
-        let ctx = vm.build_metered_ctx();
-        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
         let exe = VmExe::new(program);
-        let interpreter = vm
-            .executor()
-            .metered_instance(&exe, &executor_idx_to_air_idx)?;
-        let (mut segments, _) = interpreter.execute_metered(input.clone(), ctx)?;
+        let (vm, _) = VirtualMachine::new_with_keygen(engine, builder, config)?;
+        let ctx = vm.build_metered_ctx(&exe);
+        let (mut segments, _) = vm
+            .metered_interpreter(&exe)?
+            .execute_metered(input.clone(), ctx)?;
         assert_eq!(segments.len(), 1, "test only supports one segment");
         let Segment {
             instret_start,
@@ -111,11 +111,14 @@ pub mod test_utils {
         } = segments.pop().unwrap();
         assert_eq!(instret_start, 0);
         let state = vm.create_initial_state(&exe, input);
-        let output = vm.execute_preflight(&exe, state, None, &trace_heights)?;
-        assert_eq!(
-            output.to_state.instret, num_insns,
-            "metered execution insn count doesn't match preflight execution"
-        );
+        let mut preflight_interpreter = vm.preflight_interpreter(&exe)?;
+        let output = vm.execute_preflight(
+            &mut preflight_interpreter,
+            state,
+            Some(num_insns),
+            &trace_heights,
+        )?;
+
         Ok((output, vm))
     }
 
@@ -137,7 +140,7 @@ pub mod test_utils {
     }
 
     pub fn test_native_config() -> NativeConfig {
-        let mut system = test_system_config();
+        let mut system = test_system_config_without_continuations();
         system.memory_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 0;
         system.memory_config.addr_spaces[RV32_MEMORY_AS as usize].num_cells = 0;
         NativeConfig {
@@ -148,14 +151,14 @@ pub mod test_utils {
 
     pub fn test_native_continuations_config() -> NativeConfig {
         NativeConfig {
-            system: test_system_config().with_continuations(),
+            system: test_system_config_without_continuations().with_continuations(),
             native: Default::default(),
         }
     }
 
     pub fn test_rv32_with_kernels_config() -> Rv32WithKernelsConfig {
         Rv32WithKernelsConfig {
-            system: test_system_config().with_continuations(),
+            system: test_system_config_without_continuations().with_continuations(),
             ..Default::default()
         }
     }

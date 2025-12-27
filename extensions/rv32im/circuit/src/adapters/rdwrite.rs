@@ -259,6 +259,10 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32RdWriteAdapterFiller {
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        // SAFETY:
+        // - caller ensures `adapter_row` contains a valid record representation that was previously
+        //   written by the executor
+        // - get_record_from_slice correctly interprets the bytes as Rv32RdWriteAdapterRecord
         let record: &Rv32RdWriteAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut Rv32RdWriteAdapterCols<F> = adapter_row.borrow_mut();
@@ -348,6 +352,10 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32CondRdWriteAdapterFiller {
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        // SAFETY:
+        // - caller ensures `adapter_row` contains a valid record representation that was previously
+        //   written by the executor
+        // - get_record_from_slice correctly interprets the bytes as Rv32RdWriteAdapterRecord
         let record: &Rv32RdWriteAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_cols: &mut Rv32CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
@@ -355,6 +363,9 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32CondRdWriteAdapterFiller {
         adapter_cols.needs_write = F::from_bool(record.rd_ptr != u32::MAX);
 
         if record.rd_ptr != u32::MAX {
+            // SAFETY:
+            // - adapter_row has sufficient length for the split
+            // - size_of::<Rv32RdWriteAdapterCols<u8>>() is the correct split point
             unsafe {
                 self.inner.fill_trace_row(
                     mem_helper,

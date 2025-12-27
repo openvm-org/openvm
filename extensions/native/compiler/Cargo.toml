@@ -32,11 +32,8 @@ metrics = { workspace = true, optional = true }
 strum = { workspace = true }
 
 [dev-dependencies]
-p3-symmetric = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
-openvm-native-circuit = { workspace = true, features = ["test-utils"]}
 openvm-stark-sdk = { workspace = true }
-rand.workspace = true
 
 [features]
 default = ["parallel", "halo2-compiler"]

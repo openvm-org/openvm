@@ -1,4 +1,8 @@
-use std::{fs::File, io::Write, path::Path};
+use std::{
+    fs::File,
+    io::{self, Write},
+    path::Path,
+};
 
 use derive_new::new;
 use getset::{Setters, WithSetters};
@@ -11,6 +15,7 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::StarkEngine,
     p3_field::Field,
+    p3_util::log2_strict_usize,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -43,12 +48,15 @@ pub fn vm_poseidon2_config<F: Field>() -> Poseidon2Config<F> {
 
 /// A VM configuration is the minimum serializable format to be able to create the execution
 /// environment and circuit for a zkVM supporting a fixed set of instructions.
+/// This trait contains the sub-traits [VmExecutionConfig] and [VmCircuitConfig].
+/// The [InitFileGenerator] sub-trait provides custom build hooks to generate code for initializing
+/// some VM extensions. The `VmConfig` is expected to contain the [SystemConfig] internally.
 ///
 /// For users who only need to create an execution environment, use the sub-trait
 /// [VmExecutionConfig] to avoid the `SC` generic.
 ///
-/// This trait does not contain the [VmProverBuilder] trait, because a single VM configuration may
-/// implement multiple [VmProverBuilder]s for different prover backends.
+/// This trait does not contain the [VmBuilder] trait, because a single VM configuration may
+/// implement multiple [VmBuilder]s for different prover backends.
 pub trait VmConfig<SC>:
     Clone
     + Serialize
@@ -64,7 +72,7 @@ where
 }
 
 pub trait VmExecutionConfig<F> {
-    type Executor: AnyEnum + Send + Sync;
+    type Executor: AnyEnum;
 
     fn create_executors(&self)
         -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
@@ -130,12 +138,12 @@ pub trait InitFileGenerator {
         &self,
         manifest_dir: &Path,
         init_file_name: Option<&str>,
-    ) -> eyre::Result<()> {
+    ) -> io::Result<()> {
         if let Some(contents) = self.generate_init_file_contents() {
             let dest_path = Path::new(manifest_dir)
                 .join(init_file_name.unwrap_or(OPENVM_DEFAULT_INIT_FILE_NAME));
             let mut f = File::create(&dest_path)?;
-            write!(f, "{}", contents)?;
+            write!(f, "{contents}")?;
         }
         Ok(())
     }
@@ -205,8 +213,18 @@ impl MemoryConfig {
         addr_spaces[RV32_IMM_AS as usize] = AddressSpaceHostConfig::new(0, 1, MemoryCellType::Null);
         addr_spaces[RV32_REGISTER_AS as usize] =
             AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
-        addr_spaces[RV32_MEMORY_AS as usize] =
-            AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
+
+        #[cfg(feature = "legacy-v1-3-mem-align")]
+        {
+            addr_spaces[RV32_MEMORY_AS as usize] =
+                AddressSpaceHostConfig::new(0, 1, MemoryCellType::U8);
+        }
+        #[cfg(not(feature = "legacy-v1-3-mem-align"))]
+        {
+            addr_spaces[RV32_MEMORY_AS as usize] =
+                AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
+        }
+
         addr_spaces[PUBLIC_VALUES_AS as usize] =
             AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
 
@@ -219,6 +237,13 @@ impl MemoryConfig {
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
         addr_spaces[NATIVE_AS as usize].num_cells = 1 << 29;
         Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17, 8)
+    }
+
+    pub fn min_block_size_bits(&self) -> Vec<u8> {
+        self.addr_spaces
+            .iter()
+            .map(|addr_sp| log2_strict_usize(addr_sp.min_block_size) as u8)
+            .collect()
     }
 }
 
@@ -269,7 +294,7 @@ impl SystemConfig {
         memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
         Self {
             max_constraint_degree,
-            continuation_enabled: false,
+            continuation_enabled: true,
             memory_config,
             num_public_values,
             profiling: false,
@@ -302,7 +327,8 @@ impl SystemConfig {
     }
 
     pub fn with_max_segment_len(mut self, max_segment_len: usize) -> Self {
-        self.segmentation_limits.max_trace_height = max_segment_len as u32;
+        self.segmentation_limits
+            .set_max_trace_height(max_segment_len as u32);
         self
     }
 
@@ -323,6 +349,16 @@ impl SystemConfig {
     /// Returns the AIR ID of the memory boundary AIR. Panic if the boundary AIR is not enabled.
     pub fn memory_boundary_air_id(&self) -> usize {
         PUBLIC_VALUES_AIR_ID + usize::from(self.has_public_values_chip())
+    }
+
+    /// Returns the AIR ID of the memory merkle AIR. Returns None if continuations are not enabled.
+    pub fn memory_merkle_air_id(&self) -> Option<usize> {
+        let boundary_idx = self.memory_boundary_air_id();
+        if self.continuation_enabled {
+            Some(boundary_idx + 1)
+        } else {
+            None
+        }
     }
 
     /// AIR ID for the first memory access adapter AIR.

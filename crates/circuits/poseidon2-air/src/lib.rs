@@ -28,6 +28,9 @@ pub use babybear::*;
 pub use config::*;
 pub use permute::*;
 
+#[cfg(all(feature = "cuda", test))]
+mod cuda_abi;
+
 #[cfg(test)]
 mod tests;
 

@@ -212,6 +212,7 @@ impl<F: FieldAlgebra, V: Copy + Into<F>> MemoryReadOrImmediateOperation<'_, F, V
         self.offline_checker.eval_bulk_access(
             builder,
             self.address,
+            #[allow(clippy::cloned_ref_to_slice_refs)]
             &[self.data.clone()],
             &[self.data],
             self.timestamp,

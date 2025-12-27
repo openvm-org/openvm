@@ -35,8 +35,10 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
         hasher: &impl HasherChip<CHUNK, F>,
     ) {
         assert!(self.final_state.is_none(), "Merkle chip already finalized");
-        let mut tree = MerkleTree::from_memory(initial_memory, &self.air.memory_dimensions, hasher);
-        self.final_state = Some(tree.finalize(hasher, final_memory, &self.air.memory_dimensions));
+        let memory_dimensions = &self.air.memory_dimensions;
+        let mut tree = MerkleTree::from_memory(initial_memory, memory_dimensions, hasher);
+        self.final_state = Some(tree.finalize(hasher, final_memory, memory_dimensions));
+        self.top_tree = tree.top_tree(memory_dimensions.addr_space_height);
     }
 }
 

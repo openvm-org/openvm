@@ -1,3 +1,6 @@
+#![cfg_attr(feature = "tco", allow(incomplete_features))]
+#![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
+
 pub mod commands;
 pub mod default;
 pub mod input;
@@ -8,6 +11,52 @@ use std::process::{Command, Stdio};
 use eyre::{Context, Result};
 pub use openvm_build::{get_rustup_toolchain_name, DEFAULT_RUSTUP_TOOLCHAIN_NAME};
 
+#[cfg(all(feature = "cuda", feature = "tco"))]
+pub const OPENVM_VERSION_MESSAGE: &str = concat!(
+    "v",
+    env!("CARGO_PKG_VERSION"),
+    " (",
+    env!("VERGEN_GIT_SHA"),
+    ") [cuda, tco]"
+);
+
+#[cfg(all(feature = "cuda", feature = "aot", not(feature = "tco")))]
+pub const OPENVM_VERSION_MESSAGE: &str = concat!(
+    "v",
+    env!("CARGO_PKG_VERSION"),
+    " (",
+    env!("VERGEN_GIT_SHA"),
+    ") [cuda, aot]"
+);
+
+#[cfg(all(feature = "cuda", not(feature = "tco"), not(feature = "aot")))]
+pub const OPENVM_VERSION_MESSAGE: &str = concat!(
+    "v",
+    env!("CARGO_PKG_VERSION"),
+    " (",
+    env!("VERGEN_GIT_SHA"),
+    ") [cuda]"
+);
+
+#[cfg(all(not(feature = "cuda"), feature = "tco"))]
+pub const OPENVM_VERSION_MESSAGE: &str = concat!(
+    "v",
+    env!("CARGO_PKG_VERSION"),
+    " (",
+    env!("VERGEN_GIT_SHA"),
+    ") [tco]"
+);
+
+#[cfg(all(not(feature = "cuda"), feature = "aot", not(feature = "tco")))]
+pub const OPENVM_VERSION_MESSAGE: &str = concat!(
+    "v",
+    env!("CARGO_PKG_VERSION"),
+    " (",
+    env!("VERGEN_GIT_SHA"),
+    ") [aot]"
+);
+
+#[cfg(all(not(feature = "cuda"), not(feature = "tco"), not(feature = "aot")))]
 pub const OPENVM_VERSION_MESSAGE: &str = concat!(
     "v",
     env!("CARGO_PKG_VERSION"),

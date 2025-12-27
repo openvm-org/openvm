@@ -15,6 +15,18 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 use test_case::test_case;
+#[cfg(feature = "cuda")]
+use {
+    crate::cuda_abi::is_zero,
+    openvm_cuda_backend::{
+        base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, types::F,
+    },
+    openvm_cuda_common::copy::MemCopyH2D as _,
+    openvm_stark_backend::p3_field::PrimeField32,
+    openvm_stark_sdk::utils::create_seeded_rng,
+    rand::Rng,
+    std::sync::Arc,
+};
 
 use super::{IsZeroIo, IsZeroSubAir};
 use crate::{SubAir, TraceSubRowGenerator};
@@ -154,5 +166,46 @@ fn test_vec_is_zero_fail(x_vec: [u32; 4], expected: [u32; 4]) {
             "Expected constraint to fail"
         );
         trace.row_mut(i)[1] = BabyBear::ONE - trace.row_mut(i)[1];
+    }
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_is_zero_against_cpu_full() {
+    let mut rng = create_seeded_rng();
+    for log_height in 1..=16 {
+        let n = 1 << log_height;
+        let vec_x: Vec<F> = (0..n)
+            .map(|_| {
+                if rng.gen_bool(0.5) {
+                    0 // 50% chance to be zero
+                } else {
+                    rng.gen_range(0..F::ORDER_U32) // 50% chance to be random
+                }
+            })
+            .map(F::from_canonical_u32)
+            .collect();
+
+        let input_buffer = vec_x.as_slice().to_device().unwrap();
+        let output = DeviceMatrix::<F>::with_capacity(n, 2);
+        unsafe {
+            is_zero::dummy_tracegen(output.buffer(), &input_buffer).unwrap();
+        };
+
+        let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
+            vec_x
+                .iter()
+                .flat_map(|x| {
+                    let cur_x = *x;
+                    let mut cur_inv = F::ZERO;
+                    let mut cur_out = F::ONE;
+                    IsZeroSubAir.generate_subrow(cur_x, (&mut cur_inv, &mut cur_out));
+                    [cur_inv, cur_out]
+                })
+                .collect::<Vec<_>>(),
+            2,
+        ));
+
+        assert_eq_host_and_device_matrix(cpu_matrix, &output);
     }
 }

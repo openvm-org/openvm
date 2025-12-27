@@ -1,6 +1,7 @@
 name: Extension Tests
 
 on:
+  workflow_call:
   push:
     branches: ["main"]
   pull_request:
@@ -14,39 +15,47 @@ on:
       - ".github/workflows/extension-tests.yml"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-extension-tests-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
   OPENVM_FAST_TEST: "1"
+  OPENVM_SKIP_DEBUG: "1"
 
 jobs:
   extension-tests:
     strategy:
       matrix:
         extension:
-          - { name: "rv32im", path: "rv32im" }
-          - { name: "native", path: "native" }
-          - { name: "keccak256", path: "keccak256" }
-          - { name: "sha256", path: "sha256" }
-          - { name: "bigint", path: "bigint" }
-          - { name: "algebra", path: "algebra" }
-          - { name: "ecc", path: "ecc" }
-          - { name: "pairing", path: "pairing" }
+          - { name: "rv32im", path: "rv32im", aot: false }
+          - { name: "native", path: "native", aot: false }
+          - { name: "keccak256", path: "keccak256", aot: false }
+          - { name: "sha256", path: "sha256", aot: false }
+          - { name: "bigint", path: "bigint", aot: false }
+          - { name: "algebra", path: "algebra", aot: false }
+          - { name: "ecc", path: "ecc", aot: false }
+          - { name: "pairing", path: "pairing", aot: false }
+          - { name: "rv32im", path: "rv32im", aot: true }
+          - { name: "native", path: "native", aot: true }
+          - { name: "keccak256", path: "keccak256", aot: true }
+          - { name: "sha256", path: "sha256", aot: true }
+          - { name: "bigint", path: "bigint", aot: true }
+          - { name: "algebra", path: "algebra", aot: true }
+          - { name: "weierstrass_ec", path: "weierstrass_ec", aot: true }
+          - { name: "edwards_ec", path: "edwards_ec", aot: true }
+          - { name: "pairing", path: "pairing", aot: true }
+        platform:
+          - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 
     runs-on:
-      - runs-on=${{ github.run_id }}
-      - runner=64cpu-linux-arm64
-      - image=ubuntu24-full-arm64
-      - tag=extension-${{ matrix.extension.name }}
-      - extras=s3-cache
+      - runs-on=${{ github.run_id }}-extension-tests-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ matrix.platform.runner }}/image=${{ matrix.platform.image }}/extras=s3-cache
 
     steps:
-      - uses: runs-on/action@v1
-      - uses: actions/checkout@v4
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -54,7 +63,7 @@ jobs:
             - "crates/circuits/**"
             - "crates/vm/**"
             - "crates/toolchain/**"
-            - "extensions/${{ matrix.extensions.path }}/**"
+            - "extensions/${{ matrix.extension.path }}/**"
             - ".github/workflows/extension-tests.yml"
       - name: Skip if no changes
         if: steps.filter.outputs.matched == 'false'
@@ -68,23 +77,37 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Run ${{ matrix.extension.name }} circuit crate tests
+      - name: Run ${{ format('{0}{1}', matrix.extension.name, matrix.extension.aot && '-aot' || '') }} circuit crate tests
         working-directory: extensions/${{ matrix.extension.path }}/circuit
-        run: cargo nextest run --cargo-profile=fast --test-threads=32
+        run: |
+          TEST_THREADS="--test-threads=32"
+          if [[ "${{ matrix.extension.name }}" == "algebra" ]]; then
+            TEST_THREADS="--test-threads=4"
+          fi
+          if [[ "${{ matrix.extension.aot }}" == 'true' ]]; then
+            cargo nextest run --cargo-profile=fast --features aot $TEST_THREADS --no-tests=pass --success-output=immediate
+          else
+            cargo nextest run --cargo-profile=fast $TEST_THREADS --no-tests=pass --success-output=immediate
+          fi
 
+        # We only need to run guest crate tests on CPU since we are not testing prover functionality
       - name: Run ${{ matrix.extension.name }} guest crate tests
         if: hashFiles(format('extensions/{0}/guest', matrix.extension.path)) != ''
         working-directory: extensions/${{ matrix.extension.path }}/guest
         run: |
-          FEATURE_ARGS=""
+          GUEST_FEATURE_ARGS=""
           if [[ "${{ matrix.extension.name }}" == "pairing" ]]; then
-            FEATURE_ARGS="--features=bn254,bls12_381,halo2curves"
+            GUEST_FEATURE_ARGS="--features=bn254,bls12_381,halo2curves"
           fi
-          cargo nextest run --cargo-profile=fast $FEATURE_ARGS --no-tests=pass
+          cargo nextest run --cargo-profile=fast  $GUEST_FEATURE_ARGS --no-tests=pass
 
-      - name: Run ${{ matrix.extension.name }} integration tests
+      - name: Run ${{ format('{0}{1}', matrix.extension.name, matrix.extension.aot && '-aot' || '') }} integration tests
         if: hashFiles(format('extensions/{0}/tests', matrix.extension.path)) != ''
         working-directory: extensions/${{ matrix.extension.path }}/tests
         run: |
-          rustup component add rust-src --toolchain nightly-2025-02-14
-          cargo nextest run --cargo-profile=fast --profile=heavy --no-tests=pass
+          rustup component add rust-src --toolchain nightly-2025-08-02
+          if [[ "${{ matrix.extension.aot }}" == 'true' ]]; then
+            cargo nextest run --cargo-profile=fast --features aot --profile=heavy --no-tests=pass --success-output=immediate
+          else
+            cargo nextest run --cargo-profile=fast --profile=heavy --no-tests=pass --success-output=immediate
+          fi

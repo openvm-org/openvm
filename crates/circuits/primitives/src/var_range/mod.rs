@@ -23,10 +23,15 @@ use openvm_stark_backend::{
 use tracing::instrument;
 
 mod bus;
+pub use bus::*;
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+
 #[cfg(test)]
 pub mod tests;
-
-pub use bus::*;
 
 #[derive(Default, AlignedBorrow, Copy, Clone)]
 #[repr(C)]

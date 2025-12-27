@@ -1,3 +1,8 @@
+#![cfg_attr(feature = "tco", allow(incomplete_features))]
+#![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
+#![cfg_attr(feature = "tco", allow(internal_features))]
+#![cfg_attr(feature = "tco", feature(core_intrinsics))]
+
 use std::result::Result;
 
 use openvm_circuit::{
@@ -25,6 +30,20 @@ pub use sha256_chip::*;
 mod extension;
 pub use extension::*;
 
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cuda")] {
+        use openvm_circuit::arch::DenseRecordArena;
+        use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};
+        use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
+        use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+        use openvm_rv32im_circuit::Rv32ImGpuProverExt;
+        pub(crate) mod cuda_abi;
+        pub use Sha256Rv32GpuBuilder as Sha256Rv32Builder;
+    } else {
+        pub use Sha256Rv32CpuBuilder as Sha256Rv32Builder;
+    }
+}
+
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Sha256Rv32Config {
     #[config(executor = "SystemExecutor<F>")]
@@ -42,7 +61,7 @@ pub struct Sha256Rv32Config {
 impl Default for Sha256Rv32Config {
     fn default() -> Self {
         Self {
-            system: SystemConfig::default().with_continuations(),
+            system: SystemConfig::default(),
             rv32i: Rv32I,
             rv32m: Rv32M::default(),
             io: Rv32Io,
@@ -82,6 +101,59 @@ where
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, &config.sha256, inventory)?;
+        Ok(chip_complex)
+    }
+}
+
+#[cfg(feature = "cuda")]
+#[derive(Clone)]
+pub struct Sha256Rv32GpuBuilder;
+
+#[cfg(feature = "cuda")]
+impl VmBuilder<GpuBabyBearPoseidon2Engine> for Sha256Rv32GpuBuilder {
+    type VmConfig = Sha256Rv32Config;
+    type SystemChipInventory = SystemChipInventoryGPU;
+    type RecordArena = DenseRecordArena;
+
+    fn create_chip_complex(
+        &self,
+        config: &Sha256Rv32Config,
+        circuit: AirInventory<BabyBearPoseidon2Config>,
+    ) -> Result<
+        VmChipComplex<
+            BabyBearPoseidon2Config,
+            Self::RecordArena,
+            GpuBackend,
+            Self::SystemChipInventory,
+        >,
+        ChipInventoryError,
+    > {
+        let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
+            &SystemGpuBuilder,
+            &config.system,
+            circuit,
+        )?;
+        let inventory = &mut chip_complex.inventory;
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+            &Rv32ImGpuProverExt,
+            &config.rv32i,
+            inventory,
+        )?;
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+            &Rv32ImGpuProverExt,
+            &config.rv32m,
+            inventory,
+        )?;
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+            &Rv32ImGpuProverExt,
+            &config.io,
+            inventory,
+        )?;
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+            &Sha256GpuProverExt,
+            &config.sha256,
+            inventory,
+        )?;
         Ok(chip_complex)
     }
 }

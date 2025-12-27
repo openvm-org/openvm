@@ -63,7 +63,7 @@ impl Encode for ContinuationVmProof<SC> {
 
 impl Encode for VmStarkProof<SC> {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
-        self.proof.encode(writer)?;
+        self.inner.encode(writer)?;
         encode_slice(&self.user_public_values, writer)
     }
 }
@@ -298,7 +298,7 @@ impl Encode for [F; DIGEST_SIZE] {
 }
 
 /// Encodes length of slice and then each element
-pub(crate) fn encode_slice<T: Encode, W: Write>(slice: &[T], writer: &mut W) -> Result<()> {
+pub fn encode_slice<T: Encode, W: Write>(slice: &[T], writer: &mut W) -> Result<()> {
     slice.len().encode(writer)?;
     for elt in slice {
         elt.encode(writer)?;
@@ -334,10 +334,10 @@ impl Decode for ContinuationVmProof<SC> {
 
 impl Decode for VmStarkProof<SC> {
     fn decode<R: Read>(reader: &mut R) -> Result<Self> {
-        let proof = Proof::decode(reader)?;
+        let inner = Proof::decode(reader)?;
         let user_public_values = decode_vec(reader)?;
         Ok(Self {
-            proof,
+            inner,
             user_public_values,
         })
     }
@@ -377,10 +377,7 @@ impl Decode for Proof<SC> {
         if version != CODEC_VERSION {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!(
-                    "Invalid codec version. Expected {}, got {}",
-                    CODEC_VERSION, version
-                ),
+                format!("Invalid codec version. Expected {CODEC_VERSION}, got {version}"),
             ));
         }
 

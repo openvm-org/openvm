@@ -1,6 +1,7 @@
 name: VM STARK and Compiler Tests
 
 on:
+  workflow_call:
   push:
     branches: ["main"]
   pull_request:
@@ -8,41 +9,58 @@ on:
     paths:
       - "crates/circuits/**"
       - "crates/vm/**"
-      - "extensions/native/**"
       - "Cargo.toml"
       - ".github/workflows/vm.yml"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-vm-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
   OPENVM_FAST_TEST: "1"
+  OPENVM_SKIP_DEBUG: "1"
 
 jobs:
   tests:
+    strategy:
+      matrix:
+        platform:
+          - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64" }
+
     runs-on:
-      - runs-on=${{ github.run_id }}
-      - runner=64cpu-linux-arm64
-      - image=ubuntu24-full-arm64
-      - extras=s3-cache
+      - runs-on=${{ github.run_id }}-vm-tests-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ matrix.platform.runner }}/image=${{ matrix.platform.image }}/extras=s3-cache
 
     steps:
-      - uses: runs-on/action@v1
-      - uses: actions/checkout@v4
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
+      - run: | # avoid cross-device link error
+          rustup component remove clippy || true
+          rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
+      - name: Set CPU tests environment variables
+        if: ${{ !contains(matrix.platform.runner, 'gpu') }}
+        run: |
+          echo "NEXTEST_ARGS=--cargo-profile fast --features parallel" >> $GITHUB_ENV
+
+      - name: Check CUDA status and set environment variables
+        if: contains(matrix.platform.runner, 'gpu')
+        run: |
+          nvcc --version
+          echo "NEXTEST_ARGS=cuda --features parallel,cuda,touchemall" >> $GITHUB_ENV
+
       - name: Run vm crate tests
         working-directory: crates/vm
         run: |
-          cargo nextest run --cargo-profile=fast --features parallel
+          cargo nextest run ${{ env.NEXTEST_ARGS }}
 
       - name: Run vm crate tests with basic memory
+        if: ${{ !contains(matrix.platform.runner, 'gpu') }}
         working-directory: crates/vm
         run: |
           cargo nextest run --cargo-profile=fast --features parallel,basic-memory

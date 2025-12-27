@@ -1,6 +1,16 @@
 use std::borrow::BorrowMut;
 
-use openvm_circuit::arch::testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder};
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::{
+    testing::{
+        default_var_range_checker_bus, dummy_range_checker, GpuChipTestBuilder, GpuTestChipHarness,
+    },
+    EmptyMultiRowLayout,
+};
+use openvm_circuit::arch::{
+    testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
+    Arena, PreflightExecutor,
+};
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
@@ -9,6 +19,8 @@ use openvm_instructions::{
 use openvm_native_compiler::{
     conversion::AS, NativeJalOpcode::*, NativeRangeCheckOpcode::RANGE_CHECK,
 };
+#[cfg(feature = "cuda")]
+use openvm_native_compiler::{NativeJalOpcode, NativeRangeCheckOpcode};
 use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{
@@ -23,10 +35,11 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
 use super::{JalRangeCheckAir, JalRangeCheckExecutor};
+#[cfg(feature = "cuda")]
+use crate::jal_rangecheck::{JalRangeCheckGpu, JalRangeCheckRecord};
 use crate::{
-    jal_rangecheck::{JalRangeCheckCols, NativeJalRangeCheckChip},
+    jal_rangecheck::{JalRangeCheckCols, JalRangeCheckFiller, NativeJalRangeCheckChip},
     test_utils::write_native_array,
-    JalRangeCheckFiller,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
@@ -50,28 +63,54 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
     Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
+#[cfg(feature = "cuda")]
+fn create_test_harness(
+    tester: &GpuChipTestBuilder,
+) -> GpuTestChipHarness<
+    F,
+    JalRangeCheckExecutor,
+    JalRangeCheckAir,
+    JalRangeCheckGpu,
+    NativeJalRangeCheckChip<F>,
+> {
+    let range_bus = default_var_range_checker_bus();
+    let air = JalRangeCheckAir::new(tester.execution_bridge(), tester.memory_bridge(), range_bus);
+    let executor = JalRangeCheckExecutor::new();
+    let filler = JalRangeCheckFiller::new(dummy_range_checker(range_bus));
+    let cpu_chip = NativeJalRangeCheckChip::<F>::new(filler, tester.dummy_memory_helper());
+    let gpu_chip = JalRangeCheckGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
 // `a_val` and `c` will be disregarded if opcode is JAL
-fn set_and_execute(
-    tester: &mut VmChipTestBuilder<F>,
-    harness: &mut Harness,
+#[allow(clippy::too_many_arguments)]
+fn set_and_execute<E, RA>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
     rng: &mut StdRng,
     opcode: VmOpcode,
     a_val: Option<u32>,
     b: Option<u32>,
     c: Option<u32>,
-) {
+) where
+    E: PreflightExecutor<F, RA>,
+    RA: Arena,
+{
     if opcode == JAL.global_opcode() {
         let initial_pc = rng.gen_range(0..(1 << PC_BITS));
         let a = gen_pointer(rng, 1);
         let final_pc = F::from_canonical_u32(rng.gen_range(0..(1 << PC_BITS)));
         let b = b.unwrap_or((final_pc - F::from_canonical_u32(initial_pc)).as_canonical_u32());
         tester.execute_with_pc(
-            harness,
+            executor,
+            arena,
             &Instruction::from_usize(opcode, [a, b as usize, 0, AS::Native as usize, 0, 0, 0]),
             initial_pc,
         );
 
-        let final_pc = tester.execution.last_to_pc();
+        let final_pc = tester.execution_final_state().pc;
         let expected_final_pc = F::from_canonical_u32(initial_pc) + F::from_canonical_u32(b);
         assert_eq!(final_pc, expected_final_pc);
         let result_a_val = tester.read::<1>(AS::Native as usize, a)[0].as_canonical_u32();
@@ -88,7 +127,8 @@ fn set_and_execute(
         let b = b.unwrap_or(rng.gen_range(min_b..=16));
         let c = c.unwrap_or(rng.gen_range(min_c..=14));
         tester.execute(
-            harness,
+            executor,
+            arena,
             &Instruction::from_usize(
                 opcode,
                 [a, b as usize, c as usize, AS::Native as usize, 0, 0, 0],
@@ -115,7 +155,8 @@ fn rand_jal_range_check_test(opcode: VmOpcode, num_ops: usize) {
     for _ in 0..num_ops {
         set_and_execute(
             &mut tester,
-            &mut harness,
+            &mut harness.executor,
+            &mut harness.arena,
             &mut rng,
             opcode,
             None,
@@ -127,6 +168,41 @@ fn rand_jal_range_check_test(opcode: VmOpcode, num_ops: usize) {
     tester.simple_test().expect("Verification failed");
 }
 
+#[cfg(feature = "cuda")]
+#[test_case(NativeJalOpcode::JAL.global_opcode(), 100)]
+#[test_case(NativeRangeCheckOpcode::RANGE_CHECK.global_opcode(), 100)]
+fn test_cuda_jal_rangecheck_tracegen(opcode: VmOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester = GpuChipTestBuilder::default();
+    let mut harness = create_test_harness(&tester);
+
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+        );
+    }
+
+    type Record<'a> = &'a mut JalRangeCheckRecord<F>;
+    harness
+        .dense_arena
+        .get_record_seeker::<Record<'_>, EmptyMultiRowLayout>()
+        .transfer_to_matrix_arena(&mut harness.matrix_arena);
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
+
 #[test]
 fn range_check_edge_cases_test() {
     let mut rng = create_seeded_rng();
@@ -135,7 +211,8 @@ fn range_check_edge_cases_test() {
 
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         RANGE_CHECK.global_opcode(),
         Some(0),
@@ -144,7 +221,8 @@ fn range_check_edge_cases_test() {
     );
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         RANGE_CHECK.global_opcode(),
         Some((1 << 30) - 1),
@@ -156,7 +234,8 @@ fn range_check_edge_cases_test() {
     let a = rng.gen_range(0..(1 << 14)) << 16;
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         RANGE_CHECK.global_opcode(),
         Some(a),
@@ -168,7 +247,8 @@ fn range_check_edge_cases_test() {
     let a = rng.gen_range(0..(1 << 16));
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         RANGE_CHECK.global_opcode(),
         Some(a),
@@ -207,7 +287,16 @@ fn run_negative_jal_range_check_test(
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default_native();
     let mut harness = create_test_chip(&tester);
-    set_and_execute(&mut tester, &mut harness, &mut rng, opcode, a_val, b, c);
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        opcode,
+        a_val,
+        b,
+        c,
+    );
 
     let modify_trace = |trace: &mut DenseMatrix<F>| {
         let mut values = trace.row_slice(0).to_vec();

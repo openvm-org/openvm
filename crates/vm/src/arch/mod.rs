@@ -4,7 +4,6 @@ mod config;
 pub mod execution;
 /// Execution context types for different execution modes.
 pub mod execution_mode;
-/// Traits and builders to compose collections of chips into a virtual machine.
 mod extensions;
 /// Traits and wrappers to facilitate VM chip integration
 mod integration_api;
@@ -16,6 +15,9 @@ mod state;
 /// Top level [VmExecutor] and [VirtualMachine] constructor and API.
 pub mod vm;
 
+/// AOT execution
+#[cfg(feature = "aot")]
+pub mod aot;
 pub mod hasher;
 /// Interpreter for pure and metered VM execution
 pub mod interpreter;
@@ -25,11 +27,15 @@ pub mod interpreter_preflight;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod testing;
 
+#[cfg(feature = "aot")]
+pub use aot::AotInstance;
 pub use config::*;
 pub use execution::*;
-pub use execution_mode::{E1ExecutionCtx, E2ExecutionCtx};
+pub use execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait};
 pub use extensions::*;
 pub use integration_api::*;
+pub use interpreter::InterpretedInstance;
+pub use openvm_circuit_derive::create_handler;
 pub use openvm_instructions as instructions;
 pub use record_arena::*;
 pub use state::*;

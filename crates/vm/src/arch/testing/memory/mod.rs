@@ -8,6 +8,11 @@ use crate::system::memory::{online::TracingMemory, MemoryController};
 
 pub mod air;
 
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+
 /// A dummy testing chip that will add unconstrained messages into the [MemoryBus].
 /// Stores a log of raw messages to send/receive to the [MemoryBus].
 ///

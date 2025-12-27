@@ -14,10 +14,12 @@ use openvm_circuit::{
     system::SystemExecutor,
     utils::air_test,
 };
-use openvm_ecc_circuit::SECP256K1_CONFIG;
+use openvm_ecc_circuit::{SECP256K1_MODULUS, SECP256K1_ORDER};
 use openvm_instructions::exe::VmExe;
 use openvm_platform::memory::MEM_SIZE;
-use openvm_rv32im_circuit::*;
+use openvm_rv32im_circuit::{
+    Rv32I, Rv32IExecutor, Rv32ImBuilder, Rv32ImConfig, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
+};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
@@ -57,10 +59,61 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
         .with_extension(ModularTranspilerExtension)
         .transpile(&elf.instructions)?;
     for instruction in program {
-        println!("{:?}", instruction);
+        println!("{instruction:?}");
     }
     Ok(())
 }
+
+#[cfg(feature = "aot")]
+#[test_case("tests/data/rv32im-exp-from-as")]
+fn test_rv32im_aot_pure_runtime(elf_path: &str) -> Result<()> {
+    let elf = get_elf(elf_path)?;
+    let exe = VmExe::from_elf(
+        elf,
+        Transpiler::<F>::default()
+            .with_extension(Rv32ITranspilerExtension)
+            .with_extension(Rv32MTranspilerExtension)
+            .with_extension(Rv32IoTranspilerExtension),
+    )?;
+
+    let config = Rv32ImConfig::default();
+    let executor = VmExecutor::new(config.clone())?;
+
+    let interpreter = executor.instance(&exe)?;
+    let _interp_state = interpreter.execute(vec![], None)?;
+
+    Ok(())
+}
+/*
+#[cfg(feature = "aot")]
+#[test_case("tests/data/rv32im-exp-from-as")]
+fn test_rv32im_aot_pure_runtime_with_path(elf_path: &str) -> Result<()> {
+    let elf = get_elf(elf_path)?;
+    let exe = VmExe::from_elf(
+        elf,
+        Transpiler::<F>::default()
+            .with_extension(Rv32ITranspilerExtension)
+            .with_extension(Rv32MTranspilerExtension)
+            .with_extension(Rv32IoTranspilerExtension),
+    )?;
+
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let config = Rv32ImConfig::default();
+    let executor = VmExecutor::new(config.clone())?;
+
+    let interpreter = executor.instance(&exe)?;
+    let interp_state = interpreter.execute(vec![], None)?;
+
+    let asm_name = String::from("asm_test_name");
+    let mut aot_instance = executor.aot_instance_with_asm_name(&exe, &asm_name)?;
+    let aot_state = aot_instance.execute(vec![], None)?;
+
+    assert_eq!(interp_state.instret(), aot_state.instret());
+    assert_eq!(interp_state.pc(), aot_state.pc());
+
+    Ok(())
+}
+    */
 
 #[test_case("tests/data/rv32im-exp-from-as")]
 #[test_case("tests/data/rv32im-fib-from-as")]
@@ -101,7 +154,7 @@ pub struct Rv32ModularFp2Int256Config {
 impl Rv32ModularFp2Int256Config {
     pub fn new(modular_moduli: Vec<BigUint>, fp2_moduli: Vec<(String, BigUint)>) -> Self {
         Self {
-            system: SystemConfig::default().with_continuations(),
+            system: SystemConfig::default(),
             base: Default::default(),
             mul: Default::default(),
             io: Default::default(),
@@ -125,14 +178,8 @@ impl InitFileGenerator for Rv32ModularFp2Int256Config {
 #[test_case("tests/data/rv32im-intrin-from-as")]
 fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     let config = Rv32ModularFp2Int256Config::new(
-        vec![
-            SECP256K1_CONFIG.modulus.clone(),
-            SECP256K1_CONFIG.scalar.clone(),
-        ],
-        vec![(
-            SECP256K1_CONFIG.struct_name.clone(),
-            SECP256K1_CONFIG.modulus.clone(),
-        )],
+        vec![SECP256K1_MODULUS.clone(), SECP256K1_ORDER.clone()],
+        vec![("Secp256k1Coord".to_string(), SECP256K1_MODULUS.clone())],
     );
     let elf = get_elf(elf_path)?;
     let openvm_exe = VmExe::from_elf(
@@ -162,6 +209,6 @@ fn test_terminate_prove() -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension)
             .with_extension(ModularTranspilerExtension),
     )?;
-    air_test(Rv32ImCpuBuilder, config, openvm_exe);
+    air_test(Rv32ImBuilder, config, openvm_exe);
     Ok(())
 }

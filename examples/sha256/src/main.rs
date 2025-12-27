@@ -1,15 +1,12 @@
-openvm::entry!(main);
-
-// ANCHOR: imports
+// [!region imports]
 use core::hint::black_box;
 
 use hex::FromHex;
+use openvm as _;
 use openvm_sha2::sha256;
-// ANCHOR_END: imports
+// [!endregion imports]
 
-// ANCHOR: main
-openvm::entry!(main);
-
+// [!region main]
 pub fn main() {
     let test_vectors = [(
         "",
@@ -24,4 +21,4 @@ pub fn main() {
         }
     }
 }
-// ANCHOR_END: main
+// [!endregion main]

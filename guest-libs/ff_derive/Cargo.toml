@@ -12,6 +12,8 @@ license.workspace = true
 [features]
 # enabled when generating bitvec code utilizing the version of ff's bitvec
 bits = []
+# Internal feature for testing only.
+cuda = ["openvm-algebra-circuit/cuda"]
 
 [lib]
 proc-macro = true

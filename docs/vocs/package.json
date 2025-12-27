@@ -1,0 +1,29 @@
+{
+  "name": "@openvm/docs",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vocs dev",
+    "build": "vocs build",
+    "preview": "vocs preview",
+    "vercel-build": "for SYMLINK_DIR in docs/snippets/examples docs/snippets/examples_cli docs/snippets/examples_sdk docs/snippets/examples_sdk_guest docs/snippets/examples_sdk_toml; do cp -rL $SYMLINK_DIR $SYMLINK_DIR-tmp && rm -rf $SYMLINK_DIR && mv $SYMLINK_DIR-tmp $SYMLINK_DIR; done && pnpm build"
+  },
+  "dependencies": {
+    "katex": "^0.16.22",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "rehype-katex": "^7.0.1",
+    "remark-math": "^6.0.0",
+    "remark-mdx-disable-explicit-jsx": "^0.1.0",
+    "vocs": "^1.0.13"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.1.10",
+    "glob": "^11.0.3",
+    "patch-package": "^8.0.0",
+    "postinstall-postinstall": "^2.1.0",
+    "typescript": "^5.9.2"
+  }
+}

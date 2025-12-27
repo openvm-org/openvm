@@ -2,11 +2,9 @@ use clap::Parser;
 use eyre::Result;
 use k256::ecdsa::{SigningKey, VerifyingKey};
 use openvm_benchmarks_prove::util::BenchmarkCli;
-use openvm_circuit::arch::instructions::exe::VmExe;
-use openvm_sdk::config::{SdkVmConfig, SdkVmCpuBuilder};
+use openvm_sdk::config::{SdkVmBuilder, SdkVmConfig};
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{bench::run_with_metric_collection, p3_baby_bear::BabyBear};
-use openvm_transpiler::FromElf;
 use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
 use tiny_keccak::{Hasher, Keccak};
 
@@ -32,7 +30,6 @@ fn main() -> Result<()> {
     let config =
         SdkVmConfig::from_toml(include_str!("../../../guest/ecrecover/openvm.toml"))?.app_vm_config;
     let elf = args.build_bench_program("ecrecover", &config, None)?;
-    let exe = VmExe::from_elf(elf, config.transpiler())?;
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         let mut rng = ChaCha8Rng::seed_from_u64(12345);
@@ -58,11 +55,10 @@ fn main() -> Result<()> {
                 .map(|s| make_input(&signing_key, s.as_bytes()))
                 .collect::<Vec<_>>(),
         );
-        args.bench_from_exe(
+        args.bench_from_exe::<SdkVmBuilder, _>(
             "ecrecover_program",
-            SdkVmCpuBuilder,
             config,
-            exe,
+            elf,
             input_stream.into(),
         )
     })

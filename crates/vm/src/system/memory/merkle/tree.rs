@@ -264,4 +264,11 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
             final_root,
         }
     }
+
+    pub fn top_tree(&self, top_height: usize) -> Vec<[F; CHUNK]> {
+        // tree root is at index 1
+        (0..(2 << top_height) - 1)
+            .map(|i| self.get_node(i + 1))
+            .collect()
+    }
 }

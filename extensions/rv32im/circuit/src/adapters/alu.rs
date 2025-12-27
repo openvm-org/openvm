@@ -282,6 +282,8 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceFiller<F>
         // - Do not overwrite any reference in `record` before it has already been used or moved
         // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic
         //   otherwise)
+        // - adapter_row contains a valid Rv32BaseAluAdapterRecord representation
+        // - get_record_from_slice correctly interprets the bytes as Rv32BaseAluAdapterRecord
         let record: &Rv32BaseAluAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut Rv32BaseAluAdapterCols<F> = adapter_row.borrow_mut();

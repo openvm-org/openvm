@@ -1,6 +1,12 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
-use openvm_circuit::arch::testing::{TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+use openvm_circuit::{
+    arch::{
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        Arena, ExecutionBridge, PreflightExecutor,
+    },
+    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
+};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
@@ -19,6 +25,14 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
+#[cfg(feature = "cuda")]
+use {
+    crate::{adapters::Rv32BaseAluAdapterRecord, BaseAluCoreRecord, Rv32BaseAluChipGpu},
+    openvm_circuit::arch::{
+        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
+        EmptyAdapterCoreLayout,
+    },
+};
 
 use super::{core::run_alu, BaseAluCoreAir, Rv32BaseAluChip, Rv32BaseAluExecutor};
 use crate::{
@@ -37,7 +51,32 @@ const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 type Harness = TestChipHarness<F, Rv32BaseAluExecutor, Rv32BaseAluAir, Rv32BaseAluChip<F>>;
 
-fn create_test_chip(
+fn create_harness_fields(
+    memory_bridge: MemoryBridge,
+    execution_bridge: ExecutionBridge,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    memory_helper: SharedMemoryHelper<F>,
+) -> (Rv32BaseAluAir, Rv32BaseAluExecutor, Rv32BaseAluChip<F>) {
+    let air = Rv32BaseAluAir::new(
+        Rv32BaseAluAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
+        BaseAluCoreAir::new(bitwise_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
+    );
+    let executor = Rv32BaseAluExecutor::new(
+        Rv32BaseAluAdapterExecutor::new(),
+        BaseAluOpcode::CLASS_OFFSET,
+    );
+    let chip = Rv32BaseAluChip::new(
+        BaseAluFiller::new(
+            Rv32BaseAluAdapterFiller::new(bitwise_chip.clone()),
+            bitwise_chip,
+            BaseAluOpcode::CLASS_OFFSET,
+        ),
+        memory_helper,
+    );
+    (air, executor, chip)
+}
+
+fn create_harness(
     tester: &VmChipTestBuilder<F>,
 ) -> (
     Harness,
@@ -51,24 +90,10 @@ fn create_test_chip(
         bitwise_bus,
     ));
 
-    let air = Rv32BaseAluAir::new(
-        Rv32BaseAluAdapterAir::new(
-            tester.execution_bridge(),
-            tester.memory_bridge(),
-            bitwise_bus,
-        ),
-        BaseAluCoreAir::new(bitwise_bus, BaseAluOpcode::CLASS_OFFSET),
-    );
-    let executor = Rv32BaseAluExecutor::new(
-        Rv32BaseAluAdapterExecutor::new(),
-        BaseAluOpcode::CLASS_OFFSET,
-    );
-    let chip = Rv32BaseAluChip::new(
-        BaseAluFiller::new(
-            Rv32BaseAluAdapterFiller::new(bitwise_chip.clone()),
-            bitwise_chip.clone(),
-            BaseAluOpcode::CLASS_OFFSET,
-        ),
+    let (air, executor, chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        bitwise_chip.clone(),
         tester.memory_helper(),
     );
     let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
@@ -76,9 +101,11 @@ fn create_test_chip(
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
-fn set_and_execute(
-    tester: &mut VmChipTestBuilder<F>,
-    harness: &mut Harness,
+#[allow(clippy::too_many_arguments)]
+fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
     rng: &mut StdRng,
     opcode: BaseAluOpcode,
     b: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
@@ -108,7 +135,7 @@ fn set_and_execute(
         opcode.global_opcode().as_usize(),
         rng,
     );
-    tester.execute(harness, &instruction);
+    tester.execute(executor, arena, &instruction);
 
     let a = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c)
         .map(F::from_canonical_u8);
@@ -131,7 +158,7 @@ fn rand_rv32_alu_test(opcode: BaseAluOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
 
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_test_chip(&tester);
+    let (mut harness, bitwise) = create_harness(&tester);
 
     // TODO(AG): make a more meaningful test for memory accesses
     tester.write(2, 1024, [F::ONE; 4]);
@@ -142,7 +169,8 @@ fn rand_rv32_alu_test(opcode: BaseAluOpcode, num_ops: usize) {
     for _ in 0..num_ops {
         set_and_execute(
             &mut tester,
-            &mut harness,
+            &mut harness.executor,
+            &mut harness.arena,
             &mut rng,
             opcode,
             None,
@@ -168,7 +196,7 @@ fn rand_rv32_alu_test_persistent(opcode: BaseAluOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
 
     let mut tester = VmChipTestBuilder::default_persistent();
-    let (mut harness, bitwise) = create_test_chip(&tester);
+    let (mut harness, bitwise) = create_harness(&tester);
 
     // TODO(AG): make a more meaningful test for memory accesses
     tester.write(2, 1024, [F::ONE; 4]);
@@ -179,7 +207,8 @@ fn rand_rv32_alu_test_persistent(opcode: BaseAluOpcode, num_ops: usize) {
     for _ in 0..num_ops {
         set_and_execute(
             &mut tester,
-            &mut harness,
+            &mut harness.executor,
+            &mut harness.arena,
             &mut rng,
             opcode,
             None,
@@ -216,11 +245,12 @@ fn run_negative_alu_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
-    let (mut chip, bitwise) = create_test_chip(&tester);
+    let (mut harness, bitwise) = create_harness(&tester);
 
     set_and_execute(
         &mut tester,
-        &mut chip,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         opcode,
         Some(b),
@@ -228,7 +258,7 @@ fn run_negative_alu_test(
         Some(c),
     );
 
-    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
         let cols: &mut BaseAluCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
@@ -250,7 +280,7 @@ fn run_negative_alu_test(
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));
@@ -441,4 +471,87 @@ fn run_and_sanity_test() {
     for i in 0..RV32_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
+}
+
+// ////////////////////////////////////////////////////////////////////////////////////
+//  CUDA TESTS
+//
+//  Ensure GPU tracegen is equivalent to CPU tracegen
+// ////////////////////////////////////////////////////////////////////////////////////
+
+#[cfg(feature = "cuda")]
+type GpuHarness = GpuTestChipHarness<
+    F,
+    Rv32BaseAluExecutor,
+    Rv32BaseAluAir,
+    Rv32BaseAluChipGpu,
+    Rv32BaseAluChip<F>,
+>;
+
+#[cfg(feature = "cuda")]
+fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    let bitwise_bus = default_bitwise_lookup_bus();
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
+    let (air, executor, cpu_chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        dummy_bitwise_chip,
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = Rv32BaseAluChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.timestamp_max_bits(),
+    );
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
+#[test_case(BaseAluOpcode::ADD, 100)]
+#[test_case(BaseAluOpcode::SUB, 100)]
+#[test_case(BaseAluOpcode::XOR, 100)]
+#[test_case(BaseAluOpcode::OR, 100)]
+#[test_case(BaseAluOpcode::AND, 100)]
+fn test_cuda_rand_alu_tracegen(opcode: BaseAluOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester =
+        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+
+    let mut harness = create_cuda_harness(&tester);
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+        );
+    }
+
+    type Record<'a> = (
+        &'a mut Rv32BaseAluAdapterRecord,
+        &'a mut BaseAluCoreRecord<RV32_REGISTER_NUM_LIMBS>,
+    );
+
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv32BaseAluAdapterExecutor<RV32_CELL_BITS>>::new(),
+        );
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
 }

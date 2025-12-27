@@ -16,6 +16,8 @@ pub mod types;
 impl MetricDb {
     pub fn new(metrics_file: impl AsRef<Path>) -> Result<Self> {
         let file = File::open(metrics_file)?;
+        // SAFETY: File is read-only mapped. File will not be modified by other
+        // processes during the mapping's lifetime.
         let mmap = unsafe { Mmap::map(&file)? };
         let metrics: MetricsFile = serde_json::from_slice(&mmap)?;
 
@@ -110,7 +112,7 @@ impl MetricDb {
                 .map(|key| {
                     label_dict
                         .get(key)
-                        .unwrap_or_else(|| panic!("Label key '{}' should exist in label_dict", key))
+                        .unwrap_or_else(|| panic!("Label key '{key}' should exist in label_dict"))
                         .clone()
                 })
                 .collect();
@@ -177,7 +179,7 @@ impl MetricDb {
                         .map(|m| Self::format_number(m.value))
                         .unwrap_or_default();
 
-                    row.push_str(&format!("{} | ", metric_value));
+                    row.push_str(&format!("{metric_value} | "));
                 }
 
                 markdown_output.push_str(&row);

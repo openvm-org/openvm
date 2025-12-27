@@ -1,4 +1,4 @@
-use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+use openvm_circuit::arch::testing::{memory::gen_pointer, TestBuilder};
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_rv32im_circuit::adapters::{RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS};
 use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -6,7 +6,7 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{rngs::StdRng, Rng};
 
 pub fn write_ptr_reg(
-    tester: &mut VmChipTestBuilder<BabyBear>,
+    tester: &mut impl TestBuilder<BabyBear>,
     ptr_as: usize,
     reg_addr: usize,
     value: u32,
@@ -19,7 +19,7 @@ pub fn write_ptr_reg(
 }
 
 pub fn rv32_write_heap_default<const NUM_LIMBS: usize>(
-    tester: &mut VmChipTestBuilder<BabyBear>,
+    tester: &mut impl TestBuilder<BabyBear>,
     addr1_writes: Vec<[BabyBear; NUM_LIMBS]>,
     addr2_writes: Vec<[BabyBear; NUM_LIMBS]>,
     opcode_with_offset: usize,
@@ -46,7 +46,7 @@ pub fn rv32_write_heap_default<const NUM_LIMBS: usize>(
 }
 
 pub fn rv32_write_heap_default_with_increment<const NUM_LIMBS: usize>(
-    tester: &mut VmChipTestBuilder<BabyBear>,
+    tester: &mut impl TestBuilder<BabyBear>,
     addr1_writes: Vec<[BabyBear; NUM_LIMBS]>,
     addr2_writes: Vec<[BabyBear; NUM_LIMBS]>,
     pointer_increment: usize,
@@ -80,7 +80,7 @@ pub fn rv32_write_heap_default_with_increment<const NUM_LIMBS: usize>(
 }
 
 pub fn rv32_heap_branch_default<const NUM_LIMBS: usize>(
-    tester: &mut VmChipTestBuilder<BabyBear>,
+    tester: &mut impl TestBuilder<BabyBear>,
     addr1_writes: Vec<[BabyBear; NUM_LIMBS]>,
     addr2_writes: Vec<[BabyBear; NUM_LIMBS]>,
     imm: isize,
@@ -108,7 +108,7 @@ pub fn rv32_heap_branch_default<const NUM_LIMBS: usize>(
 
 // Returns (instruction, rd)
 pub fn rv32_rand_write_register_or_imm<const NUM_LIMBS: usize>(
-    tester: &mut VmChipTestBuilder<BabyBear>,
+    tester: &mut impl TestBuilder<BabyBear>,
     rs1_writes: [u32; NUM_LIMBS],
     rs2_writes: [u32; NUM_LIMBS],
     imm: Option<usize>,

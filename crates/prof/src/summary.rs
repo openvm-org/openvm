@@ -5,8 +5,9 @@ use itertools::Itertools;
 
 use crate::{
     aggregate::{
-        AggregateMetrics, EXECUTE_METERED_TIME_LABEL, EXECUTE_PREFLIGHT_TIME_LABEL, INSNS_LABEL,
-        MAIN_CELLS_USED_LABEL, PROOF_TIME_LABEL, PROVE_EXCL_TRACE_TIME_LABEL, TRACE_GEN_TIME_LABEL,
+        AggregateMetrics, EXECUTE_METERED_TIME_LABEL, EXECUTE_PREFLIGHT_INSNS_LABEL,
+        EXECUTE_PREFLIGHT_TIME_LABEL, MAIN_CELLS_USED_LABEL, PROOF_TIME_LABEL,
+        PROVE_EXCL_TRACE_TIME_LABEL, TRACE_GEN_TIME_LABEL,
     },
     types::MdTableCell,
 };
@@ -61,7 +62,7 @@ impl GithubSummary {
                     .to_str()
                     .expect("Filename should be valid UTF-8");
                 let mut row = aggregated.get_summary_row(md_filename).unwrap_or_else(|| {
-                    panic!("Failed to get summary row for file '{}'", md_filename)
+                    panic!("Failed to get summary row for file '{md_filename}'")
                 });
                 if let Some(prev_aggregated) = prev_aggregated {
                     // md_filename doesn't matter
@@ -182,10 +183,7 @@ impl AggregateMetrics {
                 .get(PROVE_EXCL_TRACE_TIME_LABEL)
                 .map(|s| s.sum.val)
                 .unwrap_or(0.0);
-            println!(
-                "{} {} {} {}",
-                execute_metered, execute_preflight, trace_gen, stark_prove
-            );
+            println!("{execute_metered} {execute_preflight} {trace_gen} {stark_prove}");
             MdTableCell::new(
                 execute_metered + execute_preflight + trace_gen + stark_prove,
                 None,
@@ -221,7 +219,10 @@ impl AggregateMetrics {
             .get(MAIN_CELLS_USED_LABEL)
             .map(|s| s.sum)
             .unwrap_or_default();
-        let insns = stats.get(INSNS_LABEL).map(|s| s.sum).unwrap_or_default();
+        let insns = stats
+            .get(EXECUTE_PREFLIGHT_INSNS_LABEL)
+            .map(|s| s.sum)
+            .unwrap_or_default();
         Some(SingleSummaryMetrics {
             cells_used,
             insns,

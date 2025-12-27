@@ -38,17 +38,17 @@ pub enum SymbolicExpr {
 impl std::fmt::Display for SymbolicExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            SymbolicExpr::Input(i) => write!(f, "Input_{}", i),
-            SymbolicExpr::Var(i) => write!(f, "Var_{}", i),
-            SymbolicExpr::Const(i, _, _) => write!(f, "Const_{}", i),
-            SymbolicExpr::Add(lhs, rhs) => write!(f, "({} + {})", lhs, rhs),
-            SymbolicExpr::Sub(lhs, rhs) => write!(f, "({} - {})", lhs, rhs),
-            SymbolicExpr::Mul(lhs, rhs) => write!(f, "{} * {}", lhs, rhs),
-            SymbolicExpr::Div(lhs, rhs) => write!(f, "({} / {})", lhs, rhs),
-            SymbolicExpr::IntAdd(lhs, s) => write!(f, "({} + {})", lhs, s),
-            SymbolicExpr::IntMul(lhs, s) => write!(f, "({} x {})", lhs, s),
+            SymbolicExpr::Input(i) => write!(f, "Input_{i}"),
+            SymbolicExpr::Var(i) => write!(f, "Var_{i}"),
+            SymbolicExpr::Const(i, _, _) => write!(f, "Const_{i}"),
+            SymbolicExpr::Add(lhs, rhs) => write!(f, "({lhs} + {rhs})"),
+            SymbolicExpr::Sub(lhs, rhs) => write!(f, "({lhs} - {rhs})"),
+            SymbolicExpr::Mul(lhs, rhs) => write!(f, "{lhs} * {rhs}"),
+            SymbolicExpr::Div(lhs, rhs) => write!(f, "({lhs} / {rhs})"),
+            SymbolicExpr::IntAdd(lhs, s) => write!(f, "({lhs} + {s})"),
+            SymbolicExpr::IntMul(lhs, s) => write!(f, "({lhs} x {s})"),
             SymbolicExpr::Select(flag_id, lhs, rhs) => {
-                write!(f, "(if {} then {} else {})", flag_id, lhs, rhs)
+                write!(f, "(if {flag_id} then {lhs} else {rhs})")
             }
         }
     }
@@ -591,8 +591,7 @@ impl SymbolicExpr {
         };
         assert!(
             res < prime.clone(),
-            "symbolic expr: {} evaluation exceeds prime",
-            self
+            "symbolic expr: {self} evaluation exceeds prime"
         );
         res
     }

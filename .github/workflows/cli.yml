@@ -15,6 +15,7 @@ on:
       - "examples/**"
       - "Cargo.toml"
       - ".github/workflows/cli.yml"
+  workflow_call:
   workflow_dispatch:
     inputs:
       use_local_openvm:
@@ -24,7 +25,7 @@ on:
         default: false
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-cli-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
@@ -34,14 +35,10 @@ env:
 jobs:
   app-level-cli:
     runs-on:
-      - runs-on=${{ github.run_id }}
-      - disk=large
-      - runner=64cpu-linux-arm64
-      - image=ubuntu24-full-arm64
-      - extras=s3-cache
+      - runs-on=${{ github.run_id }}/disk=large/runner=64cpu-linux-x64/image=ubuntu24-full-x64/extras=s3-cache
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -49,7 +46,7 @@ jobs:
       - uses: taiki-e/install-action@nextest
       - name: Install solc # svm should support arm64 linux
         run: |
-          (hash svm 2>/dev/null || cargo install --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
+          (hash svm 2>/dev/null || cargo install --locked --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
 
       - name: Install cargo-openvm
         working-directory: crates/cli

@@ -1,0 +1,153 @@
+name: Guest Library Tests (CUDA)
+
+on:
+  workflow_call:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "crates/circuits/**"
+      - "crates/vm/**"
+      - "crates/toolchain/**"
+      - "extensions/**"
+      - "guest-libs/**"
+      - "Cargo.toml"
+      - ".github/workflows/guest-lib-tests.cuda.yml"
+      - "crates/sdk/guest/fib/**"
+
+concurrency:
+  group: ${{ github.workflow_ref }}-guest-lib-tests-cuda-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  OPENVM_FAST_TEST: "1"
+  OPENVM_SKIP_DEBUG: "1"
+
+jobs:
+  guest-lib-tests-cuda:
+    strategy:
+      matrix:
+        crates: # group crates on the same runner based on test time
+          - { names: "sha2 keccak256 verify_stark" }
+          - { names: "ruint k256 p256" }
+          - { names: "ff_derive pairing" }
+    runs-on:
+      - runs-on=${{ github.run_id }}-guest-lib-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=test-gpu-nvidia/cpu=8+32/family=g6+g5+g6e
+
+    steps:
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            common:
+              - "crates/circuits/**"
+              - "crates/vm/**"
+              - "crates/toolchain/**"
+              - "extensions/rv32im/**"
+              - "extensions/rv32-adapters/**"
+              - ".github/workflows/guest-lib-tests.cuda.yml"
+              - "crates/sdk/guest/fib/**"
+            sha2:
+              - "extensions/sha256/**"
+              - "guest-libs/sha2/**"
+            keccak256:
+              - "extensions/keccak256/**"
+              - "guest-libs/keccak256/**"
+            ff_derive:
+              - "extensions/algebra/**"
+              - "guest-libs/ff_derive/**"
+            k256:
+              - "extensions/algebra/**"
+              - "extensions/ecc/**"
+              - "guest-libs/k256/**"
+            p256:
+              - "extensions/algebra/**"
+              - "extensions/ecc/**"
+              - "guest-libs/p256/**"
+            ruint:
+              - "extensions/bigint/**"
+              - "guest-libs/ruint/**"
+            pairing:
+              - "extensions/algebra/**"
+              - "extensions/ecc/**"
+              - "extensions/pairing/**"
+              - "guest-libs/pairing/**"
+            verify_stark:
+              - "extensions/native/**"
+              - "guest-libs/verify_stark/**"
+
+      - name: Skip if no changes
+        env:
+          FILTER_OUTPUTS: ${{ toJSON(steps.filter.outputs) }}
+        run: |
+          # Check if common files changed
+          COMMON_CHANGED=$(echo $FILTER_OUTPUTS | jq -r .common)
+
+          # Check if any crate in the current matrix group changed
+          ANY_CRATE_CHANGED=false
+          for crate in ${{ matrix.crates.names }}; do
+            crate_changed=$(echo $FILTER_OUTPUTS | jq -r .$crate)
+            if [[ "$crate_changed" == "true" ]]; then
+              ANY_CRATE_CHANGED=true
+              break
+            fi
+          done
+
+          # Skip if neither common nor any crate in this matrix group changed
+          if [[ "$COMMON_CHANGED" != "true" && "$ANY_CRATE_CHANGED" != "true" ]]; then
+            echo "No relevant changes for crates [${{ matrix.crates }}], skipping tests."
+            exit 0
+          fi
+
+      - run: | # avoid cross-device link error
+          rustup component remove clippy || true
+          rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/rust-cache-cuda
+        with:
+          cache-on-failure: true
+      - uses: taiki-e/install-action@nextest
+
+      - name: Check CUDA status and set environment variables
+        run: |
+          nvcc --version
+          echo "NEXTEST_ENV=CUDA_OPT_LEVEL=3" >> $GITHUB_ENV
+          echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
+
+      - name: Run guest library tests
+        env:
+          FILTER_OUTPUTS: ${{ toJSON(steps.filter.outputs) }}
+        run: |
+          COMMON_CHANGED=$(echo $FILTER_OUTPUTS | jq -r .common)
+          rustup component add rust-src --toolchain nightly-2025-08-02
+
+          for crate in ${{ matrix.crates.names }}; do
+            crate_changed=$(echo $FILTER_OUTPUTS | jq -r .$crate)
+            if [[ "$COMMON_CHANGED" == "true" || "$crate_changed" == "true" ]]; then
+              echo "::group::Running tests for $crate"
+
+              # Run guest library tests
+              if [ -d "guest-libs/$crate" ]; then
+                pushd guest-libs/$crate
+
+                # Handle special feature args for pairing crate
+                SPECIAL_ARGS=""
+                if [[ "$crate" == "pairing" ]]; then
+                  SPECIAL_ARGS="--features=bn254,bls12_381"
+                elif [[ "$crate" == "ruint" ]]; then
+                  # only run integration tests because other tests are not OpenVM related
+                  SPECIAL_ARGS="test_matrix_power"
+                fi
+
+                ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} $SPECIAL_ARGS --no-tests=pass --test-threads=1
+                popd
+              fi
+              echo "::endgroup::"
+            else
+              echo "Skipping tests for $crate as no relevant files changed."
+            fi
+          done

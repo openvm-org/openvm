@@ -9,7 +9,7 @@ license.workspace = true
 
 [dependencies]
 openvm-benchmarks-utils.workspace = true
-openvm-circuit.workspace = true
+openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-continuations.workspace = true
 openvm-sdk.workspace = true
 openvm-stark-backend.workspace = true
@@ -19,23 +19,27 @@ openvm-native-circuit.workspace = true
 openvm-native-compiler.workspace = true
 openvm-native-recursion = { workspace = true, features = ["test-utils"] }
 
-clap = { version = "4.5.9", features = ["derive", "env"] }
+clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
-tokio = { version = "1.43.1", features = ["rt", "rt-multi-thread", "macros"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros"] }
 rand_chacha = { version = "0.3", default-features = false }
 k256 = { workspace = true, features = ["ecdsa"] }
 tiny-keccak.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 rand.workspace = true
 tracing.workspace = true
+metrics.workspace = true
 
 [dev-dependencies]
 
 [features]
 default = ["parallel", "jemalloc", "metrics"]
 metrics = ["openvm-sdk/metrics"]
+tco = ["openvm-sdk/tco"]
+aot = ["openvm-sdk/aot"]
 perf-metrics = ["openvm-sdk/perf-metrics", "metrics"]
 stark-debug = ["openvm-sdk/stark-debug"]
+async = ["openvm-sdk/async"]
 # runs leaf aggregation benchmarks:
 aggregation = []
 evm = ["openvm-sdk/evm-verify"]
@@ -45,17 +49,24 @@ jemalloc = ["openvm-sdk/jemalloc"]
 jemalloc-prof = ["openvm-sdk/jemalloc-prof"]
 nightly-features = ["openvm-sdk/nightly-features"]
 
+cuda = [
+    "openvm-circuit/cuda",
+    "openvm-native-circuit/cuda",
+    "openvm-sdk/cuda",
+]
+
 [package.metadata.cargo-shear]
 ignored = ["derive_more", "rand"]
 
 [[bin]]
 name = "fib_e2e"
 path = "src/bin/fib_e2e.rs"
-# TODO: cfg run benchmark with prove stark if no evm feature
-required-features = ["evm"]
 
 [[bin]]
 name = "kitchen_sink"
 path = "src/bin/kitchen_sink.rs"
-# TODO: cfg run benchmark with prove stark if no evm feature
-required-features = ["evm"]
+
+[[bin]]
+name = "async_regex"
+path = "src/bin/async_regex.rs"
+required-features = ["async"]

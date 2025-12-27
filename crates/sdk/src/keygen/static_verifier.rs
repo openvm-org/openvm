@@ -45,7 +45,7 @@ impl RootVerifierProvingKey {
         &self,
         dummy_internal_proof: Proof<SC>,
     ) -> Result<Proof<RootSC>, VirtualMachineError> {
-        let mut prover = RootVerifierLocalProver::new(self.clone())?;
+        let mut prover = RootVerifierLocalProver::new(self)?;
         // 2 * DIGEST_SIZE for exe_commit and leaf_commit
         let num_public_values = prover.vm_config().as_ref().num_public_values - 2 * DIGEST_SIZE;
         SingleSegmentVmProver::prove(

@@ -37,6 +37,7 @@ bitcode = { workspace = true }
 
 [features]
 default = ["parallel", "jemalloc"]
+aot = ["openvm-circuit/aot", "openvm-native-circuit/aot"]
 static-verifier = [
     "openvm-native-compiler/halo2-compiler",
     "snark-verifier-sdk",
@@ -58,3 +59,4 @@ parallel = ["openvm-stark-backend/parallel"]
 mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]
 nightly-features = ["openvm-circuit/nightly-features"]
+cuda = ["openvm-circuit/cuda", "openvm-native-circuit/cuda"]

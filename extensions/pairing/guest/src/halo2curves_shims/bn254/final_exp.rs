@@ -1,14 +1,26 @@
+use alloc::vec::Vec;
+
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2},
     ff::Field,
 };
 use lazy_static::lazy_static;
-use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
+use openvm_ecc_guest::{
+    algebra::{field::FieldExtension, ExpBytes},
+    AffinePoint,
+};
 
 use super::{Bn254, EXP1, EXP2, M_INV, R_INV, U27_COEFF_0, U27_COEFF_1};
-use crate::pairing::{FinalExp, MultiMillerLoop};
+use crate::{
+    halo2curves_shims::naf::biguint_to_naf,
+    pairing::{FinalExp, MultiMillerLoop},
+};
 
 lazy_static! {
+    static ref EXP1_NAF: Vec<i8> = biguint_to_naf(&EXP1);
+    static ref EXP2_NAF: Vec<i8> = biguint_to_naf(&EXP2);
+    static ref R_INV_NAF: Vec<i8> = biguint_to_naf(&R_INV);
+    static ref M_INV_NAF: Vec<i8> = biguint_to_naf(&M_INV);
     pub static ref UNITY_ROOT_27: Fq12 = {
         let u0 = U27_COEFF_0.to_u64_digits();
         let u1 = U27_COEFF_1.to_u64_digits();
@@ -25,7 +37,7 @@ lazy_static! {
             Fq2::ZERO,
         ])
     };
-    pub static ref UNITY_ROOT_27_EXP2: Fq12 = UNITY_ROOT_27.pow(EXP2.to_u64_digits());
+    pub static ref UNITY_ROOT_27_EXP2: Fq12 = UNITY_ROOT_27.exp_naf(true, &EXP2_NAF);
 }
 
 #[allow(non_snake_case)]
@@ -74,12 +86,12 @@ impl FinalExp for Bn254 {
         let unity_root_27 = *UNITY_ROOT_27;
         debug_assert_eq!(unity_root_27.pow([27]), Fq12::one());
 
-        if f.pow(EXP1.to_u64_digits()) == Fq12::ONE {
+        if f.exp_naf(true, &EXP1_NAF) == Fq12::ONE {
             c = *f;
             u = Fq12::ONE;
         } else {
             let f_mul_unity_root_27 = f * unity_root_27;
-            if f_mul_unity_root_27.pow(EXP1.to_u64_digits()) == Fq12::ONE {
+            if f_mul_unity_root_27.exp_naf(true, &EXP1_NAF) == Fq12::ONE {
                 c = f_mul_unity_root_27;
                 u = unity_root_27;
             } else {
@@ -90,20 +102,20 @@ impl FinalExp for Bn254 {
 
         // 1. Compute r-th root and exponentiate to rInv where
         //   rInv = 1/r mod (p^12-1)/r
-        c = c.pow(R_INV.to_u64_digits());
+        c = c.exp_naf(true, &R_INV_NAF);
 
         // 2. Compute m-th root where
         //   m = (6x + 2 + q^3 - q^2 +q)/3r
         // Exponentiate to mInv where
         //   mInv = 1/m mod p^12-1
-        c = c.pow(M_INV.to_u64_digits());
+        c = c.exp_naf(true, &M_INV_NAF);
 
         // 3. Compute cube root
         // since gcd(3, (p^12-1)/r) != 1, we use a modified Tonelli-Shanks algorithm
         // see Alg.4 of https://eprint.iacr.org/2024/640.pdf
         // Typo in the paper: p^k-1 = 3^n * s instead of p-1 = 3^r * s
         // where k=12 and n=3 here and exp2 = (s+1)/3
-        let mut x = c.pow(EXP2.to_u64_digits());
+        let mut x = c.exp_naf(true, &EXP2_NAF);
 
         // 3^t is ord(x^3 / residueWitness)
         let c_inv = c.invert().unwrap();

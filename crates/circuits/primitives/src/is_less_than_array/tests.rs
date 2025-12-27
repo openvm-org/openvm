@@ -16,6 +16,14 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
 };
+#[cfg(feature = "cuda")]
+use {
+    crate::cuda_abi::less_than::less_than_array_dummy_tracegen,
+    openvm_cuda_backend::{
+        base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, types::F,
+    },
+    openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer},
+};
 
 use super::*;
 
@@ -211,4 +219,61 @@ fn test_is_less_than_tuple_chip_nonzero_diff() {
         Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_less_than_array_tracegen() {
+    let max_bits: usize = 16;
+    let decomp: usize = 8;
+    const ARRAY_LEN: usize = 2;
+    const AUX_LEN: usize = 2;
+
+    let num_pairs = 4;
+    let trace = DeviceMatrix::<F>::with_capacity(num_pairs, 3 * ARRAY_LEN + AUX_LEN + 2);
+    let pairs = vec![
+        [14321, 123, 26678, 233],
+        [26678, 244, 14321, 233],
+        [14321, 244, 14321, 244],
+        [14321, 233, 14321, 244],
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .to_device()
+    .unwrap();
+
+    let rc_num_bins = (1 << (decomp + 1)) as usize;
+    let rc_histogram = DeviceBuffer::<u32>::with_capacity(rc_num_bins);
+
+    unsafe {
+        less_than_array_dummy_tracegen(
+            trace.buffer(),
+            num_pairs,
+            &pairs,
+            max_bits,
+            ARRAY_LEN,
+            AUX_LEN,
+            &rc_histogram,
+        )
+        .unwrap();
+    }
+
+    // From test_is_less_than_tuple_chip in OpenVM's is_less_than_array tests, modified slightly
+    let expected_cpu_matrix_vals = [
+        [14321, 123, 26678, 233, 1, 1, 0, 1344947008, 68, 48],
+        [26678, 244, 14321, 233, 0, 1, 0, 668318913, 186, 207],
+        [14321, 244, 14321, 244, 0, 0, 0, 0, 255, 255],
+        [14321, 233, 14321, 244, 1, 0, 1, 549072524, 10, 0],
+    ];
+    let expected_cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
+        expected_cpu_matrix_vals
+            .into_iter()
+            .flatten()
+            .map(F::from_canonical_u32)
+            .collect(),
+        3 * ARRAY_LEN + AUX_LEN + 2,
+    ));
+
+    assert_eq_host_and_device_matrix(expected_cpu_matrix, &trace);
 }

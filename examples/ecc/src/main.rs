@@ -1,27 +1,28 @@
-// ANCHOR: imports
+// [!region imports]
 use hex_literal::hex;
-use openvm_ecc_guest::{
-    algebra::IntMod,
+use openvm as _;
+use openvm_algebra_guest::IntMod;
+use openvm_ecc_guest::weierstrass::WeierstrassPoint;
+use openvm_k256::{Secp256k1Coord, Secp256k1Point};
+use openvm_te_guest::{
     ed25519::{Ed25519Coord, Ed25519Point},
     edwards::TwistedEdwardsPoint,
-    weierstrass::WeierstrassPoint,
 };
-use openvm_k256::{Secp256k1Coord, Secp256k1Point};
-// ANCHOR_END: imports
+// [!endregion imports]
 
-// ANCHOR: init
+// [!region init]
 openvm::init!();
 /* The init! macro will expand to the following
 openvm_algebra_guest::moduli_macros::moduli_init! {
-"115792089237316195423570985008687907853269984665640564039457584007908834671663",
-"115792089237316195423570985008687907852837564279074904382605163141518161494337"
+    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
+    "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
 }
 openvm_ecc_guest::sw_macros::sw_init! { "Secp256k1Point" }
 openvm_ecc_guest::te_macros::te_init! { "Ed25519Point" }
 */
-// ANCHOR_END: init
+// [!endregion init]
 
-// ANCHOR: main
+// [!region main]
 pub fn main() {
     let x1 = Secp256k1Coord::from_u32(1);
     let y1 = Secp256k1Coord::from_le_bytes_unchecked(&hex!(
@@ -55,4 +56,4 @@ pub fn main() {
     #[allow(clippy::op_ref)]
     let _p3 = &p1 + &p2;
 }
-// ANCHOR_END: main
+// [!endregion main]

@@ -1,9 +1,8 @@
 use std::num::NonZero;
 
-use getset::WithSetters;
-use openvm_instructions::riscv::{
-    RV32_IMM_AS, RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
-};
+use getset::{Getters, Setters, WithSetters};
+use itertools::Itertools;
+use openvm_instructions::riscv::{RV32_IMM_AS, RV32_REGISTER_AS};
 
 use super::{
     memory_ctx::MemoryCtx,
@@ -11,44 +10,32 @@ use super::{
 };
 use crate::{
     arch::{
-        execution_mode::{
-            metered::segment_ctx::SegmentationLimits, E1ExecutionCtx, E2ExecutionCtx,
-        },
-        VmExecState,
+        execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait},
+        SystemConfig, VmExecState,
     },
-    system::memory::{dimensions::MemoryDimensions, online::GuestMemory},
+    system::memory::online::GuestMemory,
 };
 
 pub const DEFAULT_PAGE_BITS: usize = 6;
-pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
-#[derive(Clone, Debug, WithSetters)]
+#[derive(Clone, Debug, Getters, Setters, WithSetters)]
 pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
     pub trace_heights: Vec<u32>,
     pub is_trace_height_constant: Vec<bool>,
-
     pub memory_ctx: MemoryCtx<PAGE_BITS>,
     pub segmentation_ctx: SegmentationCtx,
-    pub continuations_enabled: bool,
-    instret_last_segment_check: u64,
-    #[getset(set_with = "pub")]
-    segment_check_insns: u64,
+    #[getset(get = "pub", set = "pub", set_with = "pub")]
+    suspend_on_segment: bool,
 }
 
 impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
-    // Note[jpw]: this is indeed too many arguments, prefer to use `build_metered_ctx` in
-    // `VmExecutor` or `VirtualMachine`.
-    #[allow(clippy::too_many_arguments)]
+    // Note[jpw]: prefer to use `build_metered_ctx` in `VmExecutor` or `VirtualMachine`.
     pub fn new(
         constant_trace_heights: Vec<Option<usize>>,
-        has_public_values_chip: bool,
-        continuations_enabled: bool,
-        as_byte_alignment_bits: Vec<u8>,
-        memory_dimensions: MemoryDimensions,
         air_names: Vec<String>,
         widths: Vec<usize>,
         interactions: Vec<usize>,
-        segmentation_limits: SegmentationLimits,
+        config: &SystemConfig,
     ) -> Self {
         let (trace_heights, is_trace_height_constant): (Vec<u32>, Vec<bool>) =
             constant_trace_heights
@@ -62,12 +49,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
                 })
                 .unzip();
 
-        let memory_ctx = MemoryCtx::new(
-            has_public_values_chip,
-            continuations_enabled,
-            as_byte_alignment_bits,
-            memory_dimensions,
-        );
+        let memory_ctx = MemoryCtx::new(config);
 
         // Assert that the indices are correct
         debug_assert!(
@@ -89,45 +71,36 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         );
 
         let segmentation_ctx =
-            SegmentationCtx::new(air_names, widths, interactions, segmentation_limits);
+            SegmentationCtx::new(air_names, widths, interactions, config.segmentation_limits);
 
         let mut ctx = Self {
             trace_heights,
             is_trace_height_constant,
             memory_ctx,
             segmentation_ctx,
-            continuations_enabled,
-            segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
-            instret_last_segment_check: 0,
+            suspend_on_segment: false,
         };
-        if !continuations_enabled {
+        if !config.continuation_enabled {
             // force single segment
-            ctx.segment_check_insns = u64::MAX;
+            ctx.segmentation_ctx.segment_check_insns = u64::MAX;
+            ctx.segmentation_ctx.instrets_until_check = u64::MAX;
         }
 
         // Add merkle height contributions for all registers
-        ctx.add_register_merkle_heights();
+        ctx.memory_ctx.add_register_merkle_heights();
 
         ctx
     }
 
-    #[inline(always)]
-    fn add_register_merkle_heights(&mut self) {
-        if self.continuations_enabled {
-            self.memory_ctx.update_boundary_merkle_heights(
-                RV32_REGISTER_AS,
-                0,
-                (RV32_NUM_REGISTERS * RV32_REGISTER_NUM_LIMBS) as u32,
-            );
-        }
-    }
-
+    /// This changes the frequency of segment checks. BE CAREFUL when you change this during
+    /// execution!
     pub fn with_max_trace_height(mut self, max_trace_height: u32) -> Self {
         self.segmentation_ctx.set_max_trace_height(max_trace_height);
         let max_check_freq = (max_trace_height / 2) as u64;
-        if max_check_freq < self.segment_check_insns {
-            self.segment_check_insns = max_check_freq;
+        if max_check_freq < self.segmentation_ctx.segment_check_insns {
+            self.segmentation_ctx.segment_check_insns = max_check_freq;
         }
+        self.segmentation_ctx.instrets_until_check = self.segmentation_ctx.segment_check_insns;
         self
     }
 
@@ -151,71 +124,64 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
     fn reset_segment(&mut self) {
         self.memory_ctx.clear();
-        for (i, &is_constant) in self.is_trace_height_constant.iter().enumerate() {
-            if !is_constant {
-                self.trace_heights[i] = 0;
-            }
-        }
-
         // Add merkle height contributions for all registers
-        self.add_register_merkle_heights();
+        self.memory_ctx.add_register_merkle_heights();
     }
 
     #[inline(always)]
-    pub fn check_and_segment(&mut self, instret: u64) {
-        let threshold = self
-            .instret_last_segment_check
-            .wrapping_add(self.segment_check_insns);
-        debug_assert!(
-            threshold >= self.instret_last_segment_check,
-            "overflow in segment check threshold calculation"
-        );
-        if instret < threshold {
-            return;
+    pub fn check_and_segment(&mut self) -> bool {
+        // We track the segmentation check by instrets_until_check instead of instret in order to
+        // save a register in AOT mode.
+        if self.segmentation_ctx.instrets_until_check > 0 {
+            return false;
         }
+        self.segmentation_ctx.instrets_until_check = self.segmentation_ctx.segment_check_insns;
+        self.segmentation_ctx.instret += self.segmentation_ctx.segment_check_insns;
 
         self.memory_ctx
             .lazy_update_boundary_heights(&mut self.trace_heights);
         let did_segment = self.segmentation_ctx.check_and_segment(
-            instret,
-            &self.trace_heights,
+            self.segmentation_ctx.instret,
+            &mut self.trace_heights,
             &self.is_trace_height_constant,
         );
 
-        self.instret_last_segment_check = instret;
         if did_segment {
             self.reset_segment();
         }
+        did_segment
     }
 
     #[allow(dead_code)]
-    pub fn print_heights(&self) {
-        println!("{:>10} {:<30}", "Height", "Air Name");
-        println!("{}", "-".repeat(42));
-        for (i, height) in self.trace_heights.iter().enumerate() {
-            let air_name = self
-                .segmentation_ctx
-                .air_names
-                .get(i)
-                .map(|s| s.as_str())
-                .unwrap_or("Unknown");
-            println!("{:>10} {:<30}", height, air_name);
+    pub fn print_segment(&self) {
+        println!("{}", "-".repeat(80));
+        println!("Segment {}", self.segmentation_ctx.segments.len() - 1);
+        println!("{}", "-".repeat(80));
+        println!("{:>10} {:>10} {:<30}", "Width", "Height", "Air Name");
+        println!("{}", "-".repeat(80));
+        for ((&width, &height), air_name) in self
+            .segmentation_ctx
+            .widths
+            .iter()
+            .zip_eq(self.trace_heights.iter())
+            .zip_eq(self.segmentation_ctx.air_names.iter())
+        {
+            println!("{:>10} {:>10} {:<30}", width, height, air_name.as_str());
         }
     }
 }
 
-impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
+impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     #[inline(always)]
     fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32) {
         debug_assert!(
             address_space != RV32_IMM_AS,
             "address space must not be immediate"
         );
-        debug_assert!(size > 0, "size must be greater than 0, got {}", size);
+        debug_assert!(size > 0, "size must be greater than 0, got {size}");
         debug_assert!(
             size.is_power_of_two(),
-            "size must be a power of 2, got {}",
-            size
+            "size must be a power of 2, got {size}"
         );
 
         // Handle access adapter updates
@@ -232,27 +198,34 @@ impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
     }
 
     #[inline(always)]
-    fn should_suspend<F>(vm_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
-        // E2 always runs until termination. Here we use the function as a hook called every
-        // instruction.
-        vm_state.ctx.check_and_segment(vm_state.instret);
-        false
+    fn should_suspend<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
+        // ATTENTION: Please make sure to update the corresponding logic in the
+        // `asm_bridge` crate and `aot.rs`` when you change this function.
+        // If `segment_suspend` is set, suspend when a segment is determined (but the VM state might
+        // be after the segment boundary because the segment happens in the previous checkpoint).
+        // Otherwise, execute until termination.
+        if exec_state.ctx.check_and_segment() && exec_state.ctx.suspend_on_segment {
+            true
+        } else {
+            exec_state.ctx.segmentation_ctx.instrets_until_check -= 1;
+            false
+        }
     }
 
     #[inline(always)]
-    fn on_terminate<F>(vm_state: &mut VmExecState<F, GuestMemory, Self>) {
-        vm_state
+    fn on_terminate<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) {
+        exec_state
             .ctx
             .memory_ctx
-            .lazy_update_boundary_heights(&mut vm_state.ctx.trace_heights);
-        vm_state
+            .lazy_update_boundary_heights(&mut exec_state.ctx.trace_heights);
+        exec_state
             .ctx
             .segmentation_ctx
-            .segment(vm_state.instret, &vm_state.ctx.trace_heights);
+            .create_final_segment(&exec_state.ctx.trace_heights);
     }
 }
 
-impl<const PAGE_BITS: usize> E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
+impl<const PAGE_BITS: usize> MeteredExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     #[inline(always)]
     fn on_height_change(&mut self, chip_idx: usize, height_delta: u32) {
         debug_assert!(

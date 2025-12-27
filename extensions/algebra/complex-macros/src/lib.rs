@@ -609,14 +609,11 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
         }
         let mod_idx = intmod_idx.expect("mod_idx is required");
 
-        println!(
-            "[init] complex #{} = {} (mod_idx = {})",
-            complex_idx, struct_name, mod_idx
-        );
+        println!("[init] complex #{complex_idx} = {struct_name} (mod_idx = {mod_idx})");
 
         for op_type in ["add", "sub", "mul", "div"] {
             let func_name = syn::Ident::new(
-                &format!("complex_{}_extern_func_{}", op_type, struct_name),
+                &format!("complex_{op_type}_extern_func_{struct_name}"),
                 span.into(),
             );
             let mut chars = op_type.chars().collect::<Vec<_>>();
@@ -639,7 +636,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
         }
 
         let setup_extern_func = syn::Ident::new(
-            &format!("complex_setup_extern_func_{}", struct_name),
+            &format!("complex_setup_extern_func_{struct_name}"),
             span.into(),
         );
 
@@ -649,7 +646,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
                 #[cfg(target_os = "zkvm")]
                 {
                     use super::openvm_intrinsics_meta_do_not_type_this_by_yourself::{two_modular_limbs_list, limb_list_borders};
-                    let two_modulus_bytes = &two_modular_limbs_list[limb_list_borders[#mod_idx]..limb_list_borders[#mod_idx + 1]];
+                    let two_modulus_bytes = &two_modular_limbs_list.0[limb_list_borders[#mod_idx]..limb_list_borders[#mod_idx + 1]];
 
                     // We are going to use the numeric representation of the `rs2` register to distinguish the chip to setup.
                     // The transpiler will transform this instruction, based on whether `rs2` is `x0` or `x1`, into a `SETUP_ADDSUB` or `SETUP_MULDIV` instruction.

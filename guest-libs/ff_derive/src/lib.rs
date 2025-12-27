@@ -315,9 +315,8 @@ fn validate_struct(ast: &syn::ItemStruct, limbs: usize) -> Option<proc_macro2::T
                 syn::Error::new_spanned(
                     field,
                     format!(
-                        "The inner field must be an array of limbs. Change this to `[u64; {}]`",
-                        limbs,
-                    ),
+                    "The inner field must be an array of limbs. Change this to `[u64; {limbs}]`",
+                ),
                 )
                 .to_compile_error(),
             )
@@ -332,10 +331,7 @@ fn validate_struct(ast: &syn::ItemStruct, limbs: usize) -> Option<proc_macro2::T
         return Some(
             syn::Error::new_spanned(
                 arr,
-                format!(
-                    "PrimeField derive requires 64-bit limbs. Change this to `[u64; {}]",
-                    limbs
-                ),
+                format!("PrimeField derive requires 64-bit limbs. Change this to `[u64; {limbs}]"),
             )
             .to_compile_error(),
         );
@@ -359,7 +355,7 @@ fn validate_struct(ast: &syn::ItemStruct, limbs: usize) -> Option<proc_macro2::T
             return Some(
                 syn::Error::new_spanned(
                     arr,
-                    format!("To derive PrimeField, change this to `[u64; {}]`.", limbs),
+                    format!("To derive PrimeField, change this to `[u64; {limbs}]`."),
                 )
                 .to_compile_error(),
             )
@@ -369,7 +365,7 @@ fn validate_struct(ast: &syn::ItemStruct, limbs: usize) -> Option<proc_macro2::T
         return Some(
             syn::Error::new_spanned(
                 lit_int,
-                format!("The given modulus requires {} limbs.", limbs),
+                format!("The given modulus requires {limbs} limbs."),
             )
             .to_compile_error(),
         );
@@ -399,13 +395,13 @@ fn fetch_attr(name: &str, attrs: &[syn::Attribute]) -> Option<String> {
                         match nv.lit {
                             syn::Lit::Str(ref s) => return Some(s.value()),
                             _ => {
-                                panic!("attribute {} should be a string", name);
+                                panic!("attribute {name} should be a string");
                             }
                         }
                     }
                 }
                 _ => {
-                    panic!("attribute {} should be a string", name);
+                    panic!("attribute {name} should be a string");
                 }
             }
         }
@@ -791,7 +787,7 @@ fn prime_field_impl(
 ) -> proc_macro2::TokenStream {
     // Returns r{n} as an ident.
     fn get_temp(n: usize) -> syn::Ident {
-        syn::Ident::new(&format!("r{}", n), proc_macro2::Span::call_site())
+        syn::Ident::new(&format!("r{n}"), proc_macro2::Span::call_site())
     }
 
     // The parameter list for the mont_reduce() internal method.
@@ -1070,7 +1066,7 @@ fn prime_field_impl(
     // compile some of the trait impls depending on whether we're in zkvm or not.
     // So, we create a new module with #[cfg(not(target_os = "zkvm"))] and place the impls in there.
     let impl_module_ident =
-        syn::Ident::new(&format!("impl_{}", name), proc_macro2::Span::call_site());
+        syn::Ident::new(&format!("impl_{name}"), proc_macro2::Span::call_site());
 
     let zero_impl = quote! {
         #[cfg(target_os = "zkvm")]

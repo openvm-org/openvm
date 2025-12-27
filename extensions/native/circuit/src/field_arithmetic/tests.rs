@@ -1,6 +1,14 @@
 use std::borrow::BorrowMut;
 
-use openvm_circuit::arch::testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder};
+use openvm_circuit::arch::{
+    testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
+    Arena, PreflightExecutor,
+};
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::{
+    testing::{GpuChipTestBuilder, GpuTestChipHarness},
+    EmptyAdapterCoreLayout,
+};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{conversion::AS, FieldArithmeticOpcode};
 use openvm_stark_backend::{
@@ -17,14 +25,17 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
+#[cfg(feature = "cuda")]
+use super::FieldArithmeticChipGpu;
 use super::{
     FieldArithmeticChip, FieldArithmeticCoreAir, FieldArithmeticCoreCols, FieldArithmeticExecutor,
 };
+#[cfg(feature = "cuda")]
+use crate::{adapters::AluNativeAdapterRecord, field_arithmetic::FieldArithmeticRecord};
 use crate::{
     adapters::{AluNativeAdapterAir, AluNativeAdapterExecutor, AluNativeAdapterFiller},
-    field_arithmetic::{run_field_arithmetic, FieldArithmeticAir},
+    field_arithmetic::{run_field_arithmetic, FieldArithmeticAir, FieldArithmeticCoreFiller},
     test_utils::write_native_or_imm,
-    FieldArithmeticCoreFiller,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
@@ -46,15 +57,44 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
     Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
+#[cfg(feature = "cuda")]
+fn create_test_harness(
+    tester: &GpuChipTestBuilder,
+) -> GpuTestChipHarness<
+    F,
+    FieldArithmeticExecutor,
+    FieldArithmeticAir,
+    FieldArithmeticChipGpu,
+    FieldArithmeticChip<F>,
+> {
+    let adapter_air = AluNativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge());
+    let core_air = FieldArithmeticCoreAir::new();
+    let air = FieldArithmeticAir::new(adapter_air, core_air);
+
+    let adapter_step = AluNativeAdapterExecutor::new();
+    let executor = FieldArithmeticExecutor::new(adapter_step);
+
+    let core_filler = FieldArithmeticCoreFiller::new(AluNativeAdapterFiller);
+
+    let cpu_chip = FieldArithmeticChip::new(core_filler, tester.dummy_memory_helper());
+    let gpu_chip = FieldArithmeticChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute(
-    tester: &mut VmChipTestBuilder<F>,
-    harness: &mut Harness,
+fn set_and_execute<E, RA>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
     rng: &mut StdRng,
     opcode: FieldArithmeticOpcode,
     b: Option<F>,
     c: Option<F>,
-) {
+) where
+    E: PreflightExecutor<F, RA>,
+    RA: Arena,
+{
     let b_val = b.unwrap_or(rng.gen());
     let c_val = c.unwrap_or(if opcode == FieldArithmeticOpcode::DIV {
         // If division, make sure c is not zero
@@ -68,7 +108,8 @@ fn set_and_execute(
     let a = gen_pointer(rng, 1);
 
     tester.execute(
-        harness,
+        executor,
+        arena,
         &Instruction::new(
             opcode.global_opcode(),
             F::from_canonical_usize(a),
@@ -92,30 +133,84 @@ fn set_and_execute(
 // Randomly generate computations and execute, ensuring that the generated trace
 // passes all constraints.
 //////////////////////////////////////////////////////////////////////////////////////
-#[test_case(FieldArithmeticOpcode::ADD, 100)]
-#[test_case(FieldArithmeticOpcode::SUB, 100)]
-#[test_case(FieldArithmeticOpcode::MUL, 100)]
-#[test_case(FieldArithmeticOpcode::DIV, 100)]
-fn new_field_arithmetic_air_test(opcode: FieldArithmeticOpcode, num_ops: usize) {
+fn rand_set_and_execute<E, RA>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
+    opcode: FieldArithmeticOpcode,
+    num_ops: usize,
+) where
+    E: PreflightExecutor<F, RA>,
+    RA: Arena,
+{
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default_native();
-    let mut harness = create_test_chip(&tester);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut harness, &mut rng, opcode, None, None);
+        set_and_execute(tester, executor, arena, &mut rng, opcode, None, None);
     }
 
     set_and_execute(
-        &mut tester,
-        &mut harness,
+        tester,
+        executor,
+        arena,
         &mut rng,
         opcode,
         Some(F::ZERO),
         None,
     );
+}
+
+#[test_case(FieldArithmeticOpcode::ADD, 100)]
+#[test_case(FieldArithmeticOpcode::SUB, 100)]
+#[test_case(FieldArithmeticOpcode::MUL, 100)]
+#[test_case(FieldArithmeticOpcode::DIV, 100)]
+fn new_field_arithmetic_air_test(opcode: FieldArithmeticOpcode, num_ops: usize) {
+    let mut tester = VmChipTestBuilder::default_native();
+    let mut harness = create_test_chip(&tester);
+    rand_set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        opcode,
+        num_ops,
+    );
 
     let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
+}
+
+#[cfg(feature = "cuda")]
+#[test_case(FieldArithmeticOpcode::ADD, 100)]
+#[test_case(FieldArithmeticOpcode::SUB, 100)]
+#[test_case(FieldArithmeticOpcode::MUL, 100)]
+#[test_case(FieldArithmeticOpcode::DIV, 100)]
+fn test_cuda_field_arithmetic_air_test(opcode: FieldArithmeticOpcode, num_ops: usize) {
+    let mut tester = GpuChipTestBuilder::default();
+    let mut harness = create_test_harness(&tester);
+    rand_set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.dense_arena,
+        opcode,
+        num_ops,
+    );
+    type Record<'a> = (
+        &'a mut AluNativeAdapterRecord<F>,
+        &'a mut FieldArithmeticRecord<F>,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record<'_>, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, AluNativeAdapterExecutor>::new(),
+        );
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -147,7 +242,8 @@ fn run_negative_field_arithmetic_test(
 
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         opcode,
         Some(b),
@@ -248,7 +344,8 @@ fn new_field_arithmetic_air_test_panic() {
     tester.write(4, 0, [BabyBear::ZERO]);
     // should panic
     tester.execute(
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &Instruction::from_usize(
             FieldArithmeticOpcode::DIV.global_opcode(),
             [0, 0, 0, 4, 4, 4],

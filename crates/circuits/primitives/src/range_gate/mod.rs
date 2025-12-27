@@ -153,5 +153,7 @@ impl RangeCheckerGateChip {
 
 const fn make_col_map() -> RangeGateCols<usize> {
     let indices_arr = indices_arr::<NUM_RANGE_GATE_COLS>();
+    // SAFETY: RangeGateCols is repr(C) with two fields, same layout as [usize; 2].
+    // NUM_RANGE_GATE_COLS equals 2. Transmute reinterprets array as struct.
     unsafe { transmute::<[usize; NUM_RANGE_GATE_COLS], RangeGateCols<usize>>(indices_arr) }
 }

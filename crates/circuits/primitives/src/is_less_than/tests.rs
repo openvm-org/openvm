@@ -14,6 +14,14 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
 };
+#[cfg(feature = "cuda")]
+use {
+    crate::cuda_abi::less_than::less_than_dummy_tracegen,
+    openvm_cuda_backend::{
+        base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, types::F,
+    },
+    openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer},
+};
 
 use super::IsLessThanIo;
 use crate::{
@@ -169,4 +177,54 @@ fn test_is_less_than_negative() {
         Some(VerificationError::OodEvaluationMismatch),
         "Expected verification to fail, but it passed"
     );
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_less_than_tracegen() {
+    let max_bits: usize = 16;
+    let decomp: usize = 8;
+    const AUX_LEN: usize = 2;
+
+    let num_pairs = 4;
+    let trace = DeviceMatrix::<F>::with_capacity(num_pairs, 3 + AUX_LEN);
+    let pairs = vec![[14321, 26883], [1, 0], [773, 773], [337, 456]]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .to_device()
+        .unwrap();
+
+    let rc_num_bins = (1 << (decomp + 1)) as usize;
+    let rc_histogram = DeviceBuffer::<u32>::with_capacity(rc_num_bins);
+
+    unsafe {
+        less_than_dummy_tracegen(
+            trace.buffer(),
+            num_pairs,
+            &pairs,
+            max_bits,
+            AUX_LEN,
+            &rc_histogram,
+        )
+        .unwrap();
+    }
+
+    // From test_lt_chip_decomp_does_not_divide
+    let expected_cpu_matrix_vals: [[u32; 5]; 4] = [
+        [14321, 26883, 1, 17, 49],
+        [1, 0, 0, 254, 255],
+        [773, 773, 0, 255, 255],
+        [337, 456, 1, 118, 0],
+    ];
+    let expected_cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
+        expected_cpu_matrix_vals
+            .into_iter()
+            .flatten()
+            .map(F::from_canonical_u32)
+            .collect(),
+        3 + AUX_LEN,
+    ));
+
+    assert_eq_host_and_device_matrix(expected_cpu_matrix, &trace);
 }

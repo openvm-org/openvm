@@ -1,0 +1,251 @@
+# Using the SDK
+
+While the CLI provides a convenient way to build, prove, and verify programs, you may want more fine-grained control over the process. The OpenVM Rust SDK allows you to customize various aspects of the workflow programmatically.
+
+For more information on the basic CLI flow, see [Overview of Basic Usage](/book/writing-apps/overview). Writing a guest program is the same as in the CLI.
+
+## Imports and Setup
+
+If you have a guest program and would like to try running the **host program** specified in the next section, you can do so by adding the following imports and setup at the top of the file. You may need to modify the imports and/or the `SomeStruct` struct to match your program.
+
+```rust
+// [!include ~/snippets/examples_sdk/sdk_stark.rs:dependencies]
+```
+
+## Configuring the VM
+
+### Preset Configurations
+
+The following convenience methods are available to construct a `GenericSdk` object with a preset config:
+
+- `Sdk::riscv32()` returns a `GenericSdk` supporting the RV32IM extension.
+- `Sdk::standard()` returns a `GenericSdk` supporting all default OpenVM extensions, including RV32IM.
+
+Note that to use `Sdk::riscv32()` or `Sdk::standard()` the `app_vm_config` field of your `openvm.toml` must exactly match a specific set configuration.
+
+`Sdk::riscv32()` supports normal Rust compiled to the `rv32im` target (for more information see [OpenVM Rust Frontend](/specs/reference/rust-frontend)) and `openvm::io` functions. To use it, the `app_vm_config` field of your `openvm.toml` must be:
+
+```toml [openvm_riscv32.toml]
+// [!include ~/snippets/examples_sdk_toml/openvm_riscv32.toml]
+```
+
+`Sdk::standard()` supports a wider variety of VM extensions, increasing the performance of many cryptographic operations. The `app_vm_config` section of the `openvm.toml` of any guest program that uses `Sdk::standard()` must also match a specific preset configuration.
+
+<details>
+<summary> Click here to view the `Sdk::standard()` `openvm.toml`</summary>
+```toml [openvm_standard.toml]
+// [!include ~/snippets/examples_sdk_toml/openvm_standard.toml]
+```
+</details>
+
+Observe that this standard `openvm.toml` also enables normal Rust and `openvm::io` functions (via the `rv32i`, `rv32m`, and `io` extensions). `keccak` and `sha256` enable intrinsic instructions for the [Keccak](/book/acceleration-using-extensions/keccak) and [SHA-256](/book/acceleration-using-extensions/sha-256) hashes respectively, and `bigint` supports [Big Integer](/book/acceleration-using-extensions/big-integer) operations.
+
+[Modular](/book/acceleration-using-extensions/algebra) operations for the BN254, Secp256k1 (i.e. K256), Secp256r1 (i.e. P256), and BLS12-381 curves' scalar and coordinate field moduli are also supported, as well as [Complex Field Extension](/book/acceleration-using-extensions/algebra#complex-field-extension) operations over the BN254 and BLS12-381 coordinate fields. [Elliptic Curve Cryptography](/book/acceleration-using-extensions/elliptic-curve-cryptography) operations are also supported for the BN254, Secp256k1, Secp256r1, and BLS12-381 curves, and [Elliptic Curve Pairing](/book/acceleration-using-extensions/elliptic-curve-pairing) checks are supported for the BN254 and BLS12-381 curves.
+
+For more information on extensions and guest libraries, see [Acceleration Using Pre-Built Extensions](/book/acceleration-using-extensions/overview).
+
+### Customizing the VM Configuration
+
+To use a custom VM configuration, you can construct your own `GenericSdk` object which includes the
+extensions and system configuration your VM will use. To do this, you can use the `SdkVmConfig::builder()`
+ method and set the desired extensions and system configuration as in the example below.
+
+```rust
+    let vm_config = SdkVmConfig::builder()
+        .system(Default::default())
+        .rv32i(Default::default())
+        .rv32m(Default::default())
+        .io(Default::default())
+        .build()
+        .optimize();
+    let sdk = Sdk::new(
+        AppConfig::new(FriParameters::standard_fast(), vm_config)
+    )?;
+```
+
+A custom OpenVM configuration can also be specified in an `openvm.toml` file and read to create a `GenericSdk`.
+
+```rust
+    Sdk::new(SdkVmConfig::from_toml(include_str!("your_path_project_root/openvm.toml"))?)?;
+```
+
+<details>
+<summary>To customize your `Sdk`, you may need additional dependencies. Click here to view.</summary>
+
+```rust
+use openvm_sdk::{
+    config::{AppConfig, SdkVmConfig},
+    Sdk,
+};
+use openvm_stark_sdk::config::FriParameters;
+```
+
+</details>
+
+:::info
+When using Rust to write the guest program, the VM system configuration should keep the default value `pointer_max_bits = 29` to match the hardcoded memory limit of the memory allocator. Otherwise, the guest program may fail due to out of bounds memory access in the VM.
+:::
+
+## Building and Transpiling a Program
+
+The SDK provides lower-level control over the building and transpiling process. You can either use the SDK to build your ELF executable or read it in as bytes using `fs::read`.
+
+```rust
+// [!include ~/snippets/examples_sdk/sdk_stark.rs:build]
+// [!include ~/snippets/examples_sdk/sdk_stark.rs:read_elf]
+
+// [!include ~/snippets/examples_sdk/sdk_stark.rs:transpilation]
+```
+
+## Running a Program
+
+To run your program and see the public value output, you can do the following:
+
+```rust
+// [!include ~/snippets/examples_sdk/sdk_stark.rs:execution]
+```
+
+### Using `StdIn`
+
+The `StdIn` struct allows you to format any serializable type into a VM-readable format by passing in a reference to your struct into `StdIn::write` as above. You also have the option to pass in a `&[u8]` into `StdIn::write_bytes`, or a `&[F]` into `StdIn::write_field` where `F` is the `openvm_stark_sdk::p3_baby_bear::BabyBear` field type.
+
+:::info
+**Generating CLI Bytes**
+To get the VM byte representation of a serializable struct `data` (i.e. for use in the CLI), you can print out the result of `openvm::serde::to_vec(data).unwrap()` in a Rust host program.
+:::
+
+## Generating and Verifying Proofs
+
+OpenVM supports generating three types of proofs. The sections below describe how to generate and verify each type of proof.
+
+- [App Proof](#app-proof): Generates STARK proof(s) of the guest program
+- [STARK Proof](#stark-proof): Generates a STARK proof that can be posted on-chain
+- [EVM Proof](#evm-proof): Generates a halo2 proof that can be posted on-chain
+
+## App Proof
+
+### Generating App Proofs
+
+After building and transpiling a program, you can then generate a proof. To do so, you need to convert your ELF into a `VmExe`, commit your `VmExe`, generate an `AppProvingKey`, format your input into `StdIn`, and then generate a proof.
+
+The SDK, however, combines the first few steps for you. Create a prover and pass in your input as a `StdIn` to generate an app proof.
+
+```rust
+// [!include ~/snippets/examples_sdk/sdk_app.rs:proof_generation]
+```
+
+For large guest programs, the program will be proved in multiple continuation segments and the returned `proof: ContinuationVmProof` object consists of multiple STARK proofs, one for each segment.
+
+:::info
+The app prover constructor can take an `Elf`, `VmExe`, `Arc<VmExe>`, or raw ELF bytes in the form of a `Vec<u8>` or `&[u8]` (via implementations of the `From` trait). This also holds for the STARK and EVM provers specified below.
+:::
+
+### Verifying App Proofs
+
+After generating a proof, you can verify it. To do so, you need your verifying key (which you can get from `sdk.app_keygen()`) and the output of your `prove` call.
+
+```rust
+// [!include ~/snippets/examples_sdk/sdk_app.rs:verification]
+```
+
+<details>
+<summary>To use the above verification, you may need additional dependencies. Click here to view.</summary>
+
+```rust
+// [!include ~/snippets/examples_sdk/sdk_app.rs:dependencies]
+```
+
+</details>
+
+## STARK Proof
+
+### STARK Proof Generation and Verification
+
+You can now run the aggregation keygen, proof, and verification functions for the STARK proof by either (a) calling `sdk.prove(...)` directly or (b) creating a prover with custom fields. You should also generate an app commit, e.g. hashes of both the app config and executable used to generate the proof.
+
+```rust 
+// [!include ~/snippets/examples_sdk/sdk_stark.rs:proof_generation]
+```
+
+Once the proof is generated, you can verify it using the SDK as follows:
+
+```rust
+// [!include ~/snippets/examples_sdk/sdk_stark.rs:verification]
+```
+
+Note that STARK verification requires the app commit to confirm that the submitted proof is for the app config and executable specified.
+
+:::info
+Note that the aggregation proving and verifying keys will be generated (a) once and (b) only when needed. Calling one of `sdk.prove(...)`, `sdk.prover(...)`, and `sdk.agg_keygen(...)` for the first time will initialize key generation.
+:::
+
+## EVM Proof
+
+### Setup
+
+To generate an EVM proof, you will first need to download trusted setup parameters from our S3 bucket. You can do so using the following script:
+
+```bash
+#!/bin/bash
+ 
+for k in {5..23}
+do
+    wget -P ~/.openvm/params/ "https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_${k}.srs"
+done
+```
+
+Note that `cargo openvm setup --evm` CLI command will also download these parameters into the `~/.openvm/params/` directory. For more information on the setup process, see [STARK and EVM Key Generation](/book/writing-apps/generating-proofs#stark-and-evm-key-generation).
+
+:::warning
+`cargo openvm setup --evm` requires a large amount of computation and memory (~70 GB).
+:::
+
+<details>
+<summary>Note that there are additional dependencies for the EVM Proof flow. Click here to view.</summary>
+
+```rust
+// [!include ~/snippets/examples_sdk/sdk_evm.rs:dependencies]
+```
+
+</details>
+
+### EVM Proof Generation and Verification
+
+You can now run the aggregation keygen, proof, and verification functions for the EVM proof.
+
+**Note**: you **do not** need to generate the app proof with the `generate_app_proof` function, as the EVM proof function will handle this automatically.
+
+```rust
+// [!include ~/snippets/examples_sdk/sdk_evm.rs:evm_verification]
+```
+
+:::info
+To verify EVM proofs you will need to enable Cargo feature `openvm-sdk/evm-verify` respectively. We recommend adding this feature to your package's `Cargo.toml`.
+```toml
+[features]
+evm-verify = ["openvm-sdk/evm-verify"]
+```
+Note that `openvm-sdk/evm-verify` will automatically activate `openvm-sdk/evm-prove`, which is required for EVM proving.
+:::
+
+:::warning
+The halo2 aggregation proving key generated in the above example is very large (~16 GB). Avoid dereferencing and cloning it if possible.
+:::
+
+## Another Example: Using the Standard SDK
+
+For many programs with modular arithmetic and/or cryptographic operations, the RISC-V instruction set alone may not be enough to achieve the performance desired. OpenVM supports many extensions to accelerate said operations, a standard set of which are included inside the standard SDK configuration.
+
+Take, for example, this toy program that checks if several guest library implementations of [`IntMod`](/book/acceleration-using-extensions/algebra#available-traits-and-methods) are fields by loosely checking if their moduli are prime.
+
+```rust
+// [!include ~/snippets/examples_sdk_guest/little/src/main.rs]
+```
+
+Its `openvm.toml` follows the [preset configuration](/book/advanced-usage/sdk#preset-configurations) specified above.
+
+Simply initialize `Sdk` using `Sdk::standard()` and build, prove, and verify as above.
+
+```rust
+// [!include ~/snippets/examples_sdk/sdk_app.rs:init]
+```

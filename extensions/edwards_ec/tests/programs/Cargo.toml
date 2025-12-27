@@ -1,0 +1,63 @@
+[workspace]
+[package]
+name = "openvm-te-test-programs"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+openvm = { path = "../../../../crates/toolchain/openvm" }
+openvm-platform = { path = "../../../../crates/toolchain/platform" }
+openvm-custom-insn = { path = "../../../../crates/toolchain/custom_insn", default-features = false }
+
+openvm-te-guest = { path = "../../guest", default-features = false }
+openvm-ecc-te-macros = { path = "../../../../extensions/edwards_ec/te-macros", default-features = false }
+openvm-algebra-guest = { path = "../../../algebra/guest", default-features = false }
+openvm-algebra-moduli-macros = { path = "../../../algebra/moduli-macros", default-features = false }
+openvm-rv32im-guest = { path = "../../../../extensions/rv32im/guest", default-features = false }
+
+openvm-keccak256 = { path = "../../../../guest-libs/keccak256/" }
+openvm-k256 = { path = "../../../../guest-libs/k256", package = "k256", features = [
+    "ecdsa",
+], optional = true }
+openvm-p256 = { path = "../../../../guest-libs/p256", package = "p256", features = [
+    "ecdsa",
+], optional = true }
+
+serde = { version = "1.0", default-features = false, features = [
+    "alloc",
+    "derive",
+] }
+serde_with = { version = "3.13.0", default-features = false, features = [
+    "alloc",
+    "macros",
+] }
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+hex-literal = { version = "0.4.1", default-features = false }
+ecdsa-core = { version = "0.16.9", package = "ecdsa", default-features = false }
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+num-bigint = "0.4.6"
+
+[features]
+default = []
+std = ["serde/std", "openvm/std"]
+k256 = ["dep:openvm-k256"]
+p256 = ["dep:openvm-p256"]
+ed25519 = ["openvm-te-guest/ed25519"]
+
+[profile.release]
+panic = "abort"
+lto = "thin"    # turn on lto = fat to decrease binary size, but this optimizes out some missing extern links so we shouldn't use it for testing
+# strip = "symbols"
+
+[[example]]
+name = "decompress"
+required-features = ["ed25519"]
+
+[[example]]
+name = "edwards_ec"
+required-features = ["ed25519"]
+
+[[example]]
+name = "invalid_setup"
+required-features = ["ed25519"]

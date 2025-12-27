@@ -22,8 +22,11 @@ pub struct AggregateMetrics {
     pub by_group: HashMap<String, HashMap<MetricName, Stats>>,
     /// In seconds
     pub total_proof_time: MdTableCell,
-    /// In seconds
+    /// In seconds (infinite parallelism)
     pub total_par_proof_time: MdTableCell,
+    /// Per-group bounded parallel proof time in seconds
+    #[serde(skip)]
+    pub bounded_par_by_group: HashMap<String, MdTableCell>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -117,7 +120,24 @@ impl GroupedMetrics {
         })
     }
 
-    pub fn aggregate(&self) -> AggregateMetrics {
+    /// Validates that E1, metered, and preflight instruction counts all match each other
+    fn validate_instruction_counts(group_summaries: &HashMap<MetricName, Stats>) {
+        let e1_insns = group_summaries.get(EXECUTE_E1_INSNS_LABEL);
+        let metered_insns = group_summaries.get(EXECUTE_METERED_INSNS_LABEL);
+        let preflight_insns = group_summaries.get(EXECUTE_PREFLIGHT_INSNS_LABEL);
+
+        if let (Some(e1_insns), Some(preflight_insns)) = (e1_insns, preflight_insns) {
+            assert_eq!(e1_insns.sum.val as u64, preflight_insns.sum.val as u64);
+        }
+        if let (Some(e1_insns), Some(metered_insns)) = (e1_insns, metered_insns) {
+            assert_eq!(e1_insns.sum.val as u64, metered_insns.sum.val as u64);
+        }
+        if let (Some(metered_insns), Some(preflight_insns)) = (metered_insns, preflight_insns) {
+            assert_eq!(metered_insns.sum.val as u64, preflight_insns.sum.val as u64);
+        }
+    }
+
+    pub fn aggregate(&self, num_parallel: usize) -> AggregateMetrics {
         let by_group: HashMap<String, _> = self
             .by_group
             .iter()
@@ -133,6 +153,11 @@ impl GroupedMetrics {
                         (metric_name.clone(), summary)
                     })
                     .collect();
+
+                if !group_name.contains("keygen") {
+                    Self::validate_instruction_counts(&group_summaries);
+                }
+
                 (group_name.clone(), group_summaries)
             })
             .collect();
@@ -141,8 +166,74 @@ impl GroupedMetrics {
             ..Default::default()
         };
         metrics.compute_total();
+        metrics.bounded_par_by_group = self
+            .compute_bounded_par_times(num_parallel, &metrics.by_group)
+            .into_iter()
+            .map(|(k, v)| (k, MdTableCell::new(v, Some(0.0))))
+            .collect();
+
         metrics
     }
+
+    /// Compute per-group parallel proof time with bounded parallelism.
+    fn compute_bounded_par_times(
+        &self,
+        num_parallel: usize,
+        stats_by_group: &HashMap<String, HashMap<MetricName, Stats>>,
+    ) -> HashMap<String, f64> {
+        let mut per_group = HashMap::new();
+
+        for (group_name, metrics) in &self.by_group {
+            if group_name.contains("keygen") {
+                continue;
+            }
+
+            let mut group_time = 0.0;
+
+            // Add serial execution time for app_proof groups
+            if is_app_proof_group(group_name) {
+                if let Some(stats) = stats_by_group.get(group_name) {
+                    if let Some(metered) = stats.get(EXECUTE_METERED_TIME_LABEL) {
+                        group_time += metered.avg.val / 1000.0;
+                    }
+                    if let Some(e1) = stats.get(EXECUTE_E1_TIME_LABEL) {
+                        group_time += e1.avg.val / 1000.0;
+                    }
+                }
+            }
+
+            // Schedule proofs in parallel
+            if let Some(proof_times) = metrics.get(PROOF_TIME_LABEL) {
+                let times_s: Vec<f64> = proof_times.iter().map(|(ms, _)| ms / 1000.0).collect();
+                group_time += schedule_parallel(&times_s, num_parallel);
+            }
+
+            per_group.insert(group_name.clone(), group_time);
+        }
+
+        per_group
+    }
+}
+
+/// Round-robin assignment: proof i -> slot i % num_parallel. Returns max slot time.
+fn schedule_parallel(proof_times: &[f64], num_parallel: usize) -> f64 {
+    if proof_times.is_empty() || num_parallel == 0 {
+        return 0.0;
+    }
+
+    let mut slot_times = vec![0.0_f64; num_parallel];
+    for (i, duration) in proof_times.iter().enumerate() {
+        slot_times[i % num_parallel] += duration;
+    }
+    slot_times.iter().cloned().fold(0.0_f64, f64::max)
+}
+
+fn is_app_proof_group(name: &str) -> bool {
+    name != "leaf"
+        && name != "root"
+        && name != "halo2_outer"
+        && name != "halo2_wrapper"
+        && !name.starts_with("internal")
 }
 
 // A hacky way to order the groups for display.
@@ -171,7 +262,7 @@ impl AggregateMetrics {
                 continue;
             }
             let stats = stats.unwrap_or_else(|| {
-                panic!("Missing proof time statistics for group '{}'", group_name)
+                panic!("Missing proof time statistics for group '{group_name}'")
             });
             let mut sum = stats.sum;
             let mut max = stats.max;
@@ -200,12 +291,7 @@ impl AggregateMetrics {
                     max.diff.unwrap_or(0.0);
 
                 // Account for the serial execute_metered and execute_e1 for app outside of segments
-                if group_name != "leaf"
-                    && group_name != "root"
-                    && group_name != "halo2_outer"
-                    && group_name != "halo2_wrapper"
-                    && !group_name.starts_with("internal")
-                {
+                if is_app_proof_group(group_name) {
                     if let Some(execute_metered_stats) = execute_metered_stats {
                         // For metered metrics without segment labels, we just use the value
                         // directly Count is 1, so avg = sum = max = min =
@@ -280,9 +366,7 @@ impl AggregateMetrics {
                 let value = self
                     .by_group
                     .get(group_name)
-                    .unwrap_or_else(|| {
-                        panic!("Group '{}' should exist in by_group map", group_name)
-                    })
+                    .unwrap_or_else(|| panic!("Group '{group_name}' should exist in by_group map"))
                     .clone();
                 (key, value)
             })
@@ -323,13 +407,18 @@ impl AggregateMetrics {
         }
     }
 
-    pub fn write_markdown(&self, writer: &mut impl Write, metric_names: &[&str]) -> Result<()> {
-        self.write_summary_markdown(writer)?;
+    pub fn write_markdown(
+        &self,
+        writer: &mut impl Write,
+        metric_names: &[&str],
+        num_parallel: usize,
+    ) -> Result<()> {
+        self.write_summary_markdown(writer, num_parallel)?;
         writeln!(writer)?;
 
         let metric_names = metric_names.to_vec();
         for (group_name, summaries) in self.to_vec() {
-            writeln!(writer, "| {} |||||", group_name)?;
+            writeln!(writer, "| {group_name} |||||")?;
             writeln!(writer, "|:---|---:|---:|---:|---:|")?;
             writeln!(writer, "|metric|avg|sum|max|min|")?;
             let names = if metric_names.is_empty() {
@@ -380,12 +469,13 @@ impl AggregateMetrics {
         Ok(())
     }
 
-    fn write_summary_markdown(&self, writer: &mut impl Write) -> Result<()> {
+    fn write_summary_markdown(&self, writer: &mut impl Write, num_parallel: usize) -> Result<()> {
         writeln!(
             writer,
-            "| Summary | Proof Time (s) | Parallel Proof Time (s) |"
+            "| Summary | Proof Time (s) | Parallel Proof Time (s) | Parallel Proof Time ({} provers) (s) |",
+            num_parallel
         )?;
-        writeln!(writer, "|:---|---:|---:|")?;
+        writeln!(writer, "|:---|---:|---:|---:|")?;
         let mut rows = Vec::new();
         for (group_name, summaries) in self.to_vec() {
             if group_name.contains("keygen") {
@@ -396,7 +486,7 @@ impl AggregateMetrics {
                 continue;
             }
             let stats = stats.unwrap_or_else(|| {
-                panic!("Missing proof time statistics for group '{}'", group_name)
+                panic!("Missing proof time statistics for group '{group_name}'")
             });
             let mut sum = stats.sum;
             let mut max = stats.max;
@@ -409,15 +499,35 @@ impl AggregateMetrics {
             if let Some(diff) = &mut max.diff {
                 *diff /= 1000.0;
             }
+            // Add serial execution time for app_proof groups
+            if is_app_proof_group(&group_name) {
+                if let Some(metered) = summaries.get(EXECUTE_METERED_TIME_LABEL) {
+                    sum.val += metered.avg.val / 1000.0;
+                    max.val += metered.avg.val / 1000.0;
+                }
+                if let Some(e1) = summaries.get(EXECUTE_E1_TIME_LABEL) {
+                    sum.val += e1.avg.val / 1000.0;
+                    max.val += e1.avg.val / 1000.0;
+                }
+            }
             rows.push((group_name, sum, max));
         }
+        let total_bounded: f64 = self.bounded_par_by_group.values().map(|v| v.val).sum();
         writeln!(
             writer,
-            "| Total | {} | {} |",
-            self.total_proof_time, self.total_par_proof_time
+            "| Total | {} | {} | {:.2} |",
+            self.total_proof_time, self.total_par_proof_time, total_bounded
         )?;
         for (group_name, proof_time, par_proof_time) in rows {
-            writeln!(writer, "| {group_name} | {proof_time} | {par_proof_time} |")?;
+            let bounded = self
+                .bounded_par_by_group
+                .get(&group_name)
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "-".to_string());
+            writeln!(
+                writer,
+                "| {group_name} | {proof_time} | {par_proof_time} | {bounded} |"
+            )?;
         }
         writeln!(writer)?;
         Ok(())
@@ -464,7 +574,9 @@ impl BenchmarkOutput {
 pub const PROOF_TIME_LABEL: &str = "total_proof_time_ms";
 pub const MAIN_CELLS_USED_LABEL: &str = "main_cells_used";
 pub const TOTAL_CELLS_USED_LABEL: &str = "total_cells_used";
-pub const INSNS_LABEL: &str = "insns";
+pub const EXECUTE_E1_INSNS_LABEL: &str = "execute_e1_insns";
+pub const EXECUTE_METERED_INSNS_LABEL: &str = "execute_metered_insns";
+pub const EXECUTE_PREFLIGHT_INSNS_LABEL: &str = "execute_preflight_insns";
 pub const EXECUTE_E1_TIME_LABEL: &str = "execute_e1_time_ms";
 pub const EXECUTE_E1_INSN_MI_S_LABEL: &str = "execute_e1_insn_mi/s";
 pub const EXECUTE_METERED_TIME_LABEL: &str = "execute_metered_time_ms";
@@ -481,11 +593,11 @@ pub const VM_METRIC_NAMES: &[&str] = &[
     PROOF_TIME_LABEL,
     MAIN_CELLS_USED_LABEL,
     TOTAL_CELLS_USED_LABEL,
-    INSNS_LABEL,
     EXECUTE_E1_TIME_LABEL,
     EXECUTE_E1_INSN_MI_S_LABEL,
     EXECUTE_METERED_TIME_LABEL,
     EXECUTE_METERED_INSN_MI_S_LABEL,
+    EXECUTE_PREFLIGHT_INSNS_LABEL,
     EXECUTE_PREFLIGHT_TIME_LABEL,
     EXECUTE_PREFLIGHT_INSN_MI_S_LABEL,
     TRACE_GEN_TIME_LABEL,

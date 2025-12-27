@@ -63,6 +63,10 @@ pub trait LinearMemory {
     fn as_slice(&self) -> &[u8];
     /// Returns the entire memory as a raw byte slice.
     fn as_mut_slice(&mut self) -> &mut [u8];
+    /// Fill the memory with zeros.
+    fn fill_zero(&mut self) {
+        self.as_mut_slice().fill(0);
+    }
     /// Read `BLOCK` from `self` at `from` address without moving it.
     ///
     /// Panics or segfaults if `from..from + size_of::<BLOCK>()` is out of bounds.
@@ -141,6 +145,7 @@ pub trait LinearMemory {
 /// performance reasons, and it is up to the user to enforce types. Needless to say, this is a very
 /// `unsafe` API.
 #[derive(Debug, Clone)]
+#[repr(C)]
 pub struct AddressMap<M: LinearMemory = MemoryBackend> {
     /// Underlying memory data.
     pub mem: Vec<M>,
@@ -176,6 +181,13 @@ impl<M: LinearMemory> AddressMap<M> {
     #[inline(always)]
     pub fn get_memory_mut(&mut self) -> &mut Vec<M> {
         &mut self.mem
+    }
+
+    /// Fill each address space memory with zeros. Does not change the config.
+    pub fn fill_zero(&mut self) {
+        for mem in &mut self.mem {
+            mem.fill_zero();
+        }
     }
 
     /// # Safety
@@ -259,18 +271,16 @@ impl<M: LinearMemory> AddressMap<M> {
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
-    pub fn from_sparse(config: Vec<AddressSpaceHostConfig>, sparse_map: SparseMemoryImage) -> Self {
-        let mut vec = Self::new(config);
-        for ((addr_space, index), data_byte) in sparse_map.into_iter() {
+    pub fn set_from_sparse(&mut self, sparse_map: &SparseMemoryImage) {
+        for (&(addr_space, index), &data_byte) in sparse_map.iter() {
             // SAFETY:
             // - safety assumptions in function doc comments
             unsafe {
-                vec.mem
+                self.mem
                     .get_unchecked_mut(addr_space as usize)
                     .write_unaligned(index as usize, data_byte);
             }
         }
-        vec
     }
 }
 
@@ -278,6 +288,7 @@ impl<M: LinearMemory> AddressMap<M> {
 // @dev Note we don't make this a trait because phantom executors currently need a concrete type for
 // guest memory
 #[derive(Debug, Clone)]
+#[repr(C)]
 pub struct GuestMemory {
     pub memory: AddressMap,
 }
@@ -389,8 +400,7 @@ impl AccessMetadata {
         debug_assert!(timestamp < (1 << 29), "Timestamp must be less than 2^29");
         debug_assert!(
             block_size == 0 || (block_size.is_power_of_two() && block_size <= MAX_BLOCK_SIZE as u8),
-            "Block size must be 0 or power of 2 and <= {}",
-            MAX_BLOCK_SIZE
+            "Block size must be 0 or power of 2 and <= {MAX_BLOCK_SIZE}"
         );
 
         let encoded_block_size = if block_size == 0 {
@@ -506,6 +516,9 @@ impl TracingMemory {
         pointer: usize,
     ) -> (u32, AccessMetadata) {
         let ptr_index = pointer / ALIGN;
+        // SAFETY:
+        // - address_space is validated during instruction decoding and guaranteed to be within
+        //   bounds
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
         let current_meta = meta_page.get(ptr_index);
 
@@ -526,6 +539,9 @@ impl TracingMemory {
     #[inline(always)]
     fn get_timestamp<const ALIGN: usize>(&mut self, address_space: usize, pointer: usize) -> u32 {
         let ptr_index = pointer / ALIGN;
+        // SAFETY:
+        // - address_space is validated during instruction decoding and guaranteed to be within
+        //   bounds
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
         let current_meta = meta_page.get(ptr_index);
 
@@ -564,6 +580,12 @@ impl TracingMemory {
         if header.block_size == header.lowest_block_size {
             return;
         }
+        // SAFETY:
+        // - header.address_space is validated during instruction decoding and within bounds
+        // - header.pointer and header.type_size define valid memory bounds within the address space
+        // - The memory access range (header.pointer * header.type_size)..(header.pointer +
+        //   header.block_size) * header.type_size is within the allocated size for the address
+        //   space, preventing out of bounds access
         let data_slice = unsafe {
             self.data.memory.get_u8_slice(
                 header.address_space,
@@ -661,6 +683,9 @@ impl TracingMemory {
             return;
         }
         let begin = start_ptr as usize / MIN_BLOCK_SIZE;
+        // SAFETY:
+        // - address_space is validated during instruction decoding and guaranteed to be within
+        //   bounds
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
 
         for i in 0..(block_size as usize / MIN_BLOCK_SIZE) {
@@ -691,6 +716,9 @@ impl TracingMemory {
         prev_values: &[T; BLOCK_SIZE],
     ) -> u32 {
         debug_assert_eq!(ALIGN, self.data.memory.config[address_space].min_block_size);
+        // SAFETY:
+        // - address_space is validated during instruction decoding and guaranteed to be within
+        //   bounds
         debug_assert_eq!(
             unsafe {
                 self.data

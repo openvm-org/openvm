@@ -11,11 +11,15 @@ use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{execution_mode::E1ExecutionCtx, Streams, VmExecState};
+use super::{execution_mode::ExecutionCtxTrait, Streams, VmExecState};
+#[cfg(feature = "tco")]
+use crate::arch::interpreter::InterpretedInstance;
+#[cfg(feature = "aot")]
+use crate::arch::SystemConfig;
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::{execution_mode::E2ExecutionCtx, ExecutorInventoryError, MatrixRecordArena},
+    arch::{execution_mode::MeteredExecutionCtxTrait, ExecutorInventoryError, MatrixRecordArena},
     system::{
         memory::online::{GuestMemory, TracingMemory},
         program::ProgramBus,
@@ -26,18 +30,20 @@ use crate::{
 pub enum ExecutionError {
     #[error("execution failed at pc {pc}, err: {msg}")]
     Fail { pc: u32, msg: &'static str },
-    #[error("pc {pc} out of bounds for program of length {program_len}, with pc_base {pc_base}")]
-    PcOutOfBounds {
-        pc: u32,
-        pc_base: u32,
-        program_len: usize,
-    },
+    #[error("pc {0} out of bounds")]
+    PcOutOfBounds(u32),
     #[error("unreachable instruction at pc {0}")]
     Unreachable(u32),
     #[error("at pc {pc}, opcode {opcode} was not enabled")]
     DisabledOperation { pc: u32, opcode: VmOpcode },
     #[error("at pc = {pc}")]
     HintOutOfBounds { pc: u32 },
+    #[error("at pc {pc}, hint buffer num_words {num_words} exceeds MAX_HINT_BUFFER_WORDS {max_hint_buffer_words}")]
+    HintBufferTooLarge {
+        pc: u32,
+        num_words: u32,
+        max_hint_buffer_words: u32,
+    },
     #[error("at pc {pc}, tried to publish into index {public_value_index} when num_public_values = {num_public_values}")]
     PublicValueIndexOutOfBounds {
         pc: u32,
@@ -68,6 +74,8 @@ pub enum ExecutionError {
     FailedWithExitCode(u32),
     #[error("trace buffer out of bounds: requested {requested} but capacity is {capacity}")]
     TraceBufferOutOfBounds { requested: usize, capacity: usize },
+    #[error("instruction counter overflow: {instret} + {num_insns} > u64::MAX")]
+    InstretOverflow { instret: u64, num_insns: u64 },
     #[error("inventory error: {0}")]
     Inventory(#[from] ExecutorInventoryError),
     #[error("static program error: {0}")]
@@ -85,21 +93,57 @@ pub enum StaticProgramError {
     DisabledOperation { pc: u32, opcode: VmOpcode },
     #[error("Executor not found for opcode {opcode}")]
     ExecutorNotFound { opcode: VmOpcode },
+    #[error("Failed to create temporary file: {err}")]
+    FailToCreateTemporaryFile { err: String },
+    #[error("Failed to write into temporary file: {err}")]
+    FailToWriteTemporaryFile { err: String },
+    #[error("Failed to generate dynamic library: {err}")]
+    FailToGenerateDynamicLibrary { err: String },
 }
 
-/// Function pointer for interpreter execution with function signature `(pre_compute, exec_state)`.
-/// The `pre_compute: &[u8]` is a pre-computed buffer of data corresponding to a single instruction.
-/// The contents of `pre_compute` are determined from the program code as specified by the
-/// [Executor] and [MeteredExecutor] traits.
-pub type ExecuteFunc<F, CTX> = unsafe fn(&[u8], &mut VmExecState<F, GuestMemory, CTX>);
+#[cfg(feature = "aot")]
+#[derive(Error, Debug)]
+pub enum AotError {
+    #[error("AOT compilation not supported for this opcode")]
+    NotSupported,
+
+    #[error("No executor found for opcode {0}")]
+    NoExecutorFound(VmOpcode),
+
+    #[error("Invalid instruction format")]
+    InvalidInstruction,
+
+    #[error("Other AOT error: {0}")]
+    Other(String),
+}
+
+/// Function pointer for interpreter execution with function signature `(pre_compute,
+/// arg, exec_state)`. The `pre_compute: *const u8` is a pre-computed buffer of data
+/// corresponding to a single instruction. The contents of `pre_compute` are determined from the
+/// program code as specified by the [Executor] and [MeteredExecutor] traits.
+pub type ExecuteFunc<F, CTX> =
+    unsafe fn(pre_compute: *const u8, exec_state: &mut VmExecState<F, GuestMemory, CTX>);
+
+/// Handler for tail call elimination. The `CTX` is assumed to contain pointers to the pre-computed
+/// buffer and the function handler table.
+///
+/// - `pre_compute_buf` is the starting pointer of the pre-computed buffer.
+/// - `handlers` is the starting pointer of the table of function pointers of `Handler` type. The
+///   pointer is typeless to avoid self-referential types.
+#[cfg(feature = "tco")]
+pub type Handler<F, CTX> = unsafe fn(
+    interpreter: &InterpretedInstance<F, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+);
 
 /// Trait for pure execution via a host interpreter. The trait methods provide the methods to
 /// pre-process the program code into function pointers which operate on `pre_compute` instruction
 /// data.
 // @dev: In the codebase this is sometimes referred to as (E1).
-pub trait Executor<F> {
+pub trait InterpreterExecutor<F> {
     fn pre_compute_size(&self) -> usize;
 
+    #[cfg(not(feature = "tco"))]
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
@@ -107,16 +151,62 @@ pub trait Executor<F> {
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E1ExecutionCtx;
+        Ctx: ExecutionCtxTrait;
+
+    /// Returns a function pointer with tail call optimization. The handler function assumes that
+    /// the pre-compute buffer it receives is the populated `data`.
+    // NOTE: we could have used `pre_compute` above to populate `data`, but the implementations were
+    // simpler to keep `handler` entirely separate from `pre_compute`.
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait;
 }
+
+#[cfg(feature = "aot")]
+pub trait AotExecutor<F> {
+    fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
+        false
+    }
+
+    /*
+    Function: Generate x86 assembly for the given RV32 instruction, and transfer control to the next RV32 instruction
+
+    Preconditions:
+    x86 Registers: rbx = vm_exec_state_ptr, rbp = pre_compute_insns_ptr,
+    - instruction: the instruction to be executed
+
+    Postcondition:
+    - x86's PC should be set to the label of the next RV32 instruction, and transfers control to the next instruction
+    */
+    fn generate_x86_asm(&self, _inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
+        unimplemented!()
+    }
+    // TODO: add air_idx:usize parameter to the function, for AotMeteredExecutor::generate_x86_asm
+}
+#[cfg(feature = "aot")]
+pub trait Executor<F>: InterpreterExecutor<F> + AotExecutor<F> {}
+#[cfg(feature = "aot")]
+impl<F, T> Executor<F> for T where T: InterpreterExecutor<F> + AotExecutor<F> {}
+
+#[cfg(not(feature = "aot"))]
+pub trait Executor<F>: InterpreterExecutor<F> {}
+#[cfg(not(feature = "aot"))]
+impl<F, T> Executor<F> for T where T: InterpreterExecutor<F> {}
 
 /// Trait for metered execution via a host interpreter. The trait methods provide the methods to
 /// pre-process the program code into function pointers which operate on `pre_compute` instruction
 /// data which contains auxiliary data (e.g., corresponding AIR ID) for metering purposes.
 // @dev: In the codebase this is sometimes referred to as (E2).
-pub trait MeteredExecutor<F> {
+pub trait InterpreterMeteredExecutor<F> {
     fn metered_pre_compute_size(&self) -> usize;
 
+    #[cfg(not(feature = "tco"))]
     fn metered_pre_compute<Ctx>(
         &self,
         air_idx: usize,
@@ -125,20 +215,62 @@ pub trait MeteredExecutor<F> {
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E2ExecutionCtx;
+        Ctx: MeteredExecutionCtxTrait;
+
+    /// Returns a function pointer with tail call optimization. The handler function assumes that
+    /// the pre-compute buffer it receives is the populated `data`.
+    // NOTE: we could have used `metered_pre_compute` above to populate `data`, but the
+    // implementations were simpler to keep `metered_handler` entirely separate from
+    // `metered_pre_compute`.
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        air_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait;
 }
 
-// TODO[jpw]: Avoid Clone by making executors stateless?
+#[cfg(feature = "aot")]
+pub trait AotMeteredExecutor<F> {
+    fn is_aot_metered_supported(&self, _inst: &Instruction<F>) -> bool {
+        false
+    }
+
+    fn generate_x86_metered_asm(
+        &self,
+        _inst: &Instruction<F>,
+        _pc: u32,
+        _chip_idx: usize,
+        _config: &SystemConfig,
+    ) -> Result<String, AotError> {
+        unimplemented!()
+    }
+}
+
+#[cfg(feature = "aot")]
+pub trait MeteredExecutor<F>: InterpreterMeteredExecutor<F> + AotMeteredExecutor<F> {}
+#[cfg(feature = "aot")]
+impl<F, T> MeteredExecutor<F> for T where T: InterpreterMeteredExecutor<F> + AotMeteredExecutor<F> {}
+
+#[cfg(not(feature = "aot"))]
+pub trait MeteredExecutor<F>: InterpreterMeteredExecutor<F> {}
+#[cfg(not(feature = "aot"))]
+impl<F, T> MeteredExecutor<F> for T where T: InterpreterMeteredExecutor<F> {}
+
 /// Trait for preflight execution via a host interpreter. The trait methods allow execution of
 /// instructions via enum dispatch within an interpreter. This execution is specialized to record
 /// "records" of execution which will be ingested later for trace matrix generation. The records are
 /// stored in a record arena, which is provided in the [VmStateMut] argument.
-// @dev: In the codebase this is sometimes referred to as (E3).
-pub trait PreflightExecutor<F, RA = MatrixRecordArena<F>>: Clone {
+// NOTE: In the codebase this is sometimes referred to as (E3).
+pub trait PreflightExecutor<F, RA = MatrixRecordArena<F>> {
     /// Runtime execution of the instruction, if the instruction is owned by the
     /// current instance. May internally store records of this call for later trace generation.
     fn execute(
-        &mut self,
+        &self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError>;
@@ -157,6 +289,8 @@ pub struct VmStateMut<'a, F, MEM, RA> {
     pub memory: &'a mut MEM,
     pub streams: &'a mut Streams<F>,
     pub rng: &'a mut StdRng,
+    /// Custom public values to be set by the system PublicValuesExecutor
+    pub(crate) custom_pvs: &'a mut Vec<Option<F>>,
     pub ctx: &'a mut RA,
     #[cfg(feature = "metrics")]
     pub metrics: &'a mut VmMetrics,
@@ -374,7 +508,7 @@ impl<T: FieldAlgebra> From<(u32, Option<T>)> for PcIncOrSet<T> {
 
 /// Phantom sub-instructions affect the runtime of the VM and the trace matrix values.
 /// However they all have no AIR constraints besides advancing the pc by
-/// [DEFAULT_PC_STEP](openvm_instructions::program::DEFAULT_PC_STEP).
+/// [DEFAULT_PC_STEP].
 ///
 /// They should not mutate memory, but they can mutate the input & hint streams.
 ///

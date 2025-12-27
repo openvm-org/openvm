@@ -7,6 +7,15 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use super::adapters::RV32_REGISTER_NUM_LIMBS;
 use crate::adapters::{Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterExecutor};
 
+mod execution;
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+#[cfg(feature = "aot")]
+mod aot;
+
 #[cfg(test)]
 mod tests;
 

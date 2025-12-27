@@ -1,0 +1,141 @@
+name: Extension Tests (CUDA)
+
+on:
+  workflow_call:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "crates/circuits/**"
+      - "crates/vm/**"
+      - "crates/toolchain/**"
+      - "extensions/**"
+      - "Cargo.toml"
+      - ".github/workflows/extension-tests.cuda.yml"
+  workflow_dispatch:
+    inputs:
+      machine_type:
+        description: "Runner machine type (e.g. test-gpu-nvidia/cpu=8+32)"
+        required: false
+        default: test-gpu-nvidia/family=g6+g5+g6e
+
+concurrency:
+  group: ${{ github.workflow_ref }}-extension-tests-cuda-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  OPENVM_FAST_TEST: "1"
+  OPENVM_SKIP_DEBUG: "1"
+
+jobs:
+  extension-tests-cuda:
+    strategy:
+      matrix:
+        extensions: # group extensions on the same runner based on test time
+          - "rv32im native"
+          - "keccak256 sha256 bigint algebra weierstrass_ec edwards_ec pairing"
+    runs-on:
+      - runs-on=${{ github.run_id }}-extension-tests-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.machine_type || 'test-gpu-nvidia/family=g6+g5+g6e' }}
+
+    steps:
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            common:
+              - "crates/circuits/**"
+              - "crates/vm/**"
+              - "crates/toolchain/**"
+              - ".github/workflows/extension-tests.cuda.yml"
+            rv32im:
+              - "extensions/rv32im/**"
+            native:
+              - "extensions/native/**"
+            keccak256:
+              - "extensions/keccak256/**"
+            sha256:
+              - "extensions/sha256/**"
+            bigint:
+              - "extensions/bigint/**"
+            algebra:
+              - "extensions/algebra/**"
+            weierstrass_ec:
+              - "extensions/weierstrass_ec/**"
+            edwards_ec:
+              - "extensions/edwards_ec/**"
+            pairing:
+              - "extensions/pairing/**"
+
+      - name: Skip if no changes
+        env:
+          FILTER_OUTPUTS: ${{ toJSON(steps.filter.outputs) }}
+        run: |
+          # Check if common files changed
+          COMMON_CHANGED=$(echo $FILTER_OUTPUTS | jq -r .common)
+
+          # Check if any extension in the current matrix group changed
+          ANY_EXT_CHANGED=false
+          for ext in ${{ matrix.extensions }}; do
+            ext_changed=$(echo $FILTER_OUTPUTS | jq -r .$ext)
+            if [[ "$ext_changed" == "true" ]]; then
+              ANY_EXT_CHANGED=true
+              break
+            fi
+          done
+
+          # Skip if neither common nor any extension in this matrix group changed
+          if [[ "$COMMON_CHANGED" != "true" && "$ANY_EXT_CHANGED" != "true" ]]; then
+            echo "No relevant changes for extensions [${{ matrix.extensions }}], skipping tests."
+            exit 0
+          fi
+
+      - run: | # avoid cross-device link error
+          rustup component remove clippy || true
+          rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/rust-cache-cuda
+        with:
+          cache-on-failure: true
+      - uses: taiki-e/install-action@nextest
+
+      - name: Check CUDA status and set environment variables
+        run: |
+          nvcc --version
+          echo "NEXTEST_ENV=CUDA_OPT_LEVEL=3" >> $GITHUB_ENV
+          echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
+          echo "VPMM_PAGES=1" >> $GITHUB_ENV
+
+      - name: Run extension tests
+        env:
+          FILTER_OUTPUTS: ${{ toJSON(steps.filter.outputs) }}
+        run: |
+          COMMON_CHANGED=$(echo $FILTER_OUTPUTS | jq -r .common)
+
+          for ext in ${{ matrix.extensions }}; do
+            ext_changed=$(echo $FILTER_OUTPUTS | jq -r .$ext)
+            if [[ "$COMMON_CHANGED" == "true" || "$ext_changed" == "true" ]]; then
+              echo "::group::Running tests for $ext"
+
+              # Run circuit tests
+              if [ -d "extensions/$ext/circuit" ]; then
+                pushd extensions/$ext/circuit
+                ${{ env.NEXTEST_ENV }} cargo nextest run cuda ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
+                popd
+              fi
+
+              # Run integration tests
+              if [ -d "extensions/$ext/tests" ]; then
+                pushd extensions/$ext/tests
+                rustup component add rust-src --toolchain nightly-2025-08-02
+                ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
+                popd
+              fi
+              echo "::endgroup::"
+            else
+              echo "Skipping tests for $ext as no relevant files changed."
+            fi
+          done

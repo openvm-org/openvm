@@ -225,10 +225,14 @@ impl<'a, F, A> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressio
         &'a mut self,
         layout: FieldExpressionRecordLayout<F, A>,
     ) -> FieldExpressionCoreRecordMut<'a> {
+        // SAFETY: The buffer length is the width of the trace which should be at least 1
         let (opcode_buf, input_limbs_buff) = unsafe { self.split_at_mut_unchecked(1) };
 
+        // SAFETY: opcode_buf has exactly 1 element from split_at_mut_unchecked(1)
+        let opcode_buf = unsafe { opcode_buf.get_unchecked_mut(0) };
+
         FieldExpressionCoreRecordMut {
-            opcode: &mut opcode_buf[0],
+            opcode: opcode_buf,
             input_limbs: &mut input_limbs_buff[..layout.metadata.total_input_limbs],
         }
     }
@@ -300,7 +304,7 @@ impl<A> FieldExpressionExecutor<A> {
             opcode_flag_idx
         };
         assert_eq!(opcode_flag_idx.len(), local_opcode_idx.len() - 1);
-        tracing::info!(
+        tracing::debug!(
             "FieldExpressionCoreExecutor: opcode={name}, main_width={}",
             BaseAir::<BabyBear>::width(&expr)
         );
@@ -388,7 +392,7 @@ where
     >,
 {
     fn execute(
-        &mut self,
+        &self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
@@ -430,6 +434,9 @@ where
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F: PrimeField32, A> AotExecutor<F> for FieldExpressionExecutor<A> {}
+
 impl<F, A> TraceFiller<F> for FieldExpressionFiller<A>
 where
     F: PrimeField32 + Send + Sync + Clone,
@@ -437,10 +444,16 @@ where
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         // Get the core record from the row slice
+        // SAFETY: Caller guarantees that row_slice has width A::WIDTH + core width
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
+        // SAFETY:
+        // - caller ensures `core_row` contains a valid record representation that was previously
+        //   written by the executor
+        // - core_row slice is transmuted to FieldExpressionCoreRecordMut using the specified
+        //   layout, which satisfies CustomBorrow requirements for safe access.
         let record: FieldExpressionCoreRecordMut =
             unsafe { get_record_from_slice(&mut core_row, self.get_record_layout::<F>()) };
 

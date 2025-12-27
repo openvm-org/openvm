@@ -1,18 +1,30 @@
 name: "OpenVM Benchmarks: Coordinate Runner & Reporting"
 
 on:
+  workflow_call:
+    inputs:
+      is_merge_queue:
+        description: "Whether this is being called from merge queue"
+        required: false
+        type: boolean
+        default: false
   push:
-    branches: ["main", "feat/new-execution"]
+    branches: ["main"]
+    paths:
+      - "benchmarks/prove/**"
+      - "benchmarks/guest/**"
+      - "crates/**"
+      - "extensions/**"
+      - ".github/workflows/benchmark-call.yml"
+      - ".github/workflows/benchmarks.yml"
+      - "Cargo.toml"
   pull_request:
     types: [opened, synchronize, reopened, labeled]
     branches: ["**"]
     paths:
       - "benchmarks/prove/**"
-      - "crates/circuits/**"
-      - "crates/toolchain/**"
-      - "crates/prof/**"
-      - "crates/sdk/**"
-      - "crates/vm/**"
+      - "benchmarks/guest/**"
+      - "crates/**"
       - "extensions/**"
       - ".github/workflows/benchmark-call.yml"
       - ".github/workflows/benchmarks.yml"
@@ -36,7 +48,7 @@ on:
         default: false
 
 concurrency:
-  group: benchmark-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-benchmarks-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
@@ -57,12 +69,11 @@ permissions:
 jobs:
   create-matrix:
     runs-on:
-      - runs-on=${{ github.run_id }}
-      - runner=8cpu-linux-x64
+      - runs-on=${{ github.run_id }}/runner=8cpu-linux-x64
     outputs:
       matrix: ${{ steps.create-matrix.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ env.CURRENT_SHA }}
           repository: ${{ env.REPO }}
@@ -81,9 +92,6 @@ jobs:
             RUN_E2E=$(echo "$LABELS" | jq 'any(.name == "run-benchmark-e2e")')
           else
             RUN_E2E=${{ github.event.inputs.run-benchmark-e2e || 'false' }}
-          fi
-          if [[ "$RUN_E2E" == "true" ]]; then
-            FEATURE_FLAGS="evm,${FEATURE_FLAGS}"
           fi
           if [[ "${{ github.event.inputs.aggregation }}" == "true" ]]; then
             FEATURE_FLAGS="aggregation,${FEATURE_FLAGS}"
@@ -139,20 +147,22 @@ jobs:
       max_segment_length: ${{ matrix.benchmark_run.max_segment_length }}
       e2e_bench: ${{ matrix.benchmark_run.e2e_bench }}
       features: ${{ matrix.benchmark_run.features }}
+      is_merge_queue: ${{ inputs.is_merge_queue || false }}
+      job_index: ${{ strategy.job-index }}
     secrets: inherit
 
   summarize:
     needs: [create-matrix, benchmark]
     runs-on:
       - runs-on=${{ github.run_id }}
-      - runner=8cpu-linux-arm64
+      - runner=8cpu-linux-x64
     steps:
       ##########################################################################
       # Install S3 if necessary                                                #
       ##########################################################################
       - name: Install architecture specific tools
         run: |
-          S5CMD_BIN="s5cmd_2.2.2_linux_arm64.deb"
+          S5CMD_BIN="s5cmd_2.2.2_linux_amd64.deb"
           echo "Checking s5cmd"
           if type s5cmd &>/dev/null; then
               echo "s5cmd was installed."
@@ -168,7 +178,7 @@ jobs:
       ##########################################################################
       # Download individual result .md files from S3 and combine them          #
       ##########################################################################
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ env.CURRENT_SHA }}
           repository: ${{ env.REPO }}
@@ -191,6 +201,12 @@ jobs:
 
       - name: Set github pages path for push
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          BENCHMARK_RESULTS_PATH="benchmarks"
+          echo "BENCHMARK_RESULTS_PATH=${BENCHMARK_RESULTS_PATH}" >> $GITHUB_ENV
+
+      - name: Set github pages path for merge queue
+        if: inputs.is_merge_queue == true
         run: |
           BENCHMARK_RESULTS_PATH="benchmarks"
           echo "BENCHMARK_RESULTS_PATH=${BENCHMARK_RESULTS_PATH}" >> $GITHUB_ENV
@@ -220,6 +236,7 @@ jobs:
             fi
             echo "Target branch REF_HASH: $REF_HASH"
           else
+            # For merge_group and push events, use "main" as reference
             REF_HASH="main"
           fi
 
@@ -281,7 +298,7 @@ jobs:
       ##########################################################################
       # Update benchmark-results branch with summary                           #
       ##########################################################################
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: benchmark-results
 
@@ -291,12 +308,13 @@ jobs:
           git config --global user.name "github-actions[bot]"
 
       - name: Update github pages with new bench results
-        if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch')
+        if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch') || inputs.is_merge_queue == true
         run: |
           mkdir -p ${BENCHMARK_RESULTS_PATH}
           cp ${TMP_DIR}/*.md ${BENCHMARK_RESULTS_PATH}/
           git add ${BENCHMARK_RESULTS_PATH}
-          if [[ "${{ github.event_name }}" == "push" ]]; then
+          # Update index.md for both push to main and merge_queue events
+          if [[ "${{ github.event_name }}" == "push" ]] || [[ "${{ inputs.is_merge_queue }}" == "true" ]]; then
             cp ${TMP_DIR}/summary.md index.md
             git add index.md
           fi

@@ -6,7 +6,7 @@ mod tests {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use openvm_sha256_circuit::{Sha256Rv32Config, Sha256Rv32CpuBuilder};
+    use openvm_sha256_circuit::{Sha256Rv32Builder, Sha256Rv32Config};
     use openvm_sha256_transpiler::Sha256TranspilerExtension;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
@@ -27,7 +27,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(Sha256TranspilerExtension),
         )?;
-        air_test(Sha256Rv32CpuBuilder, config, openvm_exe);
+        air_test(Sha256Rv32Builder, config, openvm_exe);
         Ok(())
     }
 }

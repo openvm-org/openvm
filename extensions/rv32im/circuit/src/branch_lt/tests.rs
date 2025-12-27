@@ -1,9 +1,14 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
-    arch::testing::{
-        memory::gen_pointer, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+    arch::{
+        testing::{
+            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+            BITWISE_OP_LOOKUP_BUS,
+        },
+        Arena, ExecutionBridge, PreflightExecutor,
     },
+    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::i32_to_f,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
@@ -24,8 +29,18 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
+#[cfg(feature = "cuda")]
+use {
+    crate::{
+        adapters::Rv32BranchAdapterRecord, BranchLessThanCoreRecord, Rv32BranchLessThanChipGpu,
+    },
+    openvm_circuit::arch::{
+        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
+        EmptyAdapterCoreLayout,
+    },
+};
 
-use super::{core::run_cmp, Rv32BranchLessThanChip};
+use super::{run_cmp, Rv32BranchLessThanChip};
 use crate::{
     adapters::{
         Rv32BranchAdapterAir, Rv32BranchAdapterExecutor, Rv32BranchAdapterFiller, RV32_CELL_BITS,
@@ -46,7 +61,36 @@ type Harness = TestChipHarness<
     Rv32BranchLessThanChip<F>,
 >;
 
-fn create_test_chip(
+fn create_harness_fields(
+    memory_bridge: MemoryBridge,
+    execution_bridge: ExecutionBridge,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    memory_helper: SharedMemoryHelper<F>,
+) -> (
+    Rv32BranchLessThanAir,
+    Rv32BranchLessThanExecutor,
+    Rv32BranchLessThanChip<F>,
+) {
+    let air = Rv32BranchLessThanAir::new(
+        Rv32BranchAdapterAir::new(execution_bridge, memory_bridge),
+        BranchLessThanCoreAir::new(bitwise_chip.bus(), BranchLessThanOpcode::CLASS_OFFSET),
+    );
+    let executor = Rv32BranchLessThanExecutor::new(
+        Rv32BranchAdapterExecutor::new(),
+        BranchLessThanOpcode::CLASS_OFFSET,
+    );
+    let chip = Rv32BranchLessThanChip::new(
+        BranchLessThanFiller::new(
+            Rv32BranchAdapterFiller,
+            bitwise_chip,
+            BranchLessThanOpcode::CLASS_OFFSET,
+        ),
+        memory_helper,
+    );
+    (air, executor, chip)
+}
+
+fn create_harness(
     tester: &mut VmChipTestBuilder<F>,
 ) -> (
     Harness,
@@ -60,20 +104,10 @@ fn create_test_chip(
         bitwise_bus,
     ));
 
-    let air = Rv32BranchLessThanAir::new(
-        Rv32BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-        BranchLessThanCoreAir::new(bitwise_bus, BranchLessThanOpcode::CLASS_OFFSET),
-    );
-    let executor = Rv32BranchLessThanExecutor::new(
-        Rv32BranchAdapterExecutor::new(),
-        BranchLessThanOpcode::CLASS_OFFSET,
-    );
-    let chip = Rv32BranchLessThanChip::new(
-        BranchLessThanFiller::new(
-            Rv32BranchAdapterFiller,
-            bitwise_chip.clone(),
-            BranchLessThanOpcode::CLASS_OFFSET,
-        ),
+    let (air, executor, chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        bitwise_chip.clone(),
         tester.memory_helper(),
     );
     let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
@@ -82,9 +116,10 @@ fn create_test_chip(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute(
-    tester: &mut VmChipTestBuilder<F>,
-    harness: &mut Harness,
+fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
     rng: &mut StdRng,
     opcode: BranchLessThanOpcode,
     a: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
@@ -105,7 +140,8 @@ fn set_and_execute(
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_canonical_u8));
 
     tester.execute_with_pc(
-        harness,
+        executor,
+        arena,
         &Instruction::from_isize(
             opcode.global_opcode(),
             rs1 as isize,
@@ -119,8 +155,8 @@ fn set_and_execute(
 
     let (cmp_result, _, _, _) =
         run_cmp::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode.local_usize() as u8, &a, &b);
-    let from_pc = tester.execution.last_from_pc().as_canonical_u32() as i32;
-    let to_pc = tester.execution.last_to_pc().as_canonical_u32() as i32;
+    let from_pc = tester.last_from_pc().as_canonical_u32() as i32;
+    let to_pc = tester.last_to_pc().as_canonical_u32() as i32;
     let pc_inc = if cmp_result { imm } else { 4 };
 
     assert_eq!(to_pc, from_pc + pc_inc);
@@ -140,12 +176,13 @@ fn set_and_execute(
 fn rand_branch_lt_test(opcode: BranchLessThanOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise_chip) = create_test_chip(&mut tester);
+    let (mut harness, bitwise_chip) = create_harness(&mut tester);
 
     for _ in 0..num_ops {
         set_and_execute(
             &mut tester,
-            &mut harness,
+            &mut harness.executor,
+            &mut harness.arena,
             &mut rng,
             opcode,
             None,
@@ -157,7 +194,8 @@ fn rand_branch_lt_test(opcode: BranchLessThanOpcode, num_ops: usize) {
     // Test special case where b = c
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         opcode,
         Some([101, 128, 202, 255]),
@@ -166,7 +204,8 @@ fn rand_branch_lt_test(opcode: BranchLessThanOpcode, num_ops: usize) {
     );
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         opcode,
         Some([36, 0, 0, 0]),
@@ -209,11 +248,12 @@ fn run_negative_branch_lt_test(
     let imm = 16i32;
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_test_chip(&mut tester);
+    let (mut harness, bitwise) = create_harness(&mut tester);
 
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         opcode,
         Some(a),
@@ -470,12 +510,13 @@ fn rv32_blt_unsigned_wrong_b_msb_sign_negative_test() {
 fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut chip, _) = create_test_chip(&mut tester);
+    let (mut chip, _) = create_harness(&mut tester);
 
     let x = [145, 34, 25, 205];
     set_and_execute(
         &mut tester,
-        &mut chip,
+        &mut chip.executor,
+        &mut chip.arena,
         &mut rng,
         BranchLessThanOpcode::BLT,
         Some(x),
@@ -485,7 +526,8 @@ fn execute_roundtrip_sanity_test() {
 
     set_and_execute(
         &mut tester,
-        &mut chip,
+        &mut chip.executor,
+        &mut chip.arena,
         &mut rng,
         BranchLessThanOpcode::BGE,
         Some(x),
@@ -589,4 +631,85 @@ fn run_cmp_eq_sanity_test() {
     assert!(cmp_result);
     assert_eq!(diff_idx, RV32_REGISTER_NUM_LIMBS);
     assert_eq!(x_sign, y_sign);
+}
+
+// ////////////////////////////////////////////////////////////////////////////////////
+//  CUDA TESTS
+//
+//  Ensure GPU tracegen is equivalent to CPU tracegen
+// ////////////////////////////////////////////////////////////////////////////////////
+
+#[cfg(feature = "cuda")]
+type GpuHarness = GpuTestChipHarness<
+    F,
+    Rv32BranchLessThanExecutor,
+    Rv32BranchLessThanAir,
+    Rv32BranchLessThanChipGpu,
+    Rv32BranchLessThanChip<F>,
+>;
+
+#[cfg(feature = "cuda")]
+fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    let bitwise_bus = default_bitwise_lookup_bus();
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
+    let (air, executor, cpu_chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        dummy_bitwise_chip,
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = Rv32BranchLessThanChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.timestamp_max_bits(),
+    );
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
+#[test_case(BranchLessThanOpcode::BLT, 100)]
+#[test_case(BranchLessThanOpcode::BLTU, 100)]
+#[test_case(BranchLessThanOpcode::BGE, 100)]
+#[test_case(BranchLessThanOpcode::BGEU, 100)]
+fn test_cuda_rand_branch_lt_tracegen(opcode: BranchLessThanOpcode, num_ops: usize) {
+    let mut tester =
+        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+    let mut rng = create_seeded_rng();
+    let mut harness = create_cuda_harness(&tester);
+
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+        );
+    }
+
+    type Record<'a> = (
+        &'a mut Rv32BranchAdapterRecord,
+        &'a mut BranchLessThanCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv32BranchAdapterExecutor>::new(),
+        );
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
 }

@@ -10,7 +10,7 @@ use openvm_circuit::{
     system::phantom::PhantomExecutor,
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
-use openvm_ecc_circuit::{CurveConfig, SwCurveCoeffs};
+use openvm_ecc_circuit::CurveConfig;
 use openvm_instructions::PhantomDiscriminant;
 use openvm_pairing_guest::{
     bls12_381::{
@@ -32,25 +32,21 @@ pub enum PairingCurve {
 }
 
 impl PairingCurve {
-    pub fn curve_config(&self) -> CurveConfig<SwCurveCoeffs> {
+    pub fn curve_config(&self) -> CurveConfig {
         match self {
             PairingCurve::Bn254 => CurveConfig::new(
                 BN254_ECC_STRUCT_NAME.to_string(),
                 BN254_MODULUS.clone(),
                 BN254_ORDER.clone(),
-                SwCurveCoeffs {
-                    a: BigUint::zero(),
-                    b: BigUint::from_u8(3).unwrap(),
-                },
+                BigUint::zero(),
+                BigUint::from_u8(3).unwrap(),
             ),
             PairingCurve::Bls12_381 => CurveConfig::new(
                 BLS12_381_ECC_STRUCT_NAME.to_string(),
                 BLS12_381_MODULUS.clone(),
                 BLS12_381_ORDER.clone(),
-                SwCurveCoeffs {
-                    a: BigUint::zero(),
-                    b: BigUint::from_u8(4).unwrap(),
-                },
+                BigUint::zero(),
+                BigUint::from_u8(4).unwrap(),
             ),
         }
     }
@@ -69,6 +65,13 @@ pub struct PairingExtension {
 }
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
+#[cfg_attr(
+    feature = "aot",
+    derive(
+        openvm_circuit_derive::AotExecutor,
+        openvm_circuit_derive::AotMeteredExecutor
+    )
+)]
 pub enum PairingExtensionExecutor<F: Field> {
     Phantom(PhantomExecutor<F>),
 }
@@ -274,6 +277,9 @@ pub(crate) mod phantom {
     where
         Fp::Repr: From<[u8; N]>,
     {
+        // SAFETY:
+        // - RV32_MEMORY_AS consists of `u8`s
+        // - RV32_MEMORY_AS is in bounds
         let repr: &[u8; N] = unsafe {
             memory
                 .memory

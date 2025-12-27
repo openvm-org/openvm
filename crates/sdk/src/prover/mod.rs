@@ -22,8 +22,8 @@ mod evm {
     use std::sync::Arc;
 
     use openvm_circuit::arch::{
-        Executor, MeteredExecutor, PreflightExecutor, VirtualMachineError, VmBuilder,
-        VmExecutionConfig,
+        instructions::exe::VmExe, Executor, MeteredExecutor, PreflightExecutor,
+        VirtualMachineError, VmBuilder, VmExecutionConfig,
     };
     use openvm_native_circuit::NativeConfig;
     use openvm_native_recursion::halo2::utils::Halo2ParamsReader;
@@ -32,10 +32,10 @@ mod evm {
     use super::{Halo2Prover, StarkProver};
     use crate::{
         config::AggregationTreeConfig,
-        keygen::{AggProvingKey, AppProvingKey},
+        keygen::{AggProvingKey, AppProvingKey, Halo2ProvingKey},
         stdin::StdIn,
         types::EvmProof,
-        NonRootCommittedExe, F, SC,
+        F, SC,
     };
 
     pub struct EvmHalo2Prover<E, VB, NativeBuilder>
@@ -59,25 +59,23 @@ mod evm {
         <NativeConfig as VmExecutionConfig<F>>::Executor:
             PreflightExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
     {
+        #[allow(clippy::too_many_arguments)]
         pub fn new(
             reader: &impl Halo2ParamsReader,
             app_vm_builder: VB,
             native_builder: NativeBuilder,
-            app_pk: Arc<AppProvingKey<VB::VmConfig>>,
-            app_committed_exe: Arc<NonRootCommittedExe>,
-            agg_pk: AggProvingKey,
+            app_pk: &AppProvingKey<VB::VmConfig>,
+            app_exe: Arc<VmExe<F>>,
+            agg_pk: &AggProvingKey,
+            halo2_pk: Halo2ProvingKey,
             agg_tree_config: AggregationTreeConfig,
         ) -> Result<Self, VirtualMachineError> {
-            let AggProvingKey {
-                agg_stark_pk,
-                halo2_pk,
-            } = agg_pk;
             let stark_prover = StarkProver::new(
                 app_vm_builder,
                 native_builder,
                 app_pk,
-                app_committed_exe,
-                agg_stark_pk,
+                app_exe,
+                agg_pk,
                 agg_tree_config,
             )?;
             Ok(Self {
@@ -86,15 +84,16 @@ mod evm {
             })
         }
 
+        pub fn with_program_name(mut self, program_name: impl AsRef<str>) -> Self {
+            self.set_program_name(program_name);
+            self
+        }
         pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {
             self.stark_prover.set_program_name(program_name);
             self
         }
 
-        pub fn generate_proof_for_evm(
-            &mut self,
-            input: StdIn,
-        ) -> Result<EvmProof, VirtualMachineError> {
+        pub fn prove_evm(&mut self, input: StdIn) -> Result<EvmProof, VirtualMachineError> {
             let root_proof = self
                 .stark_prover
                 .generate_proof_for_outer_recursion(input)?;

@@ -5,39 +5,48 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
 };
 use openvm_stark_sdk::{
-    config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        setup_tracing, FriParameters,
-    },
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing, FriParameters},
     engine::{StarkFriEngine, VerificationDataWithFriParams},
     p3_baby_bear::BabyBear,
 };
 
+#[cfg(feature = "aot")]
+use crate::arch::{SystemConfig, VmState};
+#[cfg(feature = "aot")]
+use crate::system::memory::online::GuestMemory;
 use crate::{
     arch::{
-        debug_proving_ctx, execution_mode::metered::Segment, vm::VirtualMachine, Executor,
-        ExitCode, MatrixRecordArena, MeteredExecutor, PreflightExecutionOutput, PreflightExecutor,
-        Streams, VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig,
+        debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
+        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
+        VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
 };
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cuda")] {
+        pub use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine as TestStarkEngine, chip::cpu_proving_ctx_to_gpu};
+        use crate::arch::DenseRecordArena;
+        pub type TestRecordArena = DenseRecordArena;
+    } else {
+        pub use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as TestStarkEngine;
+        use crate::arch::MatrixRecordArena;
+        pub type TestRecordArena = MatrixRecordArena<BabyBear>;
+    }
+}
+type RA = TestRecordArena;
 
 // NOTE on trait bounds: the compiler cannot figure out Val<SC>=BabyBear without the
 // VmExecutionConfig and VmCircuitConfig bounds even though VmProverBuilder already includes them.
 // The compiler also seems to need the extra VC even though VC=VB::VmConfig
 pub fn air_test<VB, VC>(builder: VB, config: VC, exe: impl Into<VmExe<BabyBear>>)
 where
-    VB: VmBuilder<
-        BabyBearPoseidon2Engine,
-        VmConfig = VC,
-        RecordArena = MatrixRecordArena<BabyBear>,
-    >,
+    VB: VmBuilder<TestStarkEngine, VmConfig = VC, RecordArena = RA>,
     VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmConfig<BabyBearPoseidon2Config>,
-    <VC as VmExecutionConfig<BabyBear>>::Executor: Executor<BabyBear>
-        + MeteredExecutor<BabyBear>
-        + PreflightExecutor<BabyBear, MatrixRecordArena<BabyBear>>,
+    <VC as VmExecutionConfig<BabyBear>>::Executor:
+        Executor<BabyBear> + MeteredExecutor<BabyBear> + PreflightExecutor<BabyBear, RA>,
 {
     air_test_with_min_segments(builder, config, exe, Streams::default(), 1);
 }
@@ -51,34 +60,111 @@ pub fn air_test_with_min_segments<VB, VC>(
     min_segments: usize,
 ) -> Option<MemoryImage>
 where
-    VB: VmBuilder<
-        BabyBearPoseidon2Engine,
-        VmConfig = VC,
-        RecordArena = MatrixRecordArena<BabyBear>,
-    >,
+    VB: VmBuilder<TestStarkEngine, VmConfig = VC, RecordArena = RA>,
     VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmConfig<BabyBearPoseidon2Config>,
-    <VC as VmExecutionConfig<BabyBear>>::Executor: Executor<BabyBear>
-        + MeteredExecutor<BabyBear>
-        + PreflightExecutor<BabyBear, MatrixRecordArena<BabyBear>>,
+    <VC as VmExecutionConfig<BabyBear>>::Executor:
+        Executor<BabyBear> + MeteredExecutor<BabyBear> + PreflightExecutor<BabyBear, RA>,
 {
     let mut log_blowup = 1;
     while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
         log_blowup += 1;
     }
     let fri_params = FriParameters::new_for_testing(log_blowup);
-    let (final_memory, _) = air_test_impl::<BabyBearPoseidon2Engine, VB>(
+    let debug = std::env::var("OPENVM_SKIP_DEBUG") != Result::Ok(String::from("1"));
+    let (final_memory, _) = air_test_impl::<TestStarkEngine, VB>(
         fri_params,
         builder,
         config,
         exe,
         input,
         min_segments,
-        true,
+        debug,
     )
     .unwrap();
     final_memory
+}
+
+// Compares the output of the interpreter and the AOT instance for pure and metered execution
+#[cfg(feature = "aot")]
+pub fn check_aot_equivalence<E, VB>(
+    vm: &VirtualMachine<E, VB>,
+    config: &VB::VmConfig,
+    exe: &VmExe<Val<E::SC>>,
+    input: &Streams<Val<E::SC>>,
+) -> eyre::Result<()>
+where
+    E: StarkFriEngine,
+    Val<E::SC>: PrimeField32,
+    VB: VmBuilder<E>,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
+        + MeteredExecutor<Val<E::SC>>
+        + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+    Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
+{
+    /*
+    Assertions for Pure Execution AOT
+    */
+    {
+        let interp_state_pure = vm
+            .naive_interpreter(exe)?
+            .execute(input.clone(), None)
+            .expect("Failed to execute");
+
+        let aot_state_pure = vm
+            .get_aot_instance(exe)?
+            .execute(input.clone(), None)
+            .expect("Failed to execute");
+
+        let system_config: &SystemConfig = config.as_ref();
+        let addr_spaces = &system_config.memory_config.addr_spaces;
+        let assert_vm_state_eq =
+            |lhs: &VmState<Val<E::SC>, GuestMemory>, rhs: &VmState<Val<E::SC>, GuestMemory>| {
+                assert_eq!(lhs.pc(), rhs.pc());
+                for r in 0..addr_spaces[1].num_cells {
+                    let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
+                    let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
+                    assert_eq!(a, b);
+                }
+            };
+        assert_vm_state_eq(&interp_state_pure, &aot_state_pure);
+    }
+
+    /*
+    Assertions for Metered AOT
+    */
+    println!("Checking metered AOT equivalence");
+    {
+        let metered_ctx = vm.build_metered_ctx(exe);
+        let (aot_segments, aot_state_metered) = vm
+            .get_metered_aot_instance(exe)?
+            .execute_metered(input.clone(), metered_ctx.clone())?;
+
+        let (segments, interp_state_metered) = vm
+            .naive_metered_interpreter(exe)?
+            .execute_metered(input.clone(), metered_ctx.clone())?;
+
+        assert_eq!(interp_state_metered.pc(), aot_state_metered.pc());
+
+        let system_config: &SystemConfig = config.as_ref();
+        let addr_spaces = &system_config.memory_config.addr_spaces;
+
+        for r in 0..addr_spaces[1].num_cells {
+            let interp = unsafe { interp_state_metered.memory.read::<u8, 1>(1, r as u32) };
+            let aot_interp = unsafe { aot_state_metered.memory.read::<u8, 1>(1, r as u32) };
+            assert_eq!(interp, aot_interp);
+        }
+
+        assert_eq!(segments.len(), aot_segments.len());
+        for i in 0..segments.len() {
+            assert_eq!(segments[i].instret_start, aot_segments[i].instret_start);
+            assert_eq!(segments[i].num_insns, aot_segments[i].num_insns);
+            assert_eq!(segments[i].trace_heights, aot_segments[i].trace_heights);
+        }
+    }
+
+    Ok(())
 }
 
 /// Executes and proves the VM and returns the final memory state.
@@ -109,38 +195,44 @@ where
 {
     setup_tracing();
     let engine = E::new(fri_params);
-    let (mut vm, pk) = VirtualMachine::<E, VB>::new_with_keygen(engine, builder, config)?;
+    let (mut vm, pk) = VirtualMachine::<E, VB>::new_with_keygen(engine, builder, config.clone())?;
     let vk = pk.get_vk();
     let exe = exe.into();
     let input = input.into();
-    let metered_ctx = vm.build_metered_ctx();
-    let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
-    let interpreter = vm
-        .executor()
-        .metered_instance(&exe, &executor_idx_to_air_idx)?;
-    let (segments, _) = interpreter.execute_metered(input.clone(), metered_ctx)?;
-    let committed_exe = vm.commit_exe(exe);
-    let cached_program_trace = vm.transport_committed_exe_to_device(&committed_exe);
+    let metered_ctx = vm.build_metered_ctx(&exe);
+
+    #[cfg(feature = "aot")]
+    check_aot_equivalence(&vm, &config, &exe, &input)?;
+
+    let (segments, _) = vm
+        .metered_interpreter(&exe)?
+        .execute_metered(input.clone(), metered_ctx.clone())?;
+
+    let cached_program_trace = vm.commit_program_on_device(&exe.program);
     vm.load_program(cached_program_trace);
-    let exe = committed_exe.exe;
+    let mut preflight_interpreter = vm.preflight_interpreter(&exe)?;
 
     let mut state = Some(vm.create_initial_state(&exe, input));
     let mut proofs = Vec::new();
     let mut exit_code = None;
     for segment in segments {
         let Segment {
-            instret_start,
             num_insns,
             trace_heights,
+            ..
         } = segment;
-        assert_eq!(state.as_ref().unwrap().instret, instret_start);
         let from_state = Option::take(&mut state).unwrap();
         vm.transport_init_memory_to_device(&from_state.memory);
         let PreflightExecutionOutput {
             system_records,
             record_arenas,
             to_state,
-        } = vm.execute_preflight(&exe, from_state, Some(num_insns), &trace_heights)?;
+        } = vm.execute_preflight(
+            &mut preflight_interpreter,
+            from_state,
+            Some(num_insns),
+            &trace_heights,
+        )?;
         state = Some(to_state);
         exit_code = system_records.exit_code;
 

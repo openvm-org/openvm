@@ -11,8 +11,11 @@ use openvm_instructions::{
 use openvm_stark_backend::prover::{hal::ProverBackend, types::DeviceMultiStarkProvingKey};
 
 use crate::{
-    arch::{execution_mode::tracegen::TracegenCtx, Arena, PreflightExecutor, VmExecState},
-    system::{memory::online::TracingMemory, program::PcEntry},
+    arch::{
+        execution_mode::PreflightCtx, interpreter_preflight::PcEntry, Arena, PreflightExecutor,
+        VmExecState,
+    },
+    system::memory::online::TracingMemory,
 };
 
 pub mod cycle_tracker;
@@ -52,8 +55,8 @@ pub struct VmMetrics {
 #[allow(unused_variables)]
 #[inline(always)]
 pub fn update_instruction_metrics<F, RA, Executor>(
-    state: &mut VmExecState<F, TracingMemory, TracegenCtx<RA>>,
-    executor: &mut Executor,
+    state: &mut VmExecState<F, TracingMemory, PreflightCtx<RA>>,
+    executor: &Executor,
     prev_pc: u32, // the pc of the instruction executed, state.pc is next pc
     pc_entry: &PcEntry<F>,
 ) where
@@ -63,7 +66,7 @@ pub fn update_instruction_metrics<F, RA, Executor>(
 {
     #[cfg(any(debug_assertions, feature = "perf-metrics"))]
     {
-        let pc = state.pc;
+        let pc = state.pc();
         state.metrics.update_backtrace(pc);
     }
 
@@ -71,7 +74,7 @@ pub fn update_instruction_metrics<F, RA, Executor>(
     {
         use std::iter::zip;
 
-        let pc = state.pc;
+        let pc = state.pc();
         let opcode = pc_entry.insn.opcode;
         let opcode_name = executor.get_opcode_name(opcode.as_usize());
 
@@ -100,7 +103,7 @@ pub fn update_instruction_metrics<F, RA, Executor>(
 // We also clear the current trace cell counts so there aren't negative diffs at the start of the
 // next segment.
 #[cfg(feature = "perf-metrics")]
-pub fn end_segment_metrics<F, RA>(state: &mut VmExecState<F, TracingMemory, TracegenCtx<RA>>)
+pub fn end_segment_metrics<F, RA>(state: &mut VmExecState<F, TracingMemory, PreflightCtx<RA>>)
 where
     F: Clone + Send + Sync,
     RA: Arena,
