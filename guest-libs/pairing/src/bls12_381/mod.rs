@@ -4,7 +4,7 @@ use core::ops::Neg;
 
 use openvm_algebra_guest::IntMod;
 use openvm_algebra_moduli_macros::moduli_declare;
-use openvm_ecc_guest::{weierstrass::IntrinsicCurve, CyclicGroup, Group};
+use openvm_ecc_guest::{CyclicGroup, Group, IntrinsicCurve};
 
 mod fp12;
 mod fp2;

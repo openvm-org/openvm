@@ -1,0 +1,61 @@
+# Twisted Edwards Elliptic Curve Cryptography
+
+The OpenVM Twisted Edwards Elliptic Curve Cryptography Extension provides support for twisted Edwards elliptic curve operations through the `openvm-ecc-guest` crate.
+
+Developers can enable arbitrary twisted Edwards curves by configuring this extension with the modulus for the coordinate field and the coefficients in the curve equation. A preset configuration for the ed25519 curve is provided in the `ed25519` module, enabled by the `ed25519` feature.
+
+## Available traits and methods
+
+- `Group` trait:
+  This represents an element of a [group](<https://en.wikipedia.org/wiki/Group_(mathematics)>) where the operation is addition. Therefore the trait includes functions for `add`, `sub`, and `double`.
+
+  - `IDENTITY` is the identity element of the group.
+
+- `CyclicGroup` trait:
+  It's a group that has a generator, so it defines `GENERATOR` and `NEG_GENERATOR`.
+
+- `TwistedEdwardsPoint` trait:
+  It represents an affine point on a twisted Edwards elliptic curve and it extends `Group`.
+
+  - `Coordinate` type is the type of the coordinates of the point, and it implements `IntMod`.
+  - `x()`, `y()` are used to get the affine coordinates
+  - `from_xy` is a constructor for the point, which checks if the point is on the affine curve.
+  - The point supports elliptic curve operations through the intrinsic function `add_impl`.
+  - `decompress`: Sometimes a twisted Edwards elliptic curve point is compressed and represented by its `y` coordinate and the odd/even parity of the `x` coordinate. `decompress` is used to decompress the point back to `(x, y)`.
+
+- `msm`: for multi-scalar multiplication.
+
+## Macros
+
+For twisted Edwards elliptic curve cryptography, the `openvm-te-guest` crate provides macros similar to those in [`openvm-algebra-guest`](/book/acceleration-using-extensions/algebra):
+
+1. **Declare**: Use `te_declare!` to define elliptic curves over the previously declared moduli. For example:
+
+```rust
+te_declare! {
+    Ed25519Point { mod_type = Ed25519Coord, a = Ed25519_A, d = Ed25519_D },
+}
+```
+
+Each declared curve must specify the `mod_type` (implementing `IntMod`) and constants `a` and `d` for the twisted Edwards curve equation \\(ax2 + y^2 = 1 + dx^2 y^2 \\).
+This creates `Ed25519Point` struct which implements the `Group` and `TwistedEdwardsPoint` traits. The underlying memory layout of the struct uses the memory layout of the `Ed25519Coord` struct.
+
+2. **Init**: Called once, the [`openvm::init!` macro](/book/acceleration-using-extensions/overview#automating-the-init-step) produces a call to `te_init!` that enumerates these curves and allows the compiler to produce optimized instructions:
+
+```rust
+openvm::init!();
+/* This expands to
+te_init! {
+    "Ed25519Point",
+}
+*/
+```
+
+**Summary**:
+
+- `te_declare!`: Declares elliptic curve structures.
+- `init!`: Initializes them once, linking them to the underlying moduli.
+
+To use elliptic curve operations on a struct defined with `te_declare!`, it is expected that the struct for the curve's coordinate field was defined using `moduli_declare!`. In particular, the coordinate field needs to be initialized and set up as described in the [algebra extension](/book/acceleration-using-extensions/algebra) chapter.
+
+For the basic operations provided by the `TwistedEdwardsPoint` trait, the scalar field is not needed. However, if you wish to use pairing operations with the [pairing extension](/book/acceleration-using-extensions/elliptic-curve-pairing), the scalar field must also be declared, initialized, and set up.

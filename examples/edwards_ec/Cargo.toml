@@ -1,0 +1,27 @@
+[package]
+name = "ecc-example"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]
+members = []
+
+[dependencies]
+openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
+    "std",
+] }
+openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
+openvm-te-guest = { git = "https://github.com/openvm-org/openvm.git", features = ["ed25519"]}
+hex-literal = { version = "0.4.1", default-features = false }
+serde = { version = "1.0", default-features = false, features = [ "derive" ] }
+num-bigint = { version = "0.4.6", default-features = false }
+
+[features]
+default = []
+
+# remove this if copying example outside of monorepo
+[patch."https://github.com/openvm-org/openvm.git"]
+openvm = { path = "../../crates/toolchain/openvm" }
+openvm-algebra-guest = { path = "../../extensions/algebra/guest" }
+openvm-te-guest = { path = "../../extensions/edwards_ec/guest" }
+k256 = { path = "../../guest-libs/k256" }

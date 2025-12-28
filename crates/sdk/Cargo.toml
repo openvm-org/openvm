@@ -16,6 +16,8 @@ openvm-bigint-transpiler = { workspace = true }
 openvm-build = { workspace = true }
 openvm-ecc-circuit = { workspace = true }
 openvm-ecc-transpiler = { workspace = true }
+openvm-te-circuit = { workspace = true }
+openvm-te-transpiler = { workspace = true }
 openvm-keccak256-circuit = { workspace = true }
 openvm-keccak256-transpiler = { workspace = true }
 openvm-sha2-circuit = { workspace = true }
@@ -91,6 +93,7 @@ tco = [
     "openvm-bigint-circuit/tco",
     "openvm-algebra-circuit/tco",
     "openvm-ecc-circuit/tco",
+    "openvm-te-circuit/tco",
     "openvm-pairing-circuit/tco",
 ]
 aot = [
@@ -102,6 +105,7 @@ aot = [
     "openvm-bigint-circuit/aot",
     "openvm-algebra-circuit/aot",
     "openvm-ecc-circuit/aot",
+    "openvm-te-circuit/aot",
     "openvm-pairing-circuit/aot",
 ]
 unprotected = ["openvm-circuit/unprotected"]
@@ -128,6 +132,7 @@ cuda = [
     "openvm-algebra-circuit/cuda",
     "openvm-bigint-circuit/cuda",
     "openvm-ecc-circuit/cuda",
+    "openvm-te-circuit/cuda",
     "openvm-keccak256-circuit/cuda",
     "openvm-sha2-circuit/cuda",
     "openvm-pairing-circuit/cuda",

@@ -4,8 +4,8 @@ use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
 use openvm_algebra_moduli_macros::moduli_declare;
 use openvm_ecc_guest::{
-    weierstrass::{CachedMulTable, IntrinsicCurve, WeierstrassPoint},
-    CyclicGroup, Group,
+    weierstrass::{CachedMulTable, WeierstrassPoint},
+    CyclicGroup, Group, IntrinsicCurve,
 };
 use openvm_ecc_sw_macros::sw_declare;
 
