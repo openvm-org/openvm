@@ -1,4 +1,4 @@
-# `openvm-sw-macros`
+# `openvm-ecc-sw-macros`
 
 Procedural macros for use in guest program to generate short Weierstrass elliptic curve struct with custom intrinsics for compile-time modulus.
 
@@ -93,7 +93,7 @@ mod openvm_intrinsics_ffi_2 {
 
 3. Again, if using the Rust bindings, then the `sw_setup_extern_func_*` function for every curve is automatically called on first use of any of the curve's intrinsics.
 
-4. The order of the items in `sw_init!` **must match** the order of the moduli in the chip configuration -- more specifically, in the modular extension parameters (the order of `CurveConfig`s in `EccExtension::supported_sw_curves`, which is usually defined with the whole `app_vm_config` in the `openvm.toml` file).
+4. The order of the items in `sw_init!` **must match** the order of the moduli in the chip configuration -- more specifically, in the modular extension parameters (the order of `CurveConfig`s in `WeierstrassExtension::supported_sw_curves`, which is usually defined with the whole `app_vm_config` in the `openvm.toml` file).
 
 5. Note that, due to the nature of function names, the name of the struct used in `sw_init!` must be the same as in `sw_declare!`. To illustrate, the following code will **fail** to compile:
 

@@ -18,7 +18,7 @@ pub(crate) fn horizen_to_p3_babybear(horizen_babybear: HorizenBabyBear) -> BabyB
 }
 
 pub(crate) fn horizen_round_consts() -> Poseidon2Constants<BabyBear> {
-    let p3_rc16: Vec<Vec<_>> = RC16
+    let p3_rc16: Vec<Vec<BabyBear>> = RC16
         .iter()
         .map(|round| {
             round
@@ -29,10 +29,18 @@ pub(crate) fn horizen_round_consts() -> Poseidon2Constants<BabyBear> {
         .collect();
     let p_end = BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS + BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS;
 
+    let beginning_full_round_constants: [[BabyBear; POSEIDON2_WIDTH];
+        BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS] = from_fn(|i| p3_rc16[i].clone().try_into().unwrap());
+    let partial_round_constants: [BabyBear; BABY_BEAR_POSEIDON2_PARTIAL_ROUNDS] =
+        from_fn(|i| p3_rc16[i + BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS][0]);
+    let ending_full_round_constants: [[BabyBear; POSEIDON2_WIDTH];
+        BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS] =
+        from_fn(|i| p3_rc16[i + p_end].clone().try_into().unwrap());
+
     Poseidon2Constants {
-        beginning_full_round_constants: from_fn(|i| p3_rc16[i].clone().try_into().unwrap()),
-        partial_round_constants: from_fn(|i| p3_rc16[i + BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS][0]),
-        ending_full_round_constants: from_fn(|i| p3_rc16[i + p_end].clone().try_into().unwrap()),
+        beginning_full_round_constants,
+        partial_round_constants,
+        ending_full_round_constants,
     }
 }
 

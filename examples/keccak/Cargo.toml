@@ -7,7 +7,7 @@ edition = "2021"
 members = []
 
 [dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git", branch = "develop", features = [
+openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
     "std",
 ] }
 openvm-keccak256 = { git = "https://github.com/openvm-org/openvm.git" }

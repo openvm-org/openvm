@@ -3,7 +3,7 @@ use openvm_instructions::{
 };
 use openvm_instructions_derive::LocalOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_te_guest::{TeBaseFunct7, TE_FUNCT3, TE_OPCODE};
+use openvm_te_guest::{TeBaseFunct7, OPCODE, TE_FUNCT3};
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
 use rrs_lib::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
@@ -24,15 +24,6 @@ pub struct EdwardsTranspilerExtension;
 
 impl<F: PrimeField32> TranspilerExtension<F> for EdwardsTranspilerExtension {
     fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
-        self.process_edwards_instruction(instruction_stream)
-    }
-}
-
-impl EdwardsTranspilerExtension {
-    fn process_edwards_instruction<F: PrimeField32>(
-        &self,
-        instruction_stream: &[u32],
-    ) -> Option<TranspilerOutput<F>> {
         if instruction_stream.is_empty() {
             return None;
         }
@@ -40,7 +31,7 @@ impl EdwardsTranspilerExtension {
         let opcode = (instruction_u32 & 0x7f) as u8;
         let funct3 = ((instruction_u32 >> 12) & 0b111) as u8;
 
-        if opcode != TE_OPCODE {
+        if opcode != OPCODE {
             return None;
         }
         if funct3 != TE_FUNCT3 {

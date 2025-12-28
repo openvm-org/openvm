@@ -303,7 +303,7 @@ pub fn te_init(input: TokenStream) -> TokenStream {
             #[no_mangle]
             extern "C" fn #add_extern_func(rd: usize, rs1: usize, rs2: usize) {
                 openvm::platform::custom_insn_r!(
-                    opcode = TE_OPCODE,
+                    opcode = OPCODE,
                     funct3 = TE_FUNCT3 as usize,
                     funct7 = TeBaseFunct7::TeAdd as usize + #ec_idx
                         * (TeBaseFunct7::TWISTED_EDWARDS_MAX_KINDS as usize),
@@ -319,7 +319,7 @@ pub fn te_init(input: TokenStream) -> TokenStream {
                 {
 
                     openvm::platform::custom_insn_r!(
-                        opcode = ::openvm_te_guest::TE_OPCODE,
+                        opcode = ::openvm_te_guest::OPCODE,
                         funct3 = ::openvm_te_guest::TE_FUNCT3 as usize,
                         funct7 = ::openvm_te_guest::TeBaseFunct7::TeSetup as usize
                             + #ec_idx
@@ -337,7 +337,7 @@ pub fn te_init(input: TokenStream) -> TokenStream {
         #[allow(non_snake_case)]
         #[cfg(target_os = "zkvm")]
         mod openvm_intrinsics_ffi_2_te {
-            use ::openvm_te_guest::{TE_OPCODE, TE_FUNCT3, TeBaseFunct7};
+            use ::openvm_te_guest::{OPCODE, TE_FUNCT3, TeBaseFunct7};
 
             #(#externs)*
         }

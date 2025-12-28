@@ -1,4 +1,4 @@
-use openvm_ecc_guest::{SwBaseFunct7, SW_FUNCT3, SW_OPCODE};
+use openvm_ecc_guest::{SwBaseFunct7, OPCODE, SW_FUNCT3};
 use openvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, VmOpcode,
 };
@@ -26,15 +26,6 @@ pub struct EccTranspilerExtension;
 
 impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
     fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>> {
-        self.process_weierstrass_instruction(instruction_stream)
-    }
-}
-
-impl EccTranspilerExtension {
-    fn process_weierstrass_instruction<F: PrimeField32>(
-        &self,
-        instruction_stream: &[u32],
-    ) -> Option<TranspilerOutput<F>> {
         if instruction_stream.is_empty() {
             return None;
         }
@@ -42,7 +33,7 @@ impl EccTranspilerExtension {
         let opcode = (instruction_u32 & 0x7f) as u8;
         let funct3 = ((instruction_u32 >> 12) & 0b111) as u8;
 
-        if opcode != SW_OPCODE {
+        if opcode != OPCODE {
             return None;
         }
         if funct3 != SW_FUNCT3 {
@@ -76,14 +67,18 @@ impl EccTranspilerExtension {
                 ))
             } else {
                 let global_opcode = match SwBaseFunct7::from_repr(base_funct7) {
-                    Some(SwBaseFunct7::SwAddNe) => Rv32WeierstrassOpcode::EC_ADD_NE.global_opcode(),
+                    Some(SwBaseFunct7::SwAddNe) => {
+                        Rv32WeierstrassOpcode::EC_ADD_NE as usize
+                            + Rv32WeierstrassOpcode::CLASS_OFFSET
+                    }
                     Some(SwBaseFunct7::SwDouble) => {
                         assert!(dec_insn.rs2 == 0);
-                        Rv32WeierstrassOpcode::EC_DOUBLE.global_opcode()
+                        Rv32WeierstrassOpcode::EC_DOUBLE as usize
+                            + Rv32WeierstrassOpcode::CLASS_OFFSET
                     }
                     _ => unimplemented!(),
                 };
-                let global_opcode = global_opcode.as_usize() + curve_idx_shift;
+                let global_opcode = global_opcode + curve_idx_shift;
                 Some(from_r_type(global_opcode, 2, &dec_insn, true))
             }
         };

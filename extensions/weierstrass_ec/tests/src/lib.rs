@@ -137,8 +137,7 @@ mod tests {
                     b: BigUint::from_radix_be(&hex!("b4050a850c04b3abf54132565044b0b7d7bfd8ba270b39432355ffb4"), 256)
                         .unwrap(),
                 },
-            ]
-        );
+            ]);
 
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
@@ -146,7 +145,6 @@ mod tests {
             ["k256"],
             &config,
         )?;
-
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()

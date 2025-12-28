@@ -22,7 +22,7 @@ pub mod edwards;
 pub mod ed25519;
 
 /// This is custom-1 defined in RISC-V spec document
-pub const TE_OPCODE: u8 = 0x2b;
+pub const OPCODE: u8 = 0x2b;
 pub const TE_FUNCT3: u8 = 0b100;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]

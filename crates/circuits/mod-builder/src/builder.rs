@@ -418,7 +418,6 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
         for i in 0..self.constraints.len() {
             let expr = self.constraints[i]
                 .evaluate_overflow_expr::<AB>(&inputs, &vars, &constants, &flags);
-
             self.check_carry_mod_to_zero.eval(
                 builder,
                 (

@@ -451,11 +451,11 @@ macro_rules! impl_sw_group_ops {
                 self.double_assign_impl::<true>();
             }
 
-            // Note: It was found that implementing `is_identity` in group.rs as a default
-            // implementation increases the cycle count by 50% on the ecrecover benchmark. For
-            // this reason, we implement it here instead. We hypothesize that this is due to
-            // compiler optimizations that are not possible when the `is_identity` function is
-            // defined in a different source file.
+            // This implementation is the same as the default implementation in the `Group` trait,
+            // but it was found that overriding the default implementation reduced the cycle count
+            // by 50% on the ecrecover benchmark.
+            // We hypothesize that this is due to compiler optimizations that are not possible when
+            // the `is_identity` function is defined in a different source file.
             #[inline(always)]
             fn is_identity(&self) -> bool {
                 self == &<Self as Group>::IDENTITY
