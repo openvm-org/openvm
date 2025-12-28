@@ -30,8 +30,6 @@ pub const TE_FUNCT3: u8 = 0b100;
 pub enum TeBaseFunct7 {
     TeAdd = 0,
     TeSetup,
-    TeHintDecompress,
-    TeHintNonQr,
 }
 
 impl TeBaseFunct7 {
