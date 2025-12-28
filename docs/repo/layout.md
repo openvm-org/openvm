@@ -20,7 +20,8 @@ The main components of the repository are:
     - [Keccak256](#keccak256)
     - [Big Integers](#big-integers)
     - [Algebra (Modular Arithmetic)](#algebra-modular-arithmetic)
-    - [Elliptic Curve Cryptography](#elliptic-curve-cryptography)
+    - [Elliptic Curve Cryptography (with short Weierstrass curves)](#short-weierstrass-elliptic-curve-cryptography)
+    - [Elliptic Curve Cryptography (with twisted Edwards curves)](#twisted-edwards-elliptic-curve-cryptography)
     - [Elliptic Curve Pairing](#elliptic-curve-pairing)
 
 ### Documentation
@@ -87,6 +88,7 @@ The toolchain, ISA, and VM are simultaneously extendable. All non-system functio
 - [`openvm-algebra-moduli-macros`](../../extensions/algebra/moduli-macros): Procedural macros for use in guest program to generate modular arithmetic struct with custom intrinsics for compile-time modulus.
 - [`openvm-algebra-complex-macros`](../../extensions/algebra/complex-macros): Procedural macros for use in guest program to generate complex field struct with custom intrinsics for compile-time modulus.
 - [`openvm-ecc-sw-macros`](../../extensions/ecc/sw-macros): Procedural macros for use in guest program to generate short Weierstrass curve struct with custom intrinsics for compile-time curve.
+- [`openvm-ecc-te-macros`](../../extensions/ecc/sw-macros): Procedural macros for use in guest program to generate twisted Edwards curve struct with custom intrinsics for compile-time curve.
 
 #### RV32IM
 
@@ -123,12 +125,19 @@ The toolchain, ISA, and VM are simultaneously extendable. All non-system functio
 - [`openvm-algebra-guest`](../../extensions/algebra/guest): Guest library with traits for modular arithmetic and complex field extension operations.
 - [`openvm-algebra-tests`](../../extensions/algebra/tests): Integration tests for the algebra extension.
 
-#### Elliptic Curve Cryptography
+#### Short Weierstrass Elliptic Curve Cryptography
 
-- [`openvm-ecc-circuit`](../../extensions/ecc/circuit): Circuit extension for Weierstrass elliptic curve operations for arbitrary compile-time curve.
-- [`openvm-ecc-transpiler`](../../extensions/ecc/transpiler): Transpiler extension for Weierstrass elliptic curve operations for arbitrary compile-time curve.
-- [`openvm-ecc-guest`](../../extensions/ecc/guest): Guest library with traits for elliptic curve cryptography. Includes implementations of ECDSA and multi-scalar multiplication.
-- [`openvm-ecc-tests`](../../extensions/ecc/tests): Integration tests for the elliptic curve cryptography extension.
+- [`openvm-ecc-circuit`](../../extensions/ecc/circuit): Circuit extension for short Weierstrass elliptic curve operations for arbitrary compile-time curve.
+- [`openvm-ecc-transpiler`](../../extensions/ecc/transpiler): Transpiler extension for short Weierstrass elliptic curve operations for arbitrary compile-time curve.
+- [`openvm-ecc-guest`](../../extensions/ecc/guest): Guest library with traits for short Weierstrass elliptic curve cryptography. Includes implementations of ECDSA and multi-scalar multiplication.
+- [`openvm-ecc-tests`](../../extensions/ecc/tests): Integration tests for the short Weierstrass elliptic curve cryptography extension.
+
+#### Twisted Edwards Elliptic Curve Cryptography
+
+- [`openvm-te-circuit`](../../extensions/ecc/circuit): Circuit extension for twisted Edwards elliptic curve operations for arbitrary compile-time curve.
+- [`openvm-te-transpiler`](../../extensions/ecc/transpiler): Transpiler extension for twisted Edwards elliptic curve operations for arbitrary compile-time curve.
+- [`openvm-te-guest`](../../extensions/ecc/guest): Guest library with traits for twisted Edwards elliptic curve cryptography. Includes an implementation of multi-scalar multiplication.
+- [`openvm-te-tests`](../../extensions/ecc/tests): Integration tests for the twisted Edwards elliptic curve cryptography extension.
 
 #### Elliptic Curve Pairing
 

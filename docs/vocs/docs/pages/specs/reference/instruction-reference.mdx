@@ -184,22 +184,25 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | Algebra | `Fp2Opcode::DIV` | DIV\<Fp2\> |
 | Algebra | `Fp2Opcode::SETUP_MULDIV` | SETUP_MULDIV\<Fp2\> |
 
-## Elliptic Curve Extension
+## Short Weierstrass Elliptic Curve Extension
 
 #### Instructions
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
-| Elliptic Curve | `Rv32WeierstrassOpcode::EC_ADD_NE` | EC_ADD_NE\<C\> |
-| Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_ADD_NE` | SETUP_EC_ADD_NE\<C\> |
-| Elliptic Curve | `Rv32WeierstrassOpcode::EC_DOUBLE` | EC_DOUBLE\<C\> |
-| Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_DOUBLE` | SETUP_EC_DOUBLE\<C\> |
+| Short Weierstrass Elliptic Curve | `Rv32WeierstrassOpcode::EC_ADD_NE` | EC_ADD_NE\<C\> |
+| Short Weierstrass Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_ADD_NE` | SETUP_EC_ADD_NE\<C\> |
+| Short Weierstrass Elliptic Curve | `Rv32WeierstrassOpcode::EC_DOUBLE` | EC_DOUBLE\<C\> |
+| Short Weierstrass Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_DOUBLE` | SETUP_EC_DOUBLE\<C\> |
 
-#### Phantom Sub-Instructions
+## Twisted Edwards Elliptic Curve Extension
 
-| VM Extension | `PhantomDiscriminant` | ISA Phantom Sub-Instruction |
+#### Instructions
+
+| VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
-| Elliptic Curve | `EccPhantom::HintDecompress` | HintDecompress |
+| Twisted Edwards Elliptic Curve | `Rv32TeOpcode::TE_ADD` | TE_ADD\<C\> |
+| Twisted Edwards Elliptic Curve | `Rv32TeOpcode::SETUP_TE_ADD` | SETUP_TE_ADD\<C\> |
 
 ## Pairing Extension
 
