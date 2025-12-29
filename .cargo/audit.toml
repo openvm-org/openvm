@@ -1,4 +1,9 @@
 [advisories]
-  # an older version of tracing-subscriber 0.2.25 is used in ark-bn254 but it is an optional dependency that is not included in the crate graph even with all features enabled
-  # unfortunately cargo audit includes optional dependencies from Cargo.lock even if they are not in the crate graph
-  ignore = ["RUSTSEC-2025-0055"]
+  ignore = [
+    # an older version of tracing-subscriber 0.2.25 is used in ark-bn254 but it is an optional dependency that is not included in the crate graph even with all features enabled
+    # unfortunately cargo audit includes optional dependencies from Cargo.lock even if they are not in the crate graph
+    "RUSTSEC-2025-0055",
+    # ruint has a bug in the `reciprocal_mg10` function, which we do not use.
+    # See: https://rustsec.org/advisories/RUSTSEC-2025-0137
+    "RUSTSEC-2025-0137",
+  ]
