@@ -6811,6 +6811,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-new-keccak256"
+version = "1.4.2"
+dependencies = [
+ "openvm-new-keccak256-guest",
+ "tiny-keccak",
+]
+
+[[package]]
 name = "openvm-new-keccak256-circuit"
 version = "1.4.2"
 dependencies = [
