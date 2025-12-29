@@ -1,4 +1,11 @@
 [advisories]
+  ignore = [
   # an older version of tracing-subscriber 0.2.25 is used in ark-bn254 but it is an optional dependency that is not included in the crate graph even with all features enabled
   # unfortunately cargo audit includes optional dependencies from Cargo.lock even if they are not in the crate graph
-  ignore = ["RUSTSEC-2025-0055"]
+  "RUSTSEC-2025-0055",
+  # all host ruint dependencies have been updated to >=1.17.1.
+  # the guest library ruint patch is currently pinned to 1.14 and will be updated in a future release.
+  # - the advisory concerns undefined behavior (UB) which may trigger memory corruption in a previously marked safe function `reciprocal_mg10`. The upstream fix is to change the safe function to `unsafe`.
+  # - the advisory does not affect correctness of existing code.
+  "RUSTSEC-2025-0137"
+  ]
