@@ -5,5 +5,7 @@
   "RUSTSEC-2025-0055",
   # all host ruint dependencies have been updated to >=1.17.1.
   # the guest library ruint patch is currently pinned to 1.14 and will be updated in a future release.
+  # - the advisory concerns undefined behavior (UB) which may trigger memory corruption in a previously marked safe function `reciprocal_mg10`. The upstream fix is to change the safe function to `unsafe`.
+  # - the advisory does not affect correctness of existing code.
   "RUSTSEC-2025-0137"
   ]
