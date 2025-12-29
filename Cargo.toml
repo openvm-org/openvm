@@ -68,6 +68,7 @@ members = [
     "guest-libs/k256/",
     "guest-libs/p256/",
     "guest-libs/keccak256/",
+    "guest-libs/new_keccak256/",
     "guest-libs/pairing/",
     "guest-libs/ruint/",
     "guest-libs/sha2/",
