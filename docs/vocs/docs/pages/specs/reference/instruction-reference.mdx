@@ -184,6 +184,14 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | Algebra | `Fp2Opcode::DIV` | DIV\<Fp2\> |
 | Algebra | `Fp2Opcode::SETUP_MULDIV` | SETUP_MULDIV\<Fp2\> |
 
+#### Phantom Sub-Instructions
+
+| VM Extension | `PhantomDiscriminant` | ISA Phantom Sub-Instruction |
+| ------------- | ---------- | ------------- |
+| Algebra | `ModularPhantom::HintNonQr` | HintNonQr\<N\> |
+| Algebra | `ModularPhantom::HintSqrt` | HintSqrt\<N\> |
+
+
 ## Short Weierstrass Elliptic Curve Extension
 
 #### Instructions
@@ -203,13 +211,3 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | ------------- | ---------- | ------------- |
 | Twisted Edwards Elliptic Curve | `Rv32TeOpcode::TE_ADD` | TE_ADD\<C\> |
 | Twisted Edwards Elliptic Curve | `Rv32TeOpcode::SETUP_TE_ADD` | SETUP_TE_ADD\<C\> |
-
-## Pairing Extension
-
-#### Instructions
-
-#### Phantom Sub-Instructions
-
-| VM Extension | `PhantomDiscriminant` | ISA Phantom Sub-Instruction |
-| ------------- | ---------- | ------------- |
-| Pairing | `PairingPhantom::HintDecompress` | HintDecompress |
