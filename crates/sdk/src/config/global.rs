@@ -475,7 +475,11 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for SdkVmGpuBuilder {
             VmProverExtension::<E, _, _>::extend_prover(&Keccak256GpuProverExt, keccak, inventory)?;
         }
         if let Some(new_keccak) = &config.new_keccak {
-            VmProverExtension::<E, _, _>::extend_prover(&NewKeccak256GpuProverExt, new_keccak, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(
+                &NewKeccak256GpuProverExt,
+                new_keccak,
+                inventory,
+            )?;
         }
         if let Some(sha256) = &config.sha256 {
             VmProverExtension::<E, _, _>::extend_prover(&Sha256GpuProverExt, sha256, inventory)?;
