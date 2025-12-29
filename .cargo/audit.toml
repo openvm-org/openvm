@@ -1,8 +1,9 @@
 [advisories]
-  # RUSTSEC-2025-0055:
-  # - an older version of tracing-subscriber 0.2.25 is used in ark-bn254 but it is an optional dependency that is not included in the crate graph even with all features enabled
-  # - unfortunately cargo audit includes optional dependencies from Cargo.lock even if they are not in the crate graph
-  # RUSTSEC-2025-0137:
-  # - all host ruint dependencies have been updated to >=1.17.1
-  # - the guest library ruint patch is currently pinned to 1.14 and will be updated in a future release
-  ignore = ["RUSTSEC-2025-0055", "RUSTSEC-2025-0137"]
+  ignore = [
+  # an older version of tracing-subscriber 0.2.25 is used in ark-bn254 but it is an optional dependency that is not included in the crate graph even with all features enabled
+  # unfortunately cargo audit includes optional dependencies from Cargo.lock even if they are not in the crate graph
+  "RUSTSEC-2025-0055",
+  # all host ruint dependencies have been updated to >=1.17.1.
+  # the guest library ruint patch is currently pinned to 1.14 and will be updated in a future release.
+  "RUSTSEC-2025-0137"
+  ]
