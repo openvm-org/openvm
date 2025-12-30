@@ -12,8 +12,6 @@ openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
 ] }
 openvm-keccak256 = { git = "https://github.com/openvm-org/openvm.git" }
 hex = { version = "0.4.3" }
-tiny-keccak = { git = "https://github.com/openvm-org/tiny-keccak.git", features = ["keccak"] }
-openvm-new-keccak256-guest = { path = "../../extensions/new-keccak256/guest" }
 
 [features]
 default = []
@@ -22,4 +20,3 @@ default = []
 [patch."https://github.com/openvm-org/openvm.git"]
 openvm = { path = "../../crates/toolchain/openvm" }
 openvm-keccak256 = { path = "../../guest-libs/keccak256" }
-
