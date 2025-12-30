@@ -14,7 +14,6 @@ pub trait TranspilerExtension<F> {
     fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>>;
 }
 
-#[derive(Debug)]
 pub struct TranspilerOutput<F> {
     pub instructions: Vec<Option<Instruction<F>>>,
     pub used_u32s: usize,
