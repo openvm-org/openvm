@@ -275,11 +275,7 @@ mod aot {
                 MemoryCtx<DEFAULT_PAGE_BITS>,
                 page_indices_since_checkpoint_len
             );
-        let continuations_enabled_offset =
-            memory_ctx_offset + offset_of!(MemoryCtx<DEFAULT_PAGE_BITS>, continuations_enabled);
         let inserted_label = format!(".asm_execute_pc_{pc}_inserted");
-        let done_label = format!(".asm_execute_pc_{pc}_done");
-        let skip_append_label = format!(".asm_execute_pc_{pc}_skip_append");
         // The next section is the implementation of `BitSet::insert` in ASM.
         // pub fn insert(&mut self, index: usize) -> bool {
         //     let word_index = index >> 6;
@@ -326,11 +322,6 @@ mod aot {
         // self.addr_space_access_count[address_space] += 1;
         asm_str += &format!("    add dword ptr [{reg1} + {address_space} * 4], 1\n");
         asm_str += &format!("{inserted_label}:\n");
-        // Skip append if continuations are disabled
-        asm_str += &format!(
-            "    cmp byte ptr [{REG_EXEC_STATE_PTR} + {continuations_enabled_offset}], 0\n"
-        );
-        asm_str += &format!("    je {skip_append_label}\n");
         // Append page_id to page_indices_since_checkpoint
         asm_str += &format!("    pop {ptr_reg}\n");
         asm_str += &format!(
@@ -347,11 +338,6 @@ mod aot {
         asm_str += &format!(
             "    mov [{REG_EXEC_STATE_PTR} + {page_indices_since_checkpoint_len_offset}], {reg1}\n"
         );
-        asm_str += &format!("    jmp {done_label}\n");
-        asm_str += &format!("{skip_append_label}:\n");
-        // Discard pushed page_id
-        asm_str += &format!("    pop {ptr_reg}\n");
-        asm_str += &format!("{done_label}:\n");
 
         Ok(asm_str)
     }

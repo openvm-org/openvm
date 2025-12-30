@@ -3,7 +3,8 @@ use openvm_instructions::riscv::{RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGI
 
 use crate::{arch::SystemConfig, system::memory::dimensions::MemoryDimensions};
 
-const MAX_MEMORY_OPS_PER_INSN: usize = 1 << 16;
+/// Upper bound on memory operations per instruction. Used for buffer allocation.
+pub const MAX_MEMORY_OPS_PER_INSN: usize = 1 << 16;
 
 #[derive(Clone, Debug)]
 pub struct BitSet {
@@ -126,12 +127,8 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
 
         let bitset_size = 1 << (merkle_height.saturating_sub(PAGE_BITS));
         let addr_space_size = (1 << memory_dimensions.addr_space_height) + 1;
-        let segment_check_insns = if segment_check_insns == u64::MAX {
-            0
-        } else {
-            segment_check_insns as usize
-        };
-        let page_indices_since_checkpoint_cap = segment_check_insns * MAX_MEMORY_OPS_PER_INSN;
+        let page_indices_since_checkpoint_cap =
+            Self::calculate_checkpoint_capacity(segment_check_insns);
 
         Self {
             min_block_size_bits: config.memory_config.min_block_size_bits(),
@@ -149,6 +146,11 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
                 .into_boxed_slice(),
             page_indices_since_checkpoint_len: 0,
         }
+    }
+
+    #[inline(always)]
+    pub(super) fn calculate_checkpoint_capacity(segment_check_insns: u64) -> usize {
+        segment_check_insns as usize * MAX_MEMORY_OPS_PER_INSN
     }
 
     #[inline(always)]
@@ -198,16 +200,14 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
                 }
             }
 
-            if self.continuations_enabled {
-                // Append page_id to page_indices_since_checkpoint
-                let len = self.page_indices_since_checkpoint_len;
-                debug_assert!(len < self.page_indices_since_checkpoint.len());
-                // SAFETY: len is within bounds, and we extend length by 1 after writing.
-                unsafe {
-                    *self.page_indices_since_checkpoint.as_mut_ptr().add(len) = page_id;
-                }
-                self.page_indices_since_checkpoint_len = len + 1;
+            // Append page_id to page_indices_since_checkpoint
+            let len = self.page_indices_since_checkpoint_len;
+            debug_assert!(len < self.page_indices_since_checkpoint.len());
+            // SAFETY: len is within bounds, and we extend length by 1 after writing.
+            unsafe {
+                *self.page_indices_since_checkpoint.as_mut_ptr().add(len) = page_id;
             }
+            self.page_indices_since_checkpoint_len = len + 1;
         }
     }
 

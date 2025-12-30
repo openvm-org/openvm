@@ -49,7 +49,6 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
                 })
                 .unzip();
 
-        // Assert that the indices are correct
         let segmentation_ctx =
             SegmentationCtx::new(air_names, widths, interactions, config.segmentation_limits);
         let memory_ctx = MemoryCtx::new(config, segmentation_ctx.segment_check_insns);
@@ -80,11 +79,6 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             segmentation_ctx,
             suspend_on_segment: false,
         };
-        if !config.continuation_enabled {
-            // force single segment
-            ctx.segmentation_ctx.segment_check_insns = u64::MAX;
-            ctx.segmentation_ctx.instrets_until_check = u64::MAX;
-        }
 
         // Add merkle height contributions for all registers
         ctx.memory_ctx.add_register_merkle_heights();
@@ -98,9 +92,8 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         self.segmentation_ctx.set_max_trace_height(max_trace_height);
         let max_check_freq = (max_trace_height / 2) as u64;
         if max_check_freq < self.segmentation_ctx.segment_check_insns {
-            self.segmentation_ctx.segment_check_insns = max_check_freq;
+            self = self.with_segment_check_insns(max_check_freq);
         }
-        self.segmentation_ctx.instrets_until_check = self.segmentation_ctx.segment_check_insns;
         self
     }
 
@@ -111,6 +104,20 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
     pub fn with_max_interactions(mut self, max_interactions: usize) -> Self {
         self.segmentation_ctx.set_max_interactions(max_interactions);
+        self
+    }
+
+    pub fn with_segment_check_insns(mut self, segment_check_insns: u64) -> Self {
+        self.segmentation_ctx.segment_check_insns = segment_check_insns;
+        self.segmentation_ctx.instrets_until_check = segment_check_insns;
+
+        // Update memory context with new segment check instructions
+        let page_indices_since_checkpoint_cap =
+            MemoryCtx::<PAGE_BITS>::calculate_checkpoint_capacity(segment_check_insns);
+
+        self.memory_ctx.page_indices_since_checkpoint =
+            vec![0; page_indices_since_checkpoint_cap].into_boxed_slice();
+        self.memory_ctx.page_indices_since_checkpoint_len = 0;
         self
     }
 

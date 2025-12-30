@@ -68,8 +68,7 @@ pub struct SegmentationCtx {
     pub(crate) segmentation_limits: SegmentationLimits,
     pub instret: u64,
     pub instrets_until_check: u64,
-    #[getset(set_with = "pub")]
-    pub segment_check_insns: u64,
+    pub(super) segment_check_insns: u64,
     /// Checkpoint of trace heights at last known state where all thresholds satisfied
     pub(crate) checkpoint_trace_heights: Vec<u32>,
     /// Instruction count at the checkpoint
