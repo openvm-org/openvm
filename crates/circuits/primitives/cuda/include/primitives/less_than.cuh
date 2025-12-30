@@ -3,7 +3,7 @@
 #include "histogram.cuh"
 #include "fp_array.cuh"
 
-static const size_t AUX_LEN = 2;
+inline constexpr size_t AUX_LEN = 2;
 
 template <typename T, size_t AUX_LEN = AUX_LEN> struct LessThanAuxCols {
     T lower_decomp[AUX_LEN];
@@ -19,14 +19,14 @@ template <typename T, size_t NUM, size_t AUX_LEN = AUX_LEN> struct LessThanArray
 namespace AssertLessThan {
 /**
  * @brief Generates columns needed to constrain that x < y
- * 
+ *
  * @section Trace Context Parameters
  * @param rc Range checker histogram reference
  * @param max_bits Maximum number of bits the respresntation of x and y can be
  * @param x First value to compare (must be strictly less than y)
  * @param y Second value to compare
  * @param lower_decomp_len Number of columns needed to constrain x < y
- * 
+ *
  * @section Mutable Column Parameters
  * @param lower_decomp Columns used to constrain x < y
  */
@@ -45,14 +45,14 @@ __device__ __forceinline__ void generate_subrow(
 namespace IsLessThan {
 /**
  * @brief Generates columns needed to constrain that out_flag == (x < y)
- * 
+ *
  * @section Trace Context Parameters
  * @param rc Range checker histogram reference
  * @param max_bits Maximum number of bits the respresntation of x and y can be
  * @param x First value to compare
  * @param y Second value to compare
  * @param lower_decomp_len Number of columns needed to constrain out_flag == (x < y)
- * 
+ *
  * @section Mutable Column Parameters
  * @param lower_decomp Columns used to constrain out_flag == (x < y)
  * @param out_flag Boolean value equal to x < y
@@ -77,7 +77,7 @@ namespace IsLessThanArray {
 /**
  * @brief Generates columns needed to constrain that out_flag == (x < y),
  *        where x and y are represented by array_len limbs.
- * 
+ *
  * @section Trace Context Parameters
  * @param rc Range checker histogram reference
  * @param max_bits Maximum number of bits each limb of x and y can be
@@ -85,7 +85,7 @@ namespace IsLessThanArray {
  * @param y Second value to compare
  * @param array_len Number of limbs to represent x and y
  * @param aux_len Number of additional columns needed to constrain outflag == (x < y)
- * 
+ *
  * @section Mutable Column Parameters
  * @param diff_marker Array that marks the most significant limb difference in x and y
  * @param diff_inv Field inverse of the first differing y[i] - x[i], or 0
