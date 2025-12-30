@@ -1,14 +1,15 @@
 // [!region imports]
+use hex_literal::hex;
+use tiny_keccak::{Hasher, Keccak};
+
+#[cfg(target_os = "zkvm")]
+use openvm as _;
 // [!endregion imports]
 
 // [!region main]
-#[cfg(target_os = "zkvm")]
-use hex_literal::hex;
-use openvm as _;
 
 /// Vector of test cases for Keccak-256 hash function.
 /// Each test case consists of (input_bytes, expected_hash_result).
-#[cfg(target_os = "zkvm")]
 const KECCAK_TEST_CASES: &[(&[u8], [u8; 32])] = &[
     (
         b"",
@@ -147,25 +148,19 @@ const KECCAK_TEST_CASES: &[(&[u8], [u8; 32])] = &[
         hex!("f5392ee04880a0bd1336f30ee79b5c014a90728bf29f422dabb4ae6bc972f30b"),
     ),
 ];
-// todo: call the forked tiny keccak library once that is updated instead of directly calling the
-// keccak256_guest native functions
 pub fn main() {
-    #[cfg(target_os = "zkvm")]
-    {
-        for &(input, expected) in KECCAK_TEST_CASES {
-            let mut input = input.to_vec();
-            let mut output = [0u8; 32];
-            openvm_new_keccak256_guest::native_keccak256(
-                input.as_ptr(),
-                input.len(),
-                output.as_mut_ptr(),
-            );
-            assert_eq!(output, expected);
-        }
+    // Run the keccak tests for all targets
+    for &(input, expected) in KECCAK_TEST_CASES {
+        let mut output = [0u8; 32];
 
-        // let mut expected_output = [0u8; 32];
-        // openvm_keccak256::keccak256(&buffer);
-        // assert_eq!(output, expected_output);
+        // Using tiny-keccak API
+        let mut hasher = Keccak::v256();
+        hasher.update(input);
+        hasher.finalize(&mut output);
+
+        assert_eq!(output, expected);
     }
+
+    println!("All {} keccak256 test cases passed!", KECCAK_TEST_CASES.len());
 }
 // [!endregion main]
