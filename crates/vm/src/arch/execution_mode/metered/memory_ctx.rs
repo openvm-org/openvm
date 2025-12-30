@@ -190,6 +190,15 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         let end_page_id = ((end_block_id - 1) >> PAGE_BITS) + 1;
 
         for page_id in start_page_id..end_page_id {
+            // Append page_id to page_indices_since_checkpoint
+            let len = self.page_indices_since_checkpoint_len;
+            debug_assert!(len < self.page_indices_since_checkpoint.len());
+            // SAFETY: len is within bounds, and we extend length by 1 after writing.
+            unsafe {
+                *self.page_indices_since_checkpoint.as_mut_ptr().add(len) = page_id;
+            }
+            self.page_indices_since_checkpoint_len = len + 1;
+
             if self.page_indices.insert(page_id as usize) {
                 // SAFETY: address_space passed is usually a hardcoded constant or derived from an
                 // Instruction where it is bounds checked before passing
@@ -199,15 +208,6 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
                         .get_unchecked_mut(address_space as usize) += 1;
                 }
             }
-
-            // Append page_id to page_indices_since_checkpoint
-            let len = self.page_indices_since_checkpoint_len;
-            debug_assert!(len < self.page_indices_since_checkpoint.len());
-            // SAFETY: len is within bounds, and we extend length by 1 after writing.
-            unsafe {
-                *self.page_indices_since_checkpoint.as_mut_ptr().add(len) = page_id;
-            }
-            self.page_indices_since_checkpoint_len = len + 1;
         }
     }
 

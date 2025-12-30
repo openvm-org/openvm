@@ -288,8 +288,22 @@ mod aot {
         // }
         // self.page_indices_since_checkpoint.push(page_id);
 
-        // Start with `ptr_reg = index`
-        asm_str += &format!("    push {ptr_reg}\n");
+        // Append page_id to page_indices_since_checkpoint
+        asm_str += &format!(
+            "    mov {reg1}, [{REG_EXEC_STATE_PTR} + {page_indices_since_checkpoint_len_offset}]\n"
+        );
+        asm_str += &format!(
+            "    mov {reg2}, [{REG_EXEC_STATE_PTR} + {page_indices_since_checkpoint_ptr_offset}]\n"
+        );
+        let ptr_reg_32 = convert_x86_reg(ptr_reg, Width::W32).ok_or_else(|| {
+            AotError::Other(format!("unsupported ptr_reg for 32-bit store: {ptr_reg}"))
+        })?;
+        asm_str += &format!("    mov dword ptr [{reg2} + {reg1} * 4], {ptr_reg_32}\n");
+        asm_str += &format!("    add {reg1}, 1\n");
+        asm_str += &format!(
+            "    mov [{REG_EXEC_STATE_PTR} + {page_indices_since_checkpoint_len_offset}], {reg1}\n"
+        );
+
         // `reg1 = word_index`
         asm_str += &format!("    mov {reg1}, {ptr_reg}\n");
         asm_str += &format!("    shr {reg1}, 6\n");
@@ -322,22 +336,6 @@ mod aot {
         // self.addr_space_access_count[address_space] += 1;
         asm_str += &format!("    add dword ptr [{reg1} + {address_space} * 4], 1\n");
         asm_str += &format!("{inserted_label}:\n");
-        // Append page_id to page_indices_since_checkpoint
-        asm_str += &format!("    pop {ptr_reg}\n");
-        asm_str += &format!(
-            "    mov {reg1}, [{REG_EXEC_STATE_PTR} + {page_indices_since_checkpoint_len_offset}]\n"
-        );
-        asm_str += &format!(
-            "    mov {reg2}, [{REG_EXEC_STATE_PTR} + {page_indices_since_checkpoint_ptr_offset}]\n"
-        );
-        let ptr_reg_32 = convert_x86_reg(ptr_reg, Width::W32).ok_or_else(|| {
-            AotError::Other(format!("unsupported ptr_reg for 32-bit store: {ptr_reg}"))
-        })?;
-        asm_str += &format!("    mov dword ptr [{reg2} + {reg1} * 4], {ptr_reg_32}\n");
-        asm_str += &format!("    add {reg1}, 1\n");
-        asm_str += &format!(
-            "    mov [{REG_EXEC_STATE_PTR} + {page_indices_since_checkpoint_len_offset}], {reg1}\n"
-        );
 
         Ok(asm_str)
     }
