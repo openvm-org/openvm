@@ -21,7 +21,6 @@ pub trait TranspilerExtension<F> {
     }
 }
 
-#[derive(Debug)]
 pub struct TranspilerOutput<F> {
     pub instructions: Vec<Option<Instruction<F>>>,
     pub used_u32s: usize,
