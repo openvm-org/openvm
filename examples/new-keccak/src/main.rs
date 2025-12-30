@@ -1,9 +1,8 @@
 // [!region imports]
 use hex_literal::hex;
-use tiny_keccak::{Hasher, Keccak};
-
 #[cfg(target_os = "zkvm")]
 use openvm as _;
+use tiny_keccak::{Hasher, Keccak};
 // [!endregion imports]
 
 // [!region main]
@@ -161,6 +160,9 @@ pub fn main() {
         assert_eq!(output, expected);
     }
 
-    println!("All {} keccak256 test cases passed!", KECCAK_TEST_CASES.len());
+    println!(
+        "All {} keccak256 test cases passed!",
+        KECCAK_TEST_CASES.len()
+    );
 }
 // [!endregion main]
