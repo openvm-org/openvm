@@ -12,7 +12,7 @@ use crate::{
         },
         execution_mode::{metered::segment_ctx::SegmentationCtx, MeteredCtx, Segment},
         interpreter::{
-            alloc_pre_compute_buf, get_metered_pre_compute_instructions,
+            alloc_pre_compute_buf, check_termination, get_metered_pre_compute_instructions,
             get_metered_pre_compute_max_size, split_pre_compute_buf, PreComputeInstruction,
         },
         AotError, ExecutionError, ExecutorInventory, MeteredExecutor, StaticProgramError, Streams,
@@ -341,16 +341,21 @@ where
         from_state: VmState<F, GuestMemory>,
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
-        let vm_exec_state = VmExecState::new(from_state, ctx);
-        let vm_exec_state = self.execute_metered_until_suspend(vm_exec_state)?;
-        // handle execution error
-        match vm_exec_state.exit_code {
-            Ok(_) => Ok((
-                vm_exec_state.ctx.segmentation_ctx.segments,
-                vm_exec_state.vm_state,
-            )),
-            Err(e) => Err(e),
+        let mut exec_state = VmExecState::new(from_state, ctx);
+
+        loop {
+            exec_state = self.execute_metered_until_suspend(exec_state)?;
+            // The execution has terminated.
+            if exec_state.exit_code.is_ok() && exec_state.exit_code.as_ref().unwrap().is_some() {
+                break;
+            }
+            if exec_state.exit_code.is_err() {
+                return Err(exec_state.exit_code.unwrap_err());
+            }
         }
+        check_termination(exec_state.exit_code)?;
+        let VmExecState { vm_state, ctx, .. } = exec_state;
+        Ok((ctx.into_segments(), vm_state))
     }
 
     // TODO: implement execute_metered_until_suspend for AOT if needed
