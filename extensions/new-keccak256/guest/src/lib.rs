@@ -21,6 +21,15 @@ struct AlignedStackBuf<const N: usize> {
     data: [u8; N],
 }
 
+/// SAFETY: Caller must ensure:
+/// - buffer and input are aligned to MIN_ALIGN
+/// - len is a multiple of MIN_ALIGN
+#[cfg(target_os = "zkvm")]
+#[inline(always)]
+unsafe fn native_xorin_unchecked(buffer: *mut u8, input: *const u8, len: usize) {
+    __native_xorin(buffer, input, len);
+}
+
 #[cfg(target_os = "zkvm")]
 #[no_mangle]
 pub extern "C" fn native_xorin(buffer: *mut u8, input: *const u8, len: usize) {
@@ -28,29 +37,46 @@ pub extern "C" fn native_xorin(buffer: *mut u8, input: *const u8, len: usize) {
         return;
     }
     unsafe {
-        let aligned_buffer;
-        let aligned_input;
+        let buffer_aligned = buffer as usize % MIN_ALIGN == 0;
+        let input_aligned = input as usize % MIN_ALIGN == 0;
+        let len_aligned = len % MIN_ALIGN == 0;
+        let all_aligned = buffer_aligned && input_aligned && len_aligned;
 
-        let actual_buffer = if buffer as usize % MIN_ALIGN == 0 {
-            buffer
+        if all_aligned {
+            __native_xorin(buffer, input, len);
         } else {
-            aligned_buffer = AlignedBuf::new(buffer, len, MIN_ALIGN);
-            aligned_buffer.ptr
-        };
+            let adjusted_len = len.next_multiple_of(MIN_ALIGN);
+            let aligned_buffer;
+            let aligned_input;
 
-        let actual_input = if input as usize % MIN_ALIGN == 0 {
-            input
-        } else {
-            aligned_input = AlignedBuf::new(input, len, MIN_ALIGN);
-            aligned_input.ptr
-        };
+            let actual_buffer = if buffer_aligned && len_aligned {
+                buffer
+            } else {
+                aligned_buffer = AlignedBuf::new(buffer, adjusted_len, MIN_ALIGN);
+                aligned_buffer.ptr
+            };
 
-        __native_xorin(actual_buffer, actual_input, len);
+            let actual_input = if input_aligned && len_aligned {
+                input
+            } else {
+                aligned_input = AlignedBuf::new(input, adjusted_len, MIN_ALIGN);
+                aligned_input.ptr
+            };
 
-        if buffer as usize % MIN_ALIGN != 0 {
-            core::ptr::copy_nonoverlapping(actual_buffer as *const u8, buffer, len);
+            __native_xorin(actual_buffer, actual_input, adjusted_len);
+
+            if !buffer_aligned || !len_aligned {
+                core::ptr::copy_nonoverlapping(actual_buffer as *const u8, buffer, len);
+            }
         }
     }
+}
+
+/// SAFETY: Caller must ensure buffer is aligned to MIN_ALIGN
+#[cfg(target_os = "zkvm")]
+#[inline(always)]
+unsafe fn native_keccakf_unchecked(buffer: *mut u8) {
+    __native_keccakf(buffer);
 }
 
 #[cfg(target_os = "zkvm")]
@@ -86,20 +112,21 @@ pub extern "C" fn native_keccakf(buffer: *mut u8) {
 #[cfg(target_os = "zkvm")]
 #[no_mangle]
 pub extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8) {
-    // SAFETY: assuming safety assumptions of the inputs, we handle all cases where `bytes` or
-    // `output` are not aligned to 4 bytes.
     unsafe {
+        let bytes_aligned = bytes as usize % MIN_ALIGN == 0;
+        let output_aligned = output as usize % MIN_ALIGN == 0;
+
         let aligned_bytes;
         let aligned_output;
 
-        let actual_bytes = if len == 0 || bytes as usize % MIN_ALIGN == 0 {
+        let actual_bytes = if len == 0 || bytes_aligned {
             bytes
         } else {
             aligned_bytes = AlignedBuf::new(bytes, len, MIN_ALIGN);
             aligned_bytes.ptr
         };
 
-        let actual_output = if output as usize % MIN_ALIGN == 0 {
+        let actual_output = if output_aligned {
             output
         } else {
             aligned_output = AlignedBuf::uninit(KECCAK_OUTPUT_SIZE, MIN_ALIGN);
@@ -108,99 +135,62 @@ pub extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8
 
         keccak256_impl(actual_bytes, len, actual_output);
 
-        if output as usize % MIN_ALIGN != 0 {
+        if !output_aligned {
             core::ptr::copy_nonoverlapping(actual_output as *const u8, output, KECCAK_OUTPUT_SIZE);
         }
     }
 }
 
+/// SAFETY: This function is only called from native_keccak256 which ensures:
+/// - input is aligned to MIN_ALIGN
+/// - output is aligned to MIN_ALIGN
+/// - All internal buffers are aligned by AlignedStackBuf
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
-fn keccak_update(
-    buffer: &mut AlignedStackBuf<KECCAK_WIDTH_BYTES>,
-    input: *const u8,
-    len: usize,
-) -> usize {
+unsafe fn keccak256_impl(input: *const u8, len: usize, output: *mut u8) {
+    let mut buffer = AlignedStackBuf::<KECCAK_WIDTH_BYTES> {
+        data: [0u8; KECCAK_WIDTH_BYTES],
+    };
     let buffer_ptr = buffer.data.as_mut_ptr();
+
     let mut offset = 0;
     let mut remaining = len;
-    let input_aligned = input as usize % MIN_ALIGN == 0;
 
     // Absorb full blocks
     while remaining >= KECCAK_RATE {
-        if input_aligned {
-            __native_xorin(buffer_ptr, unsafe { input.add(offset) }, KECCAK_RATE);
-        } else {
-            let mut block = AlignedStackBuf::<KECCAK_RATE> {
-                data: [0u8; KECCAK_RATE],
-            };
-            unsafe {
-                core::ptr::copy_nonoverlapping(
-                    input.add(offset),
-                    block.data.as_mut_ptr(),
-                    KECCAK_RATE,
-                );
-                __native_xorin(buffer_ptr, block.data.as_ptr(), KECCAK_RATE);
-            }
-        }
-        unsafe {
-            __native_keccakf(buffer_ptr);
-        }
+        native_xorin_unchecked(buffer_ptr, input.add(offset), KECCAK_RATE);
+        native_keccakf_unchecked(buffer_ptr);
         offset += KECCAK_RATE;
         remaining -= KECCAK_RATE;
     }
 
     // Handle remaining bytes
     if remaining > 0 {
-        unsafe {
-            if input_aligned && remaining % MIN_ALIGN == 0 {
-                __native_xorin(buffer_ptr, input.add(offset), remaining);
-            } else {
-                let adjusted_len = remaining.next_multiple_of(MIN_ALIGN);
-                let mut padded_input = AlignedStackBuf::<KECCAK_RATE> {
-                    data: [0u8; KECCAK_RATE],
-                };
-                core::ptr::copy_nonoverlapping(
-                    input.add(offset),
-                    padded_input.data.as_mut_ptr(),
-                    remaining,
-                );
-                __native_xorin(buffer_ptr, padded_input.data.as_ptr(), adjusted_len);
-            }
+        if remaining % MIN_ALIGN == 0 {
+            native_xorin_unchecked(buffer_ptr, input.add(offset), remaining);
+        } else {
+            let adjusted_len = remaining.next_multiple_of(MIN_ALIGN);
+            let mut padded_input = AlignedStackBuf::<KECCAK_RATE> {
+                data: [0u8; KECCAK_RATE],
+            };
+            core::ptr::copy_nonoverlapping(
+                input.add(offset),
+                padded_input.data.as_mut_ptr(),
+                remaining,
+            );
+            native_xorin_unchecked(buffer_ptr, padded_input.data.as_ptr(), adjusted_len);
         }
     }
 
-    remaining
-}
-
-#[cfg(target_os = "zkvm")]
-#[inline(always)]
-fn keccak_finalize(
-    buffer: &mut AlignedStackBuf<KECCAK_WIDTH_BYTES>,
-    remaining_len: usize,
-    output: *mut u8,
-) {
     // Apply Keccak padding (pad10*1)
-    buffer.data[remaining_len] ^= 0x01;
+    buffer.data[remaining] ^= 0x01;
     buffer.data[KECCAK_RATE - 1] ^= 0x80;
 
     // Final permutation
-    unsafe {
-        __native_keccakf(buffer.data.as_mut_ptr());
+    native_keccakf_unchecked(buffer_ptr);
 
-        // Extract output
-        core::ptr::copy_nonoverlapping(buffer.data.as_ptr(), output, KECCAK_OUTPUT_SIZE);
-    }
-}
-
-#[cfg(target_os = "zkvm")]
-#[inline(always)]
-fn keccak256_impl(input: *const u8, len: usize, output: *mut u8) {
-    let mut buffer = AlignedStackBuf::<KECCAK_WIDTH_BYTES> {
-        data: [0u8; KECCAK_WIDTH_BYTES],
-    };
-    let remaining_len = keccak_update(&mut buffer, input, len);
-    keccak_finalize(&mut buffer, remaining_len, output);
+    // Extract output
+    core::ptr::copy_nonoverlapping(buffer.data.as_ptr(), output, KECCAK_OUTPUT_SIZE);
 }
 
 #[cfg(target_os = "zkvm")]
