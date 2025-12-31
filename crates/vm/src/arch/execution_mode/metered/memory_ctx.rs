@@ -107,11 +107,10 @@ pub struct MemoryCtx<const PAGE_BITS: usize> {
     pub boundary_idx: usize,
     pub merkle_tree_index: Option<usize>,
     pub adapter_offset: usize,
-    pub continuations_enabled: bool,
+    continuations_enabled: bool,
     chunk: u32,
     chunk_bits: u32,
     pub page_indices: BitSet,
-    pub page_access_count: usize,
     pub addr_space_access_count: RVec<usize>,
     pub page_indices_since_checkpoint: Box<[u32]>,
     pub page_indices_since_checkpoint_len: usize,
@@ -140,7 +139,6 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             memory_dimensions,
             continuations_enabled: config.continuation_enabled,
             page_indices: BitSet::new(bitset_size),
-            page_access_count: 0,
             addr_space_access_count: vec![0; addr_space_size].into(),
             page_indices_since_checkpoint: vec![0; page_indices_since_checkpoint_cap]
                 .into_boxed_slice(),
@@ -257,7 +255,10 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
     /// Initialize state for a new segment
     #[inline(always)]
     pub(crate) fn initialize_segment(&mut self, trace_heights: &mut [u32]) {
-        // Reset trace heights for memory chips
+        // Clear page indices for the new segment
+        self.page_indices.clear();
+
+        // Reset trace heights for memory chips as 0
         // SAFETY: boundary_idx is a compile time constant within bounds
         unsafe {
             *trace_heights.get_unchecked_mut(self.boundary_idx) = 0;
@@ -277,15 +278,11 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         // Apply height updates for all pages accessed since last checkpoint, and
         // initialize page_indices for the new segment.
         let mut addr_space_access_count = vec![0; self.addr_space_access_count.len()];
-        let mut page_access_count = 0;
-        self.page_indices.clear();
-
         let pages_len = self.page_indices_since_checkpoint_len;
         for i in 0..pages_len {
             // SAFETY: i is within 0..pages_len and pages_len is the slice length.
             let page_id = unsafe { *self.page_indices_since_checkpoint.get_unchecked(i) } as usize;
             if self.page_indices.insert(page_id) {
-                page_access_count += 1;
                 let (addr_space, _) = self
                     .memory_dimensions
                     .index_to_label((page_id as u64) << PAGE_BITS);
@@ -298,10 +295,12 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
                 }
             }
         }
-
-        self.apply_height_updates(trace_heights, page_access_count, &addr_space_access_count);
-
+        self.apply_height_updates(trace_heights, &addr_space_access_count);
         self.page_indices_since_checkpoint_len = 0;
+
+        // Add merkle height contributions for all registers
+        self.add_register_merkle_heights();
+        self.lazy_update_boundary_heights(trace_heights);
     }
 
     /// Updates the checkpoint with current safe state
@@ -312,12 +311,9 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
 
     /// Apply height updates given page counts
     #[inline(always)]
-    fn apply_height_updates(
-        &self,
-        trace_heights: &mut [u32],
-        page_access_count: usize,
-        addr_space_access_count: &[usize],
-    ) {
+    fn apply_height_updates(&self, trace_heights: &mut [u32], addr_space_access_count: &[usize]) {
+        let page_access_count: usize = addr_space_access_count.iter().sum();
+
         // On page fault, assume we add all leaves in a page
         let leaves = (page_access_count << PAGE_BITS) as u32;
         // SAFETY: boundary_idx is a compile time constant within bounds
@@ -346,7 +342,9 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             }
         }
 
-        for (address_space, &x) in addr_space_access_count.iter().enumerate() {
+        for address_space in 0..addr_space_access_count.len() {
+            // SAFETY: address_space is from 0 to len(), guaranteed to be in bounds
+            let x = unsafe { *addr_space_access_count.get_unchecked(address_space) };
             if x > 0 {
                 // Initial **and** final handling of touched pages requires send (resp. receive) in
                 // chunk-sized units for the merkle chip
@@ -365,13 +363,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
     /// Resolve all lazy updates of each memory access for memory adapters/poseidon2/merkle chip.
     #[inline(always)]
     pub(crate) fn lazy_update_boundary_heights(&mut self, trace_heights: &mut [u32]) {
-        let page_access_count = self.addr_space_access_count.iter().sum();
-        self.apply_height_updates(
-            trace_heights,
-            page_access_count,
-            &self.addr_space_access_count,
-        );
-        self.page_access_count = 0;
+        self.apply_height_updates(trace_heights, &self.addr_space_access_count);
         // SAFETY: Resetting array elements to 0 is always safe
         unsafe {
             std::ptr::write_bytes(

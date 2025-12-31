@@ -212,8 +212,15 @@ mod aot {
         //     let end_page_id = ((end_block_id - 1) >> PAGE_BITS) + 1;
 
         //     for page_id in start_page_id..end_page_id {
+        //          // Append page_id to page_indices_since_checkpoint
+        //          let len = self.page_indices_since_checkpoint_len;
+        //          // SAFETY: len is within bounds, and we extend length by 1 after writing.
+        //          unsafe {
+        //              *self.page_indices_since_checkpoint.as_mut_ptr().add(len) = page_id;
+        //          }
+        //          self.page_indices_since_checkpoint_len = len + 1;
+        //
         //         if self.page_indices.insert(page_id as usize) {
-        //             self.page_access_count += 1;
         //             // SAFETY: address_space passed is usually a hardcoded constant or derived
         // from an             // Instruction where it is bounds checked before passing
         //             unsafe {
@@ -276,17 +283,6 @@ mod aot {
                 page_indices_since_checkpoint_len
             );
         let inserted_label = format!(".asm_execute_pc_{pc}_inserted");
-        // The next section is the implementation of `BitSet::insert` in ASM.
-        // pub fn insert(&mut self, index: usize) -> bool {
-        //     let word_index = index >> 6;
-        //     let bit_index = index & 63;
-        //     let mask = 1u64 << bit_index;
-        //     let word = unsafe { self.words.get_unchecked_mut(word_index) };
-        //     let was_set = (*word & mask) != 0;
-        //     *word |= mask;
-        //     !was_set
-        // }
-        // self.page_indices_since_checkpoint.push(page_id);
 
         // Append page_id to page_indices_since_checkpoint
         asm_str += &format!(
@@ -304,6 +300,18 @@ mod aot {
             "    mov [{REG_EXEC_STATE_PTR} + {page_indices_since_checkpoint_len_offset}], {reg1}\n"
         );
 
+        // The next section is the implementation of `BitSet::insert` in ASM.
+        // pub fn insert(&mut self, index: usize) -> bool {
+        //     let word_index = index >> 6;
+        //     let bit_index = index & 63;
+        //     let mask = 1u64 << bit_index;
+        //     let word = unsafe { self.words.get_unchecked_mut(word_index) };
+        //     let was_set = (*word & mask) != 0;
+        //     *word |= mask;
+        //     !was_set
+        // }
+
+        // Start with `ptr_reg = index`
         // `reg1 = word_index`
         asm_str += &format!("    mov {reg1}, {ptr_reg}\n");
         asm_str += &format!("    shr {reg1}, 6\n");
@@ -336,6 +344,7 @@ mod aot {
         // self.addr_space_access_count[address_space] += 1;
         asm_str += &format!("    add dword ptr [{reg1} + {address_space} * 4], 1\n");
         asm_str += &format!("{inserted_label}:\n");
+        // Inserted, do nothing
 
         Ok(asm_str)
     }

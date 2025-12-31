@@ -82,6 +82,8 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
         // Add merkle height contributions for all registers
         ctx.memory_ctx.add_register_merkle_heights();
+        ctx.memory_ctx
+            .lazy_update_boundary_heights(&mut ctx.trace_heights);
 
         ctx
     }
@@ -153,8 +155,6 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
                 .initialize_segment(&mut self.trace_heights, &self.is_trace_height_constant);
             // Initialize memory context for new segment
             self.memory_ctx.initialize_segment(&mut self.trace_heights);
-            // Add merkle height contributions for all registers
-            self.memory_ctx.add_register_merkle_heights();
         } else {
             // Update checkpoint for trace heights
             self.segmentation_ctx
