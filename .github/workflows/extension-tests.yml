@@ -34,7 +34,8 @@ jobs:
           - { name: "sha2", path: "sha2", aot: false }
           - { name: "bigint", path: "bigint", aot: false }
           - { name: "algebra", path: "algebra", aot: false }
-          - { name: "ecc", path: "ecc", aot: false }
+          - { name: "weierstrass_ec", path: "weierstrass_ec", aot: false }
+          - { name: "edwards_ec", path: "edwards_ec", aot: false }
           - { name: "pairing", path: "pairing", aot: false }
           - { name: "rv32im", path: "rv32im", aot: true }
           - { name: "native", path: "native", aot: true }
@@ -42,7 +43,8 @@ jobs:
           - { name: "sha2", path: "sha2", aot: true }
           - { name: "bigint", path: "bigint", aot: true }
           - { name: "algebra", path: "algebra", aot: true }
-          - { name: "ecc", path: "ecc", aot: true }
+          - { name: "weierstrass_ec", path: "weierstrass_ec", aot: true }
+          - { name: "edwards_ec", path: "edwards_ec", aot: true }
           - { name: "pairing", path: "pairing", aot: true }
         platform:
           - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64" }

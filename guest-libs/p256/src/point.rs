@@ -14,10 +14,7 @@ use elliptic_curve::{
     FieldBytesEncoding,
 };
 use openvm_algebra_guest::IntMod;
-use openvm_ecc_guest::{
-    weierstrass::{IntrinsicCurve, WeierstrassPoint},
-    CyclicGroup,
-};
+use openvm_ecc_guest::weierstrass::{weierstrass::WeierstrassPoint, CyclicGroup, IntrinsicCurve};
 
 use crate::{
     internal::{P256Coord, P256Point, P256Scalar},
@@ -148,7 +145,7 @@ impl elliptic_curve::Group for P256Point {
     }
 
     fn is_identity(&self) -> Choice {
-        (<Self as openvm_ecc_guest::Group>::is_identity(self) as u8).into()
+        (<Self as openvm_ecc_guest::weierstrass::Group>::is_identity(self) as u8).into()
     }
 
     fn double(&self) -> Self {
@@ -203,7 +200,7 @@ impl FromEncodedPoint<NistP256> for P256Point {
     ///
     /// `None` value if `encoded_point` is not on the secp256k1 curve.
     fn from_encoded_point(encoded_point: &EncodedPoint) -> CtOption<Self> {
-        match openvm_ecc_guest::ecdsa::VerifyingKey::<NistP256>::from_sec1_bytes(
+        match openvm_ecc_guest::weierstrass::ecdsa::VerifyingKey::<NistP256>::from_sec1_bytes(
             encoded_point.as_bytes(),
         ) {
             Ok(verifying_key) => CtOption::new(*verifying_key.as_affine(), 1.into()),

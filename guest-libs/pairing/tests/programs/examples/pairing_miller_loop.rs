@@ -6,7 +6,7 @@ extern crate alloc;
 
 use openvm::io::read_vec;
 use openvm_algebra_guest::{field::FieldExtension, IntMod};
-use openvm_ecc_guest::AffinePoint;
+use openvm_ecc_guest::weierstrass::AffinePoint;
 use openvm_pairing_guest::pairing::MultiMillerLoop;
 
 openvm::entry!(main);

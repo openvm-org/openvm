@@ -836,7 +836,9 @@ fn check_exit_code(exit_code: Result<Option<u32>, ExecutionError>) -> Result<(),
 }
 
 /// Same as [check_exit_code] but errors if program did not terminate.
-fn check_termination(exit_code: Result<Option<u32>, ExecutionError>) -> Result<(), ExecutionError> {
+pub(super) fn check_termination(
+    exit_code: Result<Option<u32>, ExecutionError>,
+) -> Result<(), ExecutionError> {
     let did_terminate = matches!(exit_code.as_ref(), Ok(Some(_)));
     check_exit_code(exit_code)?;
     match did_terminate {

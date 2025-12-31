@@ -668,7 +668,7 @@ where
     pub fn with_halo2_pk(self, halo2_pk: Halo2ProvingKey) -> Self {
         let _ = self
             .set_halo2_pk(halo2_pk)
-            .map_err(|_| "halo2_pk already set");
+            .map_err(|_| panic!("halo2_pk already set"));
         self
     }
 

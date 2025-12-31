@@ -10,7 +10,6 @@ mod tests {
     };
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use openvm_circuit::utils::{air_test, test_system_config};
-    use openvm_ecc_circuit::SECP256K1_CONFIG;
     use openvm_instructions::exe::VmExe;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -18,6 +17,7 @@ mod tests {
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir, NoInitFile};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
+    use openvm_weierstrass_circuit::SECP256K1_CONFIG;
 
     type F = BabyBear;
 

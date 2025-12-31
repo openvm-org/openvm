@@ -1,0 +1,32 @@
+[package]
+name = "openvm-ecc-guest"
+description = "OpenVM guest library for elliptic curve cryptography"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+openvm = { workspace = true }
+openvm-weierstrass-guest = { workspace = true }
+openvm-edwards-guest = { workspace = true }
+hex-literal = { workspace = true }
+openvm-algebra-guest = { workspace = true }
+serde = { workspace = true }
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+lazy_static = { workspace = true }
+num-bigint = { workspace = true }
+
+[features]
+default = []
+ed25519 = []
+halo2curves = ["openvm-weierstrass-guest/halo2curves", "openvm-edwards-guest/halo2curves"]
+std = ["openvm-weierstrass-guest/std", "openvm-edwards-guest/std", "openvm/std"]
+
+[package.metadata.cargo-shear]
+ignored = [
+    "openvm",
+    "serde",
+]
