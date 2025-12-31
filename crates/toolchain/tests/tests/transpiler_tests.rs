@@ -14,7 +14,7 @@ use openvm_circuit::{
     system::SystemExecutor,
     utils::air_test,
 };
-use openvm_ecc_circuit::{SECP256K1_MODULUS, SECP256K1_ORDER};
+use openvm_weierstrass_circuit::{SECP256K1_MODULUS, SECP256K1_ORDER};
 use openvm_instructions::exe::VmExe;
 use openvm_platform::memory::MEM_SIZE;
 use openvm_rv32im_circuit::{

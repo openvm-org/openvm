@@ -1,5 +1,5 @@
 [package]
-name = "openvm-te-transpiler"
+name = "openvm-edwards-transpiler"
 description = "OpenVM transpiler extension for elliptic curve cryptography with twisted Edwards curves"
 version.workspace = true
 authors.workspace = true

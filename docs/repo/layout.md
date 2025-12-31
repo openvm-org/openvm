@@ -127,17 +127,17 @@ The toolchain, ISA, and VM are simultaneously extendable. All non-system functio
 
 #### Short Weierstrass Elliptic Curve Cryptography
 
-- [`openvm-ecc-circuit`](../../extensions/ecc/circuit): Circuit extension for short Weierstrass elliptic curve operations for arbitrary compile-time curve.
-- [`openvm-ecc-transpiler`](../../extensions/ecc/transpiler): Transpiler extension for short Weierstrass elliptic curve operations for arbitrary compile-time curve.
+- [`openvm-weierstrass-circuit`](../../extensions/weierstrass_ec/circuit): Circuit extension for short Weierstrass elliptic curve operations for arbitrary compile-time curve.
+- [`openvm-weierstrass-transpiler`](../../extensions/weierstrass_ec/transpiler): Transpiler extension for short Weierstrass elliptic curve operations for arbitrary compile-time curve.
 - [`openvm-ecc-guest`](../../extensions/ecc/guest): Guest library with traits for short Weierstrass elliptic curve cryptography. Includes implementations of ECDSA and multi-scalar multiplication.
-- [`openvm-ecc-tests`](../../extensions/ecc/tests): Integration tests for the short Weierstrass elliptic curve cryptography extension.
+- [`openvm-weierstrass-integration-tests`](../../extensions/weierstrass_ec/tests): Integration tests for the short Weierstrass elliptic curve cryptography extension.
 
 #### Twisted Edwards Elliptic Curve Cryptography
 
-- [`openvm-te-circuit`](../../extensions/ecc/circuit): Circuit extension for twisted Edwards elliptic curve operations for arbitrary compile-time curve.
-- [`openvm-te-transpiler`](../../extensions/ecc/transpiler): Transpiler extension for twisted Edwards elliptic curve operations for arbitrary compile-time curve.
-- [`openvm-te-guest`](../../extensions/ecc/guest): Guest library with traits for twisted Edwards elliptic curve cryptography. Includes an implementation of multi-scalar multiplication.
-- [`openvm-te-tests`](../../extensions/ecc/tests): Integration tests for the twisted Edwards elliptic curve cryptography extension.
+- [`openvm-edwards-circuit`](../../extensions/edwards_ec/circuit): Circuit extension for twisted Edwards elliptic curve operations for arbitrary compile-time curve.
+- [`openvm-edwards-transpiler`](../../extensions/edwards_ec/transpiler): Transpiler extension for twisted Edwards elliptic curve operations for arbitrary compile-time curve.
+- [`openvm-te-guest`](../../extensions/edwards_ec/guest): Guest library with traits for twisted Edwards elliptic curve cryptography. Includes an implementation of multi-scalar multiplication.
+- [`openvm-edwards-integration-tests`](../../extensions/edwards_ec/tests): Integration tests for the twisted Edwards elliptic curve cryptography extension.
 
 #### Elliptic Curve Pairing
 

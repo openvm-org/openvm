@@ -10,7 +10,7 @@ use openvm_circuit::{
     system::memory::{online::GuestMemory, POINTER_MAX_BITS},
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
-use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
+use openvm_weierstrass_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,

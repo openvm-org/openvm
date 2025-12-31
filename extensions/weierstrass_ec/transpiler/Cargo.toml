@@ -1,5 +1,5 @@
 [package]
-name = "openvm-ecc-transpiler"
+name = "openvm-weierstrass-transpiler"
 description = "OpenVM transpiler extension for elliptic curve cryptography with short Weierstrass curves"
 version.workspace = true
 authors.workspace = true

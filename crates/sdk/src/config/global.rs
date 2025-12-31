@@ -11,11 +11,14 @@ use openvm_circuit::{
     derive::VmConfig,
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
-use openvm_ecc_circuit::{
+use openvm_weierstrass_circuit::{
     EccCpuProverExt, WeierstrassExtension, WeierstrassExtensionExecutor, P256_CONFIG,
     SECP256K1_CONFIG,
 };
-use openvm_ecc_transpiler::EccTranspilerExtension;
+use openvm_weierstrass_transpiler::EccTranspilerExtension;
+use openvm_edwards_circuit::{
+    EdwardsCpuProverExt, EdwardsExtension, EdwardsExtensionExecutor, ED25519_CONFIG,
+};
 use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use openvm_native_circuit::{
@@ -41,10 +44,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
     prover::cpu::{CpuBackend, CpuDevice},
 };
-use openvm_te_circuit::{
-    EdwardsCpuProverExt, EdwardsExtension, EdwardsExtensionExecutor, ED25519_CONFIG,
-};
-use openvm_te_transpiler::EdwardsTranspilerExtension;
+use openvm_edwards_transpiler::EdwardsTranspilerExtension;
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
 cfg_if::cfg_if! {
@@ -55,8 +55,8 @@ cfg_if::cfg_if! {
         use openvm_cuda_backend::{
             engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend, types::SC,
         };
-        use openvm_ecc_circuit::EccProverExt;
-        use openvm_te_circuit::EdwardsProverExt;
+        use openvm_weierstrass_circuit::EccProverExt;
+        use openvm_edwards_circuit::EdwardsProverExt;
         use openvm_keccak256_circuit::Keccak256GpuProverExt;
         use openvm_native_circuit::NativeGpuProverExt;
         use openvm_rv32im_circuit::Rv32ImGpuProverExt;

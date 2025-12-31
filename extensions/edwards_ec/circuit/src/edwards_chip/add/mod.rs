@@ -20,7 +20,7 @@ use openvm_mod_circuit_builder::{
 use openvm_rv32_adapters::{
     Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
 };
-use openvm_te_transpiler::Rv32EdwardsOpcode;
+use openvm_edwards_transpiler::Rv32EdwardsOpcode;
 
 use super::{utils::jacobi, EdwardsAir, EdwardsChip};
 

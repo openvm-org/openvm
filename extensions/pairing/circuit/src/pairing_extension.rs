@@ -10,7 +10,7 @@ use openvm_circuit::{
     system::phantom::PhantomExecutor,
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
-use openvm_ecc_circuit::CurveConfig;
+use openvm_weierstrass_circuit::CurveConfig;
 use openvm_instructions::PhantomDiscriminant;
 use openvm_pairing_guest::{
     bls12_381::{

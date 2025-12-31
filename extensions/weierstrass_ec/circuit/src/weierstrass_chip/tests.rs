@@ -16,7 +16,7 @@ use openvm_circuit_primitives::{
         SharedBitwiseOperationLookupChip,
     },
 };
-use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
+use openvm_weierstrass_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},

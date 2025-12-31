@@ -1,5 +1,5 @@
 [package]
-name = "openvm-te-circuit"
+name = "openvm-edwards-circuit"
 description = "OpenVM circuit extension for elliptic curve cryptography with twisted Edwards curves"
 version.workspace = true
 authors.workspace = true
@@ -16,7 +16,7 @@ openvm-mod-circuit-builder = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-algebra-circuit = { workspace = true }
 openvm-rv32-adapters = { workspace = true }
-openvm-te-transpiler = { workspace = true }
+openvm-edwards-transpiler = { workspace = true }
 openvm-te-guest = { workspace = true, features = ["ed25519"] }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }

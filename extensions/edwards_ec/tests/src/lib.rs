@@ -8,14 +8,16 @@ mod tests {
         arch::instructions::exe::VmExe,
         utils::{air_test, air_test_with_min_segments, test_system_config},
     };
+    use openvm_edwards_circuit::{
+        CurveConfig, Rv32EdwardsBuilder, Rv32EdwardsConfig, ED25519_CONFIG,
+    };
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
     use openvm_sdk::config::{AppConfig, SdkVmBuilder, SdkVmConfig};
     use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::{openvm_stark_backend, p3_baby_bear::BabyBear};
-    use openvm_te_circuit::{CurveConfig, Rv32EdwardsBuilder, Rv32EdwardsConfig, ED25519_CONFIG};
-    use openvm_te_transpiler::EdwardsTranspilerExtension;
+    use openvm_edwards_transpiler::EdwardsTranspilerExtension;
     use openvm_toolchain_tests::{
         build_example_program_at_path_with_features, get_programs_dir, NoInitFile,
     };

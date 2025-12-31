@@ -17,7 +17,7 @@ use openvm_instructions::{
 };
 use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpr};
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_te_transpiler::Rv32EdwardsOpcode;
+use openvm_edwards_transpiler::Rv32EdwardsOpcode;
 
 use super::TeAddExecutor;
 use crate::edwards_chip::curves::{get_curve_type, te_add, CurveType};

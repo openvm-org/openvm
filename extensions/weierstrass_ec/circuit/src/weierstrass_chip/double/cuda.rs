@@ -8,7 +8,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_cuda_backend::{chip::get_empty_air_proving_ctx, prover_backend::GpuBackend, types::F};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
+use openvm_weierstrass_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
     ExprBuilderConfig, FieldExpressionChipGPU, FieldExpressionCoreAir, FieldExpressionMetadata,

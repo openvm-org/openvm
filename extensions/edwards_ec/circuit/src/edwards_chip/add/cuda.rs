@@ -14,7 +14,7 @@ use openvm_mod_circuit_builder::{
 };
 use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
-use openvm_te_transpiler::Rv32EdwardsOpcode;
+use openvm_edwards_transpiler::Rv32EdwardsOpcode;
 
 use crate::{te_add_expr, EdwardsRecord};
 

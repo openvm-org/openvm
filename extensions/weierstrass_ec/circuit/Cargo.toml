@@ -1,5 +1,5 @@
 [package]
-name = "openvm-ecc-circuit"
+name = "openvm-weierstrass-circuit"
 description = "OpenVM circuit extension for elliptic curve cryptography with short Weierstrass curves"
 version.workspace = true
 authors.workspace = true
@@ -16,7 +16,7 @@ openvm-mod-circuit-builder = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-algebra-circuit = { workspace = true }
 openvm-rv32-adapters = { workspace = true }
-openvm-ecc-transpiler = { workspace = true }
+openvm-weierstrass-transpiler = { workspace = true }
 openvm-ecc-guest = { workspace = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }

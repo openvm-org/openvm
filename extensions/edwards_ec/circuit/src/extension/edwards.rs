@@ -18,6 +18,7 @@ use openvm_circuit_primitives::{
     },
     var_range::VariableRangeCheckerBus,
 };
+use openvm_edwards_transpiler::Rv32EdwardsOpcode;
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_stark_backend::{
@@ -30,7 +31,6 @@ use openvm_te_guest::{
     algebra::IntMod,
     ed25519::{CURVE_A as ED25519_A, CURVE_D as ED25519_D, ED25519_MODULUS, ED25519_ORDER},
 };
-use openvm_te_transpiler::Rv32EdwardsOpcode;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;

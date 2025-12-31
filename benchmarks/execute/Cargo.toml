@@ -16,8 +16,8 @@ openvm-algebra-circuit.workspace = true
 openvm-algebra-transpiler.workspace = true
 openvm-bigint-circuit.workspace = true
 openvm-bigint-transpiler.workspace = true
-openvm-ecc-circuit.workspace = true
-openvm-ecc-transpiler.workspace = true
+openvm-weierstrass-circuit.workspace = true
+openvm-weierstrass-transpiler.workspace = true
 openvm-native-circuit = { workspace = true }
 openvm-pairing-circuit.workspace = true
 openvm-pairing-guest.workspace = true

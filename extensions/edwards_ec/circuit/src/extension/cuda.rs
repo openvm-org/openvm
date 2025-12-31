@@ -10,10 +10,10 @@ use openvm_circuit::{
     },
 };
 use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
+use openvm_edwards_transpiler::Rv32EdwardsOpcode;
 use openvm_instructions::LocalOpcode;
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use openvm_te_transpiler::Rv32EdwardsOpcode;
 use strum::EnumCount;
 
 use crate::{edwards_chip::TeAddChipGpu, EdwardsAir, EdwardsExtension, Rv32EdwardsConfig};
