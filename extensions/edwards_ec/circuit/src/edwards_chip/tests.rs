@@ -275,7 +275,7 @@ fn set_and_execute_ec_add<
             a_biguint,
             d_biguint,
             BigUint::one(),
-            Rv32EdwardsOpcode::SETUP_TE_ADD as usize,
+            Rv32EdwardsOpcode::SETUP_TE_EC_ADD as usize,
         )
     } else if let Some((x1, y1)) = p1 {
         let (x2, y2) = p2.unwrap();
@@ -284,9 +284,9 @@ fn set_and_execute_ec_add<
         let x2 = x2 % modulus;
         let y2 = y2 % modulus;
         if rng.gen_bool(0.5) {
-            (x1, y1, x2, y2, Rv32EdwardsOpcode::TE_ADD as usize)
+            (x1, y1, x2, y2, Rv32EdwardsOpcode::TE_EC_ADD as usize)
         } else {
-            (x2, y2, x1, y1, Rv32EdwardsOpcode::TE_ADD as usize)
+            (x2, y2, x1, y1, Rv32EdwardsOpcode::TE_EC_ADD as usize)
         }
     } else {
         panic!("Generating random inputs generically is harder because the input points need to be on the curve.");

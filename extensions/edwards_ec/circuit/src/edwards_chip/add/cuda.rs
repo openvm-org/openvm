@@ -64,8 +64,8 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
         let num_records = records.len() / record_size;
 
         let local_opcode_idx = vec![
-            Rv32EdwardsOpcode::TE_ADD as usize,
-            Rv32EdwardsOpcode::SETUP_TE_ADD as usize,
+            Rv32EdwardsOpcode::TE_EC_ADD as usize,
+            Rv32EdwardsOpcode::SETUP_TE_EC_ADD as usize,
         ];
 
         let air = FieldExpressionCoreAir::new(expr, self.offset, local_opcode_idx, vec![]);

@@ -78,8 +78,8 @@ fn gen_base_expr(
     let expr = ec_double_ne_expr(config, range_checker_bus, a_biguint);
 
     let local_opcode_idx = vec![
-        Rv32WeierstrassOpcode::EC_DOUBLE as usize,
-        Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+        Rv32WeierstrassOpcode::SW_EC_DOUBLE as usize,
+        Rv32WeierstrassOpcode::SETUP_SW_EC_DOUBLE as usize,
     ];
 
     (expr, local_opcode_idx)

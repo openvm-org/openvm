@@ -15,8 +15,8 @@ use strum::{EnumCount, EnumIter, FromRepr};
 #[allow(non_camel_case_types)]
 #[repr(usize)]
 pub enum Rv32EdwardsOpcode {
-    TE_ADD,
-    SETUP_TE_ADD,
+    TE_EC_ADD,
+    SETUP_TE_EC_ADD,
 }
 
 #[derive(Default)]
@@ -48,7 +48,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for EdwardsTranspilerExtension {
             let curve_idx_shift = curve_idx * Rv32EdwardsOpcode::COUNT;
 
             if base_funct7 == TeBaseFunct7::TeSetup as u8 {
-                let local_opcode = Rv32EdwardsOpcode::SETUP_TE_ADD;
+                let local_opcode = Rv32EdwardsOpcode::SETUP_TE_EC_ADD;
                 Some(Instruction::new(
                     VmOpcode::from_usize(local_opcode.global_opcode().as_usize() + curve_idx_shift),
                     F::from_canonical_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rd),
@@ -61,7 +61,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for EdwardsTranspilerExtension {
                 ))
             } else {
                 let global_opcode = match TeBaseFunct7::from_repr(base_funct7) {
-                    Some(TeBaseFunct7::TeAdd) => Rv32EdwardsOpcode::TE_ADD.global_opcode(),
+                    Some(TeBaseFunct7::TeAdd) => Rv32EdwardsOpcode::TE_EC_ADD.global_opcode(),
                     _ => unimplemented!(),
                 };
                 let global_opcode = global_opcode.as_usize() + curve_idx_shift;

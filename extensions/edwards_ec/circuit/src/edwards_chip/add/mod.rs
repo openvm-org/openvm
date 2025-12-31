@@ -82,8 +82,8 @@ fn gen_base_expr(
     let expr = te_add_expr(config, range_checker_bus, a_biguint, d_biguint);
 
     let local_opcode_idx = vec![
-        Rv32EdwardsOpcode::TE_ADD as usize,
-        Rv32EdwardsOpcode::SETUP_TE_ADD as usize,
+        Rv32EdwardsOpcode::TE_EC_ADD as usize,
+        Rv32EdwardsOpcode::SETUP_TE_EC_ADD as usize,
     ];
 
     (expr, local_opcode_idx)

@@ -86,7 +86,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeExecutor<BLOCKS, B
         };
 
         let local_opcode = opcode.local_opcode_idx(self.offset);
-        let is_setup = local_opcode == Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize;
+        let is_setup = local_opcode == Rv32WeierstrassOpcode::SETUP_SW_EC_ADD_NE as usize;
 
         Ok(is_setup)
     }

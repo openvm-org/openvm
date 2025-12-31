@@ -129,8 +129,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for EdwardsExtension {
 
                 inventory.add_executor(
                     EdwardsExtensionExecutor::TeAddRv32_32(add),
-                    ((Rv32EdwardsOpcode::TE_ADD as usize)
-                        ..=(Rv32EdwardsOpcode::SETUP_TE_ADD as usize))
+                    ((Rv32EdwardsOpcode::TE_EC_ADD as usize)
+                        ..=(Rv32EdwardsOpcode::SETUP_TE_EC_ADD as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else {

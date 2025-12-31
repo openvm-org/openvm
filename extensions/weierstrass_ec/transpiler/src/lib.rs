@@ -15,10 +15,10 @@ use strum::{EnumCount, EnumIter, FromRepr};
 #[allow(non_camel_case_types)]
 #[repr(usize)]
 pub enum Rv32WeierstrassOpcode {
-    EC_ADD_NE,
-    SETUP_EC_ADD_NE,
-    EC_DOUBLE,
-    SETUP_EC_DOUBLE,
+    SW_EC_ADD_NE,
+    SETUP_SW_EC_ADD_NE,
+    SW_EC_DOUBLE,
+    SETUP_SW_EC_DOUBLE,
 }
 
 #[derive(Default)]
@@ -52,8 +52,8 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
             let curve_idx_shift = curve_idx * Rv32WeierstrassOpcode::COUNT;
             if base_funct7 == SwBaseFunct7::SwSetup as u8 {
                 let local_opcode = match dec_insn.rs2 {
-                    0 => Rv32WeierstrassOpcode::SETUP_EC_DOUBLE,
-                    _ => Rv32WeierstrassOpcode::SETUP_EC_ADD_NE,
+                    0 => Rv32WeierstrassOpcode::SETUP_SW_EC_DOUBLE,
+                    _ => Rv32WeierstrassOpcode::SETUP_SW_EC_ADD_NE,
                 };
                 Some(Instruction::new(
                     VmOpcode::from_usize(local_opcode.global_opcode().as_usize() + curve_idx_shift),
@@ -68,12 +68,12 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
             } else {
                 let global_opcode = match SwBaseFunct7::from_repr(base_funct7) {
                     Some(SwBaseFunct7::SwAddNe) => {
-                        Rv32WeierstrassOpcode::EC_ADD_NE as usize
+                        Rv32WeierstrassOpcode::SW_EC_ADD_NE as usize
                             + Rv32WeierstrassOpcode::CLASS_OFFSET
                     }
                     Some(SwBaseFunct7::SwDouble) => {
                         assert!(dec_insn.rs2 == 0);
-                        Rv32WeierstrassOpcode::EC_DOUBLE as usize
+                        Rv32WeierstrassOpcode::SW_EC_DOUBLE as usize
                             + Rv32WeierstrassOpcode::CLASS_OFFSET
                     }
                     _ => unimplemented!(),

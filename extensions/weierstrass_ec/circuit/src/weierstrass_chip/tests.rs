@@ -237,7 +237,7 @@ mod ec_addne_tests {
                 BigUint::one(),
                 BigUint::one(),
                 BigUint::one(),
-                Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+                Rv32WeierstrassOpcode::SETUP_SW_EC_ADD_NE as usize,
             )
         } else if let Some((x1, y1)) = p1 {
             let (x2, y2) = p2.unwrap();
@@ -246,9 +246,9 @@ mod ec_addne_tests {
             let x2 = x2 % modulus;
             let y2 = y2 % modulus;
             if rng.gen_bool(0.5) {
-                (x1, y1, x2, y2, Rv32WeierstrassOpcode::EC_ADD_NE as usize)
+                (x1, y1, x2, y2, Rv32WeierstrassOpcode::SW_EC_ADD_NE as usize)
             } else {
-                (x2, y2, x1, y1, Rv32WeierstrassOpcode::EC_ADD_NE as usize)
+                (x2, y2, x1, y1, Rv32WeierstrassOpcode::SW_EC_ADD_NE as usize)
             }
         } else {
             panic!("Generating random inputs generically is harder because the input points need to be on the curve.");
@@ -692,18 +692,18 @@ mod ec_double_tests {
             (
                 modulus.clone(),
                 a_biguint.clone(),
-                Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+                Rv32WeierstrassOpcode::SETUP_SW_EC_DOUBLE as usize,
             )
         } else if let Some(x) = x {
             let y = y.unwrap();
             let x = x % modulus;
             let y = y % modulus;
-            (x, y, Rv32WeierstrassOpcode::EC_DOUBLE as usize)
+            (x, y, Rv32WeierstrassOpcode::SW_EC_DOUBLE as usize)
         } else {
             let x = generate_random_biguint(modulus);
             let y = generate_random_biguint(modulus);
 
-            (x, y, Rv32WeierstrassOpcode::EC_DOUBLE as usize)
+            (x, y, Rv32WeierstrassOpcode::SW_EC_DOUBLE as usize)
         };
 
         let ptr_as = RV32_REGISTER_AS as usize;

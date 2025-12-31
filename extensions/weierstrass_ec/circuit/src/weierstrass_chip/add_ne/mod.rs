@@ -69,8 +69,8 @@ fn gen_base_expr(
     let expr = ec_add_ne_expr(config, range_checker_bus);
 
     let local_opcode_idx = vec![
-        Rv32WeierstrassOpcode::EC_ADD_NE as usize,
-        Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+        Rv32WeierstrassOpcode::SW_EC_ADD_NE as usize,
+        Rv32WeierstrassOpcode::SETUP_SW_EC_ADD_NE as usize,
     ];
 
     (expr, local_opcode_idx)

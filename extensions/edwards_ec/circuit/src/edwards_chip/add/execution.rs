@@ -86,7 +86,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> TeAddExecutor<BLOCKS, BLO
         };
 
         let local_opcode = opcode.local_opcode_idx(self.offset);
-        let is_setup = local_opcode == Rv32EdwardsOpcode::SETUP_TE_ADD as usize;
+        let is_setup = local_opcode == Rv32EdwardsOpcode::SETUP_TE_EC_ADD as usize;
 
         Ok(is_setup)
     }

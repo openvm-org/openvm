@@ -492,7 +492,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                                 * (::openvm_ecc_guest::weierstrass::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                         rd = In uninit,
                         rs1 = In p1,
-                        rs2 = Const "x0" // will be parsed as 0 and therefore transpiled to SETUP_EC_DOUBLE
+                        rs2 = Const "x0" // will be parsed as 0 and therefore transpiled to SETUP_SW_EC_DOUBLE
                     );
 
 

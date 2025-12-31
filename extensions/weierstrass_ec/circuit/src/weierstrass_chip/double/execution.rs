@@ -79,7 +79,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleExecutor<BLOCKS, 
         };
 
         let local_opcode = opcode.local_opcode_idx(self.offset);
-        let is_setup = local_opcode == Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize;
+        let is_setup = local_opcode == Rv32WeierstrassOpcode::SETUP_SW_EC_DOUBLE as usize;
 
         Ok(is_setup)
     }

@@ -139,8 +139,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
 
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcAddNeRv32_32(addne),
-                    ((Rv32WeierstrassOpcode::EC_ADD_NE as usize)
-                        ..=(Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize))
+                    ((Rv32WeierstrassOpcode::SW_EC_ADD_NE as usize)
+                        ..=(Rv32WeierstrassOpcode::SETUP_SW_EC_ADD_NE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
@@ -154,8 +154,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
 
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcDoubleRv32_32(double),
-                    ((Rv32WeierstrassOpcode::EC_DOUBLE as usize)
-                        ..=(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize))
+                    ((Rv32WeierstrassOpcode::SW_EC_DOUBLE as usize)
+                        ..=(Rv32WeierstrassOpcode::SETUP_SW_EC_DOUBLE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else if bytes <= 48 {
@@ -173,8 +173,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
 
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcAddNeRv32_48(addne),
-                    ((Rv32WeierstrassOpcode::EC_ADD_NE as usize)
-                        ..=(Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize))
+                    ((Rv32WeierstrassOpcode::SW_EC_ADD_NE as usize)
+                        ..=(Rv32WeierstrassOpcode::SETUP_SW_EC_ADD_NE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
@@ -188,8 +188,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
 
                 inventory.add_executor(
                     WeierstrassExtensionExecutor::EcDoubleRv32_48(double),
-                    ((Rv32WeierstrassOpcode::EC_DOUBLE as usize)
-                        ..=(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize))
+                    ((Rv32WeierstrassOpcode::SW_EC_DOUBLE as usize)
+                        ..=(Rv32WeierstrassOpcode::SETUP_SW_EC_DOUBLE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else {
