@@ -296,7 +296,6 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             }
         }
         self.apply_height_updates(trace_heights, &addr_space_access_count);
-        self.page_indices_since_checkpoint_len = 0;
 
         // Add merkle height contributions for all registers
         self.add_register_merkle_heights();

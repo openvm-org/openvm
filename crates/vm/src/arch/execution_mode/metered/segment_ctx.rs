@@ -299,17 +299,13 @@ impl SegmentationCtx {
         trace_heights: &mut [u32],
         is_trace_height_constant: &[bool],
     ) {
-        // Get the segment heights from the last created segment
-        if let Some(last_segment) = self.segments.last() {
-            // Reset trace heights by subtracting the segment's heights
-            self.reset_trace_heights(
-                trace_heights,
-                &last_segment.trace_heights,
-                is_trace_height_constant,
-            );
-        }
-        // Reset checkpoint since we're starting a new segment
-        self.checkpoint_instret = 0;
+        // Reset trace heights by subtracting the last segment's heights
+        let last_segment = self.segments.last().unwrap();
+        self.reset_trace_heights(
+            trace_heights,
+            &last_segment.trace_heights,
+            is_trace_height_constant,
+        );
     }
 
     /// Resets trace heights by subtracting segment heights
