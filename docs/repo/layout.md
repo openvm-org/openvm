@@ -129,7 +129,7 @@ The toolchain, ISA, and VM are simultaneously extendable. All non-system functio
 
 - [`openvm-weierstrass-circuit`](../../extensions/weierstrass_ec/circuit): Circuit extension for short Weierstrass elliptic curve operations for arbitrary compile-time curve.
 - [`openvm-weierstrass-transpiler`](../../extensions/weierstrass_ec/transpiler): Transpiler extension for short Weierstrass elliptic curve operations for arbitrary compile-time curve.
-- [`openvm-weierstrass-guest`](../../extensions/ecc/guest): Guest library with traits for short Weierstrass elliptic curve cryptography. Includes implementations of ECDSA and multi-scalar multiplication.
+- [`openvm-weierstrass-guest`](../../extensions/weierstrass_ec/guest): Guest library with traits for short Weierstrass elliptic curve cryptography. Includes implementations of ECDSA and multi-scalar multiplication.
 - [`openvm-weierstrass-integration-tests`](../../extensions/weierstrass_ec/tests): Integration tests for the short Weierstrass elliptic curve cryptography extension.
 
 #### Twisted Edwards Elliptic Curve Cryptography
@@ -138,6 +138,9 @@ The toolchain, ISA, and VM are simultaneously extendable. All non-system functio
 - [`openvm-edwards-transpiler`](../../extensions/edwards_ec/transpiler): Transpiler extension for twisted Edwards elliptic curve operations for arbitrary compile-time curve.
 - [`openvm-edwards-guest`](../../extensions/edwards_ec/guest): Guest library with traits for twisted Edwards elliptic curve cryptography. Includes an implementation of multi-scalar multiplication.
 - [`openvm-edwards-integration-tests`](../../extensions/edwards_ec/tests): Integration tests for the twisted Edwards elliptic curve cryptography extension.
+
+#### Elliptic Curve Cryptography
+- [`openvm-ecc-guest`](../../extensions/ecc_guest): Guest library that re-exports the short Weierstrass and twisted Edwards elliptic curve cryptography extensions for convenience.
 
 #### Elliptic Curve Pairing
 

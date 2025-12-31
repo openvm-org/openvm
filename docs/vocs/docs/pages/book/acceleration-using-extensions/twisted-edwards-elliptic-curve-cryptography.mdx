@@ -1,6 +1,6 @@
 # Twisted Edwards Elliptic Curve Cryptography
 
-The OpenVM Twisted Edwards Elliptic Curve Cryptography Extension provides support for twisted Edwards elliptic curve operations through the `openvm-weierstrass-guest` crate.
+The OpenVM Twisted Edwards Elliptic Curve Cryptography Extension provides support for twisted Edwards elliptic curve operations through the `edwards` module in the `openvm-ecc-guest` crate.
 
 Developers can enable arbitrary twisted Edwards curves by configuring this extension with the modulus for the coordinate field and the coefficients in the curve equation. A preset configuration for the ed25519 curve is provided in the `ed25519` module, enabled by the `ed25519` feature.
 
@@ -27,7 +27,7 @@ Developers can enable arbitrary twisted Edwards curves by configuring this exten
 
 ## Macros
 
-For twisted Edwards elliptic curve cryptography, the `openvm-edwards-guest` crate provides macros similar to those in [`openvm-algebra-guest`](/book/acceleration-using-extensions/algebra):
+For twisted Edwards elliptic curve cryptography, the `openvm-ecc-guest::edwards` module provides macros similar to those in [`openvm-algebra-guest`](/book/acceleration-using-extensions/algebra):
 
 1. **Declare**: Use `te_declare!` to define elliptic curves over the previously declared moduli. For example:
 
