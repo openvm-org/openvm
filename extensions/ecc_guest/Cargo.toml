@@ -24,3 +24,9 @@ default = []
 ed25519 = []
 halo2curves = ["openvm-weierstrass-guest/halo2curves", "openvm-edwards-guest/halo2curves"]
 std = ["openvm-weierstrass-guest/std", "openvm-edwards-guest/std", "openvm/std"]
+
+[package.metadata.cargo-shear]
+ignored = [
+    "openvm",
+    "serde",
+]

@@ -6,9 +6,9 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use openvm::io::read;
-use openvm_ecc_test_programs::Sec1DecodingTestVector;
 #[allow(unused_imports)]
 use openvm_k256::{ecdsa::VerifyingKey, Secp256k1Coord, Secp256k1Point};
+use openvm_weierstrass_test_programs::Sec1DecodingTestVector;
 
 openvm::entry!(main);
 

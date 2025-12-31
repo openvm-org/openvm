@@ -7,12 +7,12 @@ use alloc::vec::Vec;
 
 use ecdsa_core::{signature::hazmat::PrehashVerifier, RecoveryId};
 use openvm::io::read;
-use openvm_ecc_test_programs::RecoveryTestVector;
 #[allow(unused_imports)]
 use openvm_k256::{
     ecdsa::{Signature, VerifyingKey},
     Secp256k1Coord, Secp256k1Point,
 };
+use openvm_weierstrass_test_programs::RecoveryTestVector;
 
 openvm::entry!(main);
 

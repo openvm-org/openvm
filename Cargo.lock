@@ -6557,13 +6557,9 @@ name = "openvm-edwards-guest"
 version = "1.4.2"
 dependencies = [
  "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
- "hex-literal 0.4.1",
- "lazy_static",
- "num-bigint 0.4.6",
  "once_cell",
  "openvm",
  "openvm-algebra-guest",
- "openvm-algebra-moduli-macros",
  "openvm-custom-insn",
  "openvm-ecc-te-macros",
  "openvm-rv32im-guest",

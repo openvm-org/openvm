@@ -14,18 +14,12 @@ strum_macros.workspace = true
 openvm-custom-insn = { workspace = true }
 openvm-rv32im-guest = { workspace = true }
 openvm-algebra-guest = { workspace = true }
-openvm-algebra-moduli-macros = { workspace = true }
 openvm-weierstrass-guest = { workspace = true }
 openvm-ecc-te-macros = { workspace = true }
 once_cell = { workspace = true, features = ["race", "alloc"] }
-num-bigint = { workspace = true }
-hex-literal = { workspace = true }
 
 # Used for `halo2curves` feature
 halo2curves-axiom = { workspace = true, optional = true }
-
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
-lazy_static = { workspace = true }
 
 [features]
 default = []

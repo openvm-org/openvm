@@ -7,12 +7,12 @@ use alloc::vec::Vec;
 
 use ecdsa_core::RecoveryId;
 use openvm::io::read;
-use openvm_ecc_test_programs::RecoveryTestVector;
 #[allow(unused_imports)]
 use openvm_p256::{
     ecdsa::{Signature, VerifyingKey},
     P256Coord, P256Point,
 };
+use openvm_weierstrass_test_programs::RecoveryTestVector;
 
 openvm::entry!(main);
 
