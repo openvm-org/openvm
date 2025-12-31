@@ -6,7 +6,7 @@ edition.workspace = true
 [dependencies]
 openvm = { workspace = true, features = ["std"] }
 openvm-algebra-guest.workspace = true
-openvm-ecc-guest.workspace = true
+openvm-weierstrass-guest.workspace = true
 openvm-keccak256.workspace = true
 revm-precompile = { git = "https://github.com/bluealloy/revm.git", tag = "v75", default-features = false }
 # IMPORTANT: must be same version as used by revm; revm does not re-export this feature so we enable it here

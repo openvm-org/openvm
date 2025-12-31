@@ -2,7 +2,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use hex_literal::hex;
-use openvm_ecc_guest::{algebra::IntMod, msm, weierstrass::WeierstrassPoint, Group};
+use openvm_weierstrass_guest::{algebra::IntMod, msm, weierstrass::WeierstrassPoint, Group};
 use openvm_k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar};
 use openvm_p256::{P256Coord, P256Point};
 

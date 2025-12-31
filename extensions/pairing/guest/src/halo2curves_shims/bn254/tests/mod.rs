@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use halo2curves_axiom::bn256::{Fq, Fq2, G1Affine, G2Affine};
 use itertools::izip;
-use openvm_ecc_guest::AffinePoint;
+use openvm_weierstrass_guest::AffinePoint;
 use rand::{rngs::StdRng, SeedableRng};
 
 #[cfg(test)]

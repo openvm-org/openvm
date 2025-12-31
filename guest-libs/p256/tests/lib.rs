@@ -268,7 +268,7 @@ mod guest_tests {
 mod host_tests {
     use hex_literal::hex;
     use openvm_algebra_guest::IntMod;
-    use openvm_ecc_guest::{msm, weierstrass::WeierstrassPoint, Group};
+    use openvm_weierstrass_guest::{msm, weierstrass::WeierstrassPoint, Group};
     use p256::{P256Coord, P256Point, P256Scalar};
 
     #[test]

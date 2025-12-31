@@ -4,7 +4,7 @@ use hex_literal::hex;
 // [!region imports]
 use openvm as _;
 use openvm_algebra_guest::{field::FieldExtension, IntMod};
-use openvm_ecc_guest::AffinePoint;
+use openvm_weierstrass_guest::AffinePoint;
 use openvm_pairing::{
     bls12_381::{Bls12_381, Fp, Fp2},
     PairingCheck,

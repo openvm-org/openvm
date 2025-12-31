@@ -27,7 +27,7 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
     prover::cpu::{CpuBackend, CpuDevice},
 };
-use openvm_te_guest::{
+use openvm_edwards_guest::{
     algebra::IntMod,
     ed25519::{CURVE_A as ED25519_A, CURVE_D as ED25519_D, ED25519_MODULUS, ED25519_ORDER},
 };
@@ -81,7 +81,7 @@ impl EdwardsExtension {
             .collect::<Vec<String>>()
             .join(", ");
 
-        format!("openvm_te_guest::te_macros::te_init! {{ {supported_curves} }}")
+        format!("openvm_edwards_guest::te_macros::te_init! {{ {supported_curves} }}")
     }
 }
 

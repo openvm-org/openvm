@@ -17,8 +17,8 @@ use syn::{
 /// }
 /// ```
 ///
-/// For this macro to work, you must import the `elliptic_curve` crate and the `openvm_te_guest`
-/// crate..
+/// For this macro to work, you must import the `elliptic_curve` crate and the
+/// `openvm_edwards_guest` crate..
 #[proc_macro]
 pub fn te_declare(input: TokenStream) -> TokenStream {
     let MacroArgs { items } = parse_macro_input!(input as MacroArgs);
@@ -115,10 +115,10 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
                         let y1x2 = p1.y.clone() * p2.x.clone();
                         let x1x2 = p1.x.clone() * p2.x.clone();
                         let y1y2 = p1.y.clone() * p2.y.clone();
-                        let dx1x2y1y2 = <Self as ::openvm_te_guest::edwards::TwistedEdwardsPoint>::CURVE_D * &x1x2 * &y1y2;
+                        let dx1x2y1y2 = <Self as ::openvm_edwards_guest::edwards::TwistedEdwardsPoint>::CURVE_D * &x1x2 * &y1y2;
 
                         let x3 = (x1y2 + y1x2).div_unsafe(&<#intmod_type as openvm_algebra_guest::IntMod>::ONE + &dx1x2y1y2);
-                        let y3 = (y1y2 - <Self as ::openvm_te_guest::edwards::TwistedEdwardsPoint>::CURVE_A * x1x2).div_unsafe(&<#intmod_type as openvm_algebra_guest::IntMod>::ONE - &dx1x2y1y2);
+                        let y3 = (y1y2 - <Self as ::openvm_edwards_guest::edwards::TwistedEdwardsPoint>::CURVE_A * x1x2).div_unsafe(&<#intmod_type as openvm_algebra_guest::IntMod>::ONE - &dx1x2y1y2);
 
                         #struct_name { x: x3, y: y3 }
                     }
@@ -141,12 +141,12 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
                 #[cfg(target_os = "zkvm")]
                 #[inline(always)]
                 fn set_up_once() {
-                    static is_setup: ::openvm_te_guest::once_cell::race::OnceBool = ::openvm_te_guest::once_cell::race::OnceBool::new();
+                    static is_setup: ::openvm_edwards_guest::once_cell::race::OnceBool = ::openvm_edwards_guest::once_cell::race::OnceBool::new();
                     is_setup.get_or_init(|| {
-                        let modulus_bytes = <<Self as openvm_te_guest::edwards::TwistedEdwardsPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
-                        let mut zero = [0u8; <<Self as openvm_te_guest::edwards::TwistedEdwardsPoint>::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS];
-                        let curve_a_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<Self as openvm_te_guest::edwards::TwistedEdwardsPoint>::CURVE_A);
-                        let curve_d_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<Self as openvm_te_guest::edwards::TwistedEdwardsPoint>::CURVE_D);
+                        let modulus_bytes = <<Self as openvm_edwards_guest::edwards::TwistedEdwardsPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
+                        let mut zero = [0u8; <<Self as openvm_edwards_guest::edwards::TwistedEdwardsPoint>::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS];
+                        let curve_a_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<Self as openvm_edwards_guest::edwards::TwistedEdwardsPoint>::CURVE_A);
+                        let curve_d_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<Self as openvm_edwards_guest::edwards::TwistedEdwardsPoint>::CURVE_D);
                         let p1 = [modulus_bytes.as_ref(), curve_a_bytes.as_ref()].concat();
                         let p2 = [curve_d_bytes.as_ref(), zero.as_ref()].concat();
                         let mut uninit: core::mem::MaybeUninit<[Self; 2]> = core::mem::MaybeUninit::uninit();
@@ -164,7 +164,7 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl ::openvm_te_guest::edwards::TwistedEdwardsPoint for #struct_name {
+            impl ::openvm_edwards_guest::edwards::TwistedEdwardsPoint for #struct_name {
                 const CURVE_A: Self::Coordinate = #const_a;
                 const CURVE_D: Self::Coordinate = #const_d;
 
@@ -237,7 +237,7 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
             }
 
             mod #group_ops_mod_name {
-                use ::openvm_te_guest::{Group, edwards::TwistedEdwardsPoint, FromCompressed, impl_te_group_ops, algebra::{IntMod, DivUnsafe, DivAssignUnsafe, ExpBytes}};
+                use ::openvm_edwards_guest::{Group, edwards::TwistedEdwardsPoint, FromCompressed, impl_te_group_ops, algebra::{IntMod, DivUnsafe, DivAssignUnsafe, ExpBytes}};
                 use super::*;
 
                 impl_te_group_ops!(#struct_name, #intmod_type);
@@ -245,7 +245,7 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
                 impl FromCompressed<#intmod_type> for #struct_name {
                     fn decompress(y: #intmod_type, rec_id: &u8) -> Option<Self> {
                         use openvm_algebra_guest::{Sqrt, DivUnsafe};
-                        let x_squared = (<#intmod_type as openvm_algebra_guest::IntMod>::ONE - &y * &y).div_unsafe(<#struct_name as ::openvm_te_guest::edwards::TwistedEdwardsPoint>::CURVE_A - &<#struct_name as ::openvm_te_guest::edwards::TwistedEdwardsPoint>::CURVE_D * &y * &y);
+                        let x_squared = (<#intmod_type as openvm_algebra_guest::IntMod>::ONE - &y * &y).div_unsafe(<#struct_name as ::openvm_edwards_guest::edwards::TwistedEdwardsPoint>::CURVE_A - &<#struct_name as ::openvm_edwards_guest::edwards::TwistedEdwardsPoint>::CURVE_D * &y * &y);
                         let x = x_squared.sqrt();
                         match x {
                             None => None,
@@ -260,7 +260,7 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
                                     return None;
                                 }
                                 // In order for sqrt() to return Some, we are guaranteed that x * x == x_squared, which already proves (correct_x, y) is on the curve
-                                Some(<#struct_name as ::openvm_te_guest::edwards::TwistedEdwardsPoint>::from_xy_unchecked(correct_x, y))
+                                Some(<#struct_name as ::openvm_edwards_guest::edwards::TwistedEdwardsPoint>::from_xy_unchecked(correct_x, y))
                             }
                         }
                     }
@@ -319,11 +319,11 @@ pub fn te_init(input: TokenStream) -> TokenStream {
                 {
 
                     openvm::platform::custom_insn_r!(
-                        opcode = ::openvm_te_guest::OPCODE,
-                        funct3 = ::openvm_te_guest::TE_FUNCT3 as usize,
-                        funct7 = ::openvm_te_guest::TeBaseFunct7::TeSetup as usize
+                        opcode = ::openvm_edwards_guest::OPCODE,
+                        funct3 = ::openvm_edwards_guest::TE_FUNCT3 as usize,
+                        funct7 = ::openvm_edwards_guest::TeBaseFunct7::TeSetup as usize
                             + #ec_idx
-                                * (::openvm_te_guest::TeBaseFunct7::TWISTED_EDWARDS_MAX_KINDS as usize),
+                                * (::openvm_edwards_guest::TeBaseFunct7::TWISTED_EDWARDS_MAX_KINDS as usize),
                         rd = In uninit,
                         rs1 = In p1,
                         rs2 = In p2,
@@ -337,7 +337,7 @@ pub fn te_init(input: TokenStream) -> TokenStream {
         #[allow(non_snake_case)]
         #[cfg(target_os = "zkvm")]
         mod openvm_intrinsics_ffi_2_te {
-            use ::openvm_te_guest::{OPCODE, TE_FUNCT3, TeBaseFunct7};
+            use ::openvm_edwards_guest::{OPCODE, TE_FUNCT3, TeBaseFunct7};
 
             #(#externs)*
         }

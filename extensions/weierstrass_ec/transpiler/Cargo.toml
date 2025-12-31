@@ -13,5 +13,5 @@ openvm-instructions = { workspace = true }
 openvm-transpiler = { workspace = true }
 rrs-lib = { workspace = true }
 strum = { workspace = true }
-openvm-ecc-guest = { workspace = true }
+openvm-weierstrass-guest = { workspace = true }
 openvm-instructions-derive = { workspace = true }

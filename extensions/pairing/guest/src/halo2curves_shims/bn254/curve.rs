@@ -2,7 +2,7 @@ use halo2curves_axiom::bn256::{Fq, Fq2};
 use lazy_static::lazy_static;
 use num_bigint::BigUint;
 use num_traits::Num;
-use openvm_ecc_guest::algebra::field::FieldExtension;
+use openvm_weierstrass_guest::algebra::field::FieldExtension;
 
 lazy_static! {
     pub static ref BN254_XI: Fq2 = Fq2::from_coeffs([Fq::from_raw([9, 0, 0, 0]), Fq::one()]);

@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
 use itertools::izip;
-use openvm_ecc_guest::{
+use openvm_weierstrass_guest::{
     algebra::{DivUnsafe, Field},
     AffinePoint,
 };

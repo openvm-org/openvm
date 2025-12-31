@@ -9,7 +9,7 @@ openvm = { path = "../../../../crates/toolchain/openvm" }
 openvm-platform = { path = "../../../../crates/toolchain/platform" }
 openvm-custom-insn = { path = "../../../../crates/toolchain/custom_insn", default-features = false }
 
-openvm-ecc-guest = { path = "../../guest", default-features = false }
+openvm-weierstrass-guest = { path = "../../guest", default-features = false }
 openvm-ecc-sw-macros = { path = "../../../../extensions/weierstrass_ec/sw-macros", default-features = false }
 openvm-algebra-guest = { path = "../../../algebra/guest", default-features = false }
 openvm-algebra-moduli-macros = { path = "../../../algebra/moduli-macros", default-features = false }

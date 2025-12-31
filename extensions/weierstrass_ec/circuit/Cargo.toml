@@ -17,7 +17,7 @@ openvm-stark-backend = { workspace = true }
 openvm-algebra-circuit = { workspace = true }
 openvm-rv32-adapters = { workspace = true }
 openvm-weierstrass-transpiler = { workspace = true }
-openvm-ecc-guest = { workspace = true }
+openvm-weierstrass-guest = { workspace = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
 openvm-stark-sdk = { workspace = true, optional = true }

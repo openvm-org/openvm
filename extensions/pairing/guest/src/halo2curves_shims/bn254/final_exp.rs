@@ -5,7 +5,7 @@ use halo2curves_axiom::{
     ff::Field,
 };
 use lazy_static::lazy_static;
-use openvm_ecc_guest::{
+use openvm_weierstrass_guest::{
     algebra::{field::FieldExtension, ExpBytes},
     AffinePoint,
 };

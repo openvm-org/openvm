@@ -204,7 +204,7 @@ impl Fp12 {
 mod tests {
     use halo2curves_axiom::{bn256::Fq12, ff::Field};
     use openvm_circuit_primitives::TraceSubRowGenerator;
-    use openvm_ecc_guest::algebra::field::FieldExtension;
+    use openvm_weierstrass_guest::algebra::field::FieldExtension;
     use openvm_mod_circuit_builder::{test_utils::*, *};
     use openvm_pairing_guest::bn254::BN254_MODULUS;
     use openvm_stark_backend::{

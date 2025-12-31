@@ -1,5 +1,5 @@
 #![no_std]
-extern crate self as openvm_ecc_guest;
+extern crate self as openvm_weierstrass_guest;
 #[macro_use]
 extern crate alloc;
 

@@ -7,8 +7,8 @@ edition = "2021"
 [dependencies]
 openvm = { path = "../../../toolchain/openvm", features = ["std"] }
 openvm-algebra-guest = { path = "../../../../extensions/algebra/guest" }
-openvm-ecc-guest = { path = "../../../../extensions/weierstrass_ec/guest" }
-openvm-te-guest = { path = "../../../../extensions/edwards_ec/guest" }
+openvm-weierstrass-guest = { path = "../../../../extensions/weierstrass_ec/guest" }
+openvm-edwards-guest = { path = "../../../../extensions/edwards_ec/guest" }
 openvm-pairing = { path = "../../../../guest-libs/pairing", features = [
     "bn254",
     "bls12_381",

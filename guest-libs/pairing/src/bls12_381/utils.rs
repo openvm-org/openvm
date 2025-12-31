@@ -1,6 +1,6 @@
 use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2, G2Affine};
 use openvm_algebra_guest::{field::FieldExtension, IntMod};
-use openvm_ecc_guest::weierstrass::WeierstrassPoint;
+use openvm_weierstrass_guest::weierstrass::WeierstrassPoint;
 
 use super::{Fp, Fp12, Fp2};
 use crate::bls12_381::G2Affine as OpenVmG2Affine;

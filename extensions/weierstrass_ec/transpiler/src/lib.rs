@@ -1,4 +1,4 @@
-use openvm_ecc_guest::{SwBaseFunct7, OPCODE, SW_FUNCT3};
+use openvm_weierstrass_guest::{SwBaseFunct7, OPCODE, SW_FUNCT3};
 use openvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, VmOpcode,
 };

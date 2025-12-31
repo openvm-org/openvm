@@ -5,7 +5,7 @@
 use core::hint::black_box;
 
 use hex_literal::hex;
-use openvm_ecc_guest::{
+use openvm_weierstrass_guest::{
     algebra::IntMod,
     ecdsa::{verify_prehashed, VerifyingKey},
     weierstrass::WeierstrassPoint,

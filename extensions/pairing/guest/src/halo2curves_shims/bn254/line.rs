@@ -3,7 +3,7 @@ extern crate std;
 use std::ops::{Add, Mul, Neg, Sub};
 
 use halo2curves_axiom::bn256::{Fq12, Fq2};
-use openvm_ecc_guest::{
+use openvm_weierstrass_guest::{
     algebra::{field::FieldExtension, Field},
     AffinePoint,
 };

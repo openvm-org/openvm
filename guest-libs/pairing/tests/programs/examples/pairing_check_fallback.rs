@@ -9,7 +9,7 @@ use openvm_algebra_guest::{
     field::{ComplexConjugate, FieldExtension},
     DivUnsafe, Field, IntMod,
 };
-use openvm_ecc_guest::AffinePoint;
+use openvm_weierstrass_guest::AffinePoint;
 use openvm_pairing::PairingCheck;
 use openvm_pairing_guest::pairing::{exp_check_fallback, MultiMillerLoop, PairingCheckError};
 

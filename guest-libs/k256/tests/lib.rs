@@ -269,7 +269,7 @@ mod host_tests {
     use hex_literal::hex;
     use k256::{Scalar as Secp256k1Scalar, Secp256k1Coord, Secp256k1Point};
     use openvm_algebra_guest::IntMod;
-    use openvm_ecc_guest::{msm, weierstrass::WeierstrassPoint, Group};
+    use openvm_weierstrass_guest::{msm, weierstrass::WeierstrassPoint, Group};
 
     #[test]
     fn test_host_secp256k1() {

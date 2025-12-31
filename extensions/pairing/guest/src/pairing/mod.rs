@@ -11,7 +11,7 @@ use openvm_algebra_guest::{
     field::{ComplexConjugate, FieldExtension},
     ExpBytes, Field, IntMod,
 };
-use openvm_ecc_guest::AffinePoint;
+use openvm_weierstrass_guest::AffinePoint;
 
 use crate::PairingBaseFunct7;
 

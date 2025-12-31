@@ -9,7 +9,7 @@ resolver = "2"
 [workspace.dependencies]
 openvm = { path = "../../crates/toolchain/openvm" }
 openvm-algebra-guest = { path = "../../extensions/algebra/guest", default-features = false }
-openvm-ecc-guest = { path = "../../extensions/weierstrass_ec/guest", default-features = false }
+openvm-weierstrass-guest = { path = "../../extensions/weierstrass_ec/guest", default-features = false }
 openvm-keccak256 = { path = "../../guest-libs/keccak256/", default-features = false }
 openvm-ruint = { path = "../../guest-libs/ruint/", package = "ruint", default-features = false }
 openvm-pairing = { path = "../../guest-libs/pairing/", default-features = false }

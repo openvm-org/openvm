@@ -1,5 +1,5 @@
 [package]
-name = "openvm-ecc-guest"
+name = "openvm-weierstrass-guest"
 description = "OpenVM guest library for elliptic curve cryptography with short Weierstrass curves"
 version.workspace = true
 authors.workspace = true

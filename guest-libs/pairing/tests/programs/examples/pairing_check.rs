@@ -5,7 +5,7 @@
 extern crate alloc;
 
 use openvm::io::read_vec;
-use openvm_ecc_guest::AffinePoint;
+use openvm_weierstrass_guest::AffinePoint;
 use openvm_pairing::PairingCheck;
 
 openvm::entry!(main);

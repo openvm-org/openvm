@@ -54,7 +54,7 @@ pub trait TwistedEdwardsPoint: Sized {
 /// use core::ops::AddAssign;
 ///
 /// use openvm_algebra_guest::{DivUnsafe, Field};
-/// use openvm_ecc_guest::{edwards::TwistedEdwardsPoint, AffinePoint, Group};
+/// use openvm_weierstrass_guest::{edwards::TwistedEdwardsPoint, AffinePoint, Group};
 /// ```
 #[macro_export]
 macro_rules! impl_te_affine {

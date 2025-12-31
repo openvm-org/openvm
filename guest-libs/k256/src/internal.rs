@@ -3,7 +3,7 @@ use core::ops::{Add, Neg};
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
 use openvm_algebra_moduli_macros::moduli_declare;
-use openvm_ecc_guest::{
+use openvm_weierstrass_guest::{
     weierstrass::{CachedMulTable, WeierstrassPoint},
     CyclicGroup, Group, IntrinsicCurve,
 };
@@ -65,7 +65,7 @@ impl IntrinsicCurve for Secp256k1 {
             let table = CachedMulTable::<Self>::new_with_prime_order(bases, 4);
             table.windowed_mul(coeffs)
         } else {
-            openvm_ecc_guest::msm(coeffs, bases)
+            openvm_weierstrass_guest::msm(coeffs, bases)
         }
     }
 }

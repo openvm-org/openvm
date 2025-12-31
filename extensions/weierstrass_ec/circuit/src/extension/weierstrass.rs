@@ -88,7 +88,7 @@ impl WeierstrassExtension {
             .collect::<Vec<String>>()
             .join(", ");
 
-        format!("openvm_ecc_guest::sw_macros::sw_init! {{ {supported_curves} }}")
+        format!("openvm_weierstrass_guest::sw_macros::sw_init! {{ {supported_curves} }}")
     }
 }
 

@@ -1,6 +1,6 @@
 # P256
 
-The P256 guest library uses [`openvm-ecc-guest`](/book/acceleration-using-extensions/elliptic-curve-cryptography) to provide elliptic curve operations over the Secp256r1 curve. It is intended as a patch for the [`p256`](https://crates.io/crates/p256) rust crate and can be swapped in for accelerated signature verification usage. Note that signing from a private key is not supported.  
+The P256 guest library uses [`openvm-weierstrass-guest`](/book/acceleration-using-extensions/elliptic-curve-cryptography) to provide elliptic curve operations over the Secp256r1 curve. It is intended as a patch for the [`p256`](https://crates.io/crates/p256) rust crate and can be swapped in for accelerated signature verification usage. Note that signing from a private key is not supported.  
 
 
 ### Config parameters

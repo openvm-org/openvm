@@ -252,7 +252,7 @@ where
 /// use core::ops::AddAssign;
 ///
 /// use openvm_algebra_guest::{DivUnsafe, Field};
-/// use openvm_ecc_guest::{weierstrass::WeierstrassPoint, AffinePoint, Group};
+/// use openvm_weierstrass_guest::{weierstrass::WeierstrassPoint, AffinePoint, Group};
 /// ```
 #[macro_export]
 macro_rules! impl_sw_affine {

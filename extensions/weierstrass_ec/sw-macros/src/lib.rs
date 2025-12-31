@@ -17,8 +17,8 @@ use syn::{
 /// }
 /// ```
 ///
-/// For this macro to work, you must import the `elliptic_curve` crate and the `openvm_ecc_guest`
-/// crate.
+/// For this macro to work, you must import the `elliptic_curve` crate and the
+/// `openvm_weierstrass_guest` crate.
 #[proc_macro]
 pub fn sw_declare(input: TokenStream) -> TokenStream {
     let MacroArgs { items } = parse_macro_input!(input as MacroArgs);
@@ -185,15 +185,15 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 #[inline(always)]
                 #[cfg(target_os = "zkvm")]
                 fn set_up_once() {
-                    static is_setup: ::openvm_ecc_guest::once_cell::race::OnceBool = ::openvm_ecc_guest::once_cell::race::OnceBool::new();
+                    static is_setup: ::openvm_weierstrass_guest::once_cell::race::OnceBool = ::openvm_weierstrass_guest::once_cell::race::OnceBool::new();
 
                     is_setup.get_or_init(|| {
                         // p1 is (x1, y1), and x1 must be the modulus.
                         // y1 can be anything for SetupEcAdd, but must equal `a` for SetupEcDouble
-                        let modulus_bytes = <<Self as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
-                        let mut one = [0u8; <<Self as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS];
+                        let modulus_bytes = <<Self as openvm_weierstrass_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
+                        let mut one = [0u8; <<Self as openvm_weierstrass_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS];
                         one[0] = 1;
-                        let curve_a_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<#struct_name as openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A);
+                        let curve_a_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<#struct_name as openvm_weierstrass_guest::weierstrass::WeierstrassPoint>::CURVE_A);
                         // p1 should be (p, a)
                         let p1 = [modulus_bytes.as_ref(), curve_a_bytes.as_ref()].concat();
                         // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.
@@ -222,7 +222,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 }
             }
 
-            impl ::openvm_ecc_guest::weierstrass::WeierstrassPoint for #struct_name {
+            impl ::openvm_weierstrass_guest::weierstrass::WeierstrassPoint for #struct_name {
                 const CURVE_A: #intmod_type = #const_a;
                 const CURVE_B: #intmod_type = #const_b;
                 const IDENTITY: Self = Self::identity();
@@ -376,7 +376,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             }
 
             mod #group_ops_mod_name {
-                use ::openvm_ecc_guest::{weierstrass::{WeierstrassPoint}, FromCompressed, impl_sw_group_ops, algebra::IntMod};
+                use ::openvm_weierstrass_guest::{weierstrass::{WeierstrassPoint}, FromCompressed, impl_sw_group_ops, algebra::IntMod};
                 use super::*;
 
                 impl_sw_group_ops!(#struct_name, #intmod_type);
@@ -384,7 +384,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 impl FromCompressed<#intmod_type> for #struct_name {
                     fn decompress(x: #intmod_type, rec_id: &u8) -> Option<Self> {
                         use openvm_algebra_guest::Sqrt;
-                        let y_squared = &x * &x * &x + &<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A * &x + &<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_B;
+                        let y_squared = &x * &x * &x + &<#struct_name as ::openvm_weierstrass_guest::weierstrass::WeierstrassPoint>::CURVE_A * &x + &<#struct_name as ::openvm_weierstrass_guest::weierstrass::WeierstrassPoint>::CURVE_B;
                         let y = y_squared.sqrt();
                         match y {
                             None => None,
@@ -399,7 +399,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                                     return None;
                                 }
                                 // In order for sqrt() to return Some, we are guaranteed that y * y == y_squared, which already proves (x, correct_y) is on the curve
-                                Some(<#struct_name as ::openvm_ecc_guest::weierstrass::WeierstrassPoint>::from_xy_unchecked(x, correct_y))
+                                Some(<#struct_name as ::openvm_weierstrass_guest::weierstrass::WeierstrassPoint>::from_xy_unchecked(x, correct_y))
                             }
                         }
                     }
@@ -475,21 +475,21 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                 #[cfg(target_os = "zkvm")]
                 {
                     openvm::platform::custom_insn_r!(
-                        opcode = ::openvm_ecc_guest::OPCODE,
-                        funct3 = ::openvm_ecc_guest::SW_FUNCT3 as usize,
-                        funct7 = ::openvm_ecc_guest::SwBaseFunct7::SwSetup as usize
+                        opcode = ::openvm_weierstrass_guest::OPCODE,
+                        funct3 = ::openvm_weierstrass_guest::SW_FUNCT3 as usize,
+                        funct7 = ::openvm_weierstrass_guest::SwBaseFunct7::SwSetup as usize
                             + #ec_idx
-                                * (::openvm_ecc_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                                * (::openvm_weierstrass_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                         rd = In uninit,
                         rs1 = In p1,
                         rs2 = In p2
                     );
                     openvm::platform::custom_insn_r!(
-                        opcode = ::openvm_ecc_guest::OPCODE,
-                        funct3 = ::openvm_ecc_guest::SW_FUNCT3 as usize,
-                        funct7 = ::openvm_ecc_guest::SwBaseFunct7::SwSetup as usize
+                        opcode = ::openvm_weierstrass_guest::OPCODE,
+                        funct3 = ::openvm_weierstrass_guest::SW_FUNCT3 as usize,
+                        funct7 = ::openvm_weierstrass_guest::SwBaseFunct7::SwSetup as usize
                             + #ec_idx
-                                * (::openvm_ecc_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
+                                * (::openvm_weierstrass_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                         rd = In uninit,
                         rs1 = In p1,
                         rs2 = Const "x0" // will be parsed as 0 and therefore transpiled to SETUP_EC_DOUBLE
@@ -505,7 +505,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
         #[allow(non_snake_case)]
         #[cfg(target_os = "zkvm")]
         mod openvm_intrinsics_ffi_2 {
-            use ::openvm_ecc_guest::{OPCODE, SW_FUNCT3, SwBaseFunct7};
+            use ::openvm_weierstrass_guest::{OPCODE, SW_FUNCT3, SwBaseFunct7};
 
             #(#externs)*
         }

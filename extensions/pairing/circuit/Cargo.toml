@@ -11,7 +11,7 @@ repository.workspace = true
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-circuit = { workspace = true }
-openvm-ecc-guest = { workspace = true }
+openvm-weierstrass-guest = { workspace = true }
 openvm-pairing-guest = { workspace = true, features = [
     "halo2curves",
     "bls12_381",
@@ -49,7 +49,7 @@ openvm-stark-sdk = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 halo2curves-axiom = { workspace = true }
-openvm-ecc-guest = { workspace = true }
+openvm-weierstrass-guest = { workspace = true }
 openvm-pairing-guest = { workspace = true, features = [
     "halo2curves",
     "bls12_381",

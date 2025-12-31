@@ -1,5 +1,5 @@
 #![no_std]
-extern crate self as openvm_te_guest;
+extern crate self as openvm_edwards_guest;
 #[macro_use]
 extern crate alloc;
 
@@ -11,9 +11,9 @@ use strum_macros::FromRepr;
 mod affine_point;
 pub use affine_point::*;
 // Use the same group traits as the short Weierstrass ec extension
-pub use openvm_ecc_guest::group::*;
+pub use openvm_weierstrass_guest::group::*;
 // Use the same msm implementation as the short Weierstrass ec extension
-pub use openvm_ecc_guest::msm::*;
+pub use openvm_weierstrass_guest::msm::*;
 
 /// Edwards curve traits
 pub mod edwards;
@@ -37,4 +37,4 @@ impl TeBaseFunct7 {
 }
 
 // Use the same traits as the short Weierstrass ec extension
-pub use openvm_ecc_guest::{FromCompressed, IntrinsicCurve};
+pub use openvm_weierstrass_guest::{FromCompressed, IntrinsicCurve};

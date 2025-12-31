@@ -18,7 +18,7 @@ use {
         bn254::{Bn254, Bn254Fp, Bn254Fp2, Bn254G1Affine, Bn254Scalar, G2Affine as Bn254G2Affine},
         PairingCheck,
     },
-    openvm_ecc_guest::{weierstrass::WeierstrassPoint, CyclicGroup},
+    openvm_weierstrass_guest::{weierstrass::WeierstrassPoint, CyclicGroup},
 };
 
 // Note: these will all currently be represented as bytes32 even though they could be smaller

@@ -3,7 +3,7 @@ use openvm_instructions::{
 };
 use openvm_instructions_derive::LocalOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_te_guest::{TeBaseFunct7, OPCODE, TE_FUNCT3};
+use openvm_edwards_guest::{TeBaseFunct7, OPCODE, TE_FUNCT3};
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
 use rrs_lib::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};

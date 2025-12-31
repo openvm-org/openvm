@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 
 use itertools::izip;
 use openvm_algebra_guest::{field::FieldExtension, DivUnsafe, Field};
-use openvm_ecc_guest::AffinePoint;
+use openvm_weierstrass_guest::AffinePoint;
 use openvm_pairing_guest::{
     bn254::{BN254_PSEUDO_BINARY_ENCODING, BN254_SEED},
     pairing::{

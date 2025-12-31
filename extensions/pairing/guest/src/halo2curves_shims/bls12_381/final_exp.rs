@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use halo2curves_axiom::bls12_381::{Fq, Fq12, Fq2};
 use lazy_static::lazy_static;
 use num_bigint::BigUint;
-use openvm_ecc_guest::{algebra::Field, AffinePoint};
+use openvm_weierstrass_guest::{algebra::Field, AffinePoint};
 
 use super::{Bls12_381, FINAL_EXP_FACTOR, LAMBDA, POLY_FACTOR};
 use crate::{

@@ -18,7 +18,7 @@ mod bn254 {
     use openvm_weierstrass_circuit::{
         CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, WeierstrassExtension,
     };
-    use openvm_ecc_guest::{
+    use openvm_weierstrass_guest::{
         algebra::{field::FieldExtension, IntMod},
         AffinePoint,
     };
@@ -485,7 +485,7 @@ mod bls12_381 {
     use openvm_weierstrass_circuit::{
         CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, WeierstrassExtension,
     };
-    use openvm_ecc_guest::{
+    use openvm_weierstrass_guest::{
         algebra::{field::FieldExtension, IntMod},
         AffinePoint,
     };
