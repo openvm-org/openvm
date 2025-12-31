@@ -1,0 +1,216 @@
+| Summary | Proof Time (s) | Parallel Proof Time (s) | Parallel Proof Time (32 provers) (s) |
+|:---|---:|---:|---:|
+| Total |  2.37 |  0.74 | 0.74 |
+| regex_program |  2.37 |  0.74 |  0.74 |
+
+
+| regex_program |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` |  583.50 |  2,334 |  705 |  533 |
+| `main_cells_used     ` |  4,421,557 |  17,686,228 |  10,891,066 |  2,177,774 |
+| `total_cells_used    ` |  14,617,035 |  58,468,140 |  23,437,436 |  11,579,760 |
+| `execute_metered_time_ms` |  36 | -          | -          | -          |
+| `execute_metered_insn_mi/s` |  112.48 | -          |  112.48 |  112.48 |
+| `execute_preflight_insns` |  1,034,378 |  4,137,512 |  1,104,000 |  826,512 |
+| `execute_preflight_time_ms` |  52.75 |  211 |  64 |  44 |
+| `execute_preflight_insn_mi/s` |  31.56 | -          |  32.75 |  28.73 |
+| `trace_gen_time_ms   ` |  169.25 |  677 |  182 |  154 |
+| `memory_finalize_time_ms` |  1 |  4 |  4 |  0 |
+| `stark_prove_excluding_trace_time_ms` |  287.75 |  1,151 |  311 |  272 |
+| `main_trace_commit_time_ms` |  51.50 |  206 |  57 |  49 |
+| `generate_perm_trace_time_ms` |  28.25 |  113 |  40 |  19 |
+| `perm_trace_commit_time_ms` |  64.18 |  256.72 |  71.09 |  55.09 |
+| `quotient_poly_compute_time_ms` |  58.88 |  235.52 |  69.43 |  52.49 |
+| `quotient_poly_commit_time_ms` |  15.71 |  62.83 |  18.53 |  13.72 |
+| `pcs_opening_time_ms ` |  65.50 |  262 |  75 |  57 |
+
+
+
+<details>
+<summary>Detailed Metrics</summary>
+
+|  | keygen_time_ms | app_prove_time_ms |
+| --- | --- |
+|  | 617 | 2,385 | 
+
+| group | prove_segment_time_ms | fri.log_blowup | execute_metered_time_ms | execute_metered_insns | execute_metered_insn_mi/s | compute_user_public_values_proof_time_ms |
+| --- | --- | --- | --- | --- | --- | --- |
+| regex_program | 563 | 1 | 36 | 4,137,512 | 112.48 | 0 | 
+
+| group | air_id | air_name | segment | rows | prep_cols | perm_cols | main_cols | cells |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| regex_program | 0 | ProgramAir | 0 | 131,072 |  | 8 | 10 | 2,359,296 | 
+| regex_program | 0 | ProgramAir | 1 | 131,072 |  | 8 | 10 | 2,359,296 | 
+| regex_program | 0 | ProgramAir | 2 | 131,072 |  | 8 | 10 | 2,359,296 | 
+| regex_program | 0 | ProgramAir | 3 | 131,072 |  | 8 | 10 | 2,359,296 | 
+| regex_program | 1 | VmConnectorAir | 0 | 2 | 1 | 16 | 5 | 42 | 
+| regex_program | 1 | VmConnectorAir | 1 | 2 | 1 | 16 | 5 | 42 | 
+| regex_program | 1 | VmConnectorAir | 2 | 2 | 1 | 16 | 5 | 42 | 
+| regex_program | 1 | VmConnectorAir | 3 | 2 | 1 | 16 | 5 | 42 | 
+| regex_program | 10 | VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | 0 | 256 |  | 72 | 39 | 28,416 | 
+| regex_program | 11 | VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | 0 | 16,384 |  | 52 | 31 | 1,359,872 | 
+| regex_program | 11 | VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | 1 | 16,384 |  | 52 | 31 | 1,359,872 | 
+| regex_program | 11 | VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | 2 | 16,384 |  | 52 | 31 | 1,359,872 | 
+| regex_program | 11 | VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | 3 | 16,384 |  | 52 | 31 | 1,359,872 | 
+| regex_program | 12 | RangeTupleCheckerAir<2> | 0 | 524,288 | 2 | 8 | 1 | 4,718,592 | 
+| regex_program | 12 | RangeTupleCheckerAir<2> | 1 | 524,288 | 2 | 8 | 1 | 4,718,592 | 
+| regex_program | 12 | RangeTupleCheckerAir<2> | 2 | 524,288 | 2 | 8 | 1 | 4,718,592 | 
+| regex_program | 12 | RangeTupleCheckerAir<2> | 3 | 524,288 | 2 | 8 | 1 | 4,718,592 | 
+| regex_program | 13 | KeccakVmAir | 3 | 32 |  | 1,056 | 3,163 | 135,008 | 
+| regex_program | 14 | Rv32HintStoreAir | 0 | 16,384 |  | 44 | 32 | 1,245,184 | 
+| regex_program | 15 | VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | 0 | 16,384 |  | 28 | 20 | 786,432 | 
+| regex_program | 15 | VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | 1 | 16,384 |  | 28 | 20 | 786,432 | 
+| regex_program | 15 | VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | 2 | 16,384 |  | 28 | 20 | 786,432 | 
+| regex_program | 15 | VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | 3 | 8,192 |  | 28 | 20 | 393,216 | 
+| regex_program | 16 | VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | 0 | 32,768 |  | 36 | 28 | 2,097,152 | 
+| regex_program | 16 | VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | 1 | 65,536 |  | 36 | 28 | 4,194,304 | 
+| regex_program | 16 | VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | 2 | 65,536 |  | 36 | 28 | 4,194,304 | 
+| regex_program | 16 | VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | 3 | 32,768 |  | 36 | 28 | 2,097,152 | 
+| regex_program | 17 | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 0 | 32,768 |  | 28 | 18 | 1,507,328 | 
+| regex_program | 17 | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 1 | 32,768 |  | 28 | 18 | 1,507,328 | 
+| regex_program | 17 | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 2 | 32,768 |  | 28 | 18 | 1,507,328 | 
+| regex_program | 17 | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 3 | 32,768 |  | 28 | 18 | 1,507,328 | 
+| regex_program | 18 | VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | 0 | 65,536 |  | 32 | 32 | 4,194,304 | 
+| regex_program | 18 | VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | 1 | 65,536 |  | 32 | 32 | 4,194,304 | 
+| regex_program | 18 | VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | 2 | 65,536 |  | 32 | 32 | 4,194,304 | 
+| regex_program | 18 | VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | 3 | 65,536 |  | 32 | 32 | 4,194,304 | 
+| regex_program | 19 | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 0 | 131,072 |  | 28 | 26 | 7,077,888 | 
+| regex_program | 19 | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 1 | 65,536 |  | 28 | 26 | 3,538,944 | 
+| regex_program | 19 | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 2 | 65,536 |  | 28 | 26 | 3,538,944 | 
+| regex_program | 19 | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 3 | 65,536 |  | 28 | 26 | 3,538,944 | 
+| regex_program | 2 | PersistentBoundaryAir<8> | 0 | 131,072 |  | 12 | 20 | 4,194,304 | 
+| regex_program | 2 | PersistentBoundaryAir<8> | 1 | 1,024 |  | 12 | 20 | 32,768 | 
+| regex_program | 2 | PersistentBoundaryAir<8> | 2 | 1,024 |  | 12 | 20 | 32,768 | 
+| regex_program | 2 | PersistentBoundaryAir<8> | 3 | 1,024 |  | 12 | 20 | 32,768 | 
+| regex_program | 20 | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | 0 | 1,024 |  | 52 | 36 | 90,112 | 
+| regex_program | 20 | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | 3 | 32 |  | 52 | 36 | 2,816 | 
+| regex_program | 21 | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | 0 | 524,288 |  | 52 | 41 | 48,758,784 | 
+| regex_program | 21 | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | 1 | 524,288 |  | 52 | 41 | 48,758,784 | 
+| regex_program | 21 | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | 2 | 524,288 |  | 52 | 41 | 48,758,784 | 
+| regex_program | 21 | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | 3 | 524,288 |  | 52 | 41 | 48,758,784 | 
+| regex_program | 22 | VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | 0 | 65,536 |  | 52 | 53 | 6,881,280 | 
+| regex_program | 22 | VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | 1 | 65,536 |  | 52 | 53 | 6,881,280 | 
+| regex_program | 22 | VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | 2 | 65,536 |  | 52 | 53 | 6,881,280 | 
+| regex_program | 22 | VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | 3 | 65,536 |  | 52 | 53 | 6,881,280 | 
+| regex_program | 23 | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 0 | 8,192 |  | 40 | 37 | 630,784 | 
+| regex_program | 23 | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 1 | 8,192 |  | 40 | 37 | 630,784 | 
+| regex_program | 23 | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 2 | 8,192 |  | 40 | 37 | 630,784 | 
+| regex_program | 23 | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 3 | 8,192 |  | 40 | 37 | 630,784 | 
+| regex_program | 24 | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 0 | 524,288 |  | 52 | 36 | 46,137,344 | 
+| regex_program | 24 | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 1 | 524,288 |  | 52 | 36 | 46,137,344 | 
+| regex_program | 24 | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 2 | 524,288 |  | 52 | 36 | 46,137,344 | 
+| regex_program | 24 | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 3 | 262,144 |  | 52 | 36 | 23,068,672 | 
+| regex_program | 25 | BitwiseOperationLookupAir<8> | 0 | 65,536 | 3 | 8 | 2 | 655,360 | 
+| regex_program | 25 | BitwiseOperationLookupAir<8> | 1 | 65,536 | 3 | 8 | 2 | 655,360 | 
+| regex_program | 25 | BitwiseOperationLookupAir<8> | 2 | 65,536 | 3 | 8 | 2 | 655,360 | 
+| regex_program | 25 | BitwiseOperationLookupAir<8> | 3 | 65,536 | 3 | 8 | 2 | 655,360 | 
+| regex_program | 26 | PhantomAir | 0 | 1 |  | 12 | 6 | 18 | 
+| regex_program | 27 | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 0 | 16,384 |  | 8 | 300 | 5,046,272 | 
+| regex_program | 27 | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 1 | 1,024 |  | 8 | 300 | 315,392 | 
+| regex_program | 27 | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 2 | 1,024 |  | 8 | 300 | 315,392 | 
+| regex_program | 27 | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 3 | 2,048 |  | 8 | 300 | 630,784 | 
+| regex_program | 28 | VariableRangeCheckerAir | 0 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| regex_program | 28 | VariableRangeCheckerAir | 1 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| regex_program | 28 | VariableRangeCheckerAir | 2 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| regex_program | 28 | VariableRangeCheckerAir | 3 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| regex_program | 3 | MemoryMerkleAir<8> | 0 | 131,072 |  | 16 | 32 | 6,291,456 | 
+| regex_program | 3 | MemoryMerkleAir<8> | 1 | 1,024 |  | 16 | 32 | 49,152 | 
+| regex_program | 3 | MemoryMerkleAir<8> | 2 | 1,024 |  | 16 | 32 | 49,152 | 
+| regex_program | 3 | MemoryMerkleAir<8> | 3 | 2,048 |  | 16 | 32 | 98,304 | 
+| regex_program | 6 | AccessAdapterAir<8> | 0 | 131,072 |  | 16 | 17 | 4,325,376 | 
+| regex_program | 6 | AccessAdapterAir<8> | 1 | 1,024 |  | 16 | 17 | 33,792 | 
+| regex_program | 6 | AccessAdapterAir<8> | 2 | 1,024 |  | 16 | 17 | 33,792 | 
+| regex_program | 6 | AccessAdapterAir<8> | 3 | 1,024 |  | 16 | 17 | 33,792 | 
+| regex_program | 9 | VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | 0 | 256 |  | 72 | 59 | 33,536 | 
+
+| group | air_name | quotient_deg | interactions | constraints |
+| --- | --- | --- | --- | --- |
+| regex_program | AccessAdapterAir<16> | 2 | 5 | 12 | 
+| regex_program | AccessAdapterAir<2> | 2 | 5 | 12 | 
+| regex_program | AccessAdapterAir<32> | 2 | 5 | 12 | 
+| regex_program | AccessAdapterAir<4> | 2 | 5 | 12 | 
+| regex_program | AccessAdapterAir<8> | 2 | 5 | 12 | 
+| regex_program | BitwiseOperationLookupAir<8> | 2 | 2 | 4 | 
+| regex_program | KeccakVmAir | 2 | 321 | 4,513 | 
+| regex_program | MemoryMerkleAir<8> | 2 | 4 | 39 | 
+| regex_program | PersistentBoundaryAir<8> | 2 | 3 | 7 | 
+| regex_program | PhantomAir | 2 | 3 | 5 | 
+| regex_program | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 2 | 1 | 286 | 
+| regex_program | ProgramAir | 1 | 1 | 4 | 
+| regex_program | RangeTupleCheckerAir<2> | 1 | 1 | 4 | 
+| regex_program | Rv32HintStoreAir | 2 | 18 | 29 | 
+| regex_program | VariableRangeCheckerAir | 1 | 1 | 4 | 
+| regex_program | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 2 | 20 | 37 | 
+| regex_program | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 2 | 18 | 40 | 
+| regex_program | VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | 2 | 24 | 91 | 
+| regex_program | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 2 | 11 | 20 | 
+| regex_program | VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | 2 | 13 | 35 | 
+| regex_program | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 2 | 10 | 18 | 
+| regex_program | VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | 2 | 16 | 20 | 
+| regex_program | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | 2 | 18 | 33 | 
+| regex_program | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | 2 | 17 | 40 | 
+| regex_program | VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | 2 | 25 | 84 | 
+| regex_program | VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | 2 | 24 | 31 | 
+| regex_program | VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | 2 | 19 | 19 | 
+| regex_program | VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | 2 | 12 | 14 | 
+| regex_program | VmConnectorAir | 2 | 5 | 11 | 
+
+| group | segment | trace_gen_time_ms | total_proof_time_ms | total_cells_used | total_cells | system_trace_gen_time_ms | stark_prove_excluding_trace_time_ms | single_trace_gen_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | query phase_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | partially_prove_time_ms | open_time_ms | memory_finalize_time_ms | main_trace_commit_time_ms | main_cells_used | generate_perm_trace_time_ms | execute_preflight_time_ms | execute_preflight_insns | execute_preflight_insn_mi/s | evaluate matrix_time_ms | eval_and_commit_quotient_time_ms | build fri inputs_time_ms | OpeningProverGpu::open_time_ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| regex_program | 0 | 180 | 705 | 23,437,436 | 150,778,428 | 180 | 311 | 0 | 60.61 | 18.53 | 5 | 71.09 | 75 | 97 | 75 | 4 | 57 | 10,891,066 | 25 | 45 | 1,103,000 | 28.73 | 22 | 79 | 1 | 75 | 
+| regex_program | 1 | 154 | 533 | 11,597,664 | 128,513,066 | 154 | 273 | 1 | 52.99 | 14.89 | 4 | 65.70 | 69 | 85 | 69 | 0 | 49 | 2,195,390 | 19 | 64 | 1,104,000 | 32.75 | 16 | 68 | 0 | 69 | 
+| regex_program | 2 | 161 | 533 | 11,579,760 | 128,513,066 | 161 | 272 | 1 | 52.49 | 15.68 | 4 | 64.84 | 57 | 95 | 57 | 0 | 50 | 2,177,774 | 29 | 58 | 1,104,000 | 32.06 | 17 | 68 | 0 | 57 | 
+| regex_program | 3 | 182 | 563 | 11,853,280 | 103,456,394 | 182 | 295 | 0 | 69.43 | 13.72 | 5 | 55.09 | 61 | 98 | 61 | 0 | 50 | 2,421,998 | 40 | 44 | 826,512 | 32.70 | 19 | 84 | 1 | 61 | 
+
+| group | segment | trace_height_constraint | weighted_sum | threshold |
+| --- | --- | --- | --- | --- |
+| regex_program | 0 | 0 | 2,870,278 | 2,013,265,921 | 
+| regex_program | 0 | 1 | 8,479,744 | 2,013,265,921 | 
+| regex_program | 0 | 2 | 1,435,139 | 2,013,265,921 | 
+| regex_program | 0 | 3 | 9,728,004 | 2,013,265,921 | 
+| regex_program | 0 | 4 | 524,288 | 2,013,265,921 | 
+| regex_program | 0 | 5 | 262,144 | 2,013,265,921 | 
+| regex_program | 0 | 6 | 3,302,144 | 2,013,265,921 | 
+| regex_program | 0 | 7 | 69,632 | 2,013,265,921 | 
+| regex_program | 0 | 8 | 27,736,333 | 2,013,265,921 | 
+| regex_program | 1 | 0 | 2,768,900 | 2,013,265,921 | 
+| regex_program | 1 | 1 | 7,720,960 | 2,013,265,921 | 
+| regex_program | 1 | 2 | 1,384,450 | 2,013,265,921 | 
+| regex_program | 1 | 3 | 9,357,316 | 2,013,265,921 | 
+| regex_program | 1 | 4 | 4,096 | 2,013,265,921 | 
+| regex_program | 1 | 5 | 2,048 | 2,013,265,921 | 
+| regex_program | 1 | 6 | 3,284,992 | 2,013,265,921 | 
+| regex_program | 1 | 7 | 65,536 | 2,013,265,921 | 
+| regex_program | 1 | 8 | 25,637,898 | 2,013,265,921 | 
+| regex_program | 2 | 0 | 2,768,900 | 2,013,265,921 | 
+| regex_program | 2 | 1 | 7,720,960 | 2,013,265,921 | 
+| regex_program | 2 | 2 | 1,384,450 | 2,013,265,921 | 
+| regex_program | 2 | 3 | 9,357,316 | 2,013,265,921 | 
+| regex_program | 2 | 4 | 4,096 | 2,013,265,921 | 
+| regex_program | 2 | 5 | 2,048 | 2,013,265,921 | 
+| regex_program | 2 | 6 | 3,284,992 | 2,013,265,921 | 
+| regex_program | 2 | 7 | 65,536 | 2,013,265,921 | 
+| regex_program | 2 | 8 | 25,637,898 | 2,013,265,921 | 
+| regex_program | 3 | 0 | 2,162,820 | 2,013,265,921 | 
+| regex_program | 3 | 1 | 6,003,712 | 2,013,265,921 | 
+| regex_program | 3 | 2 | 1,081,410 | 2,013,265,921 | 
+| regex_program | 3 | 3 | 7,509,092 | 2,013,265,921 | 
+| regex_program | 3 | 4 | 7,168 | 2,013,265,921 | 
+| regex_program | 3 | 5 | 3,072 | 2,013,265,921 | 
+| regex_program | 3 | 6 | 1,904,960 | 2,013,265,921 | 
+| regex_program | 3 | 7 | 65,536 | 2,013,265,921 | 
+| regex_program | 3 | 8 | 19,788,394 | 2,013,265,921 | 
+
+</details>
+
+
+Commit: https://github.com/openvm-org/openvm/commit/8aaa1b0ce0b110be7de6d745b6dae5af928a7713
+
+Max Segment Length: 1048476
+
+Instance Type: g6.2xlarge
+
+Memory Allocator: jemalloc
+
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/20613658003)
