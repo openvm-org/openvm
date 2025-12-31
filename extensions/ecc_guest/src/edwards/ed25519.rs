@@ -1,3 +1,5 @@
+extern crate alloc;
+
 use core::ops::Add;
 
 use hex_literal::hex;
@@ -6,8 +8,7 @@ use lazy_static::lazy_static;
 #[cfg(not(target_os = "zkvm"))]
 use num_bigint::BigUint;
 use openvm_algebra_guest::IntMod;
-
-use crate::{CyclicGroup, IntrinsicCurve};
+use openvm_edwards_guest::{CyclicGroup, IntrinsicCurve};
 
 #[cfg(not(target_os = "zkvm"))]
 lazy_static! {
@@ -25,7 +26,7 @@ lazy_static! {
     ));
 }
 
-openvm_algebra_moduli_macros::moduli_declare! {
+openvm_algebra_guest::moduli_macros::moduli_declare! {
     Ed25519Coord { modulus = "0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED" },
     Ed25519Scalar { modulus = "0x1000000000000000000000000000000014DEF9DEA2F79CD65812631A5CF5D3ED" },
 }
@@ -41,7 +42,7 @@ pub const CURVE_D: Ed25519Coord = Ed25519Coord::from_const_bytes(hex!(
     "A3785913CA4DEB75ABD841414D0A700098E879777940C78C73FE6F2BEE6C0352"
 ));
 
-openvm_ecc_te_macros::te_declare! {
+openvm_edwards_guest::te_macros::te_declare! {
     Ed25519Point { mod_type = Ed25519Coord, a = CURVE_A, d = CURVE_D },
 }
 
@@ -75,10 +76,10 @@ impl IntrinsicCurve for Ed25519Point {
         for<'a> &'a Self::Point: Add<&'a Self::Point, Output = Self::Point>,
     {
         if coeffs.len() < 25 {
-            let table = crate::edwards::CachedMulTable::<Self>::new(bases, 4);
+            let table = openvm_edwards_guest::edwards::CachedMulTable::<Self>::new(bases, 4);
             table.windowed_mul(coeffs)
         } else {
-            crate::msm(coeffs, bases)
+            openvm_edwards_guest::msm(coeffs, bases)
         }
     }
 }

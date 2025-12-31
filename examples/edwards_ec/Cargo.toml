@@ -11,7 +11,7 @@ openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
     "std",
 ] }
 openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
-openvm-edwards-guest = { git = "https://github.com/openvm-org/openvm.git", features = ["ed25519"]}
+openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git", features = ["ed25519"]}
 hex-literal = { version = "0.4.1", default-features = false }
 serde = { version = "1.0", default-features = false, features = [ "derive" ] }
 num-bigint = { version = "0.4.6", default-features = false }
@@ -23,5 +23,5 @@ default = []
 [patch."https://github.com/openvm-org/openvm.git"]
 openvm = { path = "../../crates/toolchain/openvm" }
 openvm-algebra-guest = { path = "../../extensions/algebra/guest" }
-openvm-edwards-guest = { path = "../../extensions/edwards_ec/guest" }
+openvm-ecc-guest = { path = "../../extensions/ecc_guest" }
 k256 = { path = "../../guest-libs/k256" }

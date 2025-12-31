@@ -18,6 +18,10 @@ use openvm_circuit_primitives::{
     },
     var_range::VariableRangeCheckerBus,
 };
+use openvm_ecc_guest::edwards::{
+    algebra::IntMod,
+    ed25519::{CURVE_A as ED25519_A, CURVE_D as ED25519_D, ED25519_MODULUS, ED25519_ORDER},
+};
 use openvm_edwards_transpiler::Rv32EdwardsOpcode;
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
@@ -26,10 +30,6 @@ use openvm_stark_backend::{
     engine::StarkEngine,
     p3_field::PrimeField32,
     prover::cpu::{CpuBackend, CpuDevice},
-};
-use openvm_ecc_guest::edwards::{
-    algebra::IntMod,
-    ed25519::{CURVE_A as ED25519_A, CURVE_D as ED25519_D, ED25519_MODULUS, ED25519_ORDER},
 };
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};

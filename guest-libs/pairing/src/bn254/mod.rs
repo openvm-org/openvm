@@ -5,7 +5,9 @@ use core::ops::{Add, Neg};
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
 use openvm_algebra_moduli_macros::moduli_declare;
-use openvm_ecc_guest::weierstrass::{weierstrass::CachedMulTable, CyclicGroup, Group, IntrinsicCurve};
+use openvm_ecc_guest::weierstrass::{
+    weierstrass::CachedMulTable, CyclicGroup, Group, IntrinsicCurve,
+};
 use openvm_ecc_sw_macros::sw_declare;
 use openvm_pairing_guest::pairing::PairingIntrinsics;
 

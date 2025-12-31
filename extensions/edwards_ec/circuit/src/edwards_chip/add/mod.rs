@@ -12,6 +12,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
 };
+use openvm_edwards_transpiler::Rv32EdwardsOpcode;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionExecutor,
@@ -20,7 +21,6 @@ use openvm_mod_circuit_builder::{
 use openvm_rv32_adapters::{
     Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
 };
-use openvm_edwards_transpiler::Rv32EdwardsOpcode;
 
 use super::{utils::jacobi, EdwardsAir, EdwardsChip};
 

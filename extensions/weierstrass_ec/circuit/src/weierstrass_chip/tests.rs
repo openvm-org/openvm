@@ -16,7 +16,6 @@ use openvm_circuit_primitives::{
         SharedBitwiseOperationLookupChip,
     },
 };
-use openvm_weierstrass_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
@@ -28,6 +27,7 @@ use openvm_mod_circuit_builder::{
 use openvm_pairing_guest::bls12_381::BLS12_381_MODULUS;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_weierstrass_transpiler::Rv32WeierstrassOpcode;
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {

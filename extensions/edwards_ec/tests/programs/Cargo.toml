@@ -1,6 +1,6 @@
 [workspace]
 [package]
-name = "openvm-te-test-programs"
+name = "openvm-edwards-test-programs"
 version = "0.0.0"
 edition = "2021"
 
@@ -9,7 +9,7 @@ openvm = { path = "../../../../crates/toolchain/openvm" }
 openvm-platform = { path = "../../../../crates/toolchain/platform" }
 openvm-custom-insn = { path = "../../../../crates/toolchain/custom_insn", default-features = false }
 
-openvm-edwards-guest = { path = "../../guest", default-features = false }
+openvm-ecc-guest = { path = "../../../ecc_guest", default-features = false }
 openvm-ecc-te-macros = { path = "../../../../extensions/edwards_ec/te-macros", default-features = false }
 openvm-algebra-guest = { path = "../../../algebra/guest", default-features = false }
 openvm-algebra-moduli-macros = { path = "../../../algebra/moduli-macros", default-features = false }
@@ -43,7 +43,7 @@ default = []
 std = ["serde/std", "openvm/std"]
 k256 = ["dep:openvm-k256"]
 p256 = ["dep:openvm-p256"]
-ed25519 = ["openvm-edwards-guest/ed25519"]
+ed25519 = ["openvm-ecc-guest/ed25519"]
 
 [profile.release]
 panic = "abort"

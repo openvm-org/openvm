@@ -21,7 +21,6 @@ use openvm_circuit_primitives::{
     },
     var_range::VariableRangeCheckerBus,
 };
-use openvm_weierstrass_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_stark_backend::{
@@ -30,6 +29,7 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
     prover::cpu::{CpuBackend, CpuDevice},
 };
+use openvm_weierstrass_transpiler::Rv32WeierstrassOpcode;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;

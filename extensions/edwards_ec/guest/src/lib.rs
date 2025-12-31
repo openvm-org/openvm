@@ -11,15 +11,12 @@ use strum_macros::FromRepr;
 mod affine_point;
 pub use affine_point::*;
 // Use the same group traits as the short Weierstrass ec extension
-pub use openvm_ecc_guest::weierstrass::group::*;
+pub use openvm_weierstrass_guest::group::*;
 // Use the same msm implementation as the short Weierstrass ec extension
-pub use openvm_ecc_guest::weierstrass::msm::*;
+pub use openvm_weierstrass_guest::msm::*;
 
 /// Edwards curve traits
 pub mod edwards;
-
-#[cfg(feature = "ed25519")]
-pub mod ed25519;
 
 /// This is custom-1 defined in RISC-V spec document
 pub const OPCODE: u8 = 0x2b;
@@ -37,4 +34,4 @@ impl TeBaseFunct7 {
 }
 
 // Use the same traits as the short Weierstrass ec extension
-pub use openvm_ecc_guest::weierstrass::{FromCompressed, IntrinsicCurve};
+pub use openvm_weierstrass_guest::{FromCompressed, IntrinsicCurve};

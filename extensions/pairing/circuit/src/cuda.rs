@@ -10,8 +10,8 @@ use openvm_circuit::{
     system::cuda::SystemChipInventoryGPU,
 };
 use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
-use openvm_weierstrass_circuit::EccProverExt;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use openvm_weierstrass_circuit::EccProverExt;
 
 use crate::{PairingProverExt, Rv32PairingConfig};
 

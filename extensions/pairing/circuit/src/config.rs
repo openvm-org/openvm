@@ -12,12 +12,14 @@ use openvm_circuit::{
     system::SystemChipInventory,
 };
 use openvm_circuit_derive::VmConfig;
-use openvm_weierstrass_circuit::{EccCpuProverExt, WeierstrassExtension, WeierstrassExtensionExecutor};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::StarkEngine,
     p3_field::PrimeField32,
     prover::cpu::{CpuBackend, CpuDevice},
+};
+use openvm_weierstrass_circuit::{
+    EccCpuProverExt, WeierstrassExtension, WeierstrassExtensionExecutor,
 };
 use serde::{Deserialize, Serialize};
 

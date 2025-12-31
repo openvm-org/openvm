@@ -10,7 +10,6 @@ use openvm_circuit::{
     system::phantom::PhantomExecutor,
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
-use openvm_weierstrass_circuit::CurveConfig;
 use openvm_instructions::PhantomDiscriminant;
 use openvm_pairing_guest::{
     bls12_381::{
@@ -20,6 +19,7 @@ use openvm_pairing_guest::{
 };
 use openvm_pairing_transpiler::PairingPhantom;
 use openvm_stark_backend::{config::StarkGenericConfig, engine::StarkEngine, p3_field::Field};
+use openvm_weierstrass_circuit::CurveConfig;
 use serde::{Deserialize, Serialize};
 use strum::FromRepr;
 

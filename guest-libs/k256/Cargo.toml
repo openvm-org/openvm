@@ -15,7 +15,7 @@ license.workspace = true
 openvm = { workspace = true }
 openvm-algebra-guest = { workspace = true }
 openvm-algebra-moduli-macros = { workspace = true }
-openvm-weierstrass-guest = { workspace = true }
+openvm-ecc-guest = { workspace = true }
 openvm-ecc-sw-macros = { workspace = true }
 
 once_cell = { workspace = true, optional = true }
@@ -55,7 +55,7 @@ std = [
     "ecdsa-core?/std",
     "elliptic-curve/std",
     "once_cell?/std",
-    "openvm-weierstrass-guest/std",
+    "openvm-ecc-guest/std",
 ]
 arithmetic = ["elliptic-curve/arithmetic"]
 bits = ["arithmetic", "elliptic-curve/bits"]

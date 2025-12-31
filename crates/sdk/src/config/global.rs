@@ -11,14 +11,10 @@ use openvm_circuit::{
     derive::VmConfig,
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
-use openvm_weierstrass_circuit::{
-    EccCpuProverExt, WeierstrassExtension, WeierstrassExtensionExecutor, P256_CONFIG,
-    SECP256K1_CONFIG,
-};
-use openvm_weierstrass_transpiler::EccTranspilerExtension;
 use openvm_edwards_circuit::{
     EdwardsCpuProverExt, EdwardsExtension, EdwardsExtensionExecutor, ED25519_CONFIG,
 };
+use openvm_edwards_transpiler::EdwardsTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use openvm_native_circuit::{
@@ -44,8 +40,12 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
     prover::cpu::{CpuBackend, CpuDevice},
 };
-use openvm_edwards_transpiler::EdwardsTranspilerExtension;
 use openvm_transpiler::transpiler::Transpiler;
+use openvm_weierstrass_circuit::{
+    EccCpuProverExt, WeierstrassExtension, WeierstrassExtensionExecutor, P256_CONFIG,
+    SECP256K1_CONFIG,
+};
+use openvm_weierstrass_transpiler::EccTranspilerExtension;
 use serde::{Deserialize, Serialize};
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {

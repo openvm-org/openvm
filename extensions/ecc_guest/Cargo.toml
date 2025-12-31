@@ -11,10 +11,16 @@ repository.workspace = true
 openvm = { workspace = true }
 openvm-weierstrass-guest = { workspace = true }
 openvm-edwards-guest = { workspace = true }
+hex-literal = { workspace = true }
+openvm-algebra-guest = { workspace = true }
+serde = { workspace = true }
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+lazy_static = { workspace = true }
+num-bigint = { workspace = true }
 
 [features]
 default = []
-ed25519 = ["openvm-edwards-guest/ed25519"]
-halo2curves = ["openvm-weierstrass-guest/halo2curves", "openvm-weierstrass-guest/halo2curves"]
-std = ["openvm-weierstrass-guest/std", "openvm-weierstrass-guest/std"]
-alloc = ["openvm-weierstrass-guest/alloc", "openvm-weierstrass-guest/alloc"]
+ed25519 = []
+halo2curves = ["openvm-weierstrass-guest/halo2curves", "openvm-edwards-guest/halo2curves"]
+std = ["openvm-weierstrass-guest/std", "openvm-edwards-guest/std", "openvm/std"]

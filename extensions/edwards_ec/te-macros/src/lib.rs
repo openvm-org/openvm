@@ -143,10 +143,10 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
                 fn set_up_once() {
                     static is_setup: ::openvm_ecc_guest::edwards::once_cell::race::OnceBool = ::openvm_ecc_guest::edwards::once_cell::race::OnceBool::new();
                     is_setup.get_or_init(|| {
-                        let modulus_bytes = <<Self as openvm_ecc_guest::edwards::edwards::TwistedEdwardsPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
-                        let mut zero = [0u8; <<Self as openvm_ecc_guest::edwards::edwards::TwistedEdwardsPoint>::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS];
-                        let curve_a_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<Self as openvm_ecc_guest::edwards::edwards::TwistedEdwardsPoint>::CURVE_A);
-                        let curve_d_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<Self as openvm_ecc_guest::edwards::edwards::TwistedEdwardsPoint>::CURVE_D);
+                        let modulus_bytes = <<Self as ::openvm_ecc_guest::edwards::edwards::TwistedEdwardsPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
+                        let mut zero = [0u8; <<Self as ::openvm_ecc_guest::edwards::edwards::TwistedEdwardsPoint>::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS];
+                        let curve_a_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<Self as ::openvm_ecc_guest::edwards::edwards::TwistedEdwardsPoint>::CURVE_A);
+                        let curve_d_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<Self as ::openvm_ecc_guest::edwards::edwards::TwistedEdwardsPoint>::CURVE_D);
                         let p1 = [modulus_bytes.as_ref(), curve_a_bytes.as_ref()].concat();
                         let p2 = [curve_d_bytes.as_ref(), zero.as_ref()].concat();
                         let mut uninit: core::mem::MaybeUninit<[Self; 2]> = core::mem::MaybeUninit::uninit();

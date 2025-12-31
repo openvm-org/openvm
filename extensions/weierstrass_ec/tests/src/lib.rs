@@ -13,7 +13,6 @@ mod tests {
         arch::instructions::exe::VmExe,
         utils::{air_test, air_test_with_min_segments, test_system_config},
     };
-    use openvm_weierstrass_transpiler::EccTranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
@@ -30,6 +29,7 @@ mod tests {
     use openvm_weierstrass_circuit::{
         CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, P256_CONFIG, SECP256K1_CONFIG,
     };
+    use openvm_weierstrass_transpiler::EccTranspilerExtension;
 
     use crate::test_vectors::{
         k256_sec1_decoding_test_vectors, K256_RECOVERY_TEST_VECTORS, P256_RECOVERY_TEST_VECTORS,

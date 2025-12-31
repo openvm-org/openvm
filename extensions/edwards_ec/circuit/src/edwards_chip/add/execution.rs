@@ -10,6 +10,7 @@ use openvm_circuit::{
     system::memory::{online::GuestMemory, POINTER_MAX_BITS},
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
+use openvm_edwards_transpiler::Rv32EdwardsOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -17,7 +18,6 @@ use openvm_instructions::{
 };
 use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpr};
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_edwards_transpiler::Rv32EdwardsOpcode;
 
 use super::TeAddExecutor;
 use crate::edwards_chip::curves::{get_curve_type, te_add, CurveType};

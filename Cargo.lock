@@ -5169,6 +5169,7 @@ dependencies = [
  "openvm-algebra-moduli-macros",
  "openvm-algebra-transpiler",
  "openvm-circuit",
+ "openvm-ecc-guest",
  "openvm-ecc-sw-macros",
  "openvm-rv32im-transpiler",
  "openvm-sha2-circuit",
@@ -5178,7 +5179,6 @@ dependencies = [
  "openvm-toolchain-tests",
  "openvm-transpiler",
  "openvm-weierstrass-circuit",
- "openvm-weierstrass-guest",
  "openvm-weierstrass-transpiler",
  "rand 0.8.5",
  "serde",
@@ -6489,6 +6489,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-ecc-guest"
+version = "1.4.2"
+dependencies = [
+ "hex-literal 0.4.1",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "openvm",
+ "openvm-algebra-guest",
+ "openvm-edwards-guest",
+ "openvm-weierstrass-guest",
+ "serde",
+]
+
+[[package]]
 name = "openvm-ecc-sw-macros"
 version = "1.4.2"
 dependencies = [
@@ -6525,7 +6539,7 @@ dependencies = [
  "openvm-circuit-primitives",
  "openvm-cuda-backend",
  "openvm-cuda-common",
- "openvm-edwards-guest",
+ "openvm-ecc-guest",
  "openvm-edwards-transpiler",
  "openvm-instructions",
  "openvm-mod-circuit-builder",
@@ -6582,7 +6596,7 @@ dependencies = [
 name = "openvm-edwards-transpiler"
 version = "1.4.2"
 dependencies = [
- "openvm-edwards-guest",
+ "openvm-ecc-guest",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-stark-backend",
@@ -6864,6 +6878,7 @@ dependencies = [
  "openvm-algebra-transpiler",
  "openvm-circuit",
  "openvm-custom-insn",
+ "openvm-ecc-guest",
  "openvm-ecc-sw-macros",
  "openvm-instructions",
  "openvm-pairing",
@@ -6877,7 +6892,6 @@ dependencies = [
  "openvm-toolchain-tests",
  "openvm-transpiler",
  "openvm-weierstrass-circuit",
- "openvm-weierstrass-guest",
  "openvm-weierstrass-transpiler",
  "rand 0.8.5",
  "serde",
@@ -6899,6 +6913,7 @@ dependencies = [
  "openvm-circuit-derive",
  "openvm-circuit-primitives",
  "openvm-cuda-backend",
+ "openvm-ecc-guest",
  "openvm-instructions",
  "openvm-mod-circuit-builder",
  "openvm-pairing-guest",
@@ -6907,7 +6922,6 @@ dependencies = [
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-weierstrass-circuit",
- "openvm-weierstrass-guest",
  "rand 0.8.5",
  "serde",
  "strum 0.26.3",
@@ -6928,7 +6942,7 @@ dependencies = [
  "openvm-algebra-guest",
  "openvm-algebra-moduli-macros",
  "openvm-custom-insn",
- "openvm-weierstrass-guest",
+ "openvm-ecc-guest",
  "rand 0.8.5",
  "serde",
  "strum_macros 0.26.4",
@@ -7369,13 +7383,13 @@ dependencies = [
  "openvm-circuit-primitives",
  "openvm-cuda-backend",
  "openvm-cuda-common",
+ "openvm-ecc-guest",
  "openvm-instructions",
  "openvm-mod-circuit-builder",
  "openvm-pairing-guest",
  "openvm-rv32-adapters",
  "openvm-stark-backend",
  "openvm-stark-sdk",
- "openvm-weierstrass-guest",
  "openvm-weierstrass-transpiler",
  "rand 0.8.5",
  "serde",
@@ -7427,11 +7441,11 @@ dependencies = [
 name = "openvm-weierstrass-transpiler"
 version = "1.4.2"
 dependencies = [
+ "openvm-ecc-guest",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-stark-backend",
  "openvm-transpiler",
- "openvm-weierstrass-guest",
  "rrs-lib",
  "strum 0.26.3",
 ]
@@ -7484,6 +7498,7 @@ dependencies = [
  "openvm-algebra-moduli-macros",
  "openvm-algebra-transpiler",
  "openvm-circuit",
+ "openvm-ecc-guest",
  "openvm-ecc-sw-macros",
  "openvm-rv32im-transpiler",
  "openvm-sha2-circuit",
@@ -7493,7 +7508,6 @@ dependencies = [
  "openvm-toolchain-tests",
  "openvm-transpiler",
  "openvm-weierstrass-circuit",
- "openvm-weierstrass-guest",
  "openvm-weierstrass-transpiler",
  "rand 0.8.5",
  "serde",
