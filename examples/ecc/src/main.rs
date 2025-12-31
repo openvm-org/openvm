@@ -2,12 +2,14 @@
 use hex_literal::hex;
 use openvm as _;
 use openvm_algebra_guest::IntMod;
-use openvm_weierstrass_guest::weierstrass::WeierstrassPoint;
-use openvm_k256::{Secp256k1Coord, Secp256k1Point};
-use openvm_edwards_guest::{
-    ed25519::{Ed25519Coord, Ed25519Point},
-    edwards::TwistedEdwardsPoint,
+use openvm_ecc_guest::{
+    edwards::{
+        ed25519::{Ed25519Coord, Ed25519Point},
+        edwards::TwistedEdwardsPoint,
+    },
+    weierstrass::weierstrass::WeierstrassPoint,
 };
+use openvm_k256::{Secp256k1Coord, Secp256k1Point};
 // [!endregion imports]
 
 // [!region init]
@@ -17,8 +19,8 @@ openvm_algebra_guest::moduli_macros::moduli_init! {
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F",
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
 }
-openvm_weierstrass_guest::sw_macros::sw_init! { "Secp256k1Point" }
-openvm_weierstrass_guest::te_macros::te_init! { "Ed25519Point" }
+openvm_ecc_guest::weierstrass::sw_macros::sw_init! { "Secp256k1Point" }
+openvm_ecc_guest::weierstrass::te_macros::te_init! { "Ed25519Point" }
 */
 // [!endregion init]
 

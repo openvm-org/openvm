@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use openvm_weierstrass_guest::CyclicGroup;
+use openvm_ecc_guest::weierstrass::CyclicGroup;
 #[allow(unused_imports)]
 use {openvm_k256::Secp256k1Point, openvm_p256::P256Point};
 

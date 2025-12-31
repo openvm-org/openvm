@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 
 use halo2curves_axiom::bls12_381::{Fq12, G1Affine, G2Affine, G2Prepared};
-use openvm_weierstrass_guest::{algebra::Field, AffinePoint};
+use openvm_ecc_guest::weierstrass::{algebra::Field, AffinePoint};
 use rand::{rngs::StdRng, SeedableRng};
 use subtle::ConditionallySelectable;
 

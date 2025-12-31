@@ -120,7 +120,7 @@ pub(crate) mod phantom {
         arch::{PhantomSubExecutor, Streams},
         system::memory::online::GuestMemory,
     };
-    use openvm_weierstrass_guest::{algebra::field::FieldExtension, AffinePoint};
+    use openvm_ecc_guest::weierstrass::{algebra::field::FieldExtension, AffinePoint};
     use openvm_instructions::{
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},
         PhantomDiscriminant,

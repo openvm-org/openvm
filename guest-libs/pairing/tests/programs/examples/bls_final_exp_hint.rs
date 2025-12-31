@@ -6,7 +6,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use openvm::io::read;
-use openvm_weierstrass_guest::AffinePoint;
+use openvm_ecc_guest::weierstrass::AffinePoint;
 use openvm_pairing::{
     bls12_381::{Bls12_381, Fp, Fp12, Fp2},
     PairingCheck,

@@ -6,7 +6,7 @@ extern crate alloc;
 
 use hex_literal::hex;
 use openvm::io::read_vec;
-use openvm_weierstrass_guest::{
+use openvm_ecc_guest::weierstrass::{
     algebra::{Field, IntMod},
     weierstrass::WeierstrassPoint,
     FromCompressed, Group,

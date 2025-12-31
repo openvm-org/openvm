@@ -4,7 +4,7 @@
 
 use openvm::io::read_vec;
 use openvm_algebra_guest::IntMod;
-use openvm_weierstrass_guest::AffinePoint;
+use openvm_ecc_guest::weierstrass::AffinePoint;
 use openvm_pairing_guest::pairing::MillerStep;
 
 openvm::entry!(main);

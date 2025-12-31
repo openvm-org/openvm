@@ -6,7 +6,6 @@ mod guest_tests {
         arch::instructions::exe::VmExe,
         utils::{air_test, test_system_config},
     };
-    use openvm_weierstrass_transpiler::EccTranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
@@ -17,6 +16,7 @@ mod guest_tests {
     use openvm_weierstrass_circuit::{
         CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, SECP256K1_CONFIG,
     };
+    use openvm_weierstrass_transpiler::EccTranspilerExtension;
 
     use crate::guest_tests::ecdsa_config::EcdsaBuilder;
 
@@ -269,7 +269,7 @@ mod host_tests {
     use hex_literal::hex;
     use k256::{Scalar as Secp256k1Scalar, Secp256k1Coord, Secp256k1Point};
     use openvm_algebra_guest::IntMod;
-    use openvm_weierstrass_guest::{msm, weierstrass::WeierstrassPoint, Group};
+    use openvm_ecc_guest::weierstrass::{msm, weierstrass::WeierstrassPoint, Group};
 
     #[test]
     fn test_host_secp256k1() {

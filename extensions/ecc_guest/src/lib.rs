@@ -1,2 +1,2 @@
-pub use openvm_edwards_guest as edwards;
-pub use openvm_weierstrass_guest as weierstrass;
+pub use openvm_ecc_guest::edwards as edwards;
+pub use openvm_ecc_guest::weierstrass as weierstrass;

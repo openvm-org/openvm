@@ -4,7 +4,7 @@ use halo2curves_axiom::bls12_381::{Fq, Fq2, Fr, G1Affine, G2Affine};
 use itertools::izip;
 use num_bigint::BigUint;
 use num_traits::Num;
-use openvm_weierstrass_guest::{algebra::ExpBytes, AffinePoint};
+use openvm_ecc_guest::weierstrass::{algebra::ExpBytes, AffinePoint};
 
 use crate::{
     halo2curves_shims::bls12_381::{Bls12_381, SEED_NEG},

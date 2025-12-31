@@ -27,7 +27,7 @@ openvm_algebra_guest::moduli_macros::moduli_init! {
     "0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
 }
 
-openvm_weierstrass_guest::sw_macros::sw_init! {
+openvm_ecc_guest::weierstrass::sw_macros::sw_init! {
     "Secp256k1Point",
 }
 */
@@ -73,7 +73,7 @@ extern "C" {
 #[allow(non_snake_case)]
 #[cfg(target_os = "zkvm")]
 mod openvm_intrinsics_ffi_2 {
-    use :openvm_weierstrass_guest::{OPCODE, SW_FUNCT3, SwBaseFunct7};
+    use :openvm_ecc_guest::weierstrass::{OPCODE, SW_FUNCT3, SwBaseFunct7};
 
     #[no_mangle]
     extern "C" fn sw_add_extern_func_Secp256k1Point(rd: usize, rs1: usize, rs2: usize) {

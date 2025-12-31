@@ -3,7 +3,7 @@
 
 use hex_literal::hex;
 use openvm_algebra_guest::moduli_macros::moduli_init;
-use openvm_edwards_guest::{
+use openvm_ecc_guest::edwards::{
     algebra::IntMod,
     ed25519::{Ed25519Coord, Ed25519Point},
     edwards::TwistedEdwardsPoint,

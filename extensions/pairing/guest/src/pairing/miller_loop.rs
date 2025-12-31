@@ -6,7 +6,7 @@ use core::{
 
 use itertools::{izip, Itertools};
 use openvm_algebra_guest::{field::FieldExtension, DivUnsafe, Field};
-use openvm_weierstrass_guest::AffinePoint;
+use openvm_ecc_guest::weierstrass::AffinePoint;
 
 use super::{Evaluatable, EvaluatedLine, MillerStep, UnevaluatedLine};
 

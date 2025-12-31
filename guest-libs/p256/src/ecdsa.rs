@@ -5,7 +5,7 @@
 
 pub use ecdsa_core::signature::{self, Error};
 #[cfg(feature = "ecdsa")]
-use openvm_weierstrass_guest::ecdsa::VerifyCustomHook;
+use openvm_ecc_guest::weierstrass::ecdsa::VerifyCustomHook;
 #[cfg(feature = "ecdsa")]
 use {super::P256Point, ecdsa_core::hazmat::VerifyPrimitive};
 
@@ -20,7 +20,7 @@ pub type SigningKey = ecdsa_core::SigningKey<NistP256>;
 
 /// ECDSA/secp256k1 verification key (i.e. public key)
 #[cfg(feature = "ecdsa")]
-pub type VerifyingKey = openvm_weierstrass_guest::ecdsa::VerifyingKey<NistP256>;
+pub type VerifyingKey = openvm_ecc_guest::weierstrass::ecdsa::VerifyingKey<NistP256>;
 
 // No custom hook
 #[cfg(feature = "ecdsa")]
@@ -33,7 +33,7 @@ impl VerifyPrimitive<NistP256> for P256Point {
         z: &crate::point::FieldBytes,
         sig: &Signature,
     ) -> Result<(), ecdsa_core::Error> {
-        openvm_weierstrass_guest::ecdsa::verify_prehashed::<NistP256>(
+        openvm_ecc_guest::weierstrass::ecdsa::verify_prehashed::<NistP256>(
             *self,
             z.as_slice(),
             sig.to_bytes().as_slice(),

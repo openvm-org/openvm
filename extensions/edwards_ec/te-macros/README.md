@@ -31,7 +31,7 @@ openvm_algebra_guest::moduli_macros::moduli_init! {
     "0x1000000000000000000000000000000014DEF9DEA2F79CD65812631A5CF5D3ED",
 }
 
-openvm_weierstrass_guest::te_macros::te_init! {
+openvm_ecc_guest::weierstrass::te_macros::te_init! {
     Ed25519Point,
 }
 
@@ -77,7 +77,7 @@ extern "C" {
 ```rust
 #[cfg(target_os = "zkvm")]
 mod openvm_intrinsics_ffi_2 {
-    use :openvm_weierstrass_guest::{OPCODE, TE_FUNCT3, TeBaseFunct7};
+    use :openvm_ecc_guest::weierstrass::{OPCODE, TE_FUNCT3, TeBaseFunct7};
 
     #[no_mangle]
     extern "C" fn te_add_extern_func_Ed25519Point(rd: usize, rs1: usize, rs2: usize) {

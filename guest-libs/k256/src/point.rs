@@ -14,7 +14,7 @@ use elliptic_curve::{
     FieldBytesEncoding,
 };
 use openvm_algebra_guest::IntMod;
-use openvm_weierstrass_guest::{weierstrass::WeierstrassPoint, CyclicGroup, IntrinsicCurve};
+use openvm_ecc_guest::weierstrass::{weierstrass::WeierstrassPoint, CyclicGroup, IntrinsicCurve};
 
 use crate::{
     internal::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
@@ -149,7 +149,7 @@ impl elliptic_curve::Group for Secp256k1Point {
     }
 
     fn is_identity(&self) -> Choice {
-        (<Self as openvm_weierstrass_guest::Group>::is_identity(self) as u8).into()
+        (<Self as openvm_ecc_guest::weierstrass::Group>::is_identity(self) as u8).into()
     }
 
     fn double(&self) -> Self {
@@ -177,7 +177,7 @@ impl MulByGenerator for Secp256k1Point {}
 impl DecompressPoint<Secp256k1> for Secp256k1Point {
     /// Note that this is not constant time
     fn decompress(x_bytes: &FieldBytes, y_is_odd: Choice) -> CtOption<Self> {
-        use openvm_weierstrass_guest::FromCompressed;
+        use openvm_ecc_guest::weierstrass::FromCompressed;
 
         let x = Secp256k1Coord::from_be_bytes_unchecked(x_bytes.as_slice());
         let rec_id = y_is_odd.unwrap_u8();
@@ -205,7 +205,7 @@ impl FromEncodedPoint<Secp256k1> for Secp256k1Point {
     ///
     /// `None` value if `encoded_point` is not on the secp256k1 curve.
     fn from_encoded_point(encoded_point: &EncodedPoint) -> CtOption<Self> {
-        match openvm_weierstrass_guest::ecdsa::VerifyingKey::<Secp256k1>::from_sec1_bytes(
+        match openvm_ecc_guest::weierstrass::ecdsa::VerifyingKey::<Secp256k1>::from_sec1_bytes(
             encoded_point.as_bytes(),
         ) {
             Ok(verifying_key) => CtOption::new(*verifying_key.as_affine(), 1.into()),

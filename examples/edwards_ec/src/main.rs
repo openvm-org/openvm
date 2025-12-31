@@ -2,7 +2,7 @@
 use hex_literal::hex;
 use openvm as _;
 use openvm_algebra_guest::IntMod;
-use openvm_edwards_guest::{
+use openvm_ecc_guest::edwards::{
     ed25519::{Ed25519Coord, Ed25519Point},
     edwards::TwistedEdwardsPoint,
 };
@@ -15,7 +15,7 @@ openvm_algebra_guest::moduli_macros::moduli_init! {
     "0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED",
     "0x1000000000000000000000000000000014DEF9DEA2F79CD65812631A5CF5D3ED"
 }
-openvm_edwards_guest::te_macros::te_init! { "Ed25519Point" }
+openvm_ecc_guest::edwards::te_macros::te_init! { "Ed25519Point" }
 */
 // [!endregion init]
 

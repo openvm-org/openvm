@@ -2,7 +2,7 @@ use halo2curves_axiom::bls12_381::{Fq, Fq2};
 use lazy_static::lazy_static;
 use num_bigint::BigUint;
 use num_traits::Num;
-use openvm_weierstrass_guest::algebra::{field::FieldExtension, Field};
+use openvm_ecc_guest::weierstrass::algebra::{field::FieldExtension, Field};
 
 lazy_static! {
     pub static ref BLS12_381_XI: Fq2 = Fq2::from_coeffs([Fq::ONE, Fq::ONE]);

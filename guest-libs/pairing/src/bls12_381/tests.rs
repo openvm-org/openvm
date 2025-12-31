@@ -5,7 +5,7 @@ use halo2curves_axiom::bls12_381::{
 use num_bigint::BigUint;
 use num_traits::One;
 use openvm_algebra_guest::{field::FieldExtension, IntMod};
-use openvm_weierstrass_guest::{weierstrass::WeierstrassPoint, AffinePoint};
+use openvm_ecc_guest::weierstrass::{weierstrass::WeierstrassPoint, AffinePoint};
 use openvm_pairing_guest::{
     bls12_381::{BLS12_381_MODULUS, BLS12_381_ORDER},
     pairing::{FinalExp, MultiMillerLoop, PairingCheck, PairingIntrinsics},

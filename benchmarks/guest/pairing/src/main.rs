@@ -4,7 +4,7 @@ use openvm_pairing::{
     bn254::{Bn254, Bn254G1Affine, Fp, Fp2},
     PairingCheck,
 };
-use openvm_weierstrass_guest::AffinePoint;
+use openvm_ecc_guest::weierstrass::AffinePoint;
 
 openvm::init!();
 

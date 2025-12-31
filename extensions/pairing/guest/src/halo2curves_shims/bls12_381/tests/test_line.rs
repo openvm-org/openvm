@@ -2,7 +2,7 @@ use halo2curves_axiom::{
     bls12_381::{Fq, Fq12, Fq2, G1Affine},
     ff::Field,
 };
-use openvm_weierstrass_guest::{algebra::field::FieldExtension, AffinePoint};
+use openvm_ecc_guest::weierstrass::{algebra::field::FieldExtension, AffinePoint};
 use rand::{rngs::StdRng, SeedableRng};
 
 use crate::{

@@ -6,7 +6,7 @@ extern crate alloc;
 
 use hex_literal::hex;
 use openvm::io::read_vec;
-use openvm_edwards_guest::{
+use openvm_ecc_guest::edwards::{
     algebra::IntMod,
     ed25519::{Ed25519Coord, Ed25519Point},
     edwards::TwistedEdwardsPoint,
