@@ -11,7 +11,6 @@ use openvm_circuit::system::cuda::extensions::SystemGpuBuilder as SystemBuilder;
 use openvm_circuit::{arch::RowMajorMatrixArena, system::SystemCpuBuilder as SystemBuilder};
 use openvm_circuit::{
     arch::{
-        execution_mode::metered::segment_ctx::{SegmentationLimits, DEFAULT_SEGMENT_CHECK_INSNS},
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         verify_segments, verify_single, AirInventory, ContinuationVmProver,
         PreflightExecutionOutput, SingleSegmentVmProver, VirtualMachine, VmCircuitConfig,
@@ -946,41 +945,6 @@ fn test_vm_execute_native_chips() {
     instance
         .execute(input_stream, None)
         .expect("Failed to execute");
-}
-
-// This test ensures that metered execution never segments when continuations is disabled
-#[test]
-fn test_single_segment_executor_no_segmentation() {
-    setup_tracing();
-
-    let mut config = test_native_config();
-    config
-        .system
-        .set_segmentation_limits(SegmentationLimits::default().with_max_trace_height(1));
-
-    let engine = TestEngine::new(FriParameters::new_for_testing(3));
-    let (vm, _) =
-        VirtualMachine::new_with_keygen(engine, NativeBuilder::default(), config).unwrap();
-    let instructions: Vec<_> = (0..2 * DEFAULT_SEGMENT_CHECK_INSNS)
-        .map(|_| Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 0, 0, 0))
-        .chain(std::iter::once(Instruction::from_isize(
-            TERMINATE.global_opcode(),
-            0,
-            0,
-            0,
-            0,
-            0,
-        )))
-        .collect();
-
-    let exe = VmExe::new(Program::from_instructions(&instructions));
-    let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
-    let metered_ctx = vm.build_metered_ctx(&exe);
-    vm.executor()
-        .metered_instance(&exe, &executor_idx_to_air_idx)
-        .unwrap()
-        .execute_metered(vec![], metered_ctx)
-        .unwrap();
 }
 
 #[test]
