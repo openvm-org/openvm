@@ -539,9 +539,9 @@ impl<const NUM_LIMBS: usize, const NUM_BLOCKS: usize, const BLOCK_SIZE: usize>
         // When R is at infinity (is_inf = 1), we can't compute real lambda values
         // because the denominators would be zero. Use safe denominators (1) instead.
         // Boolean OR: a OR b = a + b - a * b
-        let is_setup = compute_cols.flags.is_setup.clone();
-        let is_inf = compute_cols.flags.is_inf.clone();
-        let use_safe_denom = is_setup.clone() + is_inf.clone() - is_setup.clone() * is_inf.clone();
+        let is_setup = compute_cols.flags.is_setup;
+        let is_inf = compute_cols.flags.is_inf;
+        let use_safe_denom = is_setup + is_inf - is_setup * is_inf;
         builder
             .when(is_compute)
             .assert_eq(field_cols.flags[1], use_safe_denom);

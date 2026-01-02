@@ -638,8 +638,8 @@ impl<const NUM_LIMBS: usize, const NUM_BLOCKS: usize, const BLOCK_SIZE: usize>
             );
         }
 
-        for i in 0..EC_MUL_SCALAR_BYTES {
-            digest_cols.scalar_data[i] = F::from_canonical_u8(scalar_bytes[i]);
+        for (dst, &src) in digest_cols.scalar_data.iter_mut().zip(scalar_bytes.iter()) {
+            *dst = F::from_canonical_u8(src);
         }
 
         for block_idx in 0..NUM_BLOCKS {
