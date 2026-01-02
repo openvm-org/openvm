@@ -5,8 +5,8 @@
 #include "primitives/trace_access.h"
 #include <cassert>
 
-static const size_t PERSISTENT_CHUNK = 8;
-static const size_t VOLATILE_CHUNK = 1;
+inline constexpr size_t PERSISTENT_CHUNK = 8;
+inline constexpr size_t VOLATILE_CHUNK = 1;
 
 template <size_t CHUNK> struct BoundaryRecord {
     uint32_t address_space;
@@ -24,8 +24,8 @@ template <typename T> struct PersistentBoundaryCols {
     T timestamp;
 };
 
-static const size_t ADDR_ELTS = 2;
-static const size_t NUM_AS_LIMBS = 1;
+inline constexpr size_t ADDR_ELTS = 2;
+inline constexpr size_t NUM_AS_LIMBS = 1;
 
 template <typename T> struct VolatileBoundaryCols {
     T address_space_limbs[NUM_AS_LIMBS];
@@ -61,7 +61,7 @@ __global__ void cukernel_persistent_boundary_tracegen(
             // TODO better address space handling
             FpArray<8> init_values;
             if (initial_mem[record.address_space - 1]) {
-                init_values = 
+                init_values =
                     record.address_space == 4
                         ? FpArray<8>::from_raw_array(
                             reinterpret_cast<uint32_t const *>(
