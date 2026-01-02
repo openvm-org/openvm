@@ -16,6 +16,7 @@ openvm-mod-circuit-builder = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-algebra-circuit = { workspace = true }
 openvm-rv32-adapters = { workspace = true }
+openvm-rv32im-circuit = { workspace = true }
 openvm-ecc-transpiler = { workspace = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }

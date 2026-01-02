@@ -100,16 +100,13 @@ pub fn ec_double<const CURVE_TYPE: u8, const BLOCKS: usize, const BLOCK_SIZE: us
     }
 }
 
+/// Scalar is always 32 bytes
+const EC_MUL_SCALAR_SIZE: usize = 32;
+
 #[inline(always)]
-pub fn ec_mul<
-    const CURVE_TYPE: u8,
-    const BLOCKS_PER_POINT: usize,
-    const BLOCKS_PER_SCALAR: usize,
-    const POINT_SIZE: usize,
-    const SCALAR_SIZE: usize,
->(
+pub fn ec_mul<const CURVE_TYPE: u8, const BLOCKS_PER_POINT: usize, const POINT_SIZE: usize>(
     point_data: [[u8; POINT_SIZE]; BLOCKS_PER_POINT],
-    scalar_data: [[u8; SCALAR_SIZE]; BLOCKS_PER_SCALAR],
+    scalar_data: [u8; EC_MUL_SCALAR_SIZE],
 ) -> [[u8; POINT_SIZE]; BLOCKS_PER_POINT] {
     match CURVE_TYPE {
         x if x == CurveType::K256 as u8 => ec_mul_256bit::<
@@ -118,9 +115,7 @@ pub fn ec_mul<
             halo2curves_axiom::secp256k1::Secp256k1,
             halo2curves_axiom::secp256k1::Secp256k1Affine,
             BLOCKS_PER_POINT,
-            BLOCKS_PER_SCALAR,
             POINT_SIZE,
-            SCALAR_SIZE,
         >(point_data, scalar_data),
         x if x == CurveType::P256 as u8 => ec_mul_256bit::<
             halo2curves_axiom::secp256r1::Fq,
@@ -128,9 +123,7 @@ pub fn ec_mul<
             halo2curves_axiom::secp256r1::Secp256r1,
             halo2curves_axiom::secp256r1::Secp256r1Affine,
             BLOCKS_PER_POINT,
-            BLOCKS_PER_SCALAR,
             POINT_SIZE,
-            SCALAR_SIZE,
         >(point_data, scalar_data),
         x if x == CurveType::BN254 as u8 => ec_mul_256bit::<
             halo2curves_axiom::bn256::Fr,
@@ -138,15 +131,10 @@ pub fn ec_mul<
             halo2curves_axiom::bn256::G1,
             halo2curves_axiom::bn256::G1Affine,
             BLOCKS_PER_POINT,
-            BLOCKS_PER_SCALAR,
             POINT_SIZE,
-            SCALAR_SIZE,
         >(point_data, scalar_data),
         x if x == CurveType::BLS12_381 as u8 => {
-            ec_mul_bls12_381::<BLOCKS_PER_POINT, BLOCKS_PER_SCALAR, POINT_SIZE, SCALAR_SIZE>(
-                point_data,
-                scalar_data,
-            )
+            ec_mul_bls12_381::<BLOCKS_PER_POINT, POINT_SIZE>(point_data, scalar_data)
         }
         _ => panic!("Unsupported curve type: {}", CURVE_TYPE),
     }
@@ -278,15 +266,13 @@ fn ec_mul_256bit<
     CJ: for<'a> Mul<&'a Fr, Output = CJ> + From<CA>,
     CA: CurveAffine<CurveExt = CJ, Base = Fq, ScalarExt = Fr> + CurveAffineExt + From<CJ>,
     const BLOCKS_PER_POINT: usize,
-    const BLOCKS_PER_SCALAR: usize,
     const POINT_SIZE: usize,
-    const SCALAR_SIZE: usize,
 >(
     point_data: [[u8; POINT_SIZE]; BLOCKS_PER_POINT],
-    scalar_data: [[u8; SCALAR_SIZE]; BLOCKS_PER_SCALAR],
+    scalar_data: [u8; EC_MUL_SCALAR_SIZE],
 ) -> [[u8; POINT_SIZE]; BLOCKS_PER_POINT] {
     // read scalar and point data
-    let scalar = blocks_to_field_element::<Fr>(scalar_data.as_flattened());
+    let scalar = blocks_to_field_element::<Fr>(&scalar_data);
     let x1 = blocks_to_field_element::<Fq>(point_data[..BLOCKS_PER_POINT / 2].as_flattened());
     let y1 = blocks_to_field_element::<Fq>(point_data[BLOCKS_PER_POINT / 2..].as_flattened());
 
@@ -303,17 +289,12 @@ fn ec_mul_256bit<
 }
 
 #[inline(always)]
-fn ec_mul_bls12_381<
-    const BLOCKS_PER_POINT: usize,
-    const BLOCKS_PER_SCALAR: usize,
-    const POINT_SIZE: usize,
-    const SCALAR_SIZE: usize,
->(
+fn ec_mul_bls12_381<const BLOCKS_PER_POINT: usize, const POINT_SIZE: usize>(
     point_data: [[u8; POINT_SIZE]; BLOCKS_PER_POINT],
-    scalar_data: [[u8; SCALAR_SIZE]; BLOCKS_PER_SCALAR],
+    scalar_data: [u8; EC_MUL_SCALAR_SIZE],
 ) -> [[u8; POINT_SIZE]; BLOCKS_PER_POINT] {
     // read scalar and point data
-    let scalar = blocks_to_field_element::<blstrs::Scalar>(&scalar_data.as_flattened()[..32]);
+    let scalar = blocks_to_field_element::<blstrs::Scalar>(&scalar_data);
     let x1 = blocks_to_field_element_bls12_381_coordinate(
         point_data[..BLOCKS_PER_POINT / 2].as_flattened(),
     );

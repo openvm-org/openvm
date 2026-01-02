@@ -1,10 +1,8 @@
-mod ec_mul;
 mod eq_mod;
 mod heap;
 mod heap_branch;
 mod vec_heap;
 
-pub use ec_mul::*;
 pub use eq_mod::*;
 pub use heap::*;
 pub use heap_branch::*;

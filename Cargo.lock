@@ -6492,6 +6492,7 @@ dependencies = [
  "openvm-mod-circuit-builder",
  "openvm-pairing-guest",
  "openvm-rv32-adapters",
+ "openvm-rv32im-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "pasta_curves 0.5.1",

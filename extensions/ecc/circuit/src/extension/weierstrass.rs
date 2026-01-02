@@ -37,7 +37,7 @@ use strum::EnumCount;
 use crate::{
     get_ec_addne_air, get_ec_addne_chip, get_ec_addne_step, get_ec_double_air, get_ec_double_chip,
     get_ec_double_step, get_ec_mul_air, get_ec_mul_chip, get_ec_mul_step, EcAddNeExecutor,
-    EcDoubleExecutor, EcMulExecutor, EccCpuProverExt, WeierstrassAir, WeierstrassEcMulAir,
+    EcDoubleExecutor, EcMulAir, EcMulExecutor, EccCpuProverExt, WeierstrassAir,
 };
 
 #[serde_as]
@@ -118,11 +118,11 @@ pub enum WeierstrassExtensionExecutor {
     // 32 limbs prime
     EcAddNeRv32_32(EcAddNeExecutor<2, 32>),
     EcDoubleRv32_32(EcDoubleExecutor<2, 32>),
-    EcMulRv32_32(EcMulExecutor<2, 1, 32, 32>),
+    EcMulRv32_32(EcMulExecutor<2, 32>),
     // 48 limbs prime
     EcAddNeRv32_48(EcAddNeExecutor<6, 16>),
     EcDoubleRv32_48(EcDoubleExecutor<6, 16>),
-    EcMulRv32_48(EcMulExecutor<6, 3, 16, 16>),
+    EcMulRv32_48(EcMulExecutor<6, 16>),
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
@@ -181,6 +181,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                     pointer_max_bits,
                     start_offset,
                     curve.a.clone(),
+                    curve.scalar.clone(),
                 );
 
                 inventory.add_executor(
@@ -230,6 +231,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                     pointer_max_bits,
                     start_offset,
                     curve.a.clone(),
+                    curve.scalar.clone(),
                 );
 
                 inventory.add_executor(
@@ -306,14 +308,18 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                 );
                 inventory.add_air(double);
 
-                let mul = get_ec_mul_air::<2, 1, 32, 32>(
-                    exec_bridge,
+                let system_port = SystemPort {
+                    execution_bus,
+                    program_bus,
                     memory_bridge,
-                    config,
-                    range_checker_bus,
+                };
+                let mul = get_ec_mul_air::<32, 2, 32>(
+                    system_port,
                     bitwise_lu,
                     pointer_max_bits,
                     start_offset,
+                    config,
+                    range_checker_bus,
                     curve.a.clone(),
                 );
                 inventory.add_air(mul);
@@ -347,14 +353,18 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                 );
                 inventory.add_air(double);
 
-                let mul = get_ec_mul_air::<6, 3, 16, 16>(
-                    exec_bridge,
+                let system_port = SystemPort {
+                    execution_bus,
+                    program_bus,
                     memory_bridge,
-                    config,
-                    range_checker_bus,
+                };
+                let mul = get_ec_mul_air::<48, 6, 16>(
+                    system_port,
                     bitwise_lu,
                     pointer_max_bits,
                     start_offset,
+                    config,
+                    range_checker_bus,
                     curve.a.clone(),
                 );
                 inventory.add_air(mul);
@@ -429,14 +439,15 @@ where
                 );
                 inventory.add_executor_chip(double);
 
-                inventory.next_air::<WeierstrassEcMulAir<2, 1, 32, 32>>()?;
-                let mul = get_ec_mul_chip::<Val<SC>, 2, 1, 32, 32>(
+                inventory.next_air::<EcMulAir<32, 2, 32>>()?;
+                let mul = get_ec_mul_chip::<Val<SC>, 32, 2, 32>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
                     pointer_max_bits,
                     curve.a.clone(),
+                    curve.scalar.clone(),
                 );
                 inventory.add_executor_chip(mul);
             } else if bytes <= 48 {
@@ -467,14 +478,15 @@ where
                 );
                 inventory.add_executor_chip(double);
 
-                inventory.next_air::<WeierstrassEcMulAir<6, 3, 16, 16>>()?;
-                let mul = get_ec_mul_chip::<Val<SC>, 6, 3, 16, 16>(
+                inventory.next_air::<EcMulAir<48, 6, 16>>()?;
+                let mul = get_ec_mul_chip::<Val<SC>, 48, 6, 16>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
                     pointer_max_bits,
                     curve.a.clone(),
+                    curve.scalar.clone(),
                 );
                 inventory.add_executor_chip(mul);
             } else {
