@@ -18,7 +18,7 @@ use openvm_rv32im_transpiler::LessThanOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 use strum::IntoEnumIterator;
@@ -94,17 +94,15 @@ where
 
         let b_diff = b[NUM_LIMBS - 1] - cols.b_msb_f;
         let c_diff = c[NUM_LIMBS - 1] - cols.c_msb_f;
-        builder
-            .assert_zero(b_diff.clone() * (AB::Expr::from_canonical_u32(1 << LIMB_BITS) - b_diff));
-        builder
-            .assert_zero(c_diff.clone() * (AB::Expr::from_canonical_u32(1 << LIMB_BITS) - c_diff));
+        builder.assert_zero(b_diff.clone() * (AB::Expr::from_u32(1 << LIMB_BITS) - b_diff));
+        builder.assert_zero(c_diff.clone() * (AB::Expr::from_u32(1 << LIMB_BITS) - c_diff));
 
         for i in (0..NUM_LIMBS).rev() {
             let diff = (if i == NUM_LIMBS - 1 {
                 cols.c_msb_f - cols.b_msb_f
             } else {
                 c[i] - b[i]
-            }) * (AB::Expr::from_canonical_u8(2) * cols.cmp_result - AB::Expr::ONE);
+            }) * (AB::Expr::from_u8(2) * cols.cmp_result - AB::Expr::ONE);
             prefix_sum += marker[i].into();
             builder.assert_bool(marker[i]);
             builder.assert_zero(not::<AB::Expr>(prefix_sum.clone()) * diff.clone());
@@ -123,10 +121,8 @@ where
         // Check if b_msb_f and c_msb_f are in [-128, 127) if signed, [0, 256) if unsigned.
         self.bus
             .send_range(
-                cols.b_msb_f
-                    + AB::Expr::from_canonical_u32(1 << (LIMB_BITS - 1)) * cols.opcode_slt_flag,
-                cols.c_msb_f
-                    + AB::Expr::from_canonical_u32(1 << (LIMB_BITS - 1)) * cols.opcode_slt_flag,
+                cols.b_msb_f + AB::Expr::from_u32(1 << (LIMB_BITS - 1)) * cols.opcode_slt_flag,
+                cols.c_msb_f + AB::Expr::from_u32(1 << (LIMB_BITS - 1)) * cols.opcode_slt_flag,
             )
             .eval(builder, is_valid.clone());
 
@@ -139,9 +135,9 @@ where
             .iter()
             .zip(LessThanOpcode::iter())
             .fold(AB::Expr::ZERO, |acc, (flag, opcode)| {
-                acc + (*flag).into() * AB::Expr::from_canonical_u8(opcode as u8)
+                acc + (*flag).into() * AB::Expr::from_u8(opcode as u8)
             })
-            + AB::Expr::from_canonical_usize(self.offset);
+            + AB::Expr::from_usize(self.offset);
         let mut a: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         a[0] = cols.cmp_result.into();
 
@@ -274,23 +270,23 @@ where
         // b_msb_f and c_msb_f if not
         let (b_msb_f, b_msb_range) = if b_sign {
             (
-                -F::from_canonical_u16((1u16 << LIMB_BITS) - record.b[NUM_LIMBS - 1] as u16),
+                -F::from_u16((1u16 << LIMB_BITS) - record.b[NUM_LIMBS - 1] as u16),
                 record.b[NUM_LIMBS - 1] - (1u8 << (LIMB_BITS - 1)),
             )
         } else {
             (
-                F::from_canonical_u8(record.b[NUM_LIMBS - 1]),
+                F::from_u8(record.b[NUM_LIMBS - 1]),
                 record.b[NUM_LIMBS - 1] + ((is_slt as u8) << (LIMB_BITS - 1)),
             )
         };
         let (c_msb_f, c_msb_range) = if c_sign {
             (
-                -F::from_canonical_u16((1u16 << LIMB_BITS) - record.c[NUM_LIMBS - 1] as u16),
+                -F::from_u16((1u16 << LIMB_BITS) - record.c[NUM_LIMBS - 1] as u16),
                 record.c[NUM_LIMBS - 1] - (1u8 << (LIMB_BITS - 1)),
             )
         } else {
             (
-                F::from_canonical_u8(record.c[NUM_LIMBS - 1]),
+                F::from_u8(record.c[NUM_LIMBS - 1]),
                 record.c[NUM_LIMBS - 1] + ((is_slt as u8) << (LIMB_BITS - 1)),
             )
         };
@@ -304,9 +300,9 @@ where
                 b_msb_f - c_msb_f
             }
         } else if cmp_result {
-            F::from_canonical_u8(record.c[diff_idx] - record.b[diff_idx])
+            F::from_u8(record.c[diff_idx] - record.b[diff_idx])
         } else {
-            F::from_canonical_u8(record.b[diff_idx] - record.c[diff_idx])
+            F::from_u8(record.b[diff_idx] - record.c[diff_idx])
         };
 
         self.bitwise_lookup_chip
@@ -324,8 +320,8 @@ where
         core_row.opcode_sltu_flag = F::from_bool(!is_slt);
         core_row.opcode_slt_flag = F::from_bool(is_slt);
         core_row.cmp_result = F::from_bool(cmp_result);
-        core_row.c = record.c.map(F::from_canonical_u8);
-        core_row.b = record.b.map(F::from_canonical_u8);
+        core_row.c = record.c.map(F::from_u8);
+        core_row.b = record.b.map(F::from_u8);
     }
 }
 

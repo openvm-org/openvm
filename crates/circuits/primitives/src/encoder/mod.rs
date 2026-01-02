@@ -2,7 +2,7 @@ use std::ops::RangeInclusive;
 
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, PrimeCharacteristicRing},
 };
 
 use crate::SubAir;
@@ -97,8 +97,8 @@ impl Encoder {
         // First part: product for each coordinate
         for (i, &coord) in pt.iter().enumerate() {
             for j in 0..coord {
-                expr *= vars[i] - AB::Expr::from_canonical_u32(j);
-                denom *= AB::F::from_canonical_u32(coord - j);
+                expr *= vars[i] - AB::Expr::from_u32(j);
+                denom *= AB::F::from_u32(coord - j);
             }
         }
 
@@ -107,8 +107,8 @@ impl Encoder {
             let sum: u32 = pt.iter().sum();
             let var_sum = vars.iter().fold(AB::Expr::ZERO, |acc, &v| acc + v);
             for j in 0..(self.max_flag_degree - sum) {
-                expr *= AB::Expr::from_canonical_u32(self.max_flag_degree - j) - var_sum.clone();
-                denom *= AB::F::from_canonical_u32(j + 1);
+                expr *= AB::Expr::from_u32(self.max_flag_degree - j) - var_sum.clone();
+                denom *= AB::F::from_u32(j + 1);
             }
         }
         expr * denom.inverse()
@@ -190,8 +190,7 @@ impl Encoder {
         flag_idx_vals
             .iter()
             .fold(AB::Expr::ZERO, |acc, (flag_idx, val)| {
-                acc + self.get_flag_expr::<AB>(*flag_idx, vars)
-                    * AB::Expr::from_canonical_usize(*val)
+                acc + self.get_flag_expr::<AB>(*flag_idx, vars) * AB::Expr::from_usize(*val)
             })
     }
 }
@@ -215,7 +214,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for Encoder {
         let falling_factorial = |lin: AB::Expr| {
             let mut res = AB::Expr::ONE;
             for i in 0..=self.max_flag_degree {
-                res *= lin.clone() - AB::Expr::from_canonical_u32(i);
+                res *= lin.clone() - AB::Expr::from_u32(i);
             }
             res
         };

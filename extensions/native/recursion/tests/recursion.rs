@@ -14,7 +14,7 @@ use openvm_native_recursion::testing_utils::inner::run_recursive_test;
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig, Val},
     p3_commit::PolynomialSpace,
-    p3_field::{extension::BinomialExtensionField, FieldAlgebra},
+    p3_field::{extension::BinomialExtensionField, PrimeCharacteristicRing},
     prover::{
         cpu::{CpuBackend, CpuDevice},
         hal::{DeviceDataTransporter, ProverBackend, TraceCommitter},
@@ -37,8 +37,8 @@ fn fibonacci_program(a: u32, b: u32, n: u32) -> Program<BabyBear> {
 
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let prev: Felt<_> = builder.constant(F::from_canonical_u32(a));
-    let next: Felt<_> = builder.constant(F::from_canonical_u32(b));
+    let prev: Felt<_> = builder.constant(F::from_u32(a));
+    let next: Felt<_> = builder.constant(F::from_u32(b));
 
     builder.commit_public_value(prev);
     builder.commit_public_value(next);

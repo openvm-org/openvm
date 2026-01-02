@@ -9,14 +9,14 @@ type F = BabyBear;
 
 fn random_instruction(rng: &mut impl Rng) -> Instruction<F> {
     Instruction::new(
-        VmOpcode::from_usize(rng.gen()),
-        rng.gen(),
-        rng.gen(),
-        rng.gen(),
-        rng.gen(),
-        rng.gen(),
-        rng.gen(),
-        rng.gen(),
+        VmOpcode::from_usize(rng.random::<u16>() as usize),
+        rng.random(),
+        rng.random(),
+        rng.random(),
+        rng.random(),
+        rng.random(),
+        rng.random(),
+        rng.random(),
     )
 }
 

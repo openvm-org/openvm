@@ -23,11 +23,11 @@ use crate::{
     OPENVM_VERSION,
 };
 
-/// Number of bytes in a Bn254Fr.
+/// Number of bytes in a Bn254.
 pub(crate) const BN254_BYTES: usize = 32;
-/// Number of Bn254Fr in `accumulator` field.
+/// Number of Bn254 in `accumulator` field.
 pub const NUM_BN254_ACCUMULATOR: usize = 12;
-/// Number of Bn254Fr in `proof` field for a circuit with only 1 advice column.
+/// Number of Bn254 in `proof` field for a circuit with only 1 advice column.
 #[cfg(feature = "evm-prove")]
 const NUM_BN254_PROOF: usize = 43;
 
@@ -66,7 +66,7 @@ pub struct ProofData {
     /// KZG accumulator.
     pub accumulator: Vec<u8>,
     #[serde_as(as = "serde_with::hex::Hex")]
-    /// Bn254Fr proof in little-endian bytes. The circuit only has 1 advice column, so the proof is
+    /// Bn254 proof in little-endian bytes. The circuit only has 1 advice column, so the proof is
     /// of length `NUM_BN254_PROOF * BN254_BYTES`.
     pub proof: Vec<u8>,
 }
@@ -79,7 +79,7 @@ pub struct EvmProof {
     /// versions.
     pub version: String,
     #[serde(flatten)]
-    /// Bn254Fr public value app commits.
+    /// Bn254 public value app commits.
     pub app_commit: AppExecutionCommit,
     #[serde_as(as = "serde_with::hex::Hex")]
     /// User public values packed into bytes.

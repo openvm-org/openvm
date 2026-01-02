@@ -13,7 +13,7 @@ use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{conversion::AS, FieldArithmeticOpcode};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -95,12 +95,12 @@ fn set_and_execute<E, RA>(
     E: PreflightExecutor<F, RA>,
     RA: Arena,
 {
-    let b_val = b.unwrap_or(rng.gen());
+    let b_val = b.unwrap_or(rng.random());
     let c_val = c.unwrap_or(if opcode == FieldArithmeticOpcode::DIV {
         // If division, make sure c is not zero
-        F::from_canonical_u32(rng.gen_range(0..F::NEG_ONE.as_canonical_u32()) + 1)
+        F::from_u32(rng.random_range(0..F::NEG_ONE.as_canonical_u32()) + 1)
     } else {
-        rng.gen()
+        rng.random()
     });
     assert!(!c_val.is_zero(), "Division by zero");
     let (b, b_as) = write_native_or_imm(tester, rng, b_val, None);
@@ -112,12 +112,12 @@ fn set_and_execute<E, RA>(
         arena,
         &Instruction::new(
             opcode.global_opcode(),
-            F::from_canonical_usize(a),
+            F::from_usize(a),
             b,
             c,
-            F::from_canonical_usize(AS::Native as usize),
-            F::from_canonical_usize(b_as),
-            F::from_canonical_usize(c_as),
+            F::from_usize(AS::Native as usize),
+            F::from_usize(b_as),
+            F::from_usize(c_as),
             F::ZERO,
         ),
     );
@@ -252,7 +252,7 @@ fn run_negative_field_arithmetic_test(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<F>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).expect("row exists").to_vec();
         let cols: &mut FieldArithmeticCoreCols<F> =
             values.split_at_mut(adapter_width).1.borrow_mut();
         if let Some(a) = prank_vals.a {
@@ -285,8 +285,8 @@ fn run_negative_field_arithmetic_test(
 fn field_arithmetic_negative_zero_div_test() {
     run_negative_field_arithmetic_test(
         FieldArithmeticOpcode::DIV,
-        F::from_canonical_u32(111),
-        F::from_canonical_u32(222),
+        F::from_u32(111),
+        F::from_u32(222),
         FieldExpressionPrankVals {
             b: Some(F::ZERO),
             ..Default::default()
@@ -323,14 +323,14 @@ fn field_arithmetic_negative_rand() {
     let mut rng = create_seeded_rng();
     run_negative_field_arithmetic_test(
         FieldArithmeticOpcode::DIV,
-        F::from_canonical_u32(111),
-        F::from_canonical_u32(222),
+        F::from_u32(111),
+        F::from_u32(222),
         FieldExpressionPrankVals {
-            a: Some(rng.gen()),
-            b: Some(rng.gen()),
-            c: Some(rng.gen()),
-            opcode_flags: Some([rng.gen(), rng.gen(), rng.gen(), rng.gen()]),
-            divisor_inv: Some(rng.gen()),
+            a: Some(rng.random()),
+            b: Some(rng.random()),
+            c: Some(rng.random()),
+            opcode_flags: Some([rng.random(), rng.random(), rng.random(), rng.random()]),
+            divisor_inv: Some(rng.random()),
         },
         VerificationError::OodEvaluationMismatch,
     );

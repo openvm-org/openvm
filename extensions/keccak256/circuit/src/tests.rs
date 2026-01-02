@@ -23,7 +23,7 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::Rv32KeccakOpcode::{self, *};
 use openvm_stark_backend::{
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -109,7 +109,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     len: Option<usize>,
     expected_output: Option<[u8; 32]>,
 ) {
-    let len = len.unwrap_or(rng.gen_range(1..3000));
+    let len = len.unwrap_or(rng.random_range(1..3000));
     let tmp = get_random_message(rng, len);
     let message: &[u8] = message.unwrap_or(&tmp);
     let len = message.len();
@@ -120,17 +120,17 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let dst_ptr = gen_pointer(rng, 4);
     let src_ptr = gen_pointer(rng, 4);
-    tester.write(1, rd, dst_ptr.to_le_bytes().map(F::from_canonical_u8));
-    tester.write(1, rs1, src_ptr.to_le_bytes().map(F::from_canonical_u8));
-    tester.write(1, rs2, len.to_le_bytes().map(F::from_canonical_u8));
+    tester.write(1, rd, dst_ptr.to_le_bytes().map(F::from_u8));
+    tester.write(1, rs1, src_ptr.to_le_bytes().map(F::from_u8));
+    tester.write(1, rs2, len.to_le_bytes().map(F::from_u8));
 
     message.chunks(4).enumerate().for_each(|(i, chunk)| {
-        let rng = rng.gen();
+        let rng = rng.random();
         let chunk: [&u8; 4] = array::from_fn(|i| chunk.get(i).unwrap_or(&rng));
         tester.write(
             RV32_MEMORY_AS as usize,
             src_ptr + i * 4,
-            chunk.map(|&x| F::from_canonical_u8(x)),
+            chunk.map(|&x| F::from_u8(x)),
         );
     });
 
@@ -144,7 +144,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     println!("expected_output: {expected_output:?}");
     println!("keccak256(message): {:?}", keccak256(message));
     assert_eq!(
-        expected_output.map(F::from_canonical_u8),
+        expected_output.map(F::from_u8),
         tester.read(RV32_MEMORY_AS as usize, dst_ptr)
     );
 }
@@ -281,12 +281,14 @@ fn run_negative_keccak256_test(
     );
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(16).to_vec();
+        let mut trace_row = trace
+            .row_slice(16)
+            .expect("trace row should be present")
+            .to_vec();
         let digest_row: &mut KeccakVmCols<_> = trace_row.as_mut_slice().borrow_mut();
         for i in 0..16 {
-            let out_limb = F::from_canonical_u16(
-                prank_output[2 * i] as u16 + ((prank_output[2 * i + 1] as u16) << 8),
-            );
+            let out_limb =
+                F::from_u16(prank_output[2 * i] as u16 + ((prank_output[2 * i + 1] as u16) << 8));
             let x = i / 4;
             let y = 0;
             let limb = i % 4;
@@ -316,7 +318,7 @@ fn test_keccak256_negative() {
     hasher.update(&input);
     let mut out = [0u8; 32];
     hasher.finalize(&mut out);
-    out[0] = rng.gen();
+    out[0] = rng.random();
     run_negative_keccak256_test(&input, out, VerificationError::OodEvaluationMismatch);
 }
 

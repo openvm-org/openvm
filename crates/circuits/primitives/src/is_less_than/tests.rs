@@ -4,7 +4,7 @@ use derive_new::new;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -58,7 +58,7 @@ impl<AB: InteractionBuilder> Air<AB> for IsLtTestAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let (io, lower_decomp) = local.split_at(3);
         let [x, y, out] = [io[0], io[1], io[2]];
 
@@ -91,8 +91,8 @@ impl IsLessThanChip {
             .zip(self.pairs)
             .for_each(|(row, (x, y))| {
                 let row = IsLessThanColsMut::from_mut_slice(row);
-                *row.x = F::from_canonical_u32(x);
-                *row.y = F::from_canonical_u32(y);
+                *row.x = F::from_u32(x);
+                *row.y = F::from_u32(y);
                 self.air
                     .0
                     .generate_subrow((&self.range_checker, x, y), (row.lower_decomp, row.out));
@@ -169,7 +169,7 @@ fn test_is_less_than_negative() {
     let mut trace = chip.generate_trace();
     let range_trace = range_checker.generate_trace();
 
-    trace.values[2] = FieldAlgebra::from_canonical_u64(0);
+    trace.values[2] = PrimeCharacteristicRing::from_u64(0);
 
     disable_debug_builder();
     assert_eq!(
@@ -221,7 +221,7 @@ fn test_cuda_less_than_tracegen() {
         expected_cpu_matrix_vals
             .into_iter()
             .flatten()
-            .map(F::from_canonical_u32)
+            .map(F::from_u32)
             .collect(),
         3 + AUX_LEN,
     ));

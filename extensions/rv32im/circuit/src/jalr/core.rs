@@ -22,7 +22,7 @@ use openvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 
@@ -92,10 +92,10 @@ where
             .iter()
             .enumerate()
             .fold(AB::Expr::ZERO, |acc, (i, &val)| {
-                acc + val * AB::Expr::from_canonical_u32(1 << ((i + 1) * RV32_CELL_BITS))
+                acc + val * AB::Expr::from_u32(1 << ((i + 1) * RV32_CELL_BITS))
             });
 
-        let least_sig_limb = from_pc + AB::F::from_canonical_u32(DEFAULT_PC_STEP) - composed;
+        let least_sig_limb = from_pc + AB::F::from_u32(DEFAULT_PC_STEP) - composed;
 
         // rd_data is the final decomposition of `from_pc + DEFAULT_PC_STEP` we need.
         // The range check on `least_sig_limb` also ensures that `rd_data` correctly represents
@@ -127,15 +127,15 @@ where
 
         // Constrain to_pc_least_sig_bit + 2 * to_pc_limbs = rs1 + imm as a i32 addition with 2
         // limbs RISC-V spec explicitly sets the least significant bit of `to_pc` to 0
-        let rs1_limbs_01 = rs1[0] + rs1[1] * AB::F::from_canonical_u32(1 << RV32_CELL_BITS);
-        let rs1_limbs_23 = rs1[2] + rs1[3] * AB::F::from_canonical_u32(1 << RV32_CELL_BITS);
-        let inv = AB::F::from_canonical_u32(1 << 16).inverse();
+        let rs1_limbs_01 = rs1[0] + rs1[1] * AB::F::from_u32(1 << RV32_CELL_BITS);
+        let rs1_limbs_23 = rs1[2] + rs1[3] * AB::F::from_u32(1 << RV32_CELL_BITS);
+        let inv = AB::F::from_u32(1 << 16).inverse();
 
         builder.assert_bool(to_pc_least_sig_bit);
         let carry = (rs1_limbs_01 + imm - to_pc_limbs[0] * AB::F::TWO - to_pc_least_sig_bit) * inv;
         builder.when(is_valid).assert_bool(carry.clone());
 
-        let imm_extend_limb = imm_sign * AB::F::from_canonical_u32((1 << 16) - 1);
+        let imm_extend_limb = imm_sign * AB::F::from_u32((1 << 16) - 1);
         let carry = (rs1_limbs_23 + imm_extend_limb + carry - to_pc_limbs[1]) * inv;
         builder.when(is_valid).assert_bool(carry);
 
@@ -146,8 +146,7 @@ where
         self.range_bus
             .range_check(to_pc_limbs[0], 15)
             .eval(builder, is_valid);
-        let to_pc =
-            to_pc_limbs[0] * AB::F::TWO + to_pc_limbs[1] * AB::F::from_canonical_u32(1 << 16);
+        let to_pc = to_pc_limbs[0] * AB::F::TWO + to_pc_limbs[1] * AB::F::from_u32(1 << 16);
 
         let expected_opcode = VmCoreAir::<AB, I>::opcode_to_global_expr(self, JALR);
 
@@ -302,20 +301,20 @@ where
 
         // Write in reverse order
         core_row.imm_sign = F::from_bool(record.imm_sign);
-        core_row.to_pc_limbs = to_pc_limbs.map(F::from_canonical_u32);
+        core_row.to_pc_limbs = to_pc_limbs.map(F::from_u32);
         core_row.to_pc_least_sig_bit = F::from_bool(to_pc & 1 == 1);
         // fill_trace_row is called only on valid rows
         core_row.is_valid = F::ONE;
-        core_row.rs1_data = record.rs1_val.to_le_bytes().map(F::from_canonical_u8);
+        core_row.rs1_data = record.rs1_val.to_le_bytes().map(F::from_u8);
         core_row
             .rd_data
             .iter_mut()
             .rev()
             .zip(rd_data.iter().skip(1).rev())
             .for_each(|(dst, src)| {
-                *dst = F::from_canonical_u8(*src);
+                *dst = F::from_u8(*src);
             });
-        core_row.imm = F::from_canonical_u16(record.imm);
+        core_row.imm = F::from_u16(record.imm);
     }
 }
 

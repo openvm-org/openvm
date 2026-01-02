@@ -471,9 +471,9 @@ impl AddressSpaceHostLayout for MemoryCellType {
     unsafe fn to_field<F: Field>(&self, value: &[u8]) -> F {
         match self {
             Self::Null => unreachable!(),
-            Self::U8 => F::from_canonical_u8(*value.get_unchecked(0)),
-            Self::U16 => F::from_canonical_u16(core::ptr::read(value.as_ptr() as *const u16)),
-            Self::U32 => F::from_canonical_u32(core::ptr::read(value.as_ptr() as *const u32)),
+            Self::U8 => F::from_u8(*value.get_unchecked(0)),
+            Self::U16 => F::from_u16(core::ptr::read(value.as_ptr() as *const u16)),
+            Self::U32 => F::from_u32(core::ptr::read(value.as_ptr() as *const u32)),
             Self::Native { .. } => core::ptr::read(value.as_ptr() as *const F),
         }
     }

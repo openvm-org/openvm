@@ -27,7 +27,7 @@ use openvm_native_compiler::conversion::AS;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
 #[repr(C)]
@@ -67,10 +67,10 @@ impl<AB: InteractionBuilder, const N: usize> VmAdapterAir<AB> for NativeVectoriz
         let mut timestamp_delta = 0usize;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
-            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+            timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
-        let native_as = AB::Expr::from_canonical_u32(AS::Native as u32);
+        let native_as = AB::Expr::from_u32(AS::Native as u32);
 
         self.memory_bridge
             .read(
@@ -110,7 +110,7 @@ impl<AB: InteractionBuilder, const N: usize> VmAdapterAir<AB> for NativeVectoriz
                     native_as.clone(),
                 ],
                 cols.from_state,
-                AB::F::from_canonical_usize(timestamp_delta),
+                AB::F::from_usize(timestamp_delta),
                 (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
@@ -242,7 +242,7 @@ impl<F: PrimeField32, const N: usize> AdapterTraceFiller<F> for NativeVectorized
         adapter_row.b_pointer = record.b_ptr;
         adapter_row.a_pointer = record.a_ptr;
 
-        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
-        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
+        adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(record.from_pc);
     }
 }

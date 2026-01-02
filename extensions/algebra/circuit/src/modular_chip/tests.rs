@@ -30,7 +30,7 @@ use openvm_mod_circuit_builder::{
 use openvm_pairing_guest::{bls12_381::BLS12_381_MODULUS, bn254::BN254_MODULUS};
 use openvm_rv32_adapters::{rv32_write_heap_default, write_ptr_reg};
 use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
@@ -187,7 +187,7 @@ mod addsub_tests {
             let a = generate_random_biguint(modulus);
             let b = generate_random_biguint(modulus);
 
-            let op = rng.gen_range(0..2) + ADD_LOCAL; // 0 for add, 1 for sub
+            let op = rng.random_range(0..2) + ADD_LOCAL; // 0 for add, 1 for sub
             (a, b, op)
         };
 
@@ -219,11 +219,11 @@ mod addsub_tests {
 
         let a_limbs: Vec<F> = biguint_to_limbs_vec(&a, NUM_LIMBS)
             .into_iter()
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect();
         let b_limbs: Vec<F> = biguint_to_limbs_vec(&b, NUM_LIMBS)
             .into_iter()
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect();
 
         for i in (0..NUM_LIMBS).step_by(BLOCK_SIZE) {
@@ -251,7 +251,7 @@ mod addsub_tests {
 
         let expected_limbs: Vec<F> = biguint_to_limbs_vec(&expected_answer, NUM_LIMBS)
             .into_iter()
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect();
 
         for i in (0..NUM_LIMBS).step_by(BLOCK_SIZE) {
@@ -533,7 +533,7 @@ mod muldiv_tests {
             let a = generate_random_biguint(modulus);
             let b = generate_random_biguint(modulus);
 
-            let op = rng.gen_range(0..2) + MUL_LOCAL; // 0 for add, 1 for sub
+            let op = rng.random_range(0..2) + MUL_LOCAL; // 0 for add, 1 for sub
 
             (a, b, op)
         };
@@ -566,11 +566,11 @@ mod muldiv_tests {
 
         let a_limbs: Vec<F> = biguint_to_limbs_vec(&a, NUM_LIMBS)
             .into_iter()
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect();
         let b_limbs: Vec<F> = biguint_to_limbs_vec(&b, NUM_LIMBS)
             .into_iter()
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect();
 
         for i in (0..NUM_LIMBS).step_by(BLOCK_SIZE) {
@@ -598,7 +598,7 @@ mod muldiv_tests {
 
         let expected_limbs: Vec<F> = biguint_to_limbs_vec(&expected_answer, NUM_LIMBS)
             .into_iter()
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect();
 
         for i in (0..NUM_LIMBS).step_by(BLOCK_SIZE) {
@@ -905,14 +905,12 @@ mod is_equal_tests {
             )
         } else {
             let b = b.unwrap_or(
-                generate_field_element::<TOTAL_LIMBS, LIMB_BITS>(modulus, rng)
-                    .map(F::from_canonical_u32),
+                generate_field_element::<TOTAL_LIMBS, LIMB_BITS>(modulus, rng).map(F::from_u32),
             );
-            let c = c.unwrap_or(if rng.gen_bool(0.5) {
+            let c = c.unwrap_or(if rng.random_bool(0.5) {
                 b
             } else {
-                generate_field_element::<TOTAL_LIMBS, LIMB_BITS>(modulus, rng)
-                    .map(F::from_canonical_u32)
+                generate_field_element::<TOTAL_LIMBS, LIMB_BITS>(modulus, rng).map(F::from_u32)
             });
 
             (b, c, offset + Rv32ModularArithmeticOpcode::IS_EQ as usize)
@@ -948,7 +946,7 @@ mod is_equal_tests {
             opcode_offset,
         );
 
-        let modulus_limbs = modulus_limbs.map(F::from_canonical_u8);
+        let modulus_limbs = modulus_limbs.map(F::from_u8);
 
         for i in 0..num_tests {
             set_and_execute_is_equal(
@@ -1028,7 +1026,7 @@ mod is_equal_tests {
             opcode_offset,
         );
 
-        let modulus_limbs = modulus_limbs.map(F::from_canonical_u8);
+        let modulus_limbs = modulus_limbs.map(F::from_u8);
 
         for i in 0..num_ops {
             set_and_execute_is_equal(
@@ -1107,7 +1105,7 @@ mod is_equal_tests {
             opcode_offset,
         );
 
-        let modulus_limbs = modulus_limbs.map(F::from_canonical_u8);
+        let modulus_limbs = modulus_limbs.map(F::from_u8);
 
         set_and_execute_is_equal(
             &mut tester,
@@ -1124,12 +1122,15 @@ mod is_equal_tests {
 
         let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
         let modify_trace = |trace: &mut DenseMatrix<F>| {
-            let mut trace_row = trace.row_slice(0).to_vec();
+            let mut trace_row = trace
+                .row_slice(0)
+                .expect("trace row should be present")
+                .to_vec();
             let cols: &mut ModularIsEqualCoreCols<_, READ_LIMBS> =
                 trace_row.split_at_mut(adapter_width).1.borrow_mut();
             if test_case == 1 {
                 // test the constraint that c_lt_mark = 2 when is_setup = 1
-                cols.b[0] = F::from_canonical_u32(1);
+                cols.b[0] = F::from_u32(1);
                 cols.c_lt_mark = F::ONE;
                 cols.lt_marker = [F::ZERO; READ_LIMBS];
                 cols.lt_marker[READ_LIMBS - 1] = F::ONE;
@@ -1138,17 +1139,17 @@ mod is_equal_tests {
             } else if test_case == 2 {
                 // test the constraint that b[i] = N[i] for all i when prefix_sum is not 1 or
                 // lt_marker_sum - is_setup
-                cols.b[0] = F::from_canonical_u32(2);
-                cols.c_lt_mark = F::from_canonical_u8(2);
+                cols.b[0] = F::from_u32(2);
+                cols.c_lt_mark = F::from_u8(2);
                 cols.lt_marker = [F::ZERO; READ_LIMBS];
-                cols.lt_marker[READ_LIMBS - 1] = F::from_canonical_u8(2);
+                cols.lt_marker[READ_LIMBS - 1] = F::from_u8(2);
                 cols.c_lt_diff = modulus_limbs[READ_LIMBS - 1] - cols.c[READ_LIMBS - 1];
             } else if test_case == 3 {
                 // test the constraint that sum_i lt_marker[i] = 2 when is_setup = 1
-                cols.b[0] = F::from_canonical_u32(3);
-                cols.c_lt_mark = F::from_canonical_u8(2);
+                cols.b[0] = F::from_u32(3);
+                cols.c_lt_mark = F::from_u8(2);
                 cols.lt_marker = [F::ZERO; READ_LIMBS];
-                cols.lt_marker[READ_LIMBS - 1] = F::from_canonical_u8(2);
+                cols.lt_marker[READ_LIMBS - 1] = F::from_u8(2);
                 cols.lt_marker[0] = F::ONE;
                 cols.b_lt_diff = modulus_limbs[0] - cols.b[0];
                 cols.c_lt_diff = modulus_limbs[READ_LIMBS - 1] - cols.c[READ_LIMBS - 1];

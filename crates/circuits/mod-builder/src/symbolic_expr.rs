@@ -10,7 +10,9 @@ use num_traits::{FromPrimitive, One, Zero};
 use openvm_circuit_primitives::bigint::{
     check_carry_to_zero::get_carry_max_abs_and_bits, OverflowInt,
 };
-use openvm_stark_backend::{p3_air::AirBuilder, p3_field::FieldAlgebra, p3_util::log2_ceil_usize};
+use openvm_stark_backend::{
+    p3_air::AirBuilder, p3_field::PrimeCharacteristicRing, p3_util::log2_ceil_usize,
+};
 
 /// Example: If there are 4 inputs (x1, y1, x2, y2), and one intermediate variable lambda,
 /// Mul(Var(0), Var(0)) - Input(0) - Input(2) =>
@@ -459,9 +461,9 @@ impl SymbolicExpr {
 
     fn isize_to_expr<AB: AirBuilder>(s: isize) -> AB::Expr {
         if s >= 0 {
-            AB::Expr::from_canonical_usize(s as usize)
+            AB::Expr::from_usize(s as usize)
         } else {
-            -AB::Expr::from_canonical_usize(s.unsigned_abs())
+            -AB::Expr::from_usize(s.unsigned_abs())
         }
     }
 
@@ -502,7 +504,7 @@ impl SymbolicExpr {
                 let left = lhs.evaluate_overflow_expr::<AB>(inputs, variables, constants, flags);
                 let right = rhs.evaluate_overflow_expr::<AB>(inputs, variables, constants, flags);
                 let num_limbs = max(left.num_limbs(), right.num_limbs());
-                let flag = flags[*flag_id];
+                let flag = &flags[*flag_id];
                 let mut res = vec![];
                 for i in 0..num_limbs {
                     res.push(
@@ -510,12 +512,12 @@ impl SymbolicExpr {
                             left.limb(i).clone()
                         } else {
                             AB::Expr::ZERO
-                        }) * flag.into()
+                        }) * flag.clone()
                             + (if i < right.num_limbs() {
                                 right.limb(i).clone()
                             } else {
                                 AB::Expr::ZERO
-                            }) * (AB::Expr::ONE - flag.into()),
+                            }) * (AB::Expr::ONE - flag.clone()),
                     );
                 }
                 OverflowInt::from_computed_limbs(
