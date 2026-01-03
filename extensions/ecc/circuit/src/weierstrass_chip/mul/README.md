@@ -4,6 +4,22 @@
 
 The EC_MUL multirow chip implements elliptic curve scalar multiplication using a double-and-add algorithm. Unlike single-row chips, this chip generates **257 trace rows per instruction**: 256 compute rows (one per scalar bit) plus 1 digest row for memory I/O.
 
+> **Note**: Each source file in this module (`mod.rs`, `columns.rs`, `air.rs`, `execution.rs`, `trace.rs`, `field_expr.rs`) contains detailed Rust doc comments that complement this README. Use `cargo doc` or browse the source files directly for implementation-level documentation.
+
+## Quick Reference
+
+| Aspect | Value |
+|--------|-------|
+| Rows per instruction | 257 (256 compute + 1 digest) |
+| Scalar size | 256 bits |
+| Supported curves | secp256k1, P-256, BN254, BLS12_381 |
+| Opcodes | `EC_MUL`, `SETUP_EC_MUL` |
+| Constraint degree | 7 (requires `--app-log-blowup 3`) |
+
+## Benchmarking
+
+For performance benchmarks using real-world workloads (e.g., Ethereum block execution), see the branch `manh/ec-mul-bench` on the [openvm-reth-benchmark](https://github.com/openvm-org/openvm-reth-benchmark) repository.
+
 ## Instruction Entry Point
 
 ### Transpiler
@@ -75,12 +91,16 @@ return R
 
 ## File Structure
 
-- `mod.rs` - Module exports, constants, and chip constructors
-- `columns.rs` - Column struct definitions for trace layout
-- `air.rs` - AIR constraints
-- `field_expr.rs` - FieldExpr for EC point operations
-- `execution.rs` - Instruction execution logic
-- `trace.rs` - Trace generation (Executor and Filler)
+Each file contains detailed Rust doc comments explaining its purpose and implementation details:
+
+| File | Purpose | Key Doc Sections |
+|------|---------|------------------|
+| `mod.rs` | Module exports, constants, chip constructors | Module overview, usage examples, current status |
+| `columns.rs` | Column struct definitions for trace layout | Layout diagrams, known issues, width calculations |
+| `air.rs` | AIR constraints | Constraint overview, known issues, transition logic |
+| `field_expr.rs` | FieldExpr for EC point operations | Input/output mapping, flag semantics |
+| `execution.rs` | Instruction execution logic | Execution flow, setup vs normal mode, curve dispatch |
+| `trace.rs` | Trace generation (Executor and Filler) | Record layout, filling phases, timing notes |
 
 ## Column Layout
 
@@ -271,67 +291,134 @@ The `ec_mul()` function in `curves.rs` dispatches to native implementations:
 
 ## Known Issues
 
-### Issue 1: FieldExpr Column Layout Mismatch (CRITICAL)
+### Issue 1: FieldExpr Evaluation & Interaction Mismatch (CRITICAL)
 
-**Problem**: The AIR evaluates FieldExpr's `SubAir::eval()` on ALL rows, including digest rows. FieldExpr reads `is_valid` from offset `base_width`, but for digest rows, this offset contains `from_state.pc` (non-zero).
+**Problem**: The AIR evaluates FieldExpr's `SubAir::eval()` on ALL rows (257 per instruction), but trace generation only calls FieldExpr's `generate_subrow()` for compute rows (256 per instruction). This causes two critical issues:
 
-**Symptoms**:
+1. **Constraint failures**: FieldExpr reads `is_valid` from offset `base_width`, which contains garbage (`from_state.pc`) for digest rows
+2. **Range check interaction mismatch**: FieldExpr sends range check interactions gated by `is_valid`, but trace only generates requests for compute rows
+
+**Interaction Mismatch Details**:
+
+| Component | Behavior |
+|-----------|----------|
+| **AIR (all 257 rows)** | FieldExpr sends range check interactions with multiplicity = `is_valid` (see `builder.rs` lines 436-443) |
+| **Digest row in AIR** | `is_valid = from_state.pc` (garbage, e.g., 0x1000), sends garbage multiplicity |
+| **Trace (256 rows only)** | Only calls `generate_subrow()` for compute rows; `range_checker.add_count()` called 256 times |
+| **Result** | Grand product mismatch: AIR sends extra interactions for digest row, trace doesn't match |
+
+**Constraint Failure Details**:
 
 - `assert_bool(is_valid)` fails (pc is not 0 or 1)
-- `assert_bool(is_setup)` fails (garbage value)
-- Range check interactions sent with wrong count
+- `assert_bool(is_setup)` fails where `is_setup = is_valid - flags[0] - flags[1]` (garbage)
 - STARK verification error: "out-of-domain evaluation mismatch"
 
-**Root Cause**: Digest row's `from_state.pc` overlaps with FieldExpr's `is_valid` position.
+**Root Cause**: Digest row's `from_state.pc` overlaps with FieldExpr's `is_valid` column position at offset `base_width`.
 
-**Suggested Fixes**:
+**Fix Options**:
 
-1. **Add Padding Field (Recommended)**:
+**Option A: Generate dummy FieldExpr on digest row (Recommended)**
 
-   ```rust
-   pub struct EcMulDigestCols<...> {
-       pub flags: EcMulFlagsCols<T>,
-       pub control: EcMulControlCols<T, NUM_LIMBS>,
-       pub field_expr_gate: T,  // Always 0, acts as FieldExpr's is_valid
-       pub from_state: ExecutionState<T>,
-       // ... rest of fields
-   }
-   ```
+Since `is_valid` is designed to gate padding/dummy rows (not instruction rows), and the digest row is an active part of the EC_MUL instruction, we should:
 
-   This ensures `local[base_width] = 0` for digest rows.
+1. Call `generate_subrow()` on digest row with dummy inputs and `is_valid = 0`
+2. This generates matching range check requests for the FieldExpr columns
+3. Overlay digest-specific columns starting AFTER the FieldExpr columns
 
-2. **Gate mod-builder's Setup Constraint**:
-   In `crates/circuits/mod-builder/src/builder.rs`, line 367:
+```rust
+// In trace.rs, for digest row:
+// 1. Generate dummy FieldExpr columns (is_valid = 0)
+let dummy_inputs = vec![BigUint::ZERO; 4];  // Rx, Ry, Px, Py
+let dummy_flags = vec![false, false];        // bit, is_setup
+self.ec_mul_step_expr.generate_subrow(
+    (self.range_checker.as_ref(), dummy_inputs, dummy_flags),
+    &mut row[compute_base_width..compute_base_width + expr_width],
+);
+// Set is_valid = 0 manually
+row[compute_base_width] = F::ZERO;
 
-   ```rust
-   // Change from:
-   builder.assert_bool(is_setup.clone());
-   // To:
-   builder.when(is_valid.clone()).assert_bool(is_setup.clone());
-   ```
+// 2. Digest-specific columns start after FieldExpr columns
+let digest_start = compute_base_width + expr_width;
+// ... fill digest columns at digest_start offset
+```
 
-   This gates the constraint by `is_valid` so it passes when `is_valid = 0`.
+**Column Layout with Option A**:
 
-3. **Generate FieldExpr Trace on Digest Row**:
-   Generate FieldExpr columns with `is_valid = 0` on the digest row, then overlay digest-specific columns starting at `base_width + 1`. Requires adding the padding field.
+```text
+Compute Row:
+[EcMulFlagsCols | EcMulControlCols | FieldExpr (is_valid=1) | padding...]
 
-### Issue 2: Point Addition to Infinity (POTENTIAL)
+Digest Row:
+[EcMulFlagsCols | EcMulControlCols | FieldExpr (is_valid=0) | DigestSpecific...]
+```
 
-**Problem**: The current FieldExpr handles the case when R = ∞ (using safe denominators), but the formula `R_added = R_doubled + P` may not correctly compute `P` when adding `P` to infinity.
+Total width = base_width + expr_width + digest_specific_width (larger but correct)
 
-**Details**:
+**Option B: Add padding field (Simpler but semantically awkward)**
 
-- When `is_inf = 1` and `bit = 1`, we want `R_next = P` (adding base point to infinity)
-- Current formula: `R_doubled = 2*R` (with safe denom), `R_added = R_doubled + P`
-- Since R = (0,0), the arithmetic produces garbage values (even with safe denominators)
-- The output is `R_added` which is not equal to `P`
+Add a padding field so `is_valid = 0` for digest rows without generating FieldExpr:
 
-**Potential Fix**:
+```rust
+pub struct EcMulDigestCols<...> {
+    pub flags: EcMulFlagsCols<T>,
+    pub control: EcMulControlCols<T, NUM_LIMBS>,
+    pub field_expr_gate: T,  // Always 0, acts as FieldExpr's is_valid
+    pub from_state: ExecutionState<T>,
+    // ... rest of fields
+}
+```
 
-- Add explicit selection: `R_next = is_inf && bit ? P : (bit ? R_added : R_doubled)`
-- Or ensure the FieldExpr arithmetic correctly handles the infinity case
+This works but treats digest row as if it were a padding row, which is semantically incorrect. The trace doesn't call `generate_subrow()` for digest row, so no range check requests are generated - but this is fine because `is_valid = 0` means multiplicity = 0 in the AIR.
 
-**Note**: This may already be handled correctly by the native execution in `ec_mul` which uses proper curve libraries. The issue would only manifest in the AIR constraints if they don't match.
+**Trade-offs**:
+
+| Aspect | Option A (Dummy FieldExpr) | Option B (Padding Field) |
+|--------|---------------------------|--------------------------|
+| Semantic correctness | ✅ Digest row is an active row | ⚠️ Treats digest as padding |
+| Trace width | Larger (base + expr + digest) | Smaller (max of compute/digest) |
+| Implementation | More complex | Simpler |
+| Range check requests | Generated with is_valid=0 | Not generated |
+
+### Issue 2: Point Addition to Infinity (CRITICAL)
+
+**Problem**: When adding P to infinity (R = ∞), the FieldExpr produces garbage instead of P, causing memory bridge verification failure.
+
+**What's Already Implemented**:
+
+- The `is_inf` flag exists in `EcMulFlagsCols` and is tracked correctly through compute rows
+- In the AIR: `use_safe_denom = is_setup OR is_inf` (line 544)
+- In trace filler: `flags[1] = is_setup || is_inf` (lines 516-520)
+- Safe denominators (1) are used when `is_inf = 1` to avoid division by zero
+
+**What's Still Broken**:
+
+- Safe denominators prevent division by zero but **don't fix the output values**
+- When R = (0,0) with safe denom: `R_doubled = (a², -a³)` (garbage, not infinity)
+- Then `R_added = garbage + P` = more garbage, not P
+- The output selection `bit ? R_added : R_doubled` returns garbage either way
+
+**Root Cause Flow**:
+
+1. Execution: Native `ec_mul()` writes correct result to memory (e.g., P for scalar with MSB=1)
+2. Memory controller: Records the correct result
+3. Trace filler: Computes `result_data` using FieldExpr (garbage when is_inf=1 and bit=1)
+4. Memory bridge: Sends write interaction with garbage data
+5. Grand product check fails because interactions don't match
+
+**Fix Required**: Modify output selection in `field_expr.rs` to handle infinity explicitly:
+
+```rust
+// After computing ax, ay, dx, dy, add is_inf_flag as a 3rd flag:
+let is_inf_flag = (*builder).borrow_mut().new_flag();
+
+// When is_inf = 1 and bit = 1, output should be P (base point), not R_added
+// When is_inf = 1 and bit = 0, output should stay at "infinity" (0,0 representation)
+let use_base_point = is_inf_flag && bit_flag;  // Need to output P directly
+let out_x = select(use_base_point, px, select(bit_flag, ax, dx));
+let out_y = select(use_base_point, py, select(bit_flag, ay, dy));
+```
+
+The AIR and trace filler would need to pass `is_inf` as a separate flag (flag 2) to FieldExpr.
 
 ### Issue 3: Adding Two Equal Points - P = D (POTENTIAL)
 
@@ -358,6 +445,13 @@ The `ec_mul()` function in `curves.rs` dispatches to native implementations:
 
 **Problem**: The Encoder with `max_degree=2` generates constraints up to degree 7, requiring `app_log_blowup >= 3`.
 
+**Current Implementation**:
+
+- Encoder with `max_degree=2`: Uses 22 columns (since C(24,2) = 276 >= 257)
+- `contains_flag()` returns a degree-2 Lagrange polynomial
+- Encoder's internal `eval()` has degree-3 constraints (falling factorial)
+- Row transition loop (lines 250-263) creates 256 individual degree-7 constraints
+
 **Constraint Degree Analysis**:
 
 | Constraint Location | Description | Degree |
@@ -370,13 +464,13 @@ The `ec_mul()` function in `curves.rs` dispatches to native implementations:
 | Row index transition | `when_transition * when(both_in_instruction) * when(is_current) * is_next` | **7** |
 | FieldExpr constraints | Depends on expression complexity | ~3-5 |
 
-**Breakdown of Degree 7 Constraint**:
+**Breakdown of Degree 7 Constraint** (lines 258-262):
 
-```
+```rust
 builder.when_transition()           // +1 (transition indicator)
-       .when(both_in_instruction)   // +2 (degree 2 filter)
-       .when(is_current)            // +2 (Lagrange polynomial)
-       .assert_one(is_next);        // +2 (constraint with Lagrange)
+       .when(both_in_instruction)   // +2 (degree 2 expression)
+       .when(is_current)            // +2 (Lagrange polynomial from contains_flag)
+       .assert_one(is_next);        // +2 (Lagrange polynomial)
                                     // = 7 total
 ```
 
@@ -390,10 +484,30 @@ This sets `max_constraint_degree = (1 << 3) + 1 = 9`, sufficient for degree 7.
 
 **Potential Fixes**:
 
-1. **Reduce Encoder max_degree**: Using `max_degree=3` would require only 9 columns (vs 22) but Lagrange polynomials would be degree 3, making some constraints degree 8+
-2. **Simplify row index checking**: Instead of checking all 257 row transitions individually, use a simpler increment-by-1 constraint
-3. **Binary encoding**: Use 9 binary columns (log2(257)) with degree-1 constraints, but more columns and constraints overall
-4. **Accept higher degree**: Document `--app-log-blowup 3` requirement and accept the performance tradeoff
+1. **Replace Encoder with simple increment** (Recommended):
+   - Replace `row_idx: [T; 22]` (Encoder) with single `row_idx: T` column
+   - Constrain: `when(in_instruction).assert_eq(next.row_idx, local.row_idx + 1)` → degree 3
+   - Range-check: `row_idx ∈ [0, 256]` via VariableRangeChecker
+   - Constrain: `is_first_compute → row_idx = 0`, `is_digest → row_idx = 256`
+   - **Result**: Max degree drops from 7 to ~4-5, columns drop from 22 to 1
+
+2. **Reduce Encoder max_degree to 3** (Not recommended):
+   - Would need 10 columns (C(13,3) = 286 >= 257)
+   - Lagrange polynomials become degree 3
+   - Transition constraints become degree 1+2+3+3 = **9** (worse!)
+
+3. **Binary encoding**:
+   - Use 9 binary columns (log2(512) covers 0-256)
+   - Each column boolean: degree 2 to check
+   - Increment requires carry logic: more constraints but degree 2-3
+   - **Result**: 9 columns (vs 22), max degree ~3-4
+
+4. **Accept higher degree** (Current approach):
+   - Document `--app-log-blowup 3` requirement
+   - Accept the 8x proof size increase for this chip
+   - Simpler to implement, but performance cost
+
+**Recommendation**: Fix #1 is the best approach - replacing Encoder with a simple row counter eliminates 256 degree-7 constraints and reduces column count from 22 to 1.
 
 ## AIR Constraints Summary
 
@@ -442,3 +556,24 @@ The `--app-log-blowup 3` sets `max_constraint_degree = 9`, which is needed becau
 - `openvm-ecc-transpiler`: Opcode definitions
 - `k256`: Native secp256k1 operations for execution
 - `halo2curves_axiom`: Alternative curve implementations
+
+## Further Reading
+
+### Source Code Comments
+
+Each source file contains comprehensive Rust doc comments. To explore:
+
+```bash
+# Generate and open HTML documentation
+cargo doc --package openvm-ecc-circuit --open
+
+# Or read source files directly - each has a module-level doc comment
+# explaining the file's purpose, structure, and known issues
+```
+
+### Related Components
+
+- **Transpiler**: `extensions/ecc/transpiler/src/lib.rs` - Opcode definitions
+- **Extension**: `extensions/ecc/circuit/src/extension/weierstrass.rs` - Chip registration
+- **Mod-builder**: `crates/circuits/mod-builder/src/builder.rs` - FieldExpr infrastructure
+- **Curves**: `extensions/ecc/circuit/src/weierstrass_chip/curves.rs` - Native curve operations
