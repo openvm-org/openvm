@@ -5,6 +5,7 @@ extern crate alloc;
 
 pub use once_cell;
 pub use openvm_algebra_guest as algebra;
+pub use openvm_ecc_curve_macros as curve_macros;
 pub use openvm_ecc_sw_macros as sw_macros;
 use strum_macros::FromRepr;
 
@@ -32,6 +33,8 @@ pub enum SwBaseFunct7 {
     SwAddNe = 0,
     SwDouble,
     SwSetup,
+    SwEcMul,
+    SwSetupMul,
 }
 
 impl SwBaseFunct7 {
