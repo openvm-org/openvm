@@ -138,6 +138,16 @@ impl BenchSummaryMetrics {
         if let (Some(root), Some(prev_root)) = (&mut self.root, &prev.root) {
             root.set_diff(prev_root);
         }
+        if let (Some(halo2_outer), Some(prev_halo2_outer)) =
+            (&mut self.halo2_outer, &prev.halo2_outer)
+        {
+            halo2_outer.set_diff(prev_halo2_outer);
+        }
+        if let (Some(halo2_wrapper), Some(prev_halo2_wrapper)) =
+            (&mut self.halo2_wrapper, &prev.halo2_wrapper)
+        {
+            halo2_wrapper.set_diff(prev_halo2_wrapper);
+        }
     }
 }
 
@@ -183,13 +193,11 @@ impl AggregateMetrics {
                 .get(PROVE_EXCL_TRACE_TIME_LABEL)
                 .map(|s| s.sum.val)
                 .unwrap_or(0.0);
-            println!("{execute_metered} {execute_preflight} {trace_gen} {stark_prove}");
             MdTableCell::new(
                 execute_metered + execute_preflight + trace_gen + stark_prove,
                 None,
             )
         };
-        println!("{}", self.total_proof_time.val);
         let par_proof_time_ms = if let Some(proof_stats) = stats.get(PROOF_TIME_LABEL) {
             proof_stats.max
         } else {
