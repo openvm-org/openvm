@@ -3,8 +3,8 @@ use openvm_instructions::riscv::{RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGI
 
 use crate::{arch::SystemConfig, system::memory::dimensions::MemoryDimensions};
 
-/// Upper bound on memory operations per instruction. Used for buffer allocation.
-pub const MAX_MEMORY_OPS_PER_INSN: usize = 1 << 16;
+/// Upper bound on number of memory pages accessed per instruction. Used for buffer allocation.
+pub const MAX_MEM_PAGE_OPS_PER_INSN: usize = 1 << 16;
 
 #[derive(Clone, Debug)]
 pub struct BitSet {
@@ -148,7 +148,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
 
     #[inline(always)]
     pub(super) fn calculate_checkpoint_capacity(segment_check_insns: u64) -> usize {
-        segment_check_insns as usize * MAX_MEMORY_OPS_PER_INSN
+        segment_check_insns as usize * MAX_MEM_PAGE_OPS_PER_INSN
     }
 
     #[inline(always)]
@@ -186,6 +186,11 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         let end_block_id = start_block_id + num_blocks;
         let start_page_id = start_block_id >> PAGE_BITS;
         let end_page_id = ((end_block_id - 1) >> PAGE_BITS) + 1;
+        assert!(
+            self.page_indices_since_checkpoint_len + (end_page_id - start_page_id) as usize
+                <= self.page_indices_since_checkpoint.len(),
+            "more than {MAX_MEM_PAGE_OPS_PER_INSN} memory pages accessed in a single instruction"
+        );
 
         for page_id in start_page_id..end_page_id {
             // Append page_id to page_indices_since_checkpoint
