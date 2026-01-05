@@ -7,7 +7,7 @@ use derive_new::new;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     p3_air::{Air, BaseAir},
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -60,7 +60,7 @@ impl<AB: InteractionBuilder, const AUX_LEN: usize> Air<AB> for AssertLtTestAir<A
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local: &AssertLessThanCols<_, AUX_LEN> = (*local).borrow();
 
         let io = AssertLessThanIo::new(local.x, local.y, local.count);
@@ -92,8 +92,8 @@ impl<const AUX_LEN: usize> AssertLessThanChip<AUX_LEN> {
             .zip(self.pairs)
             .for_each(|(row, (x, y))| {
                 let row: &mut AssertLessThanCols<F, AUX_LEN> = row.borrow_mut();
-                row.x = F::from_canonical_u32(x);
-                row.y = F::from_canonical_u32(y);
+                row.x = F::from_u32(x);
+                row.y = F::from_u32(y);
                 row.count = F::ONE;
                 self.air
                     .0
@@ -203,7 +203,7 @@ fn test_assert_less_than_negative_2() {
     let range_trace = range_checker.generate_trace();
 
     // Make the trace invalid
-    trace.values[3] = FieldAlgebra::from_canonical_u64(1 << decomp as u64);
+    trace.values[3] = PrimeCharacteristicRing::from_u64(1 << decomp as u64);
 
     disable_debug_builder();
     assert_eq!(
@@ -273,7 +273,7 @@ fn test_cuda_assert_less_than_tracegen() {
         expected_cpu_matrix_vals
             .into_iter()
             .flatten()
-            .map(F::from_canonical_u32)
+            .map(F::from_u32)
             .collect(),
         3 + AUX_LEN,
     ));

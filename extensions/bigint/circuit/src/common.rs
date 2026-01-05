@@ -107,8 +107,8 @@ mod tests {
     fn test_u256_lt() {
         let mut rng = StdRng::from_seed([42; 32]);
         for _ in 0..10000 {
-            let limbs_a: [u64; 4] = rng.gen();
-            let limbs_b: [u64; 4] = rng.gen();
+            let limbs_a: [u64; 4] = rng.random();
+            let limbs_b: [u64; 4] = rng.random();
             let a = U256::from_limbs(limbs_a);
             let b = U256::from_limbs(limbs_b);
             let a_u8: [u8; INT256_NUM_LIMBS] = u64_array_to_bytes(limbs_a);
@@ -120,8 +120,8 @@ mod tests {
     fn test_i256_lt() {
         let mut rng = StdRng::from_seed([42; 32]);
         for _ in 0..10000 {
-            let limbs_a: [u64; 4] = rng.gen();
-            let limbs_b: [u64; 4] = rng.gen();
+            let limbs_a: [u64; 4] = rng.random();
+            let limbs_b: [u64; 4] = rng.random();
             let a = I256::from_limbs(limbs_a);
             let b = I256::from_limbs(limbs_b);
             let a_u8: [u8; INT256_NUM_LIMBS] = u64_array_to_bytes(limbs_a);

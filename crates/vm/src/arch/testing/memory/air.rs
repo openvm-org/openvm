@@ -4,7 +4,7 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -78,7 +78,7 @@ impl<F> BaseAir<F> for MemoryDummyAir {
 impl<AB: InteractionBuilder> Air<AB> for MemoryDummyAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local = DummyMemoryInteractionColsRef::from_slice(&local);
 
         self.bus
@@ -117,10 +117,10 @@ impl<F: PrimeField32> MemoryDummyChip<F> {
 
     pub fn push(&mut self, addr_space: u32, ptr: u32, data: &[F], timestamp: u32, count: F) {
         assert_eq!(data.len(), self.air.block_size);
-        self.trace.push(F::from_canonical_u32(addr_space));
-        self.trace.push(F::from_canonical_u32(ptr));
+        self.trace.push(F::from_u32(addr_space));
+        self.trace.push(F::from_u32(ptr));
         self.trace.extend_from_slice(data);
-        self.trace.push(F::from_canonical_u32(timestamp));
+        self.trace.push(F::from_u32(timestamp));
         self.trace.push(count);
     }
 }

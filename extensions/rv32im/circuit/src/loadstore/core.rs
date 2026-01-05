@@ -16,7 +16,7 @@ use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 
@@ -111,7 +111,7 @@ where
 
         // We will use the InstructionOpcode enum to encode the opcodes
         // the appended digit to each opcode is the shift amount
-        let inv_2 = AB::F::from_canonical_u32(2).inverse();
+        let inv_2 = AB::F::from_u32(2).inverse();
         let mut opcode_flags = vec![];
         for flag in flags {
             opcode_flags.push(flag * (flag - AB::F::ONE) * inv_2);
@@ -199,23 +199,21 @@ where
             builder.assert_eq(*cell, expected_val);
         }
 
-        let expected_opcode = opcode_when(&[LoadW0]) * AB::Expr::from_canonical_u8(LOADW as u8)
-            + opcode_when(&[LoadHu0, LoadHu2]) * AB::Expr::from_canonical_u8(LOADHU as u8)
-            + opcode_when(&[LoadBu0, LoadBu1, LoadBu2, LoadBu3])
-                * AB::Expr::from_canonical_u8(LOADBU as u8)
-            + opcode_when(&[StoreW0]) * AB::Expr::from_canonical_u8(STOREW as u8)
-            + opcode_when(&[StoreH0, StoreH2]) * AB::Expr::from_canonical_u8(STOREH as u8)
-            + opcode_when(&[StoreB0, StoreB1, StoreB2, StoreB3])
-                * AB::Expr::from_canonical_u8(STOREB as u8);
+        let expected_opcode = opcode_when(&[LoadW0]) * AB::Expr::from_u8(LOADW as u8)
+            + opcode_when(&[LoadHu0, LoadHu2]) * AB::Expr::from_u8(LOADHU as u8)
+            + opcode_when(&[LoadBu0, LoadBu1, LoadBu2, LoadBu3]) * AB::Expr::from_u8(LOADBU as u8)
+            + opcode_when(&[StoreW0]) * AB::Expr::from_u8(STOREW as u8)
+            + opcode_when(&[StoreH0, StoreH2]) * AB::Expr::from_u8(STOREH as u8)
+            + opcode_when(&[StoreB0, StoreB1, StoreB2, StoreB3]) * AB::Expr::from_u8(STOREB as u8);
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(self, expected_opcode);
 
         let load_shift_amount = opcode_when(&[LoadBu1]) * AB::Expr::ONE
             + opcode_when(&[LoadHu2, LoadBu2]) * AB::Expr::TWO
-            + opcode_when(&[LoadBu3]) * AB::Expr::from_canonical_u32(3);
+            + opcode_when(&[LoadBu3]) * AB::Expr::from_u32(3);
 
         let store_shift_amount = opcode_when(&[StoreB1]) * AB::Expr::ONE
             + opcode_when(&[StoreH2, StoreB2]) * AB::Expr::TWO
-            + opcode_when(&[StoreB3]) * AB::Expr::from_canonical_u32(3);
+            + opcode_when(&[StoreB3]) * AB::Expr::from_u32(3);
 
         AdapterAirContext {
             to_pc: None,
@@ -341,9 +339,9 @@ where
 
         let write_data = run_write_data(opcode, record.read_data, record.prev_data, shift as usize);
         // Writing in reverse order
-        core_row.write_data = write_data.map(F::from_canonical_u32);
-        core_row.prev_data = record.prev_data.map(F::from_canonical_u32);
-        core_row.read_data = record.read_data.map(F::from_canonical_u8);
+        core_row.write_data = write_data.map(F::from_u32);
+        core_row.prev_data = record.prev_data.map(F::from_u32);
+        core_row.read_data = record.read_data.map(F::from_u8);
         core_row.is_load = F::from_bool([LOADW, LOADHU, LOADBU].contains(&opcode));
         core_row.is_valid = F::ONE;
         let flags = &mut core_row.flags;

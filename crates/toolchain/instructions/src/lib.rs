@@ -59,7 +59,7 @@ impl VmOpcode {
 
     /// Convert the VmOpcode into a field element
     pub fn to_field<F: Field>(&self) -> F {
-        F::from_canonical_usize(self.as_usize())
+        F::from_usize(self.as_usize())
     }
 }
 

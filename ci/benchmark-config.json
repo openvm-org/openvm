@@ -77,7 +77,7 @@
       "e2e_bench": true,
       "run_params": [
         {
-          "instance_type": "g6.2xlarge",
+          "instance_type": "g6e.4xlarge",
           "memory_allocator": "jemalloc",
           "app_log_blowup": 1,
           "leaf_log_blowup": 1,

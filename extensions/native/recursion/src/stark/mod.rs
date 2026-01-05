@@ -11,7 +11,7 @@ use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::{
     air_builders::symbolic::SymbolicExpressionDag,
     p3_commit::LagrangeSelectors,
-    p3_field::{FieldAlgebra, FieldExtensionAlgebra, TwoAdicField},
+    p3_field::{BasedVectorSpace, PrimeCharacteristicRing, TwoAdicField},
     p3_matrix::{dense::RowMajorMatrixView, stack::VerticalPair},
     proof::{AdjacentOpenedValues, Proof},
     verifier::GenericVerifierConstraintFolder,
@@ -600,7 +600,7 @@ where
                             let values = builder.array::<Array<C, _>>(2);
                             builder.assert_usize_eq(
                                 after_challenge.local.len(),
-                                after_challenge_width * RVar::from(C::EF::D),
+                                after_challenge_width * RVar::from(C::EF::DIMENSION),
                             );
                             builder.assert_usize_eq(
                                 after_challenge.next.len(),
@@ -963,7 +963,7 @@ where
         let after_challenge_width = if constants.width.after_challenge.is_empty() {
             0
         } else {
-            C::EF::D * constants.width.after_challenge[0]
+            C::EF::DIMENSION * constants.width.after_challenge[0]
         };
         builder.assert_usize_eq(
             after_challenge_values.local.len(),
@@ -1003,10 +1003,10 @@ where
         for i in 0..num_quotient_chunks {
             let chunk = builder.get(&quotient_chunks, i);
             // Assert that the chunk length matches the expected length.
-            builder.assert_usize_eq(RVar::from(C::EF::D), RVar::from(chunk.len()));
+            builder.assert_usize_eq(RVar::from(C::EF::DIMENSION), RVar::from(chunk.len()));
             // Collect the quotient values into vectors.
             let mut quotient_vals = vec![];
-            for j in 0..C::EF::D {
+            for j in 0..C::EF::DIMENSION {
                 let value = builder.get(&chunk, j);
                 quotient_vals.push(value);
             }
@@ -1016,7 +1016,7 @@ where
         let quotient: Ext<_, _> = Self::recompute_quotient(builder, &quotient, qc_domains, zeta);
 
         // Assert that the quotient times the zerofier is equal to the folded constraints.
-        builder.assert_ext_eq(folded_constraints * sels.inv_zeroifier, quotient);
+        builder.assert_ext_eq(folded_constraints * sels.inv_vanishing, quotient);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1033,13 +1033,17 @@ where
         exposed_values_after_challenge: &[Vec<Ext<C::F, C::EF>>],
     ) -> Ext<C::F, C::EF> {
         let mut unflatten = |v: &[Ext<C::F, C::EF>]| {
-            v.chunks_exact(C::EF::D)
+            v.chunks_exact(C::EF::DIMENSION)
                 .map(|chunk| {
                     builder.eval(
                         chunk
                             .iter()
                             .enumerate()
-                            .map(|(e_i, &x)| x * C::EF::monomial(e_i).cons())
+                            .map(|(e_i, &x)| {
+                                x * C::EF::ith_basis_element(e_i)
+                                    .expect("basis element index out of bounds")
+                                    .cons()
+                            })
                             .sum::<SymbolicExt<_, _>>(),
                     )
                 })
@@ -1100,8 +1104,10 @@ where
                     .filter(|(j, _)| *j != i)
                     .map(|(_, other_domain)| {
                         let first_point: Ext<_, _> = builder.eval(domain.first_point());
-                        other_domain.zp_at_point(builder, zeta)
-                            * other_domain.zp_at_point(builder, first_point).inverse()
+                        other_domain.vanishing_poly_at_point(builder, zeta)
+                            * other_domain
+                                .vanishing_poly_at_point(builder, first_point)
+                                .inverse()
                     })
                     .product::<SymbolicExt<_, _>>()
             })
@@ -1115,10 +1121,15 @@ where
                 .iter()
                 .enumerate()
                 .map(|(ch_i, ch)| {
-                    assert_eq!(ch.len(), C::EF::D);
+                    assert_eq!(ch.len(), C::EF::DIMENSION);
                     ch.iter()
                         .enumerate()
-                        .map(|(e_i, &c)| zps[ch_i] * C::EF::monomial(e_i) * c)
+                        .map(|(e_i, &c)| {
+                            zps[ch_i]
+                                * C::EF::ith_basis_element(e_i)
+                                    .expect("basis element index out of bounds")
+                                * c
+                        })
                         .sum::<SymbolicExt<_, _>>()
                 })
                 .sum::<SymbolicExt<_, _>>(),
@@ -1166,7 +1177,7 @@ where
     C::F: TwoAdicField,
 {
     if builder.flags.static_only {
-        builder.eval(C::F::from_canonical_usize(val.value()))
+        builder.eval(C::F::from_usize(val.value()))
     } else {
         builder.unsafe_cast_var_to_felt(val.get_var())
     }

@@ -89,7 +89,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
     pub fn build(&mut self, operations: TracedVec<DslIr<AsmConfig<F, EF>>>) {
         if self.block_label().is_zero() {
             // Initialize the heap pointer value.
-            let heap_start = F::from_canonical_u32(HEAP_START_ADDRESS as u32);
+            let heap_start = F::from_u32(HEAP_START_ADDRESS as u32);
             self.push(AsmInstruction::ImmF(HEAP_PTR, heap_start), None);
             // Jump over the TRAP instruction we are about to add.
             self.push(AsmInstruction::j(self.trap_label + F::ONE), None);
@@ -146,7 +146,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.add_felt_exti(dst, lhs, rhs, debug_info);
                 }
                 DslIr::AddEFI(dst, lhs, rhs) => {
-                    self.add_ext_exti(dst, lhs, EF::from_base(rhs), debug_info);
+                    self.add_ext_exti(dst, lhs, EF::from(rhs), debug_info);
                 }
                 DslIr::SubV(dst, lhs, rhs) => {
                     self.push(
@@ -226,7 +226,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.sub_ext_felt(dst, lhs, rhs, debug_info);
                 }
                 DslIr::SubEFI(dst, lhs, rhs) => {
-                    self.add_ext_exti(dst, lhs, EF::from_base(rhs.neg()), debug_info);
+                    self.add_ext_exti(dst, lhs, EF::from(rhs.neg()), debug_info);
                 }
                 DslIr::SubEIN(dst, lhs, rhs) => {
                     self.sub_exti_ext(dst, lhs, rhs, debug_info.clone());
@@ -641,7 +641,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                 );
                 let inc = align((len.as_canonical_u32() as usize) * size);
                 assert!((inc as u32) < HEAP_SIZE, "Allocation size too large");
-                let inc_f = F::from_canonical_usize(inc);
+                let inc_f = F::from_usize(inc);
                 self.push(
                     AsmInstruction::AddFI(HEAP_PTR, HEAP_PTR, inc_f),
                     debug_info.clone(),
@@ -668,7 +668,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                         debug_info.clone(),
                     );
                 }
-                let size_f = F::from_canonical_usize(size);
+                let size_f = F::from_usize(size);
                 self.push(
                     AsmInstruction::MulFI(A0, len.fp(), size_f),
                     debug_info.clone(),
@@ -718,7 +718,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
     }
 
     fn block_label(&mut self) -> F {
-        F::from_canonical_usize(self.basic_blocks.len() - 1)
+        F::from_usize(self.basic_blocks.len() - 1)
     }
 
     fn push_to_block(
@@ -951,8 +951,8 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField>
 // Ext compiler logic.
 impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCompiler<F, EF> {
     fn assign_exti(&mut self, dst: i32, imm: EF, debug_info: Option<DebugInfo>) {
-        let imm = imm.as_base_slice();
-        for i in 0..EF::D {
+        let imm = imm.as_basis_coefficients_slice();
+        for i in 0..EF::DIMENSION {
             self.push(
                 AsmInstruction::ImmF(dst + i as i32, imm[i]),
                 debug_info.clone(),
@@ -981,8 +981,8 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         rhs: EF,
         debug_info: Option<DebugInfo>,
     ) {
-        let rhs = rhs.as_base_slice();
-        for i in 0..EF::D {
+        let rhs = rhs.as_basis_coefficients_slice();
+        for i in 0..EF::DIMENSION {
             let j = i as i32;
             self.push(
                 AsmInstruction::AddFI(dst.fp() + j, lhs.fp() + j, rhs[i]),
@@ -998,8 +998,8 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         rhs: Ext<F, EF>,
         debug_info: Option<DebugInfo>,
     ) {
-        let lhs = lhs.as_base_slice();
-        for i in 0..EF::D {
+        let lhs = lhs.as_basis_coefficients_slice();
+        for i in 0..EF::DIMENSION {
             let j = i as i32;
             self.push(
                 AsmInstruction::SubFIN(dst.fp() + j, lhs[i], rhs.fp() + j),
@@ -1019,7 +1019,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             AsmInstruction::AddF(dst.fp(), lhs.fp(), rhs.fp()),
             debug_info.clone(),
         );
-        for i in 1..EF::D {
+        for i in 1..EF::DIMENSION {
             let j = i as i32;
             self.push(
                 AsmInstruction::CopyF(dst.fp() + j, lhs.fp() + j),
@@ -1039,7 +1039,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
             AsmInstruction::SubF(dst.fp(), lhs.fp(), rhs.fp()),
             debug_info.clone(),
         );
-        for i in 1..EF::D {
+        for i in 1..EF::DIMENSION {
             let j = i as i32;
             self.push(
                 AsmInstruction::CopyF(dst.fp() + j, lhs.fp() + j),
@@ -1055,14 +1055,14 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         rhs: EF,
         debug_info: Option<DebugInfo>,
     ) {
-        let rhs = rhs.as_base_slice();
+        let rhs = rhs.as_basis_coefficients_slice();
 
         self.push(
             AsmInstruction::CopyF(dst.fp(), lhs.fp()),
             debug_info.clone(),
         );
 
-        for i in 1..EF::D {
+        for i in 1..EF::DIMENSION {
             let j = i as i32;
             self.push(
                 AsmInstruction::ImmF(dst.fp() + j, rhs[i]),
@@ -1078,7 +1078,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         rhs: Felt<F>,
         debug_info: Option<DebugInfo>,
     ) {
-        for i in 0..EF::D {
+        for i in 0..EF::DIMENSION {
             let j = i as i32;
             self.push(
                 AsmInstruction::MulF(dst.fp() + j, lhs.fp() + j, rhs.fp()),
@@ -1094,7 +1094,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         rhs: F,
         debug_info: Option<DebugInfo>,
     ) {
-        for i in 0..EF::D {
+        for i in 0..EF::DIMENSION {
             let j = i as i32;
             self.push(
                 AsmInstruction::MulFI(dst.fp() + j, lhs.fp() + j, rhs),
@@ -1110,7 +1110,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         rhs: Felt<F>,
         debug_info: Option<DebugInfo>,
     ) {
-        for i in 0..EF::D {
+        for i in 0..EF::DIMENSION {
             let j = i as i32;
             self.push(
                 AsmInstruction::DivF(dst.fp() + j, lhs.fp() + j, rhs.fp()),

@@ -157,7 +157,7 @@ jobs:
         run: |
           ALLOCATOR=${{ inputs.memory_allocator || github.event.inputs.memory_allocator }}
           if [[ ! "${{ inputs.instance_type || github.event.inputs.instance_type }}" =~ ^g ]]; then
-            FEATURE_FLAGS=${FEATURE_FLAGS},nightly-features
+            FEATURE_FLAGS=${FEATURE_FLAGS}
             if [[ "${{ inputs.e2e_bench }}" == "true" ]]; then
               FEATURE_FLAGS=${FEATURE_FLAGS},evm
             fi

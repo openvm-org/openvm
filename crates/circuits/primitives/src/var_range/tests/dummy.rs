@@ -1,7 +1,7 @@
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -35,7 +35,7 @@ impl<AB: InteractionBuilder + AirBuilder> Air<AB> for TestSendAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         // local = [value, max_bits]
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         self.bus.send(local[0], local[1]).eval(builder, AB::F::ONE);
     }
 }
@@ -68,7 +68,7 @@ impl<AB: InteractionBuilder + AirBuilder> Air<AB> for TestRangeCheckAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         // local = [value]
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         self.bus
             .range_check(local[0], self.max_bits)
             .eval(builder, AB::F::ONE);

@@ -1,6 +1,8 @@
 use openvm_native_circuit::execute_program;
 use openvm_native_compiler::{asm::AsmBuilder, ir::Felt};
-use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, Field, FieldAlgebra};
+use openvm_stark_backend::p3_field::{
+    extension::BinomialExtensionField, Field, PrimeCharacteristicRing,
+};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 type F = BabyBear;
@@ -10,7 +12,7 @@ type EF = BinomialExtensionField<BabyBear, 4>;
 fn test_hint_bits_felt() {
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let felt: Felt<_> = builder.constant(F::from_canonical_u32(5));
+    let felt: Felt<_> = builder.constant(F::from_u32(5));
     let bits = builder.num2bits_f(felt, F::bits() as u32);
 
     let x = builder.get(&bits, 0);

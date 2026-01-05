@@ -57,8 +57,8 @@ impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for ProgramAir {
         let common_trace = builder.common_main();
         let cached_trace = &builder.cached_mains()[0];
 
-        let exec_freq = common_trace.row_slice(0)[0];
-        let exec_cols = cached_trace.row_slice(0).to_vec();
+        let exec_freq = common_trace.row_slice(0).expect("row 0 present")[0];
+        let exec_cols = cached_trace.row_slice(0).expect("row 0 present").to_vec();
 
         self.bus
             .inner

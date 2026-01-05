@@ -7,7 +7,7 @@ use openvm_circuit_primitives::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -34,7 +34,7 @@ impl<const N: usize, AB: InteractionBuilder> Air<AB> for AccessAdapterAir<N> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local: &AccessAdapterCols<AB::Var, N> = (*local).borrow();
 
         builder.assert_bool(local.is_split);
@@ -87,7 +87,7 @@ impl<const N: usize, AB: InteractionBuilder> Air<AB> for AccessAdapterAir<N> {
             .send(
                 MemoryAddress::new(
                     local.address.address_space,
-                    local.address.pointer + AB::Expr::from_canonical_usize(N / 2),
+                    local.address.pointer + AB::Expr::from_usize(N / 2),
                 ),
                 local.values[N / 2..].to_vec(),
                 local.right_timestamp,

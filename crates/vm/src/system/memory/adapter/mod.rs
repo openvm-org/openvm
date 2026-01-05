@@ -383,8 +383,8 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
         row.is_valid = F::ONE;
         row.is_split = F::from_bool(is_split);
         row.address = MemoryAddress::new(
-            F::from_canonical_u32(address.address_space),
-            F::from_canonical_u32(address.pointer),
+            F::from_u32(address.address_space),
+            F::from_u32(address.pointer),
         );
         let addr_space_layout = addr_spaces[address.address_space as usize].layout;
         // SAFETY: values will be a slice of the cell type
@@ -408,8 +408,8 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
                 }
             }
         }
-        row.left_timestamp = F::from_canonical_u32(left_timestamp);
-        row.right_timestamp = F::from_canonical_u32(right_timestamp);
+        row.left_timestamp = F::from_u32(left_timestamp);
+        row.right_timestamp = F::from_u32(right_timestamp);
         self.air.lt_air.generate_subrow(
             (self.range_checker.as_ref(), left_timestamp, right_timestamp),
             (&mut row.lt_aux, &mut row.is_right_larger),
