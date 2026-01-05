@@ -111,7 +111,7 @@ pub struct MemoryCtx<const PAGE_BITS: usize> {
     chunk: u32,
     chunk_bits: u32,
     pub page_indices: BitSet,
-    pub addr_space_access_count: RVec<usize>,
+    pub addr_space_access_count: RVec<u32>,
     pub page_indices_since_checkpoint: Box<[u32]>,
     pub page_indices_since_checkpoint_len: usize,
 }
@@ -315,11 +315,11 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
 
     /// Apply height updates given page counts
     #[inline(always)]
-    fn apply_height_updates(&self, trace_heights: &mut [u32], addr_space_access_count: &[usize]) {
-        let page_access_count: usize = addr_space_access_count.iter().sum();
+    fn apply_height_updates(&self, trace_heights: &mut [u32], addr_space_access_count: &[u32]) {
+        let page_access_count: u32 = addr_space_access_count.iter().sum();
 
         // On page fault, assume we add all leaves in a page
-        let leaves = (page_access_count << PAGE_BITS) as u32;
+        let leaves = page_access_count << PAGE_BITS;
         // SAFETY: boundary_idx is a compile time constant within bounds
         unsafe {
             *trace_heights.get_unchecked_mut(self.boundary_idx) += leaves;
@@ -339,10 +339,8 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             let nodes = (((1 << PAGE_BITS) - 1) + (merkle_height - PAGE_BITS)) as u32;
             // SAFETY: merkle_tree_idx is guaranteed to be in bounds
             unsafe {
-                *trace_heights.get_unchecked_mut(poseidon2_idx) +=
-                    nodes * page_access_count as u32 * 2;
-                *trace_heights.get_unchecked_mut(merkle_tree_idx) +=
-                    nodes * page_access_count as u32 * 2;
+                *trace_heights.get_unchecked_mut(poseidon2_idx) += nodes * page_access_count * 2;
+                *trace_heights.get_unchecked_mut(merkle_tree_idx) += nodes * page_access_count * 2;
             }
         }
 
@@ -358,7 +356,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
                     trace_heights,
                     address_space as u32,
                     self.chunk_bits,
-                    (x << (PAGE_BITS + 1)) as u32,
+                    x << (PAGE_BITS + 1),
                 );
             }
         }
