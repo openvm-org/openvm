@@ -103,7 +103,7 @@ impl Mul<Secp256k1Scalar> for Secp256k1Point {
     type Output = Secp256k1Point;
 
     fn mul(self, other: Secp256k1Scalar) -> Secp256k1Point {
-        Secp256k1::msm(&[other], &[self])
+        Secp256k1::msm::<true>(&[other], &[self])
     }
 }
 
@@ -111,7 +111,7 @@ impl Mul<&Secp256k1Scalar> for &Secp256k1Point {
     type Output = Secp256k1Point;
 
     fn mul(self, other: &Secp256k1Scalar) -> Secp256k1Point {
-        Secp256k1::msm(&[*other], &[*self])
+        Secp256k1::msm::<true>(&[*other], &[*self])
     }
 }
 
@@ -119,19 +119,19 @@ impl Mul<&Secp256k1Scalar> for Secp256k1Point {
     type Output = Secp256k1Point;
 
     fn mul(self, other: &Secp256k1Scalar) -> Secp256k1Point {
-        Secp256k1::msm(&[*other], &[self])
+        Secp256k1::msm::<true>(&[*other], &[self])
     }
 }
 
 impl MulAssign<Secp256k1Scalar> for Secp256k1Point {
     fn mul_assign(&mut self, rhs: Secp256k1Scalar) {
-        *self = Secp256k1::msm(&[rhs], &[*self]);
+        *self = Secp256k1::msm::<true>(&[rhs], &[*self]);
     }
 }
 
 impl MulAssign<&Secp256k1Scalar> for Secp256k1Point {
     fn mul_assign(&mut self, rhs: &Secp256k1Scalar) {
-        *self = Secp256k1::msm(&[*rhs], &[*self]);
+        *self = Secp256k1::msm::<true>(&[*rhs], &[*self]);
     }
 }
 
@@ -170,7 +170,7 @@ impl elliptic_curve::group::Curve for Secp256k1Point {
 
 impl LinearCombination for Secp256k1Point {
     fn lincomb(x: &Self, k: &Self::Scalar, y: &Self, l: &Self::Scalar) -> Self {
-        Secp256k1::msm(&[*k, *l], &[*x, *y])
+        Secp256k1::msm::<true>(&[*k, *l], &[*x, *y])
     }
 }
 
