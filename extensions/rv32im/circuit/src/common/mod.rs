@@ -342,7 +342,7 @@ mod aot {
         );
         asm_str += &format!("    mov {reg1}, [{reg1}]\n");
         // self.addr_space_access_count[address_space] += 1;
-        asm_str += &format!("    add qword ptr [{reg1} + {address_space} * 8], 1\n");
+        asm_str += &format!("    add dword ptr [{reg1} + {address_space} * 4], 1\n");
         asm_str += &format!("{inserted_label}:\n");
         // Inserted, do nothing
 
