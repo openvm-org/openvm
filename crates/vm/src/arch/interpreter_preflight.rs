@@ -179,18 +179,18 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
         let opcode = pc_entry.insn.opcode;
         let c = pc_entry.insn.c;
         // Capture total trace cells before executing, if metrics are enabled
-        #[cfg(feature = "metrics")]
-        let prev_total_cells: usize = {
-            use std::iter::zip;
-            let heights = state
-                .ctx
-                .arenas
-                .iter()
-                .map(|arena| arena.current_trace_height());
-            zip(&state.metrics.main_widths, heights)
-                .map(|(w, h)| w * h)
-                .sum()
-        };
+        // #[cfg(feature = "metrics")]
+        // let prev_total_cells: usize = {
+        //     use std::iter::zip;
+        //     let heights = state
+        //         .ctx
+        //         .arenas
+        //         .iter()
+        //         .map(|arena| arena.current_trace_height());
+        //     zip(&state.metrics.main_widths, heights)
+        //         .map(|(w, h)| w * h)
+        //         .sum()
+        // };
         // Handle termination instruction
         if opcode.as_usize() == SystemOpcode::CLASS_OFFSET + SystemOpcode::TERMINATE as usize {
             state.exit_code = Ok(Some(c.as_canonical_u32()));
@@ -219,18 +219,18 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
         {
             crate::metrics::update_instruction_metrics(state, executor, pc, pc_entry);
             // Compute and print how many cells this instruction added
-            use std::iter::zip;
-            let heights_after = state
-                .ctx
-                .arenas
-                .iter()
-                .map(|arena| arena.current_trace_height());
-            let total_cells_after: usize = zip(&state.metrics.main_widths, heights_after)
-                .map(|(w, h)| w * h)
-                .sum();
-            let delta_cells = total_cells_after.saturating_sub(prev_total_cells);
-            let opcode_name = executor.get_opcode_name(opcode.as_usize());
-            println!("pc={:#010x} insn={} cells+{}", pc, opcode_name, delta_cells);
+            // use std::iter::zip;
+            // let heights_after = state
+            //     .ctx
+            //     .arenas
+            //     .iter()
+            //     .map(|arena| arena.current_trace_height());
+            // let total_cells_after: usize = zip(&state.metrics.main_widths, heights_after)
+            //     .map(|(w, h)| w * h)
+            //     .sum();
+            // let delta_cells = total_cells_after.saturating_sub(prev_total_cells);
+            // let opcode_name = executor.get_opcode_name(opcode.as_usize());
+            // println!("pc={:#010x} insn={} cells+{}", pc, opcode_name, delta_cells);
         }
 
         #[cfg(not(feature = "metrics"))]
