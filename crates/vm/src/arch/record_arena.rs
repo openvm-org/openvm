@@ -25,6 +25,14 @@ pub trait Arena {
     fn current_trace_height(&self) -> usize {
         0
     }
+
+    /// Returns the current number of trace cells (field elements) used.
+    /// For [MatrixRecordArena], this is rows × width.
+    /// For [DenseRecordArena], this is bytes / 4 (assuming 4-byte field elements).
+    #[cfg(feature = "metrics")]
+    fn current_trace_cells(&self) -> usize {
+        0
+    }
 }
 
 /// Given some minimum layout of type `Layout`, the `RecordArena` should allocate a buffer, of
@@ -126,6 +134,11 @@ impl<F: Field> Arena for MatrixRecordArena<F> {
     #[cfg(feature = "metrics")]
     fn current_trace_height(&self) -> usize {
         self.trace_offset / self.width
+    }
+
+    #[cfg(feature = "metrics")]
+    fn current_trace_cells(&self) -> usize {
+        self.trace_offset
     }
 }
 
@@ -262,6 +275,12 @@ impl Arena for DenseRecordArena {
     fn current_trace_height(&self) -> usize {
         // For DenseRecordArena, return bytes allocated as a proxy for "rows"
         self.records_buffer.position() as usize
+    }
+
+    #[cfg(feature = "metrics")]
+    fn current_trace_cells(&self) -> usize {
+        // For DenseRecordArena, return bytes / 4 (assuming 4-byte field elements)
+        self.records_buffer.position() as usize / 4
     }
 }
 
