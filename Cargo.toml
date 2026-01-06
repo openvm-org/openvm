@@ -233,6 +233,7 @@ libloading = "0.8"
 tracing-subscriber = { version = "0.3.20", features = ["std", "env-filter"] }
 tokio = "1" # >=1.0.0 to allow downstream flexibility
 abi_stable = "0.11.3"
+bytesize = "2.0"
 
 # default-features = false for no_std for use in guest programs
 itertools = { version = "0.14.0", default-features = false }
