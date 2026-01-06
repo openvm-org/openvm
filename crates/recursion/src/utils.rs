@@ -313,7 +313,9 @@ pub fn poseidon2_hash_slice(vals: &[F]) -> ([F; CHUNK], Vec<[F; WIDTH]>) {
 }
 
 #[inline]
-pub fn poseidon2_hash_slice_with_states(vals: &[F]) -> ([F; CHUNK], Vec<[F; WIDTH]>, Vec<[F; WIDTH]>) {
+pub fn poseidon2_hash_slice_with_states(
+    vals: &[F],
+) -> ([F; CHUNK], Vec<[F; WIDTH]>, Vec<[F; WIDTH]>) {
     let num_chunks = vals.len().div_ceil(CHUNK);
     let mut pre_states = Vec::with_capacity(num_chunks);
     let mut post_states = Vec::with_capacity(num_chunks);

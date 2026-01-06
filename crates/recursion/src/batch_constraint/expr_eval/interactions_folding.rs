@@ -404,7 +404,8 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_blob(
                 cur_eq3b_idx += 1;
             } else {
                 // `cur_interactions_evals` in rust verifier are the list of evaluated node_claims
-                // After multiplying with eq_3b and sum together we get the `num` and `denom` in rust verifier.
+                // After multiplying with eq_3b and sum together we get the `num` and `denom` in
+                // rust verifier.
                 for (interaction_idx, inter) in inters.iter().enumerate() {
                     let eq_3b = eq_3bs[cur_eq3b_idx].eq_mle(
                         &preflight.batch_constraint.xi,
@@ -422,7 +423,8 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_blob(
                         has_interactions: true,
                         is_first_in_air: interaction_idx == 0,
                         is_last_in_air: false,
-                        is_mult: true, // for each interaction, only the first record with is_mult = true
+                        is_mult: true, /* for each interaction, only the first record with
+                                        * is_mult = true */
                         is_bus_index: false,
                     });
                     num_sum += expr_evals[[pidx, *air_idx]][inter.count] * eq_3b;

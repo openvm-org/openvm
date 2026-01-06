@@ -280,8 +280,7 @@ pub fn generate_trace(
     let width = MerkleVerifyCols::<F>::width();
     let num_leaves: usize = 1 << k;
     let mut poseidon2_inputs = vec![];
-    let logs_per_proof =
-        preflights
+    let logs_per_proof = preflights
         .iter()
         .map(|preflight| build_merkle_logs(preflight, params))
         .collect_vec();
@@ -651,8 +650,8 @@ pub mod cuda {
                 let leaf_offset = leaf_hashes.len();
                 for coset_idx in 0..num_leaves {
                     if log.commit_major == 0 {
-                        let states =
-                            &preflight.initial_row_states[log.commit_minor][log.query_idx][coset_idx];
+                        let states = &preflight.initial_row_states[log.commit_minor][log.query_idx]
+                            [coset_idx];
                         let post_state = states.last().unwrap();
                         leaf_hashes.extend_from_slice(&post_state[..CHUNK]);
                     } else {

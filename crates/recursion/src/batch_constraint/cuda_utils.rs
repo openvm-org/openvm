@@ -1,6 +1,7 @@
 use cuda_backend_v2::{Digest, F};
 use openvm_stark_backend::air_builders::symbolic::{
-    SymbolicExpressionNode, symbolic_variable::{Entry, SymbolicVariable},
+    SymbolicExpressionNode,
+    symbolic_variable::{Entry, SymbolicVariable},
 };
 use p3_field::FieldAlgebra;
 use stark_backend_v2::keygen::types::StarkVerifyingKeyV2;

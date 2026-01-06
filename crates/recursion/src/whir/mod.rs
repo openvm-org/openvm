@@ -769,11 +769,9 @@ impl WhirModuleChip {
                 &blob.stacking_widths_psums,
                 &blob.mu_pows,
             ),
-            NonInitialOpenedValues => non_initial_opened_values::generate_trace(
-                child_vk,
-                proofs,
-                preflights,
-            ),
+            NonInitialOpenedValues => {
+                non_initial_opened_values::generate_trace(child_vk, proofs, preflights)
+            }
             Folding => folding::generate_trace(child_vk, proofs, preflights),
             FinalPolyMleEval => final_poly_mle_eval::generate_trace(child_vk, proofs, preflights),
             FinalPolyQueryEval => final_poly_query_eval::generate_trace(
@@ -814,18 +812,21 @@ impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for WhirModuleChip {
 
 #[cfg(feature = "cuda")]
 mod cuda_tracegen {
+    use std::cmp;
+
     use cuda_backend_v2::GpuBackendV2;
     use openvm_cuda_backend::{base::DeviceMatrix, data_transporter::transport_matrix_to_device};
     use openvm_cuda_common::d_buffer::DeviceBuffer;
     use stark_backend_v2::poseidon2::{CHUNK, WIDTH};
-    use std::cmp;
 
     use super::*;
-    use crate::cuda::{
-        GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr,
-        vk::VerifyingKeyGpu,
+    use crate::{
+        cuda::{
+            GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr,
+            vk::VerifyingKeyGpu,
+        },
+        whir::cuda_abi::PoseidonStatePair,
     };
-    use crate::whir::cuda_abi::PoseidonStatePair;
 
     pub(in crate::whir) struct WhirBlobGpu {
         pub zis: DeviceBuffer<F>,
@@ -885,9 +886,8 @@ mod cuda_tracegen {
                             };
                             let chunk_start = chunk_idx * CHUNK;
                             let chunk_len = cmp::min(CHUNK, opened_row.len() - chunk_start);
-                            pre_state[..chunk_len].copy_from_slice(
-                                &opened_row[chunk_start..chunk_start + chunk_len],
-                            );
+                            pre_state[..chunk_len]
+                                .copy_from_slice(&opened_row[chunk_start..chunk_start + chunk_len]);
                             pairs.push(PoseidonStatePair {
                                 pre_state,
                                 post_state,
@@ -951,10 +951,8 @@ mod cuda_tracegen {
             let poseidon_states_host = build_initial_poseidon_state_pairs(proofs, preflights);
             let poseidon_states = to_device_or_nullptr(&poseidon_states_host).unwrap();
 
-            let folding_records_cap: usize = preflights
-                .iter()
-                .map(|p| p.whir.fold_records.len())
-                .sum();
+            let folding_records_cap: usize =
+                preflights.iter().map(|p| p.whir.fold_records.len()).sum();
             let mut folding_records_host = Vec::with_capacity(folding_records_cap);
             for preflight in preflights.iter() {
                 folding_records_host.extend_from_slice(&preflight.whir.fold_records);
@@ -981,7 +979,8 @@ mod cuda_tracegen {
                     }
                 }
             }
-            let codeword_opened_values = to_device_or_nullptr(&codeword_opened_values_host).unwrap();
+            let codeword_opened_values =
+                to_device_or_nullptr(&codeword_opened_values_host).unwrap();
 
             // Must be in same order as codeword_opened_values
             let mut codeword_states_host = Vec::with_capacity(codeword_opened_values_cap * WIDTH);
