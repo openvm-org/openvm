@@ -11,6 +11,8 @@ pub const DEFAULT_MAX_TRACE_HEIGHT_BITS: u8 = 22;
 pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << DEFAULT_MAX_TRACE_HEIGHT_BITS;
 pub const DEFAULT_MAX_MEMORY: usize = 15 << 30; // 15GB
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
+const DEFAULT_MAIN_CELL_WEIGHT: usize = 3; // 1 + 2^{log_blowup=1}
+const DEFAULT_INTERACTION_CELL_WEIGHT: usize = 8; // 2 * D_EF
 
 #[derive(derive_new::new, Clone, Debug, Serialize, Deserialize)]
 pub struct Segment {
@@ -37,8 +39,8 @@ impl Default for SegmentationConfig {
     fn default() -> Self {
         Self {
             limits: SegmentationLimits::default(),
-            main_cell_weight: 3,
-            interaction_cell_weight: 8,
+            main_cell_weight: DEFAULT_MAIN_CELL_WEIGHT,
+            interaction_cell_weight: DEFAULT_INTERACTION_CELL_WEIGHT,
             base_field_size: size_of::<u32>(),
         }
     }
