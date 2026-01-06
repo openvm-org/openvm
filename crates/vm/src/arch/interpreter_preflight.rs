@@ -198,9 +198,14 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
                 .get_unchecked(pc_entry.executor_idx as usize)
         };
 
-        // Capture trace cells before execution
+        // Capture trace cells before execution (total across all arenas)
         #[cfg(feature = "metrics")]
-        let prev_cells = state.ctx.arenas[air_idx].current_trace_cells();
+        let prev_total_cells: usize = state
+            .ctx
+            .arenas
+            .iter()
+            .map(|arena| arena.current_trace_cells())
+            .sum();
 
         let arena = unsafe {
             // SAFETY: air_idx is a valid AIR index in the vkey, and always construct arenas with
@@ -213,11 +218,21 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
         #[cfg(feature = "metrics")]
         {
             crate::metrics::update_instruction_metrics(state, executor, pc, pc_entry);
-            // Compute and print cells delta (field elements added to the trace)
-            let curr_cells = state.ctx.arenas[air_idx].current_trace_cells();
-            let delta_cells = curr_cells.saturating_sub(prev_cells);
+            // Compute cells delta and cumulative total across all arenas
+            let curr_total_cells: usize = state
+                .ctx
+                .arenas
+                .iter()
+                .map(|arena| arena.current_trace_cells())
+                .sum();
+            let delta_cells = curr_total_cells.saturating_sub(prev_total_cells);
             let opcode_name = executor.get_opcode_name(opcode.as_usize());
-            tracing::info!(pc = format_args!("{:#010x}", pc), insn = %opcode_name, cells = delta_cells);
+            tracing::info!(
+                pc = format_args!("{:#010x}", pc),
+                insn = %opcode_name,
+                cells = delta_cells,
+                total_cells = curr_total_cells
+            );
         }
 
         #[cfg(not(feature = "metrics"))]
