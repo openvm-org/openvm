@@ -217,13 +217,13 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
             let curr_height = state.ctx.arenas[air_idx].current_trace_height();
             let delta = curr_height.saturating_sub(prev_height);
             let opcode_name = executor.get_opcode_name(opcode.as_usize());
-            println!("pc={:#010x} insn={} alloc+{}", pc, opcode_name, delta);
+            tracing::info!(pc = format_args!("{:#010x}", pc), insn = %opcode_name, alloc_delta = delta);
         }
 
         #[cfg(not(feature = "metrics"))]
         {
             let opcode_name = executor.get_opcode_name(opcode.as_usize());
-            println!("pc={:#010x} insn={}", pc, opcode_name);
+            tracing::info!(pc = format_args!("{:#010x}", pc), insn = %opcode_name);
         }
 
         Ok(())
