@@ -49,8 +49,12 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
                 })
                 .unzip();
 
-        let segmentation_ctx =
-            SegmentationCtx::new(air_names, widths, interactions, config.segmentation_limits);
+        let segmentation_ctx = SegmentationCtx::new(
+            air_names,
+            widths,
+            interactions,
+            config.segmentation_config.clone(),
+        );
         let memory_ctx = MemoryCtx::new(config, segmentation_ctx.segment_check_insns);
 
         // Assert that the indices are correct
@@ -70,13 +74,6 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             segmentation_ctx.air_names[memory_ctx.adapter_offset].contains("AccessAdapterAir<2>"),
             "air_name={}",
             segmentation_ctx.air_names[memory_ctx.adapter_offset]
-        );
-
-        let segmentation_ctx = SegmentationCtx::new(
-            air_names,
-            widths,
-            interactions,
-            config.segmentation_config.clone(),
         );
 
         let mut ctx = Self {
