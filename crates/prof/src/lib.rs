@@ -117,13 +117,35 @@ impl MetricDb {
                 })
                 .collect();
 
-            // Add to dict_by_label_types
-            self.dict_by_label_types
-                .entry(label_keys)
+            // Remove cycle_tracker_span if present as it is too long for markdown and visualized in
+            // flamegraphs
+            let cycle_tracker_span_index = label_keys.iter().position(|k| k == "cycle_tracker_span");
+            let (final_label_keys, final_label_values) = if let Some(index) = cycle_tracker_span_index {
+                let mut keys = label_keys.clone();
+                let mut values = label_values.clone();
+                keys.remove(index);
+                values.remove(index);
+                (keys, values)
+            } else {
+                (label_keys, label_values)
+            };
+
+            // Add to dict_by_label_types, combining metrics with same name by summing values
+            let entry = self.dict_by_label_types
+                .entry(final_label_keys)
                 .or_default()
-                .entry(label_values)
-                .or_default()
-                .extend(metrics.clone());
+                .entry(final_label_values)
+                .or_default();
+
+            for metric in metrics.clone() {
+                if let Some(existing_metric) = entry.iter_mut().find(|m| m.name == metric.name) {
+                    // Sum the values for metrics with the same name
+                    existing_metric.value += metric.value;
+                } else {
+                    // Add new metric if no existing one with same name
+                    entry.push(metric);
+                }
+            }
         }
     }
 
@@ -134,11 +156,6 @@ impl MetricDb {
         sorted_keys.sort();
 
         for label_keys in sorted_keys {
-            if label_keys.contains(&"cycle_tracker_span".to_string()) {
-                // Skip cycle_tracker_span as it is too long for markdown and visualized in
-                // flamegraphs
-                continue;
-            }
             let metrics_dict = &self.dict_by_label_types[&label_keys];
             let mut metric_names: Vec<String> = metrics_dict
                 .values()
@@ -164,8 +181,27 @@ impl MetricDb {
             markdown_output.push_str(&separator);
             markdown_output.push('\n');
 
+            // TODO: this is hacky and specifically used for the opcode frequency table
+            // If table contains a frequency column, sort rows by frequency (descending)
+            let mut rows: Vec<_> = metrics_dict.iter().collect();
+            if metric_names.contains(&"frequency".to_string()) {
+                rows.sort_by(|(_, metrics_a), (_, metrics_b)| {
+                    let freq_a = metrics_a
+                        .iter()
+                        .find(|m| m.name == "frequency")
+                        .map(|m| m.value)
+                        .unwrap_or(0.0);
+                    let freq_b = metrics_b
+                        .iter()
+                        .find(|m| m.name == "frequency")
+                        .map(|m| m.value)
+                        .unwrap_or(0.0);
+                    freq_b.partial_cmp(&freq_a).unwrap_or(std::cmp::Ordering::Equal)
+                });
+            }
+
             // Fill table rows
-            for (label_values, metrics) in metrics_dict {
+            for (label_values, metrics) in rows {
                 let mut row = String::new();
                 row.push_str("| ");
                 row.push_str(&label_values.join(" | "));
