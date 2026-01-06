@@ -269,7 +269,7 @@ impl SegmentationCtx {
             if !is_constant && padded_height > self.config.limits.max_trace_height {
                 let air_name = unsafe { self.air_names.get_unchecked(i) };
                 tracing::info!(
-                    "instret {:10} | height ({:8}) > max ({:8}) | chip {:3} ({}) ",
+                    "overshoot: instret {:10} | height ({:8}) > max ({:8}) | chip {:3} ({}) ",
                     instret,
                     padded_height,
                     self.config.limits.max_trace_height,
@@ -288,7 +288,7 @@ impl SegmentationCtx {
 
         if total_memory > self.config.limits.max_memory {
             tracing::info!(
-                "instret {:10} | total memory ({:10}) > max ({:10}) | main ({:10}) | interaction ({:10})",
+                "overshoot: instret {:10} | total memory ({:10}) > max ({:10}) | main ({:10}) | interaction ({:10})",
                 instret,
                 total_memory,
                 self.config.limits.max_memory,
@@ -301,7 +301,7 @@ impl SegmentationCtx {
         let total_interactions = self.calculate_total_interactions(trace_heights);
         if total_interactions > self.config.limits.max_interactions {
             tracing::info!(
-                "instret {:10} | total interactions ({:10}) > max ({:10})",
+                "overshoot: instret {:10} | total interactions ({:10}) > max ({:10})",
                 instret,
                 total_interactions,
                 self.config.limits.max_interactions
