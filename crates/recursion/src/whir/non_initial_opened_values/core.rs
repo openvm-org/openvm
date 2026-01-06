@@ -11,10 +11,7 @@ use p3_field::{FieldAlgebra, FieldExtensionAlgebra, TwoAdicField};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
-    D_EF, F,
-    keygen::types::MultiStarkVerifyingKeyV2,
-    poseidon2::WIDTH,
-    proof::Proof,
+    D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, poseidon2::WIDTH, proof::Proof,
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
 
@@ -293,7 +290,8 @@ pub(crate) fn generate_trace(
             cols.is_first_in_query = F::from_bool(is_first_in_query);
             cols.zi_root = preflight.whir.zj_roots[whir_round][query_idx];
             cols.value_hash = preflight.codeword_states[whir_round - 1][query_idx][coset_idx];
-            let value = &proof.whir_proof.codeword_opened_values[whir_round - 1][query_idx][coset_idx];
+            let value =
+                &proof.whir_proof.codeword_opened_values[whir_round - 1][query_idx][coset_idx];
             cols.value.copy_from_slice(value.as_base_slice());
             let query_offset = preflight.whir.query_offsets[whir_round];
             cols.merkle_idx_bit_src = preflight.whir.queries[query_offset + query_idx];

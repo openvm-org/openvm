@@ -1,9 +1,8 @@
 use cuda_backend_v2::{EF, F};
 use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
 
-use crate::whir::{final_poly_query_eval::FinalPolyQueryEvalRecord, folding::FoldRecord};
-
 pub use crate::system::PoseidonStatePair;
+use crate::whir::{final_poly_query_eval::FinalPolyQueryEvalRecord, folding::FoldRecord};
 
 extern "C" {
     fn _initial_opened_values_tracegen(

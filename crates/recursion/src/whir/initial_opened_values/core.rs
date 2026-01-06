@@ -427,9 +427,8 @@ pub(crate) fn generate_trace(
             }
 
             let states = &preflight.initial_row_states[commit_idx][query_idx][coset_idx];
-            let opened_row = &proofs[proof_idx]
-                .whir_proof
-                .initial_round_opened_rows[commit_idx][query_idx][coset_idx];
+            let opened_row = &proofs[proof_idx].whir_proof.initial_round_opened_rows[commit_idx]
+                [query_idx][coset_idx];
             let chunk_start = chunk_idx * CHUNK;
 
             // Reconstruct pre_state: start from previous post_state, overwrite with chunk data

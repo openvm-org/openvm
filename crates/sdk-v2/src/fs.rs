@@ -5,7 +5,6 @@ use std::{
 
 use eyre::{Report, Result};
 use serde::{Serialize, de::DeserializeOwned};
-
 use stark_backend_v2::codec::{Decode, Encode};
 
 pub fn read_object_from_file<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> Result<T> {
