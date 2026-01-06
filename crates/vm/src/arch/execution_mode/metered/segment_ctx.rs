@@ -10,7 +10,7 @@ pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
 pub const DEFAULT_MAX_TRACE_HEIGHT_BITS: u8 = 22;
 pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << DEFAULT_MAX_TRACE_HEIGHT_BITS;
-pub const DEFAULT_MAX_MEMORY: usize = 15 << 30; // 15GB
+pub const DEFAULT_MAX_MEMORY: usize = 15 << 30; // 15GiB
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 const DEFAULT_MAIN_CELL_WEIGHT: usize = 3; // 1 + 2^{log_blowup=1}
 const DEFAULT_INTERACTION_CELL_WEIGHT: usize = 8; // 2 * D_EF
