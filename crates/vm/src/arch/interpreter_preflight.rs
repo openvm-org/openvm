@@ -178,19 +178,6 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
 
         let opcode = pc_entry.insn.opcode;
         let c = pc_entry.insn.c;
-        // Capture total trace cells before executing, if metrics are enabled
-        // #[cfg(feature = "metrics")]
-        // let prev_total_cells: usize = {
-        //     use std::iter::zip;
-        //     let heights = state
-        //         .ctx
-        //         .arenas
-        //         .iter()
-        //         .map(|arena| arena.current_trace_height());
-        //     zip(&state.metrics.main_widths, heights)
-        //         .map(|(w, h)| w * h)
-        //         .sum()
-        // };
         // Handle termination instruction
         if opcode.as_usize() == SystemOpcode::CLASS_OFFSET + SystemOpcode::TERMINATE as usize {
             state.exit_code = Ok(Some(c.as_canonical_u32()));
@@ -203,11 +190,19 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
             executor.get_opcode_name(pc_entry.insn.opcode.as_usize()),
             state.memory.timestamp()
         );
-        let arena = unsafe {
-            // SAFETY: executor_idx is guarantee to be within bounds by ProgramHandler constructor
-            let air_idx = *self
+
+        // SAFETY: executor_idx is guarantee to be within bounds by ProgramHandler constructor
+        let air_idx = unsafe {
+            *self
                 .executor_idx_to_air_idx
-                .get_unchecked(pc_entry.executor_idx as usize);
+                .get_unchecked(pc_entry.executor_idx as usize)
+        };
+
+        // Capture trace height before execution
+        #[cfg(feature = "metrics")]
+        let prev_height = state.ctx.arenas[air_idx].current_trace_height();
+
+        let arena = unsafe {
             // SAFETY: air_idx is a valid AIR index in the vkey, and always construct arenas with
             // length equal to num_airs
             state.ctx.arenas.get_unchecked_mut(air_idx)
@@ -218,24 +213,15 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
         #[cfg(feature = "metrics")]
         {
             crate::metrics::update_instruction_metrics(state, executor, pc, pc_entry);
-            // Compute and print how many cells this instruction added
-            // use std::iter::zip;
-            // let heights_after = state
-            //     .ctx
-            //     .arenas
-            //     .iter()
-            //     .map(|arena| arena.current_trace_height());
-            // let total_cells_after: usize = zip(&state.metrics.main_widths, heights_after)
-            //     .map(|(w, h)| w * h)
-            //     .sum();
-            // let delta_cells = total_cells_after.saturating_sub(prev_total_cells);
-            // let opcode_name = executor.get_opcode_name(opcode.as_usize());
-            // println!("pc={:#010x} insn={} cells+{}", pc, opcode_name, delta_cells);
+            // Compute and print how many rows this instruction added to its arena
+            let curr_height = state.ctx.arenas[air_idx].current_trace_height();
+            let delta_rows = curr_height.saturating_sub(prev_height);
+            let opcode_name = executor.get_opcode_name(opcode.as_usize());
+            println!("pc={:#010x} insn={} rows+{}", pc, opcode_name, delta_rows);
         }
 
         #[cfg(not(feature = "metrics"))]
         {
-            // Fallback: print instruction name without cell deltas
             let opcode_name = executor.get_opcode_name(opcode.as_usize());
             println!("pc={:#010x} insn={}", pc, opcode_name);
         }
