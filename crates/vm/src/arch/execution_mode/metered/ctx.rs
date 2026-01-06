@@ -103,8 +103,8 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         self
     }
 
-    pub fn with_max_cells(mut self, max_cells: usize) -> Self {
-        self.segmentation_ctx.set_max_cells(max_cells);
+    pub fn with_max_memory(mut self, max_memory: usize) -> Self {
+        self.segmentation_ctx.set_max_memory(max_memory);
         self
     }
 
@@ -127,8 +127,18 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         self
     }
 
+    pub fn with_main_cell_weight(mut self, weight: usize) -> Self {
+        self.segmentation_ctx.set_main_cell_weight(weight);
+        self
+    }
+
     pub fn with_interaction_cell_weight(mut self, weight: usize) -> Self {
         self.segmentation_ctx.set_interaction_cell_weight(weight);
+        self
+    }
+
+    pub fn with_base_field_size(mut self, base_field_size: usize) -> Self {
+        self.segmentation_ctx.set_base_field_size(base_field_size);
         self
     }
 

@@ -5,14 +5,14 @@ use openvm_instructions::riscv::RV32_IMM_AS;
 
 use crate::{
     arch::{
-        execution_mode::metered::segment_ctx::DEFAULT_MAX_CELLS as DEFAULT_SEGMENT_MAX_CELLS,
+        execution_mode::metered::segment_ctx::DEFAULT_MAX_MEMORY as DEFAULT_SEGMENT_MAX_MEMORY,
         ExecutionCtxTrait, MeteredExecutionCtxTrait, SystemConfig, VmExecState,
     },
     system::memory::online::GuestMemory,
 };
 
 const DEFAULT_MAX_SEGMENTS: u64 = 100;
-pub const DEFAULT_MAX_COST: u64 = DEFAULT_MAX_SEGMENTS * DEFAULT_SEGMENT_MAX_CELLS as u64;
+pub const DEFAULT_MAX_COST: u64 = DEFAULT_MAX_SEGMENTS * DEFAULT_SEGMENT_MAX_MEMORY as u64;
 
 #[derive(Clone, Debug)]
 pub struct AccessAdapterCtx {
