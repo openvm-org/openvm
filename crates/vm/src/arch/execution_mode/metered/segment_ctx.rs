@@ -1,3 +1,5 @@
+use std::mem::size_of;
+
 use getset::{Setters, WithSetters};
 use openvm_stark_backend::p3_field::PrimeField32;
 use p3_baby_bear::BabyBear;
@@ -7,7 +9,7 @@ pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
 pub const DEFAULT_MAX_TRACE_HEIGHT_BITS: u8 = 22;
 pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << DEFAULT_MAX_TRACE_HEIGHT_BITS;
-pub const DEFAULT_MAX_CELLS: usize = 1_200_000_000; // 1.2B
+pub const DEFAULT_MAX_MEMORY: usize = 15 << 30; // 15GB
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 
 #[derive(derive_new::new, Clone, Debug, Serialize, Deserialize)]
@@ -17,19 +19,36 @@ pub struct Segment {
     pub trace_heights: Vec<u32>,
 }
 
-#[derive(Clone, Debug, Default, WithSetters)]
+#[derive(Clone, Debug, WithSetters)]
 pub struct SegmentationConfig {
     pub limits: SegmentationLimits,
-    /// Cells per row contributed by each interaction in cell count.
+    /// Weight multiplier for main trace cells in memory calculation.
+    #[getset(set_with = "pub")]
+    pub main_cell_weight: usize,
+    /// Weight multiplier for interaction cells in memory calculation.
     #[getset(set_with = "pub")]
     pub interaction_cell_weight: usize,
+    /// Size of the base field in bytes. Used to convert cell count to memory bytes.
+    #[getset(set_with = "pub")]
+    pub base_field_size: usize,
+}
+
+impl Default for SegmentationConfig {
+    fn default() -> Self {
+        Self {
+            limits: SegmentationLimits::default(),
+            main_cell_weight: 3,
+            interaction_cell_weight: 8,
+            base_field_size: size_of::<u32>(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, WithSetters, Setters)]
 pub struct SegmentationLimits {
     pub max_trace_height: u32,
     #[getset(set = "pub", set_with = "pub")]
-    pub max_cells: usize,
+    pub max_memory: usize,
     #[getset(set_with = "pub")]
     pub max_interactions: usize,
 }
@@ -38,21 +57,21 @@ impl Default for SegmentationLimits {
     fn default() -> Self {
         Self {
             max_trace_height: DEFAULT_MAX_TRACE_HEIGHT,
-            max_cells: DEFAULT_MAX_CELLS,
+            max_memory: DEFAULT_MAX_MEMORY,
             max_interactions: DEFAULT_MAX_INTERACTIONS,
         }
     }
 }
 
 impl SegmentationLimits {
-    pub fn new(max_trace_height: u32, max_cells: usize, max_interactions: usize) -> Self {
+    pub fn new(max_trace_height: u32, max_memory: usize, max_interactions: usize) -> Self {
         debug_assert!(
             max_trace_height.is_power_of_two(),
             "max_trace_height should be a power of two"
         );
         Self {
             max_trace_height,
-            max_cells,
+            max_memory,
             max_interactions,
         }
     }
@@ -120,16 +139,24 @@ impl SegmentationCtx {
         self.config.limits.set_max_trace_height(max_trace_height);
     }
 
-    pub fn set_max_cells(&mut self, max_cells: usize) {
-        self.config.limits.max_cells = max_cells;
+    pub fn set_max_memory(&mut self, max_memory: usize) {
+        self.config.limits.max_memory = max_memory;
     }
 
     pub fn set_max_interactions(&mut self, max_interactions: usize) {
         self.config.limits.max_interactions = max_interactions;
     }
 
+    pub fn set_main_cell_weight(&mut self, weight: usize) {
+        self.config.main_cell_weight = weight;
+    }
+
     pub fn set_interaction_cell_weight(&mut self, weight: usize) {
         self.config.interaction_cell_weight = weight;
+    }
+
+    pub fn set_base_field_size(&mut self, base_field_size: usize) {
+        self.config.base_field_size = base_field_size;
     }
 
     /// Calculate the maximum trace height and corresponding air name
@@ -144,22 +171,29 @@ impl SegmentationCtx {
             .unwrap_or((0, "unknown"))
     }
 
-    /// Calculate the total cells used based on trace heights and widths,
-    /// including weighted contribution from interactions if `interaction_cell_weight > 0`.
+    /// Calculate total memory in bytes based on trace heights and widths.
+    /// Formula: base_field_size * (main_cell_weight * main_cells + interaction_cell_weight *
+    /// interaction_cells)
     #[inline(always)]
-    fn calculate_total_cells(&self, trace_heights: &[u32]) -> usize {
+    fn calculate_total_memory(&self, trace_heights: &[u32]) -> usize {
         debug_assert_eq!(trace_heights.len(), self.widths.len());
 
+        let main_weight = self.config.main_cell_weight;
         let interaction_weight = self.config.interaction_cell_weight;
-        trace_heights
+        let base_field_size = self.config.base_field_size;
+
+        let total_cells: usize = trace_heights
             .iter()
             .zip(self.widths.iter())
             .zip(self.interactions.iter())
             .map(|((&height, &width), &interactions)| {
                 let padded_height = height.next_power_of_two() as usize;
-                padded_height * (width + interactions * interaction_weight)
+                padded_height * width * main_weight
+                    + padded_height * interactions * interaction_weight
             })
-            .sum()
+            .sum();
+
+        total_cells * base_field_size
     }
 
     /// Calculate the total interactions based on trace heights
@@ -199,8 +233,10 @@ impl SegmentationCtx {
             return false;
         }
 
+        let main_weight = self.config.main_cell_weight;
         let interaction_weight = self.config.interaction_cell_weight;
-        let mut total_cells = 0;
+        let base_field_size = self.config.base_field_size;
+        let mut total_cells: usize = 0;
         for (i, (((padded_height, width), interactions), is_constant)) in trace_heights
             .iter()
             .map(|&height| height.next_power_of_two())
@@ -223,15 +259,17 @@ impl SegmentationCtx {
                 );
                 return true;
             }
-            total_cells += padded_height as usize * (width + interactions * interaction_weight);
+            total_cells += padded_height as usize * width * main_weight
+                + padded_height as usize * interactions * interaction_weight;
         }
+        let total_memory = total_cells * base_field_size;
 
-        if total_cells > self.config.limits.max_cells {
+        if total_memory > self.config.limits.max_memory {
             tracing::info!(
-                "instret {:10} | total cells ({:10}) > max ({:10})",
+                "instret {:10} | total memory ({:10}) > max ({:10})",
                 instret,
-                total_cells,
-                self.config.limits.max_cells
+                total_memory,
+                self.config.limits.max_memory
             );
             return true;
         }
@@ -403,18 +441,18 @@ impl SegmentationCtx {
         trace_heights: &[u32],
     ) {
         let (max_trace_height, air_name) = self.calculate_max_trace_height_with_name(trace_heights);
-        let total_cells = self.calculate_total_cells(trace_heights);
+        let total_memory = self.calculate_total_memory(trace_heights);
         let total_interactions = self.calculate_total_interactions(trace_heights);
         let utilization = self.calculate_trace_utilization(trace_heights);
 
         let final_marker = if IS_FINAL { " [TERMINATED]" } else { "" };
 
         tracing::info!(
-            "Segment {:3} | instret {:10} | {:8} instructions | {:10} cells | {:10} interactions | {:8} max height ({}) | {:.2}% utilization{}",
+            "Segment {:3} | instret {:10} | {:8} instructions | {:10} memory | {:10} interactions | {:8} max height ({}) | {:.2}% utilization{}",
             self.segments.len(),
             instret_start,
             num_insns,
-            total_cells,
+            total_memory,
             total_interactions,
             max_trace_height,
             air_name,
