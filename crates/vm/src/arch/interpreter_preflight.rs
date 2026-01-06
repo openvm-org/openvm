@@ -213,11 +213,11 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
         #[cfg(feature = "metrics")]
         {
             crate::metrics::update_instruction_metrics(state, executor, pc, pc_entry);
-            // Compute and print how many rows this instruction added to its arena
+            // Compute and print allocation delta (rows for MatrixRecordArena, bytes for DenseRecordArena)
             let curr_height = state.ctx.arenas[air_idx].current_trace_height();
-            let delta_rows = curr_height.saturating_sub(prev_height);
+            let delta = curr_height.saturating_sub(prev_height);
             let opcode_name = executor.get_opcode_name(opcode.as_usize());
-            println!("pc={:#010x} insn={} rows+{}", pc, opcode_name, delta_rows);
+            println!("pc={:#010x} insn={} alloc+{}", pc, opcode_name, delta);
         }
 
         #[cfg(not(feature = "metrics"))]

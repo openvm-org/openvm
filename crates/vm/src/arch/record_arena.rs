@@ -257,6 +257,12 @@ impl Arena for DenseRecordArena {
     fn is_empty(&self) -> bool {
         self.allocated().is_empty()
     }
+
+    #[cfg(feature = "metrics")]
+    fn current_trace_height(&self) -> usize {
+        // For DenseRecordArena, return bytes allocated as a proxy for "rows"
+        self.records_buffer.position() as usize
+    }
 }
 
 // =================== Helper Functions =================================
