@@ -8,7 +8,10 @@ use stark_backend_v2::{
     keygen::types::{MultiStarkProvingKeyV2, MultiStarkVerifyingKeyV2},
     poseidon2::sponge::DuplexSpongeRecorder,
     proof::Proof,
-    prover::{CommittedTraceDataV2, DeviceDataTransporterV2, ProverBackendV2, ProvingContextV2},
+    prover::{
+        CommittedTraceDataV2, DeviceDataTransporterV2, DeviceMultiStarkProvingKeyV2,
+        ProverBackendV2, ProvingContextV2,
+    },
 };
 use tracing::instrument;
 
@@ -26,6 +29,7 @@ pub struct NonRootAggregationProver<
     T: AggNodeTraceGen<PB>,
 > {
     pk: Arc<MultiStarkProvingKeyV2>,
+    d_pk: DeviceMultiStarkProvingKeyV2<PB>,
     vk: Arc<MultiStarkVerifyingKeyV2>,
 
     agg_node_tracegen: T,
@@ -110,10 +114,7 @@ where
         let engine = E::new(self.pk.params.clone());
         #[cfg(debug_assertions)]
         crate::aggregation::debug_constraints(&self.circuit, &ctx.per_trace, &engine);
-        let proof = engine.prove(
-            &engine.device().transport_pk_to_device(self.pk.as_ref()),
-            ctx,
-        );
+        let proof = engine.prove(&self.d_pk, ctx);
         #[cfg(debug_assertions)]
         engine.verify(&self.vk, &proof)?;
         Ok(proof)
@@ -133,6 +134,7 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ag
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         let circuit = Arc::new(AggregationCircuit::new(Arc::new(verifier_circuit)));
         let (pk, vk) = engine.keygen(&circuit.airs());
+        let d_pk = engine.device().transport_pk_to_device(&pk);
         let self_vk_pcs_data = if is_recursive {
             Some(circuit.verifier_circuit.commit_child_vk(&engine, &vk))
         } else {
@@ -140,6 +142,7 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ag
         };
         Self {
             pk: Arc::new(pk),
+            d_pk,
             vk: Arc::new(vk),
             agg_node_tracegen: T::new(),
             child_vk,
@@ -160,6 +163,7 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ag
             verifier_circuit.commit_child_vk(&engine, &child_vk);
         let circuit = Arc::new(AggregationCircuit::new(Arc::new(verifier_circuit)));
         let vk = Arc::new(pk.get_vk());
+        let d_pk = engine.device().transport_pk_to_device(&pk);
         let self_vk_pcs_data = if is_recursive {
             Some(circuit.verifier_circuit.commit_child_vk(&engine, &vk))
         } else {
@@ -167,6 +171,7 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ag
         };
         Self {
             pk,
+            d_pk,
             vk,
             agg_node_tracegen: T::new(),
             child_vk,
