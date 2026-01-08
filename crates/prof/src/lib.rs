@@ -10,6 +10,7 @@ use crate::{
 };
 
 pub mod aggregate;
+pub mod instruction_count;
 pub mod summary;
 pub mod types;
 
@@ -117,18 +118,24 @@ impl MetricDb {
                 })
                 .collect();
 
-            // Remove cycle_tracker_span if present as it is too long for markdown and visualized in
+            // Remove cycle_tracker_span and dsl_ir if present as they are too long for markdown and visualized in
             // flamegraphs
-            let cycle_tracker_span_index = label_keys.iter().position(|k| k == "cycle_tracker_span");
-            let (final_label_keys, final_label_values) = if let Some(index) = cycle_tracker_span_index {
-                let mut keys = label_keys.clone();
-                let mut values = label_values.clone();
+            let mut keys = label_keys.clone();
+            let mut values = label_values.clone();
+            
+            // Remove cycle_tracker_span if present
+            if let Some(index) = keys.iter().position(|k| k == "cycle_tracker_span") {
                 keys.remove(index);
                 values.remove(index);
-                (keys, values)
-            } else {
-                (label_keys, label_values)
-            };
+            }
+            
+            // Remove dsl_ir if present
+            if let Some(index) = keys.iter().position(|k| k == "dsl_ir") {
+                keys.remove(index);
+                values.remove(index);
+            }
+            
+            let (final_label_keys, final_label_values) = (keys, values);
 
             // Add to dict_by_label_types, combining metrics with same name by summing values
             let entry = self.dict_by_label_types
@@ -181,22 +188,39 @@ impl MetricDb {
             markdown_output.push_str(&separator);
             markdown_output.push('\n');
 
-            // TODO: this is hacky and specifically used for the opcode frequency table
-            // If table contains a frequency column, sort rows by frequency (descending)
+            // Sort rows: first by segment (ascending) if present, then by frequency (descending) if present
             let mut rows: Vec<_> = metrics_dict.iter().collect();
-            if metric_names.contains(&"frequency".to_string()) {
-                rows.sort_by(|(_, metrics_a), (_, metrics_b)| {
-                    let freq_a = metrics_a
-                        .iter()
-                        .find(|m| m.name == "frequency")
-                        .map(|m| m.value)
-                        .unwrap_or(0.0);
-                    let freq_b = metrics_b
-                        .iter()
-                        .find(|m| m.name == "frequency")
-                        .map(|m| m.value)
-                        .unwrap_or(0.0);
-                    freq_b.partial_cmp(&freq_a).unwrap_or(std::cmp::Ordering::Equal)
+            let segment_index = label_keys.iter().position(|k| k == "segment");
+            let has_frequency = metric_names.contains(&"frequency".to_string());
+            
+            if segment_index.is_some() || has_frequency {
+                rows.sort_by(|(label_values_a, metrics_a), (label_values_b, metrics_b)| {
+                    // First, sort by segment (ascending) if present
+                    if let Some(seg_idx) = segment_index {
+                        let seg_a = label_values_a.get(seg_idx).map(|s| s.as_str()).unwrap_or("");
+                        let seg_b = label_values_b.get(seg_idx).map(|s| s.as_str()).unwrap_or("");
+                        let seg_cmp = seg_a.cmp(seg_b);
+                        if seg_cmp != std::cmp::Ordering::Equal {
+                            return seg_cmp;
+                        }
+                    }
+                    
+                    // Then, sort by frequency (descending) if present
+                    if has_frequency {
+                        let freq_a = metrics_a
+                            .iter()
+                            .find(|m| m.name == "frequency")
+                            .map(|m| m.value)
+                            .unwrap_or(0.0);
+                        let freq_b = metrics_b
+                            .iter()
+                            .find(|m| m.name == "frequency")
+                            .map(|m| m.value)
+                            .unwrap_or(0.0);
+                        return freq_b.partial_cmp(&freq_a).unwrap_or(std::cmp::Ordering::Equal);
+                    }
+                    
+                    std::cmp::Ordering::Equal
                 });
             }
 
