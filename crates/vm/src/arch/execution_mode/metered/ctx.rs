@@ -132,6 +132,11 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         self
     }
 
+    pub fn with_main_cell_secondary_weight(mut self, weight: f64) -> Self {
+        self.segmentation_ctx.set_main_cell_secondary_weight(weight);
+        self
+    }
+
     pub fn with_interaction_cell_weight(mut self, weight: usize) -> Self {
         self.segmentation_ctx.set_interaction_cell_weight(weight);
         self
