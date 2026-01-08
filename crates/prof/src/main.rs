@@ -103,7 +103,7 @@ fn main() -> Result<()> {
         let instruction_count_table =
             openvm_prof::instruction_count::generate_instruction_count_table(&db);
         if !instruction_count_table.is_empty() {
-            markdown_output.push_str("\n");
+            markdown_output.push('\n');
             markdown_output.push_str(&instruction_count_table);
         }
 
