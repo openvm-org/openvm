@@ -1,4 +1,4 @@
-use std::mem::size_of;
+use std::{cmp::max, mem::size_of};
 
 use bytesize::ByteSize;
 use getset::{Setters, WithSetters};
@@ -13,6 +13,7 @@ pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << DEFAULT_MAX_TRACE_HEIGHT_BITS;
 pub const DEFAULT_MAX_MEMORY: usize = 15 << 30; // 15GiB
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 const DEFAULT_MAIN_CELL_WEIGHT: usize = 3; // 1 + 2^{log_blowup=1}
+const DEFAULT_MAIN_CELL_SECONDARY_WEIGHT: f64 = 0.5;
 const DEFAULT_INTERACTION_CELL_WEIGHT: usize = 8; // 2 * D_EF
 
 #[derive(derive_new::new, Clone, Debug, Serialize, Deserialize)]
@@ -28,6 +29,10 @@ pub struct SegmentationConfig {
     /// Weight multiplier for main trace cells in memory calculation.
     #[getset(set_with = "pub")]
     pub main_cell_weight: usize,
+    /// Second order memory contribution from main cells. This term is maxed with the weighted
+    /// interaction contribution.
+    #[getset(set_with = "pub")]
+    pub main_cell_secondary_weight: f64,
     /// Weight multiplier for interaction cells in memory calculation.
     #[getset(set_with = "pub")]
     pub interaction_cell_weight: usize,
@@ -41,6 +46,7 @@ impl Default for SegmentationConfig {
         Self {
             limits: SegmentationLimits::default(),
             main_cell_weight: DEFAULT_MAIN_CELL_WEIGHT,
+            main_cell_secondary_weight: DEFAULT_MAIN_CELL_SECONDARY_WEIGHT,
             interaction_cell_weight: DEFAULT_INTERACTION_CELL_WEIGHT,
             base_field_size: size_of::<u32>(),
         }
@@ -154,6 +160,10 @@ impl SegmentationCtx {
         self.config.main_cell_weight = weight;
     }
 
+    pub fn set_main_cell_secondary_weight(&mut self, weight: f64) {
+        self.config.main_cell_secondary_weight = weight;
+    }
+
     pub fn set_interaction_cell_weight(&mut self, weight: usize) {
         self.config.interaction_cell_weight = weight;
     }
@@ -189,6 +199,7 @@ impl SegmentationCtx {
         debug_assert_eq!(trace_heights.len(), self.widths.len());
 
         let main_weight = self.config.main_cell_weight;
+        let main_secondary_weight = self.config.main_cell_secondary_weight;
         let interaction_weight = self.config.interaction_cell_weight;
         let base_field_size = self.config.base_field_size;
 
@@ -205,10 +216,12 @@ impl SegmentationCtx {
         }
 
         let main_memory = main_cnt * main_weight * base_field_size;
+        let main_secondary_memory =
+            (((main_cnt * base_field_size) as f64) * main_secondary_weight).round() as usize;
         let interaction_memory =
             (interaction_cnt + 1).next_power_of_two() * interaction_weight * base_field_size;
         (
-            main_memory + interaction_memory,
+            main_memory + max(main_secondary_memory, interaction_memory),
             main_memory,
             interaction_memory,
         )
@@ -252,6 +265,7 @@ impl SegmentationCtx {
         }
 
         let main_weight = self.config.main_cell_weight;
+        let main_secondary_weight = self.config.main_cell_secondary_weight;
         let interaction_weight = self.config.interaction_cell_weight;
         let base_field_size = self.config.base_field_size;
         let mut main_cnt = 0usize;
@@ -281,10 +295,13 @@ impl SegmentationCtx {
             main_cnt += padded_height as usize * width;
             interaction_cnt += padded_height as usize * interactions;
         }
+        let main_memory = main_cnt * main_weight * base_field_size;
+        let main_secondary_memory =
+            (((main_cnt * base_field_size) as f64) * main_secondary_weight).round() as usize;
         // interaction rounding to match n_logup calculation
-        let total_memory = (main_cnt * main_weight
-            + (interaction_cnt + 1).next_power_of_two() * interaction_weight)
-            * base_field_size;
+        let interaction_memory =
+            (interaction_cnt + 1).next_power_of_two() * interaction_weight * base_field_size;
+        let total_memory = main_memory + max(main_secondary_memory, interaction_memory);
 
         if total_memory > self.config.limits.max_memory {
             tracing::info!(
