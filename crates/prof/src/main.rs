@@ -98,7 +98,6 @@ fn main() -> Result<()> {
 
         let mut markdown_output = String::from_utf8(writer)?;
 
-        // TODO: calculate diffs for instruction count
         // Add instruction count table aggregated by segment
         let instruction_count_table =
             openvm_prof::instruction_count::generate_instruction_count_table(&db);
