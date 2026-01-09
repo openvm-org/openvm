@@ -107,6 +107,14 @@ fn main() -> Result<()> {
 
         let mut markdown_output = String::from_utf8(writer)?;
 
+        // Add instruction count table aggregated by segment
+        let instruction_count_table =
+            openvm_prof::instruction_count::generate_instruction_count_table(&db);
+        if !instruction_count_table.is_empty() {
+            markdown_output.push('\n');
+            markdown_output.push_str(&instruction_count_table);
+        }
+
         // TODO: calculate diffs for detailed metrics
         // Add detailed metrics in a collapsible section
         markdown_output.push_str("\n<details>\n<summary>Detailed Metrics</summary>\n\n");
