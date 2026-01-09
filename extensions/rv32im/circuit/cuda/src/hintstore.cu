@@ -108,13 +108,13 @@ struct Rv32HintStore {
 #ifdef CUDA_DEBUG
             assert(record.num_words <= MAX_HINT_BUFFER_WORDS);
 #endif
-            uint32_t rem_words_limb2_lshift =
+            uint32_t rem_words_msl_lshift =
                 (RV32_REGISTER_NUM_LIMBS - 2) * RV32_CELL_BITS - MAX_HINT_BUFFER_WORDS_BITS;
 
             // Combined range check for mem_ptr and num_words
             bitwise_lookup.add_range(
                 (record.mem_ptr >> msl_rshift) << msl_lshift,
-                ((record.num_words >> 8) & 0xFF) << rem_words_limb2_lshift
+                ((record.num_words >> 8) & 0xFF) << rem_words_msl_lshift
             );
             mem_helper.fill(
                 row.slice_from(COL_INDEX(Rv32HintStoreCols, mem_ptr_aux_cols)),

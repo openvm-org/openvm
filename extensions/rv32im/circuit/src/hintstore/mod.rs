@@ -214,7 +214,7 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
         // For MAX_HINT_BUFFER_WORDS_BITS = 10, this requires:
         // - limbs[3] = 0 (since 2^10 < 2^24)
         // - limbs[2] = 0 (since 2^10 < 2^16)
-        // - limbs[2] < 4 (since 2^10 = 4 * 2^8)
+        // - limbs[1] < 4 (since 2^10 = 4 * 2^8)
         for i in 1..=REM_WORD_NUM_ZERO_LIMBS {
             builder.assert_zero(local_cols.rem_words_limbs[RV32_REGISTER_NUM_LIMBS - i]);
         }
@@ -534,7 +534,7 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
             (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits) as u32;
 
         // Scale factors for rem_words range check (using MAX_HINT_BUFFER_WORDS_BITS)
-        let rem_words_limb2_lshift: u32 = ((RV32_REGISTER_NUM_LIMBS - REM_WORD_NUM_ZERO_LIMBS)
+        let rem_words_msl_lshift: u32 = ((RV32_REGISTER_NUM_LIMBS - REM_WORD_NUM_ZERO_LIMBS)
             * RV32_CELL_BITS
             - MAX_HINT_BUFFER_WORDS_BITS) as u32;
 
@@ -570,7 +570,7 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
                         >> (RV32_CELL_BITS
                             * (RV32_REGISTER_NUM_LIMBS - 1 - REM_WORD_NUM_ZERO_LIMBS)))
                         & 0xFF)
-                        << rem_words_limb2_lshift,
+                        << rem_words_msl_lshift,
                 );
 
                 let mut timestamp = record.inner.timestamp + num_words * 3;
