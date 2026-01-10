@@ -271,7 +271,7 @@ fn test_hint_buffer_rem_words_range_check() {
         let mut trace_row = trace.row_slice(0).to_vec();
         let cols: &mut Rv32HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
         // Force `rem_words` to overflow MAX_HINT_BUFFER_WORDS_BITS on the start row.
-        cols.rem_words_limbs = [F::ZERO, F::ZERO, F::ZERO, F::from_canonical_u8(1)];
+        cols.rem_words_limbs = [F::ZERO, F::ZERO, F::from_canonical_u8(1), F::ZERO];
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
