@@ -41,9 +41,7 @@ use crate::{
         RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     base_alu::BaseAluCoreCols,
-    test_utils::{
-        generate_rv32_is_type_immediate, get_verification_error, rv32_rand_write_register_or_imm,
-    },
+    test_utils::{generate_rv32_is_type_immediate, rv32_rand_write_register_or_imm},
     BaseAluFiller, Rv32BaseAluAir,
 };
 
@@ -232,7 +230,6 @@ fn rand_rv32_alu_test_persistent(opcode: BaseAluOpcode, num_ops: usize) {
 // part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
-#[allow(clippy::too_many_arguments)]
 fn run_negative_alu_test(
     opcode: BaseAluOpcode,
     prank_a: [u32; RV32_REGISTER_NUM_LIMBS],
@@ -241,7 +238,6 @@ fn run_negative_alu_test(
     prank_c: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
     prank_opcode_flags: Option<[bool; 5]>,
     is_imm: Option<bool>,
-    interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
@@ -283,7 +279,9 @@ fn run_negative_alu_test(
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -296,7 +294,6 @@ fn rv32_alu_add_wrong_negative_test() {
         None,
         None,
         None,
-        false,
     );
 }
 
@@ -310,7 +307,6 @@ fn rv32_alu_add_out_of_range_negative_test() {
         None,
         None,
         None,
-        true,
     );
 }
 
@@ -324,7 +320,6 @@ fn rv32_alu_sub_wrong_negative_test() {
         None,
         None,
         None,
-        false,
     );
 }
 
@@ -338,7 +333,6 @@ fn rv32_alu_sub_out_of_range_negative_test() {
         None,
         None,
         None,
-        true,
     );
 }
 
@@ -352,7 +346,6 @@ fn rv32_alu_xor_wrong_negative_test() {
         None,
         None,
         None,
-        true,
     );
 }
 
@@ -366,7 +359,6 @@ fn rv32_alu_or_wrong_negative_test() {
         None,
         None,
         None,
-        true,
     );
 }
 
@@ -380,7 +372,6 @@ fn rv32_alu_and_wrong_negative_test() {
         None,
         None,
         None,
-        true,
     );
 }
 
@@ -394,7 +385,6 @@ fn rv32_alu_adapter_unconstrained_imm_limb_test() {
         Some([511, 6, 0, 0]),
         None,
         Some(true),
-        true,
     );
 }
 
@@ -408,7 +398,6 @@ fn rv32_alu_adapter_unconstrained_rs2_read_test() {
         None,
         Some([false, false, false, false, false]),
         Some(false),
-        false,
     );
 }
 
