@@ -1,0 +1,22 @@
+[package]
+name = "openvm-blake3"
+description = "OpenVM library for blake3"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+# For now, use pure Rust blake3 for both native and zkvm
+# Once we add native extension support, this will change
+blake3 = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true, features = ["alloc"] }
+
+[features]
+default = []
+std = ["blake3/std"]

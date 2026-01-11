@@ -68,6 +68,7 @@ members = [
     "guest-libs/pairing/",
     "guest-libs/ruint/",
     "guest-libs/sha2/",
+    "guest-libs/blake3/",
     "guest-libs/verify_stark/",
     "scripts",
 ]
@@ -172,6 +173,7 @@ openvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features
 openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
 openvm-verify-stark = { path = "guest-libs/verify_stark", default-features = false }
+openvm-blake3 = { path = "guest-libs/blake3", default-features = false }
 
 # Benchmarking
 openvm-benchmarks-utils = { path = "benchmarks/utils", default-features = false }
@@ -250,6 +252,7 @@ num-integer = { version = "0.1.46", default-features = false }
 num-traits = { version = "0.2.19", default-features = false }
 ff = { version = "0.13.1", default-features = false }
 sha2 = { version = "0.10", default-features = false }
+blake3 = { version = "1.5", default-features = false }
 blstrs = { version = "0.7.1", default-features = true }
 
 # specific to CUDA and GPU

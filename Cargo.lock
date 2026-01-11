@@ -6289,6 +6289,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-blake3"
+version = "1.4.3-rc.0"
+dependencies = [
+ "blake3",
+ "hex",
+]
+
+[[package]]
 name = "openvm-build"
 version = "1.4.3"
 dependencies = [
