@@ -1,0 +1,33 @@
+[package]
+name = "openvm-prometheus-metrics"
+description = "Prometheus metrics exporter for OpenVM benchmarks"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+metrics.workspace = true
+metrics-exporter-prometheus = { version = "0.15", default-features = false, features = ["http-listener"] }
+metrics-tracing-context = "0.16.0"
+metrics-util = "0.17.0"
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "signal", "time", "sync", "macros"] }
+eyre.workspace = true
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["std", "env-filter"] }
+tracing-forest = "0.1.6"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+clap = { workspace = true, features = ["derive"] }
+chrono = "0.4"
+
+# S3 support (optional)
+aws-config = { version = "1.5", optional = true }
+aws-sdk-s3 = { version = "1.65", optional = true }
+
+[features]
+default = []
+s3 = ["aws-config", "aws-sdk-s3"]
+
+[[bin]]
+name = "export-to-prometheus"
+path = "src/bin/export-to-prometheus.rs"

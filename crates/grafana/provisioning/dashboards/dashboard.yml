@@ -1,0 +1,13 @@
+apiVersion: 1
+
+providers:
+  - name: 'OpenVM Dashboards'
+    orgId: 1
+    folder: 'OpenVM'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/openvm
+      foldersFromFilesStructure: false

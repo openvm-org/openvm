@@ -13,6 +13,7 @@ members = [
     "benchmarks/execute",
     "benchmarks/prove",
     "crates/prof",
+    "crates/prometheus-metrics",
     "crates/sdk",
     "crates/cli",
     "crates/circuits/mod-builder",
@@ -139,6 +140,7 @@ openvm-circuit = { path = "crates/vm", default-features = false }
 openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
 openvm-continuations = { path = "crates/continuations", default-features = false }
 cargo-openvm = { path = "crates/cli", default-features = false }
+openvm-prometheus-metrics = { path = "crates/prometheus-metrics", default-features = false }
 
 # Extensions
 openvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }

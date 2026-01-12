@@ -5,7 +5,6 @@ use openvm_sdk::{
     config::{SdkVmBuilder, SdkVmConfig},
     StdIn,
 };
-use openvm_stark_sdk::bench::run_with_metric_collection;
 
 fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
@@ -13,7 +12,7 @@ fn main() -> Result<()> {
     let config =
         SdkVmConfig::from_toml(include_str!("../../../guest/regex/openvm.toml"))?.app_vm_config;
     let elf = args.build_bench_program("regex", &config, None)?;
-    run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
+    args.run_with_metrics(|| -> Result<()> {
         let data = include_str!("../../../guest/regex/regex_email.txt");
 
         let fe_bytes = data.to_owned().into_bytes();

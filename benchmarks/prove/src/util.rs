@@ -77,9 +77,34 @@ pub struct BenchmarkCli {
     /// Whether to execute with additional profiling metric collection
     #[arg(long)]
     pub profiling: bool,
+
+    /// Enable Prometheus metrics endpoint instead of JSON file output
+    #[arg(long)]
+    pub prometheus: bool,
+
+    /// Prometheus metrics port (default: 9091)
+    #[arg(long, default_value = "9091")]
+    pub prometheus_port: u16,
 }
 
 impl BenchmarkCli {
+    /// Run a function with metric collection enabled.
+    ///
+    /// If `--prometheus` is set, metrics are exposed via HTTP endpoint for Prometheus to scrape.
+    /// The server runs indefinitely until Ctrl+C is pressed.
+    /// Otherwise, metrics are written to a JSON file specified by the `OUTPUT_PATH` environment variable.
+    pub fn run_with_metrics<R>(&self, f: impl FnOnce() -> R) -> R {
+        if self.prometheus {
+            openvm_prometheus_metrics::run_with_prometheus_metrics(
+                self.prometheus_port,
+                0, // 0 = run indefinitely until Ctrl+C
+                f,
+            )
+        } else {
+            openvm_stark_sdk::bench::run_with_metric_collection("OUTPUT_PATH", f)
+        }
+    }
+
     pub fn app_config<VC>(&self, mut app_vm_config: VC) -> AppConfig<VC>
     where
         VC: AsMut<SystemConfig>,
