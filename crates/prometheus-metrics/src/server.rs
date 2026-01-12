@@ -228,16 +228,25 @@ pub async fn export_metrics_to_prometheus(
     port: u16,
     duration_secs: u64,
 ) -> Result<()> {
+    export_multiple_metrics_to_prometheus(&[(source.to_string(), run_id.to_string())], port, duration_secs).await
+}
+
+/// Export metrics from multiple JSON files or S3 sources to Prometheus.
+///
+/// This function reads multiple metrics JSON files and exposes all metrics via a single
+/// HTTP endpoint for Prometheus to scrape. Each source gets its own run_id label.
+///
+/// # Arguments
+///
+/// * `sources` - List of (source_path, run_id) pairs. Source can be local path or S3 URI.
+/// * `port` - The port to listen on for the metrics endpoint
+/// * `duration_secs` - How long to keep the server running (0 = indefinite until Ctrl+C)
+pub async fn export_multiple_metrics_to_prometheus(
+    sources: &[(String, String)],
+    port: u16,
+    duration_secs: u64,
+) -> Result<()> {
     use std::collections::BTreeMap;
-
-    // Load metrics from source
-    let file_contents = if source.starts_with("s3://") {
-        load_from_s3(source).await?
-    } else {
-        std::fs::read_to_string(source)?
-    };
-
-    let metrics: BTreeMap<String, Vec<MetricEntry>> = serde_json::from_str(&file_contents)?;
 
     let addr: SocketAddr = ([0, 0, 0, 0], port).into();
 
@@ -251,56 +260,71 @@ pub async fn export_metrics_to_prometheus(
     // Spawn the HTTP server
     let server_handle = tokio::spawn(exporter);
 
-    // Leak the run_id for static lifetime
-    let run_id_static: &'static str = Box::leak(run_id.to_string().into_boxed_str());
+    // Load and register metrics from all sources
+    for (source, run_id) in sources {
+        println!("Loading metrics from: {}", source);
+        println!("  Run ID: {}", run_id);
 
-    // Register all metrics from the JSON file with run_id label
-    if let Some(gauges) = metrics.get("gauge") {
-        for entry in gauges {
-            let mut labels: Vec<(&'static str, &'static str)> = entry
-                .labels
-                .iter()
-                .map(|(k, v)| {
-                    let k: &'static str = Box::leak(k.clone().into_boxed_str());
-                    let v: &'static str = Box::leak(v.clone().into_boxed_str());
-                    (k, v)
-                })
-                .collect();
+        // Load metrics from source
+        let file_contents = if source.starts_with("s3://") {
+            load_from_s3(source).await?
+        } else {
+            std::fs::read_to_string(source)?
+        };
 
-            // Add run_id label
-            labels.push(("run_id", run_id_static));
+        let metrics: BTreeMap<String, Vec<MetricEntry>> = serde_json::from_str(&file_contents)?;
 
-            let value: f64 = entry.value.parse().unwrap_or(0.0);
-            let sanitized_name = sanitize_metric_name(&entry.metric);
-            let name: &'static str = Box::leak(sanitized_name.into_boxed_str());
-            metrics::gauge!(name, &labels).set(value);
+        // Leak the run_id for static lifetime
+        let run_id_static: &'static str = Box::leak(run_id.clone().into_boxed_str());
+
+        // Register all metrics from the JSON file with run_id label
+        if let Some(gauges) = metrics.get("gauge") {
+            for entry in gauges {
+                let mut labels: Vec<(&'static str, &'static str)> = entry
+                    .labels
+                    .iter()
+                    .map(|(k, v)| {
+                        let k: &'static str = Box::leak(k.clone().into_boxed_str());
+                        let v: &'static str = Box::leak(v.clone().into_boxed_str());
+                        (k, v)
+                    })
+                    .collect();
+
+                // Add run_id label
+                labels.push(("run_id", run_id_static));
+
+                let value: f64 = entry.value.parse().unwrap_or(0.0);
+                let sanitized_name = sanitize_metric_name(&entry.metric);
+                let name: &'static str = Box::leak(sanitized_name.into_boxed_str());
+                metrics::gauge!(name, &labels).set(value);
+            }
+        }
+
+        if let Some(counters) = metrics.get("counter") {
+            for entry in counters {
+                let mut labels: Vec<(&'static str, &'static str)> = entry
+                    .labels
+                    .iter()
+                    .map(|(k, v)| {
+                        let k: &'static str = Box::leak(k.clone().into_boxed_str());
+                        let v: &'static str = Box::leak(v.clone().into_boxed_str());
+                        (k, v)
+                    })
+                    .collect();
+
+                // Add run_id label
+                labels.push(("run_id", run_id_static));
+
+                let value: u64 = entry.value.parse().unwrap_or(0);
+                let sanitized_name = sanitize_metric_name(&entry.metric);
+                let name: &'static str = Box::leak(sanitized_name.into_boxed_str());
+                metrics::counter!(name, &labels).absolute(value);
+            }
         }
     }
 
-    if let Some(counters) = metrics.get("counter") {
-        for entry in counters {
-            let mut labels: Vec<(&'static str, &'static str)> = entry
-                .labels
-                .iter()
-                .map(|(k, v)| {
-                    let k: &'static str = Box::leak(k.clone().into_boxed_str());
-                    let v: &'static str = Box::leak(v.clone().into_boxed_str());
-                    (k, v)
-                })
-                .collect();
-
-            // Add run_id label
-            labels.push(("run_id", run_id_static));
-
-            let value: u64 = entry.value.parse().unwrap_or(0);
-            let sanitized_name = sanitize_metric_name(&entry.metric);
-            let name: &'static str = Box::leak(sanitized_name.into_boxed_str());
-            metrics::counter!(name, &labels).absolute(value);
-        }
-    }
-
-    println!("Run ID: {}", run_id);
-    println!("Prometheus metrics available at http://0.0.0.0:{}/metrics", port);
+    println!("\nPrometheus metrics available at http://0.0.0.0:{}/metrics", port);
+    println!("Loaded {} source(s)", sources.len());
 
     if duration_secs == 0 {
         println!("Server running indefinitely. Press Ctrl+C to stop.");

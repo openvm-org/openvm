@@ -24,22 +24,24 @@ After the benchmark completes, the server continues running until you press Ctrl
 
 ### Import metrics.json to Prometheus
 
-Use the `export-to-prometheus` CLI to load an existing metrics.json file:
+Use the `export-to-prometheus` CLI to load existing metrics.json files:
 
 ```bash
 # From local file
 cargo run --release -p openvm-prometheus-metrics --bin export-to-prometheus -- \
   --source ./metrics.json
 
-# With custom run ID
+# Multiple files for comparison (each file's name becomes its run_id)
 cargo run --release -p openvm-prometheus-metrics --bin export-to-prometheus -- \
-  --source ./metrics.json \
-  --run-id "my-benchmark-run"
+  --source ./baseline.json --source ./optimized.json
 
 # From S3 (requires --features s3)
 cargo run --release -p openvm-prometheus-metrics --features s3 --bin export-to-prometheus -- \
   --source s3://my-bucket/benchmarks/metrics.json
 ```
+
+When loading multiple files, each file gets its filename (without extension) as the `run_id` label,
+allowing you to compare them in Grafana using the Run ID dropdown.
 
 ### Programmatic usage
 
@@ -76,7 +78,7 @@ fn main() {
 ```
 Options:
       --source <SOURCE>      Source: path to local JSON file or S3 URI (s3://bucket/key)
-      --run-id <RUN_ID>      Run ID to use for metrics labeling (defaults to filename)
+                             Can be specified multiple times for comparison
       --port <PORT>          Port to expose metrics on [default: 9091]
       --duration <DURATION>  Duration in seconds to keep server alive (0 = indefinite) [default: 0]
       --list-s3              List available runs in S3 bucket

@@ -1,15 +1,20 @@
-//! CLI tool to export metrics from a JSON file or S3 to Prometheus.
+//! CLI tool to export metrics from JSON files or S3 to Prometheus.
 //!
 //! # Usage
 //!
-//! Export from local file:
+//! Export from a single local file:
 //! ```bash
-//! cargo run --bin export-to-prometheus -- --source ./metrics.json --port 9091 --duration 60
+//! cargo run --bin export-to-prometheus -- --source ./metrics.json
+//! ```
+//!
+//! Export multiple files for comparison:
+//! ```bash
+//! cargo run --bin export-to-prometheus -- --source ./run1.json --source ./run2.json
 //! ```
 //!
 //! Export from S3 (requires --features s3):
 //! ```bash
-//! cargo run --bin export-to-prometheus --features s3 -- --source s3://bucket/path/metrics.json --port 9091
+//! cargo run --bin export-to-prometheus --features s3 -- --source s3://bucket/path/metrics.json
 //! ```
 //!
 //! List available runs in S3:
@@ -19,19 +24,16 @@
 
 use clap::Parser;
 use eyre::Result;
-use openvm_prometheus_metrics::{export_metrics_to_prometheus, list_runs_in_s3};
+use openvm_prometheus_metrics::{export_multiple_metrics_to_prometheus, list_runs_in_s3};
 
 #[derive(Parser)]
 #[command(name = "export-to-prometheus")]
-#[command(about = "Export metrics.json (from file or S3) to Prometheus scrape endpoint")]
+#[command(about = "Export metrics.json files (from local paths or S3) to Prometheus scrape endpoint")]
 struct Args {
-    /// Source: path to local JSON file or S3 URI (s3://bucket/key)
+    /// Source: path to local JSON file or S3 URI (s3://bucket/key).
+    /// Can be specified multiple times to load multiple files for comparison.
     #[arg(long, required_unless_present = "list_s3")]
-    source: Option<String>,
-
-    /// Run ID to use for metrics labeling (defaults to filename without extension)
-    #[arg(long)]
-    run_id: Option<String>,
+    source: Vec<String>,
 
     /// Port to expose metrics on
     #[arg(long, default_value = "9091")]
@@ -52,6 +54,26 @@ struct Args {
     /// S3 key prefix (for --list-s3)
     #[arg(long, default_value = "")]
     s3_prefix: String,
+}
+
+/// Derive run_id from a source path (filename without extension)
+fn derive_run_id(source: &str) -> String {
+    if source.starts_with("s3://") {
+        // Extract filename from S3 key
+        source
+            .rsplit('/')
+            .next()
+            .and_then(|f| f.strip_suffix(".json"))
+            .unwrap_or("unknown")
+            .to_string()
+    } else {
+        // Extract filename from local path
+        std::path::Path::new(source)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown")
+            .to_string()
+    }
 }
 
 #[tokio::main]
@@ -75,33 +97,25 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    let source = args.source.expect("--source required");
+    if args.source.is_empty() {
+        eprintln!("Error: at least one --source is required");
+        std::process::exit(1);
+    }
 
-    // Derive run_id from source if not provided
-    let run_id = args.run_id.unwrap_or_else(|| {
-        if source.starts_with("s3://") {
-            // Extract filename from S3 key
-            source
-                .rsplit('/')
-                .next()
-                .and_then(|f| f.strip_suffix(".json"))
-                .unwrap_or("unknown")
-                .to_string()
-        } else {
-            // Extract filename from local path
-            std::path::Path::new(&source)
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("unknown")
-                .to_string()
-        }
-    });
+    // Build list of (source, run_id) pairs
+    let sources: Vec<(String, String)> = args
+        .source
+        .iter()
+        .map(|s| {
+            let run_id = derive_run_id(s);
+            (s.clone(), run_id)
+        })
+        .collect();
 
-    println!("Source: {}", source);
-    println!("Run ID: {}", run_id);
     println!("Port: {}", args.port);
+    println!("Loading {} source(s)...\n", sources.len());
 
-    export_metrics_to_prometheus(&source, &run_id, args.port, args.duration).await?;
+    export_multiple_metrics_to_prometheus(&sources, args.port, args.duration).await?;
 
     println!("Done.");
     Ok(())

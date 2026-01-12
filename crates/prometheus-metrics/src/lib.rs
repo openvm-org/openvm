@@ -58,6 +58,7 @@ mod server;
 pub use server::{
     export_json_to_prometheus,
     export_metrics_to_prometheus,
+    export_multiple_metrics_to_prometheus,
     generate_run_id,
     list_runs_in_s3,
     run_with_prometheus_metrics,

@@ -292,6 +292,18 @@
           }
         },
         {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "targetField": "segment",
+                "destinationType": "number"
+              }
+            ],
+            "fields": {}
+          }
+        },
+        {
           "id": "sortBy",
           "options": {
             "fields": {},
@@ -300,6 +312,18 @@
                 "field": "segment"
               }
             ]
+          }
+        },
+        {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "targetField": "segment",
+                "destinationType": "string"
+              }
+            ],
+            "fields": {}
           }
         },
         {
