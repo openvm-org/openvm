@@ -7,7 +7,7 @@ use openvm_circuit_primitives::{
     SubAir,
 };
 use openvm_stark_backend::{
-    interaction::InteractionBuilder, p3_air::AirBuilder, p3_field::FieldAlgebra,
+    interaction::InteractionBuilder, p3_air::AirBuilder, p3_field::PrimeCharacteristicRing,
 };
 
 use super::bus::MemoryBus;
@@ -125,7 +125,9 @@ pub struct MemoryReadOperation<'a, T, V, const N: usize> {
 /// The max degree of constraints is:
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
 /// eval_bulk_access: refer to private function MemoryOfflineChecker::eval_bulk_access
-impl<F: FieldAlgebra, V: Copy + Into<F>, const N: usize> MemoryReadOperation<'_, F, V, N> {
+impl<F: PrimeCharacteristicRing, V: Copy + Into<F>, const N: usize>
+    MemoryReadOperation<'_, F, V, N>
+{
     /// Evaluate constraints and send/receive interactions.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
     where
@@ -179,7 +181,7 @@ pub struct MemoryReadOrImmediateOperation<'a, T, V> {
 /// is_immediate check: deg(aux.is_immediate) + max(deg(data), deg(address.pointer))
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
 /// eval_bulk_access: refer to private function MemoryOfflineChecker::eval_bulk_access
-impl<F: FieldAlgebra, V: Copy + Into<F>> MemoryReadOrImmediateOperation<'_, F, V> {
+impl<F: PrimeCharacteristicRing, V: Copy + Into<F>> MemoryReadOrImmediateOperation<'_, F, V> {
     /// Evaluate constraints and send/receive interactions.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
     where
@@ -209,6 +211,7 @@ impl<F: FieldAlgebra, V: Copy + Into<F>> MemoryReadOrImmediateOperation<'_, F, V
             enabled.clone(),
         );
 
+        #[allow(clippy::cloned_ref_to_slice_refs)]
         self.offline_checker.eval_bulk_access(
             builder,
             self.address,
@@ -240,7 +243,9 @@ pub struct MemoryWriteOperation<'a, T, V, const N: usize> {
 /// The max degree of constraints is:
 /// eval_timestamps: deg(enabled) + max(1, deg(self.timestamp))
 /// eval_bulk_access: refer to private function MemoryOfflineChecker::eval_bulk_access
-impl<T: FieldAlgebra, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<'_, T, V, N> {
+impl<T: PrimeCharacteristicRing, V: Copy + Into<T>, const N: usize>
+    MemoryWriteOperation<'_, T, V, N>
+{
     /// Evaluate constraints and send/receive interactions. `enabled` must be boolean.
     pub fn eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
     where

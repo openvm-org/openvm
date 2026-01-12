@@ -11,7 +11,9 @@ use std::{
     ops::{AddAssign, DivAssign, MulAssign, SubAssign},
 };
 
-use openvm_stark_backend::p3_field::{ExtensionField, Field, FieldAlgebra, FieldArray, PrimeField};
+use openvm_stark_backend::p3_field::{
+    ExtensionField, Field, FieldArray, PrimeCharacteristicRing, PrimeField,
+};
 use serde::{Deserialize, Serialize};
 
 use super::{utils::prime_field_to_usize, Ext, Felt, Usize, Var};
@@ -36,20 +38,20 @@ pub fn ext_elements<F: Field, EF: ExtensionField<F>>() -> Digest<EF> {
 
 fn digest_id<F: Field>(id: u32) -> Digest<F> {
     let elements = elements();
-    Digest::from(elements.0.map(|e: F| {
-        (e + F::from_canonical_u32(id))
-            .try_inverse()
-            .unwrap_or(F::ONE)
-    }))
+    Digest::from(
+        elements
+            .0
+            .map(|e: F| (e + F::from_u32(id)).try_inverse().unwrap_or(F::ONE)),
+    )
 }
 
 fn digest_id_ext<F: Field, EF: ExtensionField<F>>(id: u32) -> Digest<EF> {
     let elements = ext_elements();
-    Digest::from(elements.0.map(|e: EF| {
-        (e + EF::from_canonical_u32(id))
-            .try_inverse()
-            .unwrap_or(EF::ONE)
-    }))
+    Digest::from(
+        elements
+            .0
+            .map(|e: EF| (e + EF::from_u32(id)).try_inverse().unwrap_or(EF::ONE)),
+    )
 }
 
 fn div_digests<F: Field>(a: Digest<F>, b: Digest<F>) -> Digest<F> {
@@ -273,11 +275,11 @@ pub enum ExtOperand<F: Field, EF: ExtensionField<F>> {
 impl<F: Field, EF: ExtensionField<F>> ExtOperand<F, EF> {
     pub fn digest(&self) -> Digest<EF> {
         match self {
-            ExtOperand::Base(f) => SymbolicFelt::from(*f).digest().0.map(EF::from_base).into(),
+            ExtOperand::Base(f) => SymbolicFelt::from(*f).digest().0.map(EF::from).into(),
             ExtOperand::Const(ef) => (*ef).into(),
-            ExtOperand::Felt(f) => SymbolicFelt::from(*f).digest().0.map(EF::from_base).into(),
+            ExtOperand::Felt(f) => SymbolicFelt::from(*f).digest().0.map(EF::from).into(),
             ExtOperand::Ext(e) => digest_id_ext::<F, EF>(e.0),
-            ExtOperand::SymFelt(f) => f.digest().0.map(EF::from_base).into(),
+            ExtOperand::SymFelt(f) => f.digest().0.map(EF::from).into(),
             ExtOperand::Sym(e) => e.digest(),
         }
     }
@@ -309,41 +311,16 @@ pub trait ExtensionOperand<F: Field, EF: ExtensionField<F>> {
     fn to_operand(self) -> ExtOperand<F, EF>;
 }
 
-impl<N: Field> FieldAlgebra for SymbolicVar<N> {
-    type F = N;
+impl<N: Field> PrimeCharacteristicRing for SymbolicVar<N> {
+    type PrimeSubfield = N::PrimeSubfield;
 
     const ZERO: Self = SymbolicVar::Const(N::ZERO, FieldArray([N::ZERO; 4]));
     const ONE: Self = SymbolicVar::Const(N::ONE, FieldArray([N::ONE; 4]));
     const TWO: Self = SymbolicVar::Const(N::TWO, FieldArray([N::TWO; 4]));
     const NEG_ONE: Self = SymbolicVar::Const(N::NEG_ONE, FieldArray([N::NEG_ONE; 4]));
 
-    fn from_f(f: Self::F) -> Self {
-        SymbolicVar::from(f)
-    }
-    fn from_bool(b: bool) -> Self {
-        SymbolicVar::from(N::from_bool(b))
-    }
-    fn from_canonical_u8(n: u8) -> Self {
-        SymbolicVar::from(N::from_canonical_u8(n))
-    }
-    fn from_canonical_u16(n: u16) -> Self {
-        SymbolicVar::from(N::from_canonical_u16(n))
-    }
-    fn from_canonical_u32(n: u32) -> Self {
-        SymbolicVar::from(N::from_canonical_u32(n))
-    }
-    fn from_canonical_u64(n: u64) -> Self {
-        SymbolicVar::from(N::from_canonical_u64(n))
-    }
-    fn from_canonical_usize(n: usize) -> Self {
-        SymbolicVar::from(N::from_canonical_usize(n))
-    }
-
-    fn from_wrapped_u32(n: u32) -> Self {
-        SymbolicVar::from(N::from_wrapped_u32(n))
-    }
-    fn from_wrapped_u64(n: u64) -> Self {
-        SymbolicVar::from(N::from_wrapped_u64(n))
+    fn from_prime_subfield(f: Self::PrimeSubfield) -> Self {
+        SymbolicVar::from(N::from_prime_subfield(f))
     }
 }
 
@@ -354,46 +331,21 @@ impl<N: Field> NotSymbolicVar for Var<N> {}
 impl<N: PrimeField> NotSymbolicVar for Usize<N> {}
 impl<N: Field> NotSymbolicVar for RVar<N> {}
 
-impl<F: Field> FieldAlgebra for SymbolicFelt<F> {
-    type F = F;
+impl<F: Field> PrimeCharacteristicRing for SymbolicFelt<F> {
+    type PrimeSubfield = F::PrimeSubfield;
 
     const ZERO: Self = SymbolicFelt::Const(F::ZERO, FieldArray([F::ZERO; 4]));
     const ONE: Self = SymbolicFelt::Const(F::ONE, FieldArray([F::ONE; 4]));
     const TWO: Self = SymbolicFelt::Const(F::TWO, FieldArray([F::TWO; 4]));
     const NEG_ONE: Self = SymbolicFelt::Const(F::NEG_ONE, FieldArray([F::NEG_ONE; 4]));
 
-    fn from_f(f: Self::F) -> Self {
-        SymbolicFelt::from(f)
-    }
-    fn from_bool(b: bool) -> Self {
-        SymbolicFelt::from(F::from_bool(b))
-    }
-    fn from_canonical_u8(n: u8) -> Self {
-        SymbolicFelt::from(F::from_canonical_u8(n))
-    }
-    fn from_canonical_u16(n: u16) -> Self {
-        SymbolicFelt::from(F::from_canonical_u16(n))
-    }
-    fn from_canonical_u32(n: u32) -> Self {
-        SymbolicFelt::from(F::from_canonical_u32(n))
-    }
-    fn from_canonical_u64(n: u64) -> Self {
-        SymbolicFelt::from(F::from_canonical_u64(n))
-    }
-    fn from_canonical_usize(n: usize) -> Self {
-        SymbolicFelt::from(F::from_canonical_usize(n))
-    }
-
-    fn from_wrapped_u32(n: u32) -> Self {
-        SymbolicFelt::from(F::from_wrapped_u32(n))
-    }
-    fn from_wrapped_u64(n: u64) -> Self {
-        SymbolicFelt::from(F::from_wrapped_u64(n))
+    fn from_prime_subfield(f: Self::PrimeSubfield) -> Self {
+        SymbolicFelt::from(F::from_prime_subfield(f))
     }
 }
 
-impl<F: Field, EF: ExtensionField<F>> FieldAlgebra for SymbolicExt<F, EF> {
-    type F = EF;
+impl<F: Field, EF: ExtensionField<F>> PrimeCharacteristicRing for SymbolicExt<F, EF> {
+    type PrimeSubfield = F::PrimeSubfield;
 
     const ZERO: Self = SymbolicExt::Const(EF::ZERO, FieldArray([EF::ZERO; 4]));
     const ONE: Self =
@@ -405,33 +357,9 @@ impl<F: Field, EF: ExtensionField<F>> FieldAlgebra for SymbolicExt<F, EF> {
         FieldArray([EF::ZERO, EF::ZERO, EF::ZERO, EF::NEG_ONE]),
     );
 
-    fn from_f(f: Self::F) -> Self {
-        SymbolicExt::Const(f, f.into())
-    }
-    fn from_bool(b: bool) -> Self {
-        SymbolicExt::from_f(EF::from_bool(b))
-    }
-    fn from_canonical_u8(n: u8) -> Self {
-        SymbolicExt::from_f(EF::from_canonical_u8(n))
-    }
-    fn from_canonical_u16(n: u16) -> Self {
-        SymbolicExt::from_f(EF::from_canonical_u16(n))
-    }
-    fn from_canonical_u32(n: u32) -> Self {
-        SymbolicExt::from_f(EF::from_canonical_u32(n))
-    }
-    fn from_canonical_u64(n: u64) -> Self {
-        SymbolicExt::from_f(EF::from_canonical_u64(n))
-    }
-    fn from_canonical_usize(n: usize) -> Self {
-        SymbolicExt::from_f(EF::from_canonical_usize(n))
-    }
-
-    fn from_wrapped_u32(n: u32) -> Self {
-        SymbolicExt::from_f(EF::from_wrapped_u32(n))
-    }
-    fn from_wrapped_u64(n: u64) -> Self {
-        SymbolicExt::from_f(EF::from_wrapped_u64(n))
+    fn from_prime_subfield(f: Self::PrimeSubfield) -> Self {
+        let ef = EF::from(F::from_prime_subfield(f));
+        SymbolicExt::Const(ef, ef.into())
     }
 }
 
@@ -1332,7 +1260,7 @@ impl<N: Field> From<RVar<N>> for SymbolicVar<N> {
 
 impl<N: PrimeField> From<usize> for RVar<N> {
     fn from(value: usize) -> Self {
-        Self::from_field(N::from_canonical_usize(value))
+        RVar::Const(N::from_usize(value))
     }
 }
 

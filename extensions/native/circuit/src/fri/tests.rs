@@ -10,7 +10,7 @@ use openvm_circuit::arch::{
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{conversion::AS, FriOpcode::FRI_REDUCED_OPENING};
 use openvm_stark_backend::{
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -94,15 +94,13 @@ fn set_and_execute<E, RA>(
     E: PreflightExecutor<F, RA>,
     RA: Arena,
 {
-    let len = rng.gen_range(1..=28);
+    let len = rng.random_range(1..=28);
     let a_ptr = gen_pointer(rng, len);
     let b_ptr = gen_pointer(rng, len);
-    let a_ptr_ptr =
-        write_native_array::<F, 1>(tester, rng, Some([F::from_canonical_usize(a_ptr)])).1;
-    let b_ptr_ptr =
-        write_native_array::<F, 1>(tester, rng, Some([F::from_canonical_usize(b_ptr)])).1;
+    let a_ptr_ptr = write_native_array::<F, 1>(tester, rng, Some([F::from_usize(a_ptr)])).1;
+    let b_ptr_ptr = write_native_array::<F, 1>(tester, rng, Some([F::from_usize(b_ptr)])).1;
 
-    let len_ptr = write_native_array::<F, 1>(tester, rng, Some([F::from_canonical_usize(len)])).1;
+    let len_ptr = write_native_array::<F, 1>(tester, rng, Some([F::from_usize(len)])).1;
     let (alpha, alpha_ptr) = write_native_array::<F, EXT_DEG>(tester, rng, None);
     let out_ptr = gen_pointer(rng, EXT_DEG);
     let is_init = true;
@@ -111,8 +109,8 @@ fn set_and_execute<E, RA>(
     let mut vec_a = Vec::with_capacity(len);
     let mut vec_b = Vec::with_capacity(len);
     for i in 0..len {
-        let a = rng.gen();
-        let b: [F; EXT_DEG] = std::array::from_fn(|_| rng.gen());
+        let a = rng.random();
+        let b: [F; EXT_DEG] = std::array::from_fn(|_| rng.random());
         vec_a.push(a);
         vec_b.push(b);
         if !is_init {
@@ -226,10 +224,10 @@ fn run_negative_fri_mat_opening_test() {
     );
 
     let modify_trace = |trace: &mut DenseMatrix<F>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).expect("row exists").to_vec();
         let cols: &mut WorkloadCols<F> = values[..WL_WIDTH].borrow_mut();
 
-        cols.prefix.a_or_is_first = F::from_canonical_u32(42);
+        cols.prefix.a_or_is_first = F::from_u32(42);
 
         *trace = RowMajorMatrix::new(values, OVERALL_WIDTH);
     };

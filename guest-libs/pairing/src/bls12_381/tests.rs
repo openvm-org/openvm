@@ -10,7 +10,7 @@ use openvm_pairing_guest::{
     bls12_381::{BLS12_381_MODULUS, BLS12_381_ORDER},
     pairing::{FinalExp, MultiMillerLoop, PairingCheck, PairingIntrinsics},
 };
-use rand::{rngs::StdRng, SeedableRng};
+use rand08::{rngs::StdRng, SeedableRng};
 
 use super::{Fp, Fp12, Fp2};
 use crate::{

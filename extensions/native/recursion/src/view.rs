@@ -5,7 +5,7 @@ use openvm_native_compiler::{
 };
 use openvm_stark_backend::{
     keygen::types::TraceWidth,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_util::log2_strict_usize,
 };
 
@@ -57,11 +57,11 @@ pub fn get_advice_per_air<C: Config>(
         .map(|constraint| {
             let coefficients = builder.array(constraint.coefficients.len());
             for (i, coeff) in constraint.coefficients.iter().enumerate() {
-                let coefficient: Var<_> = builder.constant(C::N::from_canonical_u32(*coeff));
+                let coefficient: Var<_> = builder.constant(C::N::from_u32(*coeff));
                 builder.set(&coefficients, i, coefficient);
             }
             assert!(constraint.threshold <= C::F::ORDER_U32);
-            let threshold: Var<_> = builder.constant(C::N::from_wrapped_u32(constraint.threshold));
+            let threshold: Var<_> = builder.constant(C::N::from_u32(constraint.threshold));
             let is_threshold_at_p = constraint.threshold == C::F::ORDER_U32;
             LinearConstraintVariable {
                 coefficients,
@@ -90,9 +90,7 @@ pub fn get_advice_per_air<C: Config>(
                 // Because `C::F::ORDER_U32` is prime and `max_coefficient > 1`,
                 // `floor(C::F::ORDER_U32 / max_coefficient) * max_coefficient < C::F::ORDER_U32`,
                 // `height * max_coefficient` cannot overflow `C::F`.
-                value: builder.constant(C::N::from_canonical_u32(
-                    C::F::ORDER_U32 / max_coefficient + 1,
-                )),
+                value: builder.constant(C::N::from_u32(C::F::ORDER_U32 / max_coefficient + 1)),
             }
         };
         builder.set(&height_maxes, i, height_max);

@@ -5,7 +5,7 @@ use openvm_native_compiler::{
     prelude::{Builder, MemIndex, MemVariable, Ptr, Variable},
 };
 use openvm_native_compiler_derive::DslVariable;
-use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
+use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, PrimeCharacteristicRing};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 #[derive(DslVariable, Clone, Debug)]
@@ -139,13 +139,13 @@ fn test_slice_variable_impl_happy_path() {
     let mut builder = AsmBuilder::<F, EF>::default();
     let slice1: [Felt<F>; N] = builder.uninit();
     for (i, f) in slice1.iter().enumerate() {
-        builder.assign(f, F::from_canonical_u32(i as u32));
+        builder.assign(f, F::from_u32(i as u32));
     }
     let slice2: [Felt<F>; N] = builder.uninit();
     slice2.assign(slice1, &mut builder);
     builder.assert_eq::<[_; N]>(slice1, slice2);
     for (i, f) in slice2.iter().enumerate() {
-        builder.assign(f, F::from_canonical_u32(i as u32));
+        builder.assign(f, F::from_u32(i as u32));
     }
     let ptr = builder.alloc(1, <[Felt<F>; N] as MemVariable<C>>::size_of());
     let mem_index = MemIndex {
@@ -174,7 +174,7 @@ fn test_slice_assert_eq_neg() {
     let mut builder = AsmBuilder::<F, EF>::default();
     let slice1: [Felt<F>; N] = builder.uninit();
     for (i, f) in slice1.iter().enumerate() {
-        builder.assign(f, F::from_canonical_u32(i as u32));
+        builder.assign(f, F::from_u32(i as u32));
     }
     let slice2: [Felt<F>; N] = [builder.eval(F::ZERO); N];
     // Should panic because slice1 != slice2

@@ -6,7 +6,7 @@ use openvm_circuit::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
         ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator, MatrixRecordArena,
         RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex, VmCircuitExtension,
-        VmExecutionExtension, VmProverExtension,
+        VmExecutionExtension, VmField, VmProverExtension,
     },
     system::{
         memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemExecutor,
@@ -86,7 +86,7 @@ impl<E, SC> VmBuilder<E> for Keccak256Rv32CpuBuilder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<SC>: PrimeField32,
+    Val<SC>: VmField,
 {
     type VmConfig = Keccak256Rv32Config;
     type SystemChipInventory = SystemChipInventory<SC>;

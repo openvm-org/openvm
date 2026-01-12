@@ -10,7 +10,7 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::{InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::{cpu::CpuBackend, types::AirProvingContext},
@@ -72,7 +72,7 @@ impl<const CHUNK: usize, F> PartitionedBaseAir<F> for PersistentBoundaryAir<CHUN
 impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryAir<CHUNK> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local: &PersistentBoundaryCols<AB::Var, CHUNK> = (*local).borrow();
 
         // `direction` should be -1, 0, 1
@@ -93,7 +93,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             // direction = -1 => is_final = 1
             local.expand_direction.into(),
             AB::Expr::ZERO,
-            local.address_space - AB::F::from_canonical_u32(ADDR_SPACE_OFFSET),
+            local.address_space - AB::F::from_u32(ADDR_SPACE_OFFSET),
             local.leaf_label.into(),
         ];
         expand_fields.extend(local.hash.map(Into::into));
@@ -113,7 +113,7 @@ impl<const CHUNK: usize, AB: InteractionBuilder> Air<AB> for PersistentBoundaryA
             .send(
                 MemoryAddress::new(
                     local.address_space,
-                    local.leaf_label * AB::F::from_canonical_usize(CHUNK),
+                    local.leaf_label * AB::F::from_usize(CHUNK),
                 ),
                 local.values.to_vec(),
                 local.timestamp,
@@ -277,20 +277,20 @@ where
                     let (initial_row, final_row) = row.split_at_mut(width);
                     *initial_row.borrow_mut() = PersistentBoundaryCols {
                         expand_direction: Val::<SC>::ONE,
-                        address_space: Val::<SC>::from_canonical_u32(touched_label.address_space),
-                        leaf_label: Val::<SC>::from_canonical_u32(touched_label.label),
+                        address_space: Val::<SC>::from_u32(touched_label.address_space),
+                        leaf_label: Val::<SC>::from_u32(touched_label.label),
                         values: touched_label.init_values,
                         hash: touched_label.init_hash,
-                        timestamp: Val::<SC>::from_canonical_u32(INITIAL_TIMESTAMP),
+                        timestamp: Val::<SC>::from_u32(INITIAL_TIMESTAMP),
                     };
 
                     *final_row.borrow_mut() = PersistentBoundaryCols {
                         expand_direction: Val::<SC>::NEG_ONE,
-                        address_space: Val::<SC>::from_canonical_u32(touched_label.address_space),
-                        leaf_label: Val::<SC>::from_canonical_u32(touched_label.label),
+                        address_space: Val::<SC>::from_u32(touched_label.address_space),
+                        leaf_label: Val::<SC>::from_u32(touched_label.label),
                         values: touched_label.final_values,
                         hash: touched_label.final_hash,
-                        timestamp: Val::<SC>::from_canonical_u32(touched_label.final_timestamp),
+                        timestamp: Val::<SC>::from_u32(touched_label.final_timestamp),
                     };
                 });
             Arc::new(RowMajorMatrix::new(rows, width))

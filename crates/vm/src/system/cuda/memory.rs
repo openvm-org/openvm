@@ -15,7 +15,8 @@ use openvm_cuda_common::{
     memory_manager::MemTracker,
 };
 use openvm_stark_backend::{
-    p3_field::FieldAlgebra, p3_util::log2_ceil_usize, prover::types::AirProvingContext, Chip,
+    p3_field::PrimeCharacteristicRing, p3_util::log2_ceil_usize, prover::types::AirProvingContext,
+    Chip,
 };
 
 use super::{
