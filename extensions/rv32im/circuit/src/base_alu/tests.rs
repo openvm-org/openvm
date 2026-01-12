@@ -163,8 +163,11 @@ fn rand_rv32_alu_test(opcode: BaseAluOpcode, num_ops: usize) {
     // TODO(AG): make a more meaningful test for memory accesses
     tester.write(2, 1024, [F::ONE; 4]);
     tester.write(2, 1028, [F::ONE; 4]);
-    let sm = tester.read(2, 1024);
-    assert_eq!(sm, [F::ONE; 8]);
+    // Avoid wider-than-min-block accesses when access adapters are disabled
+    let sm1 = tester.read(2, 1024);
+    let sm2 = tester.read(2, 1028);
+    assert_eq!(sm1, [F::ONE; 4]);
+    assert_eq!(sm2, [F::ONE; 4]);
 
     for _ in 0..num_ops {
         set_and_execute(
@@ -201,8 +204,11 @@ fn rand_rv32_alu_test_persistent(opcode: BaseAluOpcode, num_ops: usize) {
     // TODO(AG): make a more meaningful test for memory accesses
     tester.write(2, 1024, [F::ONE; 4]);
     tester.write(2, 1028, [F::ONE; 4]);
-    let sm = tester.read(2, 1024);
-    assert_eq!(sm, [F::ONE; 8]);
+    // Avoid wider-than-min-block accesses when access adapters are disabled
+    let sm1 = tester.read(2, 1024);
+    let sm2 = tester.read(2, 1028);
+    assert_eq!(sm1, [F::ONE; 4]);
+    assert_eq!(sm2, [F::ONE; 4]);
 
     for _ in 0..num_ops {
         set_and_execute(
