@@ -66,11 +66,14 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
                 segmentation_ctx.air_names[merkle_tree_index]
             );
         }
-        debug_assert!(
-            segmentation_ctx.air_names[memory_ctx.adapter_offset].contains("AccessAdapterAir<2>"),
-            "air_name={}",
-            segmentation_ctx.air_names[memory_ctx.adapter_offset]
-        );
+        if memory_ctx.access_adapters_enabled {
+            debug_assert!(
+                segmentation_ctx.air_names[memory_ctx.adapter_offset]
+                    .contains("AccessAdapterAir<2>"),
+                "air_name={}",
+                segmentation_ctx.air_names[memory_ctx.adapter_offset]
+            );
+        }
 
         let mut ctx = Self {
             trace_heights,

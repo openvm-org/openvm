@@ -118,20 +118,24 @@ impl<SC: StarkGenericConfig> MemoryAirInventory<SC> {
             );
             MemoryInterfaceAirs::Volatile { boundary }
         };
-        // Memory access adapters
-        let lt_air = IsLtSubAir::new(range_bus, mem_config.timestamp_max_bits);
-        let maan = mem_config.max_access_adapter_n;
-        assert!(matches!(maan, 2 | 4 | 8 | 16 | 32));
-        let access_adapters: Vec<AirRef<SC>> = [
-            Arc::new(AccessAdapterAir::<2> { memory_bus, lt_air }) as AirRef<SC>,
-            Arc::new(AccessAdapterAir::<4> { memory_bus, lt_air }) as AirRef<SC>,
-            Arc::new(AccessAdapterAir::<8> { memory_bus, lt_air }) as AirRef<SC>,
-            Arc::new(AccessAdapterAir::<16> { memory_bus, lt_air }) as AirRef<SC>,
-            Arc::new(AccessAdapterAir::<32> { memory_bus, lt_air }) as AirRef<SC>,
-        ]
-        .into_iter()
-        .take(log2_strict_usize(maan))
-        .collect();
+        // Memory access adapters - only create if enabled
+        let access_adapters: Vec<AirRef<SC>> = if mem_config.access_adapters_enabled {
+            let lt_air = IsLtSubAir::new(range_bus, mem_config.timestamp_max_bits);
+            let maan = mem_config.max_access_adapter_n;
+            assert!(matches!(maan, 2 | 4 | 8 | 16 | 32));
+            [
+                Arc::new(AccessAdapterAir::<2> { memory_bus, lt_air }) as AirRef<SC>,
+                Arc::new(AccessAdapterAir::<4> { memory_bus, lt_air }) as AirRef<SC>,
+                Arc::new(AccessAdapterAir::<8> { memory_bus, lt_air }) as AirRef<SC>,
+                Arc::new(AccessAdapterAir::<16> { memory_bus, lt_air }) as AirRef<SC>,
+                Arc::new(AccessAdapterAir::<32> { memory_bus, lt_air }) as AirRef<SC>,
+            ]
+            .into_iter()
+            .take(log2_strict_usize(maan))
+            .collect()
+        } else {
+            Vec::new()
+        };
 
         Self {
             bridge,
@@ -159,7 +163,16 @@ impl<SC: StarkGenericConfig> MemoryAirInventory<SC> {
 
 /// This is O(1) and returns the length of
 /// [`MemoryAirInventory::into_airs`].
-pub fn num_memory_airs(is_persistent: bool, max_access_adapter_n: usize) -> usize {
-    // boundary + { merkle if is_persistent } + access_adapters
-    1 + usize::from(is_persistent) + log2_strict_usize(max_access_adapter_n)
+pub fn num_memory_airs(
+    is_persistent: bool,
+    max_access_adapter_n: usize,
+    access_adapters_enabled: bool,
+) -> usize {
+    // boundary + { merkle if is_persistent } + access_adapters (if enabled)
+    let num_adapters = if access_adapters_enabled {
+        log2_strict_usize(max_access_adapter_n)
+    } else {
+        0
+    };
+    1 + usize::from(is_persistent) + num_adapters
 }
