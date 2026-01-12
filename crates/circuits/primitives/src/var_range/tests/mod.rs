@@ -2,13 +2,11 @@ use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
     p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
-    utils::disable_debug_builder, verifier::VerificationError, AirRef,
+    prover::types::AirProvingContext, utils::disable_debug_builder, AirRef,
 };
-use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear, utils::create_seeded_rng,
-};
+use openvm_stark_sdk::{any_rap_arc_vec, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
+use stark_backend_v2::{prover::AirProvingContextV2, test_utils::test_engine_small, StarkEngineV2};
 #[cfg(feature = "cuda")]
 use {
     crate::var_range::{VariableRangeCheckerAir, VariableRangeCheckerChipGPU},
@@ -86,18 +84,23 @@ fn test_variable_range_checker_chip_send() {
         })
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
-    let var_range_checker_trace = var_range_checker.generate_trace();
+    let var_range_checker_trace: RowMajorMatrix<BabyBear> = var_range_checker.generate_trace();
 
     let all_traces = lists_traces
         .into_iter()
         .chain(iter::once(var_range_checker_trace))
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .map(Arc::new)
+        .map(AirProvingContext::simple_no_pis)
+        .map(AirProvingContextV2::from_v1_no_cached)
+        .collect::<Vec<_>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
+    test_engine_small()
+        .run_test(all_chips, all_traces)
         .expect("Verification failed");
 }
 
 #[test]
+#[should_panic]
 fn negative_test_variable_range_checker_chip_send() {
     // test that the constraint fails when some val >= 2^max_bits
     let mut rng = create_seeded_rng();
@@ -136,14 +139,15 @@ fn negative_test_variable_range_checker_chip_send() {
         2,
     );
     let var_range_trace = var_range_checker.generate_trace();
-    let all_traces = vec![list_trace, var_range_trace];
+    let all_traces = [list_trace, var_range_trace]
+        .into_iter()
+        .map(Arc::new)
+        .map(AirProvingContext::simple_no_pis)
+        .map(AirProvingContextV2::from_v1_no_cached)
+        .collect::<Vec<_>>();
 
     disable_debug_builder();
-    assert_eq!(
-        BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces).err(),
-        Some(VerificationError::ChallengePhaseError),
-        "Expected constraint to fail"
-    );
+    test_engine_small().run_test(all_chips, all_traces).unwrap();
 }
 
 #[test]
@@ -202,13 +206,18 @@ fn test_variable_range_checker_chip_range_check() {
     let all_traces = lists_traces
         .into_iter()
         .chain(iter::once(var_range_checker_trace))
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .map(Arc::new)
+        .map(AirProvingContext::simple_no_pis)
+        .map(AirProvingContextV2::from_v1_no_cached)
+        .collect::<Vec<_>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
+    test_engine_small()
+        .run_test(all_chips, all_traces)
         .expect("Verification failed");
 }
 
 #[test]
+#[should_panic]
 fn negative_test_variable_range_checker_chip_range_check() {
     // test that the constraint fails when some val >= 2^max_bits
     let mut rng = create_seeded_rng();
@@ -245,14 +254,15 @@ fn negative_test_variable_range_checker_chip_range_check() {
         1,
     );
     let var_range_trace = var_range_checker.generate_trace();
-    let all_traces = vec![list_trace, var_range_trace];
+    let all_traces = [list_trace, var_range_trace]
+        .into_iter()
+        .map(Arc::new)
+        .map(AirProvingContext::simple_no_pis)
+        .map(AirProvingContextV2::from_v1_no_cached)
+        .collect::<Vec<_>>();
 
     disable_debug_builder();
-    assert_eq!(
-        BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces).err(),
-        Some(VerificationError::ChallengePhaseError),
-        "Expected constraint to fail"
-    );
+    test_engine_small().run_test(all_chips, all_traces).unwrap();
 }
 
 #[cfg(feature = "cuda")]

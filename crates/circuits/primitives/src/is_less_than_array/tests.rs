@@ -9,13 +9,12 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
+    prover::types::AirProvingContext,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     utils::disable_debug_builder,
-    verifier::VerificationError,
 };
-use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-};
+use openvm_stark_sdk::any_rap_arc_vec;
+use stark_backend_v2::{prover::AirProvingContextV2, test_utils::test_engine_small, StarkEngineV2};
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::less_than::less_than_array_dummy_tracegen,
@@ -169,14 +168,21 @@ fn test_is_less_than_tuple_chip() {
 
     let trace = chip.generate_trace();
     let range_checker_trace = range_checker.generate_trace();
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![air, range_checker.air],
-        vec![trace, range_checker_trace],
-    )
-    .expect("Verification failed");
+
+    let traces = [trace, range_checker_trace]
+        .into_iter()
+        .map(Arc::new)
+        .map(AirProvingContext::simple_no_pis)
+        .map(AirProvingContextV2::from_v1_no_cached)
+        .collect::<Vec<_>>();
+
+    test_engine_small()
+        .run_test(any_rap_arc_vec![air, range_checker.air], traces)
+        .expect("Verification failed");
 }
 
 #[test]
+#[should_panic]
 fn test_is_less_than_tuple_chip_negative() {
     let range_checker = get_tester_range_chip();
     let mut chip = IsLtArrayChip::<N, LIMBS>::new(16, range_checker.clone());
@@ -187,19 +193,21 @@ fn test_is_less_than_tuple_chip_negative() {
 
     trace.values[2] = FieldAlgebra::from_canonical_u64(0);
 
+    let traces = [trace, range_checker_trace]
+        .into_iter()
+        .map(Arc::new)
+        .map(AirProvingContext::simple_no_pis)
+        .map(AirProvingContextV2::from_v1_no_cached)
+        .collect::<Vec<_>>();
+
     disable_debug_builder();
-    assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-            any_rap_arc_vec![air, range_checker.air],
-            vec![trace, range_checker_trace]
-        )
-        .err(),
-        Some(VerificationError::OodEvaluationMismatch),
-        "Expected verification to fail, but it passed"
-    );
+    test_engine_small()
+        .run_test(any_rap_arc_vec![air, range_checker.air], traces)
+        .unwrap();
 }
 
 #[test]
+#[should_panic]
 fn test_is_less_than_tuple_chip_nonzero_diff() {
     let range_checker = get_tester_range_chip();
     let mut chip = IsLtArrayChip::<N, LIMBS>::new(16, range_checker.clone());
@@ -209,16 +217,17 @@ fn test_is_less_than_tuple_chip_nonzero_diff() {
     let trace = chip.generate_wrong_trace();
     let range_checker_trace = range_checker.generate_trace();
 
+    let traces = [trace, range_checker_trace]
+        .into_iter()
+        .map(Arc::new)
+        .map(AirProvingContext::simple_no_pis)
+        .map(AirProvingContextV2::from_v1_no_cached)
+        .collect::<Vec<_>>();
+
     disable_debug_builder();
-    assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-            any_rap_arc_vec![air, range_checker.air],
-            vec![trace, range_checker_trace]
-        )
-        .err(),
-        Some(VerificationError::OodEvaluationMismatch),
-        "Expected verification to fail, but it passed"
-    );
+    test_engine_small()
+        .run_test(any_rap_arc_vec![air, range_checker.air], traces)
+        .unwrap();
 }
 
 #[cfg(feature = "cuda")]
