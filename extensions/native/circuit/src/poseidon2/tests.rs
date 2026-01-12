@@ -1,7 +1,8 @@
 use std::cmp::min;
 
-use openvm_circuit::arch::testing::{
-    memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, VmChipTester,
+use openvm_circuit::arch::{
+    testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, VmChipTester},
+    VmField,
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{
@@ -10,7 +11,7 @@ use openvm_native_compiler::{
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32, PrimeField64},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32, PrimeField64},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -56,7 +57,7 @@ type Harness<F, const SBOX_REGISTERS: usize> = TestChipHarness<
     NativePoseidon2Chip<F, SBOX_REGISTERS>,
 >;
 
-fn create_test_chip<F: PrimeField32, const SBOX_REGISTERS: usize>(
+fn create_test_chip<F: VmField, const SBOX_REGISTERS: usize>(
     tester: &VmChipTestBuilder<F>,
 ) -> Harness<F, SBOX_REGISTERS> {
     let air = NativePoseidon2Air::new(
@@ -146,13 +147,13 @@ fn random_instance(
             dims.push(log_height);
             let mut opened_row = vec![];
             for _ in 0..opened_element_size * row_length {
-                opened_row.push(rng.gen());
+                opened_row.push(rng.random());
             }
             opened.push(opened_row);
         }
         if log_height > 0 {
-            proof.push(std::array::from_fn(|_| rng.gen()));
-            sibling_is_on_right.push(rng.gen());
+            proof.push(std::array::from_fn(|_| rng.random()));
+            sibling_is_on_right.push(rng.random());
         }
     }
 
@@ -251,7 +252,7 @@ fn set_and_execute<const SBOX_REGISTERS: usize>(
     }
     tester.write(address_space, commit_pointer, commit);
 
-    let opened_element_size_inv = F::from_canonical_usize(case.opened_element_size)
+    let opened_element_size_inv = F::from_usize(case.opened_element_size)
         .inverse()
         .as_canonical_u32() as usize;
     tester.execute(
@@ -301,7 +302,7 @@ fn test<const N: usize>(cases: [Case; N]) {
     let inner_width = p2_chip.air.width();
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
+        let mut trace_row = trace.row_slice(0).expect("row exists").to_vec();
         trace_row[..inner_width].copy_from_slice(&inner_trace.values);
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
@@ -398,10 +399,9 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
     let mut rng = create_seeded_rng();
     (0..num_ops)
         .map(|_| {
-            let [a, b, c] =
-                std::array::from_fn(|_| BabyBear::from_canonical_usize(gen_pointer(&mut rng, 1)));
+            let [a, b, c] = std::array::from_fn(|_| BabyBear::from_usize(gen_pointer(&mut rng, 1)));
             Instruction {
-                opcode: if rng.gen_bool(0.5) {
+                opcode: if rng.random_bool(0.5) {
                     PERM_POS2
                 } else {
                     COMP_POS2
@@ -410,8 +410,8 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
                 a,
                 b,
                 c,
-                d: BabyBear::from_canonical_usize(4),
-                e: BabyBear::from_canonical_usize(4),
+                d: BabyBear::from_usize(4),
+                e: BabyBear::from_usize(4),
                 f: BabyBear::ZERO,
                 g: BabyBear::ZERO,
             }
@@ -447,14 +447,14 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
         let rhs = gen_pointer(&mut rng, CHUNK) / 2;
 
         let data: [_; 2 * CHUNK] =
-            std::array::from_fn(|_| BabyBear::from_canonical_usize(rng.gen_range(elem_range())));
+            std::array::from_fn(|_| BabyBear::from_usize(rng.random_range(elem_range())));
 
         let hash = harness.executor.subchip.permute(data);
 
-        tester.write(d, a, [BabyBear::from_canonical_usize(dst)]);
-        tester.write(d, b, [BabyBear::from_canonical_usize(lhs)]);
+        tester.write(d, a, [BabyBear::from_usize(dst)]);
+        tester.write(d, b, [BabyBear::from_usize(lhs)]);
         if opcode == COMP_POS2 {
-            tester.write(d, c, [BabyBear::from_canonical_usize(rhs)]);
+            tester.write(d, c, [BabyBear::from_usize(rhs)]);
         }
 
         let data_left: [_; CHUNK] = std::array::from_fn(|i| data[i]);
@@ -524,7 +524,7 @@ fn test_vm_compress_poseidon2_as4() {
         instructions.push(Instruction::large_from_isize(
             FieldArithmeticOpcode::ADD.global_opcode(),
             lhs_ptr + i,
-            rng.gen_range(1..1 << 20),
+            rng.random_range(1usize..(1usize << 20)) as isize,
             0,
             4,
             0,
@@ -538,7 +538,7 @@ fn test_vm_compress_poseidon2_as4() {
         instructions.push(Instruction::large_from_isize(
             FieldArithmeticOpcode::ADD.global_opcode(),
             rhs_ptr + i,
-            rng.gen_range(1..1 << 20),
+            rng.random_range(1usize..(1usize << 20)) as isize,
             0,
             4,
             0,
@@ -667,11 +667,11 @@ mod cuda_tests {
         for _ in 0..100 {
             let instruction = Instruction {
                 opcode: opcode.global_opcode(),
-                a: CudaF::from_canonical_usize(gen_pointer(&mut rng, 1)),
-                b: CudaF::from_canonical_usize(gen_pointer(&mut rng, 1)),
-                c: CudaF::from_canonical_usize(gen_pointer(&mut rng, 1)),
-                d: CudaF::from_canonical_usize(4),
-                e: CudaF::from_canonical_usize(4),
+                a: CudaF::from_usize(gen_pointer(&mut rng, 1)),
+                b: CudaF::from_usize(gen_pointer(&mut rng, 1)),
+                c: CudaF::from_usize(gen_pointer(&mut rng, 1)),
+                d: CudaF::from_usize(4),
+                e: CudaF::from_usize(4),
                 f: CudaF::ZERO,
                 g: CudaF::ZERO,
             };
@@ -689,16 +689,14 @@ mod cuda_tests {
             ]
             .map(|elem| elem.as_canonical_u32() as usize);
 
-            tester.write::<1>(d, a, [CudaF::from_canonical_usize(dst)]);
-            tester.write::<1>(d, b, [CudaF::from_canonical_usize(lhs)]);
+            tester.write::<1>(d, a, [CudaF::from_usize(dst)]);
+            tester.write::<1>(d, b, [CudaF::from_usize(lhs)]);
             if opcode == Poseidon2Opcode::COMP_POS2 {
-                tester.write::<1>(d, c, [CudaF::from_canonical_usize(rhs)]);
+                tester.write::<1>(d, c, [CudaF::from_usize(rhs)]);
             }
 
-            let data_left: [_; CHUNK] =
-                from_fn(|_| CudaF::from_canonical_usize(rng.gen_range(1..=100)));
-            let data_right: [_; CHUNK] =
-                from_fn(|_| CudaF::from_canonical_usize(rng.gen_range(1..=100)));
+            let data_left: [_; CHUNK] = from_fn(|_| CudaF::from_usize(rng.random_range(1..=100)));
+            let data_right: [_; CHUNK] = from_fn(|_| CudaF::from_usize(rng.random_range(1..=100)));
             match opcode {
                 Poseidon2Opcode::COMP_POS2 => {
                     tester.write::<CHUNK>(e, lhs, data_left);
@@ -817,7 +815,7 @@ mod cuda_tests {
             }
             tester.write(ADDRESS_SPACE, commit_pointer, commit);
 
-            let opened_element_size_inv = CudaF::from_canonical_usize(opened_element_size)
+            let opened_element_size_inv = CudaF::from_usize(opened_element_size)
                 .inverse()
                 .as_canonical_u32() as usize;
             tester.execute(

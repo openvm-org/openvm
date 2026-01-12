@@ -19,7 +19,7 @@ use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -147,7 +147,7 @@ where
             .chain(Some(last_opcode_flag));
         let expected_opcode = opcode_flags
             .zip(self.local_opcode_idx.iter().map(|&i| i + self.offset))
-            .map(|(flag, global_idx)| flag * AB::Expr::from_canonical_usize(global_idx))
+            .map(|(flag, global_idx)| flag * AB::Expr::from_usize(global_idx))
             .sum();
 
         let instruction = MinimalInstruction {

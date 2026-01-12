@@ -4,7 +4,7 @@ use halo2curves_axiom::{
 };
 use num_bigint::BigUint;
 use openvm_pairing_guest::algebra::field::FieldExtension;
-use openvm_stark_sdk::utils::create_seeded_rng_with_seed;
+use rand08::{rngs::StdRng, SeedableRng};
 
 pub fn bn254_fq_to_biguint(fq: Fq) -> BigUint {
     let bytes = fq.to_bytes();
@@ -23,11 +23,11 @@ pub fn bn254_fq12_to_biguint_vec(x: Fq12) -> Vec<BigUint> {
 }
 
 pub fn bn254_fq2_random(seed: u64) -> Fq2 {
-    let seed = create_seeded_rng_with_seed(seed);
-    Fq2::random(seed)
+    let mut rng = StdRng::seed_from_u64(seed);
+    Fq2::random(&mut rng)
 }
 
 pub fn bn254_fq12_random(seed: u64) -> Fq12 {
-    let seed = create_seeded_rng_with_seed(seed);
-    Fq12::random(seed)
+    let mut rng = StdRng::seed_from_u64(seed);
+    Fq12::random(&mut rng)
 }

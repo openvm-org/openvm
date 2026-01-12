@@ -13,7 +13,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder},
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_util::indices_arr,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -62,7 +62,10 @@ impl<AB: InteractionBuilder> Air<AB> for RangeCheckerGateAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &RangeGateCols<AB::Var> = (*local).borrow();
         let next: &RangeGateCols<AB::Var> = (*next).borrow();
 
@@ -76,10 +79,9 @@ impl<AB: InteractionBuilder> Air<AB> for RangeCheckerGateAir {
             .assert_eq(local.counter + AB::Expr::ONE, next.counter);
         // Constrain the last counter value to ensure trace height equals range_max
         // This is critical as the trace height is not part of the verification key
-        builder.when_last_row().assert_eq(
-            local.counter,
-            AB::F::from_canonical_u32(self.bus.range_max - 1),
-        );
+        builder
+            .when_last_row()
+            .assert_eq(local.counter, AB::F::from_u32(self.bus.range_max - 1));
         // Omit creating separate bridge.rs file for brevity
         self.bus.receive(local.counter).eval(builder, local.mult);
     }
@@ -144,7 +146,7 @@ impl RangeCheckerGateChip {
             .enumerate()
             .flat_map(|(i, count)| {
                 let c = count.swap(0, std::sync::atomic::Ordering::Relaxed);
-                vec![F::from_canonical_usize(i), F::from_canonical_u32(c)]
+                vec![F::from_usize(i), F::from_u32(c)]
             })
             .collect();
         RowMajorMatrix::new(rows, NUM_RANGE_GATE_COLS)

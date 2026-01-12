@@ -12,16 +12,16 @@ use crate::system::memory::{merkle::public_values::PUBLIC_VALUES_AS, online::PAG
 
 pub fn i32_to_f<F: PrimeField32>(val: i32) -> F {
     if val.signum() == -1 {
-        -F::from_canonical_u32(val.unsigned_abs())
+        -F::from_u32(val.unsigned_abs())
     } else {
-        F::from_canonical_u32(val as u32)
+        F::from_u32(val as u32)
     }
 }
 
 pub fn generate_long_number<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     rng: &mut StdRng,
 ) -> [u32; NUM_LIMBS] {
-    array::from_fn(|_| rng.gen_range(0..(1 << LIMB_BITS)))
+    array::from_fn(|_| rng.random_range(0..(1 << LIMB_BITS)))
 }
 
 // in little endian

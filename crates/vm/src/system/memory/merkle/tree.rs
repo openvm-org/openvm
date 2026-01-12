@@ -155,12 +155,10 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                                             height_section: F::from_bool(
                                                 height > md.address_height,
                                             ),
-                                            parent_height: F::from_canonical_usize(height),
+                                            parent_height: F::from_usize(height),
                                             is_root: F::from_bool(height == md.overall_height()),
-                                            parent_as_label: F::from_canonical_u32(parent_as_label),
-                                            parent_address_label: F::from_canonical_u32(
-                                                parent_address_label,
-                                            ),
+                                            parent_as_label: F::from_u32(parent_as_label),
+                                            parent_address_label: F::from_u32(parent_address_label),
                                             parent_hash: par_old_values,
                                             left_child_hash: *old_left,
                                             right_child_hash: *old_right,
@@ -172,12 +170,10 @@ impl<F: PrimeField32, const CHUNK: usize> MerkleTree<F, CHUNK> {
                                             height_section: F::from_bool(
                                                 height > md.address_height,
                                             ),
-                                            parent_height: F::from_canonical_usize(height),
+                                            parent_height: F::from_usize(height),
                                             is_root: F::from_bool(height == md.overall_height()),
-                                            parent_as_label: F::from_canonical_u32(parent_as_label),
-                                            parent_address_label: F::from_canonical_u32(
-                                                parent_address_label,
-                                            ),
+                                            parent_as_label: F::from_u32(parent_as_label),
+                                            parent_address_label: F::from_u32(parent_address_label),
                                             parent_hash: combined,
                                             left_child_hash: *left,
                                             right_child_hash: *right,

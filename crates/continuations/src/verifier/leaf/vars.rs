@@ -4,7 +4,7 @@ use openvm_native_compiler::prelude::*;
 use openvm_native_recursion::hints::Hintable;
 use openvm_stark_sdk::openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
     proof::Proof,
 };
 
@@ -55,7 +55,7 @@ impl Hintable<C> for UserPublicValuesRootProof<F> {
         }
     }
     fn write(&self) -> Vec<Vec<<C as Config>::N>> {
-        let len = <<C as Config>::N>::from_canonical_usize(self.sibling_hashes.len());
+        let len = <<C as Config>::N>::from_usize(self.sibling_hashes.len());
         let mut stream = len.write();
         stream.extend(
             self.sibling_hashes

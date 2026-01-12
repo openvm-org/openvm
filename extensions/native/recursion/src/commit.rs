@@ -17,7 +17,11 @@ pub trait PolynomialSpaceVariable<C: Config>: Sized + FromConstant<C> {
         point: Ext<C::F, C::EF>,
     ) -> LagrangeSelectors<Ext<C::F, C::EF>>;
 
-    fn zp_at_point(&self, builder: &mut Builder<C>, point: Ext<C::F, C::EF>) -> Ext<C::F, C::EF>;
+    fn vanishing_poly_at_point(
+        &self,
+        builder: &mut Builder<C>,
+        point: Ext<C::F, C::EF>,
+    ) -> Ext<C::F, C::EF>;
 
     fn split_domains(
         &self,

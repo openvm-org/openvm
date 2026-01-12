@@ -26,7 +26,7 @@ use openvm_mod_circuit_builder::{
     test_utils::generate_random_biguint, utils::biguint_to_limbs_vec, ExprBuilderConfig,
 };
 use openvm_pairing_guest::bls12_381::BLS12_381_MODULUS;
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
@@ -245,7 +245,7 @@ mod ec_addne_tests {
             let y1 = y1 % modulus;
             let x2 = x2 % modulus;
             let y2 = y2 % modulus;
-            if rng.gen_bool(0.5) {
+            if rng.random_bool(0.5) {
                 (x1, y1, x2, y2, Rv32WeierstrassOpcode::EC_ADD_NE as usize)
             } else {
                 (x2, y2, x1, y1, Rv32WeierstrassOpcode::EC_ADD_NE as usize)
@@ -268,34 +268,34 @@ mod ec_addne_tests {
         tester.write::<RV32_REGISTER_NUM_LIMBS>(
             ptr_as,
             rs1_ptr,
-            p1_base_addr.to_le_bytes().map(F::from_canonical_u8),
+            p1_base_addr.to_le_bytes().map(F::from_u8),
         );
         tester.write::<RV32_REGISTER_NUM_LIMBS>(
             ptr_as,
             rs2_ptr,
-            p2_base_addr.to_le_bytes().map(F::from_canonical_u8),
+            p2_base_addr.to_le_bytes().map(F::from_u8),
         );
         tester.write::<RV32_REGISTER_NUM_LIMBS>(
             ptr_as,
             rd_ptr,
-            result_base_addr.to_le_bytes().map(F::from_canonical_u8),
+            result_base_addr.to_le_bytes().map(F::from_u8),
         );
 
         let x1_limbs: Vec<F> = biguint_to_limbs_vec(&x1, NUM_LIMBS)
             .into_iter()
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect();
         let x2_limbs: Vec<F> = biguint_to_limbs_vec(&x2, NUM_LIMBS)
             .into_iter()
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect();
         let y1_limbs: Vec<F> = biguint_to_limbs_vec(&y1, NUM_LIMBS)
             .into_iter()
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect();
         let y2_limbs: Vec<F> = biguint_to_limbs_vec(&y2, NUM_LIMBS)
             .into_iter()
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect();
 
         for i in (0..NUM_LIMBS).step_by(BLOCK_SIZE) {
@@ -718,21 +718,21 @@ mod ec_double_tests {
         tester.write::<RV32_REGISTER_NUM_LIMBS>(
             ptr_as,
             rs1_ptr,
-            p1_base_addr.to_le_bytes().map(F::from_canonical_u8),
+            p1_base_addr.to_le_bytes().map(F::from_u8),
         );
         tester.write::<RV32_REGISTER_NUM_LIMBS>(
             ptr_as,
             rd_ptr,
-            result_base_addr.to_le_bytes().map(F::from_canonical_u8),
+            result_base_addr.to_le_bytes().map(F::from_u8),
         );
 
         let x1_limbs: Vec<F> = biguint_to_limbs_vec(&x1, NUM_LIMBS)
             .into_iter()
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect();
         let y1_limbs: Vec<F> = biguint_to_limbs_vec(&y1, NUM_LIMBS)
             .into_iter()
-            .map(F::from_canonical_u8)
+            .map(F::from_u8)
             .collect();
 
         for i in (0..NUM_LIMBS).step_by(BLOCK_SIZE) {

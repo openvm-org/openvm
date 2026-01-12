@@ -24,7 +24,7 @@ use openvm_rv32im_transpiler::BaseAluOpcode::ADD;
 use openvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -129,19 +129,19 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     initial_pc: Option<u32>,
     rs1: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
 ) {
-    let imm = initial_imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
-    let imm_sign = initial_imm_sign.unwrap_or(rng.gen_range(0..2));
+    let imm = initial_imm.unwrap_or(rng.random_range(0..(1 << IMM_BITS)));
+    let imm_sign = initial_imm_sign.unwrap_or(rng.random_range(0..2));
     let imm_ext = imm + (imm_sign * 0xffff0000);
-    let a = rng.gen_range(0..32) << 2;
-    let b = rng.gen_range(1..32) << 2;
-    let to_pc = rng.gen_range(0..(1 << PC_BITS));
+    let a = rng.random_range(0..32) << 2;
+    let b = rng.random_range(1..32) << 2;
+    let to_pc = rng.random_range(0..(1 << PC_BITS));
 
     let rs1 = rs1.unwrap_or(into_limbs((to_pc as u32).wrapping_sub(imm_ext)));
-    let rs1 = rs1.map(F::from_canonical_u32);
+    let rs1 = rs1.map(F::from_u32);
 
     tester.write(1, b, rs1);
 
-    let initial_pc = initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS)));
+    let initial_pc = initial_pc.unwrap_or(rng.random_range(0..(1 << PC_BITS)));
     tester.execute_with_pc(
         executor,
         arena,
@@ -167,7 +167,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let rd_data = if a == 0 { [0; 4] } else { rd_data };
 
     assert_eq!(next_pc & !1, final_pc);
-    assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<4>(1, a));
+    assert_eq!(rd_data.map(F::from_u8), tester.read::<4>(1, a));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -250,24 +250,24 @@ fn run_negative_jalr_test(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
+        let mut trace_row = trace.row_slice(0).expect("row exists").to_vec();
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
         let core_cols: &mut Rv32JalrCoreCols<F> = core_row.borrow_mut();
 
         if let Some(data) = prank_vals.rd_data {
-            core_cols.rd_data = data.map(F::from_canonical_u32);
+            core_cols.rd_data = data.map(F::from_u32);
         }
         if let Some(data) = prank_vals.rs1_data {
-            core_cols.rs1_data = data.map(F::from_canonical_u32);
+            core_cols.rs1_data = data.map(F::from_u32);
         }
         if let Some(data) = prank_vals.to_pc_least_sig_bit {
-            core_cols.to_pc_least_sig_bit = F::from_canonical_u32(data);
+            core_cols.to_pc_least_sig_bit = F::from_u32(data);
         }
         if let Some(data) = prank_vals.to_pc_limbs {
-            core_cols.to_pc_limbs = data.map(F::from_canonical_u32);
+            core_cols.to_pc_limbs = data.map(F::from_u32);
         }
         if let Some(data) = prank_vals.imm_sign {
-            core_cols.imm_sign = F::from_canonical_u32(data);
+            core_cols.imm_sign = F::from_u32(data);
         }
 
         *trace = RowMajorMatrix::new(trace_row, trace.width());
@@ -347,7 +347,7 @@ fn overflow_negative_tests() {
         Some(0),
         JalrPrankValues {
             to_pc_limbs: Some([
-                (F::NEG_ONE * F::from_canonical_u32((1 << 14) + 1)).as_canonical_u32(),
+                (F::NEG_ONE * F::from_u32((1 << 14) + 1)).as_canonical_u32(),
                 1,
             ]),
             ..Default::default()

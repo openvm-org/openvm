@@ -16,7 +16,7 @@ use openvm_circuit_primitives::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField64},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField64},
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -331,7 +331,7 @@ impl<F: Field> BaseAir<F> for FieldExpr {
 impl<AB: InteractionBuilder> Air<AB> for FieldExpr {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         SubAir::eval(self, builder, &local);
     }
 }
@@ -394,7 +394,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             for (lhs, rhs) in zip_eq(&reads, expected) {
                 builder
                     .when(is_setup.clone())
-                    .assert_eq(lhs.clone(), AB::F::from_canonical_usize(rhs));
+                    .assert_eq(lhs.clone(), AB::F::from_usize(rhs));
             }
         }
 
@@ -406,9 +406,9 @@ impl<AB: InteractionBuilder> SubAir<AB> for FieldExpr {
             .map(|(_, limbs)| {
                 let limbs_expr: Vec<_> = limbs
                     .iter()
-                    .map(|limb| AB::Expr::from_canonical_usize(*limb))
+                    .map(|limb| AB::Expr::from_usize(*limb))
                     .collect();
-                OverflowInt::from_canonical_unsigned_limbs(limbs_expr, self.limb_bits)
+                OverflowInt::from_unsigned_limbs(limbs_expr, self.limb_bits)
             })
             .collect();
 
@@ -487,7 +487,7 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
             .iter()
             .map(|x| OverflowInt::<isize>::from_biguint(x, self.limb_bits, Some(self.num_limbs)))
             .collect::<Vec<_>>();
-        let zero = OverflowInt::<isize>::from_canonical_unsigned_limbs(vec![0], limb_bits);
+        let zero = OverflowInt::<isize>::from_unsigned_limbs(vec![0], limb_bits);
         let mut vars_overflow = vec![zero; self.num_variables];
         // Note: in cases where the prime fits in less limbs than `num_limbs`, we use the smaller
         // number of limbs.
@@ -498,7 +498,7 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
             .iter()
             .map(|(_, limbs)| {
                 let limbs_isize: Vec<_> = limbs.iter().map(|i| *i as isize).collect();
-                OverflowInt::from_canonical_unsigned_limbs(limbs_isize, self.limb_bits)
+                OverflowInt::from_unsigned_limbs(limbs_isize, self.limb_bits)
             })
             .collect();
 
@@ -525,7 +525,7 @@ impl<F: PrimeField64> TraceSubRowGenerator<F> for FieldExpr {
             for &q in q_limbs.iter() {
                 range_checker.add_count((q + (1 << limb_bits)) as u32, limb_bits + 1);
             }
-            let q_overflow = OverflowInt::from_canonical_signed_limbs(q_limbs.clone(), limb_bits);
+            let q_overflow = OverflowInt::from_signed_limbs(q_limbs.clone(), limb_bits);
             // compute carries of (expr - q * p)
             let expr = self.constraints[i].evaluate_overflow_isize(
                 &input_overflow,
@@ -658,8 +658,8 @@ fn load_overflow<AB: AirBuilder>(
 ) -> Vec<OverflowInt<AB::Expr>> {
     let mut result = vec![];
     for x in arr.into_iter() {
-        let limbs: Vec<AB::Expr> = x.iter().map(|x| (*x).into()).collect();
-        result.push(OverflowInt::<AB::Expr>::from_canonical_unsigned_limbs(
+        let limbs: Vec<AB::Expr> = x.iter().cloned().map(|x| x.into()).collect();
+        result.push(OverflowInt::<AB::Expr>::from_unsigned_limbs(
             limbs, limb_bits,
         ));
     }

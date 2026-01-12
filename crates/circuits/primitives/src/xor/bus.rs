@@ -1,6 +1,6 @@
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, LookupBus},
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
 };
 
 /// Represents a bus for `(x, y, x ^ y)` identified by a unique bus index (`usize`).
@@ -53,7 +53,7 @@ pub struct XorBusInteraction<T> {
     pub is_lookup: bool,
 }
 
-impl<T: FieldAlgebra> XorBusInteraction<T> {
+impl<T: PrimeCharacteristicRing> XorBusInteraction<T> {
     /// Finalizes and sends/receives over the Xor bus.
     pub fn eval<AB>(self, builder: &mut AB, count: impl Into<AB::Expr>)
     where

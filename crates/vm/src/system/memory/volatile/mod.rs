@@ -18,7 +18,7 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::{cpu::CpuBackend, types::AirProvingContext},
@@ -116,7 +116,7 @@ impl<AB: InteractionBuilder> Air<AB> for VolatileBoundaryAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let [local, next] = [0, 1].map(|i| main.row_slice(i));
+        let [local, next] = [0, 1].map(|i| main.row_slice(i).expect("window row present"));
         let local: &VolatileBoundaryCols<_> = (*local).borrow();
         let next: &VolatileBoundaryCols<_> = (*next).borrow();
 
@@ -272,7 +272,7 @@ where
                 range_checker.decompose(*ptr, self.pointer_max_bits, &mut row.pointer_limbs);
                 row.initial_data = Val::<SC>::ZERO;
                 row.final_data = data;
-                row.final_timestamp = Val::<SC>::from_canonical_u32(timestamped_values.timestamp);
+                row.final_timestamp = Val::<SC>::from_u32(timestamped_values.timestamp);
                 row.is_valid = Val::<SC>::ONE;
 
                 // If next.is_valid == 1:
@@ -282,13 +282,10 @@ where
                     addr_lt_air.0.generate_subrow(
                         (
                             self.range_checker.as_ref(),
+                            &[Val::<SC>::from_u32(*addr_space), Val::<SC>::from_u32(*ptr)],
                             &[
-                                Val::<SC>::from_canonical_u32(*addr_space),
-                                Val::<SC>::from_canonical_u32(*ptr),
-                            ],
-                            &[
-                                Val::<SC>::from_canonical_u32(next_addr_space),
-                                Val::<SC>::from_canonical_u32(next_ptr),
+                                Val::<SC>::from_u32(next_addr_space),
+                                Val::<SC>::from_u32(next_ptr),
                             ],
                         ),
                         ((&mut row.addr_lt_aux).into(), &mut out),

@@ -5,7 +5,7 @@ use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::{cpu::CpuBackend, types::AirProvingContext},
@@ -71,7 +71,7 @@ where
     fn start_offset(&self) -> usize;
 
     fn start_offset_expr(&self) -> AB::Expr {
-        AB::Expr::from_canonical_usize(self.start_offset())
+        AB::Expr::from_usize(self.start_offset())
     }
 
     fn expr_to_global_expr(&self, local_expr: impl Into<AB::Expr>) -> AB::Expr {
@@ -79,7 +79,7 @@ where
     }
 
     fn opcode_to_global_expr(&self, local_opcode: impl LocalOpcode) -> AB::Expr {
-        self.expr_to_global_expr(AB::Expr::from_canonical_usize(local_opcode.local_usize()))
+        self.expr_to_global_expr(AB::Expr::from_usize(local_opcode.local_usize()))
     }
 }
 
@@ -251,7 +251,7 @@ where
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local: &[AB::Var] = (*local).borrow();
         let (local_adapter, local_core) = local.split_at(self.adapter.width());
 

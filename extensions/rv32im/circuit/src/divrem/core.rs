@@ -21,7 +21,7 @@ use openvm_rv32im_transpiler::DivRemOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 use strum::IntoEnumIterator;
@@ -121,9 +121,9 @@ where
 
         // Constrain that b = (c * q + r) % 2^{NUM_LIMBS * LIMB_BITS} and range checkeach element in
         // q.
-        let b_ext = cols.b_sign * AB::F::from_canonical_u32((1 << LIMB_BITS) - 1);
-        let c_ext = cols.c_sign * AB::F::from_canonical_u32((1 << LIMB_BITS) - 1);
-        let carry_divide = AB::F::from_canonical_u32(1 << LIMB_BITS).inverse();
+        let b_ext = cols.b_sign * AB::F::from_u32((1 << LIMB_BITS) - 1);
+        let c_ext = cols.c_sign * AB::F::from_u32((1 << LIMB_BITS) - 1);
+        let carry_divide = AB::F::from_u32(1 << LIMB_BITS).inverse();
         let mut carry: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
 
         for i in 0..NUM_LIMBS {
@@ -143,7 +143,7 @@ where
 
         // Constrain that the upper limbs of b = c * q + r are all equal to b_ext and
         // range check each element in r.
-        let q_ext = cols.q_sign * AB::F::from_canonical_u32((1 << LIMB_BITS) - 1);
+        let q_ext = cols.q_sign * AB::F::from_u32((1 << LIMB_BITS) - 1);
         let mut carry_ext: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
 
         for j in 0..NUM_LIMBS {
@@ -183,7 +183,7 @@ where
         let mut when_zero_divisor = builder.when(cols.zero_divisor);
         for i in 0..NUM_LIMBS {
             when_zero_divisor.assert_zero(c[i]);
-            when_zero_divisor.assert_eq(q[i], AB::F::from_canonical_u32((1 << LIMB_BITS) - 1));
+            when_zero_divisor.assert_eq(q[i], AB::F::from_u32((1 << LIMB_BITS) - 1));
         }
         // c_sum is guaranteed to be non-zero if c is non-zero since we assume
         // each limb of c to be within [0, 2^LIMB_BITS) already.
@@ -223,7 +223,7 @@ where
             .when(not::<AB::Expr>(signed.clone()))
             .assert_zero(cols.c_sign);
         builder.assert_eq(
-            cols.b_sign + cols.c_sign - AB::Expr::from_canonical_u32(2) * cols.b_sign * cols.c_sign,
+            cols.b_sign + cols.c_sign - AB::Expr::from_u32(2) * cols.b_sign * cols.c_sign,
             cols.sign_xor,
         );
 
@@ -247,11 +247,11 @@ where
             .assert_zero(cols.q_sign);
 
         // Check that the signs of b and c are correct.
-        let sign_mask = AB::F::from_canonical_u32(1 << (LIMB_BITS - 1));
+        let sign_mask = AB::F::from_u32(1 << (LIMB_BITS - 1));
         self.bitwise_lookup_bus
             .send_range(
-                AB::Expr::from_canonical_u32(2) * (b[NUM_LIMBS - 1] - cols.b_sign * sign_mask),
-                AB::Expr::from_canonical_u32(2) * (c[NUM_LIMBS - 1] - cols.c_sign * sign_mask),
+                AB::Expr::from_u32(2) * (b[NUM_LIMBS - 1] - cols.b_sign * sign_mask),
+                AB::Expr::from_u32(2) * (c[NUM_LIMBS - 1] - cols.c_sign * sign_mask),
             )
             .eval(builder, signed.clone());
 
@@ -284,7 +284,7 @@ where
             );
             builder
                 .when(cols.sign_xor)
-                .assert_one((r_p[i] - AB::F::from_canonical_u32(1 << LIMB_BITS)) * cols.r_inv[i]);
+                .assert_one((r_p[i] - AB::F::from_u32(1 << LIMB_BITS)) * cols.r_inv[i]);
             builder
                 .when(cols.sign_xor)
                 .when(not::<AB::Expr>(carry_lt[i].clone()))
@@ -295,8 +295,8 @@ where
         let mut prefix_sum = special_case.clone();
 
         for i in (0..NUM_LIMBS).rev() {
-            let diff = r_p[i] * (AB::Expr::from_canonical_u8(2) * cols.c_sign - AB::Expr::ONE)
-                + c[i] * (AB::Expr::ONE - AB::Expr::from_canonical_u8(2) * cols.c_sign);
+            let diff = r_p[i] * (AB::Expr::from_u8(2) * cols.c_sign - AB::Expr::ONE)
+                + c[i] * (AB::Expr::ONE - AB::Expr::from_u8(2) * cols.c_sign);
             prefix_sum += marker[i].into();
             builder.assert_bool(marker[i]);
             builder.assert_zero(not::<AB::Expr>(prefix_sum.clone()) * diff.clone());
@@ -317,9 +317,9 @@ where
         let expected_opcode = flags.iter().zip(DivRemOpcode::iter()).fold(
             AB::Expr::ZERO,
             |acc, (flag, local_opcode)| {
-                acc + (*flag).into() * AB::Expr::from_canonical_u8(local_opcode as u8)
+                acc + (*flag).into() * AB::Expr::from_u8(local_opcode as u8)
             },
-        ) + AB::Expr::from_canonical_usize(self.offset);
+        ) + AB::Expr::from_usize(self.offset);
 
         let is_div = cols.opcode_div_flag + cols.opcode_divu_flag;
         let a = array::from_fn(|i| select(is_div.clone(), q[i], r[i]));
@@ -534,20 +534,18 @@ where
                 record.c[idx] as u32 - r_prime[idx]
             };
             self.bitwise_lookup_chip.request_range(val - 1, 0);
-            core_row.lt_diff = F::from_canonical_u32(val);
+            core_row.lt_diff = F::from_u32(val);
             core_row.lt_marker[idx] = F::ONE;
         }
 
-        let r_prime_f = r_prime.map(F::from_canonical_u32);
-        core_row.r_inv = r_prime_f.map(|r| (r - F::from_canonical_u32(256)).inverse());
+        let r_prime_f = r_prime.map(F::from_u32);
+        core_row.r_inv = r_prime_f.map(|r| (r - F::from_u32(256)).inverse());
         core_row.r_prime = r_prime_f;
 
-        let r_sum_f = r
-            .iter()
-            .fold(F::ZERO, |acc, r| acc + F::from_canonical_u32(*r));
+        let r_sum_f = r.iter().fold(F::ZERO, |acc, r| acc + F::from_u32(*r));
         core_row.r_sum_inv = r_sum_f.try_inverse().unwrap_or(F::ZERO);
 
-        let c_sum_f = F::from_canonical_u32(record.c.iter().fold(0, |acc, c| acc + *c as u32));
+        let c_sum_f = F::from_u32(record.c.iter().fold(0, |acc, c| acc + *c as u32));
         core_row.c_sum_inv = c_sum_f.try_inverse().unwrap_or(F::ZERO);
 
         core_row.sign_xor = F::from_bool(sign_xor);
@@ -558,10 +556,10 @@ where
         core_row.r_zero = F::from_bool(r_zero);
         core_row.zero_divisor = F::from_bool(case == DivRemCoreSpecialCase::ZeroDivisor);
 
-        core_row.r = r.map(F::from_canonical_u32);
-        core_row.q = q.map(F::from_canonical_u32);
-        core_row.c = record.c.map(F::from_canonical_u8);
-        core_row.b = record.b.map(F::from_canonical_u8);
+        core_row.r = r.map(F::from_u32);
+        core_row.q = q.map(F::from_u32);
+        core_row.c = record.c.map(F::from_u8);
+        core_row.b = record.b.map(F::from_u8);
     }
 }
 

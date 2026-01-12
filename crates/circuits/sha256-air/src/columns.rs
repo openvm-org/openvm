@@ -1,7 +1,7 @@
 //! WARNING: the order of fields in the structs is important, do not change it
 
 use openvm_circuit_primitives::{utils::not, AlignedBorrow};
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 
 use super::{
     SHA256_HASH_WORDS, SHA256_ROUNDS_PER_ROW, SHA256_ROW_VAR_CNT, SHA256_WORD_BITS,
@@ -133,7 +133,7 @@ impl<O, T: Copy + core::ops::Add<Output = O>> Sha256FlagsCols<T> {
     // function.
     pub fn is_padding_row(&self) -> O
     where
-        O: FieldAlgebra,
+        O: PrimeCharacteristicRing,
     {
         not(self.is_not_padding_row())
     }

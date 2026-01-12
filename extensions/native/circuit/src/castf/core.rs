@@ -15,7 +15,7 @@ use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 
@@ -71,7 +71,7 @@ where
             .iter()
             .enumerate()
             .fold(AB::Expr::ZERO, |acc, (i, &limb)| {
-                acc + limb * AB::Expr::from_canonical_u32(1 << (i * LIMB_BITS))
+                acc + limb * AB::Expr::from_u32(1 << (i * LIMB_BITS))
             });
 
         for i in 0..4 {
@@ -93,9 +93,7 @@ where
             writes: [cols.out_val.map(Into::into)].into(),
             instruction: MinimalInstruction {
                 is_valid: cols.is_valid.into(),
-                opcode: AB::Expr::from_canonical_usize(
-                    CastfOpcode::CASTF.global_opcode().as_usize(),
-                ),
+                opcode: AB::Expr::from_usize(CastfOpcode::CASTF.global_opcode().as_usize()),
             }
             .into(),
         }
@@ -190,8 +188,8 @@ where
             self.range_checker_chip.add_count(limb as u32, limb_bits);
         }
         core_row.is_valid = F::ONE;
-        core_row.out_val = out.map(F::from_canonical_u8);
-        core_row.in_val = F::from_canonical_u32(record.val);
+        core_row.out_val = out.map(F::from_u8);
+        core_row.in_val = F::from_u32(record.val);
     }
 }
 

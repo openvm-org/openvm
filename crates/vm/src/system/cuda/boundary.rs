@@ -198,7 +198,7 @@ mod tests {
         Chip,
     };
     use openvm_stark_sdk::utils::create_seeded_rng;
-    use p3_field::FieldAlgebra;
+    use p3_field::PrimeCharacteristicRing;
     use rand::Rng;
 
     use super::{BoundaryChipGPU, VariableRangeCheckerChipGPU};
@@ -214,15 +214,15 @@ mod tests {
 
         let mut distinct_addresses = HashSet::new();
         while distinct_addresses.len() < NUM_ADDRESSES {
-            let addr_space = rng.gen_range(0..MAX_ADDRESS_SPACE);
-            let pointer = rng.gen_range(0..(1 << LIMB_BITS));
+            let addr_space = rng.random_range(0..MAX_ADDRESS_SPACE);
+            let pointer = rng.random_range(0..(1 << LIMB_BITS));
             distinct_addresses.insert((addr_space, pointer));
         }
 
         let mut final_memory = TimestampedEquipartition::<F, 1>::new();
         for (addr_space, pointer) in distinct_addresses.iter().cloned() {
-            let final_data = F::from_canonical_u32(rng.gen_range(0..(1 << LIMB_BITS)));
-            let final_clk = rng.gen_range(1..(1 << LIMB_BITS)) as u32;
+            let final_data = F::from_u32(rng.random_range(0..(1 << LIMB_BITS)));
+            let final_clk = rng.random_range(1..(1 << LIMB_BITS)) as u32;
 
             final_memory.push((
                 (addr_space, pointer),

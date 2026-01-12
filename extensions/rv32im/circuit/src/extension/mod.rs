@@ -771,7 +771,7 @@ mod phantom {
                 (hint.len() as u32)
                     .to_le_bytes()
                     .iter()
-                    .map(|b| F::from_canonical_u8(*b)),
+                    .map(|b| F::from_u8(*b)),
             );
             // Extend by 0 for 4 byte alignment
             let capacity = hint.len().div_ceil(4) * 4;
@@ -799,9 +799,9 @@ mod phantom {
 
             let len = read_rv32_register(memory, a) as usize;
             streams.hint_stream.clear();
-            streams.hint_stream.extend(
-                std::iter::repeat_with(|| F::from_canonical_u8(rng.gen::<u8>())).take(len * 4),
-            );
+            streams
+                .hint_stream
+                .extend(std::iter::repeat_with(|| F::from_u8(rng.random::<u8>())).take(len * 4));
             Ok(())
         }
     }
@@ -866,7 +866,7 @@ mod phantom {
             offset += 4;
             let v = (0..v_len)
                 .map(|_| {
-                    let ret = F::from_canonical_u32(extract_u32(value, offset));
+                    let ret = F::from_u32(extract_u32(value, offset));
                     offset += 4;
                     ret
                 })

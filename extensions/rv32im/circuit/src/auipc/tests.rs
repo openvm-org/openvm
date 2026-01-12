@@ -15,7 +15,7 @@ use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcod
 use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -104,18 +104,18 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 ) where
     Rv32AuipcExecutor: PreflightExecutor<F, RA>,
 {
-    let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS))) as usize;
-    let a = rng.gen_range(0..32) << 2;
+    let imm = imm.unwrap_or(rng.random_range(0..(1 << IMM_BITS))) as usize;
+    let a = rng.random_range(0..32) << 2;
 
     tester.execute_with_pc(
         executor,
         arena,
         &Instruction::from_usize(opcode.global_opcode(), [a, 0, imm, 1, 0]),
-        initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
+        initial_pc.unwrap_or(rng.random_range(0..(1 << PC_BITS))),
     );
     let initial_pc = tester.last_from_pc().as_canonical_u32();
     let rd_data = run_auipc(initial_pc, imm as u32);
-    assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<4>(1, a));
+    assert_eq!(rd_data.map(F::from_u8), tester.read::<4>(1, a));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -188,18 +188,18 @@ fn run_negative_auipc_test(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<F>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
+        let mut trace_row = trace.row_slice(0).expect("row exists").to_vec();
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
         let core_cols: &mut Rv32AuipcCoreCols<F> = core_row.borrow_mut();
 
         if let Some(data) = prank_vals.rd_data {
-            core_cols.rd_data = data.map(F::from_canonical_u32);
+            core_cols.rd_data = data.map(F::from_u32);
         }
         if let Some(data) = prank_vals.imm_limbs {
-            core_cols.imm_limbs = data.map(F::from_canonical_u32);
+            core_cols.imm_limbs = data.map(F::from_u32);
         }
         if let Some(data) = prank_vals.pc_limbs {
-            core_cols.pc_limbs = data.map(F::from_canonical_u32);
+            core_cols.pc_limbs = data.map(F::from_u32);
         }
 
         *trace = RowMajorMatrix::new(trace_row, trace.width());
@@ -373,9 +373,9 @@ fn test_cuda_rand_auipc_tracegen() {
     let num_ops = 100;
 
     for _ in 0..num_ops {
-        let imm = rng.gen_range(0..(1 << IMM_BITS)) as usize;
+        let imm = rng.random_range(0..(1 << IMM_BITS)) as usize;
         let a = gen_pointer(&mut rng, RV32_REGISTER_NUM_LIMBS);
-        let initial_pc = rng.gen_range(0..(1 << PC_BITS));
+        let initial_pc = rng.random_range(0..(1 << PC_BITS));
 
         tester.execute_with_pc(
             &mut harness.executor,

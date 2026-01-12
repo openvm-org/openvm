@@ -1,6 +1,6 @@
 use openvm_native_circuit::execute_program;
 use openvm_native_compiler::{asm::AsmBuilder, ir::Var};
-use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
+use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, PrimeCharacteristicRing};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 type F = BabyBear;
@@ -13,8 +13,8 @@ fn test_compiler_conditionals() {
     let zero: Var<_> = builder.eval(F::ZERO);
     let one: Var<_> = builder.eval(F::ONE);
     let two: Var<_> = builder.eval(F::TWO);
-    let three: Var<_> = builder.eval(F::from_canonical_u32(3));
-    let four: Var<_> = builder.eval(F::from_canonical_u32(4));
+    let three: Var<_> = builder.eval(F::from_u32(3));
+    let four: Var<_> = builder.eval(F::from_u32(4));
 
     let c: Var<_> = builder.eval(F::ZERO);
     builder.if_eq(zero, zero).then(|builder| {
@@ -60,8 +60,8 @@ fn test_compiler_conditionals_v2() {
     let zero: Var<_> = builder.eval(F::ZERO);
     let one: Var<_> = builder.eval(F::ONE);
     let two: Var<_> = builder.eval(F::TWO);
-    let three: Var<_> = builder.eval(F::from_canonical_u32(3));
-    let four: Var<_> = builder.eval(F::from_canonical_u32(4));
+    let three: Var<_> = builder.eval(F::from_u32(3));
+    let four: Var<_> = builder.eval(F::from_u32(4));
 
     let c: Var<_> = builder.eval(F::ZERO);
     builder.if_eq(zero, zero).then(|builder| {
@@ -88,9 +88,9 @@ fn test_compiler_conditionals_const() {
 
     let zero = builder.eval_expr(F::ZERO);
     let one = builder.eval_expr(F::ONE);
-    let two = builder.eval_expr(F::from_canonical_u32(2));
-    let three = builder.eval_expr(F::from_canonical_u32(3));
-    let four = builder.eval_expr(F::from_canonical_u32(4));
+    let two = builder.eval_expr(F::from_u32(2));
+    let three = builder.eval_expr(F::from_u32(3));
+    let four = builder.eval_expr(F::from_u32(4));
 
     // 1 instruction to evaluate the variable.
     let c: Var<_> = builder.eval(F::ZERO);

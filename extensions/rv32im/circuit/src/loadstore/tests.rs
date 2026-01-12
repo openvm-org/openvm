@@ -14,7 +14,7 @@ use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, Loc
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -22,7 +22,7 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use rand::{rngs::StdRng, seq::SliceRandom, Rng};
+use rand::{prelude::IndexedRandom, rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
@@ -110,8 +110,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     imm_sign: Option<u32>,
     mem_as: Option<usize>,
 ) {
-    let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
-    let imm_sign = imm_sign.unwrap_or(rng.gen_range(0..2));
+    let imm = imm.unwrap_or(rng.random_range(0..(1 << IMM_BITS)));
+    let imm_sign = imm_sign.unwrap_or(rng.random_range(0..2));
     let imm_ext = imm + imm_sign * 0xffff0000;
 
     let alignment = match opcode {
@@ -121,7 +121,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         _ => unreachable!(),
     };
 
-    let ptr_val: u32 = rng.gen_range(0..(1 << (tester.address_bits() - alignment))) << alignment;
+    let ptr_val: u32 = rng.random_range(0..(1 << (tester.address_bits() - alignment))) << alignment;
     let rs1 = rs1.unwrap_or(ptr_val.wrapping_sub(imm_ext).to_le_bytes());
     let ptr_val = imm_ext.wrapping_add(u32::from_le_bytes(rs1));
     let a = gen_pointer(rng, 4);
@@ -135,12 +135,12 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     });
 
     let shift_amount = ptr_val % 4;
-    tester.write(1, b, rs1.map(F::from_canonical_u8));
+    tester.write(1, b, rs1.map(F::from_u8));
 
     let mut some_prev_data: [F; RV32_REGISTER_NUM_LIMBS] =
-        array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << RV32_CELL_BITS))));
+        array::from_fn(|_| F::from_u32(rng.random_range(0..(1 << RV32_CELL_BITS))));
     let mut read_data: [F; RV32_REGISTER_NUM_LIMBS] =
-        array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << RV32_CELL_BITS))));
+        array::from_fn(|_| F::from_u32(rng.random_range(0..(1 << RV32_CELL_BITS))));
 
     if is_load {
         if a == 0 {
@@ -150,7 +150,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         tester.write(mem_as, (ptr_val - shift_amount) as usize, read_data);
     } else {
         if mem_as == 4 {
-            some_prev_data = array::from_fn(|_| rng.gen());
+            some_prev_data = array::from_fn(|_| rng.random());
         }
         if a == 0 {
             read_data = [F::ZERO; RV32_REGISTER_NUM_LIMBS];
@@ -184,7 +184,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         some_prev_data.map(|x| x.as_canonical_u32()),
         shift_amount as usize,
     )
-    .map(F::from_canonical_u32);
+    .map(F::from_u32);
     if is_load {
         if enabled_write {
             assert_eq!(write_data, tester.read::<4>(1, a));
@@ -289,28 +289,28 @@ fn run_negative_loadstore_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
+        let mut trace_row = trace.row_slice(0).expect("row exists").to_vec();
         let (adapter_row, core_row) = trace_row.split_at_mut(adapter_width);
         let adapter_cols: &mut Rv32LoadStoreAdapterCols<F> = adapter_row.borrow_mut();
         let core_cols: &mut LoadStoreCoreCols<F, RV32_REGISTER_NUM_LIMBS> = core_row.borrow_mut();
 
         if let Some(read_data) = prank_vals.read_data {
-            core_cols.read_data = read_data.map(F::from_canonical_u32);
+            core_cols.read_data = read_data.map(F::from_u32);
         }
         if let Some(prev_data) = prank_vals.prev_data {
-            core_cols.prev_data = prev_data.map(F::from_canonical_u32);
+            core_cols.prev_data = prev_data.map(F::from_u32);
         }
         if let Some(write_data) = prank_vals.write_data {
-            core_cols.write_data = write_data.map(F::from_canonical_u32);
+            core_cols.write_data = write_data.map(F::from_u32);
         }
         if let Some(flags) = prank_vals.flags {
-            core_cols.flags = flags.map(F::from_canonical_u32);
+            core_cols.flags = flags.map(F::from_u32);
         }
         if let Some(is_load) = prank_vals.is_load {
             core_cols.is_load = F::from_bool(is_load);
         }
         if let Some(mem_as) = prank_vals.mem_as {
-            adapter_cols.mem_as = F::from_canonical_u32(mem_as);
+            adapter_cols.mem_as = F::from_u32(mem_as);
         }
 
         *trace = RowMajorMatrix::new(trace_row, trace.width());

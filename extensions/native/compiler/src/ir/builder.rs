@@ -3,7 +3,7 @@ use std::{iter::Zip, vec::IntoIter};
 use backtrace::Backtrace;
 use itertools::izip;
 use openvm_native_compiler_derive::iter_zip;
-use openvm_stark_backend::p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra};
+use openvm_stark_backend::p3_field::{BasedVectorSpace, Field, PrimeCharacteristicRing};
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -386,7 +386,7 @@ impl<C: Config> Builder<C> {
                 },
                 step_sizes: arrays
                     .iter()
-                    .map(|array| C::N::from_canonical_usize(array.element_size_of()))
+                    .map(|array| C::N::from_usize(array.element_size_of()))
                     .collect(),
                 builder: self,
             }
@@ -396,7 +396,7 @@ impl<C: Config> Builder<C> {
     }
 
     pub fn print_debug(&mut self, val: usize) {
-        let constant = self.eval(C::N::from_canonical_usize(val));
+        let constant = self.eval(C::N::from_usize(val));
         self.print_v(constant);
     }
 
@@ -446,7 +446,7 @@ impl<C: Config> Builder<C> {
     }
 
     pub fn hint_ext(&mut self) -> Ext<C::F, C::EF> {
-        let flattened = self.hint_felts_fixed(C::EF::D);
+        let flattened = self.hint_felts_fixed(C::EF::DIMENSION);
 
         // Simply recast memory as Array<Ext>.
         let array: Array<C, Ext<_, _>> = match flattened {
@@ -544,7 +544,7 @@ impl<C: Config> Builder<C> {
         let flattened = self.hint_felts();
 
         let size = <Ext<C::F, C::EF> as MemVariable<C>>::size_of();
-        self.assert_usize_eq(flattened.len(), len * C::N::from_canonical_usize(size));
+        self.assert_usize_eq(flattened.len(), len * C::N::from_usize(size));
 
         // Simply recast memory as Array<Ext>.
         match flattened {

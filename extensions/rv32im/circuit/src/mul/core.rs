@@ -17,7 +17,7 @@ use openvm_rv32im_transpiler::MulOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
 
@@ -74,7 +74,7 @@ where
         // If 0 <= a[i], carry[i] < 2^LIMB_BITS, it can be proven that a[i] = sum_{k=0}^{i} (b[k] *
         // c[i - k]) % 2^LIMB_BITS as necessary.
         let mut carry: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
-        let carry_divide = AB::F::from_canonical_u32(1 << LIMB_BITS).inverse();
+        let carry_divide = AB::F::from_u32(1 << LIMB_BITS).inverse();
 
         for i in 0..NUM_LIMBS {
             let expected_limb = if i == 0 {
@@ -242,9 +242,9 @@ where
 
         // write in reverse order
         core_row.is_valid = F::ONE;
-        core_row.c = record.c.map(F::from_canonical_u8);
-        core_row.b = record.b.map(F::from_canonical_u8);
-        core_row.a = a.map(F::from_canonical_u8);
+        core_row.c = record.c.map(F::from_u8);
+        core_row.b = record.b.map(F::from_u8);
+        core_row.a = a.map(F::from_u8);
     }
 }
 

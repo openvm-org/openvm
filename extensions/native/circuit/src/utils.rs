@@ -32,7 +32,7 @@ pub mod test_utils {
         engine::StarkFriEngine,
         p3_baby_bear::BabyBear,
     };
-    use rand::{distributions::Standard, prelude::Distribution, rngs::StdRng, Rng};
+    use rand::{rngs::StdRng, Rng};
 
     use crate::{NativeConfig, NativeCpuBuilder, Rv32WithKernelsConfig};
 
@@ -44,13 +44,13 @@ pub mod test_utils {
         value: F,
         is_imm: Option<bool>,
     ) -> (F, usize) {
-        let is_imm = is_imm.unwrap_or(rng.gen_bool(0.5));
+        let is_imm = is_imm.unwrap_or(rng.random_bool(0.5));
         if is_imm {
             (value, AS::Immediate as usize)
         } else {
             let ptr = gen_pointer(rng, 1);
             tester.write::<1>(AS::Native as usize, ptr, [value]);
-            (F::from_canonical_usize(ptr), AS::Native as usize)
+            (F::from_usize(ptr), AS::Native as usize)
         }
     }
 
@@ -60,11 +60,8 @@ pub mod test_utils {
         tester: &mut impl TestBuilder<F>,
         rng: &mut StdRng,
         value: Option<[F; N]>,
-    ) -> ([F; N], usize)
-    where
-        Standard: Distribution<F>, // Needed for `rng.gen`
-    {
-        let value = value.unwrap_or(array::from_fn(|_| rng.gen()));
+    ) -> ([F; N], usize) {
+        let value = value.unwrap_or(array::from_fn(|_| F::from_u32(rng.random())));
         let ptr = gen_pointer(rng, N);
         tester.write::<N>(AS::Native as usize, ptr, value);
         (value, ptr)

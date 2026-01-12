@@ -1,7 +1,7 @@
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -33,7 +33,7 @@ impl<F: Field> BaseAir<F> for DummyAir {
 impl<AB: InteractionBuilder + AirBuilder> Air<AB> for DummyAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         self.bus
             .push(local[0], local[1], local[2], local[3], true)
             .eval(builder, AB::F::ONE);

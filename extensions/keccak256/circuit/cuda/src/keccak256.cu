@@ -25,15 +25,12 @@ __global__ void p3_inner_tracegen(
     __align__(16) uint64_t initial_state[5][5] = {0};
 
     if (block_idx < total_num_blocks) {
-        // We need to transpose state matrices due to a plonky3 issue: https://github.com/Plonky3/Plonky3/issues/672
-        // Note: the fix for this issue will be a commit after the major Field crate refactor PR https://github.com/Plonky3/Plonky3/pull/640
-        //       which will require a significant refactor to switch to.
 #pragma unroll 5
         for (auto x = 0; x < 5; x++) {
 #pragma unroll 5
             for (auto y = 0; y < 5; y++) {
-                current_state[x][y] = states[block_idx * KECCAK_STATE_SIZE + y + 5 * x];
-                initial_state[x][y] = current_state[x][y];
+                current_state[y][x] = states[block_idx * KECCAK_STATE_SIZE + x + 5 * y];
+                initial_state[y][x] = current_state[y][x];
             }
         }
     }

@@ -14,7 +14,7 @@ use openvm_stark_backend::{
 use tracing::instrument;
 
 use crate::{
-    arch::hasher::HasherChip,
+    arch::{hasher::HasherChip, VmField},
     system::{
         memory::{
             merkle::{tree::MerkleTree, FinalState, MemoryMerkleChip, MemoryMerkleCols},
@@ -108,7 +108,7 @@ pub trait SerialReceiver<T> {
     fn receive(&self, msg: T);
 }
 
-impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> SerialReceiver<&'a [F]>
+impl<'a, F: VmField, const SBOX_REGISTERS: usize> SerialReceiver<&'a [F]>
     for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
 {
     /// Receives a permutation preimage, pads with zeros to the permutation width, and records.
@@ -122,7 +122,7 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> SerialReceiver<&'a [F]>
     }
 }
 
-impl<'a, F: PrimeField32> SerialReceiver<&'a [F]> for Poseidon2PeripheryChip<F> {
+impl<'a, F: VmField> SerialReceiver<&'a [F]> for Poseidon2PeripheryChip<F> {
     fn receive(&self, perm_preimage: &'a [F]) {
         match self {
             Poseidon2PeripheryChip::Register0(chip) => chip.receive(perm_preimage),
