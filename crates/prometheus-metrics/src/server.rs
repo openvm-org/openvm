@@ -15,6 +15,29 @@ use tokio::sync::Notify;
 use tracing_forest::ForestLayer;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
 
+/// Sanitize a metric name to be valid for Prometheus.
+/// Prometheus metric names must match [a-zA-Z_:][a-zA-Z0-9_:]*
+/// This replaces invalid characters (dots, hyphens, slashes, etc.) with underscores.
+fn sanitize_metric_name(name: &str) -> String {
+    let mut result = String::with_capacity(name.len());
+    for (i, c) in name.chars().enumerate() {
+        if c.is_ascii_alphanumeric() || c == '_' || c == ':' {
+            result.push(c);
+        } else if i == 0 && c.is_ascii_digit() {
+            // First character can't be a digit, prefix with underscore
+            result.push('_');
+            result.push(c);
+        } else {
+            result.push('_');
+        }
+    }
+    // Ensure the name doesn't start with a digit
+    if result.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+        result.insert(0, '_');
+    }
+    result
+}
+
 /// Generate a unique run ID based on timestamp and optional git SHA.
 pub fn generate_run_id(benchmark_name: &str) -> String {
     let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
@@ -248,7 +271,8 @@ pub async fn export_metrics_to_prometheus(
             labels.push(("run_id", run_id_static));
 
             let value: f64 = entry.value.parse().unwrap_or(0.0);
-            let name: &'static str = Box::leak(entry.metric.clone().into_boxed_str());
+            let sanitized_name = sanitize_metric_name(&entry.metric);
+            let name: &'static str = Box::leak(sanitized_name.into_boxed_str());
             metrics::gauge!(name, &labels).set(value);
         }
     }
@@ -269,7 +293,8 @@ pub async fn export_metrics_to_prometheus(
             labels.push(("run_id", run_id_static));
 
             let value: u64 = entry.value.parse().unwrap_or(0);
-            let name: &'static str = Box::leak(entry.metric.clone().into_boxed_str());
+            let sanitized_name = sanitize_metric_name(&entry.metric);
+            let name: &'static str = Box::leak(sanitized_name.into_boxed_str());
             metrics::counter!(name, &labels).absolute(value);
         }
     }
