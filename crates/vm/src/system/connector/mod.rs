@@ -79,11 +79,11 @@ impl<F: Field> BaseAirWithPublicValues<F> for VmConnectorAir {
 impl<F: Field> PartitionedBaseAir<F> for VmConnectorAir {}
 impl<F: Field> BaseAir<F> for VmConnectorAir {
     fn width(&self) -> usize {
-        5
+        6
     }
 
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
-        Some(RowMajorMatrix::new_col(vec![F::ZERO, F::ONE]))
+        None
     }
 }
 
@@ -128,6 +128,8 @@ pub struct ConnectorCols<T> {
     pub exit_code: T,
     /// Lowest `range_bus.range_max_bits` bits of the timestamp
     timestamp_low_limb: T,
+    /// Equals 1 if this is the first row of the segment, 0 if this is the second row of the segment.
+    is_begin: T,
 }
 
 impl<T: Copy> ConnectorCols<T> {
@@ -138,16 +140,18 @@ impl<T: Copy> ConnectorCols<T> {
             is_terminate: f(self.is_terminate),
             exit_code: f(self.exit_code),
             timestamp_low_limb: f(self.timestamp_low_limb),
+            is_begin: f(self.is_begin),
         }
     }
 
-    fn flatten(&self) -> [T; 5] {
+    fn flatten(&self) -> [T; 6] {
         [
             self.pc,
             self.timestamp,
             self.is_terminate,
             self.exit_code,
             self.timestamp_low_limb,
+            self.is_begin,
         ]
     }
 }
@@ -157,10 +161,10 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
         let main = builder.main();
         let preprocessed = builder.preprocessed();
         let prep_local = preprocessed.row_slice(0);
-        let (begin, end) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (main.row_slice(0), main.row_slice(1));
 
-        let begin: &ConnectorCols<AB::Var> = (*begin).borrow();
-        let end: &ConnectorCols<AB::Var> = (*end).borrow();
+        let local: &ConnectorCols<AB::Var> = (*local).borrow();
+        let next: &ConnectorCols<AB::Var> = (*next).borrow();
 
         let &VmConnectorPvs {
             initial_pc,
@@ -169,35 +173,37 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
             is_terminate,
         } = builder.public_values().borrow();
 
-        builder.when_transition().assert_eq(begin.pc, initial_pc);
-        builder.when_transition().assert_eq(end.pc, final_pc);
+        builder.when_transition().assert_eq(local.pc, initial_pc);
+        builder.when_transition().assert_eq(next.pc, final_pc);
         builder
             .when_transition()
-            .when(end.is_terminate)
-            .assert_eq(end.exit_code, exit_code);
+            .when(next.is_terminate)
+            .assert_eq(next.exit_code, exit_code);
         builder
             .when_transition()
-            .assert_eq(end.is_terminate, is_terminate);
+            .assert_eq(next.is_terminate, is_terminate);
 
-        builder.when_transition().assert_one(begin.timestamp);
+        builder.when_transition().assert_one(local.timestamp);
+
+        // Enforce that there will be exactly two rows: one with is_begin = 1 and one with is_begin = 0
+        builder.when_first_row().assert_one(local.is_begin);
+        builder.when_transition().assert_eq(next.is_begin + AB::Expr::ONE, local.is_begin);
+        builder.when_last_row().assert_zero(local.is_begin);
 
         self.execution_bus.execute(
             builder,
-            AB::Expr::ONE - prep_local[0], // 1 only if these are [0th, 1st] and not [1st, 0th]
-            ExecutionState::new(end.pc, end.timestamp),
-            ExecutionState::new(begin.pc, begin.timestamp),
+            local.is_begin, // 1 only if these are [0th, 1st] and not [1st, 0th]
+            ExecutionState::new(next.pc, next.timestamp),
+            ExecutionState::new(local.pc, local.timestamp),
         );
         self.program_bus.lookup_instruction(
             builder,
-            end.pc,
+            next.pc,
             AB::Expr::from_canonical_usize(TERMINATE.global_opcode().as_usize()),
-            [AB::Expr::ZERO, AB::Expr::ZERO, end.exit_code.into()],
-            (AB::Expr::ONE - prep_local[0]) * end.is_terminate,
+            [AB::Expr::ZERO, AB::Expr::ZERO, next.exit_code.into()],
+            local.is_begin * next.is_terminate,
         );
 
-        // The following constraints hold on every row, so we rename `begin` to `local` to avoid
-        // confusion.
-        let local = begin;
         // We decompose and range check `local.timestamp` as `timestamp_low_limb,
         // timestamp_high_limb` where `timestamp = timestamp_low_limb + timestamp_high_limb
         // * 2^range_max_bits`.
@@ -244,6 +250,7 @@ impl<F> VmConnectorChip<F> {
             is_terminate: 0,
             exit_code: 0,
             timestamp_low_limb: 0, // will be computed during tracegen
+            is_begin: 1,
         });
     }
 
@@ -254,6 +261,7 @@ impl<F> VmConnectorChip<F> {
             is_terminate: exit_code.is_some() as u32,
             exit_code: exit_code.unwrap_or(DEFAULT_SUSPEND_EXIT_CODE),
             timestamp_low_limb: 0, // will be computed during tracegen
+            is_begin: 0,
         });
     }
 
@@ -317,6 +325,6 @@ impl<F: PrimeField32> ChipUsageGetter for VmConnectorChip<F> {
     }
 
     fn trace_width(&self) -> usize {
-        5
+        6
     }
 }
