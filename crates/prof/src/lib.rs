@@ -10,6 +10,7 @@ use crate::{
 };
 
 pub mod aggregate;
+pub mod instruction_count;
 pub mod summary;
 pub mod types;
 
@@ -117,13 +118,42 @@ impl MetricDb {
                 })
                 .collect();
 
-            // Add to dict_by_label_types
-            self.dict_by_label_types
-                .entry(label_keys)
+            // Remove cycle_tracker_span and dsl_ir if present as they are too long for markdown and
+            // visualized in flamegraphs
+            let mut keys = label_keys.clone();
+            let mut values = label_values.clone();
+
+            // Remove cycle_tracker_span if present
+            if let Some(index) = keys.iter().position(|k| k == "cycle_tracker_span") {
+                keys.remove(index);
+                values.remove(index);
+            }
+
+            // Remove dsl_ir if present
+            if let Some(index) = keys.iter().position(|k| k == "dsl_ir") {
+                keys.remove(index);
+                values.remove(index);
+            }
+
+            let (final_label_keys, final_label_values) = (keys, values);
+
+            // Add to dict_by_label_types, combining metrics with same name by summing values
+            let entry = self
+                .dict_by_label_types
+                .entry(final_label_keys)
                 .or_default()
-                .entry(label_values)
-                .or_default()
-                .extend(metrics.clone());
+                .entry(final_label_values)
+                .or_default();
+
+            for metric in metrics.clone() {
+                if let Some(existing_metric) = entry.iter_mut().find(|m| m.name == metric.name) {
+                    // Sum the values for metrics with the same name
+                    existing_metric.value += metric.value;
+                } else {
+                    // Add new metric if no existing one with same name
+                    entry.push(metric);
+                }
+            }
         }
     }
 
@@ -134,11 +164,6 @@ impl MetricDb {
         sorted_keys.sort();
 
         for label_keys in sorted_keys {
-            if label_keys.contains(&"cycle_tracker_span".to_string()) {
-                // Skip cycle_tracker_span as it is too long for markdown and visualized in
-                // flamegraphs
-                continue;
-            }
             let metrics_dict = &self.dict_by_label_types[&label_keys];
             let mut metric_names: Vec<String> = metrics_dict
                 .values()
@@ -164,8 +189,53 @@ impl MetricDb {
             markdown_output.push_str(&separator);
             markdown_output.push('\n');
 
+            // Sort rows: first by segment (ascending) if present, then by frequency (descending) if
+            // present
+            let mut rows: Vec<_> = metrics_dict.iter().collect();
+            let segment_index = label_keys.iter().position(|k| k == "segment");
+            let has_frequency = metric_names.contains(&"frequency".to_string());
+
+            if segment_index.is_some() || has_frequency {
+                rows.sort_by(|(label_values_a, metrics_a), (label_values_b, metrics_b)| {
+                    // First, sort by segment (ascending) if present
+                    if let Some(seg_idx) = segment_index {
+                        let seg_a = label_values_a
+                            .get(seg_idx)
+                            .map(|s| s.as_str())
+                            .unwrap_or("");
+                        let seg_b = label_values_b
+                            .get(seg_idx)
+                            .map(|s| s.as_str())
+                            .unwrap_or("");
+                        let seg_cmp = seg_a.cmp(seg_b);
+                        if seg_cmp != std::cmp::Ordering::Equal {
+                            return seg_cmp;
+                        }
+                    }
+
+                    // Then, sort by frequency (descending) if present
+                    if has_frequency {
+                        let freq_a = metrics_a
+                            .iter()
+                            .find(|m| m.name == "frequency")
+                            .map(|m| m.value)
+                            .unwrap_or(0.0);
+                        let freq_b = metrics_b
+                            .iter()
+                            .find(|m| m.name == "frequency")
+                            .map(|m| m.value)
+                            .unwrap_or(0.0);
+                        return freq_b
+                            .partial_cmp(&freq_a)
+                            .unwrap_or(std::cmp::Ordering::Equal);
+                    }
+
+                    std::cmp::Ordering::Equal
+                });
+            }
+
             // Fill table rows
-            for (label_values, metrics) in metrics_dict {
+            for (label_values, metrics) in rows {
                 let mut row = String::new();
                 row.push_str("| ");
                 row.push_str(&label_values.join(" | "));

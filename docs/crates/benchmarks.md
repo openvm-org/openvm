@@ -112,6 +112,22 @@ openvm-prof --json-paths $OUTPUT_PATH
 This will generate a markdown file to the same path as $OUTPUT_PATH but with a `.md` extension. The `--json-paths` argument can take multiple files, comma separated.
 There is also an optional `--prev-json-paths` argument to compare the metrics with a previous run.
 
+### Instruction Count Profiling
+
+To generate detailed instruction count metrics in the markdown output, run the benchmark with the `perf-metrics` feature enabled:
+
+```bash
+OUTPUT_PATH="metrics.json" GUEST_SYMBOLS_PATH="guest.syms" cargo run --release --bin <benchmark_name> --features perf-metrics
+```
+
+Then process the metrics with `openvm-prof`:
+
+```bash
+openvm-prof --json-paths metrics.json
+```
+
+The generated markdown file will include an instruction count table aggregated by segment, showing the frequency of each instruction type executed during the benchmark run. This provides detailed insights into instruction-level performance characteristics.
+
 ### Circuit Flamegraphs
 
 While traditional flamegraphs generated from instrumenting a proving binary run on the host machine are useful,
