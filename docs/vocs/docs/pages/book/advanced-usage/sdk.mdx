@@ -38,7 +38,7 @@ Note that to use `Sdk::riscv32()` or `Sdk::standard()` the `app_vm_config` field
 ```
 </details>
 
-Observe that this standard `openvm.toml` also enables normal Rust and `openvm::io` functions (via the `rv32i`, `rv32m`, and `io` extensions). `keccak` and `sha256` enable intrinsic instructions for the [Keccak](/book/acceleration-using-extensions/keccak) and [SHA-256](/book/acceleration-using-extensions/sha-256) hashes respectively, and `bigint` supports [Big Integer](/book/acceleration-using-extensions/big-integer) operations.
+Observe that this standard `openvm.toml` also enables normal Rust and `openvm::io` functions (via the `rv32i`, `rv32m`, and `io` extensions). `keccak` and `sha2` enable intrinsic instructions for the [Keccak](/book/acceleration-using-extensions/keccak) and [SHA-2](/book/acceleration-using-extensions/sha-2) hashes respectively, and `bigint` supports [Big Integer](/book/acceleration-using-extensions/big-integer) operations.
 
 [Modular](/book/acceleration-using-extensions/algebra) operations for the BN254, Secp256k1 (i.e. K256), Secp256r1 (i.e. P256), and BLS12-381 curves' scalar and coordinate field moduli are also supported, as well as [Complex Field Extension](/book/acceleration-using-extensions/algebra#complex-field-extension) operations over the BN254 and BLS12-381 coordinate fields. [Elliptic Curve Cryptography](/book/acceleration-using-extensions/elliptic-curve-cryptography) operations are also supported for the BN254, Secp256k1, Secp256r1, and BLS12-381 curves, and [Elliptic Curve Pairing](/book/acceleration-using-extensions/elliptic-curve-pairing) checks are supported for the BN254 and BLS12-381 curves.
 
