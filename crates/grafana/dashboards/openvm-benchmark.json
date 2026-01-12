@@ -35,7 +35,7 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
+        "w": 8,
         "x": 0,
         "y": 0
       },
@@ -93,8 +93,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 6,
+        "w": 8,
+        "x": 8,
         "y": 0
       },
       "id": 2,
@@ -151,8 +151,8 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 12,
+        "w": 8,
+        "x": 16,
         "y": 0
       },
       "id": 3,
@@ -181,64 +181,6 @@
         }
       ],
       "title": "Total Instructions",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 18,
-        "y": 0
-      },
-      "id": 4,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "11.0.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "expr": "sum(total_cycles{run_id=\"$run_id\", group=\"$group\"})",
-          "legendFormat": "Cycles",
-          "refId": "A"
-        }
-      ],
-      "title": "Total Cycles",
       "type": "stat"
     },
     {
@@ -603,6 +545,18 @@
       "title": "Instructions by Segment",
       "transformations": [
         {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "targetField": "segment",
+                "destinationType": "number"
+              }
+            ],
+            "fields": {}
+          }
+        },
+        {
           "id": "sortBy",
           "options": {
             "fields": {},
@@ -611,6 +565,18 @@
                 "field": "segment"
               }
             ]
+          }
+        },
+        {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "targetField": "segment",
+                "destinationType": "string"
+              }
+            ],
+            "fields": {}
           }
         }
       ],

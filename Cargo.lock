@@ -6981,7 +6981,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-prometheus-metrics"
-version = "1.4.2"
+version = "1.4.3"
 dependencies = [
  "aws-config",
  "aws-sdk-s3",
