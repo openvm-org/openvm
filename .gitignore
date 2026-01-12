@@ -47,11 +47,3 @@ profile.json.gz
 
 # test fixtures
 benchmarks/fixtures
-
-#TODO: Remove this 
-crates/toolchain/tests/rv32im-test-vectors/tests/*
-*.o
-*.a 
-*.s
-*.txt
-riscv/*
