@@ -32,7 +32,7 @@ use openvm_rv32im_transpiler::BaseAluOpcode::ADD;
 use openvm_rv32im_transpiler::MulOpcode::{self, MUL};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::FieldAlgebra,
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -137,8 +137,8 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     b: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
     c: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
 ) {
-    let b = b.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
-    let c = c.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
+    let b = b.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
+    let c = c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
 
     let (mut instruction, rd) =
         rv32_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
@@ -148,7 +148,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let (a, _) = run_mul::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&b, &c);
     assert_eq!(
-        a.map(F::from_canonical_u8),
+        a.map(F::from_u8),
         tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd)
     )
 }
@@ -219,10 +219,10 @@ fn run_negative_mul_test(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).expect("row exists").to_vec();
         let cols: &mut MultiplicationCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
-        cols.a = prank_a.map(F::from_canonical_u32);
+        cols.a = prank_a.map(F::from_u32);
         cols.is_valid = F::from_bool(prank_is_valid);
         *trace = RowMajorMatrix::new(values, trace.width());
     };
@@ -388,7 +388,7 @@ fn test_aot_mul_randomized_pairs() {
     let mut expected = HashMap::new();
 
     for &offset in &offsets {
-        let value_i32 = rng.gen_range(-(1i32 << 11)..(1i32 << 11));
+        let value_i32 = rng.random_range(-(1i32 << 11)..(1i32 << 11));
         let imm_field = (value_i32 as u32) & 0x00FF_FFFF;
         instructions.push(add_immediate(offset, imm_field));
         expected.insert(offset, value_i32 as u32);

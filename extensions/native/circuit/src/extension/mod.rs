@@ -8,7 +8,7 @@ use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
         ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
-        VmExecutionExtension, VmProverExtension,
+        VmExecutionExtension, VmField, VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
@@ -23,7 +23,7 @@ use openvm_poseidon2_air::Poseidon2Config;
 use openvm_rv32im_circuit::BranchEqualCoreAir;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    p3_field::{Field, PrimeField32},
+    p3_field::PrimeField32,
     prover::cpu::{CpuBackend, CpuDevice},
 };
 use openvm_stark_sdk::engine::StarkEngine;
@@ -92,7 +92,7 @@ pub struct Native;
         openvm_circuit_derive::AotMeteredExecutor
     )
 )]
-pub enum NativeExecutor<F: Field> {
+pub enum NativeExecutor<F: VmField> {
     LoadStore(NativeLoadStoreExecutor<1>),
     BlockLoadStore(NativeLoadStoreExecutor<BLOCK_LOAD_STORE_SIZE>),
     BranchEqual(NativeBranchEqExecutor),
@@ -103,7 +103,7 @@ pub enum NativeExecutor<F: Field> {
     VerifyBatch(NativePoseidon2Executor<F, 1>),
 }
 
-impl<F: PrimeField32> VmExecutionExtension<F> for Native {
+impl<F: VmField> VmExecutionExtension<F> for Native {
     type Executor = NativeExecutor<F>;
 
     fn extend_execution(
@@ -206,7 +206,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Native {
 
 impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Native
 where
-    Val<SC>: PrimeField32,
+    Val<SC>: VmField,
 {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
@@ -280,7 +280,7 @@ where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     RA: RowMajorMatrixArena<Val<SC>>,
-    Val<SC>: PrimeField32,
+    Val<SC>: VmField,
 {
     fn extend_prover(
         &self,
@@ -386,9 +386,7 @@ pub(crate) mod phantom {
                 }
             };
             assert!(streams.hint_stream.is_empty());
-            streams
-                .hint_stream
-                .push_back(F::from_canonical_usize(hint.len()));
+            streams.hint_stream.push_back(F::from_usize(hint.len()));
             streams.hint_stream.extend(hint);
             Ok(())
         }
@@ -467,9 +465,7 @@ pub(crate) mod phantom {
 
             assert!(streams.hint_stream.is_empty());
             for _ in 0..len {
-                streams
-                    .hint_stream
-                    .push_back(F::from_canonical_u32(val & 1));
+                streams.hint_stream.push_back(F::from_u32(val & 1));
                 val >>= 1;
             }
             Ok(())
@@ -497,7 +493,7 @@ pub(crate) mod phantom {
             streams.hint_space.push(payload);
             // Hint stream should have already been consumed.
             assert!(streams.hint_stream.is_empty());
-            streams.hint_stream.push_back(F::from_canonical_usize(id));
+            streams.hint_stream.push_back(F::from_usize(id));
             Ok(())
         }
     }

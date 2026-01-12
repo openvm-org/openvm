@@ -1,7 +1,7 @@
 use core::fmt::Debug;
 use std::marker::PhantomData;
 
-use openvm_stark_backend::p3_field::{Field, FieldExtensionAlgebra, PrimeField};
+use openvm_stark_backend::p3_field::{BasedVectorSpace, Field, PrimeField};
 use serde::{Deserialize, Serialize};
 
 use self::opcodes::ConstraintOpcode;
@@ -71,7 +71,7 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
             args: vec![
                 vec![tmp_id.clone()],
                 value
-                    .as_base_slice()
+                    .as_basis_coefficients_slice()
                     .iter()
                     .map(|x| x.as_canonical_biguint().to_string())
                     .collect(),
@@ -97,7 +97,7 @@ impl<C: Config + Debug> ConstraintCompiler<C> {
                     opcode: ConstraintOpcode::ImmE,
                     args: vec![
                         vec![a.id()],
-                        b.as_base_slice()
+                        b.as_basis_coefficients_slice()
                             .iter()
                             .map(|x| x.as_canonical_biguint().to_string())
                             .collect(),

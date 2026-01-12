@@ -1,74 +1,47 @@
-use std::{any::TypeId, marker::PhantomData};
+use std::marker::PhantomData;
 
 use derivative::Derivative;
-use openvm_stark_backend::p3_field::FieldAlgebra;
-use openvm_stark_sdk::p3_baby_bear::{BabyBear, BabyBearInternalLayerParameters};
-use p3_monty_31::InternalLayerBaseParameters;
+use openvm_stark_backend::p3_field::{Field, InjectiveMonomial, PrimeCharacteristicRing};
 use p3_poseidon2::{
     add_rc_and_sbox_generic, mds_light_permutation, ExternalLayer, ExternalLayerConstants,
     ExternalLayerConstructor, GenericPoseidon2LinearLayers, InternalLayer,
     InternalLayerConstructor, MDSMat4,
 };
 
-use super::{babybear_internal_linear_layer, BABY_BEAR_POSEIDON2_SBOX_DEGREE};
+use super::{
+    babybear_internal_linear_layer, BABY_BEAR_POSEIDON2_SBOX_DEGREE, INTERNAL_DIAG_MONTY_16,
+};
 
 const WIDTH: usize = crate::POSEIDON2_WIDTH;
 
-pub trait Poseidon2MatrixConfig: Clone + Sync {
-    fn int_diag_m1_matrix<F: FieldAlgebra>() -> [F; WIDTH];
-}
-
-/// This type needs to implement GenericPoseidon2LinearLayers generic in F so that our
-/// Poseidon2SubAir can also be generic in F, but in reality each implementation of this struct's
-/// functions should be field specific. To circumvent this, Poseidon2LinearLayers is generic in F
-/// but **currently requires** that F is BabyBear.
+/// Linear layers for BabyBear Poseidon2 using the Plonky3 interfaces, but with a
+/// hand-rolled internal layer to preserve the previous constraint DAG.
 #[derive(Debug, Clone)]
 pub struct BabyBearPoseidon2LinearLayers;
 
-// This is the same as the implementation for
-// GenericPoseidon2LinearLayersMonty31<BabyBearParameters, BabyBearInternalLayerParameters> except
-// that we drop the clause that FA needs be multipliable by BabyBear.
-// TODO[jpw/stephen]: This is clearly not the best way to do this, but it would
-// require some reworking in plonky3 to get around the generics.
-impl<FA: FieldAlgebra> GenericPoseidon2LinearLayers<FA, WIDTH> for BabyBearPoseidon2LinearLayers {
-    fn internal_linear_layer(state: &mut [FA; WIDTH]) {
-        let diag_m1_matrix = &<BabyBearInternalLayerParameters as InternalLayerBaseParameters<
-            _,
-            16,
-        >>::INTERNAL_DIAG_MONTY;
-        assert_eq!(
-            TypeId::of::<FA::F>(),
-            TypeId::of::<BabyBear>(),
-            "BabyBear is the only supported field type"
-        );
-        // SAFETY: TypeId check above ensures FA::F is BabyBear, so transmute is valid
-        let diag_m1_matrix =
-            unsafe { std::mem::transmute::<&[BabyBear; WIDTH], &[FA::F; WIDTH]>(diag_m1_matrix) };
-        babybear_internal_linear_layer(state, diag_m1_matrix);
+impl GenericPoseidon2LinearLayers<16> for BabyBearPoseidon2LinearLayers {
+    fn internal_linear_layer<R: PrimeCharacteristicRing>(state: &mut [R; WIDTH]) {
+        // Use the old-style internal layer (sum + diag * state[i]) to keep the
+        // Poseidon2 AIR identical to the previous release.
+        babybear_internal_linear_layer(state, &INTERNAL_DIAG_MONTY_16);
     }
 
-    fn external_linear_layer(state: &mut [FA; WIDTH]) {
+    fn external_linear_layer<R: PrimeCharacteristicRing>(state: &mut [R; WIDTH]) {
         mds_light_permutation(state, &MDSMat4);
     }
 }
 
-// Below are generic implementations of the Poseidon2 Internal and External Layers
-// generic in the field. These are currently used for the runtime poseidon2
-// execution even though they are less optimized than the Monty31 specific
-// implementations in Plonky3. We could use those more optimized implementations,
-// but it would require many unsafe transmutes.
-
 #[derive(Debug, Derivative)]
 #[derivative(Clone)]
-pub struct Poseidon2InternalLayer<F: FieldAlgebra, LinearLayers> {
+pub struct Poseidon2InternalLayer<F: PrimeCharacteristicRing, LinearLayers> {
     pub internal_constants: Vec<F>,
     _marker: PhantomData<LinearLayers>,
 }
 
-impl<AF: FieldAlgebra, LinearLayers> InternalLayerConstructor<AF>
-    for Poseidon2InternalLayer<AF::F, LinearLayers>
+impl<F: Field + PrimeCharacteristicRing, LinearLayers> InternalLayerConstructor<F>
+    for Poseidon2InternalLayer<F, LinearLayers>
 {
-    fn new_from_constants(internal_constants: Vec<AF::F>) -> Self {
+    fn new_from_constants(internal_constants: Vec<F>) -> Self {
         Self {
             internal_constants,
             _marker: PhantomData,
@@ -76,32 +49,35 @@ impl<AF: FieldAlgebra, LinearLayers> InternalLayerConstructor<AF>
     }
 }
 
-impl<FA: FieldAlgebra, LinearLayers, const WIDTH: usize>
-    InternalLayer<FA, WIDTH, BABY_BEAR_POSEIDON2_SBOX_DEGREE>
-    for Poseidon2InternalLayer<FA::F, LinearLayers>
+impl<
+        F: Field + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
+        LinearLayers,
+        const W: usize,
+    > InternalLayer<F, W, BABY_BEAR_POSEIDON2_SBOX_DEGREE>
+    for Poseidon2InternalLayer<F, LinearLayers>
 where
-    LinearLayers: GenericPoseidon2LinearLayers<FA, WIDTH>,
+    LinearLayers: GenericPoseidon2LinearLayers<W>,
 {
     /// Perform the internal layers of the Poseidon2 permutation on the given state.
-    fn permute_state(&self, state: &mut [FA; WIDTH]) {
+    fn permute_state(&self, state: &mut [F; W]) {
         self.internal_constants.iter().for_each(|&rc| {
-            add_rc_and_sbox_generic::<_, BABY_BEAR_POSEIDON2_SBOX_DEGREE>(&mut state[0], rc);
+            add_rc_and_sbox_generic::<_, _, BABY_BEAR_POSEIDON2_SBOX_DEGREE>(&mut state[0], rc);
             LinearLayers::internal_linear_layer(state);
-        })
+        });
     }
 }
 
 #[derive(Debug, Derivative)]
 #[derivative(Clone)]
-pub struct Poseidon2ExternalLayer<F: FieldAlgebra, LinearLayers, const WIDTH: usize> {
-    pub constants: ExternalLayerConstants<F, WIDTH>,
+pub struct Poseidon2ExternalLayer<F: PrimeCharacteristicRing, LinearLayers, const W: usize> {
+    pub constants: ExternalLayerConstants<F, W>,
     _marker: PhantomData<LinearLayers>,
 }
 
-impl<FA: FieldAlgebra, LinearLayers, const WIDTH: usize> ExternalLayerConstructor<FA, WIDTH>
-    for Poseidon2ExternalLayer<FA::F, LinearLayers, WIDTH>
+impl<F: Field + PrimeCharacteristicRing, LinearLayers, const W: usize>
+    ExternalLayerConstructor<F, W> for Poseidon2ExternalLayer<F, LinearLayers, W>
 {
-    fn new_from_constants(external_layer_constants: ExternalLayerConstants<FA::F, WIDTH>) -> Self {
+    fn new_from_constants(external_layer_constants: ExternalLayerConstants<F, W>) -> Self {
         Self {
             constants: external_layer_constants,
             _marker: PhantomData,
@@ -109,37 +85,41 @@ impl<FA: FieldAlgebra, LinearLayers, const WIDTH: usize> ExternalLayerConstructo
     }
 }
 
-impl<FA: FieldAlgebra, LinearLayers, const WIDTH: usize>
-    ExternalLayer<FA, WIDTH, BABY_BEAR_POSEIDON2_SBOX_DEGREE>
-    for Poseidon2ExternalLayer<FA::F, LinearLayers, WIDTH>
+impl<
+        F: Field + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
+        LinearLayers,
+        const W: usize,
+    > ExternalLayer<F, W, BABY_BEAR_POSEIDON2_SBOX_DEGREE>
+    for Poseidon2ExternalLayer<F, LinearLayers, W>
 where
-    LinearLayers: GenericPoseidon2LinearLayers<FA, WIDTH>,
+    LinearLayers: GenericPoseidon2LinearLayers<W>,
 {
-    fn permute_state_initial(&self, state: &mut [FA; WIDTH]) {
+    fn permute_state_initial(&self, state: &mut [F; W]) {
         LinearLayers::external_linear_layer(state);
-        external_permute_state::<FA, LinearLayers, WIDTH>(
-            state,
-            self.constants.get_initial_constants(),
-        );
+        external_permute_state::<F, LinearLayers, W>(state, self.constants.get_initial_constants());
     }
 
-    fn permute_state_terminal(&self, state: &mut [FA; WIDTH]) {
-        external_permute_state::<FA, LinearLayers, WIDTH>(
+    fn permute_state_terminal(&self, state: &mut [F; W]) {
+        external_permute_state::<F, LinearLayers, W>(
             state,
             self.constants.get_terminal_constants(),
         );
     }
 }
 
-fn external_permute_state<FA: FieldAlgebra, LinearLayers, const WIDTH: usize>(
-    state: &mut [FA; WIDTH],
-    constants: &[[FA::F; WIDTH]],
+fn external_permute_state<
+    F: Field + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
+    LinearLayers,
+    const W: usize,
+>(
+    state: &mut [F; W],
+    constants: &[[F; W]],
 ) where
-    LinearLayers: GenericPoseidon2LinearLayers<FA, WIDTH>,
+    LinearLayers: GenericPoseidon2LinearLayers<W>,
 {
     for elem in constants.iter() {
         state.iter_mut().zip(elem.iter()).for_each(|(s, &rc)| {
-            add_rc_and_sbox_generic::<_, BABY_BEAR_POSEIDON2_SBOX_DEGREE>(s, rc)
+            add_rc_and_sbox_generic::<_, _, BABY_BEAR_POSEIDON2_SBOX_DEGREE>(s, rc)
         });
         LinearLayers::external_linear_layer(state);
     }

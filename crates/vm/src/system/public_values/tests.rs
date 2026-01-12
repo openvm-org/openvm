@@ -6,7 +6,7 @@ use openvm_instructions::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilderWithPublicValues},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::types::AirProvingContext,
     rap::PartitionedBaseAir,
@@ -66,7 +66,7 @@ impl<F: Field> PartitionedBaseAir<F> for PublicValuesCoreAir {}
 impl<AB: InteractionBuilder + AirBuilderWithPublicValues> Air<AB> for PublicValuesCoreAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local_core = main.row_slice(0);
+        let local_core = main.row_slice(0).expect("window should have two elements");
         // It's never used, so pick any value.
         let dummy_pc = local_core[0];
         VmCoreAir::<AB, AdapterInterface<AB::Expr>>::eval(self, builder, &local_core, dummy_pc);
@@ -142,34 +142,25 @@ fn set_and_execute<E, RA>(
     E: PreflightExecutor<F, RA>,
     RA: Arena,
 {
-    let (b, e) = if rng.gen_bool(0.5) {
-        let val = F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32));
+    let (b, e) = if rng.random_bool(0.5) {
+        let val = F::from_u32(rng.random_range(0..F::ORDER_U32));
         public_values.push(val);
-        (val, F::from_canonical_u32(RV32_IMM_AS))
+        (val, F::from_u32(RV32_IMM_AS))
     } else {
         let ptr = gen_pointer(rng, 4);
-        let val = F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32));
+        let val = F::from_u32(rng.random_range(0..F::ORDER_U32));
         public_values.push(val);
         tester.write(NATIVE_AS as usize, ptr, [val]);
-        (
-            F::from_canonical_u32(ptr as u32),
-            F::from_canonical_u32(NATIVE_AS),
-        )
+        (F::from_u32(ptr as u32), F::from_u32(NATIVE_AS))
     };
 
-    let (c, f) = if rng.gen_bool(0.5) {
-        (
-            F::from_canonical_u32(idx),
-            F::from_canonical_u32(RV32_IMM_AS),
-        )
+    let (c, f) = if rng.random_bool(0.5) {
+        (F::from_u32(idx), F::from_u32(RV32_IMM_AS))
     } else {
         let ptr = gen_pointer(rng, 4);
-        let val = F::from_canonical_u32(idx);
+        let val = F::from_u32(idx);
         tester.write(NATIVE_AS as usize, ptr, [val]);
-        (
-            F::from_canonical_u32(ptr as u32),
-            F::from_canonical_u32(NATIVE_AS),
-        )
+        (F::from_u32(ptr as u32), F::from_u32(NATIVE_AS))
     };
 
     let instruction = Instruction {
@@ -221,8 +212,8 @@ fn public_values_rand_test() {
 fn public_values_happy_path_1() {
     let cols = PublicValuesCoreColsView::<F, F> {
         is_valid: F::ONE,
-        value: F::from_canonical_u32(12),
-        index: F::from_canonical_u32(2),
+        value: F::from_u32(12),
+        index: F::from_u32(2),
         custom_pv_vars: to_field_vec(vec![1, 0]),
         _marker: Default::default(),
     };
@@ -241,8 +232,8 @@ fn public_values_happy_path_1() {
 fn public_values_neg_pv_not_match() {
     let cols = PublicValuesCoreColsView::<F, F> {
         is_valid: F::ONE,
-        value: F::from_canonical_u32(12),
-        index: F::from_canonical_u32(2),
+        value: F::from_u32(12),
+        index: F::from_u32(2),
         custom_pv_vars: to_field_vec(vec![1, 0]),
         _marker: Default::default(),
     };
@@ -265,8 +256,8 @@ fn public_values_neg_pv_not_match() {
 fn public_values_neg_index_out_of_bound() {
     let cols = PublicValuesCoreColsView::<F, F> {
         is_valid: F::ONE,
-        value: F::from_canonical_u32(12),
-        index: F::from_canonical_u32(8),
+        value: F::from_u32(12),
+        index: F::from_u32(8),
         custom_pv_vars: to_field_vec(vec![0, 0]),
         _marker: Default::default(),
     };
@@ -296,15 +287,15 @@ fn public_values_neg_double_publish_impl(actual_pv: u32) {
     let rows = [
         PublicValuesCoreColsView::<F, F> {
             is_valid: F::ONE,
-            value: F::from_canonical_u32(12),
-            index: F::from_canonical_u32(0),
+            value: F::from_u32(12),
+            index: F::from_u32(0),
             custom_pv_vars: to_field_vec(vec![0, 1]),
             _marker: Default::default(),
         },
         PublicValuesCoreColsView::<F, F> {
             is_valid: F::ONE,
-            value: F::from_canonical_u32(13),
-            index: F::from_canonical_u32(0),
+            value: F::from_u32(13),
+            index: F::from_u32(0),
             custom_pv_vars: to_field_vec(vec![0, 1]),
             _marker: Default::default(),
         },

@@ -18,7 +18,7 @@ use openvm_native_compiler::{
 };
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -117,8 +117,8 @@ fn set_and_execute<const NUM_CELLS: usize, E, RA>(
     let ([c_val], c) = write_native_array(tester, rng, None);
 
     let mem_ptr = gen_pointer(rng, NUM_CELLS);
-    let b = F::from_canonical_usize(mem_ptr) - c_val;
-    let data: [F; NUM_CELLS] = array::from_fn(|_| rng.gen());
+    let b = F::from_usize(mem_ptr) - c_val;
+    let data: [F; NUM_CELLS] = array::from_fn(|_| rng.random());
 
     match opcode {
         LOADW => {
@@ -322,7 +322,7 @@ fn run_negative_native_loadstore_test<const NUM_CELLS: usize>(
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<F>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).expect("row exists").to_vec();
         let (adapter_row, core_row) = values.split_at_mut(adapter_width);
         let adapter_cols: &mut NativeLoadStoreAdapterCols<F, NUM_CELLS> = adapter_row.borrow_mut();
         let core_cols: &mut NativeLoadStoreCoreCols<F, NUM_CELLS> = core_row.borrow_mut();

@@ -14,7 +14,7 @@ use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_stark_backend::{
     config::Val,
     engine::StarkEngine,
-    p3_field::{FieldExtensionAlgebra, PrimeField32, TwoAdicField},
+    p3_field::{BasedVectorSpace, PrimeField32, TwoAdicField},
 };
 use openvm_stark_sdk::{
     config::{
@@ -246,7 +246,7 @@ fn check_recursive_verifier_size<SC: StarkGenericConfig>(
             after_challenge_rounds.resize(widths.len(), (0, 0, 2));
         }
         for (i, &width) in widths.iter().enumerate() {
-            after_challenge_rounds[i].0 += SC::Challenge::D * width;
+            after_challenge_rounds[i].0 += SC::Challenge::DIMENSION * width;
             after_challenge_rounds[i].1 += 1;
         }
     }
@@ -255,7 +255,7 @@ fn check_recursive_verifier_size<SC: StarkGenericConfig>(
     let quotient_round = (
         vk.per_air
             .iter()
-            .map(|vk| SC::Challenge::D * vk.quotient_degree as usize)
+            .map(|vk| SC::Challenge::DIMENSION * vk.quotient_degree as usize)
             .sum(),
         vk.per_air.len(),
         1,

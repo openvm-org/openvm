@@ -22,7 +22,7 @@ use openvm_sha256_transpiler::Rv32Sha256Opcode;
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder},
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -140,7 +140,10 @@ impl Sha256VmAir {
     /// Implement all necessary constraints for the padding
     fn eval_padding<AB: InteractionBuilder>(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local_cols: &Sha256VmRoundCols<AB::Var> = local[..SHA256VM_ROUND_WIDTH].borrow();
         let next_cols: &Sha256VmRoundCols<AB::Var> = next[..SHA256VM_ROUND_WIDTH].borrow();
 
@@ -226,8 +229,8 @@ impl Sha256VmAir {
         //   - and next_padding_offset = 0 since `pad_flags = NotConsidered`
         let expected_len = next.inner.flags.local_block_idx
             * next.control.padding_occurred
-            * AB::Expr::from_canonical_usize(SHA256_BLOCK_U8S)
-            + next_row_idx * AB::Expr::from_canonical_usize(SHA256_READ_SIZE)
+            * AB::Expr::from_usize(SHA256_BLOCK_U8S)
+            + next_row_idx * AB::Expr::from_usize(SHA256_READ_SIZE)
             + next_padding_offset;
 
         // Note: `next_is_first_padding_row` is either -1,0,1
@@ -391,7 +394,7 @@ impl Sha256VmAir {
 
             builder
                 .when(should_be_128)
-                .assert_eq(AB::Expr::from_canonical_u32(1 << 7), w);
+                .assert_eq(AB::Expr::from_u32(1 << 7), w);
 
             // should be len is handled outside of the loop
         }
@@ -413,7 +416,7 @@ impl Sha256VmAir {
         );
 
         builder.when(is_last_padding_row.clone()).assert_eq(
-            appended_len * AB::F::from_canonical_usize(RV32_CELL_BITS).inverse(), // bit to byte conversion
+            appended_len * AB::F::from_usize(RV32_CELL_BITS).inverse(), // bit to byte conversion
             actual_len,
         );
 
@@ -436,7 +439,10 @@ impl Sha256VmAir {
     /// Implement constraints on `len`, `read_ptr` and `cur_timestamp`
     fn eval_transitions<AB: InteractionBuilder>(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local_cols: &Sha256VmRoundCols<AB::Var> = local[..SHA256VM_ROUND_WIDTH].borrow();
         let next_cols: &Sha256VmRoundCols<AB::Var> = next[..SHA256VM_ROUND_WIDTH].borrow();
 
@@ -451,8 +457,8 @@ impl Sha256VmAir {
 
         // Read ptr should increment by [SHA256_READ_SIZE] for the first 4 rows and stay the same
         // otherwise
-        let read_ptr_delta = local_cols.inner.flags.is_first_4_rows
-            * AB::Expr::from_canonical_usize(SHA256_READ_SIZE);
+        let read_ptr_delta =
+            local_cols.inner.flags.is_first_4_rows * AB::Expr::from_usize(SHA256_READ_SIZE);
         builder
             .when_transition()
             .when(not::<AB::Expr>(is_last_row.clone()))
@@ -475,7 +481,7 @@ impl Sha256VmAir {
     /// Implement the reads for the first 4 rows of a block
     fn eval_reads<AB: InteractionBuilder>(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local_cols: &Sha256VmRoundCols<AB::Var> = local[..SHA256VM_ROUND_WIDTH].borrow();
 
         let message: [AB::Var; SHA256_READ_SIZE] = array::from_fn(|i| {
@@ -486,7 +492,7 @@ impl Sha256VmAir {
         self.memory_bridge
             .read(
                 MemoryAddress::new(
-                    AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
+                    AB::Expr::from_u32(RV32_MEMORY_AS),
                     local_cols.control.read_ptr,
                 ),
                 message,
@@ -498,14 +504,14 @@ impl Sha256VmAir {
     /// Implement the constraints for the last row of a message
     fn eval_last_row<AB: InteractionBuilder>(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local_cols: &Sha256VmDigestCols<AB::Var> = local[..SHA256VM_DIGEST_WIDTH].borrow();
 
         let timestamp: AB::Var = local_cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
-            timestamp + AB::Expr::from_canonical_usize(timestamp_delta - 1)
+            timestamp + AB::Expr::from_usize(timestamp_delta - 1)
         };
 
         let is_last_row =
@@ -513,10 +519,7 @@ impl Sha256VmAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(
-                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
-                    local_cols.rd_ptr,
-                ),
+                MemoryAddress::new(AB::Expr::from_u32(RV32_REGISTER_AS), local_cols.rd_ptr),
                 local_cols.dst_ptr,
                 timestamp_pp(),
                 &local_cols.register_reads_aux[0],
@@ -525,10 +528,7 @@ impl Sha256VmAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(
-                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
-                    local_cols.rs1_ptr,
-                ),
+                MemoryAddress::new(AB::Expr::from_u32(RV32_REGISTER_AS), local_cols.rs1_ptr),
                 local_cols.src_ptr,
                 timestamp_pp(),
                 &local_cols.register_reads_aux[1],
@@ -537,10 +537,7 @@ impl Sha256VmAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(
-                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
-                    local_cols.rs2_ptr,
-                ),
+                MemoryAddress::new(AB::Expr::from_u32(RV32_REGISTER_AS), local_cols.rs2_ptr),
                 local_cols.len_data,
                 timestamp_pp(),
                 &local_cols.register_reads_aux[2],
@@ -550,7 +547,7 @@ impl Sha256VmAir {
         // range check that the memory pointers don't overflow
         // Note: no need to range check the length since we read from memory step by step and
         //       the memory bus will catch any memory accesses beyond ptr_max_bits
-        let shift = AB::Expr::from_canonical_usize(
+        let shift = AB::Expr::from_usize(
             1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.ptr_max_bits),
         );
         // This only works if self.ptr_max_bits >= 24 which is typically the case
@@ -564,10 +561,10 @@ impl Sha256VmAir {
             .eval(builder, is_last_row.clone());
 
         // the number of reads that happened to read the entire message: we do 4 reads per block
-        let time_delta = (local_cols.inner.flags.local_block_idx + AB::Expr::ONE)
-            * AB::Expr::from_canonical_usize(4);
+        let time_delta =
+            (local_cols.inner.flags.local_block_idx + AB::Expr::ONE) * AB::Expr::from_usize(4);
         // Every time we read the message we increment the read pointer by SHA256_READ_SIZE
-        let read_ptr_delta = time_delta.clone() * AB::Expr::from_canonical_usize(SHA256_READ_SIZE);
+        let read_ptr_delta = time_delta.clone() * AB::Expr::from_usize(SHA256_READ_SIZE);
 
         let result: [AB::Var; SHA256_WORD_U8S * SHA256_HASH_WORDS] = array::from_fn(|i| {
             // The limbs are written in big endian order to the memory so need to be reversed
@@ -583,7 +580,7 @@ impl Sha256VmAir {
         // another hash
         self.memory_bridge
             .write(
-                MemoryAddress::new(AB::Expr::from_canonical_u32(RV32_MEMORY_AS), dst_ptr_val),
+                MemoryAddress::new(AB::Expr::from_u32(RV32_MEMORY_AS), dst_ptr_val),
                 result,
                 timestamp_pp() + time_delta.clone(),
                 &local_cols.writes_aux,
@@ -592,16 +589,16 @@ impl Sha256VmAir {
 
         self.execution_bridge
             .execute_and_increment_pc(
-                AB::Expr::from_canonical_usize(Rv32Sha256Opcode::SHA256.global_opcode().as_usize()),
+                AB::Expr::from_usize(Rv32Sha256Opcode::SHA256.global_opcode().as_usize()),
                 [
                     local_cols.rd_ptr.into(),
                     local_cols.rs1_ptr.into(),
                     local_cols.rs2_ptr.into(),
-                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
-                    AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
+                    AB::Expr::from_u32(RV32_REGISTER_AS),
+                    AB::Expr::from_u32(RV32_MEMORY_AS),
                 ],
                 local_cols.from_state,
-                AB::Expr::from_canonical_usize(timestamp_delta) + time_delta.clone(),
+                AB::Expr::from_usize(timestamp_delta) + time_delta.clone(),
             )
             .eval(builder, is_last_row.clone());
 
@@ -618,7 +615,7 @@ impl Sha256VmAir {
         // Assert that we started reading from the correct timestamp
         builder.when(is_last_row.clone()).assert_eq(
             local_cols.control.cur_timestamp,
-            local_cols.from_state.timestamp + AB::Expr::from_canonical_u32(3) + time_delta,
+            local_cols.from_state.timestamp + AB::Expr::from_u32(3) + time_delta,
         );
     }
 }

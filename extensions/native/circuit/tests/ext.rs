@@ -4,10 +4,10 @@ use openvm_native_compiler::{
     ir::{Ext, Felt},
 };
 use openvm_stark_backend::p3_field::{
-    extension::BinomialExtensionField, FieldAlgebra, FieldExtensionAlgebra,
+    extension::BinomialExtensionField, BasedVectorSpace, PrimeCharacteristicRing,
 };
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
-use rand::{thread_rng, Rng};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use rand::Rng;
 #[test]
 fn test_ext2felt() {
     const D: usize = 4;
@@ -16,13 +16,13 @@ fn test_ext2felt() {
 
     let mut builder = AsmBuilder::<F, EF>::default();
 
-    let mut rng = thread_rng();
-    let val = rng.gen::<EF>();
+    let mut rng = create_seeded_rng();
+    let val = rng.random::<EF>();
 
     let ext: Ext<F, EF> = builder.constant(val);
     let felts = builder.ext2felt(ext);
 
-    for (i, &fe) in val.as_base_slice().iter().enumerate() {
+    for (i, &fe) in val.as_basis_coefficients_slice().iter().enumerate() {
         let lhs = builder.get(&felts, i);
         let rhs: Felt<F> = builder.constant(fe);
         builder.assert_felt_eq(lhs, rhs);
@@ -35,7 +35,7 @@ fn test_ext2felt() {
 }
 
 #[test]
-fn test_ext_from_base_slice() {
+fn test_ext_from_slice() {
     const D: usize = 4;
     type F = BabyBear;
     type EF = BinomialExtensionField<BabyBear, D>;
@@ -43,13 +43,13 @@ fn test_ext_from_base_slice() {
     let mut builder = AsmBuilder::<F, EF>::default();
 
     let base_slice = &[
-        F::from_canonical_usize(123),
-        F::from_canonical_usize(234),
-        F::from_canonical_usize(345),
-        F::from_canonical_usize(456),
+        F::from_usize(123),
+        F::from_usize(234),
+        F::from_usize(345),
+        F::from_usize(456),
     ];
 
-    let val = EF::from_base_slice(base_slice);
+    let val = EF::from_basis_coefficients_slice(base_slice).unwrap();
     let expected: Ext<_, _> = builder.constant(val);
 
     let felts = base_slice.map(|e| builder.constant::<Felt<_>>(e));
