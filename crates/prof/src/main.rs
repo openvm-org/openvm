@@ -107,6 +107,13 @@ fn main() -> Result<()> {
 
         let mut markdown_output = String::from_utf8(writer)?;
 
+        // Add GPU memory chart if available
+        if let Some(chart) = db.generate_gpu_memory_chart() {
+            markdown_output.push_str("\n## GPU Memory Usage\n\n");
+            markdown_output.push_str(&chart);
+            markdown_output.push('\n');
+        }
+
         // Add instruction count table aggregated by segment
         let instruction_count_table =
             openvm_prof::instruction_count::generate_instruction_count_table(&db);
