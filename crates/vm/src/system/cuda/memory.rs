@@ -18,6 +18,7 @@ use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing, p3_util::log2_ceil_usize, prover::types::AirProvingContext,
     Chip,
 };
+use tracing::instrument;
 
 use super::{
     access_adapters::AccessAdapterInventoryGPU,
@@ -86,8 +87,9 @@ impl MemoryInventoryGPU {
         self.persistent.is_some()
     }
 
+    #[instrument(name = "set_initial_memory", skip_all)]
     pub fn set_initial_memory(&mut self, initial_memory: &AddressMap) {
-        let _mem = MemTracker::start("set initial memory");
+        let mem = MemTracker::start("set initial memory");
         let persistent = self
             .persistent
             .as_mut()
@@ -127,8 +129,10 @@ impl MemoryInventoryGPU {
                     .collect();
             }
         }
+        mem.emit_metrics();
     }
 
+    #[instrument(name = "generate_proving_ctxs", skip_all)]
     pub fn generate_proving_ctxs(
         &mut self,
         access_adapter_arena: DenseRecordArena,
@@ -230,6 +234,7 @@ impl MemoryInventoryGPU {
             self.access_adapters
                 .generate_air_proving_ctxs(access_adapter_arena),
         );
+        mem.emit_metrics();
         ret
     }
 }
