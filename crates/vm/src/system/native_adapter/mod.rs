@@ -23,7 +23,7 @@ use openvm_instructions::{
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 use util::{tracing_read_or_imm_native, tracing_write_native};
 
@@ -83,7 +83,7 @@ impl<AB: InteractionBuilder, const R: usize, const W: usize> VmAdapterAir<AB>
         let mut timestamp_delta = 0usize;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
-            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+            timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
         for (i, r_cols) in cols.reads_aux.iter().enumerate() {
@@ -140,7 +140,7 @@ impl<AB: InteractionBuilder, const R: usize, const W: usize> VmAdapterAir<AB>
                     addr_c.address_space,
                 ],
                 cols.from_state,
-                AB::F::from_canonical_usize(timestamp_delta),
+                AB::F::from_usize(timestamp_delta),
                 (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
@@ -275,7 +275,7 @@ impl<F: PrimeField32, const R: usize, const W: usize> AdapterTraceFiller<F>
                 adapter_row.writes_aux[0].write_aux.as_mut(),
             );
             adapter_row.writes_aux[0].address.pointer = record.write_ptr[0];
-            adapter_row.writes_aux[0].address.address_space = F::from_canonical_u32(NATIVE_AS);
+            adapter_row.writes_aux[0].address.address_space = F::from_u32(NATIVE_AS);
         }
 
         adapter_row
@@ -294,9 +294,9 @@ impl<F: PrimeField32, const R: usize, const W: usize> AdapterTraceFiller<F>
                         read_cols.read_aux.as_mut(),
                     );
                     read_cols.address.pointer = *ptr_or_imm;
-                    read_cols.address.address_space = F::from_canonical_u32(RV32_IMM_AS);
+                    read_cols.address.address_space = F::from_u32(RV32_IMM_AS);
                 } else {
-                    read_cols.read_aux.is_zero_aux = F::from_canonical_u32(NATIVE_AS).inverse();
+                    read_cols.read_aux.is_zero_aux = F::from_u32(NATIVE_AS).inverse();
                     read_cols.read_aux.is_immediate = F::ZERO;
                     mem_helper.fill(
                         read_record.prev_timestamp,
@@ -304,11 +304,11 @@ impl<F: PrimeField32, const R: usize, const W: usize> AdapterTraceFiller<F>
                         read_cols.read_aux.as_mut(),
                     );
                     read_cols.address.pointer = *ptr_or_imm;
-                    read_cols.address.address_space = F::from_canonical_u32(NATIVE_AS);
+                    read_cols.address.address_space = F::from_u32(NATIVE_AS);
                 }
             });
 
-        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
-        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
+        adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(record.from_pc);
     }
 }

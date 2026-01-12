@@ -12,9 +12,8 @@ use openvm_native_recursion::{
     witness::Witnessable,
 };
 use openvm_stark_backend::keygen::types::MultiStarkVerifyingKey;
-use openvm_stark_sdk::{
-    config::FriParameters, openvm_stark_backend::proof::Proof, p3_bn254_fr::Bn254Fr,
-};
+use openvm_stark_sdk::{config::FriParameters, openvm_stark_backend::proof::Proof};
+use p3_bn254::Bn254;
 
 use crate::{
     verifier::{
@@ -30,7 +29,7 @@ use crate::{
 /// This trait implementation defines what the public values of the
 /// final EVM proof will be.
 pub trait StaticVerifierPvHandler {
-    /// Returns the number of public values, as [Bn254Fr] field elements.
+    /// Returns the number of public values, as [Bn254] field elements.
     fn handle_public_values(
         &self,
         builder: &mut Builder<OuterConfig>,
@@ -72,7 +71,7 @@ impl StaticVerifierPvHandler for DefaultStaticVerifierPvHandler {
 pub struct StaticVerifierConfig {
     pub root_verifier_fri_params: FriParameters,
     pub special_air_ids: SpecialAirIds,
-    pub root_verifier_program_commit: [Bn254Fr; 1],
+    pub root_verifier_program_commit: [Bn254; 1],
 }
 
 impl StaticVerifierConfig {

@@ -30,7 +30,7 @@ use openvm_rv32im_circuit::adapters::tracing_write;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
 #[repr(C)]
@@ -74,11 +74,11 @@ impl<AB: InteractionBuilder, const READ_SIZE: usize, const WRITE_SIZE: usize> Vm
         let mut timestamp_delta = 0usize;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
-            timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
+            timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
         let d = AB::Expr::TWO;
-        let e = AB::Expr::from_canonical_u32(AS::Native as u32);
+        let e = AB::Expr::from_u32(AS::Native as u32);
 
         self.memory_bridge
             .read(
@@ -109,7 +109,7 @@ impl<AB: InteractionBuilder, const READ_SIZE: usize, const WRITE_SIZE: usize> Vm
                     e,
                 ],
                 cols.from_state,
-                AB::F::from_canonical_usize(timestamp_delta),
+                AB::F::from_usize(timestamp_delta),
                 (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
@@ -218,8 +218,7 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> AdapterTr
             adapter_row.reads_aux[0].as_mut(),
         );
 
-        adapter_row.writes_aux[0]
-            .set_prev_data(record.write_aux.prev_data.map(F::from_canonical_u8));
+        adapter_row.writes_aux[0].set_prev_data(record.write_aux.prev_data.map(F::from_u8));
         mem_helper.fill(
             record.write_aux.prev_timestamp,
             record.from_timestamp + 1,
@@ -229,7 +228,7 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> AdapterTr
         adapter_row.b_pointer = record.b_ptr;
         adapter_row.a_pointer = record.a_ptr;
 
-        adapter_row.from_state.timestamp = F::from_canonical_u32(record.from_timestamp);
-        adapter_row.from_state.pc = F::from_canonical_u32(record.from_pc);
+        adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
+        adapter_row.from_state.pc = F::from_u32(record.from_pc);
     }
 }

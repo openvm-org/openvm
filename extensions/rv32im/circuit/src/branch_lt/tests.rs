@@ -19,7 +19,7 @@ use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcod
 use openvm_rv32im_transpiler::BranchLessThanOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{FieldAlgebra, PrimeField32},
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -126,18 +126,18 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     b: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
     imm: Option<i32>,
 ) {
-    let a = a.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
-    let b = b.unwrap_or(if rng.gen_bool(0.5) {
+    let a = a.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
+    let b = b.unwrap_or(if rng.random_bool(0.5) {
         a
     } else {
-        array::from_fn(|_| rng.gen_range(0..=u8::MAX))
+        array::from_fn(|_| rng.random_range(0..=u8::MAX))
     });
 
-    let imm = imm.unwrap_or(rng.gen_range((-ABS_MAX_IMM)..ABS_MAX_IMM));
+    let imm = imm.unwrap_or(rng.random_range((-ABS_MAX_IMM)..ABS_MAX_IMM));
     let rs1 = gen_pointer(rng, 4);
     let rs2 = gen_pointer(rng, 4);
-    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, a.map(F::from_canonical_u8));
-    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_canonical_u8));
+    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, a.map(F::from_u8));
+    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_u8));
 
     tester.execute_with_pc(
         executor,
@@ -150,7 +150,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
             1,
             1,
         ),
-        rng.gen_range(imm.unsigned_abs()..(1 << (PC_BITS - 1))),
+        rng.random_range(imm.unsigned_abs()..(1 << (PC_BITS - 1))),
     );
 
     let (cmp_result, _, _, _) =
@@ -265,7 +265,7 @@ fn run_negative_branch_lt_test(
     let ge_opcode = opcode == BranchLessThanOpcode::BGE || opcode == BranchLessThanOpcode::BGEU;
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut values = trace.row_slice(0).to_vec();
+        let mut values = trace.row_slice(0).expect("row exists").to_vec();
         let cols: &mut BranchLessThanCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
 
@@ -276,10 +276,10 @@ fn run_negative_branch_lt_test(
             cols.b_msb_f = i32_to_f(b_msb);
         }
         if let Some(diff_marker) = prank_vals.diff_marker {
-            cols.diff_marker = diff_marker.map(F::from_canonical_u32);
+            cols.diff_marker = diff_marker.map(F::from_u32);
         }
         if let Some(diff_val) = prank_vals.diff_val {
-            cols.diff_val = F::from_canonical_u32(diff_val);
+            cols.diff_val = F::from_u32(diff_val);
         }
         cols.cmp_result = F::from_bool(prank_cmp_result);
         cols.cmp_lt = F::from_bool(ge_opcode ^ prank_cmp_result);

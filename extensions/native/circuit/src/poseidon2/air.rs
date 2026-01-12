@@ -18,7 +18,7 @@ use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -53,7 +53,7 @@ impl<F: Field, const SBOX_REGISTERS: usize> NativePoseidon2Air<F, SBOX_REGISTERS
             memory_bridge,
             internal_bus: verify_batch_bus,
             subair: Arc::new(Poseidon2SubAir::new(poseidon2_config.constants.into())),
-            address_space: F::from_canonical_u32(AS::Native as u32),
+            address_space: F::from_u32(AS::Native as u32),
         }
     }
 }
@@ -79,9 +79,9 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local: &NativePoseidon2Cols<AB::Var, SBOX_REGISTERS> = (*local).borrow();
-        let next = main.row_slice(1);
+        let next = main.row_slice(1).expect("window should have two elements");
         let next: &NativePoseidon2Cols<AB::Var, SBOX_REGISTERS> = (*next).borrow();
 
         let &NativePoseidon2Cols {
@@ -167,7 +167,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             false,
             end_inside_row,
             very_first_timestamp,
-            start_timestamp + AB::F::from_canonical_usize(2 * CHUNK),
+            start_timestamp + AB::F::from_usize(2 * CHUNK),
             opened_base_pointer,
             opened_element_size_inv,
             initial_opened_index,
@@ -179,7 +179,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
 
         builder.when(inside_row - end_inside_row).assert_eq(
             next.start_timestamp,
-            start_timestamp + AB::F::from_canonical_usize(2 * CHUNK),
+            start_timestamp + AB::F::from_usize(2 * CHUNK),
         );
         builder
             .when(inside_row - end_inside_row)
@@ -263,7 +263,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
                 .read(
                     MemoryAddress::new(self.address_space, cell.row_pointer),
                     [left_input[i]],
-                    start_timestamp + AB::F::from_canonical_usize((2 * i) + 1),
+                    start_timestamp + AB::F::from_usize((2 * i) + 1),
                     &cell.read,
                 )
                 .eval(builder, inside_row * (AB::Expr::ONE - is_exhausted.clone()));
@@ -297,7 +297,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
                         cell.row_pointer.into(),
                         opened_element_size_inv * (cell.row_end - cell.row_pointer),
                     ],
-                    start_timestamp + AB::F::from_canonical_usize(2 * i),
+                    start_timestamp + AB::F::from_usize(2 * i),
                     &cell.read_row_pointer_and_length,
                 )
                 .eval(builder, inside_row * cell.is_first_in_row);
@@ -367,8 +367,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             .when(next.incorporate_row + next.incorporate_sibling)
             .assert_eq(next_top_level_specific.proof_index, AB::F::ZERO);
 
-        let timestamp_after_initial_reads =
-            start_timestamp + AB::F::from_canonical_usize(NUM_INITIAL_READS);
+        let timestamp_after_initial_reads = start_timestamp + AB::F::from_usize(NUM_INITIAL_READS);
 
         builder
             .when(end.clone())
@@ -376,7 +375,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             .assert_eq(next.initial_opened_index, AB::F::ZERO);
         self.execution_bridge
             .execute_and_increment_pc(
-                AB::Expr::from_canonical_usize(VERIFY_BATCH.global_opcode().as_usize()),
+                AB::Expr::from_usize(VERIFY_BATCH.global_opcode().as_usize()),
                 [
                     dim_register,
                     opened_register,
@@ -419,7 +418,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             .read(
                 MemoryAddress::new(self.address_space, index_register),
                 [index_base_pointer],
-                very_first_timestamp + AB::F::from_canonical_usize(3),
+                very_first_timestamp + AB::F::from_usize(3),
                 &index_base_pointer_read,
             )
             .eval(builder, end_top_level);
@@ -427,7 +426,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             .read(
                 MemoryAddress::new(self.address_space, commit_register),
                 [commit_pointer],
-                very_first_timestamp + AB::F::from_canonical_usize(4),
+                very_first_timestamp + AB::F::from_usize(4),
                 &commit_pointer_read,
             )
             .eval(builder, end_top_level);
@@ -436,13 +435,13 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             .read(
                 MemoryAddress::new(self.address_space, commit_pointer),
                 left_output,
-                very_first_timestamp + AB::F::from_canonical_usize(5),
+                very_first_timestamp + AB::F::from_usize(5),
                 &commit_read,
             )
             .eval(builder, end_top_level);
 
         builder.when(start_top_level).assert_eq(
-            very_first_timestamp + AB::F::from_canonical_usize(NUM_INITIAL_READS),
+            very_first_timestamp + AB::F::from_usize(NUM_INITIAL_READS),
             start_timestamp,
         );
 
@@ -613,10 +612,8 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
 
         self.execution_bridge
             .execute_and_increment_pc(
-                is_permute.clone()
-                    * AB::F::from_canonical_usize(PERM_POS2.global_opcode().as_usize())
-                    + is_compress
-                        * AB::F::from_canonical_usize(COMP_POS2.global_opcode().as_usize()),
+                is_permute.clone() * AB::F::from_usize(PERM_POS2.global_opcode().as_usize())
+                    + is_compress * AB::F::from_usize(COMP_POS2.global_opcode().as_usize()),
                 [
                     output_register.into(),
                     input_register_1.into(),
@@ -625,7 +622,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
                     self.address_space.into(),
                 ],
                 ExecutionState::new(pc, start_timestamp),
-                AB::Expr::from_canonical_u32(NUM_SIMPLE_ACCESSES),
+                AB::Expr::from_u32(NUM_SIMPLE_ACCESSES),
             )
             .eval(builder, simple);
 
@@ -655,16 +652,16 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
                 &read_input_pointer_2,
             )
             .eval(builder, simple * is_compress);
-        builder.when(simple).when(is_permute.clone()).assert_eq(
-            input_pointer_2,
-            input_pointer_1 + AB::F::from_canonical_usize(CHUNK),
-        );
+        builder
+            .when(simple)
+            .when(is_permute.clone())
+            .assert_eq(input_pointer_2, input_pointer_1 + AB::F::from_usize(CHUNK));
 
         self.memory_bridge
             .read(
                 MemoryAddress::new(self.address_space, input_pointer_1),
                 left_input,
-                start_timestamp + AB::F::from_canonical_usize(3),
+                start_timestamp + AB::F::from_usize(3),
                 &read_data_1,
             )
             .eval(builder, simple);
@@ -673,7 +670,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             .read(
                 MemoryAddress::new(self.address_space, input_pointer_2),
                 right_input,
-                start_timestamp + AB::F::from_canonical_usize(4),
+                start_timestamp + AB::F::from_usize(4),
                 &read_data_2,
             )
             .eval(builder, simple);
@@ -682,7 +679,7 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             .write(
                 MemoryAddress::new(self.address_space, output_pointer),
                 left_output,
-                start_timestamp + AB::F::from_canonical_usize(5),
+                start_timestamp + AB::F::from_usize(5),
                 &write_data_1,
             )
             .eval(builder, simple);
@@ -691,10 +688,10 @@ impl<AB: InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
             .write(
                 MemoryAddress::new(
                     self.address_space,
-                    output_pointer + AB::F::from_canonical_usize(CHUNK),
+                    output_pointer + AB::F::from_usize(CHUNK),
                 ),
                 right_output,
-                start_timestamp + AB::F::from_canonical_usize(6),
+                start_timestamp + AB::F::from_usize(6),
                 &write_data_2,
             )
             .eval(builder, simple * is_permute);

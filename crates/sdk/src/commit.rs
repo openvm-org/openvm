@@ -7,15 +7,15 @@ use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_stark_backend::{
     config::{Com, StarkGenericConfig, Val},
     engine::StarkEngine,
-    p3_field::PrimeField32,
+    p3_field::{PrimeField, PrimeField32},
 };
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
-    openvm_stark_backend::p3_field::FieldAlgebra,
+    openvm_stark_backend::p3_field::PrimeCharacteristicRing,
     p3_baby_bear::BabyBear,
-    p3_bn254_fr::Bn254Fr,
 };
+use p3_bn254::Bn254;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use tracing::instrument;
@@ -23,7 +23,7 @@ use tracing::instrument;
 use crate::{types::BN254_BYTES, F, SC};
 
 /// Wrapper for an array of big-endian bytes, representing an unsigned big integer. Each commit can
-/// be converted to a Bn254Fr using the trivial identification as natural numbers or into a `u32`
+/// be converted to a Bn254 using the trivial identification as natural numbers or into a `u32`
 /// digest by decomposing the big integer base-`F::MODULUS`.
 #[serde_as]
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -38,7 +38,7 @@ impl CommitBytes {
         &self.0
     }
 
-    pub fn to_bn254(&self) -> Bn254Fr {
+    pub fn to_bn254(&self) -> Bn254 {
         bytes_to_bn254(&self.0)
     }
 
@@ -46,7 +46,7 @@ impl CommitBytes {
         bytes_to_u32_digest(&self.0)
     }
 
-    pub fn from_bn254(bn254: Bn254Fr) -> Self {
+    pub fn from_bn254(bn254: Bn254) -> Self {
         Self(bn254_to_bytes(bn254))
     }
 
@@ -132,31 +132,33 @@ pub fn commit_app_exe(
     Arc::new(VmCommittedExe::<SC>::commit(exe, app_engine.config().pcs()))
 }
 
-pub(crate) fn babybear_digest_to_bn254(digest: &[F; DIGEST_SIZE]) -> Bn254Fr {
-    let mut ret = Bn254Fr::ZERO;
-    let order = Bn254Fr::from_canonical_u32(BabyBear::ORDER_U32);
-    let mut base = Bn254Fr::ONE;
+pub(crate) fn babybear_digest_to_bn254(digest: &[F; DIGEST_SIZE]) -> Bn254 {
+    let mut ret = Bn254::ZERO;
+    let order = Bn254::from_u32(BabyBear::ORDER_U32);
+    let mut base = Bn254::ONE;
     digest.iter().for_each(|&x| {
-        ret += base * Bn254Fr::from_canonical_u32(x.as_canonical_u32());
+        ret += base * Bn254::from_u32(x.as_canonical_u32());
         base *= order;
     });
     ret
 }
 
-fn bytes_to_bn254(bytes: &[u8; BN254_BYTES]) -> Bn254Fr {
-    let order = Bn254Fr::from_canonical_u32(1 << 8);
-    let mut ret = Bn254Fr::ZERO;
-    let mut base = Bn254Fr::ONE;
+fn bytes_to_bn254(bytes: &[u8; BN254_BYTES]) -> Bn254 {
+    let order = Bn254::from_u32(1 << 8);
+    let mut ret = Bn254::ZERO;
+    let mut base = Bn254::ONE;
     for byte in bytes.iter().rev() {
-        ret += base * Bn254Fr::from_canonical_u8(*byte);
+        ret += base * Bn254::from_u8(*byte);
         base *= order;
     }
     ret
 }
 
-fn bn254_to_bytes(bn254: Bn254Fr) -> [u8; BN254_BYTES] {
-    let mut ret = bn254.value.to_bytes();
-    ret.reverse();
+fn bn254_to_bytes(bn254: Bn254) -> [u8; BN254_BYTES] {
+    let mut ret = [0u8; BN254_BYTES];
+    let bytes = bn254.as_canonical_biguint().to_bytes_be();
+    let start = BN254_BYTES - bytes.len();
+    ret[start..].copy_from_slice(&bytes);
     ret
 }
 
@@ -180,5 +182,5 @@ fn bytes_to_u32_digest(bytes: &[u8; BN254_BYTES]) -> [u32; DIGEST_SIZE] {
 }
 
 fn u32_digest_to_bytes(digest: &[u32; DIGEST_SIZE]) -> [u8; BN254_BYTES] {
-    bn254_to_bytes(babybear_digest_to_bn254(&digest.map(F::from_canonical_u32)))
+    bn254_to_bytes(babybear_digest_to_bn254(&digest.map(F::from_u32)))
 }
