@@ -2,14 +2,19 @@ use std::{array, iter, sync::Arc};
 
 use openvm_stark_backend::{
     p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
-    utils::disable_debug_builder, verifier::VerificationError, AirRef,
+    prover::types::AirProvingContext, utils::disable_debug_builder, AirRef,
 };
 use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
-    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
+    any_rap_arc_vec, dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
 use rand::Rng;
+use stark_backend_v2::{
+    poseidon2::sponge::DuplexSponge,
+    prover::AirProvingContextV2,
+    test_utils::{test_engine_small, test_system_params_small},
+    BabyBearPoseidon2CpuEngineV2, StarkEngineV2,
+};
 #[cfg(feature = "cuda")]
 use {
     crate::range_tuple::{RangeTupleCheckerAir, RangeTupleCheckerChipGPU},
@@ -90,13 +95,18 @@ fn test_range_tuple_chip() {
     let all_traces = lists_traces
         .into_iter()
         .chain(iter::once(range_trace))
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .map(Arc::new)
+        .map(AirProvingContext::simple_no_pis)
+        .map(AirProvingContextV2::from_v1_no_cached)
+        .collect::<Vec<_>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
+    BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(test_system_params_small(3, 9, 3))
+        .run_test(all_chips, all_traces)
         .expect("Verification failed");
 }
 
 #[test]
+#[should_panic]
 fn negative_test_range_tuple_chip() {
     let bus_index = 0;
     let sizes = [2, 2, 8];
@@ -117,16 +127,17 @@ fn negative_test_range_tuple_chip() {
     // Corrupt the trace to make it invalid
     range_trace.values[0] = BabyBear::from_wrapped_u32(99);
 
+    let traces = [range_trace]
+        .into_iter()
+        .map(Arc::new)
+        .map(AirProvingContext::simple_no_pis)
+        .map(AirProvingContextV2::from_v1_no_cached)
+        .collect::<Vec<_>>();
+
     disable_debug_builder();
-    assert_eq!(
-        BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-            any_rap_arc_vec![range_checker.air],
-            vec![range_trace]
-        )
-        .err(),
-        Some(VerificationError::ChallengePhaseError),
-        "Expected constraint to fail"
-    );
+    test_engine_small()
+        .run_test(any_rap_arc_vec![range_checker.air], traces)
+        .unwrap();
 }
 
 #[test]
