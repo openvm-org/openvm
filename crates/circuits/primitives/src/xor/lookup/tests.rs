@@ -2,14 +2,20 @@ use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
     interaction::BusIndex, p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::*, utils::disable_debug_builder, verifier::VerificationError, AirRef,
+    p3_maybe_rayon::prelude::*, prover::types::AirProvingContext, utils::disable_debug_builder,
+    AirRef,
 };
 use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
-    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, engine::StarkFriEngine,
+    any_rap_arc_vec, dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
 use rand::Rng;
+use stark_backend_v2::{
+    poseidon2::sponge::DuplexSponge,
+    prover::AirProvingContextV2,
+    test_utils::{test_engine_small, test_system_params_small},
+    BabyBearPoseidon2CpuEngineV2, StarkEngineV2,
+};
 
 use crate::xor::XorLookupChip;
 
@@ -76,13 +82,18 @@ fn test_xor_limbs_chip() {
     let all_traces = requesters_traces
         .into_iter()
         .chain(iter::once(xor_trace))
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .map(Arc::new)
+        .map(AirProvingContext::simple_no_pis)
+        .map(AirProvingContextV2::from_v1_no_cached)
+        .collect::<Vec<_>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
+    BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(test_system_params_small(3, 9, 3))
+        .run_test(all_chips, all_traces)
         .expect("Verification failed");
 }
 
 #[test]
+#[should_panic]
 fn negative_test_xor_limbs_chip() {
     let mut rng = create_seeded_rng();
 
@@ -129,14 +140,15 @@ fn negative_test_xor_limbs_chip() {
 
     let xor_trace = xor_chip.generate_trace();
 
+    let traces = [requester_trace, xor_trace]
+        .into_iter()
+        .map(Arc::new)
+        .map(AirProvingContext::simple_no_pis)
+        .map(AirProvingContextV2::from_v1_no_cached)
+        .collect::<Vec<_>>();
+
     disable_debug_builder();
-    let result = BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![requester, xor_chip.air],
-        vec![requester_trace, xor_trace],
-    );
-    assert_eq!(
-        result.err(),
-        Some(VerificationError::ChallengePhaseError),
-        "Expected verification to fail, but it passed"
-    );
+    test_engine_small()
+        .run_test(any_rap_arc_vec![requester, xor_chip.air], traces)
+        .unwrap();
 }
