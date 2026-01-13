@@ -79,11 +79,7 @@ impl<F: Field> BaseAirWithPublicValues<F> for VmConnectorAir {
 impl<F: Field> PartitionedBaseAir<F> for VmConnectorAir {}
 impl<F: Field> BaseAir<F> for VmConnectorAir {
     fn width(&self) -> usize {
-        6
-    }
-
-    fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
-        None
+        ConnectorCols::<F>::width()
     }
 }
 
@@ -326,6 +322,6 @@ impl<F: PrimeField32> ChipUsageGetter for VmConnectorChip<F> {
     }
 
     fn trace_width(&self) -> usize {
-        6
+        ConnectorCols::<F>::width()
     }
 }
