@@ -54,6 +54,9 @@ members = [
     "extensions/sha256/circuit",
     "extensions/sha256/transpiler",
     "extensions/sha256/guest",
+    "extensions/blake3/circuit",
+    "extensions/blake3/transpiler",
+    "extensions/blake3/guest",
     "extensions/ecc/circuit",
     "extensions/ecc/transpiler",
     "extensions/ecc/guest",
@@ -68,6 +71,7 @@ members = [
     "guest-libs/pairing/",
     "guest-libs/ruint/",
     "guest-libs/sha2/",
+    "guest-libs/blake3/",
     "guest-libs/verify_stark/",
     "scripts",
 ]
@@ -156,6 +160,9 @@ openvm-keccak256-guest = { path = "extensions/keccak256/guest", default-features
 openvm-sha256-circuit = { path = "extensions/sha256/circuit", default-features = false }
 openvm-sha256-transpiler = { path = "extensions/sha256/transpiler", default-features = false }
 openvm-sha256-guest = { path = "extensions/sha256/guest", default-features = false }
+openvm-blake3-circuit = { path = "extensions/blake3/circuit", default-features = false }
+openvm-blake3-transpiler = { path = "extensions/blake3/transpiler", default-features = false }
+openvm-blake3-guest = { path = "extensions/blake3/guest", default-features = false }
 openvm-bigint-circuit = { path = "extensions/bigint/circuit", default-features = false }
 openvm-bigint-transpiler = { path = "extensions/bigint/transpiler", default-features = false }
 openvm-bigint-guest = { path = "extensions/bigint/guest", default-features = false }
@@ -172,6 +179,7 @@ openvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features
 openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
 openvm-verify-stark = { path = "guest-libs/verify_stark", default-features = false }
+openvm-blake3 = { path = "guest-libs/blake3", default-features = false }
 
 # Benchmarking
 openvm-benchmarks-utils = { path = "benchmarks/utils", default-features = false }
@@ -182,6 +190,7 @@ p3-baby-bear = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539bbc84
 p3-dft = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539bbc84085efb609f4f62cb03cf49588388abdb", default-features = false }
 p3-fri = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539bbc84085efb609f4f62cb03cf49588388abdb", default-features = false }
 p3-keccak-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539bbc84085efb609f4f62cb03cf49588388abdb", default-features = false }
+p3-blake3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539bbc84085efb609f4f62cb03cf49588388abdb", default-features = false }
 p3-merkle-tree = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539bbc84085efb609f4f62cb03cf49588388abdb", default-features = false }
 p3-monty-31 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539bbc84085efb609f4f62cb03cf49588388abdb", default-features = false }
 p3-poseidon2 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539bbc84085efb609f4f62cb03cf49588388abdb", default-features = false }
@@ -250,6 +259,7 @@ num-integer = { version = "0.1.46", default-features = false }
 num-traits = { version = "0.2.19", default-features = false }
 ff = { version = "0.13.1", default-features = false }
 sha2 = { version = "0.10", default-features = false }
+blake3 = { version = "1.5", default-features = false }
 blstrs = { version = "0.7.1", default-features = true }
 
 # specific to CUDA and GPU

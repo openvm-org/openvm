@@ -20,6 +20,8 @@ openvm-keccak256-circuit = { workspace = true }
 openvm-keccak256-transpiler = { workspace = true }
 openvm-sha256-circuit = { workspace = true }
 openvm-sha256-transpiler = { workspace = true }
+openvm-blake3-circuit = { workspace = true }
+openvm-blake3-transpiler = { workspace = true }
 openvm-pairing-circuit = { workspace = true }
 openvm-pairing-transpiler = { workspace = true }
 openvm-native-circuit = { workspace = true }

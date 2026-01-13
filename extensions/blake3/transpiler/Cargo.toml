@@ -1,0 +1,19 @@
+[package]
+name = "openvm-blake3-transpiler"
+description = "OpenVM BLAKE3 transpiler extension"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+openvm-blake3-guest = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-instructions-derive = { workspace = true }
+openvm-stark-backend = { workspace = true }
+openvm-transpiler = { workspace = true }
+rrs-lib = { workspace = true }
+strum = { workspace = true }

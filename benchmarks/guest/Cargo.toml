@@ -3,7 +3,7 @@ version = "0.0.0"
 edition = "2021"
 
 [workspace]
-members = ["base64_json", "bincode", "bubblesort", "ecrecover", "factorial_iterative_u256", "fibonacci", "fibonacci_iterative", "fibonacci_recursive", "keccak256", "keccak256_iter", "kitchen-sink", "pairing", "quicksort", "regex", "revm_snailtracer", "revm_transfer", "rkyv", "sha256", "sha256_iter"]
+members = ["base64_json", "bincode", "blake3", "bubblesort", "ecrecover", "factorial_iterative_u256", "fibonacci", "fibonacci_iterative", "fibonacci_recursive", "keccak256", "keccak256_iter", "kitchen-sink", "pairing", "quicksort", "regex", "revm_snailtracer", "revm_transfer", "rkyv", "sha256", "sha256_iter"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -14,6 +14,7 @@ openvm-keccak256 = { path = "../../guest-libs/keccak256/", default-features = fa
 openvm-ruint = { path = "../../guest-libs/ruint/", package = "ruint", default-features = false }
 openvm-pairing = { path = "../../guest-libs/pairing/", default-features = false }
 openvm-sha2 = { path = "../../guest-libs/sha2/", default-features = false }
+openvm-blake3 = { path = "../../guest-libs/blake3/", default-features = false }
 openvm-k256 = { path = "../../guest-libs/k256/", package = "k256" }
 openvm-p256 = { path = "../../guest-libs/p256/", package = "p256" }
 

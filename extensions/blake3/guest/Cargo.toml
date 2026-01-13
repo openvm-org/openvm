@@ -1,0 +1,13 @@
+[package]
+name = "openvm-blake3-guest"
+description = "OpenVM BLAKE3 guest extension"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+openvm-platform = { workspace = true }

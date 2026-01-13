@@ -1,0 +1,23 @@
+[package]
+name = "openvm-blake3"
+description = "OpenVM library for blake3"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+openvm-blake3-guest = { workspace = true }
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+blake3 = { workspace = true }
+
+[dev-dependencies]
+hex = { workspace = true, features = ["alloc"] }
+
+[features]
+default = []
+std = ["blake3/std"]
