@@ -182,7 +182,8 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
 
         // We force the first row to have is_begin = 1 and the last row to have is_begin = 0.
         // Additionally, we enforce that the is_begin column decreases by exactly 1 per row.
-        // The only way to satisfy this is to have exactly two rows: one with is_begin = 1 and one with is_begin = 0.
+        // The only way to satisfy this is to have exactly two rows: one with is_begin = 1 and 
+        // one with is_begin = 0 (assuming max height < field characteristic)
         builder.when_first_row().assert_one(local.is_begin);
         builder.when_transition().assert_eq(next.is_begin + AB::Expr::ONE, local.is_begin);
         builder.when_last_row().assert_zero(local.is_begin);
