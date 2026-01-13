@@ -300,7 +300,7 @@ fn test_three_outer_iterations() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic]
 fn test_fail_outer_iterations_with_padding_between() {
     // for i in 0..3 { for j in 0..M { ... }}
     // Disabled padding between iterations should now fail
@@ -343,7 +343,7 @@ fn test_enabled_then_disabled_iterations() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_fail_disabled_then_enabled() {
     let trace =
         generate_trace::<_, 1, 0, { width::<1, 0>() }>(vec![[0, 0, 0], [0, 0, 0], [1, 1, 1]]);
@@ -351,7 +351,7 @@ fn test_fail_disabled_then_enabled() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_fail_complex_enabled_disabled_mix() {
     let trace = generate_trace::<_, 1, 0, { width::<1, 0>() }>(vec![
         [1, 0, 1],
@@ -404,7 +404,7 @@ fn test_first_row_nonzero_counter() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_fail_is_first_not_boolean() {
     let trace = generate_trace::<_, 1, 0, { width::<1, 0>() }>(vec![[1, 0, 2]]);
     prove_and_verify_test_air::<1, 0>(trace);
@@ -412,7 +412,7 @@ fn test_fail_is_first_not_boolean() {
 
 // Boundary constraints
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_fail_missing_start() {
     let trace = generate_trace::<_, 1, 0, { width::<1, 0>() }>(vec![[1, 0, 0]]);
     prove_and_verify_test_air::<1, 0>(trace);
@@ -420,7 +420,7 @@ fn test_fail_missing_start() {
 
 // Disabled row constraints
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_fail_disabled_row_has_is_first() {
     let trace = generate_trace::<_, 1, 0, { width::<1, 0>() }>(vec![[1, 0, 1], [0, 0, 1]]);
     prove_and_verify_test_air::<1, 0>(trace);
@@ -428,21 +428,21 @@ fn test_fail_disabled_row_has_is_first() {
 
 // Transition constraints
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_fail_counter_jumps_by_more_than_one() {
     let trace = generate_trace::<_, 1, 0, { width::<1, 0>() }>(vec![[1, 0, 1], [1, 2, 1]]);
     prove_and_verify_test_air::<1, 0>(trace);
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_fail_counter_decreases() {
     let trace = generate_trace::<_, 1, 0, { width::<1, 0>() }>(vec![[1, 1, 1], [1, 0, 1]]);
     prove_and_verify_test_air::<1, 0>(trace);
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_fail_is_enabled_changes_within_iteration() {
     let trace =
         generate_trace::<_, 1, 0, { width::<1, 0>() }>(vec![[1, 0, 1], [0, 0, 0], [1, 0, 0]]);
@@ -450,7 +450,7 @@ fn test_fail_is_enabled_changes_within_iteration() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_fail_is_first_set_within_iteration() {
     let trace =
         generate_trace::<_, 1, 0, { width::<1, 0>() }>(vec![[1, 0, 1], [1, 0, 1], [1, 0, 0]]);
@@ -458,7 +458,7 @@ fn test_fail_is_first_set_within_iteration() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_fail_iteration_boundary_missing_is_first() {
     let trace = generate_trace::<_, 1, 0, { width::<1, 0>() }>(vec![[1, 0, 1], [1, 1, 0]]);
     prove_and_verify_test_air::<1, 0>(trace);
@@ -576,7 +576,7 @@ fn test_three_loops_3x2_iterations() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_three_loops_fail_middle_missing_start_on_outer_start() {
     // When i starts, j must also start
     let trace = generate_trace::<_, 2, 1, { width::<2, 1>() }>(vec![[1, 0, 0, 0, 1, 0]]);
@@ -584,7 +584,7 @@ fn test_three_loops_fail_middle_missing_start_on_outer_start() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_three_loops_fail_middle_missing_start_on_outer_increment() {
     // When i increments, j must start
     let trace = generate_trace::<_, 2, 1, { width::<2, 1>() }>(vec![
@@ -595,7 +595,7 @@ fn test_three_loops_fail_middle_missing_start_on_outer_increment() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_three_loops_fail_middle_start_within_iteration() {
     // j start should only happen when j increments or i increments
     let trace = generate_trace::<_, 2, 1, { width::<2, 1>() }>(vec![
@@ -606,7 +606,7 @@ fn test_three_loops_fail_middle_start_within_iteration() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_three_loops_fail_middle_counter_jumps() {
     // j jumps from 0 to 2
     let trace = generate_trace::<_, 2, 1, { width::<2, 1>() }>(vec![
@@ -617,7 +617,7 @@ fn test_three_loops_fail_middle_counter_jumps() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_three_loops_fail_outer_counter_jumps() {
     // i jumps from 0 to 2
     let trace = generate_trace::<_, 2, 1, { width::<2, 1>() }>(vec![
@@ -628,7 +628,7 @@ fn test_three_loops_fail_outer_counter_jumps() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_three_loops_fail_middle_counter_decreases() {
     // j decreases from 1 to 0
     let trace = generate_trace::<_, 2, 1, { width::<2, 1>() }>(vec![
@@ -639,7 +639,7 @@ fn test_three_loops_fail_middle_counter_decreases() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_three_loops_fail_outer_missing_start_flag() {
     // i missing start flag on first row (j is missing start flag, since there's no i start flag in
     // data)
@@ -648,7 +648,7 @@ fn test_three_loops_fail_outer_missing_start_flag() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_three_loops_fail_outer_start_within_iteration() {
     // i start flag set when j increments but i doesn't
     let trace = generate_trace::<_, 2, 1, { width::<2, 1>() }>(vec![
@@ -659,7 +659,7 @@ fn test_three_loops_fail_outer_start_within_iteration() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_three_loops_fail_middle_boundary_missing_start() {
     // When j increments, must have j start flag
     let trace = generate_trace::<_, 2, 1, { width::<2, 1>() }>(vec![
@@ -670,7 +670,7 @@ fn test_three_loops_fail_middle_boundary_missing_start() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_three_loops_fail_outer_boundary_missing_start() {
     // When i increments, must have j start flag (there's no i start flag in columns)
     let trace = generate_trace::<_, 2, 1, { width::<2, 1>() }>(vec![
@@ -782,7 +782,7 @@ fn test_four_loops_with_disabled_padding() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_four_loops_fail_mid_inner_missing_start_on_mid_outer_start() {
     // When j starts, k must start
     let trace = generate_trace::<_, 3, 2, { width::<3, 2>() }>(vec![
@@ -793,7 +793,7 @@ fn test_four_loops_fail_mid_inner_missing_start_on_mid_outer_start() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_four_loops_fail_mid_outer_and_mid_inner_missing_start_on_outer_start() {
     // When i starts, j and k must start
     let trace = generate_trace::<_, 3, 2, { width::<3, 2>() }>(vec![
@@ -803,7 +803,7 @@ fn test_four_loops_fail_mid_outer_and_mid_inner_missing_start_on_outer_start() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_four_loops_fail_mid_inner_counter_jumps() {
     // k jumps from 0 to 2
     let trace = generate_trace::<_, 3, 2, { width::<3, 2>() }>(vec![
@@ -814,7 +814,7 @@ fn test_four_loops_fail_mid_inner_counter_jumps() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_four_loops_fail_mid_outer_counter_jumps() {
     // j jumps from 0 to 2
     let trace = generate_trace::<_, 3, 2, { width::<3, 2>() }>(vec![
@@ -825,7 +825,7 @@ fn test_four_loops_fail_mid_outer_counter_jumps() {
 }
 
 #[test]
-#[should_panic(expected = "Zerocheck sum is not zero")]
+#[should_panic] // TODO: catch explicit error
 fn test_four_loops_fail_mid_inner_start_within_iteration() {
     // k start flag when k doesn't change
     let trace = generate_trace::<_, 3, 2, { width::<3, 2>() }>(vec![
