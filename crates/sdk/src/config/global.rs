@@ -6,6 +6,8 @@ use openvm_algebra_circuit::{
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use openvm_bigint_circuit::{Int256, Int256CpuProverExt, Int256Executor};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
+use openvm_blake3_circuit::{Blake3, Blake3CpuProverExt, Blake3Executor};
+use openvm_blake3_transpiler::Blake3TranspilerExtension;
 use openvm_circuit::{
     arch::{instructions::NATIVE_AS, *},
     derive::VmConfig,
@@ -82,6 +84,7 @@ pub struct SdkVmConfig {
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
     pub sha256: Option<UnitStruct>,
+    pub blake3: Option<UnitStruct>,
     pub native: Option<UnitStruct>,
     pub castf: Option<UnitStruct>,
 
@@ -202,6 +205,9 @@ impl TranspilerConfig<F> for SdkVmConfig {
         if self.sha256.is_some() {
             transpiler = transpiler.with_extension(Sha256TranspilerExtension);
         }
+        if self.blake3.is_some() {
+            transpiler = transpiler.with_extension(Blake3TranspilerExtension);
+        }
         if self.native.is_some() {
             transpiler = transpiler.with_extension(LongFormTranspilerExtension);
         }
@@ -270,6 +276,7 @@ impl SdkVmConfig {
         let io = config.io.map(|_| Rv32Io);
         let keccak = config.keccak.map(|_| Keccak256);
         let sha256 = config.sha256.map(|_| Sha256);
+        let blake3 = config.blake3.map(|_| Blake3);
         let native = config.native.map(|_| Native);
         let castf = config.castf.map(|_| CastFExtension);
         let rv32m = config.rv32m;
@@ -285,6 +292,7 @@ impl SdkVmConfig {
             io,
             keccak,
             sha256,
+            blake3,
             native,
             castf,
             rv32m,
@@ -317,6 +325,8 @@ pub struct SdkVmConfigInner {
     pub keccak: Option<Keccak256>,
     #[extension(executor = "Sha256Executor")]
     pub sha256: Option<Sha256>,
+    #[extension(executor = "Blake3Executor")]
+    pub blake3: Option<Blake3>,
     #[extension(executor = "NativeExecutor<F>")]
     pub native: Option<Native>,
     #[extension(executor = "CastFExtensionExecutor")]
@@ -394,6 +404,9 @@ where
         }
         if let Some(sha256) = &config.sha256 {
             VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, sha256, inventory)?;
+        }
+        if let Some(blake3) = &config.blake3 {
+            VmProverExtension::<E, _, _>::extend_prover(&Blake3CpuProverExt, blake3, inventory)?;
         }
         if let Some(native) = &config.native {
             VmProverExtension::<E, _, _>::extend_prover(&NativeCpuProverExt, native, inventory)?;
@@ -572,6 +585,12 @@ impl From<Sha256> for UnitStruct {
     }
 }
 
+impl From<Blake3> for UnitStruct {
+    fn from(_: Blake3) -> Self {
+        UnitStruct {}
+    }
+}
+
 impl From<Native> for UnitStruct {
     fn from(_: Native) -> Self {
         UnitStruct {}
@@ -593,6 +612,7 @@ struct SdkVmConfigWithDefaultDeser {
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
     pub sha256: Option<UnitStruct>,
+    pub blake3: Option<UnitStruct>,
     pub native: Option<UnitStruct>,
     pub castf: Option<UnitStruct>,
 
@@ -612,6 +632,7 @@ impl From<SdkVmConfigWithDefaultDeser> for SdkVmConfig {
             io: config.io,
             keccak: config.keccak,
             sha256: config.sha256,
+            blake3: config.blake3,
             native: config.native,
             castf: config.castf,
             rv32m: config.rv32m,

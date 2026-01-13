@@ -528,7 +528,7 @@ dependencies = [
  "alloy-rlp",
  "alloy-serde",
  "alloy-sol-types",
- "itertools 0.14.0",
+ "itertools 0.13.0",
  "serde",
  "serde_json",
  "serde_with",
@@ -3787,7 +3787,7 @@ dependencies = [
  "dyn-clone",
  "foundry-compilers-artifacts",
  "foundry-compilers-core",
- "itertools 0.14.0",
+ "itertools 0.13.0",
  "path-slash",
  "rayon",
  "semver 1.0.26",
@@ -6294,6 +6294,53 @@ version = "1.4.3-rc.0"
 dependencies = [
  "blake3",
  "hex",
+ "openvm-blake3-guest",
+]
+
+[[package]]
+name = "openvm-blake3-circuit"
+version = "1.4.3-rc.0"
+dependencies = [
+ "blake3",
+ "cfg-if",
+ "derive-new 0.6.0",
+ "derive_more 1.0.0",
+ "hex",
+ "itertools 0.14.0",
+ "openvm-blake3-transpiler",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
+ "openvm-instructions",
+ "openvm-rv32im-circuit",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "p3-blake3-air",
+ "rand 0.8.5",
+ "serde",
+ "strum 0.26.3",
+ "tokio",
+]
+
+[[package]]
+name = "openvm-blake3-guest"
+version = "1.4.3-rc.0"
+dependencies = [
+ "openvm-platform",
+]
+
+[[package]]
+name = "openvm-blake3-transpiler"
+version = "1.4.3-rc.0"
+dependencies = [
+ "openvm-blake3-guest",
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-stark-backend",
+ "openvm-transpiler",
+ "rrs-lib",
+ "strum 0.26.3",
 ]
 
 [[package]]
@@ -7084,6 +7131,8 @@ dependencies = [
  "openvm-algebra-transpiler",
  "openvm-bigint-circuit",
  "openvm-bigint-transpiler",
+ "openvm-blake3-circuit",
+ "openvm-blake3-transpiler",
  "openvm-build",
  "openvm-circuit",
  "openvm-continuations",
@@ -7422,6 +7471,21 @@ dependencies = [
  "blake3",
  "p3-symmetric",
  "p3-util",
+]
+
+[[package]]
+name = "p3-blake3-air"
+version = "0.1.0"
+source = "git+https://github.com/Plonky3/Plonky3.git?rev=539bbc84085efb609f4f62cb03cf49588388abdb#539bbc84085efb609f4f62cb03cf49588388abdb"
+dependencies = [
+ "itertools 0.14.0",
+ "p3-air",
+ "p3-field",
+ "p3-matrix",
+ "p3-maybe-rayon",
+ "p3-util",
+ "rand 0.8.5",
+ "tracing",
 ]
 
 [[package]]
@@ -10072,7 +10136,7 @@ dependencies = [
  "derive_more 2.0.1",
  "dunce",
  "inturn",
- "itertools 0.14.0",
+ "itertools 0.10.5",
  "itoa",
  "normalize-path",
  "once_map",
@@ -10108,7 +10172,7 @@ dependencies = [
  "alloy-primitives",
  "bitflags",
  "bumpalo",
- "itertools 0.14.0",
+ "itertools 0.10.5",
  "memchr",
  "num-bigint 0.4.6",
  "num-rational",

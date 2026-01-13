@@ -10,8 +10,9 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-# For now, use pure Rust blake3 for both native and zkvm
-# Once we add native extension support, this will change
+openvm-blake3-guest = { workspace = true }
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
 blake3 = { workspace = true }
 
 [dev-dependencies]
