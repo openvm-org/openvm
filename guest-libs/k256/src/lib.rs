@@ -21,9 +21,9 @@ pub use internal::{
     Secp256k1Point as ProjectivePoint, Secp256k1Scalar as Scalar, Secp256k1Scalar,
 };
 
-// -- Define the ZST for implementing the elliptic curve traits --
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
-pub struct Secp256k1;
+openvm_ecc_curve_macros::curve_declare! {
+    Secp256k1 { point_type = Secp256k1Point, scalar_type = Secp256k1Scalar },
+}
 
 // --- Implement the Curve trait on Secp256k1 ---
 
