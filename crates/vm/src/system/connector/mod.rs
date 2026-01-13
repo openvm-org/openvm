@@ -129,6 +129,7 @@ pub struct ConnectorCols<T> {
     /// Lowest `range_bus.range_max_bits` bits of the timestamp
     timestamp_low_limb: T,
     /// Equals 1 if this is the first row of the segment, 0 if this is the second row of the segment.
+    /// Used to enforce that the trace has exactly two rows.
     is_begin: T,
 }
 
@@ -159,8 +160,6 @@ impl<T: Copy> ConnectorCols<T> {
 impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> for VmConnectorAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let preprocessed = builder.preprocessed();
-        let prep_local = preprocessed.row_slice(0);
         let (local, next) = (main.row_slice(0), main.row_slice(1));
 
         let local: &ConnectorCols<AB::Var> = (*local).borrow();
@@ -185,7 +184,9 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
 
         builder.when_transition().assert_one(local.timestamp);
 
-        // Enforce that there will be exactly two rows: one with is_begin = 1 and one with is_begin = 0
+        // We force the first row to have is_begin = 1 and the last row to have is_begin = 0.
+        // Additionally, we enforce that the is_begin column decreases by exactly 1 per row.
+        // The only way to satisfy this is to have exactly two rows: one with is_begin = 1 and one with is_begin = 0.
         builder.when_first_row().assert_one(local.is_begin);
         builder.when_transition().assert_eq(next.is_begin + AB::Expr::ONE, local.is_begin);
         builder.when_last_row().assert_zero(local.is_begin);
