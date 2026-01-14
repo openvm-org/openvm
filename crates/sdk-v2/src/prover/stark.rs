@@ -73,6 +73,11 @@ where
                 .agg_prover
                 .internal_recursive_prover
                 .get_cached_commit(true),
+            compression_commit: self
+                .agg_prover
+                .compression_prover
+                .as_ref()
+                .map(|prover| prover.get_dag_commit()),
         }
     }
 }

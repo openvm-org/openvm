@@ -9,7 +9,7 @@ use crate::{
     batch_constraint::{
         cuda_utils::*,
         eq_airs::{Eq3bBlob, Eq3bColumns, RecordIdx, StackedIdxRecord},
-        expr_eval::SingleMainSymbolicExpressionColumns,
+        expr_eval::{CachedSymbolicExpressionColumns, SingleMainSymbolicExpressionColumns},
     },
     cuda::{preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr},
     utils::MultiVecWithBounds,
@@ -40,6 +40,7 @@ extern "C" {
         num_records_per_proof: usize,
         d_sumcheck_rnds: *const EF,
         d_sumcheck_bounds: *const usize,
+        d_cached_records: *const CachedGpuRecord,
     ) -> i32;
 
     fn _eq_3b_tracegen(
@@ -84,7 +85,9 @@ pub unsafe fn sym_expr_common_tracegen(
     num_records_per_proof: usize,
     d_sumcheck_rnds: &DeviceBuffer<EF>,
     d_sumcheck_bounds: &DeviceBuffer<usize>,
+    d_cached_records: Option<&DeviceBuffer<CachedGpuRecord>>,
 ) -> Result<(), CudaError> {
+    let cached_records_ptr = d_cached_records.map_or(::core::ptr::null(), |b| b.as_ptr());
     CudaError::from_result(_sym_expr_common_tracegen(
         d_trace.as_mut_ptr(),
         height,
@@ -109,6 +112,7 @@ pub unsafe fn sym_expr_common_tracegen(
         num_records_per_proof,
         d_sumcheck_rnds.as_ptr(),
         d_sumcheck_bounds.as_ptr(),
+        cached_records_ptr,
     ))
 }
 
@@ -151,6 +155,7 @@ pub fn generate_sym_expr_trace(
     proofs: &[ProofGpu],
     preflights: &[PreflightGpu],
     max_num_proofs: usize,
+    has_cached: bool,
     expr_evals: &MultiVecWithBounds<EF, 2>,
 ) -> DeviceMatrix<F> {
     debug_assert_eq!(proofs.len(), preflights.len());
@@ -216,7 +221,9 @@ pub fn generate_sym_expr_trace(
     }
 
     let height = total_rows.max(1).next_power_of_two();
-    let width = SingleMainSymbolicExpressionColumns::<F>::width() * max_num_proofs;
+    let cached_width = CachedSymbolicExpressionColumns::<F>::width();
+    let width = SingleMainSymbolicExpressionColumns::<F>::width() * max_num_proofs
+        + if has_cached { 0 } else { cached_width + 1 };
     let trace = DeviceMatrix::with_capacity(height, width);
 
     let d_log_heights = proofs
@@ -277,6 +284,11 @@ pub fn generate_sym_expr_trace(
     };
     let d_sumcheck_bounds = sumcheck_bounds.to_device().unwrap();
 
+    let d_cached_records = (!has_cached)
+        .then(|| build_cached_gpu_records(child_vk).to_device())
+        .transpose()
+        .unwrap();
+
     unsafe {
         sym_expr_common_tracegen(
             trace.buffer(),
@@ -302,6 +314,7 @@ pub fn generate_sym_expr_trace(
             total_rows,
             &d_sumcheck_rnds,
             &d_sumcheck_bounds,
+            d_cached_records.as_ref(),
         )
         .unwrap();
     }

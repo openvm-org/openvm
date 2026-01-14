@@ -17,9 +17,11 @@ use crate::{
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use continuations_v2::aggregation::NonRootGpuProver as NonRootAggregationProver;
+        use continuations_v2::aggregation::CompressionGpuProver as CompressionProver;
         type E = cuda_backend_v2::BabyBearPoseidon2GpuEngineV2;
     } else {
         use continuations_v2::aggregation::NonRootCpuProver as NonRootAggregationProver;
+        use continuations_v2::aggregation::CompressionCpuProver as CompressionProver;
         type E = stark_backend_v2::BabyBearPoseidon2CpuEngineV2;
     }
 }
@@ -28,6 +30,7 @@ pub struct AggProver {
     pub leaf_prover: NonRootAggregationProver<MAX_NUM_CHILDREN_LEAF>,
     pub internal_for_leaf_prover: NonRootAggregationProver<MAX_NUM_CHILDREN_INTERNAL>,
     pub internal_recursive_prover: NonRootAggregationProver<MAX_NUM_CHILDREN_INTERNAL>,
+    pub compression_prover: Option<CompressionProver>,
     pub agg_tree_config: AggregationTreeConfig,
 }
 
@@ -51,10 +54,18 @@ impl AggProver {
             agg_config.params.internal.clone(),
             true,
         );
+        let compression_prover = agg_config.params.compression.map(|compression_params| {
+            CompressionProver::new::<E>(
+                internal_recursive_prover.get_vk(),
+                internal_recursive_prover.get_self_vk_pcs_data().unwrap(),
+                compression_params,
+            )
+        });
         Self {
             leaf_prover,
             internal_for_leaf_prover,
             internal_recursive_prover,
+            compression_prover,
             agg_tree_config,
         }
     }
@@ -75,10 +86,18 @@ impl AggProver {
             agg_pk.internal_recursive_pk,
             true,
         );
+        let compression_prover = agg_pk.compression_pk.map(|compression_params| {
+            CompressionProver::from_pk::<E>(
+                internal_recursive_prover.get_vk(),
+                internal_recursive_prover.get_self_vk_pcs_data().unwrap(),
+                compression_params,
+            )
+        });
         Self {
             leaf_prover,
             internal_for_leaf_prover,
             internal_recursive_prover,
+            compression_prover,
             agg_tree_config,
         }
     }
@@ -155,8 +174,35 @@ impl AggProver {
             internal_recursive_layer += 1;
         }
 
+        let inner = if let Some(compression_prover) = self.compression_prover.as_ref() {
+            // We add one additional internal_recursive layer before the compression layer to
+            // minimize the input size. This internal_recursive layer will have a single child
+            // proof, meaning that it may have 2-3x fewer trace cells than the previous layer.
+            let inner = info_span!(
+                "agg_layer",
+                group = format!("internal_recursive.{internal_recursive_layer}")
+            )
+            .in_scope(|| {
+                info_span!("single_internal_agg", idx = internal_node_idx).in_scope(|| {
+                    internal_node_idx += 1;
+                    self.internal_recursive_prover.agg_prove::<E>(
+                        &[internal_proofs[0].clone()],
+                        None,
+                        true,
+                    )
+                })
+            })?;
+
+            info_span!("agg_layer", group = format!("compression")).in_scope(|| {
+                info_span!("compression")
+                    .in_scope(|| compression_prover.agg_prove::<E>(&[inner], None, false))
+            })?
+        } else {
+            internal_proofs[0].clone()
+        };
+
         Ok(NonRootStarkProof {
-            inner: internal_proofs[0].clone(),
+            inner,
             user_pvs_proof: continuation_proof.user_public_values,
         })
     }

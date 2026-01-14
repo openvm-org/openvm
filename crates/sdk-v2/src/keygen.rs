@@ -35,6 +35,7 @@ pub struct AggProvingKey {
     pub leaf_pk: Arc<MultiStarkProvingKey>,
     pub internal_for_leaf_pk: Arc<MultiStarkProvingKey>,
     pub internal_recursive_pk: Arc<MultiStarkProvingKey>,
+    pub compression_pk: Option<Arc<MultiStarkProvingKey>>,
 }
 
 impl<VC> AppProvingKey<VC>

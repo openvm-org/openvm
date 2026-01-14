@@ -4,9 +4,9 @@ use openvm_stark_backend::air_builders::symbolic::{
     symbolic_variable::{Entry, SymbolicVariable},
 };
 use p3_field::FieldAlgebra;
-use stark_backend_v2::keygen::types::StarkVerifyingKeyV2;
+use stark_backend_v2::keygen::types::{MultiStarkVerifyingKeyV2, StarkVerifyingKeyV2};
 
-use crate::batch_constraint::expr_eval::NodeKind;
+use crate::batch_constraint::expr_eval::{NodeKind, build_cached_records};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -35,6 +35,31 @@ pub struct FlatSymbolicVariable {
     pub index: u32,
     pub part_index: u32,
     pub offset: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct CachedGpuRecord {
+    pub node_idx: u32,
+    pub attrs: [u32; 3],
+    pub fanout: u32,
+    pub is_constraint: bool,
+    pub constraint_idx: u32,
+}
+
+pub(crate) fn build_cached_gpu_records(
+    child_vk: &MultiStarkVerifyingKeyV2,
+) -> Vec<CachedGpuRecord> {
+    build_cached_records(child_vk)
+        .iter()
+        .map(|r| CachedGpuRecord {
+            node_idx: r.node_idx as u32,
+            attrs: r.attrs.map(|x| x as u32),
+            fanout: r.fanout as u32,
+            is_constraint: r.is_constraint,
+            constraint_idx: r.constraint_idx as u32,
+        })
+        .collect()
 }
 
 pub(super) fn flatten_constraint_node(

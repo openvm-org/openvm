@@ -100,8 +100,8 @@ pub fn verify_vm_stark_proof_decoded(
         return Err(VerifyStarkError::ExecutionUnsuccessful(exit_code));
     }
 
-    // Check that the final proof is computed by the internal recursive prover, i.e.
-    // that internal_flag is 2.
+    // Check that the final proof is computed by the internal recursive (or compression)
+    // prover, i.e. that internal_flag is 2.
     if internal_flag != F::TWO {
         return Err(VerifyStarkError::InvalidInternalFlag(internal_flag));
     }
@@ -130,24 +130,37 @@ pub fn verify_vm_stark_proof_decoded(
         });
     }
 
-    // Check that recursion_flag is 1 or 2. If recursion_flag == 1, then there was
-    // only 1 internal recursive layer and internal_recursive_vk_commit should not
-    // be set. Else, check internal_recursive_vk_commit against expected_commits.
-    if recursion_flag == F::ONE {
-        if internal_recursive_vk_commit != [F::ZERO; DIGEST_SIZE] {
-            return Err(VerifyStarkError::InternalRecursiveVkCommitDefined {
-                actual: internal_recursive_vk_commit,
-            });
-        }
-    } else if recursion_flag == F::TWO {
-        if internal_recursive_vk_commit != vk.baseline.internal_recursive_vk_commit {
-            return Err(VerifyStarkError::InternalRecursiveVkCommitMismatch {
-                expected: vk.baseline.internal_recursive_vk_commit,
-                actual: internal_recursive_vk_commit,
-            });
-        }
-    } else {
+    // Check that recursion_flag is 2, i.e. that the penultimate layer is internal
+    // recursive.
+    if recursion_flag != F::TWO {
         return Err(VerifyStarkError::InvalidRecursionFlag(recursion_flag));
     }
+
+    // Check internal_recursive_vk_commit against expected_commits.
+    if internal_recursive_vk_commit != vk.baseline.internal_recursive_vk_commit {
+        return Err(VerifyStarkError::InternalRecursiveVkCommitMismatch {
+            expected: vk.baseline.internal_recursive_vk_commit,
+            actual: internal_recursive_vk_commit,
+        });
+    }
+
+    // Check that the public values of the last AIR matches up with the expected
+    // compression_commit if compression is enabled, else ensure the last AIR has
+    // no public values.
+    let compression_commit_pvs = proof.inner.public_values.last().unwrap().clone();
+    if let Some(expected_compression_commit) = vk.baseline.compression_commit.as_ref() {
+        let expected_expression_commit = expected_compression_commit.to_vec();
+        if compression_commit_pvs != expected_expression_commit {
+            return Err(VerifyStarkError::CompressionCommitMismatch {
+                expected: expected_expression_commit,
+                actual: compression_commit_pvs,
+            });
+        }
+    } else if !compression_commit_pvs.is_empty() {
+        return Err(VerifyStarkError::CompressionCommitDefined {
+            actual: compression_commit_pvs,
+        });
+    }
+
     Ok(())
 }
