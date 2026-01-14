@@ -14,7 +14,7 @@ pub const DEFAULT_INTERNAL_LOG_BLOWUP: usize = 2;
 // of children is a const generic in the recursion circuit. We may change
 // these as needed, but note that a disparity in max and actual number of
 // leaf/internal children will cause a performance loss.
-pub const MAX_NUM_CHILDREN_LEAF: usize = 1;
+pub const MAX_NUM_CHILDREN_LEAF: usize = 4;
 pub const MAX_NUM_CHILDREN_INTERNAL: usize = 3;
 
 #[derive(Clone, Debug, Serialize, Deserialize, derive_new::new)]
@@ -96,7 +96,7 @@ pub fn default_app_params(log_blowup: usize, l_skip: usize, n_stack: usize) -> S
 
 pub fn default_leaf_params(log_blowup: usize) -> SystemParams {
     let l_skip = 2;
-    let n_stack = 17;
+    let n_stack = 18;
     let k_whir = 4;
     let max_constraint_degree = 4;
     generic_system_params(log_blowup, l_skip, n_stack, k_whir, max_constraint_degree)
