@@ -354,6 +354,11 @@ impl AggregateMetrics {
                 }
             }
         }
+        for (group_name, bounded) in self.bounded_par_by_group.iter_mut() {
+            if let Some(prev_bounded) = prev.bounded_par_by_group.get(group_name) {
+                bounded.diff = Some(bounded.val - prev_bounded.val);
+            }
+        }
         self.compute_total();
     }
 
@@ -563,10 +568,16 @@ impl AggregateMetrics {
             }
             rows.push((group_name, sum, max));
         }
-        let total_bounded: f64 = self.bounded_par_by_group.values().map(|v| v.val).sum();
+        let mut total_bounded = MdTableCell::new(0.0, None);
+        for cell in self.bounded_par_by_group.values() {
+            total_bounded.val += cell.val;
+            if let Some(diff) = cell.diff {
+                *total_bounded.diff.get_or_insert(0.0) += diff;
+            }
+        }
         writeln!(
             writer,
-            "| Total | {} | {} | {:.2} |",
+            "| Total | {} | {} | {} |",
             self.total_proof_time, self.total_par_proof_time, total_bounded
         )?;
         for (group_name, proof_time, par_proof_time) in rows {
