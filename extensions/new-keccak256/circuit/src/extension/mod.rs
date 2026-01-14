@@ -33,7 +33,7 @@ use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
 use crate::{
-    keccakf::{air::KeccakfVmAir, KeccakfVmChip, KeccakfVmExecutor, KeccakfVmFiller},
+    keccakf_op::{air::KeccakfVmAir, KeccakfVmChip, KeccakfVmExecutor, KeccakfVmFiller},
     xorin::{air::XorinVmAir, XorinVmChip, XorinVmExecutor, XorinVmFiller},
 };
 

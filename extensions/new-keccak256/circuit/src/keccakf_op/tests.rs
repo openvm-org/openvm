@@ -21,13 +21,11 @@ use rand::rngs::StdRng;
 use rand::Rng;
 
 use super::KeccakfVmFiller;
-use crate::keccakf::air::KeccakfVmAir;
+use crate::keccakf_op::{air::KeccakfOpAir, KeccakfVmChip, KeccakfVmExecutor};
 
 type F = BabyBear;
-type Harness = TestChipHarness<F, KeccakfVmExecutor, KeccakfVmAir, KeccakfVmChip<F>>;
+type Harness = TestChipHarness<F, KeccakfVmExecutor, KeccakfOpAir, KeccakfVmChip<F>>;
 const MAX_TRACE_ROWS: usize = 4096;
-
-use crate::keccakf::{KeccakfVmChip, KeccakfVmExecutor};
 
 fn create_harness_fields(
     execution_bridge: ExecutionBridge,
@@ -35,8 +33,8 @@ fn create_harness_fields(
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
-) -> (KeccakfVmAir, KeccakfVmExecutor, KeccakfVmChip<F>) {
-    let air = KeccakfVmAir::new(
+) -> (KeccakfOpAir, KeccakfVmExecutor, KeccakfVmChip<F>) {
+    let air = KeccakfOpAir::new(
         execution_bridge,
         memory_bridge,
         bitwise_chip.bus(),
@@ -163,7 +161,7 @@ use crate::{cuda::KeccakfVmChipGpu, keccakf::trace::KeccakfVmRecordMut};
 
 #[cfg(feature = "cuda")]
 type GpuHarness =
-    GpuTestChipHarness<F, KeccakfVmExecutor, KeccakfVmAir, KeccakfVmChipGpu, KeccakfVmChip<F>>;
+    GpuTestChipHarness<F, KeccakfVmExecutor, KeccakfOpAir, KeccakfVmChipGpu, KeccakfVmChip<F>>;
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {

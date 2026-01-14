@@ -18,7 +18,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use p3_keccak_air::NUM_ROUNDS;
 
 use super::KeccakfVmExecutor;
-use crate::keccakf::utils::{
+use crate::keccakf_op::utils::{
     KECCAK_WIDTH_BYTES, KECCAK_WIDTH_U32_LIMBS, KECCAK_WIDTH_U64_LIMBS, KECCAK_WORD_SIZE,
 };
 

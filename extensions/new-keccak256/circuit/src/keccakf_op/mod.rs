@@ -1,10 +1,9 @@
-pub mod air;
-pub mod columns;
+mod air;
+mod columns;
 pub mod execution;
 #[cfg(test)]
 pub mod tests;
-pub mod trace;
-pub mod utils;
+mod trace;
 
 use openvm_circuit::arch::VmChipWrapper;
 use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;

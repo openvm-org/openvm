@@ -23,8 +23,8 @@ use openvm_rv32im_circuit::adapters::{tracing_read, tracing_write};
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 use p3_keccak_air::generate_trace_rows;
 
-use crate::keccakf::{
-    columns::{KeccakfVmCols, NUM_KECCAKF_VM_COLS, NUM_KECCAK_PERM_COLS, NUM_ROUNDS},
+use crate::keccakf_op::{
+    columns::{KeccakfOpCols, NUM_KECCAKF_VM_COLS, NUM_KECCAK_PERM_COLS, NUM_ROUNDS},
     utils::{KECCAK_WIDTH_BYTES, KECCAK_WIDTH_U32_LIMBS, KECCAK_WIDTH_U64_LIMBS},
     KeccakfVmExecutor, KeccakfVmFiller,
 };
@@ -276,7 +276,7 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
                         );
 
                         // fills in preimage_state_hi
-                        let cols: &mut KeccakfVmCols<F> = row.borrow_mut();
+                        let cols: &mut KeccakfOpCols<F> = row.borrow_mut();
                         for idx in 0..KECCAK_WIDTH_BYTES / 2 {
                             cols.preimage_state_hi[idx] =
                                 F::from_canonical_u8(preimage_buffer_bytes[2 * idx + 1]);
