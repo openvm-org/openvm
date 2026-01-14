@@ -25,10 +25,11 @@ use crate::{
     batch_constraint::{BatchConstraintModule, LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX},
     bus::{
         AirShapeBus, BatchConstraintModuleBus, CachedCommitBus, ColumnClaimsBus, CommitmentsBus,
-        ConstraintSumcheckRandomnessBus, EqNegBaseRandBus, EqNegResultBus, ExpressionClaimNMaxBus,
-        FractionFolderInputBus, GkrModuleBus, HyperdimBus, LiftedHeightsBus, MerkleVerifyBus,
-        Poseidon2Bus, PublicValuesBus, SelUniBus, StackingIndicesBus, StackingModuleBus,
-        TranscriptBus, WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
+        ConstraintSumcheckRandomnessBus, DagCommitBus, EqNegBaseRandBus, EqNegResultBus,
+        ExpressionClaimNMaxBus, FractionFolderInputBus, GkrModuleBus, HyperdimBus,
+        LiftedHeightsBus, MerkleVerifyBus, Poseidon2Bus, PublicValuesBus, SelUniBus,
+        StackingIndicesBus, StackingModuleBus, TranscriptBus, WhirModuleBus, WhirOpeningPointBus,
+        XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::{
@@ -50,7 +51,11 @@ const BATCH_CONSTRAINT_MOD_IDX: usize = 0;
 
 // Trait to make tracegen functions generic on ProverBackendV2
 pub trait VerifierTraceGen<PB: ProverBackendV2> {
-    fn new(child_mvk: Arc<MultiStarkVerifyingKeyV2>, continuations_enabled: bool) -> Self;
+    fn new(
+        child_mvk: Arc<MultiStarkVerifyingKeyV2>,
+        continuations_enabled: bool,
+        has_cached: bool,
+    ) -> Self;
     fn commit_child_vk<E: StarkEngineV2<SC = SC, PB = PB>>(
         &self,
         engine: &E,
@@ -71,6 +76,7 @@ pub trait AggregationSubCircuit {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>>;
     fn public_values_bus(&self) -> PublicValuesBus;
     fn cached_commit_bus(&self) -> CachedCommitBus;
+    fn dag_commit_bus(&self) -> DagCommitBus;
     fn max_num_proofs(&self) -> usize;
 }
 
@@ -191,6 +197,7 @@ pub struct BusInventory {
 
     // Continuations buses
     pub cached_commit_bus: CachedCommitBus,
+    pub dag_commit_bus: DagCommitBus,
 }
 
 /// The records from global recursion preflight on CPU for verifying a single proof.
@@ -322,6 +329,7 @@ impl BusInventory {
 
             // Continuation buses
             cached_commit_bus: CachedCommitBus::new(b.new_bus_idx()),
+            dag_commit_bus: DagCommitBus::new(b.new_bus_idx()),
         }
     }
 }
@@ -435,12 +443,13 @@ pub struct VerifierSubCircuit<const MAX_NUM_PROOFS: usize> {
 
 impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
     pub fn new(child_mvk: Arc<MultiStarkVerifyingKeyV2>) -> Self {
-        Self::new_with_set_continuations(child_mvk, false)
+        Self::new_with_options(child_mvk, false, true)
     }
 
-    pub fn new_with_set_continuations(
+    pub fn new_with_options(
         child_mvk: Arc<MultiStarkVerifyingKeyV2>,
         continuations_enabled: bool,
+        has_cached: bool,
     ) -> Self {
         let mut b = BusIndexManager::new();
         let bus_inventory = BusInventory::new(&mut b);
@@ -467,6 +476,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             bus_inventory.clone(),
             MAX_NUM_PROOFS,
             power_checker_trace.clone(),
+            has_cached,
         );
         let stacking = StackingModule::new(&child_mvk, &mut b, bus_inventory.clone());
         let whir = WhirModule::new(&child_mvk, &mut b, bus_inventory.clone());
@@ -791,6 +801,10 @@ impl<const MAX_NUM_PROOFS: usize> AggregationSubCircuit for VerifierSubCircuit<M
         self.bus_inventory.cached_commit_bus
     }
 
+    fn dag_commit_bus(&self) -> DagCommitBus {
+        self.bus_inventory.dag_commit_bus
+    }
+
     fn max_num_proofs(&self) -> usize {
         MAX_NUM_PROOFS
     }
@@ -799,8 +813,12 @@ impl<const MAX_NUM_PROOFS: usize> AggregationSubCircuit for VerifierSubCircuit<M
 impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
     for VerifierSubCircuit<MAX_NUM_PROOFS>
 {
-    fn new(child_mvk: Arc<MultiStarkVerifyingKeyV2>, continuations_enabled: bool) -> Self {
-        Self::new_with_set_continuations(child_mvk, continuations_enabled)
+    fn new(
+        child_mvk: Arc<MultiStarkVerifyingKeyV2>,
+        continuations_enabled: bool,
+        has_cached: bool,
+    ) -> Self {
+        Self::new_with_options(child_mvk, continuations_enabled, has_cached)
     }
 
     fn commit_child_vk<E: StarkEngineV2<SC = SC, PB = CpuBackendV2>>(
@@ -848,8 +866,10 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
                 module.generate_cpu_ctxs(child_vk, proofs, &preflights, &exp_bits_len_gen)
             })
             .collect::<Vec<_>>();
-        ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX].cached_mains =
-            vec![child_vk_pcs_data];
+        if self.batch_constraint.has_cached {
+            ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
+                .cached_mains = vec![child_vk_pcs_data];
+        }
         let mut ctx_per_trace = ctxs_by_module.into_iter().flatten().collect::<Vec<_>>();
         // Caution: this must be done after GKR and WHIR tracegen
         tracing::trace_span!("wrapper.generate_proving_ctxs", air_module = "Primitives",).in_scope(
@@ -926,8 +946,12 @@ pub mod cuda_tracegen {
     impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<GpuBackendV2>
         for VerifierSubCircuit<MAX_NUM_PROOFS>
     {
-        fn new(child_mvk: Arc<MultiStarkVerifyingKeyV2>, continuations_enabled: bool) -> Self {
-            Self::new_with_set_continuations(child_mvk, continuations_enabled)
+        fn new(
+            child_mvk: Arc<MultiStarkVerifyingKeyV2>,
+            continuations_enabled: bool,
+            has_cached: bool,
+        ) -> Self {
+            Self::new_with_options(child_mvk, continuations_enabled, has_cached)
         }
 
         fn commit_child_vk<E: StarkEngineV2<SC = SC, PB = GpuBackendV2>>(
@@ -993,8 +1017,10 @@ pub mod cuda_tracegen {
                     )
                 })
                 .collect::<Vec<_>>();
-            ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
-                .cached_mains = vec![child_vk_pcs_data];
+            if self.batch_constraint.has_cached {
+                ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
+                    .cached_mains = vec![child_vk_pcs_data];
+            }
             let mut ctx_per_trace = ctxs_by_module.into_iter().flatten().collect::<Vec<_>>();
             // Caution: this must be done after GKR and WHIR tracegen
             tracing::trace_span!("wrapper.generate_proving_ctxs", air_module = "Primitives",)
