@@ -1,6 +1,7 @@
 use core::{array, cmp::min, iter::zip};
 use std::borrow::{Borrow, BorrowMut};
 
+use itertools::{Itertools, fold};
 use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq};
 use openvm_stark_backend::{
     air_builders::{
@@ -18,7 +19,7 @@ use p3_field::{
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
-    D_EF, EF, F,
+    D_EF, DIGEST_SIZE, EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
     poly_common::{Squarable, eval_eq_uni_at_one},
     proof::Proof,
@@ -34,9 +35,10 @@ use crate::{
         SymbolicExpressionMessage,
     },
     bus::{
-        AirShapeBus, AirShapeBusMessage, ColumnClaimsBus, ColumnClaimsMessage, HyperdimBus,
-        HyperdimBusMessage, PublicValuesBus, PublicValuesBusMessage, SelHypercubeBus,
-        SelHypercubeBusMessage, SelUniBus, SelUniBusMessage,
+        AirShapeBus, AirShapeBusMessage, ColumnClaimsBus, ColumnClaimsMessage, DagCommitBus,
+        DagCommitBusMessage, HyperdimBus, HyperdimBusMessage, PublicValuesBus,
+        PublicValuesBusMessage, SelHypercubeBus, SelHypercubeBusMessage, SelUniBus,
+        SelUniBusMessage,
     },
     system::Preflight,
     utils::{
@@ -45,6 +47,8 @@ use crate::{
     },
 };
 const NUM_FLAGS: usize = 4;
+const ENCODER_MAX_DEGREE: u32 = 2;
+const FLAG_MODULUS: u32 = ENCODER_MAX_DEGREE + 1;
 
 #[derive(AlignedBorrow, Copy, Clone)]
 #[repr(C)]
@@ -89,18 +93,29 @@ pub struct SymbolicExpressionAir {
     pub sel_hypercube_bus: SelHypercubeBus,
     pub sel_uni_bus: SelUniBus,
     pub eq_neg_internal_bus: EqNegInternalBus,
+    pub dag_commit_bus: DagCommitBus,
 
     pub cnt_proofs: usize,
+    pub has_cached: bool,
 }
 
 impl<F> BaseAirWithPublicValues<F> for SymbolicExpressionAir {}
 impl<F> PartitionedBaseAir<F> for SymbolicExpressionAir {
     fn cached_main_widths(&self) -> Vec<usize> {
-        vec![CachedSymbolicExpressionColumns::<F>::width()]
+        if self.has_cached {
+            vec![CachedSymbolicExpressionColumns::<F>::width()]
+        } else {
+            vec![]
+        }
     }
 
     fn common_main_width(&self) -> usize {
         SingleMainSymbolicExpressionColumns::<F>::width() * self.cnt_proofs
+            + if self.has_cached {
+                0
+            } else {
+                1 + CachedSymbolicExpressionColumns::<F>::width()
+            }
     }
 }
 
@@ -108,6 +123,7 @@ impl<F> BaseAir<F> for SymbolicExpressionAir {
     fn width(&self) -> usize {
         CachedSymbolicExpressionColumns::<F>::width()
             + SingleMainSymbolicExpressionColumns::<F>::width() * self.cnt_proofs
+            + if self.has_cached { 0 } else { 1 }
     }
 }
 
@@ -117,15 +133,67 @@ where
 {
     fn eval(&self, builder: &mut AB) {
         let main_local = builder.common_main().row_slice(0).to_vec();
-        let cached_local = builder.cached_mains()[0].row_slice(0).to_vec();
+
         let single_main_width = SingleMainSymbolicExpressionColumns::<AB::Var>::width();
-        let cached_cols: &CachedSymbolicExpressionColumns<AB::Var> = cached_local[..].borrow();
-        let main_cols: Vec<&SingleMainSymbolicExpressionColumns<AB::Var>> = main_local
+        let cached_width = CachedSymbolicExpressionColumns::<AB::Var>::width();
+
+        let cached_local_vec = self
+            .has_cached
+            .then(|| builder.cached_mains()[0].row_slice(0).to_vec());
+
+        let (cached_cols, main_slice) = if self.has_cached {
+            let cached_slice = cached_local_vec.as_ref().unwrap().as_slice();
+            let main_slice = main_local.as_slice();
+            let cached_cols: &CachedSymbolicExpressionColumns<AB::Var> = cached_slice.borrow();
+            (cached_cols, main_slice)
+        } else {
+            // No cached trace: common main is prefixed by `row_idx` and then cached columns
+            let main_next = builder.common_main().row_slice(1).to_vec();
+
+            let (prefix_local, rest_local) = main_local.as_slice().split_at(1);
+            let (prefix_next, _rest_next) = main_next.as_slice().split_at(1);
+            let (cached_slice, main_slice) = rest_local.split_at(cached_width);
+            let cached_cols: &CachedSymbolicExpressionColumns<AB::Var> = cached_slice.borrow();
+
+            let row_idx_local = prefix_local[0];
+            let row_idx_next = prefix_next[0];
+
+            builder.when_first_row().assert_zero(row_idx_local);
+            builder
+                .when_transition()
+                .assert_eq(row_idx_next, row_idx_local + AB::Expr::ONE);
+
+            debug_assert_eq!(FLAG_MODULUS, 3);
+            builder.assert_bool(cached_cols.is_constraint);
+            for flag in cached_cols.flags {
+                builder.assert_tern(flag);
+            }
+
+            let cached_slice_expr = cached_slice
+                .to_vec()
+                .into_iter()
+                .map(Into::into)
+                .collect_vec();
+
+            self.dag_commit_bus.send(
+                builder,
+                AB::Expr::ZERO,
+                DagCommitBusMessage {
+                    idx: row_idx_local.into(),
+                    values: cached_symbolic_expr_cols_to_digest(&cached_slice_expr),
+                },
+                AB::Expr::ONE,
+            );
+
+            (cached_cols, main_slice)
+        };
+
+        let main_cols: Vec<&SingleMainSymbolicExpressionColumns<AB::Var>> = main_slice
             .chunks(single_main_width)
             .map(|chunk| chunk.borrow())
             .collect();
 
-        let enc = Encoder::new(NodeKind::COUNT, 2, true);
+        let enc = Encoder::new(NodeKind::COUNT, ENCODER_MAX_DEGREE, true);
         assert_eq!(enc.width(), NUM_FLAGS);
         let flags = cached_cols.flags;
 
@@ -344,12 +412,15 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
     proofs: &[Proof],
     preflights: &[Preflight],
     max_num_proofs: usize,
+    has_cached: bool,
     expr_evals: &MultiVecWithBounds<EF, 2>,
 ) -> RowMajorMatrix<F> {
     let l_skip = child_vk.inner.params.l_skip;
 
     let single_main_width = SingleMainSymbolicExpressionColumns::<F>::width();
-    let main_width = single_main_width * max_num_proofs;
+    let cached_width = CachedSymbolicExpressionColumns::<F>::width();
+    let main_width =
+        single_main_width * max_num_proofs + if has_cached { 0 } else { 1 + cached_width };
 
     struct Record {
         args: [F; 2 * D_EF],
@@ -557,34 +628,79 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
     let height = num_valid_rows.next_power_of_two();
     let mut main_trace = F::zero_vec(main_width * height);
 
-    main_trace
-        .par_chunks_exact_mut(single_main_width)
-        .enumerate()
-        .for_each(|(i, chunk)| {
-            let row_idx = i / max_num_proofs;
-            let proof_idx = i % max_num_proofs;
+    let (encoder, cached_records) = if has_cached {
+        (None, None)
+    } else {
+        let encoder = Encoder::new(NodeKind::COUNT, ENCODER_MAX_DEGREE, true);
+        assert_eq!(encoder.width(), NUM_FLAGS);
+        let cached_records = build_cached_records(child_vk);
+        debug_assert_eq!(cached_records.len(), num_valid_rows);
+        (Some(encoder), Some(cached_records))
+    };
 
-            if proof_idx >= proofs.len() {
-                return;
-            }
+    main_trace
+        .par_chunks_exact_mut(main_width)
+        .enumerate()
+        .for_each(|(row_idx, row)| {
+            // When has_cached == false we prepend row_idx for all rows
+            let row_offset = if has_cached {
+                0
+            } else {
+                row[0] = F::from_canonical_usize(row_idx);
+                1
+            };
+
             if row_idx >= num_valid_rows {
                 return;
             }
 
-            let record_idx = proof_idx * num_valid_rows + row_idx;
-            let record = &records[record_idx];
+            let row = &mut row[row_offset..];
 
-            if record.is_none() {
-                return;
+            let main_offset = if has_cached {
+                0
+            } else {
+                let record = &cached_records.as_ref().unwrap()[row_idx];
+                let encoder = encoder.as_ref().unwrap();
+                let cols: &mut CachedSymbolicExpressionColumns<_> =
+                    row[..cached_width].borrow_mut();
+
+                for (i, x) in encoder
+                    .get_flag_pt(record.kind as usize)
+                    .into_iter()
+                    .enumerate()
+                {
+                    cols.flags[i] = F::from_canonical_u32(x);
+                }
+                cols.air_idx = F::from_canonical_usize(record.air_idx);
+                cols.node_or_interaction_idx = F::from_canonical_usize(record.node_idx);
+                cols.attrs = record.attrs.map(F::from_canonical_usize);
+                cols.is_constraint = F::from_bool(record.is_constraint);
+                cols.constraint_idx = F::from_canonical_usize(record.constraint_idx);
+                cols.fanout = F::from_canonical_usize(record.fanout);
+
+                cached_width
+            };
+
+            for proof_idx in 0..max_num_proofs {
+                if proof_idx >= proofs.len() {
+                    continue;
+                }
+
+                let record_idx = proof_idx * num_valid_rows + row_idx;
+                let Some(record) = records[record_idx].as_ref() else {
+                    continue;
+                };
+
+                let start = main_offset + proof_idx * single_main_width;
+                let end = start + single_main_width;
+                let cols: &mut SingleMainSymbolicExpressionColumns<_> =
+                    row[start..end].borrow_mut();
+                cols.is_present = F::ONE;
+                cols.args = record.args;
+                cols.sort_idx = F::from_canonical_usize(record.sort_idx);
+                cols.n_abs = F::from_canonical_usize(record.n_abs);
+                cols.is_n_neg = F::from_canonical_usize(record.is_n_neg);
             }
-            let record = record.as_ref().unwrap();
-
-            let cols: &mut SingleMainSymbolicExpressionColumns<_> = chunk.borrow_mut();
-            cols.is_present = F::ONE;
-            cols.args = record.args;
-            cols.sort_idx = F::from_canonical_usize(record.sort_idx);
-            cols.n_abs = F::from_canonical_usize(record.n_abs);
-            cols.is_n_neg = F::from_canonical_usize(record.is_n_neg);
         });
 
     RowMajorMatrix::new(main_trace, main_width)
@@ -620,36 +736,19 @@ pub(crate) enum NodeKind {
     InteractionMsgComp = 12,
 }
 
-/// Returns the cached trace
-#[tracing::instrument(
-    name = "generate_cached_trace",
-    skip_all,
-    fields(air = "SymbolicExpressionAir")
-)]
-pub(crate) fn generate_symbolic_expr_cached_trace(
-    child_vk: &MultiStarkVerifyingKeyV2,
-) -> RowMajorMatrix<F> {
-    // 3 var types: main, preprocessed, public value
-    // 3 selectors: is_first, is_last, is_transition
-    // 1 constant type
-    // 4 gates: add, sub, neg, mul
-    let encoder = Encoder::new(NodeKind::COUNT, 2, true);
-    assert_eq!(encoder.width(), NUM_FLAGS);
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct CachedRecord {
+    kind: NodeKind,
+    air_idx: usize,
+    pub(crate) node_idx: usize,
+    pub(crate) attrs: [usize; 3],
+    pub(crate) is_constraint: bool,
+    pub(crate) constraint_idx: usize,
+    pub(crate) fanout: usize,
+}
 
-    let cached_width = CachedSymbolicExpressionColumns::<F>::width();
-
-    struct Record {
-        kind: NodeKind,
-        air_idx: usize,
-        node_idx: usize,
-        attrs: [usize; 3],
-        is_constraint: bool,
-        constraint_idx: usize,
-        fanout: usize,
-    }
-    let mut records = vec![];
-
-    let mut fanout_per_air = vec![];
+pub(crate) fn build_cached_records(child_vk: &MultiStarkVerifyingKeyV2) -> Vec<CachedRecord> {
+    let mut fanout_per_air = Vec::with_capacity(child_vk.inner.per_air.len());
     for vk in &child_vk.inner.per_air {
         let nodes = &vk.symbolic_constraints.constraints.nodes;
         let mut fanout = vec![0usize; nodes.len()];
@@ -660,11 +759,13 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
                     left_idx,
                     right_idx,
                     ..
-                } => {
-                    fanout[*left_idx] += 1;
-                    fanout[*right_idx] += 1;
                 }
-                SymbolicExpressionNode::Sub {
+                | SymbolicExpressionNode::Sub {
+                    left_idx,
+                    right_idx,
+                    ..
+                }
+                | SymbolicExpressionNode::Mul {
                     left_idx,
                     right_idx,
                     ..
@@ -674,14 +775,6 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
                 }
                 SymbolicExpressionNode::Neg { idx, .. } => {
                     fanout[*idx] += 1;
-                }
-                SymbolicExpressionNode::Mul {
-                    left_idx,
-                    right_idx,
-                    ..
-                } => {
-                    fanout[*left_idx] += 1;
-                    fanout[*right_idx] += 1;
                 }
                 _ => {}
             }
@@ -695,6 +788,7 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
         fanout_per_air.push(fanout);
     }
 
+    let mut records = vec![];
     for (air_idx, (vk, fanout_per_node)) in
         zip(child_vk.inner.per_air.iter(), fanout_per_air.into_iter()).enumerate()
     {
@@ -718,7 +812,7 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
             }
             let is_constraint = j < constraint_idxs.len() && constraint_idxs[j] == node_idx;
 
-            let mut record = Record {
+            let mut record = CachedRecord {
                 kind: NodeKind::Constant,
                 air_idx,
                 node_idx,
@@ -803,7 +897,7 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
         for (interaction_idx, interaction) in
             vk.symbolic_constraints.interactions.iter().enumerate()
         {
-            records.push(Record {
+            records.push(CachedRecord {
                 kind: NodeKind::InteractionMult,
                 air_idx,
                 node_idx: interaction_idx,
@@ -813,7 +907,7 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
                 fanout: 0,
             });
             for (idx_in_message, &node_idx) in interaction.message.iter().enumerate() {
-                records.push(Record {
+                records.push(CachedRecord {
                     kind: NodeKind::InteractionMsgComp,
                     air_idx,
                     node_idx: interaction_idx,
@@ -827,7 +921,7 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
         let mut node_idx = constraints.nodes.len();
         for unused_var in &vk.unused_variables {
             let record = match unused_var.entry {
-                Entry::Preprocessed { offset } => Record {
+                Entry::Preprocessed { offset } => CachedRecord {
                     kind: NodeKind::VarPreprocessed,
                     air_idx,
                     node_idx,
@@ -838,7 +932,7 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
                 },
                 Entry::Main { part_index, offset } => {
                     let part = vk.dag_main_part_index_to_commit_index(part_index);
-                    Record {
+                    CachedRecord {
                         kind: NodeKind::VarMain,
                         air_idx,
                         node_idx,
@@ -856,6 +950,27 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
             records.push(record);
         }
     }
+    records
+}
+
+/// Returns the cached trace
+#[tracing::instrument(
+    name = "generate_cached_trace",
+    skip_all,
+    fields(air = "SymbolicExpressionAir")
+)]
+pub(crate) fn generate_symbolic_expr_cached_trace(
+    child_vk: &MultiStarkVerifyingKeyV2,
+) -> RowMajorMatrix<F> {
+    // 3 var types: main, preprocessed, public value
+    // 3 selectors: is_first, is_last, is_transition
+    // 1 constant type
+    // 4 gates: add, sub, neg, mul
+    let encoder = Encoder::new(NodeKind::COUNT, ENCODER_MAX_DEGREE, true);
+    assert_eq!(encoder.width(), NUM_FLAGS);
+
+    let cached_width = CachedSymbolicExpressionColumns::<F>::width();
+    let records = build_cached_records(child_vk);
 
     let height = records.len().next_power_of_two();
     let mut cached_trace = F::zero_vec(cached_width * height);
@@ -881,4 +996,31 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
         });
 
     RowMajorMatrix::new(cached_trace, cached_width)
+}
+
+/// Compress a CachedSymbolicExpressionColumns row into a digest. The 0-index element
+/// is a composition of the ternary (i.e. in [0, FLAG_MODULUS)) Encoder flags and the
+/// boolean flag is_constraint, all of which should fit into any 13-bit (or higher)
+/// Field. Each of the remaining cached columns is its own digest element.
+///
+/// WARNING: To use this in an AIR you MUST constrain that is_constraint is boolean
+/// and that each flag is in [0, FLAG_MODULUS)
+pub fn cached_symbolic_expr_cols_to_digest<F: FieldAlgebra>(cached_cols: &[F]) -> [F; DIGEST_SIZE] {
+    let cached_cols: &CachedSymbolicExpressionColumns<_> = cached_cols.borrow();
+    let mut ret = [F::ZERO; DIGEST_SIZE];
+    ret[0] = fold(
+        cached_cols.flags.iter().enumerate(),
+        cached_cols.is_constraint.clone(),
+        |acc, (pow_exp, flag)| {
+            acc + (flag.clone() * F::from_canonical_u32(FLAG_MODULUS.pow(pow_exp as u32) << 1))
+        },
+    );
+    ret[1] = cached_cols.air_idx.clone();
+    ret[2] = cached_cols.node_or_interaction_idx.clone();
+    ret[3] = cached_cols.attrs[0].clone();
+    ret[4] = cached_cols.attrs[1].clone();
+    ret[5] = cached_cols.attrs[2].clone();
+    ret[6] = cached_cols.fanout.clone();
+    ret[7] = cached_cols.constraint_idx.clone();
+    ret
 }

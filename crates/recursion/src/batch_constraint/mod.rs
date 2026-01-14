@@ -47,9 +47,9 @@ use crate::{
     },
     bus::{
         AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus, ConstraintSumcheckRandomnessBus,
-        EqNegBaseRandBus, EqNegResultBus, ExpressionClaimNMaxBus, FractionFolderInputBus,
-        HyperdimBus, PublicValuesBus, SelHypercubeBus, SelUniBus, StackingModuleBus, TranscriptBus,
-        XiRandomnessBus,
+        DagCommitBus, EqNegBaseRandBus, EqNegResultBus, ExpressionClaimNMaxBus,
+        FractionFolderInputBus, HyperdimBus, PublicValuesBus, SelHypercubeBus, SelUniBus,
+        StackingModuleBus, TranscriptBus, XiRandomnessBus,
     },
     primitives::{bus::PowerCheckerBus, pow::PowerCheckerTraceGenerator},
     system::{
@@ -113,6 +113,8 @@ pub struct BatchConstraintModule {
     widths: Vec<TraceWidth>,
 
     max_num_proofs: usize,
+    pub(crate) has_cached: bool,
+    dag_commit_bus: DagCommitBus,
 }
 
 impl BatchConstraintModule {
@@ -122,6 +124,7 @@ impl BatchConstraintModule {
         bus_inventory: BusInventory,
         max_num_proofs: usize,
         pow_checker: Arc<PowerCheckerTraceGenerator<2, 32>>,
+        has_cached: bool,
     ) -> Self {
         let l_skip = child_vk.inner.params.l_skip;
         let max_constraint_degree = child_vk.max_constraint_degree();
@@ -167,6 +170,8 @@ impl BatchConstraintModule {
             max_constraint_degree,
             widths,
             max_num_proofs,
+            has_cached,
+            dag_commit_bus: bus_inventory.dag_commit_bus,
         }
     }
 
@@ -314,7 +319,9 @@ impl AirModule for BatchConstraintModule {
             sel_hypercube_bus: self.sel_hypercube_bus,
             sel_uni_bus: self.sel_uni_bus,
             eq_neg_internal_bus: self.eq_neg_internal_bus,
+            dag_commit_bus: self.dag_commit_bus,
             cnt_proofs: self.max_num_proofs,
+            has_cached: self.has_cached,
         };
         let fraction_folder_air = FractionsFolderAir {
             transcript_bus: self.transcript_bus,
@@ -664,6 +671,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
         let chips = [
             BatchConstraintModuleChip::SymbolicExpression {
                 max_num_proofs: self.max_num_proofs,
+                has_cached: self.has_cached,
             },
             BatchConstraintModuleChip::FractionsFolder,
             BatchConstraintModuleChip::SumcheckUni,
@@ -719,6 +727,7 @@ impl BatchConstraintModule {
 enum BatchConstraintModuleChip {
     SymbolicExpression {
         max_num_proofs: usize,
+        has_cached: bool,
     },
     FractionsFolder,
     SumcheckUni,
@@ -784,15 +793,17 @@ impl BatchConstraintModuleChip {
                 preflights,
             ),
             EqUni => eq_airs::generate_eq_uni_trace(child_vk, proofs, preflights),
-            SymbolicExpression { max_num_proofs } => {
-                expr_eval::generate_symbolic_expr_common_trace(
-                    child_vk,
-                    proofs,
-                    preflights,
-                    *max_num_proofs,
-                    &blob.expr_evals,
-                )
-            }
+            SymbolicExpression {
+                max_num_proofs,
+                has_cached,
+            } => expr_eval::generate_symbolic_expr_common_trace(
+                child_vk,
+                proofs,
+                preflights,
+                *max_num_proofs,
+                *has_cached,
+                &blob.expr_evals,
+            ),
             ExpressionClaim { pow_checker } => expression_claim::generate_trace(
                 child_vk,
                 &blob.expr_claim_blob,
@@ -843,11 +854,15 @@ pub mod cuda_tracegen {
             use BatchConstraintModuleChip::*;
             let child_vk = &child_vk.cpu;
             match self {
-                SymbolicExpression { max_num_proofs } => generate_sym_expr_trace(
+                SymbolicExpression {
+                    max_num_proofs,
+                    has_cached,
+                } => generate_sym_expr_trace(
                     child_vk,
                     proofs,
                     preflights,
                     *max_num_proofs,
+                    *has_cached,
                     &blob.expr_evals,
                 ),
                 Eq3b => generate_eq_3b_trace(child_vk, &blob.eq_3b_blob, preflights),
@@ -879,6 +894,7 @@ pub mod cuda_tracegen {
             let chips = [
                 BatchConstraintModuleChip::SymbolicExpression {
                     max_num_proofs: self.max_num_proofs,
+                    has_cached: self.has_cached,
                 },
                 BatchConstraintModuleChip::FractionsFolder,
                 BatchConstraintModuleChip::SumcheckUni,

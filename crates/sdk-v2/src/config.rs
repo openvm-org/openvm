@@ -8,6 +8,7 @@ pub const DEFAULT_APP_L_SKIP: usize = 4;
 pub const DEFAULT_APP_LOG_BLOWUP: usize = 1;
 pub const DEFAULT_LEAF_LOG_BLOWUP: usize = 2;
 pub const DEFAULT_INTERNAL_LOG_BLOWUP: usize = 2;
+pub const DEFAULT_COMPRESSION_LOG_BLOWUP: usize = 4;
 
 // WARNING: These currently serve as both the DEFAULT and MAXIMUM number of
 // children for the leaf and internal aggregation layers, as the max number
@@ -43,6 +44,7 @@ pub struct AggregationConfig {
 pub struct AggregationSystemParams {
     pub leaf: SystemParams,
     pub internal: SystemParams,
+    pub compression: Option<SystemParams>,
 }
 
 impl Default for AggregationSystemParams {
@@ -50,6 +52,7 @@ impl Default for AggregationSystemParams {
         Self {
             leaf: default_leaf_params(DEFAULT_LEAF_LOG_BLOWUP),
             internal: default_internal_params(DEFAULT_INTERNAL_LOG_BLOWUP),
+            compression: Some(default_compression_params(DEFAULT_COMPRESSION_LOG_BLOWUP)),
         }
     }
 }
@@ -108,6 +111,35 @@ pub fn default_internal_params(log_blowup: usize) -> SystemParams {
     let k_whir = 4;
     let max_constraint_degree = 4;
     generic_system_params(log_blowup, l_skip, n_stack, k_whir, max_constraint_degree)
+}
+
+/// Compression params are optimized to minimize the size of the WHIR proof given ~50
+/// million trace cells. Parameters were chosen by computing the proof size for each
+/// of the set of reasonable parameters, and selecting the best config. Intuitively,
+/// a large n_stack + l_skip reduces stacking width, and the other parameters are then
+/// balanced to reduce size maximally.
+///
+/// NOTE: Proof size largely depends on log_blowup - a higher log_blowup corresponds
+/// to a smaller proof.
+pub fn default_compression_params(log_blowup: usize) -> SystemParams {
+    let l_skip = 2;
+    let n_stack = 20;
+    let k_whir = 4;
+    let max_constraint_degree = 4;
+    let whir_params = WhirParams {
+        k: k_whir,
+        log_final_poly_len: 11,
+        query_phase_pow_bits: WHIR_POW_BITS,
+    };
+    let whir_config = WhirConfig::new(log_blowup, l_skip + n_stack, whir_params, SECURITY_LEVEL);
+    SystemParams {
+        l_skip,
+        n_stack,
+        log_blowup,
+        whir: whir_config,
+        logup: log_up_security_params_baby_bear_100_bits(),
+        max_constraint_degree,
+    }
 }
 
 pub fn generic_system_params(

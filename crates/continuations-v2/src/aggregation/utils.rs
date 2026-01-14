@@ -12,7 +12,6 @@ use openvm_stark_sdk::{
     },
     engine::{StarkEngine, StarkFriEngine},
 };
-use recursion_circuit::system::AggregationSubCircuit;
 use stark_backend_v2::{
     F, StarkWhirEngine,
     prover::{
@@ -21,14 +20,14 @@ use stark_backend_v2::{
     },
 };
 
-use crate::aggregation::AggregationCircuit;
+use crate::aggregation::Circuit;
 
-pub fn debug_constraints<S, E>(
-    circuit: &AggregationCircuit<S>,
+pub fn debug_constraints<C, E>(
+    circuit: &C,
     ctxs: &[(usize, AirProvingContextV2<E::PB>)],
     engine: &E,
 ) where
-    S: AggregationSubCircuit,
+    C: Circuit,
     E: StarkWhirEngine,
 {
     let device = engine.device();
