@@ -1,5 +1,5 @@
 pub mod aggregation;
-pub mod public_values;
+pub mod circuit;
 
 #[cfg(test)]
 mod tests;

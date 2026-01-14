@@ -20,15 +20,15 @@ pub enum VerifyStarkError {
     InternalForLeafVkCommitMismatch { expected: Digest, actual: Digest },
     #[error("Invalid internal recursive vk commit: expected {expected:?}, actual {actual:?}")]
     InternalRecursiveVkCommitMismatch { expected: Digest, actual: Digest },
-    #[error(
-        "Internal recursive vk commit (actual {actual:?}) shouldn't be defined if recursion flag is 1"
-    )]
-    InternalRecursiveVkCommitDefined { actual: Digest },
+    #[error("Invalid compression commit: expected {expected:?}, actual {actual:?}")]
+    CompressionCommitMismatch { expected: Vec<F>, actual: Vec<F> },
+    #[error("Compression commit should not be defined if not enabled, actual {actual:?}")]
+    CompressionCommitDefined { actual: Vec<F> },
     #[error("Program execution did not terminate successfully, exit_code: {0}")]
     ExecutionUnsuccessful(F),
     #[error("Invalid internal flag {0}, should be 2")]
     InvalidInternalFlag(F),
-    #[error("Invalid recursion flag {0}, should be either 1 or 2")]
+    #[error("Invalid recursion flag {0}, should be 2")]
     InvalidRecursionFlag(F),
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),

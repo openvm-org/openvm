@@ -1,6 +1,7 @@
 #include "fp.h"
 #include "fpext.h"
 #include "launcher.cuh"
+#include "primitives/encoder.cuh"
 #include "primitives/trace_access.h"
 #include "types.h"
 
@@ -9,17 +10,20 @@
 #include <cstdint>
 
 enum NodeKind : uint8_t {
-    NODE_KIND_VAR_PREPROCESSED,
-    NODE_KIND_VAR_MAIN,
-    NODE_KIND_VAR_PUBLIC_VALUE,
-    NODE_KIND_IS_FIRST_ROW,
-    NODE_KIND_IS_LAST_ROW,
-    NODE_KIND_IS_TRANSITION,
-    NODE_KIND_CONSTANT,
-    NODE_KIND_ADD,
-    NODE_KIND_SUB,
-    NODE_KIND_NEG,
-    NODE_KIND_MUL
+    NODE_KIND_VAR_PREPROCESSED = 0,
+    NODE_KIND_VAR_MAIN = 1,
+    NODE_KIND_VAR_PUBLIC_VALUE = 2,
+    NODE_KIND_IS_FIRST_ROW = 3,
+    NODE_KIND_IS_LAST_ROW = 4,
+    NODE_KIND_IS_TRANSITION = 5,
+    NODE_KIND_CONSTANT = 6,
+    NODE_KIND_ADD = 7,
+    NODE_KIND_SUB = 8,
+    NODE_KIND_NEG = 9,
+    NODE_KIND_MUL = 10,
+    NODE_KIND_INTERACTION_MULT = 11,
+    NODE_KIND_INTERACTION_MSG_COMP = 12,
+    NODE_KIND_COUNT = 13,
 };
 
 struct FlatSymbolicConstraintNode {
@@ -43,6 +47,28 @@ struct FlatSymbolicVariable {
     uint32_t index;
     uint32_t part_index;
     uint32_t offset;
+};
+
+struct CachedRecord {
+    uint32_t node_idx;
+    uint32_t attrs[3];
+    uint32_t fanout;
+    bool is_constraint;
+    uint32_t constraint_idx;
+};
+
+template <typename T> struct CachedSymbolicExpressionCols {
+    // Additional columns for continuations compression layer
+    T row_idx;
+
+    // Original cached trace columns
+    T flags[4];
+    T air_idx;
+    T node_or_interaction_idx;
+    T attrs[3];
+    T fanout;
+    T is_constraint;
+    T constraint_idx;
 };
 
 template <typename T> struct SymbolicExpressionCols {
@@ -126,7 +152,8 @@ __global__ void symbolic_expression_tracegen(
     const uint32_t *air_ids_per_record,
     size_t num_records_per_proof,
     const FpExt *sumcheck_rnds,
-    const size_t *sumcheck_bounds
+    const size_t *sumcheck_bounds,
+    const CachedRecord *cached_records
 ) {
     // Unused because expr_evals[i].len() is aleways the number of all airs,
     // plus 1 for unused variables
@@ -143,7 +170,15 @@ __global__ void symbolic_expression_tracegen(
 
     RowSlice row(trace + row_idx, height);
     constexpr uint32_t SINGLE_WIDTH = sizeof(SymbolicExpressionCols<uint8_t>);
-    RowSlice proof_row = row.slice_from(proof_idx * SINGLE_WIDTH);
+    constexpr uint32_t CACHED_WIDTH = sizeof(CachedSymbolicExpressionCols<uint8_t>);
+
+    if (cached_records && proof_idx == 0) {
+        COL_WRITE_VALUE(row, CachedSymbolicExpressionCols, row_idx, row_idx);
+        row.fill_zero(1, CACHED_WIDTH);
+    }
+
+    RowSlice proof_row =
+        row.slice_from((cached_records ? CACHED_WIDTH : 0) + proof_idx * SINGLE_WIDTH);
     proof_row.fill_zero(0, SINGLE_WIDTH);
 
     if (proof_idx >= num_proofs || row_idx >= num_records_per_proof) {
@@ -176,6 +211,22 @@ __global__ void symbolic_expression_tracegen(
     const FpExt *rs_rest = sumcheck_rnds + sum_start + 1;
     uint32_t rs_rest_len = sum_end - sum_start > 0 ? sum_end - sum_start - 1 : 0;
 
+    if (cached_records && proof_idx == 0) {
+        COL_WRITE_VALUE(row, CachedSymbolicExpressionCols, air_idx, air_idx);
+        CachedRecord cached_record = cached_records[row_idx];
+        COL_WRITE_VALUE(
+            row, CachedSymbolicExpressionCols, node_or_interaction_idx, cached_record.node_idx
+        );
+        COL_WRITE_ARRAY(row, CachedSymbolicExpressionCols, attrs, cached_record.attrs);
+        COL_WRITE_VALUE(row, CachedSymbolicExpressionCols, fanout, cached_record.fanout);
+        COL_WRITE_VALUE(
+            row, CachedSymbolicExpressionCols, is_constraint, cached_record.is_constraint
+        );
+        COL_WRITE_VALUE(
+            row, CachedSymbolicExpressionCols, constraint_idx, cached_record.constraint_idx
+        );
+    }
+
     uint32_t nodes_start = constraint_nodes_bounds[air_idx];
     uint32_t nodes_len = constraint_nodes_bounds[air_idx + 1] - nodes_start;
     const FlatSymbolicConstraintNode *nodes_per_air = constraint_nodes + nodes_start;
@@ -186,6 +237,7 @@ __global__ void symbolic_expression_tracegen(
 
     uint32_t unused_start = unused_variables_bounds[air_idx];
     uint32_t unused_len = unused_variables_bounds[air_idx + 1] - unused_start;
+    const FlatSymbolicVariable *unused_variables_per_air = unused_variables + unused_start;
 
     Fp sort_idx_fp = Fp(static_cast<uint32_t>(sort_idx));
     uint32_t n_abs = log_height < l_skip ? l_skip - log_height : log_height - l_skip;
@@ -196,6 +248,8 @@ __global__ void symbolic_expression_tracegen(
     COL_WRITE_VALUE(proof_row, SymbolicExpressionCols, sort_idx, sort_idx_fp);
     COL_WRITE_VALUE(proof_row, SymbolicExpressionCols, n_abs, n_abs_fp);
     COL_WRITE_VALUE(proof_row, SymbolicExpressionCols, is_n_neg, is_n_neg_fp);
+
+    Encoder encoder(NodeKind::NODE_KIND_COUNT, 2, true);
 
     if (local_idx < nodes_len) {
         const FlatSymbolicConstraintNode node = nodes_per_air[local_idx];
@@ -247,9 +301,15 @@ __global__ void symbolic_expression_tracegen(
             write_arg_first(proof_row, expr_per_air[node.data0]);
             break;
         }
-        case NODE_KIND_CONSTANT:
         default:
             break;
+        }
+        if (cached_records && proof_idx == 0) {
+            // Flags live inside `CachedSymbolicExpressionCols.flags`. Do NOT write at column 0,
+            // because column 0 is `row_idx` when `cached_records` is present.
+            encoder.write_flag_pt(
+                row.slice_from(COL_INDEX(CachedSymbolicExpressionCols, flags)), node.kind
+            );
         }
         return;
     }
@@ -267,6 +327,12 @@ __global__ void symbolic_expression_tracegen(
                 uint32_t node_idx = interaction_messages[interaction.message_start + msg_offset];
                 write_arg_first(proof_row, expr_per_air[node_idx]);
             }
+            if (cached_records && proof_idx == 0) {
+                encoder.write_flag_pt(
+                    row.slice_from(COL_INDEX(CachedSymbolicExpressionCols, flags)),
+                    local_idx == 0 ? NODE_KIND_INTERACTION_MULT : NODE_KIND_INTERACTION_MSG_COMP
+                );
+            }
             return;
         }
         local_idx -= block;
@@ -277,6 +343,13 @@ __global__ void symbolic_expression_tracegen(
         uint32_t eval_idx = nodes_len + local_idx;
         if (expr_start + eval_idx < expr_end) {
             write_arg_first(proof_row, expr_per_air[eval_idx]);
+            if (cached_records && proof_idx == 0) {
+                FlatSymbolicVariable unused = unused_variables_per_air[local_idx];
+                encoder.write_flag_pt(
+                    row.slice_from(COL_INDEX(CachedSymbolicExpressionCols, flags)),
+                    unused.entry_kind
+                );
+            }
         }
     }
 }
@@ -304,7 +377,8 @@ extern "C" int _sym_expr_common_tracegen(
     const uint32_t *d_air_ids_per_record,
     size_t num_records_per_proof,
     const FpExt *d_sumcheck_rnds,
-    const size_t *d_sumcheck_bounds
+    const size_t *d_sumcheck_bounds,
+    const CachedRecord *d_cached_records
 ) {
     // Unused because expr_evals[i].len() is always the number of all airs,
     // plus 1 for unused variables.
@@ -337,7 +411,8 @@ extern "C" int _sym_expr_common_tracegen(
         d_air_ids_per_record,
         num_records_per_proof,
         d_sumcheck_rnds,
-        d_sumcheck_bounds
+        d_sumcheck_bounds,
+        d_cached_records
     );
     return CHECK_KERNEL();
 }

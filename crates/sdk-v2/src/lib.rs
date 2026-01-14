@@ -475,12 +475,20 @@ where
             leaf_pk: agg_prover.leaf_prover.get_pk(),
             internal_for_leaf_pk: agg_prover.internal_for_leaf_prover.get_pk(),
             internal_recursive_pk: agg_prover.internal_recursive_prover.get_pk(),
+            compression_pk: agg_prover
+                .compression_prover
+                .as_ref()
+                .map(|prover| prover.get_pk()),
         }
     }
 
     pub fn agg_vk(&self) -> Arc<MultiStarkVerifyingKey> {
         let agg_prover = self.agg_prover();
-        agg_prover.internal_recursive_prover.get_vk()
+        if let Some(prover) = agg_prover.compression_prover.as_ref() {
+            prover.get_vk()
+        } else {
+            agg_prover.internal_recursive_prover.get_vk()
+        }
     }
 
     // ======================== Verification Methods ========================
