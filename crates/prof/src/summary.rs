@@ -16,6 +16,7 @@ use crate::{
 pub struct GithubSummary {
     pub rows: Vec<SummaryRow>,
     pub benchmark_results_link: String,
+    pub omit_cells_used: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -51,6 +52,9 @@ impl GithubSummary {
         md_paths: &[PathBuf],
         benchmark_results_link: &str,
     ) -> Self {
+        let omit_cells_used = aggregated_metrics
+            .iter()
+            .all(|(aggregated, _)| !aggregated.has_cells_used_metrics());
         let rows = aggregated_metrics
             .iter()
             .zip_eq(md_paths.iter())
@@ -80,13 +84,23 @@ impl GithubSummary {
         Self {
             rows,
             benchmark_results_link: benchmark_results_link.to_string(),
+            omit_cells_used,
         }
     }
 
     pub fn write_markdown(&self, writer: &mut impl Write) -> Result<()> {
-        writeln!(writer, "| group | app.proof_time_ms | app.cycles | app.cells_used | leaf.proof_time_ms | leaf.cycles | leaf.cells_used |")?;
+        let include_cells_used = !self.omit_cells_used;
+        if include_cells_used {
+            writeln!(writer, "| group | app.proof_time_ms | app.cycles | app.cells_used | leaf.proof_time_ms | leaf.cells_used |")?;
+        } else {
+            writeln!(
+                writer,
+                "| group | app.proof_time_ms | app.cycles | leaf.proof_time_ms |"
+            )?;
+        }
         write!(writer, "| -- |")?;
-        for _ in 0..6 {
+        let trailing_columns = if include_cells_used { 5 } else { 3 };
+        for _ in 0..trailing_columns {
             write!(writer, " -- |")?;
         }
         writeln!(writer)?;
@@ -97,23 +111,46 @@ impl GithubSummary {
                 "| [{}]({}/{}) |",
                 row.name, self.benchmark_results_link, row.md_filename
             )?;
-            row.metrics.write_partial_md_row(writer)?;
+            row.metrics.write_partial_md_row(writer, include_cells_used)?;
             writeln!(writer)?;
         }
         writeln!(writer)?;
+        if self.omit_cells_used {
+            writeln!(
+                writer,
+                "Note: cells_used metrics omitted because CUDA tracegen does not expose unpadded trace heights."
+            )?;
+            writeln!(writer)?;
+        }
 
         Ok(())
     }
 }
 
 impl BenchSummaryMetrics {
-    pub fn write_partial_md_row(&self, writer: &mut impl Write) -> Result<()> {
-        self.app.write_partial_md_row(writer)?;
-        if let Some(leaf) = &self.leaf {
-            leaf.write_partial_md_row(writer)?;
+    pub fn write_partial_md_row(
+        &self,
+        writer: &mut impl Write,
+        include_cells_used: bool,
+    ) -> Result<()> {
+        if include_cells_used {
+            let (leaf_proof_time, leaf_cells_used) = match &self.leaf {
+                Some(leaf) => (leaf.proof_time_ms.to_string(), leaf.cells_used.to_string()),
+                None => ("-".to_string(), "-".to_string()),
+            };
+            self.app.write_partial_md_row(writer)?;
+            write!(writer, "{} | {} |", leaf_proof_time, leaf_cells_used)?;
         } else {
-            // Always write placeholder for leaf
-            write!(writer, "- | - | - |")?;
+            let leaf_proof_time = self
+                .leaf
+                .as_ref()
+                .map(|leaf| leaf.proof_time_ms.to_string())
+                .unwrap_or_else(|| "-".to_string());
+            write!(
+                writer,
+                "{} | {} | {} |",
+                self.app.proof_time_ms, self.app.insns, leaf_proof_time
+            )?;
         }
         // Don't print other metrics in summary for now:
 
@@ -159,6 +196,12 @@ impl SingleSummaryMetrics {
 }
 
 impl AggregateMetrics {
+    pub fn has_cells_used_metrics(&self) -> bool {
+        self.by_group
+            .values()
+            .any(|stats| stats.contains_key(MAIN_CELLS_USED_LABEL))
+    }
+
     pub fn get_single_summary(&self, name: &str) -> Option<SingleSummaryMetrics> {
         let stats = self.by_group.get(name)?;
         // Any group must have proof_time, but may not have cells_used or cycles (e.g., halo2)
