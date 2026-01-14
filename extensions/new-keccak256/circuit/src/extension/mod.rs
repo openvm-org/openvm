@@ -25,6 +25,7 @@ use openvm_rv32im_circuit::{
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
+    interaction::PermutationCheckBus,
     p3_field::PrimeField32,
     prover::cpu::{CpuBackend, CpuDevice},
 };
@@ -33,7 +34,7 @@ use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
 use crate::{
-    keccakf_op::{air::KeccakfVmAir, KeccakfVmChip, KeccakfVmExecutor, KeccakfVmFiller},
+    keccakf_op::{air::KeccakfOpAir, KeccakfVmChip, KeccakfVmExecutor, KeccakfVmFiller},
     xorin::{air::XorinVmAir, XorinVmChip, XorinVmExecutor, XorinVmFiller},
 };
 
@@ -181,10 +182,12 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for NewKeccak256 {
         );
         inventory.add_air(xorin_air);
 
-        let keccak_air = KeccakfVmAir::new(
+        let keccakf_state_bus = PermutationCheckBus::new(inventory.new_bus_idx());
+        let keccak_air = KeccakfOpAir::new(
             exec_bridge,
             memory_bridge,
             bitwise_lu,
+            keccakf_state_bus,
             pointer_max_bits,
             KeccakfOpcode::CLASS_OFFSET,
         );
@@ -236,7 +239,7 @@ where
         );
         inventory.add_executor_chip(xorin_chip);
 
-        inventory.next_air::<KeccakfVmAir>()?;
+        inventory.next_air::<KeccakfOpAir>()?;
         let keccak_chip = KeccakfVmChip::new(
             KeccakfVmFiller::new(bitwise_lu, pointer_max_bits),
             mem_helper.clone(),

@@ -6812,7 +6812,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-new-keccak256"
-version = "1.4.2"
+version = "1.4.3"
 dependencies = [
  "openvm-new-keccak256-guest",
  "tiny-keccak",
@@ -6820,7 +6820,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-new-keccak256-circuit"
-version = "1.4.2"
+version = "1.4.3"
 dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
@@ -6846,14 +6846,14 @@ dependencies = [
 
 [[package]]
 name = "openvm-new-keccak256-guest"
-version = "1.4.2"
+version = "1.4.3"
 dependencies = [
  "openvm-platform",
 ]
 
 [[package]]
 name = "openvm-new-keccak256-transpiler"
-version = "1.4.2"
+version = "1.4.3"
 dependencies = [
  "openvm-instructions",
  "openvm-instructions-derive",

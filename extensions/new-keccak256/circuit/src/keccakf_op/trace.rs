@@ -19,22 +19,23 @@ use openvm_instructions::{
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
 };
 use openvm_new_keccak256_transpiler::KeccakfOpcode;
-use openvm_rv32im_circuit::adapters::{tracing_read, tracing_write};
+use openvm_rv32im_circuit::adapters::{memory_read, tracing_read, tracing_write};
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
-use p3_keccak_air::generate_trace_rows;
 
-use crate::keccakf_op::{
-    columns::{KeccakfOpCols, NUM_KECCAKF_VM_COLS, NUM_KECCAK_PERM_COLS, NUM_ROUNDS},
-    utils::{KECCAK_WIDTH_BYTES, KECCAK_WIDTH_U32_LIMBS, KECCAK_WIDTH_U64_LIMBS},
-    KeccakfVmExecutor, KeccakfVmFiller,
+use super::{KeccakfVmExecutor, KeccakfVmFiller, NUM_KECCAKF_OP_ROWS};
+use crate::{
+    keccakf_op::columns::KeccakfOpCols,
+    KECCAK_WIDTH_BYTES, KECCAK_WIDTH_U64S, KECCAK_WORD_SIZE,
 };
+
+const KECCAK_WIDTH_U32_LIMBS: usize = KECCAK_WIDTH_BYTES / KECCAK_WORD_SIZE;
 
 #[derive(Clone, Copy)]
 pub struct KeccakfVmMetadata {}
 
 impl MultiRowMetadata for KeccakfVmMetadata {
     fn get_num_rows(&self) -> usize {
-        NUM_ROUNDS
+        NUM_KECCAKF_OP_ROWS
     }
 }
 
@@ -46,11 +47,12 @@ pub struct KeccakfVmRecordHeader {
     pub pc: u32,
     pub timestamp: u32,
     pub buffer: u32,
-    pub preimage_buffer_bytes: [u8; 200],
+    pub preimage_buffer_bytes: [u8; KECCAK_WIDTH_BYTES],
     pub rd_ptr: u32,
     pub register_aux_cols: [MemoryReadAuxRecord; 1],
-    pub buffer_read_aux_cols: [MemoryReadAuxRecord; 200 / 4],
-    pub buffer_write_aux_cols: [MemoryWriteBytesAuxRecord<4>; 200 / 4],
+    pub buffer_read_aux_cols: [MemoryReadAuxRecord; KECCAK_WIDTH_U32_LIMBS],
+    pub buffer_write_aux_cols: [MemoryWriteBytesAuxRecord<KECCAK_WORD_SIZE>;
+        KECCAK_WIDTH_U32_LIMBS],
 }
 
 pub struct KeccakfVmRecordMut<'a> {
@@ -113,45 +115,28 @@ where
             &mut record.inner.register_aux_cols[0].prev_timestamp,
         ));
 
+        let guest_mem = state.memory.data();
         for idx in 0..KECCAK_WIDTH_U32_LIMBS {
-            let read = tracing_read::<4>(
-                state.memory,
+            let read = memory_read::<KECCAK_WORD_SIZE>(
+                guest_mem,
                 RV32_MEMORY_AS,
-                record.inner.buffer + (idx * 4) as u32,
-                &mut record.inner.buffer_read_aux_cols[idx].prev_timestamp,
+                record.inner.buffer + (idx * KECCAK_WORD_SIZE) as u32,
             );
-
-            record.inner.preimage_buffer_bytes[4 * idx..4 * (idx + 1)].copy_from_slice(&read);
+            record.inner.preimage_buffer_bytes
+                [KECCAK_WORD_SIZE * idx..KECCAK_WORD_SIZE * (idx + 1)]
+                .copy_from_slice(&read);
         }
 
-        let preimage_buffer_bytes = record.inner.preimage_buffer_bytes;
-        let mut preimage_buffer_bytes_u64: [u64; KECCAK_WIDTH_U64_LIMBS] =
-            [0; KECCAK_WIDTH_U64_LIMBS];
-
-        for idx in 0..KECCAK_WIDTH_U64_LIMBS {
-            preimage_buffer_bytes_u64[idx] = u64::from_le_bytes(
-                preimage_buffer_bytes[8 * idx..8 * idx + 8]
-                    .try_into()
-                    .unwrap(),
-            );
-        }
-
-        tiny_keccak::keccakf(&mut preimage_buffer_bytes_u64);
-
-        // result is placed in preimage_buffer_bytes_u64
-        // convert back to blocks of u8's
-        let mut result_u8: [u8; KECCAK_WIDTH_BYTES] = [0; KECCAK_WIDTH_BYTES];
-        for idx in 0..KECCAK_WIDTH_U64_LIMBS {
-            let chunk: [u8; 8] = preimage_buffer_bytes_u64[idx].to_le_bytes();
-            result_u8[8 * idx..8 * idx + 8].copy_from_slice(&chunk);
-        }
-
+        let postimage_buffer_bytes = keccakf_postimage_bytes(&record.inner.preimage_buffer_bytes);
         for idx in 0..KECCAK_WIDTH_U32_LIMBS {
-            let chunk: [u8; 4] = result_u8[4 * idx..4 * idx + 4].try_into().unwrap();
+            let chunk: [u8; KECCAK_WORD_SIZE] = postimage_buffer_bytes
+                [KECCAK_WORD_SIZE * idx..KECCAK_WORD_SIZE * (idx + 1)]
+                .try_into()
+                .unwrap();
             tracing_write(
                 state.memory,
                 RV32_MEMORY_AS,
-                record.inner.buffer + (idx * 4) as u32,
+                record.inner.buffer + (idx * KECCAK_WORD_SIZE) as u32,
                 chunk,
                 &mut record.inner.buffer_write_aux_cols[idx].prev_timestamp,
                 &mut record.inner.buffer_write_aux_cols[idx].prev_data,
@@ -174,180 +159,108 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfVmFiller {
             return;
         }
 
+        let width = trace_matrix.width();
         let (trace, dummy_trace) = trace_matrix
             .values
-            .split_at_mut(rows_used * NUM_KECCAKF_VM_COLS);
-
-        let p3_dummy_trace: RowMajorMatrix<F> =
-            generate_trace_rows(vec![[0u64; KECCAK_WIDTH_U64_LIMBS]; 1], 0);
-
-        dummy_trace
-            // Each Keccak-f round corresponds to exactly one trace row of width
-            // NUM_KECCAKF_VM_COLS. We already reserved NUM_ROUNDS rows above
-            // (NUM_ROUNDS * NUM_KECCAKF_VM_COLS elements).
-            .chunks_exact_mut(NUM_KECCAKF_VM_COLS)
-            .enumerate()
-            .for_each(|(row_idx, row_slice)| {
-                let idx = row_idx % NUM_ROUNDS;
-                row_slice[..NUM_KECCAK_PERM_COLS].copy_from_slice(
-                    &p3_dummy_trace.values
-                        [idx * NUM_KECCAK_PERM_COLS..(idx + 1) * NUM_KECCAK_PERM_COLS],
-                );
-                // Need to get rid of the accidental garbage data that might overflow
-                // the F's prime field. Unfortunately, there
-                // is no good way around this
-                // SAFETY:
-                // - row has exactly NUM_KECCAK_VM_COLS elements
-                // - NUM_KECCAK_PERM_COLS offset is less than NUM_KECCAK_VM_COLS by design
-                // - We're zeroing the remaining (NUM_KECCAK_VM_COLS - NUM_KECCAK_PERM_COLS)
-                //   elements to clear any garbage data that might overflow the field
-                unsafe {
-                    std::ptr::write_bytes(
-                        row_slice.as_mut_ptr().add(NUM_KECCAK_PERM_COLS) as *mut u8,
-                        0,
-                        (NUM_KECCAKF_VM_COLS - NUM_KECCAK_PERM_COLS) * size_of::<F>(),
-                    );
-                }
-            });
+            .split_at_mut(rows_used * width);
+        dummy_trace.fill(F::ZERO);
 
         trace
-            // Each Keccak-f round corresponds to exactly one trace row of width
-            // NUM_KECCAKF_VM_COLS. We already reserved NUM_ROUNDS rows above
-            // (NUM_ROUNDS * NUM_KECCAKF_VM_COLS elements).
-            .chunks_exact_mut(NUM_KECCAKF_VM_COLS * NUM_ROUNDS)
-            .for_each(|mut round_slice| {
-                // each round takes up one row in the trace matrix
-                // Safety: the initial prefix of the buffer of size NUM_KECCAKF_VM_COLS * NUM_ROUNDS
-                // holds the record header
-                let record: KeccakfVmRecordMut = unsafe {
-                    get_record_from_slice(
-                        &mut round_slice,
-                        KeccakfVmRecordLayout {
-                            metadata: KeccakfVmMetadata {},
-                        },
-                    )
+            .chunks_exact_mut(width * NUM_KECCAKF_OP_ROWS)
+            .for_each(|record_slice| {
+                let record = {
+                    let mut record_slice = record_slice;
+                    let record: KeccakfVmRecordMut = unsafe {
+                        get_record_from_slice(
+                            &mut record_slice,
+                            KeccakfVmRecordLayout::new(KeccakfVmMetadata {}),
+                        )
+                    };
+                    record.inner.clone()
                 };
-                let record = record.inner.clone();
-                let mut timestamp = record.timestamp;
 
-                // compute u64 preimage and postimage to not have to recompute per row
-                let preimage_buffer_bytes = record.preimage_buffer_bytes;
-                let mut preimage_buffer_bytes_u64: [u64; KECCAK_WIDTH_U64_LIMBS] =
-                    [0; KECCAK_WIDTH_U64_LIMBS];
-                for idx in 0..KECCAK_WIDTH_U64_LIMBS {
-                    let le_bytes: [u8; 8] = preimage_buffer_bytes[8 * idx..8 * idx + 8]
-                        .try_into()
-                        .unwrap();
-                    preimage_buffer_bytes_u64[idx] = u64::from_le_bytes(le_bytes);
+                let postimage_buffer_bytes =
+                    keccakf_postimage_bytes(&record.preimage_buffer_bytes);
+                let buffer_ptr_limbs = record.buffer.to_le_bytes();
+                let buffer_ptr_limbs_f = buffer_ptr_limbs.map(F::from_canonical_u8);
+
+                let (read_row, write_row) = record_slice.split_at_mut(width);
+                read_row.fill(F::ZERO);
+                write_row.fill(F::ZERO);
+
+                let read_cols: &mut KeccakfOpCols<F> = read_row.borrow_mut();
+                read_cols.pc = F::from_canonical_u32(record.pc);
+                read_cols.is_valid = F::ONE;
+                read_cols.is_after_valid = F::ZERO;
+                read_cols.timestamp = F::from_canonical_u32(record.timestamp);
+                read_cols.rd_ptr = F::from_canonical_u32(record.rd_ptr);
+                read_cols.buffer_ptr_limbs = buffer_ptr_limbs_f;
+                for (dst, &byte) in read_cols
+                    .buffer
+                    .iter_mut()
+                    .zip(record.preimage_buffer_bytes.iter())
+                {
+                    *dst = F::from_canonical_u8(byte);
                 }
 
-                let mut preimage_buffer_bytes_u64_transpose: [u64; KECCAK_WIDTH_U64_LIMBS] =
-                    [0; KECCAK_WIDTH_U64_LIMBS];
-                for y in 0..5 {
-                    for x in 0..5 {
-                        preimage_buffer_bytes_u64_transpose[x + 5 * y] =
-                            preimage_buffer_bytes_u64[y + 5 * x];
-                    }
+                mem_helper.fill(
+                    record.register_aux_cols[0].prev_timestamp,
+                    record.timestamp,
+                    read_cols.rd_aux.as_mut(),
+                );
+                let mut timestamp = record.timestamp + 1;
+                for (aux, write_aux) in read_cols
+                    .buffer_word_aux
+                    .iter_mut()
+                    .zip(record.buffer_write_aux_cols.iter())
+                {
+                    mem_helper.fill(write_aux.prev_timestamp, timestamp, aux);
+                    timestamp += 1;
                 }
 
-                let mut postimage_buffer_bytes_u64 = preimage_buffer_bytes_u64;
-                tiny_keccak::keccakf(&mut postimage_buffer_bytes_u64);
-
-                let mut postimage_buffer_bytes: [u8; KECCAK_WIDTH_BYTES] =
-                    [0u8; KECCAK_WIDTH_BYTES];
-                for idx in 0..KECCAK_WIDTH_U64_LIMBS {
-                    let chunk: [u8; 8] = postimage_buffer_bytes_u64[idx].to_le_bytes();
-                    postimage_buffer_bytes[8 * idx..8 * idx + 8].copy_from_slice(&chunk);
+                let write_cols: &mut KeccakfOpCols<F> = write_row.borrow_mut();
+                write_cols.pc = F::from_canonical_u32(record.pc);
+                write_cols.is_valid = F::ZERO;
+                write_cols.is_after_valid = F::ONE;
+                write_cols.timestamp = F::from_canonical_u32(record.timestamp);
+                write_cols.rd_ptr = F::from_canonical_u32(record.rd_ptr);
+                write_cols.buffer_ptr_limbs = buffer_ptr_limbs.map(F::from_canonical_u8);
+                for (dst, &byte) in write_cols
+                    .buffer
+                    .iter_mut()
+                    .zip(postimage_buffer_bytes.iter())
+                {
+                    *dst = F::from_canonical_u8(byte);
                 }
 
-                // fills in inner
-                // the reason we give the transpose instead is inside, plonky3 transpose the
-                // input so transpose of transpose fixes it
-                let p3_trace: RowMajorMatrix<F> =
-                    generate_trace_rows(vec![preimage_buffer_bytes_u64_transpose], 0);
+                let limb_shift = 1u32
+                    << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.pointer_max_bits) as u32;
+                let scaled_limb = (buffer_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1] as u32)
+                    * limb_shift;
+                self.bitwise_lookup_chip
+                    .request_range(scaled_limb, scaled_limb);
 
-                round_slice
-                    .chunks_exact_mut(NUM_KECCAKF_VM_COLS)
-                    .enumerate()
-                    .for_each(|(row_idx, row)| {
-                        row[..NUM_KECCAK_PERM_COLS].copy_from_slice(
-                            &p3_trace.values[row_idx * NUM_KECCAK_PERM_COLS
-                                ..(row_idx + 1) * NUM_KECCAK_PERM_COLS],
-                        );
-
-                        // fills in preimage_state_hi
-                        let cols: &mut KeccakfOpCols<F> = row.borrow_mut();
-                        for idx in 0..KECCAK_WIDTH_BYTES / 2 {
-                            cols.preimage_state_hi[idx] =
-                                F::from_canonical_u8(preimage_buffer_bytes[2 * idx + 1]);
-                        }
-                        // fills in postimage_state_hi
-                        for idx in 0..KECCAK_WIDTH_BYTES / 2 {
-                            cols.postimage_state_hi[idx] =
-                                F::from_canonical_u8(postimage_buffer_bytes[2 * idx + 1]);
-                        }
-                        // fills in instruction
-                        cols.instruction.pc = F::from_canonical_u32(record.pc);
-                        cols.instruction.is_enabled = F::ONE;
-                        cols.timestamp = F::from_canonical_u32(timestamp);
-                        cols.instruction.rd_ptr = F::from_canonical_u32(record.rd_ptr);
-                        cols.instruction.buffer_ptr = F::from_canonical_u32(record.buffer);
-                        cols.instruction.buffer_ptr_limbs =
-                            record.buffer.to_le_bytes().map(F::from_canonical_u8);
-
-                        let is_first_round = cols.inner.step_flags[0];
-                        let is_final_round = cols.inner.step_flags[NUM_ROUNDS - 1];
-                        cols.is_enabled_is_first_round = is_first_round;
-                        cols.is_enabled_is_final_round = is_final_round;
-
-                        // fills in memory offline checker
-                        if row_idx == 0 {
-                            mem_helper.fill(
-                                record.register_aux_cols[0].prev_timestamp,
-                                timestamp,
-                                cols.mem_oc.register_aux_cols[0].as_mut(),
-                            );
-                            timestamp += 1;
-                            for t in 0..KECCAK_WIDTH_U32_LIMBS {
-                                mem_helper.fill(
-                                    record.buffer_read_aux_cols[t].prev_timestamp,
-                                    timestamp,
-                                    cols.mem_oc.buffer_bytes_read_aux_cols[t].as_mut(),
-                                );
-                                timestamp += 1;
-                            }
-
-                            // safety: the following approach only works when self.pointer_max_bits
-                            // >= 24
-                            let limb_shift = 1
-                                << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS
-                                    - self.pointer_max_bits);
-                            let buffer_limbs = record.buffer.to_le_bytes();
-                            let need_range_check =
-                                [buffer_limbs.last().unwrap(), buffer_limbs.last().unwrap()];
-                            for pair in need_range_check.chunks_exact(2) {
-                                self.bitwise_lookup_chip.request_range(
-                                    (pair[0] * limb_shift) as u32,
-                                    (pair[1] * limb_shift) as u32,
-                                );
-                            }
-                        }
-
-                        if row_idx == NUM_ROUNDS - 1 {
-                            for t in 0..KECCAK_WIDTH_U32_LIMBS {
-                                mem_helper.fill(
-                                    record.buffer_write_aux_cols[t].prev_timestamp,
-                                    timestamp,
-                                    cols.mem_oc.buffer_bytes_write_aux_cols[t].as_mut(),
-                                );
-                                cols.mem_oc.buffer_bytes_write_aux_cols[t].prev_data = record
-                                    .buffer_write_aux_cols[t]
-                                    .prev_data
-                                    .map(F::from_canonical_u8);
-                                timestamp += 1;
-                            }
-                        }
-                    });
+                for pair in postimage_buffer_bytes.chunks_exact(2) {
+                    self.bitwise_lookup_chip
+                        .request_range(pair[0] as u32, pair[1] as u32);
+                }
             });
     }
+}
+
+fn keccakf_postimage_bytes(
+    preimage_buffer_bytes: &[u8; KECCAK_WIDTH_BYTES],
+) -> [u8; KECCAK_WIDTH_BYTES] {
+    let mut state = [0u64; KECCAK_WIDTH_U64S];
+    for (idx, chunk) in preimage_buffer_bytes.chunks_exact(8).enumerate() {
+        state[idx] = u64::from_le_bytes(chunk.try_into().unwrap());
+    }
+    tiny_keccak::keccakf(&mut state);
+
+    let mut result = [0u8; KECCAK_WIDTH_BYTES];
+    for (idx, word) in state.into_iter().enumerate() {
+        let bytes = word.to_le_bytes();
+        result[8 * idx..8 * idx + 8].copy_from_slice(&bytes);
+    }
+    result
 }

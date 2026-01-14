@@ -12,8 +12,6 @@ pub struct KeccakfOpCols<T> {
     pub pc: T,
     /// True on the row handling execution for an instruction.
     pub is_valid: T,
-    /// True only on the row immediately after an `is_valid = true` row.
-    pub is_after_valid: T,
     /// The starting timestamp for execution in this row.
     /// A single row will do multiple memory accesses.
     pub timestamp: T,

@@ -15,12 +15,11 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
 use openvm_stark_backend::p3_field::PrimeField32;
-use p3_keccak_air::NUM_ROUNDS;
 
-use super::KeccakfVmExecutor;
-use crate::keccakf_op::utils::{
-    KECCAK_WIDTH_BYTES, KECCAK_WIDTH_U32_LIMBS, KECCAK_WIDTH_U64_LIMBS, KECCAK_WORD_SIZE,
-};
+use super::{KeccakfVmExecutor, NUM_KECCAKF_OP_ROWS};
+use crate::{KECCAK_WIDTH_BYTES, KECCAK_WIDTH_U64S, KECCAK_WORD_SIZE};
+
+const KECCAK_WIDTH_U32_LIMBS: usize = KECCAK_WIDTH_BYTES / KECCAK_WORD_SIZE;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -185,7 +184,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     };
     assert_eq!(message.len(), KECCAK_WIDTH_BYTES);
 
-    let mut message_u64 = [0u64; KECCAK_WIDTH_U64_LIMBS];
+    let mut message_u64 = [0u64; KECCAK_WIDTH_U64S];
     for (i, message_chunk) in message.chunks_exact(8).enumerate() {
         let message_chunk_u64 = u64::from_le_bytes(message_chunk.try_into().unwrap());
         message_u64[i] = message_chunk_u64;
@@ -201,12 +200,12 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     if IS_E1 {
         exec_state.vm_write(RV32_MEMORY_AS, buffer, &result);
     } else {
-        for i in 0..KECCAK_WIDTH_U32_LIMBS {
-            let mut write_chunk: [u8; 4] = [0; 4];
-            write_chunk.copy_from_slice(&result[4 * i..4 * i + 4]);
-            exec_state.vm_write::<u8, KECCAK_WORD_SIZE>(
-                RV32_MEMORY_AS,
-                buffer + (i * KECCAK_WORD_SIZE) as u32,
+    for i in 0..KECCAK_WIDTH_U32_LIMBS {
+        let mut write_chunk: [u8; 4] = [0; 4];
+        write_chunk.copy_from_slice(&result[4 * i..4 * i + 4]);
+        exec_state.vm_write::<u8, KECCAK_WORD_SIZE>(
+            RV32_MEMORY_AS,
+            buffer + (i * KECCAK_WORD_SIZE) as u32,
                 &write_chunk,
             );
         }
@@ -225,8 +224,9 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     let pre_compute: &E2PreCompute<KeccakfPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<KeccakfPreCompute>>())
             .borrow();
-    exec_state
-        .ctx
-        .on_height_change(pre_compute.chip_idx as usize, NUM_ROUNDS as u32);
+    exec_state.ctx.on_height_change(
+        pre_compute.chip_idx as usize,
+        NUM_KECCAKF_OP_ROWS as u32,
+    );
     execute_e12_impl::<F, CTX, false>(&pre_compute.data, exec_state);
 }

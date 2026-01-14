@@ -39,7 +39,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, NewKeccak25
         );
         inventory.add_executor_chip(xorin_chip);
 
-        inventory.next_air::<KeccakfVmAir>()?;
+        inventory.next_air::<KeccakfOpAir>()?;
         let keccakf_chip = KeccakfVmChipGpu::new(
             range_checker,
             bitwise_lu,

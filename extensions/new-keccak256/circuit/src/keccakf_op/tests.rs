@@ -14,7 +14,10 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 };
 use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_new_keccak256_transpiler::KeccakfOpcode;
-use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_backend::{
+    interaction::{BusIndex, PermutationCheckBus},
+    p3_field::FieldAlgebra,
+};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::rngs::StdRng;
 #[cfg(feature = "cuda")]
@@ -26,6 +29,7 @@ use crate::keccakf_op::{air::KeccakfOpAir, KeccakfVmChip, KeccakfVmExecutor};
 type F = BabyBear;
 type Harness = TestChipHarness<F, KeccakfVmExecutor, KeccakfOpAir, KeccakfVmChip<F>>;
 const MAX_TRACE_ROWS: usize = 4096;
+const KECCAKF_STATE_BUS: BusIndex = 13;
 
 fn create_harness_fields(
     execution_bridge: ExecutionBridge,
@@ -38,6 +42,7 @@ fn create_harness_fields(
         execution_bridge,
         memory_bridge,
         bitwise_chip.bus(),
+        PermutationCheckBus::new(KECCAKF_STATE_BUS),
         address_bits,
         KeccakfOpcode::CLASS_OFFSET,
     );
@@ -157,7 +162,7 @@ use openvm_circuit::arch::{
 };
 
 #[cfg(feature = "cuda")]
-use crate::{cuda::KeccakfVmChipGpu, keccakf::trace::KeccakfVmRecordMut};
+use crate::{cuda::KeccakfVmChipGpu, keccakf_op::trace::KeccakfVmRecordMut};
 
 #[cfg(feature = "cuda")]
 type GpuHarness =
