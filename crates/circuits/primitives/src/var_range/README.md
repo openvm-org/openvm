@@ -14,13 +14,19 @@ For example, with `range_max_bits = 3`, the lookup table contains:
 - All 2-bit values: 0, 1, 2, 3
 - All 3-bit values: 0, 1, 2, 3, 4, 5, 6, 7
 
-The chip has three columns `value, max_bits, mult`. The `value, max_bits` columns are preprocessed and the `mult` column is left unconstrained. The `(value, max_bits)` preprocessed trace is populated with `(x, b)` for all $x \in [0, 2^b)$ and $b \in [0, \mathtt{range\\_max\\_bits}]$.
+The chip uses gate-based constraints to generate the trace columns instead of a preprocessed trace. The trace enumerates all valid `(value, max_bits)` pairs in a specific order: for each bit size `b` from 0 to `range_max_bits`, it enumerates all values from 0 to $2^b - 1$. The order is: `[0,0]`, `[0,1]`, `[1,1]`, `[0,2]`, `[1,2]`, `[2,2]`, `[3,2]`, `[0,3]`, ...
 
-**Preprocessed Columns:**
+**Columns:**
 - `value`: The value being range checked
 - `max_bits`: The maximum number of bits for this value
+- `two_to_max_bits`: Helper column storing $2^{\mathtt{max\_bits}}$, used to detect wrap transitions
+- `selector_inverse`: The inverse of the selector `(value + 1 - two_to_max_bits)`, used to create a boolean selector for wrap detection
+- `mult`: Multiplicity column tracking how many range checks are requested for each `(value, max_bits)` pair
 
-**IO Columns:**
-- `mult`: Multiplicity column tracking how many range checks are requested for each (value, max_bits) pair
+The constraints enforce the enumeration pattern by:
+1. Starting at `[0, 0]` (first-row constraints)
+2. Detecting wrap transitions when `value` reaches $2^{\mathtt{max\_bits}} - 1$ using the selector-based detection
+3. Enforcing correct progression: increment `value`, or wrap to `[0, max_bits+1]`
+4. Ending with a dummy row `[0, range_max_bits+1]` to make trace height a power of 2, constraining this row to have mult=0
 
 The functionality and usage of the chip are very similar to those of the [Range Checker](../range/README.md) chip.
