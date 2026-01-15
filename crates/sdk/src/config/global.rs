@@ -403,15 +403,15 @@ where
         if let Some(keccak) = &config.keccak {
             VmProverExtension::<E, _, _>::extend_prover(&Keccak256CpuProverExt, keccak, inventory)?;
         }
-        if let Some(sha256) = &config.sha256 {
-            VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, sha256, inventory)?;
-        }
         if let Some(new_keccak) = &config.new_keccak {
             VmProverExtension::<E, _, _>::extend_prover(
                 &NewKeccak256CpuProverExt,
                 new_keccak,
                 inventory,
             )?;
+        }
+        if let Some(sha256) = &config.sha256 {
+            VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, sha256, inventory)?;
         }
         if let Some(native) = &config.native {
             VmProverExtension::<E, _, _>::extend_prover(&NativeCpuProverExt, native, inventory)?;
