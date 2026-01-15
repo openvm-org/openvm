@@ -8,27 +8,25 @@ use openvm_stark_backend::{
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
-use p3_keccak_air::{
-    KeccakAir, KeccakCols as KeccakPermCols, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS, U64_LIMBS,
-};
+use p3_keccak_air::{KeccakAir, KeccakCols, NUM_KECCAK_COLS, U64_LIMBS};
 
 use crate::KECCAK_WIDTH_U64S;
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
-pub struct KeccakfPeripheryCols<T> {
-    pub inner: KeccakPermCols<T>,
+pub struct KeccakfPermCols<T> {
+    pub inner: KeccakCols<T>,
 }
 
 /// A periphery AIR that wraps the Plonky3 AIR with a direct interaction on a [PermutationCheckBus].
 #[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct KeccakfPeripheryAir {
+pub struct KeccakfPermAir {
     /// Direct bus with keccakf pre- or post-state. Bus message is `prestate_u16_limbs ||
     /// poststate_u16_limbs`
     pub keccakf_state_bus: PermutationCheckBus,
 }
 
-impl<T: Copy> KeccakfPeripheryCols<T> {
+impl<T: Copy> KeccakfPermCols<T> {
     pub fn postimage(&self, y: usize, x: usize, limb: usize) -> T {
         self.inner.a_prime_prime_prime(y, x, limb)
     }
@@ -42,23 +40,23 @@ impl<T: Copy> KeccakfPeripheryCols<T> {
     }
 }
 
-pub const NUM_KECCAKF_PERI_COLS: usize = size_of::<KeccakfPeripheryCols<u8>>();
+pub const NUM_KECCAKF_PERM_COLS: usize = size_of::<KeccakfPermCols<u8>>();
 
-impl<F> BaseAirWithPublicValues<F> for KeccakfPeripheryAir {}
-impl<F> PartitionedBaseAir<F> for KeccakfPeripheryAir {}
-impl<F> BaseAir<F> for KeccakfPeripheryAir {
+impl<F> BaseAirWithPublicValues<F> for KeccakfPermAir {}
+impl<F> PartitionedBaseAir<F> for KeccakfPermAir {}
+impl<F> BaseAir<F> for KeccakfPermAir {
     fn width(&self) -> usize {
-        NUM_KECCAKF_PERI_COLS
+        NUM_KECCAKF_PERM_COLS
     }
 }
 
-impl<AB: InteractionBuilder> Air<AB> for KeccakfPeripheryAir {
+impl<AB: InteractionBuilder> Air<AB> for KeccakfPermAir {
     fn eval(&self, builder: &mut AB) {
         self.eval_keccak_f(builder);
 
         let main = builder.main();
         let local = main.row_slice(0);
-        let local: &KeccakfPeripheryCols<_> = (*local).borrow();
+        let local: &KeccakfPermCols<_> = (*local).borrow();
 
         // Only allowed to export on the last round of permutation
         builder
@@ -86,7 +84,7 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfPeripheryAir {
     }
 }
 
-impl KeccakfPeripheryAir {
+impl KeccakfPermAir {
     /// Evaluate the keccak-f permutation constraints.
     ///
     /// WARNING: The keccak-f AIR columns **must** be the first columns in the main AIR.
@@ -94,7 +92,7 @@ impl KeccakfPeripheryAir {
     pub fn eval_keccak_f<AB: AirBuilder>(&self, builder: &mut AB) {
         let keccakf_air = KeccakAir {};
         let mut sub_builder =
-            SubAirBuilder::<AB, KeccakAir, AB::Var>::new(builder, 0..NUM_KECCAK_PERM_COLS);
+            SubAirBuilder::<AB, KeccakAir, AB::Var>::new(builder, 0..NUM_KECCAK_COLS);
         keccakf_air.eval(&mut sub_builder);
     }
 }

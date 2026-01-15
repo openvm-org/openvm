@@ -5,12 +5,12 @@
 
 /// The AIR that handles interactions with the VM ExecutionBus and MemoryBus for handling of the
 /// keccakf opcode.
-mod keccakf_op;
+pub mod keccakf_op;
 /// Wrapper around the Plonky3 keccakf permutation AIR with a direct lookup bus for interaction with
 /// `KeccakfOpAir`.
-mod keccakf_periphery;
+mod keccakf_perm;
 /// AIR that handles the `xorin` opcode.
-mod xorin;
+pub mod xorin;
 
 #[cfg(feature = "cuda")]
 mod cuda;

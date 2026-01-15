@@ -16,7 +16,7 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{KeccakfVmExecutor, NUM_KECCAKF_OP_ROWS};
+use super::{KeccakfExecutor, NUM_OP_ROWS_PER_INS};
 use crate::{KECCAK_WIDTH_BYTES, KECCAK_WIDTH_U64S, KECCAK_WORD_SIZE};
 
 const KECCAK_WIDTH_U32_LIMBS: usize = KECCAK_WIDTH_BYTES / KECCAK_WORD_SIZE;
@@ -27,7 +27,7 @@ struct KeccakfPreCompute {
     a: u8,
 }
 
-impl KeccakfVmExecutor {
+impl KeccakfExecutor {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -57,7 +57,7 @@ impl KeccakfVmExecutor {
     }
 }
 
-impl<F: PrimeField32> InterpreterExecutor<F> for KeccakfVmExecutor {
+impl<F: PrimeField32> InterpreterExecutor<F> for KeccakfExecutor {
     fn pre_compute_size(&self) -> usize {
         size_of::<KeccakfPreCompute>()
     }
@@ -94,9 +94,9 @@ impl<F: PrimeField32> InterpreterExecutor<F> for KeccakfVmExecutor {
 }
 
 #[cfg(feature = "aot")]
-impl<F: PrimeField32> AotExecutor<F> for KeccakfVmExecutor {}
+impl<F: PrimeField32> AotExecutor<F> for KeccakfExecutor {}
 
-impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakfVmExecutor {
+impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakfExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<KeccakfPreCompute>()
     }
@@ -137,7 +137,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakfVmExecutor {
 }
 
 #[cfg(feature = "aot")]
-impl<F: PrimeField32> AotMeteredExecutor<F> for KeccakfVmExecutor {}
+impl<F: PrimeField32> AotMeteredExecutor<F> for KeccakfExecutor {}
 
 #[create_handler]
 #[inline(always)]
@@ -200,12 +200,12 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     if IS_E1 {
         exec_state.vm_write(RV32_MEMORY_AS, buffer, &result);
     } else {
-    for i in 0..KECCAK_WIDTH_U32_LIMBS {
-        let mut write_chunk: [u8; 4] = [0; 4];
-        write_chunk.copy_from_slice(&result[4 * i..4 * i + 4]);
-        exec_state.vm_write::<u8, KECCAK_WORD_SIZE>(
-            RV32_MEMORY_AS,
-            buffer + (i * KECCAK_WORD_SIZE) as u32,
+        for i in 0..KECCAK_WIDTH_U32_LIMBS {
+            let mut write_chunk: [u8; 4] = [0; 4];
+            write_chunk.copy_from_slice(&result[4 * i..4 * i + 4]);
+            exec_state.vm_write::<u8, KECCAK_WORD_SIZE>(
+                RV32_MEMORY_AS,
+                buffer + (i * KECCAK_WORD_SIZE) as u32,
                 &write_chunk,
             );
         }
@@ -224,9 +224,8 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     let pre_compute: &E2PreCompute<KeccakfPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<KeccakfPreCompute>>())
             .borrow();
-    exec_state.ctx.on_height_change(
-        pre_compute.chip_idx as usize,
-        NUM_KECCAKF_OP_ROWS as u32,
-    );
+    exec_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, NUM_OP_ROWS_PER_INS as u32);
     execute_e12_impl::<F, CTX, false>(&pre_compute.data, exec_state);
 }

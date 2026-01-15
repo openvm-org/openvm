@@ -2,7 +2,7 @@ use openvm_circuit::system::memory::offline_checker::{MemoryReadAuxCols, MemoryW
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 
-use crate::xorin::utils::{KECCAK_RATE_BYTES, KECCAK_WORD_SIZE};
+use crate::{KECCAK_RATE_BYTES, KECCAK_WORD_SIZE};
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]

@@ -2,7 +2,7 @@ use openvm_circuit::system::memory::offline_checker::{MemoryBaseAuxCols, MemoryR
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 
-use crate::{KECCAK_WIDTH_BYTES, KECCAK_WORD_SIZE};
+use crate::{KECCAK_WIDTH_BYTES, KECCAK_WIDTH_WORDS};
 
 /// Each instruction handling will use _two_ rows.
 #[repr(C)]
@@ -31,7 +31,7 @@ pub struct KeccakfOpCols<T> {
     pub rd_aux: MemoryReadAuxCols<T>,
     /// Auxiliary columns for timestamp checking of the writes to `buffer`. The writes are done one
     /// word at a time, and each write requires a separate previous timestamp.
-    pub buffer_word_aux: [MemoryBaseAuxCols<T>; KECCAK_WIDTH_BYTES / KECCAK_WORD_SIZE],
+    pub buffer_word_aux: [MemoryBaseAuxCols<T>; KECCAK_WIDTH_WORDS],
 }
 
 pub const NUM_KECCAKF_OP_COLS: usize = size_of::<KeccakfOpCols<u8>>();

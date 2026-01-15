@@ -16,7 +16,8 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{XorinVmExecutor, KECCAK_WORD_SIZE};
+use super::XorinVmExecutor;
+use crate::KECCAK_WORD_SIZE;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]

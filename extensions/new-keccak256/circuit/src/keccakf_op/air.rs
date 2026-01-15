@@ -140,12 +140,14 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
                 base: base_aux,
                 prev_data: *prev_data,
             };
-            self.memory_bridge.write(
-                MemoryAddress::new(AB::F::from_canonical_u32(RV32_MEMORY_AS), ptr),
-                *data,
-                timestamp_pp(),
-                &write_aux,
-            );
+            self.memory_bridge
+                .write(
+                    MemoryAddress::new(AB::F::from_canonical_u32(RV32_MEMORY_AS), ptr),
+                    *data,
+                    timestamp_pp(),
+                    &write_aux,
+                )
+                .eval(builder, is_valid);
         }
 
         // ======== Execution bus =========

@@ -1,6 +1,8 @@
 // ==== VM-specific constants ====
 /// Number of cells to read/write in a single memory access
 pub const KECCAK_WORD_SIZE: usize = 4;
+/// The number of memory blocks needed to access the entire keccakf state.
+pub const KECCAK_WIDTH_WORDS: usize = KECCAK_WIDTH_BYTES / KECCAK_WORD_SIZE;
 
 // ==== Do not change these constants! ====
 /// Total number of sponge bytes: number of rate bytes + number of capacity
