@@ -2,101 +2,65 @@
 
 This chip efficiently range checks tuples of values using a single interaction when the product of their ranges is relatively small (less than ~2^20). For example, when checking pairs `(x, y)` against their respective bit limits, this approach is more efficient than performing separate range checks.
 
+**Note:** This chip requires that each range size is a power of 2 (i.e., each value in `sizes` must be a power of 2).
+
 **Columns:**
 - `tuple`: Array of N columns containing all possible tuple combinations within the specified ranges
-- `tuple_inverse`: Array of (N-1) columns where `tuple_inverse[i] = inv(tuple[i] - (bus.sizes[i] - 1))` for 0 <= i <= N-2. Used to detect when a tuple component reaches its maximum value.
-- `prefix_product`: Array of (N-1) columns when N > 2, or 0 columns when N == 2. For 0 <= i <= N-2, `prefix_product[i] = is_last[0] * ... * is_last[i]` where `is_last[i] = tuple_inverse[i] * (tuple[i] - (bus.sizes[i] - 1))`. When N == 2, the prefix product is inlined into the transition constraints to optimize the circuit.
+- `is_first`: Array of (N-1) boolean columns. `is_first[i]` equals the change in `tuple[i+1]` (0 or 1) when `is_first[i+1] != 1`. Additionally, when `is_first[i+1] == 1`, then `is_first[i]` must also be 1.
 - `mult`: Multiplicity column tracking the number of range checks requested for each tuple
 
 The `sizes` parameter in `RangeTupleCheckerBus` defines the maximum value for each dimension.
 
-For a 2-dimensional tuple with `sizes = [3, 2]`, the preprocessed trace contains these 6 combinations in lexicographic order:
+For a 2-dimensional tuple with `sizes = [4, 2]`, the preprocessed trace contains these 8 combinations in lexicographic order:
 ```
 (0,0)
 (1,0)
 (2,0)
+(3,0)
 (0,1)
 (1,1)
 (2,1)
+(3,1)
 ```
 
 ## Circuit Constraints
 
 ### Boundary Constraints
 
-We enforce that the trace starts at `(0, 0, ..., 0)` and ends at `(sizes[0]-1, sizes[1]-1, ..., sizes[N-1]-1)`:
+We enforce that the trace starts at `(0, 0, ..., 0)` and ends at `(sizes[0]-1, sizes[1]-1, ..., sizes[N-1]-1)`.
 
-### tuple_inverse Constraints
+Additionally, in the first row, all `is_first` columns must be 1.
 
-For each `0 <= i < N-1`, we enforce,
-```
-tuple_inverse[i] * (tuple[i] - (sizes[i] - 1)) * (tuple[i] - (sizes[i] - 1)) = tuple[i] - (sizes[i] - 1)
-```
+### is_first Constraints
 
-This enforces:
-- `tuple_inverse[i] = inv(tuple[i] - (sizes[i] - 1))` when `tuple[i] != sizes[i] - 1`
-- `tuple_inverse[i] = 0` when `tuple[i] = sizes[i] - 1`
-
-### prefix_product Constraints (N > 2 only)
-
-For `N > 2` and `1 <= i < N-1`:
-```
-prefix_product[i] = prefix_product[i-1] * (1 - tuple_inverse[i] * (tuple[i] - (sizes[i] - 1)))
-```
-
-where `prefix_product[0] = 1 - tuple_inverse[0] * (tuple[0] - (sizes[0] - 1))`.
+For each `0 <= i < N-1`:
+- `is_first[i]` must be boolean (0 or 1)
+- In the first row: `is_first[i] = 1`
 
 ### Transition Constraints
 
-The transition constraints enforce lexicographic ordering between consecutive rows. The behavior differs for `N == 2` and `N > 2`:
-
-#### N == 2 Case
-
-When `N == 2`, the `prefix_product` column is eliminated and its computation is inlined directly into the transition constraints:
+The transition constraints enforce lexicographic ordering between consecutive rows using `is_first` to track wrapping behavior.
 
 **For `tuple[0]` (leftmost component):**
-```
-next.tuple[0] = (local.tuple[0] + 1) * (local.tuple_inverse[0] * (local.tuple[0] - (sizes[0] - 1)))
-```
-
-This means:
-- If `tuple[0] < sizes[0] - 1`: `next.tuple[0] = tuple[0] + 1` (increment)
-- If `tuple[0] = sizes[0] - 1`: `next.tuple[0] = 0` (wrap to zero)
-
-**For `tuple[1]` (rightmost component):**
-```
-next.tuple[1] = local.tuple[1] + (1 - local.tuple_inverse[0] * (local.tuple[0] - (sizes[0] - 1)))
-```
-
-This means:
-- If `tuple[0] < sizes[0] - 1`: `next.tuple[1] = tuple[1]` (no change)
-- If `tuple[0] = sizes[0] - 1`: `next.tuple[1] = tuple[1] + 1` (increment)
-
-This creates the lexicographic ordering: `(0,0) → (1,0) → (2,0) → (0,1) → (1,1) → (2,1)` for `sizes = [3, 2]`.
-
-#### N > 2 Case
-
-For `N > 2`, the transition constraints use `prefix_product` to determine when each component should increment:
-
-**For `tuple[0]` (leftmost component):**
-```
-next.tuple[0] = (local.tuple[0] + 1) * (1 - local.prefix_product[0])
-```
-
-- Increments every row, wrapping to `0` when it reaches `sizes[0] - 1`
+- When `is_first[0] != 1`: `next.tuple[0] - local.tuple[0] = 1` (increments by 1)
+- When `is_first[0] == 1`: wrapping occurs (handled by wrapping constraints)
 
 **For `tuple[i]` where `1 <= i < N-1` (middle components):**
-```
-next.tuple[i] = (local.tuple[i] + local.prefix_product[i-1]) * (1 - local.prefix_product[i])
-```
-
-- Increments when all components to the left are at their maximum (`prefix_product[i-1] = 1`)
-- Wraps to `0` when it and all components to the left are at their maximum (`prefix_product[i] = 1`)
+- When `is_first[i] != 1`: `next.tuple[i] - local.tuple[i]` is boolean (0 or 1)
+- When `is_first[i] == 1`: wrapping occurs (handled by wrapping constraints)
 
 **For `tuple[N-1]` (rightmost component):**
-```
-next.tuple[N-1] = local.tuple[N-1] + local.prefix_product[N-2]
-```
+- `next.tuple[N-1] - local.tuple[N-1]` is boolean (0 or 1, never wraps)
 
-- Only increments when all other components are at their maximum (`prefix_product[N-2] = 1`)
-- Never wraps (it's the last component to increment)
+**is_first Computation:**
+- `is_first[N-2] = next.tuple[N-1] - local.tuple[N-1]` (equals the change in `tuple[N-1]`, which is 0 or 1)
+- For `0 <= i < N-2`:
+  - When `is_first[i+1] != 1`: `is_first[i] = next.tuple[i+1] - local.tuple[i+1]` (equals the change in `tuple[i+1]`)
+  - When `is_first[i+1] == 1`: `is_first[i] = 1` (propagation constraint)
+
+**Wrapping Constraints:**
+When `is_first[i] == 1` (indicating `tuple[i]` wraps):
+- `local.tuple[i] = sizes[i] - 1` (was at maximum)
+- `next.tuple[i] = 0` (wraps to zero)
+
+This creates the lexicographic ordering: `(0,0) → (1,0) → (2,0) → (3,0) → (0,1) → (1,1) → (2,1) → (3,1)` for `sizes = [4, 2]`.
