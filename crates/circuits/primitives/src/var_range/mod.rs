@@ -92,7 +92,8 @@ impl<AB: InteractionBuilder> Air<AB> for VariableRangeCheckerAir {
 
         // The selector is (value + 1 - two_to_max_bits), which is 0 when is a wrap transition.
         let selector = local.value + AB::Expr::ONE - local.two_to_max_bits;
-        // Ensure selector_inverse is the inverse of the selector when selector is non-zero, or unconstrained if selector is 0.
+        // Ensure selector_inverse is the inverse of the selector when selector is non-zero, or
+        // unconstrained if selector is 0.
         builder.when_transition().assert_eq(
             local.selector_inverse * selector.clone() * selector.clone(),
             selector.clone(),
@@ -104,13 +105,15 @@ impl<AB: InteractionBuilder> Air<AB> for VariableRangeCheckerAir {
             is_not_wrap.clone() * (local.value + AB::Expr::ONE - next.value)
                 + (AB::Expr::ONE - is_not_wrap.clone()) * next.value,
         );
-        // If not a wrap transition, max_bits should stay the same, otherwise, max_bits should increment by 1
+        // If not a wrap transition, max_bits should stay the same, otherwise, max_bits should
+        // increment by 1
         builder.when_transition().assert_zero(
             is_not_wrap.clone() * (local.max_bits - next.max_bits)
                 + (AB::Expr::ONE - is_not_wrap.clone())
                     * (local.max_bits + AB::Expr::ONE - next.max_bits),
         );
-        // If not wrap transition, two_to_max_bits should stay the same, otherwise, two_to_max_bits should be multiplied by 2
+        // If not wrap transition, two_to_max_bits should stay the same, otherwise, two_to_max_bits
+        // should be multiplied by 2
         builder.when_transition().assert_zero(
             is_not_wrap.clone() * (local.two_to_max_bits - next.two_to_max_bits)
                 + (AB::Expr::ONE - is_not_wrap.clone())

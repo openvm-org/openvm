@@ -83,10 +83,11 @@ pub mod cuda {
     use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer};
     use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 
-    use crate::{
-        cuda_abi::var_range::dummy_tracegen,
-        var_range::{VariableRangeCheckerChipGPU, NUM_VARIABLE_RANGE_PREPROCESSED_COLS},
-    };
+    use crate::{cuda_abi::var_range::dummy_tracegen, var_range::VariableRangeCheckerChipGPU};
+
+    /// Width of the dummy trace: [count, value, bits] = 3 columns
+    /// Define the width of the dummy instead of using constant from var_range
+    const DUMMY_TRACE_WIDTH: usize = 3;
 
     pub struct DummyInteractionChipGPU {
         pub range_checker: Arc<VariableRangeCheckerChipGPU>,
@@ -107,8 +108,7 @@ pub mod cuda {
     impl<RA> Chip<RA, GpuBackend> for DummyInteractionChipGPU {
         fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
             let height = self.data.len();
-            let width = NUM_VARIABLE_RANGE_PREPROCESSED_COLS + 1;
-            let trace = DeviceMatrix::<F>::with_capacity(height, width);
+            let trace = DeviceMatrix::<F>::with_capacity(height, DUMMY_TRACE_WIDTH);
             unsafe {
                 dummy_tracegen(&self.data, trace.buffer(), &self.range_checker.count).unwrap();
             }
