@@ -1,5 +1,5 @@
-//! A chip which uses preprocessed trace to provide a lookup table for range checking
-//! a variable `x` has `b` bits where `b` can be any integer in `[0, range_max_bits]`.
+//! A chip which provides a lookup table for range checking a variable `x` has `b` bits
+//! where `b` can be any integer in `[0, range_max_bits]` without using preprocessed trace.
 //! In other words, the same chip can be used to range check for different bit sizes.
 //! We define `0` to have `0` bits.
 
@@ -13,14 +13,16 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
-    p3_air::{Air, BaseAir, PairBuilder},
-    p3_field::{Field, PrimeField32},
+    p3_air::{Air, AirBuilder, BaseAir},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
     Chip, ChipUsageGetter,
 };
 use tracing::instrument;
+
+use crate::utils::select;
 
 mod bus;
 pub use bus::*;
@@ -36,22 +38,23 @@ pub mod tests;
 #[derive(Default, AlignedBorrow, Copy, Clone)]
 #[repr(C)]
 pub struct VariableRangeCols<T> {
-    /// Number of range checks requested for each (value, max_bits) pair
-    pub mult: T,
-}
-
-#[derive(Default, AlignedBorrow, Copy, Clone)]
-#[repr(C)]
-pub struct VariableRangePreprocessedCols<T> {
     /// The value being range checked
     pub value: T,
     /// The maximum number of bits for this value
     pub max_bits: T,
+    /// Helper column used to handle wrap-around transitions, stores 2^max_bits
+    pub two_to_max_bits: T,
+    /// The inverse of the selector (value + 1 - two_to_max_bits), unconstrained if selector is 0.
+    /// Used to create a boolean selector for detecting wrap transitions
+    pub selector_inverse: T,
+    /// Boolean selector: 1 if NOT a wrap transition, 0 if wrapping
+    /// Used to reduce degree of transition constraints
+    pub is_not_wrap: T,
+    /// Number of range checks requested for each (value, max_bits) pair
+    pub mult: T,
 }
 
 pub const NUM_VARIABLE_RANGE_COLS: usize = size_of::<VariableRangeCols<u8>>();
-pub const NUM_VARIABLE_RANGE_PREPROCESSED_COLS: usize =
-    size_of::<VariableRangePreprocessedCols<u8>>();
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct VariableRangeCheckerAir {
@@ -68,36 +71,72 @@ impl<F: Field> BaseAirWithPublicValues<F> for VariableRangeCheckerAir {}
 impl<F: Field> PartitionedBaseAir<F> for VariableRangeCheckerAir {}
 impl<F: Field> BaseAir<F> for VariableRangeCheckerAir {
     fn width(&self) -> usize {
-        NUM_VARIABLE_RANGE_COLS
-    }
-
-    fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
-        let rows: Vec<F> = [F::ZERO; NUM_VARIABLE_RANGE_PREPROCESSED_COLS]
-            .into_iter()
-            .chain((0..=self.range_max_bits()).flat_map(|bits| {
-                (0..(1 << bits)).flat_map(move |value| {
-                    [F::from_canonical_u32(value), F::from_canonical_usize(bits)].into_iter()
-                })
-            }))
-            .collect();
-        Some(RowMajorMatrix::new(
-            rows,
-            NUM_VARIABLE_RANGE_PREPROCESSED_COLS,
-        ))
+        VariableRangeCols::<F>::width()
     }
 }
 
-impl<AB: InteractionBuilder + PairBuilder> Air<AB> for VariableRangeCheckerAir {
+impl<AB: InteractionBuilder> Air<AB> for VariableRangeCheckerAir {
     fn eval(&self, builder: &mut AB) {
-        let preprocessed = builder.preprocessed();
-        let prep_local = preprocessed.row_slice(0);
-        let prep_local: &VariableRangePreprocessedCols<AB::Var> = (*prep_local).borrow();
         let main = builder.main();
-        let local = main.row_slice(0);
+
+        let (local, next) = (main.row_slice(0), main.row_slice(1));
         let local: &VariableRangeCols<AB::Var> = (*local).borrow();
-        // Omit creating separate bridge.rs file for brevity
+        let next: &VariableRangeCols<AB::Var> = (*next).borrow();
+
+        // First-row constraints: ensure we start at [0, 0] with two_to_max_bits = 1.
+        // Note: selector_inverse is unconstrained on the first row because selector = 0.
+        builder.when_first_row().assert_zero(local.value);
+        builder.when_first_row().assert_zero(local.max_bits);
+        builder.when_first_row().assert_one(local.two_to_max_bits);
+
+        // The selector is (value + 1 - two_to_max_bits), which is 0 when it is a wrap transition.
+        let selector = local.value + AB::Expr::ONE - local.two_to_max_bits;
+        // Constraints to ensure that is_not_wrap is 1 when selector is non-zero, and 0 when
+        // selector is 0.
+        builder.when(selector.clone()).assert_one(local.is_not_wrap);
+        builder.assert_eq(local.is_not_wrap, selector.clone() * local.selector_inverse);
+
+        // If not a wrap transition, value should increment by 1, otherwise, value should reset to 0
+        builder.when_transition().assert_eq(
+            next.value,
+            select::<AB::Expr>(
+                local.is_not_wrap,
+                local.value + AB::Expr::ONE,
+                AB::Expr::ZERO,
+            ),
+        );
+        // If not a wrap transition, max_bits should stay the same, otherwise, max_bits should
+        // increment by 1
+        builder.when_transition().assert_eq(
+            next.max_bits,
+            select::<AB::Expr>(
+                local.is_not_wrap,
+                local.max_bits,
+                local.max_bits + AB::Expr::ONE,
+            ),
+        );
+        // If not wrap transition, two_to_max_bits should stay the same, otherwise, two_to_max_bits
+        // should be multiplied by 2
+        builder.when_transition().assert_eq(
+            next.two_to_max_bits,
+            select::<AB::Expr>(
+                local.is_not_wrap,
+                local.two_to_max_bits,
+                local.two_to_max_bits * AB::Expr::TWO,
+            ),
+        );
+
+        // Ensure the last row is our dummy row: value=0, max_bits=range_max_bits+1, mult=0
+        // This dummy row makes the trace height a power of 2.
+        builder.when_last_row().assert_zero(local.value);
+        builder.when_last_row().assert_eq(
+            local.max_bits,
+            AB::F::from_canonical_usize(self.bus.range_max_bits + 1),
+        );
+        builder.when_last_row().assert_zero(local.mult);
+
         self.bus
-            .receive(prep_local.value, prep_local.max_bits)
+            .receive(local.value, local.max_bits)
             .eval(builder, local.mult);
     }
 }
@@ -137,10 +176,10 @@ impl VariableRangeCheckerChip {
         level = "trace"
     )]
     pub fn add_count(&self, value: u32, max_bits: usize) {
-        // index is 2^max_bits + value - 1 + 1 for the extra [0, 0] row
+        // index is 2^max_bits + value - 1
         // if each [value, max_bits] is valid, the sends multiset will be exactly the receives
         // multiset
-        let idx = (1 << max_bits) + (value as usize);
+        let idx = (1 << max_bits) + (value as usize) - 1;
         assert!(
             idx < self.count.len(),
             "range exceeded: {} >= {}",
@@ -160,10 +199,21 @@ impl VariableRangeCheckerChip {
     /// Generates trace and resets the internal counters all to 0.
     pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
         let mut rows = F::zero_vec(self.count.len() * NUM_VARIABLE_RANGE_COLS);
-        for (n, row) in rows.chunks_mut(NUM_VARIABLE_RANGE_COLS).enumerate() {
-            let cols: &mut VariableRangeCols<F> = row.borrow_mut();
+        for (i, row) in rows.chunks_exact_mut(NUM_VARIABLE_RANGE_COLS).enumerate() {
+            let cols: &mut VariableRangeCols<F> = (*row).borrow_mut();
+            let max_bits = (i + 1).ilog2();
+            let two_to_max_bits = 1 << max_bits;
+            let value = i + 1 - two_to_max_bits;
+
+            // Convert to field elements before computing selector
+            cols.value = F::from_canonical_usize(value);
+            cols.max_bits = F::from_canonical_u32(max_bits);
+            cols.two_to_max_bits = F::from_canonical_usize(two_to_max_bits);
+            let selector = cols.value + F::ONE - cols.two_to_max_bits;
+            cols.selector_inverse = selector.try_inverse().unwrap_or(F::ZERO);
+            cols.is_not_wrap = F::from_bool(!selector.is_zero());
             cols.mult =
-                F::from_canonical_u32(self.count[n].swap(0, std::sync::atomic::Ordering::Relaxed));
+                F::from_canonical_u32(self.count[i].swap(0, std::sync::atomic::Ordering::Relaxed));
         }
         RowMajorMatrix::new(rows, NUM_VARIABLE_RANGE_COLS)
     }
