@@ -21,6 +21,7 @@ The chip uses gate-based constraints to generate the trace columns instead of a 
 - `max_bits`: The maximum number of bits for this value
 - `two_to_max_bits`: Helper column storing $2^{\mathtt{max\_bits}}$, used to detect wrap transitions
 - `selector_inverse`: The inverse of the selector `(value + 1 - two_to_max_bits)`, used to create a boolean selector for wrap detection
+- `is_not_wrap`: Boolean selector (1 if NOT wrapping, 0 if wrapping), used to reduce degree of transition constraints
 - `mult`: Multiplicity column tracking how many range checks are requested for each `(value, max_bits)` pair
 
 The constraints enforce the enumeration pattern by:
