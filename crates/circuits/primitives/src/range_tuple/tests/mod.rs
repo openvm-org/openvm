@@ -1,7 +1,12 @@
 use std::{array, iter, sync::Arc};
 
 use openvm_stark_backend::{
-    AirRef, p3_field::FieldAlgebra, p3_matrix::dense::{DenseMatrix, RowMajorMatrix}, p3_maybe_rayon::prelude::*, utils::disable_debug_builder, verifier::VerificationError
+    p3_field::FieldAlgebra,
+    p3_matrix::dense::{DenseMatrix, RowMajorMatrix},
+    p3_maybe_rayon::prelude::*,
+    utils::disable_debug_builder,
+    verifier::VerificationError,
+    AirRef,
 };
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
@@ -114,7 +119,7 @@ fn negative_test_range_tuple_chip() {
         .collect();
 
     let dummy_air = DummyInteractionAir::new(sizes.len(), true, bus_index);
-    
+
     let dummy_trace = RowMajorMatrix::new(
         valid_tuples
             .iter()
@@ -134,8 +139,9 @@ fn negative_test_range_tuple_chip() {
 
     BabyBearBlake3Engine::run_simple_test_no_pis_fast(
         all_chips,
-        vec![dummy_trace, range_trace.clone()]
-    ).expect("This should not fail");
+        vec![dummy_trace, range_trace.clone()],
+    )
+    .expect("This should not fail");
 
     // Corrupt the trace to make it invalid
     range_trace.values[0] = BabyBear::from_wrapped_u32(99);

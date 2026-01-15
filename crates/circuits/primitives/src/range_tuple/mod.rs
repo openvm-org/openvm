@@ -154,7 +154,7 @@ impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupl
                         .when_transition()
                         .assert_eq(next.tuple[i], local.tuple[i] + local.prefix_product[i - 1]);
                 } else {
-                    // for all other tuple columns, the value of the column changes if the previous 
+                    // for all other tuple columns, the value of the column changes if the previous
                     // values of the columns to the left of the current column are at their maximums
                     // the column must wrap if it, and all columns to the left of it are at their maximums
                     builder.when_transition().assert_eq(
