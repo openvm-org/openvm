@@ -17,9 +17,7 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{KeccakfExecutor, NUM_OP_ROWS_PER_INS};
-use crate::{KECCAK_WIDTH_BYTES, KECCAK_WIDTH_U64S, KECCAK_WORD_SIZE};
-
-const KECCAK_WIDTH_U32_LIMBS: usize = KECCAK_WIDTH_BYTES / KECCAK_WORD_SIZE;
+use crate::{keccakf_op::keccakf_postimage_bytes, KECCAK_WIDTH_BYTES, KECCAK_WORD_SIZE};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -155,58 +153,22 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     pre_compute: &KeccakfPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    use tiny_keccak::keccakf;
+    let rd_ptr = pre_compute.a as u32;
+    let buffer_ptr_limbs: [u8; 4] = exec_state.vm_read(RV32_REGISTER_AS, rd_ptr);
+    let buffer_ptr = u32::from_le_bytes(buffer_ptr_limbs);
 
-    // the variable naming might be misleading
-    // buf_ptr is the pointer to the register which holds the actual pointer to the buffer
-    let buf_ptr = pre_compute.a as u32;
-    let buffer_limbs: [u8; 4] = exec_state.vm_read(RV32_REGISTER_AS, buf_ptr);
-    let buffer = u32::from_le_bytes(buffer_limbs);
-
-    let message_vec: Option<Vec<u8>> = if IS_E1 {
-        None
-    } else {
-        Some(
-            (0..KECCAK_WIDTH_U32_LIMBS)
-                .flat_map(|i| {
-                    exec_state.vm_read::<u8, KECCAK_WORD_SIZE>(
-                        RV32_MEMORY_AS,
-                        buffer + (i * KECCAK_WORD_SIZE) as u32,
-                    )
-                })
-                .collect(),
-        )
-    };
-
-    let message: &[u8] = match message_vec.as_deref() {
-        Some(v) => &v[..KECCAK_WIDTH_BYTES],
-        None => exec_state.vm_read_slice(RV32_MEMORY_AS, buffer, KECCAK_WIDTH_BYTES),
-    };
-    assert_eq!(message.len(), KECCAK_WIDTH_BYTES);
-
-    let mut message_u64 = [0u64; KECCAK_WIDTH_U64S];
-    for (i, message_chunk) in message.chunks_exact(8).enumerate() {
-        let message_chunk_u64 = u64::from_le_bytes(message_chunk.try_into().unwrap());
-        message_u64[i] = message_chunk_u64;
-    }
-    keccakf(&mut message_u64);
-
-    let mut result: [u8; KECCAK_WIDTH_BYTES] = [0; KECCAK_WIDTH_BYTES];
-    for (i, message) in message_u64.into_iter().enumerate() {
-        let message_bytes = message.to_le_bytes();
-        result[8 * i..8 * i + 8].copy_from_slice(&message_bytes);
-    }
+    let preimage: &[u8] =
+        exec_state.host_read_slice(RV32_MEMORY_AS, buffer_ptr, KECCAK_WIDTH_BYTES);
+    let postimage = keccakf_postimage_bytes(preimage.try_into().unwrap());
 
     if IS_E1 {
-        exec_state.vm_write(RV32_MEMORY_AS, buffer, &result);
+        exec_state.vm_write(RV32_MEMORY_AS, buffer_ptr, &postimage);
     } else {
-        for i in 0..KECCAK_WIDTH_U32_LIMBS {
-            let mut write_chunk: [u8; 4] = [0; 4];
-            write_chunk.copy_from_slice(&result[4 * i..4 * i + 4]);
+        for (word_idx, word) in postimage.chunks_exact(KECCAK_WORD_SIZE).enumerate() {
             exec_state.vm_write::<u8, KECCAK_WORD_SIZE>(
                 RV32_MEMORY_AS,
-                buffer + (i * KECCAK_WORD_SIZE) as u32,
-                &write_chunk,
+                buffer_ptr + (word_idx * KECCAK_WORD_SIZE) as u32,
+                word.try_into().unwrap(),
             );
         }
     }

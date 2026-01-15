@@ -29,12 +29,11 @@ use openvm_stark_backend::{
     prover::{cpu::CpuBackend, types::AirProvingContext},
     Chip,
 };
-use tiny_keccak::keccakf;
 
 use super::{KeccakfExecutor, NUM_OP_ROWS_PER_INS};
 use crate::{
-    keccakf_op::columns::KeccakfOpCols, KECCAK_WIDTH_BYTES, KECCAK_WIDTH_U64S, KECCAK_WIDTH_WORDS,
-    KECCAK_WORD_SIZE,
+    keccakf_op::{columns::KeccakfOpCols, keccakf_postimage_bytes},
+    KECCAK_WIDTH_BYTES, KECCAK_WIDTH_WORDS, KECCAK_WORD_SIZE,
 };
 
 #[derive(derive_new::new)]
@@ -123,30 +122,20 @@ where
         let prestate =
             unsafe { guest_mem.get_slice(RV32_MEMORY_AS, record.buffer_ptr, KECCAK_WIDTH_BYTES) };
         record.preimage_buffer_bytes.copy_from_slice(prestate);
-        let mut buffer = [0u64; KECCAK_WIDTH_U64S];
-        // While almost all host architectures are little-endian, we use explicit from_le_bytes for
-        // safety (instead of direct memcpy)
-        for (u64_word, chunk) in buffer.iter_mut().zip(prestate.chunks_exact(8)) {
-            *u64_word = u64::from_le_bytes(chunk.try_into().unwrap());
-        }
-        keccakf(&mut buffer);
-        for (i, u64_word) in buffer.into_iter().enumerate() {
-            debug_assert_eq!(RV32_CELL_BITS, 8);
-            let bytes = u64_word.to_le_bytes();
-            for j in 0..8 / KECCAK_WORD_SIZE {
-                let word_idx = i * (8 / KECCAK_WORD_SIZE) + j;
-                let aux = &mut record.buffer_word_aux[word_idx];
-                // We don't need prev_data since we read it earlier
-                let (t_prev, _) = timed_write::<KECCAK_WORD_SIZE>(
-                    state.memory,
-                    RV32_MEMORY_AS,
-                    buffer_ptr + (word_idx * KECCAK_WORD_SIZE) as u32,
-                    bytes[j * KECCAK_WORD_SIZE..(j + 1) * KECCAK_WORD_SIZE]
-                        .try_into()
-                        .unwrap(),
-                );
-                aux.prev_timestamp = t_prev;
-            }
+        let poststate = keccakf_postimage_bytes(&record.preimage_buffer_bytes);
+        for (word_idx, (word, aux)) in poststate
+            .chunks_exact(KECCAK_WORD_SIZE)
+            .zip(&mut record.buffer_word_aux)
+            .enumerate()
+        {
+            // We don't need prev_data since we read it earlier
+            let (t_prev, _) = timed_write::<KECCAK_WORD_SIZE>(
+                state.memory,
+                RV32_MEMORY_AS,
+                buffer_ptr + (word_idx * KECCAK_WORD_SIZE) as u32,
+                word.try_into().unwrap(),
+            );
+            aux.prev_timestamp = t_prev;
         }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
@@ -202,11 +191,13 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
                 local.timestamp = F::from_canonical_u32(record.timestamp);
                 local.rd_ptr = F::from_canonical_u32(record.rd_ptr);
                 local.buffer_ptr_limbs = buffer_ptr_limbs.map(F::from_canonical_u8);
+                next.is_after_valid = F::ONE;
+                next.timestamp = local.timestamp;
 
-                for (dst, &byte) in local.buffer.iter_mut().zip(&postimage_buffer_bytes) {
+                for (dst, &byte) in local.buffer.iter_mut().zip(&record.preimage_buffer_bytes) {
                     *dst = F::from_canonical_u8(byte);
                 }
-                for (dst, &byte) in next.buffer.iter_mut().zip(&record.preimage_buffer_bytes) {
+                for (dst, &byte) in next.buffer.iter_mut().zip(&postimage_buffer_bytes) {
                     *dst = F::from_canonical_u8(byte);
                 }
 
@@ -240,21 +231,4 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
             });
         *self.shared_records.lock().unwrap() = records;
     }
-}
-
-fn keccakf_postimage_bytes(
-    preimage_buffer_bytes: &[u8; KECCAK_WIDTH_BYTES],
-) -> [u8; KECCAK_WIDTH_BYTES] {
-    let mut state = [0u64; KECCAK_WIDTH_U64S];
-    for (idx, chunk) in preimage_buffer_bytes.chunks_exact(8).enumerate() {
-        state[idx] = u64::from_le_bytes(chunk.try_into().unwrap());
-    }
-    tiny_keccak::keccakf(&mut state);
-
-    let mut result = [0u8; KECCAK_WIDTH_BYTES];
-    for (idx, word) in state.into_iter().enumerate() {
-        let bytes = word.to_le_bytes();
-        result[8 * idx..8 * idx + 8].copy_from_slice(&bytes);
-    }
-    result
 }

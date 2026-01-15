@@ -5,6 +5,7 @@ use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
     interaction::{InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, AirBuilder, BaseAir},
+    p3_field::FieldAlgebra,
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -16,9 +17,15 @@ use crate::KECCAK_WIDTH_U64S;
 #[derive(Debug, AlignedBorrow)]
 pub struct KeccakfPermCols<T> {
     pub inner: KeccakCols<T>,
+
+    /// The AIR **assumes** but does not constrain that the timestamp should be unique for each
+    /// distinct preimage state.
+    pub timestamp: T,
 }
 
 /// A periphery AIR that wraps the Plonky3 AIR with a direct interaction on a [PermutationCheckBus].
+/// The AIR assumes but does not constrain that the timestamp in the bus should be unique for each
+/// distinct preimage state.
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct KeccakfPermAir {
     /// Direct bus with keccakf pre- or post-state. Bus message is `prestate_u16_limbs ||
@@ -65,16 +72,27 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfPermAir {
 
         // ==== Receive preimage and postimage on direct bus ====
         // reminder: keccakf-air constrains that `preimage` stays the same across steps within 24 rows of the same permutation <https://github.com/Plonky3/Plonky3/blob/539bbc84085efb609f4f62cb03cf49588388abdb/keccak-air/src/air.rs#L62>
+
+        // preimage
         self.keccakf_state_bus.receive(
             builder,
-            // state[x + 5 * y] is y-major as in https://keccak.team/keccak_specs_summary.html
             iter::empty()
+                .chain([AB::Expr::ZERO, local.timestamp.into()])
                 .chain((0..KECCAK_WIDTH_U64S).flat_map(|i| {
+                    // state[x + 5 * y] is y-major as in https://keccak.team/keccak_specs_summary.html
                     let y = i / 5;
                     let x = i % 5;
                     (0..U64_LIMBS).map(move |limb| local.inner.preimage[y][x][limb].into())
-                }))
+                })),
+            local.inner.export,
+        );
+        // postimage
+        self.keccakf_state_bus.receive(
+            builder,
+            iter::empty()
+                .chain([AB::Expr::ONE, local.timestamp.into()])
                 .chain((0..KECCAK_WIDTH_U64S).flat_map(|i| {
+                    // state[x + 5 * y] is y-major as in https://keccak.team/keccak_specs_summary.html
                     let y = i / 5;
                     let x = i % 5;
                     (0..U64_LIMBS).map(move |limb| local.postimage(y, x, limb).into())

@@ -152,17 +152,16 @@ fn set_and_execute_single_perm<RA: Arena, E: PreflightExecutor<F, RA>>(
 ///////////////////////////////////////////////////////////////////////////////////////
 #[test]
 fn rand_keccakf_positive_tests() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let TestHarness {
+        mut harness,
+        bitwise,
+        perm,
+    } = create_test_harness(&mut tester);
+
     let num_ops: usize = 100;
-
     for _ in 0..num_ops {
-        let mut rng = create_seeded_rng();
-        let mut tester = VmChipTestBuilder::default();
-        let TestHarness {
-            mut harness,
-            bitwise,
-            perm,
-        } = create_test_harness(&mut tester);
-
         set_and_execute_single_perm(
             &mut tester,
             &mut harness.executor,
@@ -170,15 +169,15 @@ fn rand_keccakf_positive_tests() {
             &mut rng,
             KeccakfOpcode::KECCAKF,
         );
-
-        let tester = tester
-            .build()
-            .load(harness)
-            .load_periphery(perm)
-            .load_periphery(bitwise)
-            .finalize();
-        tester.simple_test().expect("Verification failed");
     }
+
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(perm)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////
