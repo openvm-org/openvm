@@ -15,6 +15,7 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
 use openvm_stark_backend::p3_field::PrimeField32;
+use p3_keccak_air::NUM_ROUNDS;
 
 use super::{KeccakfExecutor, NUM_OP_ROWS_PER_INS};
 use crate::{keccakf_op::keccakf_postimage_bytes, KECCAK_WIDTH_BYTES, KECCAK_WORD_SIZE};
@@ -186,8 +187,23 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     let pre_compute: &E2PreCompute<KeccakfPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<KeccakfPreCompute>>())
             .borrow();
+
+    let op_air_idx = pre_compute.chip_idx as usize;
+
+    // Update KeccakfOpChip height (2 rows per instruction)
     exec_state
         .ctx
-        .on_height_change(pre_compute.chip_idx as usize, NUM_OP_ROWS_PER_INS as u32);
+        .on_height_change(op_air_idx, NUM_OP_ROWS_PER_INS as u32);
+
+    // HACK: KeccakfPermAir is added right before KeccakfOpAir in extend_circuit,
+    // and due to reverse ordering of AIR indices, perm_air_idx = op_air_idx + 1.
+    // See extension/mod.rs extend_circuit for the ordering.
+    let perm_air_idx = op_air_idx + 1;
+
+    // Update KeccakfPermChip height (24 rows per keccakf permutation)
+    exec_state
+        .ctx
+        .on_height_change(perm_air_idx, NUM_ROUNDS as u32);
+
     execute_e12_impl::<F, CTX, false>(&pre_compute.data, exec_state);
 }
