@@ -93,13 +93,8 @@ impl<AB: InteractionBuilder> Air<AB> for VariableRangeCheckerAir {
         let selector = local.value + AB::Expr::ONE - local.two_to_max_bits;
         // Constraints to ensure that is_not_wrap is 1 when selector is non-zero, and 0 when
         // selector is 0.
-        builder
-            .when_transition()
-            .when(selector.clone())
-            .assert_one(local.is_not_wrap);
-        builder
-            .when_transition()
-            .assert_eq(local.is_not_wrap, selector.clone() * local.selector_inverse);
+        builder.when(selector.clone()).assert_one(local.is_not_wrap);
+        builder.assert_eq(local.is_not_wrap, selector.clone() * local.selector_inverse);
 
         // If not a wrap transition, value should increment by 1, otherwise, value should reset to 0
         builder.when_transition().assert_eq(
@@ -216,7 +211,7 @@ impl VariableRangeCheckerChip {
             cols.two_to_max_bits = F::from_canonical_usize(two_to_max_bits);
             let selector = cols.value + F::ONE - cols.two_to_max_bits;
             cols.selector_inverse = selector.try_inverse().unwrap_or(F::ZERO);
-            cols.is_not_wrap = selector * cols.selector_inverse;
+            cols.is_not_wrap = F::from_bool(!selector.is_zero());
             cols.mult =
                 F::from_canonical_u32(self.count[i].swap(0, std::sync::atomic::Ordering::Relaxed));
         }
