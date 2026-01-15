@@ -103,7 +103,7 @@ template <typename T> struct Instruction2Cols {
 };
 
 // Size constants for the three column types
-static const size_t WORKLOAD_SIZE = sizeof(WorkloadCols<uint8_t>);
-static const size_t INSN1_SIZE = sizeof(Instruction1Cols<uint8_t>);
-static const size_t INSN2_SIZE = sizeof(Instruction2Cols<uint8_t>);
-static const size_t OVERALL_SIZE = std::max({WORKLOAD_SIZE, INSN1_SIZE, INSN2_SIZE});
+inline constexpr size_t WORKLOAD_SIZE = sizeof(WorkloadCols<uint8_t>);
+inline constexpr size_t INSN1_SIZE = sizeof(Instruction1Cols<uint8_t>);
+inline constexpr size_t INSN2_SIZE = sizeof(Instruction2Cols<uint8_t>);
+inline constexpr size_t OVERALL_SIZE = std::max({WORKLOAD_SIZE, INSN1_SIZE, INSN2_SIZE});

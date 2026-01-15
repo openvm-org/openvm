@@ -7,13 +7,13 @@
 
 using namespace poseidon2;
 
-static const size_t WIDTH = 16;
-static const size_t SBOX_DEGREE = Poseidon2DefaultParams::SBOX_DEGREE;
-static const size_t HALF_FULL_ROUNDS = Poseidon2DefaultParams::HALF_FULL_ROUNDS;
-static const size_t PARTIAL_ROUNDS = Poseidon2DefaultParams::PARTIAL_ROUNDS;
+inline constexpr size_t WIDTH = 16;
+inline constexpr size_t SBOX_DEGREE = Poseidon2DefaultParams::SBOX_DEGREE;
+inline constexpr size_t HALF_FULL_ROUNDS = Poseidon2DefaultParams::HALF_FULL_ROUNDS;
+inline constexpr size_t PARTIAL_ROUNDS = Poseidon2DefaultParams::PARTIAL_ROUNDS;
 
-static const uint32_t NUM_INITIAL_READS = 6;
-// static const uint32_t NUM_SIMPLE_ACCESSES = 7;
+inline constexpr uint32_t NUM_INITIAL_READS = 6;
+// inline constexpr uint32_t NUM_SIMPLE_ACCESSES = 7;
 
 template <typename T, size_t SBOX_REGISTERS> struct NativePoseidon2Cols {
     Poseidon2SubCols<T, WIDTH, SBOX_DEGREE, SBOX_REGISTERS, HALF_FULL_ROUNDS, PARTIAL_ROUNDS> inner;

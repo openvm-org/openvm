@@ -7,6 +7,12 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 
 ## Unreleased
 
+## v1.4.3 (2026-01-11)
+
+### Changed
+- (Prover) Fixes to metered execution. Execution now tracks memory accesses since last checkpoint.
+- (Prover) CUDA tracegen optimization for memory merkle tree.
+
 ## v1.4.2 (2025-12-08)
 
 ### Added

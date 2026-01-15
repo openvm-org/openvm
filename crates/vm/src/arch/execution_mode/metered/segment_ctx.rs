@@ -68,8 +68,7 @@ pub struct SegmentationCtx {
     pub(crate) segmentation_limits: SegmentationLimits,
     pub instret: u64,
     pub instrets_until_check: u64,
-    #[getset(set_with = "pub")]
-    pub segment_check_insns: u64,
+    pub(super) segment_check_insns: u64,
     /// Checkpoint of trace heights at last known state where all thresholds satisfied
     pub(crate) checkpoint_trace_heights: Vec<u32>,
     /// Instruction count at the checkpoint
@@ -176,7 +175,7 @@ impl SegmentationCtx {
     }
 
     #[inline(always)]
-    fn should_segment(
+    pub(crate) fn should_segment(
         &self,
         instret: u64,
         trace_heights: &[u32],
@@ -257,20 +256,13 @@ impl SegmentationCtx {
         let should_seg = self.should_segment(instret, trace_heights, is_trace_height_constant);
 
         if should_seg {
-            self.create_segment_from_checkpoint(instret, trace_heights, is_trace_height_constant);
-        } else {
-            self.update_checkpoint(instret, trace_heights);
+            self.create_segment_from_checkpoint(instret, trace_heights);
         }
         should_seg
     }
 
     #[inline(always)]
-    fn create_segment_from_checkpoint(
-        &mut self,
-        instret: u64,
-        trace_heights: &mut [u32],
-        is_trace_height_constant: &[bool],
-    ) {
+    fn create_segment_from_checkpoint(&mut self, instret: u64, trace_heights: &mut [u32]) {
         let instret_start = self
             .segments
             .last()
@@ -296,12 +288,24 @@ impl SegmentationCtx {
             (instret, trace_heights.to_vec())
         };
 
-        // Reset current trace heights and checkpoint
-        self.reset_trace_heights(trace_heights, &segment_heights, is_trace_height_constant);
-        self.checkpoint_instret = 0;
-
         let num_insns = segment_instret - instret_start;
         self.create_segment::<false>(instret_start, num_insns, segment_heights);
+    }
+
+    /// Initialize state for a new segment
+    #[inline(always)]
+    pub(crate) fn initialize_segment(
+        &mut self,
+        trace_heights: &mut [u32],
+        is_trace_height_constant: &[bool],
+    ) {
+        // Reset trace heights by subtracting the last segment's heights
+        let last_segment = self.segments.last().unwrap();
+        self.reset_trace_heights(
+            trace_heights,
+            &last_segment.trace_heights,
+            is_trace_height_constant,
+        );
     }
 
     /// Resets trace heights by subtracting segment heights
@@ -325,7 +329,7 @@ impl SegmentationCtx {
 
     /// Updates the checkpoint with current safe state
     #[inline(always)]
-    fn update_checkpoint(&mut self, instret: u64, trace_heights: &[u32]) {
+    pub(crate) fn update_checkpoint(&mut self, instret: u64, trace_heights: &[u32]) {
         self.checkpoint_trace_heights.copy_from_slice(trace_heights);
         self.checkpoint_instret = instret;
     }
