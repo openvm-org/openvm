@@ -1,10 +1,10 @@
 mod air;
-mod columns;
+pub mod columns;
 mod execution;
 #[cfg(test)]
 pub mod tests;
 /// Preflight and CPU trace generation
-mod trace;
+pub mod trace;
 
 use std::mem::MaybeUninit;
 
@@ -14,7 +14,7 @@ pub use trace::*;
 
 use crate::{KECCAK_WIDTH_BYTES, KECCAK_WIDTH_U64S};
 
-const NUM_OP_ROWS_PER_INS: usize = 2;
+pub const NUM_OP_ROWS_PER_INS: usize = 2;
 
 #[derive(derive_new::new, Clone, Copy)]
 pub struct KeccakfExecutor {

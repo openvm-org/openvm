@@ -1,6 +1,7 @@
 use core::convert::TryInto;
 use std::{
     borrow::BorrowMut,
+    mem::{align_of, size_of},
     sync::{Arc, Mutex},
 };
 
@@ -83,6 +84,35 @@ pub struct KeccakfRecord {
     pub rd_aux: MemoryReadAuxRecord,
     pub buffer_word_aux: [MemoryReadAuxRecord; KECCAK_WIDTH_WORDS],
     pub preimage_buffer_bytes: [u8; KECCAK_WIDTH_BYTES],
+}
+
+/// Mutable reference wrapper for KeccakfRecord, used for record seeking in CUDA tests
+pub struct KeccakfRecordMut<'a> {
+    pub inner: &'a mut KeccakfRecord,
+}
+
+impl<'a> CustomBorrow<'a, KeccakfRecordMut<'a>, KeccakfRecordLayout> for [u8] {
+    fn custom_borrow(&'a mut self, _layout: KeccakfRecordLayout) -> KeccakfRecordMut<'a> {
+        let (record_buf, _rest) =
+            unsafe { self.split_at_mut_unchecked(size_of::<KeccakfRecord>()) };
+        KeccakfRecordMut {
+            inner: record_buf.borrow_mut(),
+        }
+    }
+
+    unsafe fn extract_layout(&self) -> KeccakfRecordLayout {
+        KeccakfRecordLayout::new(KeccakfMetadata)
+    }
+}
+
+impl SizedRecord<KeccakfRecordLayout> for KeccakfRecordMut<'_> {
+    fn size(_layout: &KeccakfRecordLayout) -> usize {
+        size_of::<KeccakfRecord>()
+    }
+
+    fn alignment(_layout: &KeccakfRecordLayout) -> usize {
+        align_of::<KeccakfRecord>()
+    }
 }
 
 impl<F, RA> PreflightExecutor<F, RA> for KeccakfExecutor

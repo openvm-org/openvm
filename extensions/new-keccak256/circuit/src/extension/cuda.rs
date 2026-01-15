@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use openvm_circuit::{
     arch::DenseRecordArena,
     system::cuda::{
@@ -12,7 +14,10 @@ use openvm_rv32im_circuit::Rv32ImGpuProverExt;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use super::*;
-use crate::cuda::{KeccakfVmChipGpu, XorinVmChipGpu};
+use crate::{
+    cuda::{KeccakfOpChipGpu, KeccakfPermChipGpu, SharedKeccakfRecords, XorinVmChipGpu},
+    keccakf_perm::KeccakfPermAir,
+};
 
 pub struct NewKeccak256GpuProverExt;
 
@@ -30,6 +35,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, NewKeccak25
         let range_checker = get_inventory_range_checker(inventory);
         let bitwise_lu = get_or_create_bitwise_op_lookup(inventory)?;
 
+        // XorinVmChip
         inventory.next_air::<XorinVmAir>()?;
         let xorin_chip = XorinVmChipGpu::new(
             range_checker.clone(),
@@ -39,14 +45,27 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, NewKeccak25
         );
         inventory.add_executor_chip(xorin_chip);
 
+        // Create shared state for passing records between Op and Perm chips
+        let shared_records = Arc::new(Mutex::new(SharedKeccakfRecords::default()));
+
+        // NOTE: AIRs are added in extend_circuit in this order: XorinVmAir, KeccakfPermAir, KeccakfOpAir
+        // The prover extension must consume AIRs in the same order.
+
+        // Register KeccakfPermChip (periphery chip - added BEFORE OpChip to ensure OpChip tracegen runs first)
+        inventory.next_air::<KeccakfPermAir>()?;
+        let perm_chip = KeccakfPermChipGpu::new(shared_records.clone());
+        inventory.add_periphery_chip(perm_chip);
+
+        // Register KeccakfOpChip (executor chip - generates first due to executor vs periphery ordering)
         inventory.next_air::<KeccakfOpAir>()?;
-        let keccakf_chip = KeccakfVmChipGpu::new(
+        let op_chip = KeccakfOpChipGpu::new(
             range_checker,
             bitwise_lu,
             pointer_max_bits,
             timestamp_max_bits as u32,
+            shared_records,
         );
-        inventory.add_executor_chip(keccakf_chip);
+        inventory.add_executor_chip(op_chip);
 
         Ok(())
     }
