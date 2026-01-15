@@ -167,8 +167,13 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfPermChipGpu {
         let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
 
         unsafe {
-            cuda_abi::keccakf_perm::tracegen(d_trace.buffer(), trace_height, &d_records, num_records)
-                .unwrap();
+            cuda_abi::keccakf_perm::tracegen(
+                d_trace.buffer(),
+                trace_height,
+                &d_records,
+                num_records,
+            )
+            .unwrap();
         }
 
         AirProvingContext::simple_no_pis(d_trace)

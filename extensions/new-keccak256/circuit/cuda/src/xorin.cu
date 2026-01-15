@@ -1,10 +1,14 @@
+#include "fp.h"
 #include "launcher.cuh"
 #include "primitives/buffer_view.cuh"
 #include "primitives/constants.h"
-#include "primitives/trace_access.h"
 #include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
 #include "system/memory/controller.cuh"
-#include "xorin/xorin.cuh"
+#include "xorin.cuh"
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
 
 using namespace xorin;
 using namespace riscv;
@@ -42,8 +46,7 @@ __global__ void xorin_tracegen(
         assert(rec.len < (1U << pointer_max_bits));
 
         MemoryAuxColsFactory mem_helper(
-            VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins),
-            timestamp_max_bits
+            VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins), timestamp_max_bits
         );
         BitwiseOperationLookup bitwise_lookup(d_bitwise_lookup_ptr, bitwise_num_bits);
 
@@ -62,9 +65,13 @@ __global__ void xorin_tracegen(
         XORIN_WRITE(instruction.start_timestamp, rec.timestamp);
 
         // Fill buffer/input/len limbs
-        XORIN_WRITE_ARRAY(instruction.buffer_ptr_limbs, reinterpret_cast<const uint8_t*>(&rec.buffer));
-        XORIN_WRITE_ARRAY(instruction.input_ptr_limbs, reinterpret_cast<const uint8_t*>(&rec.input));
-        XORIN_WRITE_ARRAY(instruction.len_limbs, reinterpret_cast<const uint8_t*>(&rec.len));
+        XORIN_WRITE_ARRAY(
+            instruction.buffer_ptr_limbs, reinterpret_cast<const uint8_t *>(&rec.buffer)
+        );
+        XORIN_WRITE_ARRAY(
+            instruction.input_ptr_limbs, reinterpret_cast<const uint8_t *>(&rec.input)
+        );
+        XORIN_WRITE_ARRAY(instruction.len_limbs, reinterpret_cast<const uint8_t *>(&rec.len));
 
         // Fill is_padding_bytes
         for (auto i = 0u; i < num_reads && i < XORIN_NUM_WORDS; i++) {
@@ -92,8 +99,8 @@ __global__ void xorin_tracegen(
         // Timestamps follow the order from CPU trace: registers, buffer reads, input reads, buffer writes
         auto timestamp = rec.timestamp;
 
-        // Register aux cols (3 register reads)
-        #pragma unroll
+// Register aux cols (3 register reads)
+#pragma unroll
         for (auto t = 0u; t < XORIN_REGISTER_READS; t++) {
             mem_helper.fill(
                 XORIN_SLICE(mem_oc.register_aux_cols[t].base),
@@ -136,7 +143,10 @@ __global__ void xorin_tracegen(
                 rec.buffer_write_aux_cols[t].prev_timestamp,
                 timestamp
             );
-            XORIN_WRITE_ARRAY(mem_oc.buffer_bytes_write_aux_cols[t].prev_data, rec.buffer_write_aux_cols[t].prev_data);
+            XORIN_WRITE_ARRAY(
+                mem_oc.buffer_bytes_write_aux_cols[t].prev_data,
+                rec.buffer_write_aux_cols[t].prev_data
+            );
             timestamp++;
         }
         for (auto t = num_reads; t < XORIN_NUM_WORDS; t++) {
