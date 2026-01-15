@@ -234,7 +234,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> CudaTestHarness {
     );
 
     let op_harness =
-        GpuTestChipHarness::with_capacity(executor, air.clone(), gpu_chip, cpu_chip, MAX_TRACE_ROWS);
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_TRACE_ROWS);
 
     // Create GPU Perm chip with shared records
     let perm_air = KeccakfPermAir::new(air.keccakf_state_bus);
