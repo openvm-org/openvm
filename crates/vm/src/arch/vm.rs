@@ -23,19 +23,26 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::{
     config::{Com, StarkGenericConfig, Val},
-    engine::StarkEngine,
-    keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_field::{FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdicField},
     p3_util::{log2_ceil_usize, log2_strict_usize},
-    proof::Proof,
-    prover::{
-        hal::{DeviceDataTransporter, MatrixDimensions, TraceCommitter},
-        types::{CommittedTraceData, DeviceMultiStarkProvingKey, ProvingContext},
-    },
-    verifier::VerificationError,
+    prover::MatrixDimensions,
 };
 use p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
+use stark_backend_v2::{
+    keygen::types::{
+        MultiStarkProvingKeyV2 as MultiStarkProvingKey,
+        MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey,
+    },
+    proof::Proof,
+    prover::{
+        ColMajorMatrix, CommittedTraceDataV2 as CommittedTraceData, DeviceDataTransporterV2,
+        DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
+        ProverBackendV2 as ProverBackend, ProvingContextV2 as ProvingContext, TraceCommitterV2,
+    },
+    verifier::VerifierError as VerificationError,
+    StarkEngineV2 as StarkEngine,
+};
 use thiserror::Error;
 use tracing::{info_span, instrument};
 
@@ -438,9 +445,27 @@ where
         engine: E,
         builder: VB,
         config: VB::VmConfig,
-    ) -> Result<(Self, MultiStarkProvingKey<E::SC>), VirtualMachineError> {
+    ) -> Result<(Self, MultiStarkProvingKey), VirtualMachineError>
+    where
+        E: StarkEngine<SC = stark_backend_v2::SC>,
+    {
         let circuit = config.create_airs()?;
-        let pk = circuit.keygen(&engine);
+        // TODO[jpw]: remove; this is just to extract constraints and FRI parameters are not used
+        let pk = {
+            use stark_backend_v2::openvm_stark_sdk::{
+                config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+                engine::{StarkEngine as _, StarkFriEngine},
+            };
+            let engine_v1 = BabyBearPoseidon2Engine::new(
+                FriParameters::standard_with_100_bits_conjectured_security(2),
+            );
+            let mut builder = engine_v1.keygen_builder();
+            for air in circuit.into_airs() {
+                builder.add_air(air);
+            }
+            let pk_v1 = builder.generate_pk();
+            MultiStarkProvingKey::from_v1(engine.config(), pk_v1)
+        };
         let d_pk = engine.device().transport_pk_to_device(&pk);
         let vm = Self::new(engine, builder, config, d_pk)?;
         Ok((vm, pk))
@@ -741,9 +766,9 @@ where
 
         // ==== Defensive checks that the trace heights satisfy the linear constraints: ====
         let idx_trace_heights = ctx
-            .per_air
+            .per_trace
             .iter()
-            .map(|(air_idx, ctx)| (*air_idx, ctx.main_trace_height()))
+            .map(|(air_idx, ctx)| (*air_idx, ctx.common_main.height()))
             .collect_vec();
         // 1. check max trace height isn't exceeded
         let max_trace_height = if TypeId::of::<Val<E::SC>>() == TypeId::of::<BabyBear>() {
@@ -813,7 +838,7 @@ where
         state: VmState<Val<E::SC>, GuestMemory>,
         num_insns: Option<u64>,
         trace_heights: &[u32],
-    ) -> Result<(Proof<E::SC>, Option<GuestMemory>), VirtualMachineError>
+    ) -> Result<(Proof, Option<GuestMemory>), VirtualMachineError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
@@ -841,8 +866,8 @@ where
     /// or [`verify_single`] directly instead.
     pub fn verify(
         &self,
-        vk: &MultiStarkVerifyingKey<E::SC>,
-        proofs: &[Proof<E::SC>],
+        vk: &MultiStarkVerifyingKey,
+        proofs: &[Proof],
     ) -> Result<(), VmVerificationError>
     where
         Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
@@ -866,16 +891,17 @@ where
         &self,
         program: &Program<Val<E::SC>>,
     ) -> CommittedTraceData<E::PB> {
-        let trace = generate_cached_trace(program);
+        let trace = ColMajorMatrix::from_row_major(&generate_cached_trace(program));
+        let height = trace.height();
         let d_trace = self
             .engine
             .device()
             .transport_matrix_to_device(&Arc::new(trace));
-        let (commitment, data) = self.engine.device().commit(std::slice::from_ref(&d_trace));
+        let (commitment, pcs) = self.engine.device().commit(std::slice::from_ref(&&d_trace));
         CommittedTraceData {
             commitment,
-            trace: d_trace,
-            data,
+            data: Arc::new(pcs),
+            height,
         }
     }
 
@@ -888,12 +914,15 @@ where
         &self,
         committed_exe: &VmCommittedExe<E::SC>,
     ) -> CommittedTraceData<E::PB> {
-        let commitment = committed_exe.get_program_commit();
-        let trace = &committed_exe.trace;
-        let prover_data = &committed_exe.prover_data;
-        self.engine
-            .device()
-            .transport_committed_trace_to_device(commitment, trace, prover_data)
+        let data = &committed_exe.prover_data;
+        let height = data.mat_view(0).height();
+        let d_data = self.engine.device().transport_pcs_data_to_device(data);
+        let commitment = data.commit();
+        CommittedTraceData {
+            commitment,
+            data: Arc::new(d_data),
+            height,
+        }
     }
 
     /// Loads cached program trace into the VM.
@@ -934,14 +963,14 @@ where
             .per_air
             .iter()
             .map(|pk| {
-                let constant_trace_height =
-                    pk.preprocessed_data.as_ref().map(|pd| pd.trace.height());
+                let constant_trace_height = pk.preprocessed_data.as_ref().map(|cd| cd.height);
                 let air_names = pk.air_name.clone();
-                let width = pk
-                    .vk
-                    .params
-                    .width
-                    .total_width(<<E::SC as StarkGenericConfig>::Challenge>::D);
+                // TODO[jpw]: revisit v2 width calculation
+                let width = pk.vk.params.width.total_width(
+                    <<E::SC as StarkGenericConfig>::Challenge as FieldExtensionAlgebra<
+                        Val<E::SC>,
+                    >>::D,
+                );
                 let num_interactions = pk.vk.symbolic_constraints.interactions.len();
                 (constant_trace_height, air_names, width, num_interactions)
             })
@@ -969,10 +998,11 @@ where
             .per_air
             .iter()
             .map(|pk| {
-                pk.vk
-                    .params
-                    .width
-                    .total_width(<<E::SC as StarkGenericConfig>::Challenge>::D)
+                pk.vk.params.width.total_width(
+                    <<E::SC as StarkGenericConfig>::Challenge as FieldExtensionAlgebra<
+                        Val<E::SC>,
+                    >>::D,
+                )
             })
             .collect();
 
@@ -1007,7 +1037,7 @@ where
     deserialize = "Com<SC>: Deserialize<'de>"
 ))]
 pub struct ContinuationVmProof<SC: StarkGenericConfig> {
-    pub per_segment: Vec<Proof<SC>>,
+    pub per_segment: Vec<Proof>,
     pub user_public_values: UserPublicValuesProof<{ CHUNK }, Val<SC>>,
 }
 
@@ -1029,7 +1059,7 @@ pub trait SingleSegmentVmProver<SC: StarkGenericConfig> {
         &mut self,
         input: impl Into<Streams<Val<SC>>>,
         trace_heights: &[u32],
-    ) -> Result<Proof<SC>, VirtualMachineError>;
+    ) -> Result<Proof, VirtualMachineError>;
 }
 
 /// Virtual machine prover instance for a fixed VM config and a fixed program. For use in proving a
@@ -1046,7 +1076,7 @@ where
     pub vm: VirtualMachine<E, VB>,
     pub interpreter: PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
     #[getset(get = "pub")]
-    program_commitment: Com<E::SC>,
+    program_commitment: <E::PB as ProverBackend>::Commitment,
     #[getset(get = "pub")]
     exe: Arc<VmExe<Val<E::SC>>>,
     #[getset(get = "pub", get_mut = "pub")]
@@ -1063,7 +1093,7 @@ where
         exe: Arc<VmExe<Val<E::SC>>>,
         cached_program_trace: CommittedTraceData<E::PB>,
     ) -> Result<Self, StaticProgramError> {
-        let program_commitment = cached_program_trace.commitment.clone();
+        let program_commitment = cached_program_trace.commitment;
         vm.load_program(cached_program_trace);
         let interpreter = vm.preflight_interpreter(&exe)?;
         let state = vm.create_initial_state(&exe, vec![]);
@@ -1189,7 +1219,7 @@ where
         &mut self,
         input: impl Into<Streams<Val<E::SC>>>,
         trace_heights: &[u32],
-    ) -> Result<Proof<E::SC>, VirtualMachineError> {
+    ) -> Result<Proof, VirtualMachineError> {
         self.reset_state(input);
         let vm = &mut self.vm;
         let exe = &self.exe;
@@ -1219,8 +1249,8 @@ where
 /// to the [VmCommittedExe].
 pub fn verify_single<E>(
     engine: &E,
-    vk: &MultiStarkVerifyingKey<E::SC>,
-    proof: &Proof<E::SC>,
+    vk: &MultiStarkVerifyingKey,
+    proof: &Proof,
 ) -> Result<(), VerificationError>
 where
     E: StarkEngine,
@@ -1260,8 +1290,8 @@ pub struct VerifiedExecutionPayload<F> {
 // @dev: This function doesn't need to be generic in `VC`.
 pub fn verify_segments<E>(
     engine: &E,
-    vk: &MultiStarkVerifyingKey<E::SC>,
-    proofs: &[Proof<E::SC>],
+    vk: &MultiStarkVerifyingKey,
+    proofs: &[Proof],
 ) -> Result<VerifiedExecutionPayload<Val<E::SC>>, VmVerificationError>
 where
     E: StarkEngine,
@@ -1289,20 +1319,24 @@ where
         let mut merkle_air_present = false;
 
         // Check public values.
-        for air_proof_data in proof.per_air.iter() {
-            let pvs = &air_proof_data.public_values;
-            let air_vk = &vk.inner.per_air[air_proof_data.air_id];
-            if air_proof_data.air_id == PROGRAM_AIR_ID {
+        for (air_idx, (vdata, pvs)) in proof
+            .trace_vdata
+            .iter()
+            .zip(proof.public_values.iter())
+            .enumerate()
+        {
+            let air_vk = &vk.inner.per_air[air_idx];
+            if air_idx == PROGRAM_AIR_ID {
                 program_air_present = true;
+                let vdata = vdata.as_ref().unwrap();
                 if i == 0 {
-                    program_commit =
-                        Some(proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref());
+                    program_commit = Some(vdata.cached_commitments[PROGRAM_CACHED_TRACE_INDEX]);
                 } else if program_commit.unwrap()
-                    != proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref()
+                    != vdata.cached_commitments[PROGRAM_CACHED_TRACE_INDEX]
                 {
                     return Err(VmVerificationError::ProgramCommitMismatch { index: i });
                 }
-            } else if air_proof_data.air_id == CONNECTOR_AIR_ID {
+            } else if air_idx == CONNECTOR_AIR_ID {
                 connector_air_present = true;
                 let pvs: &VmConnectorPvs<_> = pvs.as_slice().borrow();
 
@@ -1338,7 +1372,7 @@ where
                         actual: pvs.exit_code.as_canonical_u32(),
                     });
                 }
-            } else if air_proof_data.air_id == MERKLE_AIR_ID {
+            } else if air_idx == MERKLE_AIR_ID {
                 merkle_air_present = true;
                 let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
 
@@ -1380,7 +1414,7 @@ where
     }
     let exe_commit = compute_exe_commit(
         &vm_poseidon2_hasher(),
-        program_commit.unwrap(),
+        &program_commit.unwrap(),
         initial_memory_root.as_ref().unwrap(),
         start_pc.unwrap(),
     );
@@ -1440,7 +1474,7 @@ where
 #[tracing::instrument(level = "debug", skip_all)]
 pub fn debug_proving_ctx<E, VB>(
     vm: &VirtualMachine<E, VB>,
-    pk: &MultiStarkProvingKey<E::SC>,
+    pk: &MultiStarkProvingKey,
     ctx: &ProvingContext<E::PB>,
 ) where
     E: StarkEngine,
@@ -1448,26 +1482,29 @@ pub fn debug_proving_ctx<E, VB>(
 {
     use itertools::multiunzip;
     use openvm_stark_backend::prover::types::AirProofRawInput;
+    use stark_backend_v2::prover::StridedColMajorMatrixView;
 
     let device = vm.engine.device();
     let air_inv = vm.config().create_airs().unwrap();
     let global_airs = air_inv.into_airs().collect_vec();
     let (airs, pks, proof_inputs): (Vec<_>, Vec<_>, Vec<_>) =
-        multiunzip(ctx.per_air.iter().map(|(air_id, air_ctx)| {
+        multiunzip(ctx.per_trace.iter().map(|(air_id, air_ctx)| {
             // Transfer from device **back** to host so the debugger can read the data.
             let cached_mains = air_ctx
                 .cached_mains
                 .iter()
-                .map(|pre| device.transport_matrix_from_device_to_host(&pre.trace))
+                .map(|cd| {
+                    let data = device.transport_pcs_data_from_device_to_host(&cd.data);
+                    Arc::new(data.mat_view(0).to_row_major_matrix())
+                })
                 .collect_vec();
-            let common_main = air_ctx
-                .common_main
-                .as_ref()
-                .map(|m| device.transport_matrix_from_device_to_host(m));
+            let matrix = device.transport_matrix_from_device_to_host(&air_ctx.common_main);
+            let common_main =
+                StridedColMajorMatrixView::from(matrix.as_view()).to_row_major_matrix();
             let public_values = air_ctx.public_values.clone();
             let raw = AirProofRawInput {
                 cached_mains,
-                common_main,
+                common_main: Some(Arc::new(common_main)),
                 public_values,
             };
             (
@@ -1476,5 +1513,7 @@ pub fn debug_proving_ctx<E, VB>(
                 raw,
             )
         }));
-    vm.engine.debug(&airs, &pks, &proof_inputs);
+
+    // TODO
+    // vm.engine.debug(&airs, &pks, &proof_inputs);
 }

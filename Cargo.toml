@@ -9,12 +9,12 @@ license = "MIT OR Apache-2.0"
 
 [workspace]
 members = [
-    "benchmarks/utils",
-    "benchmarks/execute",
-    "benchmarks/prove",
+    # "benchmarks/utils",
+    # "benchmarks/execute",
+    # "benchmarks/prove",
     "crates/prof",
-    "crates/sdk",
-    "crates/cli",
+    # "crates/sdk",
+    # "crates/cli",
     "crates/circuits/mod-builder",
     "crates/circuits/poseidon2-air",
     "crates/circuits/primitives",
@@ -34,11 +34,11 @@ members = [
     "extensions/rv32im/guest",
     "extensions/rv32im/tests",
     "extensions/rv32-adapters",
-    "extensions/native/circuit",
-    "extensions/native/compiler",
-    "extensions/native/compiler/derive",
-    "extensions/native/recursion",
-    "extensions/native/transpiler",
+    # "extensions/native/circuit",
+    # "extensions/native/compiler",
+    # "extensions/native/compiler/derive",
+    # "extensions/native/recursion",
+    # "extensions/native/transpiler",
     "extensions/algebra/circuit",
     "extensions/algebra/transpiler",
     "extensions/algebra/guest",
@@ -113,11 +113,13 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.3", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.3", default-features = false }
-openvm-cuda-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.3", default-features = false }
-openvm-cuda-builder = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.3", default-features = false }
-openvm-cuda-common = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.3", default-features = false }
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
+openvm-cuda-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
+openvm-cuda-builder = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
+openvm-cuda-common = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
+stark-backend-v2 = { git = "ssh://git@github.com/axiom-crypto/v2-proof-system.git", branch = "main", default-features = false }
+cuda-backend-v2 = { git = "ssh://git@github.com/axiom-crypto/v2-proof-system.git", branch = "main", default-features = false }
 
 # OpenVM
 openvm-sdk = { path = "crates/sdk", default-features = false }
@@ -236,7 +238,7 @@ abi_stable = "0.11.3"
 itertools = { version = "0.14.0", default-features = false }
 bitcode = { version = "0.6.5", default-features = false, features = ["serde"] }
 serde = { version = "1.0.201", default-features = false, features = ["derive"] }
-hex-literal = { version = "0.4.1", default-features = false }
+hex-literal = { version = "1.0.0", default-features = false }
 bytemuck = { version = "1.20.0", default-features = false }
 once_cell = { version = "1.20", default-features = false }
 spin = { version = "0.10.0", default-features = false }
