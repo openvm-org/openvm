@@ -6607,6 +6607,7 @@ name = "openvm-keccak256-guest"
 version = "1.4.3"
 dependencies = [
  "openvm-platform",
+ "spin 0.10.0",
 ]
 
 [[package]]

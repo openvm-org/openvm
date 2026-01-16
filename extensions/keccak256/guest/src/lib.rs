@@ -4,6 +4,8 @@
 extern crate alloc;
 #[cfg(target_os = "zkvm")]
 use openvm_platform::alloc::AlignedBuf;
+#[cfg(target_os = "zkvm")]
+use spin::Mutex;
 
 pub const OPCODE: u8 = 0x0b;
 pub const KECCAKF_FUNCT3: u8 = 0b100;
@@ -21,6 +23,14 @@ pub const MIN_ALIGN: usize = 4;
 struct AlignedStackBuf<const N: usize> {
     data: [u8; N],
 }
+
+/// Calls to [keccak256_impl] require use of a buffer for the state. Allocation of such a buffer can
+/// increase the size of the stack frame. Instead, we can reuse a static buffer. Spin mutex is
+/// acceptable since the zkVM is single-threaded so there is no contention.
+#[cfg(target_os = "zkvm")]
+static KECCAK_BUFFER: Mutex<AlignedStackBuf<KECCAK_WIDTH_BYTES>> = Mutex::new(AlignedStackBuf {
+    data: [0u8; KECCAK_WIDTH_BYTES],
+});
 
 /// SAFETY: Caller must ensure:
 /// - buffer and input are aligned to MIN_ALIGN
@@ -149,10 +159,11 @@ pub extern "C" fn native_keccak256(bytes: *const u8, len: usize, output: *mut u8
 #[cfg(target_os = "zkvm")]
 #[inline(always)]
 unsafe fn keccak256_impl(input: *const u8, len: usize, output: *mut u8) {
-    let mut buffer = AlignedStackBuf::<KECCAK_WIDTH_BYTES> {
-        data: [0u8; KECCAK_WIDTH_BYTES],
-    };
+    let mut buffer = KECCAK_BUFFER.lock();
     let buffer_ptr = buffer.data.as_mut_ptr();
+
+    // Zero the buffer (memset equivalent)
+    core::ptr::write_bytes(buffer_ptr, 0, KECCAK_WIDTH_BYTES);
 
     let mut offset = 0;
     let mut remaining = len;

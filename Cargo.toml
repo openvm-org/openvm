@@ -239,6 +239,7 @@ serde = { version = "1.0.201", default-features = false, features = ["derive"] }
 hex-literal = { version = "0.4.1", default-features = false }
 bytemuck = { version = "1.20.0", default-features = false }
 once_cell = { version = "1.20", default-features = false }
+spin = { version = "0.10.0", default-features = false }
 
 # cryptography, default-features = false for no_std
 tiny-keccak = { version = "2.0.2", features = ["keccak"] }
