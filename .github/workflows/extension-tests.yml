@@ -30,7 +30,6 @@ jobs:
         extension:
           - { name: "rv32im", path: "rv32im", aot: false }
           - { name: "native", path: "native", aot: false }
-          - { name: "new-keccak256", path: "new-keccak256", aot: false }
           - { name: "keccak256", path: "keccak256", aot: false }
           - { name: "sha256", path: "sha256", aot: false }
           - { name: "bigint", path: "bigint", aot: false }
@@ -39,7 +38,6 @@ jobs:
           - { name: "pairing", path: "pairing", aot: false }
           - { name: "rv32im", path: "rv32im", aot: true }
           - { name: "native", path: "native", aot: true }
-          - { name: "new-keccak256", path: "new-keccak256", aot: true }
           - { name: "keccak256", path: "keccak256", aot: true }
           - { name: "sha256", path: "sha256", aot: true }
           - { name: "bigint", path: "bigint", aot: true }
