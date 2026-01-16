@@ -21,8 +21,6 @@ use crate::cuda_abi::poseidon2;
 pub struct SharedBuffer<T> {
     pub buffer: Arc<DeviceBuffer<T>>,
     pub idx: Arc<DeviceBuffer<u32>>,
-    #[cfg(feature = "metrics")]
-    pub(crate) current_trace_height: Arc<AtomicUsize>,
 }
 
 pub struct Poseidon2ChipGPU<const SBOX_REGISTERS: usize> {
@@ -48,8 +46,6 @@ impl<const SBOX_REGISTERS: usize> Poseidon2ChipGPU<SBOX_REGISTERS> {
         SharedBuffer {
             buffer: self.records.clone(),
             idx: self.idx.clone(),
-            #[cfg(feature = "metrics")]
-            current_trace_height: self.current_trace_height.clone(),
         }
     }
 

@@ -734,9 +734,6 @@ where
         system_records: SystemRecords<Val<E::SC>>,
         record_arenas: Vec<VB::RecordArena>,
     ) -> Result<ProvingContext<E::PB>, GenerationError> {
-        #[cfg(feature = "metrics")]
-        let mut current_trace_heights =
-            self.get_trace_heights_from_arenas(&system_records, &record_arenas);
         // main tracegen call:
         let ctx = self
             .chip_complex
@@ -794,8 +791,6 @@ where
                 });
             }
         }
-        #[cfg(feature = "metrics")]
-        self.finalize_metrics(&mut current_trace_heights);
         #[cfg(feature = "stark-debug")]
         self.debug_proving_ctx(&ctx);
 
@@ -1482,78 +1477,4 @@ pub fn debug_proving_ctx<E, VB>(
             )
         }));
     vm.engine.debug(&airs, &pks, &proof_inputs);
-}
-
-#[cfg(feature = "metrics")]
-mod vm_metrics {
-    use std::iter::zip;
-
-    use metrics::counter;
-
-    use super::*;
-    use crate::arch::Arena;
-
-    impl<E, VB> VirtualMachine<E, VB>
-    where
-        E: StarkEngine,
-        VB: VmBuilder<E>,
-    {
-        /// Assumed that `record_arenas` has length equal to number of AIRs.
-        ///
-        /// Best effort calculation of the used trace heights per chip without padding to powers of
-        /// two. This is best effort because some periphery chips may not have record arenas to
-        /// instrument. This function includes the constant trace heights, and the used height of
-        /// the program trace. It does not include the memory access adapter trace heights,
-        /// which is included in `SystemChipComplex::finalize_trace_heights`.
-        pub(crate) fn get_trace_heights_from_arenas(
-            &self,
-            system_records: &SystemRecords<Val<E::SC>>,
-            record_arenas: &[VB::RecordArena],
-        ) -> Vec<usize> {
-            let num_airs = self.num_airs();
-            assert_eq!(num_airs, record_arenas.len());
-            let mut heights: Vec<usize> = record_arenas
-                .iter()
-                .map(|arena| arena.current_trace_height())
-                .collect();
-            // If there are any constant trace heights, set them
-            for (pk, height) in zip(&self.pk.per_air, &mut heights) {
-                if let Some(constant_height) =
-                    pk.preprocessed_data.as_ref().map(|pd| pd.trace.height())
-                {
-                    *height = constant_height;
-                }
-            }
-            // Program chip used height
-            heights[PROGRAM_AIR_ID] = system_records.filtered_exec_frequencies.len();
-
-            heights
-        }
-
-        /// Update used trace heights after tracegen is done (primarily updating memory-related
-        /// metrics) and then emit the final metrics.
-        pub(crate) fn finalize_metrics(&self, heights: &mut [usize]) {
-            self.chip_complex.system.finalize_trace_heights(heights);
-            let mut main_cells_used = 0usize;
-            let mut total_cells_used = 0usize;
-            for (pk, height) in zip(&self.pk.per_air, heights.iter()) {
-                let width = &pk.vk.params.width;
-                main_cells_used += width.main_width() * *height;
-                total_cells_used +=
-                    width.total_width(<E::SC as StarkGenericConfig>::Challenge::D) * *height;
-            }
-            tracing::debug!(?heights);
-            tracing::info!(main_cells_used, total_cells_used);
-            counter!("main_cells_used").absolute(main_cells_used as u64);
-            counter!("total_cells_used").absolute(total_cells_used as u64);
-
-            #[cfg(feature = "perf-metrics")]
-            {
-                for (name, value) in zip(self.air_names(), heights) {
-                    let labels = [("air_name", name.to_string())];
-                    counter!("rows_used", &labels).absolute(*value as u64);
-                }
-            }
-        }
-    }
 }
