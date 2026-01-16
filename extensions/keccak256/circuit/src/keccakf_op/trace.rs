@@ -20,7 +20,7 @@ use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
 };
-use openvm_new_keccak256_transpiler::KeccakfOpcode;
+use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_rv32im_circuit::adapters::{timed_write, tracing_read};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},

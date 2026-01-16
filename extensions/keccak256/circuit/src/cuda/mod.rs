@@ -1,10 +1,12 @@
-use std::{iter::repeat_n, sync::Arc};
+use std::{
+    mem::size_of,
+    sync::{Arc, Mutex},
+};
 
 use derive_new::new;
-use openvm_circuit::arch::{DenseRecordArena, MultiRowLayout, RecordSeeker};
+use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU, utils::next_power_of_two_or_zero,
-    var_range::VariableRangeCheckerChipGPU,
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_backend::{
     base::DeviceMatrix, chip::get_empty_air_proving_ctx, prelude::F, prover_backend::GpuBackend,
@@ -15,102 +17,165 @@ use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use p3_keccak_air::NUM_ROUNDS;
 
 use crate::{
-    columns::NUM_KECCAK_VM_COLS,
-    trace::{KeccakVmMetadata, KeccakVmRecordMut},
-    utils::num_keccak_f,
+    keccakf_op::{columns::NUM_KECCAKF_OP_COLS, trace::KeccakfRecord, NUM_OP_ROWS_PER_INS},
+    keccakf_perm::NUM_KECCAKF_PERM_COLS,
+    xorin::{columns::NUM_XORIN_VM_COLS, trace::XorinVmRecordHeader},
 };
 
 mod cuda_abi;
-use cuda_abi::keccak256::*;
+
+// ========================== XorinVmChipGpu ==========================
 
 #[derive(new)]
-pub struct Keccak256ChipGpu {
+pub struct XorinVmChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
-    pub ptr_max_bits: u32,
+    pub pointer_max_bits: usize,
     pub timestamp_max_bits: u32,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Keccak256ChipGpu {
-    fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        let records = arena.allocated_mut();
+impl Chip<DenseRecordArena, GpuBackend> for XorinVmChipGpu {
+    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        const RECORD_SIZE: usize = size_of::<XorinVmRecordHeader>();
+        let records = arena.allocated();
         if records.is_empty() {
             return get_empty_air_proving_ctx::<GpuBackend>();
         }
+        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let mut record_offsets = Vec::<usize>::new();
-        let mut block_to_record_idx = Vec::<u32>::new();
-        let mut block_offsets = Vec::<u32>::new();
-        let mut offset_so_far = 0;
-        let mut num_blocks_so_far = 0;
-        while offset_so_far < records.len() {
-            record_offsets.push(offset_so_far);
-            block_offsets.push(num_blocks_so_far);
+        let trace_width = NUM_XORIN_VM_COLS;
+        let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
 
-            let record = RecordSeeker::<
-                DenseRecordArena,
-                KeccakVmRecordMut,
-                MultiRowLayout<KeccakVmMetadata>,
-            >::get_record_at(&mut offset_so_far, records);
-
-            let num_blocks = num_keccak_f(record.inner.len as usize);
-            let record_idx = record_offsets.len() - 1;
-            block_to_record_idx.extend(repeat_n(record_idx as u32, num_blocks));
-            num_blocks_so_far += num_blocks as u32;
-        }
-        assert_eq!(num_blocks_so_far as usize, block_to_record_idx.len());
-        assert_eq!(offset_so_far, records.len());
-        assert_eq!(block_offsets.len(), record_offsets.len());
-
-        let records_num = record_offsets.len();
         let d_records = records.to_device().unwrap();
-        let d_record_offsets = record_offsets.to_device().unwrap();
-        let d_block_offsets = block_offsets.to_device().unwrap();
-        let d_block_to_record_idx = block_to_record_idx.to_device().unwrap();
-
-        let rows_used = num_blocks_so_far as usize * NUM_ROUNDS;
-        let trace_height = next_power_of_two_or_zero(rows_used);
-        let trace = DeviceMatrix::<F>::with_capacity(trace_height, NUM_KECCAK_VM_COLS);
-
-        // We store state + keccakf(state) for each block
-        let states_num = 2 * num_blocks_so_far as usize;
-        let d_states = DeviceBuffer::<u64>::with_capacity(states_num * 25);
+        let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
 
         unsafe {
-            keccakf(
-                &d_records,
-                records_num,
-                &d_record_offsets,
-                &d_block_offsets,
-                num_blocks_so_far,
-                &d_states,
-                &self.bitwise_lookup.count,
-                RV32_CELL_BITS,
-            )
-            .unwrap();
-
-            p3_tracegen(trace.buffer(), trace_height, num_blocks_so_far, &d_states).unwrap();
-
-            tracegen(
-                trace.buffer(),
+            cuda_abi::xorin::tracegen(
+                d_trace.buffer(),
                 trace_height,
                 &d_records,
-                records_num,
-                &d_record_offsets,
-                &d_block_offsets,
-                &d_block_to_record_idx,
-                num_blocks_so_far,
-                &d_states,
-                rows_used,
-                self.ptr_max_bits,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
                 RV32_CELL_BITS,
+                self.pointer_max_bits as u32,
                 self.timestamp_max_bits,
             )
             .unwrap();
         }
 
-        AirProvingContext::simple_no_pis(trace)
+        AirProvingContext::simple_no_pis(d_trace)
+    }
+}
+
+// ========================== Shared state for KeccakfOp <-> KeccakfPerm ==========================
+
+/// Shared state to pass records from KeccakfOpChipGpu to KeccakfPermChipGpu
+/// The OpChip generates first and stores the device buffer, then PermChip takes it.
+#[derive(Default)]
+pub struct SharedKeccakfRecords {
+    /// Device buffer containing records (set by OpChip, consumed by PermChip)
+    pub d_records: Option<DeviceBuffer<u8>>,
+    /// Number of records
+    pub num_records: usize,
+}
+
+pub type SharedKeccakfRecordsGpu = Arc<Mutex<SharedKeccakfRecords>>;
+
+// ========================== KeccakfOpChipGpu ==========================
+
+#[derive(new)]
+pub struct KeccakfOpChipGpu {
+    pub range_checker: Arc<VariableRangeCheckerChipGPU>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
+    pub pointer_max_bits: usize,
+    pub timestamp_max_bits: u32,
+    pub shared_records: SharedKeccakfRecordsGpu,
+}
+
+impl Chip<DenseRecordArena, GpuBackend> for KeccakfOpChipGpu {
+    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        const RECORD_SIZE: usize = size_of::<KeccakfRecord>();
+        let records = arena.allocated();
+        if records.is_empty() {
+            // Store empty state for PermChip
+            let mut shared = self.shared_records.lock().unwrap();
+            shared.d_records = None;
+            shared.num_records = 0;
+            return get_empty_air_proving_ctx::<GpuBackend>();
+        }
+        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
+
+        let num_records = records.len() / RECORD_SIZE;
+        let trace_width = NUM_KECCAKF_OP_COLS;
+        let trace_height = next_power_of_two_or_zero(num_records * NUM_OP_ROWS_PER_INS);
+
+        // Transfer records to GPU
+        let d_records = records.to_device().unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
+
+        unsafe {
+            cuda_abi::keccakf_op::tracegen(
+                d_trace.buffer(),
+                trace_height,
+                &d_records,
+                &self.range_checker.count,
+                &self.bitwise_lookup.count,
+                RV32_CELL_BITS,
+                self.pointer_max_bits as u32,
+                self.timestamp_max_bits,
+            )
+            .unwrap();
+        }
+
+        // Store records in shared state for PermChip
+        {
+            let mut shared = self.shared_records.lock().unwrap();
+            shared.d_records = Some(d_records);
+            shared.num_records = num_records;
+        }
+
+        AirProvingContext::simple_no_pis(d_trace)
+    }
+}
+
+// ========================== KeccakfPermChipGpu ==========================
+
+#[derive(new)]
+pub struct KeccakfPermChipGpu {
+    pub shared_records: SharedKeccakfRecordsGpu,
+}
+
+impl Chip<DenseRecordArena, GpuBackend> for KeccakfPermChipGpu {
+    fn generate_proving_ctx(&self, _arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        // Take records from shared state (set by OpChip)
+        let (d_records, num_records) = {
+            let mut shared = self.shared_records.lock().unwrap();
+            (shared.d_records.take(), shared.num_records)
+        };
+
+        let Some(d_records) = d_records else {
+            return get_empty_air_proving_ctx::<GpuBackend>();
+        };
+
+        if num_records == 0 {
+            return get_empty_air_proving_ctx::<GpuBackend>();
+        }
+
+        let trace_width = NUM_KECCAKF_PERM_COLS;
+        let trace_height = next_power_of_two_or_zero(num_records * NUM_ROUNDS);
+
+        let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
+
+        unsafe {
+            cuda_abi::keccakf_perm::tracegen(
+                d_trace.buffer(),
+                trace_height,
+                &d_records,
+                num_records,
+            )
+            .unwrap();
+        }
+
+        AirProvingContext::simple_no_pis(d_trace)
     }
 }

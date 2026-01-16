@@ -20,7 +20,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
-use openvm_new_keccak256_transpiler::KeccakfOpcode;
+use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_stark_backend::{
     interaction::{BusIndex, PermutationCheckBus},
     p3_field::{FieldAlgebra, PrimeField32},

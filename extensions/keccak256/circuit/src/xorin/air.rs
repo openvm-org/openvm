@@ -12,7 +12,7 @@ use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, ut
 use openvm_instructions::riscv::{
     RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
 };
-use openvm_new_keccak256_transpiler::XorinOpcode;
+use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},

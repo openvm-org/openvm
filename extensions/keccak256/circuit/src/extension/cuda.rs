@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use openvm_circuit::{
     arch::DenseRecordArena,
     system::cuda::{
@@ -12,18 +14,19 @@ use openvm_rv32im_circuit::Rv32ImGpuProverExt;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use super::*;
-use crate::{air::KeccakVmAir, cuda::Keccak256ChipGpu};
+use crate::{
+    cuda::{KeccakfOpChipGpu, KeccakfPermChipGpu, SharedKeccakfRecords, XorinVmChipGpu},
+    keccakf_perm::KeccakfPermAir,
+};
 
 pub struct Keccak256GpuProverExt;
 
-// This implementation is specific to GpuBackend because the lookup chips
-// (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
 impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Keccak256>
     for Keccak256GpuProverExt
 {
     fn extend_prover(
         &self,
-        _: &Keccak256,
+        _extension: &Keccak256,
         inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let pointer_max_bits = inventory.airs().pointer_max_bits();
@@ -32,21 +35,43 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Keccak256>
         let range_checker = get_inventory_range_checker(inventory);
         let bitwise_lu = get_or_create_bitwise_op_lookup(inventory)?;
 
-        // These calls to next_air are not strictly necessary to construct the chips, but provide a
-        // safeguard to ensure that chip construction matches the circuit definition
-        inventory.next_air::<KeccakVmAir>()?;
-        let keccak = Keccak256ChipGpu::new(
+        // XorinVmChip
+        inventory.next_air::<XorinVmAir>()?;
+        let xorin_chip = XorinVmChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
-            pointer_max_bits as u32,
+            pointer_max_bits,
             timestamp_max_bits as u32,
         );
-        inventory.add_executor_chip(keccak);
+        inventory.add_executor_chip(xorin_chip);
+
+        // Create shared state for passing records between Op and Perm chips
+        let shared_records = Arc::new(Mutex::new(SharedKeccakfRecords::default()));
+
+        // NOTE: AIRs are added in extend_circuit in this order: XorinVmAir, KeccakfPermAir, KeccakfOpAir
+        // The prover extension must consume AIRs in the same order.
+
+        // Register KeccakfPermChip (periphery chip - added BEFORE OpChip to ensure OpChip tracegen runs first)
+        inventory.next_air::<KeccakfPermAir>()?;
+        let perm_chip = KeccakfPermChipGpu::new(shared_records.clone());
+        inventory.add_periphery_chip(perm_chip);
+
+        // Register KeccakfOpChip (executor chip - generates first due to executor vs periphery ordering)
+        inventory.next_air::<KeccakfOpAir>()?;
+        let op_chip = KeccakfOpChipGpu::new(
+            range_checker,
+            bitwise_lu,
+            pointer_max_bits,
+            timestamp_max_bits as u32,
+            shared_records,
+        );
+        inventory.add_executor_chip(op_chip);
 
         Ok(())
     }
 }
 
+#[derive(Clone)]
 pub struct Keccak256Rv32GpuBuilder;
 
 type E = GpuBabyBearPoseidon2Engine;

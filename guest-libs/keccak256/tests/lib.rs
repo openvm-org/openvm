@@ -3,7 +3,7 @@ mod tests {
     use eyre::Result;
     use openvm_circuit::utils::air_test;
     use openvm_instructions::exe::VmExe;
-    use openvm_keccak256_circuit::{Keccak256Rv32Builder, Keccak256Rv32Config};
+    use openvm_keccak256_circuit::Keccak256Rv32Config;
     use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -11,6 +11,11 @@ mod tests {
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
+
+    #[cfg(not(feature = "cuda"))]
+    use openvm_keccak256_circuit::Keccak256Rv32CpuBuilder as TestBuilder;
+    #[cfg(feature = "cuda")]
+    use openvm_keccak256_circuit::Keccak256Rv32GpuBuilder as TestBuilder;
 
     type F = BabyBear;
 
@@ -27,7 +32,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
-        air_test(Keccak256Rv32Builder, config, openvm_exe);
+        air_test(TestBuilder, config, openvm_exe);
         Ok(())
     }
 }
