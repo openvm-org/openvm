@@ -88,16 +88,16 @@ impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupl
             );
         }
 
-        // The leftmost tuple column should always either increment by one or wrap (wrap is handled later)
-        builder.when_transition().when_ne(next.is_first[0], AB::Expr::ONE).assert_one(
-            next.tuple[0] - local.tuple[0]
-        );
+        // The leftmost tuple column can stay the same or increment by one
+        builder.when_transition().assert_bool(next.tuple[0] - local.tuple[0]);
         // The middle tuple columns can stay the same, increment by one, or wrap (wrap is handled later)
         for i in 1..N-1 {
-            builder.when_transition().when_ne(next.is_first[i], AB::Expr::ONE).assert_bool(next.tuple[i] - local.tuple[i]);
+            builder.when_transition().when_ne(next.is_first[i - 1], AB::Expr::ONE).assert_bool(next.tuple[i] - local.tuple[i]);
         }
-        // The rightmost tuple column can stay the same or increment by one
-        builder.when_transition().assert_bool(next.tuple[N-1] - local.tuple[N-1]);
+        // The rightmost tuple column should always either increment by one or wrap (wrap is handled later)
+        builder.when_transition().when_ne(next.is_first[N-2], AB::Expr::ONE).assert_one(
+            next.tuple[N-1] - local.tuple[N-1]
+        );
 
         // Constrain the first row of is_first to always be one, and constain is_first to always be bool
         for i in 0..N-1 {
@@ -106,26 +106,26 @@ impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupl
         }
 
         // Constrain is_first based on differences between consecutive tuple rows
-        for i in 0..N-2 {
-            builder.when_transition().when_ne(next.is_first[i + 1], AB::Expr::ONE).assert_eq(
-                next.tuple[i + 1] - local.tuple[i + 1],
+        builder.when_transition().assert_eq(
+            next.tuple[0] - local.tuple[0],
+            next.is_first[0]
+        );
+        for i in 1..N-1 {
+            builder.when_transition().when_ne(next.is_first[i - 1], AB::Expr::ONE).assert_eq(
+                next.tuple[i] - local.tuple[i],
                 next.is_first[i]
             );
-            builder.when_transition().when(next.is_first[i + 1]).assert_one(next.is_first[i]);
+            builder.when_transition().when(next.is_first[i - 1]).assert_one(next.is_first[i]);
         }
-        builder.when_transition().assert_eq(
-            next.tuple[N-1] - local.tuple[N-1],
-            next.is_first[N-2]
-        );
 
         // Handle wrapping by constraining the start and end points of each counter
         for i in 0..N-1 {
             builder.when_transition().when(next.is_first[i]).assert_eq(
-                local.tuple[i], 
-                AB::F::from_canonical_u32(self.bus.sizes[i] - 1)
+                local.tuple[i + 1], 
+                AB::F::from_canonical_u32(self.bus.sizes[i + 1] - 1)
             );
             builder.when_transition().when(next.is_first[i]).assert_eq(
-                next.tuple[i], 
+                next.tuple[i + 1], 
                 AB::Expr::ZERO
             );
         }
@@ -175,7 +175,6 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
         let index = ids
             .iter()
             .zip(self.air.bus.sizes.iter())
-            .rev()
             .fold(0, |acc, (id, sz)| acc * sz + id) as usize;
         assert!(
             index < self.count.len(),
@@ -195,45 +194,33 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
 
     pub fn generate_trace<F: Field + PrimeField32>(&self) -> RowMajorMatrix<F> {
         let mut unrolled_matrix = Vec::with_capacity(self.count.len() * 2 * N);
-        let mut tuple = [0u32; N];
-        let mut is_first = vec![1u32; N - 1];
         
         for i in 0..self.count.len() {
-            // Output current row: tuple + is_first + mult
+            let mut tmp_idx = i as u32;
+            let mut tuple = [0u32; N];
+            for j in (0..N).rev() {
+                tuple[j] = tmp_idx % self.air.bus.sizes[j];
+                tmp_idx = tmp_idx / self.air.bus.sizes[j];
+            }
+            
+            let mut first_nonzero = 0;
+            for j in 0..N {
+                if tuple[j] != 0 {
+                    first_nonzero = j;
+                }
+            }
+            
+            let mut is_first = vec![0u32; N - 1];
+            for j in 0..first_nonzero {
+                is_first[j] = 0;
+            }
+            for j in first_nonzero..(N - 1) {
+                is_first[j] = 1;
+            }
+            
             unrolled_matrix.extend(tuple);
             unrolled_matrix.extend(&is_first);
             unrolled_matrix.push(self.count[i].swap(0, std::sync::atomic::Ordering::Relaxed));
-
-            // Compute next tuple
-            let mut next_tuple = tuple;
-            for j in 0..N {
-                if next_tuple[j] < self.air.bus.sizes[j] - 1 {
-                    next_tuple[j] += 1;
-                    break;
-                }
-                next_tuple[j] = 0;
-            }
-
-            // Compute is_first for next row based on tuple changes
-            // is_first[N-2] = next.tuple[N-1] - local.tuple[N-1]
-            // This is 1 when tuple[N-1] changes (increments or wraps)
-            let mut next_is_first = vec![0u32; N - 1];
-            if next_tuple[N - 1] != tuple[N - 1] {
-                next_is_first[N - 2] = 1;
-            }
-            
-            // For i in 0..N-2: is_first[i] = next.tuple[i+1] - local.tuple[i+1] when is_first[i+1] != 1
-            // When is_first[i+1] == 1, then is_first[i] = 1 (propagation)
-            for j in (0..N - 2).rev() {
-                if next_is_first[j + 1] == 1 {
-                    next_is_first[j] = 1;
-                } else if next_tuple[j + 1] != tuple[j + 1] {
-                    next_is_first[j] = 1;
-                }
-            }
-            
-            tuple = next_tuple;
-            is_first = next_is_first;
         }
 
         RowMajorMatrix::new(

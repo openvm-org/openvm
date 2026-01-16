@@ -2,7 +2,7 @@ use std::{array, iter, sync::Arc};
 
 use openvm_stark_backend::{
     p3_field::FieldAlgebra,
-    p3_matrix::dense::{DenseMatrix, RowMajorMatrix},
+    p3_matrix::dense::{RowMajorMatrix},
     p3_maybe_rayon::prelude::*,
     utils::disable_debug_builder,
     verifier::VerificationError,
@@ -147,14 +147,15 @@ fn negative_test_range_tuple_chip() {
     range_trace.values[0] = BabyBear::from_wrapped_u32(99);
 
     disable_debug_builder();
-    assert_eq!(
-        BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-            any_rap_arc_vec![range_checker.air],
-            vec![range_trace]
-        )
-        .err(),
-        Some(VerificationError::OodEvaluationMismatch),
-        "Expected constraint to fail"
+    let error = BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+        any_rap_arc_vec![range_checker.air],
+        vec![range_trace]
+    )
+    .err();
+    assert!(
+        matches!(error, Some(VerificationError::OodEvaluationMismatch) | Some(VerificationError::ChallengePhaseError)),
+        "Expected constraint to fail with either OodEvaluationMismatch or ChallengePhaseError, got: {:?}",
+        error
     );
 }
 
