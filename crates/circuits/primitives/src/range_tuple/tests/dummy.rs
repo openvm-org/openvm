@@ -27,13 +27,12 @@ impl<RA, const N: usize> Chip<RA, GpuBackend> for DummyInteractionChipGPU<N> {
         let height = self.data.len() / N;
         let width = N + 1;
         let trace = DeviceMatrix::<F>::with_capacity(height, width);
-        let sizes = self.range_tuple_checker.sizes.to_device().unwrap();
         unsafe {
             dummy_tracegen(
                 &self.data,
                 trace.buffer(),
                 &self.range_tuple_checker.count,
-                &sizes,
+                &self.range_tuple_checker.sizes,
             )
             .unwrap();
         }

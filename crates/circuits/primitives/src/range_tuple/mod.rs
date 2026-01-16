@@ -5,16 +5,15 @@
 //! [VariableRangeCheckerChip](super::var_range::VariableRangeCheckerChip) instead.
 
 use std::{
-    mem::size_of,
+    borrow::Borrow,
     sync::{atomic::AtomicU32, Arc},
 };
 
-use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
-    p3_air::{Air, BaseAir, PairBuilder},
-    p3_field::{Field, PrimeField32},
+    p3_air::{Air, AirBuilder, BaseAir, PairBuilder},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
@@ -32,20 +31,27 @@ pub use cuda::*;
 #[cfg(test)]
 pub mod tests;
 
-#[repr(C)]
-#[derive(Default, Copy, Clone, AlignedBorrow)]
-pub struct RangeTupleCols<T> {
-    /// Number of range checks requested for each tuple combination
-    pub mult: T,
-}
-
-#[derive(Default, Clone)]
-pub struct RangeTuplePreprocessedCols<T> {
+#[derive(Copy, Clone)]
+pub struct RangeTupleCols<'a, T> {
     /// Contains all possible tuple combinations within specified ranges
-    pub tuple: Vec<T>,
+    pub tuple: &'a [T],
+    /// Array of (N-1) boolean columns. `is_first[i]` is 1 if `tuple[i + 1]` has just switched to a new number, 0 otherwise.
+    pub is_first: &'a [T],
+    /// Number of range checks requested for each tuple combination
+    pub mult: &'a T,
 }
 
-pub const NUM_RANGE_TUPLE_COLS: usize = size_of::<RangeTupleCols<u8>>();
+impl<'a, T> RangeTupleCols<'a, T> {
+    fn from_slice<const N: usize>(slice: &'a [T]) -> Self {
+        let (tuple, rest) = slice.split_at(N);
+        let (is_first, rest) = rest.split_at(N - 1);
+        Self {
+            tuple,
+            is_first,
+            mult: &rest[0],
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct RangeTupleCheckerAir<const N: usize> {
@@ -62,44 +68,71 @@ impl<F: Field, const N: usize> PartitionedBaseAir<F> for RangeTupleCheckerAir<N>
 
 impl<F: Field, const N: usize> BaseAir<F> for RangeTupleCheckerAir<N> {
     fn width(&self) -> usize {
-        NUM_RANGE_TUPLE_COLS
-    }
-
-    fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
-        let mut unrolled_matrix = Vec::with_capacity((self.height() as usize) * N);
-        let mut row = [0u32; N];
-        for _ in 0..self.height() {
-            unrolled_matrix.extend(row);
-            for i in (0..N).rev() {
-                if row[i] < self.bus.sizes[i] - 1 {
-                    row[i] += 1;
-                    break;
-                }
-                row[i] = 0;
-            }
-        }
-        Some(RowMajorMatrix::new(
-            unrolled_matrix
-                .iter()
-                .map(|&v| F::from_canonical_u32(v))
-                .collect(),
-            N,
-        ))
+        N * 2
     }
 }
 
 impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupleCheckerAir<N> {
     fn eval(&self, builder: &mut AB) {
-        let preprocessed = builder.preprocessed();
-        let prep_local = preprocessed.row_slice(0);
-        let prep_local = RangeTuplePreprocessedCols {
-            tuple: (*prep_local).to_vec(),
-        };
         let main = builder.main();
-        let local = main.row_slice(0);
-        let local = RangeTupleCols { mult: (*local)[0] };
+        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let local = RangeTupleCols::from_slice::<N>((*local).borrow());
+        let next = RangeTupleCols::from_slice::<N>((*next).borrow());
 
-        self.bus.receive(prep_local.tuple).eval(builder, local.mult);
+        // Constrain tuples for first and last rows
+        for i in 0..N {
+            builder.when_first_row().assert_zero(local.tuple[i]);
+            builder.when_last_row().assert_eq(
+                local.tuple[i],
+                AB::F::from_canonical_u32(self.bus.sizes[i] - 1),
+            );
+        }
+
+        // The leftmost tuple column can stay the same or increment by one
+        builder.when_transition().assert_bool(next.tuple[0] - local.tuple[0]);
+        // The middle tuple columns can stay the same, increment by one, or wrap (wrap is handled later)
+        for i in 1..N-1 {
+            builder.when_transition().when_ne(next.is_first[i - 1], AB::Expr::ONE).assert_bool(next.tuple[i] - local.tuple[i]);
+        }
+        // The rightmost tuple column should always either increment by one or wrap (wrap is handled later)
+        builder.when_transition().when_ne(next.is_first[N-2], AB::Expr::ONE).assert_one(
+            next.tuple[N-1] - local.tuple[N-1]
+        );
+
+        // Constrain the first row of is_first to always be one, and constain is_first to always be bool
+        for i in 0..N-1 {
+            builder.when_first_row().assert_one(local.is_first[i]);
+            builder.assert_bool(local.is_first[i]);
+        }
+
+        // Constrain is_first based on differences between consecutive tuple rows
+        builder.when_transition().assert_eq(
+            next.tuple[0] - local.tuple[0],
+            next.is_first[0]
+        );
+        for i in 1..N-1 {
+            builder.when_transition().when_ne(next.is_first[i - 1], AB::Expr::ONE).assert_eq(
+                next.tuple[i] - local.tuple[i],
+                next.is_first[i]
+            );
+            builder.when_transition().when(next.is_first[i - 1]).assert_one(next.is_first[i]);
+        }
+
+        // Handle wrapping by constraining the start and end points of each counter
+        for i in 0..N-1 {
+            builder.when_transition().when(next.is_first[i]).assert_eq(
+                local.tuple[i + 1], 
+                AB::F::from_canonical_u32(self.bus.sizes[i + 1] - 1)
+            );
+            builder.when_transition().when(next.is_first[i]).assert_eq(
+                next.tuple[i + 1], 
+                AB::Expr::ZERO
+            );
+        }
+
+        self.bus
+            .receive(local.tuple.to_vec())
+            .eval(builder, *local.mult);
     }
 }
 
@@ -113,7 +146,13 @@ pub type SharedRangeTupleCheckerChip<const N: usize> = Arc<RangeTupleCheckerChip
 
 impl<const N: usize> RangeTupleCheckerChip<N> {
     pub fn new(bus: RangeTupleCheckerBus<N>) -> Self {
+        assert!(N > 1, "RangeTupleChecker requires at least 2 dimensions");
         let range_max = bus.sizes.iter().product();
+        assert!(
+            range_max > 0 && (range_max & (range_max - 1)) == 0,
+            "RangeTupleChecker requires range_max ({}) to be a power of 2",
+            range_max
+        );
         let count = (0..range_max)
             .map(|_| Arc::new(AtomicU32::new(0)))
             .collect();
@@ -153,13 +192,44 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
         }
     }
 
-    pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
-        let rows = self
-            .count
-            .iter()
-            .map(|c| F::from_canonical_u32(c.swap(0, std::sync::atomic::Ordering::Relaxed)))
-            .collect::<Vec<_>>();
-        RowMajorMatrix::new(rows, 1)
+    pub fn generate_trace<F: Field + PrimeField32>(&self) -> RowMajorMatrix<F> {
+        let mut unrolled_matrix = Vec::with_capacity(self.count.len() * 2 * N);
+        
+        for i in 0..self.count.len() {
+            let mut tmp_idx = i as u32;
+            let mut tuple = [0u32; N];
+            for j in (0..N).rev() {
+                tuple[j] = tmp_idx % self.air.bus.sizes[j];
+                tmp_idx = tmp_idx / self.air.bus.sizes[j];
+            }
+            
+            let mut first_nonzero = 0;
+            for j in 0..N {
+                if tuple[j] != 0 {
+                    first_nonzero = j;
+                }
+            }
+            
+            let mut is_first = vec![0u32; N - 1];
+            for j in 0..first_nonzero {
+                is_first[j] = 0;
+            }
+            for j in first_nonzero..(N - 1) {
+                is_first[j] = 1;
+            }
+            
+            unrolled_matrix.extend(tuple);
+            unrolled_matrix.extend(&is_first);
+            unrolled_matrix.push(self.count[i].swap(0, std::sync::atomic::Ordering::Relaxed));
+        }
+
+        RowMajorMatrix::new(
+            unrolled_matrix
+                .iter()
+                .map(|&v| F::from_canonical_u32(v))
+                .collect(),
+            N * 2,
+        )
     }
 }
 
@@ -184,6 +254,6 @@ impl<const N: usize> ChipUsageGetter for RangeTupleCheckerChip<N> {
         self.count.len()
     }
     fn trace_width(&self) -> usize {
-        NUM_RANGE_TUPLE_COLS
+        N * 2
     }
 }
