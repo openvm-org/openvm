@@ -48,7 +48,7 @@ struct VariableRangeChecker {
     // Used by VariableRangeChecker to constrain value that can be represented
     // using max_bits bits.
     __device__ void add_count(uint32_t value, size_t max_bits) {
-        uint32_t idx = (1 << max_bits) + value;
+        uint32_t idx = (1 << max_bits) + value - 1;
         hist.add_count(idx);
     }
 
