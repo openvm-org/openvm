@@ -35,7 +35,7 @@ pub mod tests;
 pub struct RangeTupleCols<'a, T> {
     /// Contains all possible tuple combinations within specified ranges
     pub tuple: &'a [T],
-    
+    /// Array of (N-1) boolean columns. `is_first[i]` is 1 if `tuple[i + 1]` has just switched to a new number, 0 otherwise.
     pub is_first: &'a [T],
     /// Number of range checks requested for each tuple combination
     pub mult: &'a T,

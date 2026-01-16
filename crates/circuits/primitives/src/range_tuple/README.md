@@ -6,10 +6,8 @@ This chip efficiently range checks tuples of values using a single interaction w
 
 **Columns:**
 - `tuple`: Array of N columns (columns 0 to N-1) containing all possible tuple combinations within the specified ranges
-- `is_first`: Array of (N-1) boolean columns (columns N to 2*N-2). `is_first[i]` is 1 if we're at or past the last non-zero dimension in the tuple, 0 otherwise.
+- `is_first`: Array of (N-1) boolean columns (columns N to 2*N-2). `is_first[i]` is 1 if `tuple[i + 1]` has just switched to a new number, 0 otherwise.
 - `mult`: Multiplicity column (column 2*N-1) tracking the number of range checks requested for each tuple
-
-The trace matrix is stored in column-major format.
 
 The `sizes` parameter in `RangeTupleCheckerBus` defines the maximum value for each dimension.
 
