@@ -83,7 +83,7 @@ pub mod range_tuple {
         ) -> i32;
     }
 
-    pub unsafe fn tracegen<const N: usize>(
+    pub unsafe fn tracegen(
         d_count: &DeviceBuffer<F>,
         d_cpu_count: &Option<DeviceBuffer<u32>>,
         d_trace: &DeviceBuffer<F>,
@@ -97,7 +97,7 @@ pub mod range_tuple {
                 .unwrap_or(std::ptr::null()),
             d_trace.as_mut_ptr(),
             d_sizes.as_ptr(),
-            N as u32,
+            d_sizes.len() as u32,
             d_count.len(),
         ))
     }

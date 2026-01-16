@@ -57,7 +57,7 @@ impl<RA, const N: usize> Chip<RA, GpuBackend> for RangeTupleCheckerChipGPU<N> {
         // `count` will be reused.
         let trace = DeviceMatrix::<F>::with_capacity(self.count.len(), N*2);
         unsafe {
-            tracegen::<N>(&self.count, &cpu_count, trace.buffer(), &self.sizes).unwrap();
+            tracegen(&self.count, &cpu_count, trace.buffer(), &self.sizes).unwrap();
         }
         // Zero the internal count buffer because this chip is stateful and may be used again.
         self.count.fill_zero().unwrap();

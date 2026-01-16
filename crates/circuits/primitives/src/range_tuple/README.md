@@ -5,22 +5,24 @@ This chip efficiently range checks tuples of values using a single interaction w
 **Note:** This chip requires that each range size is a power of 2 (i.e., each value in `sizes` must be a power of 2).
 
 **Columns:**
-- `tuple`: Array of N columns containing all possible tuple combinations within the specified ranges
-- `is_first`: Array of (N-1) boolean columns. `is_first[i]` equals the change in `tuple[i+1]` (0 or 1) when `is_first[i+1] != 1`. Additionally, when `is_first[i+1] == 1`, then `is_first[i]` must also be 1.
-- `mult`: Multiplicity column tracking the number of range checks requested for each tuple
+- `tuple`: Array of N columns (columns 0 to N-1) containing all possible tuple combinations within the specified ranges
+- `is_first`: Array of (N-1) boolean columns (columns N to 2*N-2). `is_first[i]` is 1 if we're at or past the last non-zero dimension in the tuple, 0 otherwise.
+- `mult`: Multiplicity column (column 2*N-1) tracking the number of range checks requested for each tuple
+
+The trace matrix is stored in column-major format.
 
 The `sizes` parameter in `RangeTupleCheckerBus` defines the maximum value for each dimension.
 
-For a 2-dimensional tuple with `sizes = [4, 2]`, the preprocessed trace contains these 8 combinations in lexicographic order:
+For a 2-dimensional tuple with `sizes = [4, 2]`, the preprocessed trace contains these 8 combinations in order:
 ```
 (0,0)
-(1,0)
-(2,0)
-(3,0)
 (0,1)
+(0,2)
+(0,3)
+(1,0)
 (1,1)
-(2,1)
-(3,1)
+(1,2)
+(1,3)
 ```
 
 ## Circuit Constraints
@@ -42,25 +44,24 @@ For each `0 <= i < N-1`:
 The transition constraints enforce lexicographic ordering between consecutive rows using `is_first` to track wrapping behavior.
 
 **For `tuple[0]` (leftmost component):**
-- When `is_first[0] != 1`: `next.tuple[0] - local.tuple[0] = 1` (increments by 1)
-- When `is_first[0] == 1`: wrapping occurs (handled by wrapping constraints)
+- `next.tuple[0] - local.tuple[0]` is boolean (0 or 1)
 
 **For `tuple[i]` where `1 <= i < N-1` (middle components):**
-- When `is_first[i] != 1`: `next.tuple[i] - local.tuple[i]` is boolean (0 or 1)
-- When `is_first[i] == 1`: wrapping occurs (handled by wrapping constraints)
+- When `next.is_first[i-1] != 1`: `next.tuple[i] - local.tuple[i]` is boolean (0 or 1)
+- When `next.is_first[i-1] == 1`: wrapping occurs (handled by wrapping constraints)
 
 **For `tuple[N-1]` (rightmost component):**
-- `next.tuple[N-1] - local.tuple[N-1]` is boolean (0 or 1, never wraps)
+- When `next.is_first[N-2] != 1`: `next.tuple[N-1] - local.tuple[N-1] = 1` (must increment by 1)
+- When `next.is_first[N-2] == 1`: wrapping occurs (handled by wrapping constraints)
 
-**is_first Computation:**
-- `is_first[N-2] = next.tuple[N-1] - local.tuple[N-1]` (equals the change in `tuple[N-1]`, which is 0 or 1)
-- For `0 <= i < N-2`:
-  - When `is_first[i+1] != 1`: `is_first[i] = next.tuple[i+1] - local.tuple[i+1]` (equals the change in `tuple[i+1]`)
-  - When `is_first[i+1] == 1`: `is_first[i] = 1` (propagation constraint)
+**is_first Constraints:**
+The circuit validates `next.is_first` based on tuple changes:
+- `next.is_first[0] = next.tuple[0] - local.tuple[0]`
+- For `1 <= i < N-1`:
+  - When `next.is_first[i-1] != 1`: `next.is_first[i] = next.tuple[i] - local.tuple[i]`
+  - When `next.is_first[i-1] == 1`: `next.is_first[i] = 1`
 
 **Wrapping Constraints:**
-When `is_first[i] == 1` (indicating `tuple[i]` wraps):
-- `local.tuple[i] = sizes[i] - 1` (was at maximum)
-- `next.tuple[i] = 0` (wraps to zero)
-
-This creates the lexicographic ordering: `(0,0) → (1,0) → (2,0) → (3,0) → (0,1) → (1,1) → (2,1) → (3,1)` for `sizes = [4, 2]`.
+When `next.is_first[i] == 1` (indicating `tuple[i+1]` wraps):
+- `local.tuple[i+1] = sizes[i+1] - 1` (was at maximum)
+- `next.tuple[i+1] = 0` (wraps to zero)
