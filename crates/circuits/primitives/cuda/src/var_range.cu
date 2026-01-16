@@ -1,5 +1,15 @@
 #include "fp.h"
 #include "launcher.cuh"
+#include "primitives/trace_access.h"
+
+template <typename T> struct VariableRangeCols {
+    T value;
+    T max_bits;
+    T two_to_max_bits;
+    T selector_inverse;
+    T is_not_wrap;
+    T mult;
+};
 
 __global__ void range_checker_tracegen(
     const uint32_t *count,
@@ -20,12 +30,13 @@ __global__ void range_checker_tracegen(
         Fp selector_inverse = is_selector_zero ? Fp::zero() : inv(selector);
         Fp is_not_wrap = is_selector_zero ? Fp::zero() : Fp::one();
 
-        trace[idx] = Fp(value);                                                    
-        trace[idx + num_bins] = Fp(max_bits);
-        trace[idx + 2 * num_bins] = Fp(two_to_max_bits);
-        trace[idx + 3 * num_bins] = selector_inverse;
-        trace[idx + 4 * num_bins] = is_not_wrap;
-        trace[idx + 5 * num_bins] = Fp(mult_val);
+        RowSlice row(trace + idx, num_bins);
+        COL_WRITE_VALUE(row, VariableRangeCols, value, Fp(value));
+        COL_WRITE_VALUE(row, VariableRangeCols, max_bits, Fp(max_bits));
+        COL_WRITE_VALUE(row, VariableRangeCols, two_to_max_bits, Fp(two_to_max_bits));
+        COL_WRITE_VALUE(row, VariableRangeCols, selector_inverse, selector_inverse);
+        COL_WRITE_VALUE(row, VariableRangeCols, is_not_wrap, is_not_wrap);
+        COL_WRITE_VALUE(row, VariableRangeCols, mult, Fp(mult_val));
     }
 }
 
