@@ -1,3 +1,4 @@
+#![allow(deprecated)] // elliptic-curve has not updated generic-array: ArrayLength is deprecated
 use alloc::vec::Vec;
 use core::ops::{Add, Mul};
 
