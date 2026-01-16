@@ -48,15 +48,17 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Keccak256>
         // Create shared state for passing records between Op and Perm chips
         let shared_records = Arc::new(Mutex::new(SharedKeccakfRecords::default()));
 
-        // NOTE: AIRs are added in extend_circuit in this order: XorinVmAir, KeccakfPermAir, KeccakfOpAir
-        // The prover extension must consume AIRs in the same order.
+        // NOTE: AIRs are added in extend_circuit in this order: XorinVmAir, KeccakfPermAir,
+        // KeccakfOpAir The prover extension must consume AIRs in the same order.
 
-        // Register KeccakfPermChip (periphery chip - added BEFORE OpChip to ensure OpChip tracegen runs first)
+        // Register KeccakfPermChip (periphery chip - added BEFORE OpChip to ensure OpChip tracegen
+        // runs first)
         inventory.next_air::<KeccakfPermAir>()?;
         let perm_chip = KeccakfPermChipGpu::new(shared_records.clone());
         inventory.add_periphery_chip(perm_chip);
 
-        // Register KeccakfOpChip (executor chip - generates first due to executor vs periphery ordering)
+        // Register KeccakfOpChip (executor chip - generates first due to executor vs periphery
+        // ordering)
         inventory.next_air::<KeccakfOpAir>()?;
         let op_chip = KeccakfOpChipGpu::new(
             range_checker,
