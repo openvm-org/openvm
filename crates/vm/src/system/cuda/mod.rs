@@ -151,39 +151,4 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
                 (!top_tree.is_empty()).then_some(top_tree.as_slice())
             })
     }
-
-    #[cfg(feature = "metrics")]
-    fn finalize_trace_heights(&self, heights: &mut [usize]) {
-        use crate::system::cuda::boundary::BoundaryFields;
-
-        let boundary_idx = PUBLIC_VALUES_AIR_ID + usize::from(self.public_values.is_some());
-        let mut access_adapter_offset = boundary_idx + 1;
-        match self.memory_inventory.boundary.fields {
-            BoundaryFields::Volatile(_) => {
-                let boundary_height = self.memory_inventory.boundary.num_records.unwrap_or(0);
-                heights[boundary_idx] = boundary_height;
-            }
-            BoundaryFields::Persistent(ref boundary) => {
-                let boundary_height = 2 * self.memory_inventory.boundary.num_records.unwrap_or(0);
-                heights[boundary_idx] = boundary_height;
-                heights[boundary_idx + 1] = self.memory_inventory.unpadded_merkle_height;
-                access_adapter_offset += 1;
-
-                // Poseidon2Periphery height also varies based on memory, so set it now even though
-                // it's not a system chip:
-                let poseidon_height = boundary
-                    .poseidon2_buffer
-                    .current_trace_height
-                    .load(std::sync::atomic::Ordering::Relaxed);
-                // We know the chip insertion index, which starts from *the end* of the the AIR
-                // ordering
-                const POSEIDON2_INSERTION_IDX: usize = 1;
-                let poseidon_idx = heights.len() - 1 - POSEIDON2_INSERTION_IDX;
-                heights[poseidon_idx] = poseidon_height;
-            }
-        }
-        let access_heights = &self.memory_inventory.access_adapters.unpadded_heights;
-        heights[access_adapter_offset..access_adapter_offset + access_heights.len()]
-            .copy_from_slice(access_heights);
-    }
 }

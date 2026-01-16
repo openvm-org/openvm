@@ -1,4 +1,7 @@
-use std::{result::Result, sync::Arc};
+use std::{
+    result::Result,
+    sync::{Arc, Mutex},
+};
 
 use derive_more::derive::From;
 use openvm_circuit::{
@@ -18,13 +21,14 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::*;
-use openvm_keccak256_transpiler::Rv32KeccakOpcode;
+use openvm_instructions::LocalOpcode;
+use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
+    interaction::PermutationCheckBus,
     p3_field::PrimeField32,
     prover::cpu::{CpuBackend, CpuDevice},
 };
@@ -32,23 +36,16 @@ use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use crate::{KeccakVmAir, KeccakVmChip, KeccakVmExecutor, KeccakVmFiller};
+use crate::{
+    keccakf_op::{KeccakfExecutor, KeccakfOpAir, KeccakfOpChip},
+    keccakf_perm::{KeccakfPermAir, KeccakfPermChip},
+    xorin::{air::XorinVmAir, XorinVmChip, XorinVmExecutor, XorinVmFiller},
+};
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "cuda")] {
-        mod cuda;
-        pub use cuda::*;
-        pub use cuda::{
-            Keccak256GpuProverExt as Keccak256ProverExt,
-            Keccak256Rv32GpuBuilder as Keccak256Rv32Builder,
-        };
-    } else {
-        pub use self::{
-            Keccak256CpuProverExt as Keccak256ProverExt,
-            Keccak256Rv32CpuBuilder as Keccak256Rv32Builder,
-        };
-    }
-}
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Keccak256Rv32Config {
@@ -128,7 +125,8 @@ pub struct Keccak256;
     )
 )]
 pub enum Keccak256Executor {
-    Keccak256(KeccakVmExecutor),
+    Keccakf(KeccakfExecutor),
+    Xorin(XorinVmExecutor),
 }
 
 impl<F> VmExecutionExtension<F> for Keccak256 {
@@ -139,10 +137,17 @@ impl<F> VmExecutionExtension<F> for Keccak256 {
         inventory: &mut ExecutorInventoryBuilder<F, Keccak256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
-        let keccak_step = KeccakVmExecutor::new(Rv32KeccakOpcode::CLASS_OFFSET, pointer_max_bits);
+
+        let xorin_executor = XorinVmExecutor::new(XorinOpcode::CLASS_OFFSET, pointer_max_bits);
         inventory.add_executor(
-            keccak_step,
-            Rv32KeccakOpcode::iter().map(|x| x.global_opcode()),
+            xorin_executor,
+            XorinOpcode::iter().map(|x| x.global_opcode()),
+        )?;
+
+        let keccak_executor = KeccakfExecutor::new(KeccakfOpcode::CLASS_OFFSET, pointer_max_bits);
+        inventory.add_executor(
+            keccak_executor,
+            KeccakfOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
         Ok(())
@@ -172,14 +177,28 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Keccak256 {
             }
         };
 
-        let keccak = KeccakVmAir::new(
+        let xorin_air = XorinVmAir::new(
             exec_bridge,
             memory_bridge,
             bitwise_lu,
             pointer_max_bits,
-            Rv32KeccakOpcode::CLASS_OFFSET,
+            XorinOpcode::CLASS_OFFSET,
         );
-        inventory.add_air(keccak);
+        inventory.add_air(xorin_air);
+
+        let keccakf_state_bus = PermutationCheckBus::new(inventory.new_bus_idx());
+        let periphery_air = KeccakfPermAir::new(keccakf_state_bus);
+        inventory.add_air(periphery_air);
+
+        let op_air = KeccakfOpAir::new(
+            exec_bridge,
+            memory_bridge,
+            bitwise_lu,
+            keccakf_state_bus,
+            pointer_max_bits,
+            KeccakfOpcode::CLASS_OFFSET,
+        );
+        inventory.add_air(op_air);
 
         Ok(())
     }
@@ -209,6 +228,7 @@ where
             let existing_chip = inventory
                 .find_chip::<SharedBitwiseOperationLookupChip<8>>()
                 .next();
+
             if let Some(chip) = existing_chip {
                 chip.clone()
             } else {
@@ -219,12 +239,30 @@ where
             }
         };
 
-        inventory.next_air::<KeccakVmAir>()?;
-        let keccak = KeccakVmChip::new(
-            KeccakVmFiller::new(bitwise_lu, pointer_max_bits),
-            mem_helper,
+        inventory.next_air::<XorinVmAir>()?;
+        let xorin_chip = XorinVmChip::new(
+            XorinVmFiller::new(bitwise_lu.clone(), pointer_max_bits),
+            mem_helper.clone(),
         );
-        inventory.add_executor_chip(keccak);
+        inventory.add_executor_chip(xorin_chip);
+
+        inventory.next_air::<KeccakfPermAir>()?;
+        let shared_records = Arc::new(Mutex::new(Vec::new()));
+        let periphery_chip = KeccakfPermChip::new(shared_records.clone());
+        // Clone the Arc Mutex and pass to the OpChip.
+        // WARNING: the OpChip must be added _after_ the periphery chip so that its tracegen is done
+        // _first_. After OpChip tracegen, the shared_record is set to the execution records,
+        // effectively passing the records to the periphery chip.
+        inventory.add_periphery_chip(periphery_chip);
+
+        inventory.next_air::<KeccakfOpAir>()?;
+        let op_chip = KeccakfOpChip::new(
+            bitwise_lu,
+            pointer_max_bits,
+            mem_helper.clone(),
+            shared_records,
+        );
+        inventory.add_executor_chip(op_chip);
 
         Ok(())
     }
