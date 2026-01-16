@@ -1,5 +1,8 @@
 use std::sync::{Arc, Mutex};
 
+use cuda_backend_v2::{
+    BabyBearPoseidon2GpuEngineV2 as GpuBabyBearPoseidon2Engine, GpuBackendV2 as GpuBackend,
+};
 use openvm_circuit::{
     arch::DenseRecordArena,
     system::cuda::{
@@ -9,7 +12,6 @@ use openvm_circuit::{
         SystemChipInventoryGPU,
     },
 };
-use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
 use openvm_rv32im_circuit::Rv32ImGpuProverExt;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
