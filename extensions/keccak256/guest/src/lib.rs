@@ -162,11 +162,31 @@ unsafe fn keccak256_impl(input: *const u8, len: usize, output: *mut u8) {
     let mut buffer = KECCAK_BUFFER.lock();
     let buffer_ptr = buffer.data.as_mut_ptr();
 
-    // Zero the buffer (memset equivalent)
-    core::ptr::write_bytes(buffer_ptr, 0, KECCAK_WIDTH_BYTES);
+    // State starts as [0u8; KECCAK_WIDTH_BYTES]. To save the first xorin, we memcpy directly into
+    // state.
+    let first_xorin_len = core::cmp::min(len, KECCAK_RATE);
+    core::ptr::copy_nonoverlapping(input, buffer_ptr, first_xorin_len);
+    core::ptr::write_bytes(
+        buffer_ptr.add(first_xorin_len),
+        0u8,
+        KECCAK_WIDTH_BYTES - first_xorin_len,
+    );
+    if first_xorin_len >= KECCAK_RATE {
+        native_keccakf_unchecked(buffer_ptr);
+    } else {
+        // We pad, do a single keccakf, and early return
 
-    let mut offset = 0;
-    let mut remaining = len;
+        // 1*01 padding
+        buffer.data[first_xorin_len] ^= 0x01;
+        buffer.data[KECCAK_RATE - 1] ^= 0x80;
+        native_keccakf_unchecked(buffer_ptr);
+
+        core::ptr::copy_nonoverlapping(buffer_ptr, output, KECCAK_OUTPUT_SIZE);
+        return;
+    }
+
+    let mut offset = KECCAK_RATE;
+    let mut remaining = len - KECCAK_RATE;
 
     // Absorb full blocks
     while remaining >= KECCAK_RATE {
