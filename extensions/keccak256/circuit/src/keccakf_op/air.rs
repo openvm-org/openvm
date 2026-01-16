@@ -8,7 +8,7 @@ use openvm_circuit::{
         MemoryAddress,
     },
 };
-use openvm_circuit_primitives::{bitwise_op_lookup::BitwiseOperationLookupBus, utils::not};
+use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
 use openvm_instructions::riscv::{
     RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
 };
@@ -16,7 +16,7 @@ use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_rv32im_circuit::adapters::abstract_compose;
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, PermutationCheckBus},
-    p3_air::{Air, AirBuilder, BaseAir},
+    p3_air::{Air, BaseAir},
     p3_field::FieldAlgebra,
     p3_matrix::Matrix,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -53,38 +53,11 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let local = main.row_slice(0);
         let local: &KeccakfOpCols<_> = (*local).borrow();
-        let next: &KeccakfOpCols<_> = (*next).borrow();
 
         let is_valid = local.is_valid;
-        let is_after_valid = local.is_after_valid;
         builder.assert_bool(is_valid);
-        builder.assert_bool(is_after_valid);
-        // Only one of `is_valid` or `is_after_valid` can be true at a time
-        builder.assert_zero(is_valid * is_after_valid);
-        // Two row design: we always use two rows for handling of a single instruction execution
-        // - We could do this without `is_after_valid`, but we wanted to avoid using as many `next`
-        //   (rotation) columns
-        builder.when(is_valid).assert_zero(next.is_valid);
-        builder.when(is_valid).assert_one(next.is_after_valid);
-        // Ensure that truly dummy rows have `is_valid = is_after_valid = 0`
-        builder
-            .when_transition()
-            .when(not(is_valid))
-            .assert_zero(next.is_after_valid);
-        builder.when_first_row().assert_zero(is_after_valid);
-        // Lemma: is_after_valid = 1 if and only if it is not the first row and the previous row has
-        // is_valid = 1
-        // Proof:
-        // - (=>) is_after_valid = 0 on first row, so not first row. The previous row is not last.
-        //   Hence
-        // if previous row is not valid, current row must have `is_after_valid = 0`. Therefore
-        // previous row must have `is_valid = 1`.
-        // - (<=) direct constraint
-        builder
-            .when(is_valid)
-            .assert_eq(local.timestamp, next.timestamp);
 
         let start_timestamp = local.timestamp;
         let mut timestamp_delta = 0usize;
@@ -127,17 +100,17 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
         // 2 in memory. The keccakf_state_bus guarantees that the post-state consists of
         // u16, but we still need to constrain that each pair actually consists of bytes.
         // NOTE[jpw]: this can be removed if AS2 cells are changed to u16s
-        for pair in local.buffer.chunks_exact(2) {
+        for pair in local.postimage.chunks_exact(2) {
             self.bitwise_lookup_bus
                 .send_range(pair[0], pair[1])
-                .eval(builder, is_after_valid);
+                .eval(builder, is_valid);
         }
 
         // ======== Constrain new writes of `buffer` to memory =========
         // NOTE: we use the _next_ row's `buffer` as the pre-state
         for (word_idx, (prev_word, post_word, base_aux)) in izip!(
-            local.buffer.chunks_exact(KECCAK_WORD_SIZE),
-            next.buffer.chunks_exact(KECCAK_WORD_SIZE),
+            local.preimage.chunks_exact(KECCAK_WORD_SIZE),
+            local.postimage.chunks_exact(KECCAK_WORD_SIZE),
             local.buffer_word_aux
         )
         .enumerate()
@@ -190,21 +163,32 @@ impl<AB: InteractionBuilder> Air<AB> for KeccakfOpAir {
         // Now we actually constrain that the pre- and post- buffer values are valid, but doing a
         // permutation check with the KeccakFPeripheryAir. We compose two u8 into a u16
         // since the keccakf periphery air uses u16 limbs
-        // - `is_valid + is_after_valid` is boolean.
-        // - is_valid = 1 => pre-state
-        // - is_after_valid = 1 => post-state
-        // - timestamp is the same on the two adjacent rows
+        //
+        // We use two interactions bound with the same timestamp to avoid having a really large
+        // message length.
         self.keccakf_state_bus.send(
             builder,
             iter::empty()
-                .chain([is_after_valid.into(), local.timestamp.into()])
+                .chain([AB::Expr::ZERO, local.timestamp.into()])
                 .chain(
                     local
-                        .buffer
+                        .preimage
                         .chunks(2)
                         .map(|pair| pair[0] + pair[1] * AB::F::from_canonical_u32(256)),
                 ),
-            is_valid + is_after_valid,
+            is_valid,
+        );
+        self.keccakf_state_bus.send(
+            builder,
+            iter::empty()
+                .chain([AB::Expr::ONE, local.timestamp.into()])
+                .chain(
+                    local
+                        .postimage
+                        .chunks(2)
+                        .map(|pair| pair[0] + pair[1] * AB::F::from_canonical_u32(256)),
+                ),
+            is_valid,
         );
     }
 }

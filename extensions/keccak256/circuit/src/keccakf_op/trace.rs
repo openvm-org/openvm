@@ -191,12 +191,9 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
         // overwriting
         let records = trace
             .par_chunks_exact_mut(width * NUM_OP_ROWS_PER_INS)
-            .map(|mut double_rows| {
+            .map(|mut row| {
                 let record: &mut KeccakfRecord = unsafe {
-                    get_record_from_slice(
-                        &mut double_rows,
-                        KeccakfRecordLayout::new(KeccakfMetadata),
-                    )
+                    get_record_from_slice(&mut row, KeccakfRecordLayout::new(KeccakfMetadata))
                 };
                 record.clone()
             })
@@ -206,28 +203,24 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakfOpChip<F> {
         trace
             .par_chunks_exact_mut(width * NUM_OP_ROWS_PER_INS)
             .zip(records.par_iter())
-            .for_each(|(double_rows, record)| {
-                double_rows.fill(F::ZERO);
+            .for_each(|(row, record)| {
+                row.fill(F::ZERO);
 
                 let postimage_buffer_bytes = keccakf_postimage_bytes(&record.preimage_buffer_bytes);
                 let buffer_ptr_limbs = record.buffer_ptr.to_le_bytes();
 
-                let (local_row, next_row) = double_rows.split_at_mut(width);
-                let local: &mut KeccakfOpCols<F> = local_row.borrow_mut();
-                let next: &mut KeccakfOpCols<F> = next_row.borrow_mut();
+                let local: &mut KeccakfOpCols<F> = row.borrow_mut();
 
                 local.pc = F::from_canonical_u32(record.pc);
                 local.is_valid = F::ONE;
                 local.timestamp = F::from_canonical_u32(record.timestamp);
                 local.rd_ptr = F::from_canonical_u32(record.rd_ptr);
                 local.buffer_ptr_limbs = buffer_ptr_limbs.map(F::from_canonical_u8);
-                next.is_after_valid = F::ONE;
-                next.timestamp = local.timestamp;
 
-                for (dst, &byte) in local.buffer.iter_mut().zip(&record.preimage_buffer_bytes) {
+                for (dst, &byte) in local.preimage.iter_mut().zip(&record.preimage_buffer_bytes) {
                     *dst = F::from_canonical_u8(byte);
                 }
-                for (dst, &byte) in next.buffer.iter_mut().zip(&postimage_buffer_bytes) {
+                for (dst, &byte) in local.postimage.iter_mut().zip(&postimage_buffer_bytes) {
                     *dst = F::from_canonical_u8(byte);
                 }
 

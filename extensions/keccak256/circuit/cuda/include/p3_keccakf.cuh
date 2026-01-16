@@ -6,7 +6,30 @@
 #include <cstddef>
 #include <cstdint>
 
+namespace keccak256 {
+using p3_keccak_air::NUM_ROUNDS;
+
+__device__ __constant__ inline uint8_t R[5][5] = {
+    {0, 36, 3, 41, 18},
+    {1, 44, 10, 45, 2},
+    {62, 6, 43, 15, 61},
+    {28, 55, 25, 21, 56},
+    {27, 20, 39, 8, 14},
+};
+
+__device__ __constant__ inline uint64_t RC[NUM_ROUNDS] = {
+    0x0000000000000001ULL, 0x0000000000008082ULL, 0x800000000000808AULL, 0x8000000080008000ULL,
+    0x000000000000808BULL, 0x0000000080000001ULL, 0x8000000080008081ULL, 0x8000000000008009ULL,
+    0x000000000000008AULL, 0x0000000000000088ULL, 0x0000000080008009ULL, 0x000000008000000AULL,
+    0x000000008000808BULL, 0x800000000000008BULL, 0x8000000000008089ULL, 0x8000000000008003ULL,
+    0x8000000000008002ULL, 0x8000000000000080ULL, 0x000000000000800AULL, 0x800000008000000AULL,
+    0x8000000080008081ULL, 0x8000000000008080ULL, 0x0000000080000001ULL, 0x8000000080008008ULL
+};
+} // namespace keccak256
+
 namespace p3_keccak_air {
+using keccak256::R;
+using keccak256::RC;
 
 // Plonky3 KeccakCols structure (from p3_keccak_air)
 // Must match exactly for trace compatibility
@@ -46,26 +69,9 @@ template <typename T> struct KeccakCols {
 
 inline constexpr size_t NUM_KECCAK_COLS = sizeof(KeccakCols<uint8_t>);
 
-__device__ __constant__ uint8_t R[5][5] = {
-    {0, 36, 3, 41, 18},
-    {1, 44, 10, 45, 2},
-    {62, 6, 43, 15, 61},
-    {28, 55, 25, 21, 56},
-    {27, 20, 39, 8, 14},
-};
-
-__device__ __constant__ uint64_t RC[NUM_ROUNDS] = {
-    0x0000000000000001ULL, 0x0000000000008082ULL, 0x800000000000808AULL, 0x8000000080008000ULL,
-    0x000000000000808BULL, 0x0000000080000001ULL, 0x8000000080008081ULL, 0x8000000000008009ULL,
-    0x000000000000008AULL, 0x0000000000000088ULL, 0x0000000080008009ULL, 0x000000008000000AULL,
-    0x000000008000808BULL, 0x800000000000008BULL, 0x8000000000008089ULL, 0x8000000000008003ULL,
-    0x8000000000008002ULL, 0x8000000000000080ULL, 0x000000000000800AULL, 0x800000008000000AULL,
-    0x8000000080008081ULL, 0x8000000000008080ULL, 0x0000000080000001ULL, 0x8000000080008008ULL
-};
-
 // tracegen matching plonky3
 // `row` must have first NUM_KECCAK_COLS columns matching KeccakCols
-__device__ void generate_trace_row_for_round(
+__device__ inline void generate_trace_row_for_round(
     RowSlice row,
     uint32_t round,
     uint64_t current_state[5][5]

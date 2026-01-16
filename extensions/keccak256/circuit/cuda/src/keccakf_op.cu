@@ -21,7 +21,7 @@ using namespace riscv;
 #define KECCAKF_OP_SLICE(FIELD) row.slice_from(COL_INDEX(KeccakfOpCols, FIELD))
 
 // Main kernel for KeccakfOpChip trace generation
-// Each thread processes one record (2 rows)
+// Each thread processes one record (1 rows)
 __global__ void keccakf_op_tracegen(
     Fp *d_trace,
     size_t height,
@@ -41,16 +41,13 @@ __global__ void keccakf_op_tracegen(
         return;
     }
 
-    // Each record produces 2 rows
+    // Each record produces 1 row
     size_t row0_idx = record_idx * NUM_OP_ROWS_PER_INS;
-    size_t row1_idx = record_idx * NUM_OP_ROWS_PER_INS + 1;
 
     RowSlice row0(d_trace + row0_idx, height);
-    RowSlice row1(d_trace + row1_idx, height);
 
     // Initialize both rows to zero
     row0.fill_zero(0, sizeof(KeccakfOpCols<uint8_t>));
-    row1.fill_zero(0, sizeof(KeccakfOpCols<uint8_t>));
 
     if (record_idx < num_records) {
         auto const &rec = d_records[record_idx];
@@ -60,19 +57,21 @@ __global__ void keccakf_op_tracegen(
         );
         BitwiseOperationLookup bitwise_lookup(d_bitwise_lookup_ptr, bitwise_num_bits);
 
+        // CUDA is little-endian, so the u64 word and byte representations below are the same memory layout.
+        union KeccakState {
+            uint64_t u64[25];
+            uint8_t bytes[KECCAK_WIDTH_BYTES];
+        };
         // Compute postimage
-        uint64_t state[25];
-        memcpy(state, rec.preimage_buffer_bytes, KECCAK_WIDTH_BYTES);
-        keccakf_permutation(state);
-        uint8_t postimage_bytes[KECCAK_WIDTH_BYTES];
-        memcpy(postimage_bytes, state, KECCAK_WIDTH_BYTES);
+        KeccakState state;
+        memcpy(state.u64, rec.preimage_buffer_bytes, KECCAK_WIDTH_BYTES);
+        keccakf_permutation(state.u64);
 
         // =========== Row 0: is_valid = 1, preimage buffer ===========
         {
             RowSlice row = row0;
             KECCAKF_OP_WRITE(pc, rec.pc);
             KECCAKF_OP_WRITE(is_valid, 1);
-            KECCAKF_OP_WRITE(is_after_valid, 0);
             KECCAKF_OP_WRITE(timestamp, rec.timestamp);
             KECCAKF_OP_WRITE(rd_ptr, rec.rd_ptr);
 
@@ -85,7 +84,9 @@ __global__ void keccakf_op_tracegen(
             KECCAKF_OP_WRITE_ARRAY(buffer_ptr_limbs, buffer_ptr_limbs);
 
             // Write preimage buffer
-            KECCAKF_OP_WRITE_ARRAY(buffer, rec.preimage_buffer_bytes);
+            KECCAKF_OP_WRITE_ARRAY(preimage, rec.preimage_buffer_bytes);
+            // Write postimage buffer
+            KECCAKF_OP_WRITE_ARRAY(postimage, state.bytes);
 
             // Fill rd_aux - memory read for rd_ptr
             uint32_t ts = rec.timestamp;
@@ -108,25 +109,8 @@ __global__ void keccakf_op_tracegen(
 
             // Range check for postimage bytes (pairs)
             for (size_t i = 0; i < KECCAK_WIDTH_BYTES; i += 2) {
-                bitwise_lookup.add_range(postimage_bytes[i], postimage_bytes[i + 1]);
+                bitwise_lookup.add_range(state.bytes[i], state.bytes[i + 1]);
             }
-        }
-
-        // =========== Row 1: is_after_valid = 1, postimage buffer ===========
-        {
-            RowSlice row = row1;
-            KECCAKF_OP_WRITE(pc, 0); // Not used in second row
-            KECCAKF_OP_WRITE(is_valid, 0);
-            KECCAKF_OP_WRITE(is_after_valid, 1);
-            KECCAKF_OP_WRITE(timestamp, rec.timestamp); // Same timestamp
-            KECCAKF_OP_WRITE(rd_ptr, 0);                // Not used in second row
-
-            // buffer_ptr_limbs not needed in second row (zeroed)
-
-            // Write postimage buffer
-            KECCAKF_OP_WRITE_ARRAY(buffer, postimage_bytes);
-
-            // Memory aux columns not used in second row (already zeroed)
         }
     }
     // Dummy rows are already zeroed
