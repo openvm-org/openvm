@@ -476,7 +476,10 @@ extern "C" int _proof_shape_tracegen(
         2,
         3,
         4,
-        5
+        5,
+        6,
+        7,
+        8
     )
     return CHECK_KERNEL();
 }
