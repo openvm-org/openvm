@@ -342,7 +342,7 @@ impl AggProvingKey {
         check_recursive_verifier_size(
             &internal_vm_vk,
             config.internal_fri_params,
-            config.internal_fri_params.log_blowup,
+            config.root_fri_params.log_blowup,
         );
 
         let internal_program = InternalVmVerifierConfig {
