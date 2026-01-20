@@ -135,7 +135,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             boundary_idx: config.memory_boundary_air_id(),
             merkle_tree_index: config.memory_merkle_air_id(),
             adapter_offset: config.access_adapter_air_id_offset(),
-            access_adapters_enabled: config.memory_config.access_adapters_enabled,
+            access_adapters_enabled: config.access_adapters_enabled(),
             chunk,
             chunk_bits,
             memory_dimensions,

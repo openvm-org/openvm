@@ -186,10 +186,6 @@ pub struct MemoryConfig {
     pub decomp: usize,
     /// Maximum N AccessAdapter AIR to support.
     pub max_access_adapter_n: usize,
-    /// Whether access adapters are enabled. When disabled, all memory accesses must be of the
-    /// standard block size (ie, 4 for address spaces 1-3).
-    #[new(value = "true")]
-    pub access_adapters_enabled: bool,
 }
 
 impl Default for MemoryConfig {
@@ -208,7 +204,6 @@ impl Default for MemoryConfig {
             timestamp_max_bits: 29,
             decomp: 17,
             max_access_adapter_n: 32,
-            access_adapters_enabled: true,
         }
     }
 }
@@ -261,34 +256,23 @@ impl MemoryConfig {
             .collect()
     }
 
-    /// Returns true if the Native address space (AS 4) is used
-    /// Native AS is considered "used" if it has any allocated cells
-    pub fn is_native_as_used(&self) -> bool {
+    /// Returns true if the Native address space (AS 4) is used.
+    /// Native AS is considered "used" if the host config allocates cells for it.
+    ///
+    /// When access adapters are disabled, all memory accesses must be of the
+    /// standard block size (i.e., 4 for address spaces 1-3).
+    pub fn access_adapters_enabled(&self) -> bool {
         self.addr_spaces
             .get(NATIVE_AS as usize)
             .is_some_and(|config| config.num_cells > 0)
     }
 
-    /// Disables access adapters. When disabled, all memory accesses for address spaces 1-3
-    /// must use the constant block size (4). Access adapters will only be used for
-    /// address space 4 (Native) if it is enabled.
-    pub fn without_access_adapters(mut self) -> Self {
-        self.access_adapters_enabled = false;
-        self
-    }
-
-    /// Enables access adapters. This is the default behavior
-    pub fn with_access_adapters(mut self) -> Self {
-        self.access_adapters_enabled = true;
-        self
-    }
-
-    /// Automatically sets `access_adapters_enabled` based on whether Native AS is used.
-    /// If Native AS is not used, access adapters are disabled since all other address spaces
-    /// use a fixed block size of 4
-    pub fn with_auto_access_adapters(mut self) -> Self {
-        self.access_adapters_enabled = self.is_native_as_used();
-        self
+    pub fn num_access_adapters(&self) -> usize {
+        if self.access_adapters_enabled() {
+            log2_strict_usize(self.max_access_adapter_n)
+        } else {
+            0
+        }
     }
 }
 
@@ -419,8 +403,7 @@ impl SystemConfig {
         self.memory_boundary_air_id()
             + num_memory_airs(
                 self.continuation_enabled,
-                self.memory_config.max_access_adapter_n,
-                self.memory_config.access_adapters_enabled,
+                self.memory_config.num_access_adapters(),
             )
     }
 
@@ -431,30 +414,9 @@ impl SystemConfig {
         }
     }
 
-    /// Disables access adapters. When disabled, all memory accesses for address spaces 1-3
-    /// must use the constant block size (4)
-    pub fn without_access_adapters(mut self) -> Self {
-        self.memory_config.access_adapters_enabled = false;
-        self
-    }
-
-    /// Enables access adapters. This is the default behavior.
-    pub fn with_access_adapters(mut self) -> Self {
-        self.memory_config.access_adapters_enabled = true;
-        self
-    }
-
-    /// Automatically sets `access_adapters_enabled` based on whether Native AS is used.
-    /// If Native AS is not used, access adapters are disabled since all other address spaces
-    /// use a fixed block size of 4.
-    pub fn with_auto_access_adapters(mut self) -> Self {
-        self.memory_config = self.memory_config.with_auto_access_adapters();
-        self
-    }
-
     /// Returns true if access adapters are enabled.
     pub fn access_adapters_enabled(&self) -> bool {
-        self.memory_config.access_adapters_enabled
+        self.memory_config.access_adapters_enabled()
     }
 }
 

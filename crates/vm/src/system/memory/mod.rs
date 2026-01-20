@@ -119,7 +119,7 @@ impl<SC: StarkGenericConfig> MemoryAirInventory<SC> {
             MemoryInterfaceAirs::Volatile { boundary }
         };
         // Memory access adapters - only create if enabled
-        let access_adapters: Vec<AirRef<SC>> = if mem_config.access_adapters_enabled {
+        let access_adapters: Vec<AirRef<SC>> = if mem_config.access_adapters_enabled() {
             let lt_air = IsLtSubAir::new(range_bus, mem_config.timestamp_max_bits);
             let maan = mem_config.max_access_adapter_n;
             assert!(matches!(maan, 2 | 4 | 8 | 16 | 32));
@@ -163,16 +163,7 @@ impl<SC: StarkGenericConfig> MemoryAirInventory<SC> {
 
 /// This is O(1) and returns the length of
 /// [`MemoryAirInventory::into_airs`].
-pub fn num_memory_airs(
-    is_persistent: bool,
-    max_access_adapter_n: usize,
-    access_adapters_enabled: bool,
-) -> usize {
+pub fn num_memory_airs(is_persistent: bool, num_access_adapters: usize) -> usize {
     // boundary + { merkle if is_persistent } + access_adapters (if enabled)
-    let num_adapters = if access_adapters_enabled {
-        log2_strict_usize(max_access_adapter_n)
-    } else {
-        0
-    };
-    1 + usize::from(is_persistent) + num_adapters
+    1 + usize::from(is_persistent) + num_access_adapters
 }

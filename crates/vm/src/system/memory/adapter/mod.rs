@@ -59,7 +59,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         memory_config: MemoryConfig,
     ) -> Self {
         // Only create adapter chips if access adapters are enabled
-        let chips: Vec<_> = if memory_config.access_adapters_enabled {
+        let chips: Vec<_> = if memory_config.access_adapters_enabled() {
             let rc = range_checker;
             let mb = memory_bus;
             let tmb = memory_config.timestamp_max_bits;

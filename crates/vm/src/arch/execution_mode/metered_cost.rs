@@ -18,7 +18,6 @@ pub const DEFAULT_MAX_COST: u64 = DEFAULT_MAX_SEGMENTS * DEFAULT_SEGMENT_MAX_CEL
 pub struct AccessAdapterCtx {
     min_block_size_bits: Vec<u8>,
     idx_offset: usize,
-    enabled: bool,
 }
 
 impl AccessAdapterCtx {
@@ -26,7 +25,6 @@ impl AccessAdapterCtx {
         Self {
             min_block_size_bits: config.memory_config.min_block_size_bits(),
             idx_offset: config.access_adapter_air_id_offset(),
-            enabled: config.memory_config.access_adapters_enabled,
         }
     }
 
@@ -38,10 +36,6 @@ impl AccessAdapterCtx {
         size_bits: u32,
         widths: &[usize],
     ) {
-        if !self.enabled {
-            return;
-        }
-
         debug_assert!((address_space as usize) < self.min_block_size_bits.len());
 
         // SAFETY: address_space passed is usually a hardcoded constant or derived from an
@@ -70,7 +64,7 @@ impl AccessAdapterCtx {
 #[derive(Clone, Debug, WithSetters)]
 pub struct MeteredCostCtx {
     pub widths: Vec<usize>,
-    pub access_adapter_ctx: AccessAdapterCtx,
+    pub access_adapter_ctx: Option<AccessAdapterCtx>,
     #[getset(set_with = "pub")]
     pub max_execution_cost: u64,
     // Cost is number of trace cells (height * width)
@@ -81,7 +75,9 @@ pub struct MeteredCostCtx {
 
 impl MeteredCostCtx {
     pub fn new(widths: Vec<usize>, config: &SystemConfig) -> Self {
-        let access_adapter_ctx = AccessAdapterCtx::new(config);
+        let access_adapter_ctx = config
+            .access_adapters_enabled()
+            .then(|| AccessAdapterCtx::new(config));
         Self {
             widths,
             access_adapter_ctx,
@@ -121,12 +117,9 @@ impl ExecutionCtxTrait for MeteredCostCtx {
         // Handle access adapter updates
         // SAFETY: size passed is always a non-zero power of 2
         let size_bits = unsafe { NonZero::new_unchecked(size).ilog2() };
-        self.access_adapter_ctx.update_cells(
-            &mut self.cost,
-            address_space,
-            size_bits,
-            &self.widths,
-        );
+        if let Some(ctx) = self.access_adapter_ctx.as_mut() {
+            ctx.update_cells(&mut self.cost, address_space, size_bits, &self.widths);
+        }
     }
 
     #[inline(always)]
