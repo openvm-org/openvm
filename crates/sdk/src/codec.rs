@@ -23,8 +23,8 @@ use super::{F, SC};
 type Challenge = BinomialExtensionField<F, 4>;
 
 /// Codec version should change only when proof system or proof format changes.
-/// It does correspond to the main openvm version (which may change more frequently).
-const CODEC_VERSION: u32 = 1;
+/// It does not correspond to the main openvm version (which may change more frequently).
+const CODEC_VERSION: u32 = 2;
 
 /// Hardware and language independent encoding.
 /// Uses the Writer pattern for more efficient encoding without intermediate buffers.
