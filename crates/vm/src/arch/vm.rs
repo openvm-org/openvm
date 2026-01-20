@@ -26,7 +26,7 @@ use openvm_stark_backend::{
     engine::StarkEngine,
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_field::{FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdicField},
-    p3_util::{log2_ceil_usize, log2_strict_usize},
+    p3_util::log2_ceil_usize,
     proof::Proof,
     prover::{
         hal::{DeviceDataTransporter, MatrixDimensions, TraceCommitter},
@@ -622,7 +622,9 @@ where
         let system_config: &SystemConfig = self.config().as_ref();
         let adapter_offset = system_config.access_adapter_air_id_offset();
         // ATTENTION: this must agree with `num_memory_airs`
-        let num_adapters = log2_strict_usize(system_config.memory_config.max_access_adapter_n);
+
+        let num_adapters = system_config.memory_config.num_access_adapters();
+
         assert_eq!(adapter_offset + num_adapters, system_config.num_airs());
         let access_adapter_arena_size_bound = records::arena_size_bound(
             &trace_heights[adapter_offset..adapter_offset + num_adapters],

@@ -14,7 +14,6 @@ use openvm_stark_backend::{
     interaction::PermutationCheckBus,
     p3_commit::PolynomialSpace,
     p3_field::{Field, PrimeField32},
-    p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
     p3_util::{log2_ceil_usize, log2_strict_usize},
     prover::{cpu::CpuBackend, types::AirProvingContext},
     Chip,
@@ -24,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use self::interface::MemoryInterface;
 use super::{volatile::VolatileBoundaryChip, AddressMap};
 use crate::{
-    arch::{DenseRecordArena, MemoryConfig, ADDR_SPACE_OFFSET},
+    arch::{DenseRecordArena, MemoryConfig, ADDR_SPACE_OFFSET, CONST_BLOCK_SIZE},
     system::{
         memory::{
             adapter::AccessAdapterInventory,
@@ -291,10 +290,30 @@ impl<F: PrimeField32> MemoryController<F> {
             ) => {
                 let hasher = self.hasher_chip.as_ref().unwrap();
                 boundary_chip.finalize(initial_memory, &final_memory, hasher.as_ref());
-                let final_memory_values = final_memory
-                    .into_par_iter()
-                    .map(|(key, value)| (key, value.values))
-                    .collect();
+
+                // Rechunk CONST_BLOCK_SIZE blocks into CHUNK-sized blocks for merkle_chip
+                // Note: Equipartition key is (addr_space, ptr) where ptr is the starting pointer
+                let final_memory_values: Equipartition<F, CHUNK> = {
+                    use std::collections::BTreeMap;
+                    let mut chunk_map: BTreeMap<(u32, u32), [F; CHUNK]> = BTreeMap::new();
+                    for ((addr_space, ptr), ts_values) in final_memory.into_iter() {
+                        // Align to CHUNK boundary to get the chunk's starting pointer
+                        let chunk_ptr = (ptr / CHUNK as u32) * CHUNK as u32;
+                        let block_idx_in_chunk =
+                            ((ptr % CHUNK as u32) / CONST_BLOCK_SIZE as u32) as usize;
+                        let entry = chunk_map.entry((addr_space, chunk_ptr)).or_insert_with(|| {
+                            // Initialize with values from initial memory
+                            std::array::from_fn(|i| unsafe {
+                                initial_memory.get_f::<F>(addr_space, chunk_ptr + i as u32)
+                            })
+                        });
+                        // Copy values for this block
+                        for (i, val) in ts_values.values.into_iter().enumerate() {
+                            entry[block_idx_in_chunk * CONST_BLOCK_SIZE + i] = val;
+                        }
+                    }
+                    chunk_map
+                };
                 merkle_chip.finalize(initial_memory, &final_memory_values, hasher.as_ref());
             }
             _ => panic!("TouchedMemory incorrect type"),
