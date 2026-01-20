@@ -449,6 +449,7 @@ fn test_sdk_guest_build_and_transpile() -> eyre::Result<()> {
 
 #[test]
 fn test_sdk_standard_with_p256() -> eyre::Result<()> {
+    setup_tracing();
     // WARNING: This test's keygen uses over the cargo test default stack
     // limit. To run this test, set env variable RUST_MIN_STACK=8388608.
     let sdk = Sdk::standard();

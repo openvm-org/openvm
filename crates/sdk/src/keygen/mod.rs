@@ -8,7 +8,7 @@ use openvm_circuit::{
 use openvm_continuations::verifier::{
     internal::InternalVmVerifierConfig, leaf::LeafVmVerifierConfig, root::RootVmVerifierConfig,
 };
-use openvm_native_circuit::{NativeConfig, NativeCpuBuilder};
+use openvm_native_circuit::{NativeConfig, NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_stark_backend::{
     config::Val,
@@ -273,12 +273,13 @@ fn check_recursive_verifier_size<SC: StarkGenericConfig>(
         tracing::warn!("recursive verifier size may be too large; FriReducedOpening height ({fri_reduced_opening_trace_height}) > {}", 1 << (Val::<SC>::TWO_ADICITY - next_log_blowup));
     }
     // Second check: static check for log up soundness constraints using FriReducedOpening trace
-    // height as proxy
-    if fri_reduced_opening_trace_height as u32 >= Val::<SC>::ORDER_U32 / 200 {
+    // height as proxy.
+    let native_max_height: u32 = *NATIVE_MAX_TRACE_HEIGHTS.iter().max().unwrap();
+    if fri_reduced_opening_trace_height as u32 > native_max_height {
         tracing::warn!(
             "recursive verifier size may violate log up soundness constraints; {} > {}",
-            200 * fri_reduced_opening_trace_height,
-            Val::<SC>::ORDER_U32
+            fri_reduced_opening_trace_height,
+            native_max_height
         );
     }
 }
