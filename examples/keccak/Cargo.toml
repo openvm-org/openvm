@@ -7,7 +7,7 @@ edition = "2021"
 members = []
 
 [dependencies]
-tiny-keccak = { git = "https://github.com/openvm-org/tiny-keccak", branch = "perf/custom-xorin-keccak", features = ["keccak"] }
+tiny-keccak = { git = "https://github.com/openvm-org/tiny-keccak", features = ["keccak"] }
 hex-literal = "1.1.0"
 
 [target.'cfg(target_os = "zkvm")'.dependencies]
