@@ -361,6 +361,7 @@ where
 
         challenger.observe_digest(builder, quotient_commit.clone());
 
+        challenger.check_witness(builder, m_advice.deep_pow_bits, opening.deep_pow_witness);
         let zeta = challenger.sample_ext(builder);
 
         let num_prep_rounds: Usize<_> = builder.eval(RVar::zero());
