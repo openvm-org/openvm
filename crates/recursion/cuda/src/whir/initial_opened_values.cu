@@ -223,7 +223,7 @@ extern "C" int _initial_opened_values_tracegen(
         stacking_widths_psums_per_proof,
         mu_pows
     );),
-    1, 2, 3, 4, 5
+    1, 2, 3, 4, 5, 6, 7, 8
     )
     return CHECK_KERNEL();
 }

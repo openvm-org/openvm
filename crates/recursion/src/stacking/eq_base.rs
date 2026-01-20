@@ -86,157 +86,6 @@ pub struct EqBaseCols<F> {
 }
 
 ///////////////////////////////////////////////////////////////////////////
-/// TRACE GENERATOR
-///////////////////////////////////////////////////////////////////////////
-pub struct EqBaseTraceGenerator;
-
-impl EqBaseTraceGenerator {
-    #[tracing::instrument(level = "trace", skip_all)]
-    pub fn generate_trace(
-        vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
-        preflights: &[Preflight],
-    ) -> RowMajorMatrix<F> {
-        debug_assert_eq!(proofs.len(), preflights.len());
-
-        let width = EqBaseCols::<usize>::width();
-
-        if proofs.is_empty() {
-            return RowMajorMatrix::new(vec![F::ZERO; width], width);
-        }
-
-        let mut combined_trace = Vec::<F>::new();
-        let mut total_rows = 0usize;
-
-        for (proof_idx, (proof, preflight)) in proofs.iter().zip(preflights).enumerate() {
-            let mut mults = vec![0usize; vk.inner.params.l_skip + 1];
-            for (sort_idx, (_, vdata)) in
-                preflight.proof_shape.sorted_trace_vdata.iter().enumerate()
-            {
-                if vdata.log_height <= vk.inner.params.l_skip {
-                    let neg_n = vk.inner.params.l_skip - vdata.log_height;
-                    mults[neg_n] += proof.batch_constraint_proof.column_openings[sort_idx]
-                        .iter()
-                        .flatten()
-                        .collect_vec()
-                        .len();
-                }
-            }
-
-            let num_rows = vk.inner.params.l_skip + 1;
-            let proof_idx_value = F::from_canonical_usize(proof_idx);
-
-            let mut trace = vec![F::ZERO; num_rows * width];
-
-            for chunk in trace.chunks_mut(width) {
-                let cols: &mut EqBaseCols<F> = chunk.borrow_mut();
-                cols.proof_idx = proof_idx_value;
-            }
-
-            let omega = F::two_adic_generator(vk.inner.params.l_skip);
-            let mut u = preflight.stacking.sumcheck_rnd[0];
-            let mut r = preflight.batch_constraint.sumcheck_rnd[0];
-            let mut r_omega = r * omega;
-
-            let mut prod_u_r = u * (u + r);
-            let mut prod_u_r_omega = u * (u + r_omega);
-            let mut prod_u_1 = u + F::ONE;
-            let mut prod_r_omega_1 = r_omega + F::ONE;
-
-            let mut in_prod = EF::ONE;
-
-            let u_pows = u
-                .exp_powers_of_2()
-                .take(vk.inner.params.l_skip + 1)
-                .collect_vec();
-
-            for (row_idx, chunk) in trace.chunks_mut(width).take(num_rows).enumerate() {
-                let cols: &mut EqBaseCols<F> = chunk.borrow_mut();
-                let is_last = row_idx + 1 == num_rows;
-
-                cols.proof_idx = proof_idx_value;
-                cols.is_valid = F::ONE;
-                cols.is_first = F::from_bool(row_idx == 0);
-                cols.is_last = F::from_bool(is_last);
-
-                cols.row_idx = F::from_canonical_usize(row_idx);
-
-                cols.u_pow.copy_from_slice(u.as_base_slice());
-                cols.r_pow.copy_from_slice(r.as_base_slice());
-                cols.r_omega_pow.copy_from_slice(r_omega.as_base_slice());
-
-                cols.prod_u_r.copy_from_slice(prod_u_r.as_base_slice());
-                cols.prod_u_r_omega
-                    .copy_from_slice(prod_u_r_omega.as_base_slice());
-                cols.prod_u_1.copy_from_slice(prod_u_1.as_base_slice());
-                cols.prod_r_omega_1
-                    .copy_from_slice(prod_r_omega_1.as_base_slice());
-
-                if is_last {
-                    cols.mult = F::from_canonical_usize(mults[0]);
-                }
-
-                let l_skip = vk.inner.params.l_skip - row_idx;
-                let u_pow_rev = u_pows[l_skip];
-
-                if row_idx != 0 {
-                    in_prod *= u_pow_rev + F::ONE;
-                    cols.eq_neg.copy_from_slice(
-                        (eval_eq_uni(l_skip, preflight.stacking.sumcheck_rnd[0], r)
-                            * F::from_canonical_usize(1 << l_skip))
-                        .as_base_slice(),
-                    );
-                    cols.k_rot_neg.copy_from_slice(
-                        (eval_rot_kernel_prism(
-                            l_skip,
-                            &[preflight.stacking.sumcheck_rnd[0]],
-                            &[r],
-                        ) * F::from_canonical_usize(1 << l_skip))
-                        .as_base_slice(),
-                    );
-                    cols.mult_neg = F::from_canonical_usize(mults[row_idx]);
-                }
-
-                cols.u_pow_rev.copy_from_slice(u_pow_rev.as_base_slice());
-                cols.in_prod.copy_from_slice(in_prod.as_base_slice());
-
-                u *= u;
-                r *= r;
-                r_omega *= r_omega;
-
-                prod_u_r *= u + r;
-                prod_u_r_omega *= u + r_omega;
-                prod_u_1 *= u + F::ONE;
-                prod_r_omega_1 *= r_omega + F::ONE;
-            }
-
-            combined_trace.extend(trace);
-            total_rows += num_rows;
-        }
-
-        let padded_rows = total_rows.next_power_of_two();
-        if padded_rows > total_rows {
-            let padding_start = combined_trace.len();
-            combined_trace.resize(padded_rows * width, F::ZERO);
-
-            let padding_proof_idx = F::from_canonical_usize(proofs.len());
-            let mut chunks = combined_trace[padding_start..].chunks_mut(width);
-            let num_padded_rows = padded_rows - total_rows;
-            for i in 0..num_padded_rows {
-                let chunk = chunks.next().unwrap();
-                let cols: &mut EqBaseCols<F> = chunk.borrow_mut();
-                cols.proof_idx = padding_proof_idx;
-                if i + 1 == num_padded_rows {
-                    cols.is_last = F::ONE;
-                }
-            }
-        }
-
-        RowMajorMatrix::new(combined_trace, width)
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////
 /// AIR
 ///////////////////////////////////////////////////////////////////////////
 pub struct EqBaseAir {
@@ -570,5 +419,156 @@ where
             },
             local.mult_neg,
         );
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////
+/// TRACE GENERATOR
+///////////////////////////////////////////////////////////////////////////
+pub struct EqBaseTraceGenerator;
+
+impl EqBaseTraceGenerator {
+    #[tracing::instrument(level = "trace", skip_all)]
+    pub fn generate_trace(
+        vk: &MultiStarkVerifyingKeyV2,
+        proofs: &[Proof],
+        preflights: &[Preflight],
+    ) -> RowMajorMatrix<F> {
+        debug_assert_eq!(proofs.len(), preflights.len());
+
+        let width = EqBaseCols::<usize>::width();
+
+        if proofs.is_empty() {
+            return RowMajorMatrix::new(vec![F::ZERO; width], width);
+        }
+
+        let mut combined_trace = Vec::<F>::new();
+        let mut total_rows = 0usize;
+
+        for (proof_idx, (proof, preflight)) in proofs.iter().zip(preflights).enumerate() {
+            let mut mults = vec![0usize; vk.inner.params.l_skip + 1];
+            for (sort_idx, (_, vdata)) in
+                preflight.proof_shape.sorted_trace_vdata.iter().enumerate()
+            {
+                if vdata.log_height <= vk.inner.params.l_skip {
+                    let neg_n = vk.inner.params.l_skip - vdata.log_height;
+                    mults[neg_n] += proof.batch_constraint_proof.column_openings[sort_idx]
+                        .iter()
+                        .flatten()
+                        .collect_vec()
+                        .len();
+                }
+            }
+
+            let num_rows = vk.inner.params.l_skip + 1;
+            let proof_idx_value = F::from_canonical_usize(proof_idx);
+
+            let mut trace = vec![F::ZERO; num_rows * width];
+
+            for chunk in trace.chunks_mut(width) {
+                let cols: &mut EqBaseCols<F> = chunk.borrow_mut();
+                cols.proof_idx = proof_idx_value;
+            }
+
+            let omega = F::two_adic_generator(vk.inner.params.l_skip);
+            let mut u = preflight.stacking.sumcheck_rnd[0];
+            let mut r = preflight.batch_constraint.sumcheck_rnd[0];
+            let mut r_omega = r * omega;
+
+            let mut prod_u_r = u * (u + r);
+            let mut prod_u_r_omega = u * (u + r_omega);
+            let mut prod_u_1 = u + F::ONE;
+            let mut prod_r_omega_1 = r_omega + F::ONE;
+
+            let mut in_prod = EF::ONE;
+
+            let u_pows = u
+                .exp_powers_of_2()
+                .take(vk.inner.params.l_skip + 1)
+                .collect_vec();
+
+            for (row_idx, chunk) in trace.chunks_mut(width).take(num_rows).enumerate() {
+                let cols: &mut EqBaseCols<F> = chunk.borrow_mut();
+                let is_last = row_idx + 1 == num_rows;
+
+                cols.proof_idx = proof_idx_value;
+                cols.is_valid = F::ONE;
+                cols.is_first = F::from_bool(row_idx == 0);
+                cols.is_last = F::from_bool(is_last);
+
+                cols.row_idx = F::from_canonical_usize(row_idx);
+
+                cols.u_pow.copy_from_slice(u.as_base_slice());
+                cols.r_pow.copy_from_slice(r.as_base_slice());
+                cols.r_omega_pow.copy_from_slice(r_omega.as_base_slice());
+
+                cols.prod_u_r.copy_from_slice(prod_u_r.as_base_slice());
+                cols.prod_u_r_omega
+                    .copy_from_slice(prod_u_r_omega.as_base_slice());
+                cols.prod_u_1.copy_from_slice(prod_u_1.as_base_slice());
+                cols.prod_r_omega_1
+                    .copy_from_slice(prod_r_omega_1.as_base_slice());
+
+                if is_last {
+                    cols.mult = F::from_canonical_usize(mults[0]);
+                }
+
+                let l_skip = vk.inner.params.l_skip - row_idx;
+                let u_pow_rev = u_pows[l_skip];
+
+                if row_idx != 0 {
+                    in_prod *= u_pow_rev + F::ONE;
+                    cols.eq_neg.copy_from_slice(
+                        (eval_eq_uni(l_skip, preflight.stacking.sumcheck_rnd[0], r)
+                            * F::from_canonical_usize(1 << l_skip))
+                        .as_base_slice(),
+                    );
+                    cols.k_rot_neg.copy_from_slice(
+                        (eval_rot_kernel_prism(
+                            l_skip,
+                            &[preflight.stacking.sumcheck_rnd[0]],
+                            &[r],
+                        ) * F::from_canonical_usize(1 << l_skip))
+                        .as_base_slice(),
+                    );
+                    cols.mult_neg = F::from_canonical_usize(mults[row_idx]);
+                }
+
+                cols.u_pow_rev.copy_from_slice(u_pow_rev.as_base_slice());
+                cols.in_prod.copy_from_slice(in_prod.as_base_slice());
+
+                u *= u;
+                r *= r;
+                r_omega *= r_omega;
+
+                prod_u_r *= u + r;
+                prod_u_r_omega *= u + r_omega;
+                prod_u_1 *= u + F::ONE;
+                prod_r_omega_1 *= r_omega + F::ONE;
+            }
+
+            combined_trace.extend(trace);
+            total_rows += num_rows;
+        }
+
+        let padded_rows = total_rows.next_power_of_two();
+        if padded_rows > total_rows {
+            let padding_start = combined_trace.len();
+            combined_trace.resize(padded_rows * width, F::ZERO);
+
+            let padding_proof_idx = F::from_canonical_usize(proofs.len());
+            let mut chunks = combined_trace[padding_start..].chunks_mut(width);
+            let num_padded_rows = padded_rows - total_rows;
+            for i in 0..num_padded_rows {
+                let chunk = chunks.next().unwrap();
+                let cols: &mut EqBaseCols<F> = chunk.borrow_mut();
+                cols.proof_idx = padding_proof_idx;
+                if i + 1 == num_padded_rows {
+                    cols.is_last = F::ONE;
+                }
+            }
+        }
+
+        RowMajorMatrix::new(combined_trace, width)
     }
 }
