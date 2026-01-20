@@ -13,6 +13,7 @@ use openvm_verify_stark::host::{
     compute_hint_key_for_verify_openvm_stark, encode_proof_to_kv_store_value,
 };
 
+const APP_LOG_BLOWUP: usize = 1;
 const LEAF_LOG_BLOWUP: usize = 2;
 const INTERNAL_LOG_BLOWUP: usize = 3;
 const ROOT_LOG_BLOWUP: usize = 4;
@@ -34,8 +35,10 @@ fn test_verify_openvm_stark_e2e() -> Result<()> {
         .io(Default::default())
         .native(Default::default())
         .build();
-    let fri_params = FriParameters::new_for_testing(LEAF_LOG_BLOWUP);
-    let app_config = AppConfig::new_with_leaf_fri_params(fri_params, vm_config.clone(), fri_params);
+    let app_fri_params = FriParameters::new_for_testing(APP_LOG_BLOWUP);
+    let leaf_fri_params = FriParameters::new_for_testing(LEAF_LOG_BLOWUP);
+    let app_config =
+        AppConfig::new_with_leaf_fri_params(app_fri_params, vm_config.clone(), leaf_fri_params);
     let sdk = Sdk::new(app_config)?;
     assert!(vm_config.system.config.continuation_enabled);
     let elf = sdk.build(Default::default(), pkg_dir, &None, None)?;
