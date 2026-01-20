@@ -16,6 +16,7 @@ fn main() {
             .include_from_dep("DEP_CUDA_COMMON_INCLUDE")
             .include_from_dep("DEP_CIRCUIT_PRIMITIVES_CUDA_INCLUDE")
             .include("cuda/include")
+            .include("../cuda-backend/cuda/include")
             .include("../../openvm/crates/circuits/poseidon2-air/cuda/include");
 
         common.emit_link_directives();

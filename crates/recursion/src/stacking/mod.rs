@@ -38,6 +38,9 @@ pub mod sumcheck;
 pub mod univariate;
 mod utils;
 
+#[cfg(feature = "cuda")]
+mod cuda_abi;
+
 pub struct StackingModule {
     bus_inventory: BusInventory,
 
@@ -311,17 +314,196 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for StackingModule {
 
 #[cfg(feature = "cuda")]
 mod cuda_tracegen {
-    use cuda_backend_v2::GpuBackendV2;
+    use cuda_backend_v2::{EF, GpuBackendV2};
     use itertools::Itertools;
     use openvm_cuda_backend::{base::DeviceMatrix, data_transporter::transport_matrix_to_device};
+    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 
     use super::*;
-    use crate::cuda::{
-        GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu,
+    use crate::{
+        cuda::{GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
+        stacking::cuda_abi::{
+            PolyPrecomputation, StackedSliceData, StackedTraceData, compute_coefficients,
+            compute_coefficients_temp_bytes, stacked_slice_data,
+        },
     };
 
+    pub(crate) struct StackingBlob {
+        pub(crate) slice_data: Vec<DeviceBuffer<StackedSliceData>>,
+        pub(crate) coeffs: Vec<DeviceBuffer<EF>>,
+        pub(crate) precomps: Vec<DeviceBuffer<PolyPrecomputation>>,
+    }
+
+    impl StackingBlob {
+        pub fn new(
+            child_vk: &VerifyingKeyGpu,
+            proofs: &[ProofGpu],
+            preflights: &[PreflightGpu],
+        ) -> Self {
+            let l_skip = child_vk.system_params.l_skip as u32;
+            let n_stack = child_vk.system_params.n_stack as u32;
+            let log_stacked_height = l_skip + n_stack;
+            let stacked_height = 1u32 << log_stacked_height;
+
+            let mut slice_data = Vec::with_capacity(preflights.len());
+            let mut coeffs = Vec::with_capacity(preflights.len());
+            let mut precomps = Vec::with_capacity(preflights.len());
+
+            for (proof, preflight) in izip!(proofs, preflights) {
+                let sorted_trace_data = &preflight.cpu.proof_shape.sorted_trace_vdata;
+                let num_airs = sorted_trace_data.len();
+                let mut num_commits = 1;
+
+                let mut stacked_trace_data = Vec::with_capacity(num_airs);
+                let mut other_trace_data = vec![];
+
+                let mut current_col_idx = 0;
+                let mut current_row_idx = 0;
+
+                for (air_idx, vdata) in sorted_trace_data {
+                    let stark_vk = &child_vk.cpu.inner.per_air[*air_idx];
+                    let trace_widths = &stark_vk.params.width;
+                    let log_height = vdata.log_height as u32;
+                    // IMPORTANT: This must match CPU `get_stacked_slice_data`, which stacks ONLY
+                    // the common-main columns here (cached mains are handled as separate commits).
+                    let common_width = trace_widths.common_main as u32;
+
+                    stacked_trace_data.push(StackedTraceData {
+                        commit_idx: 0,
+                        start_col_idx: current_col_idx,
+                        start_row_idx: current_row_idx,
+                        log_height,
+                        width: common_width,
+                    });
+
+                    let lifted_height = log_height.max(l_skip);
+                    let unbounded_row_idx = current_row_idx + (common_width << lifted_height);
+                    current_col_idx += unbounded_row_idx >> log_stacked_height;
+                    current_row_idx = unbounded_row_idx & (stacked_height - 1);
+
+                    other_trace_data.extend(
+                        trace_widths
+                            .preprocessed
+                            .iter()
+                            .chain(trace_widths.cached_mains.iter())
+                            .map(|&part_width| {
+                                let ret = StackedTraceData {
+                                    commit_idx: num_commits,
+                                    start_col_idx: 0,
+                                    start_row_idx: 0,
+                                    log_height,
+                                    width: part_width as u32,
+                                };
+                                num_commits += 1;
+                                ret
+                            }),
+                    );
+                }
+
+                stacked_trace_data.extend(other_trace_data.iter());
+
+                let mut num_slices = 0u32;
+                let slice_offsets = stacked_trace_data
+                    .iter()
+                    .map(|trace_data| {
+                        let ret = num_slices;
+                        num_slices += trace_data.width;
+                        ret
+                    })
+                    .collect_vec();
+
+                let d_slice_offsets = slice_offsets.to_device().unwrap();
+                let d_stacked_trace_data = stacked_trace_data.to_device().unwrap();
+
+                let d_slice_data =
+                    DeviceBuffer::<StackedSliceData>::with_capacity(num_slices as usize);
+
+                unsafe {
+                    stacked_slice_data(
+                        &d_slice_data,
+                        &d_slice_offsets,
+                        &d_stacked_trace_data,
+                        num_airs as u32,
+                        num_commits,
+                        num_slices,
+                        n_stack,
+                        l_skip,
+                    )
+                    .unwrap();
+                }
+
+                let d_lambda_pows = preflight
+                    .cpu
+                    .stacking
+                    .lambda
+                    .powers()
+                    .take((num_slices << 1) as usize)
+                    .collect_vec()
+                    .to_device()
+                    .unwrap();
+
+                let d_coeff_terms = DeviceBuffer::<EF>::with_capacity(num_slices as usize);
+                let d_coeff_term_keys = DeviceBuffer::<u64>::with_capacity(num_slices as usize);
+                let d_precomps =
+                    DeviceBuffer::<PolyPrecomputation>::with_capacity(num_slices as usize);
+                let d_num_coeffs = DeviceBuffer::<usize>::with_capacity(1);
+
+                let num_claims = proof
+                    .cpu
+                    .stacking_proof
+                    .stacking_openings
+                    .iter()
+                    .fold(0, |acc, v| acc + v.len());
+                let d_coeffs = DeviceBuffer::<EF>::with_capacity(num_claims);
+                let d_coeff_keys = DeviceBuffer::<u64>::with_capacity(num_claims);
+
+                unsafe {
+                    let temp_bytes = compute_coefficients_temp_bytes(
+                        &d_coeff_terms,
+                        &d_coeff_term_keys,
+                        &d_coeffs,
+                        &d_coeff_keys,
+                        num_slices,
+                        &d_num_coeffs,
+                    )
+                    .unwrap();
+                    let d_temp_buffer = DeviceBuffer::<u8>::with_capacity(temp_bytes);
+                    compute_coefficients(
+                        &d_coeff_terms,
+                        &d_coeff_term_keys,
+                        &d_coeffs,
+                        &d_coeff_keys,
+                        &d_precomps,
+                        &d_slice_data,
+                        &preflight.stacking.sumcheck_rnd,
+                        &preflight.batch_constraint.sumcheck_rnd,
+                        &d_lambda_pows,
+                        num_commits,
+                        num_slices,
+                        n_stack,
+                        l_skip,
+                        &d_temp_buffer,
+                        temp_bytes,
+                        &d_num_coeffs,
+                    )
+                    .unwrap();
+                }
+
+                slice_data.push(d_slice_data);
+                coeffs.push(d_coeffs);
+                precomps.push(d_precomps);
+            }
+
+            Self {
+                slice_data,
+                coeffs,
+                precomps,
+            }
+        }
+    }
+
     impl ModuleChip<GlobalCtxGpu, GpuBackendV2> for StackingModuleChip {
-        type ModuleSpecificCtx = ();
+        type ModuleSpecificCtx = StackingBlob;
 
         #[tracing::instrument(
             name = "wrapper.generate_trace",
@@ -334,18 +516,26 @@ mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            _ctx: &(),
+            ctx: &StackingBlob,
         ) -> DeviceMatrix<F> {
-            transport_matrix_to_device(Arc::new(
-                self.generate_trace_row_major(
-                    &child_vk.cpu,
-                    &proofs.iter().map(|proof| proof.cpu.clone()).collect_vec(),
-                    &preflights
-                        .iter()
-                        .map(|preflight| preflight.cpu.clone())
-                        .collect_vec(),
-                ),
-            ))
+            match self {
+                StackingModuleChip::OpeningClaims => {
+                    opening::cuda::generate_trace(child_vk, proofs, preflights, ctx)
+                }
+                StackingModuleChip::StackingClaims => {
+                    claims::cuda::generate_trace(proofs, preflights, ctx)
+                }
+                _ => transport_matrix_to_device(Arc::new(
+                    self.generate_trace_row_major(
+                        &child_vk.cpu,
+                        &proofs.iter().map(|proof| proof.cpu.clone()).collect_vec(),
+                        &preflights
+                            .iter()
+                            .map(|preflight| preflight.cpu.clone())
+                            .collect_vec(),
+                    ),
+                )),
+            }
         }
     }
 
@@ -368,6 +558,7 @@ mod cuda_tracegen {
                 StackingModuleChip::EqBase,
                 StackingModuleChip::EqBits,
             ];
+            let blob = StackingBlob::new(child_vk, proofs, preflights);
             chips
                 .iter()
                 .map(|chip| {
@@ -376,7 +567,7 @@ mod cuda_tracegen {
                         child_vk,
                         &proofs,
                         &preflights,
-                        &(),
+                        &blob,
                     )
                 })
                 .map(AirProvingContextV2::simple_no_pis)

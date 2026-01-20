@@ -64,6 +64,146 @@ pub struct EqBitsCols<F> {
 }
 
 ///////////////////////////////////////////////////////////////////////////
+/// AIR
+///////////////////////////////////////////////////////////////////////////
+pub struct EqBitsAir {
+    // Internal buses
+    pub eq_bits_internal_bus: EqBitsInternalBus,
+    pub eq_bits_lookup_bus: EqBitsLookupBus,
+    pub eq_rand_values_bus: EqRandValuesLookupBus,
+
+    // Other fields
+    pub n_stack: usize,
+    pub l_skip: usize,
+}
+
+impl BaseAirWithPublicValues<F> for EqBitsAir {}
+impl PartitionedBaseAir<F> for EqBitsAir {}
+
+impl<F> BaseAir<F> for EqBitsAir {
+    fn width(&self) -> usize {
+        EqBitsCols::<F>::width()
+    }
+}
+
+impl<AB: AirBuilder + InteractionBuilder> Air<AB> for EqBitsAir
+where
+    AB::F: PrimeField32 + TwoAdicField,
+    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+{
+    fn eval(&self, builder: &mut AB) {
+        let main = builder.main();
+        let (local, next) = (main.row_slice(0), main.row_slice(1));
+
+        let local: &EqBitsCols<AB::Var> = (*local).borrow();
+        let next: &EqBitsCols<AB::Var> = (*next).borrow();
+
+        NestedForLoopSubAir::<1, 0> {}.eval(
+            builder,
+            (
+                (
+                    NestedForLoopIoCols {
+                        is_enabled: local.is_valid,
+                        counter: [local.proof_idx],
+                        is_first: [local.is_first],
+                    }
+                    .map_into(),
+                    NestedForLoopIoCols {
+                        is_enabled: next.is_valid,
+                        counter: [next.proof_idx],
+                        is_first: [next.is_first],
+                    }
+                    .map_into(),
+                ),
+                NestedForLoopAuxCols { is_transition: [] },
+            ),
+        );
+        builder.assert_bool(local.is_valid);
+        builder.assert_bool(local.is_first);
+
+        /*
+         * Constrain that the root evaluation is correct, i.e. eq_bits([], []) = 1.
+         */
+        let mut when_first = builder.when(local.is_first);
+
+        when_first.assert_zero(local.sub_b_value);
+        when_first.assert_zero(local.num_bits);
+        when_first.assert_zero(local.b_lsb);
+
+        assert_zeros(&mut when_first, local.u_val);
+        assert_one_ext(&mut when_first, local.sub_eval);
+
+        /*
+         * Receive the parent b_value and eq_bits(u[0..k - 1], b[0..k - 1]) eval, as
+         * well as the value of u_{n_stack - num_bits + 1}.
+         */
+        self.eq_rand_values_bus.receive(
+            builder,
+            local.proof_idx,
+            EqRandValuesLookupMessage {
+                idx: AB::Expr::from_canonical_usize(self.n_stack + 1) - local.num_bits,
+                u: local.u_val.map(Into::into),
+            },
+            and(not(local.is_first), local.is_valid),
+        );
+
+        self.eq_bits_internal_bus.receive(
+            builder,
+            local.proof_idx,
+            EqBitsInternalMessage {
+                b_value: local.sub_b_value.into(),
+                num_bits: local.num_bits.into() - AB::Expr::ONE,
+                eval: local.sub_eval.map(Into::into),
+            },
+            and(not(local.is_first), local.is_valid),
+        );
+
+        let b_value = AB::Expr::TWO * local.sub_b_value + local.b_lsb;
+        builder.assert_bool(local.b_lsb);
+
+        /*
+         * Compute eq_bits(u, b) and send it to the appropriate internal and external
+         * buses.
+         */
+        let eval = ext_field_multiply(
+            local.sub_eval,
+            ext_field_subtract_scalar::<AB::Expr>(
+                ext_field_subtract::<AB::Expr>(
+                    ext_field_add_scalar::<AB::Expr>(
+                        ext_field_multiply_scalar(local.u_val, AB::Expr::TWO * local.b_lsb),
+                        AB::Expr::ONE,
+                    ),
+                    local.u_val,
+                ),
+                local.b_lsb,
+            ),
+        );
+
+        self.eq_bits_internal_bus.send(
+            builder,
+            local.proof_idx,
+            EqBitsInternalMessage {
+                b_value: b_value.clone(),
+                num_bits: local.num_bits.into(),
+                eval: eval.clone(),
+            },
+            local.is_valid * local.internal_mult,
+        );
+
+        self.eq_bits_lookup_bus.send(
+            builder,
+            local.proof_idx,
+            EqBitsLookupMessage {
+                b_value: b_value * AB::Expr::from_canonical_usize(1 << self.l_skip),
+                num_bits: local.num_bits.into(),
+                eval,
+            },
+            local.is_valid * local.external_mult,
+        );
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////
 /// TRACE GENERATOR
 ///////////////////////////////////////////////////////////////////////////
 pub struct EqBitsTraceGenerator;
@@ -214,145 +354,5 @@ impl EqBitsTraceGenerator {
         }
 
         RowMajorMatrix::new(combined_trace, width)
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////
-/// AIR
-///////////////////////////////////////////////////////////////////////////
-pub struct EqBitsAir {
-    // Internal buses
-    pub eq_bits_internal_bus: EqBitsInternalBus,
-    pub eq_bits_lookup_bus: EqBitsLookupBus,
-    pub eq_rand_values_bus: EqRandValuesLookupBus,
-
-    // Other fields
-    pub n_stack: usize,
-    pub l_skip: usize,
-}
-
-impl BaseAirWithPublicValues<F> for EqBitsAir {}
-impl PartitionedBaseAir<F> for EqBitsAir {}
-
-impl<F> BaseAir<F> for EqBitsAir {
-    fn width(&self) -> usize {
-        EqBitsCols::<F>::width()
-    }
-}
-
-impl<AB: AirBuilder + InteractionBuilder> Air<AB> for EqBitsAir
-where
-    AB::F: PrimeField32 + TwoAdicField,
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
-{
-    fn eval(&self, builder: &mut AB) {
-        let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
-
-        let local: &EqBitsCols<AB::Var> = (*local).borrow();
-        let next: &EqBitsCols<AB::Var> = (*next).borrow();
-
-        NestedForLoopSubAir::<1, 0> {}.eval(
-            builder,
-            (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.is_valid,
-                        counter: [local.proof_idx],
-                        is_first: [local.is_first],
-                    }
-                    .map_into(),
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_valid,
-                        counter: [next.proof_idx],
-                        is_first: [next.is_first],
-                    }
-                    .map_into(),
-                ),
-                NestedForLoopAuxCols { is_transition: [] },
-            ),
-        );
-        builder.assert_bool(local.is_valid);
-        builder.assert_bool(local.is_first);
-
-        /*
-         * Constrain that the root evaluation is correct, i.e. eq_bits([], []) = 1.
-         */
-        let mut when_first = builder.when(local.is_first);
-
-        when_first.assert_zero(local.sub_b_value);
-        when_first.assert_zero(local.num_bits);
-        when_first.assert_zero(local.b_lsb);
-
-        assert_zeros(&mut when_first, local.u_val);
-        assert_one_ext(&mut when_first, local.sub_eval);
-
-        /*
-         * Receive the parent b_value and eq_bits(u[0..k - 1], b[0..k - 1]) eval, as
-         * well as the value of u_{n_stack - num_bits + 1}.
-         */
-        self.eq_rand_values_bus.receive(
-            builder,
-            local.proof_idx,
-            EqRandValuesLookupMessage {
-                idx: AB::Expr::from_canonical_usize(self.n_stack + 1) - local.num_bits,
-                u: local.u_val.map(Into::into),
-            },
-            and(not(local.is_first), local.is_valid),
-        );
-
-        self.eq_bits_internal_bus.receive(
-            builder,
-            local.proof_idx,
-            EqBitsInternalMessage {
-                b_value: local.sub_b_value.into(),
-                num_bits: local.num_bits.into() - AB::Expr::ONE,
-                eval: local.sub_eval.map(Into::into),
-            },
-            and(not(local.is_first), local.is_valid),
-        );
-
-        let b_value = AB::Expr::TWO * local.sub_b_value + local.b_lsb;
-        builder.assert_bool(local.b_lsb);
-
-        /*
-         * Compute eq_bits(u, b) and send it to the appropriate internal and external
-         * buses.
-         */
-        let eval = ext_field_multiply(
-            local.sub_eval,
-            ext_field_subtract_scalar::<AB::Expr>(
-                ext_field_subtract::<AB::Expr>(
-                    ext_field_add_scalar::<AB::Expr>(
-                        ext_field_multiply_scalar(local.u_val, AB::Expr::TWO * local.b_lsb),
-                        AB::Expr::ONE,
-                    ),
-                    local.u_val,
-                ),
-                local.b_lsb,
-            ),
-        );
-
-        self.eq_bits_internal_bus.send(
-            builder,
-            local.proof_idx,
-            EqBitsInternalMessage {
-                b_value: b_value.clone(),
-                num_bits: local.num_bits.into(),
-                eval: eval.clone(),
-            },
-            local.is_valid * local.internal_mult,
-        );
-
-        self.eq_bits_lookup_bus.send(
-            builder,
-            local.proof_idx,
-            EqBitsLookupMessage {
-                b_value: b_value * AB::Expr::from_canonical_usize(1 << self.l_skip),
-                num_bits: local.num_bits.into(),
-                eval,
-            },
-            local.is_valid * local.external_mult,
-        );
     }
 }

@@ -1,5 +1,6 @@
 use std::iter::once;
 
+use cuda_backend_v2::EF;
 use itertools::Itertools;
 use openvm_cuda_common::d_buffer::DeviceBuffer;
 use stark_backend_v2::{Digest, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
@@ -57,12 +58,12 @@ pub struct GkrPreflightGpu {
 
 #[derive(Debug)]
 pub struct BatchConstraintPreflightGpu {
-    _dummy: usize,
+    pub sumcheck_rnd: DeviceBuffer<EF>,
 }
 
 #[derive(Debug)]
 pub struct StackingPreflightGpu {
-    _dummy: usize,
+    pub sumcheck_rnd: DeviceBuffer<EF>,
 }
 
 #[derive(Debug)]
@@ -175,12 +176,16 @@ impl PreflightGpu {
         GkrPreflightGpu { _dummy: 0 }
     }
 
-    fn batch_constraint(_preflight: &Preflight) -> BatchConstraintPreflightGpu {
-        BatchConstraintPreflightGpu { _dummy: 0 }
+    fn batch_constraint(preflight: &Preflight) -> BatchConstraintPreflightGpu {
+        BatchConstraintPreflightGpu {
+            sumcheck_rnd: to_device_or_nullptr(&preflight.batch_constraint.sumcheck_rnd).unwrap(),
+        }
     }
 
-    fn stacking(_preflight: &Preflight) -> StackingPreflightGpu {
-        StackingPreflightGpu { _dummy: 0 }
+    fn stacking(preflight: &Preflight) -> StackingPreflightGpu {
+        StackingPreflightGpu {
+            sumcheck_rnd: to_device_or_nullptr(&preflight.stacking.sumcheck_rnd).unwrap(),
+        }
     }
 
     fn whir(_preflight: &Preflight) -> WhirPreflightGpu {

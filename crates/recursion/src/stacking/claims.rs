@@ -67,132 +67,6 @@ pub struct StackingClaimsCols<F> {
 }
 
 ///////////////////////////////////////////////////////////////////////////
-/// TRACE GENERATOR
-///////////////////////////////////////////////////////////////////////////
-pub struct StackingClaimsTraceGenerator;
-
-impl StackingClaimsTraceGenerator {
-    #[tracing::instrument(level = "trace", skip_all)]
-    pub fn generate_trace(
-        vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
-        preflights: &[Preflight],
-    ) -> RowMajorMatrix<F> {
-        debug_assert_eq!(proofs.len(), preflights.len());
-
-        let width = StackingClaimsCols::<usize>::width();
-
-        if proofs.is_empty() {
-            return RowMajorMatrix::new(vec![F::ZERO; width], width);
-        }
-
-        let mut combined_trace = Vec::<F>::new();
-        let mut total_rows = 0usize;
-
-        for (proof_idx, (proof, preflight)) in proofs.iter().zip(preflights).enumerate() {
-            let claims = proof
-                .stacking_proof
-                .stacking_openings
-                .iter()
-                .enumerate()
-                .flat_map(|(commit_idx, openings)| {
-                    openings
-                        .iter()
-                        .enumerate()
-                        .map(move |(stacked_col_idx, opening)| {
-                            (commit_idx, stacked_col_idx, opening)
-                        })
-                })
-                .collect_vec();
-            let stacked_slices =
-                get_stacked_slice_data(vk, &preflight.proof_shape.sorted_trace_vdata);
-
-            let coeffs = compute_coefficients(
-                proof,
-                &stacked_slices,
-                &preflight.stacking.sumcheck_rnd,
-                &preflight.batch_constraint.sumcheck_rnd,
-                &preflight.stacking.lambda,
-                vk.inner.params.l_skip,
-                vk.inner.params.n_stack,
-            )
-            .0
-            .into_iter()
-            .flatten()
-            .collect_vec();
-
-            let num_rows = claims.len();
-            let proof_idx_value = F::from_canonical_usize(proof_idx);
-
-            let mut trace = vec![F::ZERO; num_rows * width];
-
-            for chunk in trace.chunks_mut(width) {
-                let cols: &mut StackingClaimsCols<F> = chunk.borrow_mut();
-                cols.proof_idx = proof_idx_value;
-            }
-
-            let initial_tidx = preflight.stacking.intermediate_tidx[2];
-
-            let mu = preflight.stacking.stacking_batching_challenge;
-            let mu_pows = mu.powers().take(claims.len()).collect_vec();
-
-            let mut final_s_eval = EF::ZERO;
-            let mut whir_claim = EF::ZERO;
-
-            for (idx, (&(commit_idx, stacked_col_idx, &claim), coeff, chunk)) in
-                izip!(&claims, coeffs, trace.chunks_mut(width)).enumerate()
-            {
-                let cols: &mut StackingClaimsCols<F> = chunk.borrow_mut();
-                cols.proof_idx = proof_idx_value;
-                cols.is_valid = F::ONE;
-                cols.is_first = F::from_bool(idx == 0);
-                cols.is_last = F::from_bool(idx + 1 == num_rows);
-
-                cols.commit_idx = F::from_canonical_usize(commit_idx);
-                cols.stacked_col_idx = F::from_canonical_usize(stacked_col_idx);
-
-                cols.tidx = F::from_canonical_usize(initial_tidx + (D_EF * idx));
-                cols.mu.copy_from_slice(mu.as_base_slice());
-                cols.mu_pow.copy_from_slice(mu_pows[idx].as_base_slice());
-
-                cols.stacking_claim.copy_from_slice(claim.as_base_slice());
-                cols.claim_coefficient
-                    .copy_from_slice(coeff.as_base_slice());
-                final_s_eval += claim * coeff;
-                cols.final_s_eval
-                    .copy_from_slice(final_s_eval.as_base_slice());
-
-                whir_claim += mu_pows[idx] * claim;
-                cols.whir_claim.copy_from_slice(whir_claim.as_base_slice());
-            }
-
-            combined_trace.extend(trace);
-            total_rows += num_rows;
-        }
-
-        let padded_rows = total_rows.next_power_of_two();
-        if padded_rows > total_rows {
-            let padding_start = combined_trace.len();
-            combined_trace.resize(padded_rows * width, F::ZERO);
-
-            let padding_proof_idx = F::from_canonical_usize(proofs.len());
-            let mut chunks = combined_trace[padding_start..].chunks_mut(width);
-            let num_padded_rows = padded_rows - total_rows;
-            for i in 0..num_padded_rows {
-                let chunk = chunks.next().unwrap();
-                let cols: &mut StackingClaimsCols<F> = chunk.borrow_mut();
-                cols.proof_idx = padding_proof_idx;
-                if i + 1 == num_padded_rows {
-                    cols.is_last = F::ONE;
-                }
-            }
-        }
-
-        RowMajorMatrix::new(combined_trace, width)
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////
 /// AIR
 ///////////////////////////////////////////////////////////////////////////
 pub struct StackingClaimsAir {
@@ -404,5 +278,234 @@ where
             },
             and(local.is_last, local.is_valid),
         );
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////
+/// TRACE GENERATOR
+///////////////////////////////////////////////////////////////////////////
+pub struct StackingClaimsTraceGenerator;
+
+impl StackingClaimsTraceGenerator {
+    #[tracing::instrument(level = "trace", skip_all)]
+    pub fn generate_trace(
+        vk: &MultiStarkVerifyingKeyV2,
+        proofs: &[Proof],
+        preflights: &[Preflight],
+    ) -> RowMajorMatrix<F> {
+        debug_assert_eq!(proofs.len(), preflights.len());
+
+        let width = StackingClaimsCols::<usize>::width();
+
+        if proofs.is_empty() {
+            return RowMajorMatrix::new(vec![F::ZERO; width], width);
+        }
+
+        let mut combined_trace = Vec::<F>::new();
+        let mut total_rows = 0usize;
+
+        for (proof_idx, (proof, preflight)) in proofs.iter().zip(preflights).enumerate() {
+            let claims = proof
+                .stacking_proof
+                .stacking_openings
+                .iter()
+                .enumerate()
+                .flat_map(|(commit_idx, openings)| {
+                    openings
+                        .iter()
+                        .enumerate()
+                        .map(move |(stacked_col_idx, opening)| {
+                            (commit_idx, stacked_col_idx, opening)
+                        })
+                })
+                .collect_vec();
+            let stacked_slices =
+                get_stacked_slice_data(vk, &preflight.proof_shape.sorted_trace_vdata);
+
+            let coeffs = compute_coefficients(
+                proof,
+                &stacked_slices,
+                &preflight.stacking.sumcheck_rnd,
+                &preflight.batch_constraint.sumcheck_rnd,
+                &preflight.stacking.lambda,
+                vk.inner.params.l_skip,
+                vk.inner.params.n_stack,
+            )
+            .0
+            .into_iter()
+            .flatten()
+            .collect_vec();
+
+            let num_rows = claims.len();
+            let proof_idx_value = F::from_canonical_usize(proof_idx);
+
+            let mut trace = vec![F::ZERO; num_rows * width];
+
+            for chunk in trace.chunks_mut(width) {
+                let cols: &mut StackingClaimsCols<F> = chunk.borrow_mut();
+                cols.proof_idx = proof_idx_value;
+            }
+
+            let initial_tidx = preflight.stacking.intermediate_tidx[2];
+
+            let mu = preflight.stacking.stacking_batching_challenge;
+            let mu_pows = mu.powers().take(claims.len()).collect_vec();
+
+            let mut final_s_eval = EF::ZERO;
+            let mut whir_claim = EF::ZERO;
+
+            for (idx, (&(commit_idx, stacked_col_idx, &claim), coeff, chunk)) in
+                izip!(&claims, coeffs, trace.chunks_mut(width)).enumerate()
+            {
+                let cols: &mut StackingClaimsCols<F> = chunk.borrow_mut();
+                cols.proof_idx = proof_idx_value;
+                cols.is_valid = F::ONE;
+                cols.is_first = F::from_bool(idx == 0);
+                cols.is_last = F::from_bool(idx + 1 == num_rows);
+
+                cols.commit_idx = F::from_canonical_usize(commit_idx);
+                cols.stacked_col_idx = F::from_canonical_usize(stacked_col_idx);
+
+                cols.tidx = F::from_canonical_usize(initial_tidx + (D_EF * idx));
+                cols.mu.copy_from_slice(mu.as_base_slice());
+                cols.mu_pow.copy_from_slice(mu_pows[idx].as_base_slice());
+
+                cols.stacking_claim.copy_from_slice(claim.as_base_slice());
+                cols.claim_coefficient
+                    .copy_from_slice(coeff.as_base_slice());
+                final_s_eval += claim * coeff;
+                cols.final_s_eval
+                    .copy_from_slice(final_s_eval.as_base_slice());
+
+                whir_claim += mu_pows[idx] * claim;
+                cols.whir_claim.copy_from_slice(whir_claim.as_base_slice());
+            }
+
+            combined_trace.extend(trace);
+            total_rows += num_rows;
+        }
+
+        let padded_rows = total_rows.next_power_of_two();
+        if padded_rows > total_rows {
+            let padding_start = combined_trace.len();
+            combined_trace.resize(padded_rows * width, F::ZERO);
+
+            let padding_proof_idx = F::from_canonical_usize(proofs.len());
+            let mut chunks = combined_trace[padding_start..].chunks_mut(width);
+            let num_padded_rows = padded_rows - total_rows;
+            for i in 0..num_padded_rows {
+                let chunk = chunks.next().unwrap();
+                let cols: &mut StackingClaimsCols<F> = chunk.borrow_mut();
+                cols.proof_idx = padding_proof_idx;
+                if i + 1 == num_padded_rows {
+                    cols.is_last = F::ONE;
+                }
+            }
+        }
+
+        RowMajorMatrix::new(combined_trace, width)
+    }
+}
+
+#[cfg(feature = "cuda")]
+pub(crate) mod cuda {
+    use openvm_cuda_backend::base::DeviceMatrix;
+    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
+
+    use super::*;
+    use crate::{
+        cuda::{preflight::PreflightGpu, proof::ProofGpu},
+        stacking::{
+            cuda_abi::{
+                ClaimsRecordsPerProof, StackingClaim, stacking_claims_tracegen,
+                stacking_claims_tracegen_temp_bytes,
+            },
+            cuda_tracegen::StackingBlob,
+        },
+    };
+
+    #[tracing::instrument(level = "trace", skip_all)]
+    pub fn generate_trace(
+        proofs_gpu: &[ProofGpu],
+        preflights_gpu: &[PreflightGpu],
+        blob: &StackingBlob,
+    ) -> DeviceMatrix<F> {
+        let mut num_valid_rows = 0;
+        let mut row_bounds = Vec::with_capacity(proofs_gpu.len());
+        let claims = proofs_gpu
+            .iter()
+            .map(|proof| {
+                let ret = proof
+                    .cpu
+                    .stacking_proof
+                    .stacking_openings
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(commit_idx, openings)| {
+                        openings
+                            .iter()
+                            .enumerate()
+                            .map(move |(stacked_col_idx, opening)| StackingClaim {
+                                commit_idx: commit_idx as u32,
+                                stacked_col_idx: stacked_col_idx as u32,
+                                claim: *opening,
+                            })
+                    })
+                    .collect_vec();
+                num_valid_rows += ret.len();
+                row_bounds.push(num_valid_rows as u32);
+                ret.to_device().unwrap()
+            })
+            .collect_vec();
+        let mu_pows = preflights_gpu
+            .iter()
+            .enumerate()
+            .map(|(proof_idx, preflight)| {
+                let mu = preflight.cpu.stacking.stacking_batching_challenge;
+                mu.powers()
+                    .take(claims[proof_idx].len())
+                    .collect_vec()
+                    .to_device()
+                    .unwrap()
+            })
+            .collect_vec();
+
+        let height = num_valid_rows.next_power_of_two();
+        let width = StackingClaimsCols::<usize>::width();
+        let d_trace = DeviceMatrix::with_capacity(height, width);
+
+        let d_claims = claims.iter().map(|buf| buf.as_ptr()).collect_vec();
+        let d_coeffs = blob.coeffs.iter().map(|buf| buf.as_ptr()).collect_vec();
+        let d_mu_pows = mu_pows.iter().map(|buf| buf.as_ptr()).collect_vec();
+        let d_records = preflights_gpu
+            .iter()
+            .map(|preflight| ClaimsRecordsPerProof {
+                initial_tidx: preflight.cpu.stacking.intermediate_tidx[2] as u32,
+                mu: preflight.cpu.stacking.stacking_batching_challenge,
+            })
+            .collect_vec()
+            .to_device()
+            .unwrap();
+
+        unsafe {
+            let temp_bytes = stacking_claims_tracegen_temp_bytes(d_trace.buffer(), height).unwrap();
+            let d_temp_buffer = DeviceBuffer::<u8>::with_capacity(temp_bytes);
+            stacking_claims_tracegen(
+                d_trace.buffer(),
+                height,
+                width,
+                &row_bounds,
+                d_claims,
+                d_coeffs,
+                d_mu_pows,
+                &d_records,
+                proofs_gpu.len() as u32,
+                &d_temp_buffer,
+                temp_bytes,
+            )
+            .unwrap();
+        }
+
+        d_trace
     }
 }
