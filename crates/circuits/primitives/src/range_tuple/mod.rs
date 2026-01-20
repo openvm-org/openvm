@@ -32,7 +32,7 @@ pub use cuda::*;
 pub mod tests;
 
 #[derive(Copy, Clone)]
-pub struct RangeTupleCols<'a, T> {
+pub struct RangeTupleColsRef<'a, T> {
     /// Contains all possible tuple combinations within specified ranges
     pub tuple: &'a [T],
     /// Array of (N-1) boolean columns. `is_first[i]` is 1 if `tuple[i + 1]` has just switched to a new number, 0 otherwise.
@@ -41,7 +41,7 @@ pub struct RangeTupleCols<'a, T> {
     pub mult: &'a T,
 }
 
-impl<'a, T> RangeTupleCols<'a, T> {
+impl<'a, T> RangeTupleColsRef<'a, T> {
     fn from_slice<const N: usize>(slice: &'a [T]) -> Self {
         let (tuple, rest) = slice.split_at(N);
         let (is_first, rest) = rest.split_at(N - 1);
@@ -76,8 +76,8 @@ impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupl
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let (local, next) = (main.row_slice(0), main.row_slice(1));
-        let local = RangeTupleCols::from_slice::<N>((*local).borrow());
-        let next = RangeTupleCols::from_slice::<N>((*next).borrow());
+        let local = RangeTupleColsRef::from_slice::<N>((*local).borrow());
+        let next = RangeTupleColsRef::from_slice::<N>((*next).borrow());
 
         // Constrain tuples for first and last rows
         for i in 0..N {
