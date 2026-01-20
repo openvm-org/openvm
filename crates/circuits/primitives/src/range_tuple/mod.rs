@@ -99,7 +99,7 @@ impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupl
             next.tuple[N-1] - local.tuple[N-1]
         );
 
-        // Constrain the first row of is_first to always be one, and constain is_first to always be bool
+        // Constrain the first row of is_first to always be one, and constrain is_first to always be bool
         for i in 0..N-1 {
             builder.when_first_row().assert_one(local.is_first[i]);
             builder.assert_bool(local.is_first[i]);
