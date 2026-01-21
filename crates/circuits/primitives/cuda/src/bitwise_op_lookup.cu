@@ -20,7 +20,7 @@ __global__ void bitwise_op_lookup_tracegen(
     uint32_t row_idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (row_idx < num_rows) {
         uint32_t x = row_idx >> NUM_BITS;
-        uint32_t y = row_idx ^ (x << NUM_BITS);
+        uint32_t y = row_idx & ((1U << NUM_BITS) - 1);
 
         Fp x_bits_array[NUM_BITS];
         Fp y_bits_array[NUM_BITS];

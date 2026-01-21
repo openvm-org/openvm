@@ -79,9 +79,11 @@ impl<AB: InteractionBuilder, const NUM_BITS: usize> Air<AB>
         // 2. Reconstruct x and y from their binary decompositions
         // x = Σ(x_bits[i] * 2^i), y = Σ(y_bits[i] * 2^i)
         let reconstruct = |bits: &[AB::Var; NUM_BITS]| {
-            bits.iter().enumerate().fold(AB::Expr::ZERO, |acc, (i, &bit)| {
-                acc + bit * AB::Expr::from_canonical_usize(1 << i)
-            })
+            bits.iter()
+                .enumerate()
+                .fold(AB::Expr::ZERO, |acc, (i, &bit)| {
+                    acc + bit * AB::Expr::from_canonical_usize(1 << i)
+                })
         };
         let x_reconstructed = reconstruct(&local.x_bits);
         let y_reconstructed = reconstruct(&local.y_bits);
@@ -100,10 +102,10 @@ impl<AB: InteractionBuilder, const NUM_BITS: usize> Air<AB>
             });
 
         // 4. Combined index: idx = x * (2^NUM_BITS) + y
-        let combined_idx = x_reconstructed.clone()
-            * AB::Expr::from_canonical_usize(1 << NUM_BITS)
+        let combined_idx = x_reconstructed.clone() * AB::Expr::from_canonical_usize(1 << NUM_BITS)
             + y_reconstructed.clone();
-        let next_combined_idx = reconstruct(&next.x_bits) * AB::Expr::from_canonical_usize(1 << NUM_BITS)
+        let next_combined_idx = reconstruct(&next.x_bits)
+            * AB::Expr::from_canonical_usize(1 << NUM_BITS)
             + reconstruct(&next.y_bits);
 
         // 5. Constrain that combined index increments by 1 each row
@@ -198,21 +200,21 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChip<NUM_BITS> {
         let num_cols = BitwiseOperationLookupCols::<F, NUM_BITS>::width();
         let num_rows = (1 << NUM_BITS) * (1 << NUM_BITS);
         let mut rows = F::zero_vec(num_rows * num_cols);
-        
+
         for (n, row) in rows.chunks_mut(num_cols).enumerate() {
             let cols: &mut BitwiseOperationLookupCols<F, NUM_BITS> = row.borrow_mut();
-            
+
             // Compute x and y from row index: row n corresponds to (x, y) where
             // x = n / (2^NUM_BITS), y = n % (2^NUM_BITS)
             let x = (n / (1 << NUM_BITS)) as u32;
             let y = (n % (1 << NUM_BITS)) as u32;
-            
+
             // Set x_bits and y_bits: decompose x and y into binary
             for i in 0..NUM_BITS {
                 cols.x_bits[i] = F::from_canonical_u32((x >> i) & 1);
                 cols.y_bits[i] = F::from_canonical_u32((y >> i) & 1);
             }
-            
+
             // Set multiplicities
             cols.mult_range = F::from_canonical_u32(
                 self.count_range[n].swap(0, std::sync::atomic::Ordering::SeqCst),
