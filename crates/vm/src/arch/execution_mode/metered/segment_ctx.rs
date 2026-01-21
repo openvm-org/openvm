@@ -6,6 +6,8 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
 
+/// Extension field size.
+const D_EF: usize = 4;
 pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
 pub const DEFAULT_MAX_TRACE_HEIGHT_BITS: u8 = 22;
@@ -14,7 +16,12 @@ pub const DEFAULT_MAX_MEMORY: usize = 15 << 30; // 15GiB
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 const DEFAULT_MAIN_CELL_WEIGHT: usize = 3; // 1 + 2^{log_blowup=1}
 const DEFAULT_MAIN_CELL_SECONDARY_WEIGHT: f64 = 0.5;
-const DEFAULT_INTERACTION_CELL_WEIGHT: usize = 8; // 2 * D_EF
+/// Each interaction contributes 2 * D_EF base field elements to the GKR segment
+/// tree leaves. We then use additional buffer whose size is a quarter of that.
+/// We need another `2 * sqrt(N) * D_EF` base field elements for eq buffers and `N / 512 * D_EF`
+/// field elements for temporary buffers -- we add a `+1` which accounts for these terms unless `N`
+/// is very small, in which case it will accounted for by a general safety buffer.
+const DEFAULT_INTERACTION_CELL_WEIGHT: usize = 2 * D_EF + 2 * D_EF / 4 + 1;
 
 #[derive(derive_new::new, Clone, Debug, Serialize, Deserialize)]
 pub struct Segment {
