@@ -21,6 +21,7 @@ use stark_backend_v2::{
         AirProvingContextV2, ColMajorMatrix, CommittedTraceDataV2, CpuBackendV2, TraceCommitterV2,
     },
 };
+use strum::EnumDiscriminants;
 
 use crate::{
     batch_constraint::{
@@ -723,7 +724,9 @@ impl BatchConstraintModule {
     }
 }
 
-#[derive(strum_macros::Display)]
+// NOTE: ordering of enum must match AIR ordering
+#[derive(strum_macros::Display, EnumDiscriminants)]
+#[strum_discriminants(repr(usize))]
 enum BatchConstraintModuleChip {
     SymbolicExpression {
         max_num_proofs: usize,
@@ -743,6 +746,12 @@ enum BatchConstraintModuleChip {
     InteractionsFolding,
     ConstraintsFolding,
     EqNeg,
+}
+
+impl BatchConstraintModuleChip {
+    fn index(&self) -> usize {
+        BatchConstraintModuleChipDiscriminants::from(self) as usize
+    }
 }
 
 impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModuleChip {
@@ -867,10 +876,8 @@ pub mod cuda_tracegen {
                 ),
                 Eq3b => generate_eq_3b_trace(child_vk, &blob.eq_3b_blob, preflights),
                 _ => {
-                    let proofs = proofs.iter().map(|p| p.cpu.clone()).collect::<Vec<_>>();
-                    let preflights = preflights.iter().map(|p| p.cpu.clone()).collect::<Vec<_>>();
-                    let trace = self.generate_trace_row_major(child_vk, &proofs, &preflights, blob);
-                    transport_matrix_to_device(Arc::new(trace))
+                    // Avoid calling any H2D inside a par_iter due to subtleties with CUDA streams
+                    unreachable!("CPU tracegen handled separately with par_iter");
                 }
             }
         }
@@ -891,16 +898,20 @@ pub mod cuda_tracegen {
             let cpu_preflights = preflights.iter().map(|p| p.cpu.clone()).collect::<Vec<_>>();
             let blob = self.generate_blob(&child_vk.cpu, &cpu_proofs, &cpu_preflights);
 
-            let chips = [
+            // Chips with cuda kernels for tracegen
+            let gpu_chips = [
                 BatchConstraintModuleChip::SymbolicExpression {
                     max_num_proofs: self.max_num_proofs,
                     has_cached: self.has_cached,
                 },
+                BatchConstraintModuleChip::Eq3b,
+            ];
+            // Chips that will use fallback cpu tracegen
+            let cpu_chips = [
                 BatchConstraintModuleChip::FractionsFolder,
                 BatchConstraintModuleChip::SumcheckUni,
                 BatchConstraintModuleChip::SumcheckLin,
                 BatchConstraintModuleChip::EqNs,
-                BatchConstraintModuleChip::Eq3b,
                 BatchConstraintModuleChip::EqSharpUni,
                 BatchConstraintModuleChip::EqSharpUniReceiver,
                 BatchConstraintModuleChip::EqUni,
@@ -912,15 +923,51 @@ pub mod cuda_tracegen {
                 BatchConstraintModuleChip::EqNeg,
             ];
             let span = tracing::Span::current();
-            chips
-                .par_iter()
+            // NOTE: do NOT use par_iter since that will lead to kernels on cuda streams != default
+            // stream, whereas previous H2D transfer was on default stream.
+            let indexed_gpu_traces = gpu_chips
+                .iter()
                 .map(|chip| {
+                    // This span is not very useful because the kernel does not synchronize on host:
                     let _guard = span.enter();
                     let trace = ModuleChip::<GlobalCtxGpu, GpuBackendV2>::generate_trace(
                         chip, child_vk, proofs, preflights, &blob,
                     );
-                    AirProvingContextV2::simple_no_pis(trace)
+                    (chip.index(), AirProvingContextV2::simple_no_pis(trace))
                 })
+                .collect_vec();
+            // We parallelize the CPU trace generation
+            let indexed_cpu_traces = cpu_chips
+                .par_iter()
+                .map(|chip| {
+                    // span within par_iter to handle parallelism
+                    let _guard = span.enter();
+                    (
+                        chip.index(),
+                        chip.generate_trace_row_major(
+                            &child_vk.cpu,
+                            &cpu_proofs,
+                            &cpu_preflights,
+                            &blob,
+                        ),
+                    )
+                })
+                .collect::<Vec<_>>();
+            // Transfer H2D serially
+            let indexed_cpu_traces = indexed_cpu_traces
+                .into_iter()
+                .map(|(index, trace)| {
+                    let _guard = span.enter();
+                    let d_trace = transport_matrix_to_device(Arc::new(trace));
+                    (index, AirProvingContextV2::simple_no_pis(d_trace))
+                })
+                .collect::<Vec<_>>();
+
+            indexed_gpu_traces
+                .into_iter()
+                .chain(indexed_cpu_traces)
+                .sorted_by(|a, b| a.0.cmp(&b.0))
+                .map(|(_index, ctx)| ctx)
                 .collect()
         }
     }
