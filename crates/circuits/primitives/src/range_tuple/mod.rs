@@ -35,7 +35,8 @@ pub mod tests;
 pub struct RangeTupleColsRef<'a, T> {
     /// Contains all possible tuple combinations within specified ranges
     pub tuple: &'a [T],
-    /// Array of (N-1) boolean columns. `is_first[i]` is 1 if `tuple[i + 1]` has just switched to a new number, 0 otherwise.
+    /// Array of (N-1) boolean columns. `is_first[i]` is 1 if `tuple[i + 1]` has just switched to a
+    /// new number, 0 otherwise.
     pub is_first: &'a [T],
     /// Number of range checks requested for each tuple combination
     pub mult: &'a T,
@@ -89,45 +90,56 @@ impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupl
         }
 
         // The leftmost tuple column can stay the same or increment by one
-        builder.when_transition().assert_bool(next.tuple[0] - local.tuple[0]);
-        // The middle tuple columns can stay the same, increment by one, or wrap (wrap is handled later)
-        for i in 1..N-1 {
-            builder.when_transition().when_ne(next.is_first[i - 1], AB::Expr::ONE).assert_bool(next.tuple[i] - local.tuple[i]);
+        builder
+            .when_transition()
+            .assert_bool(next.tuple[0] - local.tuple[0]);
+        // The middle tuple columns can stay the same, increment by one, or wrap (wrap is handled
+        // later)
+        for i in 1..N - 1 {
+            builder
+                .when_transition()
+                .when_ne(next.is_first[i - 1], AB::Expr::ONE)
+                .assert_bool(next.tuple[i] - local.tuple[i]);
         }
-        // The rightmost tuple column should always either increment by one or wrap (wrap is handled later)
-        builder.when_transition().when_ne(next.is_first[N-2], AB::Expr::ONE).assert_one(
-            next.tuple[N-1] - local.tuple[N-1]
-        );
+        // The rightmost tuple column should always either increment by one or wrap (wrap is handled
+        // later)
+        builder
+            .when_transition()
+            .when_ne(next.is_first[N - 2], AB::Expr::ONE)
+            .assert_one(next.tuple[N - 1] - local.tuple[N - 1]);
 
-        // Constrain the first row of is_first to always be one, and constrain is_first to always be bool
-        for i in 0..N-1 {
+        // Constrain the first row of is_first to always be one, and constrain is_first to always be
+        // bool
+        for i in 0..N - 1 {
             builder.when_first_row().assert_one(local.is_first[i]);
             builder.assert_bool(local.is_first[i]);
         }
 
         // Constrain is_first based on differences between consecutive tuple rows
-        builder.when_transition().assert_eq(
-            next.tuple[0] - local.tuple[0],
-            next.is_first[0]
-        );
-        for i in 1..N-1 {
-            builder.when_transition().when_ne(next.is_first[i - 1], AB::Expr::ONE).assert_eq(
-                next.tuple[i] - local.tuple[i],
-                next.is_first[i]
-            );
-            builder.when_transition().when(next.is_first[i - 1]).assert_one(next.is_first[i]);
+        builder
+            .when_transition()
+            .assert_eq(next.tuple[0] - local.tuple[0], next.is_first[0]);
+        for i in 1..N - 1 {
+            builder
+                .when_transition()
+                .when_ne(next.is_first[i - 1], AB::Expr::ONE)
+                .assert_eq(next.tuple[i] - local.tuple[i], next.is_first[i]);
+            builder
+                .when_transition()
+                .when(next.is_first[i - 1])
+                .assert_one(next.is_first[i]);
         }
 
         // Handle wrapping by constraining the start and end points of each counter
-        for i in 0..N-1 {
+        for i in 0..N - 1 {
             builder.when_transition().when(next.is_first[i]).assert_eq(
-                local.tuple[i + 1], 
-                AB::F::from_canonical_u32(self.bus.sizes[i + 1] - 1)
+                local.tuple[i + 1],
+                AB::F::from_canonical_u32(self.bus.sizes[i + 1] - 1),
             );
-            builder.when_transition().when(next.is_first[i]).assert_eq(
-                next.tuple[i + 1], 
-                AB::Expr::ZERO
-            );
+            builder
+                .when_transition()
+                .when(next.is_first[i])
+                .assert_eq(next.tuple[i + 1], AB::Expr::ZERO);
         }
 
         self.bus
@@ -194,7 +206,7 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
 
     pub fn generate_trace<F: Field + PrimeField32>(&self) -> RowMajorMatrix<F> {
         let mut unrolled_matrix = Vec::with_capacity(self.count.len() * 2 * N);
-        
+
         for i in 0..self.count.len() {
             let mut tmp_idx = i as u32;
             let mut tuple = [0u32; N];
@@ -202,14 +214,14 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
                 tuple[j] = tmp_idx % self.air.bus.sizes[j];
                 tmp_idx = tmp_idx / self.air.bus.sizes[j];
             }
-            
+
             let mut first_nonzero = 0;
             for j in 0..N {
                 if tuple[j] != 0 {
                     first_nonzero = j;
                 }
             }
-            
+
             let mut is_first = vec![0u32; N - 1];
             for j in 0..first_nonzero {
                 is_first[j] = 0;
@@ -217,7 +229,7 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
             for j in first_nonzero..(N - 1) {
                 is_first[j] = 1;
             }
-            
+
             unrolled_matrix.extend(tuple);
             unrolled_matrix.extend(&is_first);
             unrolled_matrix.push(self.count[i].swap(0, std::sync::atomic::Ordering::Relaxed));

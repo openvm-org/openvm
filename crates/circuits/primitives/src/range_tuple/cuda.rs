@@ -4,10 +4,7 @@ use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types:
 use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer};
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 
-use crate::{
-    cuda_abi::range_tuple::tracegen,
-    range_tuple::{RangeTupleCheckerChip},
-};
+use crate::{cuda_abi::range_tuple::tracegen, range_tuple::RangeTupleCheckerChip};
 
 pub struct RangeTupleCheckerChipGPU<const N: usize> {
     pub count: Arc<DeviceBuffer<F>>,
@@ -55,7 +52,7 @@ impl<RA, const N: usize> Chip<RA, GpuBackend> for RangeTupleCheckerChipGPU<N> {
         });
         // ATTENTION: we create a new buffer to copy `count` into because this chip is stateful and
         // `count` will be reused.
-        let trace = DeviceMatrix::<F>::with_capacity(self.count.len(), N*2);
+        let trace = DeviceMatrix::<F>::with_capacity(self.count.len(), N * 2);
         unsafe {
             tracegen(&self.count, &cpu_count, trace.buffer(), &self.sizes).unwrap();
         }
