@@ -1,6 +1,5 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    mem::size_of,
     sync::{atomic::AtomicU32, Arc},
 };
 
@@ -8,7 +7,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
-    p3_air::{Air, BaseAir, PairBuilder},
+    p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{cpu::CpuBackend, types::AirProvingContext},
@@ -27,27 +26,37 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-#[derive(Default, AlignedBorrow, Copy, Clone)]
+#[derive(AlignedBorrow, Copy, Clone)]
 #[repr(C)]
-pub struct BitwiseOperationLookupCols<T> {
+pub struct BitwiseOperationLookupCols<T, const NUM_BITS: usize> {
+    /// Binary decomposition of x (x_bits[0] is LSB, x_bits[NUM_BITS-1] is MSB)
+    pub x_bits: [T; NUM_BITS],
+    /// Binary decomposition of y (y_bits[0] is LSB, y_bits[NUM_BITS-1] is MSB)
+    pub y_bits: [T; NUM_BITS],
     /// Number of range check operations requested for each (x, y) pair
     pub mult_range: T,
     /// Number of XOR operations requested for each (x, y) pair
     pub mult_xor: T,
 }
 
-#[derive(Default, AlignedBorrow, Copy, Clone)]
-#[repr(C)]
-pub struct BitwiseOperationLookupPreprocessedCols<T> {
-    pub x: T,
-    pub y: T,
-    /// XOR result of x and y (x ⊕ y)
-    pub z_xor: T,
+impl<T: Default, const NUM_BITS: usize> Default for BitwiseOperationLookupCols<T, NUM_BITS> {
+    fn default() -> Self {
+        Self {
+            x_bits: [(); NUM_BITS].map(|_| T::default()),
+            y_bits: [(); NUM_BITS].map(|_| T::default()),
+            mult_range: T::default(),
+            mult_xor: T::default(),
+        }
+    }
 }
 
-pub const NUM_BITWISE_OP_LOOKUP_COLS: usize = size_of::<BitwiseOperationLookupCols<u8>>();
-pub const NUM_BITWISE_OP_LOOKUP_PREPROCESSED_COLS: usize =
-    size_of::<BitwiseOperationLookupPreprocessedCols<u8>>();
+/// Number of multiplicity columns (mult_range and mult_xor)
+pub const NUM_BITWISE_OP_LOOKUP_MULT_COLS: usize = 2;
+
+pub const fn num_bitwise_op_lookup_cols<const NUM_BITS: usize>() -> usize {
+    // x_bits: NUM_BITS, y_bits: NUM_BITS, mult_range: 1, mult_xor: 1
+    NUM_BITS + NUM_BITS + NUM_BITWISE_OP_LOOKUP_MULT_COLS
+}
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct BitwiseOperationLookupAir<const NUM_BITS: usize> {
@@ -64,52 +73,109 @@ impl<F: Field, const NUM_BITS: usize> PartitionedBaseAir<F>
 }
 impl<F: Field, const NUM_BITS: usize> BaseAir<F> for BitwiseOperationLookupAir<NUM_BITS> {
     fn width(&self) -> usize {
-        NUM_BITWISE_OP_LOOKUP_COLS
-    }
-
-    fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
-        let rows: Vec<F> = (0..(1 << NUM_BITS))
-            .flat_map(|x: u32| {
-                (0..(1 << NUM_BITS)).flat_map(move |y: u32| {
-                    [
-                        F::from_canonical_u32(x),
-                        F::from_canonical_u32(y),
-                        F::from_canonical_u32(x ^ y),
-                    ]
-                })
-            })
-            .collect();
-        Some(RowMajorMatrix::new(
-            rows,
-            NUM_BITWISE_OP_LOOKUP_PREPROCESSED_COLS,
-        ))
+        num_bitwise_op_lookup_cols::<NUM_BITS>()
     }
 }
 
-impl<AB: InteractionBuilder + PairBuilder, const NUM_BITS: usize> Air<AB>
+impl<AB: InteractionBuilder, const NUM_BITS: usize> Air<AB>
     for BitwiseOperationLookupAir<NUM_BITS>
 {
     fn eval(&self, builder: &mut AB) {
-        let preprocessed = builder.preprocessed();
-        let prep_local = preprocessed.row_slice(0);
-        let prep_local: &BitwiseOperationLookupPreprocessedCols<AB::Var> = (*prep_local).borrow();
-
         let main = builder.main();
-        let local = main.row_slice(0);
-        let local: &BitwiseOperationLookupCols<AB::Var> = (*local).borrow();
+        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let local: &BitwiseOperationLookupCols<AB::Var, NUM_BITS> = (*local).borrow();
+        let next: &BitwiseOperationLookupCols<AB::Var, NUM_BITS> = (*next).borrow();
 
+        // 1. Binary constraints: ensure each bit is boolean
+        for i in 0..NUM_BITS {
+            builder.assert_bool(local.x_bits[i]);
+            builder.assert_bool(local.y_bits[i]);
+        }
+
+        // 2. Reconstruct x and y from their binary decompositions
+        // x = Σ(x_bits[i] * 2^i), y = Σ(y_bits[i] * 2^i)
+        let x_reconstructed = local.x_bits.iter().enumerate().fold(
+            AB::Expr::ZERO,
+            |acc, (i, &bit)| {
+                acc + bit.into() * AB::Expr::from_canonical_usize(1 << i)
+            },
+        );
+        let y_reconstructed = local.y_bits.iter().enumerate().fold(
+            AB::Expr::ZERO,
+            |acc, (i, &bit)| {
+                acc + bit.into() * AB::Expr::from_canonical_usize(1 << i)
+            },
+        );
+
+        // 3. Compute z_xor algebraically from bits
+        // z_xor_bits[i] = x_bits[i] ^ y_bits[i] = x_bits[i] + y_bits[i] - 2 * x_bits[i] * y_bits[i]
+        // z_xor = Σ(z_xor_bits[i] * 2^i)
+        let z_xor_reconstructed = local
+            .x_bits
+            .iter()
+            .zip(local.y_bits.iter())
+            .enumerate()
+            .fold(AB::Expr::ZERO, |acc, (i, (&x_bit, &y_bit))| {
+                let x_bit_expr: AB::Expr = x_bit.into();
+                let y_bit_expr: AB::Expr = y_bit.into();
+                let xor_bit = x_bit_expr.clone()
+                    + y_bit_expr.clone()
+                    - AB::Expr::from_canonical_usize(2) * x_bit_expr * y_bit_expr;
+                acc + xor_bit * AB::Expr::from_canonical_usize(1 << i)
+            });
+
+        // 4. Combined index: idx = x * (2^NUM_BITS) + y
+        let combined_idx = x_reconstructed.clone()
+            * AB::Expr::from_canonical_usize(1 << NUM_BITS)
+            + y_reconstructed.clone();
+        let next_combined_idx = next.x_bits.iter().enumerate().fold(
+            AB::Expr::ZERO,
+            |acc, (i, &bit)| {
+                acc + bit.into() * AB::Expr::from_canonical_usize(1 << i)
+            },
+        ) * AB::Expr::from_canonical_usize(1 << NUM_BITS)
+            + next.y_bits.iter().enumerate().fold(
+                AB::Expr::ZERO,
+                |acc, (i, &bit)| {
+                    acc + bit.into() * AB::Expr::from_canonical_usize(1 << i)
+                },
+            );
+
+        // 5. Constrain that combined index increments by 1 each row
+        builder
+            .when_transition()
+            .assert_one(next_combined_idx.clone() - combined_idx.clone());
+
+        // 6. Boundary constraints: first row has idx = 0, last row has idx = 2^(2*NUM_BITS) - 1
+        builder.when_first_row().assert_zero(combined_idx.clone());
+        builder.when_last_row().assert_eq(
+            combined_idx,
+            AB::Expr::from_canonical_usize((1 << (2 * NUM_BITS)) - 1),
+        );
+
+        // 7. Use reconstructed values for lookup bus interactions
         self.bus
-            .receive(prep_local.x, prep_local.y, AB::F::ZERO, AB::F::ZERO)
+            .receive(
+                x_reconstructed.clone(),
+                y_reconstructed.clone(),
+                AB::F::ZERO,
+                AB::F::ZERO,
+            )
             .eval(builder, local.mult_range);
         self.bus
-            .receive(prep_local.x, prep_local.y, prep_local.z_xor, AB::F::ONE)
+            .receive(
+                x_reconstructed,
+                y_reconstructed,
+                z_xor_reconstructed,
+                AB::F::ONE,
+            )
             .eval(builder, local.mult_xor);
     }
 }
 
-// Lookup chip for operations on size NUM_BITS integers. Currently has pre-processed columns
-// for x ^ y and range check. Interactions are of form [x, y, z] where z is either x ^ y for
-// XOR or 0 for range check.
+// Lookup chip for operations on size NUM_BITS integers. Uses gate-based constraints
+// with binary decomposition instead of preprocessed trace. Interactions are of form [x, y, z]
+// where z is either x ^ y for XOR or 0 for range check.
 
 pub struct BitwiseOperationLookupChip<const NUM_BITS: usize> {
     pub air: BitwiseOperationLookupAir<NUM_BITS>,
@@ -137,7 +203,7 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChip<NUM_BITS> {
     }
 
     pub fn air_width(&self) -> usize {
-        NUM_BITWISE_OP_LOOKUP_COLS
+        num_bitwise_op_lookup_cols::<NUM_BITS>()
     }
 
     pub fn request_range(&self, x: u32, y: u32) {
@@ -164,9 +230,29 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChip<NUM_BITS> {
 
     /// Generates trace and resets all internal counters to 0.
     pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
-        let mut rows = F::zero_vec(self.count_range.len() * NUM_BITWISE_OP_LOOKUP_COLS);
-        for (n, row) in rows.chunks_mut(NUM_BITWISE_OP_LOOKUP_COLS).enumerate() {
-            let cols: &mut BitwiseOperationLookupCols<F> = row.borrow_mut();
+        let num_cols = num_bitwise_op_lookup_cols::<NUM_BITS>();
+        let num_rows = (1 << NUM_BITS) * (1 << NUM_BITS);
+        let mut rows = F::zero_vec(num_rows * num_cols);
+        
+        for (n, row) in rows.chunks_mut(num_cols).enumerate() {
+            let cols: &mut BitwiseOperationLookupCols<F, NUM_BITS> = row.borrow_mut();
+            
+            // Compute x and y from row index: row n corresponds to (x, y) where
+            // x = n / (2^NUM_BITS), y = n % (2^NUM_BITS)
+            let x = (n / (1 << NUM_BITS)) as u32;
+            let y = (n % (1 << NUM_BITS)) as u32;
+            
+            // Set x_bits: decompose x into binary
+            for i in 0..NUM_BITS {
+                cols.x_bits[i] = F::from_canonical_u32((x >> i) & 1);
+            }
+            
+            // Set y_bits: decompose y into binary
+            for i in 0..NUM_BITS {
+                cols.y_bits[i] = F::from_canonical_u32((y >> i) & 1);
+            }
+            
+            // Set multiplicities
             cols.mult_range = F::from_canonical_u32(
                 self.count_range[n].swap(0, std::sync::atomic::Ordering::SeqCst),
             );
@@ -174,7 +260,7 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChip<NUM_BITS> {
                 self.count_xor[n].swap(0, std::sync::atomic::Ordering::SeqCst),
             );
         }
-        RowMajorMatrix::new(rows, NUM_BITWISE_OP_LOOKUP_COLS)
+        RowMajorMatrix::new(rows, num_cols)
     }
 
     fn idx(x: u32, y: u32) -> usize {
@@ -203,6 +289,6 @@ impl<const NUM_BITS: usize> ChipUsageGetter for BitwiseOperationLookupChip<NUM_B
         1 << (2 * NUM_BITS)
     }
     fn trace_width(&self) -> usize {
-        NUM_BITWISE_OP_LOOKUP_COLS
+        num_bitwise_op_lookup_cols::<NUM_BITS>()
     }
 }
