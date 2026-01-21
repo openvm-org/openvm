@@ -64,7 +64,7 @@ pub fn update_instruction_metrics<F, RA, Executor>(
     RA: Arena,
     Executor: PreflightExecutor<F, RA>,
 {
-    #[cfg(any(debug_assertions, feature = "perf-metrics"))]
+    #[cfg(all(feature = "metrics", any(debug_assertions, feature = "perf-metrics")))]
     {
         let pc = state.pc();
         state.metrics.update_backtrace(pc);
@@ -202,7 +202,7 @@ impl VmMetrics {
         *self = self.partial_take();
     }
 
-    #[cfg(any(debug_assertions, feature = "perf-metrics"))]
+    #[cfg(all(feature = "metrics", any(debug_assertions, feature = "perf-metrics")))]
     pub fn update_backtrace(&mut self, pc: u32) {
         if let Some(info) = self.debug_infos.get(pc) {
             if let Some(trace) = &info.trace {
