@@ -1091,10 +1091,14 @@ where
 
     #[instrument(name = "vm.reset_state", level = "debug", skip_all)]
     pub fn reset_state(&mut self, inputs: impl Into<Streams<Val<E::SC>>>) {
-        self.state
-            .as_mut()
-            .unwrap()
-            .reset(&self.exe.init_memory, self.exe.pc_start, inputs);
+        let state = self.state.as_mut().unwrap();
+        state.reset(&self.exe.init_memory, self.exe.pc_start, inputs);
+
+        #[cfg(all(feature = "metrics", any(feature = "perf-metrics", debug_assertions)))]
+        {
+            state.metrics.fn_bounds = self.exe.fn_bounds.clone();
+            state.metrics.debug_infos = self.exe.program.debug_infos();
+        }
     }
 }
 
