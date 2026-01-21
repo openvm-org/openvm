@@ -101,7 +101,7 @@ __global__ void opening_claims_tracegen(
     }
 
     if (proof_idx == NUM_PROOFS) {
-        row.fill_zero(1, sizeof(OpeningClaimsCols<uint8_t>));
+        row.fill_zero(0, sizeof(OpeningClaimsCols<uint8_t>));
         COL_WRITE_VALUE(row, OpeningClaimsCols, proof_idx, NUM_PROOFS);
         COL_WRITE_VALUE(row, OpeningClaimsCols, is_last, global_row_idx + 1 == height);
         return;
