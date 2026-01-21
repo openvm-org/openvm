@@ -100,6 +100,7 @@ pub fn new_from_outer_multi_vk(
         num_challenges_to_sample,
         trace_height_constraints: vk.inner.trace_height_constraints.clone(),
         log_up_pow_bits: vk.inner.log_up_pow_bits,
+        deep_pow_bits: vk.inner.deep_pow_bits,
         pre_hash: DigestVal::N(pre_hash.to_vec()),
     }
 }

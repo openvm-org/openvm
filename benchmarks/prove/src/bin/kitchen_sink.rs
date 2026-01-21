@@ -6,11 +6,13 @@ use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::{arch::instructions::exe::VmExe, utils::TestStarkEngine as Poseidon2Engine};
 use openvm_continuations::verifier::leaf::types::LeafVmVerifierInput;
 use openvm_native_circuit::{NativeBuilder, NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
+use openvm_native_recursion::fri::MAX_TWO_ADICITY;
 use openvm_sdk::{
     config::SdkVmConfig,
     prover::vm::{new_local_prover, types::VmProvingKey},
     Sdk, StdIn, F, SC,
 };
+use openvm_stark_backend::{config::StarkGenericConfig, p3_field::BasedVectorSpace};
 use openvm_stark_sdk::bench::run_with_metric_collection;
 
 fn verify_native_max_trace_heights(
@@ -31,7 +33,10 @@ fn verify_native_max_trace_heights(
     for leaf_input in leaf_inputs {
         let exe = leaf_prover.exe().clone();
         let vm = &mut leaf_prover.vm;
-        let metered_ctx = vm.build_metered_ctx(&exe);
+        let metered_ctx = vm
+            .build_metered_ctx(&exe)
+            .with_max_cells(usize::MAX) // no segmentation
+            .with_max_trace_height(1 << MAX_TWO_ADICITY);
         let (segments, _) = vm
             .metered_interpreter(&exe)?
             .execute_metered(leaf_input.write_to_stream(), metered_ctx)?;
@@ -76,7 +81,31 @@ fn main() -> Result<()> {
     let sdk = Sdk::new(app_config)?;
     let exe = sdk.convert_to_exe(elf)?;
 
+    let (_, app_vk) = sdk.app_keygen();
+    let ext_degree = <<SC as StarkGenericConfig>::Challenge as BasedVectorSpace<F>>::DIMENSION;
+    println!(
+        "app_total_width = {}",
+        app_vk
+            .vk
+            .inner
+            .per_air
+            .iter()
+            .map(|vk| vk.params.width.total_width(ext_degree))
+            .sum::<usize>()
+    );
     let agg_pk = sdk.agg_pk();
+    println!(
+        "leaf_total_width = {}",
+        agg_pk
+            .leaf_vm_pk
+            .vm_pk
+            .get_vk()
+            .inner
+            .per_air
+            .iter()
+            .map(|vk| vk.params.width.total_width(ext_degree))
+            .sum::<usize>()
+    );
     // Verify that NATIVE_MAX_TRACE_HEIGHTS remains valid
     verify_native_max_trace_heights(
         &sdk,
