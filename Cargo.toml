@@ -1,5 +1,5 @@
 [workspace.package]
-version = "1.4.3"
+version = "1.5.0-rc.0"
 edition = "2021"
 rust-version = "1.90.0"
 authors = ["OpenVM Authors"]
@@ -177,16 +177,16 @@ openvm-verify-stark = { path = "guest-libs/verify_stark", default-features = fal
 openvm-benchmarks-utils = { path = "benchmarks/utils", default-features = false }
 
 # Plonky3
-p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1eed8e6", default-features = false }
-p3-baby-bear = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1eed8e6", default-features = false }
-p3-bn254 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1eed8e6", default-features = false }
-p3-dft = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1eed8e6", default-features = false }
-p3-fri = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1eed8e6", default-features = false }
-p3-keccak-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1eed8e6", default-features = false }
-p3-merkle-tree = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1eed8e6", default-features = false }
-p3-poseidon2 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1eed8e6", default-features = false }
-p3-poseidon2-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1eed8e6", default-features = false }
-p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "1eed8e6", default-features = false }
+p3-field = { version = "=0.4.1", default-features = false }
+p3-baby-bear = { version = "=0.4.1", default-features = false }
+p3-bn254 = { version = "=0.4.1", default-features = false }
+p3-dft = { version = "=0.4.1", default-features = false }
+p3-fri = { version = "=0.4.1", default-features = false }
+p3-keccak-air = { version = "=0.4.1", default-features = false }
+p3-merkle-tree = { version = "=0.4.1", default-features = false }
+p3-poseidon2 = { version = "=0.4.1", default-features = false }
+p3-poseidon2-air = { version = "=0.4.1", default-features = false }
+p3-symmetric = { version = "=0.4.1", default-features = false }
 
 zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
 snark-verifier-sdk = { version = "0.2.0", default-features = false, features = ["loader_halo2", "halo2-axiom"] }

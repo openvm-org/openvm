@@ -4,7 +4,7 @@ use openvm_native_compiler::ir::{
     Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, Witness,
 };
 use openvm_stark_backend::{
-    config::{Com, PcsProof},
+    config::Com,
     p3_util::log2_strict_usize,
     proof::{AdjacentOpenedValues, AirProofData, Commitments, OpenedValues, OpeningProof, Proof},
 };
@@ -235,18 +235,24 @@ impl Witnessable<OuterConfig> for Commitments<Com<BabyBearPoseidon2RootConfig>> 
     }
 }
 
-impl Witnessable<C> for OpeningProof<PcsProof<BabyBearPoseidon2RootConfig>, OuterChallenge> {
+impl Witnessable<C> for OpeningProof<BabyBearPoseidon2RootConfig> {
     type WitnessVariable = OpeningProofVariable<C>;
 
     fn read(&self, builder: &mut Builder<C>) -> Self::WitnessVariable {
         let proof = self.proof.read(builder);
         let values = self.values.read(builder);
-        OpeningProofVariable { proof, values }
+        let deep_pow_witness = self.deep_pow_witness.read(builder);
+        OpeningProofVariable {
+            proof,
+            values,
+            deep_pow_witness,
+        }
     }
 
     fn write(&self, witness: &mut Witness<C>) {
         self.proof.write(witness);
         <_ as Witnessable<C>>::write(&self.values, witness);
+        self.deep_pow_witness.write(witness);
     }
 }
 

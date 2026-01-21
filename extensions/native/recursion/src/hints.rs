@@ -7,7 +7,7 @@ use openvm_native_compiler::ir::{
 };
 use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::{
-    config::{Com, PcsProof},
+    config::Com,
     keygen::types::TraceWidth,
     p3_commit::{BatchOpening, ExtensionMmcs},
     p3_field::{
@@ -273,8 +273,7 @@ impl Hintable<InnerConfig> for Proof<BabyBearPoseidon2Config> {
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
         let commitments = Commitments::<Com<BabyBearPoseidon2Config>>::read(builder);
-        let opening =
-            OpeningProof::<PcsProof<BabyBearPoseidon2Config>, InnerChallenge>::read(builder);
+        let opening = OpeningProof::<BabyBearPoseidon2Config>::read(builder);
         let per_air = Vec::<AirProofData<InnerVal, InnerChallenge>>::read(builder);
         let raw_air_perm_by_height = Vec::<usize>::read(builder);
         // A hacky way to transmute from Array of Var to Array of Usize.
@@ -342,7 +341,7 @@ impl Hintable<InnerConfig> for AirProofData<InnerVal, InnerChallenge> {
     }
 }
 
-impl Hintable<InnerConfig> for OpeningProof<PcsProof<BabyBearPoseidon2Config>, InnerChallenge> {
+impl Hintable<InnerConfig> for OpeningProof<BabyBearPoseidon2Config> {
     type HintVariable = OpeningProofVariable<InnerConfig>;
 
     fn read(builder: &mut Builder<InnerConfig>) -> Self::HintVariable {
@@ -352,8 +351,13 @@ impl Hintable<InnerConfig> for OpeningProof<PcsProof<BabyBearPoseidon2Config>, I
         builder.cycle_tracker_start("HintOpeningValues");
         let values = OpenedValues::read(builder);
         builder.cycle_tracker_end("HintOpeningValues");
+        let deep_pow_witness = builder.hint_felt();
 
-        OpeningProofVariable { proof, values }
+        OpeningProofVariable {
+            proof,
+            values,
+            deep_pow_witness,
+        }
     }
 
     fn write(&self) -> Vec<Vec<<InnerConfig as Config>::N>> {
@@ -361,6 +365,7 @@ impl Hintable<InnerConfig> for OpeningProof<PcsProof<BabyBearPoseidon2Config>, I
 
         stream.extend(self.proof.write());
         stream.extend(self.values.write());
+        stream.extend(self.deep_pow_witness.write());
 
         stream
     }
