@@ -6,7 +6,7 @@ use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 
 use crate::{
     bitwise_op_lookup::{
-        num_bitwise_op_lookup_cols, BitwiseOperationLookupChip, NUM_BITWISE_OP_LOOKUP_MULT_COLS,
+        BitwiseOperationLookupChip, BitwiseOperationLookupCols, NUM_BITWISE_OP_LOOKUP_MULT_COLS,
     },
     cuda_abi::bitwise_op_lookup::tracegen,
 };
@@ -22,6 +22,7 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChipGPU<NUM_BITS> {
     }
 
     pub fn new() -> Self {
+        // The first 2^(2 * NUM_BITS) indices are for range checking, the rest are for XOR
         let count = Arc::new(DeviceBuffer::<F>::with_capacity(
             NUM_BITWISE_OP_LOOKUP_MULT_COLS * Self::num_rows(),
         ));
@@ -54,7 +55,7 @@ impl<const NUM_BITS: usize> Default for BitwiseOperationLookupChipGPU<NUM_BITS> 
 
 impl<RA, const NUM_BITS: usize> Chip<RA, GpuBackend> for BitwiseOperationLookupChipGPU<NUM_BITS> {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
-        let num_cols = num_bitwise_op_lookup_cols::<NUM_BITS>();
+        let num_cols = BitwiseOperationLookupCols::<F, NUM_BITS>::width();
         debug_assert_eq!(
             NUM_BITWISE_OP_LOOKUP_MULT_COLS * Self::num_rows(),
             self.count.len()
