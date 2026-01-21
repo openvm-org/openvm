@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use cuda_backend_v2::BabyBearPoseidon2GpuEngineV2;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{
         BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -16,7 +17,6 @@ use openvm_circuit_primitives::{
 };
 use openvm_cuda_backend::{
     data_transporter::assert_eq_host_and_device_matrix,
-    engine::GpuBabyBearPoseidon2Engine,
     prover_backend::GpuBackend,
     types::{F, SC},
 };
@@ -27,17 +27,17 @@ use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
     p3_air::BaseAir,
     p3_field::{FieldAlgebra, PrimeField32},
-    prover::{cpu::CpuBackend, types::AirProvingContext},
+    prover::{cpu::CpuBackend, types::AirProvingContext, MatrixDimensions},
     rap::AnyRap,
     utils::disable_debug_builder,
-    verifier::VerificationError,
     AirRef, Chip,
 };
-use openvm_stark_sdk::{
-    config::{setup_tracing_with_log_level, FriParameters},
-    engine::{StarkFriEngine, VerificationDataWithFriParams},
-};
+use openvm_stark_sdk::config::setup_tracing_with_log_level;
 use rand::{rngs::StdRng, Rng, SeedableRng};
+use stark_backend_v2::{
+    prover::AirProvingContextV2, verifier::VerifierError, StarkEngineV2,
+    VerificationDataV2 as VerificationData,
+};
 use tracing::Level;
 
 #[cfg(feature = "metrics")]
@@ -66,7 +66,7 @@ use crate::{
         program::ProgramBus,
         SystemPort,
     },
-    utils::next_power_of_two_or_zero,
+    utils::{next_power_of_two_or_zero, test_gpu_engine},
 };
 
 pub struct GpuTestChipHarness<F, Executor, AIR, GpuChip, CpuChip> {
@@ -527,7 +527,7 @@ impl GpuChipTester {
         G: Chip<RA, GpuBackend>,
     {
         let proving_ctx = gpu_chip.generate_proving_ctx(gpu_arena);
-        if proving_ctx.common_main.is_some() {
+        if matches!(proving_ctx.common_main.as_ref(), Some(trace) if trace.height() > 0) {
             self = self.load_air_proving_ctx(Arc::new(air) as AirRef<SC>, proving_ctx);
         }
         self
@@ -694,18 +694,24 @@ impl GpuChipTester {
         self
     }
 
-    pub fn test<P: Fn() -> GpuBabyBearPoseidon2Engine>(
+    pub fn test<P: Fn() -> BabyBearPoseidon2GpuEngineV2>(
         self,
         engine_provider: P,
-    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
-        engine_provider().run_test(self.airs, self.ctxs)
+    ) -> Result<VerificationData, VerifierError> {
+        engine_provider().run_test(
+            self.airs,
+            self.ctxs
+                .into_iter()
+                .map(AirProvingContextV2::from_v1_no_cached)
+                .collect(),
+        )
     }
 
-    pub fn simple_test(self) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
-        self.test(|| GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1)))
+    pub fn simple_test(self) -> Result<VerificationData, VerifierError> {
+        self.test(test_gpu_engine)
     }
 
-    pub fn simple_test_with_expected_error(self, expected_error: VerificationError) {
+    pub fn simple_test_with_expected_error(self, expected_error: VerifierError) {
         disable_debug_builder();
         let msg = format!(
             "Expected verification to fail with {:?}, but it didn't",

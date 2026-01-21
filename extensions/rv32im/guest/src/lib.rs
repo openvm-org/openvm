@@ -25,6 +25,16 @@ pub const REVEAL_FUNCT3: u8 = 0b010;
 pub const PHANTOM_FUNCT3: u8 = 0b011;
 pub const CSRRW_FUNCT3: u8 = 0b001;
 
+/// Maximum number of bits for hint buffer size.
+/// IMPORTANT: Must be synced with MAX_HINT_BUFFER_WORDS_BITS constant for cuda
+/// `crates/circuits/primitives/cuda/include/primitives/constants.h`
+// For the constraints, they are configured for a range of MAX_HINT_BUFFER_WORDS_BITS between
+// [8,16)
+pub const MAX_HINT_BUFFER_WORDS_BITS: usize = 10;
+/// Maximum number of words that can be read in a single HINT_BUFFER instruction.
+/// AIR constraint requires rem_words < 2^MAX_HINT_BUFFER_WORDS_BITS, so max is one less
+pub const MAX_HINT_BUFFER_WORDS: usize = (1 << MAX_HINT_BUFFER_WORDS_BITS) - 1; // 1023 words ≈ 4KB
+
 /// imm options for system phantom instructions
 #[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
 #[repr(u16)]

@@ -1,5 +1,8 @@
 //! Prover extension for the GPU backend which still does trace generation on CPU.
 
+use cuda_backend_v2::{
+    BabyBearPoseidon2GpuEngineV2 as GpuBabyBearPoseidon2Engine, GpuBackendV2 as GpuBackend,
+};
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::*,
@@ -15,9 +18,8 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::bigint::utils::big_uint_to_limbs;
 use openvm_cuda_backend::{
-    chip::{cpu_proving_ctx_to_gpu, get_empty_air_proving_ctx},
-    engine::GpuBabyBearPoseidon2Engine,
-    prover_backend::GpuBackend,
+    base::DeviceMatrix,
+    data_transporter::transport_matrix_to_device,
     types::{F, SC},
 };
 use openvm_instructions::LocalOpcode;
@@ -27,7 +29,15 @@ use openvm_rv32_adapters::{
     Rv32IsEqualModAdapterRecord, Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor,
 };
 use openvm_rv32im_circuit::Rv32ImGpuProverExt;
-use openvm_stark_backend::{p3_air::BaseAir, prover::types::AirProvingContext, Chip};
+use openvm_stark_backend::{
+    p3_air::BaseAir,
+    prover::{
+        cpu::CpuBackend as CpuBackendV1, types::AirProvingContext as AirProvingContextV1,
+        MatrixDimensions,
+    },
+    Chip as ChipV1,
+};
+use stark_backend_v2::{prover::AirProvingContextV2 as AirProvingContext, ChipV2 as Chip};
 use strum::EnumCount;
 
 use crate::{
@@ -35,6 +45,25 @@ use crate::{
     modular_chip::*,
     AlgebraRecord, Fp2Extension, ModularExtension, Rv32ModularConfig, Rv32ModularWithFp2Config,
 };
+
+pub fn cpu_proving_ctx_v1_to_gpu_v2(
+    cpu_ctx: AirProvingContextV1<CpuBackendV1<SC>>,
+) -> AirProvingContext<GpuBackend> {
+    assert!(
+        cpu_ctx.cached_mains.is_empty(),
+        "CPU to GPU transfer of cached traces not supported"
+    );
+    let trace = cpu_ctx
+        .common_main
+        .filter(|t| t.height() > 0)
+        .map(transport_matrix_to_device)
+        .unwrap_or(DeviceMatrix::dummy());
+    AirProvingContext {
+        cached_mains: vec![],
+        common_main: trace,
+        public_values: cpu_ctx.public_values,
+    }
+}
 
 #[derive(derive_new::new)]
 pub struct HybridModularChip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> {
@@ -62,7 +91,7 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
 
         let records = arena.allocated();
         if records.is_empty() {
-            return get_empty_air_proving_ctx::<GpuBackend>();
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % record_size, 0);
 
@@ -81,8 +110,8 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
         let width = adapter_width + BaseAir::<F>::width(&self.cpu.inner.expr);
         let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, width);
         seeker.transfer_to_matrix_arena(&mut matrix_arena, layout);
-        let ctx = self.cpu.generate_proving_ctx(matrix_arena);
-        cpu_proving_ctx_to_gpu(ctx)
+        let cpu_ctx = ChipV1::<_, CpuBackendV1<SC>>::generate_proving_ctx(&self.cpu, matrix_arena);
+        cpu_proving_ctx_v1_to_gpu_v2(cpu_ctx)
     }
 }
 
@@ -109,7 +138,7 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
             + ModularIsEqualCoreCols::<F, TOTAL_LIMBS>::width();
         let records = arena.allocated();
         if records.is_empty() {
-            return get_empty_air_proving_ctx::<GpuBackend>();
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % record_size, 0);
 
@@ -124,8 +153,8 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
         >>();
         let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, trace_width);
         seeker.transfer_to_matrix_arena(&mut matrix_arena, EmptyAdapterCoreLayout::new());
-        let ctx = self.cpu.generate_proving_ctx(matrix_arena);
-        cpu_proving_ctx_to_gpu(ctx)
+        let cpu_ctx = ChipV1::<_, CpuBackendV1<SC>>::generate_proving_ctx(&self.cpu, matrix_arena);
+        cpu_proving_ctx_v1_to_gpu_v2(cpu_ctx)
     }
 }
 
@@ -279,7 +308,7 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
 
         let records = arena.allocated();
         if records.is_empty() {
-            return get_empty_air_proving_ctx::<GpuBackend>();
+            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % record_size, 0);
 
@@ -297,8 +326,8 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
         let width = adapter_width + BaseAir::<F>::width(&self.cpu.inner.expr);
         let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, width);
         seeker.transfer_to_matrix_arena(&mut matrix_arena, layout);
-        let ctx = self.cpu.generate_proving_ctx(matrix_arena);
-        cpu_proving_ctx_to_gpu(ctx)
+        let cpu_ctx = ChipV1::<_, CpuBackendV1<SC>>::generate_proving_ctx(&self.cpu, matrix_arena);
+        cpu_proving_ctx_v1_to_gpu_v2(cpu_ctx)
     }
 }
 

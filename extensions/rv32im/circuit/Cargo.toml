@@ -18,6 +18,8 @@ openvm-circuit = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-rv32im-transpiler = { workspace = true }
+stark-backend-v2 = { workspace = true }
+cuda-backend-v2 = { workspace = true, optional = true }
 strum.workspace = true
 derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
@@ -55,6 +57,7 @@ cuda = [
     "dep:openvm-cuda-builder",
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
+    "dep:cuda-backend-v2",
     "openvm-circuit-primitives/cuda",
     "openvm-circuit/cuda",
 ]

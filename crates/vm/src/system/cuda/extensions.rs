@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+use cuda_backend_v2::{
+    BabyBearPoseidon2GpuEngineV2 as BabyBearPoseidon2GpuEngine, GpuBackendV2 as GpuBackend,
+};
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena, SystemConfig, VmBuilder,
@@ -13,7 +16,6 @@ use openvm_circuit_primitives::{
     },
     var_range::{VariableRangeCheckerAir, VariableRangeCheckerChip, VariableRangeCheckerChipGPU},
 };
-use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_baby_bear::BabyBear;
 
@@ -65,7 +67,7 @@ pub const PV_EXECUTOR_IDX: usize = 0;
 #[derive(Clone)]
 pub struct SystemGpuBuilder;
 
-impl VmBuilder<GpuBabyBearPoseidon2Engine> for SystemGpuBuilder {
+impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
     type VmConfig = SystemConfig;
     type RecordArena = DenseRecordArena;
     type SystemChipInventory = SystemChipInventoryGPU;
@@ -110,7 +112,7 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for SystemGpuBuilder {
         inventory.add_periphery_chip(range_checker.clone());
 
         let hasher_chip = if config.continuation_enabled {
-            let max_buffer_size = (config.segmentation_limits.max_trace_height as usize)
+            let max_buffer_size = (config.segmentation_config.limits.max_trace_height as usize)
                 .next_power_of_two() * 2 // seems like a reliable estimate
                 * (DIGEST_WIDTH * 2); // size of one record
             assert_eq!(inventory.chips().len(), POSEIDON2_INSERTION_IDX);

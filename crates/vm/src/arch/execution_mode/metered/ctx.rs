@@ -49,8 +49,12 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
                 })
                 .unzip();
 
-        let segmentation_ctx =
-            SegmentationCtx::new(air_names, widths, interactions, config.segmentation_limits);
+        let segmentation_ctx = SegmentationCtx::new(
+            air_names,
+            widths,
+            interactions,
+            config.segmentation_config.clone(),
+        );
         let memory_ctx = MemoryCtx::new(config, segmentation_ctx.segment_check_insns);
 
         // Assert that the indices are correct
@@ -99,8 +103,8 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         self
     }
 
-    pub fn with_max_cells(mut self, max_cells: usize) -> Self {
-        self.segmentation_ctx.set_max_cells(max_cells);
+    pub fn with_max_memory(mut self, max_memory: usize) -> Self {
+        self.segmentation_ctx.set_max_memory(max_memory);
         self
     }
 
@@ -120,6 +124,26 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         self.memory_ctx.page_indices_since_checkpoint =
             vec![0; page_indices_since_checkpoint_cap].into_boxed_slice();
         self.memory_ctx.page_indices_since_checkpoint_len = 0;
+        self
+    }
+
+    pub fn with_main_cell_weight(mut self, weight: usize) -> Self {
+        self.segmentation_ctx.set_main_cell_weight(weight);
+        self
+    }
+
+    pub fn with_main_cell_secondary_weight(mut self, weight: f64) -> Self {
+        self.segmentation_ctx.set_main_cell_secondary_weight(weight);
+        self
+    }
+
+    pub fn with_interaction_cell_weight(mut self, weight: usize) -> Self {
+        self.segmentation_ctx.set_interaction_cell_weight(weight);
+        self
+    }
+
+    pub fn with_base_field_size(mut self, base_field_size: usize) -> Self {
+        self.segmentation_ctx.set_base_field_size(base_field_size);
         self
     }
 

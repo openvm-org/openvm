@@ -6,6 +6,8 @@
 
 using namespace riscv;
 using namespace program;
+using hintstore::MAX_HINT_BUFFER_WORDS;
+using hintstore::MAX_HINT_BUFFER_WORDS_BITS;
 
 template <typename T> struct Rv32HintStoreCols {
     // common
@@ -87,11 +89,32 @@ struct Rv32HintStore {
         COL_WRITE_ARRAY(row, Rv32HintStoreCols, mem_ptr_limbs, mem_ptr_limbs);
 
         if (local_idx == 0) {
+// The overflow check for mem_ptr + num_words * 4 is not needed because
+// 4 * MAX_HINT_BUFFER_WORDS < 2^pointer_max_bits guarantees no overflow
+#ifdef CUDA_DEBUG
+            assert(MAX_HINT_BUFFER_WORDS_BITS + 2 < pointer_max_bits);
+#endif
+
+            // Range check for mem_ptr (using pointer_max_bits)
             uint32_t msl_rshift = (RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS;
             uint32_t msl_lshift = RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - pointer_max_bits;
+
+// Range check for num_words (using MAX_HINT_BUFFER_WORDS_BITS)
+// These constraints only work for MAX_HINT_BUFFER_WORDS_BITS in [8, 16)
+#ifdef CUDA_DEBUG
+            assert(MAX_HINT_BUFFER_WORDS_BITS >= 8 && MAX_HINT_BUFFER_WORDS_BITS < 16);
+#endif
+
+#ifdef CUDA_DEBUG
+            assert(record.num_words <= MAX_HINT_BUFFER_WORDS);
+#endif
+            uint32_t rem_words_msl_lshift =
+                (RV32_REGISTER_NUM_LIMBS - 2) * RV32_CELL_BITS - MAX_HINT_BUFFER_WORDS_BITS;
+
+            // Combined range check for mem_ptr and num_words
             bitwise_lookup.add_range(
                 (record.mem_ptr >> msl_rshift) << msl_lshift,
-                (record.num_words >> msl_rshift) << msl_lshift
+                ((record.num_words >> 8) & 0xFF) << rem_words_msl_lshift
             );
             mem_helper.fill(
                 row.slice_from(COL_INDEX(Rv32HintStoreCols, mem_ptr_aux_cols)),

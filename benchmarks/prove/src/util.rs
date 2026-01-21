@@ -66,9 +66,9 @@ pub struct BenchmarkCli {
     #[arg(long, alias = "max_segment_length")]
     pub max_segment_length: Option<u32>,
 
-    /// Total cells used in all chips in segment for continuations
+    /// Total memory in bytes used in all chips in segment for continuations
     #[arg(long)]
-    pub segment_max_cells: Option<usize>,
+    pub segment_max_memory: Option<usize>,
 
     /// Controls the arity (num_children) of the aggregation tree
     #[command(flatten)]
@@ -92,11 +92,16 @@ impl BenchmarkCli {
         if let Some(max_height) = self.max_segment_length {
             app_vm_config
                 .as_mut()
-                .segmentation_limits
+                .segmentation_config
+                .limits
                 .set_max_trace_height(max_height);
         }
-        if let Some(max_cells) = self.segment_max_cells {
-            app_vm_config.as_mut().segmentation_limits.max_cells = max_cells;
+        if let Some(max_memory) = self.segment_max_memory {
+            app_vm_config
+                .as_mut()
+                .segmentation_config
+                .limits
+                .set_max_memory(max_memory);
         }
         AppConfig {
             app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
