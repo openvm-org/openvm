@@ -9,7 +9,7 @@ use openvm_continuations::verifier::{
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_native_recursion::hints::{InnerBatchOpening, InnerFriProof, InnerQueryProof};
 use openvm_stark_backend::{
-    config::{Com, PcsProof},
+    config::Com,
     interaction::{fri_log_up::FriLogUpPartialProof, RapPhaseSeqKind},
     p3_field::{
         extension::BinomialExtensionField, BasedVectorSpace, PrimeCharacteristicRing, PrimeField32,
@@ -23,8 +23,8 @@ use super::{F, SC};
 type Challenge = BinomialExtensionField<F, 4>;
 
 /// Codec version should change only when proof system or proof format changes.
-/// It does correspond to the main openvm version (which may change more frequently).
-const CODEC_VERSION: u32 = 1;
+/// It does not correspond to the main openvm version (which may change more frequently).
+const CODEC_VERSION: u32 = 2;
 
 /// Hardware and language independent encoding.
 /// Uses the Writer pattern for more efficient encoding without intermediate buffers.
@@ -128,13 +128,11 @@ impl Encode for Proof<SC> {
 //     pub values: OpenedValues<Challenge>,
 // }
 // ```
-fn encode_opening_proof<W: Write>(
-    opening: &OpeningProof<PcsProof<SC>, Challenge>,
-    writer: &mut W,
-) -> Result<()> {
+fn encode_opening_proof<W: Write>(opening: &OpeningProof<SC>, writer: &mut W) -> Result<()> {
     // Encode FRI proof
     opening.proof.encode(writer)?;
     encode_opened_values(&opening.values, writer)?;
+    opening.deep_pow_witness.encode(writer)?;
     Ok(())
 }
 
@@ -439,12 +437,17 @@ fn decode_commitments<R: Read>(reader: &mut R) -> Result<Vec<Com<SC>>> {
     Ok(coms)
 }
 
-fn decode_opening_proof<R: Read>(reader: &mut R) -> Result<OpeningProof<PcsProof<SC>, Challenge>> {
+fn decode_opening_proof<R: Read>(reader: &mut R) -> Result<OpeningProof<SC>> {
     // Decode FRI proof
     let proof = InnerFriProof::decode(reader)?;
     let values = decode_opened_values(reader)?;
+    let deep_pow_witness = F::decode(reader)?;
 
-    Ok(OpeningProof { proof, values })
+    Ok(OpeningProof {
+        proof,
+        values,
+        deep_pow_witness,
+    })
 }
 
 fn decode_opened_values<R: Read>(reader: &mut R) -> Result<OpenedValues<Challenge>> {

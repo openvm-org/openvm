@@ -106,6 +106,7 @@ pub struct CommitmentsVariable<C: Config> {
 pub struct OpeningProofVariable<C: Config> {
     pub proof: FriProofVariable<C>,
     pub values: OpenedValuesVariable<C>,
+    pub deep_pow_witness: Felt<C::F>,
 }
 
 #[allow(clippy::type_complexity)]
