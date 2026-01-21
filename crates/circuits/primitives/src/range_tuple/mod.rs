@@ -212,22 +212,22 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
             let mut tuple = [0u32; N];
             for j in (0..N).rev() {
                 tuple[j] = tmp_idx % self.air.bus.sizes[j];
-                tmp_idx = tmp_idx / self.air.bus.sizes[j];
+                tmp_idx /= self.air.bus.sizes[j];
             }
 
             let mut first_nonzero = 0;
-            for j in 0..N {
-                if tuple[j] != 0 {
+            for (j, it) in tuple.iter().enumerate() {
+                if *it != 0 {
                     first_nonzero = j;
                 }
             }
 
             let mut is_first = vec![0u32; N - 1];
-            for j in 0..first_nonzero {
-                is_first[j] = 0;
+            for it in is_first.iter_mut().take(first_nonzero) {
+                *it = 0;
             }
-            for j in first_nonzero..(N - 1) {
-                is_first[j] = 1;
+            for it in is_first.iter_mut().take(N - 1).skip(first_nonzero) {
+                *it = 1;
             }
 
             unrolled_matrix.extend(tuple);
