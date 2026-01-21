@@ -74,7 +74,7 @@ __global__ void stacking_claims_tracegen(
     }
 
     if (proof_idx == NUM_PROOFS) {
-        row.fill_zero(1, sizeof(StackingClaimsCols<uint8_t>));
+        row.fill_zero(0, sizeof(StackingClaimsCols<uint8_t>));
         COL_WRITE_VALUE(row, StackingClaimsCols, proof_idx, NUM_PROOFS);
         COL_WRITE_VALUE(row, StackingClaimsCols, is_last, global_row_idx + 1 == height);
         return;
