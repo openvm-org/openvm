@@ -7,6 +7,7 @@ use alloc::vec::Vec;
 use core::hint::black_box;
 
 use hex::FromHex;
+use openvm::io::read;
 use openvm_sha2::{Digest, Sha256, Sha384, Sha512};
 
 openvm::entry!(main);
@@ -92,4 +93,15 @@ pub fn main() {
             );
         }
     }
+
+    let input: Vec<u8> = read();
+    let expected_output: Vec<u8> = read();
+    let output = Sha256::digest(black_box(&input));
+    if output.as_slice() != expected_output.as_slice() {
+        panic!();
+    }
+    panic!(
+        "input: {:?}, expected_output: {:?}, output: {:?}",
+        input, expected_output, output
+    );
 }
