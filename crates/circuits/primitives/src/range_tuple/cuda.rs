@@ -60,4 +60,3 @@ impl<RA, const N: usize> Chip<RA, GpuBackend> for RangeTupleCheckerChipGPU<N> {
         AirProvingContext::simple_no_pis(trace)
     }
 }
-

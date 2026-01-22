@@ -107,12 +107,16 @@ impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupl
         builder
             .when_transition()
             .assert_bool(next.tuple[0] - local.tuple[0]);
-        // (T5): Between consecutive tuples, all other columns can stay the same, increment, or wrap.
+        // (T5): Between consecutive tuples, all other columns can stay the same, increment, or
+        // wrap.
         for i in 1..N - 1 {
             builder
                 .when_ne(next.tuple[i] - local.tuple[i], AB::Expr::ZERO)
                 .when_ne(next.tuple[i] - local.tuple[i], AB::Expr::ONE)
-                .assert_eq(local.tuple[i], AB::F::from_canonical_u32(self.bus.sizes[i] - 1));
+                .assert_eq(
+                    local.tuple[i],
+                    AB::F::from_canonical_u32(self.bus.sizes[i] - 1),
+                );
             builder
                 .when_ne(next.tuple[i] - local.tuple[i], AB::Expr::ZERO)
                 .when_ne(next.tuple[i] - local.tuple[i], AB::Expr::ONE)
@@ -120,25 +124,27 @@ impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupl
         }
         // (T3): Between consecutive tuples, column `N-1` can increment or wrap.
         builder
-            .when_ne(next.tuple[N-1] - local.tuple[N-1], AB::Expr::ONE)
-            .assert_eq(local.tuple[N-1], AB::F::from_canonical_u32(self.bus.sizes[N-1] - 1));
+            .when_ne(next.tuple[N - 1] - local.tuple[N - 1], AB::Expr::ONE)
+            .assert_eq(
+                local.tuple[N - 1],
+                AB::F::from_canonical_u32(self.bus.sizes[N - 1] - 1),
+            );
         builder
-            .when_ne(next.tuple[N-1] - local.tuple[N-1], AB::Expr::ONE)
-            .assert_eq(next.tuple[N-1], AB::Expr::ZERO);
+            .when_ne(next.tuple[N - 1] - local.tuple[N - 1], AB::Expr::ONE)
+            .assert_eq(next.tuple[N - 1], AB::Expr::ZERO);
 
-
-        // (T6): Between consecutive tuples, column `i` increments or wraps if and only if column `i+1` wraps.
+        // (T6): Between consecutive tuples, column `i` increments or wraps if and only if column
+        // `i+1` wraps.
         for i in 0..N - 1 {
             let x = next.tuple[i] - local.tuple[i];
             let y = next.tuple[i + 1] - local.tuple[i + 1];
-            let a = -AB::F::from_canonical_u32(self.bus.sizes[i] - 1); 
+            let a = -AB::F::from_canonical_u32(self.bus.sizes[i] - 1);
             let b = -AB::F::from_canonical_u32(self.bus.sizes[i + 1] - 1);
             // See range_tuple/README.md
-            builder
-                .assert_zero(
-                    y.clone() * (y.clone() - AB::Expr::ONE) * (-x.clone() * (a + AB::F::ONE) + a) +
-                    x.clone() * x.clone() * (y.clone() * (b + b - AB::F::ONE) - b * b)
-                );
+            builder.assert_zero(
+                y.clone() * (y.clone() - AB::Expr::ONE) * (-x.clone() * (a + AB::F::ONE) + a)
+                    + x.clone() * x.clone() * (y.clone() * (b + b - AB::F::ONE) - b * b),
+            );
         }
 
         self.bus
@@ -205,7 +211,7 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
 
     pub fn generate_trace<F: Field + PrimeField32>(&self) -> RowMajorMatrix<F> {
         let mut rows = F::zero_vec(self.count.len() * (N + 1));
-        
+
         for (i, row) in rows.chunks_exact_mut(N + 1).enumerate() {
             let cols = RangeTupleColsRefMut::from_slice_mut::<N>(row);
             let mut tmp_idx = i as u32;
@@ -213,9 +219,8 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
                 cols.tuple[j] = F::from_canonical_u32(tmp_idx % self.air.bus.sizes[j]);
                 tmp_idx /= self.air.bus.sizes[j];
             }
-            *cols.mult = F::from_canonical_u32(
-                self.count[i].swap(0, std::sync::atomic::Ordering::Relaxed)
-            );
+            *cols.mult =
+                F::from_canonical_u32(self.count[i].swap(0, std::sync::atomic::Ordering::Relaxed));
         }
 
         RowMajorMatrix::new(rows, N + 1)
