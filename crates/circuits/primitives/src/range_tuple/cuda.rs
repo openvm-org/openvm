@@ -9,7 +9,7 @@ use crate::{cuda_abi::range_tuple::tracegen, range_tuple::RangeTupleCheckerChip}
 pub struct RangeTupleCheckerChipGPU<const N: usize> {
     pub count: Arc<DeviceBuffer<F>>,
     pub cpu_chip: Option<Arc<RangeTupleCheckerChip<N>>>,
-    pub sizes: Arc<DeviceBuffer<u32>>,
+    pub sizes: [u32; N],
 }
 
 impl<const N: usize> RangeTupleCheckerChipGPU<N> {
@@ -18,11 +18,10 @@ impl<const N: usize> RangeTupleCheckerChipGPU<N> {
         let range_max = sizes.iter().product::<u32>() as usize;
         let count = Arc::new(DeviceBuffer::<F>::with_capacity(range_max));
         count.fill_zero().unwrap();
-        let sizes_device = Arc::new(sizes.to_vec().to_device().unwrap());
         Self {
             count,
             cpu_chip: None,
-            sizes: sizes_device,
+            sizes,
         }
     }
 
@@ -30,11 +29,10 @@ impl<const N: usize> RangeTupleCheckerChipGPU<N> {
         let count = Arc::new(DeviceBuffer::<F>::with_capacity(cpu_chip.count.len()));
         count.fill_zero().unwrap();
         let sizes = *cpu_chip.sizes();
-        let sizes_device = Arc::new(sizes.to_vec().to_device().unwrap());
         Self {
             count,
             cpu_chip: Some(cpu_chip),
-            sizes: sizes_device,
+            sizes,
         }
     }
 }
@@ -52,12 +50,14 @@ impl<RA, const N: usize> Chip<RA, GpuBackend> for RangeTupleCheckerChipGPU<N> {
         });
         // ATTENTION: we create a new buffer to copy `count` into because this chip is stateful and
         // `count` will be reused.
-        let trace = DeviceMatrix::<F>::with_capacity(self.count.len(), N * 2);
+        let trace = DeviceMatrix::<F>::with_capacity(self.count.len(), N + 1);
+        let sizes_device = self.sizes.to_vec().to_device().unwrap();
         unsafe {
-            tracegen(&self.count, &cpu_count, trace.buffer(), &self.sizes).unwrap();
+            tracegen(&self.count, &cpu_count, trace.buffer(), &sizes_device).unwrap();
         }
         // Zero the internal count buffer because this chip is stateful and may be used again.
         self.count.fill_zero().unwrap();
         AirProvingContext::simple_no_pis(trace)
     }
 }
+
