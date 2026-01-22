@@ -34,7 +34,7 @@ pub mod poseidon2;
 #[allow(clippy::module_inception)]
 pub mod transcript;
 
-// TODO: I think 1 is enough for now for our max constraint degree?
+// Should be 1 when 3 <= max_constraint_degree < 7
 const SBOX_REGISTERS: usize = 1;
 
 pub struct TranscriptModule {
@@ -135,12 +135,15 @@ impl TranscriptModule {
                 cols.is_sample = F::from_bool(is_sample);
                 cols.tidx = F::from_canonical_usize(tidx);
                 cols.mask[0] = F::from_bool(true);
-                cols.lookup[0] = F::from_canonical_usize(1);
 
                 cols.prev_state = prev_poseidon_state;
 
                 if is_sample {
-                    cols.prev_state[CHUNK - 1] = preflight.transcript.values()[tidx];
+                    debug_assert_eq!(
+                        cols.prev_state[CHUNK - 1],
+                        preflight.transcript.values()[tidx],
+                        "sample value mismatch",
+                    );
                 } else {
                     cols.prev_state[0] = preflight.transcript.values()[tidx];
                 }
@@ -162,7 +165,6 @@ impl TranscriptModule {
                     }
 
                     cols.mask[idx] = F::from_bool(true);
-                    cols.lookup[idx] = F::from_canonical_usize(1);
                     if is_sample {
                         debug_assert_eq!(
                             cols.prev_state[CHUNK - 1 - idx],
@@ -327,9 +329,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
 mod cuda_tracegen {
     use cuda_backend_v2::GpuBackendV2;
     use itertools::Itertools;
-    use openvm_cuda_backend::{
-        base::DeviceMatrix, data_transporter::transport_matrix_to_device, types::F as CudaF,
-    };
+    use openvm_cuda_backend::{base::DeviceMatrix, types::F};
     use openvm_cuda_common::{
         copy::{MemCopyD2H, MemCopyH2D},
         d_buffer::DeviceBuffer,
@@ -339,8 +339,58 @@ mod cuda_tracegen {
     use super::*;
     use crate::{
         cuda::{GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
-        transcript::{cuda_abi, merkle_verify},
+        transcript::{
+            cuda_abi,
+            merkle_verify::{self, cuda::MerkleVerifyBlob},
+            transcript::cuda::TranscriptAirBlob,
+        },
     };
+
+    pub(crate) struct TranscriptBlob {
+        pub merkle_verify_blob: MerkleVerifyBlob,
+        pub transcript_air_blob: TranscriptAirBlob,
+        pub poseidon2_buffer: DeviceBuffer<F>,
+        pub num_poseidon2_inputs: usize,
+    }
+
+    impl TranscriptBlob {
+        #[tracing::instrument(name = "generate_blob", skip_all)]
+        pub fn new(
+            child_vk: &VerifyingKeyGpu,
+            proofs: &[ProofGpu],
+            preflights: &[PreflightGpu],
+        ) -> Self {
+            let poseidon2_inputs = preflights
+                .iter()
+                .flat_map(|preflight| preflight.cpu.poseidon_inputs.clone())
+                .collect_vec();
+            let mut num_poseidon2_inputs = poseidon2_inputs.len();
+
+            let merkle_verify_blob =
+                MerkleVerifyBlob::new(child_vk, proofs, preflights, num_poseidon2_inputs);
+            num_poseidon2_inputs += merkle_verify_blob.total_rows;
+
+            let transcript_air_blob =
+                TranscriptAirBlob::new(preflights, num_poseidon2_inputs as u32);
+            num_poseidon2_inputs += transcript_air_blob.num_poseidon2_inputs;
+
+            let mut poseidon2_buffer =
+                DeviceBuffer::with_capacity(num_poseidon2_inputs * POSEIDON2_WIDTH);
+            poseidon2_inputs
+                .into_iter()
+                .flatten()
+                .collect_vec()
+                .copy_to(&mut poseidon2_buffer)
+                .unwrap();
+
+            Self {
+                merkle_verify_blob,
+                transcript_air_blob,
+                poseidon2_buffer,
+                num_poseidon2_inputs,
+            }
+        }
+    }
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for TranscriptModule {
         type ModuleSpecificCtx = ();
@@ -353,52 +403,31 @@ mod cuda_tracegen {
             preflights: &[PreflightGpu],
             _ctx: &(),
         ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
-            let proofs_cpu = proofs.iter().map(|proof| proof.cpu.clone()).collect_vec();
-            let preflights_cpu = preflights
-                .iter()
-                .map(|preflight| preflight.cpu.clone())
-                .collect_vec();
-            let (merkle_trace_gpu, poseidon_inputs) =
-                tracing::trace_span!("wrapper.generate_trace", air = "MerkleVerify").in_scope(
-                    || {
-                        merkle_verify::cuda::generate_trace(
-                            &child_vk.cpu,
-                            &proofs_cpu,
-                            &preflights_cpu,
-                            &self.params,
-                        )
-                    },
-                );
-            let TranscriptTraceArtifacts {
-                transcript_trace,
-                poseidon_inputs,
-            } = tracing::trace_span!("wrapper.generate_trace", air = "Transcript")
-                .in_scope(|| self.build_trace_artifacts(&preflights_cpu, poseidon_inputs));
+            let blob = TranscriptBlob::new(child_vk, proofs, preflights);
 
-            let transcript_trace_gpu = transport_matrix_to_device(Arc::new(transcript_trace));
-
-            let poseidon_trace_gpu = trace_span!("wrapper.generate_trace", air = "Poseidon2")
-                .in_scope(|| {
+            let merkle_trace = tracing::trace_span!("wrapper.generate_trace", air = "MerkleVerify")
+                .in_scope(|| merkle_verify::cuda::generate_trace(&blob));
+            let transcript_trace =
+                tracing::trace_span!("wrapper.generate_trace", air = "Transcript")
+                    .in_scope(|| transcript::cuda::generate_trace(preflights, &blob));
+            let poseidon_trace =
+                trace_span!("wrapper.generate_trace", air = "Poseidon2").in_scope(|| {
                     trace_span!("generate_trace").in_scope(|| {
                         let poseidon2_width = Poseidon2Cols::<F, SBOX_REGISTERS>::width();
-                        let poseidon2_valid_rows = poseidon_inputs.len();
-                        let poseidon_inputs_flat: Vec<CudaF> = poseidon_inputs
-                            .into_iter()
-                            .flat_map(|state| state.into_iter())
-                            .collect();
-                        let d_records = poseidon_inputs_flat.to_device().unwrap();
-                        let d_counts = if poseidon2_valid_rows == 0 {
+
+                        let d_counts = if blob.num_poseidon2_inputs == 0 {
                             DeviceBuffer::<u32>::new()
                         } else {
-                            vec![1u32; poseidon2_valid_rows].to_device().unwrap()
+                            vec![1u32; blob.num_poseidon2_inputs].to_device().unwrap()
                         };
-                        let mut num_records = poseidon2_valid_rows;
+
+                        let mut num_records = blob.num_poseidon2_inputs;
                         if num_records > 0 {
                             unsafe {
                                 let d_num_records = [num_records].to_device().unwrap();
                                 let mut temp_bytes = 0;
                                 cuda_abi::poseidon2_deduplicate_records_get_temp_bytes(
-                                    &d_records,
+                                    &blob.poseidon2_buffer,
                                     &d_counts,
                                     num_records,
                                     &d_num_records,
@@ -411,7 +440,7 @@ mod cuda_tracegen {
                                     DeviceBuffer::<u8>::with_capacity(temp_bytes)
                                 };
                                 cuda_abi::poseidon2_deduplicate_records(
-                                    &d_records,
+                                    &blob.poseidon2_buffer,
                                     &d_counts,
                                     num_records,
                                     &d_num_records,
@@ -427,16 +456,14 @@ mod cuda_tracegen {
                         } else {
                             num_records.next_power_of_two()
                         };
-                        let poseidon_trace_gpu = DeviceMatrix::<CudaF>::with_capacity(
-                            poseidon2_num_rows,
-                            poseidon2_width,
-                        );
+                        let poseidon_trace_gpu =
+                            DeviceMatrix::<F>::with_capacity(poseidon2_num_rows, poseidon2_width);
                         unsafe {
                             cuda_abi::poseidon2_tracegen(
                                 poseidon_trace_gpu.buffer(),
                                 poseidon_trace_gpu.height(),
                                 poseidon_trace_gpu.width(),
-                                &d_records,
+                                &blob.poseidon2_buffer,
                                 &d_counts,
                                 num_records,
                                 SBOX_REGISTERS,
@@ -448,9 +475,9 @@ mod cuda_tracegen {
                 });
 
             vec![
-                AirProvingContextV2::simple_no_pis(transcript_trace_gpu),
-                AirProvingContextV2::simple_no_pis(poseidon_trace_gpu),
-                AirProvingContextV2::simple_no_pis(merkle_trace_gpu),
+                AirProvingContextV2::simple_no_pis(transcript_trace),
+                AirProvingContextV2::simple_no_pis(poseidon_trace),
+                AirProvingContextV2::simple_no_pis(merkle_trace),
             ]
         }
     }
