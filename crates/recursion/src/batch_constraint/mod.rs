@@ -748,12 +748,6 @@ enum BatchConstraintModuleChip {
     EqNeg,
 }
 
-impl BatchConstraintModuleChip {
-    fn index(&self) -> usize {
-        BatchConstraintModuleChipDiscriminants::from(self) as usize
-    }
-}
-
 impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModuleChip {
     type ModuleSpecificCtx = BatchConstraintBlobCpu;
 
@@ -843,6 +837,12 @@ pub mod cuda_tracegen {
         batch_constraint::cuda_abi::{generate_eq_3b_trace, generate_sym_expr_trace},
         cuda::{GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
     };
+
+    impl BatchConstraintModuleChip {
+        fn index(&self) -> usize {
+            BatchConstraintModuleChipDiscriminants::from(self) as usize
+        }
+    }
 
     impl ModuleChip<GlobalCtxGpu, GpuBackendV2> for BatchConstraintModuleChip {
         type ModuleSpecificCtx = BatchConstraintBlobCpu;
