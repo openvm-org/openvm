@@ -5,13 +5,12 @@ This chip efficiently range checks tuples of values using a single interaction w
 **Note:** This chip requires that each range size is a power of 2 (i.e., each value in `sizes` must be a power of 2).
 
 **Columns:**
-- `tuple`: Array of N columns (columns 0 to N-1) containing all possible tuple combinations within the specified ranges
-- `is_first`: Array of (N-1) boolean columns (columns N to 2*N-2). `is_first[i]` is 1 if `tuple[i + 1]` has just switched to a new number, 0 otherwise.
-- `mult`: Multiplicity column (column 2*N-1) tracking the number of range checks requested for each tuple
+- `tuple`: Array of N columns (columns 0 to N-1) containing all possible tuple combinations within the specified ranges.
+- `mult`: Multiplicity column (column N) tracking the number of range checks requested for each tuple.
 
 The `sizes` parameter in `RangeTupleCheckerBus` defines the maximum value for each dimension.
 
-For a 2-dimensional tuple with `sizes = [4, 2]`, the preprocessed trace contains these 8 combinations in order:
+As an example, for a 2-dimensional tuple with `sizes = [2, 4]`, the `tuple` column contains these 8 combinations in order:
 ```
 (0,0)
 (0,1)
@@ -25,41 +24,68 @@ For a 2-dimensional tuple with `sizes = [4, 2]`, the preprocessed trace contains
 
 ## Circuit Constraints
 
-### Boundary Constraints
+For consecutive tuples `(local, next)`, we say that,
 
-We enforce that the trace starts at `(0, 0, ..., 0)` and ends at `(sizes[0]-1, sizes[1]-1, ..., sizes[N-1]-1)`.
+- Column `i` stays the same if `local[i] == next[i]`.
+- Column `i` increments if `local[i] + 1 == next[i]`.
+- Column `i` wraps if `local[i] == size[i] - 1` and `next[i] == 0`.
 
-Additionally, in the first row, all `is_first` columns must be 1.
+The AIR enforces the following constraints for the `tuple` column:
 
-### is_first Constraints
+- (T1): The trace starts with `(0, ..., 0)`.
+- (T2): The trace ends with `(size[0]-1, ..., size[N-1]-1)`.
+- (T3): Between consecutive tuples, column `N-1` can increment or wrap.
+- (T4): Between consecutive tuples, column `0` can stay the same or increment.
+- (T5): Between consecutive tuples, all other columns can stay the same, increment, or wrap.
+- (T6): Between consecutive tuples, column `i` increments or wraps if and only if column `i+1` wraps.
 
-For each `0 <= i < N-1`:
-- `is_first[i]` must be boolean (0 or 1)
-- In the first row: `is_first[i] = 1`
+The constraints imply that, if `local` is a valid tuple (i.e. all values are in range), then `next` is also a valid tuple. The proof of this is as follows:
 
-### Transition Constraints
+By (T3), column `N-1` must increment or wrap, and when this is combined with (T4) + (T5) + (T6), it is implied that there exists an `0 <= i <= N-1` where columns `0` to `i-1` stay the same, columns `i+1` to `N-1` wrap, and column `i` increments. By definition, all columns except column `i` are valid and stay in bounds. As such, the only possibly problematic column is column `i`. However, if `next[i] >= size[i]`, then it is impossible for column `i` to ever wrap in any following rows, so the value will never become `size[i]-1`, which is required by (T2).
 
-The transition constraints enforce lexicographic ordering between consecutive rows using `is_first` to track wrapping behavior.
+Additionally, the constraints also imply that `next` is the lexographically next valid tuple after `local`.
 
-**For `tuple[0]` (leftmost component):**
-- `next.tuple[0] - local.tuple[0]` is boolean (0 or 1)
+Note that the length of the trace will be exactly `size[0] * ... * size[N-1]`, which is valid only if `size[i]` is always a power of 2.
 
-**For `tuple[i]` where `1 <= i < N-1` (middle components):**
-- When `next.is_first[i-1] != 1`: `next.tuple[i] - local.tuple[i]` is boolean (0 or 1)
-- When `next.is_first[i-1] == 1`: wrapping occurs (handled by wrapping constraints)
+___
 
-**For `tuple[N-1]` (rightmost component):**
-- When `next.is_first[N-2] != 1`: `next.tuple[N-1] - local.tuple[N-1] = 1` (must increment by 1)
-- When `next.is_first[N-2] == 1`: wrapping occurs (handled by wrapping constraints)
+Another remaining question is what polynomial constraints can be used to obtain (T6).
 
-**is_first Constraints:**
-The circuit validates `next.is_first` based on tuple changes:
-- `next.is_first[0] = next.tuple[0] - local.tuple[0]`
-- For `1 <= i < N-1`:
-  - When `next.is_first[i-1] != 1`: `next.is_first[i] = next.tuple[i] - local.tuple[i]`
-  - When `next.is_first[i-1] == 1`: `next.is_first[i] = 1`
+Define:
 
-**Wrapping Constraints:**
-When `next.is_first[i] == 1` (indicating `tuple[i+1]` wraps):
-- `local.tuple[i+1] = sizes[i+1] - 1` (was at maximum)
-- `next.tuple[i+1] = 0` (wraps to zero)
+- `x := next[i] - local[i]`
+- `y := next[i + 1] - local[i + 1]`
+- `a := -(size[i] - 1)`
+- `b := -(size[i+1] - 1)`
+
+Note that constraints (T3), (T4), (T5) already force $x \in \{0, 1, a\}$, $y \in \{0, 1, b\}$. As such, to get T6, we only need to constrain the following table:
+
+| (x,y) | valid configuration |
+|-------|---------------------|
+| (0,0) | yes                 |
+| (0,1) | yes                 |
+| (0,b) | no                  |
+| (1,0) | no                  |
+| (1,1) | no                  |
+| (1,b) | yes                 |
+| (a,0) | no                  |
+| (a,1) | no                  |
+| (a,b) | yes                 |
+
+Consider the table with columns for the polynomials $(x-1)(x-a)y(y-1)$, $x^2(y-b)^2$, and $(x-1)(x-a)y(y-1) - x^2(y-b)^2$:
+
+| (x,y) | $(x-1)(x-a)y(y-1)$ | $x^2(y-b)^2$ | $(x-1)(x-a)y(y-1) - x^2(y-b)^2$ |
+|-------|------------------|------------|-------------------------------|
+| (0,0) | 0                | 0          | 0                             |
+| (0,1) | 0                | 0          | 0                             |
+| (0,b) | nonzero          | 0          | nonzero                       |
+| (1,0) | 0                | nonzero    | nonzero                       |
+| (1,1) | 0                | nonzero    | nonzero                       |
+| (1,b) | 0                | 0          | 0                             |
+| (a,0) | 0                | nonzero    | nonzero                       |
+| (a,1) | 0                | nonzero    | nonzero                       |
+| (a,b) | 0                | 0          | 0                             |
+
+Note that $(x-1)(x-a)y(y-1) - x^2(y-b)^2 = ay^2 - axy^2 - xy^2 - ay - x^2y + 2bx^2y + axy + xy - b^2x^2$ which has degree 3.
+
+Thus, if we add the constraint $ay^2 - axy^2 - xy^2 - ay - x^2y + 2bx^2y + axy + xy - b^2x^2 = 0$, we are able to fully obtain T6.

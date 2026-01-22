@@ -33,11 +33,8 @@ pub mod tests;
 
 #[derive(Copy, Clone)]
 pub struct RangeTupleColsRef<'a, T> {
-    /// Contains all possible tuple combinations within specified ranges
+    /// Contains all possible tuple combinations within specified ranges. Has size N.
     pub tuple: &'a [T],
-    /// Array of (N-1) boolean columns. `is_first[i]` is 1 if `tuple[i + 1]` has just switched to a
-    /// new number, 0 otherwise.
-    pub is_first: &'a [T],
     /// Number of range checks requested for each tuple combination
     pub mult: &'a T,
 }
@@ -45,10 +42,8 @@ pub struct RangeTupleColsRef<'a, T> {
 impl<'a, T> RangeTupleColsRef<'a, T> {
     fn from_slice<const N: usize>(slice: &'a [T]) -> Self {
         let (tuple, rest) = slice.split_at(N);
-        let (is_first, rest) = rest.split_at(N - 1);
         Self {
             tuple,
-            is_first,
             mult: &rest[0],
         }
     }
@@ -69,10 +64,77 @@ impl<F: Field, const N: usize> PartitionedBaseAir<F> for RangeTupleCheckerAir<N>
 
 impl<F: Field, const N: usize> BaseAir<F> for RangeTupleCheckerAir<N> {
     fn width(&self) -> usize {
-        N * 2
+        N + 1
     }
 }
 
+/*
+For consecutive tuples `(local, next)`, we say that,
+
+- Column `i` stays the same if `local[i] == next[i]`.
+- Column `i` increments if `local[i] + 1 == next[i]`.
+- Column `i` wraps if `local[i] == size[i] - 1` and `next[i] == 0`.
+
+The AIR enforces the following constraints for the `tuple` column:
+
+- (T1): The trace starts with `(0, ..., 0)`.
+- (T2): The trace ends with `(size[0]-1, ..., size[N-1]-1)`.
+- (T3): Between consecutive tuples, column `N-1` can increment or wrap.
+- (T4): Between consecutive tuples, column `0` can stay the same or increment.
+- (T5): Between consecutive tuples, all other columns can stay the same, increment, or wrap.
+- (T6): Between consecutive tuples, column `i` increments or wraps if and only if column `i+1` wraps.
+
+The constraints imply that, if `local` is a valid tuple (i.e. all values are in range), then `next` is also a valid tuple. The proof of this is as follows:
+
+By (T3), column `N-1` must increment or wrap, and when this is combined with (T4) + (T5) + (T6), it is implied that there exists an `0 <= i <= N-1` where columns `0` to `i-1` stay the same, columns `i+1` to `N-1` wrap, and column `i` increments. By definition, all columns except column `i` are valid and stay in bounds. As such, the only possibly problematic column is column `i`. However, if `next[i] >= size[i]`, then it is impossible for column `i` to ever wrap in any following rows, so the value will never become `size[i]-1`, which is required by (T2).
+
+Additionally, the constraints also imply that `next` is the lexographically next valid tuple after `local`.
+
+Note that the length of the trace will be exactly `size[0] * ... * size[N-1]`, which is valid only if `size[i]` is always a power of 2.
+
+___
+
+Another remaining question is what polynomial constraints can be used to obtain (T6).
+
+Define:
+
+- `x := next[i] - local[i]`
+- `y := next[i + 1] - local[i + 1]`
+- `a := -(size[i] - 1)`
+- `b := -(size[i+1] - 1)`
+
+Note that constraints (T3), (T4), (T5) already force $x \in \{0, 1, a\}$, $y \in \{0, 1, b\}$. As such, to get T6, we only need to constrain the following table:
+
+| (x,y) | valid configuration |
+|-------|---------------------|
+| (0,0) | yes                 |
+| (0,1) | yes                 |
+| (0,b) | no                  |
+| (1,0) | no                  |
+| (1,1) | no                  |
+| (1,b) | yes                 |
+| (a,0) | no                  |
+| (a,1) | no                  |
+| (a,b) | yes                 |
+
+Consider the table with columns for the polynomials $(x-1)(x-a)y(y-1)$, $x^2(y-b)^2$, and $(x-1)(x-a)y(y-1) - x^2(y-b)^2$:
+
+| (x,y) | $(x-1)(x-a)y(y-1)$ | $x^2(y-b)^2$ | $(x-1)(x-a)y(y-1) - x^2(y-b)^2$ |
+|-------|------------------|------------|-------------------------------|
+| (0,0) | 0                | 0          | 0                             |
+| (0,1) | 0                | 0          | 0                             |
+| (0,b) | nonzero          | 0          | nonzero                       |
+| (1,0) | 0                | nonzero    | nonzero                       |
+| (1,1) | 0                | nonzero    | nonzero                       |
+| (1,b) | 0                | 0          | 0                             |
+| (a,0) | 0                | nonzero    | nonzero                       |
+| (a,1) | 0                | nonzero    | nonzero                       |
+| (a,b) | 0                | 0          | 0                             |
+
+Note that $(x-1)(x-a)y(y-1) - x^2(y-b)^2 = ay^2 - axy^2 - xy^2 - ay - x^2y + 2bx^2y + axy + xy - b^2x^2$ which has degree 3.
+
+Thus, if we add the constraint $ay^2 - axy^2 - xy^2 - ay - x^2y + 2bx^2y + axy + xy - b^2x^2 = 0$, we are able to fully obtain T6.
+*/
 impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupleCheckerAir<N> {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -80,7 +142,8 @@ impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupl
         let local = RangeTupleColsRef::from_slice::<N>((*local).borrow());
         let next = RangeTupleColsRef::from_slice::<N>((*next).borrow());
 
-        // Constrain tuples for first and last rows
+        // (T1): The trace starts with `(0, ..., 0)`.
+        // (T2): The trace ends with `(size[0]-1, ..., size[N-1]-1)`.
         for i in 0..N {
             builder.when_first_row().assert_zero(local.tuple[i]);
             builder.when_last_row().assert_eq(
@@ -89,57 +152,54 @@ impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupl
             );
         }
 
-        // The leftmost tuple column can stay the same or increment by one
+        // (T4): Between consecutive tuples, column `0` can stay the same or increment.
         builder
             .when_transition()
             .assert_bool(next.tuple[0] - local.tuple[0]);
-        // The middle tuple columns can stay the same, increment by one, or wrap (wrap is handled
-        // later)
+        // (T5): Between consecutive tuples, all other columns can stay the same, increment, or wrap.
         for i in 1..N - 1 {
             builder
                 .when_transition()
-                .when_ne(next.is_first[i - 1], AB::Expr::ONE)
-                .assert_bool(next.tuple[i] - local.tuple[i]);
+                .when_ne(next.tuple[i] - local.tuple[i], AB::Expr::ZERO)
+                .when_ne(next.tuple[i] - local.tuple[i], AB::Expr::ONE)
+                .assert_eq(local.tuple[i], AB::F::from_canonical_u32(self.bus.sizes[i] - 1));
+            builder
+                .when_transition()
+                .when_ne(next.tuple[i] - local.tuple[i], AB::Expr::ZERO)
+                .when_ne(next.tuple[i] - local.tuple[i], AB::Expr::ONE)
+                .assert_eq(next.tuple[i], AB::Expr::ZERO);
         }
-        // The rightmost tuple column should always either increment by one or wrap (wrap is handled
-        // later)
+        // (T3): Between consecutive tuples, column `N-1` can increment or wrap.
         builder
             .when_transition()
-            .when_ne(next.is_first[N - 2], AB::Expr::ONE)
-            .assert_one(next.tuple[N - 1] - local.tuple[N - 1]);
-
-        // Constrain the first row of is_first to always be one, and constrain is_first to always be
-        // bool
-        for i in 0..N - 1 {
-            builder.when_first_row().assert_one(local.is_first[i]);
-            builder.assert_bool(local.is_first[i]);
-        }
-
-        // Constrain is_first based on differences between consecutive tuple rows
+            .when_ne(next.tuple[N-1] - local.tuple[N-1], AB::Expr::ONE)
+            .assert_eq(local.tuple[N-1], AB::F::from_canonical_u32(self.bus.sizes[N-1] - 1));
         builder
             .when_transition()
-            .assert_eq(next.tuple[0] - local.tuple[0], next.is_first[0]);
-        for i in 1..N - 1 {
-            builder
-                .when_transition()
-                .when_ne(next.is_first[i - 1], AB::Expr::ONE)
-                .assert_eq(next.tuple[i] - local.tuple[i], next.is_first[i]);
-            builder
-                .when_transition()
-                .when(next.is_first[i - 1])
-                .assert_one(next.is_first[i]);
-        }
+            .when_ne(next.tuple[N-1] - local.tuple[N-1], AB::Expr::ONE)
+            .assert_eq(next.tuple[N-1], AB::Expr::ZERO);
 
-        // Handle wrapping by constraining the start and end points of each counter
+
+        // (T6): Between consecutive tuples, column `i` increments or wraps if and only if column `i+1` wraps.
         for i in 0..N - 1 {
-            builder.when_transition().when(next.is_first[i]).assert_eq(
-                local.tuple[i + 1],
-                AB::F::from_canonical_u32(self.bus.sizes[i + 1] - 1),
-            );
+            let x = next.tuple[i] - local.tuple[i];
+            let y = next.tuple[i + 1] - local.tuple[i + 1];
+            let a = -AB::F::from_canonical_u32(self.bus.sizes[i] - 1); 
+            let b = -AB::F::from_canonical_u32(self.bus.sizes[i + 1] - 1);
             builder
                 .when_transition()
-                .when(next.is_first[i])
-                .assert_eq(next.tuple[i + 1], AB::Expr::ZERO);
+                .assert_zero(
+                    y.clone()*y.clone()*a - 
+                    x.clone()*y.clone()*y.clone()*a - 
+                    x.clone()*y.clone()*y.clone() - 
+                    y.clone()*a - 
+                    x.clone()*x.clone()*y.clone() +
+                    x.clone()*x.clone()*y.clone()*b + 
+                    x.clone()*x.clone()*y.clone()*b + 
+                    x.clone()*y.clone()*a + 
+                    x.clone()*y.clone() - 
+                    x.clone()*x.clone()*b*b
+                );
         }
 
         self.bus
@@ -205,7 +265,7 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
     }
 
     pub fn generate_trace<F: Field + PrimeField32>(&self) -> RowMajorMatrix<F> {
-        let mut unrolled_matrix = Vec::with_capacity(self.count.len() * 2 * N);
+        let mut unrolled_matrix = Vec::with_capacity(self.count.len() * (N + 1));
 
         for i in 0..self.count.len() {
             let mut tmp_idx = i as u32;
@@ -214,24 +274,7 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
                 tuple[j] = tmp_idx % self.air.bus.sizes[j];
                 tmp_idx /= self.air.bus.sizes[j];
             }
-
-            let mut first_nonzero = 0;
-            for (j, it) in tuple.iter().enumerate() {
-                if *it != 0 {
-                    first_nonzero = j;
-                }
-            }
-
-            let mut is_first = vec![0u32; N - 1];
-            for it in is_first.iter_mut().take(first_nonzero) {
-                *it = 0;
-            }
-            for it in is_first.iter_mut().take(N - 1).skip(first_nonzero) {
-                *it = 1;
-            }
-
             unrolled_matrix.extend(tuple);
-            unrolled_matrix.extend(&is_first);
             unrolled_matrix.push(self.count[i].swap(0, std::sync::atomic::Ordering::Relaxed));
         }
 
@@ -240,7 +283,7 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
                 .iter()
                 .map(|&v| F::from_canonical_u32(v))
                 .collect(),
-            N * 2,
+            N + 1,
         )
     }
 }
@@ -266,6 +309,6 @@ impl<const N: usize> ChipUsageGetter for RangeTupleCheckerChip<N> {
         self.count.len()
     }
     fn trace_width(&self) -> usize {
-        N * 2
+        N + 1
     }
 }

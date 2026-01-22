@@ -1,6 +1,5 @@
 #include "fp.h"
 #include "launcher.cuh"
-#include <stdio.h>
 
 __global__ void range_tuple_checker_tracegen(
     const uint32_t *count,
@@ -17,22 +16,8 @@ __global__ void range_tuple_checker_tracegen(
             trace[idx + num_bins * i] = tmp_idx % sizes[i];
             tmp_idx /= sizes[i];
         }
-        
-        int32_t first_nonzero = 0;
-        for (uint32_t i = 0; i < num_dims; i++) {
-            // tuple[i] = trace[idx + num_bins * i]
-            if (trace[idx + num_bins * i]) first_nonzero = i;
-        }
-        for (int32_t i = 0; i < first_nonzero; i++) {
-            // is_first[i] = trace[idx + num_bins * (num_dims + i)]
-            trace[idx + num_bins * (num_dims + i)] = 0;
-        }
-        for (int32_t i = first_nonzero; i < num_dims - 1; i++) {
-            // is_first[i] = trace[idx + num_bins * (num_dims + i)]
-            trace[idx + num_bins * (num_dims + i)] = 1;
-        }
         uint32_t mult = count[idx] + (cpu_count ? cpu_count[idx] : 0);
-        trace[idx + num_bins * (num_dims * 2 - 1)] = Fp(mult);
+        trace[idx + num_bins * num_dims] = Fp(mult);
     }
 }
 
@@ -50,3 +35,4 @@ extern "C" int _range_tuple_checker_tracegen(
     );
     return CHECK_KERNEL();
 }
+
