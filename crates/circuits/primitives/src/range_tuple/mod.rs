@@ -49,6 +49,23 @@ impl<'a, T> RangeTupleColsRef<'a, T> {
     }
 }
 
+pub struct RangeTupleColsRefMut<'a, T> {
+    /// Contains all possible tuple combinations within specified ranges. Has size N.
+    pub tuple: &'a mut [T],
+    /// Number of range checks requested for each tuple combination
+    pub mult: &'a mut T,
+}
+
+impl<'a, T> RangeTupleColsRefMut<'a, T> {
+    fn from_slice_mut<const N: usize>(slice: &'a mut [T]) -> Self {
+        let (tuple, rest) = slice.split_at_mut(N);
+        Self {
+            tuple,
+            mult: &mut rest[0],
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct RangeTupleCheckerAir<const N: usize> {
     pub bus: RangeTupleCheckerBus<N>,
@@ -265,26 +282,21 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
     }
 
     pub fn generate_trace<F: Field + PrimeField32>(&self) -> RowMajorMatrix<F> {
-        let mut unrolled_matrix = Vec::with_capacity(self.count.len() * (N + 1));
-
-        for i in 0..self.count.len() {
+        let mut rows = F::zero_vec(self.count.len() * (N + 1));
+        
+        for (i, row) in rows.chunks_exact_mut(N + 1).enumerate() {
+            let cols = RangeTupleColsRefMut::from_slice_mut::<N>(row);
             let mut tmp_idx = i as u32;
-            let mut tuple = [0u32; N];
             for j in (0..N).rev() {
-                tuple[j] = tmp_idx % self.air.bus.sizes[j];
+                cols.tuple[j] = F::from_canonical_u32(tmp_idx % self.air.bus.sizes[j]);
                 tmp_idx /= self.air.bus.sizes[j];
             }
-            unrolled_matrix.extend(tuple);
-            unrolled_matrix.push(self.count[i].swap(0, std::sync::atomic::Ordering::Relaxed));
+            *cols.mult = F::from_canonical_u32(
+                self.count[i].swap(0, std::sync::atomic::Ordering::Relaxed)
+            );
         }
 
-        RowMajorMatrix::new(
-            unrolled_matrix
-                .iter()
-                .map(|&v| F::from_canonical_u32(v))
-                .collect(),
-            N + 1,
-        )
+        RowMajorMatrix::new(rows, N + 1)
     }
 }
 
