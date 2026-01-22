@@ -176,23 +176,19 @@ impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupl
         // (T5): Between consecutive tuples, all other columns can stay the same, increment, or wrap.
         for i in 1..N - 1 {
             builder
-                .when_transition()
                 .when_ne(next.tuple[i] - local.tuple[i], AB::Expr::ZERO)
                 .when_ne(next.tuple[i] - local.tuple[i], AB::Expr::ONE)
                 .assert_eq(local.tuple[i], AB::F::from_canonical_u32(self.bus.sizes[i] - 1));
             builder
-                .when_transition()
                 .when_ne(next.tuple[i] - local.tuple[i], AB::Expr::ZERO)
                 .when_ne(next.tuple[i] - local.tuple[i], AB::Expr::ONE)
                 .assert_eq(next.tuple[i], AB::Expr::ZERO);
         }
         // (T3): Between consecutive tuples, column `N-1` can increment or wrap.
         builder
-            .when_transition()
             .when_ne(next.tuple[N-1] - local.tuple[N-1], AB::Expr::ONE)
             .assert_eq(local.tuple[N-1], AB::F::from_canonical_u32(self.bus.sizes[N-1] - 1));
         builder
-            .when_transition()
             .when_ne(next.tuple[N-1] - local.tuple[N-1], AB::Expr::ONE)
             .assert_eq(next.tuple[N-1], AB::Expr::ZERO);
 
@@ -204,7 +200,6 @@ impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupl
             let a = -AB::F::from_canonical_u32(self.bus.sizes[i] - 1); 
             let b = -AB::F::from_canonical_u32(self.bus.sizes[i + 1] - 1);
             builder
-                .when_transition()
                 .assert_zero(
                     y.clone()*y.clone()*a - 
                     x.clone()*y.clone()*y.clone()*a - 
