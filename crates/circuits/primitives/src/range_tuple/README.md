@@ -72,7 +72,11 @@ Note that constraints (T3), (T4), (T5) already force $x \in \{0, 1, a\}$, $y \in
 | (a,1) | no                  |
 | (a,b) | yes                 |
 
-Consider the table with columns for the polynomials $(x-1)(x-a)y(y-1)$, $x^2(y-b)^2$, and $(x-1)(x-a)y(y-1) - x^2(y-b)^2$:
+Note that $x(y-b)=0$ constrains the forwards direction of (T6): if column `i` increases or wraps, then column `i+1` must wrap. Additionally, $(x-1)(x-a)y(y-1) = 0$ constrains the backwards direction of (T6): if column `i+1` wraps, then column `i` must increase or wrap. 
+
+The polynomial $(x-1)(x-a)y(y-1)$ has degree 4, so we are unable to use it directly. However, we are able to use $(x-1)(x-a)y(y-1) - x^2(y-b)^2$, which no longer has any degree 4 term.
+
+This is illustrated with the following table with columns for the polynomials $(x-1)(x-a)y(y-1)$, $x^2(y-b)^2$, and $(x-1)(x-a)y(y-1) - x^2(y-b)^2$:
 
 | (x,y) | $(x-1)(x-a)y(y-1)$ | $x^2(y-b)^2$ | $(x-1)(x-a)y(y-1) - x^2(y-b)^2$ |
 |-------|------------------|------------|-------------------------------|
@@ -86,6 +90,6 @@ Consider the table with columns for the polynomials $(x-1)(x-a)y(y-1)$, $x^2(y-b
 | (a,1) | 0                | nonzero    | nonzero                       |
 | (a,b) | 0                | 0          | 0                             |
 
-Note that $(x-1)(x-a)y(y-1) - x^2(y-b)^2 = ay^2 - axy^2 - xy^2 - ay - x^2y + 2bx^2y + axy + xy - b^2x^2$ which has degree 3.
+Note that $(x-1)(x-a)y(y-1) - x^2(y-b)^2 = y(y-1)(a-(a+1)x) + x^2(y(2b-1)-b^2)$ which has degree 3.
 
-Thus, if we add the constraint $ay^2 - axy^2 - xy^2 - ay - x^2y + 2bx^2y + axy + xy - b^2x^2 = 0$, we are able to fully obtain T6.
+Thus, if we add the constraint $y(y-1)(a-(a+1)x) + x^2(y(2b-1)-b^2) = 0$, we are able to fully obtain T6.
