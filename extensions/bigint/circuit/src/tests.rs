@@ -1014,7 +1014,7 @@ fn run_beq_256_rand_test_cuda(opcode: BranchEqualOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32HeapBranchAdapterExecutor<2, INT256_NUM_LIMBS>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32VecHeapBranchAdapterExecutor<2, 1, INT256_NUM_LIMBS>>::new(),
         );
 
     tester
@@ -1077,7 +1077,7 @@ fn run_blt_256_rand_test_cuda(opcode: BranchLessThanOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32HeapBranchAdapterExecutor<2, INT256_NUM_LIMBS>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32VecHeapBranchAdapterExecutor<2, 1, INT256_NUM_LIMBS>>::new(),
         );
 
     tester

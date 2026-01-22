@@ -1,13 +1,9 @@
 mod eq_mod;
-mod heap;
-mod heap_branch;
 mod vec_heap;
 mod vec_heap_branch;
 mod vec_to_flat;
 
 pub use eq_mod::*;
-pub use heap::*;
-pub use heap_branch::*;
 pub use vec_heap::*;
 pub use vec_heap_branch::*;
 pub use vec_to_flat::*;
