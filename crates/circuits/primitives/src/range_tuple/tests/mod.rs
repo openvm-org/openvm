@@ -37,72 +37,74 @@ mod dummy;
 
 #[test]
 fn test_range_tuple_chip() {
-    let mut rng = create_seeded_rng();
+    fn test_with_size<const N: usize>() {
+        let mut rng = create_seeded_rng();
 
-    const LIST_LEN: usize = 64;
+        const LIST_LEN: usize = 64;
 
-    let bus_index = 0;
-    let sizes: [u32; 3] = array::from_fn(|_| 1 << rng.gen_range(1..5));
+        let bus_index = 0;
+        let sizes: [u32; N] = array::from_fn(|_| 1 << rng.gen_range(1..5));
 
-    let bus = RangeTupleCheckerBus::new(bus_index, sizes);
-    let range_checker = RangeTupleCheckerChip::new(bus);
+        let bus = RangeTupleCheckerBus::new(bus_index, sizes);
+        let range_checker = RangeTupleCheckerChip::new(bus);
 
-    // generates a valid random tuple given sizes
-    let mut gen_tuple = || {
-        sizes
-            .iter()
-            .map(|&size| rng.gen_range(0..size))
-            .collect::<Vec<_>>()
-    };
+        // generates a valid random tuple given sizes
+        let mut gen_tuple = || {
+            sizes
+                .iter()
+                .map(|&size| rng.gen_range(0..size))
+                .collect::<Vec<_>>()
+        };
 
-    // generates a list of random valid tuples
-    let num_lists = 10;
-    let lists_vals = (0..num_lists)
-        .map(|_| (0..LIST_LEN).map(|_| gen_tuple()).collect::<Vec<_>>())
-        .collect::<Vec<_>>();
+        // generates a list of random valid tuples
+        let num_lists = 10;
+        let lists_vals = (0..num_lists)
+            .map(|_| (0..LIST_LEN).map(|_| gen_tuple()).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
 
-    // generate dummy AIR chips for each list
-    let lists_airs = (0..num_lists)
-        .map(|_| DummyInteractionAir::new(sizes.len(), true, bus_index))
-        .collect::<Vec<DummyInteractionAir>>();
+        // generate dummy AIR chips for each list
+        let lists_airs = (0..num_lists)
+            .map(|_| DummyInteractionAir::new(sizes.len(), true, bus_index))
+            .collect::<Vec<DummyInteractionAir>>();
 
-    let mut all_chips = lists_airs
-        .into_iter()
-        .map(|list| Arc::new(list) as AirRef<_>)
-        .collect::<Vec<_>>();
-    all_chips.push(Arc::new(range_checker.air));
+        let mut all_chips = lists_airs
+            .into_iter()
+            .map(|list| Arc::new(list) as AirRef<_>)
+            .collect::<Vec<_>>();
+        all_chips.push(Arc::new(range_checker.air));
 
-    // generate traces for each list
-    let lists_traces = lists_vals
-        .par_iter()
-        .map(|list| {
-            RowMajorMatrix::new(
-                list.clone()
-                    .into_iter()
-                    .flat_map(|v| {
-                        range_checker.add_count(&v);
-                        iter::once(1).chain(v)
-                    })
-                    .map(FieldAlgebra::from_wrapped_u32)
-                    .collect(),
-                sizes.len() + 1,
-            )
-        })
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        // generate traces for each list
+        let lists_traces = lists_vals
+            .par_iter()
+            .map(|list| {
+                RowMajorMatrix::new(
+                    list.clone()
+                        .into_iter()
+                        .flat_map(|v| {
+                            range_checker.add_count(&v);
+                            iter::once(1).chain(v)
+                        })
+                        .map(FieldAlgebra::from_wrapped_u32)
+                        .collect(),
+                    sizes.len() + 1,
+                )
+            })
+            .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
-    let range_trace = range_checker.generate_trace();
+        let range_trace = range_checker.generate_trace();
 
-    let all_traces = lists_traces
-        .into_iter()
-        .chain(iter::once(range_trace))
-        .map(Arc::new)
-        .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
-        .collect::<Vec<_>>();
+        let all_traces = lists_traces
+            .into_iter()
+            .chain(iter::once(range_trace))
+            .collect::<Vec<RowMajorMatrix<BabyBear>>>();
 
-    BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(test_system_params_small(3, 9, 3))
-        .run_test(all_chips, all_traces)
-        .expect("Verification failed");
+        BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
+            .expect("Verification failed");
+    }
+
+    test_with_size::<2>();
+    test_with_size::<3>();
+    test_with_size::<4>();
 }
 
 #[test]
@@ -118,11 +120,30 @@ fn negative_test_range_tuple_chip() {
         .flat_map(|i| (0..2).flat_map(move |j| (0..8).map(move |k| vec![i, j, k])))
         .collect();
 
-    for tuple in &valid_tuples {
-        range_checker.add_count(tuple);
-    }
+    let dummy_air = DummyInteractionAir::new(sizes.len(), true, bus_index);
+
+    let dummy_trace = RowMajorMatrix::new(
+        valid_tuples
+            .iter()
+            .flat_map(|v| {
+                range_checker.add_count(v);
+                iter::once(1).chain(v.iter().cloned())
+            })
+            .map(FieldAlgebra::from_wrapped_u32)
+            .collect(),
+        sizes.len() + 1,
+    );
 
     let mut range_trace = range_checker.generate_trace();
+
+    let mut all_chips: Vec<AirRef<_>> = vec![Arc::new(dummy_air) as AirRef<_>];
+    all_chips.push(Arc::new(range_checker.air));
+
+    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+        all_chips,
+        vec![dummy_trace, range_trace.clone()],
+    )
+    .expect("This should not fail");
 
     // Corrupt the trace to make it invalid
     range_trace.values[0] = BabyBear::from_wrapped_u32(99);
@@ -135,9 +156,16 @@ fn negative_test_range_tuple_chip() {
         .collect::<Vec<_>>();
 
     disable_debug_builder();
-    test_engine_small()
-        .run_test(any_rap_arc_vec![range_checker.air], traces)
-        .unwrap();
+    let error = BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+        any_rap_arc_vec![range_checker.air],
+        vec![range_trace],
+    )
+    .err();
+    assert!(
+        matches!(error, Some(VerificationError::OodEvaluationMismatch) | Some(VerificationError::ChallengePhaseError)),
+        "Expected constraint to fail with either OodEvaluationMismatch or ChallengePhaseError, got: {:?}",
+        error
+    );
 }
 
 #[test]
