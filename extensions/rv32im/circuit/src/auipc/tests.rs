@@ -87,6 +87,7 @@ fn set_and_execute<RA: Arena>(
     let initial_pc = tester.execution.last_from_pc().as_canonical_u32();
     let rd_data = run_auipc(initial_pc, imm as u32);
     assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<4>(1, a));
+    assert_eq!(initial_pc + 4, tester.execution.last_to_pc().as_canonical_u32())
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
