@@ -1,6 +1,5 @@
 #include "fp.h"
 #include "launcher.cuh"
-#include "poseidon2-air/params.cuh"
 #include "poseidon2.cuh"
 #include "primitives/trace_access.h"
 #include "types.h"
@@ -8,9 +7,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <driver_types.h>
-
-using PoseidonParams = Poseidon2ParamsS1;
-static constexpr size_t POSEIDON2_WIDTH = 16;
 
 template <typename T> struct MerkleVerifyCols {
     T proof_idx;
@@ -37,7 +33,7 @@ template <typename T> struct MerkleVerifyCols {
     T commit_major;
     T commit_minor;
 
-    T output[POSEIDON2_WIDTH];
+    T output[WIDTH];
 };
 
 struct CombinationIndices {
@@ -85,7 +81,6 @@ __device__ __forceinline__ void copy_digest(Fp *dst, const Fp *src) {
     }
 }
 
-template <size_t SBOX_REGS>
 __global__ void cukernel_merkle_verify_tracegen(
     Fp *d_trace,
     size_t trace_height,
@@ -152,7 +147,7 @@ __global__ void cukernel_merkle_verify_tracegen(
             row, MerkleVerifyCols, total_depth, Fp(static_cast<uint32_t>(record.depth + k + 1))
         );
 
-        Fp poseidon_state[POSEIDON2_WIDTH];
+        Fp poseidon_state[WIDTH];
         bool is_combining = local_row < num_leaves - 1;
 
         if (is_combining) {
@@ -168,8 +163,8 @@ __global__ void cukernel_merkle_verify_tracegen(
             COL_WRITE_ARRAY(row, MerkleVerifyCols, left, poseidon_state);
             COL_WRITE_ARRAY(row, MerkleVerifyCols, right, poseidon_state + DIGEST_SIZE);
 #pragma unroll
-            for (size_t col = 0; col < POSEIDON2_WIDTH; ++col) {
-                poseidon_inputs[global_row * POSEIDON2_WIDTH + col] = poseidon_state[col];
+            for (size_t col = 0; col < WIDTH; ++col) {
+                poseidon_inputs[global_row * WIDTH + col] = poseidon_state[col];
             }
             poseidon2::poseidon2_mix(poseidon_state);
             copy_digest(leaf_layer + indices.result_index * DIGEST_SIZE, poseidon_state);
@@ -209,8 +204,8 @@ __global__ void cukernel_merkle_verify_tracegen(
             COL_WRITE_ARRAY(row, MerkleVerifyCols, left, poseidon_state);
             COL_WRITE_ARRAY(row, MerkleVerifyCols, right, poseidon_state + DIGEST_SIZE);
 #pragma unroll
-            for (size_t col = 0; col < POSEIDON2_WIDTH; ++col) {
-                poseidon_inputs[global_row * POSEIDON2_WIDTH + col] = poseidon_state[col];
+            for (size_t col = 0; col < WIDTH; ++col) {
+                poseidon_inputs[global_row * WIDTH + col] = poseidon_state[col];
             }
             poseidon2::poseidon2_mix(poseidon_state);
             copy_digest(current_hash, poseidon_state);
@@ -249,7 +244,7 @@ extern "C" int _merkle_verify_tracegen(
         return cudaSuccess;
     }
     auto [grid, block] = kernel_launch_params(num_records, 512);
-    cukernel_merkle_verify_tracegen<PoseidonParams::SBOX_REGS><<<grid, block>>>(
+    cukernel_merkle_verify_tracegen<<<grid, block>>>(
         d_trace,
         height,
         width,

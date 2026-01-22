@@ -589,115 +589,142 @@ pub fn compute_combination_indices(k: usize, i: usize) -> Option<CombinationIndi
 
 #[cfg(feature = "cuda")]
 pub mod cuda {
-    use core::convert::TryInto;
-
     use itertools::Itertools;
     use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
-    use openvm_cuda_common::{
-        copy::{MemCopyD2H, MemCopyH2D},
-        d_buffer::DeviceBuffer,
-    };
+    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 
     use super::*;
-    use crate::{cuda::types::MerkleVerifyRecord, transcript::cuda_abi};
+    use crate::{
+        cuda::{
+            preflight::PreflightGpu, proof::ProofGpu, types::MerkleVerifyRecord,
+            vk::VerifyingKeyGpu,
+        },
+        transcript::{cuda_abi, cuda_tracegen::TranscriptBlob},
+    };
 
     const MAX_SUPPORTED_K: usize = 4;
 
-    #[tracing::instrument(
-        name = "generate_trace_cuda(MerkleVerifyAir)",
-        level = "trace",
-        skip_all
-    )]
-    pub fn generate_trace(
-        mvk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
-        preflights: &[Preflight],
-        params: &SystemParams,
-    ) -> (DeviceMatrix<F>, Vec<[F; POSEIDON2_WIDTH]>) {
-        assert_eq!(proofs.len(), preflights.len());
-        let k = params.k_whir();
-        assert!(
-            k <= MAX_SUPPORTED_K,
-            "unsupported k={} for CUDA merkle verify (max {})",
-            k,
-            MAX_SUPPORTED_K
-        );
-        let num_leaves = 1 << k;
-        let trace_width = MerkleVerifyCols::<F>::width();
+    pub(crate) struct MerkleVerifyBlob {
+        pub records: Vec<MerkleVerifyRecord>,
+        pub leaf_hashes: Vec<F>,
+        pub sibling_hashes: Vec<F>,
+        pub proof_row_starts: Vec<usize>,
+        pub total_rows: usize,
+        pub num_leaves: usize,
+        pub k: usize,
+        pub num_proofs: usize,
+        pub poseidon2_buffer_offset: usize,
+    }
 
-        let mut records = Vec::new();
-        let mut leaf_hashes = Vec::new();
-        let mut sibling_hashes = Vec::new();
-        let mut proof_row_starts = Vec::with_capacity(proofs.len());
+    impl MerkleVerifyBlob {
+        pub fn new(
+            child_vk: &VerifyingKeyGpu,
+            proofs: &[ProofGpu],
+            preflights: &[PreflightGpu],
+            poseidon2_buffer_offset: usize,
+        ) -> Self {
+            assert_eq!(proofs.len(), preflights.len());
+            let k = child_vk.system_params.k_whir();
+            assert!(
+                k <= MAX_SUPPORTED_K,
+                "unsupported k={} for CUDA merkle verify (max {})",
+                k,
+                MAX_SUPPORTED_K
+            );
+            let num_leaves = 1 << k;
 
-        let stacking_commits_per_proof = proofs
-            .iter()
-            .zip(preflights)
-            .map(|(proof, preflight)| build_stacking_commits(mvk, proof, preflight))
-            .collect_vec();
+            let mut records = Vec::new();
+            let mut leaf_hashes = Vec::new();
+            let mut sibling_hashes = Vec::new();
+            let mut proof_row_starts = Vec::with_capacity(proofs.len());
 
-        let logs_per_proof: Vec<_> = preflights
-            .iter()
-            .map(|preflight| build_merkle_logs(preflight, params))
-            .collect();
+            let stacking_commits_per_proof = proofs
+                .iter()
+                .zip(preflights)
+                .map(|(proof, preflight)| {
+                    build_stacking_commits(&child_vk.cpu, &proof.cpu, &preflight.cpu)
+                })
+                .collect_vec();
 
-        let mut total_rows = 0usize;
-        for (proof_idx, proof) in proofs.iter().enumerate() {
-            let preflight = &preflights[proof_idx];
-            proof_row_starts.push(total_rows);
-            for (merkle_proof_idx, log) in logs_per_proof[proof_idx].iter().enumerate() {
-                let num_rows = log.depth + num_leaves;
-                let leaf_offset = leaf_hashes.len();
-                for coset_idx in 0..num_leaves {
-                    if log.commit_major == 0 {
-                        let states = &preflight.initial_row_states[log.commit_minor][log.query_idx]
-                            [coset_idx];
-                        let post_state = states.last().unwrap();
-                        leaf_hashes.extend_from_slice(&post_state[..CHUNK]);
-                    } else {
-                        let state = &preflight.codeword_states[log.commit_major - 1][log.query_idx]
-                            [coset_idx];
-                        leaf_hashes.extend_from_slice(&state[..CHUNK]);
+            let logs_per_proof: Vec<_> = preflights
+                .iter()
+                .map(|preflight| build_merkle_logs(&preflight.cpu, &child_vk.system_params))
+                .collect();
+
+            let mut total_rows = 0usize;
+            for (proof_idx, proof) in proofs.iter().enumerate() {
+                let preflight = &preflights[proof_idx].cpu;
+                proof_row_starts.push(total_rows);
+                for (merkle_proof_idx, log) in logs_per_proof[proof_idx].iter().enumerate() {
+                    let num_rows = log.depth + num_leaves;
+                    let leaf_offset = leaf_hashes.len();
+                    for coset_idx in 0..num_leaves {
+                        if log.commit_major == 0 {
+                            let states = &preflight.initial_row_states[log.commit_minor]
+                                [log.query_idx][coset_idx];
+                            let post_state = states.last().unwrap();
+                            leaf_hashes.extend_from_slice(&post_state[..CHUNK]);
+                        } else {
+                            let state = &preflight.codeword_states[log.commit_major - 1]
+                                [log.query_idx][coset_idx];
+                            leaf_hashes.extend_from_slice(&state[..CHUNK]);
+                        }
                     }
+                    let path =
+                        build_merkle_path(log, &proof.cpu, &stacking_commits_per_proof[proof_idx]);
+                    let sibling_offset = sibling_hashes.len();
+                    for sibling in path {
+                        sibling_hashes.extend_from_slice(&sibling);
+                    }
+                    records.push(MerkleVerifyRecord {
+                        proof_idx: proof_idx as u16,
+                        merkle_proof_idx: merkle_proof_idx as u16,
+                        start_row: total_rows as u32,
+                        num_rows: num_rows as u32,
+                        depth: log.depth as u16,
+                        merkle_idx: log.merkle_idx as u32,
+                        commit_major: log.commit_major as u16,
+                        commit_minor: log.commit_minor as u16,
+                        leaf_hash_offset: leaf_offset as u32,
+                        siblings_offset: sibling_offset as u32,
+                    });
+                    total_rows += num_rows;
                 }
-                let path = build_merkle_path(log, proof, &stacking_commits_per_proof[proof_idx]);
-                let sibling_offset = sibling_hashes.len();
-                for sibling in path {
-                    sibling_hashes.extend_from_slice(&sibling);
-                }
-                records.push(MerkleVerifyRecord {
-                    proof_idx: proof_idx as u16,
-                    merkle_proof_idx: merkle_proof_idx as u16,
-                    start_row: total_rows as u32,
-                    num_rows: num_rows as u32,
-                    depth: log.depth as u16,
-                    merkle_idx: log.merkle_idx as u32,
-                    commit_major: log.commit_major as u16,
-                    commit_minor: log.commit_minor as u16,
-                    leaf_hash_offset: leaf_offset as u32,
-                    siblings_offset: sibling_offset as u32,
-                });
-                total_rows += num_rows;
+            }
+
+            Self {
+                records,
+                leaf_hashes,
+                sibling_hashes,
+                proof_row_starts,
+                total_rows,
+                num_leaves,
+                k,
+                num_proofs: proofs.len(),
+                poseidon2_buffer_offset,
             }
         }
+    }
 
-        let trace_height = total_rows.next_power_of_two().max(1);
+    #[tracing::instrument(level = "trace", skip_all)]
+    pub(crate) fn generate_trace(blob: &TranscriptBlob) -> DeviceMatrix<F> {
+        let merkle_blob = &blob.merkle_verify_blob;
+        let trace_width = MerkleVerifyCols::<F>::width();
+        let trace_height = merkle_blob.total_rows.next_power_of_two().max(1);
         let mut trace = DeviceMatrix::with_capacity(trace_height, trace_width);
         trace.buffer().fill_zero().unwrap();
 
-        if total_rows == 0 || records.is_empty() {
-            return (trace, Vec::new());
+        if merkle_blob.total_rows == 0 || merkle_blob.records.is_empty() {
+            return trace;
         }
 
-        let d_records = records.to_device().unwrap();
-        let d_leaf_hashes = leaf_hashes.to_device().unwrap();
-        let d_siblings = sibling_hashes.to_device().unwrap();
-        let d_proof_row_starts = proof_row_starts.to_device().unwrap();
-        let poseidon_buf_len = total_rows * POSEIDON2_WIDTH;
-        let mut d_poseidon_inputs = DeviceBuffer::<F>::with_capacity(poseidon_buf_len);
-        d_poseidon_inputs.fill_zero().unwrap();
-        let scratch_len = records.len() * num_leaves * DIGEST_SIZE;
-        let mut d_leaf_scratch = DeviceBuffer::<F>::with_capacity(scratch_len);
+        let d_records = merkle_blob.records.to_device().unwrap();
+        let d_leaf_hashes = merkle_blob.leaf_hashes.to_device().unwrap();
+        let d_siblings = merkle_blob.sibling_hashes.to_device().unwrap();
+        let d_proof_row_starts: DeviceBuffer<usize> =
+            merkle_blob.proof_row_starts.to_device().unwrap();
+        let scratch_len = merkle_blob.records.len() * merkle_blob.num_leaves * DIGEST_SIZE;
+        let d_leaf_scratch = DeviceBuffer::<F>::with_capacity(scratch_len);
         d_leaf_scratch.fill_zero().unwrap();
 
         unsafe {
@@ -706,26 +733,19 @@ pub mod cuda {
                 &d_records,
                 &d_leaf_hashes,
                 &d_siblings,
-                num_leaves,
-                k,
-                &mut d_poseidon_inputs,
-                total_rows,
+                merkle_blob.num_leaves,
+                merkle_blob.k,
+                &blob.poseidon2_buffer,
+                merkle_blob.poseidon2_buffer_offset,
+                merkle_blob.total_rows,
                 &d_proof_row_starts,
-                proofs.len(),
-                &mut d_leaf_scratch,
+                merkle_blob.num_proofs,
+                &d_leaf_scratch,
             )
             .expect("failed to launch merkle verify tracegen");
         }
 
-        let poseidon_inputs = d_poseidon_inputs
-            .to_host()
-            .expect("failed to copy poseidon inputs from device");
-        let poseidon_inputs = poseidon_inputs[..poseidon_buf_len]
-            .chunks_exact(POSEIDON2_WIDTH)
-            .map(|chunk| chunk.try_into().unwrap())
-            .collect_vec();
-
-        (trace, poseidon_inputs)
+        trace
     }
 
     fn build_stacking_commits(
