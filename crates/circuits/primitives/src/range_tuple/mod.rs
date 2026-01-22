@@ -96,9 +96,9 @@ The AIR enforces the following constraints for the `tuple` column:
 
 - (T1): The trace starts with `(0, ..., 0)`.
 - (T2): The trace ends with `(size[0]-1, ..., size[N-1]-1)`.
-- (T3): Between consecutive tuples, column `N-1` can increment or wrap.
-- (T4): Between consecutive tuples, column `0` can stay the same or increment.
-- (T5): Between consecutive tuples, all other columns can stay the same, increment, or wrap.
+- (T3): Between consecutive tuples, column `N-1` must increment or wrap.
+- (T4): Between consecutive tuples, column `0` must stay the same or increment.
+- (T5): Between consecutive tuples, all other columns must stay the same, increment, or wrap.
 - (T6): Between consecutive tuples, column `i` increments or wraps if and only if column `i+1` wraps.
 
 The constraints imply that, if `local` is a valid tuple (i.e. all values are in range), then `next` is also a valid tuple. The proof of this is as follows:
