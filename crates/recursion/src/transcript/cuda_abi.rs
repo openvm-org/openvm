@@ -2,9 +2,10 @@
 
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
 use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
+use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::prover::MatrixDimensions;
 
-use crate::cuda::types::MerkleVerifyRecord;
+use crate::{cuda::types::MerkleVerifyRecord, transcript::transcript::cuda::TranscriptAirRecord};
 
 extern "C" {
     fn _poseidon2_tracegen(
@@ -49,6 +50,19 @@ extern "C" {
         d_proof_start_rows: *const usize,
         num_proofs: usize,
         d_leaf_scratch: *mut F,
+    ) -> i32;
+
+    fn _transcript_air_tracegen(
+        d_trace: *mut F,
+        height: usize,
+        width: usize,
+        h_row_bounds: *const u32,
+        d_transcript_values: *const *const F,
+        d_start_states: *const *const F,
+        d_records: *const *const TranscriptAirRecord,
+        d_poseidon2_buffer: *mut F,
+        h_poseidon2_offsets: *const u32,
+        num_proofs: u32,
     ) -> i32;
 }
 
@@ -114,11 +128,12 @@ pub unsafe fn merkle_verify_tracegen(
     d_siblings: &DeviceBuffer<F>,
     num_leaves: usize,
     k: usize,
-    d_poseidon_inputs: &mut DeviceBuffer<F>,
+    d_poseidon_inputs: &DeviceBuffer<F>,
+    poseidon_input_offset: usize,
     num_valid_rows: usize,
     d_proof_start_rows: &DeviceBuffer<usize>,
     num_proofs: usize,
-    d_leaf_scratch: &mut DeviceBuffer<F>,
+    d_leaf_scratch: &DeviceBuffer<F>,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_merkle_verify_tracegen(
         d_trace.buffer().as_mut_ptr(),
@@ -130,10 +145,39 @@ pub unsafe fn merkle_verify_tracegen(
         d_siblings.as_ptr(),
         num_leaves,
         k,
-        d_poseidon_inputs.as_mut_ptr(),
+        d_poseidon_inputs
+            .as_mut_ptr()
+            .wrapping_add(poseidon_input_offset * POSEIDON2_WIDTH),
         num_valid_rows,
         d_proof_start_rows.as_ptr(),
         num_proofs,
         d_leaf_scratch.as_mut_ptr(),
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub unsafe fn transcript_air_tracegen(
+    d_trace: &DeviceBuffer<F>,
+    height: usize,
+    width: usize,
+    h_row_bounds: &[u32],
+    d_transcript_values: Vec<*const F>,
+    d_start_states: Vec<*const F>,
+    d_records: Vec<*const TranscriptAirRecord>,
+    d_poseidon2_buffer: &DeviceBuffer<F>,
+    h_poseidon2_offsets: &[u32],
+    num_proofs: usize,
+) -> Result<(), CudaError> {
+    CudaError::from_result(_transcript_air_tracegen(
+        d_trace.as_mut_ptr(),
+        height,
+        width,
+        h_row_bounds.as_ptr(),
+        d_transcript_values.as_ptr(),
+        d_start_states.as_ptr(),
+        d_records.as_ptr(),
+        d_poseidon2_buffer.as_mut_ptr(),
+        h_poseidon2_offsets.as_ptr(),
+        num_proofs as u32,
     ))
 }
