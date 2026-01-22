@@ -26,9 +26,9 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_rv32_adapters::{
-    rv32_heap_branch_default, rv32_write_heap_default, Rv32HeapAdapterAir, Rv32HeapAdapterExecutor,
-    Rv32HeapAdapterFiller, Rv32HeapBranchAdapterAir, Rv32HeapBranchAdapterExecutor,
-    Rv32HeapBranchAdapterFiller,
+    rv32_heap_branch_default, rv32_write_heap_default, Rv32VecHeapAdapterAir,
+    Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller, Rv32VecHeapBranchAdapterAir,
+    Rv32VecHeapBranchAdapterExecutor, Rv32VecHeapBranchAdapterFiller,
 };
 use openvm_rv32im_circuit::{
     adapters::{INT256_NUM_LIMBS, RV_B_TYPE_IMM_BITS},
@@ -63,6 +63,7 @@ use {
 };
 
 use crate::{
+    AluAdapterAir, AluAdapterExecutor, BranchAdapterAir, BranchAdapterExecutor, CONST_BLOCK_SIZE,
     Rv32BaseAlu256Air, Rv32BaseAlu256Chip, Rv32BaseAlu256Executor, Rv32BranchEqual256Air,
     Rv32BranchEqual256Chip, Rv32BranchEqual256Executor, Rv32BranchLessThan256Air,
     Rv32BranchLessThan256Chip, Rv32BranchLessThan256Executor, Rv32LessThan256Air,
@@ -91,21 +92,39 @@ fn create_alu_harness_fields(
     Rv32BaseAlu256Chip<F>,
 ) {
     let air = Rv32BaseAlu256Air::new(
-        Rv32HeapAdapterAir::new(
+        AluAdapterAir::new(Rv32VecHeapAdapterAir::<
+            2,
+            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            CONST_BLOCK_SIZE,
+            CONST_BLOCK_SIZE,
+        >::new(
             execution_bridge,
             memory_bridge,
             bitwise_chip.bus(),
             address_bits,
-        ),
+        )),
         BaseAluCoreAir::new(bitwise_chip.bus(), Rv32BaseAlu256Opcode::CLASS_OFFSET),
     );
     let executor = Rv32BaseAlu256Executor::new(
-        Rv32HeapAdapterExecutor::new(address_bits),
+        AluAdapterExecutor::new(Rv32VecHeapAdapterExecutor::<
+            2,
+            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            CONST_BLOCK_SIZE,
+            CONST_BLOCK_SIZE,
+        >::new(address_bits)),
         Rv32BaseAlu256Opcode::CLASS_OFFSET,
     );
     let chip = Rv32BaseAlu256Chip::new(
         BaseAluFiller::new(
-            Rv32HeapAdapterFiller::new(address_bits, bitwise_chip.clone()),
+            Rv32VecHeapAdapterFiller::<
+                2,
+                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                CONST_BLOCK_SIZE,
+                CONST_BLOCK_SIZE,
+            >::new(address_bits, bitwise_chip.clone()),
             bitwise_chip,
             Rv32BaseAlu256Opcode::CLASS_OFFSET,
         ),
@@ -126,21 +145,39 @@ fn create_lt_harness_fields(
     Rv32LessThan256Chip<F>,
 ) {
     let air = Rv32LessThan256Air::new(
-        Rv32HeapAdapterAir::new(
+        AluAdapterAir::new(Rv32VecHeapAdapterAir::<
+            2,
+            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            CONST_BLOCK_SIZE,
+            CONST_BLOCK_SIZE,
+        >::new(
             execution_bridge,
             memory_bridge,
             bitwise_chip.bus(),
             address_bits,
-        ),
+        )),
         LessThanCoreAir::new(bitwise_chip.bus(), Rv32LessThan256Opcode::CLASS_OFFSET),
     );
     let executor = Rv32LessThan256Executor::new(
-        Rv32HeapAdapterExecutor::new(address_bits),
+        AluAdapterExecutor::new(Rv32VecHeapAdapterExecutor::<
+            2,
+            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            CONST_BLOCK_SIZE,
+            CONST_BLOCK_SIZE,
+        >::new(address_bits)),
         Rv32LessThan256Opcode::CLASS_OFFSET,
     );
     let chip = Rv32LessThan256Chip::new(
         LessThanFiller::new(
-            Rv32HeapAdapterFiller::new(address_bits, bitwise_chip.clone()),
+            Rv32VecHeapAdapterFiller::<
+                2,
+                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                CONST_BLOCK_SIZE,
+                CONST_BLOCK_SIZE,
+            >::new(address_bits, bitwise_chip.clone()),
             bitwise_chip.clone(),
             Rv32LessThan256Opcode::CLASS_OFFSET,
         ),
@@ -162,21 +199,39 @@ fn create_mul_harness_fields(
     Rv32Multiplication256Chip<F>,
 ) {
     let air = Rv32Multiplication256Air::new(
-        Rv32HeapAdapterAir::new(
+        AluAdapterAir::new(Rv32VecHeapAdapterAir::<
+            2,
+            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            CONST_BLOCK_SIZE,
+            CONST_BLOCK_SIZE,
+        >::new(
             execution_bridge,
             memory_bridge,
             bitwise_chip.bus(),
             address_bits,
-        ),
+        )),
         MultiplicationCoreAir::new(*range_tuple_chip.bus(), Rv32Mul256Opcode::CLASS_OFFSET),
     );
     let executor = Rv32Multiplication256Executor::new(
-        Rv32HeapAdapterExecutor::new(address_bits),
+        AluAdapterExecutor::new(Rv32VecHeapAdapterExecutor::<
+            2,
+            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            CONST_BLOCK_SIZE,
+            CONST_BLOCK_SIZE,
+        >::new(address_bits)),
         Rv32Mul256Opcode::CLASS_OFFSET,
     );
     let chip = Rv32Multiplication256Chip::<F>::new(
         MultiplicationFiller::new(
-            Rv32HeapAdapterFiller::new(address_bits, bitwise_chip),
+            Rv32VecHeapAdapterFiller::<
+                2,
+                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                CONST_BLOCK_SIZE,
+                CONST_BLOCK_SIZE,
+            >::new(address_bits, bitwise_chip),
             range_tuple_chip,
             Rv32Mul256Opcode::CLASS_OFFSET,
         ),
@@ -194,12 +249,18 @@ fn create_shift_harness_fields(
     address_bits: usize,
 ) -> (Rv32Shift256Air, Rv32Shift256Executor, Rv32Shift256Chip<F>) {
     let air = Rv32Shift256Air::new(
-        Rv32HeapAdapterAir::new(
+        AluAdapterAir::new(Rv32VecHeapAdapterAir::<
+            2,
+            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            CONST_BLOCK_SIZE,
+            CONST_BLOCK_SIZE,
+        >::new(
             execution_bridge,
             memory_bridge,
             bitwise_chip.bus(),
             address_bits,
-        ),
+        )),
         ShiftCoreAir::new(
             bitwise_chip.bus(),
             range_checker_chip.bus(),
@@ -207,12 +268,24 @@ fn create_shift_harness_fields(
         ),
     );
     let executor = Rv32Shift256Executor::new(
-        Rv32HeapAdapterExecutor::new(address_bits),
+        AluAdapterExecutor::new(Rv32VecHeapAdapterExecutor::<
+            2,
+            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            CONST_BLOCK_SIZE,
+            CONST_BLOCK_SIZE,
+        >::new(address_bits)),
         Rv32Shift256Opcode::CLASS_OFFSET,
     );
     let chip = Rv32Shift256Chip::new(
         ShiftFiller::new(
-            Rv32HeapAdapterFiller::new(address_bits, bitwise_chip.clone()),
+            Rv32VecHeapAdapterFiller::<
+                2,
+                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                CONST_BLOCK_SIZE,
+                CONST_BLOCK_SIZE,
+            >::new(address_bits, bitwise_chip.clone()),
             bitwise_chip.clone(),
             range_checker_chip.clone(),
             Rv32Shift256Opcode::CLASS_OFFSET,
@@ -234,22 +307,34 @@ fn create_beq_harness_fields(
     Rv32BranchEqual256Chip<F>,
 ) {
     let air = Rv32BranchEqual256Air::new(
-        Rv32HeapBranchAdapterAir::new(
+        BranchAdapterAir::new(Rv32VecHeapBranchAdapterAir::<
+            2,
+            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            CONST_BLOCK_SIZE,
+        >::new(
             execution_bridge,
             memory_bridge,
             bitwise_chip.bus(),
             address_bits,
-        ),
+        )),
         BranchEqualCoreAir::new(Rv32BranchEqual256Opcode::CLASS_OFFSET, DEFAULT_PC_STEP),
     );
     let executor = Rv32BranchEqual256Executor::new(
-        Rv32HeapBranchAdapterExecutor::new(address_bits),
+        BranchAdapterExecutor::new(Rv32VecHeapBranchAdapterExecutor::<
+            2,
+            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            CONST_BLOCK_SIZE,
+        >::new(address_bits)),
         Rv32BranchEqual256Opcode::CLASS_OFFSET,
         DEFAULT_PC_STEP,
     );
     let chip = Rv32BranchEqual256Chip::new(
         BranchEqualFiller::new(
-            Rv32HeapBranchAdapterFiller::new(address_bits, bitwise_chip),
+            Rv32VecHeapBranchAdapterFiller::<
+                2,
+                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                CONST_BLOCK_SIZE,
+            >::new(address_bits, bitwise_chip),
             Rv32BranchEqual256Opcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
         ),
@@ -270,24 +355,36 @@ fn create_blt_harness_fields(
     Rv32BranchLessThan256Chip<F>,
 ) {
     let air = Rv32BranchLessThan256Air::new(
-        Rv32HeapBranchAdapterAir::new(
+        BranchAdapterAir::new(Rv32VecHeapBranchAdapterAir::<
+            2,
+            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            CONST_BLOCK_SIZE,
+        >::new(
             execution_bridge,
             memory_bridge,
             bitwise_chip.bus(),
             address_bits,
-        ),
+        )),
         BranchLessThanCoreAir::new(
             bitwise_chip.bus(),
             Rv32BranchLessThan256Opcode::CLASS_OFFSET,
         ),
     );
     let executor = Rv32BranchLessThan256Executor::new(
-        Rv32HeapBranchAdapterExecutor::new(address_bits),
+        BranchAdapterExecutor::new(Rv32VecHeapBranchAdapterExecutor::<
+            2,
+            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            CONST_BLOCK_SIZE,
+        >::new(address_bits)),
         Rv32BranchLessThan256Opcode::CLASS_OFFSET,
     );
     let chip = Rv32BranchLessThan256Chip::new(
         BranchLessThanFiller::new(
-            Rv32HeapBranchAdapterFiller::new(address_bits, bitwise_chip.clone()),
+            Rv32VecHeapBranchAdapterFiller::<
+                2,
+                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                CONST_BLOCK_SIZE,
+            >::new(address_bits, bitwise_chip.clone()),
             bitwise_chip,
             Rv32BranchLessThan256Opcode::CLASS_OFFSET,
         ),
@@ -667,7 +764,7 @@ fn run_alu_256_rand_test_cuda(opcode: BaseAluOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>>::new(),
+            EmptyAdapterCoreLayout::<F, AluAdapterExecutor>::new(),
         );
 
     tester
@@ -728,7 +825,7 @@ fn run_lt_256_rand_test_cuda(opcode: LessThanOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>>::new(),
+            EmptyAdapterCoreLayout::<F, AluAdapterExecutor>::new(),
         );
 
     tester
@@ -794,7 +891,7 @@ fn run_mul_256_rand_test_cuda(opcode: MulOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>>::new(),
+            EmptyAdapterCoreLayout::<F, AluAdapterExecutor>::new(),
         );
 
     tester
@@ -856,7 +953,7 @@ fn run_shift_256_rand_test_cuda(opcode: ShiftOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>>::new(),
+            EmptyAdapterCoreLayout::<F, AluAdapterExecutor>::new(),
         );
 
     tester

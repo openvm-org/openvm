@@ -12,17 +12,14 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::Rv32HeapAdapterExecutor;
 use openvm_rv32im_circuit::LessThanExecutor;
 use openvm_rv32im_transpiler::LessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{common, Rv32LessThan256Executor, INT256_NUM_LIMBS};
-
-type AdapterExecutor = Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
+use crate::{common, AluAdapterExecutor, Rv32LessThan256Executor, INT256_NUM_LIMBS};
 
 impl Rv32LessThan256Executor {
-    pub fn new(adapter: AdapterExecutor, offset: usize) -> Self {
+    pub fn new(adapter: AluAdapterExecutor, offset: usize) -> Self {
         Self(LessThanExecutor::new(adapter, offset))
     }
 }

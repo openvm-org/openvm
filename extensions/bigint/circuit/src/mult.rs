@@ -9,20 +9,17 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::Rv32HeapAdapterExecutor;
 use openvm_rv32im_circuit::MultiplicationExecutor;
 use openvm_rv32im_transpiler::MulOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{bytes_to_u32_array, u32_array_to_bytes},
-    Rv32Multiplication256Executor, INT256_NUM_LIMBS,
+    AluAdapterExecutor, Rv32Multiplication256Executor, INT256_NUM_LIMBS,
 };
 
-type AdapterExecutor = Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
-
 impl Rv32Multiplication256Executor {
-    pub fn new(adapter: AdapterExecutor, offset: usize) -> Self {
+    pub fn new(adapter: AluAdapterExecutor, offset: usize) -> Self {
         Self(MultiplicationExecutor::new(adapter, offset))
     }
 }
