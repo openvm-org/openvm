@@ -5,7 +5,7 @@ use openvm_cuda_backend::prelude::F;
 use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
 
 use crate::{
-    cuda::types::{AirData, PublicValueData, TraceMetadata},
+    cuda::types::{AirData, PublicValueData, TraceHeight, TraceMetadata},
     proof_shape::proof_shape::cuda::{ProofShapePerProof, ProofShapeTracegenInputs},
 };
 
@@ -15,7 +15,8 @@ extern "C" {
         height: usize,
         d_air_data: *const AirData,
         d_per_row_tidx: *const *const usize,
-        d_sorted_trace_data: *const *const TraceMetadata,
+        d_sorted_trace_heights: *const *const TraceHeight,
+        d_sorted_trace_metadata: *const *const TraceMetadata,
         d_cached_commits: *const *const Digest,
         d_per_proof: *const ProofShapePerProof,
         num_proofs: usize,
@@ -37,7 +38,8 @@ pub unsafe fn proof_shape_tracegen(
     height: usize,
     d_air_data: &DeviceBuffer<AirData>,
     d_per_row_tidx: Vec<*const usize>,
-    d_sorted_trace_data: Vec<*const TraceMetadata>,
+    d_sorted_trace_heights: Vec<*const TraceHeight>,
+    d_sorted_trace_metadata: Vec<*const TraceMetadata>,
     d_cached_commits: Vec<*const Digest>,
     d_per_proof: &DeviceBuffer<ProofShapePerProof>,
     num_proofs: usize,
@@ -48,7 +50,8 @@ pub unsafe fn proof_shape_tracegen(
         height,
         d_air_data.as_ptr(),
         d_per_row_tidx.as_ptr(),
-        d_sorted_trace_data.as_ptr(),
+        d_sorted_trace_heights.as_ptr(),
+        d_sorted_trace_metadata.as_ptr(),
         d_cached_commits.as_ptr(),
         d_per_proof.as_ptr(),
         num_proofs,

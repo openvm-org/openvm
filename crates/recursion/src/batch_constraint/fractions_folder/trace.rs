@@ -10,8 +10,8 @@ use crate::{batch_constraint::fractions_folder::FractionsFolderCols, system::Pre
 #[tracing::instrument(level = "trace", skip_all)]
 pub(crate) fn generate_trace(
     _vk: &MultiStarkVerifyingKeyV2,
-    proofs: &[Proof],
-    preflights: &[Preflight],
+    proofs: &[&Proof],
+    preflights: &[&Preflight],
 ) -> RowMajorMatrix<F> {
     let width = FractionsFolderCols::<F>::width();
 

@@ -80,7 +80,7 @@ impl EqNegTraceGenerator {
     #[tracing::instrument(level = "trace", skip_all)]
     pub fn generate_trace(
         vk: &MultiStarkVerifyingKeyV2,
-        preflights: &[Preflight],
+        preflights: &[&Preflight],
         selector_counts: &MultiVecWithBounds<SelectorCount, 1>,
     ) -> RowMajorMatrix<F> {
         let l_skip = vk.inner.params.l_skip;

@@ -7,10 +7,7 @@ use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, pro
 
 use super::ExpressionClaimCols;
 use crate::{
-    batch_constraint::expr_eval::{ConstraintsFoldingBlob, InteractionsFoldingBlob},
-    primitives::pow::PowerCheckerTraceGenerator,
-    system::Preflight,
-    utils::MultiProofVecVec,
+    primitives::pow::PowerCheckerTraceGenerator, system::Preflight, utils::MultiProofVecVec,
 };
 
 pub struct ExpressionClaimBlob {
@@ -19,13 +16,13 @@ pub struct ExpressionClaimBlob {
 }
 
 pub fn generate_expression_claim_blob(
-    cf_blob: &ConstraintsFoldingBlob,
-    if_blob: &InteractionsFoldingBlob,
+    cf_folded_claims: &MultiProofVecVec<(isize, EF)>,
+    if_folded_claims: &MultiProofVecVec<(isize, EF)>,
 ) -> ExpressionClaimBlob {
     let mut claims = MultiProofVecVec::new();
-    for pidx in 0..cf_blob.folded_claims.num_proofs() {
-        claims.extend(if_blob.folded_claims[pidx].iter().cloned());
-        claims.extend(cf_blob.folded_claims[pidx].iter().cloned());
+    for pidx in 0..cf_folded_claims.num_proofs() {
+        claims.extend(if_folded_claims[pidx].iter().cloned());
+        claims.extend(cf_folded_claims[pidx].iter().cloned());
         claims.end_proof();
     }
     ExpressionClaimBlob { claims }
@@ -35,8 +32,8 @@ pub fn generate_expression_claim_blob(
 pub(in crate::batch_constraint) fn generate_trace(
     _vk: &MultiStarkVerifyingKeyV2,
     blob: &ExpressionClaimBlob,
-    proofs: &[Proof],
-    preflights: &[Preflight],
+    proofs: &[&Proof],
+    preflights: &[&Preflight],
     pow_checker: &PowerCheckerTraceGenerator<2, 32>,
 ) -> RowMajorMatrix<F> {
     let width = ExpressionClaimCols::<F>::width();

@@ -214,71 +214,82 @@ pub(in crate::batch_constraint) struct ConstraintsFoldingBlob {
     pub(in crate::batch_constraint) folded_claims: MultiProofVecVec<(isize, EF)>,
 }
 
-pub(in crate::batch_constraint) fn generate_constraints_folding_blob(
-    vk: &MultiStarkVerifyingKey0V2,
-    expr_evals: &MultiVecWithBounds<EF, 2>,
-    preflights: &[Preflight],
-) -> ConstraintsFoldingBlob {
-    let constraints = vk
-        .per_air
-        .iter()
-        .map(|vk| vk.symbolic_constraints.constraints.constraint_idx.clone())
-        .collect_vec();
+impl ConstraintsFoldingBlob {
+    pub fn new(
+        vk: &MultiStarkVerifyingKey0V2,
+        expr_evals: &MultiVecWithBounds<EF, 2>,
+        preflights: &[&Preflight],
+    ) -> Self {
+        let constraints = vk
+            .per_air
+            .iter()
+            .map(|vk| vk.symbolic_constraints.constraints.constraint_idx.clone())
+            .collect_vec();
 
-    let mut records = MultiProofVecVec::new();
-    let mut folded = MultiProofVecVec::new();
-    for (pidx, preflight) in preflights.iter().enumerate() {
-        let lambda_tidx = preflight.batch_constraint.lambda_tidx;
-        let lambda =
-            EF::from_base_slice(&preflight.transcript.values()[lambda_tidx..lambda_tidx + D_EF]);
+        let mut records = MultiProofVecVec::new();
+        let mut folded = MultiProofVecVec::new();
+        for (pidx, preflight) in preflights.iter().enumerate() {
+            let lambda_tidx = preflight.batch_constraint.lambda_tidx;
+            let lambda = EF::from_base_slice(
+                &preflight.transcript.values()[lambda_tidx..lambda_tidx + D_EF],
+            );
 
-        let vdata = &preflight.proof_shape.sorted_trace_vdata;
-        for (sort_idx, (air_idx, v)) in vdata.iter().enumerate() {
-            let constrs = &constraints[*air_idx];
-            records.push(ConstraintsFoldingRecord {
-                // dummy to avoid handling case with no constraints
-                sort_idx,
-                air_idx: *air_idx,
-                constraint_idx: 0,
-                node_idx: 0,
-                is_first_in_air: true,
-                value: EF::ZERO,
-            });
-            let mut folded_claim = EF::ZERO;
-            let mut lambda_pow = EF::ONE;
-            for (constraint_idx, &constr) in constrs.iter().enumerate() {
-                let value = expr_evals[[pidx, *air_idx]][constr];
-                folded_claim += lambda_pow * value;
-                lambda_pow *= lambda;
+            let vdata = &preflight.proof_shape.sorted_trace_vdata;
+            for (sort_idx, (air_idx, v)) in vdata.iter().enumerate() {
+                let constrs = &constraints[*air_idx];
                 records.push(ConstraintsFoldingRecord {
+                    // dummy to avoid handling case with no constraints
                     sort_idx,
                     air_idx: *air_idx,
-                    constraint_idx: constraint_idx + 1,
-                    node_idx: constr,
-                    is_first_in_air: false,
-                    value,
+                    constraint_idx: 0,
+                    node_idx: 0,
+                    is_first_in_air: true,
+                    value: EF::ZERO,
                 });
+                let mut folded_claim = EF::ZERO;
+                let mut lambda_pow = EF::ONE;
+                for (constraint_idx, &constr) in constrs.iter().enumerate() {
+                    let value = expr_evals[[pidx, *air_idx]][constr];
+                    folded_claim += lambda_pow * value;
+                    lambda_pow *= lambda;
+                    records.push(ConstraintsFoldingRecord {
+                        sort_idx,
+                        air_idx: *air_idx,
+                        constraint_idx: constraint_idx + 1,
+                        node_idx: constr,
+                        is_first_in_air: false,
+                        value,
+                    });
+                }
+                let n_lift = v.log_height.saturating_sub(vk.params.l_skip);
+                let n = v.log_height as isize - vk.params.l_skip as isize;
+                folded.push((
+                    n,
+                    folded_claim * preflight.batch_constraint.eq_ns_frontloaded[n_lift],
+                ));
             }
-            let n_lift = v.log_height.saturating_sub(vk.params.l_skip);
-            let n = v.log_height as isize - vk.params.l_skip as isize;
-            folded.push((
-                n,
-                folded_claim * preflight.batch_constraint.eq_ns_frontloaded[n_lift],
-            ));
+            records.end_proof();
+            folded.end_proof();
         }
-        records.end_proof();
-        folded.end_proof();
+        Self {
+            records,
+            folded_claims: folded,
+        }
     }
-    ConstraintsFoldingBlob {
-        records,
-        folded_claims: folded,
+
+    #[allow(unused)]
+    pub fn empty() -> Self {
+        Self {
+            records: MultiProofVecVec::new(),
+            folded_claims: MultiProofVecVec::new(),
+        }
     }
 }
 
 #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
 pub(in crate::batch_constraint) fn generate_constraints_folding_trace(
     blob: &ConstraintsFoldingBlob,
-    preflights: &[Preflight],
+    preflights: &[&Preflight],
 ) -> RowMajorMatrix<F> {
     let width = ConstraintsFoldingCols::<F>::width();
 
@@ -359,4 +370,192 @@ pub(in crate::batch_constraint) fn generate_constraints_folding_trace(
         });
 
     RowMajorMatrix::new(trace, width)
+}
+
+#[cfg(feature = "cuda")]
+pub(in crate::batch_constraint) mod cuda {
+    use openvm_cuda_backend::{base::DeviceMatrix, chip::UInt2};
+    use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
+
+    use crate::{
+        batch_constraint::cuda_abi::{
+            AffineFpExt, ConstraintsFoldingPerProof, constraints_folding_tracegen,
+            constraints_folding_tracegen_temp_bytes,
+        },
+        cuda::{preflight::PreflightGpu, vk::VerifyingKeyGpu},
+    };
+
+    use super::*;
+
+    pub struct ConstraintsFoldingBlobGpu {
+        // Per proof, per AIR, per constraint
+        pub values: Vec<Vec<Vec<EF>>>,
+        // Per proof
+        pub constraints_folding_per_proof: Vec<ConstraintsFoldingPerProof>,
+        // For compatibility with CPU tracegen
+        pub folded_claims: MultiProofVecVec<(isize, EF)>,
+    }
+
+    impl ConstraintsFoldingBlobGpu {
+        pub fn new(
+            vk: &VerifyingKeyGpu,
+            expr_evals: &MultiVecWithBounds<EF, 2>,
+            preflights: &[PreflightGpu],
+        ) -> Self {
+            let constraints = vk
+                .cpu
+                .inner
+                .per_air
+                .iter()
+                .map(|vk| vk.symbolic_constraints.constraints.constraint_idx.clone())
+                .collect_vec();
+
+            let mut values = Vec::with_capacity(preflights.len());
+            let mut constraints_folding_per_proof = Vec::with_capacity(preflights.len());
+            let mut folded_claims = MultiProofVecVec::new();
+
+            for (pidx, preflight) in preflights.iter().enumerate() {
+                let lambda_tidx = preflight.cpu.batch_constraint.lambda_tidx;
+                let lambda = EF::from_base_slice(
+                    &preflight.cpu.transcript.values()[lambda_tidx..lambda_tidx + D_EF],
+                );
+
+                let vdata = &preflight.cpu.proof_shape.sorted_trace_vdata;
+                let mut proof_values = Vec::with_capacity(vdata.len());
+
+                for (air_idx, v) in vdata.iter() {
+                    let mut folded_claim = EF::ZERO;
+                    let mut lambda_pow = EF::ONE;
+
+                    let air_values = std::iter::once(EF::ZERO)
+                        .chain(constraints[*air_idx].iter().map(|&constr| {
+                            let value = expr_evals[[pidx, *air_idx]][constr];
+                            folded_claim += lambda_pow * value;
+                            lambda_pow *= lambda;
+                            value
+                        }))
+                        .collect_vec();
+                    proof_values.push(air_values);
+
+                    let n_lift = v.log_height.saturating_sub(vk.system_params.l_skip);
+                    let n = v.log_height as isize - vk.system_params.l_skip as isize;
+                    folded_claims.push((
+                        n,
+                        folded_claim * preflight.cpu.batch_constraint.eq_ns_frontloaded[n_lift],
+                    ));
+                }
+
+                values.push(proof_values);
+                constraints_folding_per_proof.push(ConstraintsFoldingPerProof {
+                    lambda_tidx: lambda_tidx as u32,
+                    lambda,
+                });
+                folded_claims.end_proof();
+            }
+
+            Self {
+                values,
+                constraints_folding_per_proof,
+                folded_claims,
+            }
+        }
+    }
+
+    #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
+    pub fn generate_constraints_folding_trace(
+        child_vk: &VerifyingKeyGpu,
+        preflights_gpu: &[PreflightGpu],
+        blob: &ConstraintsFoldingBlobGpu,
+    ) -> DeviceMatrix<F> {
+        let mut num_valid_rows = 0u32;
+        let mut row_bounds = Vec::with_capacity(preflights_gpu.len());
+        let mut constraint_bounds = Vec::with_capacity(preflights_gpu.len());
+        let mut proof_and_sort_idxs = vec![];
+
+        let flat_values = blob
+            .values
+            .iter()
+            .enumerate()
+            .flat_map(|(proof_idx, proof_values)| {
+                let mut num_constraints_in_proof = 0;
+                let mut proof_constraint_bounds = Vec::with_capacity(proof_values.len());
+                for (sort_idx, air_values) in proof_values.iter().enumerate() {
+                    let num_constraints = air_values.len();
+                    num_constraints_in_proof += num_constraints as u32;
+                    proof_constraint_bounds.push(num_constraints_in_proof);
+                    proof_and_sort_idxs.extend(
+                        std::iter::repeat(UInt2 {
+                            x: proof_idx as u32,
+                            y: sort_idx as u32,
+                        })
+                        .take(num_constraints),
+                    );
+                }
+                num_valid_rows += num_constraints_in_proof;
+                row_bounds.push(num_valid_rows);
+                constraint_bounds.push(proof_constraint_bounds.to_device().unwrap());
+                proof_values.iter().flatten().copied()
+            })
+            .collect_vec();
+        let eq_ns = preflights_gpu
+            .iter()
+            .map(|preflight| {
+                preflight
+                    .cpu
+                    .batch_constraint
+                    .eq_ns_frontloaded
+                    .to_device()
+                    .unwrap()
+            })
+            .collect_vec();
+
+        let height = (num_valid_rows as usize).next_power_of_two();
+        let width = ConstraintsFoldingCols::<F>::width();
+        let d_trace = DeviceMatrix::<F>::with_capacity(height, width);
+
+        let d_proof_and_sort_idxs = proof_and_sort_idxs.to_device().unwrap();
+        let d_values = flat_values.to_device().unwrap();
+        let d_cur_sum_evals = DeviceBuffer::<AffineFpExt>::with_capacity(d_values.len());
+
+        let d_constraint_bounds = constraint_bounds.iter().map(|b| b.as_ptr()).collect_vec();
+        let d_sorted_trace_heights = preflights_gpu
+            .iter()
+            .map(|preflight| preflight.proof_shape.sorted_trace_heights.as_ptr())
+            .collect_vec();
+        let d_eq_ns = eq_ns.iter().map(|b| b.as_ptr()).collect_vec();
+
+        let d_per_proof = blob.constraints_folding_per_proof.to_device().unwrap();
+
+        unsafe {
+            let temp_bytes = constraints_folding_tracegen_temp_bytes(
+                &d_proof_and_sort_idxs,
+                &d_cur_sum_evals,
+                num_valid_rows as u32,
+            )
+            .unwrap();
+            let d_temp_buffer = DeviceBuffer::<u8>::with_capacity(temp_bytes);
+            constraints_folding_tracegen(
+                d_trace.buffer(),
+                height,
+                width,
+                &d_proof_and_sort_idxs,
+                &d_cur_sum_evals,
+                &d_values,
+                &row_bounds,
+                d_constraint_bounds,
+                d_sorted_trace_heights,
+                d_eq_ns,
+                &d_per_proof,
+                preflights_gpu.len() as u32,
+                child_vk.per_air.len() as u32,
+                num_valid_rows as u32,
+                child_vk.system_params.l_skip as u32,
+                &d_temp_buffer,
+                temp_bytes,
+            )
+            .unwrap();
+        }
+
+        d_trace
+    }
 }

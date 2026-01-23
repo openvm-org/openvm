@@ -346,7 +346,7 @@ impl Eq3bBlob {
 
 pub(crate) fn generate_eq_3b_blob(
     vk: &MultiStarkVerifyingKey0V2,
-    preflights: &[Preflight],
+    preflights: &[&Preflight],
 ) -> Eq3bBlob {
     let l_skip = vk.params.l_skip;
     let mut blob = Eq3bBlob::new();
@@ -399,7 +399,7 @@ pub(crate) fn generate_eq_3b_blob(
 pub(crate) fn generate_eq_3b_trace(
     vk: &MultiStarkVerifyingKeyV2,
     blob: &Eq3bBlob,
-    preflights: &[Preflight],
+    preflights: &[&Preflight],
 ) -> RowMajorMatrix<F> {
     let width = Eq3bColumns::<F>::width();
     let l_skip = vk.inner.params.l_skip;
@@ -493,4 +493,102 @@ pub(crate) fn generate_eq_3b_trace(
         });
 
     RowMajorMatrix::new(trace, width)
+}
+
+#[cfg(feature = "cuda")]
+pub(in crate::batch_constraint) mod cuda {
+    use cuda_backend_v2::F;
+    use openvm_cuda_backend::base::DeviceMatrix;
+    use openvm_cuda_common::copy::MemCopyH2D;
+
+    use super::*;
+    use crate::{
+        batch_constraint::cuda_abi::eq_3b_tracegen,
+        cuda::{preflight::PreflightGpu, to_device_or_nullptr},
+        utils::MultiVecWithBounds,
+    };
+
+    #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
+    pub fn generate_eq_3b_trace(
+        child_vk: &MultiStarkVerifyingKeyV2,
+        blob: &Eq3bBlob,
+        preflights: &[PreflightGpu],
+    ) -> DeviceMatrix<F> {
+        debug_assert_eq!(blob.all_stacked_ids.num_proofs(), preflights.len());
+
+        let num_proofs = preflights.len();
+        let width = Eq3bColumns::<F>::width();
+        let l_skip = child_vk.inner.params.l_skip;
+
+        let mut device_records =
+            MultiVecWithBounds::<_, 1>::with_capacity(blob.all_stacked_ids.len());
+        let mut record_idxs = MultiVecWithBounds::<_, 1>::with_capacity(blob.record_idxs.len());
+
+        let mut rows_per_proof_bounds = Vec::with_capacity(num_proofs + 1);
+        rows_per_proof_bounds.push(0);
+
+        let mut n_logups = Vec::with_capacity(num_proofs);
+        let mut all_xi = MultiVecWithBounds::<_, 1>::new();
+
+        let mut num_valid_rows = 0usize;
+
+        for (pidx, preflight) in preflights.iter().enumerate() {
+            let records = &blob.all_stacked_ids[pidx];
+
+            device_records.extend(records.iter().cloned());
+            device_records.close_level(0);
+            record_idxs.extend(blob.record_idxs[pidx].iter().cloned());
+            record_idxs.close_level(0);
+
+            let n_logup = preflight.cpu.proof_shape.n_logup;
+            n_logups.push(n_logup);
+
+            let one_height = n_logup + 1;
+            let rows_for_proof = records.iter().fold(0, |acc, record| {
+                acc + if record.no_interactions {
+                    1
+                } else {
+                    one_height
+                }
+            });
+            num_valid_rows += rows_for_proof;
+            rows_per_proof_bounds.push(num_valid_rows);
+
+            all_xi.extend(preflight.cpu.batch_constraint.xi.iter().cloned());
+            all_xi.close_level(0);
+        }
+
+        let height = num_valid_rows.max(1).next_power_of_two();
+        let trace = DeviceMatrix::with_capacity(height, width);
+
+        let d_records = to_device_or_nullptr(&device_records.data).unwrap();
+        let d_record_bounds = device_records.bounds[0].to_device().unwrap();
+        let d_record_idxs = to_device_or_nullptr(&record_idxs.data).unwrap();
+        let d_record_idxs_bounds = record_idxs.bounds[0].to_device().unwrap();
+        let d_rows_per_proof_bounds = rows_per_proof_bounds.to_device().unwrap();
+        let d_n_logups = n_logups.to_device().unwrap();
+        let d_xis = to_device_or_nullptr(&all_xi.data).unwrap();
+        let d_xi_bounds = all_xi.bounds[0].to_device().unwrap();
+
+        unsafe {
+            eq_3b_tracegen(
+                trace.buffer(),
+                num_valid_rows,
+                height,
+                num_proofs,
+                l_skip,
+                &d_records,
+                &d_record_bounds,
+                &d_record_idxs,
+                &d_record_idxs_bounds,
+                &d_rows_per_proof_bounds,
+                &d_n_logups,
+                &d_xis,
+                &d_xi_bounds,
+            )
+            .unwrap();
+        }
+
+        trace
+    }
 }
