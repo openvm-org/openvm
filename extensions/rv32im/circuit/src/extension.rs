@@ -271,7 +271,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv32I {
             custom_bus_bitwise: bitwise_lu.inner.index,
             custom_bus_memory: memory_bridge.memory_bus().index(),
             custom_bus_program: exec_bridge.program_bus.index(),
-            custom_bus_exe: exec_bridge.program_bus.index(),
+            custom_bus_exe: exec_bridge.execution_bus.index(),
             custom_bus_range_check: memory_bridge.range_bus().index(),
         };
         inventory.add_air(auipc);
