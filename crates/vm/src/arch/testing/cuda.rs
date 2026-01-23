@@ -380,16 +380,12 @@ impl GpuChipTestBuilder {
             register,
             pointer.to_le_bytes().map(F::from_canonical_u8),
         );
-        if NUM_LIMBS.is_power_of_two() {
-            for (i, &write) in writes.iter().enumerate() {
-                self.write(2usize, pointer + i * NUM_LIMBS, write);
-            }
-        } else {
-            for (i, &write) in writes.iter().enumerate() {
-                let ptr = pointer + i * NUM_LIMBS;
-                for j in (0..NUM_LIMBS).step_by(4) {
-                    self.write::<4>(2usize, ptr + j, write[j..j + 4].try_into().unwrap());
-                }
+        // Always write in 4-byte chunks (CONST_BLOCK_SIZE) to avoid generating
+        // access adapter records when access adapters are disabled.
+        for (i, &write) in writes.iter().enumerate() {
+            let ptr = pointer + i * NUM_LIMBS;
+            for j in (0..NUM_LIMBS).step_by(4) {
+                self.write::<4>(2usize, ptr + j, write[j..j + 4].try_into().unwrap());
             }
         }
     }

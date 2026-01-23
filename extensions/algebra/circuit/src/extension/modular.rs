@@ -78,13 +78,13 @@ impl ModularExtension {
 )]
 pub enum ModularExtensionExecutor {
     // 32 limbs prime
-    ModularAddSubRv32_32(ModularExecutor<1, 32>), // ModularAddSub
-    ModularMulDivRv32_32(ModularExecutor<1, 32>), // ModularMulDiv
-    ModularIsEqualRv32_32(VmModularIsEqualExecutor<1, 32, 32>), // ModularIsEqual
+    ModularAddSubRv32_32(ModularExecutor<8, 4>), // ModularAddSub
+    ModularMulDivRv32_32(ModularExecutor<8, 4>), // ModularMulDiv
+    ModularIsEqualRv32_32(VmModularIsEqualExecutor<8, 4, 32>), // ModularIsEqual
     // 48 limbs prime
-    ModularAddSubRv32_48(ModularExecutor<3, 16>), // ModularAddSub
-    ModularMulDivRv32_48(ModularExecutor<3, 16>), // ModularMulDiv
-    ModularIsEqualRv32_48(VmModularIsEqualExecutor<3, 16, 48>), // ModularIsEqual
+    ModularAddSubRv32_48(ModularExecutor<12, 4>), // ModularAddSub
+    ModularMulDivRv32_48(ModularExecutor<12, 4>), // ModularMulDiv
+    ModularIsEqualRv32_48(VmModularIsEqualExecutor<12, 4, 48>), // ModularIsEqual
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
@@ -109,7 +109,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                     num_limbs: 32,
                     limb_bits: 8,
                 };
-                let addsub = get_modular_addsub_step(
+                let addsub = get_modular_addsub_step::<8, 4>(
                     config.clone(),
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -123,7 +123,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let muldiv = get_modular_muldiv_step(
+                let muldiv = get_modular_muldiv_step::<8, 4>(
                     config,
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -163,7 +163,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                     num_limbs: 48,
                     limb_bits: 8,
                 };
-                let addsub = get_modular_addsub_step(
+                let addsub = get_modular_addsub_step::<12, 4>(
                     config.clone(),
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -177,7 +177,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let muldiv = get_modular_muldiv_step(
+                let muldiv = get_modular_muldiv_step::<12, 4>(
                     config,
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -269,7 +269,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for ModularExtension {
                     limb_bits: 8,
                 };
 
-                let addsub = get_modular_addsub_air::<1, 32>(
+                let addsub = get_modular_addsub_air::<8, 4>(
                     exec_bridge,
                     memory_bridge,
                     config.clone(),
@@ -280,7 +280,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for ModularExtension {
                 );
                 inventory.add_air(addsub);
 
-                let muldiv = get_modular_muldiv_air::<1, 32>(
+                let muldiv = get_modular_muldiv_air::<8, 4>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -291,7 +291,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for ModularExtension {
                 );
                 inventory.add_air(muldiv);
 
-                let is_eq = ModularIsEqualAir::<1, 32, 32>::new(
+                let is_eq = ModularIsEqualAir::<8, 4, 32>::new(
                     Rv32IsEqualModAdapterAir::new(
                         exec_bridge,
                         memory_bridge,
@@ -308,7 +308,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for ModularExtension {
                     limb_bits: 8,
                 };
 
-                let addsub = get_modular_addsub_air::<3, 16>(
+                let addsub = get_modular_addsub_air::<12, 4>(
                     exec_bridge,
                     memory_bridge,
                     config.clone(),
@@ -319,7 +319,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for ModularExtension {
                 );
                 inventory.add_air(addsub);
 
-                let muldiv = get_modular_muldiv_air::<3, 16>(
+                let muldiv = get_modular_muldiv_air::<12, 4>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -330,7 +330,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for ModularExtension {
                 );
                 inventory.add_air(muldiv);
 
-                let is_eq = ModularIsEqualAir::<3, 16, 48>::new(
+                let is_eq = ModularIsEqualAir::<12, 4, 48>::new(
                     Rv32IsEqualModAdapterAir::new(
                         exec_bridge,
                         memory_bridge,
@@ -395,8 +395,8 @@ where
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<ModularAir<1, 32>>()?;
-                let addsub = get_modular_addsub_chip::<Val<SC>, 1, 32>(
+                inventory.next_air::<ModularAir<8, 4>>()?;
+                let addsub = get_modular_addsub_chip::<Val<SC>, 8, 4>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -405,8 +405,8 @@ where
                 );
                 inventory.add_executor_chip(addsub);
 
-                inventory.next_air::<ModularAir<1, 32>>()?;
-                let muldiv = get_modular_muldiv_chip::<Val<SC>, 1, 32>(
+                inventory.next_air::<ModularAir<8, 4>>()?;
+                let muldiv = get_modular_muldiv_chip::<Val<SC>, 8, 4>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -422,8 +422,8 @@ where
                         0
                     }
                 });
-                inventory.next_air::<ModularIsEqualAir<1, 32, 32>>()?;
-                let is_eq = ModularIsEqualChip::<Val<SC>, 1, 32, 32>::new(
+                inventory.next_air::<ModularIsEqualAir<8, 4, 32>>()?;
+                let is_eq = ModularIsEqualChip::<Val<SC>, 8, 4, 32>::new(
                     ModularIsEqualFiller::new(
                         Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
@@ -440,8 +440,8 @@ where
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<ModularAir<3, 16>>()?;
-                let addsub = get_modular_addsub_chip::<Val<SC>, 3, 16>(
+                inventory.next_air::<ModularAir<12, 4>>()?;
+                let addsub = get_modular_addsub_chip::<Val<SC>, 12, 4>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -450,8 +450,8 @@ where
                 );
                 inventory.add_executor_chip(addsub);
 
-                inventory.next_air::<ModularAir<3, 16>>()?;
-                let muldiv = get_modular_muldiv_chip::<Val<SC>, 3, 16>(
+                inventory.next_air::<ModularAir<12, 4>>()?;
+                let muldiv = get_modular_muldiv_chip::<Val<SC>, 12, 4>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -467,8 +467,8 @@ where
                         0
                     }
                 });
-                inventory.next_air::<ModularIsEqualAir<3, 16, 48>>()?;
-                let is_eq = ModularIsEqualChip::<Val<SC>, 3, 16, 48>::new(
+                inventory.next_air::<ModularIsEqualAir<12, 4, 48>>()?;
+                let is_eq = ModularIsEqualChip::<Val<SC>, 12, 4, 48>::new(
                     ModularIsEqualFiller::new(
                         Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,

@@ -270,42 +270,42 @@ struct TestConfig<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS:
     pub num_ops: usize,
 }
 
-#[test_case(TestConfig::<2, 32, 32>::new(
+#[test_case(TestConfig::<16, 4, 32>::new(
     BigUint::from_str("357686312646216567629137").unwrap(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<2, 32, 32>::new(
+#[test_case(TestConfig::<16, 4, 32>::new(
     secp256k1_coord_prime(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<2, 32, 32>::new(
+#[test_case(TestConfig::<16, 4, 32>::new(
     BN254_MODULUS.clone(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<6, 16, 48>::new(
+#[test_case(TestConfig::<24, 4, 48>::new(
     BLS12_381_MODULUS.clone(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<2, 32, 32>::new(
+#[test_case(TestConfig::<16, 4, 32>::new(
     BigUint::from_str("357686312646216567629137").unwrap(),
     false,
     50,
 ))]
-#[test_case(TestConfig::<2, 32, 32>::new(
+#[test_case(TestConfig::<16, 4, 32>::new(
     secp256k1_coord_prime(),
     false,
     50,
 ))]
-#[test_case(TestConfig::<2, 32, 32>::new(
+#[test_case(TestConfig::<16, 4, 32>::new(
     BN254_MODULUS.clone(),
     false,
     50,
 ))]
-#[test_case(TestConfig::<6, 16, 48>::new(
+#[test_case(TestConfig::<24, 4, 48>::new(
     BLS12_381_MODULUS.clone(),
     false,
     50,
@@ -466,53 +466,53 @@ mod cuda_tests {
         GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
-    #[test_case(TestConfig::<2, 32, 32>::new(
+    #[test_case(TestConfig::<16, 4, 32>::new(
     BigUint::from_str("357686312646216567629137").unwrap(),
     true,
     50),
-    create_addsub_cuda_test_harness::<2, 32>
+    create_addsub_cuda_test_harness::<16, 4>
 )]
-    #[test_case(TestConfig::<2, 32, 32>::new(
+    #[test_case(TestConfig::<16, 4, 32>::new(
     secp256k1_coord_prime(),
     true,
     50),
-    create_addsub_cuda_test_harness::<2, 32>
+    create_addsub_cuda_test_harness::<16, 4>
 )]
-    #[test_case(TestConfig::<2, 32, 32>::new(
+    #[test_case(TestConfig::<16, 4, 32>::new(
     BN254_MODULUS.clone(),
     true,
     50),
-    create_addsub_cuda_test_harness::<2, 32>
+    create_addsub_cuda_test_harness::<16, 4>
 )]
-    #[test_case(TestConfig::<6, 16, 48>::new(
+    #[test_case(TestConfig::<24, 4, 48>::new(
     BLS12_381_MODULUS.clone(),
     true,
     50),
-    create_addsub_cuda_test_harness::<6, 16>
+    create_addsub_cuda_test_harness::<24, 4>
 )]
-    #[test_case(TestConfig::<2, 32, 32>::new(
+    #[test_case(TestConfig::<16, 4, 32>::new(
     BigUint::from_str("357686312646216567629137").unwrap(),
     false,
     50),
-    create_muldiv_cuda_test_harness::<2, 32>
+    create_muldiv_cuda_test_harness::<16, 4>
 )]
-    #[test_case(TestConfig::<2, 32, 32>::new(
+    #[test_case(TestConfig::<16, 4, 32>::new(
     secp256k1_coord_prime(),
     false,
     50),
-    create_muldiv_cuda_test_harness::<2, 32>
+    create_muldiv_cuda_test_harness::<16, 4>
 )]
-    #[test_case(TestConfig::<2, 32, 32>::new(
+    #[test_case(TestConfig::<16, 4, 32>::new(
     BN254_MODULUS.clone(),
     false,
     50),
-    create_muldiv_cuda_test_harness::<2, 32>
+    create_muldiv_cuda_test_harness::<16, 4>
 )]
-    #[test_case(TestConfig::<6, 16, 48>::new(
+    #[test_case(TestConfig::<24, 4, 48>::new(
     BLS12_381_MODULUS.clone(),
     false,
     50),
-    create_muldiv_cuda_test_harness::<6, 16>
+    create_muldiv_cuda_test_harness::<24, 4>
 )]
     fn run_cuda_test_with_config<
         const BLOCKS: usize,

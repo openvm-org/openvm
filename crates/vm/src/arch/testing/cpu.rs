@@ -184,7 +184,13 @@ where
     ) -> (usize, usize) {
         let register = self.get_default_register(reg_increment);
         let pointer = self.get_default_pointer(pointer_increment);
-        self.write(1, register, pointer.to_le_bytes().map(F::from_canonical_u8));
+        // Write pointer in 4-byte chunks to avoid generating access adapter records
+        // when access adapters are disabled (min_block_size = 4 for register address space).
+        let ptr_bytes = pointer.to_le_bytes();
+        let first_4: [u8; 4] = ptr_bytes[0..4].try_into().unwrap();
+        let second_4: [u8; 4] = ptr_bytes[4..8].try_into().unwrap();
+        self.write::<4>(1, register, first_4.map(F::from_canonical_u8));
+        self.write::<4>(1, register + 4, second_4.map(F::from_canonical_u8));
         (register, pointer)
     }
 
@@ -239,21 +245,19 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         pointer: usize,
         writes: Vec<[F; NUM_LIMBS]>,
     ) {
-        self.write(
-            1usize,
-            register,
-            pointer.to_le_bytes().map(F::from_canonical_u8),
-        );
-        if NUM_LIMBS.is_power_of_two() {
-            for (i, &write) in writes.iter().enumerate() {
-                self.write(2usize, pointer + i * NUM_LIMBS, write);
-            }
-        } else {
-            for (i, &write) in writes.iter().enumerate() {
-                let ptr = pointer + i * NUM_LIMBS;
-                for j in (0..NUM_LIMBS).step_by(4) {
-                    self.write::<4>(2usize, ptr + j, write[j..j + 4].try_into().unwrap());
-                }
+        // Write pointer in 4-byte chunks to avoid generating access adapter records
+        // when access adapters are disabled (min_block_size = 4 for register address space).
+        let ptr_bytes = pointer.to_le_bytes();
+        let first_4: [u8; 4] = ptr_bytes[0..4].try_into().unwrap();
+        let second_4: [u8; 4] = ptr_bytes[4..8].try_into().unwrap();
+        self.write::<4>(1usize, register, first_4.map(F::from_canonical_u8));
+        self.write::<4>(1usize, register + 4, second_4.map(F::from_canonical_u8));
+        // Always write in 4-byte chunks (CONST_BLOCK_SIZE) to avoid generating
+        // access adapter records when access adapters are disabled.
+        for (i, &write) in writes.iter().enumerate() {
+            let ptr = pointer + i * NUM_LIMBS;
+            for j in (0..NUM_LIMBS).step_by(4) {
+                self.write::<4>(2usize, ptr + j, write[j..j + 4].try_into().unwrap());
             }
         }
     }

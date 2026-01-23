@@ -163,8 +163,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<ModularAir<1, 32>>()?;
-                let addsub = get_modular_addsub_chip::<F, 1, 32>(
+                inventory.next_air::<ModularAir<8, 4>>()?;
+                let addsub = get_modular_addsub_chip::<F, 8, 4>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -173,8 +173,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 inventory.add_executor_chip(HybridModularChip::new(addsub));
 
-                inventory.next_air::<ModularAir<1, 32>>()?;
-                let muldiv = get_modular_muldiv_chip::<F, 1, 32>(
+                inventory.next_air::<ModularAir<8, 4>>()?;
+                let muldiv = get_modular_muldiv_chip::<F, 8, 4>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -190,8 +190,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                         0
                     }
                 });
-                inventory.next_air::<ModularIsEqualAir<1, 32, 32>>()?;
-                let is_eq = ModularIsEqualChip::<F, 1, 32, 32>::new(
+                inventory.next_air::<ModularIsEqualAir<8, 4, 32>>()?;
+                let is_eq = ModularIsEqualChip::<F, 8, 4, 32>::new(
                     ModularIsEqualFiller::new(
                         Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
@@ -208,8 +208,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<ModularAir<3, 16>>()?;
-                let addsub = get_modular_addsub_chip::<F, 3, 16>(
+                inventory.next_air::<ModularAir<12, 4>>()?;
+                let addsub = get_modular_addsub_chip::<F, 12, 4>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -218,8 +218,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 inventory.add_executor_chip(HybridModularChip::new(addsub));
 
-                inventory.next_air::<ModularAir<3, 16>>()?;
-                let muldiv = get_modular_muldiv_chip::<F, 3, 16>(
+                inventory.next_air::<ModularAir<12, 4>>()?;
+                let muldiv = get_modular_muldiv_chip::<F, 12, 4>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -235,8 +235,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                         0
                     }
                 });
-                inventory.next_air::<ModularIsEqualAir<3, 16, 48>>()?;
-                let is_eq = ModularIsEqualChip::<F, 3, 16, 48>::new(
+                inventory.next_air::<ModularIsEqualAir<12, 4, 48>>()?;
+                let is_eq = ModularIsEqualChip::<F, 12, 4, 48>::new(
                     ModularIsEqualFiller::new(
                         Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
@@ -329,8 +329,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<Fp2Air<2, 32>>()?;
-                let addsub = get_fp2_addsub_chip::<F, 2, 32>(
+                inventory.next_air::<Fp2Air<16, 4>>()?;
+                let addsub = get_fp2_addsub_chip::<F, 16, 4>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -339,8 +339,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                 );
                 inventory.add_executor_chip(HybridFp2Chip::new(addsub));
 
-                inventory.next_air::<Fp2Air<2, 32>>()?;
-                let muldiv = get_fp2_muldiv_chip::<F, 2, 32>(
+                inventory.next_air::<Fp2Air<16, 4>>()?;
+                let muldiv = get_fp2_muldiv_chip::<F, 16, 4>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -355,8 +355,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<Fp2Air<6, 16>>()?;
-                let addsub = get_fp2_addsub_chip::<F, 6, 16>(
+                inventory.next_air::<Fp2Air<24, 4>>()?;
+                let addsub = get_fp2_addsub_chip::<F, 24, 4>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -365,8 +365,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                 );
                 inventory.add_executor_chip(HybridFp2Chip::new(addsub));
 
-                inventory.next_air::<Fp2Air<6, 16>>()?;
-                let muldiv = get_fp2_muldiv_chip::<F, 6, 16>(
+                inventory.next_air::<Fp2Air<24, 4>>()?;
+                let muldiv = get_fp2_muldiv_chip::<F, 24, 4>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
