@@ -334,7 +334,8 @@ pub struct VecHeapBranchAdapterInterface<
 >(PhantomData<T>);
 
 impl<T, const NUM_READS: usize, const BLOCKS_PER_READ: usize, const READ_SIZE: usize>
-    VmAdapterInterface<T> for VecHeapBranchAdapterInterface<T, NUM_READS, BLOCKS_PER_READ, READ_SIZE>
+    VmAdapterInterface<T>
+    for VecHeapBranchAdapterInterface<T, NUM_READS, BLOCKS_PER_READ, READ_SIZE>
 {
     type Reads = [[[T; READ_SIZE]; BLOCKS_PER_READ]; NUM_READS];
     type Writes = ();
@@ -848,7 +849,10 @@ mod conversions {
                 BasicAdapterInterface<T, ImmInstruction<T>, BASIC_NUM_READS, 0, READ_SIZE, 0>,
             >,
         >
-        for AdapterAirContext<T, VecHeapBranchAdapterInterface<T, NUM_READS, BLOCKS_PER_READ, READ_SIZE>>
+        for AdapterAirContext<
+            T,
+            VecHeapBranchAdapterInterface<T, NUM_READS, BLOCKS_PER_READ, READ_SIZE>,
+        >
     {
         fn from(
             ctx: AdapterAirContext<

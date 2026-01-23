@@ -14,10 +14,6 @@ use openvm_circuit::{
     },
     system::{memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemPort},
 };
-use openvm_rv32_adapters::{
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
-    Rv32VecHeapBranchAdapterAir, Rv32VecHeapBranchAdapterExecutor, Rv32VecHeapBranchAdapterFiller,
-};
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{
@@ -30,6 +26,10 @@ use openvm_circuit_primitives::{
     },
 };
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_rv32_adapters::{
+    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
+    Rv32VecHeapBranchAdapterAir, Rv32VecHeapBranchAdapterExecutor, Rv32VecHeapBranchAdapterFiller,
+};
 use openvm_rv32im_circuit::Rv32ImCpuProverExt;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -234,7 +234,9 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Int256 {
                 INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
                 CONST_BLOCK_SIZE,
-            >::new(exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits)),
+            >::new(
+                exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits
+            )),
             BaseAluCoreAir::new(bitwise_lu, Rv32BaseAlu256Opcode::CLASS_OFFSET),
         );
         inventory.add_air(alu);
@@ -246,7 +248,9 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Int256 {
                 INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
                 CONST_BLOCK_SIZE,
-            >::new(exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits)),
+            >::new(
+                exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits
+            )),
             LessThanCoreAir::new(bitwise_lu, Rv32LessThan256Opcode::CLASS_OFFSET),
         );
         inventory.add_air(lt);
@@ -256,7 +260,9 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Int256 {
                 2,
                 INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
-            >::new(exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits)),
+            >::new(
+                exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits
+            )),
             BranchEqualCoreAir::new(Rv32BranchEqual256Opcode::CLASS_OFFSET, DEFAULT_PC_STEP),
         );
         inventory.add_air(beq);
@@ -266,7 +272,9 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Int256 {
                 2,
                 INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
-            >::new(exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits)),
+            >::new(
+                exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits
+            )),
             BranchLessThanCoreAir::new(bitwise_lu, Rv32BranchLessThan256Opcode::CLASS_OFFSET),
         );
         inventory.add_air(blt);
@@ -278,7 +286,9 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Int256 {
                 INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
                 CONST_BLOCK_SIZE,
-            >::new(exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits)),
+            >::new(
+                exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits
+            )),
             MultiplicationCoreAir::new(range_tuple_checker, Rv32Mul256Opcode::CLASS_OFFSET),
         );
         inventory.add_air(mult);
@@ -290,7 +300,9 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Int256 {
                 INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
                 CONST_BLOCK_SIZE,
-            >::new(exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits)),
+            >::new(
+                exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits
+            )),
             ShiftCoreAir::new(bitwise_lu, range_checker, Rv32Shift256Opcode::CLASS_OFFSET),
         );
         inventory.add_air(shift);
@@ -387,11 +399,10 @@ where
         inventory.next_air::<Rv32BranchEqual256Air>()?;
         let beq = Rv32BranchEqual256Chip::new(
             BranchEqualFiller::new(
-                Rv32VecHeapBranchAdapterFiller::<
-                    2,
-                    INT256_NUM_BLOCKS,
-                    CONST_BLOCK_SIZE,
-                >::new(pointer_max_bits, bitwise_lu.clone()),
+                Rv32VecHeapBranchAdapterFiller::<2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE>::new(
+                    pointer_max_bits,
+                    bitwise_lu.clone(),
+                ),
                 Rv32BranchEqual256Opcode::CLASS_OFFSET,
                 DEFAULT_PC_STEP,
             ),
@@ -402,11 +413,10 @@ where
         inventory.next_air::<Rv32BranchLessThan256Air>()?;
         let blt = Rv32BranchLessThan256Chip::new(
             BranchLessThanFiller::new(
-                Rv32VecHeapBranchAdapterFiller::<
-                    2,
-                    INT256_NUM_BLOCKS,
-                    CONST_BLOCK_SIZE,
-                >::new(pointer_max_bits, bitwise_lu.clone()),
+                Rv32VecHeapBranchAdapterFiller::<2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE>::new(
+                    pointer_max_bits,
+                    bitwise_lu.clone(),
+                ),
                 bitwise_lu.clone(),
                 Rv32BranchLessThan256Opcode::CLASS_OFFSET,
             ),

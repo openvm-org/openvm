@@ -131,10 +131,10 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U25
     let rs1_ptr = exec_state.vm_read_no_adapter::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs2_ptr = exec_state.vm_read_no_adapter::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32);
     let rd_ptr = exec_state.vm_read_no_adapter::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
-    let rs1 =
-        exec_state.vm_read_no_adapter::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
-    let rs2 =
-        exec_state.vm_read_no_adapter::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
+    let rs1 = exec_state
+        .vm_read_no_adapter::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
+    let rs2 = exec_state
+        .vm_read_no_adapter::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
     let cmp_result = if IS_U256 {
         common::u256_lt(rs1, rs2)
     } else {

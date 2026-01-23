@@ -63,13 +63,13 @@ use {
 };
 
 use crate::{
-    AluAdapterAir, AluAdapterExecutor, BranchAdapterAir, BranchAdapterExecutor, INT256_NUM_BLOCKS,
-    Rv32BaseAlu256Air, Rv32BaseAlu256Chip, Rv32BaseAlu256Executor, Rv32BranchEqual256Air,
-    Rv32BranchEqual256Chip, Rv32BranchEqual256Executor, Rv32BranchLessThan256Air,
-    Rv32BranchLessThan256Chip, Rv32BranchLessThan256Executor, Rv32LessThan256Air,
-    Rv32LessThan256Chip, Rv32LessThan256Executor, Rv32Multiplication256Air,
-    Rv32Multiplication256Chip, Rv32Multiplication256Executor, Rv32Shift256Air, Rv32Shift256Chip,
-    Rv32Shift256Executor,
+    AluAdapterAir, AluAdapterExecutor, BranchAdapterAir, BranchAdapterExecutor, Rv32BaseAlu256Air,
+    Rv32BaseAlu256Chip, Rv32BaseAlu256Executor, Rv32BranchEqual256Air, Rv32BranchEqual256Chip,
+    Rv32BranchEqual256Executor, Rv32BranchLessThan256Air, Rv32BranchLessThan256Chip,
+    Rv32BranchLessThan256Executor, Rv32LessThan256Air, Rv32LessThan256Chip,
+    Rv32LessThan256Executor, Rv32Multiplication256Air, Rv32Multiplication256Chip,
+    Rv32Multiplication256Executor, Rv32Shift256Air, Rv32Shift256Chip, Rv32Shift256Executor,
+    INT256_NUM_BLOCKS,
 };
 
 type F = BabyBear;
@@ -330,11 +330,10 @@ fn create_beq_harness_fields(
     );
     let chip = Rv32BranchEqual256Chip::new(
         BranchEqualFiller::new(
-            Rv32VecHeapBranchAdapterFiller::<
-                2,
-                INT256_NUM_BLOCKS,
-                CONST_BLOCK_SIZE,
-            >::new(address_bits, bitwise_chip),
+            Rv32VecHeapBranchAdapterFiller::<2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE>::new(
+                address_bits,
+                bitwise_chip,
+            ),
             Rv32BranchEqual256Opcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
         ),
@@ -380,11 +379,10 @@ fn create_blt_harness_fields(
     );
     let chip = Rv32BranchLessThan256Chip::new(
         BranchLessThanFiller::new(
-            Rv32VecHeapBranchAdapterFiller::<
-                2,
-                INT256_NUM_BLOCKS,
-                CONST_BLOCK_SIZE,
-            >::new(address_bits, bitwise_chip.clone()),
+            Rv32VecHeapBranchAdapterFiller::<2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE>::new(
+                address_bits,
+                bitwise_chip.clone(),
+            ),
             bitwise_chip,
             Rv32BranchLessThan256Opcode::CLASS_OFFSET,
         ),
@@ -1014,7 +1012,10 @@ fn run_beq_256_rand_test_cuda(opcode: BranchEqualOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32VecHeapBranchAdapterExecutor<2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE>>::new(),
+            EmptyAdapterCoreLayout::<
+                F,
+                Rv32VecHeapBranchAdapterExecutor<2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE>,
+            >::new(),
         );
 
     tester
@@ -1077,7 +1078,10 @@ fn run_blt_256_rand_test_cuda(opcode: BranchLessThanOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32VecHeapBranchAdapterExecutor<2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE>>::new(),
+            EmptyAdapterCoreLayout::<
+                F,
+                Rv32VecHeapBranchAdapterExecutor<2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE>,
+            >::new(),
         );
 
     tester

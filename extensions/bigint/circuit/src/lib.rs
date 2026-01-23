@@ -48,7 +48,13 @@ pub const INT256_NUM_BLOCKS: usize = INT256_NUM_LIMBS / CONST_BLOCK_SIZE;
 
 /// Type alias for the ALU adapter AIR wrapper
 type AluAdapterAir = VecToFlatAluAdapterAir<
-    Rv32VecHeapAdapterAir<2, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE, CONST_BLOCK_SIZE>,
+    Rv32VecHeapAdapterAir<
+        2,
+        INT256_NUM_BLOCKS,
+        INT256_NUM_BLOCKS,
+        CONST_BLOCK_SIZE,
+        CONST_BLOCK_SIZE,
+    >,
     2,
     INT256_NUM_BLOCKS,
     INT256_NUM_BLOCKS,
@@ -59,7 +65,13 @@ type AluAdapterAir = VecToFlatAluAdapterAir<
 
 /// Type alias for the ALU adapter executor wrapper
 type AluAdapterExecutor = VecToFlatAluAdapterExecutor<
-    Rv32VecHeapAdapterExecutor<2, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE, CONST_BLOCK_SIZE>,
+    Rv32VecHeapAdapterExecutor<
+        2,
+        INT256_NUM_BLOCKS,
+        INT256_NUM_BLOCKS,
+        CONST_BLOCK_SIZE,
+        CONST_BLOCK_SIZE,
+    >,
     2,
     INT256_NUM_BLOCKS,
     INT256_NUM_BLOCKS,
@@ -90,7 +102,9 @@ type BranchAdapterExecutor = VecToFlatBranchAdapterExecutor<
 pub type Rv32BaseAlu256Air =
     VmAirWrapper<AluAdapterAir, BaseAluCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>>;
 #[derive(Clone, PreflightExecutor)]
-pub struct Rv32BaseAlu256Executor(BaseAluExecutor<AluAdapterExecutor, INT256_NUM_LIMBS, RV32_CELL_BITS>);
+pub struct Rv32BaseAlu256Executor(
+    BaseAluExecutor<AluAdapterExecutor, INT256_NUM_LIMBS, RV32_CELL_BITS>,
+);
 pub type Rv32BaseAlu256Chip<F> = VmChipWrapper<
     F,
     BaseAluFiller<
@@ -154,7 +168,9 @@ pub type Rv32Multiplication256Chip<F> = VmChipWrapper<
 pub type Rv32Shift256Air =
     VmAirWrapper<AluAdapterAir, ShiftCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>>;
 #[derive(Clone, PreflightExecutor)]
-pub struct Rv32Shift256Executor(ShiftExecutor<AluAdapterExecutor, INT256_NUM_LIMBS, RV32_CELL_BITS>);
+pub struct Rv32Shift256Executor(
+    ShiftExecutor<AluAdapterExecutor, INT256_NUM_LIMBS, RV32_CELL_BITS>,
+);
 pub type Rv32Shift256Chip<F> = VmChipWrapper<
     F,
     ShiftFiller<
@@ -171,11 +187,10 @@ pub type Rv32Shift256Chip<F> = VmChipWrapper<
 >;
 
 /// BranchEqual256
-pub type Rv32BranchEqual256Air = VmAirWrapper<BranchAdapterAir, BranchEqualCoreAir<INT256_NUM_LIMBS>>;
+pub type Rv32BranchEqual256Air =
+    VmAirWrapper<BranchAdapterAir, BranchEqualCoreAir<INT256_NUM_LIMBS>>;
 #[derive(Clone, PreflightExecutor)]
-pub struct Rv32BranchEqual256Executor(
-    BranchEqualExecutor<BranchAdapterExecutor, INT256_NUM_LIMBS>,
-);
+pub struct Rv32BranchEqual256Executor(BranchEqualExecutor<BranchAdapterExecutor, INT256_NUM_LIMBS>);
 pub type Rv32BranchEqual256Chip<F> = VmChipWrapper<
     F,
     BranchEqualFiller<

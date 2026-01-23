@@ -185,7 +185,11 @@ where
         let register = self.get_default_register(reg_increment);
         let pointer = self.get_default_pointer(pointer_increment);
         // Cast to u32 to ensure we write exactly 4 bytes (RV32 register size).
-        self.write(1, register, (pointer as u32).to_le_bytes().map(F::from_canonical_u8));
+        self.write(
+            1,
+            register,
+            (pointer as u32).to_le_bytes().map(F::from_canonical_u8),
+        );
         (register, pointer)
     }
 
