@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use openvm_circuit::{
-    arch::{AddressSpaceHostLayout, DenseRecordArena, MemoryConfig, ADDR_SPACE_OFFSET},
+    arch::{AddressSpaceHostLayout, CONST_BLOCK_SIZE, DenseRecordArena, MemoryConfig, ADDR_SPACE_OFFSET},
     system::{
         memory::{online::LinearMemory, AddressMap, TimestampedValues},
         TouchedMemory,
@@ -151,7 +151,7 @@ impl MemoryInventoryGPU {
                 mem.tracing_info("boundary finalize");
                 let (touched_memory, empty) = if partition.is_empty() {
                     let leftmost_values = 'left: {
-                        let mut res = [F::ZERO; DIGEST_WIDTH];
+                        let mut res = [F::ZERO; CONST_BLOCK_SIZE];
                         if persistent.initial_memory[ADDR_SPACE_OFFSET as usize].is_empty() {
                             break 'left res;
                         }
@@ -159,7 +159,7 @@ impl MemoryInventoryGPU {
                             [ADDR_SPACE_OFFSET as usize]
                             .layout;
                         let one_cell_size = layout.size();
-                        let values = vec![0u8; one_cell_size * DIGEST_WIDTH];
+                        let values = vec![0u8; one_cell_size * CONST_BLOCK_SIZE];
                         unsafe {
                             cuda_memcpy::<true, false>(
                                 values.as_ptr() as *mut std::ffi::c_void,
@@ -168,7 +168,7 @@ impl MemoryInventoryGPU {
                                 values.len(),
                             )
                             .unwrap();
-                            for i in 0..DIGEST_WIDTH {
+                            for i in 0..CONST_BLOCK_SIZE {
                                 res[i] = layout.to_field::<F>(&values[i * one_cell_size..]);
                             }
                         }
