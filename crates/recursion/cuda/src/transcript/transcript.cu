@@ -76,13 +76,23 @@ __global__ void transcript_air_tracegen_kernel(
         COL_WRITE_VALUE(row, TranscriptCols, mask[i], i < num_ops);
     }
 
+    // Each trace row represents 1 <= num_ops <= CHUNK operations, all of which are either
+    // samples or observes, that are followed by either 0 or 1 permutes. The sponge state
+    // is permuted after (a) 8 observes, (b) an observe that is followed by a sample, or
+    // (c) 8 samples followed by another sample. Note prev_state is the state immediately
+    // prior to the permute, while post_state is the state immediately after. If there was
+    // no permute (i.e. sample row followed by an observe), then post_state == prev_state.
     auto states = reinterpret_cast<const Array<Fp, WIDTH> *>(start_states[proof_idx]);
     Array<Fp, WIDTH> prev_state = states[state_idx];
+
+    // For sample rows, prev_state is the post_state of the prior row. For observe rows,
+    // the first num_ops elements are overwritten with observed field elements.
     if (!is_sample) {
         for (uint8_t i = 0; i < num_ops; i++) {
             prev_state.arr[i] = transcript_values[proof_idx][tidx + i];
         }
     }
+
     COL_WRITE_ARRAY(row, TranscriptCols, prev_state, prev_state.arr);
     COL_WRITE_ARRAY(
         row, TranscriptCols, post_state, permuted ? states[state_idx + 1].arr : prev_state.arr
