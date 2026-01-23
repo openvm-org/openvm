@@ -303,8 +303,8 @@ impl GkrModule {
     fn generate_blob(
         &self,
         _child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
-        preflights: &[Preflight],
+        proofs: &[&Proof],
+        preflights: &[&Preflight],
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
     ) -> GkrBlobCpu {
         debug_assert_eq!(proofs.len(), preflights.len());
@@ -518,7 +518,9 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for GkrModule {
         preflights: &[Preflight],
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
-        let blob = self.generate_blob(child_vk, proofs, preflights, exp_bits_len_gen);
+        let proof_refs = proofs.iter().collect_vec();
+        let preflight_refs = preflights.iter().collect_vec();
+        let blob = self.generate_blob(child_vk, &proof_refs, &preflight_refs, exp_bits_len_gen);
 
         let chips = [
             GkrModuleChip::Input,
@@ -624,13 +626,15 @@ mod cuda_tracegen {
             preflights: &[PreflightGpu],
             exp_bits_len_gen: &ExpBitsLenTraceGenerator,
         ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
+            let proofs_cpu = proofs.iter().map(|proof| &proof.cpu).collect_vec();
+            let preflights_cpu = preflights
+                .iter()
+                .map(|preflight| &preflight.cpu)
+                .collect_vec();
             let blob = self.generate_blob(
                 &child_vk.cpu,
-                &proofs.iter().map(|proof| proof.cpu.clone()).collect_vec(),
-                &preflights
-                    .iter()
-                    .map(|preflight| preflight.cpu.clone())
-                    .collect_vec(),
+                &proofs_cpu,
+                &preflights_cpu,
                 exp_bits_len_gen,
             );
             let chips = [
