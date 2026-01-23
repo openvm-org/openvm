@@ -326,8 +326,8 @@ where
 #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
 pub(crate) fn generate_eq_ns_trace(
     vk: &MultiStarkVerifyingKeyV2,
-    _proofs: &[Proof],
-    preflights: &[Preflight],
+    _proofs: &[&Proof],
+    preflights: &[&Preflight],
     selector_counts: &MultiVecWithBounds<SelectorCount, 1>,
 ) -> RowMajorMatrix<F> {
     let l_skip = vk.inner.params.l_skip;

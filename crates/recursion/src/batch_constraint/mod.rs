@@ -37,8 +37,7 @@ use crate::{
         },
         expr_eval::{
             ConstraintsFoldingAir, ConstraintsFoldingBlob, InteractionsFoldingAir,
-            InteractionsFoldingBlob, SymbolicExpressionAir, generate_constraints_folding_blob,
-            generate_interactions_folding_blob,
+            InteractionsFoldingBlob, SymbolicExpressionAir, generate_interactions_folding_blob,
         },
         expression_claim::{
             ExpressionClaimAir, ExpressionClaimBlob, generate_expression_claim_blob,
@@ -429,7 +428,7 @@ impl AirModule for BatchConstraintModule {
     }
 }
 
-pub(in crate::batch_constraint) struct BatchConstraintBlobCpu {
+pub(in crate::batch_constraint) struct BatchConstraintBlob {
     // Per proof, per air (vkey order), the evaluations. For optional AIRs without traces, the
     // innermost vec is empty.
     pub expr_evals: MultiVecWithBounds<EF, 2>,
@@ -437,9 +436,7 @@ pub(in crate::batch_constraint) struct BatchConstraintBlobCpu {
     pub selector_counts: MultiVecWithBounds<SelectorCount, 1>,
 
     pub eq_3b_blob: Eq3bBlob,
-    pub cf_blob: ConstraintsFoldingBlob,
     pub if_blob: InteractionsFoldingBlob,
-    pub expr_claim_blob: ExpressionClaimBlob,
     pub eq_sharp_uni_blob: EqSharpUniBlob,
 }
 
@@ -450,14 +447,12 @@ pub struct SelectorCount {
     pub transition: usize,
 }
 
-impl BatchConstraintModule {
-    #[tracing::instrument(skip_all)]
-    fn generate_blob(
-        &self,
+impl BatchConstraintBlob {
+    pub fn new(
         child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
-        preflights: &[Preflight],
-    ) -> BatchConstraintBlobCpu {
+        proofs: &[&Proof],
+        preflights: &[&Preflight],
+    ) -> Self {
         let child_vk = &child_vk.inner;
         let params = &child_vk.params;
 
@@ -470,7 +465,8 @@ impl BatchConstraintModule {
             let mut is_first_row_by_log_height = vec![];
             let mut is_last_row_by_log_height = vec![];
             let n_max = preflight.proof_shape.n_max;
-            let mut selector_counts = vec![SelectorCount::default(); self.l_skip + n_max + 1];
+            let mut selector_counts =
+                vec![SelectorCount::default(); child_vk.params.l_skip + n_max + 1];
 
             let omega = F::two_adic_generator(params.l_skip);
             for log_height in 0..=params.l_skip {
@@ -632,23 +628,49 @@ impl BatchConstraintModule {
             eq_r_one_counts_per_proof.close_level(0);
         }
         let eq_3b_blob = eq_airs::generate_eq_3b_blob(child_vk, preflights);
-        let cf_blob =
-            generate_constraints_folding_blob(child_vk, &expr_evals_per_proof, preflights);
         let if_blob = generate_interactions_folding_blob(
             child_vk,
             &expr_evals_per_proof,
             &eq_3b_blob,
             preflights,
         );
-        let expr_claim_blob = generate_expression_claim_blob(&cf_blob, &if_blob);
-        BatchConstraintBlobCpu {
+        let eq_sharp_uni_blob = generate_eq_sharp_uni_blob(child_vk, preflights);
+        Self {
             expr_evals: expr_evals_per_proof,
             selector_counts: eq_r_one_counts_per_proof,
             eq_3b_blob,
-            cf_blob,
             if_blob,
+            eq_sharp_uni_blob,
+        }
+    }
+}
+
+pub(in crate::batch_constraint) struct BatchConstraintBlobCpu {
+    pub common_blob: BatchConstraintBlob,
+    pub cf_blob: ConstraintsFoldingBlob,
+    pub expr_claim_blob: ExpressionClaimBlob,
+}
+
+impl BatchConstraintBlobCpu {
+    #[tracing::instrument(name = "generate_blob", skip_all)]
+    pub fn new(
+        child_vk: &MultiStarkVerifyingKeyV2,
+        proofs: &[Proof],
+        preflights: &[Preflight],
+    ) -> Self {
+        let proofs = proofs.iter().collect_vec();
+        let preflights = preflights.iter().collect_vec();
+        let common_blob = BatchConstraintBlob::new(child_vk, &proofs, &preflights);
+        let cf_blob =
+            ConstraintsFoldingBlob::new(&child_vk.inner, &common_blob.expr_evals, &preflights);
+        let expr_claim_blob = generate_expression_claim_blob(
+            &cf_blob.folded_claims,
+            &common_blob.if_blob.folded_claims,
+        );
+        Self {
+            common_blob,
+            cf_blob,
             expr_claim_blob,
-            eq_sharp_uni_blob: generate_eq_sharp_uni_blob(child_vk, preflights),
         }
     }
 }
@@ -667,7 +689,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
         preflights: &[Preflight],
         _ctx: &(),
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
-        let blob = self.generate_blob(child_vk, proofs, preflights);
+        let blob = BatchConstraintBlobCpu::new(child_vk, proofs, preflights);
 
         let chips = [
             BatchConstraintModuleChip::SymbolicExpression {
@@ -764,9 +786,14 @@ impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModuleChip {
         preflights: &[Preflight],
         blob: &Self::ModuleSpecificCtx,
     ) -> ColMajorMatrix<F> {
-        ColMajorMatrix::from_row_major(
-            &self.generate_trace_row_major(child_vk, proofs, preflights, blob),
-        )
+        let proofs = proofs.iter().collect_vec();
+        let preflights = preflights.iter().collect_vec();
+        ColMajorMatrix::from_row_major(&self.generate_trace_row_major(
+            child_vk,
+            &proofs,
+            &preflights,
+            blob,
+        ))
     }
 }
 
@@ -774,8 +801,8 @@ impl BatchConstraintModuleChip {
     fn generate_trace_row_major(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
-        preflights: &[Preflight],
+        proofs: &[&Proof],
+        preflights: &[&Preflight],
         blob: &BatchConstraintBlobCpu,
     ) -> RowMajorMatrix<F> {
         use BatchConstraintModuleChip::*;
@@ -783,16 +810,23 @@ impl BatchConstraintModuleChip {
             FractionsFolder => fractions_folder::generate_trace(child_vk, proofs, preflights),
             SumcheckUni => sumcheck::univariate::generate_trace(child_vk, proofs, preflights),
             SumcheckLin => sumcheck::multilinear::generate_trace(child_vk, proofs, preflights),
-            EqNs => {
-                eq_airs::generate_eq_ns_trace(child_vk, proofs, preflights, &blob.selector_counts)
+            EqNs => eq_airs::generate_eq_ns_trace(
+                child_vk,
+                proofs,
+                preflights,
+                &blob.common_blob.selector_counts,
+            ),
+            Eq3b => {
+                eq_airs::generate_eq_3b_trace(child_vk, &blob.common_blob.eq_3b_blob, preflights)
             }
-            Eq3b => eq_airs::generate_eq_3b_trace(child_vk, &blob.eq_3b_blob, preflights),
-            EqSharpUni => {
-                eq_airs::generate_eq_sharp_uni_trace(child_vk, &blob.eq_sharp_uni_blob, preflights)
-            }
+            EqSharpUni => eq_airs::generate_eq_sharp_uni_trace(
+                child_vk,
+                &blob.common_blob.eq_sharp_uni_blob,
+                preflights,
+            ),
             EqSharpUniReceiver => eq_airs::generate_eq_sharp_uni_receiver_trace(
                 child_vk,
-                &blob.eq_sharp_uni_blob,
+                &blob.common_blob.eq_sharp_uni_blob,
                 preflights,
             ),
             EqUni => eq_airs::generate_eq_uni_trace(child_vk, proofs, preflights),
@@ -805,7 +839,7 @@ impl BatchConstraintModuleChip {
                 preflights,
                 *max_num_proofs,
                 *has_cached,
-                &blob.expr_evals,
+                &blob.common_blob.expr_evals,
             ),
             ExpressionClaim { pow_checker } => expression_claim::generate_trace(
                 child_vk,
@@ -820,9 +854,11 @@ impl BatchConstraintModuleChip {
             ConstraintsFolding => {
                 expr_eval::generate_constraints_folding_trace(&blob.cf_blob, preflights)
             }
-            EqNeg => {
-                EqNegTraceGenerator::generate_trace(child_vk, preflights, &blob.selector_counts)
-            }
+            EqNeg => EqNegTraceGenerator::generate_trace(
+                child_vk,
+                preflights,
+                &blob.common_blob.selector_counts,
+            ),
         }
     }
 }
@@ -834,7 +870,15 @@ pub mod cuda_tracegen {
 
     use super::*;
     use crate::{
-        batch_constraint::cuda_abi::{generate_eq_3b_trace, generate_sym_expr_trace},
+        batch_constraint::{
+            eq_airs::cuda::generate_eq_3b_trace,
+            expr_eval::{
+                constraints_folding::cuda::{
+                    ConstraintsFoldingBlobGpu, generate_constraints_folding_trace,
+                },
+                symbolic_expression::cuda::generate_sym_expr_trace,
+            },
+        },
         cuda::{GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
     };
 
@@ -844,8 +888,38 @@ pub mod cuda_tracegen {
         }
     }
 
+    pub(in crate::batch_constraint) struct BatchConstraintBlobGpu {
+        pub common_blob: BatchConstraintBlob,
+        pub cf_blob: ConstraintsFoldingBlobGpu,
+        pub expr_claim_blob: ExpressionClaimBlob,
+    }
+
+    impl BatchConstraintBlobGpu {
+        #[tracing::instrument(name = "generate_blob", skip_all)]
+        pub fn new(
+            child_vk: &VerifyingKeyGpu,
+            proofs: &[ProofGpu],
+            preflights: &[PreflightGpu],
+        ) -> Self {
+            let cpu_proofs = proofs.iter().map(|p| &p.cpu).collect_vec();
+            let cpu_preflights = preflights.iter().map(|p| &p.cpu).collect_vec();
+            let common_blob = BatchConstraintBlob::new(&child_vk.cpu, &cpu_proofs, &cpu_preflights);
+            let cf_blob =
+                ConstraintsFoldingBlobGpu::new(&child_vk, &common_blob.expr_evals, preflights);
+            let expr_claim_blob = generate_expression_claim_blob(
+                &cf_blob.folded_claims,
+                &common_blob.if_blob.folded_claims,
+            );
+            Self {
+                common_blob,
+                cf_blob,
+                expr_claim_blob,
+            }
+        }
+    }
+
     impl ModuleChip<GlobalCtxGpu, GpuBackendV2> for BatchConstraintModuleChip {
-        type ModuleSpecificCtx = BatchConstraintBlobCpu;
+        type ModuleSpecificCtx = BatchConstraintBlobGpu;
 
         #[tracing::instrument(
             name = "wrapper.generate_trace",
@@ -861,20 +935,24 @@ pub mod cuda_tracegen {
             blob: &Self::ModuleSpecificCtx,
         ) -> DeviceMatrix<F> {
             use BatchConstraintModuleChip::*;
-            let child_vk = &child_vk.cpu;
             match self {
                 SymbolicExpression {
                     max_num_proofs,
                     has_cached,
                 } => generate_sym_expr_trace(
-                    child_vk,
+                    &child_vk.cpu,
                     proofs,
                     preflights,
                     *max_num_proofs,
                     *has_cached,
-                    &blob.expr_evals,
+                    &blob.common_blob.expr_evals,
                 ),
-                Eq3b => generate_eq_3b_trace(child_vk, &blob.eq_3b_blob, preflights),
+                Eq3b => {
+                    generate_eq_3b_trace(&child_vk.cpu, &blob.common_blob.eq_3b_blob, preflights)
+                }
+                ConstraintsFolding => {
+                    generate_constraints_folding_trace(child_vk, preflights, &blob.cf_blob)
+                }
                 _ => {
                     // Avoid calling any H2D inside a par_iter due to subtleties with CUDA streams
                     unreachable!("CPU tracegen handled separately with par_iter");
@@ -894,9 +972,7 @@ pub mod cuda_tracegen {
             preflights: &[PreflightGpu],
             _module_ctx: &(),
         ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
-            let cpu_proofs = proofs.iter().map(|p| p.cpu.clone()).collect::<Vec<_>>();
-            let cpu_preflights = preflights.iter().map(|p| p.cpu.clone()).collect::<Vec<_>>();
-            let blob = self.generate_blob(&child_vk.cpu, &cpu_proofs, &cpu_preflights);
+            let blob = BatchConstraintBlobGpu::new(&child_vk, &proofs, &preflights);
 
             // Chips with cuda kernels for tracegen
             let gpu_chips = [
@@ -905,6 +981,7 @@ pub mod cuda_tracegen {
                     has_cached: self.has_cached,
                 },
                 BatchConstraintModuleChip::Eq3b,
+                BatchConstraintModuleChip::ConstraintsFolding,
             ];
             // Chips that will use fallback cpu tracegen
             let cpu_chips = [
@@ -919,7 +996,6 @@ pub mod cuda_tracegen {
                     pow_checker: self.pow_checker.clone(),
                 },
                 BatchConstraintModuleChip::InteractionsFolding,
-                BatchConstraintModuleChip::ConstraintsFolding,
                 BatchConstraintModuleChip::EqNeg,
             ];
             let span = tracing::Span::current();
@@ -936,6 +1012,16 @@ pub mod cuda_tracegen {
                     (chip.index(), AirProvingContextV2::simple_no_pis(trace))
                 })
                 .collect_vec();
+
+            // TODO: Rework BatchConstraintBlob so it only contains common items
+            let blob = BatchConstraintBlobCpu {
+                common_blob: blob.common_blob,
+                cf_blob: ConstraintsFoldingBlob::empty(),
+                expr_claim_blob: blob.expr_claim_blob,
+            };
+            let cpu_proofs = proofs.iter().map(|p| &p.cpu).collect_vec();
+            let cpu_preflights = preflights.iter().map(|p| &p.cpu).collect_vec();
+
             // We parallelize the CPU trace generation
             let indexed_cpu_traces = cpu_chips
                 .par_iter()
