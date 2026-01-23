@@ -175,8 +175,8 @@ where
 #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
 pub(crate) fn generate_eq_uni_trace(
     vk: &MultiStarkVerifyingKeyV2,
-    _proofs: &[Proof],
-    preflights: &[Preflight],
+    _proofs: &[&Proof],
+    preflights: &[&Preflight],
 ) -> RowMajorMatrix<F> {
     let width = EqUniCols::<F>::width();
     let l_skip = vk.inner.params.l_skip;

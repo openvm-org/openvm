@@ -11,8 +11,8 @@ use crate::system::Preflight;
 #[tracing::instrument(level = "trace", skip_all)]
 pub(crate) fn generate_trace(
     vk: &MultiStarkVerifyingKeyV2,
-    proofs: &[Proof],
-    preflights: &[Preflight],
+    proofs: &[&Proof],
+    preflights: &[&Preflight],
 ) -> RowMajorMatrix<F> {
     let width = MultilinearSumcheckCols::<F>::width();
     let s_deg = vk.max_constraint_degree() + 1;

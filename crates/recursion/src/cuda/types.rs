@@ -2,13 +2,18 @@ use stark_backend_v2::F;
 
 #[repr(C)]
 #[derive(Debug, Default)]
-pub struct TraceMetadata {
+pub struct TraceHeight {
     pub air_idx: usize,
+    pub log_height: u8,
+}
+
+#[repr(C)]
+#[derive(Debug, Default)]
+pub struct TraceMetadata {
     pub cached_idx: usize,
     pub starting_cidx: usize,
     pub total_interactions: usize,
     pub num_air_id_lookups: usize,
-    pub log_height: u8,
 }
 
 #[repr(C)]
