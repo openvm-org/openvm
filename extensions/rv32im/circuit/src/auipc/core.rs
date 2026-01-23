@@ -394,5 +394,6 @@ impl<A> Rv32AuipcStep<A> {
 #[inline(always)]
 pub fn run_auipc(pc: u32, imm: u32) -> [u8; RV32_REGISTER_NUM_LIMBS] {
     let rd = pc.wrapping_add(imm << RV32_CELL_BITS);
+    println!("[control] imm = {}, pc = {}, rd = {}", imm, pc, rd);
     rd.to_le_bytes()
 }
