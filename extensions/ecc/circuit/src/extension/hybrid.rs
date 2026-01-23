@@ -110,8 +110,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<WeierstrassAir<2, 2, 32>>()?;
-                let addne = get_ec_addne_chip::<F, 2, 32>(
+                inventory.next_air::<WeierstrassAir<2, 16, 4>>()?;
+                let addne = get_ec_addne_chip::<F, 16, 4>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -120,8 +120,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 );
                 inventory.add_executor_chip(HybridWeierstrassChip::new(addne));
 
-                inventory.next_air::<WeierstrassAir<1, 2, 32>>()?;
-                let double = get_ec_double_chip::<F, 2, 32>(
+                inventory.next_air::<WeierstrassAir<1, 16, 4>>()?;
+                let double = get_ec_double_chip::<F, 16, 4>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -137,8 +137,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<WeierstrassAir<2, 6, 16>>()?;
-                let addne = get_ec_addne_chip::<F, 6, 16>(
+                inventory.next_air::<WeierstrassAir<2, 24, 4>>()?;
+                let addne = get_ec_addne_chip::<F, 24, 4>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -147,8 +147,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 );
                 inventory.add_executor_chip(HybridWeierstrassChip::new(addne));
 
-                inventory.next_air::<WeierstrassAir<1, 6, 16>>()?;
-                let double = get_ec_double_chip::<F, 6, 16>(
+                inventory.next_air::<WeierstrassAir<1, 24, 4>>()?;
+                let double = get_ec_double_chip::<F, 24, 4>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),

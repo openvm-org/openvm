@@ -22,9 +22,7 @@ pub use weierstrass::*;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        mod cuda;
         mod hybrid;
-        pub use cuda::*;
         pub use hybrid::*;
         pub use {
             EccHybridProverExt as EccProverExt,
