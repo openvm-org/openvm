@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use openvm_circuit::{
-    arch::{AddressSpaceHostLayout, CONST_BLOCK_SIZE, DenseRecordArena, MemoryConfig, ADDR_SPACE_OFFSET},
+    arch::{
+        AddressSpaceHostLayout, DenseRecordArena, MemoryConfig, ADDR_SPACE_OFFSET, CONST_BLOCK_SIZE,
+    },
     system::{
         memory::{online::LinearMemory, AddressMap, TimestampedValues},
         TouchedMemory,

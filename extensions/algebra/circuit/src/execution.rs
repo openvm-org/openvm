@@ -390,13 +390,15 @@ unsafe fn execute_e12_impl<
     pre_compute: &FieldExpressionPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs_vals = pre_compute
-        .rs_addrs
-        .map(|addr| u32::from_le_bytes(exec_state.vm_read_no_adapter(RV32_REGISTER_AS, addr as u32)));
+    let rs_vals = pre_compute.rs_addrs.map(|addr| {
+        u32::from_le_bytes(exec_state.vm_read_no_adapter(RV32_REGISTER_AS, addr as u32))
+    });
 
     let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = rs_vals.map(|address| {
         debug_assert!(address as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
-        from_fn(|i| exec_state.vm_read_no_adapter(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
+        from_fn(|i| {
+            exec_state.vm_read_no_adapter(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32)
+        })
     });
 
     let output_data = if IS_FP2 {
@@ -405,7 +407,8 @@ unsafe fn execute_e12_impl<
         field_operation::<FIELD_TYPE, BLOCKS, BLOCK_SIZE, OP>(read_data)
     };
 
-    let rd_val = u32::from_le_bytes(exec_state.vm_read_no_adapter(RV32_REGISTER_AS, pre_compute.a as u32));
+    let rd_val =
+        u32::from_le_bytes(exec_state.vm_read_no_adapter(RV32_REGISTER_AS, pre_compute.a as u32));
     debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
 
     for (i, block) in output_data.into_iter().enumerate() {
@@ -426,13 +429,15 @@ unsafe fn execute_e12_generic_impl<
     pre_compute: &FieldExpressionPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs_vals = pre_compute
-        .rs_addrs
-        .map(|addr| u32::from_le_bytes(exec_state.vm_read_no_adapter(RV32_REGISTER_AS, addr as u32)));
+    let rs_vals = pre_compute.rs_addrs.map(|addr| {
+        u32::from_le_bytes(exec_state.vm_read_no_adapter(RV32_REGISTER_AS, addr as u32))
+    });
 
     let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = rs_vals.map(|address| {
         debug_assert!(address as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
-        from_fn(|i| exec_state.vm_read_no_adapter(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
+        from_fn(|i| {
+            exec_state.vm_read_no_adapter(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32)
+        })
     });
     let read_data_dyn: DynArray<u8> = read_data.into();
 
@@ -442,7 +447,8 @@ unsafe fn execute_e12_generic_impl<
         &read_data_dyn.0,
     );
 
-    let rd_val = u32::from_le_bytes(exec_state.vm_read_no_adapter(RV32_REGISTER_AS, pre_compute.a as u32));
+    let rd_val =
+        u32::from_le_bytes(exec_state.vm_read_no_adapter(RV32_REGISTER_AS, pre_compute.a as u32));
     debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
 
     let data: [[u8; BLOCK_SIZE]; BLOCKS] = writes.into();
@@ -467,12 +473,14 @@ unsafe fn execute_e12_setup_impl<
 ) -> Result<(), ExecutionError> {
     let pc = exec_state.pc();
     // Read the first input (which should be the prime)
-    let rs_vals = pre_compute
-        .rs_addrs
-        .map(|addr| u32::from_le_bytes(exec_state.vm_read_no_adapter(RV32_REGISTER_AS, addr as u32)));
+    let rs_vals = pre_compute.rs_addrs.map(|addr| {
+        u32::from_le_bytes(exec_state.vm_read_no_adapter(RV32_REGISTER_AS, addr as u32))
+    });
     let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = rs_vals.map(|address| {
         debug_assert!(address as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
-        from_fn(|i| exec_state.vm_read_no_adapter(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
+        from_fn(|i| {
+            exec_state.vm_read_no_adapter(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32)
+        })
     });
 
     // Extract first field element as the prime
@@ -498,7 +506,8 @@ unsafe fn execute_e12_setup_impl<
         &read_data_dyn.0,
     );
 
-    let rd_val = u32::from_le_bytes(exec_state.vm_read_no_adapter(RV32_REGISTER_AS, pre_compute.a as u32));
+    let rd_val =
+        u32::from_le_bytes(exec_state.vm_read_no_adapter(RV32_REGISTER_AS, pre_compute.a as u32));
     debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
 
     let data: [[u8; BLOCK_SIZE]; BLOCKS] = writes.into();
