@@ -71,9 +71,13 @@ impl ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
             .iter()
             .map(|preflight| preflight.proof_shape.per_row_tidx.as_ptr())
             .collect_vec();
-        let sorted_trace_data = preflights_gpu
+        let sorted_trace_heights = preflights_gpu
             .iter()
-            .map(|preflight| preflight.proof_shape.sorted_trace_vdata.as_ptr())
+            .map(|preflight| preflight.proof_shape.sorted_trace_heights.as_ptr())
+            .collect_vec();
+        let sorted_trace_metadata = preflights_gpu
+            .iter()
+            .map(|preflight| preflight.proof_shape.sorted_trace_metadata.as_ptr())
             .collect_vec();
         let cached_commits = preflights_gpu
             .iter()
@@ -109,7 +113,8 @@ impl ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
                 height,
                 &vk_gpu.per_air,
                 per_row_tidx,
-                sorted_trace_data,
+                sorted_trace_heights,
+                sorted_trace_metadata,
                 cached_commits,
                 &per_proof,
                 preflights_gpu.len(),

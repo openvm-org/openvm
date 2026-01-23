@@ -433,7 +433,7 @@ impl EqSharpUniBlob {
 
 pub fn generate_eq_sharp_uni_blob(
     vk: &MultiStarkVerifyingKey0V2,
-    preflights: &[Preflight],
+    preflights: &[&Preflight],
 ) -> EqSharpUniBlob {
     let l_skip = vk.params.l_skip;
     let mut blob = EqSharpUniBlob::new(l_skip, preflights.len());
@@ -482,7 +482,7 @@ pub fn generate_eq_sharp_uni_blob(
 pub(crate) fn generate_eq_sharp_uni_trace(
     vk: &MultiStarkVerifyingKeyV2,
     blob: &EqSharpUniBlob,
-    preflights: &[Preflight],
+    preflights: &[&Preflight],
 ) -> RowMajorMatrix<F> {
     let width = EqSharpUniCols::<F>::width();
     let l_skip = vk.inner.params.l_skip;
@@ -534,7 +534,7 @@ pub(crate) fn generate_eq_sharp_uni_trace(
 pub(crate) fn generate_eq_sharp_uni_receiver_trace(
     vk: &MultiStarkVerifyingKeyV2,
     blob: &EqSharpUniBlob,
-    preflights: &[Preflight],
+    preflights: &[&Preflight],
 ) -> RowMajorMatrix<F> {
     let l_skip = vk.inner.params.l_skip;
 
