@@ -48,7 +48,7 @@ pub use shift::*;
 mod extension;
 pub use extension::*;
 
-mod auipc_functional;
+mod auipc_dazl;
 #[cfg(any(test, feature = "test-utils"))]
 mod test_utils;
 

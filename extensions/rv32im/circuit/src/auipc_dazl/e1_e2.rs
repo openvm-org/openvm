@@ -1,4 +1,3 @@
-use crate::auipc_functional::Rv32AuipcFunctionalStep;
 use openvm_circuit::arch::{
     E1ExecutionCtx, E2ExecutionCtx, E2PreCompute, ExecuteFunc, InsExecutorE1, InsExecutorE2,
     StaticProgramError, VmSegmentState,
@@ -11,6 +10,7 @@ use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_AS, RV32_REGISTER
 use openvm_stark_backend::p3_field::PrimeField32;
 use std::borrow::Borrow;
 use std::borrow::BorrowMut;
+use crate::auipc_dazl::chip::Rv32AuipcDazlStep;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -19,7 +19,7 @@ struct AuiPcPreCompute {
     a: u8,
 }
 
-impl<F> InsExecutorE1<F> for Rv32AuipcFunctionalStep
+impl<F> InsExecutorE1<F> for Rv32AuipcDazlStep
 where
     F: PrimeField32,
 {
@@ -58,7 +58,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     vm_state.instret += 1;
 }
 
-impl<F> InsExecutorE2<F> for Rv32AuipcFunctionalStep
+impl<F> InsExecutorE2<F> for Rv32AuipcDazlStep
 where
     F: PrimeField32,
 {
@@ -91,7 +91,7 @@ where
     }
 }
 
-impl Rv32AuipcFunctionalStep {
+impl Rv32AuipcDazlStep {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,

@@ -6,7 +6,7 @@ use rand::{rngs::StdRng, Rng};
 
 use openvm_circuit::arch::{
     testing::{TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    Arena, CustomBorrow, DenseRecordArena, EmptyMultiRowMetadata, InstructionExecutor,
+    Arena, DenseRecordArena, EmptyMultiRowMetadata, InstructionExecutor,
     MultiRowLayout, VmChipWrapper,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
@@ -16,21 +16,17 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 
+use crate::auipc_dazl::chip::{Rv32AuipcDazlAir, Rv32AuipcDazlChip, Rv32AuipcDazlFiller, Rv32AuipcDazlRecord, Rv32AuipcDazlStep};
 use crate::{adapters::RV32_CELL_BITS, run_auipc};
-
-use super::{
-    Rv32AuipcFunctionalAir, Rv32AuipcFunctionalChip, Rv32AuipcFunctionalFiller,
-    Rv32AuipcFunctionalRecord, Rv32AuipcFunctionalStep,
-};
 
 const IMM_BITS: usize = 24;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 type Harness<RA> = TestChipHarness<
     F,
-    Rv32AuipcFunctionalStep,
-    Rv32AuipcFunctionalAir,
-    Rv32AuipcFunctionalChip<F>,
+    Rv32AuipcDazlStep,
+    Rv32AuipcDazlAir,
+    Rv32AuipcDazlChip<F>,
     RA,
 >;
 
@@ -48,17 +44,17 @@ fn create_test_chip<RA: Arena>(
         bitwise_bus,
     ));
 
-    let air = Rv32AuipcFunctionalAir {
+    let air = Rv32AuipcDazlAir {
         custom_bus_bitwise: bitwise_bus.inner.index,
         custom_bus_memory: tester.memory_bridge().memory_bus().index(),
         custom_bus_range_check: tester.memory_bridge().range_bus().index(),
         custom_bus_program: tester.execution_bridge().program_bus.index(),
-        custom_bus_execution: tester.execution_bridge().execution_bus.index(),
+        custom_bus_exe: tester.execution_bridge().execution_bus.index(),
     };
 
-    let executor = Rv32AuipcFunctionalStep::new();
+    let executor = Rv32AuipcDazlStep::new();
     let chip = VmChipWrapper::<F, _>::new(
-        Rv32AuipcFunctionalFiller::new(bitwise_chip.clone(), tester.memory_helper().range_checker),
+        Rv32AuipcDazlFiller::new(bitwise_chip.clone(), tester.memory_helper().range_checker),
         tester.memory_helper(),
     );
     let harness = Harness::<RA>::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
@@ -74,7 +70,7 @@ fn set_and_execute<RA: Arena>(
     imm: Option<u32>,
     initial_pc: Option<u32>,
 ) where
-    Rv32AuipcFunctionalStep: InstructionExecutor<F, RA>,
+    Rv32AuipcDazlStep: InstructionExecutor<F, RA>,
 {
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS))) as usize;
     let a = rng.gen_range(0..32) << 2;
@@ -137,7 +133,7 @@ fn dense_record_arena_test() {
             set_and_execute(&mut tester, &mut dense_harness, &mut rng, AUIPC, None, None);
         }
 
-        type Record<'a> = &'a mut Rv32AuipcFunctionalRecord;
+        type Record<'a> = &'a mut Rv32AuipcDazlRecord;
 
         let mut record_interpreter = dense_harness
             .arena
