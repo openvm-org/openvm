@@ -136,15 +136,15 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
     pre_compute: &BaseAluPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
-    let rs2_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32);
-    let rd_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
+    let rs1_ptr = exec_state.vm_read_no_adapter::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs2_ptr = exec_state.vm_read_no_adapter::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32);
+    let rd_ptr = exec_state.vm_read_no_adapter::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
     let rs1 =
-        exec_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
+        exec_state.vm_read_no_adapter::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
     let rs2 =
-        exec_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
+        exec_state.vm_read_no_adapter::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
     let rd = <OP as AluOp>::compute(rs1, rs2);
-    exec_state.vm_write(RV32_MEMORY_AS, u32::from_le_bytes(rd_ptr), &rd);
+    exec_state.vm_write_no_adapter(RV32_MEMORY_AS, u32::from_le_bytes(rd_ptr), &rd);
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }
