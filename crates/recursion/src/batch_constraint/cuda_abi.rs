@@ -1,19 +1,28 @@
 #![allow(clippy::missing_safety_doc)]
 
 use cuda_backend_v2::{EF, F};
-use openvm_cuda_backend::base::DeviceMatrix;
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, error::CudaError};
-use stark_backend_v2::keygen::types::MultiStarkVerifyingKeyV2;
+use openvm_cuda_backend::chip::UInt2;
+use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
 
 use crate::{
     batch_constraint::{
         cuda_utils::*,
-        eq_airs::{Eq3bBlob, Eq3bColumns, RecordIdx, StackedIdxRecord},
-        expr_eval::{CachedSymbolicExpressionColumns, SingleMainSymbolicExpressionColumns},
+        eq_airs::{RecordIdx, StackedIdxRecord},
     },
-    cuda::{preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr},
-    utils::MultiVecWithBounds,
+    cuda::types::TraceHeight,
 };
+
+#[repr(C)]
+pub(crate) struct AffineFpExt {
+    pub(crate) a: EF,
+    pub(crate) b: EF,
+}
+
+#[repr(C)]
+pub(crate) struct ConstraintsFoldingPerProof {
+    pub(crate) lambda_tidx: u32,
+    pub(crate) lambda: EF,
+}
 
 extern "C" {
     fn _sym_expr_common_tracegen(
@@ -57,6 +66,33 @@ extern "C" {
         n_logups: *const usize,
         xis: *const EF,
         xi_bounds: *const usize,
+    ) -> i32;
+
+    fn _constraints_folding_tracegen_temp_bytes(
+        d_proof_and_sort_idxs: *const UInt2,
+        d_cur_sum_evals: *mut AffineFpExt,
+        num_valid_rows: u32,
+        temp_bytes_out: *mut usize,
+    ) -> i32;
+
+    fn _constraints_folding_tracegen(
+        d_trace: *mut F,
+        height: usize,
+        width: usize,
+        d_proof_and_sort_idxs: *const UInt2,
+        d_cur_sum_evals: *mut AffineFpExt,
+        d_values: *const EF,
+        h_row_bounds: *const u32,
+        d_constraint_bounds: *const *const u32,
+        d_sorted_trace_heights: *const *const TraceHeight,
+        d_eq_ns: *const *const EF,
+        d_per_proof: *const ConstraintsFoldingPerProof,
+        num_proofs: u32,
+        num_airs: u32,
+        num_valid_rows: u32,
+        l_skip: u32,
+        d_temp_buffer: *mut core::ffi::c_void,
+        temp_bytes: usize,
     ) -> i32;
 }
 
@@ -149,257 +185,58 @@ pub unsafe fn eq_3b_tracegen(
     ))
 }
 
-#[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
-pub fn generate_sym_expr_trace(
-    child_vk: &MultiStarkVerifyingKeyV2,
-    proofs: &[ProofGpu],
-    preflights: &[PreflightGpu],
-    max_num_proofs: usize,
-    has_cached: bool,
-    expr_evals: &MultiVecWithBounds<EF, 2>,
-) -> DeviceMatrix<F> {
-    debug_assert_eq!(proofs.len(), preflights.len());
-
-    let num_airs = child_vk.inner.per_air.len();
-
-    let mut constraint_nodes = MultiVecWithBounds::<_, 1>::new();
-
-    let mut interactions = MultiVecWithBounds::<_, 1>::new();
-
-    let mut interaction_messages = Vec::new();
-
-    let mut unused_variables = MultiVecWithBounds::<_, 1>::new();
-
-    let mut record_bounds = Vec::with_capacity(num_airs + 1);
-    record_bounds.push(0);
-
-    let mut total_rows = 0;
-
-    for vk in &child_vk.inner.per_air {
-        let constraints = &vk.symbolic_constraints.constraints;
-        for node in &constraints.nodes {
-            constraint_nodes.push(flatten_constraint_node(vk, node));
-        }
-        constraint_nodes.close_level(0);
-
-        for interaction in &vk.symbolic_constraints.interactions {
-            let message_start = interaction_messages.len();
-            interaction_messages.extend(&interaction.message);
-            interactions.push(FlatInteraction {
-                count: interaction.count as u32,
-                message_start: message_start as u32,
-                message_len: interaction.message.len() as u32,
-                bus_index: u32::from(interaction.bus_index),
-                count_weight: interaction.count_weight,
-            });
-        }
-        interactions.close_level(0);
-
-        for unused in &vk.unused_variables {
-            unused_variables.push(flatten_unused_symbolic_variable(unused));
-        }
-        unused_variables.close_level(0);
-
-        let interaction_message_rows: usize = vk
-            .symbolic_constraints
-            .interactions
-            .iter()
-            .map(|interaction| interaction.message.len())
-            .sum();
-        let rows_for_air = constraints.nodes.len()
-            + vk.symbolic_constraints.interactions.len()
-            + interaction_message_rows
-            + vk.unused_variables.len();
-        total_rows += rows_for_air;
-        record_bounds.push(total_rows as u32);
-    }
-
-    let mut air_ids_per_record = vec![0; total_rows];
-    for i in 0..(record_bounds.len() - 1) {
-        air_ids_per_record[(record_bounds[i] as usize)..(record_bounds[i + 1] as usize)]
-            .fill(i as u32);
-    }
-
-    let height = total_rows.max(1).next_power_of_two();
-    let cached_width = CachedSymbolicExpressionColumns::<F>::width();
-    let width = SingleMainSymbolicExpressionColumns::<F>::width() * max_num_proofs
-        + if has_cached { 0 } else { cached_width + 1 };
-    let trace = DeviceMatrix::with_capacity(height, width);
-
-    let d_log_heights = proofs
-        .iter()
-        .flat_map(|proof| {
-            proof
-                .cpu
-                .trace_vdata
-                .iter()
-                .map(|v| v.as_ref().map_or(0, |td| td.log_height))
-        })
-        .collect::<Vec<_>>()
-        .to_device()
-        .unwrap();
-
-    let mut sort_idx_by_air_idx = vec![0usize; num_airs * proofs.len()];
-    for (chunk, preflight) in sort_idx_by_air_idx
-        .chunks_exact_mut(num_airs)
-        .zip(preflights.iter())
-    {
-        for (sort_idx, (air_idx, _)) in preflight
-            .cpu
-            .proof_shape
-            .sorted_trace_vdata
-            .iter()
-            .enumerate()
-        {
-            chunk[*air_idx] = sort_idx;
-        }
-    }
-    let d_sort_idx_by_air_idx = sort_idx_by_air_idx.to_device().unwrap();
-
-    let d_expr_evals = expr_evals.data.to_device().unwrap();
-    let d_ee_bounds_0 = expr_evals.bounds[0].to_device().unwrap();
-    let d_ee_bounds_1 = expr_evals.bounds[1].to_device().unwrap();
-
-    let d_constraint_nodes = constraint_nodes.data.to_device().unwrap();
-    let d_constraint_nodes_bounds = constraint_nodes.bounds[0].to_device().unwrap();
-    let d_interactions = to_device_or_nullptr(&interactions.data).unwrap();
-    let d_interactions_bounds = interactions.bounds[0].to_device().unwrap();
-    let d_interaction_messages = to_device_or_nullptr(&interaction_messages).unwrap();
-    let d_unused_variables = to_device_or_nullptr(&unused_variables.data).unwrap();
-    let d_unused_variables_bounds = unused_variables.bounds[0].to_device().unwrap();
-    let d_record_bounds = record_bounds.to_device().unwrap();
-    let d_air_ids_per_record = air_ids_per_record.to_device().unwrap();
-
-    let mut sumcheck_data = Vec::new();
-    let mut sumcheck_bounds = Vec::with_capacity(preflights.len() + 1);
-    sumcheck_bounds.push(0);
-    for preflight in preflights {
-        sumcheck_data.extend_from_slice(&preflight.cpu.batch_constraint.sumcheck_rnd);
-        sumcheck_bounds.push(sumcheck_data.len());
-    }
-    let d_sumcheck_rnds = if sumcheck_data.is_empty() {
-        DeviceBuffer::new()
-    } else {
-        sumcheck_data.to_device().unwrap()
-    };
-    let d_sumcheck_bounds = sumcheck_bounds.to_device().unwrap();
-
-    let d_cached_records = (!has_cached)
-        .then(|| build_cached_gpu_records(child_vk).to_device())
-        .transpose()
-        .unwrap();
-
-    unsafe {
-        sym_expr_common_tracegen(
-            trace.buffer(),
-            height,
-            child_vk.inner.params.l_skip,
-            &d_log_heights,
-            &d_sort_idx_by_air_idx,
-            num_airs,
-            proofs.len(),
-            max_num_proofs,
-            &d_expr_evals,
-            &d_ee_bounds_0,
-            &d_ee_bounds_1,
-            &d_constraint_nodes,
-            &d_constraint_nodes_bounds,
-            &d_interactions,
-            &d_interactions_bounds,
-            &d_interaction_messages,
-            &d_unused_variables,
-            &d_unused_variables_bounds,
-            &d_record_bounds,
-            &d_air_ids_per_record,
-            total_rows,
-            &d_sumcheck_rnds,
-            &d_sumcheck_bounds,
-            d_cached_records.as_ref(),
-        )
-        .unwrap();
-    }
-    trace
+pub unsafe fn constraints_folding_tracegen_temp_bytes(
+    d_proof_and_sort_idxs: &DeviceBuffer<UInt2>,
+    d_cur_sum_evals: &DeviceBuffer<AffineFpExt>,
+    num_valid_rows: u32,
+) -> Result<usize, CudaError> {
+    let mut temp_bytes = 0usize;
+    CudaError::from_result(_constraints_folding_tracegen_temp_bytes(
+        d_proof_and_sort_idxs.as_ptr(),
+        d_cur_sum_evals.as_mut_ptr(),
+        num_valid_rows,
+        &mut temp_bytes as *mut usize,
+    ))?;
+    Ok(temp_bytes)
 }
 
-#[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
-pub fn generate_eq_3b_trace(
-    child_vk: &MultiStarkVerifyingKeyV2,
-    blob: &Eq3bBlob,
-    preflights: &[PreflightGpu],
-) -> DeviceMatrix<F> {
-    debug_assert_eq!(blob.all_stacked_ids.num_proofs(), preflights.len());
-
-    let num_proofs = preflights.len();
-    let width = Eq3bColumns::<F>::width();
-    let l_skip = child_vk.inner.params.l_skip;
-
-    let mut device_records = MultiVecWithBounds::<_, 1>::with_capacity(blob.all_stacked_ids.len());
-    let mut record_idxs = MultiVecWithBounds::<_, 1>::with_capacity(blob.record_idxs.len());
-
-    let mut rows_per_proof_bounds = Vec::with_capacity(num_proofs + 1);
-    rows_per_proof_bounds.push(0);
-
-    let mut n_logups = Vec::with_capacity(num_proofs);
-    let mut all_xi = MultiVecWithBounds::<_, 1>::new();
-
-    let mut num_valid_rows = 0usize;
-
-    for (pidx, preflight) in preflights.iter().enumerate() {
-        let records = &blob.all_stacked_ids[pidx];
-
-        device_records.extend(records.iter().cloned());
-        device_records.close_level(0);
-        record_idxs.extend(blob.record_idxs[pidx].iter().cloned());
-        record_idxs.close_level(0);
-
-        let n_logup = preflight.cpu.proof_shape.n_logup;
-        n_logups.push(n_logup);
-
-        let one_height = n_logup + 1;
-        let rows_for_proof = records.iter().fold(0, |acc, record| {
-            acc + if record.no_interactions {
-                1
-            } else {
-                one_height
-            }
-        });
-        num_valid_rows += rows_for_proof;
-        rows_per_proof_bounds.push(num_valid_rows);
-
-        all_xi.extend(preflight.cpu.batch_constraint.xi.iter().cloned());
-        all_xi.close_level(0);
-    }
-
-    let height = num_valid_rows.max(1).next_power_of_two();
-    let trace = DeviceMatrix::with_capacity(height, width);
-
-    let d_records = to_device_or_nullptr(&device_records.data).unwrap();
-    let d_record_bounds = device_records.bounds[0].to_device().unwrap();
-    let d_record_idxs = to_device_or_nullptr(&record_idxs.data).unwrap();
-    let d_record_idxs_bounds = record_idxs.bounds[0].to_device().unwrap();
-    let d_rows_per_proof_bounds = rows_per_proof_bounds.to_device().unwrap();
-    let d_n_logups = n_logups.to_device().unwrap();
-    let d_xis = to_device_or_nullptr(&all_xi.data).unwrap();
-    let d_xi_bounds = all_xi.bounds[0].to_device().unwrap();
-
-    unsafe {
-        eq_3b_tracegen(
-            trace.buffer(),
-            num_valid_rows,
-            height,
-            num_proofs,
-            l_skip,
-            &d_records,
-            &d_record_bounds,
-            &d_record_idxs,
-            &d_record_idxs_bounds,
-            &d_rows_per_proof_bounds,
-            &d_n_logups,
-            &d_xis,
-            &d_xi_bounds,
-        )
-        .unwrap();
-    }
-
-    trace
+#[allow(clippy::too_many_arguments)]
+pub unsafe fn constraints_folding_tracegen(
+    d_trace: &DeviceBuffer<F>,
+    height: usize,
+    width: usize,
+    d_proof_and_sort_idxs: &DeviceBuffer<UInt2>,
+    d_cur_sum_evals: &DeviceBuffer<AffineFpExt>,
+    d_values: &DeviceBuffer<EF>,
+    h_row_bounds: &[u32],
+    d_constraint_bounds: Vec<*const u32>,
+    d_sorted_trace_heights: Vec<*const TraceHeight>,
+    d_eq_ns: Vec<*const EF>,
+    d_per_proof: &DeviceBuffer<ConstraintsFoldingPerProof>,
+    num_proofs: u32,
+    num_airs: u32,
+    num_valid_rows: u32,
+    l_skip: u32,
+    d_temp_buffer: &DeviceBuffer<u8>,
+    temp_bytes: usize,
+) -> Result<(), CudaError> {
+    CudaError::from_result(_constraints_folding_tracegen(
+        d_trace.as_mut_ptr(),
+        height,
+        width,
+        d_proof_and_sort_idxs.as_ptr(),
+        d_cur_sum_evals.as_mut_ptr(),
+        d_values.as_ptr(),
+        h_row_bounds.as_ptr(),
+        d_constraint_bounds.as_ptr(),
+        d_sorted_trace_heights.as_ptr(),
+        d_eq_ns.as_ptr(),
+        d_per_proof.as_ptr(),
+        num_proofs,
+        num_airs,
+        num_valid_rows,
+        l_skip,
+        d_temp_buffer.as_mut_ptr() as *mut core::ffi::c_void,
+        temp_bytes,
+    ))
 }

@@ -6,7 +6,10 @@ use openvm_cuda_common::d_buffer::DeviceBuffer;
 use stark_backend_v2::{Digest, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 
 use crate::{
-    cuda::{to_device_or_nullptr, types::TraceMetadata},
+    cuda::{
+        to_device_or_nullptr,
+        types::{TraceHeight, TraceMetadata},
+    },
     proof_shape::proof_shape::compute_air_shape_lookup_counts,
     system::Preflight,
 };
@@ -36,7 +39,8 @@ pub struct TranscriptLog {
 
 #[derive(Debug)]
 pub struct ProofShapePreflightGpu {
-    pub sorted_trace_vdata: DeviceBuffer<TraceMetadata>,
+    pub sorted_trace_heights: DeviceBuffer<TraceHeight>,
+    pub sorted_trace_metadata: DeviceBuffer<TraceMetadata>,
     pub sorted_cached_commits: DeviceBuffer<Digest>,
 
     pub per_row_tidx: DeviceBuffer<usize>,
@@ -100,14 +104,16 @@ impl PreflightGpu {
 
         let bc_air_shape_lookups = compute_air_shape_lookup_counts(vk);
 
-        let sorted_trace_vdata = preflight
+        let (sorted_trace_heights, sorted_trace_metadata): (Vec<_>, Vec<_>) = preflight
             .proof_shape
             .sorted_trace_vdata
             .iter()
             .map(|(air_idx, vdata)| {
-                let metadata = TraceMetadata {
+                let height = TraceHeight {
                     air_idx: *air_idx,
                     log_height: vdata.log_height.try_into().unwrap(),
+                };
+                let metadata = TraceMetadata {
                     cached_idx: sorted_cached_commits.len(),
                     starting_cidx: cidx,
                     total_interactions,
@@ -118,7 +124,7 @@ impl PreflightGpu {
                 total_interactions += (1 << vdata.log_height.max(l_skip))
                     * vk.inner.per_air[*air_idx].num_interactions();
                 sorted_cached_commits.extend_from_slice(&vdata.cached_commitments);
-                metadata
+                (height, metadata)
             })
             .chain(
                 proof
@@ -127,16 +133,19 @@ impl PreflightGpu {
                     .enumerate()
                     .filter_map(|(air_idx, vdata)| {
                         if vdata.is_none() {
-                            Some(TraceMetadata {
-                                air_idx,
-                                ..Default::default()
-                            })
+                            Some((
+                                TraceHeight {
+                                    air_idx,
+                                    ..Default::default()
+                                },
+                                TraceMetadata::default(),
+                            ))
                         } else {
                             None
                         }
                     }),
             )
-            .collect_vec();
+            .unzip();
         let per_row_tidx = preflight
             .proof_shape
             .starting_tidx
@@ -158,7 +167,8 @@ impl PreflightGpu {
         }
 
         ProofShapePreflightGpu {
-            sorted_trace_vdata: to_device_or_nullptr(&sorted_trace_vdata).unwrap(),
+            sorted_trace_heights: to_device_or_nullptr(&sorted_trace_heights).unwrap(),
+            sorted_trace_metadata: to_device_or_nullptr(&sorted_trace_metadata).unwrap(),
             sorted_cached_commits: to_device_or_nullptr(&sorted_cached_commits).unwrap(),
             per_row_tidx: to_device_or_nullptr(&per_row_tidx).unwrap(),
             pvs_tidx: to_device_or_nullptr(&pvs_tidx_by_air_id).unwrap(),

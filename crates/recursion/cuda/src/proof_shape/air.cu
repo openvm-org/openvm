@@ -83,6 +83,7 @@ template <size_t MAX_CACHED>
 __device__ __forceinline__ void fill_present_row(
     RowSlice row,
     AirData &air_data,
+    TraceHeight &trace_height,
     TraceMetadata &trace_data,
     Digest *cached_commits,
     size_t l_skip,
@@ -91,7 +92,7 @@ __device__ __forceinline__ void fill_present_row(
     RangeChecker &range_checker,
     PowerChecker<32> &pow_checker
 ) {
-    size_t log_height = static_cast<size_t>(trace_data.log_height);
+    size_t log_height = static_cast<size_t>(trace_height.log_height);
     int32_t n = static_cast<int32_t>(log_height) - static_cast<int32_t>(l_skip);
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, log_height, log_height);
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, n_sign_bit, n < 0 ? 1 : 0);
@@ -178,7 +179,7 @@ __device__ __forceinline__ void fill_present_row(
         if (i < air_data.num_cached) {
             row.write_array(commit_idx, DIGEST_SIZE, cached_commits[trace_data.cached_idx + i]);
         } else {
-            if (i + 1 != MAX_CACHED || min_cached_idx != trace_data.air_idx) {
+            if (i + 1 != MAX_CACHED || min_cached_idx != trace_height.air_idx) {
                 row.fill_zero(commit_idx, DIGEST_SIZE);
             }
         }
@@ -311,7 +312,8 @@ __global__ void proof_shape_tracegen(
     size_t height,
     AirData *air_data,
     PtrArray<size_t, NUM_PROOFS> per_row_tidx,
-    PtrArray<TraceMetadata, NUM_PROOFS> sorted_trace_data,
+    PtrArray<TraceHeight, NUM_PROOFS> sorted_trace_heights,
+    PtrArray<TraceMetadata, NUM_PROOFS> sorted_trace_metadata,
     PtrArray<Digest, NUM_PROOFS> cached_commits,
     ProofShapePerProof *per_proof,
     ProofShapeTracegenInputs inputs
@@ -358,27 +360,30 @@ __global__ void proof_shape_tracegen(
             );
             row.fill_zero(encoder_flags_idx, encoder.width());
         } else {
-            TraceMetadata trace_data = sorted_trace_data[proof_idx][record_idx];
+            TraceHeight trace_height = sorted_trace_heights[proof_idx][record_idx];
+            TraceMetadata trace_data = sorted_trace_metadata[proof_idx][record_idx];
 
             COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_valid, Fp::one());
             COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_last, Fp::zero());
-            COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, idx, trace_data.air_idx);
+            COL_WRITE_VALUE(
+                row, typename Cols<MAX_CACHED>::template Type, idx, trace_height.air_idx
+            );
             COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, sorted_idx, record_idx);
 
             COL_WRITE_VALUE(
                 row,
                 typename Cols<MAX_CACHED>::template Type,
                 starting_tidx,
-                per_row_tidx[proof_idx][trace_data.air_idx]
+                per_row_tidx[proof_idx][trace_height.air_idx]
             );
 
             COL_WRITE_VALUE(
                 row, typename Cols<MAX_CACHED>::template Type, is_n_max_greater, Fp::zero()
             );
 
-            encoder.write_flag_pt(row.slice_from(encoder_flags_idx), trace_data.air_idx);
+            encoder.write_flag_pt(row.slice_from(encoder_flags_idx), trace_height.air_idx);
 
-            if (inputs.min_cached_idx == trace_data.air_idx) {
+            if (inputs.min_cached_idx == trace_height.air_idx) {
                 row.write_array(
                     cached_commits_idx + DIGEST_SIZE * (MAX_CACHED - 1),
                     DIGEST_SIZE,
@@ -387,10 +392,10 @@ __global__ void proof_shape_tracegen(
             }
 
             if (record_idx + 1 < inputs.num_airs) {
-                uint8_t current_log_height = trace_data.log_height;
+                uint8_t current_log_height = trace_height.log_height;
                 uint8_t next_log_height =
                     record_idx + 1 < proof_data.num_present
-                        ? sorted_trace_data[proof_idx][record_idx + 1].log_height
+                        ? sorted_trace_heights[proof_idx][record_idx + 1].log_height
                         : 0;
                 pow_checker.add_range_count(
                     static_cast<uint32_t>(current_log_height - next_log_height)
@@ -403,7 +408,8 @@ __global__ void proof_shape_tracegen(
                 );
                 fill_present_row<MAX_CACHED>(
                     row,
-                    air_data[trace_data.air_idx],
+                    air_data[trace_height.air_idx],
+                    trace_height,
                     trace_data,
                     cached_commits[proof_idx],
                     inputs.l_skip,
@@ -445,7 +451,8 @@ extern "C" int _proof_shape_tracegen(
     size_t height,
     AirData *d_air_data,
     size_t **d_per_row_tidx,
-    TraceMetadata **d_sorted_trace_data,
+    TraceHeight **d_sorted_trace_heights,
+    TraceMetadata **d_sorted_trace_metadata,
     Digest **d_cached_commits,
     ProofShapePerProof *d_per_proof,
     size_t num_proofs,
@@ -464,7 +471,8 @@ extern "C" int _proof_shape_tracegen(
                  height,
                  d_air_data,
                  PtrArray<size_t, NUM_PROOFS>(d_per_row_tidx),
-                 PtrArray<TraceMetadata, NUM_PROOFS>(d_sorted_trace_data),
+                 PtrArray<TraceHeight, NUM_PROOFS>(d_sorted_trace_heights),
+                 PtrArray<TraceMetadata, NUM_PROOFS>(d_sorted_trace_metadata),
                  PtrArray<Digest, NUM_PROOFS>(d_cached_commits),
                  d_per_proof,
                  *inputs
