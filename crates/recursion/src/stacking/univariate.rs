@@ -285,8 +285,8 @@ impl UnivariateRoundTraceGenerator {
     #[tracing::instrument(level = "trace", skip_all)]
     pub fn generate_trace(
         vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
-        preflights: &[Preflight],
+        proofs: &[&Proof],
+        preflights: &[&Preflight],
     ) -> RowMajorMatrix<F> {
         debug_assert_eq!(proofs.len(), preflights.len());
 

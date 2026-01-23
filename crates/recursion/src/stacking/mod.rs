@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use itertools::izip;
+use itertools::{Itertools, izip};
 use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::FieldAlgebra;
@@ -230,8 +230,8 @@ impl StackingModuleChip {
     fn generate_trace_row_major(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
-        preflights: &[Preflight],
+        proofs: &[&Proof],
+        preflights: &[&Preflight],
     ) -> RowMajorMatrix<F> {
         match self {
             StackingModuleChip::OpeningClaims => {
@@ -272,7 +272,13 @@ impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for StackingModuleChip {
         preflights: &[Preflight],
         _ctx: &(),
     ) -> ColMajorMatrix<F> {
-        ColMajorMatrix::from_row_major(&self.generate_trace_row_major(child_vk, proofs, preflights))
+        let proofs = proofs.iter().collect_vec();
+        let preflights = preflights.iter().collect_vec();
+        ColMajorMatrix::from_row_major(&self.generate_trace_row_major(
+            child_vk,
+            &proofs,
+            &preflights,
+        ))
     }
 }
 
@@ -525,16 +531,18 @@ mod cuda_tracegen {
                 StackingModuleChip::StackingClaims => {
                     claims::cuda::generate_trace(proofs, preflights, ctx)
                 }
-                _ => transport_matrix_to_device(Arc::new(
-                    self.generate_trace_row_major(
+                _ => {
+                    let proofs = proofs.iter().map(|proof| &proof.cpu).collect_vec();
+                    let preflights = preflights
+                        .iter()
+                        .map(|preflight| &preflight.cpu)
+                        .collect_vec();
+                    transport_matrix_to_device(Arc::new(self.generate_trace_row_major(
                         &child_vk.cpu,
-                        &proofs.iter().map(|proof| proof.cpu.clone()).collect_vec(),
-                        &preflights
-                            .iter()
-                            .map(|preflight| preflight.cpu.clone())
-                            .collect_vec(),
-                    ),
-                )),
+                        &proofs,
+                        &preflights,
+                    )))
+                }
             }
         }
     }
