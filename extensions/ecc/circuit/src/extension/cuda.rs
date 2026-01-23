@@ -1,4 +1,4 @@
-use openvm_algebra_circuit::Rv32ModularGpuBuilder;
+use openvm_algebra_circuit::Rv32ModularHybridBuilder;
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena, VmBuilder,
@@ -138,7 +138,7 @@ impl VmBuilder<E> for Rv32WeierstrassGpuBuilder {
         ChipInventoryError,
     > {
         let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&Rv32ModularGpuBuilder, &config.modular, circuit)?;
+            VmBuilder::<E>::create_chip_complex(&Rv32ModularHybridBuilder, &config.modular, circuit)?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(
             &EccGpuProverExt,

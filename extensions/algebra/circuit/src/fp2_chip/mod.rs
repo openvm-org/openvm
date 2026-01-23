@@ -9,11 +9,6 @@ pub use addsub::*;
 mod muldiv;
 pub use muldiv::*;
 
-#[cfg(feature = "cuda")]
-mod cuda;
-#[cfg(feature = "cuda")]
-pub use cuda::*;
-
 pub type Fp2Air<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAirWrapper<
     Rv32VecHeapAdapterAir<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
     FieldExpressionCoreAir,
