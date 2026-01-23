@@ -10,7 +10,7 @@ use openvm_circuit::{
             TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
             RANGE_TUPLE_CHECKER_BUS,
         },
-        Arena, ExecutionBridge, PreflightExecutor,
+        Arena, ExecutionBridge, PreflightExecutor, CONST_BLOCK_SIZE,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::generate_long_number,
@@ -63,7 +63,7 @@ use {
 };
 
 use crate::{
-    AluAdapterAir, AluAdapterExecutor, BranchAdapterAir, BranchAdapterExecutor, CONST_BLOCK_SIZE,
+    AluAdapterAir, AluAdapterExecutor, BranchAdapterAir, BranchAdapterExecutor, INT256_NUM_BLOCKS,
     Rv32BaseAlu256Air, Rv32BaseAlu256Chip, Rv32BaseAlu256Executor, Rv32BranchEqual256Air,
     Rv32BranchEqual256Chip, Rv32BranchEqual256Executor, Rv32BranchLessThan256Air,
     Rv32BranchLessThan256Chip, Rv32BranchLessThan256Executor, Rv32LessThan256Air,
@@ -94,8 +94,8 @@ fn create_alu_harness_fields(
     let air = Rv32BaseAlu256Air::new(
         AluAdapterAir::new(Rv32VecHeapAdapterAir::<
             2,
-            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            INT256_NUM_BLOCKS,
+            INT256_NUM_BLOCKS,
             CONST_BLOCK_SIZE,
             CONST_BLOCK_SIZE,
         >::new(
@@ -109,8 +109,8 @@ fn create_alu_harness_fields(
     let executor = Rv32BaseAlu256Executor::new(
         AluAdapterExecutor::new(Rv32VecHeapAdapterExecutor::<
             2,
-            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            INT256_NUM_BLOCKS,
+            INT256_NUM_BLOCKS,
             CONST_BLOCK_SIZE,
             CONST_BLOCK_SIZE,
         >::new(address_bits)),
@@ -120,8 +120,8 @@ fn create_alu_harness_fields(
         BaseAluFiller::new(
             Rv32VecHeapAdapterFiller::<
                 2,
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                INT256_NUM_BLOCKS,
+                INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
                 CONST_BLOCK_SIZE,
             >::new(address_bits, bitwise_chip.clone()),
@@ -147,8 +147,8 @@ fn create_lt_harness_fields(
     let air = Rv32LessThan256Air::new(
         AluAdapterAir::new(Rv32VecHeapAdapterAir::<
             2,
-            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            INT256_NUM_BLOCKS,
+            INT256_NUM_BLOCKS,
             CONST_BLOCK_SIZE,
             CONST_BLOCK_SIZE,
         >::new(
@@ -162,8 +162,8 @@ fn create_lt_harness_fields(
     let executor = Rv32LessThan256Executor::new(
         AluAdapterExecutor::new(Rv32VecHeapAdapterExecutor::<
             2,
-            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            INT256_NUM_BLOCKS,
+            INT256_NUM_BLOCKS,
             CONST_BLOCK_SIZE,
             CONST_BLOCK_SIZE,
         >::new(address_bits)),
@@ -173,8 +173,8 @@ fn create_lt_harness_fields(
         LessThanFiller::new(
             Rv32VecHeapAdapterFiller::<
                 2,
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                INT256_NUM_BLOCKS,
+                INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
                 CONST_BLOCK_SIZE,
             >::new(address_bits, bitwise_chip.clone()),
@@ -201,8 +201,8 @@ fn create_mul_harness_fields(
     let air = Rv32Multiplication256Air::new(
         AluAdapterAir::new(Rv32VecHeapAdapterAir::<
             2,
-            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            INT256_NUM_BLOCKS,
+            INT256_NUM_BLOCKS,
             CONST_BLOCK_SIZE,
             CONST_BLOCK_SIZE,
         >::new(
@@ -216,8 +216,8 @@ fn create_mul_harness_fields(
     let executor = Rv32Multiplication256Executor::new(
         AluAdapterExecutor::new(Rv32VecHeapAdapterExecutor::<
             2,
-            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            INT256_NUM_BLOCKS,
+            INT256_NUM_BLOCKS,
             CONST_BLOCK_SIZE,
             CONST_BLOCK_SIZE,
         >::new(address_bits)),
@@ -227,8 +227,8 @@ fn create_mul_harness_fields(
         MultiplicationFiller::new(
             Rv32VecHeapAdapterFiller::<
                 2,
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                INT256_NUM_BLOCKS,
+                INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
                 CONST_BLOCK_SIZE,
             >::new(address_bits, bitwise_chip),
@@ -251,8 +251,8 @@ fn create_shift_harness_fields(
     let air = Rv32Shift256Air::new(
         AluAdapterAir::new(Rv32VecHeapAdapterAir::<
             2,
-            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            INT256_NUM_BLOCKS,
+            INT256_NUM_BLOCKS,
             CONST_BLOCK_SIZE,
             CONST_BLOCK_SIZE,
         >::new(
@@ -270,8 +270,8 @@ fn create_shift_harness_fields(
     let executor = Rv32Shift256Executor::new(
         AluAdapterExecutor::new(Rv32VecHeapAdapterExecutor::<
             2,
-            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            INT256_NUM_BLOCKS,
+            INT256_NUM_BLOCKS,
             CONST_BLOCK_SIZE,
             CONST_BLOCK_SIZE,
         >::new(address_bits)),
@@ -281,8 +281,8 @@ fn create_shift_harness_fields(
         ShiftFiller::new(
             Rv32VecHeapAdapterFiller::<
                 2,
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                INT256_NUM_BLOCKS,
+                INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
                 CONST_BLOCK_SIZE,
             >::new(address_bits, bitwise_chip.clone()),
@@ -309,7 +309,7 @@ fn create_beq_harness_fields(
     let air = Rv32BranchEqual256Air::new(
         BranchAdapterAir::new(Rv32VecHeapBranchAdapterAir::<
             2,
-            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            INT256_NUM_BLOCKS,
             CONST_BLOCK_SIZE,
         >::new(
             execution_bridge,
@@ -322,7 +322,7 @@ fn create_beq_harness_fields(
     let executor = Rv32BranchEqual256Executor::new(
         BranchAdapterExecutor::new(Rv32VecHeapBranchAdapterExecutor::<
             2,
-            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            INT256_NUM_BLOCKS,
             CONST_BLOCK_SIZE,
         >::new(address_bits)),
         Rv32BranchEqual256Opcode::CLASS_OFFSET,
@@ -332,7 +332,7 @@ fn create_beq_harness_fields(
         BranchEqualFiller::new(
             Rv32VecHeapBranchAdapterFiller::<
                 2,
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
             >::new(address_bits, bitwise_chip),
             Rv32BranchEqual256Opcode::CLASS_OFFSET,
@@ -357,7 +357,7 @@ fn create_blt_harness_fields(
     let air = Rv32BranchLessThan256Air::new(
         BranchAdapterAir::new(Rv32VecHeapBranchAdapterAir::<
             2,
-            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            INT256_NUM_BLOCKS,
             CONST_BLOCK_SIZE,
         >::new(
             execution_bridge,
@@ -373,7 +373,7 @@ fn create_blt_harness_fields(
     let executor = Rv32BranchLessThan256Executor::new(
         BranchAdapterExecutor::new(Rv32VecHeapBranchAdapterExecutor::<
             2,
-            { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+            INT256_NUM_BLOCKS,
             CONST_BLOCK_SIZE,
         >::new(address_bits)),
         Rv32BranchLessThan256Opcode::CLASS_OFFSET,
@@ -382,7 +382,7 @@ fn create_blt_harness_fields(
         BranchLessThanFiller::new(
             Rv32VecHeapBranchAdapterFiller::<
                 2,
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
             >::new(address_bits, bitwise_chip.clone()),
             bitwise_chip,
@@ -1014,7 +1014,7 @@ fn run_beq_256_rand_test_cuda(opcode: BranchEqualOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32VecHeapBranchAdapterExecutor<2, { INT256_NUM_LIMBS / CONST_BLOCK_SIZE }, CONST_BLOCK_SIZE>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32VecHeapBranchAdapterExecutor<2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE>>::new(),
         );
 
     tester
@@ -1077,7 +1077,7 @@ fn run_blt_256_rand_test_cuda(opcode: BranchLessThanOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32VecHeapBranchAdapterExecutor<2, { INT256_NUM_LIMBS / CONST_BLOCK_SIZE }, CONST_BLOCK_SIZE>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32VecHeapBranchAdapterExecutor<2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE>>::new(),
         );
 
     tester

@@ -4,7 +4,7 @@
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
 use openvm_circuit::{
     self,
-    arch::{InitFileGenerator, SystemConfig, VmAirWrapper, VmChipWrapper},
+    arch::{InitFileGenerator, SystemConfig, VmAirWrapper, VmChipWrapper, CONST_BLOCK_SIZE},
     system::SystemExecutor,
 };
 use openvm_circuit_derive::{PreflightExecutor, VmConfig};
@@ -43,17 +43,15 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub const CONST_BLOCK_SIZE: usize = 4;
-
-// Constants for the VecToFlat adapter wrappers
-const BLOCKS_PER_OP: usize = INT256_NUM_LIMBS / CONST_BLOCK_SIZE;
+/// Number of blocks for INT256 operations (INT256_NUM_LIMBS / CONST_BLOCK_SIZE)
+pub const INT256_NUM_BLOCKS: usize = INT256_NUM_LIMBS / CONST_BLOCK_SIZE;
 
 /// Type alias for the ALU adapter AIR wrapper
 type AluAdapterAir = VecToFlatAluAdapterAir<
-    Rv32VecHeapAdapterAir<2, BLOCKS_PER_OP, BLOCKS_PER_OP, CONST_BLOCK_SIZE, CONST_BLOCK_SIZE>,
+    Rv32VecHeapAdapterAir<2, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE, CONST_BLOCK_SIZE>,
     2,
-    BLOCKS_PER_OP,
-    BLOCKS_PER_OP,
+    INT256_NUM_BLOCKS,
+    INT256_NUM_BLOCKS,
     CONST_BLOCK_SIZE,
     INT256_NUM_LIMBS,
     INT256_NUM_LIMBS,
@@ -61,10 +59,10 @@ type AluAdapterAir = VecToFlatAluAdapterAir<
 
 /// Type alias for the ALU adapter executor wrapper
 type AluAdapterExecutor = VecToFlatAluAdapterExecutor<
-    Rv32VecHeapAdapterExecutor<2, BLOCKS_PER_OP, BLOCKS_PER_OP, CONST_BLOCK_SIZE, CONST_BLOCK_SIZE>,
+    Rv32VecHeapAdapterExecutor<2, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE, CONST_BLOCK_SIZE>,
     2,
-    BLOCKS_PER_OP,
-    BLOCKS_PER_OP,
+    INT256_NUM_BLOCKS,
+    INT256_NUM_BLOCKS,
     CONST_BLOCK_SIZE,
     INT256_NUM_LIMBS,
     INT256_NUM_LIMBS,
@@ -72,18 +70,18 @@ type AluAdapterExecutor = VecToFlatAluAdapterExecutor<
 
 /// Type alias for the Branch adapter AIR wrapper
 type BranchAdapterAir = VecToFlatBranchAdapterAir<
-    Rv32VecHeapBranchAdapterAir<2, BLOCKS_PER_OP, CONST_BLOCK_SIZE>,
+    Rv32VecHeapBranchAdapterAir<2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE>,
     2,
-    BLOCKS_PER_OP,
+    INT256_NUM_BLOCKS,
     CONST_BLOCK_SIZE,
     INT256_NUM_LIMBS,
 >;
 
 /// Type alias for the Branch adapter executor wrapper
 type BranchAdapterExecutor = VecToFlatBranchAdapterExecutor<
-    Rv32VecHeapBranchAdapterExecutor<2, BLOCKS_PER_OP, CONST_BLOCK_SIZE>,
+    Rv32VecHeapBranchAdapterExecutor<2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE>,
     2,
-    BLOCKS_PER_OP,
+    INT256_NUM_BLOCKS,
     CONST_BLOCK_SIZE,
     INT256_NUM_LIMBS,
 >;
@@ -98,8 +96,8 @@ pub type Rv32BaseAlu256Chip<F> = VmChipWrapper<
     BaseAluFiller<
         Rv32VecHeapAdapterFiller<
             2,
-            BLOCKS_PER_OP,
-            BLOCKS_PER_OP,
+            INT256_NUM_BLOCKS,
+            INT256_NUM_BLOCKS,
             CONST_BLOCK_SIZE,
             CONST_BLOCK_SIZE,
         >,
@@ -120,8 +118,8 @@ pub type Rv32LessThan256Chip<F> = VmChipWrapper<
     LessThanFiller<
         Rv32VecHeapAdapterFiller<
             2,
-            BLOCKS_PER_OP,
-            BLOCKS_PER_OP,
+            INT256_NUM_BLOCKS,
+            INT256_NUM_BLOCKS,
             CONST_BLOCK_SIZE,
             CONST_BLOCK_SIZE,
         >,
@@ -142,8 +140,8 @@ pub type Rv32Multiplication256Chip<F> = VmChipWrapper<
     MultiplicationFiller<
         Rv32VecHeapAdapterFiller<
             2,
-            BLOCKS_PER_OP,
-            BLOCKS_PER_OP,
+            INT256_NUM_BLOCKS,
+            INT256_NUM_BLOCKS,
             CONST_BLOCK_SIZE,
             CONST_BLOCK_SIZE,
         >,
@@ -162,8 +160,8 @@ pub type Rv32Shift256Chip<F> = VmChipWrapper<
     ShiftFiller<
         Rv32VecHeapAdapterFiller<
             2,
-            BLOCKS_PER_OP,
-            BLOCKS_PER_OP,
+            INT256_NUM_BLOCKS,
+            INT256_NUM_BLOCKS,
             CONST_BLOCK_SIZE,
             CONST_BLOCK_SIZE,
         >,
@@ -181,7 +179,7 @@ pub struct Rv32BranchEqual256Executor(
 pub type Rv32BranchEqual256Chip<F> = VmChipWrapper<
     F,
     BranchEqualFiller<
-        Rv32VecHeapBranchAdapterFiller<2, BLOCKS_PER_OP, CONST_BLOCK_SIZE>,
+        Rv32VecHeapBranchAdapterFiller<2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE>,
         INT256_NUM_LIMBS,
     >,
 >;
@@ -196,7 +194,7 @@ pub struct Rv32BranchLessThan256Executor(
 pub type Rv32BranchLessThan256Chip<F> = VmChipWrapper<
     F,
     BranchLessThanFiller<
-        Rv32VecHeapBranchAdapterFiller<2, BLOCKS_PER_OP, CONST_BLOCK_SIZE>,
+        Rv32VecHeapBranchAdapterFiller<2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE>,
         INT256_NUM_LIMBS,
         RV32_CELL_BITS,
     >,

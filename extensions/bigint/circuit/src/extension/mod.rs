@@ -10,6 +10,7 @@ use openvm_circuit::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
         ExecutorInventoryBuilder, ExecutorInventoryError, MatrixRecordArena, RowMajorMatrixArena,
         VmBuilder, VmChipComplex, VmCircuitExtension, VmExecutionExtension, VmProverExtension,
+        CONST_BLOCK_SIZE,
     },
     system::{memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemPort},
 };
@@ -39,8 +40,8 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AluAdapterAir, AluAdapterExecutor, BranchAdapterAir, BranchAdapterExecutor, CONST_BLOCK_SIZE,
-    INT256_NUM_LIMBS, *,
+    AluAdapterAir, AluAdapterExecutor, BranchAdapterAir, BranchAdapterExecutor, INT256_NUM_BLOCKS,
+    *,
 };
 
 cfg_if::cfg_if! {
@@ -107,8 +108,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
         let alu = Rv32BaseAlu256Executor::new(
             AluAdapterExecutor::new(Rv32VecHeapAdapterExecutor::<
                 2,
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                INT256_NUM_BLOCKS,
+                INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
                 CONST_BLOCK_SIZE,
             >::new(pointer_max_bits)),
@@ -119,8 +120,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
         let lt = Rv32LessThan256Executor::new(
             AluAdapterExecutor::new(Rv32VecHeapAdapterExecutor::<
                 2,
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                INT256_NUM_BLOCKS,
+                INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
                 CONST_BLOCK_SIZE,
             >::new(pointer_max_bits)),
@@ -131,7 +132,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
         let beq = Rv32BranchEqual256Executor::new(
             BranchAdapterExecutor::new(Rv32VecHeapBranchAdapterExecutor::<
                 2,
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
             >::new(pointer_max_bits)),
             Rv32BranchEqual256Opcode::CLASS_OFFSET,
@@ -145,7 +146,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
         let blt = Rv32BranchLessThan256Executor::new(
             BranchAdapterExecutor::new(Rv32VecHeapBranchAdapterExecutor::<
                 2,
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
             >::new(pointer_max_bits)),
             Rv32BranchLessThan256Opcode::CLASS_OFFSET,
@@ -158,8 +159,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
         let mult = Rv32Multiplication256Executor::new(
             AluAdapterExecutor::new(Rv32VecHeapAdapterExecutor::<
                 2,
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                INT256_NUM_BLOCKS,
+                INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
                 CONST_BLOCK_SIZE,
             >::new(pointer_max_bits)),
@@ -170,8 +171,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
         let shift = Rv32Shift256Executor::new(
             AluAdapterExecutor::new(Rv32VecHeapAdapterExecutor::<
                 2,
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                INT256_NUM_BLOCKS,
+                INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
                 CONST_BLOCK_SIZE,
             >::new(pointer_max_bits)),
@@ -229,8 +230,8 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Int256 {
         let alu = Rv32BaseAlu256Air::new(
             AluAdapterAir::new(Rv32VecHeapAdapterAir::<
                 2,
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                INT256_NUM_BLOCKS,
+                INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
                 CONST_BLOCK_SIZE,
             >::new(exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits)),
@@ -241,8 +242,8 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Int256 {
         let lt = Rv32LessThan256Air::new(
             AluAdapterAir::new(Rv32VecHeapAdapterAir::<
                 2,
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                INT256_NUM_BLOCKS,
+                INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
                 CONST_BLOCK_SIZE,
             >::new(exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits)),
@@ -253,7 +254,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Int256 {
         let beq = Rv32BranchEqual256Air::new(
             BranchAdapterAir::new(Rv32VecHeapBranchAdapterAir::<
                 2,
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
             >::new(exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits)),
             BranchEqualCoreAir::new(Rv32BranchEqual256Opcode::CLASS_OFFSET, DEFAULT_PC_STEP),
@@ -263,7 +264,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Int256 {
         let blt = Rv32BranchLessThan256Air::new(
             BranchAdapterAir::new(Rv32VecHeapBranchAdapterAir::<
                 2,
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
             >::new(exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits)),
             BranchLessThanCoreAir::new(bitwise_lu, Rv32BranchLessThan256Opcode::CLASS_OFFSET),
@@ -273,8 +274,8 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Int256 {
         let mult = Rv32Multiplication256Air::new(
             AluAdapterAir::new(Rv32VecHeapAdapterAir::<
                 2,
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                INT256_NUM_BLOCKS,
+                INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
                 CONST_BLOCK_SIZE,
             >::new(exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits)),
@@ -285,8 +286,8 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Int256 {
         let shift = Rv32Shift256Air::new(
             AluAdapterAir::new(Rv32VecHeapAdapterAir::<
                 2,
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-                { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                INT256_NUM_BLOCKS,
+                INT256_NUM_BLOCKS,
                 CONST_BLOCK_SIZE,
                 CONST_BLOCK_SIZE,
             >::new(exec_bridge, memory_bridge, bitwise_lu, pointer_max_bits)),
@@ -354,8 +355,8 @@ where
             BaseAluFiller::new(
                 Rv32VecHeapAdapterFiller::<
                     2,
-                    { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-                    { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                    INT256_NUM_BLOCKS,
+                    INT256_NUM_BLOCKS,
                     CONST_BLOCK_SIZE,
                     CONST_BLOCK_SIZE,
                 >::new(pointer_max_bits, bitwise_lu.clone()),
@@ -371,8 +372,8 @@ where
             LessThanFiller::new(
                 Rv32VecHeapAdapterFiller::<
                     2,
-                    { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-                    { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                    INT256_NUM_BLOCKS,
+                    INT256_NUM_BLOCKS,
                     CONST_BLOCK_SIZE,
                     CONST_BLOCK_SIZE,
                 >::new(pointer_max_bits, bitwise_lu.clone()),
@@ -388,7 +389,7 @@ where
             BranchEqualFiller::new(
                 Rv32VecHeapBranchAdapterFiller::<
                     2,
-                    { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                    INT256_NUM_BLOCKS,
                     CONST_BLOCK_SIZE,
                 >::new(pointer_max_bits, bitwise_lu.clone()),
                 Rv32BranchEqual256Opcode::CLASS_OFFSET,
@@ -403,7 +404,7 @@ where
             BranchLessThanFiller::new(
                 Rv32VecHeapBranchAdapterFiller::<
                     2,
-                    { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                    INT256_NUM_BLOCKS,
                     CONST_BLOCK_SIZE,
                 >::new(pointer_max_bits, bitwise_lu.clone()),
                 bitwise_lu.clone(),
@@ -418,8 +419,8 @@ where
             MultiplicationFiller::new(
                 Rv32VecHeapAdapterFiller::<
                     2,
-                    { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-                    { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                    INT256_NUM_BLOCKS,
+                    INT256_NUM_BLOCKS,
                     CONST_BLOCK_SIZE,
                     CONST_BLOCK_SIZE,
                 >::new(pointer_max_bits, bitwise_lu.clone()),
@@ -435,8 +436,8 @@ where
             ShiftFiller::new(
                 Rv32VecHeapAdapterFiller::<
                     2,
-                    { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
-                    { INT256_NUM_LIMBS / CONST_BLOCK_SIZE },
+                    INT256_NUM_BLOCKS,
+                    INT256_NUM_BLOCKS,
                     CONST_BLOCK_SIZE,
                     CONST_BLOCK_SIZE,
                 >::new(pointer_max_bits, bitwise_lu.clone()),
