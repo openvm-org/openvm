@@ -79,7 +79,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BaseAlu256ChipGpu {
 //////////////////////////////////////////////////////////////////////////////////////
 /// Branch Equal
 //////////////////////////////////////////////////////////////////////////////////////
-pub type BranchEqual256AdapterRecord = Rv32VecHeapBranchAdapterRecord<2, 1>;
+pub type BranchEqual256AdapterRecord = Rv32VecHeapBranchAdapterRecord<2, 1, INT256_NUM_LIMBS>;
 pub type BranchEqual256CoreRecord = BranchEqualCoreRecord<INT256_NUM_LIMBS>;
 
 #[derive(new)]
@@ -177,7 +177,7 @@ impl Chip<DenseRecordArena, GpuBackend> for LessThan256ChipGpu {
 //////////////////////////////////////////////////////////////////////////////////////
 /// Branch Less Than
 //////////////////////////////////////////////////////////////////////////////////////
-pub type BranchLessThan256AdapterRecord = Rv32VecHeapBranchAdapterRecord<2, 1>;
+pub type BranchLessThan256AdapterRecord = Rv32VecHeapBranchAdapterRecord<2, 1, INT256_NUM_LIMBS>;
 pub type BranchLessThan256CoreRecord = BranchLessThanCoreRecord<INT256_NUM_LIMBS, RV32_CELL_BITS>;
 
 #[derive(new)]
