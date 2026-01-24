@@ -13,15 +13,22 @@ use crate::{
 };
 
 #[repr(C)]
-pub(crate) struct AffineFpExt {
+pub struct AffineFpExt {
     pub(crate) a: EF,
     pub(crate) b: EF,
 }
 
 #[repr(C)]
-pub(crate) struct ConstraintsFoldingPerProof {
-    pub(crate) lambda_tidx: u32,
-    pub(crate) lambda: EF,
+pub struct FpExtWithTidx {
+    pub(crate) value: EF,
+    pub(crate) tidx: u32,
+}
+
+#[repr(C)]
+pub struct InteractionRecord {
+    pub(crate) interaction_num_rows: u32,
+    pub(crate) global_start_row: u32,
+    pub(crate) stacked_idx: u32,
 }
 
 extern "C" {
@@ -86,9 +93,42 @@ extern "C" {
         d_constraint_bounds: *const *const u32,
         d_sorted_trace_heights: *const *const TraceHeight,
         d_eq_ns: *const *const EF,
-        d_per_proof: *const ConstraintsFoldingPerProof,
+        d_per_proof: *const FpExtWithTidx,
         num_proofs: u32,
         num_airs: u32,
+        num_valid_rows: u32,
+        l_skip: u32,
+        d_temp_buffer: *mut core::ffi::c_void,
+        temp_bytes: usize,
+    ) -> i32;
+
+    fn _interaction_folding_tracegen_temp_bytes(
+        d_trace: *mut F,
+        height: usize,
+        d_idx_keys: *const UInt2,
+        d_cur_sum_evals: *mut AffineFpExt,
+        num_valid_rows: u32,
+        temp_bytes_out: *mut usize,
+    ) -> i32;
+
+    fn _interactions_folding_tracegen(
+        d_trace: *mut F,
+        height: usize,
+        width: usize,
+        d_idx_keys: *mut UInt2,
+        d_cur_sum_evals: *mut AffineFpExt,
+        d_values: *const EF,
+        d_node_idxs: *const u32,
+        h_row_bounds: *const u32,
+        d_air_interaction_bounds: *const *const u32,
+        d_interaction_row_bounds: *const *const u32,
+        d_sorted_trace_vdata: *const *const TraceHeight,
+        d_records: *const *const InteractionRecord,
+        d_xis: *const *const EF,
+        d_per_proof: *const FpExtWithTidx,
+        h_num_airs: *const u32,
+        h_n_logups: *const u32,
+        num_proofs: u32,
         num_valid_rows: u32,
         l_skip: u32,
         d_temp_buffer: *mut core::ffi::c_void,
@@ -212,7 +252,7 @@ pub unsafe fn constraints_folding_tracegen(
     d_constraint_bounds: Vec<*const u32>,
     d_sorted_trace_heights: Vec<*const TraceHeight>,
     d_eq_ns: Vec<*const EF>,
-    d_per_proof: &DeviceBuffer<ConstraintsFoldingPerProof>,
+    d_per_proof: &DeviceBuffer<FpExtWithTidx>,
     num_proofs: u32,
     num_airs: u32,
     num_valid_rows: u32,
@@ -234,6 +274,74 @@ pub unsafe fn constraints_folding_tracegen(
         d_per_proof.as_ptr(),
         num_proofs,
         num_airs,
+        num_valid_rows,
+        l_skip,
+        d_temp_buffer.as_mut_ptr() as *mut core::ffi::c_void,
+        temp_bytes,
+    ))
+}
+
+pub unsafe fn interactions_folding_tracegen_temp_bytes(
+    d_trace: &DeviceBuffer<F>,
+    height: usize,
+    d_idx_keys: &DeviceBuffer<UInt2>,
+    d_cur_sum_evals: &DeviceBuffer<AffineFpExt>,
+    num_valid_rows: u32,
+) -> Result<usize, CudaError> {
+    let mut temp_bytes = 0usize;
+    CudaError::from_result(_interaction_folding_tracegen_temp_bytes(
+        d_trace.as_mut_ptr(),
+        height,
+        d_idx_keys.as_ptr(),
+        d_cur_sum_evals.as_mut_ptr(),
+        num_valid_rows,
+        &mut temp_bytes as *mut usize,
+    ))?;
+    Ok(temp_bytes)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub unsafe fn interactions_folding_tracegen(
+    d_trace: &DeviceBuffer<F>,
+    height: usize,
+    width: usize,
+    d_idx_keys: &DeviceBuffer<UInt2>,
+    d_cur_sum_evals: &DeviceBuffer<AffineFpExt>,
+    d_values: &DeviceBuffer<EF>,
+    d_node_idxs: &DeviceBuffer<u32>,
+    h_row_bounds: &[u32],
+    d_air_interaction_bounds: Vec<*const u32>,
+    d_interaction_row_bounds: Vec<*const u32>,
+    d_sorted_trace_vdata: Vec<*const TraceHeight>,
+    d_records: Vec<*const InteractionRecord>,
+    d_xis: Vec<*const EF>,
+    d_per_proof: &DeviceBuffer<FpExtWithTidx>,
+    h_num_airs: &[u32],
+    h_n_logups: &[u32],
+    num_proofs: u32,
+    num_valid_rows: u32,
+    l_skip: u32,
+    d_temp_buffer: &DeviceBuffer<u8>,
+    temp_bytes: usize,
+) -> Result<(), CudaError> {
+    CudaError::from_result(_interactions_folding_tracegen(
+        d_trace.as_mut_ptr(),
+        height,
+        width,
+        d_idx_keys.as_mut_ptr(),
+        d_cur_sum_evals.as_mut_ptr(),
+        d_values.as_ptr(),
+        d_node_idxs.as_ptr(),
+        h_row_bounds.as_ptr(),
+        d_air_interaction_bounds.as_ptr(),
+        d_interaction_row_bounds.as_ptr(),
+        d_sorted_trace_vdata.as_ptr(),
+        d_records.as_ptr(),
+        d_xis.as_ptr(),
+        d_per_proof.as_ptr(),
+        h_num_airs.as_ptr(),
+        h_n_logups.as_ptr(),
+        num_proofs,
         num_valid_rows,
         l_skip,
         d_temp_buffer.as_mut_ptr() as *mut core::ffi::c_void,
