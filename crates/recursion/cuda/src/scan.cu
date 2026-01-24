@@ -7,7 +7,7 @@
 #include <cub/device/device_scan.cuh>
 #include <cuda_runtime.h>
 #include <driver_types.h>
-#include <thrust/iterator/detail/reverse_iterator.inl>
+#include <thrust/iterator/reverse_iterator.h>
 
 __host__ int prefix_scan(Fp *d_arr, size_t n, void *d_temp, size_t temp_n, cudaStream_t stream) {
     if (!d_arr || n == 0) {

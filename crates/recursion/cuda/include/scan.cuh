@@ -8,7 +8,7 @@
 #include <cub/device/device_scan.cuh>
 #include <cuda_runtime.h>
 #include <driver_types.h>
-#include <thrust/iterator/detail/reverse_iterator.inl>
+#include <thrust/iterator/reverse_iterator.h>
 
 struct FpAdd {
     __device__ __forceinline__ Fp operator()(const Fp &a, const Fp &b) const { return a + b; }
