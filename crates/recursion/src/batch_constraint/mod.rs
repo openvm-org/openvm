@@ -37,7 +37,7 @@ use crate::{
         },
         expr_eval::{
             ConstraintsFoldingAir, ConstraintsFoldingBlob, InteractionsFoldingAir,
-            InteractionsFoldingBlob, SymbolicExpressionAir, generate_interactions_folding_blob,
+            InteractionsFoldingBlob, SymbolicExpressionAir,
         },
         expression_claim::{
             ExpressionClaimAir, ExpressionClaimBlob, generate_expression_claim_blob,
@@ -436,7 +436,6 @@ pub(in crate::batch_constraint) struct BatchConstraintBlob {
     pub selector_counts: MultiVecWithBounds<SelectorCount, 1>,
 
     pub eq_3b_blob: Eq3bBlob,
-    pub if_blob: InteractionsFoldingBlob,
     pub eq_sharp_uni_blob: EqSharpUniBlob,
 }
 
@@ -628,18 +627,11 @@ impl BatchConstraintBlob {
             eq_r_one_counts_per_proof.close_level(0);
         }
         let eq_3b_blob = eq_airs::generate_eq_3b_blob(child_vk, preflights);
-        let if_blob = generate_interactions_folding_blob(
-            child_vk,
-            &expr_evals_per_proof,
-            &eq_3b_blob,
-            preflights,
-        );
         let eq_sharp_uni_blob = generate_eq_sharp_uni_blob(child_vk, preflights);
         Self {
             expr_evals: expr_evals_per_proof,
             selector_counts: eq_r_one_counts_per_proof,
             eq_3b_blob,
-            if_blob,
             eq_sharp_uni_blob,
         }
     }
@@ -647,7 +639,8 @@ impl BatchConstraintBlob {
 
 pub(in crate::batch_constraint) struct BatchConstraintBlobCpu {
     pub common_blob: BatchConstraintBlob,
-    pub cf_blob: ConstraintsFoldingBlob,
+    pub cf_blob: Option<ConstraintsFoldingBlob>,
+    pub if_blob: Option<InteractionsFoldingBlob>,
     pub expr_claim_blob: ExpressionClaimBlob,
 }
 
@@ -663,13 +656,18 @@ impl BatchConstraintBlobCpu {
         let common_blob = BatchConstraintBlob::new(child_vk, &proofs, &preflights);
         let cf_blob =
             ConstraintsFoldingBlob::new(&child_vk.inner, &common_blob.expr_evals, &preflights);
-        let expr_claim_blob = generate_expression_claim_blob(
-            &cf_blob.folded_claims,
-            &common_blob.if_blob.folded_claims,
+        let if_blob = InteractionsFoldingBlob::new(
+            &child_vk.inner,
+            &common_blob.expr_evals,
+            &common_blob.eq_3b_blob,
+            &preflights,
         );
+        let expr_claim_blob =
+            generate_expression_claim_blob(&cf_blob.folded_claims, &if_blob.folded_claims);
         Self {
             common_blob,
-            cf_blob,
+            cf_blob: Some(cf_blob),
+            if_blob: Some(if_blob),
             expr_claim_blob,
         }
     }
@@ -851,9 +849,10 @@ impl BatchConstraintModuleChip {
             InteractionsFolding => {
                 expr_eval::generate_interactions_folding_trace(child_vk, blob, preflights)
             }
-            ConstraintsFolding => {
-                expr_eval::generate_constraints_folding_trace(&blob.cf_blob, preflights)
-            }
+            ConstraintsFolding => expr_eval::generate_constraints_folding_trace(
+                blob.cf_blob.as_ref().unwrap(),
+                preflights,
+            ),
             EqNeg => EqNegTraceGenerator::generate_trace(
                 child_vk,
                 preflights,
@@ -876,6 +875,9 @@ pub mod cuda_tracegen {
                 constraints_folding::cuda::{
                     ConstraintsFoldingBlobGpu, generate_constraints_folding_trace,
                 },
+                interactions_folding::cuda::{
+                    InteractionsFoldingBlobGpu, generate_interactions_folding_trace,
+                },
                 symbolic_expression::cuda::generate_sym_expr_trace,
             },
         },
@@ -891,6 +893,7 @@ pub mod cuda_tracegen {
     pub(in crate::batch_constraint) struct BatchConstraintBlobGpu {
         pub common_blob: BatchConstraintBlob,
         pub cf_blob: ConstraintsFoldingBlobGpu,
+        pub if_blob: InteractionsFoldingBlobGpu,
         pub expr_claim_blob: ExpressionClaimBlob,
     }
 
@@ -906,13 +909,18 @@ pub mod cuda_tracegen {
             let common_blob = BatchConstraintBlob::new(&child_vk.cpu, &cpu_proofs, &cpu_preflights);
             let cf_blob =
                 ConstraintsFoldingBlobGpu::new(&child_vk, &common_blob.expr_evals, preflights);
-            let expr_claim_blob = generate_expression_claim_blob(
-                &cf_blob.folded_claims,
-                &common_blob.if_blob.folded_claims,
+            let if_blob = InteractionsFoldingBlobGpu::new(
+                &child_vk,
+                &common_blob.expr_evals,
+                &common_blob.eq_3b_blob,
+                preflights,
             );
+            let expr_claim_blob =
+                generate_expression_claim_blob(&cf_blob.folded_claims, &if_blob.folded_claims);
             Self {
                 common_blob,
                 cf_blob,
+                if_blob,
                 expr_claim_blob,
             }
         }
@@ -953,6 +961,9 @@ pub mod cuda_tracegen {
                 ConstraintsFolding => {
                     generate_constraints_folding_trace(child_vk, preflights, &blob.cf_blob)
                 }
+                InteractionsFolding => {
+                    generate_interactions_folding_trace(child_vk, preflights, &blob.if_blob)
+                }
                 _ => {
                     // Avoid calling any H2D inside a par_iter due to subtleties with CUDA streams
                     unreachable!("CPU tracegen handled separately with par_iter");
@@ -982,6 +993,7 @@ pub mod cuda_tracegen {
                 },
                 BatchConstraintModuleChip::Eq3b,
                 BatchConstraintModuleChip::ConstraintsFolding,
+                BatchConstraintModuleChip::InteractionsFolding,
             ];
             // Chips that will use fallback cpu tracegen
             let cpu_chips = [
@@ -995,7 +1007,6 @@ pub mod cuda_tracegen {
                 BatchConstraintModuleChip::ExpressionClaim {
                     pow_checker: self.pow_checker.clone(),
                 },
-                BatchConstraintModuleChip::InteractionsFolding,
                 BatchConstraintModuleChip::EqNeg,
             ];
             let span = tracing::Span::current();
@@ -1013,10 +1024,10 @@ pub mod cuda_tracegen {
                 })
                 .collect_vec();
 
-            // TODO: Rework BatchConstraintBlob so it only contains common items
             let blob = BatchConstraintBlobCpu {
                 common_blob: blob.common_blob,
-                cf_blob: ConstraintsFoldingBlob::empty(),
+                cf_blob: None,
+                if_blob: None,
                 expr_claim_blob: blob.expr_claim_blob,
             };
             let cpu_proofs = proofs.iter().map(|p| &p.cpu).collect_vec();

@@ -276,14 +276,6 @@ impl ConstraintsFoldingBlob {
             folded_claims: folded,
         }
     }
-
-    #[allow(unused)]
-    pub fn empty() -> Self {
-        Self {
-            records: MultiProofVecVec::new(),
-            folded_claims: MultiProofVecVec::new(),
-        }
-    }
 }
 
 #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
@@ -379,7 +371,7 @@ pub(in crate::batch_constraint) mod cuda {
 
     use crate::{
         batch_constraint::cuda_abi::{
-            AffineFpExt, ConstraintsFoldingPerProof, constraints_folding_tracegen,
+            AffineFpExt, FpExtWithTidx, constraints_folding_tracegen,
             constraints_folding_tracegen_temp_bytes,
         },
         cuda::{preflight::PreflightGpu, vk::VerifyingKeyGpu},
@@ -391,7 +383,7 @@ pub(in crate::batch_constraint) mod cuda {
         // Per proof, per AIR, per constraint
         pub values: Vec<Vec<Vec<EF>>>,
         // Per proof
-        pub constraints_folding_per_proof: Vec<ConstraintsFoldingPerProof>,
+        pub constraints_folding_per_proof: Vec<FpExtWithTidx>,
         // For compatibility with CPU tracegen
         pub folded_claims: MultiProofVecVec<(isize, EF)>,
     }
@@ -446,9 +438,9 @@ pub(in crate::batch_constraint) mod cuda {
                 }
 
                 values.push(proof_values);
-                constraints_folding_per_proof.push(ConstraintsFoldingPerProof {
-                    lambda_tidx: lambda_tidx as u32,
-                    lambda,
+                constraints_folding_per_proof.push(FpExtWithTidx {
+                    value: lambda,
+                    tidx: lambda_tidx as u32,
                 });
                 folded_claims.end_proof();
             }

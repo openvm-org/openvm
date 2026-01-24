@@ -121,8 +121,8 @@ extern "C" int _stacking_claims_tracegen_temp_bytes(
     Fp *d_proof_idx = d_trace + COL_INDEX(StackingClaimsCols, proof_idx) * height;
     Fp *d_final_s_eval = d_trace + COL_INDEX(StackingClaimsCols, final_s_eval) * height;
     size_t final_s_eval_temp_bytes;
-    int ret = get_fp_prefix_scan_by_key_n_arrays_temp_bytes<D_EF>(
-        d_proof_idx, d_final_s_eval, height, final_s_eval_temp_bytes
+    int ret = prefix_scan_by_key_n_arrays_temp_bytes<D_EF>(
+        d_proof_idx, d_final_s_eval, height, final_s_eval_temp_bytes, FpEqual{}
     );
     if (ret) {
         return ret;
@@ -130,8 +130,8 @@ extern "C" int _stacking_claims_tracegen_temp_bytes(
 
     Fp *d_whir_claim = d_trace + COL_INDEX(StackingClaimsCols, whir_claim) * height;
     size_t whir_claim_temp_bytes;
-    ret = get_fp_prefix_scan_by_key_n_arrays_temp_bytes<D_EF>(
-        d_proof_idx, d_whir_claim, height, whir_claim_temp_bytes
+    ret = prefix_scan_by_key_n_arrays_temp_bytes<D_EF>(
+        d_proof_idx, d_whir_claim, height, whir_claim_temp_bytes, FpEqual{}
     );
     if (ret) {
         return ret;
@@ -187,7 +187,7 @@ extern "C" int _stacking_claims_tracegen(
     Fp *d_proof_idx = d_trace + COL_INDEX(StackingClaimsCols, proof_idx) * height;
     Fp *d_final_s_eval = d_trace + COL_INDEX(StackingClaimsCols, final_s_eval) * height;
     ret = prefix_scan_by_key_n_arrays<D_EF>(
-        d_proof_idx, d_final_s_eval, height, d_temp_buffer, temp_bytes
+        d_proof_idx, d_final_s_eval, height, d_temp_buffer, temp_bytes, FpEqual{}
     );
     if (ret) {
         return ret;
@@ -195,7 +195,7 @@ extern "C" int _stacking_claims_tracegen(
 
     Fp *d_whir_claim = d_trace + COL_INDEX(StackingClaimsCols, whir_claim) * height;
     ret = prefix_scan_by_key_n_arrays<D_EF>(
-        d_proof_idx, d_whir_claim, height, d_temp_buffer, temp_bytes
+        d_proof_idx, d_whir_claim, height, d_temp_buffer, temp_bytes, FpEqual{}
     );
     return ret;
 }
