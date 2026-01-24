@@ -98,8 +98,8 @@ pub fn default_app_params(log_blowup: usize, l_skip: usize, n_stack: usize) -> S
 }
 
 pub fn default_leaf_params(log_blowup: usize) -> SystemParams {
-    let l_skip = 2;
-    let n_stack = 18;
+    let l_skip = 4;
+    let n_stack = 17;
     let k_whir = 4;
     let max_constraint_degree = 4;
     generic_system_params(log_blowup, l_skip, n_stack, k_whir, max_constraint_degree)
