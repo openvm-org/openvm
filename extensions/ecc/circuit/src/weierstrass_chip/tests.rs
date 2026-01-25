@@ -525,7 +525,7 @@ mod ec_addne_tests {
         assert_eq!(executor.expr.builder.num_variables, 3); // lambda, x3, y3
         let r = executor
             .expr
-            .execute(vec![p1_x, p1_y, p2_x, p2_y], vec![true]);
+            .execute(&[p1_x, p1_y, p2_x, p2_y], &[true]);
 
         assert_eq!(r.len(), 3); // lambda, x3, y3
         assert_eq!(r[1], SampleEcPoints[2].0);
@@ -536,7 +536,7 @@ mod ec_addne_tests {
         assert_eq!(executor.expr.builder.num_variables, 3); // lambda, x3, y3
         let r = executor
             .expr
-            .execute(vec![p1_x, p1_y, p2_x, p2_y], vec![true]);
+            .execute(&[p1_x, p1_y, p2_x, p2_y], &[true]);
 
         assert_eq!(r.len(), 3); // lambda, x3, y3
         assert_eq!(r[1], SampleEcPoints[4].0);
@@ -1055,7 +1055,7 @@ mod ec_double_tests {
 
         assert_eq!(executor.expr.builder.num_variables, 3); // lambda, x3, y3
 
-        let r = executor.expr.execute(vec![p1_x, p1_y], vec![true]);
+        let r = executor.expr.execute(&[p1_x, p1_y], &[true]);
         assert_eq!(r.len(), 3); // lambda, x3, y3
         assert_eq!(r[1], SampleEcPoints[3].0);
         assert_eq!(r[2], SampleEcPoints[3].1);
@@ -1097,7 +1097,7 @@ mod ec_double_tests {
 
         assert_eq!(executor.expr.builder.num_variables, 3); // lambda, x3, y3
 
-        let r = executor.expr.execute(vec![p1_x, p1_y], vec![true]);
+        let r = executor.expr.execute(&[p1_x, p1_y], &[true]);
         assert_eq!(r.len(), 3); // lambda, x3, y3
         let expected_double_x = BigUint::from_str_radix(
             "7CF27B188D034F7E8A52380304B51AC3C08969E277F21B35A60B48FC47669978",
