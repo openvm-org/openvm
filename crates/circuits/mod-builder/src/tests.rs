@@ -7,7 +7,7 @@ use openvm_stark_backend::{
     p3_air::BaseAir, p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix,
 };
 use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
+    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
 };
 
@@ -60,10 +60,11 @@ fn generate_recorded_trace(
     flags: Vec<bool>,
     width: usize,
 ) -> Vec<BabyBear> {
-    let mut buffer = vec![0u8; 1024];
+    let mut buffer = vec![0u8; 2048];
     let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
         &mut buffer,
         inputs,
+        expr.num_variables,
         expr.canonical_num_limbs(),
     );
     let data: Vec<u8> = inputs
@@ -91,7 +92,7 @@ fn verify_stark_with_traces(
 ) {
     let trace_matrix = RowMajorMatrix::new(trace, width);
     let range_trace = range_checker.generate_trace();
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
+    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
         any_rap_arc_vec![expr, range_checker.air],
         vec![trace_matrix, range_trace],
     )
@@ -429,10 +430,11 @@ fn test_recorded_execution_records() {
     let flags: Vec<bool> = vec![];
 
     // Test record creation and reconstruction
-    let mut buffer = vec![0u8; 1024];
+    let mut buffer = vec![0u8; 2048];
     let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
         &mut buffer,
         &inputs,
+        expr.num_variables,
         expr.canonical_num_limbs(),
     );
     let data: Vec<u8> = inputs
@@ -515,10 +517,11 @@ fn test_record_arena_allocation_patterns() {
     ];
 
     // Test record creation with various input sizes
-    let mut buffer = vec![0u8; 1024];
+    let mut buffer = vec![0u8; 2048];
     let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
         &mut buffer,
         &inputs,
+        expr.num_variables,
         expr.canonical_num_limbs(),
     );
     let data: Vec<u8> = inputs
@@ -530,9 +533,10 @@ fn test_record_arena_allocation_patterns() {
 
     // Test with maximum inputs
     let max_inputs = vec![BigUint::one(); 40]; // MAX_INPUT_LIMBS / 4
-    let mut max_buffer = vec![0u8; 2048];
+    let mut max_buffer = vec![0u8; 4096];
+    // Using 10 as an arbitrary number of variables for this test
     let max_record =
-        FieldExpressionCoreRecordMut::new_from_execution_data(&mut max_buffer, &max_inputs, 4);
+        FieldExpressionCoreRecordMut::new_from_execution_data(&mut max_buffer, &max_inputs, 10, 4);
     assert_eq!(*max_record.opcode, 0);
 
     // Test input reconstruction
@@ -570,10 +574,11 @@ fn test_tracestep_tracefiller_roundtrip() {
     let vars_direct = expr.execute(inputs.clone(), vec![]);
 
     // Test record creation and reconstruction roundtrip
-    let mut buffer = vec![0u8; 1024];
+    let mut buffer = vec![0u8; 2048];
     let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
         &mut buffer,
         &inputs,
+        expr.num_variables,
         expr.canonical_num_limbs(),
     );
     let data: Vec<u8> = inputs

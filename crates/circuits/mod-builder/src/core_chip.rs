@@ -171,6 +171,7 @@ where
 
 pub struct FieldExpressionMetadata<F, A> {
     pub total_input_limbs: usize, // num_inputs * limbs_per_input
+    pub total_var_limbs: usize,   // num_variables * limbs_per_variable
     _phantom: PhantomData<(F, A)>,
 }
 
@@ -178,6 +179,7 @@ impl<F, A> Clone for FieldExpressionMetadata<F, A> {
     fn clone(&self) -> Self {
         Self {
             total_input_limbs: self.total_input_limbs,
+            total_var_limbs: self.total_var_limbs,
             _phantom: PhantomData,
         }
     }
@@ -187,15 +189,17 @@ impl<F, A> Default for FieldExpressionMetadata<F, A> {
     fn default() -> Self {
         Self {
             total_input_limbs: 0,
+            total_var_limbs: 0,
             _phantom: PhantomData,
         }
     }
 }
 
 impl<F, A> FieldExpressionMetadata<F, A> {
-    pub fn new(total_input_limbs: usize) -> Self {
+    pub fn new(total_input_limbs: usize, total_var_limbs: usize) -> Self {
         Self {
             total_input_limbs,
+            total_var_limbs,
             _phantom: PhantomData,
         }
     }
@@ -216,6 +220,7 @@ pub type FieldExpressionRecordLayout<F, A> = AdapterCoreLayout<FieldExpressionMe
 pub struct FieldExpressionCoreRecordMut<'a> {
     pub opcode: &'a mut u8,
     pub input_limbs: &'a mut [u8],
+    pub var_limbs: &'a mut [u8],
 }
 
 impl<'a, F, A> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressionRecordLayout<F, A>>
@@ -226,14 +231,19 @@ impl<'a, F, A> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressio
         layout: FieldExpressionRecordLayout<F, A>,
     ) -> FieldExpressionCoreRecordMut<'a> {
         // SAFETY: The buffer length is the width of the trace which should be at least 1
-        let (opcode_buf, input_limbs_buff) = unsafe { self.split_at_mut_unchecked(1) };
+        let (opcode_buf, rest) = unsafe { self.split_at_mut_unchecked(1) };
 
         // SAFETY: opcode_buf has exactly 1 element from split_at_mut_unchecked(1)
         let opcode_buf = unsafe { opcode_buf.get_unchecked_mut(0) };
 
+        // SAFETY: rest has at least total_input_limbs + total_var_limbs bytes
+        let (input_limbs, var_limbs_buf) =
+            unsafe { rest.split_at_mut_unchecked(layout.metadata.total_input_limbs) };
+
         FieldExpressionCoreRecordMut {
             opcode: opcode_buf,
-            input_limbs: &mut input_limbs_buff[..layout.metadata.total_input_limbs],
+            input_limbs,
+            var_limbs: &mut var_limbs_buf[..layout.metadata.total_var_limbs],
         }
     }
 
@@ -244,7 +254,9 @@ impl<'a, F, A> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressio
 
 impl<F, A> SizedRecord<FieldExpressionRecordLayout<F, A>> for FieldExpressionCoreRecordMut<'_> {
     fn size(layout: &FieldExpressionRecordLayout<F, A>) -> usize {
-        layout.metadata.total_input_limbs + 1
+        1  // opcode
+        + layout.metadata.total_input_limbs
+        + layout.metadata.total_var_limbs
     }
 
     fn alignment(_layout: &FieldExpressionRecordLayout<F, A>) -> usize {
@@ -257,9 +269,13 @@ impl<'a> FieldExpressionCoreRecordMut<'a> {
     pub fn new_from_execution_data(
         buffer: &'a mut [u8],
         inputs: &[BigUint],
+        num_variables: usize,
         limbs_per_input: usize,
     ) -> Self {
-        let record_info = FieldExpressionMetadata::<(), ()>::new(inputs.len() * limbs_per_input);
+        let record_info = FieldExpressionMetadata::<(), ()>::new(
+            inputs.len() * limbs_per_input,
+            num_variables * limbs_per_input,
+        );
 
         let record: Self = buffer.custom_borrow(FieldExpressionRecordLayout {
             metadata: record_info,
@@ -319,9 +335,11 @@ impl<A> FieldExpressionExecutor<A> {
     }
 
     pub fn get_record_layout<F>(&self) -> FieldExpressionRecordLayout<F, A> {
+        let num_limbs = self.expr.canonical_num_limbs();
         FieldExpressionRecordLayout {
             metadata: FieldExpressionMetadata::new(
-                self.expr.builder.num_input * self.expr.canonical_num_limbs(),
+                self.expr.builder.num_input * num_limbs,
+                self.expr.builder.num_variables * num_limbs,
             ),
         }
     }
@@ -372,9 +390,11 @@ impl<A> FieldExpressionFiller<A> {
     }
 
     pub fn get_record_layout<F>(&self) -> FieldExpressionRecordLayout<F, A> {
+        let num_limbs = self.expr.canonical_num_limbs();
         FieldExpressionRecordLayout {
             metadata: FieldExpressionMetadata::new(
-                self.num_inputs() * self.expr.canonical_num_limbs(),
+                self.num_inputs() * num_limbs,
+                self.expr.builder.num_variables * num_limbs,
             ),
         }
     }
@@ -410,13 +430,22 @@ where
             &data.0,
         );
 
-        let (writes, _, _) = run_field_expression(
+        let (writes, _, _, vars) = run_field_expression(
             &self.expr,
             &self.local_opcode_idx,
             &self.opcode_flag_idx,
             core_record.input_limbs,
             *core_record.opcode as usize,
         );
+
+        // Store computed vars in the record to avoid recomputation during trace filling
+        let field_element_limbs = self.expr.canonical_num_limbs();
+        for (i, var) in vars.iter().enumerate() {
+            let start = i * field_element_limbs;
+            let end = start + field_element_limbs;
+            let limbs = biguint_to_limbs_vec(var, field_element_limbs);
+            core_record.var_limbs[start..end].copy_from_slice(&limbs);
+        }
 
         self.adapter.write(
             state.memory,
@@ -457,17 +486,32 @@ where
         let record: FieldExpressionCoreRecordMut =
             unsafe { get_record_from_slice(&mut core_row, self.get_record_layout::<F>()) };
 
-        let (_, inputs, flags) = run_field_expression(
+        // Reconstruct inputs from record
+        let field_element_limbs = self.expr.canonical_num_limbs();
+        let inputs: Vec<BigUint> = record
+            .input_limbs
+            .chunks(field_element_limbs)
+            .map(BigUint::from_bytes_le)
+            .collect();
+
+        // Read precomputed vars from record (computed during preflight)
+        let vars: Vec<BigUint> = record
+            .var_limbs
+            .chunks(field_element_limbs)
+            .map(BigUint::from_bytes_le)
+            .collect();
+
+        // Derive flags from opcode (cheap operation)
+        let flags = derive_flags_from_opcode(
             &self.expr,
             &self.local_opcode_idx,
             &self.opcode_flag_idx,
-            record.input_limbs,
             *record.opcode as usize,
         );
 
         let range_checker = self.range_checker.as_ref();
         self.expr
-            .generate_subrow((range_checker, inputs, flags), core_row);
+            .generate_subrow_with_precomputed_vars(range_checker, &inputs, &flags, &vars, core_row);
     }
 
     fn fill_dummy_trace_row(&self, row_slice: &mut [F]) {
@@ -493,7 +537,7 @@ fn run_field_expression(
     opcode_flag_idx: &[usize],
     data: &[u8],
     local_opcode_idx: usize,
-) -> (DynArray<u8>, Vec<BigUint>, Vec<bool>) {
+) -> (DynArray<u8>, Vec<BigUint>, Vec<bool>, Vec<BigUint>) {
     let field_element_limbs = expr.canonical_num_limbs();
     assert_eq!(data.len(), expr.builder.num_input * field_element_limbs);
 
@@ -506,24 +550,12 @@ fn run_field_expression(
         inputs.push(input);
     }
 
-    let mut flags = vec![];
-    if expr.needs_setup() {
-        flags = vec![false; expr.builder.num_flags];
-
-        // Find which opcode this is in our local_opcode_idx list
-        if let Some(opcode_position) = local_opcode_flags
-            .iter()
-            .position(|&idx| idx == local_opcode_idx)
-        {
-            // If this is NOT the last opcode (setup), set the corresponding flag
-            if opcode_position < opcode_flag_idx.len() {
-                let flag_idx = opcode_flag_idx[opcode_position];
-                flags[flag_idx] = true;
-            }
-            // If opcode_position == step.opcode_flag_idx.len(), it's the setup operation
-            // and all flags should remain false (which they already are)
-        }
-    }
+    let flags = derive_flags_from_opcode(
+        expr,
+        local_opcode_flags,
+        opcode_flag_idx,
+        local_opcode_idx,
+    );
 
     let vars = expr.execute(inputs.clone(), flags.clone());
     assert_eq!(vars.len(), expr.builder.num_variables);
@@ -542,7 +574,38 @@ fn run_field_expression(
         .collect::<Vec<_>>()
         .into();
 
-    (writes, inputs, flags)
+    (writes, inputs, flags, vars)
+}
+
+/// Derives the flags vector from the local opcode index.
+/// This is used during preflight and trace filling to determine which operation is being performed.
+fn derive_flags_from_opcode(
+    expr: &FieldExpr,
+    local_opcode_flags: &[usize],
+    opcode_flag_idx: &[usize],
+    local_opcode_idx: usize,
+) -> Vec<bool> {
+    if !expr.needs_setup() {
+        return vec![];
+    }
+
+    let mut flags = vec![false; expr.builder.num_flags];
+
+    // Find which opcode this is in our local_opcode_idx list
+    if let Some(opcode_position) = local_opcode_flags
+        .iter()
+        .position(|&idx| idx == local_opcode_idx)
+    {
+        // If this is NOT the last opcode (setup), set the corresponding flag
+        if opcode_position < opcode_flag_idx.len() {
+            let flag_idx = opcode_flag_idx[opcode_position];
+            flags[flag_idx] = true;
+        }
+        // If opcode_position == step.opcode_flag_idx.len(), it's the setup operation
+        // and all flags should remain false (which they already are)
+    }
+
+    flags
 }
 
 #[inline(always)]

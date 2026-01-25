@@ -616,6 +616,118 @@ impl FieldExpr {
             .collect()
     }
 
+    /// Generates a trace subrow using precomputed `vars` to avoid redundant computation.
+    /// This is used during trace filling when vars have already been computed during preflight.
+    pub fn generate_subrow_with_precomputed_vars<F: PrimeField64>(
+        &self,
+        range_checker: &VariableRangeCheckerChip,
+        inputs: &[BigUint],
+        flags: &[bool],
+        vars: &[BigUint],
+        sub_row: &mut [F],
+    ) {
+        assert!(self.builder.is_finalized());
+        assert_eq!(inputs.len(), self.num_input);
+        assert_eq!(vars.len(), self.num_variables);
+        assert_eq!(flags.len(), self.builder.num_flags);
+
+        let limb_bits = self.limb_bits;
+
+        // BigInt type is required for computing the quotient.
+        let input_bigint = inputs
+            .iter()
+            .map(|x| BigInt::from_biguint(Sign::Plus, x.clone()))
+            .collect::<Vec<BigInt>>();
+        let vars_bigint: Vec<BigInt> = vars
+            .iter()
+            .map(|x| BigInt::from_biguint(Sign::Plus, x.clone()))
+            .collect();
+
+        // OverflowInt type is required for computing the carries.
+        let input_overflow = inputs
+            .iter()
+            .map(|x| OverflowInt::<isize>::from_biguint(x, self.limb_bits, Some(self.num_limbs)))
+            .collect::<Vec<_>>();
+        let vars_overflow: Vec<OverflowInt<isize>> = vars
+            .iter()
+            .map(|x| OverflowInt::<isize>::from_biguint(x, self.limb_bits, Some(self.num_limbs)))
+            .collect();
+
+        // Note: in cases where the prime fits in less limbs than `num_limbs`, we use the smaller
+        // number of limbs.
+        let prime_overflow = OverflowInt::<isize>::from_biguint(&self.prime, self.limb_bits, None);
+
+        let constants: Vec<_> = self
+            .constants
+            .iter()
+            .map(|(_, limbs)| {
+                let limbs_isize: Vec<_> = limbs.iter().map(|i| *i as isize).collect();
+                OverflowInt::from_canonical_unsigned_limbs(limbs_isize, self.limb_bits)
+            })
+            .collect();
+
+        let mut all_q = vec![];
+        let mut all_carry = vec![];
+        for i in 0..self.constraints.len() {
+            // expr = q * p
+            let expr_bigint =
+                self.constraints[i].evaluate_bigint(&input_bigint, &vars_bigint, flags);
+            let q = &expr_bigint / &self.prime_bigint;
+            // If this is not true then the evaluated constraint is not divisible by p.
+            debug_assert_eq!(expr_bigint, &q * &self.prime_bigint);
+            let q_limbs = big_int_to_num_limbs(&q, limb_bits, self.q_limbs[i]);
+            assert_eq!(q_limbs.len(), self.q_limbs[i]); // If this fails, the q_limbs estimate is wrong.
+            for &q in q_limbs.iter() {
+                range_checker.add_count((q + (1 << limb_bits)) as u32, limb_bits + 1);
+            }
+            let q_overflow = OverflowInt::from_canonical_signed_limbs(q_limbs.clone(), limb_bits);
+            // compute carries of (expr - q * p)
+            let expr = self.constraints[i].evaluate_overflow_isize(
+                &input_overflow,
+                &vars_overflow,
+                &constants,
+                flags,
+            );
+            let expr = expr - q_overflow * prime_overflow.clone();
+            let carries = expr.calculate_carries(limb_bits);
+            assert_eq!(carries.len(), self.carry_limbs[i]); // If this fails, the carry limbs estimate is wrong.
+            let max_overflow_bits = expr.max_overflow_bits();
+            let (carry_min_abs, carry_bits) =
+                get_carry_max_abs_and_bits(max_overflow_bits, limb_bits);
+            for &carry in carries.iter() {
+                range_checker.add_count((carry + carry_min_abs as isize) as u32, carry_bits);
+            }
+            all_q.push(vec_isize_to_f::<F>(q_limbs));
+            all_carry.push(vec_isize_to_f::<F>(carries));
+        }
+        for var in vars_overflow.iter() {
+            for limb in var.limbs().iter() {
+                range_checker.add_count(*limb as u32, limb_bits);
+            }
+        }
+
+        let input_limbs = input_overflow
+            .iter()
+            .map(|x| vec_isize_to_f::<F>(x.limbs().to_vec()))
+            .collect::<Vec<_>>();
+        let vars_limbs = vars_overflow
+            .iter()
+            .map(|x| vec_isize_to_f::<F>(x.limbs().to_vec()))
+            .collect::<Vec<_>>();
+
+        sub_row.copy_from_slice(
+            &[
+                vec![F::ONE],
+                input_limbs.concat(),
+                vars_limbs.concat(),
+                all_q.concat(),
+                all_carry.concat(),
+                flags.iter().map(|x| F::from_bool(*x)).collect::<Vec<_>>(),
+            ]
+            .concat(),
+        );
+    }
+
     pub fn load_vars<T: Clone>(&self, arr: &[T]) -> FieldExprCols<T> {
         assert!(self.builder.is_finalized());
         let is_valid = arr[0].clone();
