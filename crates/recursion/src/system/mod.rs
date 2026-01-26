@@ -837,15 +837,21 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
         proofs: &[Proof],
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
-        let span = tracing::Span::current();
-        let preflights = proofs
-            .par_iter()
-            .map(|proof| {
-                let _guard = span.enter();
-                let sponge = TS::default();
-                self.run_preflight(sponge, child_vk, proof)
-            })
-            .collect::<Vec<_>>();
+        // Use std::thread::scope for preflight parallelism. With only 3-4 proofs max, this avoids
+        // Rayon's thread pool overhead (wake-up, work stealing, synchronization) while still
+        // getting parallelism with minimal overhead.
+        let preflights = std::thread::scope(|s| {
+            let handles: Vec<_> = proofs
+                .iter()
+                .map(|proof| {
+                    s.spawn(|| {
+                        let sponge = TS::default();
+                        self.run_preflight(sponge, child_vk, proof)
+                    })
+                })
+                .collect();
+            handles.into_iter().map(|h| h.join().unwrap()).collect::<Vec<_>>()
+        });
 
         self.power_checker_trace.reset();
         let exp_bits_len_gen = ExpBitsLenTraceGenerator::default();
@@ -859,6 +865,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
             TraceModuleRef::Stacking(&self.stacking),
             TraceModuleRef::Whir(&self.whir),
         ];
+        let span = tracing::Span::current();
         let mut ctxs_by_module = modules
             .into_par_iter()
             .map(|module| {
@@ -975,16 +982,20 @@ pub mod cuda_tracegen {
                 .iter()
                 .map(|proof_cpu| ProofGpu::new(child_vk, proof_cpu))
                 .collect::<Vec<_>>();
-            // Run CPU preflight for each proof in parallel
-            let span = tracing::Span::current();
-            let preflights_cpu = proofs
-                .par_iter()
-                .map(|proof| {
-                    let _guard = span.enter();
-                    let sponge = TS::default();
-                    self.run_preflight(sponge, child_vk, proof)
-                })
-                .collect::<Vec<_>>();
+            // Use std::thread::scope for preflight parallelism. With only 3-4 proofs max, this
+            // avoids Rayon's thread pool overhead while still getting parallelism.
+            let preflights_cpu = std::thread::scope(|s| {
+                let handles: Vec<_> = proofs
+                    .iter()
+                    .map(|proof| {
+                        s.spawn(|| {
+                            let sponge = TS::default();
+                            self.run_preflight(sponge, child_vk, proof)
+                        })
+                    })
+                    .collect();
+                handles.into_iter().map(|h| h.join().unwrap()).collect::<Vec<_>>()
+            });
 
             let exp_bits_len_gen = ExpBitsLenTraceGenerator::default();
             self.power_checker_trace.reset();
