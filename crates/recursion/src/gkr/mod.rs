@@ -589,6 +589,7 @@ mod cuda_tracegen {
     use cuda_backend_v2::GpuBackendV2;
     use itertools::Itertools;
     use openvm_cuda_backend::{base::DeviceMatrix, data_transporter::transport_matrix_to_device};
+    use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 
     use super::*;
     use crate::cuda::{
@@ -643,15 +644,18 @@ mod cuda_tracegen {
                 GkrModuleChip::LayerSumcheck,
                 GkrModuleChip::XiSampler,
             ];
-            chips
-                .iter()
-                .map(|chip| {
-                    AirProvingContextV2::simple_no_pis(
-                        ModuleChip::<GlobalCtxGpu, GpuBackendV2>::generate_trace(
-                            chip, &child_vk, proofs, preflights, &blob,
-                        ),
-                    )
-                })
+
+            // Parallelize CPU trace generation; do H2D transfers serially to avoid CUDA stream
+            // subtleties (same pattern as BatchConstraintModule).
+            let traces_rm = chips
+                .par_iter()
+                .map(|chip| chip.generate_trace_row_major(&blob))
+                .collect::<Vec<_>>();
+
+            traces_rm
+                .into_iter()
+                .map(|trace_rm| transport_matrix_to_device(Arc::new(trace_rm)))
+                .map(AirProvingContextV2::simple_no_pis)
                 .collect()
         }
     }

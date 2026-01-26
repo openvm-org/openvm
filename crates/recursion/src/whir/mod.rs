@@ -20,6 +20,7 @@ use stark_backend_v2::{
     proof::{Proof, WhirProof},
     prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2, poly::Mle},
 };
+use strum::EnumDiscriminants;
 
 use crate::{
     primitives::exp_bits_len::ExpBitsLenTraceGenerator,
@@ -733,7 +734,8 @@ fn binary_k_fold(
     values[0]
 }
 
-#[derive(strum_macros::Display)]
+#[derive(Clone, Copy, strum_macros::Display, EnumDiscriminants)]
+#[strum_discriminants(repr(usize))]
 enum WhirModuleChip {
     WhirRound,
     Sumcheck,
@@ -741,8 +743,8 @@ enum WhirModuleChip {
     InitialOpenedValues,
     NonInitialOpenedValues,
     Folding,
-    FinalPolyQueryEval,
     FinalPolyMleEval,
+    FinalPolyQueryEval,
 }
 
 impl WhirModuleChip {
@@ -817,6 +819,7 @@ mod cuda_tracegen {
     use cuda_backend_v2::GpuBackendV2;
     use openvm_cuda_backend::{base::DeviceMatrix, data_transporter::transport_matrix_to_device};
     use openvm_cuda_common::d_buffer::DeviceBuffer;
+    use openvm_stark_backend::p3_maybe_rayon::prelude::*;
     use stark_backend_v2::poseidon2::{CHUNK, WIDTH};
 
     use super::*;
@@ -827,6 +830,12 @@ mod cuda_tracegen {
         },
         whir::cuda_abi::PoseidonStatePair,
     };
+
+    impl WhirModuleChip {
+        fn index(&self) -> usize {
+            WhirModuleChipDiscriminants::from(self) as usize
+        }
+    }
 
     pub(in crate::whir) struct WhirBlobGpu {
         pub zis: DeviceBuffer<F>,
@@ -1071,32 +1080,77 @@ mod cuda_tracegen {
             preflights: &[PreflightGpu],
             exp_bits_len_gen: &ExpBitsLenTraceGenerator,
         ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
-            let proofs_cpu = &proofs.iter().map(|proof| &proof.cpu).collect_vec();
-            let preflights_cpu = &preflights
+            let proofs_cpu = proofs.iter().map(|proof| &proof.cpu).collect_vec();
+            let preflights_cpu = preflights
                 .iter()
                 .map(|preflight| &preflight.cpu)
                 .collect_vec();
 
-            let blob =
-                self.generate_blob(&child_vk.cpu, proofs_cpu, preflights_cpu, exp_bits_len_gen);
-            let blob_gpu = WhirBlobGpu::new(proofs_cpu, preflights_cpu, &blob);
+            let blob = self.generate_blob(
+                &child_vk.cpu,
+                &proofs_cpu,
+                &preflights_cpu,
+                exp_bits_len_gen,
+            );
+            let blob_gpu = WhirBlobGpu::new(&proofs_cpu, &preflights_cpu, &blob);
 
-            [
-                WhirModuleChip::WhirRound,
-                WhirModuleChip::Sumcheck,
-                WhirModuleChip::Query,
+            let gpu_chips = [
                 WhirModuleChip::InitialOpenedValues,
                 WhirModuleChip::NonInitialOpenedValues,
                 WhirModuleChip::Folding,
-                WhirModuleChip::FinalPolyMleEval,
                 WhirModuleChip::FinalPolyQueryEval,
-            ]
-            .iter()
-            .map(|chip| {
-                chip.generate_gpu_trace(child_vk, proofs_cpu, preflights_cpu, &blob_gpu, &blob)
-            })
-            .map(|mat| AirProvingContextV2::simple_no_pis(mat))
-            .collect()
+            ];
+            let cpu_chips = [
+                WhirModuleChip::WhirRound,
+                WhirModuleChip::Sumcheck,
+                WhirModuleChip::Query,
+                WhirModuleChip::FinalPolyMleEval,
+            ];
+
+            // Launch all CUDA tracegen kernels serially first (default stream).
+            let indexed_gpu_ctxs = gpu_chips
+                .iter()
+                .map(|chip| {
+                    let mat = chip.generate_gpu_trace(
+                        child_vk,
+                        &proofs_cpu,
+                        &preflights_cpu,
+                        &blob_gpu,
+                        &blob,
+                    );
+                    (chip.index(), AirProvingContextV2::simple_no_pis(mat))
+                })
+                .collect::<Vec<_>>();
+
+            // Then run CPU tracegen for the remaining AIRs in parallel (no H2D inside par_iter).
+            let indexed_cpu_traces_rm = cpu_chips
+                .par_iter()
+                .map(|chip| {
+                    (
+                        chip.index(),
+                        chip.generate_trace_row_major(
+                            &child_vk.cpu,
+                            &proofs_cpu,
+                            &preflights_cpu,
+                            &blob,
+                        ),
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            // Transfer CPU traces H2D serially (default stream).
+            let mut indexed_cpu_ctxs = Vec::with_capacity(indexed_cpu_traces_rm.len());
+            for (idx, trace_rm) in indexed_cpu_traces_rm {
+                let mat = transport_matrix_to_device(Arc::new(trace_rm));
+                indexed_cpu_ctxs.push((idx, AirProvingContextV2::simple_no_pis(mat)));
+            }
+
+            indexed_gpu_ctxs
+                .into_iter()
+                .chain(indexed_cpu_ctxs)
+                .sorted_by(|a, b| a.0.cmp(&b.0))
+                .map(|(_idx, ctx)| ctx)
+                .collect()
         }
     }
 }
