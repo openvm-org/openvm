@@ -12,6 +12,7 @@ use stark_backend_v2::{
     proof::{Proof, StackingProof},
     prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
 };
+use strum::EnumDiscriminants;
 
 use crate::{
     stacking::{
@@ -216,7 +217,8 @@ impl AirModule for StackingModule {
     }
 }
 
-#[derive(strum_macros::Display)]
+#[derive(Clone, Copy, strum_macros::Display, EnumDiscriminants)]
+#[strum_discriminants(repr(usize))]
 enum StackingModuleChip {
     OpeningClaims,
     UnivariateRound,
@@ -324,6 +326,7 @@ mod cuda_tracegen {
     use itertools::Itertools;
     use openvm_cuda_backend::{base::DeviceMatrix, data_transporter::transport_matrix_to_device};
     use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
+    use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 
     use super::*;
     use crate::{
@@ -333,6 +336,12 @@ mod cuda_tracegen {
             compute_coefficients_temp_bytes, stacked_slice_data,
         },
     };
+
+    impl StackingModuleChip {
+        fn index(&self) -> usize {
+            StackingModuleChipDiscriminants::from(self) as usize
+        }
+    }
 
     pub(crate) struct StackingBlob {
         pub(crate) slice_data: Vec<DeviceBuffer<StackedSliceData>>,
@@ -558,27 +567,59 @@ mod cuda_tracegen {
             preflights: &[PreflightGpu],
             _module_ctx: &(),
         ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
-            let chips = [
+            let blob = StackingBlob::new(child_vk, proofs, preflights);
+
+            let gpu_chips = [
                 StackingModuleChip::OpeningClaims,
+                StackingModuleChip::StackingClaims,
+            ];
+            let cpu_chips = [
                 StackingModuleChip::UnivariateRound,
                 StackingModuleChip::SumcheckRounds,
-                StackingModuleChip::StackingClaims,
                 StackingModuleChip::EqBase,
                 StackingModuleChip::EqBits,
             ];
-            let blob = StackingBlob::new(child_vk, proofs, preflights);
-            chips
+
+            // Launch all GPU tracegen kernels serially first (default stream).
+            let indexed_gpu_ctxs = gpu_chips
                 .iter()
                 .map(|chip| {
-                    ModuleChip::<GlobalCtxGpu, GpuBackendV2>::generate_trace(
-                        chip,
-                        child_vk,
-                        &proofs,
-                        &preflights,
-                        &blob,
+                    let trace = ModuleChip::<GlobalCtxGpu, GpuBackendV2>::generate_trace(
+                        chip, child_vk, proofs, preflights, &blob,
+                    );
+                    (chip.index(), AirProvingContextV2::simple_no_pis(trace))
+                })
+                .collect::<Vec<_>>();
+
+            // Then run CPU tracegen for remaining AIRs in parallel
+            let proofs_cpu = proofs.iter().map(|proof| &proof.cpu).collect_vec();
+            let preflights_cpu = preflights
+                .iter()
+                .map(|preflight| &preflight.cpu)
+                .collect_vec();
+
+            let indexed_cpu_traces_rm = cpu_chips
+                .par_iter()
+                .map(|chip| {
+                    (
+                        chip.index(),
+                        chip.generate_trace_row_major(&child_vk.cpu, &proofs_cpu, &preflights_cpu),
                     )
                 })
-                .map(AirProvingContextV2::simple_no_pis)
+                .collect::<Vec<_>>();
+
+            // Transfer CPU traces H2D serially (default stream).
+            let mut indexed_cpu_ctxs = Vec::with_capacity(indexed_cpu_traces_rm.len());
+            for (idx, trace_rm) in indexed_cpu_traces_rm {
+                let trace = transport_matrix_to_device(Arc::new(trace_rm));
+                indexed_cpu_ctxs.push((idx, AirProvingContextV2::simple_no_pis(trace)));
+            }
+
+            indexed_gpu_ctxs
+                .into_iter()
+                .chain(indexed_cpu_ctxs)
+                .sorted_by(|a, b| a.0.cmp(&b.0))
+                .map(|(_idx, ctx)| ctx)
                 .collect()
         }
     }
