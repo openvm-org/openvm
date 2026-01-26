@@ -1,7 +1,7 @@
 use core::cmp::min;
 
 use sha2::digest::{
-    consts::{U32, U64},
+    consts::{U32, U48, U64},
     FixedOutput, HashMarker, Output, OutputSizeUser, Update,
 };
 
@@ -278,7 +278,7 @@ impl Update for Sha384 {
 // OutputSizeUser is required for FixedOutput
 // See: https://docs.rs/digest/0.10.7/digest/trait.FixedOutput.html
 impl OutputSizeUser for Sha384 {
-    type OutputSize = U64;
+    type OutputSize = U48;
 }
 
 impl FixedOutput for Sha384 {
