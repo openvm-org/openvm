@@ -7,8 +7,9 @@
 //! field types (K256, P256, BN254, BLS12-381).
 
 use openvm_algebra_transpiler::{Fp2Opcode, Rv32ModularArithmeticOpcode};
-use openvm_circuit::arch::{
-    DynArray, ExecutionError, PreflightExecutor, RecordArena, VmStateMut,
+use openvm_circuit::{
+    arch::{ExecutionError, PreflightExecutor, RecordArena, VmStateMut},
+    system::memory::online::TracingMemory,
 };
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_mod_circuit_builder::{
@@ -16,12 +17,9 @@ use openvm_mod_circuit_builder::{
 };
 use openvm_rv32_adapters::Rv32VecHeapAdapterExecutor;
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_circuit::system::memory::online::TracingMemory;
 
 use crate::{
-    fields::{
-        field_operation, fp2_operation, get_field_type, get_fp2_field_type, FieldType, Operation,
-    },
+    fields::{field_operation, fp2_operation, FieldType, Operation},
     FieldExprVecHeapExecutor,
 };
 
@@ -241,7 +239,8 @@ where
     ) -> Result<(), ExecutionError> {
         use openvm_circuit::arch::AdapterTraceExecutor;
 
-        let (mut adapter_record, mut core_record) = state.ctx.alloc(self.0.get_record_layout());
+        let (mut adapter_record, mut core_record) =
+            state.ctx.alloc(self.inner.get_record_layout());
 
         <Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::start(
             *state.pc,
@@ -249,63 +248,58 @@ where
             &mut adapter_record,
         );
 
-        let data: DynArray<u8> = self
-            .0
+        let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = self
+            .inner
             .adapter()
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
+            .read(state.memory, instruction, &mut adapter_record);
 
-        let local_opcode = instruction.opcode.local_opcode_idx(self.0.offset);
+        let local_opcode = instruction.opcode.local_opcode_idx(self.inner.offset);
 
-        core_record.fill_from_execution_data(local_opcode as u8, &data.0);
+        core_record
+            .fill_from_execution_data(local_opcode as u8, read_data.as_flattened().as_flattened());
 
         // Try fast path: use native field arithmetic for known field types and non-setup operations
-        let writes: DynArray<u8> = {
-            let field_type = if IS_FP2 {
-                get_fp2_field_type(&self.0.expr.prime)
-            } else {
-                get_field_type(&self.0.expr.prime)
-            };
+        let operation = if IS_FP2 {
+            local_opcode_to_fp2_operation(local_opcode)
+        } else {
+            local_opcode_to_modular_operation(local_opcode)
+        };
 
-            let operation = if IS_FP2 {
-                local_opcode_to_fp2_operation(local_opcode)
-            } else {
-                local_opcode_to_modular_operation(local_opcode)
-            };
-
-            // Convert data to the expected array format for fast path
-            let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = data.clone().into();
-
+        let output: [[u8; BLOCK_SIZE]; BLOCKS] =
             if let Some(output) = compute_output_fast::<BLOCKS, BLOCK_SIZE, IS_FP2>(
-                field_type,
+                self.cached_field_type,
                 operation,
                 read_data,
             ) {
-                output.into()
+                output
             } else {
                 // Fall back to slow path for unsupported field types or SETUP operations
                 let flag_idx = self
-                    .0
+                    .inner
                     .local_opcode_idx
                     .iter()
                     .position(|&idx| idx == local_opcode)
                     .and_then(|pos| {
-                        if pos < self.0.opcode_flag_idx.len() {
-                            Some(self.0.opcode_flag_idx[pos])
+                        if pos < self.inner.opcode_flag_idx.len() {
+                            Some(self.inner.opcode_flag_idx[pos])
                         } else {
                             None
                         }
                     })
-                    .unwrap_or_else(|| self.0.expr.num_flags());
+                    .unwrap_or_else(|| self.inner.expr.num_flags());
 
-                run_field_expression_precomputed::<true>(&self.0.expr, flag_idx, &data.0)
-            }
-        };
+                run_field_expression_precomputed::<true>(
+                    &self.inner.expr,
+                    flag_idx,
+                    read_data.as_flattened().as_flattened(),
+                )
+                .into()
+            };
 
-        self.0.adapter().write(
+        self.inner.adapter().write(
             state.memory,
             instruction,
-            writes.into(),
+            output,
             &mut adapter_record,
         );
 
@@ -314,6 +308,6 @@ where
     }
 
     fn get_opcode_name(&self, _opcode: usize) -> String {
-        self.0.name.clone()
+        self.inner.name.clone()
     }
 }

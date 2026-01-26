@@ -1,6 +1,8 @@
 use std::{cell::RefCell, rc::Rc};
 
-use derive_more::derive::{Deref, DerefMut};
+use std::ops::{Deref, DerefMut};
+
+use openvm_algebra_circuit::fields::{get_field_type, FieldType};
 use openvm_circuit::{
     arch::*,
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
@@ -57,10 +59,45 @@ pub fn ec_add_ne_expr(
 /// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per
 /// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
 // Note: PreflightExecutor is implemented manually in preflight.rs with fast native arithmetic
-#[derive(Clone, Deref, DerefMut)]
-pub struct EcAddNeExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    pub(crate) FieldExpressionExecutor<Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
-);
+#[derive(Clone)]
+pub struct EcAddNeExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize> {
+    pub(crate) inner: FieldExpressionExecutor<
+        Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+    >,
+    pub(crate) cached_field_type: Option<FieldType>,
+}
+
+impl<const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeExecutor<BLOCKS, BLOCK_SIZE> {
+    pub fn new(
+        inner: FieldExpressionExecutor<
+            Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        >,
+    ) -> Self {
+        let cached_field_type = get_field_type(&inner.expr.prime);
+        Self {
+            inner,
+            cached_field_type,
+        }
+    }
+}
+
+impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Deref for EcAddNeExecutor<BLOCKS, BLOCK_SIZE> {
+    type Target = FieldExpressionExecutor<
+        Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+    >;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<const BLOCKS: usize, const BLOCK_SIZE: usize> DerefMut
+    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
 
 fn gen_base_expr(
     config: ExprBuilderConfig,
@@ -104,7 +141,7 @@ pub fn get_ec_addne_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     offset: usize,
 ) -> EcAddNeExecutor<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus);
-    EcAddNeExecutor(FieldExpressionExecutor::new(
+    EcAddNeExecutor::new(FieldExpressionExecutor::new(
         Rv32VecHeapAdapterExecutor::new(pointer_max_bits),
         expr,
         offset,

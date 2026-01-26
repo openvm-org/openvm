@@ -1,9 +1,10 @@
 //! Fast PreflightExecutor implementations for ECC operations that use native field arithmetic
 //! instead of BigUint-based computation.
 
-use openvm_algebra_circuit::fields::{get_field_type, FieldType};
-use openvm_circuit::arch::{
-    AdapterTraceExecutor, DynArray, ExecutionError, PreflightExecutor, RecordArena, VmStateMut,
+use openvm_algebra_circuit::fields::FieldType;
+use openvm_circuit::{
+    arch::{AdapterTraceExecutor, ExecutionError, PreflightExecutor, RecordArena, VmStateMut},
+    system::memory::online::TracingMemory,
 };
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
@@ -12,12 +13,11 @@ use openvm_mod_circuit_builder::{
 };
 use openvm_rv32_adapters::Rv32VecHeapAdapterExecutor;
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_circuit::system::memory::online::TracingMemory;
 use strum::EnumCount;
 
 use super::{
     add_ne::EcAddNeExecutor,
-    curves::{ec_add_ne, ec_double, get_curve_type, CurveType},
+    curves::{ec_add_ne, ec_double, CurveType},
     double::EcDoubleExecutor,
 };
 
@@ -104,7 +104,8 @@ where
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
-        let (mut adapter_record, mut core_record) = state.ctx.alloc(self.0.get_record_layout());
+        let (mut adapter_record, mut core_record) =
+            state.ctx.alloc(self.inner.get_record_layout());
 
         <Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::start(
             *state.pc,
@@ -112,38 +113,49 @@ where
             &mut adapter_record,
         );
 
-        let data: DynArray<u8> = self
-            .0
+        let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = self
+            .inner
             .adapter()
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
+            .read(state.memory, instruction, &mut adapter_record);
 
-        let local_opcode = instruction.opcode.local_opcode_idx(self.0.offset);
+        let local_opcode = instruction.opcode.local_opcode_idx(self.inner.offset);
 
-        core_record.fill_from_execution_data(local_opcode as u8, &data.0);
+        core_record.fill_from_execution_data(
+            local_opcode as u8,
+            read_data.as_flattened().as_flattened(),
+        );
 
         // Try fast path for non-SETUP operations with known field types
-        let writes: DynArray<u8> = if !is_setup_opcode(local_opcode) {
-            let field_type = get_field_type(&self.0.expr.prime);
-            let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = data.clone().into();
-
-            if let Some(output) = compute_ec_add_ne_fast::<BLOCKS, BLOCK_SIZE>(field_type, read_data)
-            {
-                output.into()
+        let output: [[u8; BLOCK_SIZE]; BLOCKS] = if !is_setup_opcode(local_opcode) {
+            if let Some(output) = compute_ec_add_ne_fast::<BLOCKS, BLOCK_SIZE>(
+                self.cached_field_type,
+                read_data,
+            ) {
+                output
             } else {
                 // Fall back to slow path - single operation chip, flag_idx = 0
-                run_field_expression_precomputed::<true>(&self.0.expr, 0, &data.0)
+                run_field_expression_precomputed::<true>(
+                    &self.inner.expr,
+                    0,
+                    read_data.as_flattened().as_flattened(),
+                )
+                .into()
             }
         } else {
             // SETUP operations: pass num_flags so no flag is set
-            let no_flag = self.0.expr.num_flags();
-            run_field_expression_precomputed::<true>(&self.0.expr, no_flag, &data.0)
+            let no_flag = self.inner.expr.num_flags();
+            run_field_expression_precomputed::<true>(
+                &self.inner.expr,
+                no_flag,
+                read_data.as_flattened().as_flattened(),
+            )
+            .into()
         };
 
-        self.0.adapter().write(
+        self.inner.adapter().write(
             state.memory,
             instruction,
-            writes.into(),
+            output,
             &mut adapter_record,
         );
 
@@ -152,7 +164,7 @@ where
     }
 
     fn get_opcode_name(&self, _opcode: usize) -> String {
-        self.0.name.clone()
+        self.inner.name.clone()
     }
 }
 
@@ -178,7 +190,8 @@ where
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
-        let (mut adapter_record, mut core_record) = state.ctx.alloc(self.0.get_record_layout());
+        let (mut adapter_record, mut core_record) =
+            state.ctx.alloc(self.inner.get_record_layout());
 
         <Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as AdapterTraceExecutor<F>>::start(
             *state.pc,
@@ -186,41 +199,47 @@ where
             &mut adapter_record,
         );
 
-        let data: DynArray<u8> = self
-            .0
+        let read_data_arr: [[[u8; BLOCK_SIZE]; BLOCKS]; 1] = self
+            .inner
             .adapter()
-            .read(state.memory, instruction, &mut adapter_record)
-            .into();
+            .read(state.memory, instruction, &mut adapter_record);
+        let read_data: [[u8; BLOCK_SIZE]; BLOCKS] = read_data_arr[0];
 
-        let local_opcode = instruction.opcode.local_opcode_idx(self.0.offset);
+        let local_opcode = instruction.opcode.local_opcode_idx(self.inner.offset);
 
-        core_record.fill_from_execution_data(local_opcode as u8, &data.0);
+        core_record.fill_from_execution_data(local_opcode as u8, read_data.as_flattened());
 
         // Try fast path for non-SETUP operations with known curve types
-        let writes: DynArray<u8> = if !is_setup_opcode(local_opcode) {
-            // Get the curve's a coefficient from setup_values
-            let a_coeff = self.0.expr.setup_values.first();
-
-            let curve_type = a_coeff.and_then(|a| get_curve_type(&self.0.expr.prime, a));
-            let read_data: [[u8; BLOCK_SIZE]; BLOCKS] = data.clone().into();
-
-            if let Some(output) = compute_ec_double_fast::<BLOCKS, BLOCK_SIZE>(curve_type, read_data)
-            {
-                output.into()
+        let output: [[u8; BLOCK_SIZE]; BLOCKS] = if !is_setup_opcode(local_opcode) {
+            if let Some(output) = compute_ec_double_fast::<BLOCKS, BLOCK_SIZE>(
+                self.cached_curve_type,
+                read_data,
+            ) {
+                output
             } else {
                 // Fall back to slow path - single operation chip, flag_idx = 0
-                run_field_expression_precomputed::<true>(&self.0.expr, 0, &data.0)
+                run_field_expression_precomputed::<true>(
+                    &self.inner.expr,
+                    0,
+                    read_data.as_flattened(),
+                )
+                .into()
             }
         } else {
             // SETUP operations: pass num_flags so no flag is set
-            let no_flag = self.0.expr.num_flags();
-            run_field_expression_precomputed::<true>(&self.0.expr, no_flag, &data.0)
+            let no_flag = self.inner.expr.num_flags();
+            run_field_expression_precomputed::<true>(
+                &self.inner.expr,
+                no_flag,
+                read_data.as_flattened(),
+            )
+            .into()
         };
 
-        self.0.adapter().write(
+        self.inner.adapter().write(
             state.memory,
             instruction,
-            writes.into(),
+            output,
             &mut adapter_record,
         );
 
@@ -229,6 +248,6 @@ where
     }
 
     fn get_opcode_name(&self, _opcode: usize) -> String {
-        self.0.name.clone()
+        self.inner.name.clone()
     }
 }
