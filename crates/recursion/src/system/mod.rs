@@ -840,17 +840,22 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
         // Use std::thread::scope for preflight parallelism. With only 3-4 proofs max, this avoids
         // Rayon's thread pool overhead (wake-up, work stealing, synchronization) while still
         // getting parallelism with minimal overhead.
+        let span = tracing::Span::current();
         let preflights = std::thread::scope(|s| {
             let handles: Vec<_> = proofs
                 .iter()
                 .map(|proof| {
                     s.spawn(|| {
+                        let _guard = span.enter();
                         let sponge = TS::default();
                         self.run_preflight(sponge, child_vk, proof)
                     })
                 })
                 .collect();
-            handles.into_iter().map(|h| h.join().unwrap()).collect::<Vec<_>>()
+            handles
+                .into_iter()
+                .map(|h| h.join().unwrap())
+                .collect::<Vec<_>>()
         });
 
         self.power_checker_trace.reset();
@@ -984,17 +989,22 @@ pub mod cuda_tracegen {
                 .collect::<Vec<_>>();
             // Use std::thread::scope for preflight parallelism. With only 3-4 proofs max, this
             // avoids Rayon's thread pool overhead while still getting parallelism.
+            let span = tracing::Span::current();
             let preflights_cpu = std::thread::scope(|s| {
                 let handles: Vec<_> = proofs
                     .iter()
                     .map(|proof| {
                         s.spawn(|| {
+                            let _guard = span.enter();
                             let sponge = TS::default();
                             self.run_preflight(sponge, child_vk, proof)
                         })
                     })
                     .collect();
-                handles.into_iter().map(|h| h.join().unwrap()).collect::<Vec<_>>()
+                handles
+                    .into_iter()
+                    .map(|h| h.join().unwrap())
+                    .collect::<Vec<_>>()
             });
 
             let exp_bits_len_gen = ExpBitsLenTraceGenerator::default();
