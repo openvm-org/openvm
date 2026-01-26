@@ -188,19 +188,19 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
-        let local_opcode = opcode.local_opcode_idx(self.0.offset);
+        let local_opcode = opcode.local_opcode_idx(self.inner.offset);
 
-        let needs_setup = self.0.expr.needs_setup();
-        let mut flag_idx = self.0.expr.num_flags() as u8;
+        let needs_setup = self.inner.expr.needs_setup();
+        let mut flag_idx = self.inner.expr.num_flags() as u8;
         if needs_setup {
             if let Some(opcode_position) = self
-                .0
+                .inner
                 .local_opcode_idx
                 .iter()
                 .position(|&idx| idx == local_opcode)
             {
-                if opcode_position < self.0.opcode_flag_idx.len() {
-                    flag_idx = self.0.opcode_flag_idx[opcode_position] as u8;
+                if opcode_position < self.inner.opcode_flag_idx.len() {
+                    flag_idx = self.inner.opcode_flag_idx[opcode_position] as u8;
                 }
             }
         }
@@ -209,7 +209,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
         *data = FieldExpressionPreCompute {
             a: a as u8,
             rs_addrs,
-            expr: &self.0.expr,
+            expr: &self.inner.expr,
             flag_idx,
         };
 

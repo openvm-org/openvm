@@ -583,7 +583,7 @@ impl FieldExpr {
         self.builder.limb_bits
     }
 
-    pub fn execute(&self, inputs: Vec<BigUint>, flags: Vec<bool>) -> Vec<BigUint> {
+    pub fn execute(&self, inputs: &[BigUint], flags: &[bool]) -> Vec<BigUint> {
         assert!(self.builder.is_finalized());
 
         #[cfg(debug_assertions)]
@@ -601,13 +601,13 @@ impl FieldExpr {
 
         let mut vars = vec![BigUint::zero(); self.num_variables];
         for i in 0..self.constraints.len() {
-            let r = self.computes[i].compute(&inputs, &vars, &flags, &self.prime);
-            vars[i] = r.clone();
+            let r = self.computes[i].compute(inputs, &vars, flags, &self.prime);
+            vars[i] = r; // r is already owned, no clone needed
         }
         vars
     }
 
-    pub fn execute_with_output(&self, inputs: Vec<BigUint>, flags: Vec<bool>) -> Vec<BigUint> {
+    pub fn execute_with_output(&self, inputs: &[BigUint], flags: &[bool]) -> Vec<BigUint> {
         let vars = self.execute(inputs, flags);
         self.builder
             .output_indices
