@@ -4,7 +4,6 @@
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
 
 use derive_more::derive::{Deref, DerefMut};
-use openvm_circuit_derive::PreflightExecutor;
 use openvm_mod_circuit_builder::FieldExpressionExecutor;
 use openvm_rv32_adapters::Rv32VecHeapAdapterExecutor;
 #[cfg(feature = "cuda")]
@@ -22,8 +21,10 @@ pub use fp2::*;
 mod extension;
 pub use extension::*;
 pub mod fields;
+mod preflight;
 
-#[derive(Clone, PreflightExecutor, Deref, DerefMut)]
+// Note: PreflightExecutor is implemented manually in preflight.rs with fast native arithmetic
+#[derive(Clone, Deref, DerefMut)]
 pub struct FieldExprVecHeapExecutor<
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,

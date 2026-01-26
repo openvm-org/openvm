@@ -322,6 +322,12 @@ impl<A> FieldExpressionExecutor<A> {
             ),
         }
     }
+
+    /// Returns a reference to the adapter for use in custom PreflightExecutor implementations.
+    #[inline]
+    pub fn adapter(&self) -> &A {
+        &self.adapter
+    }
 }
 
 pub struct FieldExpressionFiller<A> {

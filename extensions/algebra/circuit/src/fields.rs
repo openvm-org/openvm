@@ -1,6 +1,7 @@
 use halo2curves_axiom::ff::{Field, PrimeField};
 use num_bigint::BigUint;
 use num_traits::Num;
+use once_cell::sync::Lazy;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FieldType {
@@ -22,53 +23,64 @@ pub enum Operation {
     Div = 3,
 }
 
-// TODO: hardcode this. it's slow
-fn get_modulus_as_bigint<F: PrimeField>() -> BigUint {
+// Cached modulus constants to avoid repeated string parsing
+static K256_COORD_MODULUS: Lazy<BigUint> = Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::secq256k1::Fq>());
+static K256_SCALAR_MODULUS: Lazy<BigUint> = Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::secq256k1::Fp>());
+static P256_COORD_MODULUS: Lazy<BigUint> = Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::secp256r1::Fp>());
+static P256_SCALAR_MODULUS: Lazy<BigUint> = Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::secp256r1::Fq>());
+static BN254_COORD_MODULUS: Lazy<BigUint> = Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::bn256::Fq>());
+static BN254_SCALAR_MODULUS: Lazy<BigUint> = Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::bn256::Fr>());
+static BLS12_381_COORD_MODULUS: Lazy<BigUint> = Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::bls12_381::Fq>());
+static BLS12_381_SCALAR_MODULUS: Lazy<BigUint> = Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::bls12_381::Fr>());
+
+fn get_modulus_as_bigint_slow<F: PrimeField>() -> BigUint {
     BigUint::from_str_radix(F::MODULUS.trim_start_matches("0x"), 16).unwrap()
 }
 
+#[inline]
 pub fn get_field_type(modulus: &BigUint) -> Option<FieldType> {
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secq256k1::Fq>() {
+    if modulus == &*K256_COORD_MODULUS {
         return Some(FieldType::K256Coordinate);
     }
 
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secq256k1::Fp>() {
+    if modulus == &*K256_SCALAR_MODULUS {
         return Some(FieldType::K256Scalar);
     }
 
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secp256r1::Fp>() {
+    if modulus == &*P256_COORD_MODULUS {
         return Some(FieldType::P256Coordinate);
     }
 
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secp256r1::Fq>() {
+    if modulus == &*P256_SCALAR_MODULUS {
         return Some(FieldType::P256Scalar);
     }
 
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bn256::Fq>() {
+    if modulus == &*BN254_COORD_MODULUS {
         return Some(FieldType::BN254Coordinate);
     }
 
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bn256::Fr>() {
+    if modulus == &*BN254_SCALAR_MODULUS {
         return Some(FieldType::BN254Scalar);
     }
 
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bls12_381::Fq>() {
+    if modulus == &*BLS12_381_COORD_MODULUS {
         return Some(FieldType::BLS12_381Coordinate);
     }
 
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bls12_381::Fr>() {
+    if modulus == &*BLS12_381_SCALAR_MODULUS {
         return Some(FieldType::BLS12_381Scalar);
     }
 
     None
 }
 
+#[inline]
 pub fn get_fp2_field_type(modulus: &BigUint) -> Option<FieldType> {
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bn256::Fq>() {
+    if modulus == &*BN254_COORD_MODULUS {
         return Some(FieldType::BN254Coordinate);
     }
 
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bls12_381::Fq>() {
+    if modulus == &*BLS12_381_COORD_MODULUS {
         return Some(FieldType::BLS12_381Coordinate);
     }
 
@@ -236,7 +248,7 @@ fn fp2_operation_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize, const O
 fn from_repr_with_reduction<F: PrimeField<Repr = [u8; 32]>>(bytes: [u8; 32]) -> F {
     F::from_repr_vartime(bytes).unwrap_or_else(|| {
         // Reduce modulo the field's modulus for non-canonical representations
-        let modulus = get_modulus_as_bigint::<F>();
+        let modulus = get_modulus_as_bigint_slow::<F>();
         let value = BigUint::from_bytes_le(&bytes);
         let reduced = value % modulus;
 
