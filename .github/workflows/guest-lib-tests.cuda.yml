@@ -141,6 +141,9 @@ jobs:
                 elif [[ "$crate" == "ruint" ]]; then
                   # only run integration tests because other tests are not OpenVM related
                   SPECIAL_ARGS="test_matrix_power"
+                elif [[ "$crate" == "sha2" ]]; then
+                  # also run proving tests
+                  SPECIAL_ARGS="--run-ignored=all"
                 fi
 
                 ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} $SPECIAL_ARGS --no-tests=pass --test-threads=1
