@@ -405,9 +405,9 @@ impl InteractionsFoldingBlob {
                     });
                     cur_eq3b_idx += 1;
                 } else {
-                    // `cur_interactions_evals` in rust verifier are the list of evaluated node_claims
-                    // After multiplying with eq_3b and sum together we get the `num` and `denom` in
-                    // rust verifier.
+                    // `cur_interactions_evals` in rust verifier are the list of evaluated
+                    // node_claims After multiplying with eq_3b and sum together we get the
+                    // `num` and `denom` in rust verifier.
                     for (interaction_idx, inter) in inters.iter().enumerate() {
                         let eq_3b = eq_3bs[cur_eq3b_idx].eq_mle(
                             &preflight.batch_constraint.xi,
@@ -642,6 +642,7 @@ pub(in crate::batch_constraint) mod cuda {
     use openvm_cuda_backend::{base::DeviceMatrix, chip::UInt2};
     use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 
+    use super::*;
     use crate::{
         batch_constraint::cuda_abi::{
             AffineFpExt, FpExtWithTidx, InteractionRecord, interactions_folding_tracegen,
@@ -649,8 +650,6 @@ pub(in crate::batch_constraint) mod cuda {
         },
         cuda::{preflight::PreflightGpu, vk::VerifyingKeyGpu},
     };
-
-    use super::*;
 
     pub struct InteractionsFoldingBlobGpu {
         // Per proof, per AIR, per interaction, per index
@@ -711,7 +710,8 @@ pub(in crate::batch_constraint) mod cuda {
                     let mut air_values = Vec::with_capacity(inters.len());
 
                     if inters.is_empty() {
-                        // Note differs from what is written in CPU blob generation, but matches tracegen
+                        // Note differs from what is written in CPU blob generation, but matches
+                        // tracegen
                         air_values.push(vec![expr_evals[[pidx, *air_idx]][0]]);
                         node_idxs.push(0);
                         proof_interaction_records.push(InteractionRecord {

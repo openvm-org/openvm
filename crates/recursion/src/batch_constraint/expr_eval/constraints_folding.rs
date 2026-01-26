@@ -369,6 +369,7 @@ pub(in crate::batch_constraint) mod cuda {
     use openvm_cuda_backend::{base::DeviceMatrix, chip::UInt2};
     use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 
+    use super::*;
     use crate::{
         batch_constraint::cuda_abi::{
             AffineFpExt, FpExtWithTidx, constraints_folding_tracegen,
@@ -376,8 +377,6 @@ pub(in crate::batch_constraint) mod cuda {
         },
         cuda::{preflight::PreflightGpu, vk::VerifyingKeyGpu},
     };
-
-    use super::*;
 
     pub struct ConstraintsFoldingBlobGpu {
         // Per proof, per AIR, per constraint
