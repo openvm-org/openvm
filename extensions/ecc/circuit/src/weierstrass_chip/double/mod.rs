@@ -1,6 +1,8 @@
-use std::{cell::RefCell, rc::Rc};
-
-use std::ops::{Deref, DerefMut};
+use std::{
+    cell::RefCell,
+    ops::{Deref, DerefMut},
+    rc::Rc,
+};
 
 use num_bigint::BigUint;
 use num_traits::One;
@@ -95,9 +97,7 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleExecutor<BLOCKS, BLOC
     }
 }
 
-impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Deref
-    for EcDoubleExecutor<BLOCKS, BLOCK_SIZE>
-{
+impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Deref for EcDoubleExecutor<BLOCKS, BLOCK_SIZE> {
     type Target = FieldExpressionExecutor<
         Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
     >;

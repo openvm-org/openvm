@@ -1,6 +1,8 @@
-use std::{cell::RefCell, rc::Rc};
-
-use std::ops::{Deref, DerefMut};
+use std::{
+    cell::RefCell,
+    ops::{Deref, DerefMut},
+    rc::Rc,
+};
 
 use openvm_algebra_circuit::fields::{get_field_type, FieldType};
 use openvm_circuit::{

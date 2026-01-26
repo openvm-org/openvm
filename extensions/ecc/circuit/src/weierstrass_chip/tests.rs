@@ -523,9 +523,7 @@ mod ec_addne_tests {
         let (p1_x, p1_y) = SampleEcPoints[0].clone();
         let (p2_x, p2_y) = SampleEcPoints[1].clone();
         assert_eq!(executor.expr.builder.num_variables, 3); // lambda, x3, y3
-        let r = executor
-            .expr
-            .execute(&[p1_x, p1_y, p2_x, p2_y], &[true]);
+        let r = executor.expr.execute(&[p1_x, p1_y, p2_x, p2_y], &[true]);
 
         assert_eq!(r.len(), 3); // lambda, x3, y3
         assert_eq!(r[1], SampleEcPoints[2].0);
@@ -534,9 +532,7 @@ mod ec_addne_tests {
         let (p1_x, p1_y) = SampleEcPoints[2].clone();
         let (p2_x, p2_y) = SampleEcPoints[3].clone();
         assert_eq!(executor.expr.builder.num_variables, 3); // lambda, x3, y3
-        let r = executor
-            .expr
-            .execute(&[p1_x, p1_y, p2_x, p2_y], &[true]);
+        let r = executor.expr.execute(&[p1_x, p1_y, p2_x, p2_y], &[true]);
 
         assert_eq!(r.len(), 3); // lambda, x3, y3
         assert_eq!(r[1], SampleEcPoints[4].0);

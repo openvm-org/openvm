@@ -24,14 +24,22 @@ pub enum Operation {
 }
 
 // Cached modulus constants to avoid repeated string parsing
-static K256_COORD_MODULUS: Lazy<BigUint> = Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::secq256k1::Fq>());
-static K256_SCALAR_MODULUS: Lazy<BigUint> = Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::secq256k1::Fp>());
-static P256_COORD_MODULUS: Lazy<BigUint> = Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::secp256r1::Fp>());
-static P256_SCALAR_MODULUS: Lazy<BigUint> = Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::secp256r1::Fq>());
-static BN254_COORD_MODULUS: Lazy<BigUint> = Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::bn256::Fq>());
-static BN254_SCALAR_MODULUS: Lazy<BigUint> = Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::bn256::Fr>());
-static BLS12_381_COORD_MODULUS: Lazy<BigUint> = Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::bls12_381::Fq>());
-static BLS12_381_SCALAR_MODULUS: Lazy<BigUint> = Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::bls12_381::Fr>());
+static K256_COORD_MODULUS: Lazy<BigUint> =
+    Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::secq256k1::Fq>());
+static K256_SCALAR_MODULUS: Lazy<BigUint> =
+    Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::secq256k1::Fp>());
+static P256_COORD_MODULUS: Lazy<BigUint> =
+    Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::secp256r1::Fp>());
+static P256_SCALAR_MODULUS: Lazy<BigUint> =
+    Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::secp256r1::Fq>());
+static BN254_COORD_MODULUS: Lazy<BigUint> =
+    Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::bn256::Fq>());
+static BN254_SCALAR_MODULUS: Lazy<BigUint> =
+    Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::bn256::Fr>());
+static BLS12_381_COORD_MODULUS: Lazy<BigUint> =
+    Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::bls12_381::Fq>());
+static BLS12_381_SCALAR_MODULUS: Lazy<BigUint> =
+    Lazy::new(|| get_modulus_as_bigint_slow::<halo2curves_axiom::bls12_381::Fr>());
 
 fn get_modulus_as_bigint_slow<F: PrimeField>() -> BigUint {
     BigUint::from_str_radix(F::MODULUS.trim_start_matches("0x"), 16).unwrap()

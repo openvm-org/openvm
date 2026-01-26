@@ -21,6 +21,24 @@ use super::{
     double::EcDoubleExecutor,
 };
 
+/// Generates a match statement dispatching an enum to const-generic function calls.
+macro_rules! dispatch_enum {
+    ($fn:ident, $val:expr, $read_data:expr,
+     [$(($variant_type:ident :: $variant:ident)),* $(,)?]) => {
+        match $val {
+            $(
+                $variant_type::$variant => $fn::<
+                    { $variant_type::$variant as u8 },
+                    BLOCKS,
+                    BLOCK_SIZE,
+                >($read_data),
+            )*
+            #[allow(unreachable_patterns)]
+            _ => unreachable!(),
+        }
+    };
+}
+
 /// Compute EC point addition using fast native field arithmetic.
 #[inline]
 fn compute_ec_add_ne_fast<const BLOCKS: usize, const BLOCK_SIZE: usize>(
@@ -30,17 +48,21 @@ fn compute_ec_add_ne_fast<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     let field_type = field_type?;
 
     Some(match field_type {
-        FieldType::K256Coordinate => {
-            ec_add_ne::<{ FieldType::K256Coordinate as u8 }, BLOCKS, BLOCK_SIZE>(read_data)
-        }
-        FieldType::P256Coordinate => {
-            ec_add_ne::<{ FieldType::P256Coordinate as u8 }, BLOCKS, BLOCK_SIZE>(read_data)
-        }
-        FieldType::BN254Coordinate => {
-            ec_add_ne::<{ FieldType::BN254Coordinate as u8 }, BLOCKS, BLOCK_SIZE>(read_data)
-        }
-        FieldType::BLS12_381Coordinate => {
-            ec_add_ne::<{ FieldType::BLS12_381Coordinate as u8 }, BLOCKS, BLOCK_SIZE>(read_data)
+        FieldType::K256Coordinate
+        | FieldType::P256Coordinate
+        | FieldType::BN254Coordinate
+        | FieldType::BLS12_381Coordinate => {
+            dispatch_enum!(
+                ec_add_ne,
+                field_type,
+                read_data,
+                [
+                    (FieldType::K256Coordinate),
+                    (FieldType::P256Coordinate),
+                    (FieldType::BN254Coordinate),
+                    (FieldType::BLS12_381Coordinate),
+                ]
+            )
         }
         // Scalar fields are not used for ECC point coordinates
         _ => return None,
@@ -55,31 +77,42 @@ fn compute_ec_double_fast<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 ) -> Option<[[u8; BLOCK_SIZE]; BLOCKS]> {
     let curve_type = curve_type?;
 
-    Some(match curve_type {
-        CurveType::K256 => {
-            ec_double::<{ CurveType::K256 as u8 }, BLOCKS, BLOCK_SIZE>(read_data)
-        }
-        CurveType::P256 => {
-            ec_double::<{ CurveType::P256 as u8 }, BLOCKS, BLOCK_SIZE>(read_data)
-        }
-        CurveType::BN254 => {
-            ec_double::<{ CurveType::BN254 as u8 }, BLOCKS, BLOCK_SIZE>(read_data)
-        }
-        CurveType::BLS12_381 => {
-            ec_double::<{ CurveType::BLS12_381 as u8 }, BLOCKS, BLOCK_SIZE>(read_data)
-        }
-    })
+    Some(dispatch_enum!(
+        ec_double,
+        curve_type,
+        read_data,
+        [
+            (CurveType::K256),
+            (CurveType::P256),
+            (CurveType::BN254),
+            (CurveType::BLS12_381),
+        ]
+    ))
 }
 
 /// Check if this is a SETUP opcode (not a regular EC operation)
 #[inline]
 fn is_setup_opcode(local_opcode: usize) -> bool {
     let base_opcode = local_opcode % Rv32WeierstrassOpcode::COUNT;
-    matches!(
-        base_opcode,
-        x if x == Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize
-            || x == Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize
-    )
+    base_opcode == Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize
+        || base_opcode == Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize
+}
+
+/// Slow-path fallback for EC operations (used for SETUP opcodes and unknown field types).
+#[inline]
+fn compute_ec_slow<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    expr: &openvm_mod_circuit_builder::FieldExpr,
+    local_opcode: usize,
+    read_bytes: &[u8],
+) -> [[u8; BLOCK_SIZE]; BLOCKS] {
+    let flag_idx = if is_setup_opcode(local_opcode) {
+        // SETUP operations: pass num_flags so no flag is set
+        expr.num_flags()
+    } else {
+        // Single operation chip, flag_idx = 0
+        0
+    };
+    run_field_expression_precomputed::<true>(expr, flag_idx, read_bytes).into()
 }
 
 // Implementation for EcAddNeExecutor
@@ -126,31 +159,23 @@ where
         );
 
         // Try fast path for non-SETUP operations with known field types
-        let output: [[u8; BLOCK_SIZE]; BLOCKS] = if !is_setup_opcode(local_opcode) {
-            if let Some(output) = compute_ec_add_ne_fast::<BLOCKS, BLOCK_SIZE>(
-                self.cached_field_type,
-                read_data,
-            ) {
-                output
+        let output: [[u8; BLOCK_SIZE]; BLOCKS] =
+            if !is_setup_opcode(local_opcode) {
+                compute_ec_add_ne_fast::<BLOCKS, BLOCK_SIZE>(self.cached_field_type, read_data)
+                    .unwrap_or_else(|| {
+                        compute_ec_slow::<BLOCKS, BLOCK_SIZE>(
+                            &self.inner.expr,
+                            local_opcode,
+                            read_data.as_flattened().as_flattened(),
+                        )
+                    })
             } else {
-                // Fall back to slow path - single operation chip, flag_idx = 0
-                run_field_expression_precomputed::<true>(
+                compute_ec_slow::<BLOCKS, BLOCK_SIZE>(
                     &self.inner.expr,
-                    0,
+                    local_opcode,
                     read_data.as_flattened().as_flattened(),
                 )
-                .into()
-            }
-        } else {
-            // SETUP operations: pass num_flags so no flag is set
-            let no_flag = self.inner.expr.num_flags();
-            run_field_expression_precomputed::<true>(
-                &self.inner.expr,
-                no_flag,
-                read_data.as_flattened().as_flattened(),
-            )
-            .into()
-        };
+            };
 
         self.inner.adapter().write(
             state.memory,
@@ -210,31 +235,23 @@ where
         core_record.fill_from_execution_data(local_opcode as u8, read_data.as_flattened());
 
         // Try fast path for non-SETUP operations with known curve types
-        let output: [[u8; BLOCK_SIZE]; BLOCKS] = if !is_setup_opcode(local_opcode) {
-            if let Some(output) = compute_ec_double_fast::<BLOCKS, BLOCK_SIZE>(
-                self.cached_curve_type,
-                read_data,
-            ) {
-                output
+        let output: [[u8; BLOCK_SIZE]; BLOCKS] =
+            if !is_setup_opcode(local_opcode) {
+                compute_ec_double_fast::<BLOCKS, BLOCK_SIZE>(self.cached_curve_type, read_data)
+                    .unwrap_or_else(|| {
+                        compute_ec_slow::<BLOCKS, BLOCK_SIZE>(
+                            &self.inner.expr,
+                            local_opcode,
+                            read_data.as_flattened(),
+                        )
+                    })
             } else {
-                // Fall back to slow path - single operation chip, flag_idx = 0
-                run_field_expression_precomputed::<true>(
+                compute_ec_slow::<BLOCKS, BLOCK_SIZE>(
                     &self.inner.expr,
-                    0,
+                    local_opcode,
                     read_data.as_flattened(),
                 )
-                .into()
-            }
-        } else {
-            // SETUP operations: pass num_flags so no flag is set
-            let no_flag = self.inner.expr.num_flags();
-            run_field_expression_precomputed::<true>(
-                &self.inner.expr,
-                no_flag,
-                read_data.as_flattened(),
-            )
-            .into()
-        };
+            };
 
         self.inner.adapter().write(
             state.memory,
