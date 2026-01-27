@@ -3,17 +3,17 @@
 //! These wrappers allow using `Rv32VecHeapAdapter*` types with cores that expect flat
 //! `BasicAdapterInterface` data formats.
 
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterTraceExecutor, BasicAdapterInterface, ImmInstruction,
-    MinimalInstruction, VecHeapAdapterInterface, VecHeapBranchAdapterInterface, VmAdapterAir,
-    VmAdapterInterface,
+use openvm_circuit::{
+    arch::{
+        AdapterAirContext, AdapterTraceExecutor, BasicAdapterInterface, ImmInstruction,
+        MinimalInstruction, VecHeapAdapterInterface, VecHeapBranchAdapterInterface, VmAdapterAir,
+        VmAdapterInterface,
+    },
+    system::memory::online::TracingMemory,
 };
-use openvm_circuit::system::memory::online::TracingMemory;
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    p3_air::BaseAir,
-    p3_field::PrimeField32,
+    interaction::InteractionBuilder, p3_air::BaseAir, p3_field::PrimeField32,
     rap::BaseAirWithPublicValues,
 };
 
@@ -21,7 +21,8 @@ use openvm_stark_backend::{
 // ALU Adapter Wrappers (with reads and writes)
 // =================================================================================================
 
-/// Wrapper that converts a `VecHeapAdapterInterface` (block-based) to `BasicAdapterInterface` (flat).
+/// Wrapper that converts a `VecHeapAdapterInterface` (block-based) to `BasicAdapterInterface`
+/// (flat).
 ///
 /// This allows using `Rv32VecHeapAdapterAir` with cores that expect flat read/write data.
 ///
@@ -134,23 +135,33 @@ where
         type InnerI<T, const NR: usize, const BPR: usize, const BPW: usize, const BS: usize> =
             VecHeapAdapterInterface<T, NR, BPR, BPW, BS, BS>;
 
-        let inner_reads: <InnerI<AB::Expr, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, BLOCK_SIZE> as VmAdapterInterface<AB::Expr>>::Reads =
-            core::array::from_fn(|read_i| {
-                core::array::from_fn(|block_i| {
-                    core::array::from_fn(|in_block_i| {
-                        let byte_i = block_i * BLOCK_SIZE + in_block_i;
-                        ctx.reads[read_i][byte_i].clone()
-                    })
-                })
-            });
-
-        let inner_writes: <InnerI<AB::Expr, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, BLOCK_SIZE> as VmAdapterInterface<AB::Expr>>::Writes =
+        let inner_reads: <InnerI<
+            AB::Expr,
+            NUM_READS,
+            BLOCKS_PER_READ,
+            BLOCKS_PER_WRITE,
+            BLOCK_SIZE,
+        > as VmAdapterInterface<AB::Expr>>::Reads = core::array::from_fn(|read_i| {
             core::array::from_fn(|block_i| {
                 core::array::from_fn(|in_block_i| {
                     let byte_i = block_i * BLOCK_SIZE + in_block_i;
-                    ctx.writes[0][byte_i].clone()
+                    ctx.reads[read_i][byte_i].clone()
                 })
-            });
+            })
+        });
+
+        let inner_writes: <InnerI<
+            AB::Expr,
+            NUM_READS,
+            BLOCKS_PER_READ,
+            BLOCKS_PER_WRITE,
+            BLOCK_SIZE,
+        > as VmAdapterInterface<AB::Expr>>::Writes = core::array::from_fn(|block_i| {
+            core::array::from_fn(|in_block_i| {
+                let byte_i = block_i * BLOCK_SIZE + in_block_i;
+                ctx.writes[0][byte_i].clone()
+            })
+        });
 
         let inner_ctx: AdapterAirContext<
             AB::Expr,
@@ -291,7 +302,8 @@ where
 // Branch Adapter Wrappers (reads only, no writes)
 // =================================================================================================
 
-/// Wrapper that converts a `VecHeapBranchAdapterInterface` (block-based) to `BasicAdapterInterface` (flat).
+/// Wrapper that converts a `VecHeapBranchAdapterInterface` (block-based) to `BasicAdapterInterface`
+/// (flat).
 ///
 /// This allows using `Rv32VecHeapBranchAdapterAir` with cores that expect flat read data.
 /// Branch operations have no writes.

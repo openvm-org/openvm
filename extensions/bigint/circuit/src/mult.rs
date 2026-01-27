@@ -14,7 +14,7 @@ use openvm_rv32im_transpiler::MulOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
-    common::{bytes_to_u32_array, u32_array_to_bytes},
+    common::{bytes_to_u32_array, read_int256, u32_array_to_bytes, write_int256},
     AluAdapterExecutor, Rv32Multiplication256Executor, INT256_NUM_LIMBS,
 };
 
@@ -119,15 +119,13 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &MultPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1_ptr = exec_state.vm_read_no_adapter::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
-    let rs2_ptr = exec_state.vm_read_no_adapter::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32);
-    let rd_ptr = exec_state.vm_read_no_adapter::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
-    let rs1 = exec_state
-        .vm_read_no_adapter::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
-    let rs2 = exec_state
-        .vm_read_no_adapter::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
+    let rs1_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs2_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32);
+    let rd_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
+    let rs1 = read_int256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
+    let rs2 = read_int256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
     let rd = u256_mul(rs1, rs2);
-    exec_state.vm_write_no_adapter(RV32_MEMORY_AS, u32::from_le_bytes(rd_ptr), &rd);
+    write_int256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rd_ptr), &rd);
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));

@@ -16,7 +16,10 @@ use openvm_rv32im_circuit::LessThanExecutor;
 use openvm_rv32im_transpiler::LessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{common, AluAdapterExecutor, Rv32LessThan256Executor, INT256_NUM_LIMBS};
+use crate::{
+    common::{self, read_int256, write_int256},
+    AluAdapterExecutor, Rv32LessThan256Executor, INT256_NUM_LIMBS,
+};
 
 impl Rv32LessThan256Executor {
     pub fn new(adapter: AluAdapterExecutor, offset: usize) -> Self {
@@ -128,13 +131,11 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U25
     pre_compute: &LessThanPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1_ptr = exec_state.vm_read_no_adapter::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
-    let rs2_ptr = exec_state.vm_read_no_adapter::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32);
-    let rd_ptr = exec_state.vm_read_no_adapter::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
-    let rs1 = exec_state
-        .vm_read_no_adapter::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
-    let rs2 = exec_state
-        .vm_read_no_adapter::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
+    let rs1_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs2_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32);
+    let rd_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
+    let rs1 = read_int256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
+    let rs2 = read_int256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
     let cmp_result = if IS_U256 {
         common::u256_lt(rs1, rs2)
     } else {
@@ -142,7 +143,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U25
     };
     let mut rd = [0u8; INT256_NUM_LIMBS];
     rd[0] = cmp_result as u8;
-    exec_state.vm_write_no_adapter(RV32_MEMORY_AS, u32::from_le_bytes(rd_ptr), &rd);
+    write_int256(exec_state, RV32_MEMORY_AS, u32::from_le_bytes(rd_ptr), &rd);
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
