@@ -270,7 +270,7 @@ where
 /// Note: Metered execution stores un-padded counts, so we pad them for comparison.
 /// The proving context trace height (realized) is already padded.
 /// For most AIRs, estimated_padded should exactly equal realized.
-// For MemoryMerkleAir and Poseidon2PeripheryAir, it is expected that estimated >> realized
+// For MemoryMerkleAir, Poseidon2PeripheryAir, PersistentBoundaryAir, and AccessAdapterAir, it is expected that estimated >> realized
 fn validate_metered_estimates<E, VB>(
     vm: &VirtualMachine<E, VB>,
     estimated_heights: &[u32],
