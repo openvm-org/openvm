@@ -30,3 +30,5 @@ eyre = { workspace = true }
 [features]
 # Internal feature for testing only.
 cuda = ["openvm-sha2-circuit/cuda"]
+# Enables rust integration tests that take a long time.
+long_proving_tests = []

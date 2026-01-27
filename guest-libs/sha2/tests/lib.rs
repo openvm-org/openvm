@@ -149,20 +149,26 @@ mod tests {
     #[ignore = "proving on CPU is slow"]
     fn test_sha256_prove() -> Result<()> {
         test_sha2_base("SHA256ShortMsg.rsp", Sha2Type::Sha256, true)?;
-        test_sha2_base("SHA256LongMsg.rsp", Sha2Type::Sha256, true)
+        #[cfg(feature = "long_proving_tests")]
+        test_sha2_base("SHA256LongMsg.rsp", Sha2Type::Sha256, true)?;
+        Ok(())
     }
 
     #[test]
     #[ignore = "proving on CPU is slow"]
     fn test_sha384_prove() -> Result<()> {
         test_sha2_base("SHA384ShortMsg.rsp", Sha2Type::Sha384, true)?;
-        test_sha2_base("SHA384LongMsg.rsp", Sha2Type::Sha384, true)
+        #[cfg(feature = "long_proving_tests")]
+        test_sha2_base("SHA384LongMsg.rsp", Sha2Type::Sha384, true)?;
+        Ok(())
     }
 
     #[test]
     #[ignore = "proving on CPU is slow"]
     fn test_sha512_prove() -> Result<()> {
         test_sha2_base("SHA512ShortMsg.rsp", Sha2Type::Sha512, true)?;
-        test_sha2_base("SHA512LongMsg.rsp", Sha2Type::Sha512, true)
+        #[cfg(feature = "long_proving_tests")]
+        test_sha2_base("SHA512LongMsg.rsp", Sha2Type::Sha512, true)?;
+        Ok(())
     }
 }

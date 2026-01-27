@@ -144,6 +144,9 @@ jobs:
                 elif [[ "$crate" == "sha2" ]]; then
                   # also run proving tests
                   SPECIAL_ARGS="--run-ignored=all"
+                  if [[ ${{ github.event_name }} == "push" && ${{ github.ref }} == "refs/heads/main" ]]; then
+                    SPECIAL_ARGS="$SPECIAL_ARGS --features=long_proving_tests"
+                  fi
                 fi
 
                 ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} $SPECIAL_ARGS --no-tests=pass --test-threads=1
