@@ -6,12 +6,13 @@
 #include <cassert>
 
 inline constexpr size_t PERSISTENT_CHUNK = 8;
+inline constexpr size_t BLOCKS_PER_CHUNK = 2;
 inline constexpr size_t VOLATILE_CHUNK = 1;
 
-template <size_t CHUNK> struct BoundaryRecord {
+template <size_t CHUNK, size_t BLOCKS> struct BoundaryRecord {
     uint32_t address_space;
     uint32_t ptr;
-    uint32_t timestamp;
+    uint32_t timestamps[BLOCKS];
     uint32_t values[CHUNK];
 };
 
@@ -21,7 +22,7 @@ template <typename T> struct PersistentBoundaryCols {
     T leaf_label;
     T values[PERSISTENT_CHUNK];
     T hash[PERSISTENT_CHUNK];
-    T timestamp;
+    T timestamps[BLOCKS_PER_CHUNK];
 };
 
 inline constexpr size_t ADDR_ELTS = 2;
@@ -42,7 +43,7 @@ __global__ void cukernel_persistent_boundary_tracegen(
     size_t height,
     size_t width,
     uint8_t const *const *initial_mem,
-    BoundaryRecord<PERSISTENT_CHUNK> *records,
+    BoundaryRecord<PERSISTENT_CHUNK, BLOCKS_PER_CHUNK> *records,
     size_t num_records,
     FpArray<16> *poseidon2_buffer,
     uint32_t *poseidon2_buffer_idx,
@@ -53,7 +54,7 @@ __global__ void cukernel_persistent_boundary_tracegen(
     RowSlice row = RowSlice(trace + row_idx, height);
 
     if (record_idx < num_records) {
-        BoundaryRecord<PERSISTENT_CHUNK> record = records[record_idx];
+        BoundaryRecord<PERSISTENT_CHUNK, BLOCKS_PER_CHUNK> record = records[record_idx];
         Poseidon2Buffer poseidon2(poseidon2_buffer, poseidon2_buffer_idx, poseidon2_capacity);
         COL_WRITE_VALUE(row, PersistentBoundaryCols, address_space, record.address_space);
         COL_WRITE_VALUE(row, PersistentBoundaryCols, leaf_label, record.ptr / PERSISTENT_CHUNK);
@@ -77,24 +78,32 @@ __global__ void cukernel_persistent_boundary_tracegen(
             }
             FpArray<8> init_hash = poseidon2.hash_and_record(init_values);
             COL_WRITE_VALUE(row, PersistentBoundaryCols, expand_direction, Fp::one());
-            COL_WRITE_VALUE(row, PersistentBoundaryCols, timestamp, Fp::zero());
             COL_WRITE_ARRAY(
                 row, PersistentBoundaryCols, values, reinterpret_cast<Fp const *>(init_values.v)
             );
             COL_WRITE_ARRAY(
                 row, PersistentBoundaryCols, hash, reinterpret_cast<Fp const *>(init_hash.v)
             );
+            Fp ts_values[BLOCKS_PER_CHUNK];
+            for (int i = 0; i < BLOCKS_PER_CHUNK; ++i) {
+                ts_values[i] = Fp::zero();
+            }
+            COL_WRITE_ARRAY(row, PersistentBoundaryCols, timestamps, ts_values);
         } else {
             FpArray<8> final_values = FpArray<8>::from_raw_array(record.values);
             FpArray<8> final_hash = poseidon2.hash_and_record(final_values);
             COL_WRITE_VALUE(row, PersistentBoundaryCols, expand_direction, Fp::neg_one());
-            COL_WRITE_VALUE(row, PersistentBoundaryCols, timestamp, record.timestamp);
             COL_WRITE_ARRAY(
                 row, PersistentBoundaryCols, values, reinterpret_cast<Fp const *>(final_values.v)
             );
             COL_WRITE_ARRAY(
                 row, PersistentBoundaryCols, hash, reinterpret_cast<Fp const *>(final_hash.v)
             );
+            Fp ts_values[BLOCKS_PER_CHUNK];
+            for (int i = 0; i < BLOCKS_PER_CHUNK; ++i) {
+                ts_values[i] = Fp(record.timestamps[i]);
+            }
+            COL_WRITE_ARRAY(row, PersistentBoundaryCols, timestamps, ts_values);
         }
     } else {
         row.fill_zero(0, width);
@@ -105,7 +114,7 @@ __global__ void cukernel_volatile_boundary_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
-    BoundaryRecord<VOLATILE_CHUNK> const *records,
+    BoundaryRecord<VOLATILE_CHUNK, 1> const *records,
     size_t num_records,
     uint32_t *range_checker,
     size_t range_checker_num_bins,
@@ -122,7 +131,7 @@ __global__ void cukernel_volatile_boundary_tracegen(
             // For the sake of always filling `addr_lt_aux`
             row.fill_zero(0, width);
         }
-        BoundaryRecord<VOLATILE_CHUNK> record = records[idx];
+        BoundaryRecord<VOLATILE_CHUNK, 1> record = records[idx];
         rc.decompose(
             record.address_space,
             as_max_bits,
@@ -137,11 +146,11 @@ __global__ void cukernel_volatile_boundary_tracegen(
         );
         COL_WRITE_VALUE(row, VolatileBoundaryCols, initial_data, Fp::zero());
         COL_WRITE_VALUE(row, VolatileBoundaryCols, final_data, record.values[0]);
-        COL_WRITE_VALUE(row, VolatileBoundaryCols, final_timestamp, record.timestamp);
+        COL_WRITE_VALUE(row, VolatileBoundaryCols, final_timestamp, record.timestamps[0]);
         COL_WRITE_VALUE(row, VolatileBoundaryCols, is_valid, Fp::one());
 
         if (idx != num_records - 1) {
-            BoundaryRecord<VOLATILE_CHUNK> next_record = records[idx + 1];
+            BoundaryRecord<VOLATILE_CHUNK, 1> next_record = records[idx + 1];
             uint32_t curr[ADDR_ELTS] = {record.address_space, record.ptr};
             uint32_t next[ADDR_ELTS] = {next_record.address_space, next_record.ptr};
             IsLessThanArray::generate_subrow(
@@ -189,8 +198,8 @@ extern "C" int _persistent_boundary_tracegen(
     size_t poseidon2_capacity
 ) {
     auto [grid, block] = kernel_launch_params(height);
-    BoundaryRecord<PERSISTENT_CHUNK> *d_records =
-        reinterpret_cast<BoundaryRecord<PERSISTENT_CHUNK> *>(d_raw_records);
+    BoundaryRecord<PERSISTENT_CHUNK, BLOCKS_PER_CHUNK> *d_records =
+        reinterpret_cast<BoundaryRecord<PERSISTENT_CHUNK, BLOCKS_PER_CHUNK> *>(d_raw_records);
     FpArray<16> *d_poseidon2_buffer = reinterpret_cast<FpArray<16> *>(d_poseidon2_raw_buffer);
     cukernel_persistent_boundary_tracegen<<<grid, block>>>(
         d_trace,
@@ -218,7 +227,7 @@ extern "C" int _volatile_boundary_tracegen(
     size_t ptr_max_bits
 ) {
     auto [grid, block] = kernel_launch_params(height, 512);
-    auto d_records = reinterpret_cast<BoundaryRecord<VOLATILE_CHUNK> const *>(d_raw_records);
+    auto d_records = reinterpret_cast<BoundaryRecord<VOLATILE_CHUNK, 1> const *>(d_raw_records);
     cukernel_volatile_boundary_tracegen<<<grid, block>>>(
         d_trace,
         height,
