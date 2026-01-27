@@ -192,17 +192,6 @@ where
     }
 
     #[inline(always)]
-    pub fn vm_read_no_adapter<T: Copy + Debug, const BLOCK_SIZE: usize>(
-        &mut self,
-        addr_space: u32,
-        ptr: u32,
-    ) -> [T; BLOCK_SIZE] {
-        self.ctx
-            .on_memory_operation_no_adapter(addr_space, ptr, BLOCK_SIZE as u32);
-        self.host_read(addr_space, ptr)
-    }
-
-    #[inline(always)]
     pub fn vm_write<T: Copy + Debug, const BLOCK_SIZE: usize>(
         &mut self,
         addr_space: u32,
@@ -215,18 +204,6 @@ where
     }
 
     #[inline(always)]
-    pub fn vm_write_no_adapter<T: Copy + Debug, const BLOCK_SIZE: usize>(
-        &mut self,
-        addr_space: u32,
-        ptr: u32,
-        data: &[T; BLOCK_SIZE],
-    ) {
-        self.ctx
-            .on_memory_operation_no_adapter(addr_space, ptr, BLOCK_SIZE as u32);
-        self.host_write(addr_space, ptr, data)
-    }
-
-    #[inline(always)]
     pub fn vm_read_slice<T: Copy + Debug>(
         &mut self,
         addr_space: u32,
@@ -234,18 +211,6 @@ where
         len: usize,
     ) -> &[T] {
         self.ctx.on_memory_operation(addr_space, ptr, len as u32);
-        self.host_read_slice(addr_space, ptr, len)
-    }
-
-    #[inline(always)]
-    pub fn vm_read_slice_no_adapter<T: Copy + Debug>(
-        &mut self,
-        addr_space: u32,
-        ptr: u32,
-        len: usize,
-    ) -> &[T] {
-        self.ctx
-            .on_memory_operation_no_adapter(addr_space, ptr, len as u32);
         self.host_read_slice(addr_space, ptr, len)
     }
 
