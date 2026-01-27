@@ -238,7 +238,7 @@ where
 
         let ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
 
-        validate_metered_estimates(&vm, &trace_heights, &ctx, seg_idx, instret_start, num_insns);
+        validate_metered_estimates(&vm, &trace_heights, &ctx, seg_idx);
 
         if debug {
             debug_proving_ctx(&vm, &pk, &ctx);
@@ -276,8 +276,6 @@ fn validate_metered_estimates<E, VB>(
     estimated_heights: &[u32],
     ctx: &openvm_stark_backend::prover::types::ProvingContext<E::PB>,
     seg_idx: usize,
-    instret_start: u64,
-    num_insns: u64,
 ) where
     E: StarkFriEngine,
     VB: VmBuilder<E>,
@@ -323,15 +321,13 @@ fn validate_metered_estimates<E, VB>(
         assert!(
             estimated_padded >= realized,
             "Metered estimation underestimate for AIR {} ({}): estimated {} (padded {}) < realized {} \
-             (segment {}, instret_start={}, num_insns={})",
+             (segment {})",
             air_id,
             air_name,
             estimated,
             estimated_padded,
             realized,
-            seg_idx,
-            instret_start,
-            num_insns
+            seg_idx
         );
 
         // For some airs, the overestimates are expected
@@ -347,15 +343,13 @@ fn validate_metered_estimates<E, VB>(
         assert!(
             estimated_padded == realized,
             "Metered estimation mismatch for AIR {} ({}): estimated {} (padded {}) != realized {} \
-             (segment {}, instret_start={}, num_insns={})",
+             (segment {})",
             air_id,
             air_name,
             estimated,
             estimated_padded,
             realized,
-            seg_idx,
-            instret_start,
-            num_insns
+            seg_idx
         );
     }
 }
