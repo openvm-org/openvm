@@ -217,9 +217,9 @@ where
     let mut exit_code = None;
     for (seg_idx, segment) in segments.iter().enumerate() {
         let Segment {
-            instret_start,
             num_insns,
             trace_heights,
+            ..
         } = segment.clone();
         let from_state = Option::take(&mut state).unwrap();
         vm.transport_init_memory_to_device(&from_state.memory);
@@ -270,7 +270,8 @@ where
 /// Note: Metered execution stores un-padded counts, so we pad them for comparison.
 /// The proving context trace height (realized) is already padded.
 /// For most AIRs, estimated_padded should exactly equal realized.
-// For MemoryMerkleAir, Poseidon2PeripheryAir, PersistentBoundaryAir, and AccessAdapterAir, it is expected that estimated >> realized
+/// For MemoryMerkleAir, Poseidon2PeripheryAir, PersistentBoundaryAir, and AccessAdapterAir, it is
+/// expected that estimated >> realized
 fn validate_metered_estimates<E, VB>(
     vm: &VirtualMachine<E, VB>,
     estimated_heights: &[u32],
