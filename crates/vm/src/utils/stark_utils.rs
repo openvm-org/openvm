@@ -215,12 +215,12 @@ where
     let mut state = Some(vm.create_initial_state(&exe, input));
     let mut proofs = Vec::new();
     let mut exit_code = None;
-    for segment in segments {
+    for (seg_idx, segment) in segments.iter().enumerate() {
         let Segment {
+            instret_start,
             num_insns,
             trace_heights,
-            ..
-        } = segment;
+        } = segment.clone();
         let from_state = Option::take(&mut state).unwrap();
         vm.transport_init_memory_to_device(&from_state.memory);
         let PreflightExecutionOutput {
@@ -237,6 +237,9 @@ where
         exit_code = system_records.exit_code;
 
         let ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
+
+        validate_metered_estimates(&vm, &trace_heights, &ctx, seg_idx, instret_start, num_insns);
+
         if debug {
             debug_proving_ctx(&vm, &pk, &ctx);
         }
@@ -260,4 +263,99 @@ where
         .collect();
 
     Ok((final_memory, vdata))
+}
+
+/// Validates that metered execution estimates match realized trace heights.
+///
+/// Note: Metered execution stores un-padded counts, so we pad them for comparison.
+/// The proving context trace height (realized) is already padded.
+/// For most AIRs, estimated_padded should exactly equal realized.
+// For MemoryMerkleAir and Poseidon2PeripheryAir, it is expected that estimated >> realized
+fn validate_metered_estimates<E, VB>(
+    vm: &VirtualMachine<E, VB>,
+    estimated_heights: &[u32],
+    ctx: &openvm_stark_backend::prover::types::ProvingContext<E::PB>,
+    seg_idx: usize,
+    instret_start: u64,
+    num_insns: u64,
+) where
+    E: StarkFriEngine,
+    VB: VmBuilder<E>,
+{
+    use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
+
+    let air_names: Vec<_> = vm.air_names().collect();
+
+    // Iterate over all AIRs, not just those in ctx.per_air
+    for (air_id, &estimated_u32) in estimated_heights.iter().enumerate() {
+        let estimated = estimated_u32 as usize;
+        // Look up realized height from ctx.per_air, or 0 if not present
+        let realized = ctx
+            .per_air
+            .iter()
+            .find(|(id, _)| *id == air_id)
+            .map(|(_, air_ctx)| air_ctx.main_trace_height())
+            .unwrap_or(0);
+
+        // Pad the estimated height (realized is already padded from proving context)
+        let estimated_padded = next_power_of_two_or_zero(estimated);
+        let air_name = air_names.get(air_id).unwrap_or(&"unknown");
+
+        #[cfg(feature = "metrics")]
+        {
+            metrics::gauge!(
+                "metered_estimated_height",
+                "air_id" => air_id.to_string(),
+                "air_name" => air_name.to_string(),
+                "segment" => seg_idx.to_string(),
+            )
+            .set(estimated_padded as f64);
+            metrics::gauge!(
+                "metered_realized_height",
+                "air_id" => air_id.to_string(),
+                "air_name" => air_name.to_string(),
+                "segment" => seg_idx.to_string(),
+            )
+            .set(realized as f64);
+        }
+
+        // Check for underestimation: padded estimate should be >= realized
+        assert!(
+            estimated_padded >= realized,
+            "Metered estimation underestimate for AIR {} ({}): estimated {} (padded {}) < realized {} \
+             (segment {}, instret_start={}, num_insns={})",
+            air_id,
+            air_name,
+            estimated,
+            estimated_padded,
+            realized,
+            seg_idx,
+            instret_start,
+            num_insns
+        );
+
+        // For some airs, the overestimates are expected
+        if air_name.contains("MemoryMerkleAir")
+            || air_name.contains("Poseidon2PeripheryAir")
+            || air_name.contains("PersistentBoundaryAir")
+            || air_name.contains("AccessAdapterAir")
+        {
+            continue;
+        }
+
+        // Check that estimated_padded exactly matches realized
+        assert!(
+            estimated_padded == realized,
+            "Metered estimation mismatch for AIR {} ({}): estimated {} (padded {}) != realized {} \
+             (segment {}, instret_start={}, num_insns={})",
+            air_id,
+            air_name,
+            estimated,
+            estimated_padded,
+            realized,
+            seg_idx,
+            instret_start,
+            num_insns
+        );
+    }
 }
