@@ -332,10 +332,13 @@ fn validate_metered_estimates<E, VB>(
         );
 
         // For some airs, the overestimates are expected
+        let system_config: &crate::arch::SystemConfig = vm.config().as_ref();
+        let skip_access_adapter =
+            system_config.access_adapters_enabled() && air_name.contains("AccessAdapterAir");
         if air_name.contains("MemoryMerkleAir")
             || air_name.contains("Poseidon2PeripheryAir")
             || air_name.contains("PersistentBoundaryAir")
-            || air_name.contains("AccessAdapterAir")
+            || skip_access_adapter
         {
             continue;
         }
