@@ -29,15 +29,6 @@ use openvm_pairing_guest::bls12_381::BLS12_381_MODULUS;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
-#[cfg(feature = "cuda")]
-use {
-    crate::{EccRecord, WeierstrassAddNeChipGpu},
-    openvm_circuit::arch::testing::{
-        default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
-        GpuTestChipHarness,
-    },
-    openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
-};
 
 use crate::{
     get_ec_addne_air, get_ec_addne_chip, get_ec_addne_step, get_ec_double_air, get_ec_double_chip,
@@ -110,14 +101,6 @@ mod ec_addne_tests {
         WeierstrassChip<F, 2, BLOCKS, BLOCK_SIZE>,
     >;
 
-    #[cfg(feature = "cuda")]
-    type GpuHarness<const BLOCKS: usize, const BLOCK_SIZE: usize> = GpuTestChipHarness<
-        F,
-        EcAddNeExecutor<BLOCKS, BLOCK_SIZE>,
-        WeierstrassAir<2, BLOCKS, BLOCK_SIZE>,
-        WeierstrassAddNeChipGpu<BLOCKS, BLOCK_SIZE>,
-        WeierstrassChip<F, 2, BLOCKS, BLOCK_SIZE>,
-    >;
 
     fn create_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
         tester: &VmChipTestBuilder<F>,
@@ -163,54 +146,6 @@ mod ec_addne_tests {
         (harness, (bitwise_chip.air, bitwise_chip))
     }
 
-    #[cfg(feature = "cuda")]
-    fn create_cuda_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-        tester: &GpuChipTestBuilder,
-        config: ExprBuilderConfig,
-        offset: usize,
-    ) -> GpuHarness<BLOCKS, BLOCK_SIZE> {
-        use openvm_circuit::arch::testing::{
-            default_bitwise_lookup_bus, default_var_range_checker_bus,
-        };
-
-        // getting bus from tester since `gpu_chip` and `air` must use the same bus
-        let range_bus = default_var_range_checker_bus();
-        let bitwise_bus = default_bitwise_lookup_bus();
-        // creating a dummy chip for Cpu so we only count `add_count`s from GPU
-        let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-            bitwise_bus,
-        ));
-
-        let air = get_ec_addne_air(
-            tester.execution_bridge(),
-            tester.memory_bridge(),
-            config.clone(),
-            range_bus,
-            bitwise_bus,
-            tester.address_bits(),
-            offset,
-        );
-        let executor = get_ec_addne_step(config.clone(), range_bus, tester.address_bits(), offset);
-
-        let cpu_chip = get_ec_addne_chip(
-            config.clone(),
-            tester.dummy_memory_helper(),
-            dummy_range_checker_chip,
-            dummy_bitwise_chip,
-            tester.address_bits(),
-        );
-        let gpu_chip = WeierstrassAddNeChipGpu::new(
-            tester.range_checker(),
-            tester.bitwise_op_lookup(),
-            config,
-            offset,
-            tester.address_bits() as u32,
-            tester.timestamp_max_bits() as u32,
-        );
-
-        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
-    }
 
     #[allow(clippy::too_many_arguments)]
     fn set_and_execute_ec_addne<
@@ -411,94 +346,6 @@ mod ec_addne_tests {
         );
     }
 
-    #[cfg(feature = "cuda")]
-    fn run_cuda_ec_addne<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize>(
-        offset: usize,
-        modulus: BigUint,
-    ) {
-        let mut rng = create_seeded_rng();
-
-        let mut tester =
-            GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
-
-        let config = ExprBuilderConfig {
-            modulus: modulus.clone(),
-            num_limbs: NUM_LIMBS,
-            limb_bits: LIMB_BITS,
-        };
-
-        let mut harness = create_cuda_harness::<BLOCKS, BLOCK_SIZE>(&tester, config, offset);
-
-        set_and_execute_ec_addne::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
-            &mut tester,
-            &mut harness.executor,
-            &mut harness.dense_arena,
-            &mut rng,
-            &modulus,
-            true,
-            offset,
-            None,
-            None,
-        );
-
-        set_and_execute_ec_addne::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
-            &mut tester,
-            &mut harness.executor,
-            &mut harness.dense_arena,
-            &mut rng,
-            &modulus,
-            false,
-            offset,
-            Some(SampleEcPoints[0].clone()),
-            Some(SampleEcPoints[1].clone()),
-        );
-
-        set_and_execute_ec_addne::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
-            &mut tester,
-            &mut harness.executor,
-            &mut harness.dense_arena,
-            &mut rng,
-            &modulus,
-            false,
-            offset,
-            Some(SampleEcPoints[2].clone()),
-            Some(SampleEcPoints[3].clone()),
-        );
-
-        harness
-            .dense_arena
-            .get_record_seeker::<EccRecord<2, BLOCKS, BLOCK_SIZE>, _>()
-            .transfer_to_matrix_arena(
-                &mut harness.matrix_arena,
-                harness.executor.get_record_layout::<F>(),
-            );
-
-        tester
-            .build()
-            .load_gpu_harness(harness)
-            .finalize()
-            .simple_test()
-            .unwrap();
-    }
-
-    #[cfg(feature = "cuda")]
-    #[test]
-    fn test_weierstrass_addne_cuda_2x32() {
-        run_cuda_ec_addne::<2, 32, 32>(
-            Rv32WeierstrassOpcode::CLASS_OFFSET,
-            secp256k1_coord_prime(),
-        );
-    }
-
-    #[cfg(feature = "cuda")]
-    #[test]
-    fn test_weierstrass_addne_cuda_6x16() {
-        run_cuda_ec_addne::<6, 16, 48>(
-            Rv32WeierstrassOpcode::CLASS_OFFSET,
-            BLS12_381_MODULUS.clone(),
-        );
-    }
-
     ///////////////////////////////////////////////////////////////////////////////////////
     /// SANITY TESTS
     ///
@@ -555,17 +402,7 @@ mod ec_double_tests {
         MatrixRecordArena<F>,
     >;
 
-    #[cfg(feature = "cuda")]
-    use crate::WeierstrassDoubleChipGpu;
 
-    #[cfg(feature = "cuda")]
-    type GpuHarness<const BLOCKS: usize, const BLOCK_SIZE: usize> = GpuTestChipHarness<
-        F,
-        EcDoubleExecutor<BLOCKS, BLOCK_SIZE>,
-        WeierstrassAir<1, BLOCKS, BLOCK_SIZE>,
-        WeierstrassDoubleChipGpu<BLOCKS, BLOCK_SIZE>,
-        WeierstrassChip<F, 1, BLOCKS, BLOCK_SIZE>,
-    >;
 
     fn create_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
         tester: &VmChipTestBuilder<F>,
@@ -613,60 +450,6 @@ mod ec_double_tests {
         (harness, (bitwise_chip.air, bitwise_chip))
     }
 
-    #[cfg(feature = "cuda")]
-    fn create_cuda_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-        tester: &GpuChipTestBuilder,
-        config: ExprBuilderConfig,
-        offset: usize,
-        a_biguint: BigUint,
-    ) -> GpuHarness<BLOCKS, BLOCK_SIZE> {
-        // getting bus from tester since `gpu_chip` and `air` must use the same bus
-        let range_bus = default_var_range_checker_bus();
-        let bitwise_bus = default_bitwise_lookup_bus();
-        // creating a dummy chip for Cpu so we only count `add_count`s from GPU
-        let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-            bitwise_bus,
-        ));
-
-        let air = get_ec_double_air(
-            tester.execution_bridge(),
-            tester.memory_bridge(),
-            config.clone(),
-            range_bus,
-            bitwise_bus,
-            tester.address_bits(),
-            offset,
-            a_biguint.clone(),
-        );
-        let executor = get_ec_double_step(
-            config.clone(),
-            range_bus,
-            tester.address_bits(),
-            offset,
-            a_biguint.clone(),
-        );
-
-        let cpu_chip = get_ec_double_chip(
-            config.clone(),
-            tester.dummy_memory_helper(),
-            dummy_range_checker_chip,
-            dummy_bitwise_chip,
-            tester.address_bits(),
-            a_biguint.clone(),
-        );
-        let gpu_chip = WeierstrassDoubleChipGpu::new(
-            tester.range_checker(),
-            tester.bitwise_op_lookup(),
-            config,
-            offset,
-            a_biguint,
-            tester.address_bits() as u32,
-            tester.timestamp_max_bits() as u32,
-        );
-
-        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
-    }
 
     #[allow(clippy::too_many_arguments)]
     fn set_and_execute_ec_double<
@@ -879,149 +662,6 @@ mod ec_double_tests {
     #[test]
     fn test_ec_double_6x16() {
         run_ec_double_test::<6, 16, 48>(
-            Rv32WeierstrassOpcode::CLASS_OFFSET,
-            BLS12_381_MODULUS.clone(),
-            50,
-            BigUint::zero(),
-        );
-    }
-
-    #[cfg(feature = "cuda")]
-    fn run_ec_double_cuda_test<
-        const BLOCKS: usize,
-        const BLOCK_SIZE: usize,
-        const NUM_LIMBS: usize,
-    >(
-        offset: usize,
-        modulus: BigUint,
-        num_ops: usize,
-        a: BigUint,
-    ) {
-        let mut rng = create_seeded_rng();
-
-        let mut tester =
-            GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
-
-        let config = ExprBuilderConfig {
-            modulus: modulus.clone(),
-            num_limbs: NUM_LIMBS,
-            limb_bits: LIMB_BITS,
-        };
-
-        let mut harness =
-            create_cuda_harness::<BLOCKS, BLOCK_SIZE>(&tester, config, offset, a.clone());
-
-        for i in 0..num_ops {
-            set_and_execute_ec_double::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
-                &mut tester,
-                &mut harness.executor,
-                &mut harness.dense_arena,
-                &mut rng,
-                &modulus,
-                &a,
-                i == 0,
-                offset,
-                None,
-                None,
-            );
-        }
-
-        set_and_execute_ec_double::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
-            &mut tester,
-            &mut harness.executor,
-            &mut harness.dense_arena,
-            &mut rng,
-            &modulus,
-            &a,
-            false,
-            offset,
-            Some(SampleEcPoints[0].0.clone()),
-            Some(SampleEcPoints[0].1.clone()),
-        );
-
-        set_and_execute_ec_double::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
-            &mut tester,
-            &mut harness.executor,
-            &mut harness.dense_arena,
-            &mut rng,
-            &modulus,
-            &a,
-            false,
-            offset,
-            Some(SampleEcPoints[1].0.clone()),
-            Some(SampleEcPoints[1].1.clone()),
-        );
-
-        // Testing data from: http://point-at-infinity.org/ecc/nisttv
-        let p1_x = BigUint::from_str_radix(
-            "6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296",
-            16,
-        )
-        .unwrap();
-        let p1_y = BigUint::from_str_radix(
-            "4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5",
-            16,
-        )
-        .unwrap();
-
-        set_and_execute_ec_double::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
-            &mut tester,
-            &mut harness.executor,
-            &mut harness.dense_arena,
-            &mut rng,
-            &modulus,
-            &a,
-            false,
-            offset,
-            Some(p1_x),
-            Some(p1_y),
-        );
-
-        harness
-            .dense_arena
-            .get_record_seeker::<EccRecord<1, BLOCKS, BLOCK_SIZE>, _>()
-            .transfer_to_matrix_arena(
-                &mut harness.matrix_arena,
-                harness.executor.get_record_layout::<F>(),
-            );
-
-        tester
-            .build()
-            .load_gpu_harness(harness)
-            .finalize()
-            .simple_test()
-            .unwrap();
-    }
-
-    #[cfg(feature = "cuda")]
-    #[test]
-    fn test_ec_double_cuda_2x32() {
-        run_ec_double_cuda_test::<2, 32, 32>(
-            Rv32WeierstrassOpcode::CLASS_OFFSET,
-            secp256k1_coord_prime(),
-            50,
-            BigUint::zero(),
-        );
-    }
-
-    #[cfg(feature = "cuda")]
-    #[test]
-    fn test_ec_double_cuda_2x32_nonzero_a_1() {
-        let coeff_a = (-secp256r1::Fp::from(3)).to_bytes();
-        let a = BigUint::from_bytes_le(&coeff_a);
-
-        run_ec_double_cuda_test::<2, 32, 32>(
-            Rv32WeierstrassOpcode::CLASS_OFFSET,
-            secp256r1_coord_prime(),
-            50,
-            a,
-        );
-    }
-
-    #[cfg(feature = "cuda")]
-    #[test]
-    fn test_ec_double_cuda_6x16() {
-        run_ec_double_cuda_test::<6, 16, 48>(
             Rv32WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
             50,
