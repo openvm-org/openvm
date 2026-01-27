@@ -29,6 +29,9 @@ type H = [F; DIGEST_WIDTH];
 /// Width of `((u32, u32), TimestampedValues<F, CONST_BLOCK_SIZE>)` in u32 units.
 /// = 2 (key) + 1 (timestamp) + CONST_BLOCK_SIZE (values)
 pub const TIMESTAMPED_BLOCK_WIDTH: usize = 3 + CONST_BLOCK_SIZE;
+/// Width of `((u32, u32), TimestampedValues<F, DIGEST_WIDTH>)` in u32 units.
+/// = 2 (key) + 1 (timestamp) + DIGEST_WIDTH (values)
+pub const MERKLE_TOUCHED_BLOCK_WIDTH: usize = 3 + DIGEST_WIDTH;
 
 /// A Merkle subtree stored in a single flat buffer, combining a vertical path and a heap-ordered
 /// binary tree.
@@ -334,7 +337,7 @@ impl MemoryMerkleTree {
     pub fn update_with_touched_blocks(
         &mut self,
         unpadded_height: usize,
-        d_touched_blocks: &DeviceBuffer<u32>, // consists of (as, label, ts, [F; 8])
+        d_touched_blocks: &DeviceBuffer<u32>, // consists of (as, label, ts, [F; DIGEST_WIDTH])
         empty_touched_blocks: bool,
     ) -> AirProvingContext<GpuBackend> {
         let mut public_values = self.top_roots.to_host().unwrap()[0].to_vec();
@@ -393,9 +396,10 @@ impl MemoryMerkleTree {
     }
 
     /// An auxiliary function to calculate the required number of rows for the merkle trace.
-    pub fn calculate_unpadded_height(
+    /// Generic over BLOCK_SIZE since only addresses are used, not values.
+    pub fn calculate_unpadded_height<const BLOCK_SIZE: usize>(
         &self,
-        touched_memory: &TimestampedEquipartition<F, CONST_BLOCK_SIZE>,
+        touched_memory: &TimestampedEquipartition<F, BLOCK_SIZE>,
     ) -> usize {
         let md = self.mem_config.memory_dimensions();
         let tree_height = md.overall_height();
@@ -409,7 +413,8 @@ impl MemoryMerkleTree {
                     .map(|i| {
                         let x = md.label_to_index(shift_address(touched_memory[i].0));
                         let y = md.label_to_index(shift_address(touched_memory[i + 1].0));
-                        (x ^ y).ilog2() as usize
+                        let xor = x ^ y;
+                        if xor == 0 { 0 } else { xor.ilog2() as usize }
                     })
                     .sum::<usize>()
         }

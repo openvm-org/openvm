@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use openvm_circuit::{
     arch::{
@@ -12,7 +12,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{prover_backend::GpuBackend, types::F};
 use openvm_cuda_common::{
-    copy::{cuda_memcpy, MemCopyD2D, MemCopyH2D},
+    copy::{cuda_memcpy, MemCopyH2D},
     d_buffer::DeviceBuffer,
     memory_manager::MemTracker,
 };
@@ -22,8 +22,8 @@ use openvm_stark_backend::{
 
 use super::{
     access_adapters::AccessAdapterInventoryGPU,
-    boundary::{BoundaryChipGPU, BoundaryFields},
-    merkle_tree::{MemoryMerkleTree, TIMESTAMPED_BLOCK_WIDTH},
+    boundary::{BoundaryChipGPU, BoundaryFields, PersistentBoundaryRecord},
+    merkle_tree::{MemoryMerkleTree, MERKLE_TOUCHED_BLOCK_WIDTH, TIMESTAMPED_BLOCK_WIDTH},
     Poseidon2PeripheryChipGPU, DIGEST_WIDTH,
 };
 
@@ -151,7 +151,34 @@ impl MemoryInventoryGPU {
                 }
 
                 mem.tracing_info("boundary finalize");
-                let (touched_memory, empty) = if partition.is_empty() {
+                let read_chunk_from_device_raw =
+                    |addr_space: u32, chunk_ptr: u32| -> [F; DIGEST_WIDTH] {
+                        let mut res = [F::ZERO; DIGEST_WIDTH];
+                        let addr_space_idx = addr_space as usize;
+                        let d_mem = &persistent.initial_memory[addr_space_idx];
+                        if d_mem.is_empty() {
+                            return res;
+                        }
+                        let layout = &persistent.merkle_tree.mem_config().addr_spaces[addr_space_idx]
+                            .layout;
+                        let one_cell_size = layout.size();
+                        let offset = chunk_ptr as usize * one_cell_size;
+                        let mut values = vec![0u8; one_cell_size * DIGEST_WIDTH];
+                        unsafe {
+                            cuda_memcpy::<true, false>(
+                                values.as_mut_ptr() as *mut std::ffi::c_void,
+                                d_mem.as_ptr().add(offset) as *const std::ffi::c_void,
+                                values.len(),
+                            )
+                            .unwrap();
+                            for i in 0..DIGEST_WIDTH {
+                                res[i] = layout.to_field::<F>(&values[i * one_cell_size..]);
+                            }
+                        }
+                        res
+                    };
+                let partition_is_empty = partition.is_empty();
+                let (touched_memory, empty) = if partition_is_empty {
                     let leftmost_values = 'left: {
                         let mut res = [F::ZERO; CONST_BLOCK_SIZE];
                         if persistent.initial_memory[ADDR_SPACE_OFFSET as usize].is_empty() {
@@ -190,24 +217,87 @@ impl MemoryInventoryGPU {
                 } else {
                     (partition, false)
                 };
+                let merkle_touched_memory = {
+                    let mut chunk_map: BTreeMap<(u32, u32), (u32, [F; DIGEST_WIDTH])> =
+                        BTreeMap::new();
+                    for &((addr_space, ptr), ts_values) in touched_memory.iter() {
+                        let chunk_ptr = (ptr / DIGEST_WIDTH as u32) * DIGEST_WIDTH as u32;
+                        let block_idx_in_chunk =
+                            ((ptr % DIGEST_WIDTH as u32) / CONST_BLOCK_SIZE as u32) as usize;
+                        let entry = chunk_map.entry((addr_space, chunk_ptr)).or_insert_with(|| {
+                            (
+                                0u32,
+                                read_chunk_from_device_raw(addr_space, chunk_ptr),
+                            )
+                        });
+                        entry.0 = entry.0.max(ts_values.timestamp);
+                        for (i, val) in ts_values.values.iter().copied().enumerate() {
+                            entry.1[block_idx_in_chunk * CONST_BLOCK_SIZE + i] = val;
+                        }
+                    }
+                    chunk_map
+                        .into_iter()
+                        .map(|((addr_space, ptr), (timestamp, values))| {
+                            (
+                                (addr_space, ptr),
+                                TimestampedValues { timestamp, values },
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                };
+                let boundary_records = if partition_is_empty {
+                    Vec::new()
+                } else {
+                    let mut chunk_map: BTreeMap<
+                        (u32, u32),
+                        ([u32; DIGEST_WIDTH / CONST_BLOCK_SIZE], [F; DIGEST_WIDTH]),
+                    > = BTreeMap::new();
+                    for &((addr_space, ptr), ts_values) in touched_memory.iter() {
+                        let chunk_ptr = (ptr / DIGEST_WIDTH as u32) * DIGEST_WIDTH as u32;
+                        let block_idx_in_chunk =
+                            ((ptr % DIGEST_WIDTH as u32) / CONST_BLOCK_SIZE as u32) as usize;
+                        let entry = chunk_map.entry((addr_space, chunk_ptr)).or_insert_with(|| {
+                            (
+                                [0u32; DIGEST_WIDTH / CONST_BLOCK_SIZE],
+                                read_chunk_from_device_raw(addr_space, chunk_ptr),
+                            )
+                        });
+                        entry.0[block_idx_in_chunk] = ts_values.timestamp;
+                        for (i, val) in ts_values.values.iter().copied().enumerate() {
+                            entry.1[block_idx_in_chunk * CONST_BLOCK_SIZE + i] = val;
+                        }
+                    }
+                    chunk_map
+                        .into_iter()
+                        .map(|((addr_space, ptr), (timestamps, values))| {
+                            PersistentBoundaryRecord {
+                                address_space: addr_space,
+                                ptr,
+                                timestamps,
+                                values,
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                };
                 debug_assert_eq!(
                     size_of_val(&touched_memory[0]),
                     TIMESTAMPED_BLOCK_WIDTH * size_of::<u32>()
                 );
-                let d_touched_memory = touched_memory.to_device().unwrap().as_buffer::<u32>();
-                if empty {
-                    self.boundary
-                        .finalize_records_persistent::<DIGEST_WIDTH>(DeviceBuffer::new());
-                } else {
-                    self.boundary.finalize_records_persistent::<DIGEST_WIDTH>(
-                        d_touched_memory.device_copy().unwrap().as_buffer::<u32>(),
-                    ); // TODO do not copy
-                }
+                let d_merkle_touched_memory = merkle_touched_memory
+                    .to_device()
+                    .unwrap()
+                    .as_buffer::<u32>();
+                debug_assert_eq!(
+                    size_of_val(&merkle_touched_memory[0]),
+                    MERKLE_TOUCHED_BLOCK_WIDTH * size_of::<u32>()
+                );
+                self.boundary
+                    .finalize_records_persistent::<DIGEST_WIDTH>(boundary_records);
                 mem.tracing_info("merkle update");
                 persistent.merkle_tree.finalize();
                 let merkle_tree_ctx = persistent.merkle_tree.update_with_touched_blocks(
                     unpadded_merkle_height,
-                    &d_touched_memory,
+                    &d_merkle_touched_memory,
                     empty,
                 );
                 Some(merkle_tree_ctx)

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use openvm_circuit::{
+    arch::CONST_BLOCK_SIZE,
     system::memory::{
         persistent::PersistentBoundaryCols, volatile::VolatileBoundaryCols,
         TimestampedEquipartition, TimestampedValues,
@@ -19,7 +20,7 @@ use openvm_stark_backend::{
     Chip,
 };
 
-use super::{merkle_tree::TIMESTAMPED_BLOCK_WIDTH, poseidon2::SharedBuffer};
+use super::{poseidon2::SharedBuffer, DIGEST_WIDTH};
 use crate::cuda_abi::boundary::{persistent_boundary_tracegen, volatile_boundary_tracegen};
 
 pub struct PersistentBoundary {
@@ -28,7 +29,7 @@ pub struct PersistentBoundary {
     /// This struct cannot own the device memory, hence we take extra care not to use memory we
     /// don't own. TODO: use `Arc<DeviceBuffer>` instead?
     pub initial_leaves: Vec<*const std::ffi::c_void>,
-    pub touched_blocks: Option<DeviceBuffer<u32>>,
+    pub records: Option<DeviceBuffer<u32>>,
 }
 
 pub struct VolatileBoundary {
@@ -49,13 +50,24 @@ pub struct BoundaryChipGPU {
     pub trace_width: Option<usize>,
 }
 
+const BLOCKS_PER_CHUNK: usize = DIGEST_WIDTH / CONST_BLOCK_SIZE;
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct PersistentBoundaryRecord {
+    pub address_space: u32,
+    pub ptr: u32,
+    pub timestamps: [u32; BLOCKS_PER_CHUNK],
+    pub values: [F; DIGEST_WIDTH],
+}
+
 impl BoundaryChipGPU {
     pub fn persistent(poseidon2_buffer: SharedBuffer<F>) -> Self {
         Self {
             fields: BoundaryFields::Persistent(PersistentBoundary {
                 poseidon2_buffer,
                 initial_leaves: Vec::new(),
-                touched_blocks: None,
+                records: None,
             }),
             num_records: None,
             trace_width: None,
@@ -106,14 +118,18 @@ impl BoundaryChipGPU {
 
     pub fn finalize_records_persistent<const CHUNK: usize>(
         &mut self,
-        touched_blocks: DeviceBuffer<u32>,
+        records: Vec<PersistentBoundaryRecord>,
     ) {
         match &mut self.fields {
             BoundaryFields::Volatile(_) => panic!("call `finalize_records_volatile`"),
             BoundaryFields::Persistent(fields) => {
-                self.num_records = Some(touched_blocks.len() / TIMESTAMPED_BLOCK_WIDTH);
+                self.num_records = Some(records.len());
                 self.trace_width = Some(PersistentBoundaryCols::<F, CHUNK>::width());
-                fields.touched_blocks = Some(touched_blocks);
+                fields.records = Some(if records.is_empty() {
+                    DeviceBuffer::new()
+                } else {
+                    records.to_device().unwrap().as_buffer::<u32>()
+                });
             }
         }
     }
@@ -144,7 +160,7 @@ impl<RA> Chip<RA, GpuBackend> for BoundaryChipGPU {
                         trace.height(),
                         trace.width(),
                         &mem_ptrs,
-                        boundary.touched_blocks.as_ref().unwrap(),
+                        boundary.records.as_ref().unwrap(),
                         num_records,
                         &boundary.poseidon2_buffer.buffer,
                         &boundary.poseidon2_buffer.idx,
