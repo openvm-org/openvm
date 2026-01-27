@@ -37,7 +37,9 @@ use strum::EnumCount;
 use crate::{
     get_ec_addne_air, get_ec_addne_chip, get_ec_addne_step, get_ec_double_air, get_ec_double_chip,
     get_ec_double_step, EcAddNeExecutor, EcDoubleExecutor, EccCpuProverExt, WeierstrassAir,
+    ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
+use openvm_circuit::arch::CONST_BLOCK_SIZE;
 
 #[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
@@ -102,11 +104,11 @@ impl WeierstrassExtension {
 )]
 pub enum WeierstrassExtensionExecutor {
     // 32 limbs prime
-    EcAddNeRv32_32(EcAddNeExecutor<16, 4>),
-    EcDoubleRv32_32(EcDoubleExecutor<16, 4>),
+    EcAddNeRv32_32(EcAddNeExecutor<ECC_BLOCKS_32, CONST_BLOCK_SIZE>),
+    EcDoubleRv32_32(EcDoubleExecutor<ECC_BLOCKS_32, CONST_BLOCK_SIZE>),
     // 48 limbs prime
-    EcAddNeRv32_48(EcAddNeExecutor<24, 4>),
-    EcDoubleRv32_48(EcDoubleExecutor<24, 4>),
+    EcAddNeRv32_48(EcAddNeExecutor<ECC_BLOCKS_48, CONST_BLOCK_SIZE>),
+    EcDoubleRv32_48(EcDoubleExecutor<ECC_BLOCKS_48, CONST_BLOCK_SIZE>),
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
@@ -122,12 +124,12 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
         for (i, curve) in self.supported_curves.iter().enumerate() {
             let start_offset =
                 Rv32WeierstrassOpcode::CLASS_OFFSET + i * Rv32WeierstrassOpcode::COUNT;
-            let bytes = curve.modulus.bits().div_ceil(8);
+            let bytes = curve.modulus.bits().div_ceil(8) as usize;
 
-            if bytes <= 32 {
+            if bytes <= NUM_LIMBS_32 {
                 let config = ExprBuilderConfig {
                     modulus: curve.modulus.clone(),
-                    num_limbs: 32,
+                    num_limbs: NUM_LIMBS_32,
                     limb_bits: 8,
                 };
                 let addne = get_ec_addne_step(
@@ -158,10 +160,10 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                         ..=(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
-            } else if bytes <= 48 {
+            } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: curve.modulus.clone(),
-                    num_limbs: 48,
+                    num_limbs: NUM_LIMBS_48,
                     limb_bits: 8,
                 };
                 let addne = get_ec_addne_step(
@@ -228,16 +230,16 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
         for (i, curve) in self.supported_curves.iter().enumerate() {
             let start_offset =
                 Rv32WeierstrassOpcode::CLASS_OFFSET + i * Rv32WeierstrassOpcode::COUNT;
-            let bytes = curve.modulus.bits().div_ceil(8);
+            let bytes = curve.modulus.bits().div_ceil(8) as usize;
 
-            if bytes <= 32 {
+            if bytes <= NUM_LIMBS_32 {
                 let config = ExprBuilderConfig {
                     modulus: curve.modulus.clone(),
-                    num_limbs: 32,
+                    num_limbs: NUM_LIMBS_32,
                     limb_bits: 8,
                 };
 
-                let addne = get_ec_addne_air::<16, 4>(
+                let addne = get_ec_addne_air::<ECC_BLOCKS_32, CONST_BLOCK_SIZE>(
                     exec_bridge,
                     memory_bridge,
                     config.clone(),
@@ -248,7 +250,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                 );
                 inventory.add_air(addne);
 
-                let double = get_ec_double_air::<16, 4>(
+                let double = get_ec_double_air::<ECC_BLOCKS_32, CONST_BLOCK_SIZE>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -259,14 +261,14 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                     curve.a.clone(),
                 );
                 inventory.add_air(double);
-            } else if bytes <= 48 {
+            } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: curve.modulus.clone(),
-                    num_limbs: 48,
+                    num_limbs: NUM_LIMBS_48,
                     limb_bits: 8,
                 };
 
-                let addne = get_ec_addne_air::<24, 4>(
+                let addne = get_ec_addne_air::<ECC_BLOCKS_48, CONST_BLOCK_SIZE>(
                     exec_bridge,
                     memory_bridge,
                     config.clone(),
@@ -277,7 +279,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                 );
                 inventory.add_air(addne);
 
-                let double = get_ec_double_air::<24, 4>(
+                let double = get_ec_double_air::<ECC_BLOCKS_48, CONST_BLOCK_SIZE>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -329,17 +331,17 @@ where
             }
         };
         for curve in extension.supported_curves.iter() {
-            let bytes = curve.modulus.bits().div_ceil(8);
+            let bytes = curve.modulus.bits().div_ceil(8) as usize;
 
-            if bytes <= 32 {
+            if bytes <= NUM_LIMBS_32 {
                 let config = ExprBuilderConfig {
                     modulus: curve.modulus.clone(),
-                    num_limbs: 32,
+                    num_limbs: NUM_LIMBS_32,
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<WeierstrassAir<2, 16, 4>>()?;
-                let addne = get_ec_addne_chip::<Val<SC>, 16, 4>(
+                inventory.next_air::<WeierstrassAir<2, ECC_BLOCKS_32, CONST_BLOCK_SIZE>>()?;
+                let addne = get_ec_addne_chip::<Val<SC>, ECC_BLOCKS_32, CONST_BLOCK_SIZE>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -348,8 +350,8 @@ where
                 );
                 inventory.add_executor_chip(addne);
 
-                inventory.next_air::<WeierstrassAir<1, 16, 4>>()?;
-                let double = get_ec_double_chip::<Val<SC>, 16, 4>(
+                inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_32, CONST_BLOCK_SIZE>>()?;
+                let double = get_ec_double_chip::<Val<SC>, ECC_BLOCKS_32, CONST_BLOCK_SIZE>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -358,15 +360,15 @@ where
                     curve.a.clone(),
                 );
                 inventory.add_executor_chip(double);
-            } else if bytes <= 48 {
+            } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: curve.modulus.clone(),
-                    num_limbs: 48,
+                    num_limbs: NUM_LIMBS_48,
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<WeierstrassAir<2, 24, 4>>()?;
-                let addne = get_ec_addne_chip::<Val<SC>, 24, 4>(
+                inventory.next_air::<WeierstrassAir<2, ECC_BLOCKS_48, CONST_BLOCK_SIZE>>()?;
+                let addne = get_ec_addne_chip::<Val<SC>, ECC_BLOCKS_48, CONST_BLOCK_SIZE>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -375,8 +377,8 @@ where
                 );
                 inventory.add_executor_chip(addne);
 
-                inventory.next_air::<WeierstrassAir<1, 24, 4>>()?;
-                let double = get_ec_double_chip::<Val<SC>, 24, 4>(
+                inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_48, CONST_BLOCK_SIZE>>()?;
+                let double = get_ec_double_chip::<Val<SC>, ECC_BLOCKS_48, CONST_BLOCK_SIZE>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),

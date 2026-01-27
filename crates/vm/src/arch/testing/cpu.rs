@@ -5,7 +5,11 @@ use openvm_circuit::arch::CONST_BLOCK_SIZE;
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, NATIVE_AS};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    NATIVE_AS,
+};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::VerificationData,
@@ -184,13 +188,15 @@ where
     ) -> (usize, usize) {
         let register = self.get_default_register(reg_increment);
         let pointer = self.get_default_pointer(pointer_increment);
-        // Write pointer in 4-byte chunks to avoid generating access adapter records
-        // when access adapters are disabled (min_block_size = 4 for register address space).
-        let ptr_bytes = pointer.to_le_bytes();
-        let first_4: [u8; 4] = ptr_bytes[0..4].try_into().unwrap();
-        let second_4: [u8; 4] = ptr_bytes[4..8].try_into().unwrap();
-        self.write::<4>(1, register, first_4.map(F::from_canonical_u8));
-        self.write::<4>(1, register + 4, second_4.map(F::from_canonical_u8));
+        // Write pointer in CONST_BLOCK_SIZE-byte chunks to avoid generating access adapter records
+        // when access adapters are disabled (min_block_size = CONST_BLOCK_SIZE for register address space).
+        // The pointer is RV32_REGISTER_NUM_LIMBS bytes (32-bit for RV32).
+        let ptr_bytes = (pointer as u32).to_le_bytes();
+        for i in (0..RV32_REGISTER_NUM_LIMBS).step_by(CONST_BLOCK_SIZE) {
+            let chunk: [u8; CONST_BLOCK_SIZE] =
+                ptr_bytes[i..i + CONST_BLOCK_SIZE].try_into().unwrap();
+            self.write::<CONST_BLOCK_SIZE>(1, register + i, chunk.map(F::from_canonical_u8));
+        }
         (register, pointer)
     }
 
@@ -245,19 +251,25 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         pointer: usize,
         writes: Vec<[F; NUM_LIMBS]>,
     ) {
-        // Write pointer in 4-byte chunks to avoid generating access adapter records
-        // when access adapters are disabled (min_block_size = 4 for register address space).
-        let ptr_bytes = pointer.to_le_bytes();
-        let first_4: [u8; 4] = ptr_bytes[0..4].try_into().unwrap();
-        let second_4: [u8; 4] = ptr_bytes[4..8].try_into().unwrap();
-        self.write::<4>(1usize, register, first_4.map(F::from_canonical_u8));
-        self.write::<4>(1usize, register + 4, second_4.map(F::from_canonical_u8));
-        // Always write in 4-byte chunks (CONST_BLOCK_SIZE) to avoid generating
+        // Write pointer in CONST_BLOCK_SIZE-byte chunks to avoid generating access adapter records
+        // when access adapters are disabled (min_block_size = CONST_BLOCK_SIZE for register address space).
+        // The pointer is RV32_REGISTER_NUM_LIMBS bytes (32-bit for RV32).
+        let ptr_bytes = (pointer as u32).to_le_bytes();
+        for i in (0..RV32_REGISTER_NUM_LIMBS).step_by(CONST_BLOCK_SIZE) {
+            let chunk: [u8; CONST_BLOCK_SIZE] =
+                ptr_bytes[i..i + CONST_BLOCK_SIZE].try_into().unwrap();
+            self.write::<CONST_BLOCK_SIZE>(1usize, register + i, chunk.map(F::from_canonical_u8));
+        }
+        // Always write in CONST_BLOCK_SIZE-byte chunks to avoid generating
         // access adapter records when access adapters are disabled.
         for (i, &write) in writes.iter().enumerate() {
             let ptr = pointer + i * NUM_LIMBS;
-            for j in (0..NUM_LIMBS).step_by(4) {
-                self.write::<4>(2usize, ptr + j, write[j..j + 4].try_into().unwrap());
+            for j in (0..NUM_LIMBS).step_by(CONST_BLOCK_SIZE) {
+                self.write::<CONST_BLOCK_SIZE>(
+                    2usize,
+                    ptr + j,
+                    write[j..j + CONST_BLOCK_SIZE].try_into().unwrap(),
+                );
             }
         }
     }

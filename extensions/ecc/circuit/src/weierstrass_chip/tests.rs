@@ -30,9 +30,12 @@ use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
+use openvm_circuit::arch::CONST_BLOCK_SIZE;
+
 use crate::{
     get_ec_addne_air, get_ec_addne_chip, get_ec_addne_step, get_ec_double_air, get_ec_double_chip,
-    get_ec_double_step, EcDoubleExecutor, WeierstrassAir, WeierstrassChip,
+    get_ec_double_step, EcDoubleExecutor, WeierstrassAir, WeierstrassChip, ECC_BLOCKS_32,
+    ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
 
 const LIMB_BITS: usize = 8;
@@ -329,16 +332,16 @@ mod ec_addne_tests {
     }
 
     #[test]
-    fn test_ec_addne_16x4() {
-        run_ec_addne_test::<16, 4, 32>(
+    fn test_ec_addne_32limb() {
+        run_ec_addne_test::<{ ECC_BLOCKS_32 }, { CONST_BLOCK_SIZE }, { NUM_LIMBS_32 }>(
             Rv32WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
         );
     }
 
     #[test]
-    fn test_ec_addne_24x4() {
-        run_ec_addne_test::<24, 4, 48>(
+    fn test_ec_addne_48limb() {
+        run_ec_addne_test::<{ ECC_BLOCKS_48 }, { CONST_BLOCK_SIZE }, { NUM_LIMBS_48 }>(
             Rv32WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
         );
@@ -354,11 +357,11 @@ mod ec_addne_tests {
         let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
         let config = ExprBuilderConfig {
             modulus: secp256k1_coord_prime(),
-            num_limbs: 32,
+            num_limbs: NUM_LIMBS_32,
             limb_bits: LIMB_BITS,
         };
 
-        let executor = get_ec_addne_step::<16, 4>(
+        let executor = get_ec_addne_step::<{ ECC_BLOCKS_32 }, { CONST_BLOCK_SIZE }>(
             config,
             tester.range_checker().bus(),
             tester.address_bits(),
@@ -632,8 +635,8 @@ mod ec_double_tests {
     }
 
     #[test]
-    fn test_ec_double_16x4() {
-        run_ec_double_test::<16, 4, 32>(
+    fn test_ec_double_32limb() {
+        run_ec_double_test::<{ ECC_BLOCKS_32 }, { CONST_BLOCK_SIZE }, { NUM_LIMBS_32 }>(
             Rv32WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
             50,
@@ -642,11 +645,11 @@ mod ec_double_tests {
     }
 
     #[test]
-    fn test_ec_double_16x4_nonzero_a_1() {
+    fn test_ec_double_32limb_nonzero_a() {
         let coeff_a = (-secp256r1::Fp::from(3)).to_bytes();
         let a = BigUint::from_bytes_le(&coeff_a);
 
-        run_ec_double_test::<16, 4, 32>(
+        run_ec_double_test::<{ ECC_BLOCKS_32 }, { CONST_BLOCK_SIZE }, { NUM_LIMBS_32 }>(
             Rv32WeierstrassOpcode::CLASS_OFFSET,
             secp256r1_coord_prime(),
             50,
@@ -655,8 +658,8 @@ mod ec_double_tests {
     }
 
     #[test]
-    fn test_ec_double_24x4() {
-        run_ec_double_test::<24, 4, 48>(
+    fn test_ec_double_48limb() {
+        run_ec_double_test::<{ ECC_BLOCKS_48 }, { CONST_BLOCK_SIZE }, { NUM_LIMBS_48 }>(
             Rv32WeierstrassOpcode::CLASS_OFFSET,
             BLS12_381_MODULUS.clone(),
             50,
@@ -674,11 +677,11 @@ mod ec_double_tests {
         let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
         let config = ExprBuilderConfig {
             modulus: secp256k1_coord_prime(),
-            num_limbs: 32,
+            num_limbs: NUM_LIMBS_32,
             limb_bits: LIMB_BITS,
         };
 
-        let executor = get_ec_double_step::<16, 4>(
+        let executor = get_ec_double_step::<{ ECC_BLOCKS_32 }, { CONST_BLOCK_SIZE }>(
             config,
             tester.range_checker().bus(),
             tester.address_bits(),
@@ -701,7 +704,7 @@ mod ec_double_tests {
         let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
         let config = ExprBuilderConfig {
             modulus: secp256r1_coord_prime(),
-            num_limbs: 32,
+            num_limbs: NUM_LIMBS_32,
             limb_bits: LIMB_BITS,
         };
         let a = BigUint::from_str_radix(
@@ -710,7 +713,7 @@ mod ec_double_tests {
         )
         .unwrap();
 
-        let executor = get_ec_double_step::<16, 4>(
+        let executor = get_ec_double_step::<{ ECC_BLOCKS_32 }, { CONST_BLOCK_SIZE }>(
             config.clone(),
             tester.range_checker().bus(),
             tester.address_bits(),

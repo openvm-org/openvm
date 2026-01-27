@@ -8,7 +8,7 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    Arena, PreflightExecutor,
+    Arena, PreflightExecutor, CONST_BLOCK_SIZE,
 };
 use openvm_circuit_primitives::{
     bigint::utils::secp256k1_coord_prime,
@@ -31,9 +31,12 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
-use crate::fp2_chip::{
-    get_fp2_addsub_air, get_fp2_addsub_chip, get_fp2_addsub_step, get_fp2_muldiv_air,
-    get_fp2_muldiv_chip, get_fp2_muldiv_step, Fp2Air, Fp2Chip, Fp2Executor,
+use crate::{
+    fp2_chip::{
+        get_fp2_addsub_air, get_fp2_addsub_chip, get_fp2_addsub_step, get_fp2_muldiv_air,
+        get_fp2_muldiv_chip, get_fp2_muldiv_step, Fp2Air, Fp2Chip, Fp2Executor,
+    },
+    FP2_BLOCKS_32, FP2_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
 
 const LIMB_BITS: usize = 8;
@@ -270,42 +273,42 @@ struct TestConfig<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS:
     pub num_ops: usize,
 }
 
-#[test_case(TestConfig::<16, 4, 32>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
     BigUint::from_str("357686312646216567629137").unwrap(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<16, 4, 32>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
     secp256k1_coord_prime(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<16, 4, 32>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
     BN254_MODULUS.clone(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<24, 4, 48>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_48}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_48}>::new(
     BLS12_381_MODULUS.clone(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<16, 4, 32>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
     BigUint::from_str("357686312646216567629137").unwrap(),
     false,
     50,
 ))]
-#[test_case(TestConfig::<16, 4, 32>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
     secp256k1_coord_prime(),
     false,
     50,
 ))]
-#[test_case(TestConfig::<16, 4, 32>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
     BN254_MODULUS.clone(),
     false,
     50,
 ))]
-#[test_case(TestConfig::<24, 4, 48>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_48}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_48}>::new(
     BLS12_381_MODULUS.clone(),
     false,
     50,

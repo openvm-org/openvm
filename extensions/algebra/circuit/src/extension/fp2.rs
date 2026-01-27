@@ -35,8 +35,9 @@ use crate::{
         get_fp2_addsub_air, get_fp2_addsub_chip, get_fp2_addsub_step, get_fp2_muldiv_air,
         get_fp2_muldiv_chip, get_fp2_muldiv_step, Fp2Air, Fp2Executor,
     },
-    AlgebraCpuProverExt, ModularExtension,
+    AlgebraCpuProverExt, ModularExtension, FP2_BLOCKS_32, FP2_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
+use openvm_circuit::arch::CONST_BLOCK_SIZE;
 
 #[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
@@ -84,11 +85,11 @@ impl Fp2Extension {
 )]
 pub enum Fp2ExtensionExecutor {
     // 32 limbs prime
-    Fp2AddSubRv32_32(Fp2Executor<16, 4>), // Fp2AddSub
-    Fp2MulDivRv32_32(Fp2Executor<16, 4>), // Fp2MulDiv
+    Fp2AddSubRv32_32(Fp2Executor<FP2_BLOCKS_32, CONST_BLOCK_SIZE>), // Fp2AddSub
+    Fp2MulDivRv32_32(Fp2Executor<FP2_BLOCKS_32, CONST_BLOCK_SIZE>), // Fp2MulDiv
     // 48 limbs prime
-    Fp2AddSubRv32_48(Fp2Executor<24, 4>), // Fp2AddSub
-    Fp2MulDivRv32_48(Fp2Executor<24, 4>), // Fp2MulDiv
+    Fp2AddSubRv32_48(Fp2Executor<FP2_BLOCKS_48, CONST_BLOCK_SIZE>), // Fp2AddSub
+    Fp2MulDivRv32_48(Fp2Executor<FP2_BLOCKS_48, CONST_BLOCK_SIZE>), // Fp2MulDiv
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
@@ -103,13 +104,13 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
         let dummy_range_checker_bus = VariableRangeCheckerBus::new(u16::MAX, 16);
         for (i, (_, modulus)) in self.supported_moduli.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
-            let bytes = modulus.bits().div_ceil(8);
+            let bytes = modulus.bits().div_ceil(8) as usize;
             let start_offset = Fp2Opcode::CLASS_OFFSET + i * Fp2Opcode::COUNT;
 
-            if bytes <= 32 {
+            if bytes <= NUM_LIMBS_32 {
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
-                    num_limbs: 32,
+                    num_limbs: NUM_LIMBS_32,
                     limb_bits: 8,
                 };
                 let addsub = get_fp2_addsub_step(
@@ -137,10 +138,10 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
                     ((Fp2Opcode::MUL as usize)..=(Fp2Opcode::SETUP_MULDIV as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
-            } else if bytes <= 48 {
+            } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
-                    num_limbs: 48,
+                    num_limbs: NUM_LIMBS_48,
                     limb_bits: 8,
                 };
                 let addsub = get_fp2_addsub_step(
@@ -202,17 +203,17 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Fp2Extension {
         };
         for (i, (_, modulus)) in self.supported_moduli.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
-            let bytes = modulus.bits().div_ceil(8);
+            let bytes = modulus.bits().div_ceil(8) as usize;
             let start_offset = Fp2Opcode::CLASS_OFFSET + i * Fp2Opcode::COUNT;
 
-            if bytes <= 32 {
+            if bytes <= NUM_LIMBS_32 {
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
-                    num_limbs: 32,
+                    num_limbs: NUM_LIMBS_32,
                     limb_bits: 8,
                 };
 
-                let addsub = get_fp2_addsub_air::<16, 4>(
+                let addsub = get_fp2_addsub_air::<FP2_BLOCKS_32, CONST_BLOCK_SIZE>(
                     exec_bridge,
                     memory_bridge,
                     config.clone(),
@@ -223,7 +224,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Fp2Extension {
                 );
                 inventory.add_air(addsub);
 
-                let muldiv = get_fp2_muldiv_air::<16, 4>(
+                let muldiv = get_fp2_muldiv_air::<FP2_BLOCKS_32, CONST_BLOCK_SIZE>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -233,14 +234,14 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Fp2Extension {
                     start_offset,
                 );
                 inventory.add_air(muldiv);
-            } else if bytes <= 48 {
+            } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
-                    num_limbs: 48,
+                    num_limbs: NUM_LIMBS_48,
                     limb_bits: 8,
                 };
 
-                let addsub = get_fp2_addsub_air::<24, 4>(
+                let addsub = get_fp2_addsub_air::<FP2_BLOCKS_48, CONST_BLOCK_SIZE>(
                     exec_bridge,
                     memory_bridge,
                     config.clone(),
@@ -251,7 +252,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Fp2Extension {
                 );
                 inventory.add_air(addsub);
 
-                let muldiv = get_fp2_muldiv_air::<24, 4>(
+                let muldiv = get_fp2_muldiv_air::<FP2_BLOCKS_48, CONST_BLOCK_SIZE>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -303,17 +304,17 @@ where
         };
         for (_, modulus) in extension.supported_moduli.iter() {
             // determine the number of bytes needed to represent a prime field element
-            let bytes = modulus.bits().div_ceil(8);
+            let bytes = modulus.bits().div_ceil(8) as usize;
 
-            if bytes <= 32 {
+            if bytes <= NUM_LIMBS_32 {
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
-                    num_limbs: 32,
+                    num_limbs: NUM_LIMBS_32,
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<Fp2Air<16, 4>>()?;
-                let addsub = get_fp2_addsub_chip::<Val<SC>, 16, 4>(
+                inventory.next_air::<Fp2Air<FP2_BLOCKS_32, CONST_BLOCK_SIZE>>()?;
+                let addsub = get_fp2_addsub_chip::<Val<SC>, FP2_BLOCKS_32, CONST_BLOCK_SIZE>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -322,8 +323,8 @@ where
                 );
                 inventory.add_executor_chip(addsub);
 
-                inventory.next_air::<Fp2Air<16, 4>>()?;
-                let muldiv = get_fp2_muldiv_chip::<Val<SC>, 16, 4>(
+                inventory.next_air::<Fp2Air<FP2_BLOCKS_32, CONST_BLOCK_SIZE>>()?;
+                let muldiv = get_fp2_muldiv_chip::<Val<SC>, FP2_BLOCKS_32, CONST_BLOCK_SIZE>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -331,15 +332,15 @@ where
                     pointer_max_bits,
                 );
                 inventory.add_executor_chip(muldiv);
-            } else if bytes <= 48 {
+            } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
-                    num_limbs: 48,
+                    num_limbs: NUM_LIMBS_48,
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<Fp2Air<24, 4>>()?;
-                let addsub = get_fp2_addsub_chip::<Val<SC>, 24, 4>(
+                inventory.next_air::<Fp2Air<FP2_BLOCKS_48, CONST_BLOCK_SIZE>>()?;
+                let addsub = get_fp2_addsub_chip::<Val<SC>, FP2_BLOCKS_48, CONST_BLOCK_SIZE>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -348,8 +349,8 @@ where
                 );
                 inventory.add_executor_chip(addsub);
 
-                inventory.next_air::<Fp2Air<24, 4>>()?;
-                let muldiv = get_fp2_muldiv_chip::<Val<SC>, 24, 4>(
+                inventory.next_air::<Fp2Air<FP2_BLOCKS_48, CONST_BLOCK_SIZE>>()?;
+                let muldiv = get_fp2_muldiv_chip::<Val<SC>, FP2_BLOCKS_48, CONST_BLOCK_SIZE>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),

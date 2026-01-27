@@ -7,12 +7,22 @@ use {
     openvm_mod_circuit_builder::FieldExpressionCoreRecordMut,
     openvm_rv32_adapters::Rv32VecHeapAdapterRecord,
 };
+use openvm_circuit::arch::CONST_BLOCK_SIZE;
 
 mod extension;
 mod weierstrass_chip;
 
 pub use extension::*;
 pub use weierstrass_chip::*;
+
+// Re-export limb constants from algebra for consistency
+pub use openvm_algebra_circuit::{NUM_LIMBS_32, NUM_LIMBS_48};
+
+// Blocks per ECC operation (2 coordinates per point)
+/// Blocks for ECC with 32-limb coordinates: 2 * (32 / 4) = 16 blocks
+pub const ECC_BLOCKS_32: usize = 2 * (NUM_LIMBS_32 / CONST_BLOCK_SIZE);
+/// Blocks for ECC with 48-limb coordinates: 2 * (48 / 4) = 24 blocks
+pub const ECC_BLOCKS_48: usize = 2 * (NUM_LIMBS_48 / CONST_BLOCK_SIZE);
 
 #[cfg(feature = "cuda")]
 pub(crate) type EccRecord<
