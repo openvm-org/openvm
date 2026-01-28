@@ -377,7 +377,7 @@ struct BigUintGpu {
         return result;
     }
 
-    __device__ BigUintGpu mod_inverse(const BigUintGpu &modulus, const uint8_t *barrett_mu) const {
+    __device__ __noinline__ BigUintGpu mod_inverse(const BigUintGpu &modulus, const uint8_t *barrett_mu) const {
         // Check if modulus is zero
         bool modulus_is_zero = true;
         for (uint32_t i = 0; i < modulus.num_limbs; i++) {

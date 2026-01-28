@@ -24,7 +24,7 @@ __device__ inline uint32_t get_total_carry_count(const FieldExprMeta *meta) {
     return total;
 }
 
-__device__ void generate_subrow_gpu(
+__device__ __noinline__ void generate_subrow_gpu(
     const FieldExprMeta *meta,
     const uint32_t *inputs,
     const bool *flags,
