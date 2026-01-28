@@ -27,7 +27,9 @@ pub use fp2::*;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
+        mod cuda;
         mod hybrid;
+        pub use cuda::*;
         pub use hybrid::*;
         pub use {
             AlgebraHybridProverExt as AlgebraProverExt,
