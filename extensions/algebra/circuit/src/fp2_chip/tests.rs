@@ -30,15 +30,6 @@ use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
-#[cfg(feature = "cuda")]
-use {
-    crate::extension::HybridFp2Chip,
-    openvm_circuit::arch::testing::{
-        default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
-        GpuTestChipHarness,
-    },
-    openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
-};
 
 use crate::{
     fp2_chip::{
@@ -364,213 +355,220 @@ fn run_test_with_config<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_
 }
 
 #[cfg(feature = "cuda")]
-type GpuHarness<const BLOCKS: usize, const BLOCK_SIZE: usize> = GpuTestChipHarness<
-    F,
-    Fp2Executor<BLOCKS, BLOCK_SIZE>,
-    Fp2Air<BLOCKS, BLOCK_SIZE>,
-    HybridFp2Chip<F, BLOCKS, BLOCK_SIZE>,
-    Fp2Chip<F, BLOCKS, BLOCK_SIZE>,
->;
-
-#[cfg(feature = "cuda")]
-fn create_cuda_addsub_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    tester: &GpuChipTestBuilder,
-    config: ExprBuilderConfig,
-    offset: usize,
-) -> GpuHarness<BLOCKS, BLOCK_SIZE> {
-    // getting bus from tester since `gpu_chip` and `air` must use the same bus
-    let range_bus = default_var_range_checker_bus();
-    let bitwise_bus = default_bitwise_lookup_bus();
-    // creating a dummy chip for Cpu so we only count `add_count`s from GPU
-    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
-
-    let air = get_fp2_addsub_air(
-        tester.execution_bridge(),
-        tester.memory_bridge(),
-        config.clone(),
-        range_bus,
-        bitwise_bus,
-        tester.address_bits(),
-        offset,
-    );
-    let executor =
-        get_fp2_addsub_step(config.clone(), range_bus, tester.address_bits(), offset);
-
-    let cpu_chip = get_fp2_addsub_chip(
-        config.clone(),
-        tester.dummy_memory_helper(),
-        dummy_range_checker_chip,
-        dummy_bitwise_chip,
-        tester.address_bits(),
-    );
-
-    // Use hybrid chip wrapping the CPU chip
-    let hybrid_chip = HybridFp2Chip::new(get_fp2_addsub_chip(
-        config,
-        tester.cpu_memory_helper(),
-        tester.cpu_range_checker(),
-        tester.cpu_bitwise_op_lookup(),
-        tester.address_bits(),
-    ));
-
-    GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
-}
-
-#[cfg(feature = "cuda")]
-fn create_cuda_muldiv_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    tester: &GpuChipTestBuilder,
-    config: ExprBuilderConfig,
-    offset: usize,
-) -> GpuHarness<BLOCKS, BLOCK_SIZE> {
-    // getting bus from tester since `gpu_chip` and `air` must use the same bus
-    let range_bus = default_var_range_checker_bus();
-    let bitwise_bus = default_bitwise_lookup_bus();
-    // creating a dummy chip for Cpu so we only count `add_count`s from GPU
-    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
-
-    let air = get_fp2_muldiv_air(
-        tester.execution_bridge(),
-        tester.memory_bridge(),
-        config.clone(),
-        range_bus,
-        bitwise_bus,
-        tester.address_bits(),
-        offset,
-    );
-    let executor =
-        get_fp2_muldiv_step(config.clone(), range_bus, tester.address_bits(), offset);
-
-    let cpu_chip = get_fp2_muldiv_chip(
-        config.clone(),
-        tester.dummy_memory_helper(),
-        dummy_range_checker_chip,
-        dummy_bitwise_chip,
-        tester.address_bits(),
-    );
-
-    // Use hybrid chip wrapping the CPU chip
-    let hybrid_chip = HybridFp2Chip::new(get_fp2_muldiv_chip(
-        config,
-        tester.cpu_memory_helper(),
-        tester.cpu_range_checker(),
-        tester.cpu_bitwise_op_lookup(),
-        tester.address_bits(),
-    ));
-
-    GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
-}
-
-#[cfg(feature = "cuda")]
-fn run_cuda_fp2_test_with_config<
-    const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
-    const NUM_LIMBS: usize,
->(
-    modulus: BigUint,
-    is_addsub: bool,
-    num_ops: usize,
-) {
-    use crate::AlgebraRecord;
-
-    let mut rng = create_seeded_rng();
-
-    let mut tester =
-        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
-
-    let offset = Fp2Opcode::CLASS_OFFSET;
-    let config = ExprBuilderConfig {
-        modulus: modulus.clone(),
-        num_limbs: NUM_LIMBS,
-        limb_bits: LIMB_BITS,
+mod cuda_tests {
+    use openvm_circuit::arch::{
+        testing::{
+            default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
+            GpuTestChipHarness,
+        },
+        DenseRecordArena,
     };
+    use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
+    use openvm_cuda_backend::prover_backend::GpuBackend;
+    use openvm_stark_backend::Chip;
+    use test_case::test_case;
 
-    let mut harness = if is_addsub {
-        create_cuda_addsub_harness::<BLOCKS, BLOCK_SIZE>(&tester, config, offset)
-    } else {
-        create_cuda_muldiv_harness::<BLOCKS, BLOCK_SIZE>(&tester, config, offset)
-    };
+    use super::*;
+    use crate::extension::HybridFp2Chip;
 
-    for i in 0..num_ops {
-        set_and_execute_fp2::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
-            &mut tester,
-            &mut harness.executor,
-            &mut harness.dense_arena,
-            &mut rng,
-            &modulus,
-            i == 0,
-            is_addsub,
+    pub type GpuHarness<const BLOCKS: usize, const BLOCK_SIZE: usize, T> = GpuTestChipHarness<
+        F,
+        Fp2Executor<BLOCKS, BLOCK_SIZE>,
+        Fp2Air<BLOCKS, BLOCK_SIZE>,
+        T,
+        Fp2Chip<F, BLOCKS, BLOCK_SIZE>,
+    >;
+
+    fn create_addsub_cuda_test_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+        tester: &GpuChipTestBuilder,
+        config: ExprBuilderConfig,
+        offset: usize,
+    ) -> GpuHarness<BLOCKS, BLOCK_SIZE, HybridFp2Chip<F, BLOCKS, BLOCK_SIZE>> {
+        // getting bus from tester since `gpu_chip` and `air` must use the same bus
+        let range_bus = default_var_range_checker_bus();
+        let bitwise_bus = default_bitwise_lookup_bus();
+        // creating a dummy chip for Cpu so we only count `add_count`s from GPU
+        let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
+        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+            bitwise_bus,
+        ));
+
+        let air = get_fp2_addsub_air(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            config.clone(),
+            range_bus,
+            bitwise_bus,
+            tester.address_bits(),
             offset,
         );
+        let executor =
+            get_fp2_addsub_step(config.clone(), range_bus, tester.address_bits(), offset);
+
+        let cpu_chip = get_fp2_addsub_chip(
+            config.clone(),
+            tester.dummy_memory_helper(),
+            dummy_range_checker_chip,
+            dummy_bitwise_chip,
+            tester.address_bits(),
+        );
+        let hybrid_chip = HybridFp2Chip::new(get_fp2_addsub_chip(
+            config,
+            tester.cpu_memory_helper(),
+            tester.cpu_range_checker(),
+            tester.cpu_bitwise_op_lookup(),
+            tester.address_bits(),
+        ));
+
+        GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
-    harness
-        .dense_arena
-        .get_record_seeker::<AlgebraRecord<2, BLOCKS, BLOCK_SIZE>, _>()
-        .transfer_to_matrix_arena(
-            &mut harness.matrix_arena,
-            harness.executor.get_record_layout::<F>(),
+    fn create_muldiv_cuda_test_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+        tester: &GpuChipTestBuilder,
+        config: ExprBuilderConfig,
+        offset: usize,
+    ) -> GpuHarness<BLOCKS, BLOCK_SIZE, HybridFp2Chip<F, BLOCKS, BLOCK_SIZE>> {
+        // getting bus from tester since `gpu_chip` and `air` must use the same bus
+        let range_bus = default_var_range_checker_bus();
+        let bitwise_bus = default_bitwise_lookup_bus();
+        // creating a dummy chip for Cpu so we only count `add_count`s from GPU
+        let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
+        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+            bitwise_bus,
+        ));
+
+        let air = get_fp2_muldiv_air(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            config.clone(),
+            range_bus,
+            bitwise_bus,
+            tester.address_bits(),
+            offset,
         );
+        let executor =
+            get_fp2_muldiv_step(config.clone(), range_bus, tester.address_bits(), offset);
 
-    tester
-        .build()
-        .load_gpu_harness(harness)
-        .finalize()
-        .simple_test()
-        .unwrap();
-}
+        let cpu_chip = get_fp2_muldiv_chip(
+            config.clone(),
+            tester.dummy_memory_helper(),
+            dummy_range_checker_chip,
+            dummy_bitwise_chip,
+            tester.address_bits(),
+        );
+        let hybrid_chip = HybridFp2Chip::new(get_fp2_muldiv_chip(
+            config,
+            tester.cpu_memory_helper(),
+            tester.cpu_range_checker(),
+            tester.cpu_bitwise_op_lookup(),
+            tester.address_bits(),
+        ));
 
-#[cfg(feature = "cuda")]
-#[test]
-fn cuda_test_fp2_addsub() {
-    run_cuda_fp2_test_with_config::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
-        BigUint::from_str("357686312646216567629137").unwrap(),
-        true,
-        50,
-    );
-    run_cuda_fp2_test_with_config::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
-        secp256k1_coord_prime(),
-        true,
-        50,
-    );
-    run_cuda_fp2_test_with_config::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
-        BN254_MODULUS.clone(),
-        true,
-        50,
-    );
-    run_cuda_fp2_test_with_config::<FP2_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>(
-        BLS12_381_MODULUS.clone(),
-        true,
-        50,
-    );
-}
+        GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+    }
 
-#[cfg(feature = "cuda")]
-#[test]
-fn cuda_test_fp2_muldiv() {
-    run_cuda_fp2_test_with_config::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
-        BigUint::from_str("357686312646216567629137").unwrap(),
-        false,
-        50,
-    );
-    run_cuda_fp2_test_with_config::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
-        secp256k1_coord_prime(),
-        false,
-        50,
-    );
-    run_cuda_fp2_test_with_config::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
-        BN254_MODULUS.clone(),
-        false,
-        50,
-    );
-    run_cuda_fp2_test_with_config::<FP2_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>(
-        BLS12_381_MODULUS.clone(),
-        false,
-        50,
-    );
+    #[test_case(TestConfig::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
+    BigUint::from_str("357686312646216567629137").unwrap(),
+    true,
+    50),
+    create_addsub_cuda_test_harness::<FP2_BLOCKS_32, CONST_BLOCK_SIZE>
+)]
+    #[test_case(TestConfig::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
+    secp256k1_coord_prime(),
+    true,
+    50),
+    create_addsub_cuda_test_harness::<FP2_BLOCKS_32, CONST_BLOCK_SIZE>
+)]
+    #[test_case(TestConfig::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
+    BN254_MODULUS.clone(),
+    true,
+    50),
+    create_addsub_cuda_test_harness::<FP2_BLOCKS_32, CONST_BLOCK_SIZE>
+)]
+    #[test_case(TestConfig::<FP2_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>::new(
+    BLS12_381_MODULUS.clone(),
+    true,
+    50),
+    create_addsub_cuda_test_harness::<FP2_BLOCKS_48, CONST_BLOCK_SIZE>
+)]
+    #[test_case(TestConfig::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
+    BigUint::from_str("357686312646216567629137").unwrap(),
+    false,
+    50),
+    create_muldiv_cuda_test_harness::<FP2_BLOCKS_32, CONST_BLOCK_SIZE>
+)]
+    #[test_case(TestConfig::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
+    secp256k1_coord_prime(),
+    false,
+    50),
+    create_muldiv_cuda_test_harness::<FP2_BLOCKS_32, CONST_BLOCK_SIZE>
+)]
+    #[test_case(TestConfig::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
+    BN254_MODULUS.clone(),
+    false,
+    50),
+    create_muldiv_cuda_test_harness::<FP2_BLOCKS_32, CONST_BLOCK_SIZE>
+)]
+    #[test_case(TestConfig::<FP2_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>::new(
+    BLS12_381_MODULUS.clone(),
+    false,
+    50),
+    create_muldiv_cuda_test_harness::<FP2_BLOCKS_48, CONST_BLOCK_SIZE>
+)]
+    fn run_cuda_test_with_config<
+        const BLOCKS: usize,
+        const BLOCK_SIZE: usize,
+        const NUM_LIMBS: usize,
+        C: Chip<DenseRecordArena, GpuBackend>,
+    >(
+        test_config: TestConfig<BLOCKS, BLOCK_SIZE, NUM_LIMBS>,
+        create_cuda_test_harness: impl Fn(
+            &GpuChipTestBuilder,
+            ExprBuilderConfig,
+            usize,
+        ) -> GpuHarness<BLOCKS, BLOCK_SIZE, C>,
+    ) {
+        use crate::AlgebraRecord;
+
+        let mut rng = create_seeded_rng();
+
+        let mut tester =
+            GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+
+        let offset = Fp2Opcode::CLASS_OFFSET;
+        let config = ExprBuilderConfig {
+            modulus: test_config.modulus.clone(),
+            num_limbs: NUM_LIMBS,
+            limb_bits: LIMB_BITS,
+        };
+
+        let mut harness = create_cuda_test_harness(&tester, config, offset);
+        for i in 0..test_config.num_ops {
+            set_and_execute_fp2::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, DenseRecordArena>(
+                &mut tester,
+                &mut harness.executor,
+                &mut harness.dense_arena,
+                &mut rng,
+                &test_config.modulus,
+                i == 0,
+                test_config.is_addsub,
+                offset,
+            );
+        }
+
+        harness
+            .dense_arena
+            .get_record_seeker::<AlgebraRecord<2, BLOCKS, BLOCK_SIZE>, _>()
+            .transfer_to_matrix_arena(
+                &mut harness.matrix_arena,
+                harness.executor.get_record_layout::<F>(),
+            );
+
+        tester
+            .build()
+            .load_gpu_harness(harness)
+            .finalize()
+            .simple_test()
+            .unwrap();
+    }
 }

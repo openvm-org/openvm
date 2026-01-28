@@ -114,6 +114,62 @@ mod addsub_tests {
         (harness, (bitwise_chip.air, bitwise_chip))
     }
 
+    #[cfg(feature = "cuda")]
+    type GpuHarness<const BLOCKS: usize, const BLOCK_SIZE: usize> = GpuTestChipHarness<
+        F,
+        ModularExecutor<BLOCKS, BLOCK_SIZE>,
+        ModularAir<BLOCKS, BLOCK_SIZE>,
+        HybridModularChip<F, BLOCKS, BLOCK_SIZE>,
+        ModularChip<F, BLOCKS, BLOCK_SIZE>,
+    >;
+
+    #[cfg(feature = "cuda")]
+    fn create_cuda_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+        tester: &GpuChipTestBuilder,
+        config: ExprBuilderConfig,
+        offset: usize,
+    ) -> GpuHarness<BLOCKS, BLOCK_SIZE> {
+        // getting bus from tester since `gpu_chip` and `air` must use the same bus
+        let range_bus = default_var_range_checker_bus();
+        let bitwise_bus = default_bitwise_lookup_bus();
+        // creating a dummy chip for Cpu so we only count `add_count`s from GPU
+        let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
+        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+            bitwise_bus,
+        ));
+
+        let air = get_modular_addsub_air(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            config.clone(),
+            range_bus,
+            bitwise_bus,
+            tester.address_bits(),
+            offset,
+        );
+        let executor =
+            get_modular_addsub_step(config.clone(), range_bus, tester.address_bits(), offset);
+
+        let cpu_chip = get_modular_addsub_chip(
+            config.clone(),
+            tester.dummy_memory_helper(),
+            dummy_range_checker_chip,
+            dummy_bitwise_chip,
+            tester.address_bits(),
+        );
+
+        // Use hybrid chip wrapping the CPU chip
+        let hybrid_chip = HybridModularChip::new(get_modular_addsub_chip(
+            config,
+            tester.cpu_memory_helper(),
+            tester.cpu_range_checker(),
+            tester.cpu_bitwise_op_lookup(),
+            tester.address_bits(),
+        ));
+
+        GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
+    }
+
 
     fn set_and_execute_addsub<
         const BLOCKS: usize,
@@ -274,62 +330,6 @@ mod addsub_tests {
     }
 
     #[cfg(feature = "cuda")]
-    type GpuHarness<const BLOCKS: usize, const BLOCK_SIZE: usize> = GpuTestChipHarness<
-        F,
-        ModularExecutor<BLOCKS, BLOCK_SIZE>,
-        ModularAir<BLOCKS, BLOCK_SIZE>,
-        HybridModularChip<F, BLOCKS, BLOCK_SIZE>,
-        ModularChip<F, BLOCKS, BLOCK_SIZE>,
-    >;
-
-    #[cfg(feature = "cuda")]
-    fn create_cuda_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-        tester: &GpuChipTestBuilder,
-        config: ExprBuilderConfig,
-        offset: usize,
-    ) -> GpuHarness<BLOCKS, BLOCK_SIZE> {
-        // getting bus from tester since `gpu_chip` and `air` must use the same bus
-        let range_bus = default_var_range_checker_bus();
-        let bitwise_bus = default_bitwise_lookup_bus();
-        // creating a dummy chip for Cpu so we only count `add_count`s from GPU
-        let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-            bitwise_bus,
-        ));
-
-        let air = get_modular_addsub_air(
-            tester.execution_bridge(),
-            tester.memory_bridge(),
-            config.clone(),
-            range_bus,
-            bitwise_bus,
-            tester.address_bits(),
-            offset,
-        );
-        let executor =
-            get_modular_addsub_step(config.clone(), range_bus, tester.address_bits(), offset);
-
-        let cpu_chip = get_modular_addsub_chip(
-            config.clone(),
-            tester.dummy_memory_helper(),
-            dummy_range_checker_chip,
-            dummy_bitwise_chip,
-            tester.address_bits(),
-        );
-
-        // Use hybrid chip wrapping the CPU chip
-        let hybrid_chip = HybridModularChip::new(get_modular_addsub_chip(
-            config,
-            tester.cpu_memory_helper(),
-            tester.cpu_range_checker(),
-            tester.cpu_bitwise_op_lookup(),
-            tester.address_bits(),
-        ));
-
-        GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
-    }
-
-    #[cfg(feature = "cuda")]
     fn run_cuda_addsub_test_with_config<
         const BLOCKS: usize,
         const BLOCK_SIZE: usize,
@@ -470,6 +470,62 @@ mod muldiv_tests {
         let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
 
         (harness, (bitwise_chip.air, bitwise_chip))
+    }
+
+    #[cfg(feature = "cuda")]
+    type GpuHarness<const BLOCKS: usize, const BLOCK_SIZE: usize> = GpuTestChipHarness<
+        F,
+        ModularExecutor<BLOCKS, BLOCK_SIZE>,
+        ModularAir<BLOCKS, BLOCK_SIZE>,
+        HybridModularChip<F, BLOCKS, BLOCK_SIZE>,
+        ModularChip<F, BLOCKS, BLOCK_SIZE>,
+    >;
+
+    #[cfg(feature = "cuda")]
+    fn create_cuda_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+        tester: &GpuChipTestBuilder,
+        config: ExprBuilderConfig,
+        offset: usize,
+    ) -> GpuHarness<BLOCKS, BLOCK_SIZE> {
+        // getting bus from tester since `gpu_chip` and `air` must use the same bus
+        let range_bus = default_var_range_checker_bus();
+        let bitwise_bus = default_bitwise_lookup_bus();
+        // creating a dummy chip for Cpu so we only count `add_count`s from GPU
+        let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
+        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+            bitwise_bus,
+        ));
+
+        let air = get_modular_muldiv_air(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            config.clone(),
+            range_bus,
+            bitwise_bus,
+            tester.address_bits(),
+            offset,
+        );
+        let executor =
+            get_modular_muldiv_step(config.clone(), range_bus, tester.address_bits(), offset);
+
+        let cpu_chip = get_modular_muldiv_chip(
+            config.clone(),
+            tester.dummy_memory_helper(),
+            dummy_range_checker_chip,
+            dummy_bitwise_chip,
+            tester.address_bits(),
+        );
+
+        // Use hybrid chip wrapping the CPU chip
+        let hybrid_chip = HybridModularChip::new(get_modular_muldiv_chip(
+            config,
+            tester.cpu_memory_helper(),
+            tester.cpu_range_checker(),
+            tester.cpu_bitwise_op_lookup(),
+            tester.address_bits(),
+        ));
+
+        GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
 
@@ -630,62 +686,6 @@ mod muldiv_tests {
     #[test]
     fn test_modular_muldiv_3x16_bls12_381() {
         run_test_muldiv::<3, 16, 48>(0, BLS12_381_MODULUS.clone(), 50);
-    }
-
-    #[cfg(feature = "cuda")]
-    type GpuHarness<const BLOCKS: usize, const BLOCK_SIZE: usize> = GpuTestChipHarness<
-        F,
-        ModularExecutor<BLOCKS, BLOCK_SIZE>,
-        ModularAir<BLOCKS, BLOCK_SIZE>,
-        HybridModularChip<F, BLOCKS, BLOCK_SIZE>,
-        ModularChip<F, BLOCKS, BLOCK_SIZE>,
-    >;
-
-    #[cfg(feature = "cuda")]
-    fn create_cuda_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-        tester: &GpuChipTestBuilder,
-        config: ExprBuilderConfig,
-        offset: usize,
-    ) -> GpuHarness<BLOCKS, BLOCK_SIZE> {
-        // getting bus from tester since `gpu_chip` and `air` must use the same bus
-        let range_bus = default_var_range_checker_bus();
-        let bitwise_bus = default_bitwise_lookup_bus();
-        // creating a dummy chip for Cpu so we only count `add_count`s from GPU
-        let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
-        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-            bitwise_bus,
-        ));
-
-        let air = get_modular_muldiv_air(
-            tester.execution_bridge(),
-            tester.memory_bridge(),
-            config.clone(),
-            range_bus,
-            bitwise_bus,
-            tester.address_bits(),
-            offset,
-        );
-        let executor =
-            get_modular_muldiv_step(config.clone(), range_bus, tester.address_bits(), offset);
-
-        let cpu_chip = get_modular_muldiv_chip(
-            config.clone(),
-            tester.dummy_memory_helper(),
-            dummy_range_checker_chip,
-            dummy_bitwise_chip,
-            tester.address_bits(),
-        );
-
-        // Use hybrid chip wrapping the CPU chip
-        let hybrid_chip = HybridModularChip::new(get_modular_muldiv_chip(
-            config,
-            tester.cpu_memory_helper(),
-            tester.cpu_range_checker(),
-            tester.cpu_bitwise_op_lookup(),
-            tester.address_bits(),
-        ));
-
-        GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
     #[cfg(feature = "cuda")]
