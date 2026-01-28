@@ -1,0 +1,38 @@
+[workspace]
+[package]
+name = "openvm-client-eth"
+description = "OpenVM Reth Guest Program"
+version = "0.3.0"
+edition = "2021"
+
+[dependencies]
+# workspace
+openvm-client-executor = { path = "../../crates/executor/client", features = ["openvm"] }
+
+# openvm
+openvm = { git = "https://github.com/openvm-org/openvm.git", branch = "main", features = [
+    "std",
+] }
+openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git", branch = "main" }
+openvm-ecc-guest = { git = "https://github.com/openvm-org/openvm.git", branch = "main" }
+
+# Statically turns off logging
+log = { version = "0.4", features = ["max_level_off", "release_max_level_off"] }
+tracing = { version = "0.1", features = [
+    "max_level_off",
+    "release_max_level_off",
+] }
+
+[features]
+default = []
+heap-embedded-alloc = ["openvm/heap-embedded-alloc"]
+
+[profile.release]
+panic = "abort"
+lto = "fat"
+strip = true
+
+[profile.profiling]
+inherits = "release"
+debug = 2
+strip = false

@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 set -euo pipefail
 
 ensure_riscv_gcc() {
@@ -34,14 +36,31 @@ ensure_coremark_submodules() {
   fi
 }
 
-ensure_riscv_gcc
-ensure_coremark_submodules
+ensure_root_vmexe() {
+  # We keep a prebuilt `VmExe` at repo root so we can skip rebuilding/transpiling
+  # the guest program when collecting execution metrics.
+  #
+  # This uses the CLI's `--output-dir` to copy the transpiled `.vmexe` to `./`.
+  if [[ ! -f "coremark-openvm.vmexe" ]]; then
+    ensure_riscv_gcc
+    ensure_coremark_submodules
+    echo "[execute-metrics] coremark-openvm.vmexe missing; building once..."
+    cargo openvm build --manifest-path coremark-openvm/Cargo.toml --output-dir .
+  fi
+}
+
 
 cargo install --path crates/cli/
-OUTPUT_PATH="metrics-vanilla.json" cargo openvm run --manifest-path coremark-openvm/Cargo.toml
+ensure_root_vmexe
+OUTPUT_PATH="_coremark-metrics-vanilla.json" cargo openvm run --exe coremark-openvm.vmexe --manifest-path coremark-openvm/Cargo.toml
+OUTPUT_PATH="_client-eth-metrics-vanilla.json" cargo openvm run --exe client-eth.vmexe --manifest-path client-eth/Cargo.toml --input client-eth-input.json
 
 cargo install --path crates/cli/ --features aot
-OUTPUT_PATH="metrics-aot.json" cargo openvm run --manifest-path coremark-openvm/Cargo.toml
+ensure_root_vmexe
+OUTPUT_PATH="_coremark-metrics-aot.json" cargo openvm run --exe coremark-openvm.vmexe --manifest-path coremark-openvm/Cargo.toml
+OUTPUT_PATH="_client-eth-metrics-aot.json" cargo openvm run --exe client-eth.vmexe --manifest-path client-eth/Cargo.toml --input client-eth-input.json
 
 cargo +nightly install --path crates/cli/ --features tco
-OUTPUT_PATH="metrics-tco.json" cargo openvm run --manifest-path coremark-openvm/Cargo.toml
+ensure_root_vmexe
+OUTPUT_PATH="_coremark-metrics-tco.json" cargo openvm run --exe coremark-openvm.vmexe --manifest-path coremark-openvm/Cargo.toml
+OUTPUT_PATH="_client-eth-metrics-tco.json" cargo openvm run --exe client-eth.vmexe --manifest-path client-eth/Cargo.toml --input client-eth-input.json
