@@ -15,9 +15,10 @@ ensure_riscv_gcc() {
       apt-get install -y gcc-riscv64-unknown-elf
     fi
   else
-    echo "[execute-metrics] ERROR: missing riscv64-unknown-elf-gcc and no apt-get found."
-    echo "[execute-metrics] Install a RISC-V GCC toolchain and re-run."
-    exit 1
+    # Don't hard-fail here: on non-Debian systems we can't auto-install, but the user may already
+    # have another valid RISC-V GCC toolchain installed or may prefer to install manually.
+    echo "[execute-metrics] WARNING: missing riscv64-unknown-elf-gcc and no apt-get found."
+    echo "[execute-metrics] WARNING: please install a RISC-V GCC toolchain (riscv64-unknown-elf-gcc) and re-run if needed."
   fi
 }
 
