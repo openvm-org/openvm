@@ -10,76 +10,74 @@
 using namespace riscv;
 using namespace sha256;
 
+// Helper to get a_bit from either local_row or next_row based on index
+__device__ __forceinline__ Fp get_a_bit(RowSlice local_row, RowSlice next_row, int round_idx, int bit) {
+    if (round_idx < SHA256_ROUNDS_PER_ROW) {
+        return local_row[COL_INDEX(Sha256RoundCols, work_vars.a[round_idx][bit])];
+    } else {
+        return next_row[COL_INDEX(Sha256RoundCols, work_vars.a[round_idx - SHA256_ROUNDS_PER_ROW][bit])];
+    }
+}
+
+// Helper to get e_bit from either local_row or next_row based on index
+__device__ __forceinline__ Fp get_e_bit(RowSlice local_row, RowSlice next_row, int round_idx, int bit) {
+    if (round_idx < SHA256_ROUNDS_PER_ROW) {
+        return local_row[COL_INDEX(Sha256RoundCols, work_vars.e[round_idx][bit])];
+    } else {
+        return next_row[COL_INDEX(Sha256RoundCols, work_vars.e[round_idx - SHA256_ROUNDS_PER_ROW][bit])];
+    }
+}
+
 __device__ void generate_carry_ae(RowSlice local_row, RowSlice next_row) {
-    Fp a_bits[SHA256_ROUNDS_PER_ROW * 2][SHA256_WORD_BITS];
-    Fp e_bits[SHA256_ROUNDS_PER_ROW * 2][SHA256_WORD_BITS];
-    for (int i = 0; i < SHA256_ROUNDS_PER_ROW; i++) {
-        for (int bit = 0; bit < SHA256_WORD_BITS; bit++) {
-            a_bits[i][bit] = local_row[COL_INDEX(Sha256RoundCols, work_vars.a[i][bit])];
-            e_bits[i][bit] = local_row[COL_INDEX(Sha256RoundCols, work_vars.e[i][bit])];
-        }
-    }
-
-    for (int i = 0; i < SHA256_ROUNDS_PER_ROW; i++) {
-        for (int bit = 0; bit < SHA256_WORD_BITS; bit++) {
-            a_bits[i + SHA256_ROUNDS_PER_ROW][bit] =
-                next_row[COL_INDEX(Sha256RoundCols, work_vars.a[i][bit])];
-            e_bits[i + SHA256_ROUNDS_PER_ROW][bit] =
-                next_row[COL_INDEX(Sha256RoundCols, work_vars.e[i][bit])];
-        }
-    }
-
+    // Process one round at a time instead of loading all 8 rounds upfront
+    // This reduces stack from ~2KB to ~512 bytes
+    
     for (int i = 0; i < SHA256_ROUNDS_PER_ROW; i++) {
         Fp sig_a_bits[SHA256_WORD_BITS];
         for (int bit = 0; bit < SHA256_WORD_BITS; bit++) {
-            sig_a_bits[bit] =
-                (a_bits[i + 3][(bit + 2) & 31] + a_bits[i + 3][(bit + 13) & 31] -
-                 Fp(2) * a_bits[i + 3][(bit + 2) & 31] * a_bits[i + 3][(bit + 13) & 31]) +
-                a_bits[i + 3][(bit + 22) & 31] -
-                Fp(2) *
-                    (a_bits[i + 3][(bit + 2) & 31] + a_bits[i + 3][(bit + 13) & 31] -
-                     Fp(2) * a_bits[i + 3][(bit + 2) & 31] * a_bits[i + 3][(bit + 13) & 31]) *
-                    a_bits[i + 3][(bit + 22) & 31];
+            Fp a3_b2 = get_a_bit(local_row, next_row, i + 3, (bit + 2) & 31);
+            Fp a3_b13 = get_a_bit(local_row, next_row, i + 3, (bit + 13) & 31);
+            Fp a3_b22 = get_a_bit(local_row, next_row, i + 3, (bit + 22) & 31);
+            Fp xor_2_13 = a3_b2 + a3_b13 - Fp(2) * a3_b2 * a3_b13;
+            sig_a_bits[bit] = xor_2_13 + a3_b22 - Fp(2) * xor_2_13 * a3_b22;
         }
 
         Fp sig_e_bits[SHA256_WORD_BITS];
         for (int bit = 0; bit < SHA256_WORD_BITS; bit++) {
-            sig_e_bits[bit] =
-                (e_bits[i + 3][(bit + 6) & 31] + e_bits[i + 3][(bit + 11) & 31] -
-                 Fp(2) * e_bits[i + 3][(bit + 6) & 31] * e_bits[i + 3][(bit + 11) & 31]) +
-                e_bits[i + 3][(bit + 25) & 31] -
-                Fp(2) *
-                    (e_bits[i + 3][(bit + 6) & 31] + e_bits[i + 3][(bit + 11) & 31] -
-                     Fp(2) * e_bits[i + 3][(bit + 6) & 31] * e_bits[i + 3][(bit + 11) & 31]) *
-                    e_bits[i + 3][(bit + 25) & 31];
+            Fp e3_b6 = get_e_bit(local_row, next_row, i + 3, (bit + 6) & 31);
+            Fp e3_b11 = get_e_bit(local_row, next_row, i + 3, (bit + 11) & 31);
+            Fp e3_b25 = get_e_bit(local_row, next_row, i + 3, (bit + 25) & 31);
+            Fp xor_6_11 = e3_b6 + e3_b11 - Fp(2) * e3_b6 * e3_b11;
+            sig_e_bits[bit] = xor_6_11 + e3_b25 - Fp(2) * xor_6_11 * e3_b25;
         }
 
         Fp maj_abc_bits[SHA256_WORD_BITS];
         for (int bit = 0; bit < SHA256_WORD_BITS; bit++) {
-            maj_abc_bits[bit] =
-                a_bits[i + 3][bit] * a_bits[i + 2][bit] + a_bits[i + 3][bit] * a_bits[i + 1][bit] +
-                a_bits[i + 2][bit] * a_bits[i + 1][bit] -
-                Fp(2) * a_bits[i + 3][bit] * a_bits[i + 2][bit] * a_bits[i + 1][bit];
+            Fp a3 = get_a_bit(local_row, next_row, i + 3, bit);
+            Fp a2 = get_a_bit(local_row, next_row, i + 2, bit);
+            Fp a1 = get_a_bit(local_row, next_row, i + 1, bit);
+            maj_abc_bits[bit] = a3 * a2 + a3 * a1 + a2 * a1 - Fp(2) * a3 * a2 * a1;
         }
 
         Fp ch_efg_bits[SHA256_WORD_BITS];
         for (int bit = 0; bit < SHA256_WORD_BITS; bit++) {
-            ch_efg_bits[bit] = e_bits[i + 3][bit] * e_bits[i + 2][bit] + e_bits[i + 1][bit] -
-                               e_bits[i + 3][bit] * e_bits[i + 1][bit];
+            Fp e3 = get_e_bit(local_row, next_row, i + 3, bit);
+            Fp e2 = get_e_bit(local_row, next_row, i + 2, bit);
+            Fp e1 = get_e_bit(local_row, next_row, i + 1, bit);
+            ch_efg_bits[bit] = e3 * e2 + e1 - e3 * e1;
         }
+        
         for (int j = 0; j < SHA256_WORD_U16S; j++) {
             Fp t1_limb_sum = Fp::zero();
 #pragma unroll 1
             for (int bit = 0; bit < 16; bit++) {
-                t1_limb_sum += (e_bits[i][j * 16 + bit] + sig_e_bits[j * 16 + bit] +
-                                ch_efg_bits[j * 16 + bit]) *
-                               Fp(1 << bit);
+                Fp e_i = get_e_bit(local_row, next_row, i, j * 16 + bit);
+                t1_limb_sum += (e_i + sig_e_bits[j * 16 + bit] + ch_efg_bits[j * 16 + bit]) * Fp(1 << bit);
             }
             Fp t2_limb_sum = Fp::zero();
 #pragma unroll 1
             for (int bit = 0; bit < 16; bit++) {
-                t2_limb_sum +=
-                    (sig_a_bits[j * 16 + bit] + maj_abc_bits[j * 16 + bit]) * Fp(1 << bit);
+                t2_limb_sum += (sig_a_bits[j * 16 + bit] + maj_abc_bits[j * 16 + bit]) * Fp(1 << bit);
             }
 
             Fp d_limb = Fp::zero();
@@ -87,9 +85,9 @@ __device__ void generate_carry_ae(RowSlice local_row, RowSlice next_row) {
             Fp cur_e_limb = Fp::zero();
 #pragma unroll 1
             for (int bit = 0; bit < 16; bit++) {
-                d_limb += (a_bits[i][j * 16 + bit] * Fp(1 << bit));
-                cur_a_limb += (a_bits[i + 4][j * 16 + bit] * Fp(1 << bit));
-                cur_e_limb += (e_bits[i + 4][j * 16 + bit] * Fp(1 << bit));
+                d_limb += get_a_bit(local_row, next_row, i, j * 16 + bit) * Fp(1 << bit);
+                cur_a_limb += get_a_bit(local_row, next_row, i + 4, j * 16 + bit) * Fp(1 << bit);
+                cur_e_limb += get_e_bit(local_row, next_row, i + 4, j * 16 + bit) * Fp(1 << bit);
             }
             Fp prev_carry_e =
                 (j == 0) ? Fp::zero()
@@ -109,43 +107,36 @@ __device__ void generate_carry_ae(RowSlice local_row, RowSlice next_row) {
     }
 }
 
+// Helper to get w_bit from either local_row or next_row based on index
+__device__ __forceinline__ Fp get_w_bit(RowSlice local_row, RowSlice next_row, int round_idx, int bit) {
+    if (round_idx < SHA256_ROUNDS_PER_ROW) {
+        return local_row[COL_INDEX(Sha256RoundCols, message_schedule.w[round_idx][bit])];
+    } else {
+        return next_row[COL_INDEX(Sha256RoundCols, message_schedule.w[round_idx - SHA256_ROUNDS_PER_ROW][bit])];
+    }
+}
+
 __device__ void generate_intermed_4(RowSlice local_row, RowSlice next_row) {
-    Fp w_bits[SHA256_ROUNDS_PER_ROW * 2][SHA256_WORD_BITS];
-
+    // Process one round at a time instead of loading all 8 rounds upfront
+    // This reduces stack from ~1.2KB to ~256 bytes
+    
     for (int i = 0; i < SHA256_ROUNDS_PER_ROW; i++) {
-        for (int bit = 0; bit < SHA256_WORD_BITS; bit++) {
-            w_bits[i][bit] = local_row[COL_INDEX(Sha256RoundCols, message_schedule.w[i][bit])];
-        }
-    }
-
-    for (int i = 0; i < SHA256_ROUNDS_PER_ROW; i++) {
-        for (int bit = 0; bit < SHA256_WORD_BITS; bit++) {
-            w_bits[i + SHA256_ROUNDS_PER_ROW][bit] =
-                next_row[COL_INDEX(Sha256RoundCols, message_schedule.w[i][bit])];
-        }
-    }
-
-    Fp w_limbs[SHA256_ROUNDS_PER_ROW * 2][SHA256_WORD_U16S];
-    for (int i = 0; i < SHA256_ROUNDS_PER_ROW * 2; i++) {
+        // Compute w_limbs[i] on the fly
+        Fp w_limbs_i[SHA256_WORD_U16S];
         for (int j = 0; j < SHA256_WORD_U16S; j++) {
-            w_limbs[i][j] = Fp::zero();
+            w_limbs_i[j] = Fp::zero();
             for (int bit = 0; bit < 16; bit++) {
-                w_limbs[i][j] = w_limbs[i][j] + w_bits[i][j * 16 + bit] * Fp(1 << bit);
+                w_limbs_i[j] = w_limbs_i[j] + get_w_bit(local_row, next_row, i, j * 16 + bit) * Fp(1 << bit);
             }
         }
-    }
-
-    for (int i = 0; i < SHA256_ROUNDS_PER_ROW; i++) {
+        
         Fp sig_w_bits[SHA256_WORD_BITS];
         for (int bit = 0; bit < SHA256_WORD_BITS; bit++) {
-            sig_w_bits[bit] =
-                (w_bits[i + 1][(bit + 7) & 31] + w_bits[i + 1][(bit + 18) & 31] -
-                 Fp(2) * w_bits[i + 1][(bit + 7) & 31] * w_bits[i + 1][(bit + 18) & 31]) +
-                ((bit + 3 < 32) ? w_bits[i + 1][bit + 3] : Fp::zero()) -
-                Fp(2) *
-                    (w_bits[i + 1][(bit + 7) & 31] + w_bits[i + 1][(bit + 18) & 31] -
-                     Fp(2) * w_bits[i + 1][(bit + 7) & 31] * w_bits[i + 1][(bit + 18) & 31]) *
-                    ((bit + 3 < 32) ? w_bits[i + 1][bit + 3] : Fp::zero());
+            Fp w1_b7 = get_w_bit(local_row, next_row, i + 1, (bit + 7) & 31);
+            Fp w1_b18 = get_w_bit(local_row, next_row, i + 1, (bit + 18) & 31);
+            Fp w1_b3 = (bit + 3 < 32) ? get_w_bit(local_row, next_row, i + 1, bit + 3) : Fp::zero();
+            Fp xor_7_18 = w1_b7 + w1_b18 - Fp(2) * w1_b7 * w1_b18;
+            sig_w_bits[bit] = xor_7_18 + w1_b3 - Fp(2) * xor_7_18 * w1_b3;
         }
 
         Fp sig_w_limbs[SHA256_WORD_U16S];
@@ -158,46 +149,28 @@ __device__ void generate_intermed_4(RowSlice local_row, RowSlice next_row) {
 
         for (int j = 0; j < SHA256_WORD_U16S; j++) {
             SHA256INNER_WRITE_ROUND(
-                next_row, schedule_helper.intermed_4[i][j], w_limbs[i][j] + sig_w_limbs[j]
+                next_row, schedule_helper.intermed_4[i][j], w_limbs_i[j] + sig_w_limbs[j]
             );
         }
     }
 }
 
 __device__ void generate_intermed_12(RowSlice local_row, RowSlice next_row) {
+    // Use compute-on-the-fly to avoid storing bit arrays
     for (int i = 0; i < SHA256_ROUNDS_PER_ROW; i++) {
+        // Compute sig_bits on the fly using get_w_bit helper (reusing for i+2)
         Fp sig_w_2_limbs[SHA256_WORD_U16S];
-        Fp w_i_plus_2_bits[SHA256_WORD_BITS];
-
-        if (i + 2 < SHA256_ROUNDS_PER_ROW) {
-            for (int bit = 0; bit < SHA256_WORD_BITS; bit++) {
-                w_i_plus_2_bits[bit] =
-                    local_row[COL_INDEX(Sha256RoundCols, message_schedule.w[i + 2][bit])];
-            }
-        } else {
-            for (int bit = 0; bit < SHA256_WORD_BITS; bit++) {
-                w_i_plus_2_bits[bit] = next_row[COL_INDEX(
-                    Sha256RoundCols, message_schedule.w[i + 2 - SHA256_ROUNDS_PER_ROW][bit]
-                )];
-            }
-        }
-
-        Fp sig_bits[SHA256_WORD_BITS];
-        for (int bit = 0; bit < SHA256_WORD_BITS; bit++) {
-            sig_bits[bit] =
-                (w_i_plus_2_bits[(bit + 17) & 31] + w_i_plus_2_bits[(bit + 19) & 31] -
-                 Fp(2) * w_i_plus_2_bits[(bit + 17) & 31] * w_i_plus_2_bits[(bit + 19) & 31]) +
-                ((bit + 10 < 32) ? w_i_plus_2_bits[bit + 10] : Fp::zero()) -
-                Fp(2) *
-                    (w_i_plus_2_bits[(bit + 17) & 31] + w_i_plus_2_bits[(bit + 19) & 31] -
-                     Fp(2) * w_i_plus_2_bits[(bit + 17) & 31] * w_i_plus_2_bits[(bit + 19) & 31]) *
-                    ((bit + 10 < 32) ? w_i_plus_2_bits[bit + 10] : Fp::zero());
-        }
-
         for (int j = 0; j < SHA256_WORD_U16S; j++) {
             sig_w_2_limbs[j] = Fp::zero();
-            for (int bit = 0; bit < 16; bit++) {
-                sig_w_2_limbs[j] += sig_bits[j * 16 + bit] * Fp(1 << bit);
+            for (int bit_offset = 0; bit_offset < 16; bit_offset++) {
+                int bit = j * 16 + bit_offset;
+                // Get w[i+2] bits on the fly
+                Fp w2_b17 = get_w_bit(local_row, next_row, i + 2, (bit + 17) & 31);
+                Fp w2_b19 = get_w_bit(local_row, next_row, i + 2, (bit + 19) & 31);
+                Fp w2_b10 = (bit + 10 < 32) ? get_w_bit(local_row, next_row, i + 2, bit + 10) : Fp::zero();
+                Fp xor_17_19 = w2_b17 + w2_b19 - Fp(2) * w2_b17 * w2_b19;
+                Fp sig_bit = xor_17_19 + w2_b10 - Fp(2) * xor_17_19 * w2_b10;
+                sig_w_2_limbs[j] += sig_bit * Fp(1 << bit_offset);
             }
         }
 
@@ -206,28 +179,21 @@ __device__ void generate_intermed_12(RowSlice local_row, RowSlice next_row) {
             w_7_limbs[0] = local_row[COL_INDEX(Sha256RoundCols, schedule_helper.w_3[i][0])];
             w_7_limbs[1] = local_row[COL_INDEX(Sha256RoundCols, schedule_helper.w_3[i][1])];
         } else {
-            Fp w_i_minus_3_bits[SHA256_WORD_BITS];
-            for (int bit = 0; bit < SHA256_WORD_BITS; bit++) {
-                w_i_minus_3_bits[bit] =
-                    local_row[COL_INDEX(Sha256RoundCols, message_schedule.w[i - 3][bit])];
-            }
+            // Compute w[i-3] limbs on the fly
             for (int j = 0; j < SHA256_WORD_U16S; j++) {
                 w_7_limbs[j] = Fp::zero();
                 for (int bit = 0; bit < 16; bit++) {
-                    w_7_limbs[j] += w_i_minus_3_bits[j * 16 + bit] * Fp(1 << bit);
+                    w_7_limbs[j] += local_row[COL_INDEX(Sha256RoundCols, message_schedule.w[i - 3][j * 16 + bit])] * Fp(1 << bit);
                 }
             }
         }
 
+        // Compute w_cur_limbs on the fly
         Fp w_cur_limbs[SHA256_WORD_U16S];
-        Fp w_cur_bits[SHA256_WORD_BITS];
-        for (int bit = 0; bit < SHA256_WORD_BITS; bit++) {
-            w_cur_bits[bit] = next_row[COL_INDEX(Sha256RoundCols, message_schedule.w[i][bit])];
-        }
         for (int j = 0; j < SHA256_WORD_U16S; j++) {
             w_cur_limbs[j] = Fp::zero();
             for (int bit = 0; bit < 16; bit++) {
-                w_cur_limbs[j] += w_cur_bits[j * 16 + bit] * Fp(1 << bit);
+                w_cur_limbs[j] += next_row[COL_INDEX(Sha256RoundCols, message_schedule.w[i][j * 16 + bit])] * Fp(1 << bit);
             }
         }
 
@@ -309,7 +275,7 @@ __device__ void get_block_hash(
     }
 }
 
-__device__ void generate_block_trace(
+__device__ __noinline__ void generate_block_trace(
     Fp *trace,
     size_t trace_height,
     const uint32_t input[SHA256_BLOCK_WORDS],
@@ -640,7 +606,7 @@ __device__ void generate_default_row(RowSlice row_slice) {
     }
 }
 
-__device__ void generate_missing_cells(Fp *trace_chunk, size_t trace_height) {
+__device__ __noinline__ void generate_missing_cells(Fp *trace_chunk, size_t trace_height) {
     RowSlice row15(trace_chunk + 15, trace_height);
     RowSlice row16(trace_chunk + 16, trace_height);
     RowSlice row17(trace_chunk + 17, trace_height);

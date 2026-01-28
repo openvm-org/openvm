@@ -23,7 +23,7 @@ __device__ __constant__ uint64_t RC[NUM_ROUNDS] = {
     0x8000000080008081ULL, 0x8000000000008080ULL, 0x0000000080000001ULL, 0x8000000080008008ULL
 };
 
-__device__ void generate_trace_row_for_round(
+__device__ __noinline__ void generate_trace_row_for_round(
     RowSlice row,
     uint32_t round,
     uint64_t current_state[5][5]
