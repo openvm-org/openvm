@@ -45,7 +45,7 @@ __global__ void p3_inner_tracegen(
 
     auto last_rounds = height - (blocks_to_fill - 1) * NUM_ROUNDS;
     RowSlice prev_round_row = row;
-#pragma unroll 8
+#pragma unroll 1
     for (auto round = 1; round < NUM_ROUNDS; round++) {
         if ((block_idx == (blocks_to_fill - 1)) && (round >= last_rounds)) {
             break;
