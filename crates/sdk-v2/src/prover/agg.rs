@@ -175,23 +175,29 @@ impl AggProver {
         }
 
         let inner = if let Some(compression_prover) = self.compression_prover.as_ref() {
-            // We add one additional internal_recursive layer before the compression layer to
-            // minimize the input size. This internal_recursive layer will have a single child
-            // proof, meaning that it may have 2-3x fewer trace cells than the previous layer.
-            let inner = info_span!(
-                "agg_layer",
-                group = format!("internal_recursive.{internal_recursive_layer}")
-            )
-            .in_scope(|| {
-                info_span!("single_internal_agg", idx = internal_node_idx).in_scope(|| {
-                    internal_node_idx += 1;
-                    self.internal_recursive_prover.agg_prove::<E>(
-                        &[internal_proofs[0].clone()],
-                        None,
-                        true,
-                    )
-                })
-            })?;
+            // We add two additional internal_recursive layers before the compression layer to
+            // minimize the input size. The first internal_recursive layer will have a single
+            // child proof, and thus may have 2-3x fewer trace cells than the previous layer.
+            //
+            // The second will also only have a single child, and it may require 2-3x fewer
+            // hashes (and thus Poseidon2 trace rows) than the first.
+            const ADDITIONAL_INTERNAL_RECURSIVE_LAYERS: usize = 2;
+
+            let mut inner = internal_proofs[0].clone();
+            for _ in 0..ADDITIONAL_INTERNAL_RECURSIVE_LAYERS {
+                inner = info_span!(
+                    "agg_layer",
+                    group = format!("internal_recursive.{internal_recursive_layer}")
+                )
+                .in_scope(|| {
+                    info_span!("single_internal_agg", idx = internal_node_idx).in_scope(|| {
+                        internal_node_idx += 1;
+                        self.internal_recursive_prover
+                            .agg_prove::<E>(&[inner], None, true)
+                    })
+                })?;
+                internal_recursive_layer += 1;
+            }
 
             info_span!("agg_layer", group = format!("compression")).in_scope(|| {
                 info_span!("compression")
