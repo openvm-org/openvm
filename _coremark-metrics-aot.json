@@ -1,0 +1,21 @@
+{
+  "counter": [
+    {
+      "metric": "execute_e1_insns",
+      "labels": [],
+      "value": "3047145565"
+    }
+  ],
+  "gauge": [
+    {
+      "metric": "execute_e1_time_ms",
+      "labels": [],
+      "value": "787"
+    },
+    {
+      "metric": "execute_e1_insn_mi/s",
+      "labels": [],
+      "value": "3871.2297205275904"
+    }
+  ]
+}
