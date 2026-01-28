@@ -21,7 +21,7 @@ __device__ __forceinline__ DecodedExpr decode_expr_op(ExprOp raw) {
     return d;
 }
 
-__device__ BigIntGpu evaluate_bigint(
+__device__ __noinline__ BigIntGpu evaluate_bigint(
     const ExprOp *expr_ops,
     uint32_t root_idx,
     const ExprMeta *expr_meta,
@@ -88,7 +88,7 @@ __device__ BigIntGpu evaluate_bigint(
     }
 }
 
-__device__ BigUintGpu compute_biguint(
+__device__ __noinline__ BigUintGpu compute_biguint(
     const ExprOp *expr_ops,
     uint32_t expr_idx,
     const ExprMeta *meta,
@@ -213,7 +213,7 @@ __device__ void compute(
 }
 
 // Raw evaluator: walks op stream, performs no modular reduction
-__device__ OverflowInt evaluate_overflow_int(
+__device__ __noinline__ OverflowInt evaluate_overflow_int(
     const ExprOp *expr_ops,
     uint32_t op_idx,
     const ExprMeta *meta,
