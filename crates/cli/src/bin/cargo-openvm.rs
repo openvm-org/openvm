@@ -44,7 +44,17 @@ async fn main() -> Result<()> {
     } else {
         Level::WARN
     };
-    setup_tracing_with_log_level(log_level);
+    // `openvm_stark_sdk::bench::run_with_metric_collection` installs a global tracing subscriber.
+    // If we also install one here, we can panic with:
+    // "a global default trace dispatcher has already been set".
+    //
+    // We'll still install tracing by default, except when `Run` is collecting metrics (in which
+    // case the metrics wrapper will install tracing for the process).
+    let collect_metrics_in_run =
+        matches!(command, VmCliCommands::Run(_)) && std::env::var_os("OUTPUT_PATH").is_some();
+    if !collect_metrics_in_run {
+        setup_tracing_with_log_level(log_level);
+    }
 
     match command {
         VmCliCommands::Build(cmd) => cmd.run(),

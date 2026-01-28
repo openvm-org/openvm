@@ -4,6 +4,7 @@ use clap::{Parser, ValueEnum};
 use eyre::Result;
 use openvm_circuit::arch::{instructions::exe::VmExe, OPENVM_DEFAULT_INIT_FILE_NAME};
 use openvm_sdk::{config::SdkVmConfig, fs::read_object_from_file, keygen::AppProvingKey, Sdk, F};
+use openvm_stark_sdk::bench::run_with_metric_collection;
 
 use super::{build, BuildArgs, BuildCargoArgs};
 use crate::{
@@ -278,6 +279,8 @@ impl RunCmd {
         // Create SDK
         let sdk = Sdk::new(app_config)?;
 
+        let output_path_set = std::env::var_os("OUTPUT_PATH").is_some();
+
         // For metered modes, load existing app pk from disk or generate it
         if matches!(
             self.run_args.mode,
@@ -305,23 +308,54 @@ impl RunCmd {
 
         match self.run_args.mode {
             ExecutionMode::Pure => {
-                let output = sdk.execute(exe, inputs)?;
-                println!("Execution output: {output:?}");
+                if output_path_set {
+                    run_with_metric_collection("OUTPUT_PATH", || -> eyre::Result<_> {
+                        let output = sdk.execute(exe, inputs)?;
+                        println!("Execution output: {output:?}");
+                        Ok(())
+                    })?;
+                } else {
+                    let output = sdk.execute(exe, inputs)?;
+                    println!("Execution output: {output:?}");
+                }
             }
             ExecutionMode::Meter => {
-                let (output, (cost, instret)) = sdk.execute_metered_cost(exe, inputs)?;
-                println!("Execution output: {output:?}");
+                if output_path_set {
+                    run_with_metric_collection("OUTPUT_PATH", || -> eyre::Result<_> {
+                        let (output, (cost, instret)) = sdk.execute_metered_cost(exe, inputs)?;
+                        println!("Execution output: {output:?}");
 
-                println!("Number of instructions executed: {instret}");
-                println!("Total cost: {cost}");
+                        println!("Number of instructions executed: {instret}");
+                        println!("Total cost: {cost}");
+                        Ok(())
+                    })?;
+                } else {
+                    let (output, (cost, instret)) = sdk.execute_metered_cost(exe, inputs)?;
+                    println!("Execution output: {output:?}");
+
+                    println!("Number of instructions executed: {instret}");
+                    println!("Total cost: {cost}");
+                }
             }
             ExecutionMode::Segment => {
-                let (output, segments) = sdk.execute_metered(exe, inputs)?;
-                println!("Execution output: {output:?}");
+                if output_path_set {
+                    run_with_metric_collection("OUTPUT_PATH", || -> eyre::Result<_> {
+                        let (output, segments) = sdk.execute_metered(exe, inputs)?;
+                        println!("Execution output: {output:?}");
 
-                let total_instructions: u64 = segments.iter().map(|s| s.num_insns).sum();
-                println!("Number of instructions executed: {total_instructions}");
-                println!("Total segments: {}", segments.len());
+                        let total_instructions: u64 = segments.iter().map(|s| s.num_insns).sum();
+                        println!("Number of instructions executed: {total_instructions}");
+                        println!("Total segments: {}", segments.len());
+                        Ok(())
+                    })?;
+                } else {
+                    let (output, segments) = sdk.execute_metered(exe, inputs)?;
+                    println!("Execution output: {output:?}");
+
+                    let total_instructions: u64 = segments.iter().map(|s| s.num_insns).sum();
+                    println!("Number of instructions executed: {total_instructions}");
+                    println!("Total segments: {}", segments.len());
+                }
             }
         }
 

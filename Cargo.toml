@@ -71,7 +71,7 @@ members = [
     "guest-libs/verify_stark/",
     "scripts",
 ]
-exclude = ["crates/sdk/example", "benchmarks/guest/**"]
+exclude = ["crates/sdk/example", "benchmarks/guest/**", "coremark-openvm"]
 resolver = "2"
 
 # Fastest runtime configuration

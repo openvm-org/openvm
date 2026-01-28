@@ -4,3 +4,6 @@
 [submodule "crates/sdk/contracts/lib/forge-std"]
 	path = crates/sdk/contracts/lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
+[submodule "coremark-openvm"]
+	path = coremark-openvm
+	url = https://github.com/axiom-crypto/coremark-openvm.git
