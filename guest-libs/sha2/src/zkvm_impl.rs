@@ -1,7 +1,7 @@
 use core::cmp::min;
 
 use sha2::digest::{
-    consts::{U32, U64},
+    consts::{U32, U48, U64},
     FixedOutput, HashMarker, Output, OutputSizeUser, Update,
 };
 
@@ -69,10 +69,9 @@ impl Sha256 {
     }
 
     fn finalize(mut self) -> [u8; SHA256_DIGEST_BYTES] {
-        // pad until length in bytes is 56 mod 64 (leave 8 bytes for the message length)
-        let num_bytes_of_padding = SHA256_BLOCK_BYTES - 8 - self.idx;
-        // ensure num_bytes_of_padding is positive
-        let num_bytes_of_padding = (num_bytes_of_padding + SHA256_BLOCK_BYTES) % SHA256_BLOCK_BYTES;
+        // pad positive amount so that length is multiple of SHA256_BLOCK_BYTES
+        // (extra 8 bytes are for message length)
+        let num_bytes_of_padding = SHA256_BLOCK_BYTES - (self.idx + 8) % SHA256_BLOCK_BYTES;
         let message_len_in_bits = self.len * 8;
         self.update(&PADDING_BYTES[..num_bytes_of_padding]);
         self.update(&(message_len_in_bits as u64).to_be_bytes());
@@ -177,10 +176,9 @@ impl Sha512 {
     }
 
     fn finalize(mut self) -> [u8; SHA512_DIGEST_BYTES] {
-        // pad until length in bytes is 112 mod 128 (leave 16 bytes for the message length)
-        let num_bytes_of_padding = SHA512_BLOCK_BYTES - 16 - self.idx;
-        // ensure num_bytes_of_padding is positive
-        let num_bytes_of_padding = (num_bytes_of_padding + SHA512_BLOCK_BYTES) % SHA512_BLOCK_BYTES;
+        // pad positive amount so that length is multiple of SHA512_BLOCK_BYTES
+        // (extra 16 bytes are for message length)
+        let num_bytes_of_padding = SHA512_BLOCK_BYTES - (self.idx + 16) % SHA512_BLOCK_BYTES;
         let message_len_in_bits = self.len * 8;
         self.update(&PADDING_BYTES[..num_bytes_of_padding]);
         self.update(&(message_len_in_bits as u128).to_be_bytes());
@@ -280,7 +278,7 @@ impl Update for Sha384 {
 // OutputSizeUser is required for FixedOutput
 // See: https://docs.rs/digest/0.10.7/digest/trait.FixedOutput.html
 impl OutputSizeUser for Sha384 {
-    type OutputSize = U64;
+    type OutputSize = U48;
 }
 
 impl FixedOutput for Sha384 {
