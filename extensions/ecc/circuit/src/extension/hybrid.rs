@@ -2,7 +2,7 @@
 
 use openvm_algebra_circuit::Rv32ModularHybridBuilder;
 use openvm_circuit::{
-    arch::*,
+    arch::{CONST_BLOCK_SIZE, *},
     system::{
         cuda::{
             extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
@@ -23,9 +23,9 @@ use openvm_stark_backend::{p3_air::BaseAir, prover::types::AirProvingContext, Ch
 
 use crate::{
     get_ec_addne_chip, get_ec_double_chip, EccRecord, Rv32WeierstrassConfig, WeierstrassAir,
-    WeierstrassChip, WeierstrassExtension, ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
+    WeierstrassChip, WeierstrassExtension, ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32,
+    NUM_LIMBS_48,
 };
-use openvm_circuit::arch::CONST_BLOCK_SIZE;
 
 #[derive(derive_new::new)]
 pub struct HybridWeierstrassChip<

@@ -7,7 +7,7 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    Arena, MatrixRecordArena, PreflightExecutor,
+    Arena, MatrixRecordArena, PreflightExecutor, CONST_BLOCK_SIZE,
 };
 use openvm_circuit_primitives::{
     bigint::utils::{secp256k1_coord_prime, secp256r1_coord_prime},
@@ -29,8 +29,6 @@ use openvm_pairing_guest::bls12_381::BLS12_381_MODULUS;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
-
-use openvm_circuit::arch::CONST_BLOCK_SIZE;
 
 use crate::{
     get_ec_addne_air, get_ec_addne_chip, get_ec_addne_step, get_ec_double_air, get_ec_double_chip,

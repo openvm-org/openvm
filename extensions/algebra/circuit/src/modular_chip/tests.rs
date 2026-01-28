@@ -8,7 +8,7 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    Arena, PreflightExecutor,
+    Arena, PreflightExecutor, CONST_BLOCK_SIZE,
 };
 use openvm_circuit_primitives::{
     bigint::utils::{secp256k1_coord_prime, secp256k1_scalar_prime},
@@ -43,7 +43,6 @@ use crate::{
     },
     MODULAR_BLOCKS_32, MODULAR_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
-use openvm_circuit::arch::CONST_BLOCK_SIZE;
 
 const LIMB_BITS: usize = 8;
 const MAX_INS_CAPACITY: usize = 128;

@@ -2,21 +2,20 @@
 #![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
 #![cfg_attr(feature = "tco", allow(internal_features))]
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
+use openvm_circuit::arch::CONST_BLOCK_SIZE;
 #[cfg(feature = "cuda")]
 use {
     openvm_mod_circuit_builder::FieldExpressionCoreRecordMut,
     openvm_rv32_adapters::Rv32VecHeapAdapterRecord,
 };
-use openvm_circuit::arch::CONST_BLOCK_SIZE;
 
 mod extension;
 mod weierstrass_chip;
 
 pub use extension::*;
-pub use weierstrass_chip::*;
-
 // Re-export limb constants from algebra for consistency
 pub use openvm_algebra_circuit::{NUM_LIMBS_32, NUM_LIMBS_48};
+pub use weierstrass_chip::*;
 
 // Blocks per ECC operation (2 coordinates per point)
 /// Blocks for ECC with 32-limb coordinates: 2 * (32 / 4) = 16 blocks

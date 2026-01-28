@@ -8,7 +8,7 @@ use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
         ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
-        VmExecutionExtension, VmProverExtension,
+        VmExecutionExtension, VmProverExtension, CONST_BLOCK_SIZE,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
@@ -46,7 +46,6 @@ use crate::{
     },
     AlgebraCpuProverExt, MODULAR_BLOCKS_32, MODULAR_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
-use openvm_circuit::arch::CONST_BLOCK_SIZE;
 
 #[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
@@ -81,11 +80,15 @@ pub enum ModularExtensionExecutor {
     // 32 limbs prime
     ModularAddSubRv32_32(ModularExecutor<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE>), // ModularAddSub
     ModularMulDivRv32_32(ModularExecutor<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE>), // ModularMulDiv
-    ModularIsEqualRv32_32(VmModularIsEqualExecutor<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>), // ModularIsEqual
+    ModularIsEqualRv32_32(
+        VmModularIsEqualExecutor<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>,
+    ), // ModularIsEqual
     // 48 limbs prime
     ModularAddSubRv32_48(ModularExecutor<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE>), // ModularAddSub
     ModularMulDivRv32_48(ModularExecutor<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE>), // ModularMulDiv
-    ModularIsEqualRv32_48(VmModularIsEqualExecutor<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>), // ModularIsEqual
+    ModularIsEqualRv32_48(
+        VmModularIsEqualExecutor<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>,
+    ), // ModularIsEqual
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
@@ -292,15 +295,16 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for ModularExtension {
                 );
                 inventory.add_air(muldiv);
 
-                let is_eq = ModularIsEqualAir::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
-                    Rv32IsEqualModAdapterAir::new(
-                        exec_bridge,
-                        memory_bridge,
-                        bitwise_lu,
-                        pointer_max_bits,
-                    ),
-                    ModularIsEqualCoreAir::new(modulus.clone(), bitwise_lu, start_offset),
-                );
+                let is_eq =
+                    ModularIsEqualAir::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
+                        Rv32IsEqualModAdapterAir::new(
+                            exec_bridge,
+                            memory_bridge,
+                            bitwise_lu,
+                            pointer_max_bits,
+                        ),
+                        ModularIsEqualCoreAir::new(modulus.clone(), bitwise_lu, start_offset),
+                    );
                 inventory.add_air(is_eq);
             } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
@@ -331,15 +335,16 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for ModularExtension {
                 );
                 inventory.add_air(muldiv);
 
-                let is_eq = ModularIsEqualAir::<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>::new(
-                    Rv32IsEqualModAdapterAir::new(
-                        exec_bridge,
-                        memory_bridge,
-                        bitwise_lu,
-                        pointer_max_bits,
-                    ),
-                    ModularIsEqualCoreAir::new(modulus.clone(), bitwise_lu, start_offset),
-                );
+                let is_eq =
+                    ModularIsEqualAir::<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>::new(
+                        Rv32IsEqualModAdapterAir::new(
+                            exec_bridge,
+                            memory_bridge,
+                            bitwise_lu,
+                            pointer_max_bits,
+                        ),
+                        ModularIsEqualCoreAir::new(modulus.clone(), bitwise_lu, start_offset),
+                    );
                 inventory.add_air(is_eq);
             } else {
                 panic!("Modulus too large");
@@ -424,7 +429,12 @@ where
                     }
                 });
                 inventory.next_air::<ModularIsEqualAir<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>>()?;
-                let is_eq = ModularIsEqualChip::<Val<SC>, MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
+                let is_eq = ModularIsEqualChip::<
+                    Val<SC>,
+                    MODULAR_BLOCKS_32,
+                    CONST_BLOCK_SIZE,
+                    NUM_LIMBS_32,
+                >::new(
                     ModularIsEqualFiller::new(
                         Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
@@ -469,7 +479,12 @@ where
                     }
                 });
                 inventory.next_air::<ModularIsEqualAir<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>>()?;
-                let is_eq = ModularIsEqualChip::<Val<SC>, MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>::new(
+                let is_eq = ModularIsEqualChip::<
+                    Val<SC>,
+                    MODULAR_BLOCKS_48,
+                    CONST_BLOCK_SIZE,
+                    NUM_LIMBS_48,
+                >::new(
                     ModularIsEqualFiller::new(
                         Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,

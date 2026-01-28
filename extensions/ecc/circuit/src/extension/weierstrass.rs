@@ -9,7 +9,7 @@ use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
         ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
-        VmExecutionExtension, VmProverExtension,
+        VmExecutionExtension, VmProverExtension, CONST_BLOCK_SIZE,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
@@ -39,7 +39,6 @@ use crate::{
     get_ec_double_step, EcAddNeExecutor, EcDoubleExecutor, EccCpuProverExt, WeierstrassAir,
     ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
-use openvm_circuit::arch::CONST_BLOCK_SIZE;
 
 #[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]

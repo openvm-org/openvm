@@ -6,7 +6,7 @@ use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
         ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
-        VmExecutionExtension, VmProverExtension,
+        VmExecutionExtension, VmProverExtension, CONST_BLOCK_SIZE,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
@@ -35,9 +35,9 @@ use crate::{
         get_fp2_addsub_air, get_fp2_addsub_chip, get_fp2_addsub_step, get_fp2_muldiv_air,
         get_fp2_muldiv_chip, get_fp2_muldiv_step, Fp2Air, Fp2Executor,
     },
-    AlgebraCpuProverExt, ModularExtension, FP2_BLOCKS_32, FP2_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
+    AlgebraCpuProverExt, ModularExtension, FP2_BLOCKS_32, FP2_BLOCKS_48, NUM_LIMBS_32,
+    NUM_LIMBS_48,
 };
-use openvm_circuit::arch::CONST_BLOCK_SIZE;
 
 #[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]

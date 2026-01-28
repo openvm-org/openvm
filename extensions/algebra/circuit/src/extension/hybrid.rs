@@ -2,7 +2,7 @@
 
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
-    arch::*,
+    arch::{CONST_BLOCK_SIZE, *},
     system::{
         cuda::{
             extensions::{
@@ -36,7 +36,6 @@ use crate::{
     AlgebraRecord, Fp2Extension, ModularExtension, Rv32ModularConfig, Rv32ModularWithFp2Config,
     FP2_BLOCKS_32, FP2_BLOCKS_48, MODULAR_BLOCKS_32, MODULAR_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
-use openvm_circuit::arch::CONST_BLOCK_SIZE;
 
 #[derive(derive_new::new)]
 pub struct HybridModularChip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> {
@@ -193,7 +192,12 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     }
                 });
                 inventory.next_air::<ModularIsEqualAir<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>>()?;
-                let is_eq = ModularIsEqualChip::<F, MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
+                let is_eq = ModularIsEqualChip::<
+                    F,
+                    MODULAR_BLOCKS_32,
+                    CONST_BLOCK_SIZE,
+                    NUM_LIMBS_32,
+                >::new(
                     ModularIsEqualFiller::new(
                         Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
@@ -238,7 +242,12 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     }
                 });
                 inventory.next_air::<ModularIsEqualAir<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>>()?;
-                let is_eq = ModularIsEqualChip::<F, MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>::new(
+                let is_eq = ModularIsEqualChip::<
+                    F,
+                    MODULAR_BLOCKS_48,
+                    CONST_BLOCK_SIZE,
+                    NUM_LIMBS_48,
+                >::new(
                     ModularIsEqualFiller::new(
                         Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
