@@ -25,9 +25,6 @@ impl ExecutionCtxTrait for ExecutionCtx {
     fn on_memory_operation(&mut self, _address_space: u32, _ptr: u32, _size: u32) {}
 
     #[inline(always)]
-    fn on_memory_operation_no_adapter(&mut self, _address_space: u32, _ptr: u32, _size: u32) {}
-
-    #[inline(always)]
     fn should_suspend<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
         // ATTENTION: Please make sure to update the corresponding logic in the
         // `asm_bridge` crate and `aot.rs`` when you change this function.

@@ -123,24 +123,6 @@ impl ExecutionCtxTrait for MeteredCostCtx {
     }
 
     #[inline(always)]
-    fn on_memory_operation_no_adapter(&mut self, address_space: u32, _ptr: u32, size: u32) {
-        debug_assert!(
-            address_space != RV32_IMM_AS,
-            "address space must not be immediate"
-        );
-        debug_assert!(size > 0, "size must be greater than 0, got {size}");
-        debug_assert!(
-            size.is_power_of_two(),
-            "size must be a power of 2, got {size}"
-        );
-        // Prevent unbounded memory accesses per instruction
-        if self.cost > 2 * std::cmp::max(self.max_execution_cost, DEFAULT_MAX_COST) {
-            self.panic_cost_exceeded();
-        }
-        // No access adapter updates for non-Native extensions
-    }
-
-    #[inline(always)]
     fn should_suspend<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
         if exec_state.ctx.cost > exec_state.ctx.max_execution_cost {
             true

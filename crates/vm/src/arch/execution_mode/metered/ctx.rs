@@ -236,27 +236,6 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     }
 
     #[inline(always)]
-    fn on_memory_operation_no_adapter(&mut self, address_space: u32, ptr: u32, size: u32) {
-        debug_assert!(
-            address_space != RV32_IMM_AS,
-            "address space must not be immediate"
-        );
-        debug_assert!(size > 0, "size must be greater than 0, got {size}");
-        debug_assert!(
-            size.is_power_of_two(),
-            "size must be a power of 2, got {size}"
-        );
-
-        // No access adapter updates for non-Native extensions
-
-        // Handle merkle tree updates
-        if address_space != RV32_REGISTER_AS {
-            self.memory_ctx
-                .update_boundary_merkle_heights(address_space, ptr, size);
-        }
-    }
-
-    #[inline(always)]
     fn should_suspend<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
         // ATTENTION: Please make sure to update the corresponding logic in the
         // `asm_bridge` crate and `aot.rs`` when you change this function.
