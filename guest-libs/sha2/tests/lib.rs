@@ -107,7 +107,7 @@ mod tests {
                 #[cfg(feature = "aot")]
                 {
                     use openvm_circuit::{arch::VmState, system::memory::online::GuestMemory};
-                    let naive_interpreter = executor.interpreter_instance(&exe)?;
+                    let naive_interpreter = executor.interpreter_instance(&openvm_exe)?;
                     let naive_state = naive_interpreter.execute(stdin, None)?;
                     let assert_vm_state_eq =
                         |lhs: &VmState<BabyBear, GuestMemory>,

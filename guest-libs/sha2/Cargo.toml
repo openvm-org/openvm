@@ -28,6 +28,8 @@ openvm-toolchain-tests = { workspace = true }
 eyre = { workspace = true }
 
 [features]
+default = []
+aot = ["openvm-sdk/aot"]
 # Internal feature for testing only.
 cuda = ["openvm-sha2-circuit/cuda"]
 # Enables rust integration tests that take a long time.
