@@ -180,6 +180,7 @@ impl<F, CTX> VmExecState<F, GuestMemory, CTX>
 where
     CTX: ExecutionCtxTrait,
 {
+    /// Runtime read operation for a block of memory
     #[inline(always)]
     pub fn vm_read<T: Copy + Debug, const BLOCK_SIZE: usize>(
         &mut self,
@@ -191,6 +192,7 @@ where
         self.host_read(addr_space, ptr)
     }
 
+    /// Runtime write operation for a block of memory
     #[inline(always)]
     pub fn vm_write<T: Copy + Debug, const BLOCK_SIZE: usize>(
         &mut self,
