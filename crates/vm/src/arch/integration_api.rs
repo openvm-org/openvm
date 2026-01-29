@@ -324,6 +324,24 @@ impl<
     type ProcessedInstruction = MinimalInstruction<T>;
 }
 
+/// Adapter interface for branch operations that read from heap via vec-style blocks.
+/// Similar to `VecHeapAdapterInterface` but without writes (branch operations only compare values).
+pub struct VecHeapBranchAdapterInterface<
+    T,
+    const NUM_READS: usize,
+    const BLOCKS_PER_READ: usize,
+    const READ_SIZE: usize,
+>(PhantomData<T>);
+
+impl<T, const NUM_READS: usize, const BLOCKS_PER_READ: usize, const READ_SIZE: usize>
+    VmAdapterInterface<T>
+    for VecHeapBranchAdapterInterface<T, NUM_READS, BLOCKS_PER_READ, READ_SIZE>
+{
+    type Reads = [[[T; READ_SIZE]; BLOCKS_PER_READ]; NUM_READS];
+    type Writes = ();
+    type ProcessedInstruction = ImmInstruction<T>;
+}
+
 /// Similar to `BasicAdapterInterface`, but it flattens the reads and writes into a single flat
 /// array for each
 pub struct FlatInterface<T, PI, const READ_CELLS: usize, const WRITE_CELLS: usize>(
@@ -814,6 +832,43 @@ mod conversions {
                 instruction.opcode,
                 instruction.immediate,
             ])
+        }
+    }
+
+    // AdapterAirContext: BasicInterface -> VecHeapBranchAdapterInterface
+    impl<
+            T,
+            const BASIC_NUM_READS: usize,
+            const NUM_READS: usize,
+            const BLOCKS_PER_READ: usize,
+            const READ_SIZE: usize,
+        >
+        From<
+            AdapterAirContext<
+                T,
+                BasicAdapterInterface<T, ImmInstruction<T>, BASIC_NUM_READS, 0, READ_SIZE, 0>,
+            >,
+        >
+        for AdapterAirContext<
+            T,
+            VecHeapBranchAdapterInterface<T, NUM_READS, BLOCKS_PER_READ, READ_SIZE>,
+        >
+    {
+        fn from(
+            ctx: AdapterAirContext<
+                T,
+                BasicAdapterInterface<T, ImmInstruction<T>, BASIC_NUM_READS, 0, READ_SIZE, 0>,
+            >,
+        ) -> Self {
+            assert_eq!(BASIC_NUM_READS, NUM_READS * BLOCKS_PER_READ);
+            let mut reads_it = ctx.reads.into_iter();
+            let reads = from_fn(|_| from_fn(|_| reads_it.next().unwrap()));
+            AdapterAirContext {
+                to_pc: ctx.to_pc,
+                reads,
+                writes: (),
+                instruction: ctx.instruction,
+            }
         }
     }
 }
