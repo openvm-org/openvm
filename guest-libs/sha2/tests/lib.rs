@@ -40,8 +40,7 @@ mod tests {
         };
 
         let file_content =
-            fs::read_to_string("tests/programs/examples/test_vectors/".to_string() + file_name)
-                .unwrap();
+            fs::read_to_string("tests/test_vectors/".to_string() + file_name).unwrap();
         let mut lines = file_content.lines();
         while let Some(line) = lines.next() {
             let Some(len_str) = get_attribute_from_line(line, "Len") else {
