@@ -99,7 +99,7 @@ impl Mul<P256Scalar> for P256Point {
     type Output = P256Point;
 
     fn mul(self, other: P256Scalar) -> P256Point {
-        NistP256::msm(&[other], &[self])
+        NistP256::msm::<true>(&[other], &[self])
     }
 }
 
@@ -107,7 +107,7 @@ impl Mul<&P256Scalar> for &P256Point {
     type Output = P256Point;
 
     fn mul(self, other: &P256Scalar) -> P256Point {
-        NistP256::msm(&[*other], &[*self])
+        NistP256::msm::<true>(&[*other], &[*self])
     }
 }
 
@@ -115,19 +115,19 @@ impl Mul<&P256Scalar> for P256Point {
     type Output = P256Point;
 
     fn mul(self, other: &P256Scalar) -> P256Point {
-        NistP256::msm(&[*other], &[self])
+        NistP256::msm::<true>(&[*other], &[self])
     }
 }
 
 impl MulAssign<P256Scalar> for P256Point {
     fn mul_assign(&mut self, rhs: P256Scalar) {
-        *self = NistP256::msm(&[rhs], &[*self]);
+        *self = NistP256::msm::<true>(&[rhs], &[*self]);
     }
 }
 
 impl MulAssign<&P256Scalar> for P256Point {
     fn mul_assign(&mut self, rhs: &P256Scalar) {
-        *self = NistP256::msm(&[*rhs], &[*self]);
+        *self = NistP256::msm::<true>(&[*rhs], &[*self]);
     }
 }
 
@@ -166,7 +166,7 @@ impl elliptic_curve::group::Curve for P256Point {
 
 impl LinearCombination for P256Point {
     fn lincomb(x: &Self, k: &Self::Scalar, y: &Self, l: &Self::Scalar) -> Self {
-        NistP256::msm(&[*k, *l], &[*x, *y])
+        NistP256::msm::<true>(&[*k, *l], &[*x, *y])
     }
 }
 

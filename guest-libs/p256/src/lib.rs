@@ -19,9 +19,9 @@ pub mod ecdsa;
 // Needs to be public so that the `sw_init` macro can access it
 pub use internal::{P256Coord, P256Point, P256Scalar};
 
-// -- Define the ZST for implementing the elliptic curve traits --
-#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
-pub struct NistP256;
+openvm_ecc_curve_macros::curve_declare! {
+    NistP256 { point_type = P256Point, scalar_type = P256Scalar },
+}
 
 // --- Implement the Curve trait on P256 ---
 

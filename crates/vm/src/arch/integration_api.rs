@@ -677,26 +677,29 @@ mod conversions {
         }
     }
 
-    impl<T, const N: usize, const M1: usize, const M2: usize> From<([[T; N]; M1], [[T; N]; M2])>
-        for DynArray<T>
+    // From implementation for tuples with potentially different inner array sizes
+    impl<T, const M1: usize, const M2: usize, const N1: usize, const N2: usize>
+        From<([[T; N1]; M1], [[T; N2]; M2])> for DynArray<T>
     {
-        fn from(v: ([[T; N]; M1], [[T; N]; M2])) -> Self {
-            let vec =
-                v.0.into_iter()
-                    .flatten()
-                    .chain(v.1.into_iter().flatten())
-                    .collect();
+        fn from(v: ([[T; N1]; M1], [[T; N2]; M2])) -> Self {
+            let mut vec = Vec::new();
+            for block in v.0 {
+                vec.extend(block);
+            }
+            for block in v.1 {
+                vec.extend(block);
+            }
             Self(vec)
         }
     }
 
-    impl<T, const N: usize, const M1: usize, const M2: usize> From<DynArray<T>>
-        for ([[T; N]; M1], [[T; N]; M2])
+    impl<T, const M1: usize, const M2: usize, const N1: usize, const N2: usize> From<DynArray<T>>
+        for ([[T; N1]; M1], [[T; N2]; M2])
     {
         fn from(v: DynArray<T>) -> Self {
             assert_eq!(
                 v.0.len(),
-                N * (M1 + M2),
+                N1 * M1 + N2 * M2,
                 "Incorrect vector length {}",
                 v.0.len()
             );
