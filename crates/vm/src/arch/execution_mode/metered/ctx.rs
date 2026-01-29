@@ -49,29 +49,32 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
                 })
                 .unzip();
 
-        let memory_ctx = MemoryCtx::new(config);
+        let segmentation_ctx = SegmentationCtx::new(
+            air_names,
+            widths,
+            interactions,
+            config.segmentation_config.clone(),
+        );
+        let memory_ctx = MemoryCtx::new(config, segmentation_ctx.segment_check_insns);
 
         // Assert that the indices are correct
         debug_assert!(
-            air_names[memory_ctx.boundary_idx].contains("Boundary"),
+            segmentation_ctx.air_names[memory_ctx.boundary_idx].contains("Boundary"),
             "air_name={}",
-            air_names[memory_ctx.boundary_idx]
+            segmentation_ctx.air_names[memory_ctx.boundary_idx]
         );
         if let Some(merkle_tree_index) = memory_ctx.merkle_tree_index {
             debug_assert!(
-                air_names[merkle_tree_index].contains("Merkle"),
+                segmentation_ctx.air_names[merkle_tree_index].contains("Merkle"),
                 "air_name={}",
-                air_names[merkle_tree_index]
+                segmentation_ctx.air_names[merkle_tree_index]
             );
         }
         debug_assert!(
-            air_names[memory_ctx.adapter_offset].contains("AccessAdapterAir<2>"),
+            segmentation_ctx.air_names[memory_ctx.adapter_offset].contains("AccessAdapterAir<2>"),
             "air_name={}",
-            air_names[memory_ctx.adapter_offset]
+            segmentation_ctx.air_names[memory_ctx.adapter_offset]
         );
-
-        let segmentation_ctx =
-            SegmentationCtx::new(air_names, widths, interactions, config.segmentation_limits);
 
         let mut ctx = Self {
             trace_heights,
@@ -80,14 +83,11 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             segmentation_ctx,
             suspend_on_segment: false,
         };
-        if !config.continuation_enabled {
-            // force single segment
-            ctx.segmentation_ctx.segment_check_insns = u64::MAX;
-            ctx.segmentation_ctx.instrets_until_check = u64::MAX;
-        }
 
         // Add merkle height contributions for all registers
         ctx.memory_ctx.add_register_merkle_heights();
+        ctx.memory_ctx
+            .lazy_update_boundary_heights(&mut ctx.trace_heights);
 
         ctx
     }
@@ -98,19 +98,52 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         self.segmentation_ctx.set_max_trace_height(max_trace_height);
         let max_check_freq = (max_trace_height / 2) as u64;
         if max_check_freq < self.segmentation_ctx.segment_check_insns {
-            self.segmentation_ctx.segment_check_insns = max_check_freq;
+            self = self.with_segment_check_insns(max_check_freq);
         }
-        self.segmentation_ctx.instrets_until_check = self.segmentation_ctx.segment_check_insns;
         self
     }
 
-    pub fn with_max_cells(mut self, max_cells: usize) -> Self {
-        self.segmentation_ctx.set_max_cells(max_cells);
+    pub fn with_max_memory(mut self, max_memory: usize) -> Self {
+        self.segmentation_ctx.set_max_memory(max_memory);
         self
     }
 
     pub fn with_max_interactions(mut self, max_interactions: usize) -> Self {
         self.segmentation_ctx.set_max_interactions(max_interactions);
+        self
+    }
+
+    pub fn with_segment_check_insns(mut self, segment_check_insns: u64) -> Self {
+        self.segmentation_ctx.segment_check_insns = segment_check_insns;
+        self.segmentation_ctx.instrets_until_check = segment_check_insns;
+
+        // Update memory context with new segment check instructions
+        let page_indices_since_checkpoint_cap =
+            MemoryCtx::<PAGE_BITS>::calculate_checkpoint_capacity(segment_check_insns);
+
+        self.memory_ctx.page_indices_since_checkpoint =
+            vec![0; page_indices_since_checkpoint_cap].into_boxed_slice();
+        self.memory_ctx.page_indices_since_checkpoint_len = 0;
+        self
+    }
+
+    pub fn with_main_cell_weight(mut self, weight: usize) -> Self {
+        self.segmentation_ctx.set_main_cell_weight(weight);
+        self
+    }
+
+    pub fn with_main_cell_secondary_weight(mut self, weight: f64) -> Self {
+        self.segmentation_ctx.set_main_cell_secondary_weight(weight);
+        self
+    }
+
+    pub fn with_interaction_cell_weight(mut self, weight: usize) -> Self {
+        self.segmentation_ctx.set_interaction_cell_weight(weight);
+        self
+    }
+
+    pub fn with_base_field_size(mut self, base_field_size: usize) -> Self {
+        self.segmentation_ctx.set_base_field_size(base_field_size);
         self
     }
 
@@ -120,12 +153,6 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
     pub fn into_segments(self) -> Vec<Segment> {
         self.segmentation_ctx.segments
-    }
-
-    fn reset_segment(&mut self) {
-        self.memory_ctx.clear();
-        // Add merkle height contributions for all registers
-        self.memory_ctx.add_register_merkle_heights();
     }
 
     #[inline(always)]
@@ -147,8 +174,40 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         );
 
         if did_segment {
-            self.reset_segment();
+            // Initialize contexts for new segment
+            self.segmentation_ctx
+                .initialize_segment(&mut self.trace_heights, &self.is_trace_height_constant);
+            self.memory_ctx.initialize_segment(&mut self.trace_heights);
+
+            // Check if the new segment is within limits
+            if self.segmentation_ctx.should_segment(
+                self.segmentation_ctx.instret,
+                &self.trace_heights,
+                &self.is_trace_height_constant,
+            ) {
+                let trace_heights_str = self
+                    .trace_heights
+                    .iter()
+                    .zip(self.segmentation_ctx.air_names.iter())
+                    .filter(|(&height, _)| height > 0)
+                    .map(|(&height, name)| format!("  {name} = {height}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                tracing::warn!(
+                    "Segment initialized with heights that exceed limits\n\
+                     instret={}\n\
+                     trace_heights=[\n{}\n]",
+                    self.segmentation_ctx.instret,
+                    trace_heights_str
+                );
+            }
         }
+
+        // Update checkpoints
+        self.segmentation_ctx
+            .update_checkpoint(self.segmentation_ctx.instret, &self.trace_heights);
+        self.memory_ctx.update_checkpoint();
+
         did_segment
     }
 

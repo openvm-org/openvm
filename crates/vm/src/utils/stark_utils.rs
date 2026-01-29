@@ -109,7 +109,7 @@ pub fn check_aot_equivalence<E, VB>(
     input: &Streams<Val<E::SC>>,
 ) -> eyre::Result<()>
 where
-    E: StarkFriEngine,
+    E: StarkEngine,
     Val<E::SC>: PrimeField32,
     VB: VmBuilder<E>,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
@@ -249,7 +249,7 @@ where
 
         let ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
         if debug {
-            debug_proving_ctx(&vm, &pk, &ctx);
+            debug_proving_ctx(&vm, &ctx);
         }
         let proof = vm.engine.prove(vm.pk(), ctx);
         proofs.push(proof);

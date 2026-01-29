@@ -27,7 +27,7 @@ use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
     p3_air::BaseAir,
     p3_field::{FieldAlgebra, PrimeField32},
-    prover::{cpu::CpuBackend, types::AirProvingContext},
+    prover::{cpu::CpuBackend, types::AirProvingContext, MatrixDimensions},
     rap::AnyRap,
     utils::disable_debug_builder,
     AirRef, Chip,
@@ -263,8 +263,14 @@ impl Default for GpuChipTestBuilder {
 
 impl GpuChipTestBuilder {
     pub fn new() -> Self {
-        // TODO: allow for custom test builder configuration
         Self::default()
+    }
+
+    pub fn new_persistent() -> Self {
+        let mut mem_config = MemoryConfig::default();
+        // Currently tests still use gen_pointer for the full 1<<29 range of address space 1.
+        mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
+        Self::persistent(mem_config, default_var_range_checker_bus())
     }
 
     pub fn volatile(mem_config: MemoryConfig, bus: VariableRangeCheckerBus) -> Self {
@@ -521,7 +527,7 @@ impl GpuChipTester {
         G: Chip<RA, GpuBackend>,
     {
         let proving_ctx = gpu_chip.generate_proving_ctx(gpu_arena);
-        if proving_ctx.common_main.is_some() {
+        if matches!(proving_ctx.common_main.as_ref(), Some(trace) if trace.height() > 0) {
             self = self.load_air_proving_ctx(Arc::new(air) as AirRef<SC>, proving_ctx);
         }
         self

@@ -195,9 +195,9 @@ snark-verifier-sdk = { version = "0.2.0", default-features = false, features = [
 snark-verifier = { version = "0.2.0", default-features = false }
 halo2curves-axiom = { git = "https://github.com/axiom-crypto/halo2curves.git", tag = "v0.7.2" }
 
-forge-fmt = "0.2.0"
+forge-fmt = { git = "https://github.com/foundry-rs/foundry.git", tag = "v1.5.0" }
 cargo_metadata = "0.18"
-alloy-sol-types = "0.8.25"
+alloy-sol-types = "1.4.1"
 tracing = "0.1.40"
 bon = "3.2.0"
 serde_json = "1.0.117"
@@ -233,6 +233,7 @@ libloading = "0.8"
 tracing-subscriber = { version = "0.3.20", features = ["std", "env-filter"] }
 tokio = "1" # >=1.0.0 to allow downstream flexibility
 abi_stable = "0.11.3"
+bytesize = "2.0"
 
 # default-features = false for no_std for use in guest programs
 itertools = { version = "0.14.0", default-features = false }
@@ -252,6 +253,7 @@ num-integer = { version = "0.1.46", default-features = false }
 num-traits = { version = "0.2.19", default-features = false }
 ff = { version = "0.13.1", default-features = false }
 sha2 = { version = "0.10", default-features = false }
+blstrs = { version = "0.7.1", default-features = true }
 
 # specific to CUDA and GPU
 cuda-runtime-sys = "0.3.0-alpha.1"
