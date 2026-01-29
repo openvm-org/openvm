@@ -10,7 +10,7 @@ use openvm_circuit::{
             TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
             RANGE_TUPLE_CHECKER_BUS,
         },
-        Arena, ExecutionBridge, PreflightExecutor, CONST_BLOCK_SIZE,
+        Arena, ExecutionBridge, PreflightExecutor,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::generate_long_number,
@@ -69,7 +69,6 @@ use crate::{
     Rv32BranchLessThan256Executor, Rv32LessThan256Air, Rv32LessThan256Chip,
     Rv32LessThan256Executor, Rv32Multiplication256Air, Rv32Multiplication256Chip,
     Rv32Multiplication256Executor, Rv32Shift256Air, Rv32Shift256Chip, Rv32Shift256Executor,
-    INT256_NUM_BLOCKS,
 };
 
 type F = BabyBear;

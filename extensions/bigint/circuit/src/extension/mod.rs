@@ -10,7 +10,6 @@ use openvm_circuit::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
         ExecutorInventoryBuilder, ExecutorInventoryError, MatrixRecordArena, RowMajorMatrixArena,
         VmBuilder, VmChipComplex, VmCircuitExtension, VmExecutionExtension, VmProverExtension,
-        CONST_BLOCK_SIZE,
     },
     system::{memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemPort},
 };
