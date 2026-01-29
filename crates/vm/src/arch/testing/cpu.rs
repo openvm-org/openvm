@@ -184,7 +184,12 @@ where
     ) -> (usize, usize) {
         let register = self.get_default_register(reg_increment);
         let pointer = self.get_default_pointer(pointer_increment);
-        self.write(1, register, pointer.to_le_bytes().map(F::from_canonical_u8));
+        // Cast to u32 to ensure we write exactly 4 bytes (RV32 register size).
+        self.write(
+            1,
+            register,
+            (pointer as u32).to_le_bytes().map(F::from_canonical_u8),
+        );
         (register, pointer)
     }
 
@@ -239,21 +244,23 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         pointer: usize,
         writes: Vec<[F; NUM_LIMBS]>,
     ) {
+        // Cast to u32 to ensure we write exactly 4 bytes (RV32 register size).
+        // Using usize would write 8 bytes on 64-bit systems, creating access adapter records.
         self.write(
             1usize,
             register,
-            pointer.to_le_bytes().map(F::from_canonical_u8),
+            (pointer as u32).to_le_bytes().map(F::from_canonical_u8),
         );
-        if NUM_LIMBS.is_power_of_two() {
-            for (i, &write) in writes.iter().enumerate() {
-                self.write(2usize, pointer + i * NUM_LIMBS, write);
-            }
-        } else {
-            for (i, &write) in writes.iter().enumerate() {
-                let ptr = pointer + i * NUM_LIMBS;
-                for j in (0..NUM_LIMBS).step_by(4) {
-                    self.write::<4>(2usize, ptr + j, write[j..j + 4].try_into().unwrap());
-                }
+        // When access adapters are disabled, all memory accesses must use CONST_BLOCK_SIZE.
+        // Always write in chunks of CONST_BLOCK_SIZE to ensure compatibility.
+        for (i, &write) in writes.iter().enumerate() {
+            let ptr = pointer + i * NUM_LIMBS;
+            for j in (0..NUM_LIMBS).step_by(CONST_BLOCK_SIZE) {
+                self.write::<CONST_BLOCK_SIZE>(
+                    2usize,
+                    ptr + j,
+                    write[j..j + CONST_BLOCK_SIZE].try_into().unwrap(),
+                );
             }
         }
     }

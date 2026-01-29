@@ -217,7 +217,12 @@ impl TestBuilder<F> for GpuChipTestBuilder {
     ) -> (usize, usize) {
         let register = self.get_default_register(reg_increment);
         let pointer = self.get_default_pointer(pointer_increment);
-        self.write(1, register, pointer.to_le_bytes().map(F::from_canonical_u8));
+        // Cast to u32 to ensure we write exactly 4 bytes (RV32 register size).
+        self.write(
+            1,
+            register,
+            (pointer as u32).to_le_bytes().map(F::from_canonical_u8),
+        );
         (register, pointer)
     }
 
@@ -375,10 +380,11 @@ impl GpuChipTestBuilder {
         pointer: usize,
         writes: Vec<[F; NUM_LIMBS]>,
     ) {
+        // Cast to u32 to ensure we write exactly 4 bytes (RV32 register size).
         self.write(
             1usize,
             register,
-            pointer.to_le_bytes().map(F::from_canonical_u8),
+            (pointer as u32).to_le_bytes().map(F::from_canonical_u8),
         );
         if NUM_LIMBS.is_power_of_two() {
             for (i, &write) in writes.iter().enumerate() {
