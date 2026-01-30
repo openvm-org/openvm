@@ -8,7 +8,7 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    Arena, PreflightExecutor,
+    Arena, PreflightExecutor, CONST_BLOCK_SIZE,
 };
 use openvm_circuit_primitives::{
     bigint::utils::secp256k1_coord_prime,
@@ -31,9 +31,12 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
-use crate::fp2_chip::{
-    get_fp2_addsub_air, get_fp2_addsub_chip, get_fp2_addsub_step, get_fp2_muldiv_air,
-    get_fp2_muldiv_chip, get_fp2_muldiv_step, Fp2Air, Fp2Chip, Fp2Executor,
+use crate::{
+    fp2_chip::{
+        get_fp2_addsub_air, get_fp2_addsub_chip, get_fp2_addsub_step, get_fp2_muldiv_air,
+        get_fp2_muldiv_chip, get_fp2_muldiv_step, Fp2Air, Fp2Chip, Fp2Executor,
+    },
+    FP2_BLOCKS_32, FP2_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
 
 const LIMB_BITS: usize = 8;
@@ -366,7 +369,7 @@ mod cuda_tests {
     use test_case::test_case;
 
     use super::*;
-    use crate::fp2_chip::{Fp2AddSubChipGpu, Fp2MulDivChipGpu};
+    use crate::extension::HybridFp2Chip;
 
     pub type GpuHarness<const BLOCKS: usize, const BLOCK_SIZE: usize, T> = GpuTestChipHarness<
         F,
@@ -380,7 +383,7 @@ mod cuda_tests {
         tester: &GpuChipTestBuilder,
         config: ExprBuilderConfig,
         offset: usize,
-    ) -> GpuHarness<BLOCKS, BLOCK_SIZE, Fp2AddSubChipGpu<BLOCKS, BLOCK_SIZE>> {
+    ) -> GpuHarness<BLOCKS, BLOCK_SIZE, HybridFp2Chip<F, BLOCKS, BLOCK_SIZE>> {
         // getting bus from tester since `gpu_chip` and `air` must use the same bus
         let range_bus = default_var_range_checker_bus();
         let bitwise_bus = default_bitwise_lookup_bus();
@@ -409,23 +412,22 @@ mod cuda_tests {
             dummy_bitwise_chip,
             tester.address_bits(),
         );
-        let gpu_chip = Fp2AddSubChipGpu::new(
-            tester.range_checker(),
-            tester.bitwise_op_lookup(),
+        let hybrid_chip = HybridFp2Chip::new(get_fp2_addsub_chip(
             config,
-            offset,
-            tester.address_bits() as u32,
-            tester.timestamp_max_bits() as u32,
-        );
+            tester.cpu_memory_helper(),
+            tester.cpu_range_checker(),
+            tester.cpu_bitwise_op_lookup(),
+            tester.address_bits(),
+        ));
 
-        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
     fn create_muldiv_cuda_test_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
         tester: &GpuChipTestBuilder,
         config: ExprBuilderConfig,
         offset: usize,
-    ) -> GpuHarness<BLOCKS, BLOCK_SIZE, Fp2MulDivChipGpu<BLOCKS, BLOCK_SIZE>> {
+    ) -> GpuHarness<BLOCKS, BLOCK_SIZE, HybridFp2Chip<F, BLOCKS, BLOCK_SIZE>> {
         // getting bus from tester since `gpu_chip` and `air` must use the same bus
         let range_bus = default_var_range_checker_bus();
         let bitwise_bus = default_bitwise_lookup_bus();
@@ -454,65 +456,64 @@ mod cuda_tests {
             dummy_bitwise_chip,
             tester.address_bits(),
         );
-        let gpu_chip = Fp2MulDivChipGpu::new(
-            tester.range_checker(),
-            tester.bitwise_op_lookup(),
+        let hybrid_chip = HybridFp2Chip::new(get_fp2_muldiv_chip(
             config,
-            offset,
-            tester.address_bits() as u32,
-            tester.timestamp_max_bits() as u32,
-        );
+            tester.cpu_memory_helper(),
+            tester.cpu_range_checker(),
+            tester.cpu_bitwise_op_lookup(),
+            tester.address_bits(),
+        ));
 
-        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+        GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
-    #[test_case(TestConfig::<2, 32, 32>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
     BigUint::from_str("357686312646216567629137").unwrap(),
     true,
     50),
-    create_addsub_cuda_test_harness::<2, 32>
+    create_addsub_cuda_test_harness::<FP2_BLOCKS_32, CONST_BLOCK_SIZE>
 )]
-    #[test_case(TestConfig::<2, 32, 32>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
     secp256k1_coord_prime(),
     true,
     50),
-    create_addsub_cuda_test_harness::<2, 32>
+    create_addsub_cuda_test_harness::<FP2_BLOCKS_32, CONST_BLOCK_SIZE>
 )]
-    #[test_case(TestConfig::<2, 32, 32>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
     BN254_MODULUS.clone(),
     true,
     50),
-    create_addsub_cuda_test_harness::<2, 32>
+    create_addsub_cuda_test_harness::<FP2_BLOCKS_32, CONST_BLOCK_SIZE>
 )]
-    #[test_case(TestConfig::<6, 16, 48>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>::new(
     BLS12_381_MODULUS.clone(),
     true,
     50),
-    create_addsub_cuda_test_harness::<6, 16>
+    create_addsub_cuda_test_harness::<FP2_BLOCKS_48, CONST_BLOCK_SIZE>
 )]
-    #[test_case(TestConfig::<2, 32, 32>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
     BigUint::from_str("357686312646216567629137").unwrap(),
     false,
     50),
-    create_muldiv_cuda_test_harness::<2, 32>
+    create_muldiv_cuda_test_harness::<FP2_BLOCKS_32, CONST_BLOCK_SIZE>
 )]
-    #[test_case(TestConfig::<2, 32, 32>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
     secp256k1_coord_prime(),
     false,
     50),
-    create_muldiv_cuda_test_harness::<2, 32>
+    create_muldiv_cuda_test_harness::<FP2_BLOCKS_32, CONST_BLOCK_SIZE>
 )]
-    #[test_case(TestConfig::<2, 32, 32>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>::new(
     BN254_MODULUS.clone(),
     false,
     50),
-    create_muldiv_cuda_test_harness::<2, 32>
+    create_muldiv_cuda_test_harness::<FP2_BLOCKS_32, CONST_BLOCK_SIZE>
 )]
-    #[test_case(TestConfig::<6, 16, 48>::new(
+    #[test_case(TestConfig::<FP2_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>::new(
     BLS12_381_MODULUS.clone(),
     false,
     50),
-    create_muldiv_cuda_test_harness::<6, 16>
+    create_muldiv_cuda_test_harness::<FP2_BLOCKS_48, CONST_BLOCK_SIZE>
 )]
     fn run_cuda_test_with_config<
         const BLOCKS: usize,
