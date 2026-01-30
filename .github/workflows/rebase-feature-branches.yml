@@ -39,7 +39,7 @@ jobs:
       - name: Rebase Feature Branches
         run: |
           # List of feature branches to maintain
-          FEATURE_BRANCHES=("develop-v2" "develop-v1.5.0" "develop-v1.6.0" "develop-new-keccak")
+          FEATURE_BRANCHES=("develop-v2" "develop-v1.6.0" "develop-v1.7.0")
 
           FAILED_BRANCHES=()
           SUCCEEDED_BRANCHES=()
