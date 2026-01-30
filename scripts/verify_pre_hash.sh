@@ -13,6 +13,7 @@ BASE_REF="$1"
 TAGGED_REF="$2"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ORIGINAL_REF="$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse HEAD)"
 cp $ROOT/crates/sdk/src/bin/vk_dump.rs /tmp/vk_dump.rs
 cp $ROOT/crates/sdk/src/bin/print_agg_commit.rs /tmp/print_agg_commit.rs
 
@@ -106,8 +107,8 @@ TAGGED_OUT="$ROOT/tagged-outputs"
 run_for_ref "$BASE_REF" "$BASE_OUT"
 run_for_ref "$TAGGED_REF" "$TAGGED_OUT"
 
-# Switch back to original HEAD at end.
-git switch --detach "$TAGGED_REF" >/dev/null 2>&1 || true
+# Switch back to original branch at end.
+git switch "$ORIGINAL_REF" >/dev/null 2>&1 || git switch --detach "$ORIGINAL_REF" >/dev/null 2>&1 || true
 
 echo "Comparing pre_hash values..."
 compare_dir examples "$BASE_OUT" "$TAGGED_OUT"
