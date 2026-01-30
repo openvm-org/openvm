@@ -55,7 +55,7 @@ impl Sha256 {
     }
 
     fn update(&mut self, mut input: &[u8]) {
-        self.len += input.len() as u64;
+        self.len = self.len.checked_add(input.len() as u64).unwrap();
         while !input.is_empty() {
             let to_copy = min(input.len(), SHA256_BLOCK_BYTES - self.idx);
             self.buffer[self.idx..self.idx + to_copy].copy_from_slice(&input[..to_copy]);
@@ -72,7 +72,7 @@ impl Sha256 {
         // pad positive amount so that length is multiple of SHA256_BLOCK_BYTES
         // (extra 8 bytes are for message length)
         let num_bytes_of_padding = SHA256_BLOCK_BYTES - (self.idx + 8) % SHA256_BLOCK_BYTES;
-        let message_len_in_bits: u64 = self.len * 8;
+        let message_len_in_bits: u64 = self.len.checked_mul(8).unwrap();
         self.update(&PADDING_BYTES[..num_bytes_of_padding]);
         self.update(&(message_len_in_bits).to_be_bytes());
         let mut output = [0u8; SHA256_DIGEST_BYTES];
@@ -162,7 +162,7 @@ impl Sha512 {
     }
 
     fn update(&mut self, mut input: &[u8]) {
-        self.len += input.len() as u128;
+        self.len = self.len.checked_add(input.len() as u128).unwrap();
         while !input.is_empty() {
             let to_copy = min(input.len(), SHA512_BLOCK_BYTES - self.idx);
             self.buffer[self.idx..self.idx + to_copy].copy_from_slice(&input[..to_copy]);
@@ -179,7 +179,7 @@ impl Sha512 {
         // pad positive amount so that length is multiple of SHA512_BLOCK_BYTES
         // (extra 16 bytes are for message length)
         let num_bytes_of_padding = SHA512_BLOCK_BYTES - (self.idx + 16) % SHA512_BLOCK_BYTES;
-        let message_len_in_bits: u128 = self.len * 8;
+        let message_len_in_bits: u128 = self.len.checked_mul(8).unwrap();
         self.update(&PADDING_BYTES[..num_bytes_of_padding]);
         self.update(&(message_len_in_bits).to_be_bytes());
         let mut output = [0u8; SHA512_DIGEST_BYTES];
