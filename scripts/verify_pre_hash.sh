@@ -13,8 +13,10 @@ BASE_REF="$1"
 TAGGED_REF="$2"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cp $ROOT/crates/sdk/src/bin/vk_dump.rs /tmp/vk_dump.rs
 
 get_pre_hash() {
+  # Copy the script for branches that don't have it. We need to build from source since the serialization of AppProvingKey has small differences.
   cargo run -p openvm-sdk --bin vk_dump --release -- "$1" | awk '/^pre_hash:/{print $0}'
 }
 
@@ -23,6 +25,7 @@ run_for_ref() {
   local outdir="$2"
   # Use detached checkout to avoid branch-lock issues with other worktrees.
   git switch --detach "$ref"
+  cp /tmp/vk_dump.rs $ROOT/crates/sdk/src/bin/vk_dump.rs
   cargo install --force --locked --path crates/cli
 
   mkdir -p "$outdir/examples" "$outdir/benchmarks"
@@ -48,6 +51,8 @@ run_for_ref() {
       get_pre_hash "$outdir/benchmarks/$name/app.vk" > "$outdir/benchmarks/$name/pre_hash.txt"
     fi
   done
+  rm $ROOT/crates/sdk/src/bin/vk_dump.rs
+  git reset --hard
 }
 
 compare_dir() {
