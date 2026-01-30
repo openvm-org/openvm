@@ -339,6 +339,7 @@ fn validate_metered_estimates<E, VB>(
             || air_name.contains("Poseidon2PeripheryAir")
             || air_name.contains("VolatileBoundaryAir")
             || air_name.contains("PersistentBoundaryAir")
+            || air_name.contains("NativeAdapterAir")
             || skip_access_adapter
         {
             continue;
