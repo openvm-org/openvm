@@ -13,7 +13,7 @@ use openvm_stark_sdk::{
 };
 
 #[cfg(feature = "aot")]
-use crate::arch::{SystemConfig, VmState};
+use crate::arch::{VmState};
 #[cfg(feature = "aot")]
 use crate::system::memory::online::GuestMemory;
 use crate::{
