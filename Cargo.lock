@@ -7091,10 +7091,12 @@ name = "openvm-sha2"
 version = "1.4.3"
 dependencies = [
  "eyre",
+ "hex",
  "openvm",
  "openvm-circuit",
  "openvm-instructions",
  "openvm-rv32im-transpiler",
+ "openvm-sdk",
  "openvm-sha2-circuit",
  "openvm-sha2-guest",
  "openvm-sha2-transpiler",
