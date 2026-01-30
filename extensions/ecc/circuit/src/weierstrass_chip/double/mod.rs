@@ -29,12 +29,7 @@ use super::{
     WeierstrassAir, WeierstrassChip,
 };
 
-#[cfg(feature = "cuda")]
-mod cuda;
 mod execution;
-
-#[cfg(feature = "cuda")]
-pub use cuda::*;
 
 pub fn ec_double_ne_expr(
     config: ExprBuilderConfig, // The coordinate field.
