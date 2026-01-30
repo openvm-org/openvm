@@ -14,6 +14,7 @@ TAGGED_REF="$2"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cp $ROOT/crates/sdk/src/bin/vk_dump.rs /tmp/vk_dump.rs
+cp $ROOT/crates/sdk/src/bin/print_agg_commit.rs /tmp/print_agg_commit.rs
 
 get_pre_hash() {
   # Copy the script for branches that don't have it. We need to build from source since the serialization of AppProvingKey has small differences.
@@ -26,6 +27,7 @@ run_for_ref() {
   # Use detached checkout to avoid branch-lock issues with other worktrees.
   git switch --detach "$ref"
   cp /tmp/vk_dump.rs $ROOT/crates/sdk/src/bin/vk_dump.rs
+  cp /tmp/print_agg_commit.rs $ROOT/crates/sdk/src/bin/print_agg_commit.rs
   cargo install --force --locked --path crates/cli
 
   mkdir -p "$outdir/examples" "$outdir/benchmarks"
@@ -51,7 +53,13 @@ run_for_ref() {
       get_pre_hash "$outdir/benchmarks/$name/app.vk" > "$outdir/benchmarks/$name/pre_hash.txt"
     fi
   done
+
+  echo "Running print_agg_commit..."
+  cargo run -p openvm-sdk --bin print_agg_commit --release | \
+    awk '/^internal_program_commit_u32:/{print $0}' > "$outdir/agg_commit.txt"
+
   rm $ROOT/crates/sdk/src/bin/vk_dump.rs
+  rm $ROOT/crates/sdk/src/bin/print_agg_commit.rs
   git reset --hard
 }
 
@@ -104,3 +112,15 @@ git switch --detach "$TAGGED_REF" >/dev/null 2>&1 || true
 echo "Comparing pre_hash values..."
 compare_dir examples "$BASE_OUT" "$TAGGED_OUT"
 compare_dir benchmarks "$BASE_OUT" "$TAGGED_OUT"
+
+echo "Comparing agg_commit..."
+base_agg="$(cat "$BASE_OUT/agg_commit.txt")"
+tagged_agg="$(cat "$TAGGED_OUT/agg_commit.txt")"
+if [ "$base_agg" = "$tagged_agg" ]; then
+  echo "✅ agg_commit matches ($base_agg)"
+else
+  echo "❌ agg_commit differs"
+  echo "    base  : $base_agg"
+  echo "    tagged: $tagged_agg"
+  exit 1
+fi
