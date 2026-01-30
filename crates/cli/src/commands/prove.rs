@@ -259,7 +259,6 @@ pub(crate) fn load_app_pk(
     app_pk: &Option<PathBuf>,
     cargo_args: &RunCargoArgs,
 ) -> Result<AppProvingKey<SdkVmConfig>> {
-
     let app_pk_path = if let Some(app_pk) = app_pk {
         app_pk.to_path_buf()
     } else {
