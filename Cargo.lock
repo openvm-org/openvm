@@ -6591,12 +6591,14 @@ name = "openvm-keccak256"
 version = "1.4.3"
 dependencies = [
  "eyre",
+ "hex",
  "openvm-circuit",
  "openvm-instructions",
  "openvm-keccak256-circuit",
  "openvm-keccak256-guest",
  "openvm-keccak256-transpiler",
  "openvm-rv32im-transpiler",
+ "openvm-sdk",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
