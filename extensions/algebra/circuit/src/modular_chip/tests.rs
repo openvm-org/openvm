@@ -305,8 +305,8 @@ mod addsub_tests {
     }
 
     #[test]
-    fn test_modular_addsub_1x32_small() {
-        run_addsub_test::<1, 32, 32>(
+    fn test_modular_addsub_32limb_small() {
+        run_addsub_test::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
             0,
             BigUint::from_str("357686312646216567629137").unwrap(),
             50,
@@ -314,19 +314,35 @@ mod addsub_tests {
     }
 
     #[test]
-    fn test_modular_addsub_1x32_secp256k1() {
-        run_addsub_test::<1, 32, 32>(0, secp256k1_coord_prime(), 50);
-        run_addsub_test::<1, 32, 32>(4, secp256k1_scalar_prime(), 50);
+    fn test_modular_addsub_32limb_secp256k1() {
+        run_addsub_test::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+            0,
+            secp256k1_coord_prime(),
+            50,
+        );
+        run_addsub_test::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+            4,
+            secp256k1_scalar_prime(),
+            50,
+        );
     }
 
     #[test]
-    fn test_modular_addsub_1x32_bn254() {
-        run_addsub_test::<1, 32, 32>(0, BN254_MODULUS.clone(), 50);
+    fn test_modular_addsub_32limb_bn254() {
+        run_addsub_test::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+            0,
+            BN254_MODULUS.clone(),
+            50,
+        );
     }
 
     #[test]
-    fn test_modular_addsub_3x16_bls12_381() {
-        run_addsub_test::<3, 16, 48>(0, BLS12_381_MODULUS.clone(), 50);
+    fn test_modular_addsub_48limb_bls12_381() {
+        run_addsub_test::<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>(
+            0,
+            BLS12_381_MODULUS.clone(),
+            50,
+        );
     }
 
     #[cfg(feature = "cuda")]
@@ -664,8 +680,8 @@ mod muldiv_tests {
     }
 
     #[test]
-    fn test_modular_muldiv_1x32_small() {
-        run_test_muldiv::<1, 32, 32>(
+    fn test_modular_muldiv_32limb_small() {
+        run_test_muldiv::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
             0,
             BigUint::from_str("357686312646216567629137").unwrap(),
             50,
@@ -673,19 +689,35 @@ mod muldiv_tests {
     }
 
     #[test]
-    fn test_modular_muldiv_1x32_secp256k1() {
-        run_test_muldiv::<1, 32, 32>(0, secp256k1_coord_prime(), 50);
-        run_test_muldiv::<1, 32, 32>(4, secp256k1_scalar_prime(), 50);
+    fn test_modular_muldiv_32limb_secp256k1() {
+        run_test_muldiv::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+            0,
+            secp256k1_coord_prime(),
+            50,
+        );
+        run_test_muldiv::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+            4,
+            secp256k1_scalar_prime(),
+            50,
+        );
     }
 
     #[test]
-    fn test_modular_muldiv_1x32_bn254() {
-        run_test_muldiv::<1, 32, 32>(0, BN254_MODULUS.clone(), 50);
+    fn test_modular_muldiv_32limb_bn254() {
+        run_test_muldiv::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+            0,
+            BN254_MODULUS.clone(),
+            50,
+        );
     }
 
     #[test]
-    fn test_modular_muldiv_3x16_bls12_381() {
-        run_test_muldiv::<3, 16, 48>(0, BLS12_381_MODULUS.clone(), 50);
+    fn test_modular_muldiv_48limb_bls12_381() {
+        run_test_muldiv::<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>(
+            0,
+            BLS12_381_MODULUS.clone(),
+            50,
+        );
     }
 
     #[cfg(feature = "cuda")]
@@ -955,13 +987,21 @@ mod is_equal_tests {
     }
 
     #[test]
-    fn test_modular_is_equal_1x32() {
-        test_is_equal::<1, 32, 32>(17, secp256k1_coord_prime(), 100);
+    fn test_modular_is_equal_32limb() {
+        test_is_equal::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
+            17,
+            secp256k1_coord_prime(),
+            100,
+        );
     }
 
     #[test]
-    fn test_modular_is_equal_3x16() {
-        test_is_equal::<3, 16, 48>(17, BLS12_381_MODULUS.clone(), 100);
+    fn test_modular_is_equal_48limb() {
+        test_is_equal::<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>(
+            17,
+            BLS12_381_MODULUS.clone(),
+            100,
+        );
     }
 
     #[cfg(feature = "cuda")]
@@ -1215,22 +1255,22 @@ mod is_equal_tests {
     }
 
     #[test]
-    fn negative_test_modular_is_equal_1x32() {
-        run_negative_is_equal_test::<1, 32, 32>(
+    fn negative_test_modular_is_equal_32limb() {
+        run_negative_is_equal_test::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
             secp256k1_coord_prime(),
             17,
             1,
             VerificationError::OodEvaluationMismatch,
         );
 
-        run_negative_is_equal_test::<1, 32, 32>(
+        run_negative_is_equal_test::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
             secp256k1_coord_prime(),
             17,
             2,
             VerificationError::OodEvaluationMismatch,
         );
 
-        run_negative_is_equal_test::<1, 32, 32>(
+        run_negative_is_equal_test::<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>(
             secp256k1_coord_prime(),
             17,
             3,
@@ -1239,22 +1279,22 @@ mod is_equal_tests {
     }
 
     #[test]
-    fn negative_test_modular_is_equal_3x16() {
-        run_negative_is_equal_test::<3, 16, 48>(
+    fn negative_test_modular_is_equal_48limb() {
+        run_negative_is_equal_test::<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>(
             BLS12_381_MODULUS.clone(),
             17,
             1,
             VerificationError::OodEvaluationMismatch,
         );
 
-        run_negative_is_equal_test::<3, 16, 48>(
+        run_negative_is_equal_test::<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>(
             BLS12_381_MODULUS.clone(),
             17,
             2,
             VerificationError::OodEvaluationMismatch,
         );
 
-        run_negative_is_equal_test::<3, 16, 48>(
+        run_negative_is_equal_test::<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>(
             BLS12_381_MODULUS.clone(),
             17,
             3,
