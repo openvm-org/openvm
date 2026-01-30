@@ -1,8 +1,10 @@
+use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
     config::{Com, Val},
     engine::VerificationData,
     p3_field::PrimeField32,
+    prover::types::ProvingContext,
 };
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing, FriParameters},
@@ -17,8 +19,8 @@ use crate::system::memory::online::GuestMemory;
 use crate::{
     arch::{
         debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
-        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
-        VmCircuitConfig, VmConfig, VmExecutionConfig,
+        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, SystemConfig,
+        VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
 };
@@ -275,14 +277,12 @@ where
 fn validate_metered_estimates<E, VB>(
     vm: &VirtualMachine<E, VB>,
     estimated_heights: &[u32],
-    ctx: &openvm_stark_backend::prover::types::ProvingContext<E::PB>,
+    ctx: &ProvingContext<E::PB>,
     seg_idx: usize,
 ) where
     E: StarkFriEngine,
     VB: VmBuilder<E>,
 {
-    use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
-
     let air_names: Vec<_> = vm.air_names().collect();
 
     // Iterate over all AIRs, not just those in ctx.per_air
@@ -332,7 +332,7 @@ fn validate_metered_estimates<E, VB>(
         );
 
         // For some airs, the overestimates are expected
-        let system_config: &crate::arch::SystemConfig = vm.config().as_ref();
+        let system_config: &SystemConfig = vm.config().as_ref();
         let skip_access_adapter =
             system_config.access_adapters_enabled() && air_name.contains("AccessAdapterAir");
         if air_name.contains("MemoryMerkleAir")
