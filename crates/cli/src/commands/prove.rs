@@ -259,12 +259,11 @@ pub(crate) fn load_app_pk(
     app_pk: &Option<PathBuf>,
     cargo_args: &RunCargoArgs,
 ) -> Result<AppProvingKey<SdkVmConfig>> {
-    let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
-    let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
-
     let app_pk_path = if let Some(app_pk) = app_pk {
         app_pk.to_path_buf()
     } else {
+        let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
+        let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
         get_app_pk_path(&target_dir)
     };
 
