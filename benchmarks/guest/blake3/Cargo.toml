@@ -1,0 +1,11 @@
+[package]
+name = "openvm-blake3-program"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+openvm = { workspace = true, features = ["std"] }
+openvm-blake3.workspace = true
+
+[features]
+default = []

@@ -69,6 +69,7 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
 
 const APP_PROGRAMS: &[&str] = &[
+    "blake3",
     "fibonacci_recursive",
     "fibonacci_iterative",
     "quicksort",
