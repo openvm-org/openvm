@@ -273,42 +273,42 @@ struct TestConfig<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS:
     pub num_ops: usize,
 }
 
-#[test_case(TestConfig::<2, 32, 32>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
     BigUint::from_str("357686312646216567629137").unwrap(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<2, 32, 32>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
     secp256k1_coord_prime(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<2, 32, 32>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
     BN254_MODULUS.clone(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<6, 16, 48>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_48}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_48}>::new(
     BLS12_381_MODULUS.clone(),
     true,
     50,
 ))]
-#[test_case(TestConfig::<2, 32, 32>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
     BigUint::from_str("357686312646216567629137").unwrap(),
     false,
     50,
 ))]
-#[test_case(TestConfig::<2, 32, 32>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
     secp256k1_coord_prime(),
     false,
     50,
 ))]
-#[test_case(TestConfig::<2, 32, 32>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_32}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_32}>::new(
     BN254_MODULUS.clone(),
     false,
     50,
 ))]
-#[test_case(TestConfig::<6, 16, 48>::new(
+#[test_case(TestConfig::<{FP2_BLOCKS_48}, {CONST_BLOCK_SIZE}, {NUM_LIMBS_48}>::new(
     BLS12_381_MODULUS.clone(),
     false,
     50,
