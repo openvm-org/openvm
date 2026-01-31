@@ -16,6 +16,7 @@ use openvm_sdk::{
     },
     Sdk,
 };
+use static_assertions::const_assert;
 
 use crate::{
     default::{
@@ -24,6 +25,10 @@ use crate::{
     },
     util::read_default_agg_and_halo2_pk,
 };
+
+/// The maximum value of `k` to download Halo2 KZG trusted setup parameters for. This depends on the
+/// default verifier circuit and wrapper circuit sizes.
+const MAX_HALO2_VERIFIER_K_FOR_DOWNLOAD: usize = 24;
 
 #[derive(Parser)]
 #[command(
@@ -99,7 +104,8 @@ impl SetupCmd {
                 ));
             }
 
-            Self::download_params(10, DEFAULT_HALO2_VERIFIER_K as u32).await?;
+            const_assert!(DEFAULT_HALO2_VERIFIER_K <= MAX_HALO2_VERIFIER_K_FOR_DOWNLOAD);
+            Self::download_params(10, MAX_HALO2_VERIFIER_K_FOR_DOWNLOAD as u32).await?;
             // halo2 keygen does not depend on the app config
             let sdk = Sdk::standard();
 
