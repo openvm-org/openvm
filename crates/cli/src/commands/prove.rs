@@ -78,6 +78,14 @@ enum ProveSubCommand {
         )]
         app_pk: Option<PathBuf>,
 
+        #[arg(
+            long,
+            action,
+            help = "Path to aggregation proving key, by default will be ~/.openvm/agg.pk",
+            help_heading = "OpenVM Options"
+        )]
+        agg_pk: Option<PathBuf>,
+
         #[command(flatten)]
         run_args: RunArgs,
 
@@ -175,6 +183,7 @@ impl ProveCmd {
             }
             ProveSubCommand::Stark {
                 app_pk,
+                agg_pk,
                 proof,
                 run_args,
                 cargo_args,
@@ -184,7 +193,10 @@ impl ProveCmd {
                 let mut app_pk = load_app_pk(app_pk, cargo_args)?;
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
 
-                let agg_pk = read_object_from_file(default_agg_stark_pk_path()).map_err(|e| {
+                let agg_pk_path = agg_pk
+                    .clone()
+                    .unwrap_or_else(|| PathBuf::from(default_agg_stark_pk_path()));
+                let agg_pk = read_object_from_file(agg_pk_path).map_err(|e| {
                     eyre::eyre!("Failed to read aggregation proving key: {e}\nPlease run 'cargo openvm setup' first")
                 })?;
                 let app_config = get_app_config(&mut app_pk, segmentation_args);
