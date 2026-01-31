@@ -1,5 +1,5 @@
 use std::{
-    alloc::{alloc_zeroed, dealloc, Layout},
+    alloc::{alloc, alloc_zeroed, dealloc, Layout},
     ptr::NonNull,
 };
 
@@ -55,11 +55,11 @@ impl Clone for BasicMemory {
 
         let layout = self.layout;
         // SAFETY:
-        // - alloc_zeroed creates a valid allocation for the layout
+        // - alloc creates a valid allocation for the layout
         // - copy_nonoverlapping copies exactly self.size bytes from valid source to valid dest
         // - new_ptr is guaranteed non-null after alloc check
         let ptr = unsafe {
-            let new_ptr = alloc_zeroed(layout);
+            let new_ptr = alloc(layout);
             if new_ptr.is_null() {
                 std::alloc::handle_alloc_error(layout);
             }
