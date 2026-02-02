@@ -617,7 +617,9 @@ mod tests {
                 address_space: addr_space,
                 ptr,
                 timestamps: [ts_values.timestamp, 0],
-                values: ts_values.values.map(|x| x.as_canonical_u32()),
+                values: ts_values.values.map(|x| {
+                    unsafe { std::mem::transmute::<F, u32>(x) }
+                }),
             })
             .collect::<Vec<_>>();
         let d_touched_blocks = out_records.to_device().unwrap().as_buffer::<u32>();

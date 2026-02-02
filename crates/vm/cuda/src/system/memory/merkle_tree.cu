@@ -299,8 +299,8 @@ __global__ void update_merkle_layer(
 
     uint32_t const parent_ptr = parent_ptrs[idx] =
         ((child_ptrs[2 * idx] == MISSING_CHILD) ? child_ptrs[2 * idx + 1] : child_ptrs[2 * idx]);
-    uint32_t const address_space_idx = layer[parent_ptr].address_space_idx;
-    uint32_t const parent_label = layer[parent_ptr].label >> layer_height;
+    uint32_t const address_space_idx = layer[parent_ptr].address_space;
+    uint32_t const parent_label = layer[parent_ptr].ptr >> layer_height;
     auto const subtree_layer = subtree_layers[address_space_idx];
     Poseidon2Buffer poseidon2(
         reinterpret_cast<FpArray<16> *>(poseidon2_buffer), poseidon2_buffer_idx, poseidon2_capacity
@@ -389,8 +389,8 @@ __global__ void update_to_root(
     digest_t **subtrees = reinterpret_cast<digest_t **>(d_subtrees);
     for (size_t i = 0; i < layer_size; ++i) {
         auto const idx = layer_ids[i];
-        auto const address_space_idx = layer[idx].address_space_idx;
-        layer[idx].label = num_roots - 1 + address_space_idx;
+        auto const address_space_idx = layer[idx].address_space;
+        layer[idx].ptr = num_roots - 1 + address_space_idx;
         if (subtrees[address_space_idx]) {
             COPY_DIGEST(subtrees[address_space_idx], layer[idx].digest_raw);
         }
@@ -404,7 +404,7 @@ __global__ void update_to_root(
         size_t const h = root_height - (31 - __clz((uint32_t)out_idx + 1));
         uint32_t children_ids[2] = {MISSING_CHILD, MISSING_CHILD};
         for (size_t i = 0; i < layer_size; ++i) {
-            if (auto local_idx = layer[layer_ids[i]].label - 2 * out_idx;
+            if (auto local_idx = layer[layer_ids[i]].ptr - 2 * out_idx;
                 local_idx == 1 || local_idx == 2) {
                 children_ids[local_idx - 1] = i;
             }
@@ -436,7 +436,7 @@ __global__ void update_to_root(
             size_t const max_idx = children_ids[children_ids[0] == surely_surviving_child];
             layer_ids[max_idx] = layer_ids[--layer_size];
         }
-        layer[layer_ids[surely_surviving_child]].label = out_idx;
+        layer[layer_ids[surely_surviving_child]].ptr = out_idx;
         {
             RowSlice row(merkle_trace + merkle_trace_offset + 1, trace_height);
             fill_merkle_trace_row(

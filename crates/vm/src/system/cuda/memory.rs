@@ -2,32 +2,30 @@ use std::sync::Arc;
 
 use openvm_circuit::{
     arch::{
-        AddressSpaceHostLayout, DenseRecordArena, MemoryConfig, ADDR_SPACE_OFFSET, CONST_BLOCK_SIZE,
+        AddressSpaceHostLayout, DenseRecordArena, MemoryConfig, ADDR_SPACE_OFFSET,
+        CONST_BLOCK_SIZE,
     },
-    system::{
-        memory::{online::LinearMemory, AddressMap, TimestampedValues},
-        TouchedMemory,
-    },
+    system::{memory::AddressMap, TouchedMemory},
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{prover_backend::GpuBackend, types::F};
 use openvm_cuda_common::{
-    copy::{cuda_memcpy, MemCopyH2D},
+    copy::{cuda_memcpy, MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,
     memory_manager::MemTracker,
 };
-use openvm_stark_backend::{
-    p3_field::FieldAlgebra, p3_util::log2_ceil_usize, prover::types::AirProvingContext, Chip,
-};
+use p3_field::FieldAlgebra;
+use openvm_stark_backend::{p3_util::log2_ceil_usize, prover::types::AirProvingContext, Chip};
 
 use super::{
     access_adapters::AccessAdapterInventoryGPU,
-    boundary::{BoundaryChipGPU, BoundaryFields, PersistentBoundaryRecord},
-    merkle_tree::{MemoryMerkleTree, TIMESTAMPED_BLOCK_WIDTH},
+    boundary::{BoundaryChipGPU, BoundaryFields},
+    merkle_tree::MemoryMerkleTree,
     Poseidon2PeripheryChipGPU, DIGEST_WIDTH,
 };
 
 use crate::cuda_abi::inventory;
+use crate::system::memory::online::LinearMemory;
 
 pub struct MemoryInventoryGPU {
     pub boundary: BoundaryChipGPU,
@@ -40,6 +38,7 @@ pub struct MemoryInventoryGPU {
 pub struct PersistentMemoryInventoryGPU {
     pub merkle_tree: MemoryMerkleTree,
     pub initial_memory: Vec<DeviceBuffer<u8>>,
+    pub merkle_records: Option<DeviceBuffer<u32>>,
 }
 
 #[repr(C)]
@@ -52,6 +51,11 @@ struct MemoryInventoryRecord<const CHUNK: usize, const BLOCKS: usize> {
 }
 
 impl MemoryInventoryGPU {
+    #[inline]
+    fn field_to_raw_u32(value: F) -> u32 {
+        unsafe { std::mem::transmute::<F, u32>(value) }
+    }
+
     pub fn volatile(config: MemoryConfig, range_checker: Arc<VariableRangeCheckerChipGPU>) -> Self {
         let addr_space_max_bits = log2_ceil_usize(
             (ADDR_SPACE_OFFSET + 2u32.pow(config.addr_space_height as u32)) as usize,
@@ -88,6 +92,7 @@ impl MemoryInventoryGPU {
             persistent: Some(PersistentMemoryInventoryGPU {
                 merkle_tree: MemoryMerkleTree::new(config.clone(), hasher_chip.clone()),
                 initial_memory: Vec::new(),
+                merkle_records: None,
             }),
             #[cfg(feature = "metrics")]
             unpadded_merkle_height: 0,
@@ -153,85 +158,7 @@ impl MemoryInventoryGPU {
                     .persistent
                     .as_mut()
                     .expect("persistent touched memory requires persistent memory interface");
-                
-                let in_records: Vec<MemoryInventoryRecord<4, 1>> = partition
-                    .iter()
-                    .map(|&((addr_space, ptr), ts_values)| MemoryInventoryRecord {
-                        address_space: addr_space,
-                        ptr,
-                        timestamps: [ts_values.timestamp],
-                        values: ts_values.values.map(|x| x.as_canonical_u32()),
-                    })
-                    .collect();
-
-                let in_num_records = in_records.len();
-                let out_words = in_num_records
-                    * (std::mem::size_of::<MemoryInventoryRecord<8, 2>>()
-                        / std::mem::size_of::<u32>());
-                let d_in_records = in_records.to_device().unwrap().as_buffer::<u32>();
-                let d_tmp_records = DeviceBuffer::<u32>::with_capacity(out_words);
-                let d_out_records = DeviceBuffer::<u32>::with_capacity(out_words);
-                let d_out_num_records = DeviceBuffer::<usize>::new();
-                let d_flags = DeviceBuffer::<u32>::with_capacity(in_num_records);
-                let d_positions = DeviceBuffer::<u32>::with_capacity(in_num_records);
-                let d_initial_mem = match &self.boundary.fields {
-                    BoundaryFields::Persistent(fields) => fields.initial_leaves.to_device().unwrap(),
-                    BoundaryFields::Volatile(_) => {
-                        panic!("`merge_records` requires persistent memory")
-                    }
-                };
-                let addr_space_offsets: Vec<u32> = {
-                    let mut offsets = Vec::new();
-                    let mut acc = 0u32;
-                    for addr_sp in persistent.merkle_tree.mem_config().addr_spaces.iter() {
-                        offsets.push(acc);
-                        acc = acc.saturating_add(addr_sp.layout.size() as u32);
-                    }
-                    offsets.push(acc);
-                    offsets
-                };
-                let d_addr_space_offsets = addr_space_offsets.to_device().unwrap();
-                let mut temp_bytes = 0usize;
-                unsafe {
-                    inventory::merge_records_get_temp_bytes(
-                        &d_flags,
-                        in_num_records,
-                        &mut temp_bytes,
-                    )?;
-                }
-                let d_temp_storage = DeviceBuffer::<u8>::with_capacity(temp_bytes);
-                unsafe {
-                    inventory::merge_records(
-                        &d_in_records,
-                        in_num_records,
-                        &d_initial_mem,
-                        &d_addr_space_offsets,
-                        &d_tmp_records,
-                        &d_out_records,
-                        &d_flags,
-                        &d_positions,
-                        &d_temp_storage,
-                        temp_bytes,
-                        &d_out_num_records,
-                    )?;
-                }
-                let out_num_records = d_out_num_records.to_host().unwrap()[0] as usize;
-                self.boundary
-                    .finalize_records_persistent_device::<DIGEST_WIDTH>(
-                        d_out_records,
-                        out_num_records,
-                    );
-
-                let unpadded_merkle_height =
-                    persistent.merkle_tree.calculate_unpadded_height(&partition);
-                #[cfg(feature = "metrics")]
-                {
-                    self.unpadded_merkle_height = unpadded_merkle_height;
-                }
-
-                mem.tracing_info("boundary finalize");
-                let partition_is_empty = partition.is_empty();
-                let (touched_memory, empty) = if partition_is_empty {
+                if partition.is_empty() {
                     let leftmost_values = 'left: {
                         let mut res = [F::ZERO; CONST_BLOCK_SIZE];
                         if persistent.initial_memory[ADDR_SPACE_OFFSET as usize].is_empty() {
@@ -257,33 +184,162 @@ impl MemoryInventoryGPU {
                         res
                     };
 
-                    (
-                        vec![(
-                            (1, 0),
-                            TimestampedValues {
-                                timestamp: 0,
-                                values: leftmost_values,
-                            },
-                        )],
+                    let mut values_u32 = [0u32; DIGEST_WIDTH];
+                    for i in 0..CONST_BLOCK_SIZE {
+                        values_u32[i] = Self::field_to_raw_u32(leftmost_values[i]);
+                    }
+                    let merkle_records = vec![MemoryInventoryRecord::<8, 2> {
+                        address_space: 1,
+                        ptr: 0,
+                        timestamps: [0, 0],
+                        values: values_u32,
+                    }];
+                    let d_merkle_touched_memory = merkle_records
+                        .to_device()
+                        .unwrap()
+                        .as_buffer::<u32>();
+
+                    let unpadded_merkle_height =
+                        persistent.merkle_tree.calculate_unpadded_height(&partition);
+                    #[cfg(feature = "metrics")]
+                    {
+                        self.unpadded_merkle_height = unpadded_merkle_height;
+                    }
+
+                    self.boundary
+                        .finalize_records_persistent::<DIGEST_WIDTH>(Vec::new());
+                    mem.tracing_info("merkle update");
+                    persistent.merkle_tree.finalize();
+                    let merkle_tree_ctx = persistent.merkle_tree.update_with_touched_blocks(
+                        unpadded_merkle_height,
+                        &d_merkle_touched_memory,
+                        1,
                         true,
-                    )
+                    );
+                    Some(merkle_tree_ctx)
                 } else {
-                    (partition, false)
-                };
-                debug_assert_eq!(
-                    size_of_val(&touched_memory[0]),
-                    TIMESTAMPED_BLOCK_WIDTH * size_of::<u32>()
-                );
-                let d_merkle_touched_memory = self.boundary.persistent_records();
-                mem.tracing_info("merkle update");
-                persistent.merkle_tree.finalize();
-                let merkle_tree_ctx = persistent.merkle_tree.update_with_touched_blocks(
-                    unpadded_merkle_height,
-                    &d_merkle_touched_memory,
-                    out_num_records,
-                    empty,
-                );
-                Some(merkle_tree_ctx)
+                    let in_records: Vec<MemoryInventoryRecord<4, 1>> = partition
+                        .iter()
+                        .map(|&((addr_space, ptr), ts_values)| MemoryInventoryRecord {
+                            address_space: addr_space,
+                            ptr,
+                            timestamps: [ts_values.timestamp],
+                            values: ts_values
+                                .values
+                                .map(|x| Self::field_to_raw_u32(x)),
+                        })
+                        .collect();
+                    let in_num_records = in_records.len();
+                    if in_num_records == 0 {
+                        self.boundary
+                            .finalize_records_persistent::<DIGEST_WIDTH>(Vec::new());
+                        mem.tracing_info("merkle update");
+                        persistent.merkle_tree.finalize();
+                        None
+                    } else {
+                        let out_words = in_num_records
+                            * (std::mem::size_of::<MemoryInventoryRecord<8, 2>>()
+                                / std::mem::size_of::<u32>());
+                        let d_in_records = in_records.to_device().unwrap().as_buffer::<u32>();
+                        let d_tmp_records = DeviceBuffer::<u32>::with_capacity(out_words);
+                        let d_out_records = DeviceBuffer::<u32>::with_capacity(out_words);
+                        let d_out_num_records = DeviceBuffer::<usize>::with_capacity(1);
+                        let d_flags = DeviceBuffer::<u32>::with_capacity(in_num_records);
+                        let d_positions = DeviceBuffer::<u32>::with_capacity(in_num_records);
+                        let d_initial_mem = match &self.boundary.fields {
+                            BoundaryFields::Persistent(fields) => {
+                                fields.initial_leaves.to_device().unwrap()
+                            }
+                            BoundaryFields::Volatile(_) => {
+                                panic!("`merge_records` requires persistent memory")
+                            }
+                        };
+                        let addr_space_offsets: Vec<u32> = {
+                            let mut offsets = Vec::new();
+                            let mut acc = 0u32;
+                            for addr_sp in persistent
+                                .merkle_tree
+                                .mem_config()
+                                .addr_spaces
+                                .iter()
+                                .skip(ADDR_SPACE_OFFSET as usize)
+                            {
+                                offsets.push(acc);
+                                acc = acc.saturating_add(addr_sp.layout.size() as u32);
+                            }
+                            offsets.push(acc);
+                            offsets
+                        };
+                        let d_addr_space_offsets = addr_space_offsets.to_device().unwrap();
+                        let mut temp_bytes = 0usize;
+                        unsafe {
+                            inventory::merge_records_get_temp_bytes(
+                                &d_flags,
+                                in_num_records,
+                                &mut temp_bytes,
+                            )
+                            .expect("merge_records_get_temp_bytes failed");
+                        }
+                        let d_temp_storage = if temp_bytes == 0 {
+                            DeviceBuffer::<u8>::new()
+                        } else {
+                            DeviceBuffer::<u8>::with_capacity(temp_bytes)
+                        };
+                        unsafe {
+                            inventory::merge_records(
+                                &d_in_records,
+                                in_num_records,
+                                &d_initial_mem,
+                                &d_addr_space_offsets,
+                                &d_tmp_records,
+                                &d_out_records,
+                                &d_flags,
+                                &d_positions,
+                                &d_temp_storage,
+                                temp_bytes,
+                                &d_out_num_records,
+                            )
+                            .expect("merge_records failed");
+                        }
+                        let out_num_records = d_out_num_records.to_host().unwrap()[0] as usize;
+                        self.boundary
+                            .finalize_records_persistent_device::<DIGEST_WIDTH>(
+                                d_out_records,
+                                out_num_records,
+                            );
+                        let d_merkle_records = DeviceBuffer::<u32>::with_capacity(out_words);
+                        unsafe {
+                            cuda_memcpy::<true, true>(
+                                d_merkle_records.as_mut_raw_ptr(),
+                                self.boundary.persistent_records().as_raw_ptr(),
+                                out_words * std::mem::size_of::<u32>(),
+                            )
+                            .expect("failed to copy boundary records for merkle update");
+                        }
+                        persistent.merkle_records = Some(d_merkle_records);
+
+                        let unpadded_merkle_height =
+                            persistent.merkle_tree.calculate_unpadded_height(&partition);
+                        #[cfg(feature = "metrics")]
+                        {
+                            self.unpadded_merkle_height = unpadded_merkle_height;
+                        }
+
+                        mem.tracing_info("boundary finalize");
+                        mem.tracing_info("merkle update");
+                        persistent.merkle_tree.finalize();
+                        let merkle_tree_ctx = persistent.merkle_tree.update_with_touched_blocks(
+                            unpadded_merkle_height,
+                            persistent
+                                .merkle_records
+                                .as_ref()
+                                .expect("missing merkle records"),
+                            out_num_records,
+                            false,
+                        );
+                        Some(merkle_tree_ctx)
+                    }
+                }
             }
             TouchedMemory::Volatile(partition) => {
                 assert!(self.persistent.is_none(), "TouchedMemory enum mismatch");
