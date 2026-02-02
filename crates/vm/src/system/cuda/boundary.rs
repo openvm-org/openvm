@@ -134,8 +134,35 @@ impl BoundaryChipGPU {
         }
     }
 
+    pub fn finalize_records_persistent_device<const CHUNK: usize>(
+        &mut self,
+        records: DeviceBuffer<u32>,
+        num_records: usize,
+    ) {
+        match &mut self.fields {
+            BoundaryFields::Volatile(_) => panic!("call `finalize_records_volatile`"),
+            BoundaryFields::Persistent(fields) => {
+                self.num_records = Some(num_records);
+                self.trace_width = Some(PersistentBoundaryCols::<F, CHUNK>::width());
+                fields.records = Some(records);
+            }
+        }
+    }
+
     pub fn trace_width(&self) -> usize {
         self.trace_width.expect("Finalize records to get width")
+    }
+
+    pub fn persistent_records(&self) -> &DeviceBuffer<u32> {
+        match &self.fields {
+            BoundaryFields::Persistent(fields) => fields
+                .records
+                .as_ref()
+                .expect("Finalize records to get buffer"),
+            BoundaryFields::Volatile(_) => {
+                panic!("persistent_records called on volatile boundary")
+            }
+        }
     }
 }
 

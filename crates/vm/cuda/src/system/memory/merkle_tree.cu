@@ -160,9 +160,9 @@ template <typename T> struct MerkleCols {
 };
 
 struct LabeledDigest {
-    uint32_t address_space_idx;
-    uint32_t label;
-    uint32_t timestamp; // unused
+    uint32_t address_space;
+    uint32_t ptr;
+    uint32_t timestamps[2];
     uint32_t digest_raw[CELLS_OUT];
 };
 
@@ -180,8 +180,12 @@ __global__ void prepare_for_updating(
     COPY_DIGEST(cells, leaves[gid].digest_raw);
     poseidon2_mix(cells);
     COPY_DIGEST(leaves[gid].digest_raw, cells);
-    leaves[gid].address_space_idx -= 1;
-    leaves[gid].label /= CELLS_OUT;
+    leaves[gid].address_space -= 1;
+    leaves[gid].ptr /= CELLS_OUT;
+    leaves[gid].timestamps[0] =
+        leaves[gid].timestamps[0] > leaves[gid].timestamps[1] ? leaves[gid].timestamps[0]
+                                                              : leaves[gid].timestamps[1];
+    leaves[gid].timestamps[1] = 0;
 }
 
 __global__ void set_parent_id_adjacent_differences(
@@ -200,8 +204,8 @@ __global__ void set_parent_id_adjacent_differences(
     } else {
         auto const ptr1 = current_layer_ptrs[gid - 1];
         auto const ptr2 = current_layer_ptrs[gid];
-        parent_ids[gid] = layer[ptr1].address_space_idx != layer[ptr2].address_space_idx
-            || (layer[ptr1].label >> h) != (layer[ptr2].label >> h);
+        parent_ids[gid] = layer[ptr1].address_space != layer[ptr2].address_space
+            || (layer[ptr1].ptr >> h) != (layer[ptr2].ptr >> h);
     }
 }
 
@@ -221,7 +225,7 @@ __global__ void group_by_parent(
     }
 
     uint32_t const ptr = current_layer_ptrs[gid];
-    uint32_t const my_place = parent_ids[gid] * 2 + (layer[ptr].label >> (h - 1)) % 2;
+    uint32_t const my_place = parent_ids[gid] * 2 + (layer[ptr].ptr >> (h - 1)) % 2;
     uint32_t const siblings_place = my_place ^ 1;
 
     child_ptrs[my_place] = ptr;

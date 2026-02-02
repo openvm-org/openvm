@@ -29,9 +29,6 @@ type H = [F; DIGEST_WIDTH];
 /// Width of `((u32, u32), TimestampedValues<F, CONST_BLOCK_SIZE>)` in u32 units.
 /// = 2 (key) + 1 (timestamp) + CONST_BLOCK_SIZE (values)
 pub const TIMESTAMPED_BLOCK_WIDTH: usize = 3 + CONST_BLOCK_SIZE;
-/// Width of `((u32, u32), TimestampedValues<F, DIGEST_WIDTH>)` in u32 units.
-/// = 2 (key) + 1 (timestamp) + DIGEST_WIDTH (values)
-pub const MERKLE_TOUCHED_BLOCK_WIDTH: usize = 3 + DIGEST_WIDTH;
 
 /// A Merkle subtree stored in a single flat buffer, combining a vertical path and a heap-ordered
 /// binary tree.
@@ -337,7 +334,8 @@ impl MemoryMerkleTree {
     pub fn update_with_touched_blocks(
         &mut self,
         unpadded_height: usize,
-        d_touched_blocks: &DeviceBuffer<u32>, // consists of (as, label, ts, [F; DIGEST_WIDTH])
+        d_touched_blocks: &DeviceBuffer<u32>, // consists of (as, ptr, [ts;2], [F; DIGEST_WIDTH])
+        num_leaves: usize,
         empty_touched_blocks: bool,
     ) -> AirProvingContext<GpuBackend> {
         let mut public_values = self.top_roots.to_host().unwrap()[0].to_vec();
@@ -367,6 +365,7 @@ impl MemoryMerkleTree {
                     &self.top_roots,
                     &self.zero_hash,
                     d_touched_blocks,
+                    num_leaves,
                     self.height - log2_ceil_usize(self.subtrees.len()),
                     &actual_heights,
                     unpadded_height,
@@ -460,6 +459,15 @@ mod tests {
 
     use super::MemoryMerkleTree;
     use crate::system::cuda::{Poseidon2PeripheryChipGPU, DIGEST_WIDTH};
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct OutRec {
+        address_space: u32,
+        ptr: u32,
+        timestamps: [u32; 2],
+        values: [u32; DIGEST_WIDTH],
+    }
 
     #[test]
     fn test_cuda_merkle_tree_cpu_gpu_root_equivalence() {
@@ -603,11 +611,21 @@ mod tests {
                 )
             })
             .collect::<Vec<_>>();
-        let d_touched_blocks = touched_blocks.to_device().unwrap().as_buffer::<u32>();
+        let out_records = touched_blocks
+            .iter()
+            .map(|&((addr_space, ptr), ts_values)| OutRec {
+                address_space: addr_space,
+                ptr,
+                timestamps: [ts_values.timestamp, 0],
+                values: ts_values.values.map(|x| x.as_canonical_u32()),
+            })
+            .collect::<Vec<_>>();
+        let d_touched_blocks = out_records.to_device().unwrap().as_buffer::<u32>();
 
         gpu_merkle_tree.update_with_touched_blocks(
             gpu_merkle_tree.calculate_unpadded_height(&touched_blocks),
             &d_touched_blocks,
+            out_records.len(),
             false,
         );
 
