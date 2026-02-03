@@ -5,7 +5,7 @@
 /// system operations in the same way: there is no operating system and even the standard
 /// library should be directly handled with intrinsics.
 use openvm_platform::{fileno::*, memory::sys_alloc_aligned, rust_rt::terminate, WORD_SIZE};
-use openvm_rv32im_guest::{hint_buffer_u32, hint_random, raw_print_str_from_bytes};
+use openvm_rv32im_guest::{hint_buffer_chunked, hint_random, raw_print_str_from_bytes};
 
 const DIGEST_WORDS: usize = 8;
 
@@ -73,7 +73,7 @@ pub unsafe extern "C" fn sys_sha_buffer(
 #[no_mangle]
 pub unsafe extern "C" fn sys_rand(recv_buf: *mut u32, words: usize) {
     hint_random(words);
-    hint_buffer_u32!(recv_buf, words);
+    hint_buffer_chunked(recv_buf as *mut u8, words);
 }
 
 /// # Safety

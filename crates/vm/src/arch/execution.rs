@@ -38,6 +38,12 @@ pub enum ExecutionError {
     DisabledOperation { pc: u32, opcode: VmOpcode },
     #[error("at pc = {pc}")]
     HintOutOfBounds { pc: u32 },
+    #[error("at pc {pc}, hint buffer num_words {num_words} exceeds MAX_HINT_BUFFER_WORDS {max_hint_buffer_words}")]
+    HintBufferTooLarge {
+        pc: u32,
+        num_words: u32,
+        max_hint_buffer_words: u32,
+    },
     #[error("at pc {pc}, tried to publish into index {public_value_index} when num_public_values = {num_public_values}")]
     PublicValueIndexOutOfBounds {
         pc: u32,
