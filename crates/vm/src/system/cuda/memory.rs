@@ -157,6 +157,7 @@ impl MemoryInventoryGPU {
         access_adapter_arena: DenseRecordArena,
         touched_memory: TouchedMemory<F>,
     ) -> Vec<AirProvingContext<GpuBackend>> {
+        let mem = MemTracker::start("generate mem proving ctxs");
         let merkle_proof_ctx = match touched_memory {
             TouchedMemory::Persistent(partition) => {
                 let persistent = self
@@ -218,6 +219,7 @@ impl MemoryInventoryGPU {
 
                     self.boundary
                         .finalize_records_persistent::<DIGEST_WIDTH>(Vec::new());
+                    mem.tracing_info("merkle update");
                     persistent.merkle_tree.finalize();
                     let merkle_tree_ctx = persistent.merkle_tree.update_with_touched_blocks(
                         unpadded_merkle_height,
@@ -341,6 +343,7 @@ impl MemoryInventoryGPU {
                         self.unpadded_merkle_height = unpadded_merkle_height;
                     }
 
+                    mem.tracing_info("merkle update");
                     persistent.merkle_tree.finalize();
                     let merkle_tree_ctx = persistent.merkle_tree.update_with_touched_blocks(
                         unpadded_merkle_height,
@@ -359,9 +362,11 @@ impl MemoryInventoryGPU {
                 None
             }
         };
+        mem.tracing_info("boundary tracegen");
         let mut ret = vec![self.boundary.generate_proving_ctx(())];
         if let Some(merkle_proof_ctx) = merkle_proof_ctx {
             ret.push(merkle_proof_ctx);
+            mem.tracing_info("dropping merkle tree");
             let persistent = self.persistent.as_mut().unwrap();
             persistent.merkle_tree.drop_subtrees();
             persistent.initial_memory = Vec::new();
