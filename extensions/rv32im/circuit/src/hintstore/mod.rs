@@ -25,6 +25,7 @@ use openvm_instructions::{
 use openvm_rv32im_transpiler::{
     Rv32HintStoreOpcode,
     Rv32HintStoreOpcode::{HINT_BUFFER, HINT_STOREW},
+    MAX_HINT_BUFFER_WORDS, MAX_HINT_BUFFER_WORDS_BITS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -194,19 +195,29 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
             )
             .eval(builder, is_start.clone());
 
-        // Preventing mem_ptr and rem_words overflow
-        // Constraining mem_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1] < 2^(pointer_max_bits -
-        // (RV32_REGISTER_NUM_LIMBS - 1)*RV32_CELL_BITS) which implies mem_ptr <=
-        // 2^pointer_max_bits Similarly for rem_words <= 2^pointer_max_bits
+        // Preventing rem_words overflow: rem_words < 2^MAX_HINT_BUFFER_WORDS_BITS
+        // These constraints only work for MAX_HINT_BUFFER_WORDS_BITS in [16, 23]
+        debug_assert!(
+            (16..=23).contains(&MAX_HINT_BUFFER_WORDS_BITS),
+            "MAX_HINT_BUFFER_WORDS_BITS must be in [16, 23] for these constraints to work"
+        );
+        // For MAX_HINT_BUFFER_WORDS_BITS = 18, this requires:
+        // - limbs[3] = 0 (since 2^18 < 2^24)
+        // - limbs[2] < 4 (since 2^18 = 4 * 2^16)
+        builder.assert_zero(local_cols.rem_words_limbs[RV32_REGISTER_NUM_LIMBS - 1]);
+
+        // Preventing mem_ptr overflow: mem_ptr < 2^pointer_max_bits
+        // (rem_words overflow is handled below with the stricter MAX_HINT_BUFFER_WORDS_BITS bound)
         self.bitwise_operation_lookup_bus
             .send_range(
                 local_cols.mem_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1]
                     * AB::F::from_usize(
                         1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits),
                     ),
-                local_cols.rem_words_limbs[RV32_REGISTER_NUM_LIMBS - 1]
+                local_cols.rem_words_limbs[RV32_REGISTER_NUM_LIMBS - 2]
                     * AB::F::from_usize(
-                        1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits),
+                        1 << ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS
+                            - MAX_HINT_BUFFER_WORDS_BITS),
                     ),
             )
             .eval(builder, is_start.clone());
@@ -401,6 +412,15 @@ where
             read_rv32_register(state.memory.data(), a)
         };
 
+        // Bounds check: num_words must not exceed MAX_HINT_BUFFER_WORDS
+        if num_words > MAX_HINT_BUFFER_WORDS as u32 {
+            return Err(ExecutionError::HintBufferTooLarge {
+                pc: *state.pc,
+                num_words,
+                max_hint_buffer_words: MAX_HINT_BUFFER_WORDS as u32,
+            });
+        }
+
         let record = state.ctx.alloc(MultiRowLayout::new(Rv32HintStoreMetadata {
             num_words: num_words as usize,
         }));
@@ -500,6 +520,10 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
         let msl_lshift: u32 =
             (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits) as u32;
 
+        // Scale factors for rem_words range check (using MAX_HINT_BUFFER_WORDS_BITS)
+        let rem_words_limb2_lshift: u32 =
+            ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS - MAX_HINT_BUFFER_WORDS_BITS) as u32;
+
         chunks
             .par_iter_mut()
             .zip(sizes.par_iter())
@@ -518,9 +542,17 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
                         }),
                     )
                 };
+                // Range check for mem_ptr (using pointer_max_bits)
+                // (num_words overflow check is handled below with the stricter
+                // MAX_HINT_BUFFER_WORDS_BITS bound)
+                // Range check for num_words (using MAX_HINT_BUFFER_WORDS_BITS)
+                debug_assert!(
+                    num_words <= MAX_HINT_BUFFER_WORDS as u32,
+                    "num_words must be <= MAX_HINT_BUFFER_WORDS"
+                );
                 self.bitwise_lookup_chip.request_range(
                     (record.inner.mem_ptr >> msl_rshift) << msl_lshift,
-                    (num_words >> msl_rshift) << msl_lshift,
+                    ((num_words >> 16) & 0xFF) << rem_words_limb2_lshift,
                 );
 
                 let mut timestamp = record.inner.timestamp + num_words * 3;

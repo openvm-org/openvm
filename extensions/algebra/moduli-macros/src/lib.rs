@@ -875,15 +875,15 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         }
                         #[cfg(target_os = "zkvm")]
                         {
-                            use ::openvm_algebra_guest::{openvm_custom_insn, openvm_rv32im_guest}; // needed for hint_store_u32! and hint_buffer_u32!
+                            use ::openvm_algebra_guest::{openvm_custom_insn, openvm_rv32im_guest}; // needed for hint_store_u32! and hint_buffer_chunked
 
                             let is_square = core::mem::MaybeUninit::<u32>::uninit();
-                            let sqrt = core::mem::MaybeUninit::<#struct_name>::uninit();
+                            let mut sqrt = core::mem::MaybeUninit::<#struct_name>::uninit();
                             unsafe {
                                 #hint_sqrt_extern_func(self as *const #struct_name as usize);
                                 let is_square_ptr = is_square.as_ptr() as *const u32;
                                 openvm_rv32im_guest::hint_store_u32!(is_square_ptr);
-                                openvm_rv32im_guest::hint_buffer_u32!(sqrt.as_ptr() as *const u8, <#struct_name as ::openvm_algebra_guest::IntMod>::NUM_LIMBS / 4);
+                                openvm_rv32im_guest::hint_buffer_chunked(sqrt.as_mut_ptr() as *mut u8, <#struct_name as ::openvm_algebra_guest::IntMod>::NUM_LIMBS / 4 as usize);
                                 let is_square = is_square.assume_init();
                                 if is_square == 0 || is_square == 1 {
                                     Some((is_square == 1, sqrt.assume_init()))
@@ -902,14 +902,14 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
                         }
                         #[cfg(target_os = "zkvm")]
                         {
-                            use ::openvm_algebra_guest::{openvm_custom_insn, openvm_rv32im_guest}; // needed for hint_buffer_u32!
+                            use ::openvm_algebra_guest::{openvm_custom_insn, openvm_rv32im_guest}; // needed for hint_buffer_chunked
 
                             let mut non_qr_uninit = core::mem::MaybeUninit::<Self>::uninit();
                             let mut non_qr;
                             unsafe {
                                 #hint_non_qr_extern_func();
-                                let ptr = non_qr_uninit.as_ptr() as *const u8;
-                                openvm_rv32im_guest::hint_buffer_u32!(ptr, <Self as ::openvm_algebra_guest::IntMod>::NUM_LIMBS / 4);
+                                let ptr = non_qr_uninit.as_mut_ptr() as *mut u8;
+                                openvm_rv32im_guest::hint_buffer_chunked(ptr, <Self as ::openvm_algebra_guest::IntMod>::NUM_LIMBS / 4 as usize);
                                 non_qr = non_qr_uninit.assume_init();
                             }
                             // ensure non_qr < modulus
