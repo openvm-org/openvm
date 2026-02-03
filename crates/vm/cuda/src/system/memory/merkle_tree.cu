@@ -2,7 +2,6 @@
 #include "poseidon2.cuh"
 #include "primitives/shared_buffer.cuh"
 #include "primitives/trace_access.h"
-#include "system/records.cuh"
 
 #include <cub/cub.cuh>
 
@@ -160,7 +159,12 @@ template <typename T> struct MerkleCols {
     T right_direction_different;
 };
 
-using LabeledDigest = MemoryInventoryRecord<CELLS_OUT, 2>;
+struct LabeledDigest {
+    uint32_t address_space_idx;
+    uint32_t label;
+    uint32_t timestamp; // unused
+    uint32_t digest_raw[CELLS_OUT];
+};
 
 __global__ void prepare_for_updating(
     uint32_t *child_buf,
@@ -173,15 +177,11 @@ __global__ void prepare_for_updating(
     }
     child_buf[gid] = gid;
     Fp cells[CELLS] = {0};
-    COPY_DIGEST(cells, leaves[gid].values);
+    COPY_DIGEST(cells, leaves[gid].digest_raw);
     poseidon2_mix(cells);
-    COPY_DIGEST(leaves[gid].values, cells);
-    leaves[gid].address_space -= 1;
-    leaves[gid].ptr /= CELLS_OUT;
-    leaves[gid].timestamps[0] =
-        leaves[gid].timestamps[0] > leaves[gid].timestamps[1] ? leaves[gid].timestamps[0]
-                                                              : leaves[gid].timestamps[1];
-    leaves[gid].timestamps[1] = 0;
+    COPY_DIGEST(leaves[gid].digest_raw, cells);
+    leaves[gid].address_space_idx -= 1;
+    leaves[gid].label /= CELLS_OUT;
 }
 
 __global__ void set_parent_id_adjacent_differences(
@@ -200,8 +200,8 @@ __global__ void set_parent_id_adjacent_differences(
     } else {
         auto const ptr1 = current_layer_ptrs[gid - 1];
         auto const ptr2 = current_layer_ptrs[gid];
-        parent_ids[gid] = layer[ptr1].address_space != layer[ptr2].address_space
-            || (layer[ptr1].ptr >> h) != (layer[ptr2].ptr >> h);
+        parent_ids[gid] = layer[ptr1].address_space_idx != layer[ptr2].address_space_idx
+            || (layer[ptr1].label >> h) != (layer[ptr2].label >> h);
     }
 }
 
@@ -221,7 +221,7 @@ __global__ void group_by_parent(
     }
 
     uint32_t const ptr = current_layer_ptrs[gid];
-    uint32_t const my_place = parent_ids[gid] * 2 + (layer[ptr].ptr >> (h - 1)) % 2;
+    uint32_t const my_place = parent_ids[gid] * 2 + (layer[ptr].label >> (h - 1)) % 2;
     uint32_t const siblings_place = my_place ^ 1;
 
     child_ptrs[my_place] = ptr;
@@ -295,8 +295,8 @@ __global__ void update_merkle_layer(
 
     uint32_t const parent_ptr = parent_ptrs[idx] =
         ((child_ptrs[2 * idx] == MISSING_CHILD) ? child_ptrs[2 * idx + 1] : child_ptrs[2 * idx]);
-    uint32_t const address_space_idx = layer[parent_ptr].address_space;
-    uint32_t const parent_label = layer[parent_ptr].ptr >> layer_height;
+    uint32_t const address_space_idx = layer[parent_ptr].address_space_idx;
+    uint32_t const parent_label = layer[parent_ptr].label >> layer_height;
     auto const subtree_layer = subtree_layers[address_space_idx];
     Poseidon2Buffer poseidon2(
         reinterpret_cast<FpArray<16> *>(poseidon2_buffer), poseidon2_buffer_idx, poseidon2_capacity
@@ -335,13 +335,13 @@ __global__ void update_merkle_layer(
     { // new values trace row + actual update
         bool left_new = false;
         if (auto const child_ptr = child_ptrs[2 * idx]; child_ptr != MISSING_CHILD) {
-            COPY_DIGEST(&subtree_layer[2 * parent_label], layer[child_ptr].values);
+            COPY_DIGEST(&subtree_layer[2 * parent_label], layer[child_ptr].digest_raw);
             left_new = true;
         }
         COPY_DIGEST(cells, old_left_digest);
         bool right_new = false;
         if (auto const child_ptr = child_ptrs[2 * idx + 1]; child_ptr != MISSING_CHILD) {
-            COPY_DIGEST(&subtree_layer[2 * parent_label + 1], layer[child_ptr].values);
+            COPY_DIGEST(&subtree_layer[2 * parent_label + 1], layer[child_ptr].digest_raw);
             right_new = true;
         }
         COPY_DIGEST(cells + CELLS_OUT, old_right_digest);
@@ -357,7 +357,7 @@ __global__ void update_merkle_layer(
             right_new,
             poseidon2
         );
-        COPY_DIGEST(layer[parent_ptr].values, cells);
+        COPY_DIGEST(layer[parent_ptr].digest_raw, cells);
     }
 }
 
@@ -385,10 +385,10 @@ __global__ void update_to_root(
     digest_t **subtrees = reinterpret_cast<digest_t **>(d_subtrees);
     for (size_t i = 0; i < layer_size; ++i) {
         auto const idx = layer_ids[i];
-        auto const address_space_idx = layer[idx].address_space;
-        layer[idx].ptr = num_roots - 1 + address_space_idx;
+        auto const address_space_idx = layer[idx].address_space_idx;
+        layer[idx].label = num_roots - 1 + address_space_idx;
         if (subtrees[address_space_idx]) {
-            COPY_DIGEST(subtrees[address_space_idx], layer[idx].values);
+            COPY_DIGEST(subtrees[address_space_idx], layer[idx].digest_raw);
         }
     }
 
@@ -400,7 +400,7 @@ __global__ void update_to_root(
         size_t const h = root_height - (31 - __clz((uint32_t)out_idx + 1));
         uint32_t children_ids[2] = {MISSING_CHILD, MISSING_CHILD};
         for (size_t i = 0; i < layer_size; ++i) {
-            if (auto local_idx = layer[layer_ids[i]].ptr - 2 * out_idx;
+            if (auto local_idx = layer[layer_ids[i]].label - 2 * out_idx;
                 local_idx == 1 || local_idx == 2) {
                 children_ids[local_idx - 1] = i;
             }
@@ -421,7 +421,7 @@ __global__ void update_to_root(
         for (auto i : {0, 1}) {
             if (children_ids[i] != MISSING_CHILD) {
                 COPY_DIGEST(
-                    &out[2 * out_idx + 1 + i], layer[layer_ids[children_ids[i]]].values
+                    &out[2 * out_idx + 1 + i], layer[layer_ids[children_ids[i]]].digest_raw
                 );
             }
             COPY_DIGEST(cells + CELLS_OUT * i, &out[2 * out_idx + 1 + i]);
@@ -432,7 +432,7 @@ __global__ void update_to_root(
             size_t const max_idx = children_ids[children_ids[0] == surely_surviving_child];
             layer_ids[max_idx] = layer_ids[--layer_size];
         }
-        layer[layer_ids[surely_surviving_child]].ptr = out_idx;
+        layer[layer_ids[surely_surviving_child]].label = out_idx;
         {
             RowSlice row(merkle_trace + merkle_trace_offset + 1, trace_height);
             fill_merkle_trace_row(
@@ -446,11 +446,11 @@ __global__ void update_to_root(
                 children_ids[1] != MISSING_CHILD,
                 poseidon2
             );
-            COPY_DIGEST(layer[layer_ids[surely_surviving_child]].values, cells);
+            COPY_DIGEST(layer[layer_ids[surely_surviving_child]].digest_raw, cells);
             COL_WRITE_VALUE(row, MerkleCols, height_section, true);
         }
     }
-    COPY_DIGEST(out, layer[layer_ids[0]].values);
+    COPY_DIGEST(out, layer[layer_ids[0]].digest_raw);
     for (auto i : {0, 1}) {
         RowSlice row(merkle_trace + i, trace_height);
         COL_WRITE_VALUE(row, MerkleCols, is_root, true);
