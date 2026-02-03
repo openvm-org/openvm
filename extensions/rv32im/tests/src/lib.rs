@@ -13,7 +13,7 @@ mod tests {
     };
     use openvm_instructions::{exe::VmExe, instruction::Instruction, LocalOpcode, SystemOpcode};
     use openvm_rv32im_circuit::{Rv32IBuilder, Rv32IConfig, Rv32ImBuilder, Rv32ImConfig};
-    use openvm_rv32im_guest::hint_load_by_key_encode;
+    use openvm_rv32im_guest::{hint_load_by_key_encode, MAX_HINT_BUFFER_WORDS};
     use openvm_rv32im_transpiler::{
         DivRemOpcode, MulHOpcode, MulOpcode, Rv32ITranspilerExtension, Rv32IoTranspilerExtension,
         Rv32MTranspilerExtension,
@@ -168,6 +168,37 @@ mod tests {
             hint_load_by_key_encode(&input),
         )]));
         air_test_with_min_segments(Rv32ImBuilder, config, exe, streams, 1);
+        Ok(())
+    }
+
+    /// NOTE: This test is slow because it processes > 1MB of data. It is marked #[ignore]
+    /// and can be run with: cargo test -p openvm-rv32im-integration-tests test_hint_buffer_chunking
+    /// -- --ignored
+    #[test]
+    #[ignore = "slow test: processes >1MB of data"]
+    fn test_hint_buffer_chunking() -> Result<()> {
+        let config = test_rv32im_config();
+        let elf = build_example_program_at_path(get_programs_dir!(), "hint_large_buffer", &config)?;
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension),
+        )?;
+
+        // Create input buffer larger than MAX_HINT_BUFFER_WORDS
+        // This will require chunking to succeed
+        let expected_words = MAX_HINT_BUFFER_WORDS + 100;
+        let expected_len = expected_words * 4;
+
+        // Create data with a pattern that can be verified
+        let data: Vec<F> = (0..expected_len)
+            .map(|i| F::from_canonical_u8((i % 256) as u8))
+            .collect();
+
+        let input = vec![data];
+        air_test_with_min_segments(Rv32ImBuilder, config, exe, input, 1);
         Ok(())
     }
 
