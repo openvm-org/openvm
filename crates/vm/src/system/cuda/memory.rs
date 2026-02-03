@@ -157,7 +157,6 @@ impl MemoryInventoryGPU {
         access_adapter_arena: DenseRecordArena,
         touched_memory: TouchedMemory<F>,
     ) -> Vec<AirProvingContext<GpuBackend>> {
-        let mem = MemTracker::start("generate mem proving ctxs");
         let merkle_proof_ctx = match touched_memory {
             TouchedMemory::Persistent(partition) => {
                 let persistent = self
@@ -195,12 +194,20 @@ impl MemoryInventoryGPU {
                     for i in 0..CONST_BLOCK_SIZE {
                         values_u32[i] = Self::field_to_raw_u32(leftmost_values[i]);
                     }
-                    let mut merkle_records = Vec::<u32>::with_capacity(MERKLE_TOUCHED_BLOCK_WIDTH);
-                    merkle_records.push(ADDR_SPACE_OFFSET);
-                    merkle_records.push(0);
-                    merkle_records.push(0);
-                    merkle_records.extend_from_slice(&values_u32);
-                    let d_merkle_touched_memory = merkle_records.to_device().unwrap();
+                    let merkle_record = MemoryMerkleRecord {
+                        address_space: ADDR_SPACE_OFFSET,
+                        ptr: 0,
+                        timestamp: 0,
+                        values: values_u32,
+                    };
+                    let merkle_records = [merkle_record];
+                    let merkle_words: &[u32] = unsafe {
+                        std::slice::from_raw_parts(
+                            merkle_records.as_ptr() as *const u32,
+                            MERKLE_TOUCHED_BLOCK_WIDTH,
+                        )
+                    };
+                    let d_merkle_touched_memory = merkle_words.to_device().unwrap();
 
                     let unpadded_merkle_height =
                         persistent.merkle_tree.calculate_unpadded_height(&partition);
@@ -302,7 +309,7 @@ impl MemoryInventoryGPU {
                             d_out_records,
                             out_num_records,
                         );
-                    
+
                     // Send records to memory merkle tree
                     let out_records = self.boundary.persistent_records().to_host().unwrap();
                     let record_words = 4 + DIGEST_WIDTH;
@@ -310,9 +317,7 @@ impl MemoryInventoryGPU {
                     for i in 0..out_num_records {
                         let base = i * record_words;
                         let mut values = [0u32; DIGEST_WIDTH];
-                        values.copy_from_slice(
-                            &out_records[base + 4..base + 4 + DIGEST_WIDTH],
-                        );
+                        values.copy_from_slice(&out_records[base + 4..base + 4 + DIGEST_WIDTH]);
                         let record = MemoryMerkleRecord {
                             address_space: out_records[base],
                             ptr: out_records[base + 1],
