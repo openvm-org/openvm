@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use openvm_circuit::{
     arch::{
-        AddressSpaceHostLayout, DenseRecordArena, MemoryConfig, ADDR_SPACE_OFFSET,
-        CONST_BLOCK_SIZE,
+        AddressSpaceHostLayout, DenseRecordArena, MemoryConfig, ADDR_SPACE_OFFSET, CONST_BLOCK_SIZE,
     },
     system::{memory::AddressMap, TouchedMemory},
 };
@@ -14,8 +13,8 @@ use openvm_cuda_common::{
     d_buffer::DeviceBuffer,
     memory_manager::MemTracker,
 };
-use p3_field::FieldAlgebra;
 use openvm_stark_backend::{p3_util::log2_ceil_usize, prover::types::AirProvingContext, Chip};
+use p3_field::FieldAlgebra;
 
 use super::{
     access_adapters::AccessAdapterInventoryGPU,
@@ -23,9 +22,7 @@ use super::{
     merkle_tree::{MemoryMerkleTree, MERKLE_TOUCHED_BLOCK_WIDTH},
     Poseidon2PeripheryChipGPU, DIGEST_WIDTH,
 };
-
-use crate::cuda_abi::inventory;
-use crate::system::memory::online::LinearMemory;
+use crate::{cuda_abi::inventory, system::memory::online::LinearMemory};
 
 pub struct MemoryInventoryGPU {
     pub boundary: BoundaryChipGPU,
@@ -188,8 +185,7 @@ impl MemoryInventoryGPU {
                     for i in 0..CONST_BLOCK_SIZE {
                         values_u32[i] = Self::field_to_raw_u32(leftmost_values[i]);
                     }
-                    let mut merkle_records =
-                        Vec::<u32>::with_capacity(MERKLE_TOUCHED_BLOCK_WIDTH);
+                    let mut merkle_records = Vec::<u32>::with_capacity(MERKLE_TOUCHED_BLOCK_WIDTH);
                     merkle_records.push(ADDR_SPACE_OFFSET);
                     merkle_records.push(0);
                     merkle_records.push(0);
@@ -220,9 +216,7 @@ impl MemoryInventoryGPU {
                             address_space: addr_space,
                             ptr,
                             timestamps: [ts_values.timestamp],
-                            values: ts_values
-                                .values
-                                .map(|x| Self::field_to_raw_u32(x)),
+                            values: ts_values.values.map(|x| Self::field_to_raw_u32(x)),
                         })
                         .collect();
                     let in_num_records = in_records.len();
@@ -305,9 +299,8 @@ impl MemoryInventoryGPU {
                             );
                         let out_records = self.boundary.persistent_records().to_host().unwrap();
                         let record_words = 4 + DIGEST_WIDTH;
-                        let mut merkle_records = Vec::with_capacity(
-                            out_num_records * MERKLE_TOUCHED_BLOCK_WIDTH,
-                        );
+                        let mut merkle_records =
+                            Vec::with_capacity(out_num_records * MERKLE_TOUCHED_BLOCK_WIDTH);
                         for i in 0..out_num_records {
                             let base = i * record_words;
                             let address_space = out_records[base];
@@ -318,9 +311,8 @@ impl MemoryInventoryGPU {
                             merkle_records.push(address_space);
                             merkle_records.push(ptr);
                             merkle_records.push(timestamp);
-                            merkle_records.extend_from_slice(
-                                &out_records[base + 4..base + 4 + DIGEST_WIDTH],
-                            );
+                            merkle_records
+                                .extend_from_slice(&out_records[base + 4..base + 4 + DIGEST_WIDTH]);
                         }
                         persistent.merkle_records = Some(merkle_records.to_device().unwrap());
 

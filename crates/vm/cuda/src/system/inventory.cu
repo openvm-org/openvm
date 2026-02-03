@@ -1,8 +1,14 @@
 #include "launcher.cuh"
-#include "system/records.cuh"
 #include <cub/device/device_scan.cuh>
 #include <cstddef>
 #include <cstdint>
+
+template <size_t CHUNK, size_t BLOCKS> struct MemoryInventoryRecord {
+    uint32_t address_space;
+    uint32_t ptr;
+    uint32_t timestamps[BLOCKS];
+    uint32_t values[CHUNK];
+};
 
 const uint32_t IN_BLOCK_SIZE = 4;
 const uint32_t OUT_BLOCK_SIZE = 8;

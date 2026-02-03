@@ -414,7 +414,11 @@ impl MemoryMerkleTree {
                         let x = md.label_to_index(shift_address(touched_memory[i].0));
                         let y = md.label_to_index(shift_address(touched_memory[i + 1].0));
                         let xor = x ^ y;
-                        if xor == 0 { 0 } else { xor.ilog2() as usize }
+                        if xor == 0 {
+                            0
+                        } else {
+                            xor.ilog2() as usize
+                        }
                     })
                     .sum::<usize>()
         }
@@ -437,12 +441,12 @@ mod tests {
             MemoryCellType, MemoryConfig,
         },
         system::{
+            cuda::merkle_tree::MERKLE_TOUCHED_BLOCK_WIDTH,
             memory::{
                 merkle::MerkleTree,
                 online::{GuestMemory, LinearMemory},
                 AddressMap, TimestampedValues,
             },
-            cuda::merkle_tree::MERKLE_TOUCHED_BLOCK_WIDTH,
             poseidon2::Poseidon2PeripheryChip,
         },
     };
