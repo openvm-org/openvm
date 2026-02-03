@@ -31,7 +31,10 @@ eyre = { workspace = true }
 
 [features]
 default = ["tiny_keccak"]
+aot = ["openvm-sdk/aot"]
 # Internal feature for testing only.
 cuda = ["openvm-keccak256-circuit/cuda"]
 # Enable tiny_keccak::Hasher trait implementation
 tiny_keccak = ["dep:tiny-keccak"]
+# Enables rust integration tests that take a long time.
+long_proving_tests = []
