@@ -91,3 +91,9 @@ inline constexpr size_t SHA256_REGISTER_READS = 3;
 inline constexpr size_t SHA256_READ_SIZE = 16;
 inline constexpr size_t SHA256_WRITE_SIZE = 32;
 } // namespace sha256
+
+namespace hintstore {
+// Must match MAX_HINT_BUFFER_WORDS_BITS in openvm_rv32im_guest::lib.rs
+inline constexpr size_t MAX_HINT_BUFFER_WORDS_BITS = 18;
+inline constexpr size_t MAX_HINT_BUFFER_WORDS = (1 << MAX_HINT_BUFFER_WORDS_BITS) - 1;
+} // namespace hintstore
