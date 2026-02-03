@@ -46,6 +46,7 @@ __device__ inline void read_initial_chunk(
     uint32_t addr_space_idx = address_space - 1;
     uint8_t const *mem = initial_mem[addr_space_idx];
     if (!mem) {
+        #pragma unroll
         for (int i = 0; i < OUT_BLOCK_SIZE; ++i) {
             out_values[i] = 0;
         }
@@ -53,6 +54,7 @@ __device__ inline void read_initial_chunk(
     }
     uint32_t cell_size = addr_space_cell_size(addr_space_offsets, addr_space_idx);
     size_t byte_offset = static_cast<size_t>(chunk_ptr) * cell_size;
+    #pragma unroll
     for (int i = 0; i < OUT_BLOCK_SIZE; ++i) {
         size_t off = byte_offset + static_cast<size_t>(i) * cell_size;
         if (cell_size == 4) {
@@ -95,6 +97,7 @@ __global__ void cukernel_build_candidates(
     read_initial_chunk(rec.values, initial_mem, addr_space_offsets, rec.address_space, chunk_ptr);
 
     uint32_t block_idx = (in[row_idx].ptr % OUT_BLOCK_SIZE) / IN_BLOCK_SIZE;
+    #pragma unroll
     for (int i = 0; i < IN_BLOCK_SIZE; ++i) {
         rec.values[block_idx * IN_BLOCK_SIZE + i] = in[row_idx].values[i];
     }
@@ -102,6 +105,7 @@ __global__ void cukernel_build_candidates(
 
     if (row_idx + 1 < in_num_records && same_output_block(in, row_idx, row_idx + 1)) {
         uint32_t block_idx2 = (in[row_idx + 1].ptr % OUT_BLOCK_SIZE) / IN_BLOCK_SIZE;
+        #pragma unroll
         for (int i = 0; i < IN_BLOCK_SIZE; ++i) {
             rec.values[block_idx2 * IN_BLOCK_SIZE + i] = in[row_idx + 1].values[i];
         }

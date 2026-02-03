@@ -72,6 +72,7 @@ __global__ void cukernel_persistent_boundary_tracegen(
                         )
                         : FpArray<8>::from_u8_array(initial_mem[record.address_space - 1] + record.ptr);
             } else {
+                #pragma unroll
                 for (int i = 0; i < 8; ++i) {
                     init_values.v[i] = 0;
                 }
@@ -85,6 +86,7 @@ __global__ void cukernel_persistent_boundary_tracegen(
                 row, PersistentBoundaryCols, hash, reinterpret_cast<Fp const *>(init_hash.v)
             );
             Fp ts_values[BLOCKS_PER_CHUNK];
+            #pragma unroll
             for (int i = 0; i < BLOCKS_PER_CHUNK; ++i) {
                 ts_values[i] = Fp::zero();
             }
@@ -100,6 +102,7 @@ __global__ void cukernel_persistent_boundary_tracegen(
                 row, PersistentBoundaryCols, hash, reinterpret_cast<Fp const *>(final_hash.v)
             );
             Fp ts_values[BLOCKS_PER_CHUNK];
+            #pragma unroll
             for (int i = 0; i < BLOCKS_PER_CHUNK; ++i) {
                 ts_values[i] = Fp(record.timestamps[i]);
             }
