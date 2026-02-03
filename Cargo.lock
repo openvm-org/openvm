@@ -6602,6 +6602,7 @@ dependencies = [
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
+ "spin 0.10.0",
  "tiny-keccak",
 ]
 
@@ -6636,7 +6637,6 @@ name = "openvm-keccak256-guest"
 version = "1.4.3"
 dependencies = [
  "openvm-platform",
- "spin 0.10.0",
 ]
 
 [[package]]
