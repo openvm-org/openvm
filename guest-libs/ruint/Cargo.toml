@@ -69,7 +69,7 @@ der = { version = "0.7", optional = true, default-features = false, features = [
 subtle = { version = "2.6.1", optional = true, default-features = false }
 
 # postgres
-bytes = { version = "1.4", optional = true }
+bytes = { version = "1.11", optional = true }
 postgres-types = { version = "0.2", optional = true }
 
 # diesel
