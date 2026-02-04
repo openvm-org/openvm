@@ -91,6 +91,47 @@ macro_rules! define_typed_per_proof_lookup_bus {
 }
 
 #[macro_export]
+macro_rules! define_typed_permutation_bus {
+    ($Bus:ident, $Msg:ident) => {
+        #[derive(Copy, Clone, Debug)]
+        pub struct $Bus(openvm_stark_backend::interaction::PermutationCheckBus);
+
+        impl $Bus {
+            #[inline]
+            pub fn new(bus_index: openvm_stark_backend::interaction::BusIndex) -> Self {
+                Self(openvm_stark_backend::interaction::PermutationCheckBus::new(
+                    bus_index,
+                ))
+            }
+
+            #[inline]
+            pub fn send<AB>(
+                &self,
+                builder: &mut AB,
+                message: $Msg<impl Into<AB::Expr> + Clone>,
+                enabled: impl Into<AB::Expr>,
+            ) where
+                AB: openvm_stark_backend::interaction::InteractionBuilder,
+            {
+                self.0.send(builder, message.to_vec(), enabled);
+            }
+
+            #[inline]
+            pub fn receive<AB>(
+                &self,
+                builder: &mut AB,
+                message: $Msg<impl Into<AB::Expr> + Clone>,
+                enabled: impl Into<AB::Expr>,
+            ) where
+                AB: openvm_stark_backend::interaction::InteractionBuilder,
+            {
+                self.0.receive(builder, message.to_vec(), enabled);
+            }
+        }
+    };
+}
+
+#[macro_export]
 macro_rules! define_typed_per_proof_permutation_bus {
     ($Bus:ident, $Msg:ident) => {
         #[derive(Copy, Clone, Debug)]
@@ -328,6 +369,15 @@ pub struct Poseidon2BusMessage<T> {
 }
 
 define_typed_lookup_bus!(Poseidon2Bus, Poseidon2BusMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct Poseidon2CompressMessage<T> {
+    pub input: [T; POSEIDON2_WIDTH],
+    pub output: [T; DIGEST_SIZE],
+}
+
+define_typed_lookup_bus!(Poseidon2CompressBus, Poseidon2CompressMessage);
 
 #[repr(u8)]
 #[derive(Debug, Copy, Clone)]

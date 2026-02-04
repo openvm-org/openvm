@@ -23,7 +23,7 @@ use crate::{
     circuit::{
         AggNodeTraceGen,
         dag_commit::{DagCommitAir, generate_dag_commit_proving_ctx},
-        public_values::{receiver::UserPvsReceiverAir, verifier::VerifierPvsAir},
+        nonroot::{receiver::UserPvsReceiverAir, verifier::VerifierPvsAir},
     },
 };
 
