@@ -20,7 +20,6 @@ use openvm_stark_backend::{
     prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     utils::disable_debug_builder,
-    verifier::VerificationError,
     AirRef, Chip,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
@@ -159,5 +158,7 @@ fn negative_sha256_test_bad_final_hash() {
         .load_air_proving_ctx((air, air_ctx))
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(VerificationError::OodEvaluationMismatch);
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }

@@ -17,18 +17,13 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
-    verifier::VerificationError,
 };
 use openvm_stark_sdk::{
-    config::{
-        baby_bear_blake3::{BabyBearBlake3Config, BabyBearBlake3Engine},
-        FriParameters,
-    },
-    engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };
 use rand::{rngs::StdRng, Rng};
+use stark_backend_v2::{BabyBearPoseidon2CpuEngineV2 as BabyBearPoseidon2Engine, SystemParams};
 
 use super::air::VerifyBatchBus;
 use crate::poseidon2::{
@@ -313,7 +308,9 @@ fn test<const N: usize>(cases: [Case; N]) {
         .finalize();
 
     // Run a test after pranking the poseidon2 stuff
-    prank_tester.simple_test_with_expected_error(VerificationError::OodEvaluationMismatch);
+    prank_tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -419,7 +416,7 @@ fn random_instructions(num_ops: usize) -> Vec<Instruction<BabyBear>> {
         .collect()
 }
 
-fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlake3Config> {
+fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearPoseidon2Config> {
     let elem_range = || 1..=100;
 
     let mut tester = VmChipTestBuilder::default_native();
@@ -489,26 +486,26 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
     tester.build().load(harness).finalize()
 }
 
-fn get_engine() -> BabyBearBlake3Engine {
-    BabyBearBlake3Engine::new(FriParameters::new_for_testing(3))
+fn _get_engine() -> BabyBearPoseidon2Engine {
+    BabyBearPoseidon2Engine::new(SystemParams::new_for_testing(20))
 }
 
 #[test]
 fn verify_batch_chip_simple_1() {
     let tester = tester_with_random_poseidon2_ops(1);
-    tester.test(get_engine).expect("Verification failed");
+    tester.simple_test().expect("Verification failed");
 }
 
 #[test]
 fn verify_batch_chip_simple_3() {
     let tester = tester_with_random_poseidon2_ops(3);
-    tester.test(get_engine).expect("Verification failed");
+    tester.simple_test().expect("Verification failed");
 }
 
 #[test]
 fn verify_batch_chip_simple_50() {
     let tester = tester_with_random_poseidon2_ops(50);
-    tester.test(get_engine).expect("Verification failed");
+    tester.simple_test().expect("Verification failed");
 }
 
 #[cfg(not(feature = "cuda"))]
