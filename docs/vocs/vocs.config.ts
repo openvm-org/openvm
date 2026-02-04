@@ -20,14 +20,14 @@ export default defineConfig({
     { text: "Book", link: "/book/getting-started/introduction" },
     { text: "Specs", link: "/specs/openvm/overview" },
     { text: "Whitepaper", link: "https://openvm.dev/whitepaper.pdf" },
-    { text: "SWIRL", link: "https://openvm.dev/swirl.pdf"},
+    { text: "SWIRL", link: "https://openvm.dev/swirl.pdf" },
     {
       text: "Rustdocs",
       link: `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL || "localhost:3000"}/docs/openvm`,
     },
     { text: "GitHub", link: "https://github.com/openvm-org/openvm" },
     {
-      text: "v1.4.3",
+      text: "v1.5.0",
       items: [
         {
           text: "Releases",
