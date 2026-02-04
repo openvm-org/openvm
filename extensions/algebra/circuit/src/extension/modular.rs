@@ -29,12 +29,14 @@ use openvm_rv32_adapters::{
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::PrimeField32,
-    prover::cpu::{CpuBackend, CpuDevice},
 };
-use openvm_stark_sdk::engine::StarkEngine;
-use rand::RngCore;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
+use stark_backend_v2::{
+    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
+    StarkEngineV2 as StarkEngine,
+};
 use strum::EnumCount;
 
 use crate::{
@@ -351,17 +353,17 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for ModularExtension {
 
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, SC, RA> VmProverExtension<E, RA, ModularExtension> for AlgebraCpuProverExt
+impl<E, RA> VmProverExtension<E, RA, ModularExtension> for AlgebraCpuProverExt
 where
-    SC: StarkGenericConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    RA: RowMajorMatrixArena<Val<SC>>,
-    Val<SC>: PrimeField32,
+    E::SC: StarkGenericConfig,
+    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
+    RA: RowMajorMatrixArena<Val<E::SC>>,
+    Val<E::SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
         extension: &ModularExtension,
-        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+        inventory: &mut ChipInventory<E::SC, RA, CpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -396,7 +398,7 @@ where
                 };
 
                 inventory.next_air::<ModularAir<1, 32>>()?;
-                let addsub = get_modular_addsub_chip::<Val<SC>, 1, 32>(
+                let addsub = get_modular_addsub_chip::<Val<E::SC>, 1, 32>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -406,7 +408,7 @@ where
                 inventory.add_executor_chip(addsub);
 
                 inventory.next_air::<ModularAir<1, 32>>()?;
-                let muldiv = get_modular_muldiv_chip::<Val<SC>, 1, 32>(
+                let muldiv = get_modular_muldiv_chip::<Val<E::SC>, 1, 32>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -423,7 +425,7 @@ where
                     }
                 });
                 inventory.next_air::<ModularIsEqualAir<1, 32, 32>>()?;
-                let is_eq = ModularIsEqualChip::<Val<SC>, 1, 32, 32>::new(
+                let is_eq = ModularIsEqualChip::<Val<E::SC>, 1, 32, 32>::new(
                     ModularIsEqualFiller::new(
                         Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
@@ -441,7 +443,7 @@ where
                 };
 
                 inventory.next_air::<ModularAir<3, 16>>()?;
-                let addsub = get_modular_addsub_chip::<Val<SC>, 3, 16>(
+                let addsub = get_modular_addsub_chip::<Val<E::SC>, 3, 16>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -451,7 +453,7 @@ where
                 inventory.add_executor_chip(addsub);
 
                 inventory.next_air::<ModularAir<3, 16>>()?;
-                let muldiv = get_modular_muldiv_chip::<Val<SC>, 3, 16>(
+                let muldiv = get_modular_muldiv_chip::<Val<E::SC>, 3, 16>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -468,7 +470,7 @@ where
                     }
                 });
                 inventory.next_air::<ModularIsEqualAir<3, 16, 48>>()?;
-                let is_eq = ModularIsEqualChip::<Val<SC>, 3, 16, 48>::new(
+                let is_eq = ModularIsEqualChip::<Val<E::SC>, 3, 16, 48>::new(
                     ModularIsEqualFiller::new(
                         Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,

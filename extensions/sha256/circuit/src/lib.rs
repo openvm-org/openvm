@@ -16,12 +16,12 @@ use openvm_circuit_derive::VmConfig;
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
-use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    prover::cpu::{CpuBackend, CpuDevice},
-};
-use openvm_stark_sdk::engine::StarkEngine;
+use openvm_stark_backend::config::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
+use stark_backend_v2::{
+    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
+    StarkEngineV2 as StarkEngine,
+};
 
 mod sha256_chip;
 pub use sha256_chip::*;
@@ -31,9 +31,9 @@ pub use extension::*;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
+        use cuda_backend_v2::{GpuBackendV2 as GpuBackend, BabyBearPoseidon2GpuEngineV2 as GpuBabyBearPoseidon2Engine};
         use openvm_circuit::arch::DenseRecordArena;
         use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};
-        use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
         use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
         use openvm_rv32im_circuit::Rv32ImGpuProverExt;
         pub(crate) mod cuda_abi;
@@ -75,10 +75,11 @@ impl InitFileGenerator for Sha256Rv32Config {}
 #[derive(Clone)]
 pub struct Sha256Rv32CpuBuilder;
 
-impl<E, SC> VmBuilder<E> for Sha256Rv32CpuBuilder
+type SC = stark_backend_v2::SC;
+impl<E> VmBuilder<E> for Sha256Rv32CpuBuilder
 where
     SC: StarkGenericConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
     Val<SC>: VmField,
 {
     type VmConfig = Sha256Rv32Config;

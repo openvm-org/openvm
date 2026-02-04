@@ -1,8 +1,10 @@
+use cuda_backend_v2::{
+    BabyBearPoseidon2GpuEngineV2 as GpuBabyBearPoseidon2Engine, GpuBackendV2 as GpuBackend,
+};
 use openvm_circuit::{
     arch::{ChipInventory, ChipInventoryError, DenseRecordArena, VmProverExtension},
     system::cuda::extensions::get_inventory_range_checker,
 };
-use openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine;
 use openvm_native_compiler::BLOCK_LOAD_STORE_SIZE;
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
@@ -17,7 +19,7 @@ use crate::{
     jal_rangecheck::{JalRangeCheckAir, JalRangeCheckGpu},
     loadstore::{NativeLoadStoreAir, NativeLoadStoreChipGpu},
     poseidon2::{air::NativePoseidon2Air, NativePoseidon2ChipGpu},
-    CastFExtension, GpuBackend, Native,
+    CastFExtension, Native,
 };
 
 pub struct NativeGpuProverExt;
