@@ -29,11 +29,13 @@ use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_rv32im_circuit::Rv32ImCpuProverExt;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    engine::StarkEngine,
     p3_field::PrimeField32,
-    prover::cpu::{CpuBackend, CpuDevice},
 };
 use serde::{Deserialize, Serialize};
+use stark_backend_v2::{
+    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
+    StarkEngineV2 as StarkEngine,
+};
 
 use crate::*;
 
@@ -231,17 +233,17 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Int256 {
 pub struct Int256CpuProverExt;
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, SC, RA> VmProverExtension<E, RA, Int256> for Int256CpuProverExt
+impl<E, RA> VmProverExtension<E, RA, Int256> for Int256CpuProverExt
 where
-    SC: StarkGenericConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    RA: RowMajorMatrixArena<Val<SC>>,
-    Val<SC>: PrimeField32,
+    E::SC: StarkGenericConfig,
+    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
+    RA: RowMajorMatrixArena<Val<E::SC>>,
+    Val<E::SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
         extension: &Int256,
-        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+        inventory: &mut ChipInventory<E::SC, RA, CpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -352,10 +354,11 @@ where
 #[derive(Clone)]
 pub struct Int256Rv32CpuBuilder;
 
-impl<E, SC> VmBuilder<E> for Int256Rv32CpuBuilder
+type SC = stark_backend_v2::SC;
+impl<E> VmBuilder<E> for Int256Rv32CpuBuilder
 where
     SC: StarkGenericConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
     Val<SC>: VmField,
 {
     type VmConfig = Int256Rv32Config;
