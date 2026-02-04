@@ -1,6 +1,23 @@
 # RISC-V ELF Transpilation to OpenVM Executable
 
-The OpenVM framework supports transpilation of a RISC-V ELF consisting of the RV32IM instruction set as well as [custom RISC-V instructions](/specs/reference/riscv-custom-code) specified by VM extensions into an OpenVM executable.
+The OpenVM framework supports transpilation of a RISC-V ELF consisting of the RV32IM/RV64IM instruction set as well as [custom RISC-V instructions](/specs/reference/riscv-custom-code) specified by VM extensions into an OpenVM executable.
+
+## Notation
+
+We use the following notation through this specification:
+
+- We use the term `XLEN` to refer to the width of an integer register in bits (either 32 or 64).
+- We use the term `LIMBS` to refer to the number of 8 bit limbs required to cover an integer register (`XLEN/8`).
+- Let `ind(rd)` denote `LIMBS * (register index)`, which is in `0..32*LIMBS`. In particular, it fits in one field element.
+- We use `itof` for the function that sends an immediate to its signed integer representation, as specified in Section 2.3 of [RISC-V Instruction Set Manual Volume I: Unprivileged ISA](https://lf-riscv.atlassian.net/wiki/spaces/HOME/pages/16154769/RISC-V+Technical+Specifications) (signed 12-bit, 13-bit, 21-bits for I-type, B-type, J-type, respectively), and then maps it to the corresponding field element. So `0b11…11` goes to `-1` in `F`.
+- We use `sign_extend_24` to convert a 12-bit or 20-bit integer into a 24-bit integer via sign extension. We use this in conjunction with `utof`, which converts 24 bits into an unsigned integer and then maps it to the corresponding field element. Note that each 24-bit unsigned integer fits in one field element.
+- We use `sign_extend_16` for the analogous conversion into a 16-bit integer via sign extension.
+- We use `zero_extend_24` to convert an unsigned integer with at most 24 bits into a 24-bit unsigned integer by zero extension. This is used in conjunction with `utof` to convert unsigned integers to field elements.
+- We use `sign_of(imm)` to get the sign bit of the immediate `imm`.
+- The notation `imm[0:4]` means the lowest 5 bits of the immediate.
+- The notation `imm[0:5]` means the lowest 6 bits of the immediate.
+- For a phantom instruction `ins`, `disc(ins)` is the discriminant specified in the [ISA specification](/specs/openvm/isa#system-instructions).
+- For a phantom instruction `ins` and a 16-bit `c_upper`, `phantom_c(c_upper, ins) = c_upper << 16 | disc(ins)` is the corresponding 32-bit operand `c` for PHANTOM.
 
 ## Transpiler Framework
 
@@ -19,9 +36,9 @@ The transpiler is configured upon construction with the set of VM extensions to 
 The transpilation rules must satisfy:
 
 - A read or write to the RISC-V program counter corresponds to a read or write to the program counter of the same value in OpenVM. This includes the implicit read of the program counter to fetch the instruction from program code, as well as any implicit `pc += 4` advancement in some RISC-V instructions. In transpilations where a single RISC-V code block is mapped to multiple OpenVM instructions (e.g., [Kernel Code](#openvm-kernel-code-transpilation)), the intermediate OpenVM instructions **may** change the value of the program counter to a program address that is not the start of a RISC-V instruction. It is required that at the end of the RISC-V code block, the program counter is set to the start of a valid RISC-V instruction in the RISC-V machine code.
-- A RISC-V 32-bit register `x{i}` read or write access corresponds to an OpenVM memory access at `[4 * i: 4]_1` **except** for writes to `x0`, see [below](#register-x0-handling). The 32-bits of `x{i}` are represented as 4 little-endian bytes in OpenVM memory.
-  - A RISC-V code block must **never** map to any OpenVM instruction that changes the value of `[0:4]_1` in OpenVM memory.
-- A RISC-V 32-bit user memory access of the `j`th byte in word `i` corresponds to an OpenVM memory access at `[4 * i + j]_2`.
+- A RISC-V XLEN bit register `x{i}` read or write access corresponds to an OpenVM memory access at `[LIMBS * i: LIMBS]_1` **except** for writes to `x0`, see [below](#register-x0-handling). The XLEN bits of `x{i}` are represented as LIMBS little-endian bytes in OpenVM memory.
+  - A RISC-V code block must **never** map to any OpenVM instruction that changes the value of `[0:LIMBS]_1` in OpenVM memory.
+- A RISC-V XLEN bit user memory access of the `j`th byte in word `i` corresponds to an OpenVM memory access at `[LIMBS * i + j]_2`.
 - If the RISC-V code block is a standard instruction from the [RISC-V Instruction Set Manual Volume I: Unprivileged ISA](https://lf-riscv.atlassian.net/wiki/spaces/HOME/pages/16154769/RISC-V+Technical+Specifications) ([pdf](https://drive.google.com/file/d/1uviu1nH-tScFfgrovvFCrj7Omv8tFtkp/view)), then the transpilation rule must map the RISC-V instruction to an OpenVM instruction that follows the RISC-V specification after applying the above correspondences to register and memory accesses.
 
 The above requirements, together with the invariants of the OpenVM ISA, imply that transpilation will only be valid for programs where:
@@ -37,25 +54,11 @@ A transpiler configuration is only considered valid if there are no two transpil
 
 As specified in Section 2.1 of [RISC-V Instruction Set Manual Volume I: Unprivileged ISA](https://lf-riscv.atlassian.net/wiki/spaces/HOME/pages/16154769/RISC-V+Technical+Specifications) ([pdf](https://drive.google.com/file/d/1uviu1nH-tScFfgrovvFCrj7Omv8tFtkp/view)), register `x0` is hardwired to zero and must **never** be written to.
 
-The OpenVM ISA treats `[0:4]_1` as normal read/write memory and makes no guarantees on memory accesses to this location. The transpiler must **never** transpile a RISC-V code block to any OpenVM instruction that changes the value of `[0:4]_1` in OpenVM memory. For compatibility with the RISC-V ISA, the transpiler must always transpile a RISC-V instruction to an OpenVM instruction that matches the RISC-V specification. In particular, any RISC-V instruction that has `rd=x0` must be transpiled to either the `NOP` OpenVM instruction if it has no side effects or to an OpenVM instruction that executes the expected side effect and does not change the value of `[0:4]_1`.
+The OpenVM ISA treats `[0:LIMBS]_1` as normal read/write memory and makes no guarantees on memory accesses to this location. The transpiler must **never** transpile a RISC-V code block to any OpenVM instruction that changes the value of `[0:LIMBS]_1` in OpenVM memory. For compatibility with the RISC-V ISA, the transpiler must always transpile a RISC-V instruction to an OpenVM instruction that matches the RISC-V specification. In particular, any RISC-V instruction that has `rd=x0` must be transpiled to either the `NOP` OpenVM instruction if it has no side effects or to an OpenVM instruction that executes the expected side effect and does not change the value of `[0:LIMBS]_1`.
 
 ## Transpiler Specification for Default VM Extensions
 
 This section specifies the behavior of the transpiler for the default VM extensions with the custom RISC-V instructions specified [here](/specs/reference/riscv-custom-code).
-We use the following notation:
-
-- We use the term `XLEN` to refer to the width of an integer register in bits (either 32 or 64).
-- We use the term `LIMBS` to refer to the number of 8 bit limbs required to cover an integer register (`XLEN/8`).
-- Let `ind(rd)` denote `LIMBS * (register index)`, which is in `0..32*LIMBS`. In particular, it fits in one field element.
-- We use `itof` for the function that sends an immediate to its signed integer representation, as specified in Section 2.3 of [RISC-V Instruction Set Manual Volume I: Unprivileged ISA](https://lf-riscv.atlassian.net/wiki/spaces/HOME/pages/16154769/RISC-V+Technical+Specifications) (signed 12-bit, 13-bit, 21-bits for I-type, B-type, J-type, respectively), and then maps it to the corresponding field element. So `0b11…11` goes to `-1` in `F`.
-- We use `sign_extend_24` to convert a 12-bit integer into a 24-bit integer via sign extension. We use this in conjunction with `utof`, which converts 24 bits into an unsigned integer and then maps it to the corresponding field element. Note that each 24-bit unsigned integer fits in one field element.
-- We use `sign_extend_16` for the analogous conversion into a 16-bit integer via sign extension.
-- We use `zero_extend_24` to convert an unsigned integer with at most 24 bits into a 24-bit unsigned integer by zero extension. This is used in conjunction with `utof` to convert unsigned integers to field elements.
-- We use `sign_of(imm)` to get the sign bit of the immediate `imm`.
-- The notation `imm[0:4]` means the lowest 5 bits of the immediate.
-- The notation `imm[0:5]` means the lowest 6 bits of the immediate.
-- For a phantom instruction `ins`, `disc(ins)` is the discriminant specified in the [ISA specification](/specs/openvm/isa#system-instructions).
-- For a phantom instruction `ins` and a 16-bit `c_upper`, `phantom_c(c_upper, ins) = c_upper << 16 | disc(ins)` is the corresponding 32-bit operand `c` for PHANTOM.
 
 We now specify the transpilation for system instructions and the default set of VM extensions.
 
@@ -139,8 +142,8 @@ Because `[0:LIMBS]_1` is initialized to `0` and never written to, this guarantee
 | bgeu        | BGEU_RV32/BGEU_RV64 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                     |
 | jal         | JAL_RV32/JAL_RV64 `ind(rd), 0, itof(imm), 1, 0, (rd != x0)`                                                   |
 | jalr        | JALR_RV32/JALR_RV64 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 0, (rd != x0), sign_of(imm)`            |
-| lui         | LUI_RV32/LUI_RV64 `ind(rd), 0, utof(zero_extend_24(imm[12:31])), 1, 0, 1` if `rd != x0`, else PHANTOM `_, _, disc(Nop)` |
-| auipc       | AUIPC_RV32/AUIPC_RV64 `ind(rd), 0, utof(zero_extend_24(imm[12:31]) << 4), 1` if `rd != x0`, else PHANTOM `_, _, disc(Nop)` |
+| lui         | LUI_RV32/LUI_RV64 `ind(rd), 0, utof(sign_extend_24(imm[12:31])), 1, 0, 1` if `rd != x0`, else PHANTOM `_, _, disc(Nop)` |
+| auipc       | AUIPC_RV32/AUIPC_RV64 `ind(rd), 0, utof(sign_extend_24(imm[12:31]) << 4), 1` if `rd != x0`, else PHANTOM `_, _, disc(Nop)`. |
 | mul         | MUL_RV32/MUL_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`         |
 | mulw        | MULW_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                 |
 | mulh        | MULH_RV32/MULH_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`       |
@@ -162,7 +165,7 @@ to OpenVM. In order to preserve correctness of handling of `x0`, the transpilati
 the constraint that any instruction that writes to a register must:
 
 - Transpile to `Nop` if the register is `x0` and there are no side effects.
-- Transpile to an OpenVM assembly instruction that does not write to `[0:4]_1` and processes side effects if the register is `x0` and there are side effects.
+- Transpile to an OpenVM assembly instruction that does not write to `[0:LIMBS]_1` and processes side effects if the register is `x0` and there are side effects.
 
 Each VM extension's behavior is specified below.
 
@@ -299,5 +302,5 @@ The above transpilation procedure allows the insertion of arbitrary serialized O
 
 - All code exiting the code block must jump to a valid RISC-V instruction in the machine code
 - Code from outside of the kernel code block must not jump into the middle of a kernel code block
-- Kernel code must not write to `[0:4]_1` in OpenVM memory
+- Kernel code must not write to `[0:LIMBS]_1` in OpenVM memory
 - Kernel code must only write bytes to address space `2` in OpenVM memory

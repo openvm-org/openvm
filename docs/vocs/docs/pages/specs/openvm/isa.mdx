@@ -30,6 +30,8 @@ OpenVM depends on the following parameters, some of which are fixed and some of 
 | `F`                 | The field over which the VM operates.                              | Currently fixed to Baby Bear, but may change to another 31-bit field.                               |
 | `PC_BITS`           | The number of bits in the program counter.                         | Fixed to 30.                                                                                        |
 | `DEFAULT_PC_STEP`   | The default program counter step size.                             | Fixed to 4.                                                                                         |
+| `XLEN`              | The width of an integer register in bits.                          | 32 for RV32IM, 64 for RV64IM.                                                                       |
+| `LIMBS`             | The number of 8-bit limbs per integer register (`XLEN / 8`).       | 4 for RV32IM, 8 for RV64IM.                                                                         |
 | `LIMB_BITS`         | The number of bits in a limb for RISC-V memory emulation.          | Fixed to 8.                                                                                         |
 | `ADDR_SPACE_OFFSET` | The index of the first writable address space.                     | Fixed to 1.                                                                                         |
 | `addr_space_height` | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `addr_space_height <= F::bits() - 2`                                     |
@@ -118,7 +120,7 @@ address spaces and the size of each address space are configurable constants.
 - Valid pointers are field elements that lie in `[0, 2^pointer_max_bits)`, for
   configuration constant `pointer_max_bits`. When accessing an address out of `[0, 2^pointer_max_bits)`, the VM should
   panic.
-- For the register address space (address space `1`), valid pointers lie in `[0, 128)`, corresponding to 32 registers with 4 byte limbs each.
+- For the register address space (address space `1`), valid pointers lie in `[0, 32*LIMBS)`, corresponding to 32 registers with LIMBS bytes each.
 These configuration constants must satisfy `addr_space_height, pointer_max_bits <= F::bits() - 2`. We use the following notation
 to denote cells in memory:
 
@@ -260,11 +262,17 @@ instructions will set `to_pc = from_pc + DEFAULT_PC_STEP`. We will use the follo
   unsigned 32-bit integer.
 - `i32(x)` where `x: [F; 4]` consists of 4 bytes will mean the casting from little-endian bytes in 2's complement to
   signed 32-bit integer.
+- `uXLEN(x)` where `x: [F; LIMBS]` consists of LIMBS bytes will mean the casting from little-endian bytes in 2's complement to
+  unsigned XLEN-bit integer.
+- `iXLEN(x)` where `x: [F; LIMBS]` consists of LIMBS bytes will mean the casting from little-endian bytes in 2's complement to
+  signed XLEN-bit integer.
 - `sign_extend` means sign extension of bits in 2's complement.
-- `i32(c)` where `c` is a field element will mean `c.as_canonical_u32()` if `c.as_canonical_u32() < F::modulus() / 2` or
-  `c.as_canonical_u32() - F::modulus() as i32` otherwise.
-- `decompose(c)` where `c` is a field element means `c.as_canonical_u32().to_le_bytes()`.
+- `iXLEN(c)` where `c` is a field element will mean interpreting `c` as a signed integer in `F`, i.e.,
+  if `c.as_canonical_u32() < F::modulus() / 2` then `iXLEN(c) = c.as_canonical_u32() as iXLEN` else
+  `iXLEN(c) = c.as_canonical_u32() - F::modulus() as iXLEN`.
+- `decompose(c)` where `c` is a field element means `(c.as_canonical_u32() as uXLEN).to_le_bytes()`, i.e., LIMBS little-endian bytes (zero-extended).
 - `r32{0}(a) := i32([a:4]_1)` means casting the value at `[a:4]_1` to `i32`.
+- `rXLEN{0}(a) := iXLEN([a:LIMBS]_1)` means casting the register value at `[a:LIMBS]_1` to `iXLEN`.
 
 In the specification, operands marked with `_` are not used and should be set to zero. Trailing unused operands should
 also be set to zero.
@@ -320,7 +328,7 @@ never contain such a write and conforms to the RV32IM/RV64IM specification.
 In all ALU instructions, the operand `d` is fixed to be `1`. The operand `e` must be either `0` or `1`. When `e = 0`,
 the `c` operand is expected to be of the form `F::from_canonical_u32(c_i16 as i24 as u24 as u32)` where `c_i16` is type
 `i16`. In other words we take signed 16-bits in two's complement, sign extend to 24-bits, consider the 24-bits as
-unsigned integer, and convert to field element. In the instructions below, `[c:4]_0` should be interpreted as
+unsigned integer, and convert to field element. In the instructions below, `[c:LIMBS]_0` should be interpreted as
 `c_i16 as iXLEN` sign extended to XLEN bits.
 
 | Name                | Operands    | Description                                                                                                |
@@ -385,8 +393,8 @@ For branch instructions, we fix `d = e = 1`. For jump instructions, we fix `d = 
 | BGEU_RV32/BGEU_RV64 | `a,b,c,1,1`      | `if(uXLEN([a:LIMBS]_1) >= uXLEN([b:LIMBS]_1)) pc += c`                                                                                                                                                                                                                                                                                                                      |
 | JAL_RV32/JAL_RV64   | `a,_,c,1,_,f`    | `if(f!=0) [a:LIMBS]_1 = decompose(pc+DEFAULT_PC_STEP); pc += c`. The operand `f` is assumed to be boolean. The `pc` increment is always done regardless of `f`'s value. Here `iXLEN(c)` must be in `[-2^24, 2^24)`.                                                                                                                                                         |
 | JALR_RV32/JALR_RV64 | `a,b,c,1,_,f,g`  | `if(f!=0) [a:LIMBS]_1 = decompose(pc+DEFAULT_PC_STEP); pc = F::from_canonical_u64(iXLEN([b:LIMBS]_1) + sign_extend(decompose(c)[0:2], g) as uXLEN)`. Constrains that `iXLEN([b:LIMBS]_1) + sign_extend(decompose(c)[0:2], g)` is in `[0, 2^PC_BITS)`. Here `uXLEN(c)` must be in `[0, 2^16)`. The operands `f` and `g` are assumed to be boolean. The `pc` assignment is always done regardless of `f`'s value. |
-| LUI_RV32/LUI_RV64   | `a,_,c,1,_,1`    | `[a:LIMBS]_1 = uXLEN(c) << 12`. Here `iXLEN(c)` must be in `[0, 2^20)`.                                                                                                                                                                                                                                                                                                     |
-| AUIPC_RV32/AUIPC_RV64 | `a,_,c,1,_,_`  | `[a:LIMBS]_1 = decompose(pc) + (decompose(c) << 8)`. Here `iXLEN(c)` must be in `[0, 2^24)`.                                                                                                                                                                                                                                                                                |
+| LUI_RV32/LUI_RV64   | `a,_,c,1,_,1`    | `[a:LIMBS]_1 = uXLEN(c) << 12`. Here `iXLEN(c)` must be in `[0, 2^20)`. The immediate is sign-extended.                                                                                                                                                                                                                                                                     |
+| AUIPC_RV32/AUIPC_RV64 | `a,_,c,1,_,_`  | `[a:LIMBS]_1 = decompose(pc + (iXLEN(c) << 8))`. Here `iXLEN(c)` must be in `[-2^23, 2^23)`. The immediate is sign-extended, and the addition is performed as wrapping `iXLEN` arithmetic.                                                                                                                                                                                  |
 
 For branch and JAL instructions, the instructions assume that the operand `iXLEN(c)` is in `[-2^24,2^24)`. The
 assignment `pc += c` is done as field elements.
@@ -400,10 +408,9 @@ the unsigned integer encoding of `c` as 16 bits, then sign extending it to XLEN 
 result is then cast to `uXLEN` and then to `F` and assigned to `pc`.
 
 For LUI, we are treating `c` in `[0, 2^20)` as a raw encoding of 20-bits.
-For AUIPC, we are treating `c` in `[0, 2^24)` as a raw encoding of 24-bits.
-The instruction does not need to interpret whether the register is signed or unsigned.
-For AUIPC, the addition is treated as unchecked `uXLEN` addition since that is the same as `iXLEN` addition at the bit
-level.
+For AUIPC, we are treating `c` as a signed 24-bit value in `[-2^23, 2^23)`. The shift `iXLEN(c) << 8`
+places the upper 20 bits of the immediate at bits 12-31, and the immediate is sign-extended before addition. The
+addition with `pc` is treated as unchecked `iXLEN` addition since that is the same as `uXLEN` addition at the bit level.
 
 Note that AUIPC does not have any condition for the register write.
 
