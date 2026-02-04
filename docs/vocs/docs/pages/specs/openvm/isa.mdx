@@ -35,7 +35,7 @@ OpenVM depends on the following parameters, some of which are fixed and some of 
 | `addr_space_height` | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `addr_space_height <= F::bits() - 2`                                     |
 | `pointer_max_bits`  | The maximum number of bits in a pointer.                           | Configurable, must satisfy `pointer_max_bits <= F::bits() - 2`                                      |
 | `num_public_values` | The number of user public values.                                  | Configurable. If continuation is enabled, it must equal `8` times a power of two(which is nonzero). |
-| `MAX_HINT_BUFFER_WORDS_BITS` | The maximum number of bits for hint buffer word count. This determines `MAX_HINT_BUFFER_WORDS = 2^MAX_HINT_BUFFER_WORDS_BITS - 1` = 262,143 words (≈1MB), the maximum words per `HINT_BUFFER_RV32` instruction. | Fixed to 18. |
+| `MAX_HINT_BUFFER_WORDS_BITS` | The maximum number of bits for hint buffer word count. This determines `MAX_HINT_BUFFER_WORDS = 2^MAX_HINT_BUFFER_WORDS_BITS - 1` = 1,023 words (≈4KB), the maximum words per `HINT_BUFFER_RV32` instruction. | Fixed to 10. |
 
 We explain these parameters in subsequent sections.
 
@@ -429,7 +429,7 @@ with user input-output.
 | Name             | Operands        | Description                                                                                                                                                                       |
 | ---------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | HINT_STOREW_RV32 | `_,b,_,1,2`     | `[r32{0}(b):4]_2 = next 4 bytes from hint stream`. Only valid if next 4 values in hint stream are bytes.                                                                          |
-| HINT_BUFFER_RV32 | `a,b,_,1,2`     | `[r32{0}(b):4 * l]_2 = next 4 * l bytes from hint stream` where `l = r32{0}(a)`. Only valid if next `4 * l` values in hint stream are bytes. `l` must be non-zero and <= `MAX_HINT_BUFFER_WORDS` (262,143 words ≈ 1MB). The pointer address `r32{0}(b)` does not need to be a multiple of `4`. |
+| HINT_BUFFER_RV32 | `a,b,_,1,2`     | `[r32{0}(b):4 * l]_2 = next 4 * l bytes from hint stream` where `l = r32{0}(a)`. Only valid if next `4 * l` values in hint stream are bytes. `l` must be non-zero and <= `MAX_HINT_BUFFER_WORDS` (1,023 words ≈ 4KB). The pointer address `r32{0}(b)` does not need to be a multiple of `4`. |
 | REVEAL_RV32      | `a,b,c,1,3,_,g` | Pseudo-instruction for `STOREW_RV32 a,b,c,1,3,_,g` writing to the user IO address space `3`. Only valid when continuations are enabled.                                           |
 
 > **Note:** The `MAX_HINT_BUFFER_WORDS` bound on `HINT_BUFFER_RV32` is enforced by both the executor and AIR constraints. The SDK's `hint_buffer_chunked` function automatically splits larger reads into multiple `HINT_BUFFER_RV32` instructions.
