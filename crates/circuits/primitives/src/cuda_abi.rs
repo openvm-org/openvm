@@ -67,6 +67,8 @@ pub mod range_tuple {
             d_count: *const u32,
             d_cpu_count: *const u32,
             d_trace: *mut F,
+            d_sizes: *const u32,
+            num_dims: u32,
             num_bins: usize,
         ) -> i32;
 
@@ -85,6 +87,7 @@ pub mod range_tuple {
         d_count: &DeviceBuffer<F>,
         d_cpu_count: &Option<DeviceBuffer<u32>>,
         d_trace: &DeviceBuffer<F>,
+        d_sizes: &DeviceBuffer<u32>,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_range_tuple_checker_tracegen(
             d_count.as_ptr() as *const u32,
@@ -93,6 +96,8 @@ pub mod range_tuple {
                 .map(|b| b.as_ptr())
                 .unwrap_or(std::ptr::null()),
             d_trace.as_mut_ptr(),
+            d_sizes.as_ptr(),
+            d_sizes.len() as u32,
             d_count.len(),
         ))
     }
