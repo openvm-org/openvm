@@ -120,7 +120,7 @@ address spaces and the size of each address space are configurable constants.
 - Valid pointers are field elements that lie in `[0, 2^pointer_max_bits)`, for
   configuration constant `pointer_max_bits`. When accessing an address out of `[0, 2^pointer_max_bits)`, the VM should
   panic.
-- For the register address space (address space `1`), valid pointers lie in `[0, 32*LIMBS)`, corresponding to 32 registers with LIMBS bytes each.
+- For the register address space (address space `1`), valid pointers lie in `[0, 32*LIMBS)`, corresponding to 32 registers with `LIMBS` bytes each.
 These configuration constants must satisfy `addr_space_height, pointer_max_bits <= F::bits() - 2`. We use the following notation
 to denote cells in memory:
 
@@ -304,11 +304,9 @@ always advance the program counter by `DEFAULT_PC_STEP`.
 ### RV32IM/RV64IM Extensions
 
 Due to the overlap between RV32IM and RV64IM instruction sets, the RV32IM and RV64IM extensions will be described together.
-We use the term `XLEN` to refer to the width of an integer register in bits (either 32 or 64).
-We use the term `LIMBS` to refer to the number of 8 bit limbs required to cover an integer register (`XLEN/8`).
 
 The RV32IM/RV64IM extensions introduce OpenVM opcodes which support 32-bit/64-bit RISC-V via transpilation from a standard RV32IM/RV64IM ELF
-binary, specified [here](/specs/reference/riscv-custom-code). These consist of opcodes corresponding 1-1 with RV32IM/RV64IM opcodes, as well as
+binary, specified [here](../reference/riscv-custom-code). These consist of opcodes corresponding 1-1 with RV32IM/RV64IM opcodes, as well as
 additional user IO opcodes and phantom sub-instructions to support input and debug printing on the host. 
 We denote the OpenVM opcode corresponding to a RV32IM opcode by appending `_RV32`.
 We denote the OpenVM opcode corresponding to a RV64IM opcode by appending `_RV64`.
@@ -410,7 +408,7 @@ result is then cast to `uXLEN` and then to `F` and assigned to `pc`.
 For LUI, we are treating `c` in `[0, 2^20)` as a raw encoding of 20-bits.
 For AUIPC, we are treating `c` as a signed 24-bit value in `[-2^23, 2^23)`. The shift `iXLEN(c) << 8`
 places the upper 20 bits of the immediate at bits 12-31, and the immediate is sign-extended before addition. The
-addition with `pc` is treated as unchecked `iXLEN` addition since that is the same as `uXLEN` addition at the bit level.
+addition with `pc` is treated as unchecked `iXLEN` addition.
 
 Note that AUIPC does not have any condition for the register write.
 
