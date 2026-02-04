@@ -421,8 +421,6 @@ where
     #[getset(get = "pub", get_mut = "pub")]
     pk: DeviceMultiStarkProvingKey<E::PB>,
     chip_complex: VmChipComplex<E::SC, VB::RecordArena, E::PB, VB::SystemChipInventory>,
-    #[cfg(feature = "stark-debug")]
-    pub h_pk: Option<MultiStarkProvingKey<E::SC>>,
 }
 
 impl<E, VB> VirtualMachine<E, VB>
@@ -444,8 +442,6 @@ where
             executor,
             pk: d_pk,
             chip_complex,
-            #[cfg(feature = "stark-debug")]
-            h_pk: None,
         })
     }
 
@@ -1020,12 +1016,7 @@ where
     /// See [`debug_proving_ctx`].
     #[cfg(feature = "stark-debug")]
     pub fn debug_proving_ctx(&mut self, ctx: &ProvingContext<E::PB>) {
-        if self.h_pk.is_none() {
-            let air_inv = self.config().create_airs().unwrap();
-            self.h_pk = Some(air_inv.keygen(&self.engine));
-        }
-        let pk = self.h_pk.as_ref().unwrap();
-        debug_proving_ctx(self, pk, ctx);
+        debug_proving_ctx(self, ctx);
     }
 }
 
@@ -1474,50 +1465,14 @@ where
 // stark_utils::air_test_impl
 #[cfg(any(debug_assertions, feature = "test-utils", feature = "stark-debug"))]
 #[tracing::instrument(level = "debug", skip_all)]
-pub fn debug_proving_ctx<E, VB>(
-    _vm: &VirtualMachine<E, VB>,
-    _pk: &MultiStarkProvingKey,
-    _ctx: &ProvingContext<E::PB>,
-) where
+pub fn debug_proving_ctx<E, VB>(vm: &VirtualMachine<E, VB>, ctx: &ProvingContext<E::PB>)
+where
     E: StarkEngine,
     VB: VmBuilder<E>,
 {
-    // use itertools::multiunzip;
-    // use openvm_stark_backend::prover::types::AirProofRawInput;
-    // use stark_backend_v2::prover::StridedColMajorMatrixView;
-
-    // let device = vm.engine.device();
-    // let air_inv = vm.config().create_airs().unwrap();
-    // let global_airs = air_inv.into_airs().collect_vec();
-    // let (_airs, _pks, _proof_inputs): (Vec<_>, Vec<_>, Vec<_>) =
-    //     multiunzip(ctx.per_trace.iter().map(|(air_id, air_ctx)| {
-    //         // Transfer from device **back** to host so the debugger can read the data.
-    //         let cached_mains = air_ctx
-    //             .cached_mains
-    //             .iter()
-    //             .map(|cd| {
-    //                 todo!();
-    //                 Arc::new(data.mat_view(0).to_row_major_matrix())
-    //             })
-    //             .collect_vec();
-    //         let matrix = device.transport_matrix_from_device_to_host(&air_ctx.common_main);
-    //         let common_main =
-    //             StridedColMajorMatrixView::from(matrix.as_view()).to_row_major_matrix();
-    //         let public_values = air_ctx.public_values.clone();
-    //         let raw = AirProofRawInput {
-    //             cached_mains,
-    //             common_main: Some(Arc::new(common_main)),
-    //             public_values,
-    //         };
-    //         (
-    //             global_airs[*air_id].clone(),
-    //             pk.per_air[*air_id].clone(),
-    //             raw,
-    //         )
-    //     }));
-
-    // TODO
-    // vm.engine.debug(&airs, &pks, &proof_inputs);
+    let air_inv = vm.config().create_airs().unwrap();
+    let global_airs = air_inv.into_airs().collect_vec();
+    vm.engine.debug(&global_airs, ctx);
 }
 
 #[cfg(all(feature = "metrics", not(feature = "cuda")))]
