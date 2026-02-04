@@ -1,12 +1,13 @@
 use std::{iter, sync::Arc};
 
 use list::ListChip;
-use openvm_stark_backend::{p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*, AirRef};
-use openvm_stark_sdk::{
-    config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine, p3_baby_bear::BabyBear,
-    utils::create_seeded_rng,
+use openvm_stark_backend::{
+    p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
+    prover::types::AirProvingContext, AirRef,
 };
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
+use stark_backend_v2::{prover::AirProvingContextV2, test_utils::test_engine_small, StarkEngineV2};
 
 use crate::range::{bus::RangeCheckBus, RangeCheckerChip};
 
@@ -60,8 +61,12 @@ fn test_list_range_checker() {
     let all_traces = lists_traces
         .into_iter()
         .chain(iter::once(range_trace))
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .map(Arc::new)
+        .map(AirProvingContext::simple_no_pis)
+        .map(AirProvingContextV2::from_v1_no_cached)
+        .collect::<Vec<_>>();
 
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces)
+    test_engine_small()
+        .run_test(all_chips, all_traces)
         .expect("Verification failed");
 }

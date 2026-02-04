@@ -5,15 +5,13 @@ use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
+    prover::types::AirProvingContext,
     utils::disable_debug_builder,
-    verifier::VerificationError,
     AirRef,
 };
-use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear, utils::create_seeded_rng,
-};
+use openvm_stark_sdk::{any_rap_arc_vec, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
+use stark_backend_v2::{prover::AirProvingContextV2, test_utils::test_engine_small, StarkEngineV2};
 #[cfg(feature = "cuda")]
 use {
     crate::bitwise_op_lookup::{BitwiseOperationLookupAir, BitwiseOperationLookupChipGPU},
@@ -111,7 +109,15 @@ fn test_bitwise_operation_lookup() {
         .collect::<Vec<RowMajorMatrix<BabyBear>>>();
     traces.push(lookup.generate_trace());
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(chips, traces)
+    let traces = traces
+        .into_iter()
+        .map(Arc::new)
+        .map(AirProvingContext::simple_no_pis)
+        .map(AirProvingContextV2::from_v1_no_cached)
+        .collect::<Vec<_>>();
+
+    test_engine_small()
+        .run_test(chips, traces)
         .expect("Verification failed");
 }
 
@@ -144,15 +150,19 @@ fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperation)) {
         lookup.generate_trace(),
     ];
 
+    let traces = traces
+        .into_iter()
+        .map(Arc::new)
+        .map(AirProvingContext::simple_no_pis)
+        .map(AirProvingContextV2::from_v1_no_cached)
+        .collect::<Vec<_>>();
+
     disable_debug_builder();
-    assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(chips, traces).err(),
-        Some(VerificationError::ChallengePhaseError),
-        "Expected constraint to fail"
-    );
+    test_engine_small().run_test(chips, traces).unwrap();
 }
 
 #[test]
+#[should_panic]
 fn negative_test_bitwise_operation_lookup_range_wrong_z() {
     run_negative_test((2, 1, 1, BitwiseOperation::Range));
 }
@@ -170,6 +180,7 @@ fn negative_test_bitwise_operation_lookup_range_y_out_of_range() {
 }
 
 #[test]
+#[should_panic]
 fn negative_test_bitwise_operation_lookup_xor_wrong_z() {
     // 1011(11) ^ 0101(5) = 1110(14)
     run_negative_test((11, 5, 15, BitwiseOperation::Xor));

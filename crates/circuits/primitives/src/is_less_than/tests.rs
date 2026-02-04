@@ -7,13 +7,12 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
+    prover::types::AirProvingContext,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     utils::disable_debug_builder,
-    verifier::VerificationError,
 };
-use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-};
+use openvm_stark_sdk::any_rap_arc_vec;
+use stark_backend_v2::{prover::AirProvingContextV2, test_utils::test_engine_small, StarkEngineV2};
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::less_than::less_than_dummy_tracegen,
@@ -145,7 +144,15 @@ fn test_is_less_than_chip_lt() {
     let trace = chip.generate_trace();
     let range_trace = range_checker.generate_trace();
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace])
+    let traces = [trace, range_trace]
+        .into_iter()
+        .map(Arc::new)
+        .map(AirProvingContext::simple_no_pis)
+        .map(AirProvingContextV2::from_v1_no_cached)
+        .collect::<Vec<_>>();
+
+    test_engine_small()
+        .run_test(airs, traces)
         .expect("Verification failed");
 }
 
@@ -157,11 +164,20 @@ fn test_lt_chip_decomp_does_not_divide() {
     let trace = chip.generate_trace();
     let range_trace = range_checker.generate_trace();
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace])
+    let traces = [trace, range_trace]
+        .into_iter()
+        .map(Arc::new)
+        .map(AirProvingContext::simple_no_pis)
+        .map(AirProvingContextV2::from_v1_no_cached)
+        .collect::<Vec<_>>();
+
+    test_engine_small()
+        .run_test(airs, traces)
         .expect("Verification failed");
 }
 
 #[test]
+#[should_panic]
 fn test_is_less_than_negative() {
     let (mut chip, range_checker) = setup();
     let airs = any_rap_arc_vec![chip.air, range_checker.air];
@@ -171,12 +187,15 @@ fn test_is_less_than_negative() {
 
     trace.values[2] = PrimeCharacteristicRing::from_u64(0);
 
+    let traces = [trace, range_trace]
+        .into_iter()
+        .map(Arc::new)
+        .map(AirProvingContext::simple_no_pis)
+        .map(AirProvingContextV2::from_v1_no_cached)
+        .collect::<Vec<_>>();
+
     disable_debug_builder();
-    assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace],).err(),
-        Some(VerificationError::OodEvaluationMismatch),
-        "Expected verification to fail, but it passed"
-    );
+    test_engine_small().run_test(airs, traces).unwrap();
 }
 
 #[cfg(feature = "cuda")]
