@@ -13,7 +13,7 @@ use stark_backend_v2::{
     prover::{CpuBackendV2, ProverBackendV2, ProvingContextV2},
 };
 
-use crate::circuit::NonRootTraceGen;
+use crate::circuit::nonroot::NonRootTraceGen;
 
 mod compression;
 mod nonroot;

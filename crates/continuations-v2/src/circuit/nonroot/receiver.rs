@@ -16,7 +16,7 @@ use stark_backend_v2::{
 use stark_recursion_circuit_derive::AlignedBorrow;
 use verify_stark::pvs::VERIFIER_PVS_AIR_ID;
 
-use crate::circuit::public_values::{app::*, verifier::CONSTRAINT_EVAL_AIR_ID};
+use crate::circuit::{CONSTRAINT_EVAL_AIR_ID, nonroot::app::*};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -24,6 +24,34 @@ pub struct UserPvsReceiverCols<F> {
     pub proof_idx: F,
     pub is_valid: F,
     pub pv_bus_msg: PublicValuesBusMessage<F>,
+}
+
+pub struct UserPvsReceiverAir {
+    pub public_values_bus: PublicValuesBus,
+}
+
+impl<F> BaseAir<F> for UserPvsReceiverAir {
+    fn width(&self) -> usize {
+        UserPvsReceiverCols::<u8>::width()
+    }
+}
+impl<F> BaseAirWithPublicValues<F> for UserPvsReceiverAir {}
+impl<F> PartitionedBaseAir<F> for UserPvsReceiverAir {}
+
+impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UserPvsReceiverAir {
+    fn eval(&self, builder: &mut AB) {
+        let main = builder.main();
+        let local = main.row_slice(0);
+        let local: &UserPvsReceiverCols<AB::Var> = (*local).borrow();
+
+        builder.assert_bool(local.is_valid);
+        self.public_values_bus.receive(
+            builder,
+            local.proof_idx,
+            local.pv_bus_msg.clone(),
+            local.is_valid,
+        );
+    }
 }
 
 pub fn generate_proving_ctx(
@@ -78,32 +106,4 @@ pub fn generate_proving_ctx(
     AirProvingContextV2::simple_no_pis(ColMajorMatrix::from_row_major(&RowMajorMatrix::new(
         trace, width,
     )))
-}
-
-pub struct UserPvsReceiverAir {
-    pub public_values_bus: PublicValuesBus,
-}
-
-impl<F> BaseAir<F> for UserPvsReceiverAir {
-    fn width(&self) -> usize {
-        UserPvsReceiverCols::<u8>::width()
-    }
-}
-impl<F> BaseAirWithPublicValues<F> for UserPvsReceiverAir {}
-impl<F> PartitionedBaseAir<F> for UserPvsReceiverAir {}
-
-impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UserPvsReceiverAir {
-    fn eval(&self, builder: &mut AB) {
-        let main = builder.main();
-        let local = main.row_slice(0);
-        let local: &UserPvsReceiverCols<AB::Var> = (*local).borrow();
-
-        builder.assert_bool(local.is_valid);
-        self.public_values_bus.receive(
-            builder,
-            local.proof_idx,
-            local.pv_bus_msg.clone(),
-            local.is_valid,
-        );
-    }
 }
