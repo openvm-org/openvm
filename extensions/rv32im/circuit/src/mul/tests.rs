@@ -59,7 +59,7 @@ use crate::{
         RV32_REGISTER_NUM_LIMBS,
     },
     mul::{MultiplicationCoreCols, Rv32MultiplicationChip},
-    test_utils::{get_verification_error, rv32_rand_write_register_or_imm},
+    test_utils::rv32_rand_write_register_or_imm,
     MultiplicationCoreAir, MultiplicationFiller, Rv32MultiplicationAir, Rv32MultiplicationExecutor,
 };
 
@@ -194,14 +194,12 @@ fn run_rv32_mul_rand_test() {
 // part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
-#[allow(clippy::too_many_arguments)]
 fn run_negative_mul_test(
     opcode: MulOpcode,
     prank_a: [u32; RV32_REGISTER_NUM_LIMBS],
     b: [u8; RV32_REGISTER_NUM_LIMBS],
     c: [u8; RV32_REGISTER_NUM_LIMBS],
     prank_is_valid: bool,
-    interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -233,7 +231,9 @@ fn run_negative_mul_test(
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(range_tuple)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -243,7 +243,6 @@ fn rv32_mul_wrong_negative_test() {
         [63, 247, 125, 234],
         [51, 109, 78, 142],
         [197, 85, 150, 32],
-        true,
         true,
     );
 }
@@ -256,7 +255,6 @@ fn rv32_mul_is_valid_false_negative_test() {
         [51, 109, 78, 142],
         [197, 85, 150, 32],
         false,
-        true,
     );
 }
 
