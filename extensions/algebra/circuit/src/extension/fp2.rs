@@ -26,12 +26,11 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
-use strum::EnumCount;
-
 use stark_backend_v2::{
     prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
     StarkEngineV2 as StarkEngine,
 };
+use strum::EnumCount;
 
 use crate::{
     fp2_chip::{

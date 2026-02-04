@@ -2,8 +2,8 @@ use std::{iter, sync::Arc};
 
 use list::ListChip;
 use openvm_stark_backend::{
-    p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
-    prover::types::AirProvingContext, AirRef,
+    p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*, prover::types::AirProvingContext,
+    AirRef,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
