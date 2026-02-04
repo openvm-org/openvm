@@ -9,12 +9,12 @@ use openvm_circuit::{
     system::SystemChipInventory,
 };
 use openvm_circuit_derive::VmConfig;
-use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    engine::StarkEngine,
-    prover::cpu::{CpuBackend, CpuDevice},
-};
+use openvm_stark_backend::config::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
+use stark_backend_v2::{
+    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
+    StarkEngineV2 as StarkEngine,
+};
 
 mod weierstrass;
 pub use weierstrass::*;
@@ -72,10 +72,11 @@ impl InitFileGenerator for Rv32WeierstrassConfig {
 #[derive(Clone)]
 pub struct Rv32WeierstrassCpuBuilder;
 
-impl<E, SC> VmBuilder<E> for Rv32WeierstrassCpuBuilder
+type SC = stark_backend_v2::SC;
+impl<E> VmBuilder<E> for Rv32WeierstrassCpuBuilder
 where
     SC: StarkGenericConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
     Val<SC>: VmField,
 {
     type VmConfig = Rv32WeierstrassConfig;

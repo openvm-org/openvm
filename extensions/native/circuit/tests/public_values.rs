@@ -2,10 +2,8 @@ use openvm_circuit::{arch::PUBLIC_VALUES_AIR_ID, utils::air_test_impl};
 use openvm_native_circuit::{execute_program_with_config, test_native_config, NativeCpuBuilder};
 use openvm_native_compiler::{asm::AsmBuilder, prelude::*};
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, PrimeCharacteristicRing};
-use openvm_stark_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
-    p3_baby_bear::BabyBear,
-};
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use stark_backend_v2::{BabyBearPoseidon2CpuEngineV2 as BabyBearPoseidon2Engine, SystemParams};
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;
@@ -35,9 +33,9 @@ fn test_compiler_public_values() {
     config.system.num_public_values = 2;
     // This is to justify using log_blowup=1
     assert!(config.as_ref().max_constraint_degree <= 3);
-    let fri_params = FriParameters::new_for_testing(1);
+    let params = SystemParams::new_for_testing(20);
     let (_, mut vdata) = air_test_impl::<BabyBearPoseidon2Engine, _>(
-        fri_params,
+        params,
         NativeCpuBuilder,
         config,
         program,
@@ -47,9 +45,9 @@ fn test_compiler_public_values() {
     )
     .unwrap();
     assert_eq!(vdata.len(), 1);
-    let proof = vdata.pop().unwrap().data.proof;
+    let proof = vdata.pop().unwrap().1;
     assert_eq!(
-        &proof.get_public_values()[PUBLIC_VALUES_AIR_ID],
+        &proof.public_values[PUBLIC_VALUES_AIR_ID],
         &[public_value_0, public_value_1]
     );
 }

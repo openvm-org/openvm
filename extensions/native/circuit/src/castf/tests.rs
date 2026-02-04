@@ -25,7 +25,6 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
-    verifier::VerificationError,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -201,7 +200,7 @@ struct CastFPrankValues {
     pub b_pointer: Option<u32>,
 }
 
-fn run_negative_castf_test(prank_vals: CastFPrankValues, b: Option<F>, error: VerificationError) {
+fn run_negative_castf_test(prank_vals: CastFPrankValues, b: Option<F>) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::volatile(MemoryConfig::default());
 
@@ -244,7 +243,9 @@ fn run_negative_castf_test(prank_vals: CastFPrankValues, b: Option<F>, error: Ve
         .build()
         .load_and_prank_trace(harness, modify_trace)
         .finalize();
-    tester.simple_test_with_expected_error(error);
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -255,7 +256,6 @@ fn casf_invalid_out_val_test() {
             ..Default::default()
         },
         Some(F::from_u32(2 << LIMB_BITS)),
-        VerificationError::ChallengePhaseError,
     );
 
     let prime = F::NEG_ONE.as_canonical_u32() + 1;
@@ -265,7 +265,6 @@ fn casf_invalid_out_val_test() {
             ..Default::default()
         },
         Some(F::ZERO),
-        VerificationError::ChallengePhaseError,
     );
 }
 
@@ -278,7 +277,6 @@ fn negative_convert_adapter_test() {
             ..Default::default()
         },
         None,
-        VerificationError::ChallengePhaseError,
     );
 
     // Memory address space pointer has to be 4-byte aligned
@@ -288,7 +286,6 @@ fn negative_convert_adapter_test() {
             ..Default::default()
         },
         None,
-        VerificationError::ChallengePhaseError,
     );
 }
 

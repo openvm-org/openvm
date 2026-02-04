@@ -19,10 +19,12 @@ use openvm_sha256_transpiler::Rv32Sha256Opcode;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::PrimeField32,
-    prover::cpu::{CpuBackend, CpuDevice},
 };
-use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
+use stark_backend_v2::{
+    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
+    StarkEngineV2 as StarkEngine,
+};
 use strum::IntoEnumIterator;
 
 use crate::*;
@@ -102,17 +104,17 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Sha256 {
 pub struct Sha2CpuProverExt;
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, SC, RA> VmProverExtension<E, RA, Sha256> for Sha2CpuProverExt
+impl<E, RA> VmProverExtension<E, RA, Sha256> for Sha2CpuProverExt
 where
-    SC: StarkGenericConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    RA: RowMajorMatrixArena<Val<SC>>,
-    Val<SC>: PrimeField32,
+    E::SC: StarkGenericConfig,
+    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
+    RA: RowMajorMatrixArena<Val<E::SC>>,
+    Val<E::SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
         _: &Sha256,
-        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+        inventory: &mut ChipInventory<E::SC, RA, CpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();

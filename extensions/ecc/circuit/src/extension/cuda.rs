@@ -1,3 +1,6 @@
+use cuda_backend_v2::{
+    BabyBearPoseidon2GpuEngineV2 as GpuBabyBearPoseidon2Engine, GpuBackendV2 as GpuBackend,
+};
 use openvm_algebra_circuit::Rv32ModularGpuBuilder;
 use openvm_circuit::{
     arch::{
@@ -9,7 +12,6 @@ use openvm_circuit::{
         SystemChipInventoryGPU,
     },
 };
-use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::LocalOpcode;
 use openvm_mod_circuit_builder::ExprBuilderConfig;
