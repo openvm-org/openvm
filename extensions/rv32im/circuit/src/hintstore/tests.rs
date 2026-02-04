@@ -211,15 +211,15 @@ fn test_hint_buffer_exceeds_max_words() {
     tester.write(
         RV32_REGISTER_AS as usize,
         a,
-        num_words.to_le_bytes().map(F::from_canonical_u8),
+        num_words.to_le_bytes().map(F::from_u8),
     );
 
     let mem_ptr = gen_pointer(&mut rng, 4) as u32;
     let b = gen_pointer(&mut rng, RV32_REGISTER_NUM_LIMBS);
-    tester.write(1, b, mem_ptr.to_le_bytes().map(F::from_canonical_u8));
+    tester.write(1, b, mem_ptr.to_le_bytes().map(F::from_u8));
 
     for _ in 0..num_words {
-        let data = rng.next_u32().to_le_bytes().map(F::from_canonical_u8);
+        let data = rng.next_u32().to_le_bytes().map(F::from_u8);
         tester.streams_mut().hint_stream.extend(data);
     }
 
@@ -246,15 +246,15 @@ fn test_hint_buffer_rem_words_range_check() {
     tester.write(
         RV32_REGISTER_AS as usize,
         a,
-        num_words.to_le_bytes().map(F::from_canonical_u8),
+        num_words.to_le_bytes().map(F::from_u8),
     );
 
     let mem_ptr = gen_pointer(&mut rng, 4) as u32;
     let b = gen_pointer(&mut rng, RV32_REGISTER_NUM_LIMBS);
-    tester.write(1, b, mem_ptr.to_le_bytes().map(F::from_canonical_u8));
+    tester.write(1, b, mem_ptr.to_le_bytes().map(F::from_u8));
 
     for _ in 0..num_words {
-        let data = rng.next_u32().to_le_bytes().map(F::from_canonical_u8);
+        let data = rng.next_u32().to_le_bytes().map(F::from_u8);
         tester.streams_mut().hint_stream.extend(data);
     }
 
@@ -268,10 +268,10 @@ fn test_hint_buffer_rem_words_range_check() {
     );
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut Rv32HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
         // Force `rem_words` to overflow MAX_HINT_BUFFER_WORDS_BITS on the start row.
-        cols.rem_words_limbs = [F::ZERO, F::ZERO, F::ZERO, F::from_canonical_u8(1)];
+        cols.rem_words_limbs = [F::ZERO, F::ZERO, F::from_u8(1), F::ZERO];
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
