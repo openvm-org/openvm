@@ -244,7 +244,10 @@ impl MetricDb {
         module_rows.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         for (module, max_tracked, max_at) in module_rows {
-            table.push_str(&format!("| {} | {:.2} | {} |\n", module, max_tracked, max_at));
+            table.push_str(&format!(
+                "| {} | {:.2} | {} |\n",
+                module, max_tracked, max_at
+            ));
         }
 
         Some((svg, table))
@@ -264,8 +267,14 @@ impl MetricDb {
         let plot_height = height - margin_top - margin_bottom;
 
         // Calculate data ranges
-        let ts_min = data.iter().map(|(ts, _, _, _)| *ts).fold(f64::MAX, f64::min);
-        let ts_max = data.iter().map(|(ts, _, _, _)| *ts).fold(f64::MIN, f64::max);
+        let ts_min = data
+            .iter()
+            .map(|(ts, _, _, _)| *ts)
+            .fold(f64::MAX, f64::min);
+        let ts_max = data
+            .iter()
+            .map(|(ts, _, _, _)| *ts)
+            .fold(f64::MIN, f64::max);
         let ts_range = if (ts_max - ts_min).abs() < f64::EPSILON {
             1.0
         } else {
@@ -315,7 +324,9 @@ impl MetricDb {
         // Generate Y-axis ticks (5-6 ticks)
         let y_tick_count = 5;
         let y_tick_interval = y_max / y_tick_count as f64;
-        let y_ticks: Vec<f64> = (0..=y_tick_count).map(|i| i as f64 * y_tick_interval).collect();
+        let y_ticks: Vec<f64> = (0..=y_tick_count)
+            .map(|i| i as f64 * y_tick_interval)
+            .collect();
 
         // Generate gridlines and tick labels
         let mut gridlines = String::new();

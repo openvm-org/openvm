@@ -111,7 +111,8 @@ impl GithubSummary {
                 "| [{}]({}/{}) |",
                 row.name, self.benchmark_results_link, row.md_filename
             )?;
-            row.metrics.write_partial_md_row(writer, include_cells_used)?;
+            row.metrics
+                .write_partial_md_row(writer, include_cells_used)?;
             writeln!(writer)?;
         }
         writeln!(writer)?;
