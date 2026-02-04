@@ -3537,15 +3537,18 @@ name = "openvm-keccak256"
 version = "2.0.0-alpha"
 dependencies = [
  "eyre",
+ "hex",
  "openvm-circuit",
  "openvm-instructions",
  "openvm-keccak256-circuit",
  "openvm-keccak256-guest",
  "openvm-keccak256-transpiler",
  "openvm-rv32im-transpiler",
+ "openvm-sdk",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
+ "spin 0.10.0",
  "tiny-keccak",
 ]
 
@@ -3580,7 +3583,6 @@ name = "openvm-keccak256-guest"
 version = "2.0.0-alpha"
 dependencies = [
  "openvm-platform",
- "spin 0.10.0",
 ]
 
 [[package]]
