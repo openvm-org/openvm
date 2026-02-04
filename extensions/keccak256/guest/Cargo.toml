@@ -10,8 +10,5 @@ repository.workspace = true
 [dependencies]
 openvm-platform = { workspace = true }
 
-[target.'cfg(target_os = "zkvm")'.dependencies]
-spin = { workspace = true, features = ["mutex", "spin_mutex"] }
-
 [features]
 default = []
