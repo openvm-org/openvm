@@ -10,7 +10,7 @@ use p3_matrix::Matrix;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::{Poseidon2Bus, Poseidon2BusMessage, TranscriptBus, TranscriptBusMessage},
+    bus::{Poseidon2PermuteBus, Poseidon2PermuteMessage, TranscriptBus, TranscriptBusMessage},
     transcript::poseidon2::{CHUNK, POSEIDON2_WIDTH},
 };
 
@@ -37,7 +37,7 @@ pub struct TranscriptCols<T> {
 
 pub struct TranscriptAir {
     pub transcript_bus: TranscriptBus,
-    pub poseidon2_bus: Poseidon2Bus,
+    pub poseidon2_permute_bus: Poseidon2PermuteBus,
 }
 
 impl<F: Field> BaseAir<F> for TranscriptAir {
@@ -139,9 +139,9 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
             );
         }
 
-        self.poseidon2_bus.lookup_key(
+        self.poseidon2_permute_bus.lookup_key(
             builder,
-            Poseidon2BusMessage {
+            Poseidon2PermuteMessage {
                 input: local.prev_state,
                 output: local.post_state,
             },
@@ -177,7 +177,7 @@ pub mod cuda {
     pub(crate) struct TranscriptAirBlob {
         pub records: Vec<Vec<TranscriptAirRecord>>,
         pub poseidon2_offsets: Vec<u32>,
-        pub num_poseidon2_inputs: usize,
+        pub num_poseidon2_perms: usize,
     }
 
     impl TranscriptAirBlob {
@@ -247,7 +247,7 @@ pub mod cuda {
             Self {
                 records,
                 poseidon2_offsets,
-                num_poseidon2_inputs,
+                num_poseidon2_perms: num_poseidon2_inputs,
             }
         }
     }

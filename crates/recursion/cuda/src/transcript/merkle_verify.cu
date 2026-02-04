@@ -33,7 +33,7 @@ template <typename T> struct MerkleVerifyCols {
     T commit_major;
     T commit_minor;
 
-    T output[WIDTH];
+    T output[DIGEST_SIZE];
 };
 
 struct CombinationIndices {
