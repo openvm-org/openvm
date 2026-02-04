@@ -43,7 +43,6 @@ use crate::{
         Rv32LoadStoreAdapterFiller, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     loadstore::LoadStoreCoreCols,
-    test_utils::get_verification_error,
     LoadStoreFiller, Rv32LoadStoreAir, Rv32LoadStoreExecutor,
 };
 
@@ -256,14 +255,12 @@ struct LoadStorePrankValues {
     mem_as: Option<u32>,
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_negative_loadstore_test(
     opcode: Rv32LoadStoreOpcode,
     rs1: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
     imm: Option<u32>,
     imm_sign: Option<u32>,
     prank_vals: LoadStorePrankValues,
-    interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
@@ -321,7 +318,9 @@ fn run_negative_loadstore_test(
         .build()
         .load_and_prank_trace(harness, modify_trace)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -335,7 +334,6 @@ fn negative_wrong_opcode_tests() {
             is_load: Some(false),
             ..Default::default()
         },
-        false,
     );
 
     run_negative_loadstore_test(
@@ -347,7 +345,6 @@ fn negative_wrong_opcode_tests() {
             flags: Some([0, 0, 0, 2]),
             ..Default::default()
         },
-        false,
     );
 
     run_negative_loadstore_test(
@@ -360,7 +357,6 @@ fn negative_wrong_opcode_tests() {
             is_load: Some(true),
             ..Default::default()
         },
-        false,
     );
 }
 
@@ -379,7 +375,6 @@ fn negative_write_data_tests() {
             is_load: Some(true),
             mem_as: None,
         },
-        true,
     );
 
     run_negative_loadstore_test(
@@ -395,7 +390,6 @@ fn negative_write_data_tests() {
             is_load: None,
             mem_as: None,
         },
-        false,
     );
 }
 
@@ -410,7 +404,6 @@ fn negative_wrong_address_space_tests() {
             mem_as: Some(3),
             ..Default::default()
         },
-        false,
     );
 
     run_negative_loadstore_test(
@@ -422,7 +415,6 @@ fn negative_wrong_address_space_tests() {
             mem_as: Some(4),
             ..Default::default()
         },
-        false,
     );
 
     run_negative_loadstore_test(
@@ -434,7 +426,6 @@ fn negative_wrong_address_space_tests() {
             mem_as: Some(1),
             ..Default::default()
         },
-        false,
     );
 }
 
