@@ -19,8 +19,9 @@ use openvm_pairing_guest::{
     bn254::{BN254_ECC_STRUCT_NAME, BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
 };
 use openvm_pairing_transpiler::PairingPhantom;
-use openvm_stark_backend::{config::StarkGenericConfig, engine::StarkEngine, p3_field::Field};
+use openvm_stark_backend::{config::StarkGenericConfig, p3_field::Field};
 use serde::{Deserialize, Serialize};
+use stark_backend_v2::StarkEngineV2 as StarkEngine;
 use strum::FromRepr;
 
 // All the supported pairing curves.

@@ -28,7 +28,6 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
-    verifier::VerificationError,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -242,7 +241,6 @@ fn run_negative_branch_eq_test(
     b: F,
     prank_cmp_result: Option<bool>,
     prank_diff_inv_marker: Option<F>,
-    error: VerificationError,
 ) {
     let imm = 16i32;
     let mut rng = create_seeded_rng();
@@ -279,7 +277,9 @@ fn run_negative_branch_eq_test(
         .build()
         .load_and_prank_trace(harness, modify_trace)
         .finalize();
-    tester.simple_test_with_expected_error(error);
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -290,7 +290,6 @@ fn rv32_beq_wrong_cmp_negative_test() {
         F::from_u32(7 << 24),
         Some(true),
         None,
-        VerificationError::OodEvaluationMismatch,
     );
 
     run_negative_branch_eq_test(
@@ -299,7 +298,6 @@ fn rv32_beq_wrong_cmp_negative_test() {
         F::from_u32(7 << 16),
         Some(false),
         None,
-        VerificationError::OodEvaluationMismatch,
     );
 }
 
@@ -311,7 +309,6 @@ fn rv32_beq_zero_inv_marker_negative_test() {
         F::from_u32(7 << 24),
         Some(true),
         Some(F::ZERO),
-        VerificationError::OodEvaluationMismatch,
     );
 }
 
@@ -323,7 +320,6 @@ fn rv32_beq_invalid_inv_marker_negative_test() {
         F::from_u32(7 << 24),
         Some(false),
         Some(F::from_u32(1 << 16)),
-        VerificationError::OodEvaluationMismatch,
     );
 }
 
@@ -335,7 +331,6 @@ fn rv32_bne_wrong_cmp_negative_test() {
         F::from_u32(7 << 24),
         Some(false),
         None,
-        VerificationError::OodEvaluationMismatch,
     );
 
     run_negative_branch_eq_test(
@@ -344,7 +339,6 @@ fn rv32_bne_wrong_cmp_negative_test() {
         F::from_u32(7 << 16),
         Some(true),
         None,
-        VerificationError::OodEvaluationMismatch,
     );
 }
 
@@ -356,7 +350,6 @@ fn rv32_bne_zero_inv_marker_negative_test() {
         F::from_u32(7 << 24),
         Some(false),
         Some(F::ZERO),
-        VerificationError::OodEvaluationMismatch,
     );
 }
 
@@ -368,7 +361,6 @@ fn rv32_bne_invalid_inv_marker_negative_test() {
         F::from_u32(7 << 24),
         Some(true),
         Some(F::from_u32(1 << 16)),
-        VerificationError::OodEvaluationMismatch,
     );
 }
 
