@@ -158,10 +158,7 @@ mod tests {
         let cpu_cached = cpu_committed_exe.get_committed_trace();
 
         // NOTE: This compares the stacked matrices, not the original cached trace
-        assert_eq_host_and_device_matrix_col_maj(
-            &cpu_cached.data.matrix,
-            &gpu_cached.data.matrix.evals,
-        );
+        assert_eq_host_and_device_matrix_col_maj(&cpu_cached.trace, &gpu_cached.trace);
         assert_eq!(gpu_cached.commitment, cpu_cached.commitment);
     }
 

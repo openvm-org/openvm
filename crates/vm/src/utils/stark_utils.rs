@@ -249,7 +249,7 @@ where
 
         let ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
         if debug {
-            debug_proving_ctx(&vm, &pk, &ctx);
+            debug_proving_ctx(&vm, &ctx);
         }
         let proof = vm.engine.prove(vm.pk(), ctx);
         proofs.push(proof);
