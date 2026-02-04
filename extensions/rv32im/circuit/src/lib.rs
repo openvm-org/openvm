@@ -10,12 +10,12 @@ use openvm_circuit::{
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
 use openvm_circuit_derive::{Executor, MeteredExecutor, PreflightExecutor, VmConfig};
-use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    engine::StarkEngine,
-    prover::cpu::{CpuBackend, CpuDevice},
-};
+use openvm_stark_backend::config::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
+use stark_backend_v2::{
+    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
+    StarkEngineV2 as StarkEngine,
+};
 
 pub mod adapters;
 mod auipc;
@@ -152,10 +152,11 @@ impl Rv32ImConfig {
 #[derive(Clone)]
 pub struct Rv32ICpuBuilder;
 
-impl<E, SC> VmBuilder<E> for Rv32ICpuBuilder
+type SC = stark_backend_v2::SC;
+impl<E> VmBuilder<E> for Rv32ICpuBuilder
 where
     SC: StarkGenericConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
     Val<SC>: VmField,
 {
     type VmConfig = Rv32IConfig;
@@ -182,10 +183,10 @@ where
 #[derive(Clone)]
 pub struct Rv32ImCpuBuilder;
 
-impl<E, SC> VmBuilder<E> for Rv32ImCpuBuilder
+impl<E> VmBuilder<E> for Rv32ImCpuBuilder
 where
     SC: StarkGenericConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
     Val<SC>: VmField,
 {
     type VmConfig = Rv32ImConfig;
