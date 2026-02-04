@@ -422,7 +422,7 @@ impl AirModule for WhirModule {
             stacking_indices_bus: self.bus_inventory.stacking_indices_bus,
             verify_query_bus: self.verify_query_bus,
             folding_bus: self.folding_bus,
-            poseidon_bus: self.bus_inventory.poseidon2_bus,
+            poseidon_permute_bus: self.bus_inventory.poseidon2_permute_bus,
             merkle_verify_bus: self.bus_inventory.merkle_verify_bus,
             k: params.k_whir(),
             initial_log_domain_size,
@@ -430,7 +430,7 @@ impl AirModule for WhirModule {
         let non_initial_round_opened_values_air = NonInitialOpenedValuesAir {
             verify_query_bus: self.verify_query_bus,
             folding_bus: self.folding_bus,
-            poseidon_bus: self.bus_inventory.poseidon2_bus,
+            poseidon2_compress_bus: self.bus_inventory.poseidon2_compress_bus,
             merkle_verify_bus: self.bus_inventory.merkle_verify_bus,
             k: params.k_whir(),
             initial_log_domain_size,

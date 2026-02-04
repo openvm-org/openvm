@@ -5,7 +5,10 @@ use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::prover::MatrixDimensions;
 
-use crate::{cuda::types::MerkleVerifyRecord, transcript::transcript::cuda::TranscriptAirRecord};
+use crate::{
+    cuda::types::MerkleVerifyRecord,
+    transcript::{Poseidon2Count, transcript::cuda::TranscriptAirRecord},
+};
 
 extern "C" {
     fn _poseidon2_tracegen(
@@ -13,14 +16,14 @@ extern "C" {
         height: usize,
         width: usize,
         d_records: *mut F,
-        d_counts: *mut u32,
+        d_counts: *mut Poseidon2Count,
         num_records: usize,
         sbox_regs: usize,
     ) -> i32;
 
     fn _poseidon2_deduplicate_records_get_temp_bytes(
         d_records: *mut F,
-        d_counts: *mut u32,
+        d_counts: *mut Poseidon2Count,
         num_records: usize,
         d_num_records: *mut usize,
         h_temp_bytes_out: *mut usize,
@@ -28,9 +31,12 @@ extern "C" {
 
     fn _poseidon2_deduplicate_records(
         d_records: *mut F,
-        d_counts: *mut u32,
+        d_counts: *mut Poseidon2Count,
         num_records: usize,
         d_num_records: *mut usize,
+        num_prefix_perms: usize,
+        num_compress_inputs: usize,
+        num_suffix_perms: usize,
         d_temp_storage: *mut std::ffi::c_void,
         temp_storage_bytes: usize,
     ) -> i32;
@@ -71,7 +77,7 @@ pub unsafe fn poseidon2_tracegen(
     height: usize,
     width: usize,
     d_records: &DeviceBuffer<F>,
-    d_counts: &DeviceBuffer<u32>,
+    d_counts: &DeviceBuffer<Poseidon2Count>,
     num_records: usize,
     sbox_regs: usize,
 ) -> Result<(), CudaError> {
@@ -88,7 +94,7 @@ pub unsafe fn poseidon2_tracegen(
 
 pub unsafe fn poseidon2_deduplicate_records_get_temp_bytes(
     d_records: &DeviceBuffer<F>,
-    d_counts: &DeviceBuffer<u32>,
+    d_counts: &DeviceBuffer<Poseidon2Count>,
     num_records: usize,
     d_num_records: &DeviceBuffer<usize>,
     h_temp_bytes_out: &mut usize,
@@ -104,9 +110,12 @@ pub unsafe fn poseidon2_deduplicate_records_get_temp_bytes(
 
 pub unsafe fn poseidon2_deduplicate_records(
     d_records: &DeviceBuffer<F>,
-    d_counts: &DeviceBuffer<u32>,
+    d_counts: &DeviceBuffer<Poseidon2Count>,
     num_records: usize,
     d_num_records: &DeviceBuffer<usize>,
+    num_prefix_perms: usize,
+    num_compress_inputs: usize,
+    num_suffix_perms: usize,
     d_temp_storage: &DeviceBuffer<u8>,
     temp_storage_bytes: usize,
 ) -> Result<(), CudaError> {
@@ -115,6 +124,9 @@ pub unsafe fn poseidon2_deduplicate_records(
         d_counts.as_mut_ptr(),
         num_records,
         d_num_records.as_mut_ptr(),
+        num_prefix_perms,
+        num_compress_inputs,
+        num_suffix_perms,
         d_temp_storage.as_mut_ptr() as *mut std::ffi::c_void,
         temp_storage_bytes,
     ))

@@ -363,12 +363,12 @@ impl TranscriptBus {
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
-pub struct Poseidon2BusMessage<T> {
+pub struct Poseidon2PermuteMessage<T> {
     pub input: [T; POSEIDON2_WIDTH],
     pub output: [T; POSEIDON2_WIDTH],
 }
 
-define_typed_lookup_bus!(Poseidon2Bus, Poseidon2BusMessage);
+define_typed_lookup_bus!(Poseidon2PermuteBus, Poseidon2PermuteMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]

@@ -1,6 +1,7 @@
 use core::borrow::BorrowMut;
 use std::sync::Arc;
 
+use itertools::Itertools;
 use openvm_poseidon2_air::{POSEIDON2_WIDTH, Poseidon2Config, Poseidon2SubChip};
 use openvm_stark_backend::{AirRef, p3_maybe_rayon::prelude::*};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
@@ -62,7 +63,8 @@ impl TranscriptModule {
     fn build_trace_artifacts(
         &self,
         preflights: &[Preflight],
-        mut poseidon2_inputs: Vec<[F; POSEIDON2_WIDTH]>,
+        mut poseidon2_perm_inputs: Vec<[F; POSEIDON2_WIDTH]>,
+        mut poseidon2_compress_inputs: Vec<[F; POSEIDON2_WIDTH]>,
     ) -> TranscriptTraceArtifacts {
         let transcript_width = TranscriptCols::<F>::width();
         let mut valid_rows = Vec::with_capacity(preflights.len());
@@ -70,7 +72,8 @@ impl TranscriptModule {
         let mut transcript_valid_rows = 0;
         // First pass, calculate number of rows for transcript
         for preflight in preflights.iter() {
-            poseidon2_inputs.extend_from_slice(&preflight.poseidon_inputs);
+            poseidon2_perm_inputs.extend_from_slice(&preflight.poseidon2_perm_inputs);
+            poseidon2_compress_inputs.extend_from_slice(&preflight.poseidon2_compress_inputs);
             let mut cur_is_sample = false; // should always start with observe?
             let mut count = 0;
             let mut num_valid_rows: usize = 0;
@@ -188,7 +191,7 @@ impl TranscriptModule {
                 prev_poseidon_state = cols.prev_state;
                 if permuted {
                     self.perm.permute_mut(&mut prev_poseidon_state);
-                    poseidon2_inputs.push(cols.prev_state);
+                    poseidon2_perm_inputs.push(cols.prev_state);
                 }
                 cols.post_state = prev_poseidon_state;
             }
@@ -198,29 +201,51 @@ impl TranscriptModule {
 
         TranscriptTraceArtifacts {
             transcript_trace: RowMajorMatrix::new(transcript_trace, transcript_width),
-            poseidon_inputs: poseidon2_inputs,
+            poseidon2_perm_inputs,
+            poseidon2_compress_inputs,
         }
     }
 
     fn dedup_poseidon_inputs(
-        poseidon_inputs: Vec<[F; POSEIDON2_WIDTH]>,
-    ) -> (Vec<[F; POSEIDON2_WIDTH]>, Vec<u32>) {
-        let mut keyed_states = poseidon_inputs
+        poseidon2_perm_inputs: Vec<[F; POSEIDON2_WIDTH]>,
+        poseidon2_compress_inputs: Vec<[F; POSEIDON2_WIDTH]>,
+    ) -> (Vec<[F; POSEIDON2_WIDTH]>, Vec<Poseidon2Count>) {
+        let keyed_perm_states = poseidon2_perm_inputs
             .into_iter()
-            .map(|state| (state.map(|x| x.as_canonical_u32()), state))
-            .collect::<Vec<_>>();
+            .map(|state| (state.map(|x| x.as_canonical_u32()), state, true));
+        let keyed_compress_states = poseidon2_compress_inputs
+            .into_iter()
+            .map(|state| (state.map(|x| x.as_canonical_u32()), state, false));
+        let mut keyed_states = keyed_perm_states
+            .into_iter()
+            .chain(keyed_compress_states.into_iter())
+            .collect_vec();
         keyed_states.sort_unstable_by(|a, b| a.0.cmp(&b.0));
-        let mut deduped = Vec::with_capacity(keyed_states.len());
-        let mut counts = Vec::new();
+
+        let mut deduped = Vec::new();
+        let mut counts: Vec<Poseidon2Count> = Vec::new();
         let mut last_key: Option<[u32; POSEIDON2_WIDTH]> = None;
-        for (key, state) in keyed_states {
+
+        for (key, state, is_perm) in keyed_states {
             if last_key == Some(key) {
-                if let Some(last) = counts.last_mut() {
-                    *last += 1;
+                if is_perm {
+                    counts.last_mut().unwrap().perm += 1;
+                } else {
+                    counts.last_mut().unwrap().compress += 1;
                 }
             } else {
                 deduped.push(state);
-                counts.push(1);
+                counts.push(if is_perm {
+                    Poseidon2Count {
+                        perm: 1,
+                        compress: 0,
+                    }
+                } else {
+                    Poseidon2Count {
+                        perm: 0,
+                        compress: 1,
+                    }
+                });
                 last_key = Some(key);
             }
         }
@@ -232,14 +257,15 @@ impl AirModule for TranscriptModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let transcript_air = TranscriptAir {
             transcript_bus: self.bus_inventory.transcript_bus,
-            poseidon2_bus: self.bus_inventory.poseidon2_bus,
+            poseidon2_permute_bus: self.bus_inventory.poseidon2_permute_bus,
         };
         let poseidon2_air = Poseidon2Air::<F, SBOX_REGISTERS> {
-            poseidon2_bus: self.bus_inventory.poseidon2_bus,
             subair: self.sub_chip.air.clone(),
+            poseidon2_permute_bus: self.bus_inventory.poseidon2_permute_bus,
+            poseidon2_compress_bus: self.bus_inventory.poseidon2_compress_bus,
         };
         let merkle_verify_air = MerkleVerifyAir {
-            poseidon2_bus: self.bus_inventory.poseidon2_bus,
+            poseidon2_compress_bus: self.bus_inventory.poseidon2_compress_bus,
             merkle_verify_bus: self.bus_inventory.merkle_verify_bus,
             commitments_bus: self.bus_inventory.commitments_bus,
         };
@@ -253,7 +279,15 @@ impl AirModule for TranscriptModule {
 
 pub(super) struct TranscriptTraceArtifacts {
     transcript_trace: RowMajorMatrix<F>,
-    poseidon_inputs: Vec<[F; POSEIDON2_WIDTH]>,
+    poseidon2_perm_inputs: Vec<[F; POSEIDON2_WIDTH]>,
+    poseidon2_compress_inputs: Vec<[F; POSEIDON2_WIDTH]>,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Default)]
+pub(super) struct Poseidon2Count {
+    pub perm: u32,
+    pub compress: u32,
 }
 
 impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
@@ -267,7 +301,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
         preflights: &[Preflight],
         _ctx: &(),
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
-        let (merkle_verify_trace_vec, poseidon_inputs) =
+        let (merkle_verify_trace_vec, poseidon2_compress_inputs) =
             tracing::info_span!("wrapper.generate_trace", air = "MerkleVerify").in_scope(|| {
                 merkle_verify::generate_trace(child_vk, proofs, preflights, &self.params)
             });
@@ -275,9 +309,10 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
             RowMajorMatrix::new(merkle_verify_trace_vec, MerkleVerifyCols::<F>::width());
         let TranscriptTraceArtifacts {
             transcript_trace,
-            poseidon_inputs,
+            poseidon2_perm_inputs,
+            poseidon2_compress_inputs,
         } = tracing::trace_span!("wrapper.generate_trace", air = "Transcript")
-            .in_scope(|| self.build_trace_artifacts(preflights, poseidon_inputs));
+            .in_scope(|| self.build_trace_artifacts(preflights, vec![], poseidon2_compress_inputs));
 
         let poseidon2_trace =
             trace_span!("wrapper.generate_trace", air = "Poseidon2").in_scope(|| {
@@ -285,8 +320,10 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
                 // tracing system. It would be extraordinarily helpful to update our
                 // metric outputs to contain the fields they define as labels.
                 trace_span!("generate_trace").in_scope(|| {
-                    let (mut poseidon_states, mut poseidon_counts) =
-                        Self::dedup_poseidon_inputs(poseidon_inputs);
+                    let (mut poseidon_states, poseidon_counts) = Self::dedup_poseidon_inputs(
+                        poseidon2_perm_inputs,
+                        poseidon2_compress_inputs,
+                    );
                     let poseidon2_valid_rows = poseidon_states.len();
                     let poseidon2_num_rows = if poseidon2_valid_rows == 0 {
                         1
@@ -294,16 +331,12 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
                         poseidon2_valid_rows.next_power_of_two()
                     };
                     poseidon_states.resize(poseidon2_num_rows, [F::ZERO; POSEIDON2_WIDTH]);
-                    poseidon_counts.resize(poseidon2_num_rows, 0);
-                    let poseidon_counts: Vec<F> = poseidon_counts
-                        .into_iter()
-                        .map(F::from_canonical_u32)
-                        .collect();
 
                     let inner_width = self.sub_chip.air.width();
                     let poseidon2_width = Poseidon2Cols::<F, SBOX_REGISTERS>::width();
                     let inner_trace = self.sub_chip.generate_trace(poseidon_states);
                     let mut poseidon_trace = F::zero_vec(poseidon2_num_rows * poseidon2_width);
+
                     poseidon_trace
                         .par_chunks_mut(poseidon2_width)
                         .zip(inner_trace.values.par_chunks(inner_width))
@@ -311,7 +344,9 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
                         .for_each(|(i, (row, inner_row))| {
                             row[..inner_width].copy_from_slice(inner_row);
                             let cols: &mut Poseidon2Cols<F, SBOX_REGISTERS> = row.borrow_mut();
-                            cols.mult = poseidon_counts.get(i).copied().unwrap_or(F::ZERO);
+                            let count = poseidon_counts.get(i).copied().unwrap_or_default();
+                            cols.permute_mult = F::from_canonical_u32(count.perm);
+                            cols.compress_mult = F::from_canonical_u32(count.compress);
                         });
                     RowMajorMatrix::new(poseidon_trace, poseidon2_width)
                 })
@@ -349,8 +384,17 @@ mod cuda_tracegen {
     pub(crate) struct TranscriptBlob {
         pub merkle_verify_blob: MerkleVerifyBlob,
         pub transcript_air_blob: TranscriptAirBlob,
+
+        // Because we currently can only copy to the beginning of a DeviceBuffer, the layout is
+        // expected to be in this order:
+        // - Preflight permutations
+        // - Preflight compressions
+        // - Merkle verify compressions
+        // - Transcript permutations
         pub poseidon2_buffer: DeviceBuffer<F>,
-        pub num_poseidon2_inputs: usize,
+        pub num_prefix_perms: usize,
+        pub num_suffix_perms: usize,
+        pub num_compress_inputs: usize,
     }
 
     impl TranscriptBlob {
@@ -360,25 +404,36 @@ mod cuda_tracegen {
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
         ) -> Self {
-            let poseidon2_inputs = preflights
+            let poseidon2_perm_inputs = preflights
                 .iter()
-                .flat_map(|preflight| preflight.cpu.poseidon_inputs.clone())
+                .flat_map(|preflight| preflight.cpu.poseidon2_perm_inputs.clone())
                 .collect_vec();
-            let mut num_poseidon2_inputs = poseidon2_inputs.len();
+            let poseidon2_compress_inputs = preflights
+                .iter()
+                .flat_map(|preflight| preflight.cpu.poseidon2_compress_inputs.clone())
+                .collect_vec();
+            let num_prefix_perms = poseidon2_perm_inputs.len();
+            let mut num_compress_inputs = poseidon2_compress_inputs.len();
 
-            let merkle_verify_blob =
-                MerkleVerifyBlob::new(child_vk, proofs, preflights, num_poseidon2_inputs);
-            num_poseidon2_inputs += merkle_verify_blob.total_rows;
+            let merkle_verify_blob = MerkleVerifyBlob::new(
+                child_vk,
+                proofs,
+                preflights,
+                num_prefix_perms + num_compress_inputs,
+            );
+            num_compress_inputs += merkle_verify_blob.total_rows;
 
             let transcript_air_blob =
-                TranscriptAirBlob::new(preflights, num_poseidon2_inputs as u32);
-            num_poseidon2_inputs += transcript_air_blob.num_poseidon2_inputs;
+                TranscriptAirBlob::new(preflights, (num_prefix_perms + num_compress_inputs) as u32);
+            let num_suffix_perms = transcript_air_blob.num_poseidon2_perms;
 
-            let mut poseidon2_buffer =
-                DeviceBuffer::with_capacity(num_poseidon2_inputs * POSEIDON2_WIDTH);
-            poseidon2_inputs
+            let mut poseidon2_buffer = DeviceBuffer::with_capacity(
+                (num_prefix_perms + num_compress_inputs + num_suffix_perms) * POSEIDON2_WIDTH,
+            );
+            poseidon2_perm_inputs
                 .into_iter()
                 .flatten()
+                .chain(poseidon2_compress_inputs.into_iter().flatten())
                 .collect_vec()
                 .copy_to(&mut poseidon2_buffer)
                 .unwrap();
@@ -387,7 +442,9 @@ mod cuda_tracegen {
                 merkle_verify_blob,
                 transcript_air_blob,
                 poseidon2_buffer,
-                num_poseidon2_inputs,
+                num_prefix_perms,
+                num_suffix_perms,
+                num_compress_inputs,
             }
         }
     }
@@ -414,14 +471,17 @@ mod cuda_tracegen {
                 trace_span!("wrapper.generate_trace", air = "Poseidon2").in_scope(|| {
                     trace_span!("generate_trace").in_scope(|| {
                         let poseidon2_width = Poseidon2Cols::<F, SBOX_REGISTERS>::width();
+                        let total_poseidon2_inputs = blob.num_prefix_perms
+                            + blob.num_compress_inputs
+                            + blob.num_suffix_perms;
 
-                        let d_counts = if blob.num_poseidon2_inputs == 0 {
-                            DeviceBuffer::<u32>::new()
+                        let d_counts = if total_poseidon2_inputs == 0 {
+                            DeviceBuffer::<Poseidon2Count>::new()
                         } else {
-                            vec![1u32; blob.num_poseidon2_inputs].to_device().unwrap()
+                            DeviceBuffer::<Poseidon2Count>::with_capacity(total_poseidon2_inputs)
                         };
 
-                        let mut num_records = blob.num_poseidon2_inputs;
+                        let mut num_records = total_poseidon2_inputs;
                         if num_records > 0 {
                             unsafe {
                                 let d_num_records = [num_records].to_device().unwrap();
@@ -444,6 +504,9 @@ mod cuda_tracegen {
                                     &d_counts,
                                     num_records,
                                     &d_num_records,
+                                    blob.num_prefix_perms,
+                                    blob.num_compress_inputs,
+                                    blob.num_suffix_perms,
                                     &d_temp_storage,
                                     temp_bytes,
                                 )
