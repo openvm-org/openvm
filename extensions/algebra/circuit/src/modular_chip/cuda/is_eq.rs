@@ -7,9 +7,7 @@ use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs, bitwise_op_lookup::BitwiseOperationLookupChipGPU,
     var_range::VariableRangeCheckerChipGPU,
 };
-use openvm_cuda_backend::{
-    base::DeviceMatrix, prover_backend::GpuBackend, types::F,
-};
+use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types::F};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_rv32_adapters::{Rv32IsEqualModAdapterCols, Rv32IsEqualModAdapterRecord};

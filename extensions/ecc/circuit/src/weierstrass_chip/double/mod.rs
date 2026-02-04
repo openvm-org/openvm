@@ -1,13 +1,15 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    ops::{Deref, DerefMut},
+    rc::Rc,
+};
 
-use derive_more::derive::{Deref, DerefMut};
 use num_bigint::BigUint;
 use num_traits::One;
 use openvm_circuit::{
     arch::*,
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_derive::PreflightExecutor;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
@@ -22,7 +24,10 @@ use openvm_rv32_adapters::{
     Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
 };
 
-use super::{WeierstrassAir, WeierstrassChip};
+use super::{
+    curves::{get_curve_type, CurveType},
+    WeierstrassAir, WeierstrassChip,
+};
 
 #[cfg(feature = "cuda")]
 mod cuda;
@@ -65,10 +70,50 @@ pub fn ec_double_ne_expr(
 /// BLOCKS: how many blocks do we need to represent one input or output
 /// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per
 /// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
-#[derive(Clone, PreflightExecutor, Deref, DerefMut)]
-pub struct EcDoubleExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    FieldExpressionExecutor<Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
-);
+// Note: PreflightExecutor is implemented manually in preflight.rs with fast native arithmetic
+#[derive(Clone)]
+pub struct EcDoubleExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize> {
+    pub(crate) inner: FieldExpressionExecutor<
+        Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+    >,
+    pub(crate) cached_curve_type: Option<CurveType>,
+}
+
+impl<const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleExecutor<BLOCKS, BLOCK_SIZE> {
+    pub fn new(
+        inner: FieldExpressionExecutor<
+            Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+        >,
+    ) -> Self {
+        let cached_curve_type = inner
+            .expr
+            .setup_values
+            .first()
+            .and_then(|a| get_curve_type(&inner.expr.prime, a));
+        Self {
+            inner,
+            cached_curve_type,
+        }
+    }
+}
+
+impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Deref for EcDoubleExecutor<BLOCKS, BLOCK_SIZE> {
+    type Target = FieldExpressionExecutor<
+        Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+    >;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<const BLOCKS: usize, const BLOCK_SIZE: usize> DerefMut
+    for EcDoubleExecutor<BLOCKS, BLOCK_SIZE>
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
 
 fn gen_base_expr(
     config: ExprBuilderConfig,
@@ -116,7 +161,7 @@ pub fn get_ec_double_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     a_biguint: BigUint,
 ) -> EcDoubleExecutor<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
-    EcDoubleExecutor(FieldExpressionExecutor::new(
+    EcDoubleExecutor::new(FieldExpressionExecutor::new(
         Rv32VecHeapAdapterExecutor::new(pointer_max_bits),
         expr,
         offset,

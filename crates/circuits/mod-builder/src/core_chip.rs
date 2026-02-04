@@ -24,10 +24,7 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-use crate::{
-    builder::{FieldExpr, FieldExprCols},
-    utils::biguint_to_limbs_vec,
-};
+use crate::builder::{FieldExpr, FieldExprCols};
 
 #[derive(Clone)]
 pub struct FieldExpressionCoreAir {
@@ -325,6 +322,12 @@ impl<A> FieldExpressionExecutor<A> {
             ),
         }
     }
+
+    /// Returns a reference to the adapter for use in custom PreflightExecutor implementations.
+    #[inline]
+    pub fn adapter(&self) -> &A {
+        &self.adapter
+    }
 }
 
 pub struct FieldExpressionFiller<A> {
@@ -525,22 +528,21 @@ fn run_field_expression(
         }
     }
 
-    let vars = expr.execute(inputs.clone(), flags.clone());
+    let vars = expr.execute(&inputs, &flags);
     assert_eq!(vars.len(), expr.builder.num_variables);
 
-    let outputs: Vec<BigUint> = expr
-        .builder
-        .output_indices
-        .iter()
-        .map(|&i| vars[i].clone())
-        .collect();
-    let writes: DynArray<_> = outputs
-        .iter()
-        .map(|x| biguint_to_limbs_vec(x, field_element_limbs))
-        .concat()
-        .into_iter()
-        .collect::<Vec<_>>()
-        .into();
+    // Write outputs directly to a pre-allocated buffer to avoid intermediate Vecs
+    let num_outputs = expr.builder.output_indices.len();
+    let total_output_bytes = num_outputs * field_element_limbs;
+    let mut write_buffer = vec![0u8; total_output_bytes];
+    for (i, &var_idx) in expr.builder.output_indices.iter().enumerate() {
+        let start = i * field_element_limbs;
+        let bytes = vars[var_idx].to_bytes_le();
+        let copy_len = bytes.len().min(field_element_limbs);
+        write_buffer[start..start + copy_len].copy_from_slice(&bytes[..copy_len]);
+        // Remaining bytes are already zero from vec![0u8; ...]
+    }
+    let writes: DynArray<_> = write_buffer.into();
 
     (writes, inputs, flags)
 }
@@ -573,20 +575,18 @@ pub fn run_field_expression_precomputed<const NEEDS_SETUP: bool>(
         vec![]
     };
 
-    let vars = expr.execute(inputs, flags);
+    let vars = expr.execute(&inputs, &flags);
     assert_eq!(vars.len(), expr.num_vars());
 
-    let outputs: Vec<BigUint> = expr
-        .output_indices()
-        .iter()
-        .map(|&i| vars[i].clone())
-        .collect();
-
-    outputs
-        .iter()
-        .map(|x| biguint_to_limbs_vec(x, field_element_limbs))
-        .concat()
-        .into_iter()
-        .collect::<Vec<_>>()
-        .into()
+    // Write outputs directly to a pre-allocated buffer to avoid intermediate Vecs
+    let num_outputs = expr.output_indices().len();
+    let total_output_bytes = num_outputs * field_element_limbs;
+    let mut write_buffer = vec![0u8; total_output_bytes];
+    for (i, &var_idx) in expr.output_indices().iter().enumerate() {
+        let start = i * field_element_limbs;
+        let bytes = vars[var_idx].to_bytes_le();
+        let copy_len = bytes.len().min(field_element_limbs);
+        write_buffer[start..start + copy_len].copy_from_slice(&bytes[..copy_len]);
+    }
+    write_buffer.into()
 }
