@@ -42,9 +42,7 @@ use crate::{
         RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     less_than::LessThanCoreCols,
-    test_utils::{
-        generate_rv32_is_type_immediate, get_verification_error, rv32_rand_write_register_or_imm,
-    },
+    test_utils::{generate_rv32_is_type_immediate, rv32_rand_write_register_or_imm},
     LessThanFiller, Rv32LessThanAir, Rv32LessThanExecutor,
 };
 
@@ -217,14 +215,12 @@ struct LessThanPrankValues<const NUM_LIMBS: usize> {
     pub diff_val: Option<u32>,
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_negative_less_than_test(
     opcode: LessThanOpcode,
     b: [u8; RV32_REGISTER_NUM_LIMBS],
     c: [u8; RV32_REGISTER_NUM_LIMBS],
     prank_cmp_result: bool,
     prank_vals: LessThanPrankValues<RV32_REGISTER_NUM_LIMBS>,
-    interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
@@ -270,7 +266,9 @@ fn run_negative_less_than_test(
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -278,8 +276,8 @@ fn rv32_lt_wrong_false_cmp_negative_test() {
     let b = [145, 34, 25, 205];
     let c = [73, 35, 25, 205];
     let prank_vals = Default::default();
-    run_negative_less_than_test(SLT, b, c, false, prank_vals, false);
-    run_negative_less_than_test(SLTU, b, c, false, prank_vals, false);
+    run_negative_less_than_test(SLT, b, c, false, prank_vals);
+    run_negative_less_than_test(SLTU, b, c, false, prank_vals);
 }
 
 #[test]
@@ -287,8 +285,8 @@ fn rv32_lt_wrong_true_cmp_negative_test() {
     let b = [73, 35, 25, 205];
     let c = [145, 34, 25, 205];
     let prank_vals = Default::default();
-    run_negative_less_than_test(SLT, b, c, true, prank_vals, false);
-    run_negative_less_than_test(SLTU, b, c, true, prank_vals, false);
+    run_negative_less_than_test(SLT, b, c, true, prank_vals);
+    run_negative_less_than_test(SLTU, b, c, true, prank_vals);
 }
 
 #[test]
@@ -296,8 +294,8 @@ fn rv32_lt_wrong_eq_negative_test() {
     let b = [73, 35, 25, 205];
     let c = [73, 35, 25, 205];
     let prank_vals = Default::default();
-    run_negative_less_than_test(SLT, b, c, true, prank_vals, false);
-    run_negative_less_than_test(SLTU, b, c, true, prank_vals, false);
+    run_negative_less_than_test(SLT, b, c, true, prank_vals);
+    run_negative_less_than_test(SLTU, b, c, true, prank_vals);
 }
 
 #[test]
@@ -308,8 +306,8 @@ fn rv32_lt_fake_diff_val_negative_test() {
         diff_val: Some(F::NEG_ONE.as_canonical_u32()),
         ..Default::default()
     };
-    run_negative_less_than_test(SLT, b, c, false, prank_vals, true);
-    run_negative_less_than_test(SLTU, b, c, false, prank_vals, true);
+    run_negative_less_than_test(SLT, b, c, false, prank_vals);
+    run_negative_less_than_test(SLTU, b, c, false, prank_vals);
 }
 
 #[test]
@@ -321,8 +319,8 @@ fn rv32_lt_zero_diff_val_negative_test() {
         diff_val: Some(0),
         ..Default::default()
     };
-    run_negative_less_than_test(SLT, b, c, false, prank_vals, true);
-    run_negative_less_than_test(SLTU, b, c, false, prank_vals, true);
+    run_negative_less_than_test(SLT, b, c, false, prank_vals);
+    run_negative_less_than_test(SLTU, b, c, false, prank_vals);
 }
 
 #[test]
@@ -334,8 +332,8 @@ fn rv32_lt_fake_diff_marker_negative_test() {
         diff_val: Some(72),
         ..Default::default()
     };
-    run_negative_less_than_test(SLT, b, c, false, prank_vals, false);
-    run_negative_less_than_test(SLTU, b, c, false, prank_vals, false);
+    run_negative_less_than_test(SLT, b, c, false, prank_vals);
+    run_negative_less_than_test(SLTU, b, c, false, prank_vals);
 }
 
 #[test]
@@ -347,8 +345,8 @@ fn rv32_lt_zero_diff_marker_negative_test() {
         diff_val: Some(0),
         ..Default::default()
     };
-    run_negative_less_than_test(SLT, b, c, false, prank_vals, false);
-    run_negative_less_than_test(SLTU, b, c, false, prank_vals, false);
+    run_negative_less_than_test(SLT, b, c, false, prank_vals);
+    run_negative_less_than_test(SLTU, b, c, false, prank_vals);
 }
 
 #[test]
@@ -361,7 +359,7 @@ fn rv32_slt_wrong_b_msb_negative_test() {
         diff_val: Some(1),
         ..Default::default()
     };
-    run_negative_less_than_test(SLT, b, c, false, prank_vals, false);
+    run_negative_less_than_test(SLT, b, c, false, prank_vals);
 }
 
 #[test]
@@ -374,7 +372,7 @@ fn rv32_slt_wrong_b_msb_sign_negative_test() {
         diff_val: Some(256),
         ..Default::default()
     };
-    run_negative_less_than_test(SLT, b, c, false, prank_vals, true);
+    run_negative_less_than_test(SLT, b, c, false, prank_vals);
 }
 
 #[test]
@@ -387,7 +385,7 @@ fn rv32_slt_wrong_c_msb_negative_test() {
         diff_val: Some(1),
         ..Default::default()
     };
-    run_negative_less_than_test(SLT, b, c, true, prank_vals, false);
+    run_negative_less_than_test(SLT, b, c, true, prank_vals);
 }
 
 #[test]
@@ -400,7 +398,7 @@ fn rv32_slt_wrong_c_msb_sign_negative_test() {
         diff_val: Some(256),
         ..Default::default()
     };
-    run_negative_less_than_test(SLT, b, c, true, prank_vals, true);
+    run_negative_less_than_test(SLT, b, c, true, prank_vals);
 }
 
 #[test]
@@ -413,7 +411,7 @@ fn rv32_sltu_wrong_b_msb_negative_test() {
         diff_val: Some(1),
         ..Default::default()
     };
-    run_negative_less_than_test(SLTU, b, c, true, prank_vals, false);
+    run_negative_less_than_test(SLTU, b, c, true, prank_vals);
 }
 
 #[test]
@@ -426,7 +424,7 @@ fn rv32_sltu_wrong_b_msb_sign_negative_test() {
         diff_val: Some(256),
         ..Default::default()
     };
-    run_negative_less_than_test(SLTU, b, c, true, prank_vals, true);
+    run_negative_less_than_test(SLTU, b, c, true, prank_vals);
 }
 
 #[test]
@@ -439,7 +437,7 @@ fn rv32_sltu_wrong_c_msb_negative_test() {
         diff_val: Some(1),
         ..Default::default()
     };
-    run_negative_less_than_test(SLTU, b, c, false, prank_vals, false);
+    run_negative_less_than_test(SLTU, b, c, false, prank_vals);
 }
 
 #[test]
@@ -452,7 +450,7 @@ fn rv32_sltu_wrong_c_msb_sign_negative_test() {
         diff_val: Some(256),
         ..Default::default()
     };
-    run_negative_less_than_test(SLTU, b, c, false, prank_vals, true);
+    run_negative_less_than_test(SLTU, b, c, false, prank_vals);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
