@@ -135,7 +135,7 @@ pub fn get_fp2_muldiv_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 ) -> Fp2Executor<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
 
-    FieldExprVecHeapExecutor(FieldExpressionExecutor::new(
+    FieldExprVecHeapExecutor::new(FieldExpressionExecutor::new(
         Rv32VecHeapAdapterExecutor::new(pointer_max_bits),
         expr,
         offset,

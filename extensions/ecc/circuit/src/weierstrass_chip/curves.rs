@@ -1,6 +1,7 @@
 use halo2curves_axiom::ff::{Field, PrimeField};
 use num_bigint::BigUint;
 use num_traits::Num;
+use once_cell::sync::Lazy;
 use openvm_algebra_circuit::fields::{
     blocks_to_field_element, blocks_to_field_element_bls12_381_coordinate, field_element_to_blocks,
     field_element_to_blocks_bls12_381_coordinate, FieldType,
@@ -20,29 +21,32 @@ fn get_modulus_as_bigint<F: PrimeField>() -> BigUint {
     BigUint::from_str_radix(F::MODULUS.trim_start_matches("0x"), 16).unwrap()
 }
 
+static K256_COORD_MODULUS: Lazy<BigUint> =
+    Lazy::new(get_modulus_as_bigint::<halo2curves_axiom::secq256k1::Fq>);
+static P256_COORD_MODULUS: Lazy<BigUint> =
+    Lazy::new(get_modulus_as_bigint::<halo2curves_axiom::secp256r1::Fp>);
+static BN254_COORD_MODULUS: Lazy<BigUint> =
+    Lazy::new(get_modulus_as_bigint::<halo2curves_axiom::bn256::Fq>);
+static BLS12_381_COORD_MODULUS: Lazy<BigUint> =
+    Lazy::new(get_modulus_as_bigint::<halo2curves_axiom::bls12_381::Fq>);
+static P256_A_COEFF: Lazy<BigUint> = Lazy::new(|| {
+    BigUint::from_bytes_le(&(-halo2curves_axiom::secp256r1::Fp::from(P256_NEG_A)).to_bytes())
+});
+
 pub(super) fn get_curve_type(modulus: &BigUint, a_coeff: &BigUint) -> Option<CurveType> {
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secq256k1::Fq>()
-        && a_coeff == &BigUint::ZERO
-    {
+    if modulus == &*K256_COORD_MODULUS && a_coeff == &BigUint::ZERO {
         return Some(CurveType::K256);
     }
 
-    let coeff_a = (-halo2curves_axiom::secp256r1::Fp::from(P256_NEG_A)).to_bytes();
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::secp256r1::Fp>()
-        && a_coeff == &BigUint::from_bytes_le(&coeff_a)
-    {
+    if modulus == &*P256_COORD_MODULUS && a_coeff == &*P256_A_COEFF {
         return Some(CurveType::P256);
     }
 
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bn256::Fq>()
-        && a_coeff == &BigUint::ZERO
-    {
+    if modulus == &*BN254_COORD_MODULUS && a_coeff == &BigUint::ZERO {
         return Some(CurveType::BN254);
     }
 
-    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bls12_381::Fq>()
-        && a_coeff == &BigUint::ZERO
-    {
+    if modulus == &*BLS12_381_COORD_MODULUS && a_coeff == &BigUint::ZERO {
         return Some(CurveType::BLS12_381);
     }
 
