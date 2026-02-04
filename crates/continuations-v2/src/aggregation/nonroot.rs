@@ -21,7 +21,7 @@ use crate::{
     aggregation::{AggregationProver, Circuit, trace_heights_tracing_info},
     circuit::{
         AggNodeTraceGen,
-        public_values::{receiver::UserPvsReceiverAir, verifier::VerifierPvsAir},
+        nonroot::{receiver::UserPvsReceiverAir, verifier::VerifierPvsAir},
     },
 };
 
