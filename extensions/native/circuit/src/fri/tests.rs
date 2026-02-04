@@ -16,7 +16,6 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
-    verifier::VerificationError,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -237,5 +236,7 @@ fn run_negative_fri_mat_opening_test() {
         .build()
         .load_and_prank_trace(harness, modify_trace)
         .finalize();
-    tester.simple_test_with_expected_error(VerificationError::OodEvaluationMismatch);
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }

@@ -19,6 +19,8 @@ openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
 openvm-keccak256-transpiler = { workspace = true }
+stark-backend-v2 = { workspace = true }
+cuda-backend-v2 = { workspace = true, optional = true }
 
 p3-keccak-air = { workspace = true }
 
@@ -54,6 +56,7 @@ cuda = [
     "dep:openvm-cuda-backend",
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-builder",
+    "dep:cuda-backend-v2",
     "openvm-circuit-primitives/cuda",
     "openvm-circuit/cuda",
     "openvm-rv32im-circuit/cuda",
