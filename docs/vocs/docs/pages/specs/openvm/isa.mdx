@@ -3,7 +3,7 @@
 OpenVM supports an extensible instruction set, with different groups of opcodes supported by different VM extensions.
 This specification describes the overall architecture and default VM extensions which ship with OpenVM, which are:
 
-- [RV32IM](#rv32im-extension): An extension supporting the 32-bit RISC-V ISA with multiplication.
+- [RV32IM/RV64IM](#rv32imrv64im-extension): An extension supporting the 32-bit and 64-bit RISC-V ISA with multiplication.
 - [Native](#native-extension): An extension supporting native field arithmetic for proof recursion and aggregation.
 - [Keccak-256](#keccak-extension): An extension implementing the Keccak-256 hash function compatibly with RISC-V memory.
 - [SHA2](#sha-2-extension): An extension implementing the SHA-256 and SHA-512 hash functions compatibly with RISC-V memory.
@@ -301,7 +301,7 @@ always advance the program counter by `DEFAULT_PC_STEP`.
 | CtStart    | 0x02         | `_`      | Opens a new span for tracing.                                                                        |
 | CtEnd      | 0x03         | `_`      | Closes the current span.                                                                             |
 
-### RV32IM/RV64IM Extensions
+### RV32IM/RV64IM Extensions {#rv32imrv64im-extension}
 
 Due to the overlap between RV32IM and RV64IM instruction sets, the RV32IM and RV64IM extensions will be described together.
 
