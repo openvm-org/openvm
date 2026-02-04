@@ -40,7 +40,6 @@ use crate::{
         RV32_REGISTER_NUM_LIMBS,
     },
     load_sign_extend::LoadSignExtendCoreCols,
-    test_utils::get_verification_error,
     LoadSignExtendFiller, Rv32LoadSignExtendAir, Rv32LoadSignExtendChip,
     Rv32LoadSignExtendExecutor,
 };
@@ -213,7 +212,6 @@ struct LoadSignExtPrankValues {
     opcode_flags: Option<[bool; 3]>,
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_negative_load_sign_extend_test(
     opcode: Rv32LoadStoreOpcode,
     read_data: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
@@ -221,7 +219,6 @@ fn run_negative_load_sign_extend_test(
     imm: Option<u32>,
     imm_sign: Option<u32>,
     prank_vals: LoadSignExtPrankValues,
-    interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -269,7 +266,9 @@ fn run_negative_load_sign_extend_test(
         .build()
         .load_and_prank_trace(harness, modify_trace)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -284,7 +283,6 @@ fn loadstore_negative_tests() {
             data_most_sig_bit: Some(0),
             ..Default::default()
         },
-        true,
     );
 
     run_negative_load_sign_extend_test(
@@ -297,7 +295,6 @@ fn loadstore_negative_tests() {
             shift_most_sig_bit: Some(0),
             ..Default::default()
         },
-        true,
     );
 
     run_negative_load_sign_extend_test(
@@ -310,7 +307,6 @@ fn loadstore_negative_tests() {
             opcode_flags: Some([true, false, false]),
             ..Default::default()
         },
-        true,
     );
 }
 

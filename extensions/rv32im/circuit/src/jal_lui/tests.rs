@@ -42,7 +42,6 @@ use crate::{
         Rv32RdWriteAdapterFiller, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS,
     },
     jal_lui::{Rv32JalLuiCoreCols, ADDITIONAL_BITS},
-    test_utils::get_verification_error,
     Rv32JalLuiAir, Rv32JalLuiFiller,
 };
 
@@ -193,13 +192,11 @@ struct JalLuiPrankValues {
     pub needs_write: Option<bool>,
 }
 
-#[allow(clippy::too_many_arguments)]
 fn run_negative_jal_lui_test(
     opcode: Rv32JalLuiOpcode,
     initial_imm: Option<i32>,
     initial_pc: Option<u32>,
     prank_vals: JalLuiPrankValues,
-    interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -251,7 +248,9 @@ fn run_negative_jal_lui_test(
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -265,7 +264,6 @@ fn opcode_flag_negative_test() {
             is_lui: Some(true),
             ..Default::default()
         },
-        false,
     );
     run_negative_jal_lui_test(
         JAL,
@@ -277,7 +275,6 @@ fn opcode_flag_negative_test() {
             needs_write: Some(false),
             ..Default::default()
         },
-        true,
     );
     run_negative_jal_lui_test(
         LUI,
@@ -288,7 +285,6 @@ fn opcode_flag_negative_test() {
             is_lui: Some(false),
             ..Default::default()
         },
-        false,
     );
 }
 
@@ -302,7 +298,6 @@ fn overflow_negative_tests() {
             rd_data: Some([LIMB_MAX, LIMB_MAX, LIMB_MAX, LIMB_MAX]),
             ..Default::default()
         },
-        false,
     );
     run_negative_jal_lui_test(
         LUI,
@@ -312,7 +307,6 @@ fn overflow_negative_tests() {
             rd_data: Some([LIMB_MAX, LIMB_MAX, LIMB_MAX, LIMB_MAX]),
             ..Default::default()
         },
-        false,
     );
     run_negative_jal_lui_test(
         LUI,
@@ -322,7 +316,6 @@ fn overflow_negative_tests() {
             rd_data: Some([0, LIMB_MAX, LIMB_MAX, LIMB_MAX + 1]),
             ..Default::default()
         },
-        false,
     );
     run_negative_jal_lui_test(
         LUI,
@@ -332,7 +325,6 @@ fn overflow_negative_tests() {
             imm: Some(-1),
             ..Default::default()
         },
-        false,
     );
     run_negative_jal_lui_test(
         LUI,
@@ -342,7 +334,6 @@ fn overflow_negative_tests() {
             imm: Some(-28),
             ..Default::default()
         },
-        false,
     );
     run_negative_jal_lui_test(
         JAL,
@@ -352,7 +343,6 @@ fn overflow_negative_tests() {
             rd_data: Some([F::NEG_ONE.as_canonical_u32(), 1, 0, 0]),
             ..Default::default()
         },
-        true,
     );
 }
 
