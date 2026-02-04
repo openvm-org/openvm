@@ -41,15 +41,19 @@ The OpenVM ISA treats `[0:4]_1` as normal read/write memory and makes no guarant
 
 ## Transpiler Specification for Default VM Extensions
 
-This section specifies the behavior of the transpiler for the default VM extensions with the custom RISC-V instructions specified [here](/specs/reference/riscv-custom-code). We use the following notation:
+This section specifies the behavior of the transpiler for the default VM extensions with the custom RISC-V instructions specified [here](/specs/reference/riscv-custom-code).
+We use the following notation:
 
-- Let `ind(rd)` denote `4 * (register index)`, which is in `0..128`. In particular, it fits in one field element.
+- We use the term `XLEN` to refer to the width of an integer register in bits (either 32 or 64).
+- We use the term `LIMBS` to refer to the number of 8 bit limbs required to cover an integer register (`XLEN/8`).
+- Let `ind(rd)` denote `LIMBS * (register index)`, which is in `0..32*LIMBS`. In particular, it fits in one field element.
 - We use `itof` for the function that sends an immediate to its signed integer representation, as specified in Section 2.3 of [RISC-V Instruction Set Manual Volume I: Unprivileged ISA](https://lf-riscv.atlassian.net/wiki/spaces/HOME/pages/16154769/RISC-V+Technical+Specifications) (signed 12-bit, 13-bit, 21-bits for I-type, B-type, J-type, respectively), and then maps it to the corresponding field element. So `0b11…11` goes to `-1` in `F`.
 - We use `sign_extend_24` to convert a 12-bit integer into a 24-bit integer via sign extension. We use this in conjunction with `utof`, which converts 24 bits into an unsigned integer and then maps it to the corresponding field element. Note that each 24-bit unsigned integer fits in one field element.
 - We use `sign_extend_16` for the analogous conversion into a 16-bit integer via sign extension.
 - We use `zero_extend_24` to convert an unsigned integer with at most 24 bits into a 24-bit unsigned integer by zero extension. This is used in conjunction with `utof` to convert unsigned integers to field elements.
 - We use `sign_of(imm)` to get the sign bit of the immediate `imm`.
 - The notation `imm[0:4]` means the lowest 5 bits of the immediate.
+- The notation `imm[0:5]` means the lowest 6 bits of the immediate.
 - For a phantom instruction `ins`, `disc(ins)` is the discriminant specified in the [ISA specification](/specs/openvm/isa#system-instructions).
 - For a phantom instruction `ins` and a 16-bit `c_upper`, `phantom_c(c_upper, ins) = c_upper << 16 | disc(ins)` is the corresponding 32-bit operand `c` for PHANTOM.
 
@@ -61,78 +65,95 @@ We now specify the transpilation for system instructions and the default set of 
 | ----------- | --------------------------- |
 | terminate   | TERMINATE `_, _, utof(imm)` |
 
-## RV32IM Extension
+## RV32IM/RV64IM Extension
 
-Transpilation from RV32IM to OpenVM assembly follows the mapping below, which is generally
-a 1-1 translation between RV32IM instructions and OpenVM instructions. The main exception relates
+Transpilation from RV32IM/RV64IM to OpenVM assembly follows the mapping below, which is generally
+a 1-1 translation between RV32IM/RV64IM instructions and OpenVM instructions. The main exception relates
 to handling of the `x0` register, which discards writes and has value `0` in all reads.
 We handle writes to `x0` in transpilation as follows:
 
 - Instructions that write to `x0` with no side effects are transpiled to the PHANTOM instruction with `c = 0x00` (`Nop`).
 - Instructions that write to a register which might be `x0` with side effects (JAL, JALR) are transpiled to the corresponding custom instruction whose write behavior is controlled by a flag specifying whether the target register is `x0`.
 
-Because `[0:4]_1` is initialized to `0` and never written to, this guarantees that reads from `x0` yield `0` and enforces that any OpenVM program transpiled from RV32IM conforms to the RV32IM specification for `x0`.
+Because `[0:LIMBS]_1` is initialized to `0` and never written to, this guarantees that reads from `x0` yield `0` and enforces that any OpenVM program transpiled from RV32IM/RV64IM conforms to the RV32IM/RV64IM specification for `x0`.
 
-### System Level Extensions to RV32IM
+### System Level Extensions to RV32IM/RV64IM
 
-| RISC-V Inst | OpenVM Instruction                                               |
-| ----------- | ---------------------------------------------------------------- |
-| hintstorew  | HINT_STOREW_RV32 `0, ind(rd), _, 1, 2`                           |
-| hintbuffer  | HINT_BUFFER_RV32 `ind(rs1), ind(rd), _, 1, 2`                    |
-| reveal      | STOREW_RV32 `ind(rs1), ind(rd), utof(sign_extend_16(imm)), 1, 3, 1, sign_of(imm)` |
-| hintinput   | PHANTOM `_, _, disc(Rv32HintInput)`                              |
-| printstr    | PHANTOM `ind(rd), ind(rs1), disc(Rv32PrintStr)`                  |
-| hintrandom  | PHANTOM `ind(rd), _, disc(Rv32HintRandom)`                       |
+| RISC-V Inst        | OpenVM Instruction                                                                                             |
+| ------------------ | -------------------------------------------------------------------------------------------------------------- |
+| hintstorew/hintstored  | HINT_STOREW_RV32/HINT_STORED_RV64 `0, ind(rd), _, 1, 2`                                                        |
+| hintbuffer         | HINT_BUFFER_RV32/HINT_BUFFER_RV64 `ind(rs1), ind(rd), _, 1, 2`                                                 |
+| reveal             | STOREW_RV32/STORED_RV64 `ind(rs1), ind(rd), utof(sign_extend_16(imm)), 1, 3, 1, sign_of(imm)`                  |
+| hintinput          | PHANTOM `_, _, disc(Rv32HintInput)`/PHANTOM `_, _, disc(Rv64HintInput)`                                        |
+| printstr           | PHANTOM `ind(rd), ind(rs1), disc(Rv32PrintStr)`/PHANTOM `ind(rd), ind(rs1), disc(Rv64PrintStr)`                |
+| hintrandom         | PHANTOM `ind(rd), _, disc(Rv32HintRandom)`/PHANTOM `ind(rd), _, disc(Rv64HintRandom)`                          |
 
-### Standard RV32IM Instructions
+### RV32IM/RV64IM Instructions
 
-| RISC-V Inst | OpenVM Instruction                                                                                                          |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------- |
-| add         | ADD_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
-| sub         | SUB_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
-| xor         | XOR_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
-| or          | OR_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                              |
-| and         | AND_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
-| sll         | SLL_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
-| srl         | SRL_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
-| sra         | SRA_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
-| slt         | SLT_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
-| sltu        | SLTU_RV32 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                            |
-| addi        | ADD_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`            |
-| xori        | XOR_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`            |
-| ori         | OR_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`             |
-| andi        | AND_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`            |
-| slli        | SLL_RV32 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`       |
-| srli        | SRL_RV32 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`       |
-| srai        | SRA_RV32 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`       |
-| slti        | SLT_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`            |
-| sltiu       | SLTU_RV32 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`           |
-| lb          | LOADB_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, (rd != x0), sign_of(imm)`                                   |
-| lh          | LOADH_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, (rd != x0), sign_of(imm)`                                   |
-| lw          | LOADW_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, (rd != x0), sign_of(imm)`                                   |
-| lbu         | LOADBU_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, (rd != x0), sign_of(imm)`                                  |
-| lhu         | LOADHU_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, (rd != x0), sign_of(imm)`                                  |
-| sb          | STOREB_RV32 `ind(rs2), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 1, sign_of(imm)`                                          |
-| sh          | STOREH_RV32 `ind(rs2), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 1, sign_of(imm)`                                          |
-| sw          | STOREW_RV32 `ind(rs2), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 1, sign_of(imm)`                                          |
-| beq         | BEQ_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                              |
-| bne         | BNE_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                              |
-| blt         | BLT_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                              |
-| bge         | BGE_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                              |
-| bltu        | BLTU_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                             |
-| bgeu        | BGEU_RV32 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                                             |
-| jal         | JAL_RV32 `ind(rd), 0, itof(imm), 1, 0, (rd != x0)`                                                                          |
-| jalr        | JALR_RV32 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 0, (rd != x0), sign_of(imm)`                                    |
-| lui         | LUI_RV32 `ind(rd), 0, utof(zero_extend_24(imm[12:31])), 1, 0, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`         |
-| auipc       | AUIPC_RV32 `ind(rd), 0, utof(zero_extend_24(imm[12:31]) << 4), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`        |
-| mul         | MUL_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                |
-| mulh        | MULH_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                               |
-| mulhsu      | MULHSU_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                             |
-| mulhu       | MULHU_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                              |
-| div         | DIV_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                |
-| divu        | DIVU_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                               |
-| rem         | REM_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                                |
-| remu        | REMU_RV32 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                               |
+| RISC-V Inst | OpenVM Instruction                                                                                            |
+| ----------- | ------------------------------------------------------------------------------------------------------------- |
+| add         | ADD_RV32/ADD_RV64 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`      |
+| addw        | ADDW_RV64 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`              |
+| sub         | SUB_RV32/SUB_RV64 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`      |
+| subw        | SUBW_RV64 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`              |
+| xor         | XOR_RV32/XOR_RV64 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`      |
+| or          | OR_RV32/OR_RV64 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`        |
+| and         | AND_RV32/AND_RV64 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`      |
+| sll         | SLL_RV32/SLL_RV64 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`      |
+| sllw        | SLLW_RV64 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`              |
+| srl         | SRL_RV32/SRL_RV64 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`      |
+| srlw        | SRLW_RV64 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`              |
+| sra         | SRA_RV32/SRA_RV64 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`      |
+| sraw        | SRAW_RV64 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`              |
+| slt         | SLT_RV32/SLT_RV64 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`      |
+| sltu        | SLTU_RV32/SLTU_RV64 `ind(rd), ind(rs1), ind(rs2), 1, 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`    |
+| addi        | ADD_RV32/ADD_RV64 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, else PHANTOM `_, _, disc(Nop)` |
+| addiw       | ADDW_RV64 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, else PHANTOM `_, _, disc(Nop)`  |
+| xori        | XOR_RV32/XOR_RV64 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, else PHANTOM `_, _, disc(Nop)` |
+| ori         | OR_RV32/OR_RV64 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, else PHANTOM `_, _, disc(Nop)` |
+| andi        | AND_RV32/AND_RV64 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, else PHANTOM `_, _, disc(Nop)` |
+| slli        | SLL_RV32/SLL_RV64 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4]/imm[0:5])), 1, 0` if `rd != x0`, else PHANTOM `_, _, disc(Nop)` |
+| slliw       | SLLW_RV64 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, else PHANTOM `_, _, disc(Nop)` |
+| srli        | SRL_RV32/SRL_RV64 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4]/imm[0:5])), 1, 0` if `rd != x0`, else PHANTOM `_, _, disc(Nop)` |
+| srliw       | SRLW_RV64 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, else PHANTOM `_, _, disc(Nop)` |
+| srai        | SRA_RV32/SRA_RV64 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4]/imm[0:5])), 1, 0` if `rd != x0`, else PHANTOM `_, _, disc(Nop)` |
+| sraiw       | SRAW_RV64 `ind(rd), ind(rs1), utof(zero_extend_24(imm[0:4])), 1, 0` if `rd != x0`, else PHANTOM `_, _, disc(Nop)` |
+| slti        | SLT_RV32/SLT_RV64 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, else PHANTOM `_, _, disc(Nop)` |
+| sltiu       | SLTU_RV32/SLTU_RV64 `ind(rd), ind(rs1), utof(sign_extend_24(imm)), 1, 0` if `rd != x0`, else PHANTOM `_, _, disc(Nop)` |
+| lb          | LOADB_RV32/LOADB_RV64 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, (rd != x0), sign_of(imm)`          |
+| lh          | LOADH_RV32/LOADH_RV64 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, (rd != x0), sign_of(imm)`          |
+| lw          | LOADW_RV32/LOADW_RV64 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, (rd != x0), sign_of(imm)`          |
+| ld          | LOADD_RV64 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, (rd != x0), sign_of(imm)`                     |
+| lbu         | LOADBU_RV32/LOADBU_RV64 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, (rd != x0), sign_of(imm)`        |
+| lhu         | LOADHU_RV32/LOADHU_RV64 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, (rd != x0), sign_of(imm)`        |
+| lwu         | LOADWU_RV64 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 2, (rd != x0), sign_of(imm)`                    |
+| sb          | STOREB_RV32/STOREB_RV64 `ind(rs2), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 1, sign_of(imm)`                |
+| sh          | STOREH_RV32/STOREH_RV64 `ind(rs2), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 1, sign_of(imm)`                |
+| sw          | STOREW_RV32/STOREW_RV64 `ind(rs2), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 1, sign_of(imm)`                |
+| sd          | STORED_RV64 `ind(rs2), ind(rs1), utof(sign_extend_16(imm)), 1, 2, 1, sign_of(imm)`                            |
+| beq         | BEQ_RV32/BEQ_RV64 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                       |
+| bne         | BNE_RV32/BNE_RV64 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                       |
+| blt         | BLT_RV32/BLT_RV64 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                       |
+| bge         | BGE_RV32/BGE_RV64 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                       |
+| bltu        | BLTU_RV32/BLTU_RV64 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                     |
+| bgeu        | BGEU_RV32/BGEU_RV64 `ind(rs1), ind(rs2), itof(imm), 1, 1`                                                     |
+| jal         | JAL_RV32/JAL_RV64 `ind(rd), 0, itof(imm), 1, 0, (rd != x0)`                                                   |
+| jalr        | JALR_RV32/JALR_RV64 `ind(rd), ind(rs1), utof(sign_extend_16(imm)), 1, 0, (rd != x0), sign_of(imm)`            |
+| lui         | LUI_RV32/LUI_RV64 `ind(rd), 0, utof(zero_extend_24(imm[12:31])), 1, 0, 1` if `rd != x0`, else PHANTOM `_, _, disc(Nop)` |
+| auipc       | AUIPC_RV32/AUIPC_RV64 `ind(rd), 0, utof(zero_extend_24(imm[12:31]) << 4), 1` if `rd != x0`, else PHANTOM `_, _, disc(Nop)` |
+| mul         | MUL_RV32/MUL_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`         |
+| mulw        | MULW_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                 |
+| mulh        | MULH_RV32/MULH_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`       |
+| mulhsu      | MULHSU_RV32/MULHSU_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`   |
+| mulhu       | MULHU_RV32/MULHU_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`     |
+| div         | DIV_RV32/DIV_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`         |
+| divw        | DIVW_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                 |
+| divu        | DIVU_RV32/DIVU_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`       |
+| divuw       | DIVUW_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                |
+| rem         | REM_RV32/REM_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`         |
+| remw        | REMW_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                 |
+| remu        | REMU_RV32/REMU_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`       |
+| remuw       | REMUW_RV64 `ind(rd), ind(rs1), ind(rs2), 1` if `rd != x0`, otherwise PHANTOM `_, _, disc(Nop)`                |
 
 ## OpenVM Intrinsic VM Extensions
 

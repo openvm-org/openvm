@@ -293,22 +293,27 @@ always advance the program counter by `DEFAULT_PC_STEP`.
 | CtStart    | 0x02         | `_`      | Opens a new span for tracing.                                                                        |
 | CtEnd      | 0x03         | `_`      | Closes the current span.                                                                             |
 
-### RV32IM Extension
+### RV32IM/RV64IM Extensions
 
-The RV32IM extension introduces OpenVM opcodes which support 32-bit RISC-V via transpilation from a standard RV32IM ELF
-binary, specified [here](/specs/reference/riscv-custom-code). These consist of opcodes corresponding 1-1 with RV32IM opcodes, as well as
-additional user IO opcodes and phantom sub-instructions to support input and debug printing on the host. We denote the
-OpenVM opcode corresponding to a RV32IM opcode by appending `_RV32`.
+Due to the overlap between RV32IM and RV64IM instruction sets, the RV32IM and RV64IM extensions will be described together.
+We use the term `XLEN` to refer to the width of an integer register in bits (either 32 or 64).
+We use the term `LIMBS` to refer to the number of 8 bit limbs required to cover an integer register (`XLEN/8`).
 
-The RV32IM extension uses address space `0` for immediates, address space `1` for registers, and address space `2` for
+The RV32IM/RV64IM extensions introduce OpenVM opcodes which support 32-bit/64-bit RISC-V via transpilation from a standard RV32IM/RV64IM ELF
+binary, specified [here](/specs/reference/riscv-custom-code). These consist of opcodes corresponding 1-1 with RV32IM/RV64IM opcodes, as well as
+additional user IO opcodes and phantom sub-instructions to support input and debug printing on the host. 
+We denote the OpenVM opcode corresponding to a RV32IM opcode by appending `_RV32`.
+We denote the OpenVM opcode corresponding to a RV64IM opcode by appending `_RV64`.
+
+The RV32IM/RV64IM extensions use address space `0` for immediates, address space `1` for registers, and address space `2` for
 memory. As explained [here](#address-spaces), cells in address spaces `1` and `2` are constrained to be bytes, and all
 instructions preserve this constraint.
 
-The `i`th RISC-V register is represented by the block `[4 * i:4]_1` of 4 limbs in address space `1`. All memory
-addresses in address space `1` behave uniformly, and in particular writes to the block `[0:4]_1` corresponding to the
-RISC-V register `x0` are allowed in the RV32IM extension. However, as detailed
-in [RV32IM Transpilation](/specs/reference/transpiler#rv32im-transpilation), any OpenVM program transpiled from a RV32IM ELF will
-never contain such a write and conforms to the RV32IM specification.
+The `i`th RISC-V register is represented by the block `[LIMBS * i:LIMBS]_1` of `LIMBS` limbs in address space `1`. 
+All memory addresses in address space `1` behave uniformly, and in particular writes to the block `[0:LIMBS]_1` corresponding to the
+RISC-V register `x0` are allowed in the RV32IM/RV64IM extensions. However, as detailed in 
+[RV32IM/RV64IM Transpilation](/specs/reference/transpiler#rv32imrv64im-extension), any OpenVM program transpiled from a RV32IM/RV64IM ELF will
+never contain such a write and conforms to the RV32IM/RV64IM specification.
 
 #### ALU
 
@@ -316,20 +321,27 @@ In all ALU instructions, the operand `d` is fixed to be `1`. The operand `e` mus
 the `c` operand is expected to be of the form `F::from_canonical_u32(c_i16 as i24 as u24 as u32)` where `c_i16` is type
 `i16`. In other words we take signed 16-bits in two's complement, sign extend to 24-bits, consider the 24-bits as
 unsigned integer, and convert to field element. In the instructions below, `[c:4]_0` should be interpreted as
-`c_i16 as i32` sign extended to 32-bits.
+`c_i16 as iXLEN` sign extended to XLEN bits.
 
-| Name      | Operands    | Description                                                                                              |
-| --------- | ----------- | -------------------------------------------------------------------------------------------------------- |
-| ADD_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 + [c:4]_e`. Overflow is ignored and the lower 32-bits are written to the destination. |
-| SUB_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 - [c:4]_e`. Overflow is ignored and the lower 32-bits are written to the destination. |
-| XOR_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 ^ [c:4]_e`                                                                            |
-| OR_RV32   | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 \| [c:4]_e`                                                                           |
-| AND_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 & [c:4]_e`                                                                            |
-| SLL_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 << [c:4]_e`                                                                           |
-| SRL_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 >> [c:4]_e`                                                                           |
-| SRA_RV32  | `a,b,c,1,e` | `[a:4]_1 = [b:4]_1 >> [c:4]_e` MSB extends                                                               |
-| SLT_RV32  | `a,b,c,1,e` | `[a:4]_1 = i32([b:4]_1) < i32([c:4]_e) ? 1 : 0`                                                          |
-| SLTU_RV32 | `a,b,c,1,e` | `[a:4]_1 = u32([b:4]_1) < u32([c:4]_e) ? 1 : 0`                                                          |
+| Name                | Operands    | Description                                                                                                |
+| ------------------- | ----------- | ---------------------------------------------------------------------------------------------------------- |
+| ADD_RV32/ADD_RV64   | `a,b,c,1,e` | `[a:LIMBS]_1 = [b:LIMBS]_1 + [c:LIMBS]_e`. Overflow is ignored and the lower XLEN bits are written to the destination. |
+| ADDW_RV64           | `a,b,c,1,e` | `[a:8]_1 = sign_extend([b:4]_1 + [c:4]_e)`. RV64 only. Adds lower 32 bits, sign-extends result to 64 bits. |
+| SUB_RV32/SUB_RV64   | `a,b,c,1,e` | `[a:LIMBS]_1 = [b:LIMBS]_1 - [c:LIMBS]_e`. Overflow is ignored and the lower XLEN bits are written to the destination. |
+| SUBW_RV64           | `a,b,c,1,e` | `[a:8]_1 = sign_extend([b:4]_1 - [c:4]_e)`. RV64 only. Subtracts lower 32 bits, sign-extends result to 64 bits. |
+| XOR_RV32/XOR_RV64   | `a,b,c,1,e` | `[a:LIMBS]_1 = [b:LIMBS]_1 ^ [c:LIMBS]_e`                                                                  |
+| OR_RV32/OR_RV64     | `a,b,c,1,e` | `[a:LIMBS]_1 = [b:LIMBS]_1 \| [c:LIMBS]_e`                                                                 |
+| AND_RV32/AND_RV64   | `a,b,c,1,e` | `[a:LIMBS]_1 = [b:LIMBS]_1 & [c:LIMBS]_e`                                                                  |
+| SLL_RV32/SLL_RV64   | `a,b,c,1,e` | `[a:LIMBS]_1 = [b:LIMBS]_1 << [c:LIMBS]_e`                                                                 |
+| SLLW_RV64           | `a,b,c,1,e` | `[a:8]_1 = sign_extend([b:4]_1 << [c:4]_e[0:4])`. RV64 only. Shifts lower 32 bits left, sign-extends to 64 bits. |
+| SRL_RV32/SRL_RV64   | `a,b,c,1,e` | `[a:LIMBS]_1 = [b:LIMBS]_1 >> [c:LIMBS]_e`                                                                 |
+| SRLW_RV64           | `a,b,c,1,e` | `[a:8]_1 = sign_extend([b:4]_1 >> [c:4]_e[0:4])`. RV64 only. Shifts lower 32 bits right (logical), sign-extends to 64 bits. |
+| SRA_RV32/SRA_RV64   | `a,b,c,1,e` | `[a:LIMBS]_1 = [b:LIMBS]_1 >> [c:LIMBS]_e` MSB extends                                                     |
+| SRAW_RV64           | `a,b,c,1,e` | `[a:8]_1 = sign_extend(i32([b:4]_1) >> [c:4]_e[0:4])`. RV64 only. Shifts lower 32 bits right (arithmetic), sign-extends to 64 bits. |
+| SLT_RV32/SLT_RV64   | `a,b,c,1,e` | `[a:LIMBS]_1 = iXLEN([b:LIMBS]_1) < iXLEN([c:LIMBS]_e) ? 1 : 0`                                            |
+| SLTU_RV32/SLTU_RV64 | `a,b,c,1,e` | `[a:LIMBS]_1 = uXLEN([b:LIMBS]_1) < uXLEN([c:LIMBS]_e) ? 1 : 0`                                            |
+
+For shift instructions, the shift amount is the low 5 bits of the source for RV32, the low 6 bits for RV64, and the low 5 bits for RV64 W variants.
 
 #### Load/Store
 
@@ -363,87 +375,95 @@ All load/store instructions always do block accesses of block size `4`, even for
 
 For branch instructions, we fix `d = e = 1`. For jump instructions, we fix `d = 1`.
 
-| Name       | Operands         | Description                                                                                                                                                                                                                                                                                                                                                                 |
-| ---------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| BEQ_RV32   | `a,b,c,1,1`      | `if([a:4]_1 == [b:4]_1) pc += c`                                                                                                                                                                                                                                                                                                                                            |
-| BNE_RV32   | `a,b,c,1,1`      | `if([a:4]_1 != [b:4]_1) pc += c`                                                                                                                                                                                                                                                                                                                                            |
-| BLT_RV32   | `a,b,c,1,1`      | `if(i32([a:4]_1) < i32([b:4]_1)) pc += c`                                                                                                                                                                                                                                                                                                                                   |
-| BGE_RV32   | `a,b,c,1,1`      | `if(i32([a:4]_1) >= i32([b:4]_1)) pc += c`                                                                                                                                                                                                                                                                                                                                  |
-| BLTU_RV32  | `a,b,c,1,1`      | `if(u32([a:4]_1) < u32([b:4]_1)) pc += c`                                                                                                                                                                                                                                                                                                                                   |
-| BGEU_RV32  | `a,b,c,1,1`      | `if(u32([a:4]_1) >= u32([b:4]_1)) pc += c`                                                                                                                                                                                                                                                                                                                                  |
-| JAL_RV32   | `a,_,c,1,_,f`    | `if(f!=0) [a:4]_1 = decompose(pc+4); pc += c`. The operand `f` is assumed to be boolean. The `pc` increment is always done regardless of `f`'s value. Here `i32(c)`must be in`[-2^24, 2^24)`.                                                                                                                                                                                 |
-| JALR_RV32  | `a,b,c,1,_,f,g` | `if(f!=0) [a:4]_1 = decompose(pc+4); pc = F::from_canonical_u32(i32([b:4]_1) + sign_extend(decompose(c)[0:2], g) as u32)`. Constrains that `i32([b:4]_1) + sign_extend(decompose(c)[0:2], g) is in [0, 2^PC_BITS)`. Here `u32(c)` must be in `[0, 2^16)`. The operands `f` and `g` are assumed to be boolean. The `pc` assignment is always done regardless of `f`'s value. |
-| LUI_RV32   | `a,_,c,1,_,1`    | `[a:4]_1 = u32(c) << 12`. Here `i32(c)` must be in `[0, 2^20)`.                                                                                                                                                                                                                                                                                                             |
-| AUIPC_RV32 | `a,_,c,1,_,_`    | `[a:4]_1 = decompose(pc) + (decompose(c) << 8)`. Here `i32(c)` must be in `[0, 2^24)`.                                                                                                                                                                                                                                                                                     |
+| Name                | Operands         | Description                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BEQ_RV32/BEQ_RV64   | `a,b,c,1,1`      | `if([a:LIMBS]_1 == [b:LIMBS]_1) pc += c`                                                                                                                                                                                                                                                                                                                                    |
+| BNE_RV32/BNE_RV64   | `a,b,c,1,1`      | `if([a:LIMBS]_1 != [b:LIMBS]_1) pc += c`                                                                                                                                                                                                                                                                                                                                    |
+| BLT_RV32/BLT_RV64   | `a,b,c,1,1`      | `if(iXLEN([a:LIMBS]_1) < iXLEN([b:LIMBS]_1)) pc += c`                                                                                                                                                                                                                                                                                                                       |
+| BGE_RV32/BGE_RV64   | `a,b,c,1,1`      | `if(iXLEN([a:LIMBS]_1) >= iXLEN([b:LIMBS]_1)) pc += c`                                                                                                                                                                                                                                                                                                                      |
+| BLTU_RV32/BLTU_RV64 | `a,b,c,1,1`      | `if(uXLEN([a:LIMBS]_1) < uXLEN([b:LIMBS]_1)) pc += c`                                                                                                                                                                                                                                                                                                                       |
+| BGEU_RV32/BGEU_RV64 | `a,b,c,1,1`      | `if(uXLEN([a:LIMBS]_1) >= uXLEN([b:LIMBS]_1)) pc += c`                                                                                                                                                                                                                                                                                                                      |
+| JAL_RV32/JAL_RV64   | `a,_,c,1,_,f`    | `if(f!=0) [a:LIMBS]_1 = decompose(pc+DEFAULT_PC_STEP); pc += c`. The operand `f` is assumed to be boolean. The `pc` increment is always done regardless of `f`'s value. Here `iXLEN(c)` must be in `[-2^24, 2^24)`.                                                                                                                                                         |
+| JALR_RV32/JALR_RV64 | `a,b,c,1,_,f,g`  | `if(f!=0) [a:LIMBS]_1 = decompose(pc+DEFAULT_PC_STEP); pc = F::from_canonical_u64(iXLEN([b:LIMBS]_1) + sign_extend(decompose(c)[0:2], g) as uXLEN)`. Constrains that `iXLEN([b:LIMBS]_1) + sign_extend(decompose(c)[0:2], g)` is in `[0, 2^PC_BITS)`. Here `uXLEN(c)` must be in `[0, 2^16)`. The operands `f` and `g` are assumed to be boolean. The `pc` assignment is always done regardless of `f`'s value. |
+| LUI_RV32/LUI_RV64   | `a,_,c,1,_,1`    | `[a:LIMBS]_1 = uXLEN(c) << 12`. Here `iXLEN(c)` must be in `[0, 2^20)`.                                                                                                                                                                                                                                                                                                     |
+| AUIPC_RV32/AUIPC_RV64 | `a,_,c,1,_,_`  | `[a:LIMBS]_1 = decompose(pc) + (decompose(c) << 8)`. Here `iXLEN(c)` must be in `[0, 2^24)`.                                                                                                                                                                                                                                                                                |
 
-For branch and JAL_RV32 instructions, the instructions assume that the operand `i32(c)` is in `[-2^24,2^24)`. The
+For branch and JAL instructions, the instructions assume that the operand `iXLEN(c)` is in `[-2^24,2^24)`. The
 assignment `pc += c` is done as field elements.
 In valid programs, the `from_pc` is always in `[0, 2^PC_BITS)`. We will only use base field `F` satisfying
-`2^PC_BITS + 2*2^24 < F::modulus()` so `to_pc = from_pc + c` is only valid if `i32(from_pc) + i32(c)` is in
+`2^PC_BITS + 2*2^24 < F::modulus()` so `to_pc = from_pc + c` is only valid if `iXLEN(from_pc) + iXLEN(c)` is in
 `[0, 2^PC_BITS)`.
 
-For JALR_RV32, we treat `c` in `[0, 2^16)` as a raw encoding of 16-bits.
-The operand `g` must be a boolean. We let `sign_extend(decompose(c)[0:2], g)` denote the `i32` defined by first taking
-the unsigned integer encoding of `c` as 16 bits, then sign extending it to 32 bits using the sign bit `g`, and considering the 32 bits as the 2's complement of an `i32`. Then it is added to the register value `i32([b:4]_1)`, where 32-bit overflow is ignored. The instruction is only valid if the resulting `i32` is in range `[0, 2^PC_BITS)`. The
-result is then cast to `u32` and then to `F` and assigned to `pc`.
+For JALR, we treat `c` in `[0, 2^16)` as a raw encoding of 16-bits.
+The operand `g` must be a boolean. We let `sign_extend(decompose(c)[0:2], g)` denote the `iXLEN` defined by first taking
+the unsigned integer encoding of `c` as 16 bits, then sign extending it to XLEN bits using the sign bit `g`, and considering the XLEN bits as the 2's complement of an `iXLEN`. Then it is added to the register value `iXLEN([b:LIMBS]_1)`, where XLEN-bit overflow is ignored. The instruction is only valid if the resulting `iXLEN` is in range `[0, 2^PC_BITS)`. The
+result is then cast to `uXLEN` and then to `F` and assigned to `pc`.
 
-For LUI_RV32, we are treating `c` in `[0, 2^20)` as a raw encoding of 20-bits.
-For AUIPC_RV32, we are treating `c` in `[0, 2^24)` as a raw encoding of 24-bits.
+For LUI, we are treating `c` in `[0, 2^20)` as a raw encoding of 20-bits.
+For AUIPC, we are treating `c` in `[0, 2^24)` as a raw encoding of 24-bits.
 The instruction does not need to interpret whether the register is signed or unsigned.
-For AUIPC_RV32, the addition is treated as unchecked `u32` addition since that is the same as `i32` addition at the bit
+For AUIPC, the addition is treated as unchecked `uXLEN` addition since that is the same as `iXLEN` addition at the bit
 level.
 
-Note that AUIPC_RV32 does not have any condition for the register write.
+Note that AUIPC does not have any condition for the register write.
 
-#### RV32M Extension
+#### RV32M/RV64M Extension
 
 For multiplication extension instructions, we fix `d = 1`.
-MUL_RV32 performs an 32-bit×32-bit multiplication and places the lower 32 bits in the
-destination cells. MULH_RV32, MULHU_RV32, and MULHSU_RV32 perform the same multiplication but return
-the upper 32 bits of the full 2×32-bit product, for signed×signed, unsigned×unsigned, and
+MUL performs an XLEN-bit×XLEN-bit multiplication and places the lower XLEN bits in the
+destination cells. MULH, MULHU, and MULHSU perform the same multiplication but return
+the upper XLEN bits of the full 2×XLEN-bit product, for signed×signed, unsigned×unsigned, and
 signed×unsigned multiplication respectively.
 
-DIV_RV32 and DIVU_RV32 perform signed and unsigned integer division of 32-bits by 32-bits. REM_RV32
-and REMU_RV32 provide the remainder of the corresponding division operation. Integer division is defined by
+DIV and DIVU perform signed and unsigned integer division of XLEN-bits by XLEN-bits. REM
+and REMU provide the remainder of the corresponding division operation. Integer division is defined by
 `dividend = q * divisor + r` where `0 <= |r| < |divisor|` and either `sign(r) = sign(dividend)` or `r = 0`.
+
+RV64M also includes word variants (MULW, DIVW, DIVUW, REMW, REMUW) that operate on the lower 32 bits and sign-extend the result to 64 bits.
 
 Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 
-| Name        | Operands  | Description                                                                                                                                                                                                |
-| ----------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| MUL_RV32    | `a,b,c,1` | `[a:4]_1 = ([b:4]_1 * [c:4]_1)[0:3]`                                                                                                                                                                       |
-| MULH_RV32   | `a,b,c,1` | `[a:4]_1 = (sign_extend([b:4]_1) * sign_extend([c:4]_1))[4:7]`. We sign extend `b` and `c` into 8-limb (i.e. 64-bit) integers                                                                              |
-| MULHSU_RV32 | `a,b,c,1` | `[a:4]_1 = (sign_extend([b:4]_1) * zero_extend([c:4]_1))[4:7]`. We sign extend                                                                                                                             |
-| MULHU_RV32  | `a,b,c,1` | `[a:4]_1 = (zero_extend([b:4]_1) * zero_extend([c:4]_1))[4:7]`                                                                                                                                             |
-| DIV_RV32    | `a,b,c,1` | `[a:4]_1 = [b:4]_1 / [c:4]_1` integer division. Division by zero: if `i32([c:4]_1) = 0`, set `i32([a:4]_1) = -1`. Overflow: if `i32([b:4]_1) = -2^31` and `i32([c:4]_1) = -1`, set `i32([a:4]_1) = -2^31`. |
-| DIVU_RV32   | `a,b,c,1` | `[a:4]_1 = [b:4]_1 / [c:4]_1` integer division. Division by zero: if `u32([c:4]_1) = 0`, set `u32([a:4]_1) = 2^32 - 1`.                                                                                    |
-| REM_RV32    | `a,b,c,1` | `[a:4]_1 = [b:4]_1 % [c:4]_1` integer remainder. Division by zero: if `i32([c:4]_1) = 0`, set `[a:4]_1 = [b:4]_1`. Overflow: if `i32([b:4]_1) = -2^31` and `i32([c:4]_1) = -1`, set `[a:4]_1 = 0`.         |
-| REMU_RV32   | `a,b,c,1` | `[a:4]_1 = [b:4]_1 % [c:4]_1` integer remainder. Division by zero: if `u32([c:4]_1) = 0`, set `[a:4]_1 = [b:4]_1`.                                                                                         |
+| Name                  | Operands  | Description                                                                                                                                                                                                              |
+| --------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| MUL_RV32/MUL_RV64     | `a,b,c,1` | `[a:LIMBS]_1 = ([b:LIMBS]_1 * [c:LIMBS]_1)[0:LIMBS-1]`                                                                                                                                                                   |
+| MULH_RV32/MULH_RV64   | `a,b,c,1` | `[a:LIMBS]_1 = (sign_extend([b:LIMBS]_1) * sign_extend([c:LIMBS]_1))[LIMBS:2*LIMBS-1]`. We sign extend `b` and `c` into 2×LIMBS-limb (i.e. 2×XLEN-bit) integers                                                          |
+| MULHSU_RV32/MULHSU_RV64 | `a,b,c,1` | `[a:LIMBS]_1 = (sign_extend([b:LIMBS]_1) * zero_extend([c:LIMBS]_1))[LIMBS:2*LIMBS-1]`                                                                                                                                  |
+| MULHU_RV32/MULHU_RV64 | `a,b,c,1` | `[a:LIMBS]_1 = (zero_extend([b:LIMBS]_1) * zero_extend([c:LIMBS]_1))[LIMBS:2*LIMBS-1]`                                                                                                                                   |
+| MULW_RV64             | `a,b,c,1` | `[a:LIMBS]_1 = sign_extend(([b:4]_1 * [c:4]_1)[0:3])`. RV64 only. Multiplies lower 32 bits and sign-extends result to 64 bits.                                                                                           |
+| DIV_RV32/DIV_RV64     | `a,b,c,1` | `[a:LIMBS]_1 = [b:LIMBS]_1 / [c:LIMBS]_1` integer division. Division by zero: if `iXLEN([c:LIMBS]_1) = 0`, set `iXLEN([a:LIMBS]_1) = -1`. Overflow: if `iXLEN([b:LIMBS]_1) = -2^(XLEN-1)` and `iXLEN([c:LIMBS]_1) = -1`, set `iXLEN([a:LIMBS]_1) = -2^(XLEN-1)`. |
+| DIVU_RV32/DIVU_RV64   | `a,b,c,1` | `[a:LIMBS]_1 = [b:LIMBS]_1 / [c:LIMBS]_1` integer division. Division by zero: if `uXLEN([c:LIMBS]_1) = 0`, set `uXLEN([a:LIMBS]_1) = 2^XLEN - 1`.                                                                        |
+| DIVW_RV64             | `a,b,c,1` | `[a:LIMBS]_1 = sign_extend([b:4]_1 / [c:4]_1)`. RV64 only. Divides lower 32 bits (signed) and sign-extends result to 64 bits.                                                                                            |
+| DIVUW_RV64            | `a,b,c,1` | `[a:LIMBS]_1 = sign_extend([b:4]_1 / [c:4]_1)`. RV64 only. Divides lower 32 bits (unsigned) and sign-extends result to 64 bits.                                                                                          |
+| REM_RV32/REM_RV64     | `a,b,c,1` | `[a:LIMBS]_1 = [b:LIMBS]_1 % [c:LIMBS]_1` integer remainder. Division by zero: if `iXLEN([c:LIMBS]_1) = 0`, set `[a:LIMBS]_1 = [b:LIMBS]_1`. Overflow: if `iXLEN([b:LIMBS]_1) = -2^(XLEN-1)` and `iXLEN([c:LIMBS]_1) = -1`, set `[a:LIMBS]_1 = 0`. |
+| REMU_RV32/REMU_RV64   | `a,b,c,1` | `[a:LIMBS]_1 = [b:LIMBS]_1 % [c:LIMBS]_1` integer remainder. Division by zero: if `uXLEN([c:LIMBS]_1) = 0`, set `[a:LIMBS]_1 = [b:LIMBS]_1`.                                                                             |
+| REMW_RV64             | `a,b,c,1` | `[a:LIMBS]_1 = sign_extend([b:4]_1 % [c:4]_1)`. RV64 only. Remainder of lower 32 bits (signed) and sign-extends result to 64 bits.                                                                                       |
+| REMUW_RV64            | `a,b,c,1` | `[a:LIMBS]_1 = sign_extend([b:4]_1 % [c:4]_1)`. RV64 only. Remainder of lower 32 bits (unsigned) and sign-extends result to 64 bits.                                                                                     |
 
 #### User IO
 
-In addition to opcodes which match 1-1 with the RV32IM opcodes, the following additional
+In addition to opcodes which match 1-1 with the RV32IM/RV64IM opcodes, the following additional
 opcodes interact with address spaces outside of 1 and 2 to enable verification of programs
 with user input-output.
 
-| Name             | Operands        | Description                                                                                                                                                                       |
-| ---------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HINT_STOREW_RV32 | `_,b,_,1,2`     | `[r32{0}(b):4]_2 = next 4 bytes from hint stream`. Only valid if next 4 values in hint stream are bytes.                                                                          |
-| HINT_BUFFER_RV32 | `a,b,_,1,2`     | `[r32{0}(b):4 * l]_2 = next 4 * l bytes from hint stream` where `l = r32{0}(a)`. Only valid if next `4 * l` values in hint stream are bytes. `l` must be non-zero and <= `MAX_HINT_BUFFER_WORDS` (1,023 words ≈ 4KB). The pointer address `r32{0}(b)` does not need to be a multiple of `4`. |
-| REVEAL_RV32      | `a,b,c,1,3,_,g` | Pseudo-instruction for `STOREW_RV32 a,b,c,1,3,_,g` writing to the user IO address space `3`. Only valid when continuations are enabled.                                           |
+| Name                               | Operands        | Description                                                                                                                                                                       |
+| ---------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HINT_STOREW_RV32/HINT_STORED_RV64  | `_,b,_,1,2`     | `[rXLEN{0}(b):LIMBS]_2 = next LIMBS bytes from hint stream`. Only valid if next LIMBS values in hint stream are bytes.                                                            |
+| HINT_BUFFER_RV32/HINT_BUFFER_RV64  | `a,b,_,1,2`     | `[rXLEN{0}(b):LIMBS * l]_2 = next LIMBS * l bytes from hint stream` where `l = rXLEN{0}(a)`. Only valid if next `LIMBS * l` values in hint stream are bytes. `l` must be non-zero and <= `MAX_HINT_BUFFER_WORDS` (1,023 words ≈ 4KB). The pointer address `rXLEN{0}(b)` does not need to be a multiple of `LIMBS`. |
+| REVEAL_RV32/REVEAL_RV64            | `a,b,c,1,3,_,g` | Pseudo-instruction for `STOREW_RV32/STORED_RV64 a,b,c,1,3,_,g` writing to the user IO address space `3`. Only valid when continuations are enabled.                               |
 
 > **Note:** The `MAX_HINT_BUFFER_WORDS` bound on `HINT_BUFFER_RV32` is enforced by both the executor and AIR constraints. The SDK's `hint_buffer_chunked` function automatically splits larger reads into multiple `HINT_BUFFER_RV32` instructions.
 
 #### Phantom Sub-Instructions
 
-The RV32IM extension defines the following phantom sub-instructions.
+The RV32IM/RV64IM extension defines the following phantom sub-instructions.
 
-| Name              | Discriminant | Operands | Description                                                                                                                                                                                                                                                    |
-|-------------------| ------------ | -------- |----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Rv32HintInput     | 0x20         | `_`      | Pops a vector `hint` of field elements from the input stream and resets the hint stream to equal the vector `[(hint.len() as u32).to_le_bytes()), hint].concat()`.                                                                                             |
-| Rv32PrintStr      | 0x21         | `a,b,_`  | Peeks at `[r32{0}(a)..r32{0}(a) + r32{0}(b)]_2`, tries to convert to byte array and then UTF-8 string and prints to host stdout. Prints error message if conversion fails. Does not change any VM state.                                                       |
-| Rv32HintRandom    | 0x22         | `a,_,_`  | Resets the hint stream to `4 * r32{0}(a)` random bytes. The source of randomness is deterministic using a fixed-seed RNG (`rand::rngs::StdRng`). Its result is not constrained in any way.                                                                                 |
-| Rv32HintLoadByKey | 0x23         | `a,b,_`  | Look up the value by key `[r32{0}{a}:r32{0}{b}]_2` and prepend the value into `input_stream`. The logical value is `Vec<Vec<F>>`. The serialization of `Vec` follows the format `[length, <content>]`. Both length and content encoded as little-endian bytes. |
+| Name                                | Discriminant | Operands | Description                                                                                                                                            |
+| ----------------------------------- | ------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Rv32HintInput/Rv64HintInput         | 0x20         | `_`      | Pops a vector `hint` of field elements from the input stream and resets the hint stream to equal the vector `[(hint.len() as u32).to_le_bytes()), hint].concat()`. |
+| Rv32PrintStr/Rv64PrintStr           | 0x21         | `a,b,_`  | Peeks at `[rXLEN{0}(a):rXLEN{0}(b)]_2`, tries to convert to byte array and then UTF-8 string and prints to host stdout. Prints error message if conversion fails. Does not change any VM state. |
+| Rv32HintRandom/Rv64HintRandom       | 0x22         | `a,_,_`  | Resets the hint stream to `LIMBS * rXLEN{0}(a)` random bytes. The source of randomness is deterministic using a fixed-seed RNG (`rand::rngs::StdRng`). Its result is not constrained in any way. |
+| Rv32HintLoadByKey/Rv64HintLoadByKey | 0x23         | `a,b,_`  | Look up the value by key `[rXLEN{0}(a):rXLEN{0}(b)]_2` and prepend the value into `input_stream`. The logical value is `Vec<Vec<F>>`. The serialization of `Vec` follows the format `[length, <content>]`. Both length and content encoded as little-endian bytes. |
+
 ### Native Extension
 
 The native extension operates over native field elements and has instructions tailored for STARK proof recursion. It
@@ -463,7 +483,7 @@ reads but not allowed for writes. When using immediates, we interpret `[a]_0` as
 | STOREW       | `a,b,c,4,4` | Set `[[c]_4 + b]_4 = [a]_4`.                                                                                                                                                                                                                                                               |
 | LOADW4       | `a,b,c,4,4` | Set `[a:4]_4 = [[c]_4 + b:4]_4`.                                                                                                                                                                                                                                                           |
 | STOREW4      | `a,b,c,4,4` | Set `[[c]_4 + b:4]_4 = [a:4]_4`.                                                                                                                                                                                                                                                           |
-| JAL          | `a,b,_,4`   | Jump to address and link: set `[a]_4 = (pc + DEFAU````LT````_PC_STEP)` and `pc = pc + b`.                                                                                                                                                                                                          |
+| JAL          | `a,b,_,4`   | Jump to address and link: set `[a]_4 = (pc + DEFAULT_PC_STEP)` and `pc = pc + b`.                                                                                                                                                                                                          |
 | RANGE_CHECK  | `a,b,c,4`   | Assert that `[a]_4 = x + y * 2^16` for some `x < 2^b` and `y < 2^c`. `b` must be in [0,16] and `c` must be in [0, 14].                                                                                                                                                                     |
 | BEQ          | `a,b,c,d,e` | If `[a]_d == [b]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                               |
 | BNE          | `a,b,c,d,e` | If `[a]_d != [b]_e`, then set `pc = pc + c`.                                                                                                                                                                                                                                               |
