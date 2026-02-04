@@ -19,6 +19,7 @@ pub mod inner {
         },
         engine::{StarkFriEngine, VerificationDataWithFriParams},
     };
+    use stark_backend_v2::{BabyBearPoseidon2CpuEngineV2, SystemParams};
 
     use super::*;
     use crate::{hints::Hintable, stark::VerifierProgram, types::new_from_inner_multi_vk};
@@ -52,10 +53,7 @@ pub mod inner {
     /// 3. Execute the verifier program and generate a proof.
     ///
     /// This is a convenience function with default configs for testing purposes only.
-    pub fn run_recursive_test(
-        test_proof_input: ProofInputForTest<BabyBearPoseidon2Config>,
-        fri_params: FriParameters,
-    ) {
+    pub fn run_recursive_test(test_proof_input: ProofInputForTest<BabyBearPoseidon2Config>) {
         let vparams = test_proof_input
             .run_test(&BabyBearPoseidon2Engine::new(
                 FriParameters::new_for_testing(1),
@@ -64,8 +62,8 @@ pub mod inner {
 
         let compiler_options = CompilerOptions::default();
         let (program, witness_stream) = build_verification_program(vparams, compiler_options);
-        air_test_impl::<BabyBearPoseidon2Engine, _>(
-            fri_params,
+        air_test_impl::<BabyBearPoseidon2CpuEngineV2, _>(
+            SystemParams::new_for_testing(20),
             NativeCpuBuilder,
             test_native_config(),
             program,

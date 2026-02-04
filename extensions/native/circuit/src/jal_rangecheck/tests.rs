@@ -28,7 +28,6 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
-    verifier::VerificationError,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -282,7 +281,6 @@ fn run_negative_jal_range_check_test(
     b: Option<u32>,
     c: Option<u32>,
     prank_vals: JalRangeCheckPrankValues,
-    error: VerificationError,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default_native();
@@ -328,7 +326,9 @@ fn run_negative_jal_range_check_test(
         .build()
         .load_and_prank_trace(harness, modify_trace)
         .finalize();
-    tester.simple_test_with_expected_error(error);
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -342,7 +342,6 @@ fn negative_range_check_test() {
             b: Some(1),
             ..Default::default()
         },
-        VerificationError::ChallengePhaseError,
     );
     run_negative_jal_range_check_test(
         RANGE_CHECK.global_opcode(),
@@ -353,7 +352,6 @@ fn negative_range_check_test() {
             c: Some(0),
             ..Default::default()
         },
-        VerificationError::ChallengePhaseError,
     );
     run_negative_jal_range_check_test(
         RANGE_CHECK.global_opcode(),
@@ -364,7 +362,6 @@ fn negative_range_check_test() {
             a_val: Some(1 << 30),
             ..Default::default()
         },
-        VerificationError::ChallengePhaseError,
     );
     run_negative_jal_range_check_test(
         RANGE_CHECK.global_opcode(),
@@ -375,7 +372,6 @@ fn negative_range_check_test() {
             y: Some(1),
             ..Default::default()
         },
-        VerificationError::ChallengePhaseError,
     );
 }
 
@@ -390,6 +386,5 @@ fn negative_jal_test() {
             b: Some(0),
             ..Default::default()
         },
-        VerificationError::ChallengePhaseError,
     );
 }
