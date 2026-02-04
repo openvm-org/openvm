@@ -48,6 +48,8 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
+const REM_WORD_NUM_ZERO_LIMBS: usize = 2;
+
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
 pub struct Rv32HintStoreCols<T> {
@@ -198,13 +200,16 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
         // Preventing rem_words overflow: rem_words < 2^MAX_HINT_BUFFER_WORDS_BITS
         // These constraints only work for MAX_HINT_BUFFER_WORDS_BITS in [16, 23]
         debug_assert!(
-            (16..=23).contains(&MAX_HINT_BUFFER_WORDS_BITS),
+            (8..16).contains(&MAX_HINT_BUFFER_WORDS_BITS),
             "MAX_HINT_BUFFER_WORDS_BITS must be in [16, 23] for these constraints to work"
         );
-        // For MAX_HINT_BUFFER_WORDS_BITS = 18, this requires:
-        // - limbs[3] = 0 (since 2^18 < 2^24)
-        // - limbs[2] < 4 (since 2^18 = 4 * 2^16)
-        builder.assert_zero(local_cols.rem_words_limbs[RV32_REGISTER_NUM_LIMBS - 1]);
+        // For MAX_HINT_BUFFER_WORDS_BITS = 10, this requires:
+        // - limbs[3] = 0 (since 2^10 < 2^24)
+        // - limbs[2] = 0 (since 2^10 < 2^16)
+        // - limbs[1] < 4 (since 2^10 = 4 * 2^8)
+        for i in 1..=REM_WORD_NUM_ZERO_LIMBS {
+            builder.assert_zero(local_cols.rem_words_limbs[RV32_REGISTER_NUM_LIMBS - i]);
+        }
 
         // Preventing mem_ptr overflow: mem_ptr < 2^pointer_max_bits
         // (rem_words overflow is handled below with the stricter MAX_HINT_BUFFER_WORDS_BITS bound)
@@ -214,9 +219,9 @@ impl<AB: InteractionBuilder> Air<AB> for Rv32HintStoreAir {
                     * AB::F::from_usize(
                         1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits),
                     ),
-                local_cols.rem_words_limbs[RV32_REGISTER_NUM_LIMBS - 2]
+                local_cols.rem_words_limbs[RV32_REGISTER_NUM_LIMBS - 1 - REM_WORD_NUM_ZERO_LIMBS]
                     * AB::F::from_usize(
-                        1 << ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS
+                        1 << ((RV32_REGISTER_NUM_LIMBS - REM_WORD_NUM_ZERO_LIMBS) * RV32_CELL_BITS
                             - MAX_HINT_BUFFER_WORDS_BITS),
                     ),
             )
@@ -521,8 +526,9 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
             (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits) as u32;
 
         // Scale factors for rem_words range check (using MAX_HINT_BUFFER_WORDS_BITS)
-        let rem_words_limb2_lshift: u32 =
-            ((RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS - MAX_HINT_BUFFER_WORDS_BITS) as u32;
+        let rem_words_msl_lshift: u32 = ((RV32_REGISTER_NUM_LIMBS - REM_WORD_NUM_ZERO_LIMBS)
+            * RV32_CELL_BITS
+            - MAX_HINT_BUFFER_WORDS_BITS) as u32;
 
         chunks
             .par_iter_mut()
@@ -552,7 +558,11 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
                 );
                 self.bitwise_lookup_chip.request_range(
                     (record.inner.mem_ptr >> msl_rshift) << msl_lshift,
-                    ((num_words >> 16) & 0xFF) << rem_words_limb2_lshift,
+                    ((num_words
+                        >> (RV32_CELL_BITS
+                            * (RV32_REGISTER_NUM_LIMBS - 1 - REM_WORD_NUM_ZERO_LIMBS)))
+                        & 0xFF)
+                        << rem_words_msl_lshift,
                 );
 
                 let mut timestamp = record.inner.timestamp + num_words * 3;
