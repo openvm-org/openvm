@@ -194,7 +194,7 @@ mod tests {
 
         // Create data with a pattern that can be verified
         let data: Vec<F> = (0..expected_len)
-            .map(|i| F::from_canonical_u8((i % 256) as u8))
+            .map(|i| F::from_u8((i % 256) as u8))
             .collect();
 
         let input = vec![data];
