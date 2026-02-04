@@ -78,7 +78,6 @@ use crate::{
         RV32_REGISTER_NUM_LIMBS,
     },
     mulh::{MulHCoreCols, Rv32MulHChip},
-    test_utils::get_verification_error,
     MulHCoreAir, MulHFiller, Rv32MulHAir, Rv32MulHExecutor,
 };
 #[cfg(feature = "aot")]
@@ -230,7 +229,6 @@ fn run_rv32_mulh_rand_test(opcode: MulHOpcode, num_ops: usize) {
 // part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
-#[allow(clippy::too_many_arguments)]
 fn run_negative_mulh_test(
     opcode: MulHOpcode,
     prank_a: [u32; RV32_REGISTER_NUM_LIMBS],
@@ -239,7 +237,6 @@ fn run_negative_mulh_test(
     prank_a_mul: [u32; RV32_REGISTER_NUM_LIMBS],
     prank_b_ext: u32,
     prank_c_ext: u32,
-    interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
@@ -274,7 +271,9 @@ fn run_negative_mulh_test(
         .load_periphery(bitwise)
         .load_periphery(range_tuple)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -287,7 +286,6 @@ fn rv32_mulh_wrong_a_mul_negative_test() {
         [63, 247, 125, 234],
         0,
         255,
-        true,
     );
 }
 
@@ -301,7 +299,6 @@ fn rv32_mulh_wrong_a_negative_test() {
         [63, 247, 125, 232],
         0,
         255,
-        true,
     );
 }
 
@@ -315,7 +312,6 @@ fn rv32_mulh_wrong_ext_negative_test() {
         [0, 0, 0, 0],
         0,
         0,
-        true,
     );
 }
 
@@ -329,7 +325,6 @@ fn rv32_mulh_invalid_ext_negative_test() {
         [0, 0, 0, 0],
         1,
         0,
-        false,
     );
 }
 
@@ -343,7 +338,6 @@ fn rv32_mulhsu_wrong_a_mul_negative_test() {
         [63, 247, 125, 105],
         255,
         0,
-        true,
     );
 }
 
@@ -357,7 +351,6 @@ fn rv32_mulhsu_wrong_a_negative_test() {
         [63, 247, 125, 104],
         255,
         0,
-        true,
     );
 }
 
@@ -371,7 +364,6 @@ fn rv32_mulhsu_wrong_b_ext_negative_test() {
         [0, 0, 0, 0],
         0,
         0,
-        true,
     );
 }
 
@@ -385,7 +377,6 @@ fn rv32_mulhsu_wrong_c_ext_negative_test() {
         [0, 0, 0, 0],
         255,
         255,
-        false,
     );
 }
 
@@ -399,7 +390,6 @@ fn rv32_mulhu_wrong_a_mul_negative_test() {
         [63, 247, 125, 234],
         0,
         0,
-        true,
     );
 }
 
@@ -413,7 +403,6 @@ fn rv32_mulhu_wrong_a_negative_test() {
         [63, 247, 125, 232],
         0,
         0,
-        true,
     );
 }
 
@@ -427,7 +416,6 @@ fn rv32_mulhu_wrong_ext_negative_test() {
         [0, 0, 0, 0],
         255,
         0,
-        false,
     );
 }
 

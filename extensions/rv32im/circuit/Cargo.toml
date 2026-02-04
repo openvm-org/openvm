@@ -18,6 +18,7 @@ openvm-circuit = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-rv32im-transpiler = { workspace = true }
+stark-backend-v2 = { workspace = true }
 strum.workspace = true
 derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
