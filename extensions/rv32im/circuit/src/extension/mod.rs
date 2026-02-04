@@ -31,12 +31,11 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
 };
 use serde::{Deserialize, Serialize};
-use strum::IntoEnumIterator;
-
 use stark_backend_v2::{
     prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
     StarkEngineV2 as StarkEngine,
 };
+use strum::IntoEnumIterator;
 
 use crate::{adapters::*, *};
 

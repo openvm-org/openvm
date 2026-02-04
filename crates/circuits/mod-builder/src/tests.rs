@@ -567,7 +567,7 @@ fn test_tracestep_tracefiller_roundtrip() {
         generate_random_biguint(&prime),
     ];
 
-    let vars_direct = expr.execute(inputs.clone(), vec![]);
+    let vars_direct = expr.execute(&inputs, &[]);
 
     // Test record creation and reconstruction roundtrip
     let mut buffer = vec![0u8; 1024];
@@ -587,7 +587,7 @@ fn test_tracestep_tracefiller_roundtrip() {
         .chunks(expr.canonical_num_limbs())
         .map(BigUint::from_bytes_le)
         .collect();
-    let vars_reconstructed = expr.execute(reconstructed_inputs, vec![]);
+    let vars_reconstructed = expr.execute(&reconstructed_inputs, &[]);
 
     // All intermediate variables must be preserved
     assert_eq!(vars_direct.len(), vars_reconstructed.len());
