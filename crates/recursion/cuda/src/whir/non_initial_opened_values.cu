@@ -22,7 +22,7 @@ template <typename T> struct NonInitialOpenedValuesCols {
     T zi;
     T twiddle;
     T value[D_EF];
-    T value_hash[WIDTH];
+    T value_hash[CHUNK];
     T yi[D_EF];
 };
 
@@ -77,8 +77,7 @@ __global__ void non_initial_opened_values_tracegen(
 
     // Use query_offsets for proper indexing into flattened arrays
     const size_t per_proof_offset = proof_idx * total_queries;
-    const size_t round_query_idx =
-        per_proof_offset + query_offsets[whir_round] + query_idx;
+    const size_t round_query_idx = per_proof_offset + query_offsets[whir_round] + query_idx;
 
     COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, is_enabled, Fp::one());
     COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, proof_idx, proof_idx);
@@ -89,10 +88,7 @@ __global__ void non_initial_opened_values_tracegen(
     COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, is_first_in_round, is_first_in_round);
     COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, is_first_in_query, is_first_in_query);
     COL_WRITE_VALUE(
-        row,
-        NonInitialOpenedValuesCols,
-        merkle_idx_bit_src,
-        raw_queries[round_query_idx]
+        row, NonInitialOpenedValuesCols, merkle_idx_bit_src, raw_queries[round_query_idx]
     );
     COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, zi_root, zi_roots[round_query_idx]);
     COL_WRITE_VALUE(row, NonInitialOpenedValuesCols, zi, zis[round_query_idx]);

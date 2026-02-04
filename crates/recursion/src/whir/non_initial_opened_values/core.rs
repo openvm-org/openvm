@@ -11,12 +11,17 @@ use p3_field::{FieldAlgebra, FieldExtensionAlgebra, TwoAdicField};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
-    D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, poseidon2::WIDTH, proof::Proof,
+    D_EF, F,
+    keygen::types::MultiStarkVerifyingKeyV2,
+    poseidon2::{CHUNK, WIDTH},
+    proof::Proof,
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::{MerkleVerifyBus, MerkleVerifyBusMessage, Poseidon2Bus, Poseidon2BusMessage},
+    bus::{
+        MerkleVerifyBus, MerkleVerifyBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
+    },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     whir::bus::{VerifyQueryBus, VerifyQueryBusMessage, WhirFoldingBus, WhirFoldingBusMessage},
@@ -41,14 +46,14 @@ pub(in crate::whir::non_initial_opened_values) struct NonInitialOpenedValuesCols
     zi: T,
     twiddle: T,
     value: [T; D_EF],
-    value_hash: [T; WIDTH],
+    value_hash: [T; CHUNK],
     yi: [T; D_EF],
 }
 
 pub struct NonInitialOpenedValuesAir {
     pub verify_query_bus: VerifyQueryBus,
     pub folding_bus: WhirFoldingBus,
-    pub poseidon_bus: Poseidon2Bus,
+    pub poseidon2_compress_bus: Poseidon2CompressBus,
     pub merkle_verify_bus: MerkleVerifyBus,
     pub k: usize,
     pub initial_log_domain_size: usize,
@@ -198,9 +203,9 @@ where
                 AB::Expr::ZERO
             }
         });
-        self.poseidon_bus.lookup_key(
+        self.poseidon2_compress_bus.lookup_key(
             builder,
-            Poseidon2BusMessage {
+            Poseidon2CompressMessage {
                 input: pre_state,
                 output: local.value_hash.map(Into::into),
             },
@@ -211,7 +216,7 @@ where
             builder,
             local.proof_idx,
             MerkleVerifyBusMessage {
-                value: from_fn(|i| local.value_hash[i].into()),
+                value: local.value_hash.map(Into::into),
                 merkle_idx: local.merkle_idx_bit_src.into(),
                 // There are two parts: hashing leaves (depth k) and merkle proof
                 total_depth: AB::Expr::from_canonical_usize(self.initial_log_domain_size + 1)
@@ -289,7 +294,9 @@ pub(crate) fn generate_trace(
             cols.is_first_in_round = F::from_bool(is_first_in_round);
             cols.is_first_in_query = F::from_bool(is_first_in_query);
             cols.zi_root = preflight.whir.zj_roots[whir_round][query_idx];
-            cols.value_hash = preflight.codeword_states[whir_round - 1][query_idx][coset_idx];
+            cols.value_hash.copy_from_slice(
+                &preflight.codeword_states[whir_round - 1][query_idx][coset_idx][..CHUNK],
+            );
             let value =
                 &proof.whir_proof.codeword_opened_values[whir_round - 1][query_idx][coset_idx];
             cols.value.copy_from_slice(value.as_base_slice());

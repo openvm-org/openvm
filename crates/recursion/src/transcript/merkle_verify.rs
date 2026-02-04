@@ -15,7 +15,7 @@ use p3_matrix::Matrix;
 use stark_backend_v2::{
     DIGEST_SIZE, F, SystemParams,
     keygen::types::MultiStarkVerifyingKeyV2,
-    poseidon2::{CHUNK, sponge::poseidon2_compress_with_capacity},
+    poseidon2::{CHUNK, sponge::poseidon2_compress},
     proof::Proof,
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -23,7 +23,7 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 use crate::{
     bus::{
         CommitmentsBus, CommitmentsBusMessage, MerkleVerifyBus, MerkleVerifyBusMessage,
-        Poseidon2Bus, Poseidon2BusMessage,
+        Poseidon2CompressBus, Poseidon2CompressMessage,
     },
     system::Preflight,
 };
@@ -80,7 +80,7 @@ pub struct MerkleVerifyCols<T> {
     pub commit_major: T,
     pub commit_minor: T,
 
-    pub output: [T; POSEIDON2_WIDTH],
+    pub compression_output: [T; DIGEST_SIZE],
 }
 
 #[derive(Clone, Debug)]
@@ -95,7 +95,7 @@ struct MerkleVerifyLog {
 }
 
 pub struct MerkleVerifyAir {
-    pub poseidon2_bus: Poseidon2Bus,
+    pub poseidon2_compress_bus: Poseidon2CompressBus,
     pub merkle_verify_bus: MerkleVerifyBus,
     pub commitments_bus: CommitmentsBus,
 }
@@ -204,13 +204,6 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
             },
             local.is_valid * local.recv_right,
         );
-        let send_value = array::from_fn(|i| {
-            if i < CHUNK {
-                local.output[i].into()
-            } else {
-                AB::Expr::ZERO
-            }
-        });
         // At "combining leaves" part, the idx is the same for all the rows.
         // Otherwise the idx should be half of the previous idx, which is just next.idx.
         let send_merkle_idx = local.idx * local.is_combining_leaves
@@ -219,7 +212,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
             builder,
             local.proof_idx,
             MerkleVerifyBusMessage {
-                value: send_value,
+                value: local.compression_output.map(Into::into),
                 merkle_idx: send_merkle_idx,
                 total_depth: local.total_depth.into(),
                 height: local.height + AB::Expr::ONE,
@@ -248,11 +241,11 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
                 local.right[i - CHUNK].into()
             }
         });
-        self.poseidon2_bus.lookup_key(
+        self.poseidon2_compress_bus.lookup_key(
             builder,
-            Poseidon2BusMessage {
+            Poseidon2CompressMessage {
                 input: poseidon2_input,
-                output: local.output.map(Into::into),
+                output: local.compression_output.map(Into::into),
             },
             local.is_valid,
         );
@@ -279,7 +272,7 @@ pub fn generate_trace(
     let k = params.k_whir();
     let width = MerkleVerifyCols::<F>::width();
     let num_leaves: usize = 1 << k;
-    let mut poseidon2_inputs = vec![];
+    let mut poseidon2_compress_inputs = vec![];
     let logs_per_proof = preflights
         .iter()
         .map(|preflight| build_merkle_logs(preflight, params))
@@ -402,10 +395,9 @@ pub fn generate_trace(
                 leaf_tree[combination_indices.source_layer][combination_indices.left_source_index];
             cols.right =
                 leaf_tree[combination_indices.source_layer][combination_indices.right_source_index];
-            let (output, capacity) = poseidon2_compress_with_capacity(cols.left, cols.right);
+            let output = poseidon2_compress(cols.left, cols.right);
             leaf_tree[combination_indices.result_layer][combination_indices.result_index] = output;
-            cols.output[..DIGEST_SIZE].copy_from_slice(&output);
-            cols.output[DIGEST_SIZE..].copy_from_slice(&capacity);
+            cols.compression_output = output;
 
             cols.idx = F::from_canonical_usize(merkle_idx); // const idx for leaves part
             cols.idx_parity = F::from_canonical_usize(merkle_idx % 2);
@@ -416,7 +408,7 @@ pub fn generate_trace(
             let mut input_state = [F::ZERO; POSEIDON2_WIDTH];
             input_state[..DIGEST_SIZE].copy_from_slice(&cols.left);
             input_state[DIGEST_SIZE..].copy_from_slice(&cols.right);
-            poseidon2_inputs.push(input_state);
+            poseidon2_compress_inputs.push(input_state);
 
             cols.is_combining_leaves = F::ONE;
             cols.leaf_sub_idx = F::from_canonical_usize(combination_indices.result_index);
@@ -448,13 +440,12 @@ pub fn generate_trace(
                 cols.recv_right = F::ONE;
             }
 
-            let (output, capacity) = poseidon2_compress_with_capacity(cols.left, cols.right);
-            cols.output[..DIGEST_SIZE].copy_from_slice(&output);
-            cols.output[DIGEST_SIZE..].copy_from_slice(&capacity);
+            let output = poseidon2_compress(cols.left, cols.right);
+            cols.compression_output = output;
             let mut input_state = [F::ZERO; POSEIDON2_WIDTH];
             input_state[..DIGEST_SIZE].copy_from_slice(&cols.left);
             input_state[DIGEST_SIZE..].copy_from_slice(&cols.right);
-            poseidon2_inputs.push(input_state);
+            poseidon2_compress_inputs.push(input_state);
 
             cols.idx = F::from_canonical_usize(cur_idx);
             cols.idx_parity = F::from_canonical_usize(cur_idx % 2);
@@ -466,7 +457,7 @@ pub fn generate_trace(
         }
     }
 
-    (trace, poseidon2_inputs)
+    (trace, poseidon2_compress_inputs)
 }
 
 fn build_merkle_logs(preflight: &Preflight, params: &SystemParams) -> Vec<MerkleVerifyLog> {
