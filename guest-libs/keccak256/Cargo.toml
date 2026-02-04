@@ -11,9 +11,15 @@ license.workspace = true
 
 [dependencies]
 openvm-keccak256-guest = { workspace = true }
+tiny-keccak = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "zkvm")'.dependencies]
+spin = { workspace = true, features = ["mutex", "spin_mutex"] }
 
 [dev-dependencies]
+hex = { workspace = true }
 openvm-instructions = { workspace = true }
+openvm-sdk = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils", "parallel"] }
 openvm-transpiler = { workspace = true }
@@ -23,9 +29,9 @@ openvm-rv32im-transpiler = { workspace = true }
 openvm-toolchain-tests = { workspace = true }
 eyre = { workspace = true }
 
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
-tiny-keccak = { workspace = true }
-
 [features]
+default = ["tiny_keccak"]
 # Internal feature for testing only.
 cuda = ["openvm-keccak256-circuit/cuda"]
+# Enable tiny_keccak::Hasher trait implementation
+tiny_keccak = ["dep:tiny-keccak"]
