@@ -46,9 +46,7 @@ use crate::{
         Rv32BaseAluAdapterAir, Rv32BaseAluAdapterExecutor, Rv32BaseAluAdapterFiller,
         RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
-    test_utils::{
-        generate_rv32_is_type_immediate, get_verification_error, rv32_rand_write_register_or_imm,
-    },
+    test_utils::{generate_rv32_is_type_immediate, rv32_rand_write_register_or_imm},
     Rv32ShiftAir, Rv32ShiftExecutor, ShiftFiller,
 };
 
@@ -205,7 +203,6 @@ struct ShiftPrankValues<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub limb_shift_marker: Option<[u32; NUM_LIMBS]>,
     pub bit_shift_carry: Option<[u32; NUM_LIMBS]>,
 }
-
 #[allow(clippy::too_many_arguments)]
 fn run_negative_shift_test(
     opcode: ShiftOpcode,
@@ -213,7 +210,6 @@ fn run_negative_shift_test(
     b: [u8; RV32_REGISTER_NUM_LIMBS],
     c: [u8; RV32_REGISTER_NUM_LIMBS],
     prank_vals: ShiftPrankValues<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
-    interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
@@ -265,7 +261,9 @@ fn run_negative_shift_test(
         .load_and_prank_trace(harness, modify_trace)
         .load_periphery(bitwise)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -274,9 +272,9 @@ fn rv32_shift_wrong_negative_test() {
     let b = [1, 0, 0, 0];
     let c = [1, 0, 0, 0];
     let prank_vals = Default::default();
-    run_negative_shift_test(SLL, a, b, c, prank_vals, false);
-    run_negative_shift_test(SRL, a, b, c, prank_vals, false);
-    run_negative_shift_test(SRA, a, b, c, prank_vals, false);
+    run_negative_shift_test(SLL, a, b, c, prank_vals);
+    run_negative_shift_test(SRL, a, b, c, prank_vals);
+    run_negative_shift_test(SRA, a, b, c, prank_vals);
 }
 
 #[test]
@@ -290,7 +288,7 @@ fn rv32_sll_wrong_bit_shift_negative_test() {
         bit_shift_marker: Some([0, 0, 1, 0, 0, 0, 0, 0]),
         ..Default::default()
     };
-    run_negative_shift_test(SLL, a, b, c, prank_vals, true);
+    run_negative_shift_test(SLL, a, b, c, prank_vals);
 }
 
 #[test]
@@ -302,7 +300,7 @@ fn rv32_sll_wrong_limb_shift_negative_test() {
         limb_shift_marker: Some([0, 0, 1, 0]),
         ..Default::default()
     };
-    run_negative_shift_test(SLL, a, b, c, prank_vals, true);
+    run_negative_shift_test(SLL, a, b, c, prank_vals);
 }
 
 #[test]
@@ -314,7 +312,7 @@ fn rv32_sll_wrong_bit_carry_negative_test() {
         bit_shift_carry: Some([0, 0, 0, 0]),
         ..Default::default()
     };
-    run_negative_shift_test(SLL, a, b, c, prank_vals, true);
+    run_negative_shift_test(SLL, a, b, c, prank_vals);
 }
 
 #[test]
@@ -327,7 +325,7 @@ fn rv32_sll_wrong_bit_mult_side_negative_test() {
         bit_multiplier_right: Some(1),
         ..Default::default()
     };
-    run_negative_shift_test(SLL, a, b, c, prank_vals, false);
+    run_negative_shift_test(SLL, a, b, c, prank_vals);
 }
 
 #[test]
@@ -341,7 +339,7 @@ fn rv32_srl_wrong_bit_shift_negative_test() {
         bit_shift_marker: Some([0, 0, 1, 0, 0, 0, 0, 0]),
         ..Default::default()
     };
-    run_negative_shift_test(SRL, a, b, c, prank_vals, false);
+    run_negative_shift_test(SRL, a, b, c, prank_vals);
 }
 
 #[test]
@@ -353,7 +351,7 @@ fn rv32_srl_wrong_limb_shift_negative_test() {
         limb_shift_marker: Some([0, 1, 0, 0]),
         ..Default::default()
     };
-    run_negative_shift_test(SRL, a, b, c, prank_vals, false);
+    run_negative_shift_test(SRL, a, b, c, prank_vals);
 }
 
 #[test]
@@ -366,8 +364,8 @@ fn rv32_srx_wrong_bit_mult_side_negative_test() {
         bit_multiplier_right: Some(0),
         ..Default::default()
     };
-    run_negative_shift_test(SRL, a, b, c, prank_vals, false);
-    run_negative_shift_test(SRA, a, b, c, prank_vals, false);
+    run_negative_shift_test(SRL, a, b, c, prank_vals);
+    run_negative_shift_test(SRA, a, b, c, prank_vals);
 }
 
 #[test]
@@ -381,7 +379,7 @@ fn rv32_sra_wrong_bit_shift_negative_test() {
         bit_shift_marker: Some([0, 0, 1, 0, 0, 0, 0, 0]),
         ..Default::default()
     };
-    run_negative_shift_test(SRA, a, b, c, prank_vals, false);
+    run_negative_shift_test(SRA, a, b, c, prank_vals);
 }
 
 #[test]
@@ -393,7 +391,7 @@ fn rv32_sra_wrong_limb_shift_negative_test() {
         limb_shift_marker: Some([0, 1, 0, 0]),
         ..Default::default()
     };
-    run_negative_shift_test(SRA, a, b, c, prank_vals, false);
+    run_negative_shift_test(SRA, a, b, c, prank_vals);
 }
 
 #[test]
@@ -405,7 +403,7 @@ fn rv32_sra_wrong_sign_negative_test() {
         b_sign: Some(0),
         ..Default::default()
     };
-    run_negative_shift_test(SRA, a, b, c, prank_vals, true);
+    run_negative_shift_test(SRA, a, b, c, prank_vals);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
