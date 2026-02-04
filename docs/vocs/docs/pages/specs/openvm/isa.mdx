@@ -362,20 +362,23 @@ we define the shorthand `r32{c}(b)` to mean `r32{c,g}(b)` where `g` is set to th
 Memory access to `ptr: i32` in address space `e` is only valid if `0 <= ptr < 2^addr_max_bits` and
 `ptr` is naturally aligned (i.e., `ptr` must be divisible by the data size in bytes), in
 which case it is an access to `F::from_canonical_u32(ptr as u32)`.
-The data size is `1` for LOADB_RV32, LOADBU_RV32, STOREB_RV32, `2` for LOADH_RV32, LOADHU_RV32, STOREH_RV32, and `4` for LOADW_RV32, STOREW_RV32.
+The data size is `1` for LOADB_RV32/LOADB_RV64, LOADBU_RV32/LOADBU_RV64, STOREB_RV32/STOREB_RV64, `2` for LOADH_RV32/LOADH_RV64, LOADHU_RV32/LOADHU_RV64, STOREH_RV32/STOREH_RV64, `4` for LOADW_RV32/LOADW_RV64, LOADWU_RV64, STOREW_RV32/STOREW_RV64, and `8` for LOADD_RV64, STORED_RV64.
 
-All load/store instructions always do block accesses of block size `4`, even for LOADB_RV32 and STOREB_RV32.
+All load/store instructions always do block accesses of block size `LIMBS`, even for LOADB/STOREB.
 
-| Name        | Operands        | Description                                                                                                                                                                         |
-| ----------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| LOADB_RV32  | `a,b,c,1,e,f,g` | `if(f!=0) [a:4]_1 = sign_extend([r32{c,g}(b):1]_e)` The operand `f` is assumed to be boolean. Must sign-extend the byte read from memory, which is represented in 2’s complement.   |
-| LOADH_RV32  | `a,b,c,1,e,f,g` | `if(f!=0) [a:4]_1 = sign_extend([r32{c,g}(b):2]_e)` The operand `f` is assumed to be boolean. Must sign-extend the number read from memory, which is represented in 2’s complement. |
-| LOADW_RV32  | `a,b,c,1,e,f,g` | `if(f!=0) [a:4]_1 = [r32{c,g}(b):4]_e` The operand `f` is assumed to be boolean.                                                                                                    |
-| LOADBU_RV32 | `a,b,c,1,e,f,g` | `if(f!=0) [a:4]_1 = zero_extend([r32{c,g}(b):1]_e)` The operand `f` is assumed to be boolean. Must zero-extend the number read from memory.                                         |
-| LOADHU_RV32 | `a,b,c,1,e,f,g` | `if(f!=0) [a:4]_1 = zero_extend([r32{c,g}(b):2]_e)` The operand `f` is assumed to be boolean. Must zero-extend the number read from memory.                                         |
-| STOREB_RV32 | `a,b,c,1,e,1,g` | `[r32{c,g}(b):1]_e <- [a:1]_1`                                                                                                                                                      |
-| STOREH_RV32 | `a,b,c,1,e,1,g` | `[r32{c,g}(b):2]_e <- [a:2]_1`                                                                                                                                                      |
-| STOREW_RV32 | `a,b,c,1,e,1,g` | `[r32{c,g}(b):4]_e <- [a:4]_1`                                                                                                                                                      |
+| Name                        | Operands        | Description                                                                                                                                                                         |
+| --------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| LOADB_RV32/LOADB_RV64       | `a,b,c,1,e,f,g` | `if(f!=0) [a:LIMBS]_1 = sign_extend([r32{c,g}(b):1]_e)` The operand `f` is assumed to be boolean. Must sign-extend the byte read from memory, which is represented in 2's complement.   |
+| LOADH_RV32/LOADH_RV64       | `a,b,c,1,e,f,g` | `if(f!=0) [a:LIMBS]_1 = sign_extend([r32{c,g}(b):2]_e)` The operand `f` is assumed to be boolean. Must sign-extend the number read from memory, which is represented in 2's complement. |
+| LOADW_RV32/LOADW_RV64       | `a,b,c,1,e,f,g` | `if(f!=0) [a:LIMBS]_1 = sign_extend([r32{c,g}(b):4]_e)` The operand `f` is assumed to be boolean. For RV64, sign-extends the 32-bit value to 64 bits.                               |
+| LOADD_RV64                  | `a,b,c,1,e,f,g` | `if(f!=0) [a:8]_1 = [r32{c,g}(b):8]_e` RV64 only. The operand `f` is assumed to be boolean.                                                                                         |
+| LOADBU_RV32/LOADBU_RV64     | `a,b,c,1,e,f,g` | `if(f!=0) [a:LIMBS]_1 = zero_extend([r32{c,g}(b):1]_e)` The operand `f` is assumed to be boolean. Must zero-extend the number read from memory.                                     |
+| LOADHU_RV32/LOADHU_RV64     | `a,b,c,1,e,f,g` | `if(f!=0) [a:LIMBS]_1 = zero_extend([r32{c,g}(b):2]_e)` The operand `f` is assumed to be boolean. Must zero-extend the number read from memory.                                     |
+| LOADWU_RV64                 | `a,b,c,1,e,f,g` | `if(f!=0) [a:8]_1 = zero_extend([r32{c,g}(b):4]_e)` RV64 only. The operand `f` is assumed to be boolean. Zero-extends the 32-bit value to 64 bits.                                  |
+| STOREB_RV32/STOREB_RV64     | `a,b,c,1,e,1,g` | `[r32{c,g}(b):1]_e <- [a:1]_1`                                                                                                                                                      |
+| STOREH_RV32/STOREH_RV64     | `a,b,c,1,e,1,g` | `[r32{c,g}(b):2]_e <- [a:2]_1`                                                                                                                                                      |
+| STOREW_RV32/STOREW_RV64     | `a,b,c,1,e,1,g` | `[r32{c,g}(b):4]_e <- [a:4]_1`                                                                                                                                                      |
+| STORED_RV64                 | `a,b,c,1,e,1,g` | `[r32{c,g}(b):8]_e <- [a:8]_1` RV64 only.                                                                                                                                           |
 
 #### Branch/Jump/Upper Immediate
 
