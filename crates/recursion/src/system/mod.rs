@@ -27,9 +27,9 @@ use crate::{
         AirShapeBus, BatchConstraintModuleBus, CachedCommitBus, ColumnClaimsBus, CommitmentsBus,
         ConstraintSumcheckRandomnessBus, DagCommitBus, EqNegBaseRandBus, EqNegResultBus,
         ExpressionClaimNMaxBus, FractionFolderInputBus, GkrModuleBus, HyperdimBus,
-        LiftedHeightsBus, MerkleVerifyBus, Poseidon2Bus, PublicValuesBus, SelUniBus,
-        StackingIndicesBus, StackingModuleBus, TranscriptBus, WhirModuleBus, WhirOpeningPointBus,
-        XiRandomnessBus,
+        LiftedHeightsBus, MerkleVerifyBus, Poseidon2CompressBus, Poseidon2PermuteBus,
+        PublicValuesBus, SelUniBus, StackingIndicesBus, StackingModuleBus, TranscriptBus,
+        WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::{
@@ -164,7 +164,8 @@ impl BusIndexManager {
 pub struct BusInventory {
     // Control flow buses
     pub transcript_bus: TranscriptBus,
-    pub poseidon2_bus: Poseidon2Bus,
+    pub poseidon2_permute_bus: Poseidon2PermuteBus,
+    pub poseidon2_compress_bus: Poseidon2CompressBus,
     pub merkle_verify_bus: MerkleVerifyBus,
     pub gkr_module_bus: GkrModuleBus,
     pub bc_module_bus: BatchConstraintModuleBus,
@@ -212,7 +213,8 @@ pub struct Preflight {
     pub batch_constraint: BatchConstraintPreflight,
     pub stacking: StackingPreflight,
     pub whir: WhirPreflight,
-    pub poseidon_inputs: Vec<[F; WIDTH]>,
+    pub poseidon2_perm_inputs: Vec<[F; WIDTH]>,
+    pub poseidon2_compress_inputs: Vec<[F; WIDTH]>,
     pub initial_row_states: Vec<Vec<Vec<Vec<[F; WIDTH]>>>>,
     /// Indexed by [round][query][coset]. Stores post-permutation state.
     pub codeword_states: Vec<Vec<Vec<[F; WIDTH]>>>,
@@ -293,7 +295,8 @@ impl BusInventory {
     pub(crate) fn new(b: &mut BusIndexManager) -> Self {
         Self {
             transcript_bus: TranscriptBus::new(b.new_bus_idx()),
-            poseidon2_bus: Poseidon2Bus::new(b.new_bus_idx()),
+            poseidon2_permute_bus: Poseidon2PermuteBus::new(b.new_bus_idx()),
+            poseidon2_compress_bus: Poseidon2CompressBus::new(b.new_bus_idx()),
             merkle_verify_bus: MerkleVerifyBus::new(b.new_bus_idx()),
 
             // Control flow buses
@@ -343,7 +346,8 @@ pub struct PoseidonStatePair {
 }
 
 struct MerklePrecomputation {
-    poseidon_inputs: Vec<[F; WIDTH]>,
+    poseidon2_perm_inputs: Vec<[F; WIDTH]>,
+    poseidon2_compress_inputs: Vec<[F; WIDTH]>,
     initial_row_states: Vec<Vec<Vec<Vec<[F; WIDTH]>>>>,
     codeword_states: Vec<Vec<Vec<[F; WIDTH]>>>,
 }
@@ -525,7 +529,8 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         #[cfg(not(feature = "cuda"))]
         let merkle_precomputation = Self::compute_merkle_precomputation(proof);
 
-        preflight.poseidon_inputs = merkle_precomputation.poseidon_inputs;
+        preflight.poseidon2_perm_inputs = merkle_precomputation.poseidon2_perm_inputs;
+        preflight.poseidon2_compress_inputs = merkle_precomputation.poseidon2_compress_inputs;
         preflight.initial_row_states = merkle_precomputation.initial_row_states;
         preflight.codeword_states = merkle_precomputation.codeword_states;
 
@@ -549,7 +554,10 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             .map(|r| r.iter().map(|q| q.len()).sum::<usize>())
             .sum();
 
-        let mut poseidon_inputs = Vec::with_capacity(initial_chunks + codeword_chunks);
+        // InitialOpenedValuesAir (initial_row_states) does Poseidon2 *permute* lookups per chunk.
+        // NonInitialOpenedValuesAir (codeword_states) does Poseidon2 *compress* lookups per value.
+        let mut poseidon2_perm_inputs = Vec::with_capacity(initial_chunks);
+        let mut poseidon2_compress_inputs = Vec::with_capacity(codeword_chunks);
 
         let initial_row_states: Vec<Vec<Vec<Vec<[F; WIDTH]>>>> = proof
             .whir_proof
@@ -564,7 +572,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
                             .map(|opened_row| {
                                 let (_leaf_hash, pre_states, post_states) =
                                     poseidon2_hash_slice_with_states(opened_row);
-                                poseidon_inputs.extend(pre_states);
+                                poseidon2_perm_inputs.extend(pre_states);
                                 post_states
                             })
                             .collect()
@@ -586,7 +594,9 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
                             .map(|opened_value| {
                                 let (_leaf_hash, pre_states, post_states) =
                                     poseidon2_hash_slice_with_states(opened_value.as_base_slice());
-                                poseidon_inputs.extend(pre_states);
+                                // This is not quite a compression, but the AIR will constrain that the padded
+                                // pre_state gets compressed into _leaf_hash via Poseidon2CompressBus.
+                                poseidon2_compress_inputs.extend(pre_states);
                                 debug_assert_eq!(post_states.len(), 1);
                                 post_states.into_iter().next().unwrap()
                             })
@@ -597,7 +607,8 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             .collect();
 
         MerklePrecomputation {
-            poseidon_inputs,
+            poseidon2_perm_inputs,
+            poseidon2_compress_inputs,
             initial_row_states,
             codeword_states,
         }
@@ -629,6 +640,8 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             total_data_len += row.len();
             total_chunks += num_chunks(row.len());
         }
+        let num_perm_chunks = total_chunks;
+
         for opened_value in proof
             .whir_proof
             .codeword_opened_values
@@ -707,8 +720,13 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         debug_assert_eq!(pre_states_flat.len(), total_chunks * WIDTH);
         debug_assert_eq!(post_states_flat.len(), total_chunks * WIDTH);
 
-        // Reshape pre_states into poseidon_inputs
-        let poseidon_inputs: Vec<[F; WIDTH]> = pre_states_flat
+        // Split pre_states into poseidon permute and compress inputs
+        let (perm_flat, compress_flat) = pre_states_flat.split_at(num_perm_chunks * WIDTH);
+        let poseidon2_perm_inputs: Vec<[F; WIDTH]> = perm_flat
+            .chunks_exact(WIDTH)
+            .map(|chunk| chunk.try_into().unwrap())
+            .collect();
+        let poseidon2_compress_inputs: Vec<[F; WIDTH]> = compress_flat
             .chunks_exact(WIDTH)
             .map(|chunk| chunk.try_into().unwrap())
             .collect();
@@ -767,7 +785,8 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         debug_assert_eq!(post_iter.len(), 0);
 
         MerklePrecomputation {
-            poseidon_inputs,
+            poseidon2_perm_inputs,
+            poseidon2_compress_inputs,
             initial_row_states,
             codeword_states,
         }

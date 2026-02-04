@@ -1,11 +1,45 @@
+#include "fp.h"
 #include "launcher.cuh"
+#include "poseidon2-air/columns.cuh"
 #include "poseidon2-air/params.cuh"
 #include "poseidon2-air/tracegen.cuh"
 #include "primitives/fp_array.cuh"
 #include "primitives/trace_access.h"
-#include "primitives/utils.cuh"
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <cub/cub.cuh>
+#include <cub/device/device_merge_sort.cuh>
+#include <cub/device/device_reduce.cuh>
+#include <driver_types.h>
+
+struct Poseidon2Count {
+    uint32_t perm;
+    uint32_t compress;
+};
+
+struct Poseidon2CountCompose {
+    __device__ __forceinline__ Poseidon2Count
+    operator()(const Poseidon2Count &a, const Poseidon2Count &b) const {
+        return {a.perm + b.perm, a.compress + b.compress};
+    }
+};
+
+__global__ void fill_count_buffer(
+    Poseidon2Count *d_counts,
+    size_t num_prefix_perms,
+    size_t num_compress_inputs,
+    size_t num_suffix_perms
+) {
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < num_prefix_perms) {
+        d_counts[idx] = {1, 0};
+    } else if (idx < num_prefix_perms + num_compress_inputs) {
+        d_counts[idx] = {0, 1};
+    } else if (idx < num_prefix_perms + num_compress_inputs + num_suffix_perms) {
+        d_counts[idx] = {1, 0};
+    }
+}
 
 template <size_t WIDTH, typename PoseidonParams>
 __global__ void cukernel_poseidon2_tracegen(
@@ -13,7 +47,7 @@ __global__ void cukernel_poseidon2_tracegen(
     size_t trace_height,
     size_t trace_width,
     Fp *d_records,
-    uint32_t *d_counts,
+    Poseidon2Count *d_counts,
     size_t num_records
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -24,21 +58,22 @@ __global__ void cukernel_poseidon2_tracegen(
         PoseidonParams::HALF_FULL_ROUNDS,
         PoseidonParams::PARTIAL_ROUNDS>;
 #ifdef CUDA_DEBUG
-    assert(Poseidon2Row::get_total_size() + 1 == trace_width);
+    assert(Poseidon2Row::get_total_size() + 2 == trace_width);
 #endif
     if (idx < trace_height) {
         Poseidon2Row row(d_trace + idx, trace_height);
         if (idx < num_records) {
             RowSlice state(d_records + idx * WIDTH, 1);
             poseidon2::generate_trace_row_for_perm(row, state);
-
-            d_trace[idx + Poseidon2Row::get_total_size() * trace_height] = d_counts[idx];
+            auto count = d_counts[idx];
+            d_trace[idx + Poseidon2Row::get_total_size() * trace_height] = count.perm;
+            d_trace[idx + (Poseidon2Row::get_total_size() + 1) * trace_height] = count.compress;
         } else {
             Fp dummy[Poseidon2Row::get_total_size()] = {0};
             RowSlice dummy_row(dummy, 1);
             poseidon2::generate_trace_row_for_perm(row, dummy_row);
-
             d_trace[idx + Poseidon2Row::get_total_size() * trace_height] = 0;
+            d_trace[idx + (Poseidon2Row::get_total_size() + 1) * trace_height] = 0;
         }
     }
 }
@@ -48,7 +83,7 @@ extern "C" int _poseidon2_tracegen(
     size_t height,
     size_t width,
     Fp *d_records,
-    uint32_t *d_counts,
+    Poseidon2Count *d_counts,
     size_t num_records,
     size_t sbox_regs
 ) {
@@ -76,25 +111,19 @@ extern "C" int _poseidon2_tracegen(
 // size necessary for both cub functions (i.e. sort and reduce).
 extern "C" int _poseidon2_deduplicate_records_get_temp_bytes(
     Fp *d_records,
-    uint32_t *d_counts,
+    Poseidon2Count *d_counts,
     size_t num_records,
     size_t *d_num_records,
     size_t *h_temp_bytes_out
 ) {
-    auto [grid, block] = kernel_launch_params(num_records);
     FpArray<16> *d_records_fp16 = reinterpret_cast<FpArray<16> *>(d_records);
 
-    // We want to sort and reduce the raw records, keeping track of how many
-    // each occurs in d_counts. To prepare for reduce we need to a) fill
-    // d_counts with 1s, and b) group keys together using sort. Note we do
-    // b) in the kernel below.
-    fill_buffer<uint32_t><<<grid, block>>>(d_counts, 1, num_records);
-
     size_t sort_storage_bytes = 0;
-    cub::DeviceMergeSort::SortKeys(
+    cub::DeviceMergeSort::SortPairs(
         nullptr,
         sort_storage_bytes,
         d_records_fp16,
+        d_counts,
         num_records,
         Fp16CompareOp(),
         cudaStreamPerThread
@@ -109,7 +138,7 @@ extern "C" int _poseidon2_deduplicate_records_get_temp_bytes(
         d_counts,
         d_counts,
         d_num_records,
-        std::plus(),
+        Poseidon2CountCompose{},
         num_records,
         cudaStreamPerThread
     );
@@ -124,21 +153,30 @@ extern "C" int _poseidon2_deduplicate_records_get_temp_bytes(
 // computed using _poseidon2_deduplicate_records_get_temp_bytes.
 extern "C" int _poseidon2_deduplicate_records(
     Fp *d_records,
-    uint32_t *d_counts,
+    Poseidon2Count *d_counts,
     size_t num_records,
     size_t *d_num_records,
+    size_t num_prefix_perms,
+    size_t num_compress_inputs,
+    size_t num_suffix_perms,
     void *d_temp_storage,
     size_t temp_storage_bytes
 ) {
+    auto [grid, block] = kernel_launch_params(num_records);
+    fill_count_buffer<<<grid, block, 0, cudaStreamPerThread>>>(
+        d_counts, num_prefix_perms, num_compress_inputs, num_suffix_perms
+    );
+
     FpArray<16> *d_records_fp16 = reinterpret_cast<FpArray<16> *>(d_records);
 
     // TODO: We currently can't use DeviceRadixSort since each key is 64 bytes
     // which causes Fp16Decomposer usage to exceed shared memory. We need to
     // investigate better ways to sort, as merge sort is comparison-based.
-    cub::DeviceMergeSort::SortKeys(
+    cub::DeviceMergeSort::SortPairs(
         d_temp_storage,
         temp_storage_bytes,
         d_records_fp16,
+        d_counts,
         num_records,
         Fp16CompareOp(),
         cudaStreamPerThread
@@ -155,7 +193,7 @@ extern "C" int _poseidon2_deduplicate_records(
         d_counts,
         d_counts,
         d_num_records,
-        std::plus(),
+        Poseidon2CountCompose{},
         num_records,
         cudaStreamPerThread
     );
