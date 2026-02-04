@@ -41,7 +41,6 @@ use crate::{
         RV32_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
     branch_eq::fast_run_eq,
-    test_utils::get_verification_error,
     BranchEqualCoreAir, BranchEqualFiller, Rv32BranchEqualAir, Rv32BranchEqualExecutor,
 };
 
@@ -174,14 +173,12 @@ fn rand_rv32_branch_eq_test(opcode: BranchEqualOpcode, num_ops: usize) {
 // part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
-#[allow(clippy::too_many_arguments)]
 fn run_negative_branch_eq_test(
     opcode: BranchEqualOpcode,
     a: [u8; RV32_REGISTER_NUM_LIMBS],
     b: [u8; RV32_REGISTER_NUM_LIMBS],
     prank_cmp_result: Option<bool>,
     prank_diff_inv_marker: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
-    interaction_error: bool,
 ) {
     let imm = 16i32;
     let mut rng = create_seeded_rng();
@@ -218,7 +215,9 @@ fn run_negative_branch_eq_test(
         .build()
         .load_and_prank_trace(harness, modify_trace)
         .finalize();
-    tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -229,7 +228,6 @@ fn rv32_beq_wrong_cmp_negative_test() {
         [0, 0, 0, 7],
         Some(true),
         None,
-        false,
     );
 
     run_negative_branch_eq_test(
@@ -238,7 +236,6 @@ fn rv32_beq_wrong_cmp_negative_test() {
         [0, 0, 7, 0],
         Some(false),
         None,
-        false,
     );
 }
 
@@ -250,7 +247,6 @@ fn rv32_beq_zero_inv_marker_negative_test() {
         [0, 0, 0, 7],
         Some(true),
         Some([0, 0, 0, 0]),
-        false,
     );
 }
 
@@ -262,7 +258,6 @@ fn rv32_beq_invalid_inv_marker_negative_test() {
         [0, 0, 7, 0],
         Some(false),
         Some([0, 0, 1, 0]),
-        false,
     );
 }
 
@@ -274,7 +269,6 @@ fn rv32_bne_wrong_cmp_negative_test() {
         [0, 0, 0, 7],
         Some(false),
         None,
-        false,
     );
 
     run_negative_branch_eq_test(
@@ -283,7 +277,6 @@ fn rv32_bne_wrong_cmp_negative_test() {
         [0, 0, 7, 0],
         Some(true),
         None,
-        false,
     );
 }
 
@@ -295,7 +288,6 @@ fn rv32_bne_zero_inv_marker_negative_test() {
         [0, 0, 0, 7],
         Some(false),
         Some([0, 0, 0, 0]),
-        false,
     );
 }
 
@@ -307,7 +299,6 @@ fn rv32_bne_invalid_inv_marker_negative_test() {
         [0, 0, 7, 0],
         Some(true),
         Some([0, 0, 1, 0]),
-        false,
     );
 }
 
