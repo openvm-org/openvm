@@ -27,12 +27,12 @@ pub mod test_utils {
     use openvm_stark_backend::{
         config::Domain, p3_commit::PolynomialSpace, p3_field::PrimeField32,
     };
-    use openvm_stark_sdk::{
-        config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
-        engine::StarkFriEngine,
-        p3_baby_bear::BabyBear,
-    };
+    use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear};
     use rand::{rngs::StdRng, Rng};
+    use stark_backend_v2::{
+        BabyBearPoseidon2CpuEngineV2 as BabyBearPoseidon2Engine, StarkEngineV2 as StarkEngine,
+        StarkWhirEngine, SystemParams,
+    };
 
     use crate::{NativeConfig, NativeCpuBuilder, Rv32WithKernelsConfig};
 
@@ -83,7 +83,7 @@ pub mod test_utils {
         VirtualMachineError,
     >
     where
-        E: StarkFriEngine,
+        E: StarkWhirEngine + StarkEngine<SC = stark_backend_v2::SC>,
         Domain<E::SC>: PolynomialSpace<Val = BabyBear>,
         VB: VmBuilder<E, VmConfig = NativeConfig>,
         <VB::VmConfig as VmExecutionConfig<BabyBear>>::Executor:
@@ -93,7 +93,7 @@ pub mod test_utils {
         assert!(!config.as_ref().continuation_enabled);
         let input = input_stream.into();
 
-        let engine = E::new(FriParameters::new_for_testing(1));
+        let engine = E::new(SystemParams::new_for_testing(20));
         let exe = VmExe::new(program);
         let (vm, _) = VirtualMachine::new_with_keygen(engine, builder, config)?;
         let ctx = vm.build_metered_ctx(&exe);
