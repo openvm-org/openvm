@@ -1,41 +1,37 @@
 #![no_std]
 
-#[cfg(target_os = "zkvm")]
-use core::mem::MaybeUninit;
+use openvm_keccak256_guest::KECCAK_OUTPUT_SIZE;
 
-#[inline(always)]
-pub fn keccak256(input: &[u8]) -> [u8; 32] {
-    #[cfg(not(target_os = "zkvm"))]
-    {
-        let mut output = [0u8; 32];
-        set_keccak256(input, &mut output);
-        output
+#[cfg(not(any(target_os = "zkvm", feature = "tiny_keccak")))]
+compile_error!("Keccak256 requires the 'tiny_keccak' feature to be enabled on non-zkvm targets");
+
+#[cfg(not(target_os = "zkvm"))]
+mod host_impl;
+#[cfg(target_os = "zkvm")]
+mod zkvm_impl;
+
+#[cfg(not(target_os = "zkvm"))]
+pub use host_impl::{set_keccak256, Keccak256};
+#[cfg(target_os = "zkvm")]
+pub use zkvm_impl::{native_keccak256, set_keccak256, Keccak256};
+
+#[cfg(feature = "tiny_keccak")]
+impl tiny_keccak::Hasher for Keccak256 {
+    #[inline(always)]
+    fn update(&mut self, input: &[u8]) {
+        Keccak256::update(self, input);
     }
-    #[cfg(target_os = "zkvm")]
-    {
-        let mut output = MaybeUninit::<[u8; 32]>::uninit();
-        openvm_keccak256_guest::native_keccak256(
-            input.as_ptr(),
-            input.len(),
-            output.as_mut_ptr() as *mut u8,
-        );
-        unsafe { output.assume_init() }
+
+    #[inline(always)]
+    fn finalize(self, output: &mut [u8]) {
+        Keccak256::finalize(self, output);
     }
 }
 
-/// Sets `output` to the keccak256 hash of `input`.
-pub fn set_keccak256(input: &[u8], output: &mut [u8; 32]) {
-    #[cfg(not(target_os = "zkvm"))]
-    {
-        use tiny_keccak::Hasher;
-        let mut hasher = tiny_keccak::Keccak::v256();
-        hasher.update(input);
-        hasher.finalize(output);
-    }
-    #[cfg(target_os = "zkvm")]
-    openvm_keccak256_guest::native_keccak256(
-        input.as_ptr(),
-        input.len(),
-        output.as_mut_ptr() as *mut u8,
-    );
+/// Computes the keccak256 hash of the input.
+#[inline(always)]
+pub fn keccak256(input: &[u8]) -> [u8; KECCAK_OUTPUT_SIZE] {
+    let mut output = [0u8; KECCAK_OUTPUT_SIZE];
+    set_keccak256(input, &mut output);
+    output
 }
