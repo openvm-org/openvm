@@ -48,9 +48,7 @@ fn verifier_circuit_keygen<const MAX_NUM_PROOFS: usize>(
     MultiStarkProvingKey<BabyBearPoseidon2Config>,
 ) {
     let circuit = VerifierSubCircuit::new(Arc::new(child_vk.clone()));
-    let engine_v1 = BabyBearPoseidon2Engine::new(
-        FriParameters::standard_with_100_bits_conjectured_security(2),
-    );
+    let engine_v1 = BabyBearPoseidon2Engine::new(FriParameters::standard_with_100_bits_security(2));
     let mut keygen_builder = engine_v1.keygen_builder();
     for air in circuit.airs() {
         keygen_builder.add_air(air);
