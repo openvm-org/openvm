@@ -1,7 +1,7 @@
 use core::borrow::BorrowMut;
 
 use openvm_stark_backend::p3_maybe_rayon::prelude::*;
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
+use p3_field::{BasedVectorSpace, PrimeCharacteristicRing};
 use p3_matrix::dense::RowMajorMatrix;
 use stark_backend_v2::{D_EF, EF, F, poly_common::interpolate_cubic_at_0123};
 
@@ -113,8 +113,8 @@ pub fn generate_trace(
                 let row_data = &mut proof_trace[..width];
                 let cols: &mut GkrLayerSumcheckCols<F> = row_data.borrow_mut();
                 cols.is_enabled = F::ONE;
-                cols.tidx = F::from_canonical_usize(D_EF);
-                cols.proof_idx = F::from_canonical_usize(proof_idx);
+                cols.tidx = F::from_usize(D_EF);
+                cols.proof_idx = F::from_usize(proof_idx);
                 cols.layer_idx = F::ONE;
                 cols.is_first_round = F::ONE;
                 cols.is_proof_start = F::ONE;
@@ -148,16 +148,24 @@ pub fn generate_trace(
                         &record.ris,
                     );
 
-                    let prev_challenge_base: [F; D_EF] =
-                        prev_challenge.as_base_slice().try_into().unwrap();
-                    let challenge_base: [F; D_EF] = challenge.as_base_slice().try_into().unwrap();
+                    let prev_challenge_base: [F; D_EF] = prev_challenge
+                        .as_basis_coefficients_slice()
+                        .try_into()
+                        .unwrap();
+                    let challenge_base: [F; D_EF] =
+                        challenge.as_basis_coefficients_slice().try_into().unwrap();
 
-                    let eval1_base: [F; D_EF] = evals[0].as_base_slice().try_into().unwrap();
-                    let eval2_base: [F; D_EF] = evals[1].as_base_slice().try_into().unwrap();
-                    let eval3_base: [F; D_EF] = evals[2].as_base_slice().try_into().unwrap();
+                    let eval1_base: [F; D_EF] =
+                        evals[0].as_basis_coefficients_slice().try_into().unwrap();
+                    let eval2_base: [F; D_EF] =
+                        evals[1].as_basis_coefficients_slice().try_into().unwrap();
+                    let eval3_base: [F; D_EF] =
+                        evals[2].as_basis_coefficients_slice().try_into().unwrap();
 
-                    let claim_in_base: [F; D_EF] = claim.as_base_slice().try_into().unwrap();
-                    let eq_in_base: [F; D_EF] = eq.as_base_slice().try_into().unwrap();
+                    let claim_in_base: [F; D_EF] =
+                        claim.as_basis_coefficients_slice().try_into().unwrap();
+                    let eq_in_base: [F; D_EF] =
+                        eq.as_basis_coefficients_slice().try_into().unwrap();
 
                     let ev0 = claim - evals[0];
                     let evals_full = [ev0, evals[0], evals[1], evals[2]];
@@ -166,17 +174,19 @@ pub fn generate_trace(
                         + (EF::ONE - prev_challenge) * (EF::ONE - challenge);
                     let eq_out = eq * eq_factor;
 
-                    let claim_out_base: [F; D_EF] = claim_out.as_base_slice().try_into().unwrap();
-                    let eq_out_base: [F; D_EF] = eq_out.as_base_slice().try_into().unwrap();
+                    let claim_out_base: [F; D_EF] =
+                        claim_out.as_basis_coefficients_slice().try_into().unwrap();
+                    let eq_out_base: [F; D_EF] =
+                        eq_out.as_basis_coefficients_slice().try_into().unwrap();
 
                     let cols: &mut GkrLayerSumcheckCols<F> = row_iter.next().unwrap().borrow_mut();
                     cols.is_enabled = F::ONE;
-                    cols.proof_idx = F::from_canonical_usize(proof_idx);
+                    cols.proof_idx = F::from_usize(proof_idx);
 
-                    cols.layer_idx = F::from_canonical_usize(layer_idx_value);
+                    cols.layer_idx = F::from_usize(layer_idx_value);
                     cols.is_last_layer = F::from_bool(is_last_layer);
 
-                    cols.round = F::from_canonical_usize(round_in_layer);
+                    cols.round = F::from_usize(round_in_layer);
                     cols.is_first_round = F::from_bool(round_in_layer == 0);
                     cols.is_proof_start = F::from_bool(layer_idx_value == 1 && round_in_layer == 0);
 
@@ -184,7 +194,7 @@ pub fn generate_trace(
                         F::from_bool(global_round_idx + 1 != total_rounds);
 
                     let tidx = record.derive_tidx(layer_idx, round_in_layer);
-                    cols.tidx = F::from_canonical_usize(tidx);
+                    cols.tidx = F::from_usize(tidx);
 
                     cols.ev1 = eval1_base;
                     cols.ev2 = eval2_base;

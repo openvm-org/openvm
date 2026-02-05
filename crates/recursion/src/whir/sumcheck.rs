@@ -7,7 +7,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra, extension::BinomiallyExtendable};
+use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, extension::BinomiallyExtendable};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
@@ -83,12 +83,15 @@ impl<F> BaseAir<F> for SumcheckAir {
 
 impl<AB: AirBuilder<F = F> + InteractionBuilder> Air<AB> for SumcheckAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &SumcheckCols<AB::Var> = (*local).borrow();
         let next: &SumcheckCols<AB::Var> = (*next).borrow();
 
@@ -132,9 +135,9 @@ where
 
         builder
             .when(local.is_enabled - is_same_round.clone())
-            .assert_eq(local.subidx, AB::Expr::from_canonical_usize(self.k - 1));
+            .assert_eq(local.subidx, AB::Expr::from_usize(self.k - 1));
 
-        let sumcheck_idx = local.whir_round * AB::Expr::from_canonical_usize(self.k) + local.subidx;
+        let sumcheck_idx = local.whir_round * AB::Expr::from_usize(self.k) + local.subidx;
         self.sumcheck_bus.receive(
             builder,
             proof_idx,
@@ -162,10 +165,8 @@ where
             next.post_group_claim,
             local.post_group_claim,
         );
-        when_sumcheck_transition.assert_eq(
-            next.tidx,
-            local.tidx + AB::Expr::from_canonical_usize(3 * D_EF + 2),
-        );
+        when_sumcheck_transition
+            .assert_eq(next.tidx, local.tidx + AB::Expr::from_usize(3 * D_EF + 2));
         assert_array_eq(
             &mut when_sumcheck_transition,
             next.eq_partial,
@@ -183,28 +184,28 @@ where
         self.transcript_bus.observe_ext(
             builder,
             proof_idx,
-            local.tidx + AB::Expr::from_canonical_usize(D_EF),
+            local.tidx + AB::Expr::from_usize(D_EF),
             local.ev2,
             is_enabled,
         );
         self.transcript_bus.observe(
             builder,
             proof_idx,
-            local.tidx + AB::Expr::from_canonical_usize(2 * D_EF),
+            local.tidx + AB::Expr::from_usize(2 * D_EF),
             local.folding_pow_witness,
             is_enabled,
         );
         self.transcript_bus.sample(
             builder,
             proof_idx,
-            local.tidx + AB::Expr::from_canonical_usize(2 * D_EF + 1),
+            local.tidx + AB::Expr::from_usize(2 * D_EF + 1),
             local.folding_pow_sample,
             is_enabled,
         );
         self.transcript_bus.sample_ext(
             builder,
             proof_idx,
-            local.tidx + AB::Expr::from_canonical_usize(2 * D_EF + 2),
+            local.tidx + AB::Expr::from_usize(2 * D_EF + 2),
             local.alpha,
             is_enabled,
         );
@@ -214,7 +215,7 @@ where
             ExpBitsLenMessage {
                 base: self.generator.into(),
                 bit_src: local.folding_pow_sample.into(),
-                num_bits: AB::Expr::from_canonical_usize(self.folding_pow_bits),
+                num_bits: AB::Expr::from_usize(self.folding_pow_bits),
                 result: AB::Expr::ONE,
             },
             is_enabled,
@@ -315,34 +316,38 @@ pub(crate) fn generate_trace(
 
             let cols: &mut SumcheckCols<F> = row.borrow_mut();
             cols.is_enabled = F::ONE;
-            cols.proof_idx = F::from_canonical_usize(proof_idx);
+            cols.proof_idx = F::from_usize(proof_idx);
             cols.is_first_in_proof = F::from_bool(i == 0);
             cols.is_first_in_round = F::from_bool(is_first_in_group);
-            cols.whir_round = F::from_canonical_usize(whir_round);
-            cols.subidx = F::from_canonical_usize(j);
-            cols.tidx = F::from_canonical_usize(tidx);
+            cols.whir_round = F::from_usize(whir_round);
+            cols.subidx = F::from_usize(j);
+            cols.tidx = F::from_usize(tidx);
             let sumcheck_polys = &proof.whir_proof.whir_sumcheck_polys[i];
-            cols.ev1.copy_from_slice(sumcheck_polys[0].as_base_slice());
-            cols.ev2.copy_from_slice(sumcheck_polys[1].as_base_slice());
+            cols.ev1
+                .copy_from_slice(sumcheck_polys[0].as_basis_coefficients_slice());
+            cols.ev2
+                .copy_from_slice(sumcheck_polys[1].as_basis_coefficients_slice());
             cols.folding_pow_witness = proof.whir_proof.folding_pow_witnesses[i];
             cols.folding_pow_sample = whir.folding_pow_samples[i];
             cols.eq_partial
-                .copy_from_slice(whir.eq_partials[i].as_base_slice());
-            cols.alpha.copy_from_slice(whir.alphas[i].as_base_slice());
-            cols.u
-                .copy_from_slice(whir_opening_point_per_proof[proof_idx][i].as_base_slice());
+                .copy_from_slice(whir.eq_partials[i].as_basis_coefficients_slice());
+            cols.alpha
+                .copy_from_slice(whir.alphas[i].as_basis_coefficients_slice());
+            cols.u.copy_from_slice(
+                whir_opening_point_per_proof[proof_idx][i].as_basis_coefficients_slice(),
+            );
             cols.pre_claim.copy_from_slice(
                 if is_first_in_group {
                     whir.initial_claim_per_round[whir_round]
                 } else {
                     whir.post_sumcheck_claims[i - 1]
                 }
-                .as_base_slice(),
+                .as_basis_coefficients_slice(),
             );
-            cols.post_group_claim
-                .copy_from_slice(whir.post_sumcheck_claims[last_group_row_idx].as_base_slice());
-            cols.alpha_lookup_count =
-                F::from_canonical_usize(alpha_lookup_counts[whir_round * k_whir + j]);
+            cols.post_group_claim.copy_from_slice(
+                whir.post_sumcheck_claims[last_group_row_idx].as_basis_coefficients_slice(),
+            );
+            cols.alpha_lookup_count = F::from_usize(alpha_lookup_counts[whir_round * k_whir + j]);
         });
 
     RowMajorMatrix::new(trace, width)

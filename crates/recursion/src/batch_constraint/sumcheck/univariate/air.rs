@@ -10,7 +10,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{FieldAlgebra, TwoAdicField, extension::BinomiallyExtendable};
+use p3_field::{PrimeCharacteristicRing, TwoAdicField, extension::BinomiallyExtendable};
 use p3_matrix::Matrix;
 use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -78,11 +78,14 @@ impl<F> BaseAir<F> for UnivariateSumcheckAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UnivariateSumcheckAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF> + TwoAdicField,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF> + TwoAdicField,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &UnivariateSumcheckCols<AB::Var> = (*local).borrow();
         let next: &UnivariateSumcheckCols<AB::Var> = (*next).borrow();
 
@@ -118,10 +121,9 @@ where
         let is_last = local.is_valid - is_transition.clone();
 
         // Coeff index starts at univariate degree
-        builder.when(local.is_first).assert_eq(
-            local.coeff_idx,
-            AB::Expr::from_canonical_usize(self.univariate_deg),
-        );
+        builder
+            .when(local.is_first)
+            .assert_eq(local.coeff_idx, AB::Expr::from_usize(self.univariate_deg));
         // Coeff index decrements by 1
         builder
             .when(is_transition.clone())
@@ -133,9 +135,9 @@ where
         // Powers of omega constraints
         ///////////////////////////////////////////////////////////////////////
 
-        let omega_skip = AB::Expr::from_f(<AB::Expr as FieldAlgebra>::F::two_adic_generator(
-            self.l_skip,
-        ));
+        let omega_skip = AB::Expr::from_prime_subfield(
+            <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield::two_adic_generator(self.l_skip),
+        );
 
         // Omega power ends at 1
         builder
@@ -163,7 +165,7 @@ where
         // Sum over Roots Constraints
         ///////////////////////////////////////////////////////////////////////
 
-        let domain_size = AB::Expr::from_canonical_usize(1 << self.l_skip);
+        let domain_size = AB::Expr::from_usize(1 << self.l_skip);
 
         // Initialize sum over roots
         assert_array_eq(
@@ -219,7 +221,7 @@ where
 
         builder
             .when(is_transition.clone())
-            .assert_eq(next.tidx, local.tidx - AB::Expr::from_canonical_usize(D_EF));
+            .assert_eq(next.tidx, local.tidx - AB::Expr::from_usize(D_EF));
 
         ///////////////////////////////////////////////////////////////////////
         // Interactions
@@ -229,7 +231,7 @@ where
         self.transcript_bus.sample_ext(
             builder,
             local.proof_idx,
-            local.tidx + AB::Expr::from_canonical_usize(D_EF),
+            local.tidx + AB::Expr::from_usize(D_EF),
             local.r,
             local.is_first,
         );
@@ -255,7 +257,7 @@ where
             local.proof_idx,
             StackingModuleMessage {
                 // Skip r
-                tidx: local.tidx + AB::Expr::from_canonical_usize(2 * D_EF),
+                tidx: local.tidx + AB::Expr::from_usize(2 * D_EF),
             },
             local.is_first,
         );

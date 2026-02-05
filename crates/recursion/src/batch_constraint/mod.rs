@@ -8,7 +8,7 @@ use openvm_stark_backend::{
     keygen::types::TraceWidth,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, TwoAdicField};
+use p3_field::{BasedVectorSpace, Field, PrimeCharacteristicRing, TwoAdicField};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use stark_backend_v2::{
@@ -532,7 +532,7 @@ impl BatchConstraintBlob {
                             Entry::Permutation { .. } => unreachable!(),
                             Entry::Public => {
                                 expr_evals[node_idx] =
-                                    EF::from_base(proof.public_values[air_idx][var.index]);
+                                    EF::from(proof.public_values[air_idx][var.index]);
                             }
                             Entry::Challenge => unreachable!(),
                             Entry::Exposed => unreachable!(),
@@ -551,7 +551,7 @@ impl BatchConstraintBlob {
                             selector_counts[log_height].transition += 1;
                         }
                         SymbolicExpressionNode::Constant(val) => {
-                            expr_evals[node_idx] = EF::from_base(*val);
+                            expr_evals[node_idx] = EF::from(*val);
                         }
                         SymbolicExpressionNode::Add {
                             left_idx,

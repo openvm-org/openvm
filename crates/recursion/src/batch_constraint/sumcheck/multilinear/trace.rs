@@ -1,6 +1,6 @@
 use std::borrow::BorrowMut;
 
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra, batch_multiplicative_inverse};
+use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, batch_multiplicative_inverse};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
@@ -31,7 +31,7 @@ pub(crate) fn generate_trace(
 
     let mut factorials = vec![F::ONE; s_deg + 1];
     for i in 1..=s_deg {
-        factorials[i] = factorials[i - 1] * F::from_canonical_usize(i);
+        factorials[i] = factorials[i - 1] * F::from_usize(i);
     }
     let invfact = batch_multiplicative_inverse(&factorials);
     let denom_inv: Vec<F> = (0..=s_deg)
@@ -67,7 +67,7 @@ pub(crate) fn generate_trace(
                 let cols: &mut MultilinearSumcheckCols<F> = rows[..width].borrow_mut();
                 cols.is_valid = F::ONE;
                 cols.is_dummy = F::ONE;
-                cols.proof_idx = F::from_canonical_usize(pidx);
+                cols.proof_idx = F::from_usize(pidx);
                 cols.is_proof_start = F::ONE;
                 cols.is_first_eval = F::ONE;
                 cols.prefix_product[0] = F::ONE;
@@ -98,14 +98,14 @@ pub(crate) fn generate_trace(
 
                     let cols: &mut MultilinearSumcheckCols<F> = chunk.borrow_mut();
                     cols.is_valid = F::ONE;
-                    cols.proof_idx = F::from_canonical_usize(pidx);
-                    cols.round_idx = F::from_canonical_usize(round_idx);
+                    cols.proof_idx = F::from_usize(pidx);
+                    cols.round_idx = F::from_usize(round_idx);
                     cols.is_proof_start = F::from_bool(round_idx == 0 && eval_idx == 0);
                     cols.is_first_eval = F::from_bool(eval_idx == 0);
                     cols.nested_for_loop_aux_cols.is_transition[0] =
                         F::from_bool(round_idx + 1 != n_rounds || eval_idx != s_deg);
-                    cols.eval_idx = F::from_canonical_usize(eval_idx);
-                    cols.tidx = F::from_canonical_usize(tidx_round + eval_idx * D_EF);
+                    cols.eval_idx = F::from_usize(eval_idx);
+                    cols.tidx = F::from_usize(tidx_round + eval_idx * D_EF);
                 });
 
             // Serial portion: compute dependent values round-by-round
@@ -123,13 +123,12 @@ pub(crate) fn generate_trace(
 
                 let mut prefix_products = vec![EF::ONE; rows_per_round];
                 for i in 0..s_deg {
-                    prefix_products[i + 1] = prefix_products[i] * (r - EF::from_canonical_usize(i));
+                    prefix_products[i + 1] = prefix_products[i] * (r - EF::from_usize(i));
                 }
 
                 let mut suffix_products = vec![EF::ONE; rows_per_round];
                 for i in (0..s_deg).rev() {
-                    suffix_products[i] =
-                        suffix_products[i + 1] * (EF::from_canonical_usize(i + 1) - r);
+                    suffix_products[i] = suffix_products[i + 1] * (EF::from_usize(i + 1) - r);
                 }
 
                 let mut round_sum = EF::ZERO;
@@ -144,14 +143,18 @@ pub(crate) fn generate_trace(
 
                     let chunk = row_iter.next().unwrap();
                     let cols: &mut MultilinearSumcheckCols<F> = chunk.borrow_mut();
-                    cols.eval.copy_from_slice(eval_ext.as_base_slice());
-                    cols.prefix_product.copy_from_slice(prefix.as_base_slice());
-                    cols.suffix_product.copy_from_slice(suffix.as_base_slice());
+                    cols.eval
+                        .copy_from_slice(eval_ext.as_basis_coefficients_slice());
+                    cols.prefix_product
+                        .copy_from_slice(prefix.as_basis_coefficients_slice());
+                    cols.suffix_product
+                        .copy_from_slice(suffix.as_basis_coefficients_slice());
                     cols.denom_inv = denom_inv;
                     cols.lagrange_coeff
-                        .copy_from_slice(lagrange_coeff.as_base_slice());
-                    cols.r.copy_from_slice(r.as_base_slice());
-                    cols.cur_sum.copy_from_slice(round_sum.as_base_slice());
+                        .copy_from_slice(lagrange_coeff.as_basis_coefficients_slice());
+                    cols.r.copy_from_slice(r.as_basis_coefficients_slice());
+                    cols.cur_sum
+                        .copy_from_slice(round_sum.as_basis_coefficients_slice());
                 }
 
                 cur_sum_ext = round_sum;

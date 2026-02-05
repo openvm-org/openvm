@@ -10,7 +10,7 @@ use openvm_stark_backend::{
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    Field, FieldAlgebra, FieldExtensionAlgebra, TwoAdicField, extension::BinomiallyExtendable,
+    BasedVectorSpace, Field, PrimeCharacteristicRing, TwoAdicField, extension::BinomiallyExtendable,
 };
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
@@ -75,12 +75,15 @@ impl<F> BaseAir<F> for EqSharpUniAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for EqSharpUniAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
     AB::Expr: From<F>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
 
         let local: &EqSharpUniCols<AB::Var> = (*local).borrow();
         let next: &EqSharpUniCols<AB::Var> = (*next).borrow();
@@ -204,7 +207,7 @@ where
         );
         builder.when(local.is_valid * local.is_first).assert_eq(
             local.xi_idx,
-            AB::Expr::from_canonical_usize(self.l_skip) - AB::Expr::ONE,
+            AB::Expr::from_usize(self.l_skip) - AB::Expr::ONE,
         );
         // When we drop iter_idx, xi_idx decreases
         builder
@@ -310,11 +313,14 @@ impl<F> BaseAir<F> for EqSharpUniReceiverAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for EqSharpUniReceiverAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
 
         let local: &EqSharpUniReceiverCols<AB::Var> = (*local).borrow();
         let next: &EqSharpUniReceiverCols<AB::Var> = (*next).borrow();
@@ -384,9 +390,7 @@ where
             },
             local.is_valid,
         );
-        let l_skip_inv: AB::Expr = AB::F::from_canonical_usize(1 << self.l_skip)
-            .inverse()
-            .into();
+        let l_skip_inv: AB::Expr = AB::F::from_usize(1 << self.l_skip).inverse().into();
         self.zero_n_bus.send(
             builder,
             local.proof_idx,
@@ -503,17 +507,18 @@ pub(crate) fn generate_eq_sharp_uni_trace(
                 cols.is_valid = F::ONE;
                 cols.is_first = F::from_bool(i == 0);
                 cols.is_last = F::from_bool(i + 1 == one_height);
-                cols.proof_idx = F::from_canonical_usize(pidx);
+                cols.proof_idx = F::from_usize(pidx);
                 cols.is_first_iter = F::ONE;
-                cols.xi_idx = F::from_canonical_u32(record.xi_idx);
-                cols.xi.copy_from_slice(record.xi.as_base_slice());
-                cols.iter_idx = F::from_canonical_u32(record.iter_idx);
+                cols.xi_idx = F::from_u32(record.xi_idx);
+                cols.xi
+                    .copy_from_slice(record.xi.as_basis_coefficients_slice());
+                cols.iter_idx = F::from_u32(record.iter_idx);
                 cols.is_first_iter = F::from_bool(record.iter_idx == 0);
                 cols.product_before
-                    .copy_from_slice(record.product.as_base_slice());
+                    .copy_from_slice(record.product.as_basis_coefficients_slice());
                 cols.root = record.root;
                 cols.root_pow = record.root_pow;
-                cols.root_half_order = F::from_canonical_u32(record.root_half_order);
+                cols.root_half_order = F::from_u32(record.root_half_order);
             });
     }
 
@@ -522,7 +527,7 @@ pub(crate) fn generate_eq_sharp_uni_trace(
         .enumerate()
         .for_each(|(i, chunk)| {
             let cols: &mut EqSharpUniCols<F> = chunk.borrow_mut();
-            cols.proof_idx = F::from_canonical_usize(preflights.len() + i);
+            cols.proof_idx = F::from_usize(preflights.len() + i);
             cols.is_first = F::ONE;
             cols.is_last = F::ONE;
         });
@@ -556,10 +561,11 @@ pub(crate) fn generate_eq_sharp_uni_receiver_trace(
                 cols.is_valid = F::ONE;
                 cols.is_first = F::from_bool(i == 0);
                 cols.is_last = F::from_bool(i + 1 == one_height);
-                cols.proof_idx = F::from_canonical_usize(pidx);
-                cols.coeff.copy_from_slice(product.as_base_slice());
-                cols.r.copy_from_slice(r.as_base_slice());
-                cols.idx = F::from_canonical_usize(i);
+                cols.proof_idx = F::from_usize(pidx);
+                cols.coeff
+                    .copy_from_slice(product.as_basis_coefficients_slice());
+                cols.r.copy_from_slice(r.as_basis_coefficients_slice());
+                cols.idx = F::from_usize(i);
             });
         let mut cur_sum = EF::ZERO;
         trace[(pidx * one_height * width)..((pidx + 1) * one_height * width)]
@@ -567,8 +573,9 @@ pub(crate) fn generate_eq_sharp_uni_receiver_trace(
             .rev()
             .for_each(|chunk| {
                 let cols: &mut EqSharpUniReceiverCols<_> = chunk.borrow_mut();
-                cur_sum = cur_sum * r + EF::from_base_slice(&cols.coeff);
-                cols.cur_sum.copy_from_slice(cur_sum.as_base_slice());
+                cur_sum = cur_sum * r + EF::from_basis_coefficients_slice(&cols.coeff).unwrap();
+                cols.cur_sum
+                    .copy_from_slice(cur_sum.as_basis_coefficients_slice());
             });
     }
 
@@ -577,7 +584,7 @@ pub(crate) fn generate_eq_sharp_uni_receiver_trace(
         .enumerate()
         .for_each(|(i, chunk)| {
             let cols: &mut EqSharpUniReceiverCols<F> = chunk.borrow_mut();
-            cols.proof_idx = F::from_canonical_usize(preflights.len() + i);
+            cols.proof_idx = F::from_usize(preflights.len() + i);
             cols.is_first = F::ONE;
             cols.is_last = F::ONE;
         });
