@@ -17,7 +17,7 @@ use the following assumptions in our soundness analysis:
 
 - We use proof-of-work grinding to increase bits of security as described in 
 [Section 3.11.3 of the ethSTARK paper](https://eprint.iacr.org/2021/582.pdf).
-- We use proof-of-work grinding to boost logUp soundness as described in
+- We use proof-of-work grinding to boost LogUp soundness as described in
 [Section 4 of our analysis](https://github.com/openvm-org/stark-backend/blob/main/docs/Soundness_of_Interactions_via_LogUp.pdf).
 - We analyze STARK soundness using theorems on batched FRI and DEEP-ALI with correlated agreement in the unique decoding regime (UDR).
 
@@ -40,7 +40,7 @@ These parameters are of three types:
 * **FRI parameters**: `log_blowup`, `num_queries`, `query_proof_of_work_bits`, and `commit_proof_of_work_bits` to control the soundness of the FRI
 argument used to generate proofs for the STARKs.
 * **LogUp parameters**: `max_interaction_count`, `log_max_message_length`, and `log_up_pow_bits` are parameters
-controlling the soundness of the logUp argument as described in [our soundness analysis](https://github.com/openvm-org/stark-backend/blob/main/docs/Soundness_of_Interactions_via_LogUp.pdf).
+controlling the soundness of the LogUp argument as described in [our soundness analysis](https://github.com/openvm-org/stark-backend/blob/main/docs/Soundness_of_Interactions_via_LogUp.pdf).
 * **DEEP-ALI parameters**: `deep_pow_bits` to control the soundness of the DEEP algebraic linking (DEEP-ALI) argument used in the STARK protocol.
 
 The concrete parameter values used by OpenVM are specified in the table below.
