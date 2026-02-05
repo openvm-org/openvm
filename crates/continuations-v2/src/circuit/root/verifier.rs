@@ -10,7 +10,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
-use p3_field::{Field, FieldAlgebra};
+use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use recursion_circuit::bus::{
     CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
@@ -75,7 +75,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local: &RootVerifierPvsCols<AB::Var> = (*local).borrow();
 
         /*
@@ -83,7 +83,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
          * the child public values not in RootVerifierPvs here. We start with is_terminate
          * exit code.
          */
-        let success = AB::F::from_canonical_u32(ExitCode::Success as u32);
+        let success = AB::F::from_u32(ExitCode::Success as u32);
         builder.assert_eq(local.child_pvs.exit_code, success);
         builder.assert_one(local.child_pvs.is_terminate);
 
@@ -121,8 +121,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
          * We still need to receive public values from ProofShapeModule to ensure the values
          * being read here are correct. All public values will be at VERIFIER_PVS_AIR_ID.
          */
-        let verifier_pvs_id = AB::Expr::from_canonical_usize(VERIFIER_PVS_AIR_ID);
-        let connector_pvs_offset = AB::Expr::from_canonical_usize(2 * DIGEST_SIZE);
+        let verifier_pvs_id = AB::Expr::from_usize(VERIFIER_PVS_AIR_ID);
+        let connector_pvs_offset = AB::Expr::from_usize(2 * DIGEST_SIZE);
 
         self.public_values_bus.receive(
             builder,
@@ -162,17 +162,16 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             AB::F::ZERO,
             PublicValuesBusMessage {
                 air_idx: verifier_pvs_id.clone(),
-                pv_idx: connector_pvs_offset.clone() + AB::F::from_canonical_u8(3),
+                pv_idx: connector_pvs_offset.clone() + AB::F::from_u8(3),
                 value: local.child_pvs.is_terminate.into(),
             },
             AB::F::ONE,
         );
 
-        let merkle_pvs_offset = connector_pvs_offset + AB::Expr::from_canonical_u8(4);
-        let verifier_pvs_offset =
-            merkle_pvs_offset.clone() + AB::F::from_canonical_usize(2 * DIGEST_SIZE);
+        let merkle_pvs_offset = connector_pvs_offset + AB::Expr::from_u8(4);
+        let verifier_pvs_offset = merkle_pvs_offset.clone() + AB::F::from_usize(2 * DIGEST_SIZE);
         let recursive_pvs_offset =
-            verifier_pvs_offset.clone() + AB::F::from_canonical_usize(1 + 3 * DIGEST_SIZE);
+            verifier_pvs_offset.clone() + AB::F::from_usize(1 + 3 * DIGEST_SIZE);
 
         self.public_values_bus.receive(
             builder,
@@ -202,7 +201,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                 AB::F::ZERO,
                 PublicValuesBusMessage {
                     air_idx: verifier_pvs_id.clone(),
-                    pv_idx: AB::Expr::from_canonical_usize(didx),
+                    pv_idx: AB::Expr::from_usize(didx),
                     value: local.child_pvs.user_pv_commit[didx].into(),
                 },
                 AB::F::ONE,
@@ -213,7 +212,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                 AB::F::ZERO,
                 PublicValuesBusMessage {
                     air_idx: verifier_pvs_id.clone(),
-                    pv_idx: AB::Expr::from_canonical_usize(didx + DIGEST_SIZE),
+                    pv_idx: AB::Expr::from_usize(didx + DIGEST_SIZE),
                     value: local.child_pvs.program_commit[didx].into(),
                 },
                 AB::F::ONE,
@@ -224,7 +223,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                 AB::F::ZERO,
                 PublicValuesBusMessage {
                     air_idx: verifier_pvs_id.clone(),
-                    pv_idx: merkle_pvs_offset.clone() + AB::F::from_canonical_usize(didx),
+                    pv_idx: merkle_pvs_offset.clone() + AB::F::from_usize(didx),
                     value: local.child_pvs.initial_root[didx].into(),
                 },
                 AB::F::ONE,
@@ -235,8 +234,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                 AB::F::ZERO,
                 PublicValuesBusMessage {
                     air_idx: verifier_pvs_id.clone(),
-                    pv_idx: merkle_pvs_offset.clone()
-                        + AB::F::from_canonical_usize(didx + DIGEST_SIZE),
+                    pv_idx: merkle_pvs_offset.clone() + AB::F::from_usize(didx + DIGEST_SIZE),
                     value: local.child_pvs.final_root[didx].into(),
                 },
                 AB::F::ONE,
@@ -247,7 +245,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                 AB::F::ZERO,
                 PublicValuesBusMessage {
                     air_idx: verifier_pvs_id.clone(),
-                    pv_idx: verifier_pvs_offset.clone() + AB::F::from_canonical_usize(didx + 1),
+                    pv_idx: verifier_pvs_offset.clone() + AB::F::from_usize(didx + 1),
                     value: local.child_pvs.app_vk_commit[didx].into(),
                 },
                 AB::F::ONE,
@@ -258,8 +256,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                 AB::F::ZERO,
                 PublicValuesBusMessage {
                     air_idx: verifier_pvs_id.clone(),
-                    pv_idx: verifier_pvs_offset.clone()
-                        + AB::F::from_canonical_usize(didx + DIGEST_SIZE + 1),
+                    pv_idx: verifier_pvs_offset.clone() + AB::F::from_usize(didx + DIGEST_SIZE + 1),
                     value: local.child_pvs.leaf_vk_commit[didx].into(),
                 },
                 AB::F::ONE,
@@ -271,7 +268,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                 PublicValuesBusMessage {
                     air_idx: verifier_pvs_id.clone(),
                     pv_idx: verifier_pvs_offset.clone()
-                        + AB::F::from_canonical_usize(didx + 2 * DIGEST_SIZE + 1),
+                        + AB::F::from_usize(didx + 2 * DIGEST_SIZE + 1),
                     value: local.child_pvs.internal_for_leaf_vk_commit[didx].into(),
                 },
                 AB::F::ONE,
@@ -282,7 +279,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                 AB::F::ZERO,
                 PublicValuesBusMessage {
                     air_idx: verifier_pvs_id.clone(),
-                    pv_idx: recursive_pvs_offset.clone() + AB::F::from_canonical_usize(didx + 1),
+                    pv_idx: recursive_pvs_offset.clone() + AB::F::from_usize(didx + 1),
                     value: local.child_pvs.internal_recursive_vk_commit[didx].into(),
                 },
                 AB::F::ONE,
@@ -299,8 +296,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             builder,
             AB::F::ZERO,
             CachedCommitBusMessage {
-                air_idx: AB::Expr::from_canonical_usize(CONSTRAINT_EVAL_AIR_ID),
-                cached_idx: AB::Expr::from_canonical_usize(CONSTRAINT_EVAL_CACHED_INDEX),
+                air_idx: AB::Expr::from_usize(CONSTRAINT_EVAL_AIR_ID),
+                cached_idx: AB::Expr::from_usize(CONSTRAINT_EVAL_CACHED_INDEX),
                 cached_commit: local.child_pvs.internal_recursive_vk_commit.map(Into::into),
             },
             AB::F::ONE,

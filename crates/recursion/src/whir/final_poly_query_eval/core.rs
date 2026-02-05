@@ -6,7 +6,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra, extension::BinomiallyExtendable};
+use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, extension::BinomiallyExtendable};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
@@ -76,19 +76,21 @@ impl<F> BaseAir<F> for FinalPolyQueryEvalAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for FinalPolyQueryEvalAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &FinalyPolyQueryEvalCols<AB::Var> = (*local).borrow();
         let next: &FinalyPolyQueryEvalCols<AB::Var> = (*next).borrow();
 
-        let k_whir_f = AB::Expr::from_canonical_usize(self.k_whir);
-        let eq_phase_len = k_whir_f.clone()
-            * (AB::Expr::from_canonical_usize(self.num_whir_rounds - 1) - local.whir_round);
-        let final_poly_phase_len =
-            AB::Expr::from_canonical_usize((1 << self.log_final_poly_len) - 1);
+        let k_whir_f = AB::Expr::from_usize(self.k_whir);
+        let eq_phase_len =
+            k_whir_f.clone() * (AB::Expr::from_usize(self.num_whir_rounds - 1) - local.whir_round);
+        let final_poly_phase_len = AB::Expr::from_usize((1 << self.log_final_poly_len) - 1);
 
         let round_base = (local.whir_round + AB::Expr::ONE) * k_whir_f;
 
@@ -249,7 +251,7 @@ where
             .when(is_same_round.clone())
             .assert_eq(local.is_last_round, next.is_last_round);
         builder
-            .when(local.whir_round - AB::Expr::from_canonical_usize(self.num_whir_rounds - 1))
+            .when(local.whir_round - AB::Expr::from_usize(self.num_whir_rounds - 1))
             .assert_zero(local.is_last_round);
 
         builder.assert_bool(local.do_carry);
@@ -327,7 +329,7 @@ where
             builder,
             proof_idx,
             FinalPolyQueryEvalMessage {
-                last_whir_round: AB::Expr::from_canonical_usize(self.num_whir_rounds),
+                last_whir_round: AB::Expr::from_usize(self.num_whir_rounds),
                 value: final_value,
             },
             is_last,
@@ -407,7 +409,7 @@ pub(in crate::whir) fn build_final_poly_query_eval_records(
                         EF::ZERO
                     }
                 } else {
-                    EF::from_base(zis[whir_round][query_idx - 1])
+                    EF::from(zis[whir_round][query_idx - 1])
                 };
 
                 for eval_idx in 0..eq_phase_len {
@@ -577,11 +579,11 @@ pub(crate) fn generate_trace(
 
             let cols: &mut FinalyPolyQueryEvalCols<F> = row.borrow_mut();
             cols.is_enabled = F::ONE;
-            cols.proof_idx = F::from_canonical_usize(proof_idx);
-            cols.whir_round = F::from_canonical_usize(whir_round);
-            cols.query_idx = F::from_canonical_usize(query_idx);
-            cols.phase_idx = F::from_canonical_usize(phase_idx);
-            cols.eval_idx = F::from_canonical_usize(eval_idx);
+            cols.proof_idx = F::from_usize(proof_idx);
+            cols.whir_round = F::from_usize(whir_round);
+            cols.query_idx = F::from_usize(query_idx);
+            cols.phase_idx = F::from_usize(phase_idx);
+            cols.eval_idx = F::from_usize(eval_idx);
             cols.is_first_in_proof = F::from_bool(is_first_in_proof);
             cols.is_first_in_round = F::from_bool(is_first_in_round);
             cols.is_first_in_query = F::from_bool(is_first_in_query);
@@ -594,21 +596,23 @@ pub(crate) fn generate_trace(
             cols.do_carry = F::from_bool(do_carry);
 
             cols.gamma_eq_acc
-                .copy_from_slice(record.gamma_eq_acc.as_base_slice());
+                .copy_from_slice(record.gamma_eq_acc.as_basis_coefficients_slice());
 
-            cols.alpha.copy_from_slice(record.alpha.as_base_slice());
-            cols.gamma.copy_from_slice(record.gamma.as_base_slice());
+            cols.alpha
+                .copy_from_slice(record.alpha.as_basis_coefficients_slice());
+            cols.gamma
+                .copy_from_slice(record.gamma.as_basis_coefficients_slice());
             cols.gamma_pow
-                .copy_from_slice(record.gamma_pow.as_base_slice());
+                .copy_from_slice(record.gamma_pow.as_basis_coefficients_slice());
 
             cols.query_pow
-                .copy_from_slice(record.query_pow.as_base_slice());
+                .copy_from_slice(record.query_pow.as_basis_coefficients_slice());
             cols.final_poly_coeff
-                .copy_from_slice(record.final_poly_coeff.as_base_slice());
+                .copy_from_slice(record.final_poly_coeff.as_basis_coefficients_slice());
             cols.final_value_acc
-                .copy_from_slice(record.final_value_acc.as_base_slice());
+                .copy_from_slice(record.final_value_acc.as_basis_coefficients_slice());
             cols.horner_acc
-                .copy_from_slice(record.horner_acc.as_base_slice());
+                .copy_from_slice(record.horner_acc.as_basis_coefficients_slice());
         });
 
     RowMajorMatrix::new(trace, width)

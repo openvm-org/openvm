@@ -9,7 +9,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra, extension::BinomiallyExtendable};
+use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, extension::BinomiallyExtendable};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::{
     IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator, ParallelSliceMut,
@@ -100,11 +100,14 @@ impl<F> BaseAir<F> for EqNsAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for EqNsAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
 
         let local: &EqNsColumns<AB::Var> = (*local).borrow();
         let next: &EqNsColumns<AB::Var> = (*next).borrow();
@@ -254,7 +257,7 @@ where
             builder,
             local.proof_idx,
             XiRandomnessMessage {
-                idx: local.n + AB::Expr::from_canonical_usize(self.l_skip),
+                idx: local.n + AB::Expr::from_usize(self.l_skip),
                 xi: local.xi_n.map(|x| x.into()),
             },
             is_transition.clone(),
@@ -264,7 +267,7 @@ where
             local.proof_idx,
             BatchConstraintConductorMessage {
                 msg_type: BatchConstraintInnerMessageType::Xi.to_field(),
-                idx: local.n + AB::Expr::from_canonical_usize(self.l_skip),
+                idx: local.n + AB::Expr::from_usize(self.l_skip),
                 value: local.xi_n.map(|x| x.into()),
             },
             local.n_less_than_n_logup * local.xi_mult,
@@ -410,26 +413,28 @@ pub(crate) fn generate_eq_ns_trace(
                 let cols: &mut EqNsColumns<_> = chunk.borrow_mut();
                 cols.is_valid = F::ONE;
                 cols.is_first = F::from_bool(i == 0);
-                cols.proof_idx = F::from_canonical_usize(pidx);
-                cols.n = F::from_canonical_usize(i);
+                cols.proof_idx = F::from_usize(pidx);
+                cols.n = F::from_usize(i);
                 cols.n_less_than_n_logup = F::from_bool(i < record.n_logup);
                 cols.n_less_than_n_max = F::from_bool(i < record.n_max);
                 cols.is_transition_and_n_less_than_n_max =
                     F::from_bool(i + 1 < rows.len() && i < record.n_max);
-                cols.xi_n.copy_from_slice(record.xi.as_base_slice());
-                cols.r_n.copy_from_slice(record.r.as_base_slice());
+                cols.xi_n
+                    .copy_from_slice(record.xi.as_basis_coefficients_slice());
+                cols.r_n
+                    .copy_from_slice(record.r.as_basis_coefficients_slice());
                 cols.r_product
-                    .copy_from_slice(record.r_prod.as_base_slice());
+                    .copy_from_slice(record.r_prod.as_basis_coefficients_slice());
                 cols.r_pref_product
-                    .copy_from_slice(record.eq_r_ones.as_base_slice());
+                    .copy_from_slice(record.eq_r_ones.as_basis_coefficients_slice());
                 cols.one_minus_r_pref_prod
-                    .copy_from_slice(record.eq_r_zeroes.as_base_slice());
-                cols.eq.copy_from_slice(record.eq.as_base_slice());
+                    .copy_from_slice(record.eq_r_zeroes.as_basis_coefficients_slice());
+                cols.eq
+                    .copy_from_slice(record.eq.as_basis_coefficients_slice());
                 cols.eq_sharp
-                    .copy_from_slice(record.eq_sharp.as_base_slice());
-                cols.sel_first_count = F::from_canonical_usize(record.sel_first_count);
-                cols.sel_last_and_trans_count =
-                    F::from_canonical_usize(record.sel_last_and_trans_count);
+                    .copy_from_slice(record.eq_sharp.as_basis_coefficients_slice());
+                cols.sel_first_count = F::from_usize(record.sel_first_count);
+                cols.sel_last_and_trans_count = F::from_usize(record.sel_last_and_trans_count);
             });
         let mut num_n_lift_int = vec![0; preflights[pidx].proof_shape.n_logup + 1];
         let mut num_n_lift_con = vec![0; preflights[pidx].proof_shape.n_max + 1];
@@ -448,14 +453,14 @@ pub(crate) fn generate_eq_ns_trace(
         {
             xi_mult += cnt;
             let cols: &mut EqNsColumns<_> = chunk.borrow_mut();
-            cols.xi_mult = F::from_canonical_usize(xi_mult);
+            cols.xi_mult = F::from_usize(xi_mult);
         }
         for (chunk, cnt) in trace[cur_height * width..]
             .chunks_mut(width)
             .zip(num_n_lift_con.into_iter())
         {
             let cols: &mut EqNsColumns<_> = chunk.borrow_mut();
-            cols.num_traces = F::from_canonical_usize(cnt);
+            cols.num_traces = F::from_usize(cnt);
         }
         cur_height += rows.len();
     }

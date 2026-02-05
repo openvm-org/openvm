@@ -14,7 +14,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, extension::BinomiallyExtendable};
+use p3_field::{BasedVectorSpace, Field, PrimeCharacteristicRing, extension::BinomiallyExtendable};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use stark_backend_v2::{
     D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, poly_common::Squarable, proof::Proof,
@@ -76,11 +76,11 @@ impl<F> BaseAir<F> for FinalPolyMleEvalAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for FinalPolyMleEvalAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local_row = main.row_slice(0);
+        let local_row = main.row_slice(0).expect("window should have two elements");
         let local: &FinalyPolyMleEvalCols<AB::Var> = (*local_row).borrow();
 
         builder.assert_bool(local.is_enabled);
@@ -93,7 +93,7 @@ where
 
         builder.when(local.is_root).assert_one(local.is_enabled);
 
-        let num_vars = AB::Expr::from_canonical_usize(self.num_vars);
+        let num_vars = AB::Expr::from_usize(self.num_vars);
         builder
             .when(local.is_root)
             .assert_eq(local.layer, num_vars.clone());
@@ -107,8 +107,7 @@ where
             .when(local.node_idx)
             .assert_one(is_node_idx_nonzero.clone());
 
-        let var_idx =
-            AB::Expr::from_canonical_usize(self.num_sumcheck_rounds + self.num_vars) - local.layer;
+        let var_idx = AB::Expr::from_usize(self.num_sumcheck_rounds + self.num_vars) - local.layer;
 
         self.whir_opening_point_bus.receive(
             builder,
@@ -194,7 +193,7 @@ where
         );
 
         let is_leaf = local.is_enabled - is_nonleaf;
-        let delta = AB::Expr::from_canonical_usize(D_EF);
+        let delta = AB::Expr::from_usize(D_EF);
         let tidx_node = local.tidx_final_poly_start + local.node_idx * delta;
         self.transcript_bus.observe_ext(
             builder,
@@ -204,7 +203,7 @@ where
             is_leaf.clone(),
         );
 
-        let total_whir_queries = AB::Expr::from_canonical_usize(self.total_whir_queries);
+        let total_whir_queries = AB::Expr::from_usize(self.total_whir_queries);
         self.final_poly_bus.send(
             builder,
             local.proof_idx,
@@ -220,7 +219,7 @@ where
             local.proof_idx,
             FinalPolyMleEvalMessage {
                 tidx: local.tidx_final_poly_start.into(),
-                num_whir_rounds: AB::Expr::from_canonical_usize(self.num_whir_rounds),
+                num_whir_rounds: AB::Expr::from_usize(self.num_whir_rounds),
                 value: ext_field_multiply(local.value, local.eq_alpha_u),
             },
             local.is_root,
@@ -304,20 +303,26 @@ pub(crate) fn generate_trace(
                 };
 
                 cols.is_enabled = F::ONE;
-                cols.proof_idx = F::from_canonical_usize(proof_idx);
+                cols.proof_idx = F::from_usize(proof_idx);
                 cols.is_root = F::from_bool(layer == num_vars);
-                cols.layer = F::from_canonical_usize(layer);
+                cols.layer = F::from_usize(layer);
                 cols.layer_inv = cols.layer.try_inverse().unwrap_or_default();
-                cols.node_idx = F::from_canonical_usize(node_idx);
+                cols.node_idx = F::from_usize(node_idx);
                 cols.node_idx_inv = cols.node_idx.try_inverse().unwrap_or_default();
-                cols.tidx_final_poly_start = F::from_canonical_usize(tidx);
-                cols.point.copy_from_slice(point.as_base_slice());
-                cols.left_value.copy_from_slice(left.as_base_slice());
-                cols.right_value.copy_from_slice(right.as_base_slice());
-                cols.value.copy_from_slice(value.as_base_slice());
-                cols.result.copy_from_slice(result.as_base_slice());
-                cols.eq_alpha_u.copy_from_slice(eq_alpha_u.as_base_slice());
-                cols.num_nodes_in_layer = F::from_canonical_usize(1 << (num_vars - layer));
+                cols.tidx_final_poly_start = F::from_usize(tidx);
+                cols.point
+                    .copy_from_slice(point.as_basis_coefficients_slice());
+                cols.left_value
+                    .copy_from_slice(left.as_basis_coefficients_slice());
+                cols.right_value
+                    .copy_from_slice(right.as_basis_coefficients_slice());
+                cols.value
+                    .copy_from_slice(value.as_basis_coefficients_slice());
+                cols.result
+                    .copy_from_slice(result.as_basis_coefficients_slice());
+                cols.eq_alpha_u
+                    .copy_from_slice(eq_alpha_u.as_basis_coefficients_slice());
+                cols.num_nodes_in_layer = F::from_usize(1 << (num_vars - layer));
                 cols.is_nonleaf_and_first_in_layer = F::from_bool(layer != 0 && node_idx == 0);
 
                 row_in_proof += 1;

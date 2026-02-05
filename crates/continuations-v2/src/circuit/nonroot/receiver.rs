@@ -5,7 +5,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::FieldAlgebra;
+use p3_field::PrimeCharacteristicRing;
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use recursion_circuit::bus::{PublicValuesBus, PublicValuesBusMessage};
 use stark_backend_v2::{
@@ -41,7 +41,7 @@ impl<F> PartitionedBaseAir<F> for UserPvsReceiverAir {}
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UserPvsReceiverAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local: &UserPvsReceiverCols<AB::Var> = (*local).borrow();
 
         builder.assert_bool(local.is_valid);
@@ -94,10 +94,10 @@ pub fn generate_proving_ctx(
             for (pv_idx, value) in pvs.iter().enumerate() {
                 let chunk = chunks.next().unwrap();
                 let cols: &mut UserPvsReceiverCols<F> = chunk.borrow_mut();
-                cols.proof_idx = F::from_canonical_usize(proof_idx);
+                cols.proof_idx = F::from_usize(proof_idx);
                 cols.is_valid = F::ONE;
-                cols.pv_bus_msg.air_idx = F::from_canonical_usize(air_idx);
-                cols.pv_bus_msg.pv_idx = F::from_canonical_usize(pv_idx);
+                cols.pv_bus_msg.air_idx = F::from_usize(air_idx);
+                cols.pv_bus_msg.pv_idx = F::from_usize(pv_idx);
                 cols.pv_bus_msg.value = *value;
             }
         }

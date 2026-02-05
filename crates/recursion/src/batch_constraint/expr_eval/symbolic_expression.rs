@@ -13,7 +13,7 @@ use openvm_stark_backend::{
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdicField,
+    BasedVectorSpace, PrimeCharacteristicRing, PrimeField32, TwoAdicField,
     extension::BinomiallyExtendable,
 };
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
@@ -129,17 +129,24 @@ impl<F> BaseAir<F> for SymbolicExpressionAir {
 
 impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for SymbolicExpressionAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
-        let main_local = builder.common_main().row_slice(0).to_vec();
+        let main_local = builder
+            .common_main()
+            .row_slice(0)
+            .expect("window should have at least one row")
+            .to_vec();
 
         let single_main_width = SingleMainSymbolicExpressionColumns::<AB::Var>::width();
         let cached_width = CachedSymbolicExpressionColumns::<AB::Var>::width();
 
-        let cached_local_vec = self
-            .has_cached
-            .then(|| builder.cached_mains()[0].row_slice(0).to_vec());
+        let cached_local_vec = self.has_cached.then(|| {
+            builder.cached_mains()[0]
+                .row_slice(0)
+                .expect("window should have at least one row")
+                .to_vec()
+        });
 
         let (cached_cols, main_slice) = if self.has_cached {
             let cached_slice = cached_local_vec.as_ref().unwrap().as_slice();
@@ -148,7 +155,11 @@ where
             (cached_cols, main_slice)
         } else {
             // No cached trace: common main is prefixed by `row_idx` and then cached columns
-            let main_next = builder.common_main().row_slice(1).to_vec();
+            let main_next = builder
+                .common_main()
+                .row_slice(1)
+                .expect("window should have at least two rows")
+                .to_vec();
 
             let (prefix_local, rest_local) = main_local.as_slice().split_at(1);
             let (prefix_next, _rest_next) = main_next.as_slice().split_at(1);
@@ -215,7 +226,7 @@ where
         );
 
         for (proof_idx, &cols) in main_cols.iter().enumerate() {
-            let proof_idx = AB::F::from_canonical_usize(proof_idx);
+            let proof_idx = AB::F::from_usize(proof_idx);
 
             let arg_ef0: [AB::Var; D_EF] = cols.args[..D_EF].try_into().unwrap();
             let arg_ef1: [AB::Var; D_EF] = cols.args[D_EF..2 * D_EF].try_into().unwrap();
@@ -500,33 +511,39 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
                 match node {
                     SymbolicExpressionNode::Variable(var) => match var.entry {
                         Entry::Preprocessed { .. } => {
-                            record.args[..D_EF]
-                                .copy_from_slice(expr_evals[node_idx].as_base_slice());
+                            record.args[..D_EF].copy_from_slice(
+                                expr_evals[node_idx].as_basis_coefficients_slice(),
+                            );
                         }
                         Entry::Main { .. } => {
-                            record.args[..D_EF]
-                                .copy_from_slice(expr_evals[node_idx].as_base_slice());
+                            record.args[..D_EF].copy_from_slice(
+                                expr_evals[node_idx].as_basis_coefficients_slice(),
+                            );
                         }
                         Entry::Permutation { .. } => unreachable!(),
                         Entry::Public => record.args[..D_EF]
-                            .copy_from_slice(expr_evals[node_idx].as_base_slice()),
+                            .copy_from_slice(expr_evals[node_idx].as_basis_coefficients_slice()),
                         Entry::Challenge => unreachable!(),
                         Entry::Exposed => unreachable!(),
                     },
                     SymbolicExpressionNode::IsFirstRow => {
                         record.args[..D_EF].copy_from_slice(
-                            is_first_uni_by_log_height[min(log_height, l_skip)].as_base_slice(),
+                            is_first_uni_by_log_height[min(log_height, l_skip)]
+                                .as_basis_coefficients_slice(),
                         );
                         record.args[D_EF..2 * D_EF].copy_from_slice(
-                            is_first_mle_by_n[log_height.saturating_sub(l_skip)].as_base_slice(),
+                            is_first_mle_by_n[log_height.saturating_sub(l_skip)]
+                                .as_basis_coefficients_slice(),
                         );
                     }
                     SymbolicExpressionNode::IsLastRow | SymbolicExpressionNode::IsTransition => {
                         record.args[..D_EF].copy_from_slice(
-                            is_last_uni_by_log_height[min(log_height, l_skip)].as_base_slice(),
+                            is_last_uni_by_log_height[min(log_height, l_skip)]
+                                .as_basis_coefficients_slice(),
                         );
                         record.args[D_EF..2 * D_EF].copy_from_slice(
-                            is_last_mle_by_n[log_height.saturating_sub(l_skip)].as_base_slice(),
+                            is_last_mle_by_n[log_height.saturating_sub(l_skip)]
+                                .as_basis_coefficients_slice(),
                         );
                     }
                     SymbolicExpressionNode::Constant(_) => {}
@@ -535,40 +552,45 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
                         right_idx,
                         degree_multiple: _,
                     } => {
-                        record.args[..D_EF].copy_from_slice(expr_evals[*left_idx].as_base_slice());
+                        record.args[..D_EF]
+                            .copy_from_slice(expr_evals[*left_idx].as_basis_coefficients_slice());
                         record.args[D_EF..2 * D_EF]
-                            .copy_from_slice(expr_evals[*right_idx].as_base_slice());
+                            .copy_from_slice(expr_evals[*right_idx].as_basis_coefficients_slice());
                     }
                     SymbolicExpressionNode::Sub {
                         left_idx,
                         right_idx,
                         degree_multiple: _,
                     } => {
-                        record.args[..D_EF].copy_from_slice(expr_evals[*left_idx].as_base_slice());
+                        record.args[..D_EF]
+                            .copy_from_slice(expr_evals[*left_idx].as_basis_coefficients_slice());
                         record.args[D_EF..2 * D_EF]
-                            .copy_from_slice(expr_evals[*right_idx].as_base_slice());
+                            .copy_from_slice(expr_evals[*right_idx].as_basis_coefficients_slice());
                     }
                     SymbolicExpressionNode::Neg {
                         idx,
                         degree_multiple: _,
                     } => {
-                        record.args[..D_EF].copy_from_slice(expr_evals[*idx].as_base_slice());
+                        record.args[..D_EF]
+                            .copy_from_slice(expr_evals[*idx].as_basis_coefficients_slice());
                     }
                     SymbolicExpressionNode::Mul {
                         left_idx,
                         right_idx,
                         degree_multiple: _,
                     } => {
-                        record.args[..D_EF].copy_from_slice(expr_evals[*left_idx].as_base_slice());
+                        record.args[..D_EF]
+                            .copy_from_slice(expr_evals[*left_idx].as_basis_coefficients_slice());
                         record.args[D_EF..2 * D_EF]
-                            .copy_from_slice(expr_evals[*right_idx].as_base_slice());
+                            .copy_from_slice(expr_evals[*right_idx].as_basis_coefficients_slice());
                     }
                 };
                 records.push(Some(record));
             }
             for interaction in &vk.symbolic_constraints.interactions {
                 let mut args = [F::ZERO; 2 * D_EF];
-                args[..D_EF].copy_from_slice(expr_evals[interaction.count].as_base_slice());
+                args[..D_EF]
+                    .copy_from_slice(expr_evals[interaction.count].as_basis_coefficients_slice());
                 records.push(Some(Record {
                     args,
                     sort_idx,
@@ -578,7 +600,8 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
 
                 for &node_idx in &interaction.message {
                     let mut args = [F::ZERO; 2 * D_EF];
-                    args[..D_EF].copy_from_slice(expr_evals[node_idx].as_base_slice());
+                    args[..D_EF]
+                        .copy_from_slice(expr_evals[node_idx].as_basis_coefficients_slice());
                     records.push(Some(Record {
                         args,
                         sort_idx,
@@ -592,7 +615,8 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
                 match unused_var.entry {
                     Entry::Preprocessed { .. } => {
                         let mut args = [F::ZERO; 2 * D_EF];
-                        args[..D_EF].copy_from_slice(expr_evals[node_idx].as_base_slice());
+                        args[..D_EF]
+                            .copy_from_slice(expr_evals[node_idx].as_basis_coefficients_slice());
                         records.push(Some(Record {
                             args,
                             sort_idx,
@@ -602,7 +626,8 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
                     }
                     Entry::Main { .. } => {
                         let mut args = [F::ZERO; 2 * D_EF];
-                        args[..D_EF].copy_from_slice(expr_evals[node_idx].as_base_slice());
+                        args[..D_EF]
+                            .copy_from_slice(expr_evals[node_idx].as_basis_coefficients_slice());
                         records.push(Some(Record {
                             args,
                             sort_idx,
@@ -646,7 +671,7 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
             let row_offset = if has_cached {
                 0
             } else {
-                row[0] = F::from_canonical_usize(row_idx);
+                row[0] = F::from_usize(row_idx);
                 1
             };
 
@@ -669,14 +694,14 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
                     .into_iter()
                     .enumerate()
                 {
-                    cols.flags[i] = F::from_canonical_u32(x);
+                    cols.flags[i] = F::from_u32(x);
                 }
-                cols.air_idx = F::from_canonical_usize(record.air_idx);
-                cols.node_or_interaction_idx = F::from_canonical_usize(record.node_idx);
-                cols.attrs = record.attrs.map(F::from_canonical_usize);
+                cols.air_idx = F::from_usize(record.air_idx);
+                cols.node_or_interaction_idx = F::from_usize(record.node_idx);
+                cols.attrs = record.attrs.map(F::from_usize);
                 cols.is_constraint = F::from_bool(record.is_constraint);
-                cols.constraint_idx = F::from_canonical_usize(record.constraint_idx);
-                cols.fanout = F::from_canonical_usize(record.fanout);
+                cols.constraint_idx = F::from_usize(record.constraint_idx);
+                cols.fanout = F::from_usize(record.fanout);
 
                 cached_width
             };
@@ -697,9 +722,9 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
                     row[start..end].borrow_mut();
                 cols.is_present = F::ONE;
                 cols.args = record.args;
-                cols.sort_idx = F::from_canonical_usize(record.sort_idx);
-                cols.n_abs = F::from_canonical_usize(record.n_abs);
-                cols.is_n_neg = F::from_canonical_usize(record.is_n_neg);
+                cols.sort_idx = F::from_usize(record.sort_idx);
+                cols.n_abs = F::from_usize(record.n_abs);
+                cols.is_n_neg = F::from_usize(record.is_n_neg);
             }
         });
 
@@ -985,13 +1010,13 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
                 .into_iter()
                 .enumerate()
             {
-                cols.flags[i] = F::from_canonical_u32(x);
-                cols.air_idx = F::from_canonical_usize(record.air_idx);
-                cols.node_or_interaction_idx = F::from_canonical_usize(record.node_idx);
-                cols.attrs = record.attrs.map(F::from_canonical_usize);
+                cols.flags[i] = F::from_u32(x);
+                cols.air_idx = F::from_usize(record.air_idx);
+                cols.node_or_interaction_idx = F::from_usize(record.node_idx);
+                cols.attrs = record.attrs.map(F::from_usize);
                 cols.is_constraint = F::from_bool(record.is_constraint);
-                cols.constraint_idx = F::from_canonical_usize(record.constraint_idx);
-                cols.fanout = F::from_canonical_usize(record.fanout);
+                cols.constraint_idx = F::from_usize(record.constraint_idx);
+                cols.fanout = F::from_usize(record.fanout);
             }
         });
 
@@ -1005,14 +1030,16 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
 ///
 /// WARNING: To use this in an AIR you MUST constrain that is_constraint is boolean
 /// and that each flag is in [0, FLAG_MODULUS)
-pub fn cached_symbolic_expr_cols_to_digest<F: FieldAlgebra>(cached_cols: &[F]) -> [F; DIGEST_SIZE] {
+pub fn cached_symbolic_expr_cols_to_digest<F: PrimeCharacteristicRing>(
+    cached_cols: &[F],
+) -> [F; DIGEST_SIZE] {
     let cached_cols: &CachedSymbolicExpressionColumns<_> = cached_cols.borrow();
     let mut ret = [F::ZERO; DIGEST_SIZE];
     ret[0] = fold(
         cached_cols.flags.iter().enumerate(),
         cached_cols.is_constraint.clone(),
         |acc, (pow_exp, flag)| {
-            acc + (flag.clone() * F::from_canonical_u32(FLAG_MODULUS.pow(pow_exp as u32) << 1))
+            acc + (flag.clone() * F::from_u32(FLAG_MODULUS.pow(pow_exp as u32) << 1))
         },
     );
     ret[1] = cached_cols.air_idx.clone();

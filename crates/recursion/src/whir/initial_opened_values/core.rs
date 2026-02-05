@@ -11,7 +11,7 @@ use openvm_stark_backend::{
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    FieldAlgebra, FieldExtensionAlgebra, TwoAdicField, extension::BinomiallyExtendable,
+    BasedVectorSpace, PrimeCharacteristicRing, TwoAdicField, extension::BinomiallyExtendable,
 };
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
@@ -82,16 +82,21 @@ impl<F> BaseAir<F> for InitialOpenedValuesAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for InitialOpenedValuesAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF> + TwoAdicField,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF> + TwoAdicField,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &InitialOpenedValuesCols<AB::Var> = (*local).borrow();
         let next: &InitialOpenedValuesCols<AB::Var> = (*next).borrow();
-        let omega_k = AB::Expr::from_f(
-            <<AB::Expr as FieldAlgebra>::F as TwoAdicField>::two_adic_generator(self.k),
+        let omega_k = AB::Expr::from_prime_subfield(
+            <<AB::Expr as PrimeCharacteristicRing>::PrimeSubfield as TwoAdicField>::two_adic_generator(
+                self.k,
+            ),
         );
 
         let is_same_proof = next.flags[0] - next.is_first_in_proof;
@@ -174,10 +179,9 @@ where
             [AB::F::ZERO; 4],
         );
 
-        builder.when(is_enabled - is_same_query.clone()).assert_eq(
-            local.coset_idx,
-            AB::Expr::from_canonical_usize((1 << self.k) - 1),
-        );
+        builder
+            .when(is_enabled - is_same_query.clone())
+            .assert_eq(local.coset_idx, AB::Expr::from_usize((1 << self.k) - 1));
 
         for i in 0..CHUNK {
             if i < CHUNK - 1 {
@@ -218,8 +222,8 @@ where
                 .when(is_same_commit.clone())
                 .assert_eq(next.pre_state[CHUNK + i], local.post_state[CHUNK + i]);
 
-            let col_idx = local.col_chunk_idx * AB::Expr::from_canonical_usize(CHUNK)
-                + AB::Expr::from_canonical_usize(i);
+            let col_idx =
+                local.col_chunk_idx * AB::Expr::from_usize(CHUNK) + AB::Expr::from_usize(i);
 
             self.stacking_indices_bus.receive(
                 builder,
@@ -267,7 +271,7 @@ where
             local.proof_idx,
             MerkleVerifyBusMessage {
                 merkle_idx: local.merkle_idx_bit_src.into(),
-                total_depth: AB::Expr::from_canonical_usize(self.initial_log_domain_size + 1),
+                total_depth: AB::Expr::from_usize(self.initial_log_domain_size + 1),
                 height: AB::Expr::ZERO,
                 leaf_sub_idx: local.coset_idx.into(),
                 value: array::from_fn(|i| local.post_state[i].into()),
@@ -303,7 +307,7 @@ where
                 height: AB::Expr::ZERO,
                 coset_shift: local.zi_root.into(),
                 coset_idx: local.coset_idx.into(),
-                coset_size: AB::Expr::from_canonical_usize(1 << self.k),
+                coset_size: AB::Expr::from_usize(1 << self.k),
                 twiddle: local.twiddle.into(),
                 value: codeword_value_slice_acc,
                 z_final: local.zi.into(),
@@ -393,26 +397,26 @@ pub(crate) fn generate_trace(
                 }
             };
 
-            cols.proof_idx = F::from_canonical_usize(proof_idx);
+            cols.proof_idx = F::from_usize(proof_idx);
             cols.is_first_in_proof = F::from_bool(is_first_in_proof);
             cols.is_first_in_query = F::from_bool(is_first_in_query);
             cols.is_first_in_coset = F::from_bool(is_first_in_coset);
             cols.is_first_in_commit = F::from_bool(is_first_in_commit);
-            cols.query_idx = F::from_canonical_usize(query_idx);
-            cols.commit_idx = F::from_canonical_usize(commit_idx);
-            cols.col_chunk_idx = F::from_canonical_usize(chunk_idx);
-            cols.coset_idx = F::from_canonical_usize(coset_idx);
+            cols.query_idx = F::from_usize(query_idx);
+            cols.commit_idx = F::from_usize(commit_idx);
+            cols.col_chunk_idx = F::from_usize(chunk_idx);
+            cols.coset_idx = F::from_usize(coset_idx);
             for flag in cols.flags.iter_mut().take(chunk_len) {
                 *flag = F::ONE;
             }
             cols.twiddle = omega_k.exp_u64(coset_idx as u64);
             cols.codeword_value_acc
-                .copy_from_slice(codeword_value_acc.as_base_slice());
+                .copy_from_slice(codeword_value_acc.as_basis_coefficients_slice());
             cols.zi_root = preflight.whir.zj_roots[0][query_idx];
             cols.zi = preflight.whir.zjs[0][query_idx];
             cols.yi
-                .copy_from_slice(preflight.whir.yjs[0][query_idx].as_base_slice());
-            cols.mu.copy_from_slice(mu.as_base_slice());
+                .copy_from_slice(preflight.whir.yjs[0][query_idx].as_basis_coefficients_slice());
+            cols.mu.copy_from_slice(mu.as_basis_coefficients_slice());
             cols.merkle_idx_bit_src = preflight.whir.queries[query_idx];
 
             let width_before_proof = stacking_widths_psums[cp_start];
@@ -423,7 +427,7 @@ pub(crate) fn generate_trace(
             for offset in 0..CHUNK {
                 let exponent = exponent_base + chunk_idx * CHUNK + min(offset, chunk_len - 1);
                 let mu_pow = mu_pows[width_before_proof + exponent];
-                cols.mu_pows[offset].copy_from_slice(mu_pow.as_base_slice());
+                cols.mu_pows[offset].copy_from_slice(mu_pow.as_basis_coefficients_slice());
             }
 
             let states = &preflight.initial_row_states[commit_idx][query_idx][coset_idx];

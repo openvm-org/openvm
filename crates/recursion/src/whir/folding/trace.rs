@@ -1,6 +1,6 @@
 use core::{borrow::BorrowMut, convert::TryInto};
 
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
+use p3_field::{BasedVectorSpace, PrimeCharacteristicRing};
 use p3_matrix::dense::RowMajorMatrix;
 use stark_backend_v2::{EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 
@@ -94,23 +94,26 @@ pub fn generate_trace(
 
         let cols: &mut WhirFoldingCols<F> = row.borrow_mut();
         cols.is_valid = F::ONE;
-        cols.proof_idx = F::from_canonical_usize(proof_idx);
+        cols.proof_idx = F::from_usize(proof_idx);
         cols.is_root = F::from_bool(record.coset_size == 1);
-        cols.alpha.copy_from_slice(record.alpha.as_base_slice());
-        cols.height = F::from_canonical_usize(height);
-        cols.whir_round = F::from_canonical_u32(record.whir_round);
-        cols.query_idx = F::from_canonical_u32(record.query_idx);
-        cols.coset_idx = F::from_canonical_u32(record.coset_idx);
+        cols.alpha
+            .copy_from_slice(record.alpha.as_basis_coefficients_slice());
+        cols.height = F::from_usize(height);
+        cols.whir_round = F::from_u32(record.whir_round);
+        cols.query_idx = F::from_u32(record.query_idx);
+        cols.coset_idx = F::from_u32(record.coset_idx);
         cols.left_value
-            .copy_from_slice(record.left_value.as_base_slice());
+            .copy_from_slice(record.left_value.as_basis_coefficients_slice());
         cols.right_value
-            .copy_from_slice(record.right_value.as_base_slice());
-        cols.value.copy_from_slice(record.value.as_base_slice());
+            .copy_from_slice(record.right_value.as_basis_coefficients_slice());
+        cols.value
+            .copy_from_slice(record.value.as_basis_coefficients_slice());
         cols.twiddle = record.twiddle;
         cols.coset_shift = record.coset_shift;
-        cols.coset_size = F::from_canonical_u32(record.coset_size);
+        cols.coset_size = F::from_u32(record.coset_size);
         cols.z_final = record.z_final;
-        cols.y_final.copy_from_slice(record.y_final.as_base_slice());
+        cols.y_final
+            .copy_from_slice(record.y_final.as_basis_coefficients_slice());
     }
 
     RowMajorMatrix::new(trace, width)
