@@ -30,6 +30,7 @@ use openvm_stark_backend::{
 use p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
 use stark_backend_v2::{
+    keygen::MultiStarkKeygenBuilderV2,
     keygen::types::{
         MultiStarkProvingKeyV2 as MultiStarkProvingKey,
         MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey,
@@ -445,9 +446,18 @@ where
     where
         E: StarkEngine<SC = stark_backend_v2::SC>,
     {
+        let system_config = config.as_ref();
+        let mut keygen_builder = MultiStarkKeygenBuilderV2::new(engine.config().clone());
         let circuit = config.create_airs()?;
-        let airs = circuit.into_airs().collect_vec();
-        let (pk, _vk) = engine.keygen(&airs);
+        for (air_id, air) in circuit.into_airs().enumerate() {
+            if system_config.is_required_air_id(air_id) {
+                keygen_builder.add_required_air(air.clone());
+            } else {
+                keygen_builder.add_air(air.clone());
+            }
+        }
+        let pk = keygen_builder.generate_pk().unwrap();
+        let _vk = pk.get_vk();
         let d_pk = engine.device().transport_pk_to_device(&pk);
         let vm = Self::new(engine, builder, config, d_pk)?;
         Ok((vm, pk))
@@ -1010,6 +1020,29 @@ where
     #[cfg(feature = "stark-debug")]
     pub fn debug_proving_ctx(&mut self, ctx: &ProvingContext<E::PB>) {
         debug_proving_ctx(self, ctx);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{VirtualMachine, CONNECTOR_AIR_ID, PROGRAM_AIR_ID, SystemConfig};
+    use crate::{system::SystemCpuBuilder, utils::test_cpu_engine};
+
+    #[test]
+    fn keygen_marks_required_airs_for_continuations() {
+        let engine = test_cpu_engine();
+        let config = SystemConfig::default().with_continuations();
+        let merkle_air_id = config
+            .memory_merkle_air_id()
+            .expect("continuations should have a merkle AIR");
+        let boundary_air_id = config.memory_boundary_air_id();
+
+        let (_vm, pk) = VirtualMachine::new_with_keygen(engine, SystemCpuBuilder, config).unwrap();
+
+        assert!(pk.per_air[PROGRAM_AIR_ID].vk.is_required);
+        assert!(pk.per_air[CONNECTOR_AIR_ID].vk.is_required);
+        assert!(pk.per_air[merkle_air_id].vk.is_required);
+        assert!(!pk.per_air[boundary_air_id].vk.is_required);
     }
 }
 
