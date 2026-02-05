@@ -6,7 +6,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{Field, FieldAlgebra, extension::BinomiallyExtendable};
+use p3_field::{Field, PrimeCharacteristicRing, extension::BinomiallyExtendable};
 use p3_matrix::Matrix;
 use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -83,12 +83,15 @@ impl<F> BaseAir<F> for MultilinearSumcheckAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MultilinearSumcheckAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &MultilinearSumcheckCols<AB::Var> = (*local).borrow();
         let next: &MultilinearSumcheckCols<AB::Var> = (*next).borrow();
 
@@ -156,14 +159,15 @@ where
         // Eval idx ends at s_deg if not dummy
         builder
             .when(is_last_eval.clone() * is_not_dummy.clone())
-            .assert_eq(local.eval_idx, AB::Expr::from_canonical_usize(s_deg));
+            .assert_eq(local.eval_idx, AB::Expr::from_usize(s_deg));
 
         ///////////////////////////////////////////////////////////////////////
         // Factorials Constraints
         ///////////////////////////////////////////////////////////////////////
 
-        let d_factorial_inv = AB::Expr::from_f(
-            <AB::Expr as FieldAlgebra>::F::from_canonical_usize((1..=s_deg).product()).inverse(),
+        let d_factorial_inv = AB::Expr::from_prime_subfield(
+            <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield::from_usize((1..=s_deg).product())
+                .inverse(),
         );
         // Starts at d!
         builder
@@ -172,7 +176,7 @@ where
         // 1 / (i + 1)!(d - i - 1)!  (i + 1) = 1 / i!(d - i)! * (d - i)
         builder.when(is_transition_eval.clone()).assert_eq(
             next.denom_inv * next.eval_idx,
-            local.denom_inv * (AB::Expr::from_canonical_usize(s_deg) - local.eval_idx),
+            local.denom_inv * (AB::Expr::from_usize(s_deg) - local.eval_idx),
         );
 
         ///////////////////////////////////////////////////////////////////////
@@ -251,7 +255,7 @@ where
 
         builder
             .when(is_transition_eval.clone())
-            .assert_eq(next.tidx, local.tidx + AB::Expr::from_canonical_usize(D_EF));
+            .assert_eq(next.tidx, local.tidx + AB::Expr::from_usize(D_EF));
 
         ///////////////////////////////////////////////////////////////////////
         // Interactions
@@ -285,7 +289,7 @@ where
             builder,
             local.proof_idx,
             StackingModuleMessage {
-                tidx: local.tidx + AB::Expr::from_canonical_usize(D_EF),
+                tidx: local.tidx + AB::Expr::from_usize(D_EF),
             },
             is_proof_end.clone() * is_not_dummy.clone(),
         );

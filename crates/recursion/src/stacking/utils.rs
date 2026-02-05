@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use p3_field::FieldAlgebra;
+use p3_field::PrimeCharacteristicRing;
 use stark_backend_v2::{
     EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,

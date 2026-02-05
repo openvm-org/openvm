@@ -17,7 +17,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{Field, FieldAlgebra};
+use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use recursion_circuit::bus::{Poseidon2CompressBus, Poseidon2CompressMessage};
 use stark_backend_v2::{DIGEST_SIZE, F, poseidon2::sponge::poseidon2_compress};
@@ -36,7 +36,8 @@ pub struct UserPvsInMemoryCols<F> {
     pub node_commit: [F; DIGEST_SIZE],
     pub sibling: [F; DIGEST_SIZE],
 
-    // 2^row_idx, used to (a) constrain merkle proof height and (b) accumulate merkle_path_branch_bits
+    // 2^row_idx, used to (a) constrain merkle proof height and (b) accumulate
+    // merkle_path_branch_bits
     pub row_idx_exp_2: F,
     pub merkle_path_branch_bits: F,
 }
@@ -85,7 +86,10 @@ impl<F> PartitionedBaseAir<F> for UserPvsInMemoryAir {}
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UserPvsInMemoryAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &UserPvsInMemoryCols<AB::Var> = (*local).borrow();
         let next: &UserPvsInMemoryCols<AB::Var> = (*next).borrow();
 
@@ -137,11 +141,11 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UserPvsInMemoryAir {
         let mut when_last = builder.when(local.is_valid * (next.is_valid - AB::F::ONE));
         when_last.assert_eq(
             local.merkle_path_branch_bits,
-            AB::F::from_canonical_u32(self.merkle_path_branch_bits),
+            AB::F::from_u32(self.merkle_path_branch_bits),
         );
         when_last.assert_eq(
             local.row_idx_exp_2,
-            AB::F::from_canonical_usize(1 << self.addr_space_height),
+            AB::F::from_usize(1 << self.addr_space_height),
         );
         when_last.assert_zero(local.is_right_child);
 
@@ -221,8 +225,8 @@ pub fn generate_proving_input(
         cols.is_right_child = F::from_bool(is_right_child);
         cols.node_commit = current;
         cols.sibling = sibling;
-        cols.row_idx_exp_2 = F::from_canonical_usize(1 << i);
-        cols.merkle_path_branch_bits = F::from_canonical_usize(current_branch_bits);
+        cols.row_idx_exp_2 = F::from_usize(1 << i);
+        cols.merkle_path_branch_bits = F::from_usize(current_branch_bits);
 
         let left = if is_right_child { sibling } else { current };
         let right = if is_right_child { current } else { sibling };
@@ -233,8 +237,8 @@ pub fn generate_proving_input(
     let last_row: &mut UserPvsInMemoryCols<F> = last_chunk.borrow_mut();
     last_row.is_valid = F::ONE;
     last_row.node_commit = current;
-    last_row.row_idx_exp_2 = F::from_canonical_usize(1 << (num_layers - 1));
-    last_row.merkle_path_branch_bits = F::from_canonical_usize(current_branch_bits);
+    last_row.row_idx_exp_2 = F::from_usize(1 << (num_layers - 1));
+    last_row.merkle_path_branch_bits = F::from_usize(current_branch_bits);
 
     AirProofRawInput {
         cached_mains: vec![],

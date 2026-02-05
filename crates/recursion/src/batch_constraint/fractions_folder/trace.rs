@@ -1,6 +1,6 @@
 use std::borrow::BorrowMut;
 
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
+use p3_field::{BasedVectorSpace, PrimeCharacteristicRing};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
@@ -63,21 +63,21 @@ pub(crate) fn generate_trace(
                     let cols: &mut FractionsFolderCols<F> = chunk.borrow_mut();
                     cols.is_valid = F::ONE;
                     cols.is_first = F::from_bool(i == 0);
-                    cols.proof_idx = F::from_canonical_usize(pidx);
-                    cols.air_idx = F::from_canonical_usize(air_idx);
+                    cols.proof_idx = F::from_usize(pidx);
+                    cols.air_idx = F::from_usize(air_idx);
                     cols.sum_claim_p
-                        .copy_from_slice(npa[air_idx].as_base_slice());
+                        .copy_from_slice(npa[air_idx].as_basis_coefficients_slice());
                     cols.sum_claim_q
-                        .copy_from_slice(dpa[air_idx].as_base_slice());
+                        .copy_from_slice(dpa[air_idx].as_basis_coefficients_slice());
                     cols.mu.copy_from_slice(mu_slice);
-                    cols.tidx = F::from_canonical_usize(mu_tidx - 2 * D_EF - i * 2 * D_EF);
+                    cols.tidx = F::from_usize(mu_tidx - 2 * D_EF - i * 2 * D_EF);
                 });
 
             let mut cur_p_sum = [F::ZERO; D_EF];
             let mut cur_q_sum: [_; D_EF] =
                 core::array::from_fn(|i| preflight.transcript.values()[tidx_alpha_beta + i]);
 
-            let mu = EF::from_base_slice(mu_slice);
+            let mu = EF::from_basis_coefficients_slice(mu_slice).unwrap();
             let mut cur_hash = EF::ZERO;
             for (i, chunk) in rows.chunks_exact_mut(width).enumerate() {
                 let air_idx = height - 1 - i;
@@ -91,7 +91,7 @@ pub(crate) fn generate_trace(
                 cols.cur_q_sum.copy_from_slice(&cur_q_sum);
 
                 cur_hash = npa[air_idx] + mu * (dpa[air_idx] + mu * cur_hash);
-                cols.cur_hash = cur_hash.as_base_slice().try_into().unwrap();
+                cols.cur_hash = cur_hash.as_basis_coefficients_slice().try_into().unwrap();
             }
         });
 

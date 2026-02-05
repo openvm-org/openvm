@@ -11,7 +11,7 @@ use openvm_stark_backend::{
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    FieldAlgebra, FieldExtensionAlgebra, PrimeField32, extension::BinomiallyExtendable,
+    BasedVectorSpace, PrimeCharacteristicRing, PrimeField32, extension::BinomiallyExtendable,
 };
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
@@ -95,11 +95,14 @@ impl<F> BaseAir<F> for StackingClaimsAir {
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for StackingClaimsAir
 where
     AB::F: PrimeField32,
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
 
         let local: &StackingClaimsCols<AB::Var> = (*local).borrow();
         let next: &StackingClaimsCols<AB::Var> = (*next).borrow();
@@ -157,7 +160,7 @@ where
                 commit_idx: local.commit_idx,
                 col_idx: local.stacked_col_idx,
             },
-            local.is_valid * AB::Expr::from_canonical_usize(self.stacking_index_mult),
+            local.is_valid * AB::Expr::from_usize(self.stacking_index_mult),
         );
 
         /*
@@ -216,14 +219,14 @@ where
 
         builder
             .when(not(local.is_last) * local.is_valid)
-            .assert_eq(local.tidx + AB::F::from_canonical_usize(D_EF), next.tidx);
+            .assert_eq(local.tidx + AB::F::from_usize(D_EF), next.tidx);
 
         for i in 0..D_EF {
             self.transcript_bus.receive(
                 builder,
                 local.proof_idx,
                 TranscriptBusMessage {
-                    tidx: AB::Expr::from_canonical_usize(i) + local.tidx,
+                    tidx: AB::Expr::from_usize(i) + local.tidx,
                     value: local.stacking_claim[i].into(),
                     is_sample: AB::Expr::ZERO,
                 },
@@ -234,7 +237,7 @@ where
                 builder,
                 local.proof_idx,
                 TranscriptBusMessage {
-                    tidx: AB::Expr::from_canonical_usize(i + D_EF) + local.tidx,
+                    tidx: AB::Expr::from_usize(i + D_EF) + local.tidx,
                     value: local.mu[i].into(),
                     is_sample: AB::Expr::ONE,
                 },
@@ -272,7 +275,7 @@ where
             builder,
             local.proof_idx,
             WhirModuleMessage {
-                tidx: AB::Expr::from_canonical_usize(2 * D_EF) + local.tidx,
+                tidx: AB::Expr::from_usize(2 * D_EF) + local.tidx,
                 mu: local.mu.map(Into::into),
                 claim: local.whir_claim.map(Into::into),
             },
@@ -337,7 +340,7 @@ impl StackingClaimsTraceGenerator {
             .collect_vec();
 
             let num_rows = claims.len();
-            let proof_idx_value = F::from_canonical_usize(proof_idx);
+            let proof_idx_value = F::from_usize(proof_idx);
 
             let mut trace = vec![F::ZERO; num_rows * width];
 
@@ -363,22 +366,25 @@ impl StackingClaimsTraceGenerator {
                 cols.is_first = F::from_bool(idx == 0);
                 cols.is_last = F::from_bool(idx + 1 == num_rows);
 
-                cols.commit_idx = F::from_canonical_usize(commit_idx);
-                cols.stacked_col_idx = F::from_canonical_usize(stacked_col_idx);
+                cols.commit_idx = F::from_usize(commit_idx);
+                cols.stacked_col_idx = F::from_usize(stacked_col_idx);
 
-                cols.tidx = F::from_canonical_usize(initial_tidx + (D_EF * idx));
-                cols.mu.copy_from_slice(mu.as_base_slice());
-                cols.mu_pow.copy_from_slice(mu_pows[idx].as_base_slice());
+                cols.tidx = F::from_usize(initial_tidx + (D_EF * idx));
+                cols.mu.copy_from_slice(mu.as_basis_coefficients_slice());
+                cols.mu_pow
+                    .copy_from_slice(mu_pows[idx].as_basis_coefficients_slice());
 
-                cols.stacking_claim.copy_from_slice(claim.as_base_slice());
+                cols.stacking_claim
+                    .copy_from_slice(claim.as_basis_coefficients_slice());
                 cols.claim_coefficient
-                    .copy_from_slice(coeff.as_base_slice());
+                    .copy_from_slice(coeff.as_basis_coefficients_slice());
                 final_s_eval += claim * coeff;
                 cols.final_s_eval
-                    .copy_from_slice(final_s_eval.as_base_slice());
+                    .copy_from_slice(final_s_eval.as_basis_coefficients_slice());
 
                 whir_claim += mu_pows[idx] * claim;
-                cols.whir_claim.copy_from_slice(whir_claim.as_base_slice());
+                cols.whir_claim
+                    .copy_from_slice(whir_claim.as_basis_coefficients_slice());
             }
 
             combined_trace.extend(trace);
@@ -390,7 +396,7 @@ impl StackingClaimsTraceGenerator {
             let padding_start = combined_trace.len();
             combined_trace.resize(padded_rows * width, F::ZERO);
 
-            let padding_proof_idx = F::from_canonical_usize(proofs.len());
+            let padding_proof_idx = F::from_usize(proofs.len());
             let mut chunks = combined_trace[padding_start..].chunks_mut(width);
             let num_padded_rows = padded_rows - total_rows;
             for i in 0..num_padded_rows {

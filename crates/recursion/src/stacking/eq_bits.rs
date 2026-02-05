@@ -15,7 +15,7 @@ use openvm_stark_backend::{
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdicField,
+    BasedVectorSpace, PrimeCharacteristicRing, PrimeField32, TwoAdicField,
     extension::BinomiallyExtendable,
 };
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
@@ -90,11 +90,14 @@ impl<F> BaseAir<F> for EqBitsAir {
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for EqBitsAir
 where
     AB::F: PrimeField32 + TwoAdicField,
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
 
         let local: &EqBitsCols<AB::Var> = (*local).borrow();
         let next: &EqBitsCols<AB::Var> = (*next).borrow();
@@ -142,7 +145,7 @@ where
             builder,
             local.proof_idx,
             EqRandValuesLookupMessage {
-                idx: AB::Expr::from_canonical_usize(self.n_stack + 1) - local.num_bits,
+                idx: AB::Expr::from_usize(self.n_stack + 1) - local.num_bits,
                 u: local.u_val.map(Into::into),
             },
             and(not(local.is_first), local.is_valid),
@@ -195,7 +198,7 @@ where
             builder,
             local.proof_idx,
             EqBitsLookupMessage {
-                b_value: b_value * AB::Expr::from_canonical_usize(1 << self.l_skip),
+                b_value: b_value * AB::Expr::from_usize(1 << self.l_skip),
                 num_bits: local.num_bits.into(),
                 eval,
             },
@@ -280,7 +283,7 @@ impl EqBitsTraceGenerator {
 
                     for num_bits in latest_num_bits + 1..=total_num_bits {
                         let shifted_b_value = b_value >> (total_num_bits - num_bits);
-                        let b_lsb = EF::from_canonical_usize(shifted_b_value & 1);
+                        let b_lsb = EF::from_usize(shifted_b_value & 1);
                         let u_val = u[vk.inner.params.n_stack - num_bits];
                         let next_eval =
                             latest_eval * (EF::ONE + EF::TWO * b_lsb * u_val - b_lsb - u_val);
@@ -294,7 +297,7 @@ impl EqBitsTraceGenerator {
                 }
 
                 let num_rows = b_value_map.len() + 1;
-                let proof_idx_value = F::from_canonical_usize(proof_idx);
+                let proof_idx_value = F::from_usize(proof_idx);
 
                 let mut trace = vec![F::ZERO; num_rows * width];
                 for chunk in trace.chunks_mut(width) {
@@ -309,8 +312,8 @@ impl EqBitsTraceGenerator {
 
                     first_cols.sub_eval[0] = F::ONE;
 
-                    first_cols.internal_mult = F::from_canonical_usize(base_internal_mult);
-                    first_cols.external_mult = F::from_canonical_usize(base_external_mult);
+                    first_cols.internal_mult = F::from_usize(base_internal_mult);
+                    first_cols.external_mult = F::from_usize(base_external_mult);
                 }
 
                 #[cfg(all(test, feature = "cuda"))]
@@ -325,16 +328,18 @@ impl EqBitsTraceGenerator {
                     cols.proof_idx = proof_idx_value;
                     cols.is_valid = F::ONE;
 
-                    cols.internal_mult = F::from_canonical_usize(internal_mult);
-                    cols.external_mult = F::from_canonical_usize(external_mult);
+                    cols.internal_mult = F::from_usize(internal_mult);
+                    cols.external_mult = F::from_usize(external_mult);
 
-                    cols.sub_b_value = F::from_canonical_usize(b_value >> 1);
-                    cols.num_bits = F::from_canonical_usize(num_bits);
+                    cols.sub_b_value = F::from_usize(b_value >> 1);
+                    cols.num_bits = F::from_usize(num_bits);
 
-                    cols.b_lsb = F::from_canonical_usize(b_value & 1);
-                    cols.u_val
-                        .copy_from_slice(u[vk.inner.params.n_stack - num_bits].as_base_slice());
-                    cols.sub_eval.copy_from_slice(sub_eval.as_base_slice());
+                    cols.b_lsb = F::from_usize(b_value & 1);
+                    cols.u_val.copy_from_slice(
+                        u[vk.inner.params.n_stack - num_bits].as_basis_coefficients_slice(),
+                    );
+                    cols.sub_eval
+                        .copy_from_slice(sub_eval.as_basis_coefficients_slice());
                 }
 
                 (trace, num_rows)
@@ -352,7 +357,7 @@ impl EqBitsTraceGenerator {
             let padding_start = combined_trace.len();
             combined_trace.resize(padded_rows * width, F::ZERO);
 
-            let padding_proof_idx = F::from_canonical_usize(proofs.len());
+            let padding_proof_idx = F::from_usize(proofs.len());
             for chunk in combined_trace[padding_start..].chunks_mut(width) {
                 let cols: &mut EqBitsCols<F> = chunk.borrow_mut();
                 cols.proof_idx = padding_proof_idx;
