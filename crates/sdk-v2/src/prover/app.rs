@@ -137,7 +137,7 @@ where
         );
         let proof = ContinuationVmProver::prove(&mut self.instance, input)?;
         #[cfg(debug_assertions)]
-        verify_app_proof::<E>(&self.app_vm_vk, self.memory_dimensions(), &proof)?;
+        let _ = verify_app_proof::<E>(&self.app_vm_vk, self.memory_dimensions(), &proof)?;
         Ok(proof)
     }
 
