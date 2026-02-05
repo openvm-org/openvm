@@ -85,12 +85,7 @@ __global__ void cukernel_persistent_boundary_tracegen(
             COL_WRITE_ARRAY(
                 row, PersistentBoundaryCols, hash, reinterpret_cast<Fp const *>(init_hash.v)
             );
-            Fp ts_values[BLOCKS_PER_CHUNK];
-            #pragma unroll
-            for (int i = 0; i < BLOCKS_PER_CHUNK; ++i) {
-                ts_values[i] = Fp::zero();
-            }
-            COL_WRITE_ARRAY(row, PersistentBoundaryCols, timestamps, ts_values);
+            row.fill_zero(COL_INDEX(PersistentBoundaryCols, timestamps), BLOCKS_PER_CHUNK);
         } else {
             FpArray<8> final_values = FpArray<8>::from_raw_array(record.values);
             FpArray<8> final_hash = poseidon2.hash_and_record(final_values);
