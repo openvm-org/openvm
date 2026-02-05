@@ -7,7 +7,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::FieldAlgebra;
+use p3_field::PrimeCharacteristicRing;
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use stark_backend_v2::F;
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -53,8 +53,8 @@ impl<const NUM_BITS: usize> RangeCheckerCpuTraceGenerator<NUM_BITS> {
             .enumerate()
             .flat_map(|(value, mult)| {
                 [
-                    F::from_canonical_usize(value),
-                    F::from_canonical_u32(mult.load(Ordering::Relaxed)),
+                    F::from_usize(value),
+                    F::from_u32(mult.load(Ordering::Relaxed)),
                 ]
             })
             .collect_vec();
@@ -81,7 +81,10 @@ impl<AB: AirBuilder + InteractionBuilder, const NUM_BITS: usize> Air<AB>
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &RangeCheckerCols<AB::Var> = (*local).borrow();
         let next: &RangeCheckerCols<AB::Var> = (*next).borrow();
 
@@ -89,16 +92,15 @@ impl<AB: AirBuilder + InteractionBuilder, const NUM_BITS: usize> Air<AB>
         builder
             .when_transition()
             .assert_eq(local.value + AB::F::ONE, next.value);
-        builder.when_last_row().assert_eq(
-            local.value,
-            AB::F::from_canonical_usize((1 << NUM_BITS) - 1),
-        );
+        builder
+            .when_last_row()
+            .assert_eq(local.value, AB::F::from_usize((1 << NUM_BITS) - 1));
 
         self.bus.add_key_with_lookups(
             builder,
             RangeCheckerBusMessage {
                 value: local.value.into(),
-                max_bits: AB::Expr::from_canonical_usize(NUM_BITS),
+                max_bits: AB::Expr::from_usize(NUM_BITS),
             },
             local.mult,
         );

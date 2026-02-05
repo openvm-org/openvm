@@ -7,7 +7,7 @@ use openvm_stark_backend::{AirRef, p3_maybe_rayon::prelude::*};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_air::BaseAir;
 use p3_baby_bear::Poseidon2BabyBear;
-use p3_field::{FieldAlgebra, PrimeField32};
+use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_symmetric::Permutation;
 use stark_backend_v2::{
@@ -129,14 +129,14 @@ impl TranscriptModule {
                 .enumerate()
             {
                 let cols: &mut TranscriptCols<F> = row.borrow_mut();
-                cols.proof_idx = F::from_canonical_usize(pidx);
+                cols.proof_idx = F::from_usize(pidx);
                 if i == 0 {
                     cols.is_proof_start = F::ONE;
                 }
                 let is_sample = preflight.transcript.samples()[tidx];
 
                 cols.is_sample = F::from_bool(is_sample);
-                cols.tidx = F::from_canonical_usize(tidx);
+                cols.tidx = F::from_usize(tidx);
                 cols.mask[0] = F::from_bool(true);
 
                 cols.prev_state = prev_poseidon_state;
@@ -345,8 +345,8 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
                             row[..inner_width].copy_from_slice(inner_row);
                             let cols: &mut Poseidon2Cols<F, SBOX_REGISTERS> = row.borrow_mut();
                             let count = poseidon_counts.get(i).copied().unwrap_or_default();
-                            cols.permute_mult = F::from_canonical_u32(count.perm);
-                            cols.compress_mult = F::from_canonical_u32(count.compress);
+                            cols.permute_mult = F::from_u32(count.perm);
+                            cols.compress_mult = F::from_u32(count.compress);
                         });
                     RowMajorMatrix::new(poseidon_trace, poseidon2_width)
                 })

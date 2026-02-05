@@ -10,7 +10,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{Field, FieldAlgebra};
+use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
 use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -89,7 +89,10 @@ impl<F: Field> PartitionedBaseAir<F> for GkrInputAir {}
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &GkrInputCols<AB::Var> = (*local).borrow();
         let next: &GkrInputCols<AB::Var> = (*next).borrow();
 
@@ -154,26 +157,24 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
         // Module Interactions
         ///////////////////////////////////////////////////////////////////////
 
-        let num_layers = local.n_logup + AB::Expr::from_canonical_usize(self.l_skip);
+        let num_layers = local.n_logup + AB::Expr::from_usize(self.l_skip);
 
         let needs_challenges = or(local.is_n_max_greater_than_n_logup, local.is_n_logup_zero);
-        let num_challenges = local.n_max + AB::Expr::from_canonical_usize(self.l_skip)
+        let num_challenges = local.n_max + AB::Expr::from_usize(self.l_skip)
             - has_interactions.clone() * num_layers.clone();
 
         // Add PoW and alpha, beta
         let tidx_after_pow_and_alpha_beta =
-            local.tidx + AB::Expr::TWO + AB::Expr::from_canonical_usize(2 * D_EF);
+            local.tidx + AB::Expr::TWO + AB::Expr::from_usize(2 * D_EF);
         // Add GKR layers + Sumcheck
         let tidx_after_gkr_layers = tidx_after_pow_and_alpha_beta.clone()
             + has_interactions.clone()
                 * num_layers.clone()
                 * (num_layers.clone() + AB::Expr::TWO)
-                * AB::Expr::from_canonical_usize(2 * D_EF);
+                * AB::Expr::from_usize(2 * D_EF);
         // Add separately sampled challenges
         let tidx_end = tidx_after_gkr_layers.clone()
-            + needs_challenges.clone()
-                * num_challenges.clone()
-                * AB::Expr::from_canonical_usize(D_EF);
+            + needs_challenges.clone() * num_challenges.clone() * AB::Expr::from_usize(D_EF);
 
         // 1. GkrLayerInputBus
         // 1a. Send input to GkrLayerAir
@@ -182,7 +183,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
             local.proof_idx,
             GkrLayerInputMessage {
                 // Skip q0_claim
-                tidx: (tidx_after_pow_and_alpha_beta + AB::Expr::from_canonical_usize(D_EF))
+                tidx: (tidx_after_pow_and_alpha_beta + AB::Expr::from_usize(D_EF))
                     * has_interactions.clone(),
                 q0_claim: local.q0_claim.map(Into::into),
             },
@@ -216,7 +217,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
             builder,
             local.proof_idx,
             GkrXiSamplerMessage {
-                idx: local.n_max + AB::Expr::from_canonical_usize(self.l_skip - 1),
+                idx: local.n_max + AB::Expr::from_usize(self.l_skip - 1),
                 tidx: tidx_end.clone(),
             },
             local.is_enabled * needs_challenges,
@@ -269,7 +270,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
         self.transcript_bus.observe_ext(
             builder,
             local.proof_idx,
-            local.tidx + AB::Expr::TWO + AB::Expr::from_canonical_usize(2 * D_EF),
+            local.tidx + AB::Expr::TWO + AB::Expr::from_usize(2 * D_EF),
             local.q0_claim,
             local.is_enabled * has_interactions,
         );
@@ -291,9 +292,11 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
         self.exp_bits_len_bus.lookup_key(
             builder,
             ExpBitsLenMessage {
-                base: AB::Expr::from_f(<AB::Expr as FieldAlgebra>::F::GENERATOR),
+                base: AB::Expr::from_prime_subfield(
+                    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield::GENERATOR,
+                ),
                 bit_src: local.logup_pow_sample.into(),
-                num_bits: AB::Expr::from_canonical_usize(self.logup_pow_bits),
+                num_bits: AB::Expr::from_usize(self.logup_pow_bits),
                 result: AB::Expr::ONE,
             },
             local.is_enabled,

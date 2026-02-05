@@ -5,7 +5,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{Field, FieldAlgebra};
+use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
@@ -52,7 +52,10 @@ impl<F: Field> PartitionedBaseAir<F> for TranscriptAir {}
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &TranscriptCols<AB::Var> = (*local).borrow();
         let next: &TranscriptCols<AB::Var> = (*next).borrow();
 
@@ -115,13 +118,13 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
         for i in 0..CHUNK {
             // When absorb, it's normal order (0 -> RATE)
             let observe_message = TranscriptBusMessage {
-                tidx: local.tidx + AB::Expr::from_canonical_usize(i),
+                tidx: local.tidx + AB::Expr::from_usize(i),
                 value: local.prev_state[i].into(),
                 is_sample: AB::Expr::ZERO,
             };
             // When squeeze, it's reverse RATE -> 0, so i means RATE - 1 - i
             let sample_message = TranscriptBusMessage {
-                tidx: local.tidx + AB::Expr::from_canonical_usize(i),
+                tidx: local.tidx + AB::Expr::from_usize(i),
                 value: local.prev_state[CHUNK - 1 - i].into(),
                 is_sample: AB::Expr::ONE,
             };

@@ -6,7 +6,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{FieldAlgebra, extension::BinomiallyExtendable};
+use p3_field::{PrimeCharacteristicRing, extension::BinomiallyExtendable};
 use p3_matrix::Matrix;
 use stark_backend_v2::{D_EF, F};
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -55,12 +55,12 @@ impl BaseAir<F> for WhirFoldingAir {
 
 impl<AB: AirBuilder<F = F> + InteractionBuilder> Air<AB> for WhirFoldingAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local: &WhirFoldingCols<AB::Var> = (*local).borrow();
 
         builder.assert_bool(local.is_valid);
@@ -70,7 +70,7 @@ where
         builder.when(local.is_root).assert_zero(local.coset_idx);
         builder
             .when(local.is_root)
-            .assert_eq(local.height, AB::F::from_canonical_usize(self.k));
+            .assert_eq(local.height, AB::F::from_usize(self.k));
         builder
             .when(local.is_root)
             .assert_eq(local.z_final, local.coset_shift * local.coset_shift);
@@ -96,8 +96,7 @@ where
             builder,
             local.proof_idx,
             WhirAlphaMessage {
-                idx: local.whir_round * AB::Expr::from_canonical_usize(self.k) + local.height
-                    - AB::Expr::ONE,
+                idx: local.whir_round * AB::Expr::from_usize(self.k) + local.height - AB::Expr::ONE,
                 challenge: local.alpha.map(Into::into),
             },
             local.is_valid,

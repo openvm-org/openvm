@@ -9,7 +9,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra, extension::BinomiallyExtendable};
+use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, extension::BinomiallyExtendable};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
@@ -80,11 +80,14 @@ impl<F> BaseAir<F> for Eq3bAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for Eq3bAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
 
         let local: &Eq3bColumns<AB::Var> = (*local).borrow();
         let next: &Eq3bColumns<AB::Var> = (*next).borrow();
@@ -254,7 +257,7 @@ where
             local.proof_idx,
             BatchConstraintConductorMessage {
                 msg_type: BatchConstraintInnerMessageType::Xi.to_field(),
-                idx: local.n + AB::Expr::from_canonical_usize(self.l_skip),
+                idx: local.n + AB::Expr::from_usize(self.l_skip),
                 value: local.xi.map(|x| x.into()),
             },
             local.n_at_least_n_lift * within_one_interaction,
@@ -442,22 +445,22 @@ pub(crate) fn generate_eq_3b_trace(
                     let cols: &mut Eq3bColumns<_> = chunk.borrow_mut();
                     cols.is_valid = F::ONE;
                     cols.is_first = F::from_bool(j == 0 && n == 0);
-                    cols.proof_idx = F::from_canonical_usize(pidx);
+                    cols.proof_idx = F::from_usize(pidx);
 
-                    cols.sort_idx = F::from_canonical_u32(record.sort_idx);
-                    cols.interaction_idx = F::from_canonical_u32(record.interaction_idx);
-                    cols.n_lift = F::from_canonical_u32(record.n_lift);
-                    cols.two_to_the_n_lift = F::from_canonical_usize(1 << record.n_lift);
-                    cols.n = F::from_canonical_usize(n);
+                    cols.sort_idx = F::from_u32(record.sort_idx);
+                    cols.interaction_idx = F::from_u32(record.interaction_idx);
+                    cols.n_lift = F::from_u32(record.n_lift);
+                    cols.two_to_the_n_lift = F::from_usize(1 << record.n_lift);
+                    cols.n = F::from_usize(n);
                     cols.n_at_least_n_lift = F::from_bool(n >= record.n_lift as usize);
                     cols.has_no_interactions = F::from_bool(record.no_interactions);
-                    cols.hypercube_volume = F::from_canonical_usize(1 << n);
+                    cols.hypercube_volume = F::from_usize(1 << n);
                     cols.is_first_in_air = F::from_bool(
                         record.interaction_idx == 0 && n == 0 || record.no_interactions,
                     );
                     cols.is_first_in_interaction = F::from_bool(n == 0 || record.no_interactions);
-                    cols.idx = F::from_canonical_u32(shifted_idx & ((1 << n) - 1));
-                    cols.running_idx = F::from_canonical_u32(shifted_idx);
+                    cols.idx = F::from_u32(shifted_idx & ((1 << n) - 1));
+                    cols.running_idx = F::from_u32(shifted_idx);
                     let nth_bit = (shifted_idx & (1 << n)) > 0;
                     cols.nth_bit = F::from_bool(nth_bit);
                     cols.loop_aux.is_transition[0] = F::from_bool(
@@ -473,8 +476,9 @@ pub(crate) fn generate_eq_3b_trace(
                     } else {
                         EF::ZERO
                     };
-                    cols.xi.copy_from_slice(xi.as_base_slice());
-                    cols.eq.copy_from_slice(cur_eq.as_base_slice());
+                    cols.xi.copy_from_slice(xi.as_basis_coefficients_slice());
+                    cols.eq
+                        .copy_from_slice(cur_eq.as_basis_coefficients_slice());
                     cur_eq *= if nth_bit { xi } else { EF::ONE - xi };
                 });
             cur_height += this_height;
@@ -486,7 +490,7 @@ pub(crate) fn generate_eq_3b_trace(
         .enumerate()
         .for_each(|(i, chunk)| {
             let cols: &mut Eq3bColumns<F> = chunk.borrow_mut();
-            cols.proof_idx = F::from_canonical_usize(preflights.len() + i);
+            cols.proof_idx = F::from_usize(preflights.len() + i);
             cols.is_first = F::ONE;
             cols.is_first_in_air = F::ONE;
             cols.is_first_in_interaction = F::ONE;

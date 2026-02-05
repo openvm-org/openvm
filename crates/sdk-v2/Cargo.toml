@@ -73,7 +73,6 @@ parallel = ["continuations-v2/parallel", "openvm-sdk-config/parallel"]
 mimalloc = ["openvm-circuit/mimalloc", "openvm-sdk-config/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc", "openvm-sdk-config/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
-nightly-features = ["openvm-circuit/nightly-features"]
 
 cuda = [
     "dep:cuda-backend-v2",

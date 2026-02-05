@@ -10,7 +10,7 @@ use openvm_stark_backend::{
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdicField,
+    BasedVectorSpace, Field, PrimeCharacteristicRing, PrimeField32, TwoAdicField,
     extension::BinomiallyExtendable,
 };
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
@@ -118,34 +118,37 @@ impl EqNegTraceGenerator {
                     let is_first_hypercube = row_idx == 0;
                     let is_last_hypercube = row_idx == l_skip - neg_hypercube;
 
-                    cols.proof_idx = F::from_canonical_usize(proof_idx);
+                    cols.proof_idx = F::from_usize(proof_idx);
                     cols.is_valid = F::ONE;
                     cols.is_first = F::from_bool(neg_hypercube == 0 && is_first_hypercube);
                     cols.is_last = F::from_bool(neg_hypercube + 1 == l_skip && is_last_hypercube);
 
-                    cols.neg_hypercube = F::from_canonical_usize(neg_hypercube);
+                    cols.neg_hypercube = F::from_usize(neg_hypercube);
                     cols.neg_hypercube_nz_inv =
                         cols.neg_hypercube.try_inverse().unwrap_or_default();
-                    cols.row_index = F::from_canonical_usize(row_idx);
+                    cols.row_index = F::from_usize(row_idx);
                     cols.is_first_hypercube = F::from_bool(is_first_hypercube);
                     cols.is_last_hypercube = F::from_bool(is_last_hypercube);
 
-                    cols.u_pow.copy_from_slice(u.as_base_slice());
-                    cols.r_pow.copy_from_slice(r.as_base_slice());
-                    cols.r_omega_pow.copy_from_slice(r_omega.as_base_slice());
+                    cols.u_pow.copy_from_slice(u.as_basis_coefficients_slice());
+                    cols.r_pow.copy_from_slice(r.as_basis_coefficients_slice());
+                    cols.r_omega_pow
+                        .copy_from_slice(r_omega.as_basis_coefficients_slice());
                     u *= u;
                     r *= r;
                     r_omega *= r_omega;
 
-                    cols.prod_u_r.copy_from_slice(prod_u_r.as_base_slice());
+                    cols.prod_u_r
+                        .copy_from_slice(prod_u_r.as_basis_coefficients_slice());
                     cols.prod_u_r_omega
-                        .copy_from_slice(prod_u_r_omega.as_base_slice());
+                        .copy_from_slice(prod_u_r_omega.as_basis_coefficients_slice());
                     prod_u_r *= u + r;
                     prod_u_r_omega *= u + r_omega;
 
-                    cols.prod_1_r.copy_from_slice(prod_1_r.as_base_slice());
+                    cols.prod_1_r
+                        .copy_from_slice(prod_1_r.as_basis_coefficients_slice());
                     cols.prod_1_r_omega
-                        .copy_from_slice(prod_1_r_omega.as_base_slice());
+                        .copy_from_slice(prod_1_r_omega.as_basis_coefficients_slice());
                     cols.one_half_pow = one_half_pow;
                     debug_assert_eq!(
                         prod_1_r * one_half_pow,
@@ -164,9 +167,8 @@ impl EqNegTraceGenerator {
                     // it's disjoint from the other condition.
                     if neg_hypercube == 0 && row_idx == 0 {
                         let counts = selector_counts[[proof_idx]][0];
-                        cols.sel_first_count = F::from_canonical_usize(counts.first);
-                        cols.sel_last_trans_count =
-                            F::from_canonical_usize(counts.last + counts.transition);
+                        cols.sel_first_count = F::from_usize(counts.first);
+                        cols.sel_last_trans_count = F::from_usize(counts.last + counts.transition);
                     } else if row_idx == l_skip - neg_hypercube {
                         let mut counts = selector_counts[[proof_idx]][row_idx];
                         // On `neg_hypercube`, we collect counts for all heights >= l_skip.
@@ -178,9 +180,8 @@ impl EqNegTraceGenerator {
                                 counts.transition += count.transition;
                             }
                         }
-                        cols.sel_first_count = F::from_canonical_usize(counts.first);
-                        cols.sel_last_trans_count =
-                            F::from_canonical_usize(counts.last + counts.transition);
+                        cols.sel_first_count = F::from_usize(counts.first);
+                        cols.sel_last_trans_count = F::from_usize(counts.last + counts.transition);
                     }
                 }
 
@@ -191,7 +192,7 @@ impl EqNegTraceGenerator {
 
         for chunk in chunks {
             let cols: &mut EqNegCols<F> = chunk.borrow_mut();
-            cols.proof_idx = F::from_canonical_usize(preflights.len());
+            cols.proof_idx = F::from_usize(preflights.len());
         }
 
         RowMajorMatrix::new(trace, width)
@@ -220,11 +221,14 @@ impl<F> BaseAir<F> for EqNegAir {
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for EqNegAir
 where
     AB::F: PrimeField32 + TwoAdicField,
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
 
         let local: &EqNegCols<AB::Var> = (*local).borrow();
         let next: &EqNegCols<AB::Var> = (*next).borrow();
@@ -291,14 +295,13 @@ where
         builder
             .when(local.is_first)
             .assert_zero(local.neg_hypercube);
-        builder.when(local.is_last).assert_eq(
-            local.neg_hypercube,
-            AB::F::from_canonical_usize(self.l_skip - 1),
-        );
+        builder
+            .when(local.is_last)
+            .assert_eq(local.neg_hypercube, AB::F::from_usize(self.l_skip - 1));
 
         builder.when(local.is_last_hypercube).assert_eq(
             local.row_index,
-            AB::Expr::from_canonical_usize(self.l_skip) - local.neg_hypercube,
+            AB::Expr::from_usize(self.l_skip) - local.neg_hypercube,
         );
 
         builder
@@ -447,7 +450,7 @@ where
             builder,
             local.proof_idx,
             SelUniBusMessage {
-                n: -AB::Expr::from_canonical_usize(self.l_skip),
+                n: -AB::Expr::from_usize(self.l_skip),
                 is_first: AB::Expr::ONE,
                 value: [
                     AB::Expr::ONE,
@@ -462,7 +465,7 @@ where
             builder,
             local.proof_idx,
             SelUniBusMessage {
-                n: -AB::Expr::from_canonical_usize(self.l_skip),
+                n: -AB::Expr::from_usize(self.l_skip),
                 is_first: AB::Expr::ZERO,
                 value: [
                     AB::Expr::ONE,

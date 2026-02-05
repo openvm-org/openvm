@@ -8,7 +8,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::FieldAlgebra;
+use p3_field::PrimeCharacteristicRing;
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use stark_backend_v2::F;
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -91,12 +91,12 @@ impl<const BASE: usize, const N: usize> PowerCheckerCpuTraceGenerator<BASE, N> {
             .enumerate()
             .flat_map(|(log, (mult_pow, mult_range))| {
                 let ret = [
-                    F::from_canonical_usize(log),
+                    F::from_usize(log),
                     current_pow,
-                    F::from_canonical_u32(mult_pow.load(Ordering::Relaxed)),
-                    F::from_canonical_u32(mult_range.load(Ordering::Relaxed)),
+                    F::from_u32(mult_pow.load(Ordering::Relaxed)),
+                    F::from_u32(mult_range.load(Ordering::Relaxed)),
                 ];
-                current_pow *= F::from_canonical_usize(BASE);
+                current_pow *= F::from_usize(BASE);
                 ret
             })
             .collect_vec();
@@ -124,7 +124,10 @@ impl<AB: AirBuilder + InteractionBuilder, const BASE: usize, const N: usize> Air
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &PowerCheckerCols<AB::Var> = (*local).borrow();
         let next: &PowerCheckerCols<AB::Var> = (*next).borrow();
 
@@ -136,11 +139,11 @@ impl<AB: AirBuilder + InteractionBuilder, const BASE: usize, const N: usize> Air
             .assert_eq(local.log + AB::F::ONE, next.log);
         builder
             .when_transition()
-            .assert_eq(local.pow * AB::F::from_canonical_usize(BASE), next.pow);
+            .assert_eq(local.pow * AB::F::from_usize(BASE), next.pow);
 
         builder
             .when_last_row()
-            .assert_eq(local.log, AB::F::from_canonical_usize(N - 1));
+            .assert_eq(local.log, AB::F::from_usize(N - 1));
 
         self.pow_bus.add_key_with_lookups(
             builder,
@@ -154,7 +157,7 @@ impl<AB: AirBuilder + InteractionBuilder, const BASE: usize, const N: usize> Air
             builder,
             RangeCheckerBusMessage {
                 value: local.log.into(),
-                max_bits: AB::Expr::from_canonical_usize(log2_strict_usize(N)),
+                max_bits: AB::Expr::from_usize(log2_strict_usize(N)),
             },
             local.mult_range,
         );

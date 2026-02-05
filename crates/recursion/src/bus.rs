@@ -1,6 +1,6 @@
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::interaction::InteractionBuilder;
-use p3_field::FieldAlgebra;
+use p3_field::PrimeCharacteristicRing;
 use stark_backend_v2::{D_EF, DIGEST_SIZE};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
@@ -283,7 +283,7 @@ impl TranscriptBus {
                 builder,
                 proof_idx,
                 TranscriptBusMessage {
-                    tidx: tidx.clone() + AB::Expr::from_canonical_usize(i),
+                    tidx: tidx.clone() + AB::Expr::from_usize(i),
                     value: x.into(),
                     is_sample: AB::Expr::ZERO,
                 },
@@ -307,7 +307,7 @@ impl TranscriptBus {
                 builder,
                 proof_idx,
                 TranscriptBusMessage {
-                    tidx: tidx.clone() + AB::Expr::from_canonical_usize(i),
+                    tidx: tidx.clone() + AB::Expr::from_usize(i),
                     value: x.into(),
                     is_sample: AB::Expr::ZERO,
                 },
@@ -351,7 +351,7 @@ impl TranscriptBus {
                 builder,
                 proof_idx,
                 TranscriptBusMessage {
-                    tidx: tidx.clone() + AB::Expr::from_canonical_usize(i),
+                    tidx: tidx.clone() + AB::Expr::from_usize(i),
                     value: x.into(),
                     is_sample: AB::Expr::ONE,
                 },
@@ -387,8 +387,8 @@ pub(crate) enum AirShapeProperty {
 }
 
 impl AirShapeProperty {
-    pub fn to_field<T: FieldAlgebra>(self) -> T {
-        T::from_canonical_u8(self as u8)
+    pub fn to_field<T: PrimeCharacteristicRing>(self) -> T {
+        T::from_u8(self as u8)
     }
 }
 

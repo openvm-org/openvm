@@ -1,7 +1,7 @@
 use core::borrow::BorrowMut;
 
 use openvm_stark_backend::p3_maybe_rayon::prelude::*;
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
+use p3_field::{BasedVectorSpace, PrimeCharacteristicRing};
 use p3_matrix::dense::RowMajorMatrix;
 use stark_backend_v2::{D_EF, EF, F};
 
@@ -110,7 +110,7 @@ pub fn generate_trace(
                     let row_data = &mut proof_trace[..width];
                     let cols: &mut GkrLayerCols<F> = row_data.borrow_mut();
                     cols.is_enabled = F::ONE;
-                    cols.proof_idx = F::from_canonical_usize(proof_idx);
+                    cols.proof_idx = F::from_usize(proof_idx);
                     cols.is_first = F::ONE;
                     cols.is_dummy = F::ONE;
                     cols.sumcheck_claim_in = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
@@ -129,41 +129,46 @@ pub fn generate_trace(
                     .enumerate()
                     .for_each(|(layer_idx, row_data)| {
                         let cols: &mut GkrLayerCols<F> = row_data.borrow_mut();
-                        cols.proof_idx = F::from_canonical_usize(proof_idx);
+                        cols.proof_idx = F::from_usize(proof_idx);
                         cols.is_enabled = F::ONE;
                         cols.is_first = F::from_bool(layer_idx == 0);
-                        cols.layer_idx = F::from_canonical_usize(layer_idx);
-                        cols.tidx = F::from_canonical_usize(record.layer_tidx(layer_idx));
+                        cols.layer_idx = F::from_usize(layer_idx);
+                        cols.tidx = F::from_usize(record.layer_tidx(layer_idx));
 
                         let lambda = record.lambda_at(layer_idx);
                         let eq_at_r_prime = record.eq_at(layer_idx);
 
-                        cols.lambda = lambda.as_base_slice().try_into().unwrap();
-                        cols.eq_at_r_prime = eq_at_r_prime.as_base_slice().try_into().unwrap();
+                        cols.lambda = lambda.as_basis_coefficients_slice().try_into().unwrap();
+                        cols.eq_at_r_prime = eq_at_r_prime
+                            .as_basis_coefficients_slice()
+                            .try_into()
+                            .unwrap();
 
                         let claims = &record.layer_claims[layer_idx];
                         let mu = mus_for_proof[layer_idx];
 
-                        cols.p_xi_0 = claims[0].as_base_slice().try_into().unwrap();
-                        cols.q_xi_0 = claims[1].as_base_slice().try_into().unwrap();
-                        cols.p_xi_1 = claims[2].as_base_slice().try_into().unwrap();
-                        cols.q_xi_1 = claims[3].as_base_slice().try_into().unwrap();
+                        cols.p_xi_0 = claims[0].as_basis_coefficients_slice().try_into().unwrap();
+                        cols.q_xi_0 = claims[1].as_basis_coefficients_slice().try_into().unwrap();
+                        cols.p_xi_1 = claims[2].as_basis_coefficients_slice().try_into().unwrap();
+                        cols.q_xi_1 = claims[3].as_basis_coefficients_slice().try_into().unwrap();
 
-                        cols.mu = mu.as_base_slice().try_into().unwrap();
+                        cols.mu = mu.as_basis_coefficients_slice().try_into().unwrap();
 
                         let sumcheck_claim_in = prev_layer_eval
                             .map(|(numer_prev, denom_prev)| numer_prev + lambda * denom_prev)
                             .unwrap_or(q0_claim);
-                        cols.sumcheck_claim_in =
-                            sumcheck_claim_in.as_base_slice().try_into().unwrap();
+                        cols.sumcheck_claim_in = sumcheck_claim_in
+                            .as_basis_coefficients_slice()
+                            .try_into()
+                            .unwrap();
 
                         let (numer_base, denom_base): ([F; D_EF], [F; D_EF]) =
                             reduce_to_single_evaluation::<F, F>(
-                                claims[0].as_base_slice().try_into().unwrap(),
-                                claims[2].as_base_slice().try_into().unwrap(),
-                                claims[1].as_base_slice().try_into().unwrap(),
-                                claims[3].as_base_slice().try_into().unwrap(),
-                                mu.as_base_slice().try_into().unwrap(),
+                                claims[0].as_basis_coefficients_slice().try_into().unwrap(),
+                                claims[2].as_basis_coefficients_slice().try_into().unwrap(),
+                                claims[1].as_basis_coefficients_slice().try_into().unwrap(),
+                                claims[3].as_basis_coefficients_slice().try_into().unwrap(),
+                                mu.as_basis_coefficients_slice().try_into().unwrap(),
                             );
                         cols.numer_claim = numer_base;
                         cols.denom_claim = denom_base;

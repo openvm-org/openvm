@@ -7,7 +7,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra, TwoAdicField};
+use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, TwoAdicField};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
@@ -70,12 +70,15 @@ impl<F> BaseAir<F> for NonInitialOpenedValuesAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for NonInitialOpenedValuesAir
 where
-    <AB::Expr as FieldAlgebra>::F: TwoAdicField,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: TwoAdicField,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &NonInitialOpenedValuesCols<AB::Var> = (*local).borrow();
         let next: &NonInitialOpenedValuesCols<AB::Var> = (*next).borrow();
 
@@ -94,7 +97,7 @@ where
         let is_same_round = next.is_enabled - next.is_first_in_round;
         let is_same_query = next.is_enabled - next.is_first_in_query;
 
-        let max_coset_idx = AB::Expr::from_canonical_usize((1 << self.k) - 1);
+        let max_coset_idx = AB::Expr::from_usize((1 << self.k) - 1);
         builder
             .when(local.is_enabled - is_same_query.clone())
             .assert_eq(local.coset_idx, max_coset_idx);
@@ -160,8 +163,10 @@ where
             local.is_first_in_query,
         );
 
-        let omega_k = AB::Expr::from_f(
-            <<AB::Expr as FieldAlgebra>::F as TwoAdicField>::two_adic_generator(self.k),
+        let omega_k = AB::Expr::from_prime_subfield(
+            <<AB::Expr as PrimeCharacteristicRing>::PrimeSubfield as TwoAdicField>::two_adic_generator(
+                self.k,
+            ),
         );
         builder
             .when(local.is_first_in_round)
@@ -186,7 +191,7 @@ where
                 query_idx: local.query_idx.into(),
                 height: AB::Expr::ZERO,
                 coset_shift: local.zi_root.into(),
-                coset_size: AB::Expr::from_canonical_usize(1 << self.k),
+                coset_size: AB::Expr::from_usize(1 << self.k),
                 coset_idx: local.coset_idx.into(),
                 twiddle: local.twiddle.into(),
                 value: local.value.map(Into::into),
@@ -219,7 +224,7 @@ where
                 value: local.value_hash.map(Into::into),
                 merkle_idx: local.merkle_idx_bit_src.into(),
                 // There are two parts: hashing leaves (depth k) and merkle proof
-                total_depth: AB::Expr::from_canonical_usize(self.initial_log_domain_size + 1)
+                total_depth: AB::Expr::from_usize(self.initial_log_domain_size + 1)
                     - local.whir_round,
                 height: AB::Expr::ZERO,
                 leaf_sub_idx: local.coset_idx.into(),
@@ -273,7 +278,7 @@ pub(crate) fn generate_trace(
 
             let cols: &mut NonInitialOpenedValuesCols<F> = row.borrow_mut();
             cols.is_enabled = F::ONE;
-            cols.proof_idx = F::from_canonical_usize(proof_idx);
+            cols.proof_idx = F::from_usize(proof_idx);
 
             let round_minus_1 = round_row_offsets[1..].partition_point(|&offset| offset <= i);
             let whir_round = round_minus_1 + 1;
@@ -286,9 +291,9 @@ pub(crate) fn generate_trace(
             let is_first_in_query = coset_idx == 0;
             let is_first_in_round = is_first_in_query && query_idx == 0;
 
-            cols.whir_round = F::from_canonical_usize(whir_round);
-            cols.query_idx = F::from_canonical_usize(query_idx);
-            cols.coset_idx = F::from_canonical_usize(coset_idx);
+            cols.whir_round = F::from_usize(whir_round);
+            cols.query_idx = F::from_usize(query_idx);
+            cols.coset_idx = F::from_usize(coset_idx);
             cols.twiddle = omega_k.exp_u64(coset_idx as u64);
             cols.is_first_in_proof = F::from_bool(is_first_in_proof);
             cols.is_first_in_round = F::from_bool(is_first_in_round);
@@ -299,12 +304,14 @@ pub(crate) fn generate_trace(
             );
             let value =
                 &proof.whir_proof.codeword_opened_values[whir_round - 1][query_idx][coset_idx];
-            cols.value.copy_from_slice(value.as_base_slice());
+            cols.value
+                .copy_from_slice(value.as_basis_coefficients_slice());
             let query_offset = preflight.whir.query_offsets[whir_round];
             cols.merkle_idx_bit_src = preflight.whir.queries[query_offset + query_idx];
             cols.zi = preflight.whir.zjs[whir_round][query_idx];
-            cols.yi
-                .copy_from_slice(preflight.whir.yjs[whir_round][query_idx].as_base_slice());
+            cols.yi.copy_from_slice(
+                preflight.whir.yjs[whir_round][query_idx].as_basis_coefficients_slice(),
+            );
         });
 
     RowMajorMatrix::new(trace, width)

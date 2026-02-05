@@ -55,7 +55,9 @@ impl<AB: AirBuilder + InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, _next) = (main.row_slice(0), main.row_slice(1));
+        let local = main
+            .row_slice(0)
+            .expect("window should have at least one row");
         let local: &Poseidon2Cols<AB::Var, SBOX_REGISTERS> = (*local).borrow();
 
         let mut sub_builder =

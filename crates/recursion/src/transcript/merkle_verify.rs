@@ -10,7 +10,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{Field, FieldAlgebra, PrimeField32};
+use p3_field::{Field, PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::Matrix;
 use stark_backend_v2::{
     DIGEST_SIZE, F, SystemParams,
@@ -112,7 +112,10 @@ impl<F: Field> PartitionedBaseAir<F> for MerkleVerifyAir {}
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &MerkleVerifyCols<AB::Var> = (*local).borrow();
         let next: &MerkleVerifyCols<AB::Var> = (*next).borrow();
 
@@ -152,7 +155,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
         builder.assert_bool(local.idx_parity);
         builder.when(is_merkle_transition.clone()).assert_eq(
             local.idx,
-            next.idx * AB::Expr::from_canonical_usize(2) + local.idx_parity,
+            next.idx * AB::Expr::from_usize(2) + local.idx_parity,
         );
 
         // Always receive both left and right for combining leaves part, otherwise receive only one
@@ -173,9 +176,9 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
 
         // This is 2x / 2x + 1 if it's a combining leaves part, otherwise it's 0.
         let left_leaf_sub_idx =
-            local.is_combining_leaves * local.leaf_sub_idx * AB::Expr::from_canonical_usize(2);
+            local.is_combining_leaves * local.leaf_sub_idx * AB::Expr::from_usize(2);
         let right_leaf_sub_idx = local.is_combining_leaves
-            * (local.leaf_sub_idx * AB::Expr::from_canonical_usize(2) + AB::Expr::ONE);
+            * (local.leaf_sub_idx * AB::Expr::from_usize(2) + AB::Expr::ONE);
         self.merkle_verify_bus.receive(
             builder,
             local.proof_idx,
@@ -376,11 +379,11 @@ pub fn generate_trace(
         let combination_indices = compute_combination_indices(k, i);
 
         cols.is_valid = F::ONE;
-        cols.proof_idx = F::from_canonical_usize(proof_idx);
-        cols.merkle_proof_idx = F::from_canonical_usize(merkle_proof_idx);
-        cols.commit_major = F::from_canonical_usize(commit_major);
-        cols.commit_minor = F::from_canonical_usize(commit_minor);
-        cols.total_depth = F::from_canonical_usize(depth + k + 1);
+        cols.proof_idx = F::from_usize(proof_idx);
+        cols.merkle_proof_idx = F::from_usize(merkle_proof_idx);
+        cols.commit_major = F::from_usize(commit_major);
+        cols.commit_minor = F::from_usize(commit_minor);
+        cols.total_depth = F::from_usize(depth + k + 1);
 
         if i == depth + num_leaves - 1 {
             cols.is_last_merkle = F::ONE;
@@ -399,9 +402,9 @@ pub fn generate_trace(
             leaf_tree[combination_indices.result_layer][combination_indices.result_index] = output;
             cols.compression_output = output;
 
-            cols.idx = F::from_canonical_usize(merkle_idx); // const idx for leaves part
-            cols.idx_parity = F::from_canonical_usize(merkle_idx % 2);
-            cols.height = F::from_canonical_usize(combination_indices.source_layer);
+            cols.idx = F::from_usize(merkle_idx); // const idx for leaves part
+            cols.idx_parity = F::from_usize(merkle_idx % 2);
+            cols.height = F::from_usize(combination_indices.source_layer);
             cols.recv_left = F::ONE;
             cols.recv_right = F::ONE;
 
@@ -411,7 +414,7 @@ pub fn generate_trace(
             poseidon2_compress_inputs.push(input_state);
 
             cols.is_combining_leaves = F::ONE;
-            cols.leaf_sub_idx = F::from_canonical_usize(combination_indices.result_index);
+            cols.leaf_sub_idx = F::from_usize(combination_indices.result_index);
         } else {
             // merkle proof part
             debug_assert!(i >= num_leaves - 1);
@@ -447,9 +450,9 @@ pub fn generate_trace(
             input_state[DIGEST_SIZE..].copy_from_slice(&cols.right);
             poseidon2_compress_inputs.push(input_state);
 
-            cols.idx = F::from_canonical_usize(cur_idx);
-            cols.idx_parity = F::from_canonical_usize(cur_idx % 2);
-            cols.height = F::from_canonical_usize(i + 1 - num_leaves + k);
+            cols.idx = F::from_usize(cur_idx);
+            cols.idx_parity = F::from_usize(cur_idx % 2);
+            cols.height = F::from_usize(i + 1 - num_leaves + k);
             cols.is_combining_leaves = F::ZERO;
 
             cur_hash = output;

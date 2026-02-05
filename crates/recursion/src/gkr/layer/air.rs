@@ -6,7 +6,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{Field, FieldAlgebra, extension::BinomiallyExtendable};
+use p3_field::{Field, PrimeCharacteristicRing, extension::BinomiallyExtendable};
 use p3_matrix::Matrix;
 use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -91,11 +91,14 @@ impl<F: Field> PartitionedBaseAir<F> for GkrLayerAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrLayerAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &GkrLayerCols<AB::Var> = (*local).borrow();
         let next: &GkrLayerCols<AB::Var> = (*next).borrow();
 
@@ -201,9 +204,9 @@ where
         // Transcript index increment
         let tidx_after_sumcheck = local.tidx
             // Sample lambda on non-root layer
-            + (AB::Expr::ONE - local.is_first) * AB::Expr::from_canonical_usize(D_EF)
-            + local.layer_idx * AB::Expr::from_canonical_usize(4 * D_EF);
-        let tidx_end = tidx_after_sumcheck.clone() + AB::Expr::from_canonical_usize(5 * D_EF);
+            + (AB::Expr::ONE - local.is_first) * AB::Expr::from_usize(D_EF)
+            + local.layer_idx * AB::Expr::from_usize(4 * D_EF);
+        let tidx_end = tidx_after_sumcheck.clone() + AB::Expr::from_usize(5 * D_EF);
         builder
             .when(is_transition.clone())
             .assert_eq(next.tidx, tidx_end.clone());
@@ -249,7 +252,7 @@ where
             GkrSumcheckInputMessage {
                 layer_idx: local.layer_idx.into(),
                 is_last_layer: is_last.clone(),
-                tidx: local.tidx + AB::Expr::from_canonical_usize(D_EF),
+                tidx: local.tidx + AB::Expr::from_usize(D_EF),
                 claim: local.sumcheck_claim_in.map(Into::into),
             },
             is_non_root_layer.clone() * is_not_dummy.clone(),
@@ -310,7 +313,7 @@ where
                 claim,
                 local.is_enabled * is_not_dummy.clone(),
             );
-            tidx += AB::Expr::from_canonical_usize(D_EF);
+            tidx += AB::Expr::from_usize(D_EF);
         }
         // 1c. Sample `mu`
         self.transcript_bus.sample_ext(
@@ -348,8 +351,8 @@ fn compute_recursive_relations<F, FA>(
 ) -> ([FA; D_EF], [FA; D_EF])
 where
     F: Into<FA> + Copy,
-    FA: FieldAlgebra,
-    FA::F: BinomiallyExtendable<D_EF>,
+    FA: PrimeCharacteristicRing,
+    FA::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     let p_cross_term = ext_field_add::<FA>(
         ext_field_multiply::<FA>(p_xi_0, q_xi_1),
@@ -363,8 +366,8 @@ where
 fn interpolate_linear_at_01<F, FA>(evals: [[F; D_EF]; 2], x: [F; D_EF]) -> [FA; D_EF]
 where
     F: Into<FA> + Copy,
-    FA: FieldAlgebra,
-    FA::F: BinomiallyExtendable<D_EF>,
+    FA: PrimeCharacteristicRing,
+    FA::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     let p: [FA; D_EF] = ext_field_subtract(evals[1], evals[0]);
     ext_field_add(ext_field_multiply::<FA>(p, x), evals[0])
@@ -384,8 +387,8 @@ pub(super) fn reduce_to_single_evaluation<F, FA>(
 ) -> ([FA; D_EF], [FA; D_EF])
 where
     F: Into<FA> + Copy,
-    FA: FieldAlgebra,
-    FA::F: BinomiallyExtendable<D_EF>,
+    FA: PrimeCharacteristicRing,
+    FA::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     let numer = interpolate_linear_at_01([p_xi_0, p_xi_1], mu);
     let denom = interpolate_linear_at_01([q_xi_0, q_xi_1], mu);

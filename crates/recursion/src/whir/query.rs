@@ -7,7 +7,7 @@ use openvm_stark_backend::{
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    FieldAlgebra, FieldExtensionAlgebra, TwoAdicField, extension::BinomiallyExtendable,
+    BasedVectorSpace, PrimeCharacteristicRing, TwoAdicField, extension::BinomiallyExtendable,
 };
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
@@ -71,12 +71,15 @@ impl<F> BaseAir<F> for WhirQueryAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for WhirQueryAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &WhirQueryCols<AB::Var> = (*local).borrow();
         let next: &WhirQueryCols<AB::Var> = (*next).borrow();
 
@@ -207,7 +210,7 @@ where
             ExpBitsLenMessage {
                 base: local.omega.into(),
                 bit_src: local.sample.into(),
-                num_bits: AB::Expr::from_canonical_usize(self.initial_log_domain_size - self.k)
+                num_bits: AB::Expr::from_usize(self.initial_log_domain_size - self.k)
                     - local.whir_round,
                 result: local.zi_root.into(),
             },
@@ -261,25 +264,26 @@ pub(crate) fn generate_trace(
 
             let cols: &mut WhirQueryCols<F> = row.borrow_mut();
             cols.is_enabled = F::ONE;
-            cols.proof_idx = F::from_canonical_usize(proof_idx);
+            cols.proof_idx = F::from_usize(proof_idx);
             cols.is_first_in_proof = F::from_bool(whir_round == 0 && query_idx == 0);
             cols.is_first_in_round = F::from_bool(query_idx == 0);
-            cols.tidx = F::from_canonical_usize(
-                preflight.whir.query_tidx_per_round[whir_round] + query_idx,
-            );
+            cols.tidx = F::from_usize(preflight.whir.query_tidx_per_round[whir_round] + query_idx);
             cols.sample = preflight.whir.queries[query_offset + query_idx];
-            cols.whir_round = F::from_canonical_usize(whir_round);
-            cols.query_idx = F::from_canonical_usize(query_idx);
-            cols.num_queries = F::from_canonical_usize(num_queries);
+            cols.whir_round = F::from_usize(whir_round);
+            cols.query_idx = F::from_usize(query_idx);
+            cols.num_queries = F::from_usize(num_queries);
             cols.omega = F::two_adic_generator(m - whir_round);
             cols.zi = preflight.whir.zjs[whir_round][query_idx];
             cols.zi_root = preflight.whir.zj_roots[whir_round][query_idx];
-            cols.yi
-                .copy_from_slice(preflight.whir.yjs[whir_round][query_idx].as_base_slice());
+            cols.yi.copy_from_slice(
+                preflight.whir.yjs[whir_round][query_idx].as_basis_coefficients_slice(),
+            );
             let gamma = preflight.whir.gammas[whir_round];
-            cols.gamma.copy_from_slice(gamma.as_base_slice());
+            cols.gamma
+                .copy_from_slice(gamma.as_basis_coefficients_slice());
             let gamma_pow = gamma.exp_u64(query_idx as u64 + 2);
-            cols.gamma_pow.copy_from_slice(gamma_pow.as_base_slice());
+            cols.gamma_pow
+                .copy_from_slice(gamma_pow.as_basis_coefficients_slice());
             let mut pre_claim = preflight.whir.pre_query_claims[whir_round];
             for (q, gamma_pow) in gamma.powers().skip(2).take(query_idx).enumerate() {
                 pre_claim += gamma_pow * preflight.whir.yjs[whir_round][q];
@@ -290,9 +294,11 @@ pub(crate) fn generate_trace(
                     preflight.whir.initial_claim_per_round[whir_round + 1]
                 );
             }
-            cols.pre_claim.copy_from_slice(pre_claim.as_base_slice());
+            cols.pre_claim
+                .copy_from_slice(pre_claim.as_basis_coefficients_slice());
             cols.post_claim.copy_from_slice(
-                preflight.whir.initial_claim_per_round[whir_round + 1].as_base_slice(),
+                preflight.whir.initial_claim_per_round[whir_round + 1]
+                    .as_basis_coefficients_slice(),
             );
         });
 

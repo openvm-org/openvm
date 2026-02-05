@@ -1,7 +1,7 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit_primitives::{TraceSubRowGenerator, is_equal::IsEqSubAir};
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra, TwoAdicField};
+use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, TwoAdicField};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
@@ -31,7 +31,7 @@ pub(crate) fn generate_trace(
 
     let l_skip = vk.inner.params.l_skip;
     let domain_size = 1usize << l_skip;
-    let domain_size_ext = EF::from_canonical_usize(domain_size);
+    let domain_size_ext = EF::from_usize(domain_size);
 
     let (data_slice, _) = trace.split_at_mut(total_height * width);
     let mut trace_slices: Vec<&mut [F]> = Vec::with_capacity(rows_per_proof.len());
@@ -64,7 +64,7 @@ pub(crate) fn generate_trace(
                 .collect::<Vec<_>>();
             assert_eq!(msgs.len(), 1);
             let challenge = msgs[0].challenge;
-            let challenge_ext = EF::from_base_slice(&challenge);
+            let challenge_ext = EF::from_basis_coefficients_slice(&challenge).unwrap();
 
             let omega_skip = F::two_adic_generator(l_skip);
             let domain_mask = domain_size - 1;
@@ -73,14 +73,14 @@ pub(crate) fn generate_trace(
                 .enumerate()
                 .for_each(|(i, chunk)| {
                     let coeff_idx = height - 1 - i;
-                    let coeff_base_slice = coeffs[coeff_idx].as_base_slice();
+                    let coeff_base_slice = coeffs[coeff_idx].as_basis_coefficients_slice();
 
                     let cols: &mut UnivariateSumcheckCols<F> = chunk.borrow_mut();
                     cols.is_valid = F::ONE;
-                    cols.proof_idx = F::from_canonical_usize(pidx);
+                    cols.proof_idx = F::from_usize(pidx);
                     cols.r.copy_from_slice(&challenge);
                     cols.is_first = F::from_bool(i == 0);
-                    cols.coeff_idx = F::from_canonical_usize(coeff_idx);
+                    cols.coeff_idx = F::from_usize(coeff_idx);
 
                     let exponent = coeff_idx & domain_mask;
                     cols.omega_skip_power = if exponent == 0 {
@@ -96,7 +96,7 @@ pub(crate) fn generate_trace(
                         ),
                     );
                     cols.coeff.copy_from_slice(coeff_base_slice);
-                    cols.tidx = F::from_canonical_usize(tidx_r - (i + 1) * D_EF);
+                    cols.tidx = F::from_usize(tidx_r - (i + 1) * D_EF);
                 });
 
             let mut sum_at_roots = EF::ZERO;
@@ -106,7 +106,7 @@ pub(crate) fn generate_trace(
                 let coeff_idx = height - 1 - i;
                 let chunk = row_iter.next().unwrap();
                 let cols: &mut UnivariateSumcheckCols<F> = chunk.borrow_mut();
-                let coeff = EF::from_base_slice(&cols.coeff);
+                let coeff = EF::from_basis_coefficients_slice(&cols.coeff).unwrap();
 
                 if coeff_idx & domain_mask == 0 {
                     sum_at_roots += coeff * domain_size_ext;
@@ -114,8 +114,9 @@ pub(crate) fn generate_trace(
                 value_at_r = coeff + challenge_ext * value_at_r;
 
                 cols.sum_at_roots
-                    .copy_from_slice(sum_at_roots.as_base_slice());
-                cols.value_at_r.copy_from_slice(value_at_r.as_base_slice());
+                    .copy_from_slice(sum_at_roots.as_basis_coefficients_slice());
+                cols.value_at_r
+                    .copy_from_slice(value_at_r.as_basis_coefficients_slice());
             }
             debug_assert!(row_iter.next().is_none());
         });

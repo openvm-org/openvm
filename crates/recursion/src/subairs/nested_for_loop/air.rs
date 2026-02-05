@@ -1,6 +1,6 @@
 use openvm_circuit_primitives::SubAir;
 use p3_air::AirBuilder;
-use p3_field::FieldAlgebra;
+use p3_field::PrimeCharacteristicRing;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 /// A SubAir that constrains the `is_first` flags for nested for-loops.
@@ -201,7 +201,7 @@ impl<const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
         next_is_first: impl Into<FA>,
     ) -> FA
     where
-        FA: FieldAlgebra,
+        FA: PrimeCharacteristicRing,
     {
         next_is_enabled.into() * (FA::ONE - next_is_first.into())
     }
@@ -214,7 +214,7 @@ impl<const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
     /// - The next row is enabled and has `is_first` set (boundary between loop iterations)
     pub fn local_is_last<FA>(next_is_enabled: impl Into<FA>, next_is_first: impl Into<FA>) -> FA
     where
-        FA: FieldAlgebra,
+        FA: PrimeCharacteristicRing,
     {
         FA::ONE - Self::local_is_transition(next_is_enabled, next_is_first)
     }

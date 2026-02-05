@@ -17,7 +17,7 @@ use openvm_stark_sdk::{config::setup_tracing_with_log_level, p3_baby_bear::BabyB
 use openvm_transpiler::{
     FromElf, elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler,
 };
-use p3_field::{FieldAlgebra, PrimeField32};
+use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use stark_backend_v2::{
     F, StarkEngineV2, SystemParams, WhirConfig, WhirParams,
     keygen::types::MultiStarkVerifyingKeyV2, proof::Proof,
@@ -97,7 +97,7 @@ fn run_leaf_aggregation(log_fib_input: usize) -> Result<(Arc<MultiStarkVerifying
     )?;
     let input = (1u64 << log_fib_input)
         .to_le_bytes()
-        .map(F::from_canonical_u8)
+        .map(F::from_u8)
         .to_vec();
 
     let engine = Engine::new(app_system_params());

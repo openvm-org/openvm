@@ -59,10 +59,15 @@ impl<F: Field, const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize> BaseA
 
 impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize> Air<AB>
     for TestAir<DEPTH_MINUS_ONE, DEPTH_MINUS_TWO>
+where
+    AB::F: Field,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
 
         let io_width = size_of::<NestedForLoopIoCols<u8, DEPTH_MINUS_ONE>>();
         let (local_io, local_aux) = local.split_at(io_width);
@@ -76,15 +81,15 @@ impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
             NestedForLoopSubAir::<DEPTH_MINUS_ONE, DEPTH_MINUS_TWO>.eval(
                 builder,
                 (
-                    (local_io.map_into(), next_io.map_into()),
-                    local_aux.map_into(),
+                    (local_io.clone().map_into(), next_io.clone().map_into()),
+                    local_aux.clone().map_into(),
                 ),
             );
         } else {
             NestedForLoopSubAir::<DEPTH_MINUS_ONE, 0>.eval(
                 builder,
                 (
-                    (local_io.map_into(), next_io.map_into()),
+                    (local_io.clone().map_into(), next_io.clone().map_into()),
                     NestedForLoopAuxCols { is_transition: [] },
                 ),
             );
@@ -100,10 +105,7 @@ fn generate_trace<
 >(
     rows: Vec<[u32; WIDTH]>,
 ) -> RowMajorMatrix<F> {
-    let mut rows: Vec<[F; WIDTH]> = rows
-        .into_iter()
-        .map(|r| r.map(F::from_canonical_u32))
-        .collect();
+    let mut rows: Vec<[F; WIDTH]> = rows.into_iter().map(|r| r.map(F::from_u32)).collect();
 
     let io_width = size_of::<NestedForLoopIoCols<u8, DEPTH_MINUS_ONE>>();
 

@@ -64,7 +64,7 @@ use std::sync::Arc;
 use itertools::Itertools;
 use openvm_stark_backend::{AirRef, p3_maybe_rayon::prelude::*};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use p3_field::{Field, FieldAlgebra};
+use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::dense::RowMajorMatrix;
 use stark_backend_v2::{
     D_EF, EF, F,

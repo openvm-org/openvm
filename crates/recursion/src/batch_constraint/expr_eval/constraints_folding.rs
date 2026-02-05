@@ -10,7 +10,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra, extension::BinomiallyExtendable};
+use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, extension::BinomiallyExtendable};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKey0V2};
@@ -72,11 +72,14 @@ impl<F> BaseAir<F> for ConstraintsFoldingAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for ConstraintsFoldingAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
 
         let local: &ConstraintsFoldingCols<AB::Var> = (*local).borrow();
         let next: &ConstraintsFoldingCols<AB::Var> = (*next).borrow();
@@ -230,9 +233,10 @@ impl ConstraintsFoldingBlob {
         let mut folded = MultiProofVecVec::new();
         for (pidx, preflight) in preflights.iter().enumerate() {
             let lambda_tidx = preflight.batch_constraint.lambda_tidx;
-            let lambda = EF::from_base_slice(
+            let lambda = EF::from_basis_coefficients_slice(
                 &preflight.transcript.values()[lambda_tidx..lambda_tidx + D_EF],
-            );
+            )
+            .unwrap();
 
             let vdata = &preflight.proof_shape.sorted_trace_vdata;
             for (sort_idx, (air_idx, v)) in vdata.iter().enumerate() {
@@ -307,16 +311,18 @@ pub(in crate::batch_constraint) fn generate_constraints_folding_trace(
                     .saturating_sub(preflight.proof_shape.l_skip);
 
                 cols.is_valid = F::ONE;
-                cols.proof_idx = F::from_canonical_usize(pidx);
-                cols.air_idx = F::from_canonical_usize(record.air_idx);
-                cols.sort_idx = F::from_canonical_usize(record.sort_idx);
-                cols.constraint_idx = F::from_canonical_usize(record.constraint_idx);
-                cols.n_lift = F::from_canonical_usize(n_lift);
-                cols.lambda_tidx = F::from_canonical_usize(lambda_tidx);
+                cols.proof_idx = F::from_usize(pidx);
+                cols.air_idx = F::from_usize(record.air_idx);
+                cols.sort_idx = F::from_usize(record.sort_idx);
+                cols.constraint_idx = F::from_usize(record.constraint_idx);
+                cols.n_lift = F::from_usize(n_lift);
+                cols.lambda_tidx = F::from_usize(lambda_tidx);
                 cols.lambda.copy_from_slice(lambda_slice);
-                cols.value.copy_from_slice(record.value.as_base_slice());
+                cols.value
+                    .copy_from_slice(record.value.as_basis_coefficients_slice());
                 cols.eq_n.copy_from_slice(
-                    preflight.batch_constraint.eq_ns_frontloaded[n_lift].as_base_slice(),
+                    preflight.batch_constraint.eq_ns_frontloaded[n_lift]
+                        .as_basis_coefficients_slice(),
                 );
                 cols.is_first_in_air = F::from_bool(record.is_first_in_air);
                 cols.loop_aux.is_transition[0] = F::ONE;
@@ -324,14 +330,16 @@ pub(in crate::batch_constraint) fn generate_constraints_folding_trace(
 
         // Setting `cur_sum`
         let mut cur_sum = EF::ZERO;
-        let lambda = EF::from_base_slice(lambda_slice);
+        let lambda = EF::from_basis_coefficients_slice(lambda_slice).unwrap();
         trace[cur_height * width..(cur_height + records.len()) * width]
             .chunks_exact_mut(width)
             .rev()
             .for_each(|chunk| {
                 let cols: &mut ConstraintsFoldingCols<_> = chunk.borrow_mut();
-                cur_sum = cur_sum * lambda + EF::from_base_slice(&cols.value);
-                cols.cur_sum.copy_from_slice(cur_sum.as_base_slice());
+                cur_sum =
+                    cur_sum * lambda + EF::from_basis_coefficients_slice(&cols.value).unwrap();
+                cols.cur_sum
+                    .copy_from_slice(cur_sum.as_basis_coefficients_slice());
                 if cols.is_first_in_air == F::ONE {
                     cur_sum = EF::ZERO;
                 }
@@ -355,7 +363,7 @@ pub(in crate::batch_constraint) fn generate_constraints_folding_trace(
         .enumerate()
         .for_each(|(i, chunk)| {
             let cols: &mut ConstraintsFoldingCols<F> = chunk.borrow_mut();
-            cols.proof_idx = F::from_canonical_usize(preflights.len() + i);
+            cols.proof_idx = F::from_usize(preflights.len() + i);
             cols.is_first = F::ONE;
             cols.is_last = F::ONE;
             cols.is_first_in_air = F::ONE;
@@ -407,9 +415,10 @@ pub(in crate::batch_constraint) mod cuda {
 
             for (pidx, preflight) in preflights.iter().enumerate() {
                 let lambda_tidx = preflight.cpu.batch_constraint.lambda_tidx;
-                let lambda = EF::from_base_slice(
+                let lambda = EF::from_basis_coefficients_slice(
                     &preflight.cpu.transcript.values()[lambda_tidx..lambda_tidx + D_EF],
-                );
+                )
+                .unwrap();
 
                 let vdata = &preflight.cpu.proof_shape.sorted_trace_vdata;
                 let mut proof_values = Vec::with_capacity(vdata.len());

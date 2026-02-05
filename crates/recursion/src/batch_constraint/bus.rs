@@ -1,4 +1,4 @@
-use p3_field::FieldAlgebra;
+use p3_field::PrimeCharacteristicRing;
 use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
@@ -13,8 +13,8 @@ pub(super) enum BatchConstraintInnerMessageType {
 }
 
 impl BatchConstraintInnerMessageType {
-    pub fn to_field<T: FieldAlgebra>(self) -> T {
-        T::from_canonical_u8(self as u8)
+    pub fn to_field<T: PrimeCharacteristicRing>(self) -> T {
+        T::from_u8(self as u8)
     }
 }
 

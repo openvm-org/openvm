@@ -5,7 +5,7 @@ use itertools::{Itertools, izip};
 use openvm_circuit_primitives::encoder::Encoder;
 use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use p3_field::{Field, FieldAlgebra, PrimeField32, TwoAdicField};
+use p3_field::{Field, PrimeCharacteristicRing, PrimeField32, TwoAdicField};
 use p3_matrix::dense::RowMajorMatrix;
 #[cfg(not(debug_assertions))]
 use p3_maybe_rayon::prelude::*;

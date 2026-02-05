@@ -11,7 +11,7 @@ use openvm_stark_backend::{
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdicField,
+    BasedVectorSpace, Field, PrimeCharacteristicRing, PrimeField32, TwoAdicField,
     extension::BinomiallyExtendable,
 };
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
@@ -117,11 +117,14 @@ impl<F> BaseAir<F> for EqBaseAir {
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for EqBaseAir
 where
     AB::F: PrimeField32 + TwoAdicField,
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
 
         let local: &EqBaseCols<AB::Var> = (*local).borrow();
         let next: &EqBaseCols<AB::Var> = (*next).borrow();
@@ -171,7 +174,7 @@ where
             .assert_eq(local.row_idx + AB::F::ONE, next.row_idx);
         builder
             .when(and(local.is_valid, local.is_last))
-            .assert_eq(local.row_idx, AB::F::from_canonical_usize(self.l_skip));
+            .assert_eq(local.row_idx, AB::F::from_usize(self.l_skip));
 
         self.whir_opening_point_bus.send(
             builder,
@@ -317,7 +320,7 @@ where
          * Compute eq_0(u, r) and eq_0(u, r * omega), which are sent to the lookup
          * bus. Note that k_rot_0(u, r) = eq_0(u, r * omega).
          */
-        let omega_pow_inv = AB::F::from_canonical_usize(1 << self.l_skip).inverse();
+        let omega_pow_inv = AB::F::from_usize(1 << self.l_skip).inverse();
 
         let eq_u_r = ext_field_multiply_scalar(
             ext_field_add::<AB::Expr>(ext_field_subtract(local.prod_u_r, next.u_pow), ef_one),
@@ -463,7 +466,7 @@ impl EqBaseTraceGenerator {
                     }
                 }
 
-                let proof_idx_value = F::from_canonical_usize(proof_idx);
+                let proof_idx_value = F::from_usize(proof_idx);
 
                 let mut trace = vec![F::ZERO; num_rows * width];
 
@@ -498,21 +501,24 @@ impl EqBaseTraceGenerator {
                     cols.is_first = F::from_bool(row_idx == 0);
                     cols.is_last = F::from_bool(is_last);
 
-                    cols.row_idx = F::from_canonical_usize(row_idx);
+                    cols.row_idx = F::from_usize(row_idx);
 
-                    cols.u_pow.copy_from_slice(u.as_base_slice());
-                    cols.r_pow.copy_from_slice(r.as_base_slice());
-                    cols.r_omega_pow.copy_from_slice(r_omega.as_base_slice());
+                    cols.u_pow.copy_from_slice(u.as_basis_coefficients_slice());
+                    cols.r_pow.copy_from_slice(r.as_basis_coefficients_slice());
+                    cols.r_omega_pow
+                        .copy_from_slice(r_omega.as_basis_coefficients_slice());
 
-                    cols.prod_u_r.copy_from_slice(prod_u_r.as_base_slice());
+                    cols.prod_u_r
+                        .copy_from_slice(prod_u_r.as_basis_coefficients_slice());
                     cols.prod_u_r_omega
-                        .copy_from_slice(prod_u_r_omega.as_base_slice());
-                    cols.prod_u_1.copy_from_slice(prod_u_1.as_base_slice());
+                        .copy_from_slice(prod_u_r_omega.as_basis_coefficients_slice());
+                    cols.prod_u_1
+                        .copy_from_slice(prod_u_1.as_basis_coefficients_slice());
                     cols.prod_r_omega_1
-                        .copy_from_slice(prod_r_omega_1.as_base_slice());
+                        .copy_from_slice(prod_r_omega_1.as_basis_coefficients_slice());
 
                     if is_last {
-                        cols.mult = F::from_canonical_usize(mults[0]);
+                        cols.mult = F::from_usize(mults[0]);
                     }
 
                     let l_skip = vk.inner.params.l_skip - row_idx;
@@ -522,22 +528,24 @@ impl EqBaseTraceGenerator {
                         in_prod *= u_pow_rev + F::ONE;
                         cols.eq_neg.copy_from_slice(
                             (eval_eq_uni(l_skip, preflight.stacking.sumcheck_rnd[0], r)
-                                * F::from_canonical_usize(1 << l_skip))
-                            .as_base_slice(),
+                                * F::from_usize(1 << l_skip))
+                            .as_basis_coefficients_slice(),
                         );
                         cols.k_rot_neg.copy_from_slice(
                             (eval_rot_kernel_prism(
                                 l_skip,
                                 &[preflight.stacking.sumcheck_rnd[0]],
                                 &[r],
-                            ) * F::from_canonical_usize(1 << l_skip))
-                            .as_base_slice(),
+                            ) * F::from_usize(1 << l_skip))
+                            .as_basis_coefficients_slice(),
                         );
-                        cols.mult_neg = F::from_canonical_usize(mults[row_idx]);
+                        cols.mult_neg = F::from_usize(mults[row_idx]);
                     }
 
-                    cols.u_pow_rev.copy_from_slice(u_pow_rev.as_base_slice());
-                    cols.in_prod.copy_from_slice(in_prod.as_base_slice());
+                    cols.u_pow_rev
+                        .copy_from_slice(u_pow_rev.as_basis_coefficients_slice());
+                    cols.in_prod
+                        .copy_from_slice(in_prod.as_basis_coefficients_slice());
 
                     u *= u;
                     r *= r;
@@ -564,7 +572,7 @@ impl EqBaseTraceGenerator {
             let padding_start = combined_trace.len();
             combined_trace.resize(padded_rows * width, F::ZERO);
 
-            let padding_proof_idx = F::from_canonical_usize(proofs.len());
+            let padding_proof_idx = F::from_usize(proofs.len());
             let mut chunks = combined_trace[padding_start..].chunks_mut(width);
             let num_padded_rows = padded_rows - total_rows;
             for i in 0..num_padded_rows {

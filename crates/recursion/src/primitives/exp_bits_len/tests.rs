@@ -1,7 +1,7 @@
 use core::borrow::Borrow;
 
 use openvm_stark_sdk::config::setup_tracing_with_log_level;
-use p3_field::{FieldAlgebra, PrimeField32};
+use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::Matrix;
 use stark_backend_v2::F;
 use tracing::Level;
@@ -52,8 +52,8 @@ fn test_exp_bits_len_cpu_trace_generation(num_requests: usize) {
     let generator = ExpBitsLenCpuTraceGenerator::default();
     generator.add_requests(requests.iter().map(|req| {
         (
-            F::from_canonical_u32(req.base),
-            F::from_canonical_u32(req.bit_src),
+            F::from_u32(req.base),
+            F::from_u32(req.bit_src),
             req.num_bits as usize,
         )
     }));
@@ -72,7 +72,7 @@ fn test_exp_bits_len_cpu_trace_generation(num_requests: usize) {
         let end = start + row_count * width;
         let mut expected = vec![F::ZERO; row_count * width];
         fill_valid_rows(
-            F::from_canonical_u32(req.base),
+            F::from_u32(req.base),
             req.bit_src,
             req.num_bits,
             &mut expected,
@@ -113,8 +113,8 @@ mod cuda_tests {
             let cpu_gen = ExpBitsLenCpuTraceGenerator::default();
             cpu_gen.add_requests(requests.iter().map(|req| {
                 (
-                    F::from_canonical_u32(req.base),
-                    F::from_canonical_u32(req.bit_src),
+                    F::from_u32(req.base),
+                    F::from_u32(req.bit_src),
                     req.num_bits as usize,
                 )
             }));
@@ -125,8 +125,8 @@ mod cuda_tests {
             let gpu_gen = ExpBitsLenGpuTraceGenerator::default();
             gpu_gen.add_requests(requests.iter().map(|req| {
                 (
-                    F::from_canonical_u32(req.base),
-                    F::from_canonical_u32(req.bit_src),
+                    F::from_u32(req.base),
+                    F::from_u32(req.bit_src),
                     req.num_bits as usize,
                 )
             }));

@@ -4,7 +4,8 @@ use std::{array::from_fn, borrow::BorrowMut, sync::Arc};
 use itertools::Itertools;
 use openvm_circuit_primitives::utils::assert_array_eq;
 use openvm_poseidon2_air::{
-    POSEIDON2_WIDTH, Poseidon2Config, Poseidon2SubAir, Poseidon2SubChip, Poseidon2SubCols,
+    BABY_BEAR_POSEIDON2_SBOX_DEGREE, POSEIDON2_WIDTH, Poseidon2Config, Poseidon2SubAir,
+    Poseidon2SubChip, Poseidon2SubCols,
 };
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
@@ -12,7 +13,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
-use p3_field::{Field, FieldAlgebra, PrimeField};
+use p3_field::{Field, InjectiveMonomial, PrimeCharacteristicRing, PrimeField};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use recursion_circuit::{
     batch_constraint::expr_eval::cached_symbolic_expr_cols_to_digest,
@@ -46,7 +47,7 @@ pub struct DagCommitAir<F: Field> {
     pub dag_commit_bus: DagCommitBus,
 }
 
-impl<F: PrimeField> DagCommitAir<F> {
+impl<F: PrimeField + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>> DagCommitAir<F> {
     pub fn new(dag_commit_bus: DagCommitBus) -> Self {
         let sub_chip =
             Poseidon2SubChip::<F, SBOX_REGISTERS>::new(Poseidon2Config::default().constants);
@@ -74,7 +75,10 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &DagCommitCols<AB::Var> = (*local).borrow();
         let next: &DagCommitCols<AB::Var> = (*next).borrow();
 
@@ -126,7 +130,7 @@ pub fn generate_dag_commit_proving_ctx<PB: ProverBackendV2>(
     cached_trace: PB::Matrix,
 ) -> (PB::Matrix, [PB::Val; DIGEST_SIZE])
 where
-    PB::Val: Field + PrimeField,
+    PB::Val: Field + PrimeField + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
 {
     let host_trace_cm = device.transport_matrix_from_device_to_host(&cached_trace);
     let host_trace_view: StridedColMajorMatrixView<_> = host_trace_cm.as_view().into();
@@ -160,7 +164,7 @@ where
         let row = trace_iter.next().unwrap();
         row[..inner_width].copy_from_slice(inner_row);
         let cols: &mut DagCommitCols<PB::Val> = row.borrow_mut();
-        cols.row_idx = PB::Val::from_canonical_usize(row_idx);
+        cols.row_idx = PB::Val::from_usize(row_idx);
     }
 
     let matrix_rm = RowMajorMatrix::new(trace_values, width);

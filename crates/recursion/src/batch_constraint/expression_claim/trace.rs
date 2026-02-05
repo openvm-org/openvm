@@ -1,6 +1,6 @@
 use std::borrow::BorrowMut;
 
-use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField32};
+use p3_field::{BasedVectorSpace, Field, PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
@@ -66,10 +66,10 @@ pub(in crate::batch_constraint) fn generate_trace(
                 let cols: &mut ExpressionClaimCols<_> = chunk.borrow_mut();
                 cols.is_first = F::from_bool(i == 0);
                 cols.is_valid = F::ONE;
-                cols.proof_idx = F::from_canonical_usize(pidx);
+                cols.proof_idx = F::from_usize(pidx);
                 cols.is_interaction = F::from_bool(is_interaction);
-                cols.num_multilinear_sumcheck_rounds = F::from_canonical_usize(num_rounds);
-                cols.idx = F::from_canonical_usize(if i < 2 * num_present {
+                cols.num_multilinear_sumcheck_rounds = F::from_usize(num_rounds);
+                cols.idx = F::from_usize(if i < 2 * num_present {
                     i
                 } else {
                     i - 2 * num_present
@@ -80,22 +80,28 @@ pub(in crate::batch_constraint) fn generate_trace(
                 } else {
                     i - 2 * num_present
                 };
-                cols.trace_idx = F::from_canonical_usize(trace_idx);
+                cols.trace_idx = F::from_usize(trace_idx);
                 cols.mu
                     .copy_from_slice(&preflight.transcript.values()[mu_tidx..mu_tidx + D_EF]);
-                cols.value.copy_from_slice(claims[i].1.as_base_slice());
+                cols.value
+                    .copy_from_slice(claims[i].1.as_basis_coefficients_slice());
                 cols.eq_sharp_ns.copy_from_slice(
-                    preflight.batch_constraint.eq_sharp_ns_frontloaded[n_lift].as_base_slice(),
+                    preflight.batch_constraint.eq_sharp_ns_frontloaded[n_lift]
+                        .as_basis_coefficients_slice(),
                 );
-                cols.multiplier.copy_from_slice(EF::ONE.as_base_slice());
-                cols.n_abs = F::from_canonical_usize(n_abs);
+                cols.multiplier
+                    .copy_from_slice(EF::ONE.as_basis_coefficients_slice());
+                cols.n_abs = F::from_usize(n_abs);
                 cols.n_sign = F::from_bool(claims[i].0.is_negative());
-                cols.n_abs_pow = F::from_canonical_usize(1 << n_abs);
+                cols.n_abs_pow = F::from_usize(1 << n_abs);
             });
 
         // Setting `cur_sum`
         let mut cur_sum = EF::ZERO;
-        let mu = EF::from_base_slice(&preflight.transcript.values()[mu_tidx..mu_tidx + D_EF]);
+        let mu = EF::from_basis_coefficients_slice(
+            &preflight.transcript.values()[mu_tidx..mu_tidx + D_EF],
+        )
+        .unwrap();
         trace[cur_height * width..(cur_height + claims.len()) * width]
             .chunks_exact_mut(width)
             .rev()
@@ -103,19 +109,21 @@ pub(in crate::batch_constraint) fn generate_trace(
                 let cols: &mut ExpressionClaimCols<_> = chunk.borrow_mut();
                 // if it's interaction, we need to multiply by eq_sharp_ns and norm_factor
                 let multiplier = if cols.is_interaction == F::ONE {
-                    let mut mult = EF::from_base_slice(&cols.eq_sharp_ns);
+                    let mut mult = EF::from_basis_coefficients_slice(&cols.eq_sharp_ns).unwrap();
                     if cols.n_sign == F::ONE && cols.idx.as_canonical_u32() % 2 == 0 {
                         mult *=
-                            F::from_canonical_usize(1 << cols.n_abs.as_canonical_u32() as usize)
-                                .inverse();
+                            F::from_usize(1 << cols.n_abs.as_canonical_u32() as usize).inverse();
                     }
                     mult
                 } else {
                     EF::ONE
                 };
-                cols.multiplier.copy_from_slice(multiplier.as_base_slice());
-                cur_sum = cur_sum * mu + EF::from_base_slice(&cols.value) * multiplier;
-                cols.cur_sum.copy_from_slice(cur_sum.as_base_slice());
+                cols.multiplier
+                    .copy_from_slice(multiplier.as_basis_coefficients_slice());
+                cur_sum = cur_sum * mu
+                    + EF::from_basis_coefficients_slice(&cols.value).unwrap() * multiplier;
+                cols.cur_sum
+                    .copy_from_slice(cur_sum.as_basis_coefficients_slice());
             });
 
         cur_height += claims.len();
@@ -125,7 +133,7 @@ pub(in crate::batch_constraint) fn generate_trace(
         .enumerate()
         .for_each(|(i, chunk)| {
             let cols: &mut ExpressionClaimCols<F> = chunk.borrow_mut();
-            cols.proof_idx = F::from_canonical_usize(preflights.len() + i);
+            cols.proof_idx = F::from_usize(preflights.len() + i);
         });
     RowMajorMatrix::new(trace, width)
 }
