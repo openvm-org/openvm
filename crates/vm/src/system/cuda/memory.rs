@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
 use openvm_circuit::{
-    arch::{
-        AddressSpaceHostLayout, DenseRecordArena, MemoryConfig, ADDR_SPACE_OFFSET, CONST_BLOCK_SIZE,
-    },
+    arch::{AddressSpaceHostLayout, DenseRecordArena, MemoryConfig, ADDR_SPACE_OFFSET},
     system::{memory::AddressMap, TouchedMemory},
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
@@ -167,7 +165,7 @@ impl MemoryInventoryGPU {
                 // Edge case for when partition is empty
                 if partition.is_empty() {
                     let leftmost_values = 'left: {
-                        let mut res = [F::ZERO; CONST_BLOCK_SIZE];
+                        let mut res = [F::ZERO; DIGEST_WIDTH];
                         if persistent.initial_memory[ADDR_SPACE_OFFSET as usize].is_empty() {
                             break 'left res;
                         }
@@ -175,26 +173,23 @@ impl MemoryInventoryGPU {
                             [ADDR_SPACE_OFFSET as usize]
                             .layout;
                         let one_cell_size = layout.size();
-                        let values = vec![0u8; one_cell_size * CONST_BLOCK_SIZE];
+                        let mut values = vec![0u8; one_cell_size * DIGEST_WIDTH];
                         unsafe {
                             cuda_memcpy::<true, false>(
-                                values.as_ptr() as *mut std::ffi::c_void,
+                                values.as_mut_ptr() as *mut std::ffi::c_void,
                                 persistent.initial_memory[ADDR_SPACE_OFFSET as usize].as_ptr()
                                     as *const std::ffi::c_void,
                                 values.len(),
                             )
                             .unwrap();
-                            for i in 0..CONST_BLOCK_SIZE {
+                            for i in 0..DIGEST_WIDTH {
                                 res[i] = layout.to_field::<F>(&values[i * one_cell_size..]);
                             }
                         }
                         res
                     };
 
-                    let mut values_u32 = [0u32; DIGEST_WIDTH];
-                    for i in 0..CONST_BLOCK_SIZE {
-                        values_u32[i] = Self::field_to_raw_u32(leftmost_values[i]);
-                    }
+                    let values_u32 = leftmost_values.map(Self::field_to_raw_u32);
                     let merkle_record = MemoryMerkleRecord {
                         address_space: ADDR_SPACE_OFFSET,
                         ptr: 0,
@@ -376,6 +371,79 @@ impl MemoryInventoryGPU {
                 .generate_air_proving_ctxs(access_adapter_arena),
         );
         ret
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use openvm_circuit::{
+        arch::{testing::POSEIDON2_DIRECT_BUS, vm_poseidon2_config, MemoryConfig},
+        system::{
+            memory::{merkle::MerkleTree, online::GuestMemory, AddressMap},
+            poseidon2::Poseidon2PeripheryChip,
+        },
+    };
+    use openvm_circuit_primitives::var_range::{
+        VariableRangeCheckerChip, VariableRangeCheckerChipGPU,
+    };
+    use openvm_cuda_backend::prelude::F;
+    use openvm_instructions::riscv::RV32_REGISTER_AS;
+
+    use super::*;
+    use crate::arch::testing::default_var_range_checker_bus;
+
+    #[test]
+    fn test_empty_touched_memory_uses_full_chunk_values() {
+        let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
+        addr_spaces[RV32_REGISTER_AS as usize].num_cells = DIGEST_WIDTH;
+        let mem_config = MemoryConfig::new(2, addr_spaces, 4, 29, 17, 32);
+
+        let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
+        unsafe {
+            memory.write::<u8, DIGEST_WIDTH>(RV32_REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
+        }
+
+        let cpu_hasher =
+            Poseidon2PeripheryChip::new(vm_poseidon2_config(), POSEIDON2_DIRECT_BUS, 3);
+        let cpu_merkle_tree = MerkleTree::<F, DIGEST_WIDTH>::from_memory(
+            &memory.memory,
+            &mem_config.memory_dimensions(),
+            &cpu_hasher,
+        );
+        let expected_root = cpu_merkle_tree.root();
+
+        let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(Arc::new(
+            VariableRangeCheckerChip::new(default_var_range_checker_bus()),
+        )));
+        let max_buffer_size = (mem_config
+            .addr_spaces
+            .iter()
+            .map(|ashc| ashc.num_cells * 2 + mem_config.memory_dimensions().overall_height())
+            .sum::<usize>()
+            * 2)
+        .next_power_of_two()
+            * 2
+            * DIGEST_WIDTH;
+        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(max_buffer_size, 1));
+        let mut inventory =
+            MemoryInventoryGPU::persistent(mem_config.clone(), range_checker, hasher_chip);
+        inventory.set_initial_memory(&memory.memory);
+
+        let ctxs = inventory.generate_proving_ctxs(
+            DenseRecordArena::with_byte_capacity(0),
+            TouchedMemory::Persistent(Vec::new()),
+        );
+        let merkle_ctx = ctxs
+            .into_iter()
+            .find(|ctx| ctx.public_values.len() >= 2 * DIGEST_WIDTH)
+            .expect("missing merkle ctx");
+        let gpu_root_slice =
+            &merkle_ctx.public_values[merkle_ctx.public_values.len() - DIGEST_WIDTH..];
+        let gpu_root: [F; DIGEST_WIDTH] = gpu_root_slice.try_into().unwrap();
+
+        assert_eq!(expected_root, gpu_root);
     }
 }
 
