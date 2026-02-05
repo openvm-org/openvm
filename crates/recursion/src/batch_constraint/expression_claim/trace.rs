@@ -58,7 +58,7 @@ pub(in crate::batch_constraint) fn generate_trace(
             .enumerate()
             .for_each(|(i, chunk)| {
                 let n_lift = claims[i].0.max(0) as usize;
-                let n_abs = claims[i].0.unsigned_abs() as usize;
+                let n_abs = claims[i].0.unsigned_abs();
                 let is_interaction = i < 2 * num_present;
                 if is_interaction {
                     pow_checker.add_pow(n_abs);
@@ -112,7 +112,7 @@ pub(in crate::batch_constraint) fn generate_trace(
                     let mut mult = EF::from_basis_coefficients_slice(&cols.eq_sharp_ns).unwrap();
                     if cols.n_sign == F::ONE && cols.idx.as_canonical_u32() % 2 == 0 {
                         mult *=
-                            F::from_usize(1 << cols.n_abs.as_canonical_u32() as usize).inverse();
+                            F::from_u32(1 << cols.n_abs.as_canonical_u32()).inverse();
                     }
                     mult
                 } else {

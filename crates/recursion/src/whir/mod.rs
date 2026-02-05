@@ -331,7 +331,7 @@ impl WhirModule {
             zjs.push(zjs_round);
             yjs.push(yjs_round);
 
-            gamma_pows.next().unwrap();
+            let _ = gamma_pows.next().unwrap();
         }
         // push one for the final claim
         initial_claim_per_round.push(claim);
