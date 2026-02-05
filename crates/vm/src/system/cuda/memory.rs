@@ -262,7 +262,7 @@ impl MemoryInventoryGPU {
                             .skip(ADDR_SPACE_OFFSET as usize)
                         {
                             offsets.push(acc);
-                            acc = acc.saturating_add(addr_sp.layout.size() as u32);
+                            acc = acc.checked_add(addr_sp.layout.size() as u32);
                         }
                         offsets.push(acc);
                         offsets
