@@ -38,7 +38,7 @@ The implementation of these constraints is shown below:
         .assert_eq(local.counter + AB::Expr::ONE, next.counter);
     builder.when_last_row().assert_eq(
         local.counter,
-        AB::F::from_canonical_u32(self.bus.range_max - 1),
+        AB::F::from_u32(self.bus.range_max - 1),
     );
 ```
 
