@@ -19,7 +19,7 @@ use openvm_stark_backend::{
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use stark_backend_v2::StarkEngineV2 as StarkEngine;
 
-use super::{AnyEnum, VmChipComplex, PUBLIC_VALUES_AIR_ID};
+use super::{AnyEnum, VmChipComplex, CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID};
 use crate::{
     arch::{
         execution_mode::metered::segment_ctx::SegmentationConfig, AirInventory, AirInventoryError,
@@ -367,6 +367,17 @@ impl SystemConfig {
         let boundary_idx = self.memory_boundary_air_id();
         // boundary, (if persistent memory) merkle AIRs
         boundary_idx + 1 + usize::from(self.continuation_enabled)
+    }
+
+    /// Whether the AIR ID must be present in a valid v2 proof.
+    pub fn is_required_air_id(&self, air_id: usize) -> bool {
+        if !self.continuation_enabled {
+            return false;
+        }
+        air_id == PROGRAM_AIR_ID
+            || air_id == CONNECTOR_AIR_ID
+            || air_id == self.memory_boundary_air_id()
+            || Some(air_id) == self.memory_merkle_air_id()
     }
 
     /// This is O(1) and returns the length of
