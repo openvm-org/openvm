@@ -7,7 +7,7 @@ use openvm_circuit::{
         memory::merkle::public_values::UserPublicValuesProof, program::trace::compute_exe_commit,
     },
 };
-use p3_field::{FieldAlgebra, PrimeField32};
+use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use stark_backend_v2::{
     BabyBearPoseidon2CpuEngineV2, DIGEST_SIZE, F, StarkEngineV2,
     codec::{Decode, Encode},

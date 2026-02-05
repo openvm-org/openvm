@@ -6,7 +6,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{FieldAlgebra, extension::BinomiallyExtendable};
+use p3_field::{PrimeCharacteristicRing, extension::BinomiallyExtendable};
 use p3_matrix::Matrix;
 use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -79,11 +79,14 @@ impl<F> BaseAir<F> for ExpressionClaimAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for ExpressionClaimAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
 
         let local: &ExpressionClaimCols<AB::Var> = (*local).borrow();
         let next: &ExpressionClaimCols<AB::Var> = (*next).borrow();

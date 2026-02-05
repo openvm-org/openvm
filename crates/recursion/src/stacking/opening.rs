@@ -11,7 +11,7 @@ use openvm_stark_backend::{
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField32, extension::BinomiallyExtendable,
+    BasedVectorSpace, Field, PrimeCharacteristicRing, PrimeField32, extension::BinomiallyExtendable,
 };
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
@@ -126,11 +126,14 @@ impl<F> BaseAir<F> for OpeningClaimsAir {
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for OpeningClaimsAir
 where
     AB::F: PrimeField32,
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
 
         let local: &OpeningClaimsCols<AB::Var> = (*local).borrow();
         let next: &OpeningClaimsCols<AB::Var> = (*next).borrow();
@@ -337,7 +340,7 @@ where
             ))
             .assert_eq(
                 local.row_idx + local.lifted_height,
-                AB::F::from_canonical_usize(1 << (self.n_stack + self.l_skip)),
+                AB::F::from_usize(1 << (self.n_stack + self.l_skip)),
             );
 
         assert_array_eq(
@@ -436,8 +439,8 @@ where
             EqBitsLookupMessage {
                 b_value: local.row_idx
                     * local.lifted_height_inv
-                    * AB::F::from_canonical_usize(1 << self.l_skip),
-                num_bits: AB::Expr::from_canonical_usize(self.n_stack + self.l_skip)
+                    * AB::F::from_usize(1 << self.l_skip),
+                num_bits: AB::Expr::from_usize(self.n_stack + self.l_skip)
                     - local.log_lifted_height,
                 eval: local.eq_bits.map(Into::into),
             },
@@ -458,17 +461,14 @@ where
 
         builder
             .when(and(local.is_valid, not(local.is_last)))
-            .assert_eq(
-                local.tidx + AB::Expr::from_canonical_usize(2 * D_EF),
-                next.tidx,
-            );
+            .assert_eq(local.tidx + AB::Expr::from_usize(2 * D_EF), next.tidx);
 
         for i in 0..D_EF {
             self.transcript_bus.receive(
                 builder,
                 local.proof_idx,
                 TranscriptBusMessage {
-                    tidx: local.tidx + AB::Expr::from_canonical_usize(i),
+                    tidx: local.tidx + AB::Expr::from_usize(i),
                     value: local.col_claim[i].into(),
                     is_sample: AB::Expr::ZERO,
                 },
@@ -479,7 +479,7 @@ where
                 builder,
                 local.proof_idx,
                 TranscriptBusMessage {
-                    tidx: local.tidx + AB::Expr::from_canonical_usize(D_EF + i),
+                    tidx: local.tidx + AB::Expr::from_usize(D_EF + i),
                     value: local.rot_claim[i].into(),
                     is_sample: AB::Expr::ZERO,
                 },
@@ -490,7 +490,7 @@ where
                 builder,
                 local.proof_idx,
                 TranscriptBusMessage {
-                    tidx: AB::Expr::from_canonical_usize(2 * D_EF + i) + local.tidx,
+                    tidx: AB::Expr::from_usize(2 * D_EF + i) + local.tidx,
                     value: local.lambda[i].into(),
                     is_sample: AB::Expr::ONE,
                 },
@@ -503,7 +503,7 @@ where
             local.proof_idx,
             StackingModuleTidxMessage {
                 module_idx: AB::Expr::ZERO,
-                tidx: local.tidx + AB::Expr::from_canonical_usize(3 * D_EF),
+                tidx: local.tidx + AB::Expr::from_usize(3 * D_EF),
             },
             and(local.is_last, local.is_valid),
         );
@@ -549,7 +549,7 @@ impl OpeningClaimsTraceGenerator {
             );
 
             let num_rows = claims.len();
-            let proof_idx_value = F::from_canonical_usize(proof_idx);
+            let proof_idx_value = F::from_usize(proof_idx);
 
             let mut trace = vec![F::ZERO; num_rows * width];
 
@@ -586,11 +586,13 @@ impl OpeningClaimsTraceGenerator {
                 cols.is_first = F::from_bool(row_idx == 0);
                 cols.is_last = F::from_bool(row_idx + 1 == num_rows);
 
-                cols.sort_idx = F::from_canonical_usize(sort_idx);
-                cols.part_idx = F::from_canonical_usize(part_idx);
-                cols.col_idx = F::from_canonical_usize(col_idx);
-                cols.col_claim.copy_from_slice(col_claim.as_base_slice());
-                cols.rot_claim.copy_from_slice(rot_claim.as_base_slice());
+                cols.sort_idx = F::from_usize(sort_idx);
+                cols.part_idx = F::from_usize(part_idx);
+                cols.col_idx = F::from_usize(col_idx);
+                cols.col_claim
+                    .copy_from_slice(col_claim.as_basis_coefficients_slice());
+                cols.rot_claim
+                    .copy_from_slice(rot_claim.as_basis_coefficients_slice());
 
                 cols.is_main = F::from_bool(part_idx == 0);
                 cols.is_transition_main =
@@ -598,47 +600,50 @@ impl OpeningClaimsTraceGenerator {
 
                 let n_lift = slice.n.max(0) as usize;
                 cols.hypercube_dim = if slice.n.is_positive() {
-                    F::from_canonical_usize(n_lift)
+                    F::from_usize(n_lift)
                 } else {
-                    -F::from_canonical_usize(slice.n.unsigned_abs())
+                    -F::from_usize(slice.n.unsigned_abs())
                 };
-                cols.log_lifted_height = F::from_canonical_usize(n_lift + vk.inner.params.l_skip);
-                cols.lifted_height =
-                    F::from_canonical_usize(1 << (n_lift + vk.inner.params.l_skip));
+                cols.log_lifted_height = F::from_usize(n_lift + vk.inner.params.l_skip);
+                cols.lifted_height = F::from_usize(1 << (n_lift + vk.inner.params.l_skip));
                 cols.lifted_height_inv = cols.lifted_height.inverse();
 
-                cols.tidx = F::from_canonical_usize(
+                cols.tidx = F::from_usize(
                     preflight.batch_constraint.tidx_before_column_openings + 2 * row_idx * D_EF,
                 );
                 cols.lambda
-                    .copy_from_slice(preflight.stacking.lambda.as_base_slice());
+                    .copy_from_slice(preflight.stacking.lambda.as_basis_coefficients_slice());
 
                 let lambda_pow = lambda_pows.next().unwrap();
-                cols.lambda_pow.copy_from_slice(lambda_pow.as_base_slice());
+                cols.lambda_pow
+                    .copy_from_slice(lambda_pow.as_basis_coefficients_slice());
 
-                cols.commit_idx = F::from_canonical_usize(slice.commit_idx);
-                cols.stacked_col_idx = F::from_canonical_usize(slice.col_idx);
-                cols.row_idx = F::from_canonical_usize(slice.row_idx);
+                cols.commit_idx = F::from_usize(slice.commit_idx);
+                cols.stacked_col_idx = F::from_usize(slice.col_idx);
+                cols.row_idx = F::from_usize(slice.row_idx);
                 cols.is_last_for_claim = F::from_bool(slice.is_last_for_claim);
 
-                cols.eq_in.copy_from_slice(eq_in.as_base_slice());
-                cols.k_rot_in.copy_from_slice(k_rot_in.as_base_slice());
-                cols.eq_bits.copy_from_slice(eq_bits.as_base_slice());
+                cols.eq_in
+                    .copy_from_slice(eq_in.as_basis_coefficients_slice());
+                cols.k_rot_in
+                    .copy_from_slice(k_rot_in.as_basis_coefficients_slice());
+                cols.eq_bits
+                    .copy_from_slice(eq_bits.as_basis_coefficients_slice());
 
                 let lambda_pow_eq_bits = lambda_pow * eq_bits;
                 cols.lambda_pow_eq_bits
-                    .copy_from_slice(lambda_pow_eq_bits.as_base_slice());
+                    .copy_from_slice(lambda_pow_eq_bits.as_basis_coefficients_slice());
 
                 stacking_claim_coefficient +=
                     lambda_pow_eq_bits * (eq_in + preflight.stacking.lambda * k_rot_in);
                 cols.stacking_claim_coefficient
-                    .copy_from_slice(stacking_claim_coefficient.as_base_slice());
+                    .copy_from_slice(stacking_claim_coefficient.as_basis_coefficients_slice());
                 if slice.is_last_for_claim {
                     stacking_claim_coefficient = EF::ZERO;
                 }
 
                 s_0 += lambda_pow * (col_claim + preflight.stacking.lambda * rot_claim);
-                cols.s_0.copy_from_slice(s_0.as_base_slice());
+                cols.s_0.copy_from_slice(s_0.as_basis_coefficients_slice());
             }
 
             combined_trace.extend(trace);
@@ -650,7 +655,7 @@ impl OpeningClaimsTraceGenerator {
             let padding_start = combined_trace.len();
             combined_trace.resize(padded_rows * width, F::ZERO);
 
-            let padding_proof_idx = F::from_canonical_usize(proofs.len());
+            let padding_proof_idx = F::from_usize(proofs.len());
             let mut chunks = combined_trace[padding_start..].chunks_mut(width);
             let num_padded_rows = padded_rows - total_rows;
             for i in 0..num_padded_rows {

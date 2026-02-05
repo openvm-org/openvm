@@ -6,7 +6,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{Field, FieldAlgebra, extension::BinomiallyExtendable};
+use p3_field::{Field, PrimeCharacteristicRing, extension::BinomiallyExtendable};
 use p3_matrix::Matrix;
 use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -110,11 +110,14 @@ impl<F: Field> PartitionedBaseAir<F> for GkrLayerSumcheckAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrLayerSumcheckAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &GkrLayerSumcheckCols<AB::Var> = (*local).borrow();
         let next: &GkrLayerSumcheckCols<AB::Var> = (*next).borrow();
 
@@ -205,7 +208,7 @@ where
         // Transcript index increment
         builder.when(is_transition_round.clone()).assert_eq(
             next.tidx,
-            local.tidx.into() + AB::Expr::from_canonical_usize(4 * D_EF),
+            local.tidx.into() + AB::Expr::from_usize(4 * D_EF),
         );
 
         ///////////////////////////////////////////////////////////////////////
@@ -234,7 +237,7 @@ where
             local.proof_idx,
             GkrSumcheckOutputMessage {
                 layer_idx: local.layer_idx.into(),
-                tidx: local.tidx.into() + AB::Expr::from_canonical_usize(4 * D_EF),
+                tidx: local.tidx.into() + AB::Expr::from_usize(4 * D_EF),
                 claim_out: local.claim_out.map(Into::into),
                 eq_at_r_prime: local.eq_out.map(Into::into),
             },
@@ -280,7 +283,7 @@ where
                 eval,
                 local.is_enabled * is_not_dummy.clone(),
             );
-            tidx += AB::Expr::from_canonical_usize(D_EF);
+            tidx += AB::Expr::from_usize(D_EF);
         }
         // 1b. Sample challenge `ri`
         self.transcript_bus.sample_ext(
@@ -318,12 +321,12 @@ pub(super) fn interpolate_cubic_at_0123<F, FA>(
 ) -> [FA; D_EF]
 where
     F: Into<FA> + Copy,
-    FA: FieldAlgebra,
-    FA::F: BinomiallyExtendable<D_EF>,
+    FA: PrimeCharacteristicRing,
+    FA::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
-    let three: FA = FA::from_canonical_usize(3);
-    let inv2: FA = FA::from_f(FA::F::from_canonical_usize(2).inverse());
-    let inv6: FA = FA::from_f(FA::F::from_canonical_usize(6).inverse());
+    let three: FA = FA::from_usize(3);
+    let inv2: FA = FA::from_prime_subfield(FA::PrimeSubfield::from_usize(2).inverse());
+    let inv6: FA = FA::from_prime_subfield(FA::PrimeSubfield::from_usize(6).inverse());
 
     // s1 = ev1 - ev0
     let s1: [FA; D_EF] = ext_field_subtract(ev1, ev0.clone());
@@ -374,8 +377,8 @@ pub(super) fn update_eq<F, FA>(
 ) -> [FA; D_EF]
 where
     F: Into<FA> + Copy,
-    FA: FieldAlgebra,
-    FA::F: BinomiallyExtendable<D_EF>,
+    FA: PrimeCharacteristicRing,
+    FA::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     ext_field_multiply::<FA>(
         eq_in,

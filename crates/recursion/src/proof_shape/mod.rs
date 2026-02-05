@@ -5,7 +5,7 @@ use itertools::{Itertools, izip};
 use openvm_circuit_primitives::encoder::Encoder;
 use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use p3_field::FieldAlgebra;
+use p3_field::PrimeCharacteristicRing;
 use p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use stark_backend_v2::{
     Digest, F,
@@ -172,7 +172,7 @@ impl ProofShapeModule {
                 if let Some(pdata) = avk.preprocessed_data.as_ref() {
                     ts.observe_commit(pdata.commit);
                 } else {
-                    ts.observe(F::from_canonical_usize(trace_vdata.log_height));
+                    ts.observe(F::from_usize(trace_vdata.log_height));
                 }
                 debug_assert_eq!(avk.num_cached_mains(), trace_vdata.cached_commitments.len());
                 if !pvs.is_empty() {

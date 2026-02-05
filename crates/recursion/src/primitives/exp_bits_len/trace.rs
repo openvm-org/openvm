@@ -1,7 +1,7 @@
 use core::borrow::BorrowMut;
 use std::sync::{LazyLock, Mutex};
 
-use p3_field::{Field, FieldAlgebra, PrimeField32};
+use p3_field::{Field, PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{F, poly_common::Squarable};
@@ -17,7 +17,7 @@ static NUM_BITS_INV_TABLE: LazyLock<[F; NUM_BITS_MAX_PLUS_ONE]> = LazyLock::new(
         if idx == 0 {
             F::ZERO
         } else {
-            let value = F::from_canonical_u32(idx as u32);
+            let value = F::from_u32(idx as u32);
             value
                 .try_inverse()
                 .expect("non-zero num_bits value should always be invertible")
@@ -150,13 +150,13 @@ pub(crate) fn fill_valid_rows(base: F, bit_src: u32, n: u8, trace_slice: &mut [F
         let row = &mut trace_slice[row_offset..row_offset + width];
         let cols: &mut ExpBitsLenCols<F> = row.borrow_mut();
         cols.base = bases[i as usize];
-        cols.bit_src = F::from_canonical_u32(shifted);
+        cols.bit_src = F::from_u32(shifted);
         cols.result = result;
         cols.sub_result = sub_result;
-        cols.num_bits = F::from_canonical_u8(remaining);
+        cols.num_bits = F::from_u8(remaining);
         cols.is_valid = F::ONE;
-        cols.bit_src_div_2 = F::from_canonical_u32(shifted / 2);
-        cols.bit_src_mod_2 = F::from_canonical_u32(shifted % 2);
+        cols.bit_src_div_2 = F::from_u32(shifted / 2);
+        cols.bit_src_mod_2 = F::from_u32(shifted % 2);
         cols.num_bits_inv = NUM_BITS_INV_TABLE[remaining as usize];
     }
 }

@@ -9,7 +9,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, extension::BinomiallyExtendable};
+use p3_field::{BasedVectorSpace, Field, PrimeCharacteristicRing, extension::BinomiallyExtendable};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -55,11 +55,14 @@ impl<F> BaseAir<F> for EqUniAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for EqUniAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
 
         let local: &EqUniCols<AB::Var> = (*local).borrow();
         let next: &EqUniCols<AB::Var> = (*next).borrow();
@@ -142,7 +145,7 @@ where
         builder
             .when(local.is_last)
             .when(local.is_valid)
-            .assert_eq(local.idx, AB::Expr::from_canonical_usize(self.l_skip));
+            .assert_eq(local.idx, AB::Expr::from_usize(self.l_skip));
 
         // ======================== Values recalculation ==========================
         let mut when_transition = builder.when(is_transition);
@@ -195,14 +198,14 @@ pub(crate) fn generate_eq_uni_trace(
             .for_each(|(i, chunk)| {
                 let cols: &mut EqUniCols<_> = chunk.borrow_mut();
                 cols.is_valid = F::ONE;
-                cols.proof_idx = F::from_canonical_usize(pidx);
+                cols.proof_idx = F::from_usize(pidx);
                 cols.is_first = F::from_bool(i == 0);
                 cols.is_last = F::from_bool(i + 1 == one_height);
 
-                cols.idx = F::from_canonical_usize(i);
-                cols.x.copy_from_slice(x.as_base_slice());
-                cols.y.copy_from_slice(y.as_base_slice());
-                cols.res.copy_from_slice(res.as_base_slice());
+                cols.idx = F::from_usize(i);
+                cols.x.copy_from_slice(x.as_basis_coefficients_slice());
+                cols.y.copy_from_slice(y.as_basis_coefficients_slice());
+                cols.res.copy_from_slice(res.as_basis_coefficients_slice());
 
                 res = (x + y) * res + (EF::ONE - x) * (EF::ONE - y);
                 x *= x;
@@ -215,7 +218,7 @@ pub(crate) fn generate_eq_uni_trace(
         .enumerate()
         .for_each(|(i, chunk)| {
             let cols: &mut EqUniCols<F> = chunk.borrow_mut();
-            cols.proof_idx = F::from_canonical_usize(preflights.len() + i);
+            cols.proof_idx = F::from_usize(preflights.len() + i);
         });
 
     RowMajorMatrix::new(trace, width)

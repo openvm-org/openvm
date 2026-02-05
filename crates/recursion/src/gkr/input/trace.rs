@@ -2,7 +2,7 @@ use core::borrow::BorrowMut;
 
 use openvm_circuit_primitives::{TraceSubRowGenerator, is_zero::IsZeroSubAir};
 use openvm_stark_backend::p3_maybe_rayon::prelude::*;
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
+use p3_field::{BasedVectorSpace, PrimeCharacteristicRing};
 use p3_matrix::dense::RowMajorMatrix;
 use stark_backend_v2::{EF, F};
 
@@ -46,12 +46,12 @@ pub fn generate_trace(gkr_input_records: &[GkrInputRecord], q0_claims: &[EF]) ->
             let cols: &mut GkrInputCols<F> = row_data.borrow_mut();
 
             cols.is_enabled = F::ONE;
-            cols.proof_idx = F::from_canonical_usize(proof_idx);
+            cols.proof_idx = F::from_usize(proof_idx);
 
-            cols.tidx = F::from_canonical_usize(record.tidx);
+            cols.tidx = F::from_usize(record.tidx);
 
-            cols.n_logup = F::from_canonical_usize(record.n_logup);
-            cols.n_max = F::from_canonical_usize(record.n_max);
+            cols.n_logup = F::from_usize(record.n_logup);
+            cols.n_max = F::from_usize(record.n_max);
             cols.is_n_max_greater_than_n_logup = F::from_bool(record.n_max > record.n_logup);
 
             IsZeroSubAir.generate_subrow(
@@ -62,15 +62,19 @@ pub fn generate_trace(gkr_input_records: &[GkrInputRecord], q0_claims: &[EF]) ->
             cols.logup_pow_witness = record.logup_pow_witness;
             cols.logup_pow_sample = record.logup_pow_sample;
 
-            cols.q0_claim = q0_claim.as_base_slice().try_into().unwrap();
-            cols.alpha_logup = record.alpha_logup.as_base_slice().try_into().unwrap();
+            cols.q0_claim = q0_claim.as_basis_coefficients_slice().try_into().unwrap();
+            cols.alpha_logup = record
+                .alpha_logup
+                .as_basis_coefficients_slice()
+                .try_into()
+                .unwrap();
             cols.input_layer_claim = [
                 record.input_layer_claim[0]
-                    .as_base_slice()
+                    .as_basis_coefficients_slice()
                     .try_into()
                     .unwrap(),
                 record.input_layer_claim[1]
-                    .as_base_slice()
+                    .as_basis_coefficients_slice()
                     .try_into()
                     .unwrap(),
             ];

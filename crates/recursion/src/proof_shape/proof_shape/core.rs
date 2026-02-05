@@ -15,7 +15,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{Field, FieldAlgebra, PrimeField32};
+use p3_field::{Field, PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use stark_backend_v2::{DIGEST_SIZE, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -180,25 +180,24 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 let n = log_height as isize - l_skip as isize;
                 num_present += 1;
 
-                cols.proof_idx = F::from_canonical_usize(proof_idx);
+                cols.proof_idx = F::from_usize(proof_idx);
                 cols.is_valid = F::ONE;
                 cols.is_first = F::from_bool(sorted_idx == 0);
 
-                cols.idx = F::from_canonical_usize(*idx);
-                cols.sorted_idx = F::from_canonical_usize(sorted_idx);
-                cols.log_height = F::from_canonical_usize(log_height);
+                cols.idx = F::from_usize(*idx);
+                cols.sorted_idx = F::from_usize(sorted_idx);
+                cols.log_height = F::from_usize(log_height);
                 cols.n_sign_bit = F::from_bool(n.is_negative());
                 sorted_idx += 1;
 
-                cols.starting_tidx =
-                    F::from_canonical_usize(preflight.proof_shape.starting_tidx[*idx]);
-                cols.starting_cidx = F::from_canonical_usize(cidx);
+                cols.starting_tidx = F::from_usize(preflight.proof_shape.starting_tidx[*idx]);
+                cols.starting_cidx = F::from_usize(cidx);
                 let has_preprocessed = child_vk.inner.per_air[*idx].preprocessed_data.is_some();
                 cidx += has_preprocessed as usize;
 
                 cols.is_present = F::ONE;
-                cols.height = F::from_canonical_usize(height);
-                cols.num_present = F::from_canonical_usize(num_present);
+                cols.height = F::from_usize(height);
+                cols.num_present = F::from_usize(num_present);
 
                 let lifted_height = height.max(1 << l_skip);
                 let num_interactions_per_row = child_vk.inner.per_air[*idx].num_interactions();
@@ -206,14 +205,14 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 let lifted_height_limbs = decompose_usize::<NUM_LIMBS, LIMB_BITS>(lifted_height);
                 let num_interactions_limbs =
                     decompose_usize::<NUM_LIMBS, LIMB_BITS>(num_interactions);
-                cols.lifted_height_limbs = lifted_height_limbs.map(F::from_canonical_usize);
-                cols.num_interactions_limbs = num_interactions_limbs.map(F::from_canonical_usize);
+                cols.lifted_height_limbs = lifted_height_limbs.map(F::from_usize);
+                cols.num_interactions_limbs = num_interactions_limbs.map(F::from_usize);
                 cols.total_interactions_limbs =
                     decompose_f::<F, NUM_LIMBS, LIMB_BITS>(total_interactions);
                 total_interactions += num_interactions;
 
-                cols.n_max = F::from_canonical_usize(preflight.proof_shape.n_max);
-                cols.num_air_id_lookups = F::from_canonical_usize(bc_air_shape_lookups[*idx]);
+                cols.n_max = F::from_usize(preflight.proof_shape.n_max);
+                cols.num_air_id_lookups = F::from_usize(bc_air_shape_lookups[*idx]);
 
                 let vcols: &mut ProofShapeVarColsMut<'_, F> = &mut borrow_var_cols_mut(
                     &mut chunk[cols_width..],
@@ -224,7 +223,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 for (i, flag) in idx_encoder
                     .get_flag_pt(*idx)
                     .iter()
-                    .map(|x| F::from_canonical_u32(*x))
+                    .map(|x| F::from_u32(*x))
                     .enumerate()
                 {
                     vcols.idx_flags[i] = flag;
@@ -280,29 +279,28 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
             let total_interactions_f = decompose_f::<F, NUM_LIMBS, LIMB_BITS>(total_interactions);
             let total_interactions_usize =
                 decompose_usize::<NUM_LIMBS, LIMB_BITS>(total_interactions);
-            let num_present = F::from_canonical_usize(num_present);
+            let num_present = F::from_usize(num_present);
 
             // Non-present AIRs
             for idx in (0..num_airs).filter(|idx| proof.trace_vdata[*idx].is_none()) {
                 let chunk = chunks.next().unwrap();
                 let cols: &mut ProofShapeCols<F, NUM_LIMBS> = chunk[..cols_width].borrow_mut();
 
-                cols.proof_idx = F::from_canonical_usize(proof_idx);
+                cols.proof_idx = F::from_usize(proof_idx);
                 cols.is_valid = F::ONE;
                 cols.is_first = F::from_bool(sorted_idx == 0);
 
-                cols.idx = F::from_canonical_usize(idx);
-                cols.sorted_idx = F::from_canonical_usize(sorted_idx);
+                cols.idx = F::from_usize(idx);
+                cols.sorted_idx = F::from_usize(sorted_idx);
                 sorted_idx += 1;
 
                 cols.num_present = num_present;
 
-                cols.starting_tidx =
-                    F::from_canonical_usize(preflight.proof_shape.starting_tidx[idx]);
-                cols.starting_cidx = F::from_canonical_usize(cidx);
+                cols.starting_tidx = F::from_usize(preflight.proof_shape.starting_tidx[idx]);
+                cols.starting_cidx = F::from_usize(cidx);
 
                 cols.total_interactions_limbs = total_interactions_f;
-                cols.n_max = F::from_canonical_usize(preflight.proof_shape.n_max);
+                cols.n_max = F::from_usize(preflight.proof_shape.n_max);
 
                 let vcols: &mut ProofShapeVarColsMut<'_, F> = &mut borrow_var_cols_mut(
                     &mut chunk[cols_width..],
@@ -313,7 +311,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 for (i, flag) in idx_encoder
                     .get_flag_pt(idx)
                     .iter()
-                    .map(|x| F::from_canonical_u32(*x))
+                    .map(|x| F::from_u32(*x))
                     .enumerate()
                 {
                     vcols.idx_flags[i] = flag;
@@ -340,9 +338,9 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 let chunk = chunks.next().unwrap();
                 let cols: &mut ProofShapeCols<F, NUM_LIMBS> = chunk[..cols_width].borrow_mut();
 
-                cols.proof_idx = F::from_canonical_usize(proof_idx);
+                cols.proof_idx = F::from_usize(proof_idx);
                 cols.is_last = F::ONE;
-                cols.starting_tidx = F::from_canonical_usize(preflight.proof_shape.post_tidx);
+                cols.starting_tidx = F::from_usize(preflight.proof_shape.post_tidx);
                 cols.num_present = num_present;
 
                 let n_logup = preflight.proof_shape.n_logup;
@@ -379,7 +377,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 // limb_to_range_check
                 cols.height = msb_limb;
                 // msb_limb_zero_bits_exp
-                cols.log_height = F::from_canonical_usize(1 << msb_limb_zero_bits);
+                cols.log_height = F::from_usize(1 << msb_limb_zero_bits);
 
                 let max_interactions =
                     decompose_f::<F, NUM_LIMBS, LIMB_BITS>(F::ORDER_U32 as usize);
@@ -393,11 +391,11 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                     from_fn(|i| if i == diff_idx { F::ONE } else { F::ZERO });
 
                 cols.total_interactions_limbs = total_interactions_f;
-                cols.n_max = F::from_canonical_usize(preflight.proof_shape.n_max);
+                cols.n_max = F::from_usize(preflight.proof_shape.n_max);
                 cols.is_n_max_greater = F::from_bool(preflight.proof_shape.n_max > n_logup);
 
                 // n_logup
-                cols.starting_cidx = F::from_canonical_usize(n_logup);
+                cols.starting_cidx = F::from_usize(n_logup);
 
                 range_checker
                     .add_count(msb_limb.as_canonical_u32() as usize * (1 << msb_limb_zero_bits));
@@ -422,7 +420,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
 
         for chunk in chunks {
             let cols: &mut ProofShapeCols<F, NUM_LIMBS> = chunk[..cols_width].borrow_mut();
-            cols.proof_idx = F::from_canonical_usize(proofs.len());
+            cols.proof_idx = F::from_usize(proofs.len());
         }
 
         RowMajorMatrix::new(trace, total_width)
@@ -488,7 +486,10 @@ where
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let const_width = ProofShapeCols::<AB::Var, NUM_LIMBS>::width();
 
         let localv = borrow_var_cols::<AB::Var>(
@@ -570,7 +571,7 @@ where
             builder,
             RangeCheckerBusMessage {
                 value: local.log_height - next.log_height,
-                max_bits: AB::Expr::from_canonical_usize(5),
+                max_bits: AB::Expr::from_usize(5),
             },
             and(local.is_valid, not(next.is_last)),
         );
@@ -607,21 +608,19 @@ where
             let is_current_air = self.idx_encoder.get_flag_expr::<AB>(i, localv.idx_flags);
             let mut when_current = builder.when(is_current_air.clone());
 
-            when_current.assert_eq(local.idx, AB::F::from_canonical_usize(i));
+            when_current.assert_eq(local.idx, AB::F::from_usize(i));
 
-            main_common_width +=
-                is_current_air.clone() * AB::F::from_canonical_usize(air_data.main_width);
+            main_common_width += is_current_air.clone() * AB::F::from_usize(air_data.main_width);
 
             if air_data.num_public_values != 0 {
                 has_pvs += is_current_air.clone();
             }
-            num_pvs +=
-                is_current_air.clone() * AB::F::from_canonical_usize(air_data.num_public_values);
+            num_pvs += is_current_air.clone() * AB::F::from_usize(air_data.num_public_values);
 
             // Select number of interactions for use later in the AIR and constrain that the
             // num_interactions_per_row limb decomposition is correct.
             num_interactions +=
-                is_current_air.clone() * AB::F::from_canonical_usize(air_data.num_interactions);
+                is_current_air.clone() * AB::F::from_usize(air_data.num_interactions);
 
             for (i, &limb) in decompose_f::<AB::F, NUM_LIMBS, LIMB_BITS>(air_data.num_interactions)
                 .iter()
@@ -642,24 +641,23 @@ where
             if let Some(preprocessed) = &air_data.preprocessed_data {
                 when_current.assert_eq(
                     local.log_height,
-                    AB::Expr::from_canonical_usize(
+                    AB::Expr::from_usize(
                         self.l_skip.wrapping_add_signed(preprocessed.hypercube_dim),
                     ),
                 );
                 has_preprocessed += is_current_air.clone();
 
                 preprocessed_stacked_width += is_current_air.clone()
-                    * AB::F::from_canonical_usize(air_data.preprocessed_width.unwrap());
+                    * AB::F::from_usize(air_data.preprocessed_width.unwrap());
                 (0..DIGEST_SIZE).for_each(|didx| {
                     preprocessed_commit[didx] += is_current_air.clone()
-                        * AB::F::from_canonical_u32(preprocessed.commit[didx].as_canonical_u32());
+                        * AB::F::from_u32(preprocessed.commit[didx].as_canonical_u32());
                 });
             }
 
             for (cached_idx, width) in air_data.cached_widths.iter().enumerate() {
                 cached_present[cached_idx] += is_current_air.clone();
-                cached_widths[cached_idx] +=
-                    is_current_air.clone() * AB::Expr::from_canonical_usize(*width);
+                cached_widths[cached_idx] += is_current_air.clone() * AB::Expr::from_usize(*width);
             }
         }
 
@@ -667,17 +665,16 @@ where
         // TRANSCRIPT OBSERVATIONS
         ///////////////////////////////////////////////////////////////////////////////////////////
         let is_first_idx = self.idx_encoder.get_flag_expr::<AB>(0, localv.idx_flags);
-        builder.when(is_first_idx.clone()).assert_eq(
-            local.starting_tidx,
-            AB::Expr::from_canonical_usize(2 * DIGEST_SIZE),
-        );
+        builder
+            .when(is_first_idx.clone())
+            .assert_eq(local.starting_tidx, AB::Expr::from_usize(2 * DIGEST_SIZE));
 
         self.starting_tidx_bus.receive(
             builder,
             local.proof_idx,
             StartingTidxMessage {
                 air_idx: local.idx * local.is_valid
-                    + AB::Expr::from_canonical_usize(self.per_air.len()) * local.is_last,
+                    + AB::Expr::from_usize(self.per_air.len()) * local.is_last,
                 tidx: local.starting_tidx.into(),
             },
             or(
@@ -704,16 +701,14 @@ where
                 builder,
                 local.proof_idx,
                 TranscriptBusMessage {
-                    tidx: tidx.clone() + AB::Expr::from_canonical_usize(didx),
+                    tidx: tidx.clone() + AB::Expr::from_usize(didx),
                     value: commit_val.clone(),
                     is_sample: AB::Expr::ZERO,
                 },
                 has_preprocessed.clone() * local.is_present,
             );
         }
-        tidx += has_preprocessed.clone()
-            * AB::Expr::from_canonical_usize(DIGEST_SIZE)
-            * local.is_present;
+        tidx += has_preprocessed.clone() * AB::Expr::from_usize(DIGEST_SIZE) * local.is_present;
 
         self.transcript_bus.receive(
             builder,
@@ -761,7 +756,7 @@ where
                 builder,
                 local.proof_idx,
                 TranscriptBusMessage {
-                    tidx: AB::Expr::from_canonical_usize(didx),
+                    tidx: AB::Expr::from_usize(didx),
                     value: localv.cached_commits[self.max_cached - 1][didx].into(),
                     is_sample: AB::Expr::ZERO,
                 },
@@ -772,7 +767,7 @@ where
                 builder,
                 local.proof_idx,
                 TranscriptBusMessage {
-                    tidx: AB::Expr::from_canonical_usize(didx + DIGEST_SIZE),
+                    tidx: AB::Expr::from_usize(didx + DIGEST_SIZE),
                     value: localv.cached_commits[self.max_cached - 1][didx].into(),
                     is_sample: AB::Expr::ZERO,
                 },
@@ -808,7 +803,7 @@ where
         ///////////////////////////////////////////////////////////////////////////////////////////
         // HYPERDIM (SIGNED N) LOOKUP
         ///////////////////////////////////////////////////////////////////////////////////////////
-        let l_skip = AB::F::from_canonical_usize(self.l_skip);
+        let l_skip = AB::F::from_usize(self.l_skip);
         let n = local.log_height.into() - l_skip;
         builder.assert_bool(local.n_sign_bit);
         let n_abs = select(local.n_sign_bit, -n.clone(), n.clone());
@@ -820,7 +815,7 @@ where
             builder,
             RangeCheckerBusMessage {
                 value: n_abs.clone(),
-                max_bits: AB::Expr::from_canonical_usize(5),
+                max_bits: AB::Expr::from_usize(5),
             },
             local.is_present,
         );
@@ -842,7 +837,7 @@ where
         // lifted_height = max(2^log_height, 2^l_skip)
         let lifted_height = select(
             local.n_sign_bit,
-            AB::F::from_canonical_usize(1 << self.l_skip),
+            AB::F::from_usize(1 << self.l_skip),
             local.height,
         );
         let log_lifted_height = not(local.n_sign_bit) * n_abs.clone() + l_skip;
@@ -897,9 +892,7 @@ where
                 minor_idx: cidx_offset.clone() + local.starting_cidx,
                 commitment: preprocessed_commit,
             },
-            has_preprocessed.clone()
-                * local.is_valid
-                * AB::Expr::from_canonical_usize(self.commit_mult),
+            has_preprocessed.clone() * local.is_valid * AB::Expr::from_usize(self.commit_mult),
         );
         cidx_offset += has_preprocessed.clone();
 
@@ -928,7 +921,7 @@ where
                 },
                 cached_present[cached_idx].clone()
                     * local.is_valid
-                    * AB::Expr::from_canonical_usize(self.commit_mult),
+                    * AB::Expr::from_usize(self.commit_mult),
             );
             cidx_offset += cached_present[cached_idx].clone();
 
@@ -937,7 +930,7 @@ where
                 local.proof_idx,
                 CachedCommitBusMessage {
                     air_idx: local.idx.into(),
-                    cached_idx: AB::Expr::from_canonical_usize(cached_idx),
+                    cached_idx: AB::Expr::from_usize(cached_idx),
                     cached_commit: localv.cached_commits[cached_idx].map(Into::into),
                 },
                 cached_present[cached_idx].clone()
@@ -958,9 +951,7 @@ where
                 minor_idx: AB::Expr::ZERO,
                 commitment: localv.cached_commits[self.max_cached - 1].map(Into::into),
             },
-            is_min_cached.clone()
-                * local.is_valid
-                * AB::Expr::from_canonical_usize(self.commit_mult),
+            is_min_cached.clone() * local.is_valid * AB::Expr::from_usize(self.commit_mult),
         );
 
         ///////////////////////////////////////////////////////////////////////////////////////////
@@ -986,7 +977,7 @@ where
             fold(
                 local.lifted_height_limbs.iter().enumerate(),
                 AB::Expr::ZERO,
-                |acc, (i, limb)| acc + (AB::Expr::from_canonical_u32(1 << (i * LIMB_BITS)) * *limb),
+                |acc, (i, limb)| acc + (AB::Expr::from_u32(1 << (i * LIMB_BITS)) * *limb),
             ),
             lifted_height,
         );
@@ -996,7 +987,7 @@ where
                 builder,
                 RangeCheckerBusMessage {
                     value: local.lifted_height_limbs[i].into(),
-                    max_bits: AB::Expr::from_canonical_usize(LIMB_BITS),
+                    max_bits: AB::Expr::from_usize(LIMB_BITS),
                 },
                 local.is_valid,
             );
@@ -1004,7 +995,7 @@ where
 
         // Constrain that num_interactions = height * num_interactions_per_row
         let mut carry = vec![AB::Expr::ZERO; NUM_LIMBS * 2];
-        let carry_divide = AB::F::from_canonical_u32(1 << LIMB_BITS).inverse();
+        let carry_divide = AB::F::from_u32(1 << LIMB_BITS).inverse();
 
         for (i, &height_limb) in local.lifted_height_limbs.iter().enumerate() {
             for (j, interactions_limb) in num_interactions_per_row.iter().enumerate() {
@@ -1029,7 +1020,7 @@ where
                     builder,
                     RangeCheckerBusMessage {
                         value: carry[i].clone(),
-                        max_bits: AB::Expr::from_canonical_usize(LIMB_BITS),
+                        max_bits: AB::Expr::from_usize(LIMB_BITS),
                     },
                     local.is_valid,
                 );
@@ -1062,7 +1053,7 @@ where
                 builder,
                 RangeCheckerBusMessage {
                     value: next.total_interactions_limbs[i].into(),
-                    max_bits: AB::Expr::from_canonical_usize(LIMB_BITS),
+                    max_bits: AB::Expr::from_usize(LIMB_BITS),
                 },
                 local.is_valid,
             );
@@ -1079,11 +1070,11 @@ where
         builder.when(local.is_last).assert_zero(local.is_valid);
         builder.when(next.is_last).assert_one(local.is_valid);
         builder
-            .when(local.sorted_idx - AB::F::from_canonical_usize(self.per_air.len() - 1))
+            .when(local.sorted_idx - AB::F::from_usize(self.per_air.len() - 1))
             .assert_zero(next.is_last);
         builder
             .when(next.is_last)
-            .assert_zero(local.sorted_idx - AB::F::from_canonical_usize(self.per_air.len() - 1));
+            .assert_zero(local.sorted_idx - AB::F::from_usize(self.per_air.len() - 1));
 
         // Constrain that n_logup is correct, i.e. that there are CELLS_LIMBS * LIMB_BITS - n_logup
         // leading zeroes in total_interactions_limbs. Because we only do this on the is_last row,
@@ -1105,8 +1096,7 @@ where
         for i in (0..NUM_LIMBS).rev() {
             prefix += non_zero_marker[i].into();
             expected_limb_to_range_check += local.total_interactions_limbs[i] * non_zero_marker[i];
-            msb_limb_zero_bits +=
-                non_zero_marker[i] * AB::F::from_canonical_usize((i + 1) * LIMB_BITS);
+            msb_limb_zero_bits += non_zero_marker[i] * AB::F::from_usize((i + 1) * LIMB_BITS);
 
             builder.when(local.is_last).assert_bool(non_zero_marker[i]);
             builder
@@ -1121,7 +1111,7 @@ where
         builder
             .when(local.is_last)
             .assert_eq(limb_to_range_check, expected_limb_to_range_check);
-        msb_limb_zero_bits -= n_logup + prefix * AB::F::from_canonical_usize(self.l_skip);
+        msb_limb_zero_bits -= n_logup + prefix * AB::F::from_usize(self.l_skip);
 
         self.pow_bus.lookup_key(
             builder,
@@ -1136,7 +1126,7 @@ where
             builder,
             RangeCheckerBusMessage {
                 value: limb_to_range_check * msb_limb_zero_bits_exp,
-                max_bits: AB::Expr::from_canonical_usize(LIMB_BITS),
+                max_bits: AB::Expr::from_usize(LIMB_BITS),
             },
             local.is_last,
         );
@@ -1159,7 +1149,7 @@ where
             builder,
             RangeCheckerBusMessage {
                 value: (local.n_max - n_logup) * (local.is_n_max_greater * AB::F::TWO - AB::F::ONE),
-                max_bits: AB::Expr::from_canonical_usize(5),
+                max_bits: AB::Expr::from_usize(5),
             },
             local.is_last,
         );
@@ -1229,17 +1219,17 @@ where
             builder,
             RangeCheckerBusMessage {
                 value: diff_val - AB::Expr::ONE,
-                max_bits: AB::Expr::from_canonical_usize(LIMB_BITS),
+                max_bits: AB::Expr::from_usize(LIMB_BITS),
             },
             local.is_last,
         );
     }
 }
 
-fn decompose_f<F: FieldAlgebra, const LIMBS: usize, const LIMB_BITS: usize>(
+fn decompose_f<F: PrimeCharacteristicRing, const LIMBS: usize, const LIMB_BITS: usize>(
     value: usize,
 ) -> [F; LIMBS] {
-    from_fn(|i| F::from_canonical_usize((value >> (i * LIMB_BITS)) & ((1 << LIMB_BITS) - 1)))
+    from_fn(|i| F::from_usize((value >> (i * LIMB_BITS)) & ((1 << LIMB_BITS) - 1)))
 }
 
 fn decompose_usize<const LIMBS: usize, const LIMB_BITS: usize>(value: usize) -> [usize; LIMBS] {

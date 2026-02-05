@@ -1,7 +1,7 @@
 use core::borrow::BorrowMut;
 
 use openvm_stark_backend::p3_maybe_rayon::prelude::*;
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
+use p3_field::{BasedVectorSpace, PrimeCharacteristicRing};
 use p3_matrix::dense::RowMajorMatrix;
 use stark_backend_v2::{D_EF, EF, F};
 
@@ -58,7 +58,7 @@ pub fn generate_trace(xi_sampler_records: &[GkrXiSamplerRecord]) -> RowMajorMatr
                 let row_data = &mut proof_trace[..width];
                 let cols: &mut GkrXiSamplerCols<F> = row_data.borrow_mut();
                 cols.is_enabled = F::ONE;
-                cols.proof_idx = F::from_canonical_usize(proof_idx);
+                cols.proof_idx = F::from_usize(proof_idx);
                 cols.is_first_challenge = F::ONE;
                 cols.is_dummy = F::ONE;
                 return;
@@ -83,13 +83,13 @@ pub fn generate_trace(xi_sampler_records: &[GkrXiSamplerRecord]) -> RowMajorMatr
                 .enumerate()
                 .for_each(|(row_idx, (row_data, ((xi, idx), tidx)))| {
                     let cols: &mut GkrXiSamplerCols<F> = row_data.borrow_mut();
-                    cols.proof_idx = F::from_canonical_usize(proof_idx);
+                    cols.proof_idx = F::from_usize(proof_idx);
 
                     cols.is_enabled = F::ONE;
                     cols.is_first_challenge = F::from_bool(row_idx == 0);
-                    cols.tidx = F::from_canonical_usize(*tidx);
-                    cols.idx = F::from_canonical_usize(*idx);
-                    cols.xi = xi.as_base_slice().try_into().unwrap();
+                    cols.tidx = F::from_usize(*tidx);
+                    cols.idx = F::from_usize(*idx);
+                    cols.xi = xi.as_basis_coefficients_slice().try_into().unwrap();
                 });
         });
 

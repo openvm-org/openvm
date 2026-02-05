@@ -14,7 +14,7 @@ use openvm_stark_backend::{
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdicField,
+    BasedVectorSpace, Field, PrimeCharacteristicRing, PrimeField32, TwoAdicField,
     extension::BinomiallyExtendable,
 };
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
@@ -125,11 +125,14 @@ impl<F> BaseAir<F> for SumcheckRoundsAir {
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for SumcheckRoundsAir
 where
     AB::F: PrimeField32,
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
 
         let local: &SumcheckRoundsCols<AB::Var> = (*local).borrow();
         let next: &SumcheckRoundsCols<AB::Var> = (*next).borrow();
@@ -365,7 +368,7 @@ where
             builder,
             local.proof_idx,
             WhirOpeningPointMessage {
-                idx: local.round + AB::Expr::from_canonical_usize(self.l_skip - 1),
+                idx: local.round + AB::Expr::from_usize(self.l_skip - 1),
                 value: local.u_round.map(Into::into),
             },
             local.is_valid,
@@ -395,17 +398,16 @@ where
             local.is_first,
         );
 
-        builder.when(not(local.is_last) * local.is_valid).assert_eq(
-            local.tidx + AB::F::from_canonical_usize(3 * D_EF),
-            next.tidx,
-        );
+        builder
+            .when(not(local.is_last) * local.is_valid)
+            .assert_eq(local.tidx + AB::F::from_usize(3 * D_EF), next.tidx);
 
         for i in 0..D_EF {
             self.transcript_bus.receive(
                 builder,
                 local.proof_idx,
                 TranscriptBusMessage {
-                    tidx: AB::Expr::from_canonical_usize(i) + local.tidx,
+                    tidx: AB::Expr::from_usize(i) + local.tidx,
                     value: local.s_eval_at_1[i].into(),
                     is_sample: AB::Expr::ZERO,
                 },
@@ -416,7 +418,7 @@ where
                 builder,
                 local.proof_idx,
                 TranscriptBusMessage {
-                    tidx: AB::Expr::from_canonical_usize(i + D_EF) + local.tidx,
+                    tidx: AB::Expr::from_usize(i + D_EF) + local.tidx,
                     value: local.s_eval_at_2[i].into(),
                     is_sample: AB::Expr::ZERO,
                 },
@@ -427,7 +429,7 @@ where
                 builder,
                 local.proof_idx,
                 TranscriptBusMessage {
-                    tidx: AB::Expr::from_canonical_usize(i + 2 * D_EF) + local.tidx,
+                    tidx: AB::Expr::from_usize(i + 2 * D_EF) + local.tidx,
                     value: local.u_round[i].into(),
                     is_sample: AB::Expr::ONE,
                 },
@@ -440,7 +442,7 @@ where
             local.proof_idx,
             StackingModuleTidxMessage {
                 module_idx: AB::Expr::TWO,
-                tidx: AB::Expr::from_canonical_usize(3 * D_EF) + local.tidx,
+                tidx: AB::Expr::from_usize(3 * D_EF) + local.tidx,
             },
             and(local.is_last, local.is_valid),
         );
@@ -529,7 +531,7 @@ impl SumcheckRoundsTraceGenerator {
                 };
 
                 let num_rows = sumcheck_rounds.len();
-                let proof_idx_value = F::from_canonical_usize(proof_idx);
+                let proof_idx_value = F::from_usize(proof_idx);
 
                 let mut trace = vec![F::ZERO; num_rows * width];
 
@@ -566,50 +568,52 @@ impl SumcheckRoundsTraceGenerator {
                     cols.is_first = F::from_bool(round == 0);
                     cols.is_last = F::from_bool(round + 1 == num_rows);
 
-                    cols.round = F::from_canonical_usize(round + 1);
-                    cols.tidx = F::from_canonical_usize(initial_tidx + (3 * D_EF * round));
+                    cols.round = F::from_usize(round + 1);
+                    cols.tidx = F::from_usize(initial_tidx + (3 * D_EF * round));
 
                     cols.s_eval_at_0
-                        .copy_from_slice(s_eval_at_0.as_base_slice());
+                        .copy_from_slice(s_eval_at_0.as_basis_coefficients_slice());
                     cols.s_eval_at_1
-                        .copy_from_slice(sumcheck_round[0].as_base_slice());
+                        .copy_from_slice(sumcheck_round[0].as_basis_coefficients_slice());
                     cols.s_eval_at_2
-                        .copy_from_slice(sumcheck_round[1].as_base_slice());
+                        .copy_from_slice(sumcheck_round[1].as_basis_coefficients_slice());
                     cols.s_eval_at_u
-                        .copy_from_slice(s_eval_at_u.as_base_slice());
+                        .copy_from_slice(s_eval_at_u.as_basis_coefficients_slice());
 
-                    cols.u_round.copy_from_slice(u_round.as_base_slice());
+                    cols.u_round
+                        .copy_from_slice(u_round.as_basis_coefficients_slice());
                     let r_round = if round < r.len() {
                         cols.r_round = r[round].challenge;
                         cols.has_r = F::ONE;
-                        EF::from_base_iter(r[round].challenge.into_iter())
+                        EF::from_basis_coefficients_iter(r[round].challenge.into_iter()).unwrap()
                     } else {
                         EF::ZERO
                     };
-                    cols.u_mult = F::from_canonical_usize(u_mults[round]);
+                    cols.u_mult = F::from_usize(u_mults[round]);
 
                     cols.eq_prism_base
-                        .copy_from_slice(eq_prism_base.as_base_slice());
+                        .copy_from_slice(eq_prism_base.as_basis_coefficients_slice());
                     cols.eq_cube_base
-                        .copy_from_slice(eq_cube_base.as_base_slice());
+                        .copy_from_slice(eq_cube_base.as_basis_coefficients_slice());
                     cols.rot_cube_base
-                        .copy_from_slice(rot_cube_base.as_base_slice());
+                        .copy_from_slice(rot_cube_base.as_basis_coefficients_slice());
 
                     let u_not_r = u_round * (EF::ONE - r_round);
                     let r_not_u = r_round * (EF::ONE - u_round);
                     let next_eq_term = EF::ONE - (u_not_r + r_not_u);
                     eq_cube *= next_eq_term;
-                    cols.eq_cube.copy_from_slice(eq_cube.as_base_slice());
+                    cols.eq_cube
+                        .copy_from_slice(eq_cube.as_basis_coefficients_slice());
 
                     rot_cube_minus_prod =
                         (rot_cube_minus_prod * next_eq_term) + u_not_r * r_not_u_prod;
                     r_not_u_prod *= r_not_u;
                     cols.r_not_u_prod
-                        .copy_from_slice(r_not_u_prod.as_base_slice());
+                        .copy_from_slice(r_not_u_prod.as_basis_coefficients_slice());
                     cols.rot_cube_minus_prod
-                        .copy_from_slice(rot_cube_minus_prod.as_base_slice());
+                        .copy_from_slice(rot_cube_minus_prod.as_basis_coefficients_slice());
 
-                    cols.eq_rot_mult = F::from_canonical_usize(eq_mults[round]);
+                    cols.eq_rot_mult = F::from_usize(eq_mults[round]);
                 }
 
                 (trace, num_rows)
@@ -627,7 +631,7 @@ impl SumcheckRoundsTraceGenerator {
             let padding_start = combined_trace.len();
             combined_trace.resize(padded_rows * width, F::ZERO);
 
-            let padding_proof_idx = F::from_canonical_usize(proofs.len());
+            let padding_proof_idx = F::from_usize(proofs.len());
             let mut chunks = combined_trace[padding_start..].chunks_mut(width);
             let num_padded_rows = padded_rows - total_rows;
             for i in 0..num_padded_rows {

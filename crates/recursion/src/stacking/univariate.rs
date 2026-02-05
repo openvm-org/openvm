@@ -11,7 +11,7 @@ use openvm_stark_backend::{
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    FieldAlgebra, FieldExtensionAlgebra, PrimeField32, extension::BinomiallyExtendable,
+    BasedVectorSpace, PrimeCharacteristicRing, PrimeField32, extension::BinomiallyExtendable,
 };
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
@@ -88,11 +88,14 @@ impl<F> BaseAir<F> for UnivariateRoundAir {
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UnivariateRoundAir
 where
     AB::F: PrimeField32,
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
 
         let local: &UnivariateRoundCols<AB::Var> = (*local).borrow();
         let next: &UnivariateRoundCols<AB::Var> = (*next).borrow();
@@ -137,10 +140,9 @@ where
         let d_card = 1usize << self.l_skip;
 
         builder.when(local.is_first).assert_zero(local.coeff_idx);
-        builder.when(and(local.is_last, local.is_valid)).assert_eq(
-            local.coeff_idx,
-            AB::F::from_canonical_usize(2 * (d_card - 1)),
-        );
+        builder
+            .when(and(local.is_last, local.is_valid))
+            .assert_eq(local.coeff_idx, AB::F::from_usize(2 * (d_card - 1)));
         builder
             .when(and(not(local.is_last), local.is_valid))
             .assert_one(next.coeff_idx - local.coeff_idx);
@@ -149,11 +151,11 @@ where
         builder.when(local.coeff_is_d).assert_one(local.is_valid);
         builder
             .when(local.coeff_is_d)
-            .assert_eq(local.coeff_idx, AB::F::from_canonical_usize(d_card));
+            .assert_eq(local.coeff_idx, AB::F::from_usize(d_card));
 
         assert_array_eq(
             &mut builder.when(local.is_first),
-            ext_field_multiply_scalar(local.coeff, AB::F::from_canonical_usize(d_card)),
+            ext_field_multiply_scalar(local.coeff, AB::F::from_usize(d_card)),
             local.s_0_sum_over_d,
         );
 
@@ -161,7 +163,7 @@ where
             &mut builder.when(next.coeff_is_d),
             ext_field_add(
                 local.s_0_sum_over_d,
-                ext_field_multiply_scalar(next.coeff, AB::F::from_canonical_usize(d_card)),
+                ext_field_multiply_scalar(next.coeff, AB::F::from_usize(d_card)),
             ),
             next.s_0_sum_over_d,
         );
@@ -246,7 +248,7 @@ where
                 builder,
                 local.proof_idx,
                 TranscriptBusMessage {
-                    tidx: AB::Expr::from_canonical_usize(i) + local.tidx,
+                    tidx: AB::Expr::from_usize(i) + local.tidx,
                     value: local.coeff[i].into(),
                     is_sample: AB::Expr::ZERO,
                 },
@@ -257,7 +259,7 @@ where
                 builder,
                 local.proof_idx,
                 TranscriptBusMessage {
-                    tidx: AB::Expr::from_canonical_usize(i + D_EF) + local.tidx,
+                    tidx: AB::Expr::from_usize(i + D_EF) + local.tidx,
                     value: local.u_0[i].into(),
                     is_sample: AB::Expr::ONE,
                 },
@@ -270,7 +272,7 @@ where
             local.proof_idx,
             StackingModuleTidxMessage {
                 module_idx: AB::Expr::ONE,
-                tidx: AB::Expr::from_canonical_usize(2 * D_EF) + local.tidx,
+                tidx: AB::Expr::from_usize(2 * D_EF) + local.tidx,
             },
             and(local.is_last, local.is_valid),
         );
@@ -304,7 +306,7 @@ impl UnivariateRoundTraceGenerator {
             .map(|(proof_idx, (proof, preflight))| {
                 let coeffs = &proof.stacking_proof.univariate_round_coeffs;
                 let num_rows = coeffs.len();
-                let proof_idx_value = F::from_canonical_usize(proof_idx);
+                let proof_idx_value = F::from_usize(proof_idx);
 
                 let mut trace = vec![F::ZERO; num_rows * width];
 
@@ -319,7 +321,7 @@ impl UnivariateRoundTraceGenerator {
                 let initial_tidx = preflight.stacking.intermediate_tidx[0];
 
                 let d_card = 1usize << vk.inner.params.l_skip;
-                let mut s_0_sum_over_d = coeffs[0] * F::from_canonical_usize(d_card);
+                let mut s_0_sum_over_d = coeffs[0] * F::from_usize(d_card);
                 let mut poly_rand_eval = EF::ZERO;
 
                 for (i, (&coeff, chunk, &u_0_pow)) in
@@ -331,23 +333,25 @@ impl UnivariateRoundTraceGenerator {
                     cols.is_first = F::from_bool(i == 0);
                     cols.is_last = F::from_bool(i + 1 == num_rows);
 
-                    cols.tidx = F::from_canonical_usize(initial_tidx + (D_EF * i));
-                    cols.u_0.copy_from_slice(u_0.as_base_slice());
-                    cols.u_0_pow.copy_from_slice(u_0_pow.as_base_slice());
+                    cols.tidx = F::from_usize(initial_tidx + (D_EF * i));
+                    cols.u_0.copy_from_slice(u_0.as_basis_coefficients_slice());
+                    cols.u_0_pow
+                        .copy_from_slice(u_0_pow.as_basis_coefficients_slice());
 
-                    cols.coeff.copy_from_slice(coeff.as_base_slice());
+                    cols.coeff
+                        .copy_from_slice(coeff.as_basis_coefficients_slice());
 
-                    cols.coeff_idx = F::from_canonical_usize(i);
+                    cols.coeff_idx = F::from_usize(i);
                     if i == d_card {
-                        s_0_sum_over_d += coeff * F::from_canonical_usize(d_card);
+                        s_0_sum_over_d += coeff * F::from_usize(d_card);
                         cols.coeff_is_d = F::ONE;
                     }
                     cols.s_0_sum_over_d
-                        .copy_from_slice(s_0_sum_over_d.as_base_slice());
+                        .copy_from_slice(s_0_sum_over_d.as_basis_coefficients_slice());
 
                     poly_rand_eval += coeff * u_0_pow;
                     cols.poly_rand_eval
-                        .copy_from_slice(poly_rand_eval.as_base_slice());
+                        .copy_from_slice(poly_rand_eval.as_basis_coefficients_slice());
                 }
 
                 (trace, num_rows)
@@ -365,7 +369,7 @@ impl UnivariateRoundTraceGenerator {
             let padding_start = combined_trace.len();
             combined_trace.resize(padded_rows * width, F::ZERO);
 
-            let padding_proof_idx = F::from_canonical_usize(proofs.len());
+            let padding_proof_idx = F::from_usize(proofs.len());
             let mut chunks = combined_trace[padding_start..].chunks_mut(width);
             for i in total_rows..padded_rows {
                 let chunk = chunks.next().unwrap();

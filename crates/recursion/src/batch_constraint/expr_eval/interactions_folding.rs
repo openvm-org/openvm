@@ -10,7 +10,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra, extension::BinomiallyExtendable};
+use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, extension::BinomiallyExtendable};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
@@ -97,11 +97,14 @@ impl<F> BaseAir<F> for InteractionsFoldingAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for InteractionsFoldingAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
 
         let local: &InteractionsFoldingCols<AB::Var> = (*local).borrow();
         let next: &InteractionsFoldingCols<AB::Var> = (*next).borrow();
@@ -377,8 +380,10 @@ impl InteractionsFoldingBlob {
         let mut folded = MultiProofVecVec::new();
         for (pidx, preflight) in preflights.iter().enumerate() {
             let beta_tidx = preflight.proof_shape.post_tidx + 2 + D_EF;
-            let beta =
-                EF::from_base_slice(&preflight.transcript.values()[beta_tidx..beta_tidx + D_EF]);
+            let beta = EF::from_basis_coefficients_slice(
+                &preflight.transcript.values()[beta_tidx..beta_tidx + D_EF],
+            )
+            .unwrap();
 
             let eq_3bs = &eq_3b_blob.all_stacked_ids[pidx];
             let mut cur_eq3b_idx = 0;
@@ -452,9 +457,9 @@ impl InteractionsFoldingBlob {
                             });
                         }
 
-                        cur_sum += beta_pow * EF::from_canonical_u16(inter.bus_index + 1);
+                        cur_sum += beta_pow * EF::from_u16(inter.bus_index + 1);
                         records.push(InteractionsFoldingRecord {
-                            value: EF::from_canonical_u16(inter.bus_index + 1),
+                            value: EF::from_u16(inter.bus_index + 1),
                             air_idx: *air_idx,
                             sort_idx,
                             interaction_idx,
@@ -516,25 +521,25 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
                 let record = &records[i];
                 let air_idx = preflight.proof_shape.sorted_trace_vdata[record.sort_idx].0;
                 cols.is_valid = F::ONE;
-                cols.proof_idx = F::from_canonical_usize(pidx);
-                cols.beta_tidx = F::from_canonical_usize(beta_tidx);
-                cols.air_idx = F::from_canonical_usize(record.air_idx);
-                cols.sort_idx = F::from_canonical_usize(record.sort_idx);
-                cols.interaction_idx = F::from_canonical_usize(record.interaction_idx);
-                cols.node_idx = F::from_canonical_usize(record.node_idx);
+                cols.proof_idx = F::from_usize(pidx);
+                cols.beta_tidx = F::from_usize(beta_tidx);
+                cols.air_idx = F::from_usize(record.air_idx);
+                cols.sort_idx = F::from_usize(record.sort_idx);
+                cols.interaction_idx = F::from_usize(record.interaction_idx);
+                cols.node_idx = F::from_usize(record.node_idx);
                 cols.has_interactions = F::from_bool(record.has_interactions);
                 cols.is_first_in_air = F::from_bool(record.is_first_in_air);
                 cols.is_first_in_message = F::from_bool(record.is_mult || !record.has_interactions);
                 cols.is_second_in_message = F::from_bool(was_first_interaction_in_message);
                 was_first_interaction_in_message = record.is_mult;
                 cols.is_bus_index = F::from_bool(record.is_bus_index);
-                cols.idx_in_message = F::from_canonical_usize(record.idx_in_message);
+                cols.idx_in_message = F::from_usize(record.idx_in_message);
                 cols.loop_aux.is_transition[0] = F::ONE;
                 cols.loop_aux.is_transition[1] = F::from_bool(!record.is_last_in_air);
                 if !record.is_bus_index {
                     cols.value.copy_from_slice(
                         blob.common_blob.expr_evals[[pidx, air_idx]][record.node_idx]
-                            .as_base_slice(),
+                            .as_basis_coefficients_slice(),
                     );
                 } else {
                     cols.value[0] = cols.node_idx;
@@ -552,7 +557,7 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
                                 vk.inner.params.l_skip,
                                 preflight.proof_shape.n_logup,
                             )
-                            .as_base_slice(),
+                            .as_basis_coefficients_slice(),
                     );
                 }
 
@@ -563,7 +568,7 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
 
         // Setting `cur_sum` and final acc
         let mut cur_sum = EF::ZERO;
-        let beta = EF::from_base_slice(beta_slice);
+        let beta = EF::from_basis_coefficients_slice(beta_slice).unwrap();
         let mut cur_acc_num = EF::ZERO;
         let mut cur_acc_denom = EF::ZERO;
         trace[cur_height * width..(cur_height + records.len()) * width]
@@ -577,29 +582,31 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
                     cols.cur_sum.copy_from_slice(&cols.value);
                     cur_sum = EF::ZERO;
                 } else {
-                    cur_sum = cur_sum * beta + EF::from_base_slice(&cols.value);
-                    cols.cur_sum.copy_from_slice(cur_sum.as_base_slice());
+                    cur_sum =
+                        cur_sum * beta + EF::from_basis_coefficients_slice(&cols.value).unwrap();
+                    cols.cur_sum
+                        .copy_from_slice(cur_sum.as_basis_coefficients_slice());
                 }
 
                 // Adding to the final acc
                 if cols.is_first_in_message == F::ONE {
                     // Case 1: first in message, only accumulate the num
-                    cur_acc_num +=
-                        EF::from_base_slice(&cols.cur_sum) * EF::from_base_slice(&cols.eq_3b);
+                    cur_acc_num += EF::from_basis_coefficients_slice(&cols.cur_sum).unwrap()
+                        * EF::from_basis_coefficients_slice(&cols.eq_3b).unwrap();
                     if cols.has_interactions == F::ZERO {
                         // AIR with no interactions doesn't have "second in message"
-                        cur_acc_denom +=
-                            EF::from_base_slice(&cols.cur_sum) * EF::from_base_slice(&cols.eq_3b);
+                        cur_acc_denom += EF::from_basis_coefficients_slice(&cols.cur_sum).unwrap()
+                            * EF::from_basis_coefficients_slice(&cols.eq_3b).unwrap();
                     }
                 } else if is_first_in_message_indices.contains(&(i - 1)) {
                     // Case 2: second in message, accumulate the denom
-                    cur_acc_denom +=
-                        EF::from_base_slice(&cols.cur_sum) * EF::from_base_slice(&cols.eq_3b);
+                    cur_acc_denom += EF::from_basis_coefficients_slice(&cols.cur_sum).unwrap()
+                        * EF::from_basis_coefficients_slice(&cols.eq_3b).unwrap();
                 }
                 cols.final_acc_num
-                    .copy_from_slice(cur_acc_num.as_base_slice());
+                    .copy_from_slice(cur_acc_num.as_basis_coefficients_slice());
                 cols.final_acc_denom
-                    .copy_from_slice(cur_acc_denom.as_base_slice());
+                    .copy_from_slice(cur_acc_denom.as_basis_coefficients_slice());
 
                 // Reset per AIR
                 if cols.is_first_in_air == F::ONE {
@@ -627,7 +634,7 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
         .enumerate()
         .for_each(|(i, chunk)| {
             let cols: &mut InteractionsFoldingCols<F> = chunk.borrow_mut();
-            cols.proof_idx = F::from_canonical_usize(preflights.len() + i);
+            cols.proof_idx = F::from_usize(preflights.len() + i);
             cols.is_first = F::ONE;
             cols.is_last = F::ONE;
             cols.is_first_in_air = F::ONE;
@@ -690,9 +697,10 @@ pub(in crate::batch_constraint) mod cuda {
 
             for (pidx, preflight) in preflights.iter().enumerate() {
                 let beta_tidx = preflight.proof_shape.post_tidx + 2 + D_EF;
-                let beta = EF::from_base_slice(
+                let beta = EF::from_basis_coefficients_slice(
                     &preflight.cpu.transcript.values()[beta_tidx..beta_tidx + D_EF],
-                );
+                )
+                .unwrap();
 
                 let eq_3bs = &eq_3b_blob.all_stacked_ids[pidx];
                 let mut cur_eq3b_idx = 0;
@@ -755,7 +763,7 @@ pub(in crate::batch_constraint) mod cuda {
                                 node_idxs.push(node_idx as u32);
                             }
 
-                            let bus_value = EF::from_canonical_u16(inter.bus_index + 1);
+                            let bus_value = EF::from_u16(inter.bus_index + 1);
                             cur_sum += beta_pow * bus_value;
                             interaction_values.push(bus_value);
                             node_idxs.push(inter.bus_index as u32 + 1);

@@ -7,7 +7,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{Field, FieldAlgebra, extension::BinomiallyExtendable};
+use p3_field::{Field, PrimeCharacteristicRing, extension::BinomiallyExtendable};
 use p3_matrix::Matrix;
 use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -59,11 +59,14 @@ impl<F: Field> PartitionedBaseAir<F> for GkrXiSamplerAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrXiSamplerAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &GkrXiSamplerCols<AB::Var> = (*local).borrow();
         let next: &GkrXiSamplerCols<AB::Var> = (*next).borrow();
 
@@ -117,7 +120,7 @@ where
 
         builder
             .when(is_transition_challenge.clone())
-            .assert_eq(next.tidx, local.tidx + AB::Expr::from_canonical_usize(D_EF));
+            .assert_eq(next.tidx, local.tidx + AB::Expr::from_usize(D_EF));
 
         ///////////////////////////////////////////////////////////////////////
         // Module Interactions
@@ -137,7 +140,7 @@ where
             local.is_first_challenge * is_not_dummy.clone(),
         );
         // 1b. Send output to GkrInputAir
-        let tidx_end = local.tidx + AB::Expr::from_canonical_usize(D_EF);
+        let tidx_end = local.tidx + AB::Expr::from_usize(D_EF);
         self.xi_sampler_bus.send(
             builder,
             local.proof_idx,

@@ -6,7 +6,7 @@ use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{AirRef, interaction::BusIndex};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use p3_field::FieldExtensionAlgebra;
+use p3_field::BasedVectorSpace;
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
     EF, F, SC, StarkEngineV2,
@@ -593,9 +593,12 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
                             .iter()
                             .map(|opened_value| {
                                 let (_leaf_hash, pre_states, post_states) =
-                                    poseidon2_hash_slice_with_states(opened_value.as_base_slice());
-                                // This is not quite a compression, but the AIR will constrain that the padded
-                                // pre_state gets compressed into _leaf_hash via Poseidon2CompressBus.
+                                    poseidon2_hash_slice_with_states(
+                                        opened_value.as_basis_coefficients_slice(),
+                                    );
+                                // This is not quite a compression, but the AIR will constrain that
+                                // the padded pre_state gets
+                                // compressed into _leaf_hash via Poseidon2CompressBus.
                                 poseidon2_compress_inputs.extend(pre_states);
                                 debug_assert_eq!(post_states.len(), 1);
                                 post_states.into_iter().next().unwrap()
@@ -648,7 +651,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             .iter()
             .flat_map(|per_round| per_round.iter().flat_map(|per_query| per_query.iter()))
         {
-            let len = <EF as FieldExtensionAlgebra<F>>::as_base_slice(opened_value).len();
+            let len = <EF as BasedVectorSpace<F>>::as_basis_coefficients_slice(opened_value).len();
             num_vectors += 1;
             total_data_len += len;
             total_chunks += num_chunks(len);
@@ -684,7 +687,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             .iter()
             .flat_map(|per_round| per_round.iter().flat_map(|per_query| per_query.iter()))
         {
-            push_vector(opened_value.as_base_slice());
+            push_vector(opened_value.as_basis_coefficients_slice());
         }
 
         debug_assert_eq!(descriptors.len(), num_vectors);
@@ -767,7 +770,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
                             .map(|opened_value| {
                                 debug_assert_eq!(
                                     num_chunks(
-                                        <EF as FieldExtensionAlgebra<F>>::as_base_slice(
+                                        <EF as BasedVectorSpace<F>>::as_basis_coefficients_slice(
                                             opened_value
                                         )
                                         .len()

@@ -6,7 +6,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{FieldAlgebra, PrimeField32};
+use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use stark_backend_v2::{F, proof::Proof};
 
@@ -73,14 +73,14 @@ pub(in crate::proof_shape) fn generate_trace(
 
                 cols.is_valid = F::ONE;
 
-                cols.proof_idx = F::from_canonical_usize(proof_idx);
-                cols.air_idx = F::from_canonical_usize(air_idx);
-                cols.pv_idx = F::from_canonical_usize(pv_idx);
+                cols.proof_idx = F::from_usize(proof_idx);
+                cols.air_idx = F::from_usize(air_idx);
+                cols.pv_idx = F::from_usize(pv_idx);
 
                 cols.is_first_in_air = F::from_bool(pv_idx == 0);
                 cols.is_first_in_proof = F::from_bool(row_idx == 0);
 
-                cols.tidx = F::from_canonical_usize(tidx);
+                cols.tidx = F::from_usize(tidx);
                 cols.value = *pv;
 
                 row_idx += 1;
@@ -91,7 +91,7 @@ pub(in crate::proof_shape) fn generate_trace(
 
     for chunk in chunks {
         let cols: &mut PublicValuesCols<F> = chunk.borrow_mut();
-        cols.proof_idx = F::from_canonical_usize(proofs.len());
+        cols.proof_idx = F::from_usize(proofs.len());
     }
 
     RowMajorMatrix::new(trace, width)
@@ -119,7 +119,10 @@ where
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &PublicValuesCols<AB::Var> = (*local).borrow();
         let next: &PublicValuesCols<AB::Var> = (*next).borrow();
 

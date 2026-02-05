@@ -1,7 +1,7 @@
 use std::ops::Index;
 
 use p3_air::AirBuilder;
-use p3_field::{Field, FieldAlgebra, extension::BinomiallyExtendable};
+use p3_field::{Field, PrimeCharacteristicRing, extension::BinomiallyExtendable};
 use p3_symmetric::Permutation;
 use stark_backend_v2::{
     D_EF, F,
@@ -13,14 +13,14 @@ pub const MAX_CONSTRAINT_DEGREE: usize = 4;
 
 pub fn base_to_ext<FA>(x: impl Into<FA>) -> [FA; D_EF]
 where
-    FA: FieldAlgebra,
+    FA: PrimeCharacteristicRing,
 {
     [x.into(), FA::ZERO, FA::ZERO, FA::ZERO]
 }
 
 pub fn ext_field_one_minus<FA>(x: [impl Into<FA>; D_EF]) -> [FA; D_EF]
 where
-    FA: FieldAlgebra,
+    FA: PrimeCharacteristicRing,
 {
     let [x0, x1, x2, x3] = x.map(Into::into);
     [FA::ONE - x0, -x1, -x2, -x3]
@@ -28,7 +28,7 @@ where
 
 pub fn ext_field_add<FA>(x: [impl Into<FA>; D_EF], y: [impl Into<FA>; D_EF]) -> [FA; D_EF]
 where
-    FA: FieldAlgebra,
+    FA: PrimeCharacteristicRing,
 {
     let [x0, x1, x2, x3] = x.map(Into::into);
     let [y0, y1, y2, y3] = y.map(Into::into);
@@ -37,7 +37,7 @@ where
 
 pub fn ext_field_subtract<FA>(x: [impl Into<FA>; D_EF], y: [impl Into<FA>; D_EF]) -> [FA; D_EF]
 where
-    FA: FieldAlgebra,
+    FA: PrimeCharacteristicRing,
 {
     let [x0, x1, x2, x3] = x.map(Into::into);
     let [y0, y1, y2, y3] = y.map(Into::into);
@@ -46,13 +46,13 @@ where
 
 pub fn ext_field_multiply<FA>(x: [impl Into<FA>; D_EF], y: [impl Into<FA>; D_EF]) -> [FA; D_EF]
 where
-    FA: FieldAlgebra,
-    FA::F: BinomiallyExtendable<D_EF>,
+    FA: PrimeCharacteristicRing,
+    FA::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     let [x0, x1, x2, x3] = x.map(Into::into);
     let [y0, y1, y2, y3] = y.map(Into::into);
 
-    let w = FA::from_f(FA::F::W);
+    let w = FA::from_prime_subfield(FA::PrimeSubfield::W);
 
     let z0_beta_terms = x1.clone() * y3.clone() + x2.clone() * y2.clone() + x3.clone() * y1.clone();
     let z1_beta_terms = x2.clone() * y3.clone() + x3.clone() * y2.clone();
@@ -71,7 +71,7 @@ where
 
 pub fn ext_field_add_scalar<FA>(x: [impl Into<FA>; D_EF], y: impl Into<FA>) -> [FA; D_EF]
 where
-    FA: FieldAlgebra,
+    FA: PrimeCharacteristicRing,
 {
     let [x0, x1, x2, x3] = x.map(Into::into);
     [x0 + y.into(), x1, x2, x3]
@@ -79,7 +79,7 @@ where
 
 pub fn ext_field_subtract_scalar<FA>(x: [impl Into<FA>; D_EF], y: impl Into<FA>) -> [FA; D_EF]
 where
-    FA: FieldAlgebra,
+    FA: PrimeCharacteristicRing,
 {
     let [x0, x1, x2, x3] = x.map(Into::into);
     [x0 - y.into(), x1, x2, x3]
@@ -87,7 +87,7 @@ where
 
 pub fn scalar_subtract_ext_field<FA>(x: impl Into<FA>, y: [impl Into<FA>; D_EF]) -> [FA; D_EF]
 where
-    FA: FieldAlgebra,
+    FA: PrimeCharacteristicRing,
 {
     let [y0, y1, y2, y3] = y.map(Into::into);
     [x.into() - y0, -y1, -y2, -y3]
@@ -95,7 +95,7 @@ where
 
 pub fn ext_field_multiply_scalar<FA>(x: [impl Into<FA>; D_EF], y: impl Into<FA>) -> [FA; D_EF]
 where
-    FA: FieldAlgebra,
+    FA: PrimeCharacteristicRing,
 {
     let [x0, x1, x2, x3] = x.map(Into::into);
     let y = y.into();
@@ -104,8 +104,8 @@ where
 
 pub fn eq_1<FA>(x: [impl Into<FA>; D_EF], y: [impl Into<FA>; D_EF]) -> [FA; D_EF]
 where
-    FA: FieldAlgebra,
-    FA::F: BinomiallyExtendable<D_EF>,
+    FA: PrimeCharacteristicRing,
+    FA::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     let x = x.map(Into::into);
     let y = y.map(Into::into);
@@ -265,8 +265,8 @@ pub fn interpolate_quadratic<FA>(
     alpha: [impl Into<FA>; D_EF],
 ) -> [FA; D_EF]
 where
-    FA: FieldAlgebra,
-    FA::F: BinomiallyExtendable<D_EF>,
+    FA: PrimeCharacteristicRing,
+    FA::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     let pre_claim = pre_claim.map(Into::into);
     let ev1 = ev1.map(Into::into);
@@ -278,7 +278,7 @@ where
     let s2 = ext_field_subtract::<FA>(ev2.clone(), ev1.clone());
     let p = ext_field_multiply::<FA>(
         ext_field_subtract::<FA>(s2, s1.clone()),
-        base_to_ext::<FA>(FA::from_f(FA::F::TWO.inverse())),
+        base_to_ext::<FA>(FA::from_prime_subfield(FA::PrimeSubfield::TWO.inverse())),
     );
     let q = ext_field_subtract::<FA>(s1, p.clone());
     ext_field_add::<FA>(

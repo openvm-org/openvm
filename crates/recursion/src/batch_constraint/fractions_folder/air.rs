@@ -6,7 +6,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{FieldAlgebra, extension::BinomiallyExtendable};
+use p3_field::{PrimeCharacteristicRing, extension::BinomiallyExtendable};
 use p3_matrix::Matrix;
 use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -64,11 +64,14 @@ impl<F> BaseAir<F> for FractionsFolderAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for FractionsFolderAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
 
         let local: &FractionsFolderCols<AB::Var> = (*local).borrow();
         let next: &FractionsFolderCols<AB::Var> = (*next).borrow();
@@ -117,10 +120,9 @@ where
 
         assert_array_eq(&mut builder.when(is_transition.clone()), local.mu, next.mu);
 
-        builder.when(is_transition.clone()).assert_eq(
-            next.tidx,
-            local.tidx - AB::Expr::from_canonical_usize(2 * D_EF),
-        );
+        builder
+            .when(is_transition.clone())
+            .assert_eq(next.tidx, local.tidx - AB::Expr::from_usize(2 * D_EF));
 
         ///////////////////////////////////////////////////////////////////////
         // Running Sum Constraints
@@ -190,14 +192,14 @@ where
         self.transcript_bus.sample_ext(
             builder,
             local.proof_idx,
-            local.tidx + AB::Expr::from_canonical_usize(2 * D_EF),
+            local.tidx + AB::Expr::from_usize(2 * D_EF),
             local.mu,
             local.is_first,
         );
         self.transcript_bus.observe_ext(
             builder,
             local.proof_idx,
-            local.tidx + AB::Expr::from_canonical_usize(D_EF),
+            local.tidx + AB::Expr::from_usize(D_EF),
             local.sum_claim_q,
             local.is_valid,
         );
@@ -225,7 +227,7 @@ where
             local.proof_idx,
             BatchConstraintModuleMessage {
                 // Skip lambda
-                tidx: local.tidx - AB::Expr::from_canonical_usize(D_EF),
+                tidx: local.tidx - AB::Expr::from_usize(D_EF),
                 gkr_input_layer_claim: [
                     local.cur_p_sum.map(Into::into),
                     local.cur_q_sum.map(Into::into),
@@ -239,7 +241,7 @@ where
             local.proof_idx,
             UnivariateSumcheckInputMessage {
                 // Skip mu
-                tidx: local.tidx + AB::Expr::from_canonical_usize(3 * D_EF),
+                tidx: local.tidx + AB::Expr::from_usize(3 * D_EF),
             },
             local.is_first,
         );

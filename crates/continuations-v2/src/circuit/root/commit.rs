@@ -12,7 +12,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
-use p3_field::{Field, FieldAlgebra};
+use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use recursion_circuit::bus::{Poseidon2CompressBus, Poseidon2CompressMessage};
 use stark_backend_v2::{DIGEST_SIZE, F, poseidon2::sponge::poseidon2_compress};
@@ -42,7 +42,8 @@ pub struct UserPvsCommitCols<F> {
 }
 
 /**
- * Builds a binary Merkle tree to decommit and expose the raw user public values. Constrains that:
+ * Builds a binary Merkle tree to decommit and expose the raw user public values. Constrains
+ * that:
  * - leaf nodes read pairs of digests from exposed PVs and compute parent hashes via Poseidon2
  * - internal nodes receive children from an internal permutation bus
  * - root commitment is sent to `UserPvsCommitBus`
@@ -98,7 +99,10 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
 
         let const_width = UserPvsCommitCols::<u8>::width();
         let row_idx_flags = &(*local)[const_width..];
@@ -107,7 +111,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         let local: &UserPvsCommitCols<AB::Var> = (*local)[..const_width].borrow();
         let next: &UserPvsCommitCols<AB::Var> = (*next)[..const_width].borrow();
 
-        let num_pv_chunks = AB::F::from_canonical_usize(self.num_user_pvs / DIGEST_SIZE);
+        let num_pv_chunks = AB::F::from_usize(self.num_user_pvs / DIGEST_SIZE);
 
         /*
          * Constrain that row_idx actually corresponds to the matrix row index, and
@@ -220,7 +224,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
          * the commit in public values to ensure they're a match. Note a row is valid
          * iff it is not the last, i.e. iff send_type (or receive_type) is non-zero.
          */
-        let is_valid = local.send_type * (AB::Expr::from_canonical_u8(3) - local.send_type) * half;
+        let is_valid = local.send_type * (AB::Expr::from_u8(3) - local.send_type) * half;
         let is_root = local.send_type * (local.send_type - AB::F::ONE) * half;
 
         let poseidon2_input: [AB::Var; POSEIDON2_WIDTH] = local
@@ -315,7 +319,7 @@ pub fn generate_proving_input(user_pvs: Vec<F>) -> AirProofRawInput<F> {
         let right: [F; DIGEST_SIZE] = children[DIGEST_SIZE..].try_into().unwrap();
         let parent = poseidon2_compress(left, right);
 
-        cols.row_idx = F::from_canonical_usize(row_idx);
+        cols.row_idx = F::from_usize(row_idx);
         cols.send_type = if num_pv_chunks == 2 { F::TWO } else { F::ONE };
         cols.receive_type = F::ONE;
         cols.parent = parent;
@@ -327,7 +331,7 @@ pub fn generate_proving_input(user_pvs: Vec<F>) -> AirProofRawInput<F> {
             encoder
                 .get_flag_pt(row_idx)
                 .into_iter()
-                .map(F::from_canonical_u32)
+                .map(F::from_u32)
                 .collect::<Vec<_>>()
                 .as_slice(),
         );
@@ -347,7 +351,7 @@ pub fn generate_proving_input(user_pvs: Vec<F>) -> AirProofRawInput<F> {
             let right = next_layer[2 * parent_idx + 1];
             let parent = poseidon2_compress(left, right);
 
-            cols.row_idx = F::from_canonical_usize(row_idx);
+            cols.row_idx = F::from_usize(row_idx);
             cols.send_type = if parent_layer_len > 1 { F::ONE } else { F::TWO };
             cols.receive_type = F::TWO;
             cols.parent = parent;
@@ -364,7 +368,7 @@ pub fn generate_proving_input(user_pvs: Vec<F>) -> AirProofRawInput<F> {
     debug_assert_eq!(row_idx + 1, num_pv_chunks);
     let last_chunk = chunks.next().unwrap();
     let last_cols: &mut UserPvsCommitCols<F> = last_chunk[..const_width].borrow_mut();
-    last_cols.row_idx = F::from_canonical_usize(row_idx);
+    last_cols.row_idx = F::from_usize(row_idx);
     last_cols.is_right_child = F::ONE;
 
     AirProofRawInput {

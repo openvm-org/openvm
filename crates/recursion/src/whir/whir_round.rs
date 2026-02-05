@@ -6,7 +6,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra, extension::BinomiallyExtendable};
+use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, extension::BinomiallyExtendable};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
@@ -93,7 +93,7 @@ impl<F> BaseAir<F> for WhirRoundAir {
 
 impl<AB: AirBuilder<F = F> + InteractionBuilder> Air<AB> for WhirRoundAir
 where
-    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         match self.whir_round_encoder.width() {
@@ -110,11 +110,14 @@ impl WhirRoundAir {
         &self,
         builder: &mut AB,
     ) where
-        <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+        <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
     {
         let main = builder.main();
 
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (
+            main.row_slice(0).expect("window should have two elements"),
+            main.row_slice(1).expect("window should have two elements"),
+        );
         let local: &WhirRoundCols<AB::Var, ENC_WIDTH> = (*local).borrow();
         let next: &WhirRoundCols<AB::Var, ENC_WIDTH> = (*next).borrow();
 
@@ -178,10 +181,7 @@ impl WhirRoundAir {
 
         builder
             .when(local.is_enabled - is_same_proof.clone())
-            .assert_eq(
-                local.whir_round,
-                AB::Expr::from_canonical_usize(self.num_rounds - 1),
-            );
+            .assert_eq(local.whir_round, AB::Expr::from_usize(self.num_rounds - 1));
 
         self.whir_module_bus.receive(
             builder,
@@ -209,7 +209,7 @@ impl WhirRoundAir {
             proof_idx,
             WhirSumcheckBusMessage {
                 tidx: local.tidx.into(),
-                sumcheck_idx: whir_round.clone() * AB::Expr::from_canonical_usize(self.k),
+                sumcheck_idx: whir_round.clone() * AB::Expr::from_usize(self.k),
                 pre_claim: local.claim.map(Into::into),
                 post_claim: local.post_sumcheck_claim.map(Into::into),
             },
@@ -222,7 +222,7 @@ impl WhirRoundAir {
         self.transcript_bus.observe_commit(
             builder,
             proof_idx,
-            local.tidx + AB::Expr::from_canonical_usize(non_final_round_offset),
+            local.tidx + AB::Expr::from_usize(non_final_round_offset),
             local.commit,
             is_same_proof.clone(),
         );
@@ -231,7 +231,7 @@ impl WhirRoundAir {
         self.transcript_bus.sample_ext(
             builder,
             proof_idx,
-            local.tidx + AB::Expr::from_canonical_usize(non_final_round_offset),
+            local.tidx + AB::Expr::from_usize(non_final_round_offset),
             local.z0,
             is_same_proof.clone(),
         );
@@ -239,7 +239,7 @@ impl WhirRoundAir {
         self.transcript_bus.observe_ext(
             builder,
             proof_idx,
-            local.tidx + AB::Expr::from_canonical_usize(non_final_round_offset),
+            local.tidx + AB::Expr::from_usize(non_final_round_offset),
             local.y0,
             is_same_proof.clone(),
         );
@@ -259,7 +259,7 @@ impl WhirRoundAir {
             builder,
             proof_idx,
             FinalPolyMleEvalMessage {
-                tidx: local.tidx + AB::Expr::from_canonical_usize(post_sumcheck_offset),
+                tidx: local.tidx + AB::Expr::from_usize(post_sumcheck_offset),
                 num_whir_rounds: whir_round.clone() + AB::Expr::ONE,
                 value: local.final_poly_mle_eval.map(Into::into),
             },
@@ -277,9 +277,8 @@ impl WhirRoundAir {
 
         let final_round_offset = post_sumcheck_offset + D_EF * self.final_poly_len;
         let pow_tidx = local.tidx
-            + (local.is_enabled - is_same_proof.clone())
-                * AB::Expr::from_canonical_usize(final_round_offset)
-            + is_same_proof.clone() * AB::Expr::from_canonical_usize(non_final_round_offset);
+            + (local.is_enabled - is_same_proof.clone()) * AB::Expr::from_usize(final_round_offset)
+            + is_same_proof.clone() * AB::Expr::from_usize(non_final_round_offset);
 
         self.transcript_bus.observe(
             builder,
@@ -302,7 +301,7 @@ impl WhirRoundAir {
             ExpBitsLenMessage {
                 base: self.generator.into(),
                 bit_src: local.query_pow_sample.into(),
-                num_bits: AB::Expr::from_canonical_usize(self.pow_bits),
+                num_bits: AB::Expr::from_usize(self.pow_bits),
                 result: AB::Expr::ONE,
             },
             is_enabled,
@@ -336,7 +335,7 @@ impl WhirRoundAir {
         );
         builder.when(is_same_proof).assert_eq(
             next.tidx,
-            pow_tidx.clone() + AB::Expr::from_canonical_usize(2 + D_EF) + local.num_queries,
+            pow_tidx.clone() + AB::Expr::from_usize(2 + D_EF) + local.num_queries,
         );
         self.gamma_bus.send(
             builder,
@@ -406,45 +405,48 @@ fn generate_trace_impl<const ENC_WIDTH: usize>(
 
             let cols: &mut WhirRoundCols<F, ENC_WIDTH> = row.borrow_mut();
             cols.is_enabled = F::ONE;
-            cols.proof_idx = F::from_canonical_usize(proof_idx);
-            cols.whir_round = F::from_canonical_usize(i);
+            cols.proof_idx = F::from_usize(proof_idx);
+            cols.whir_round = F::from_usize(i);
             cols.is_first_in_proof = F::from_bool(i == 0);
-            cols.tidx = F::from_canonical_usize(whir.tidx_per_round[i]);
-            cols.num_queries = F::from_canonical_usize(num_queries_per_round[i]);
+            cols.tidx = F::from_usize(whir.tidx_per_round[i]);
+            cols.num_queries = F::from_usize(num_queries_per_round[i]);
             cols.mu.copy_from_slice(
                 preflight
                     .stacking
                     .stacking_batching_challenge
-                    .as_base_slice(),
+                    .as_basis_coefficients_slice(),
             );
             cols.claim
-                .copy_from_slice(whir.initial_claim_per_round[i].as_base_slice());
+                .copy_from_slice(whir.initial_claim_per_round[i].as_basis_coefficients_slice());
             cols.final_poly_mle_eval
-                .copy_from_slice(final_poly_eval.as_base_slice());
+                .copy_from_slice(final_poly_eval.as_basis_coefficients_slice());
 
             cols.next_claim
-                .copy_from_slice(whir.initial_claim_per_round[i + 1].as_base_slice());
+                .copy_from_slice(whir.initial_claim_per_round[i + 1].as_basis_coefficients_slice());
             let post_sumcheck_idx = if k_whir == 0 {
                 whir.post_sumcheck_claims.len() - 1
             } else {
                 (i + 1) * k_whir - 1
             };
-            cols.post_sumcheck_claim
-                .copy_from_slice(whir.post_sumcheck_claims[post_sumcheck_idx].as_base_slice());
-            cols.gamma.copy_from_slice(whir.gammas[i].as_base_slice());
+            cols.post_sumcheck_claim.copy_from_slice(
+                whir.post_sumcheck_claims[post_sumcheck_idx].as_basis_coefficients_slice(),
+            );
+            cols.gamma
+                .copy_from_slice(whir.gammas[i].as_basis_coefficients_slice());
             cols.query_pow_witness = whir_proof.query_phase_pow_witnesses[i];
             cols.query_pow_sample = whir.query_pow_samples[i];
 
             if i < rows_per_proof - 1 {
                 cols.commit = whir_proof.codeword_commits[i];
-                cols.z0.copy_from_slice(whir.z0s[i].as_base_slice());
+                cols.z0
+                    .copy_from_slice(whir.z0s[i].as_basis_coefficients_slice());
                 cols.y0
-                    .copy_from_slice(whir_proof.ood_values[i].as_base_slice());
+                    .copy_from_slice(whir_proof.ood_values[i].as_basis_coefficients_slice());
             }
 
             let enc_pt = whir_round_encoder.get_flag_pt(i);
             for (j, &val) in enc_pt.iter().enumerate() {
-                cols.whir_round_enc[j] = F::from_canonical_u32(val);
+                cols.whir_round_enc[j] = F::from_u32(val);
             }
         });
 

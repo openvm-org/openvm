@@ -3,7 +3,7 @@ use openvm_stark_backend::air_builders::symbolic::{
     SymbolicExpressionNode,
     symbolic_variable::{Entry, SymbolicVariable},
 };
-use p3_field::FieldAlgebra;
+use p3_field::PrimeCharacteristicRing;
 use stark_backend_v2::keygen::types::{MultiStarkVerifyingKeyV2, StarkVerifyingKeyV2};
 
 use crate::batch_constraint::expr_eval::{NodeKind, build_cached_records};

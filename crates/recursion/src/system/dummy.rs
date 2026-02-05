@@ -1,5 +1,5 @@
 // Utilities for dummy tracegen
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
+use p3_field::{BasedVectorSpace, PrimeCharacteristicRing};
 use stark_backend_v2::{EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 
 use crate::{
@@ -16,8 +16,8 @@ impl Preflight {
             .iter()
             .enumerate()
             .map(|(i, r)| ConstraintSumcheckRandomness {
-                idx: F::from_canonical_usize(i),
-                challenge: r.as_base_slice().try_into().unwrap(),
+                idx: F::from_usize(i),
+                challenge: r.as_basis_coefficients_slice().try_into().unwrap(),
             })
             .collect()
     }
@@ -32,9 +32,9 @@ impl Preflight {
             }
         }
         WhirModuleMessage {
-            tidx: F::from_canonical_usize(self.stacking.post_tidx),
-            mu: mu.as_base_slice().try_into().unwrap(),
-            claim: claim.as_base_slice().try_into().unwrap(),
+            tidx: F::from_usize(self.stacking.post_tidx),
+            mu: mu.as_basis_coefficients_slice().try_into().unwrap(),
+            claim: claim.as_basis_coefficients_slice().try_into().unwrap(),
         }
     }
 
@@ -42,7 +42,7 @@ impl Preflight {
         let mut messages = vec![];
         for (i, commit) in proof.whir_proof.codeword_commits.iter().enumerate() {
             messages.push(CommitmentsBusMessage {
-                major_idx: F::from_canonical_usize(i + 1),
+                major_idx: F::from_usize(i + 1),
                 minor_idx: F::ZERO,
                 commitment: *commit,
             });

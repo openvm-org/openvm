@@ -2,9 +2,10 @@ use std::{iter::once, sync::Arc};
 
 use eyre::Result;
 use itertools::Itertools;
+use openvm_poseidon2_air::BABY_BEAR_POSEIDON2_SBOX_DEGREE;
 use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use p3_field::{Field, PrimeField};
+use p3_field::{Field, InjectiveMonomial, PrimeField};
 use recursion_circuit::system::{AggregationSubCircuit, VerifierTraceGen};
 use stark_backend_v2::{
     DIGEST_SIZE, F, SC, StarkWhirEngine, SystemParams,
@@ -161,7 +162,7 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ag
     ) -> Self
     where
         E::PD: DeviceDataTransporterV2<PB> + Clone,
-        PB::Val: Field + PrimeField,
+        PB::Val: Field + PrimeField + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
         PB::Matrix: Clone,
     {
         let verifier_circuit = S::new(child_vk.clone(), true, false);
@@ -191,7 +192,7 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ag
     ) -> Self
     where
         E::PD: DeviceDataTransporterV2<PB> + Clone,
-        PB::Val: Field + PrimeField,
+        PB::Val: Field + PrimeField + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>,
         PB::Matrix: Clone,
     {
         let verifier_circuit = S::new(child_vk.clone(), true, false);

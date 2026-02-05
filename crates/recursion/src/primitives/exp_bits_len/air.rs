@@ -5,7 +5,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::FieldAlgebra;
+use p3_field::PrimeCharacteristicRing;
 use p3_matrix::Matrix;
 use stark_backend_v2::F;
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -51,7 +51,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for ExpBitsLenAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let local = main.row_slice(0);
+        let local = main.row_slice(0).expect("window should have two elements");
         let local: &ExpBitsLenCols<AB::Var> = (*local).borrow();
 
         builder.assert_bool(local.bit_src_mod_2);
