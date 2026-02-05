@@ -101,12 +101,7 @@ __global__ void cukernel_persistent_boundary_tracegen(
             COL_WRITE_ARRAY(
                 row, PersistentBoundaryCols, hash, reinterpret_cast<Fp const *>(final_hash.v)
             );
-            Fp ts_values[BLOCKS_PER_CHUNK];
-            #pragma unroll
-            for (int i = 0; i < BLOCKS_PER_CHUNK; ++i) {
-                ts_values[i] = Fp(record.timestamps[i]);
-            }
-            COL_WRITE_ARRAY(row, PersistentBoundaryCols, timestamps, ts_values);
+            COL_WRITE_ARRAY(row, PersistentBoundaryCols, timestamps, record.timestamps);
         }
     } else {
         row.fill_zero(0, width);
