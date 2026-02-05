@@ -230,7 +230,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         let poseidon2_input: [AB::Var; POSEIDON2_WIDTH] = local
             .left_child
             .into_iter()
-            .chain(local.right_child.into_iter())
+            .chain(local.right_child)
             .collect_array()
             .unwrap();
 

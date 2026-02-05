@@ -145,7 +145,7 @@ where
         .row_slices()
         .map(|row| {
             state[..DIGEST_SIZE].copy_from_slice(&cached_symbolic_expr_cols_to_digest(row));
-            let input = state.clone();
+            let input = state;
             sub_chip.permute_mut(&mut state);
             input
         })

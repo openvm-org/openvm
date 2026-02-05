@@ -70,7 +70,7 @@ impl UserPvsInMemoryAir {
             user_pvs_commit_bus,
             memory_merkle_commit_bus,
             addr_space_height: memory_dimensions.addr_space_height,
-            merkle_path_branch_bits: merkle_path_branch_bits.try_into().unwrap(),
+            merkle_path_branch_bits,
         }
     }
 }
@@ -164,7 +164,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UserPvsInMemoryAir {
 
         let poseidon2_input: [AB::Expr; POSEIDON2_WIDTH] = left
             .into_iter()
-            .chain(right.into_iter())
+            .chain(right)
             .collect_array()
             .unwrap();
         let should_hash = next.is_valid * (AB::Expr::TWO - next.is_valid);

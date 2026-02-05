@@ -218,7 +218,7 @@ impl TranscriptModule {
             .map(|state| (state.map(|x| x.as_canonical_u32()), state, false));
         let mut keyed_states = keyed_perm_states
             .into_iter()
-            .chain(keyed_compress_states.into_iter())
+            .chain(keyed_compress_states)
             .collect_vec();
         keyed_states.sort_unstable_by(|a, b| a.0.cmp(&b.0));
 

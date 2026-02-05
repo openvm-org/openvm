@@ -181,8 +181,8 @@ where
             }
 
             let cached_slice_expr = cached_slice
-                .to_vec()
-                .into_iter()
+                .iter()
+                .copied()
                 .map(Into::into)
                 .collect_vec();
 
