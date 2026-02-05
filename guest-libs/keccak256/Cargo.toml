@@ -36,5 +36,3 @@ aot = ["openvm-sdk/aot"]
 cuda = ["openvm-keccak256-circuit/cuda"]
 # Enable tiny_keccak::Hasher trait implementation
 tiny_keccak = ["dep:tiny-keccak"]
-# Enables rust integration tests that take a long time.
-long_proving_tests = []

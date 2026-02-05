@@ -33,10 +33,7 @@ jobs:
           - { names: "sha2_256", path: "sha2", filter: "sha256" }
           - { names: "sha2_384", path: "sha2", filter: "sha384" }
           - { names: "sha2_512", path: "sha2", filter: "sha512" }
-          - { names: "keccak256_0mod4", path: "keccak256", filter: "0mod4" }
-          - { names: "keccak256_1mod4", path: "keccak256", filter: "1mod4" }
-          - { names: "keccak256_2mod4", path: "keccak256", filter: "2mod4" }
-          - { names: "keccak256_3mod4", path: "keccak256", filter: "3mod4" }
+          - { names: "keccak256", path: "keccak256" }
           - { names: "verify_stark" }
           - { names: "ruint k256 p256" }
           - { names: "ff_derive pairing" }
@@ -67,16 +64,7 @@ jobs:
             sha2_512:
               - "extensions/sha2/**"
               - "guest-libs/sha2/**"
-            keccak256_0mod4:
-              - "extensions/keccak256/**"
-              - "guest-libs/keccak256/**"
-            keccak256_1mod4:
-              - "extensions/keccak256/**"
-              - "guest-libs/keccak256/**"
-            keccak256_2mod4:
-              - "extensions/keccak256/**"
-              - "guest-libs/keccak256/**"
-            keccak256_3mod4:
+            keccak256:
               - "extensions/keccak256/**"
               - "guest-libs/keccak256/**"
             ff_derive:
@@ -169,12 +157,15 @@ jobs:
                 elif [[ "$crate" == "ruint" ]]; then
                   # only run integration tests because other tests are not OpenVM related
                   SPECIAL_ARGS="test_matrix_power"
-                elif [[ "$crate" == sha2_* || "$crate" == keccak256_* ]]; then
+                elif [[ "$crate" == sha2_* ]]; then
                   # only run proving tests
                   SPECIAL_ARGS="--run-ignored=ignored-only"
                   if [[ ${{ github.event_name }} == "push" && ${{ github.ref }} == "refs/heads/main" ]]; then
                     SPECIAL_ARGS="$SPECIAL_ARGS --features=long_proving_tests"
                   fi
+                elif [[ "$crate" == "keccak256" ]]; then
+                  # also run proving tests
+                  SPECIAL_ARGS="--run-ignored=all"
                 fi
 
                 # Build the command

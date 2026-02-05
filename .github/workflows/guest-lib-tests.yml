@@ -33,10 +33,7 @@ jobs:
           - { name: "sha2_256", path: "sha2", filter: "sha256" }
           - { name: "sha2_384", path: "sha2", filter: "sha384" }
           - { name: "sha2_512", path: "sha2", filter: "sha512" }
-          - { name: "keccak256_0mod4", path: "keccak256", filter: "0mod4" }
-          - { name: "keccak256_1mod4", path: "keccak256", filter: "1mod4" }
-          - { name: "keccak256_2mod4", path: "keccak256", filter: "2mod4" }
-          - { name: "keccak256_3mod4", path: "keccak256", filter: "3mod4" }
+          - { name: "keccak256", path: "keccak256" }
           - { name: "ff_derive", path: "ff_derive" }
           - { name: "k256", path: "k256" }
           - { name: "p256", path: "p256" }
@@ -81,7 +78,7 @@ jobs:
         run: |
           rustup component add rust-src --toolchain nightly-2025-08-02
           FEATURE_ARGS=""
-          if [[ "${{ matrix.crate.name }}" == sha2_* || "${{ matrix.crate.name }}" == keccak256_* ]]; then
+          if [[ "${{ matrix.crate.name }}" == sha2_* || "${{ matrix.crate.name }}" == "keccak256" ]]; then
             FEATURE_ARGS="--features=aot"
           elif [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
             FEATURE_ARGS="--features=bn254,bls12_381,aot"

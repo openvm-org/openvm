@@ -12,14 +12,17 @@ use openvm_keccak256::keccak256;
 openvm::entry!(main);
 
 pub fn main() {
-    let input: Vec<u8> = read();
-    let expected_output: Vec<u8> = read();
-    let output = keccak256(&input).to_vec();
+    let num_test_vectors: u32 = read();
+    for _ in 0..num_test_vectors {
+        let input: Vec<u8> = read();
+        let expected_output: Vec<u8> = read();
+        let output = keccak256(black_box(&input)).to_vec();
 
-    if output != expected_output {
-        panic!(
-            "input: {:?}, expected_output: {:?}, output: {:?}",
-            input, expected_output, output
-        );
+        if output != expected_output {
+            panic!(
+                "input: {:?}, expected_output: {:?}, output: {:?}",
+                input, expected_output, output
+            );
+        }
     }
 }
