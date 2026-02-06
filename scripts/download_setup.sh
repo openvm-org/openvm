@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Download ~/.openvm setup artifacts
-HALO2_DIR="halo2/src/v1.4"
+HALO2_DIR="halo2/src/v1.5"
 mkdir -p ~/.openvm
 mkdir -p ~/.openvm/$HALO2_DIR
 mkdir -p ~/.openvm/$HALO2_DIR/interfaces
@@ -21,7 +21,7 @@ for file in "Halo2Verifier.sol" "interfaces/IOpenVmHalo2Verifier.sol" "OpenVmHal
     wget "$URL" -O "$LOCAL" || curl -L "$URL" -o "$LOCAL"
 done
 
-for k in {10..23}; do
+for k in {10..24}; do
     file="kzg_bn254_${k}.srs"
     URL="$BASE_URL/params/$file"
     LOCAL=~/.openvm/params/$file
