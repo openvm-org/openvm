@@ -1,4 +1,44 @@
-use crate::{INT256_NUM_LIMBS, RV32_CELL_BITS};
+use openvm_circuit::{
+    arch::{ExecutionCtxTrait, VmExecState, CONST_BLOCK_SIZE},
+    system::memory::online::GuestMemory,
+};
+use openvm_stark_backend::p3_field::PrimeField32;
+
+use crate::{INT256_NUM_BLOCKS, INT256_NUM_LIMBS, RV32_CELL_BITS};
+
+/// Read a 256-bit integer as 8 separate 4-byte block reads.
+/// This ensures correct access adapter cost accounting.
+#[inline(always)]
+pub fn read_int256<F: PrimeField32, CTX: ExecutionCtxTrait>(
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    addr_space: u32,
+    ptr: u32,
+) -> [u8; INT256_NUM_LIMBS] {
+    let mut result = [0u8; INT256_NUM_LIMBS];
+    for i in 0..INT256_NUM_BLOCKS {
+        let block: [u8; CONST_BLOCK_SIZE] =
+            exec_state.vm_read(addr_space, ptr + (i * CONST_BLOCK_SIZE) as u32);
+        result[i * CONST_BLOCK_SIZE..(i + 1) * CONST_BLOCK_SIZE].copy_from_slice(&block);
+    }
+    result
+}
+
+/// Write a 256-bit integer as 8 separate 4-byte block writes.
+/// This ensures correct access adapter cost accounting.
+#[inline(always)]
+pub fn write_int256<F: PrimeField32, CTX: ExecutionCtxTrait>(
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    addr_space: u32,
+    ptr: u32,
+    data: &[u8; INT256_NUM_LIMBS],
+) {
+    for i in 0..INT256_NUM_BLOCKS {
+        let block: [u8; CONST_BLOCK_SIZE] = data[i * CONST_BLOCK_SIZE..(i + 1) * CONST_BLOCK_SIZE]
+            .try_into()
+            .unwrap();
+        exec_state.vm_write(addr_space, ptr + (i * CONST_BLOCK_SIZE) as u32, &block);
+    }
+}
 
 #[inline(always)]
 pub fn bytes_to_u64_array(bytes: [u8; INT256_NUM_LIMBS]) -> [u64; 4] {

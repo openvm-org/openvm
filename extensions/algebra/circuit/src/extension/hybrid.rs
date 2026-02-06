@@ -2,7 +2,7 @@
 
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
-    arch::*,
+    arch::{CONST_BLOCK_SIZE, *},
     system::{
         cuda::{
             extensions::{
@@ -34,6 +34,7 @@ use crate::{
     fp2_chip::{get_fp2_addsub_chip, get_fp2_muldiv_chip, Fp2Air, Fp2Chip},
     modular_chip::*,
     AlgebraRecord, Fp2Extension, ModularExtension, Rv32ModularConfig, Rv32ModularWithFp2Config,
+    FP2_BLOCKS_32, FP2_BLOCKS_48, MODULAR_BLOCKS_32, MODULAR_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
 
 #[derive(derive_new::new)]
@@ -150,21 +151,21 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
 
         for (i, modulus) in extension.supported_moduli.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
-            let bytes = modulus.bits().div_ceil(8);
+            let bytes = modulus.bits().div_ceil(8) as usize;
             let start_offset =
                 Rv32ModularArithmeticOpcode::CLASS_OFFSET + i * Rv32ModularArithmeticOpcode::COUNT;
 
             let modulus_limbs = big_uint_to_limbs(modulus, 8);
 
-            if bytes <= 32 {
+            if bytes <= NUM_LIMBS_32 {
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
-                    num_limbs: 32,
+                    num_limbs: NUM_LIMBS_32,
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<ModularAir<1, 32>>()?;
-                let addsub = get_modular_addsub_chip::<F, 1, 32>(
+                inventory.next_air::<ModularAir<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE>>()?;
+                let addsub = get_modular_addsub_chip::<F, MODULAR_BLOCKS_32, CONST_BLOCK_SIZE>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -173,8 +174,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 inventory.add_executor_chip(HybridModularChip::new(addsub));
 
-                inventory.next_air::<ModularAir<1, 32>>()?;
-                let muldiv = get_modular_muldiv_chip::<F, 1, 32>(
+                inventory.next_air::<ModularAir<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE>>()?;
+                let muldiv = get_modular_muldiv_chip::<F, MODULAR_BLOCKS_32, CONST_BLOCK_SIZE>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -190,8 +191,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                         0
                     }
                 });
-                inventory.next_air::<ModularIsEqualAir<1, 32, 32>>()?;
-                let is_eq = ModularIsEqualChip::<F, 1, 32, 32>::new(
+                inventory.next_air::<ModularIsEqualAir<MODULAR_BLOCKS_32, CONST_BLOCK_SIZE, NUM_LIMBS_32>>()?;
+                let is_eq = ModularIsEqualChip::<
+                    F,
+                    MODULAR_BLOCKS_32,
+                    CONST_BLOCK_SIZE,
+                    NUM_LIMBS_32,
+                >::new(
                     ModularIsEqualFiller::new(
                         Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
@@ -201,15 +207,15 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     mem_helper.clone(),
                 );
                 inventory.add_executor_chip(HybridModularIsEqualChip::new(is_eq));
-            } else if bytes <= 48 {
+            } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
-                    num_limbs: 48,
+                    num_limbs: NUM_LIMBS_48,
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<ModularAir<3, 16>>()?;
-                let addsub = get_modular_addsub_chip::<F, 3, 16>(
+                inventory.next_air::<ModularAir<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE>>()?;
+                let addsub = get_modular_addsub_chip::<F, MODULAR_BLOCKS_48, CONST_BLOCK_SIZE>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -218,8 +224,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                 );
                 inventory.add_executor_chip(HybridModularChip::new(addsub));
 
-                inventory.next_air::<ModularAir<3, 16>>()?;
-                let muldiv = get_modular_muldiv_chip::<F, 3, 16>(
+                inventory.next_air::<ModularAir<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE>>()?;
+                let muldiv = get_modular_muldiv_chip::<F, MODULAR_BLOCKS_48, CONST_BLOCK_SIZE>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -235,8 +241,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                         0
                     }
                 });
-                inventory.next_air::<ModularIsEqualAir<3, 16, 48>>()?;
-                let is_eq = ModularIsEqualChip::<F, 3, 16, 48>::new(
+                inventory.next_air::<ModularIsEqualAir<MODULAR_BLOCKS_48, CONST_BLOCK_SIZE, NUM_LIMBS_48>>()?;
+                let is_eq = ModularIsEqualChip::<
+                    F,
+                    MODULAR_BLOCKS_48,
+                    CONST_BLOCK_SIZE,
+                    NUM_LIMBS_48,
+                >::new(
                     ModularIsEqualFiller::new(
                         Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
                         start_offset,
@@ -320,17 +331,17 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
 
         for (_, modulus) in extension.supported_moduli.iter() {
             // determine the number of bytes needed to represent a prime field element
-            let bytes = modulus.bits().div_ceil(8);
+            let bytes = modulus.bits().div_ceil(8) as usize;
 
-            if bytes <= 32 {
+            if bytes <= NUM_LIMBS_32 {
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
-                    num_limbs: 32,
+                    num_limbs: NUM_LIMBS_32,
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<Fp2Air<2, 32>>()?;
-                let addsub = get_fp2_addsub_chip::<F, 2, 32>(
+                inventory.next_air::<Fp2Air<FP2_BLOCKS_32, CONST_BLOCK_SIZE>>()?;
+                let addsub = get_fp2_addsub_chip::<F, FP2_BLOCKS_32, CONST_BLOCK_SIZE>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -339,8 +350,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                 );
                 inventory.add_executor_chip(HybridFp2Chip::new(addsub));
 
-                inventory.next_air::<Fp2Air<2, 32>>()?;
-                let muldiv = get_fp2_muldiv_chip::<F, 2, 32>(
+                inventory.next_air::<Fp2Air<FP2_BLOCKS_32, CONST_BLOCK_SIZE>>()?;
+                let muldiv = get_fp2_muldiv_chip::<F, FP2_BLOCKS_32, CONST_BLOCK_SIZE>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -348,15 +359,15 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     pointer_max_bits,
                 );
                 inventory.add_executor_chip(HybridFp2Chip::new(muldiv));
-            } else if bytes <= 48 {
+            } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
-                    num_limbs: 48,
+                    num_limbs: NUM_LIMBS_48,
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<Fp2Air<6, 16>>()?;
-                let addsub = get_fp2_addsub_chip::<F, 6, 16>(
+                inventory.next_air::<Fp2Air<FP2_BLOCKS_48, CONST_BLOCK_SIZE>>()?;
+                let addsub = get_fp2_addsub_chip::<F, FP2_BLOCKS_48, CONST_BLOCK_SIZE>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -365,8 +376,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                 );
                 inventory.add_executor_chip(HybridFp2Chip::new(addsub));
 
-                inventory.next_air::<Fp2Air<6, 16>>()?;
-                let muldiv = get_fp2_muldiv_chip::<F, 6, 16>(
+                inventory.next_air::<Fp2Air<FP2_BLOCKS_48, CONST_BLOCK_SIZE>>()?;
+                let muldiv = get_fp2_muldiv_chip::<F, FP2_BLOCKS_48, CONST_BLOCK_SIZE>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),

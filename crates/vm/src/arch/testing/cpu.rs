@@ -1,10 +1,15 @@
 use std::sync::Arc;
 
 use itertools::zip_eq;
+use openvm_circuit::arch::CONST_BLOCK_SIZE;
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, NATIVE_AS};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    NATIVE_AS,
+};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::VerificationData,
@@ -48,7 +53,7 @@ use crate::{
             adapter::records::arena_size_bound,
             offline_checker::{MemoryBridge, MemoryBus},
             online::TracingMemory,
-            MemoryAirInventory, MemoryController, SharedMemoryHelper, CHUNK,
+            MemoryAirInventory, MemoryController, SharedMemoryHelper,
         },
         poseidon2::Poseidon2PeripheryChip,
         program::ProgramBus,
@@ -183,7 +188,15 @@ where
     ) -> (usize, usize) {
         let register = self.get_default_register(reg_increment);
         let pointer = self.get_default_pointer(pointer_increment);
-        self.write(1, register, pointer.to_le_bytes().map(F::from_canonical_u8));
+        // Write pointer in CONST_BLOCK_SIZE-byte chunks to avoid generating access adapter records
+        // when access adapters are disabled (min_block_size = CONST_BLOCK_SIZE for register address
+        // space). The pointer is RV32_REGISTER_NUM_LIMBS bytes (32-bit for RV32).
+        let ptr_bytes = (pointer as u32).to_le_bytes();
+        for i in (0..RV32_REGISTER_NUM_LIMBS).step_by(CONST_BLOCK_SIZE) {
+            let chunk: [u8; CONST_BLOCK_SIZE] =
+                ptr_bytes[i..i + CONST_BLOCK_SIZE].try_into().unwrap();
+            self.write::<CONST_BLOCK_SIZE>(1, register + i, chunk.map(F::from_canonical_u8));
+        }
         (register, pointer)
     }
 
@@ -238,21 +251,25 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         pointer: usize,
         writes: Vec<[F; NUM_LIMBS]>,
     ) {
-        self.write(
-            1usize,
-            register,
-            pointer.to_le_bytes().map(F::from_canonical_u8),
-        );
-        if NUM_LIMBS.is_power_of_two() {
-            for (i, &write) in writes.iter().enumerate() {
-                self.write(2usize, pointer + i * NUM_LIMBS, write);
-            }
-        } else {
-            for (i, &write) in writes.iter().enumerate() {
-                let ptr = pointer + i * NUM_LIMBS;
-                for j in (0..NUM_LIMBS).step_by(4) {
-                    self.write::<4>(2usize, ptr + j, write[j..j + 4].try_into().unwrap());
-                }
+        // Write pointer in CONST_BLOCK_SIZE-byte chunks to avoid generating access adapter records
+        // when access adapters are disabled (min_block_size = CONST_BLOCK_SIZE for register address
+        // space). The pointer is RV32_REGISTER_NUM_LIMBS bytes (32-bit for RV32).
+        let ptr_bytes = (pointer as u32).to_le_bytes();
+        for i in (0..RV32_REGISTER_NUM_LIMBS).step_by(CONST_BLOCK_SIZE) {
+            let chunk: [u8; CONST_BLOCK_SIZE] =
+                ptr_bytes[i..i + CONST_BLOCK_SIZE].try_into().unwrap();
+            self.write::<CONST_BLOCK_SIZE>(1usize, register + i, chunk.map(F::from_canonical_u8));
+        }
+        // Always write in CONST_BLOCK_SIZE-byte chunks to avoid generating
+        // access adapter records when access adapters are disabled.
+        for (i, &write) in writes.iter().enumerate() {
+            let ptr = pointer + i * NUM_LIMBS;
+            for j in (0..NUM_LIMBS).step_by(CONST_BLOCK_SIZE) {
+                self.write::<CONST_BLOCK_SIZE>(
+                    2usize,
+                    ptr + j,
+                    write[j..j + CONST_BLOCK_SIZE].try_into().unwrap(),
+                );
             }
         }
     }
@@ -323,6 +340,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         let mut mem_config = MemoryConfig::default();
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
         mem_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
+        // TODO: Check if need to revert to volatile memory, after access adapters are removed
         Self::persistent(mem_config)
     }
 
@@ -347,7 +365,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
 
     pub fn persistent(mem_config: MemoryConfig) -> Self {
         setup_tracing_with_log_level(Level::INFO);
-        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CHUNK);
+        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CONST_BLOCK_SIZE);
         let hasher_chip = Arc::new(Poseidon2PeripheryChip::new(
             vm_poseidon2_config(),
             POSEIDON2_DIRECT_BUS,
@@ -403,7 +421,7 @@ impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
         // removed when tests are updated.
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
         mem_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
-        Self::volatile(mem_config)
+        Self::persistent(mem_config)
     }
 }
 
