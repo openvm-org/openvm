@@ -1,12 +1,10 @@
 #[cfg(feature = "cuda")]
-use cuda_backend_v2::{GpuBackendV2, transport_matrix_h2d_col_major};
+use cuda_backend_v2::{GpuBackendV2, transport_air_proving_ctx_to_device};
 use stark_backend_v2::{
     DIGEST_SIZE, F,
     proof::Proof,
-    prover::{AirProvingContextV2, CpuBackendV2},
+    prover::{AirProvingContextV2, CpuBackendV2, ProverBackendV2},
 };
-
-use crate::circuit::AggNodeTraceGen;
 
 pub mod app {
     pub use openvm_circuit::arch::{
@@ -18,9 +16,25 @@ pub mod app {
 pub mod receiver;
 pub mod verifier;
 
-pub struct NonRootTraceGen;
+// Trait that non-root and compression provers use to remain generic in PB
+pub trait NonRootTraceGen<PB: ProverBackendV2> {
+    fn new() -> Self;
+    fn generate_verifier_pvs_ctx(
+        &self,
+        proofs: &[Proof],
+        user_pv_commit: Option<[F; DIGEST_SIZE]>,
+        child_vk_commit: PB::Commitment,
+    ) -> AirProvingContextV2<PB>;
+    fn generate_other_proving_ctxs(
+        &self,
+        proofs: &[Proof],
+        user_pv_commit: Option<[F; DIGEST_SIZE]>,
+    ) -> Vec<AirProvingContextV2<PB>>;
+}
 
-impl AggNodeTraceGen<CpuBackendV2> for NonRootTraceGen {
+pub struct NonRootTraceGenImpl;
+
+impl NonRootTraceGen<CpuBackendV2> for NonRootTraceGenImpl {
     fn new() -> Self {
         Self
     }
@@ -47,7 +61,7 @@ impl AggNodeTraceGen<CpuBackendV2> for NonRootTraceGen {
 }
 
 #[cfg(feature = "cuda")]
-impl AggNodeTraceGen<GpuBackendV2> for NonRootTraceGen {
+impl NonRootTraceGen<GpuBackendV2> for NonRootTraceGenImpl {
     fn new() -> Self {
         Self
     }
@@ -59,11 +73,7 @@ impl AggNodeTraceGen<GpuBackendV2> for NonRootTraceGen {
         child_vk_commit: [F; DIGEST_SIZE],
     ) -> AirProvingContextV2<GpuBackendV2> {
         let cpu_ctx = verifier::generate_proving_ctx(proofs, user_pv_commit, child_vk_commit);
-        AirProvingContextV2 {
-            cached_mains: vec![],
-            common_main: transport_matrix_h2d_col_major(&cpu_ctx.common_main).unwrap(),
-            public_values: cpu_ctx.public_values,
-        }
+        transport_air_proving_ctx_to_device(cpu_ctx)
     }
 
     fn generate_other_proving_ctxs(
@@ -72,8 +82,6 @@ impl AggNodeTraceGen<GpuBackendV2> for NonRootTraceGen {
         user_pv_commit: Option<[F; DIGEST_SIZE]>,
     ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
         let cpu_ctx = receiver::generate_proving_ctx(proofs, user_pv_commit.is_some());
-        vec![AirProvingContextV2::simple_no_pis(
-            transport_matrix_h2d_col_major(&cpu_ctx.common_main).unwrap(),
-        )]
+        vec![transport_air_proving_ctx_to_device(cpu_ctx)]
     }
 }

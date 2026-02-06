@@ -1,25 +1,33 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    sync::Arc,
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use itertools::Itertools;
 use openvm_circuit::arch::POSEIDON2_WIDTH;
-use openvm_circuit_primitives::{SubAir, encoder::Encoder, utils::not};
+use openvm_circuit_primitives::{
+    SubAir,
+    encoder::Encoder,
+    utils::{assert_array_eq, not},
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    prover::types::AirProofRawInput,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use recursion_circuit::bus::{Poseidon2CompressBus, Poseidon2CompressMessage};
-use stark_backend_v2::{DIGEST_SIZE, F, poseidon2::sponge::poseidon2_compress};
+use recursion_circuit::{
+    bus::{Poseidon2CompressBus, Poseidon2CompressMessage},
+    utils::assert_zeros,
+};
+use stark_backend_v2::{
+    DIGEST_SIZE, F,
+    poseidon2::{WIDTH, sponge::poseidon2_compress},
+    prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
+};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use crate::circuit::root::bus::{
-    UserPvsCommitBus, UserPvsCommitMessage, UserPvsCommitTreeBus, UserPvsCommitTreeMessage,
+use crate::circuit::root::{
+    bus::{UserPvsCommitBus, UserPvsCommitMessage, UserPvsCommitTreeBus, UserPvsCommitTreeMessage},
+    digests_to_poseidon2_input,
 };
 
 const MAX_ENCODER_DEGREE: u32 = 3;
@@ -42,9 +50,8 @@ pub struct UserPvsCommitCols<F> {
 }
 
 /**
- * Builds a binary Merkle tree to decommit and expose the raw user public values. Constrains
- * that:
- * - leaf nodes read pairs of digests from exposed PVs and compute parent hashes via Poseidon2
+ * Builds a binary Merkle tree to decommit and expose the raw user public values. Constrains that:
+ * - leaf nodes read single digests from exposed PVs, compress with zeros, and compute leaf hashes
  * - internal nodes receive children from an internal permutation bus
  * - root commitment is sent to `UserPvsCommitBus`
  */
@@ -64,14 +71,14 @@ impl UserPvsCommitAir {
         user_pvs_commit_tree_bus: UserPvsCommitTreeBus,
         num_user_pvs: usize,
     ) -> Self {
-        // Each leaf consumes `2 * DIGEST_SIZE` public values (left digest || right digest).
-        // We require at least one leaf (so at least one Poseidon2 hash), and a full binary tree.
-        debug_assert!(num_user_pvs >= 2 * DIGEST_SIZE);
-        debug_assert!(num_user_pvs % (2 * DIGEST_SIZE) == 0);
+        // Each leaf consumes `DIGEST_SIZE` public values, which are compressed with zeros
+        // to compute the leaf hash. We require at least one leaf, and a full binary tree.
+        debug_assert!(num_user_pvs >= DIGEST_SIZE);
+        debug_assert!(num_user_pvs % DIGEST_SIZE == 0);
         debug_assert!((num_user_pvs / DIGEST_SIZE).is_power_of_two());
 
-        // One selector per leaf PV chunk (each leaf consumes 2 digests).
-        let encoder = Encoder::new(num_user_pvs / (2 * DIGEST_SIZE), MAX_ENCODER_DEGREE, true);
+        // One selector per leaf PV chunk (each leaf consumes 1 digest).
+        let encoder = Encoder::new(num_user_pvs / DIGEST_SIZE, MAX_ENCODER_DEGREE, true);
         UserPvsCommitAir {
             poseidon2_compress_bus,
             user_pvs_commit_bus,
@@ -111,11 +118,11 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         let local: &UserPvsCommitCols<AB::Var> = (*local)[..const_width].borrow();
         let next: &UserPvsCommitCols<AB::Var> = (*next)[..const_width].borrow();
 
-        let num_pv_chunks = AB::F::from_usize(self.num_user_pvs / DIGEST_SIZE);
+        let num_rows = AB::F::from_usize(2 * self.num_user_pvs / DIGEST_SIZE);
 
         /*
          * Constrain that row_idx actually corresponds to the matrix row index, and
-         * that there are exactly num_pv_chunks rows.
+         * that there are exactly num_rows rows.
          */
         builder.when_first_row().assert_zero(local.row_idx);
         builder
@@ -123,7 +130,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             .assert_eq(local.row_idx + AB::F::ONE, next.row_idx);
         builder
             .when_last_row()
-            .assert_eq(local.row_idx, num_pv_chunks - AB::F::ONE);
+            .assert_eq(local.row_idx, num_rows - AB::F::ONE);
 
         /*
          * Constrain that is_right_child is correctly set. Even row_idx correspond to
@@ -134,7 +141,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         builder.assert_eq(local.is_right_child, not(next.is_right_child));
 
         /*
-         * Constrain that the first num_pv_chunks - 2 rows send their parent internally,
+         * Constrain that the first num_rows - 2 rows send their parent internally,
          * the second last row sends the commit, and the last row sends nothing. There
          * must be at least 2 rows, which is enforced by constraining send_type to be
          * 1 or 2 on the first row and 0 on the last.
@@ -158,11 +165,11 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             .assert_zero(next.send_type);
 
         /*
-         * Constrain that the first num_pv_chunks / 2 rows read their left and right
-         * values from pvs, the next (num_pv_chunks / 2) - 1 rows receive their values
-         * internally, and that the last row receives no values. We constrain this by
-         * asserting the last row's receive_type == 0 and that elsewhere the column
-         * is monotonically increasing.
+         * Constrain that the first num_rows / 2 rows read their left and right values
+         * from pvs, the next (num_rows / 2) - 1 rows receive their values internally,
+         * and that the last row receives no values. We constrain this by asserting the
+         * last row's receive_type == 0 and that elsewhere the column is monotonically
+         * increasing.
          */
         builder.assert_tern(local.receive_type);
 
@@ -179,7 +186,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
 
         /*
          * Send and receive internal messages. Given a non-root node at index i, its
-         * parent is at index floor((i + num_pv_chunks) / 2). Note that we send the
+         * parent is at index floor((i + num_rows) / 2). Note that we send the
          * internal message when local.send_type == 1, and receive left and right
          * when internal_receive == 2.
          */
@@ -192,7 +199,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             UserPvsCommitTreeMessage {
                 child_value: local.parent.map(Into::into),
                 is_right_child: local.is_right_child.into(),
-                parent_idx: (local.row_idx - local.is_right_child + num_pv_chunks) * half,
+                parent_idx: (local.row_idx - local.is_right_child + num_rows) * half,
             },
             internal_send,
         );
@@ -252,75 +259,72 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         );
 
         /*
-         * Constrain that the left_child and right_child of each leaf node at row_idx
-         * correspond to this AIR's public values. Leaf nodes rows should be in order
-         * of their position in the public values vector. A row is a leaf node if its
-         * receive_type == 1.
+         * Constrain that the left_child of each leaf node at row_idx corresponds to
+         * this AIR's public values, and that right_child is all zero on these rows.
+         * Leaf nodes rows should be in order of their position in the public values
+         * vector. A row is a leaf node if its receive_type == 1.
          */
         let pvs = builder.public_values();
         let is_leaf = local.receive_type * (AB::Expr::TWO - local.receive_type);
 
-        let mut pvs_left_child = vec![AB::Expr::ZERO; DIGEST_SIZE];
-        let mut pvs_right_child = vec![AB::Expr::ZERO; DIGEST_SIZE];
+        let mut pvs_digest = [AB::Expr::ZERO; DIGEST_SIZE];
 
-        for (pv_chunk_idx, pvs_chunk) in pvs.chunks(2 * DIGEST_SIZE).enumerate() {
+        for (pv_chunk_idx, pvs_chunk) in pvs.chunks(DIGEST_SIZE).enumerate() {
             let selected = self
                 .encoder
                 .get_flag_expr::<AB>(pv_chunk_idx, row_idx_flags);
             for digest_idx in 0..DIGEST_SIZE {
-                pvs_left_child[digest_idx] += selected.clone() * pvs_chunk[digest_idx].into();
-                pvs_right_child[digest_idx] +=
-                    selected.clone() * pvs_chunk[digest_idx + DIGEST_SIZE].into();
+                pvs_digest[digest_idx] += selected.clone() * pvs_chunk[digest_idx].into();
             }
         }
 
         builder.assert_eq(self.encoder.is_valid::<AB>(row_idx_flags), is_leaf.clone());
-
-        for digest_idx in 0..DIGEST_SIZE {
-            builder.assert_eq(
-                pvs_left_child[digest_idx].clone(),
-                is_leaf.clone() * local.left_child[digest_idx],
-            );
-            builder.assert_eq(
-                pvs_right_child[digest_idx].clone(),
-                is_leaf.clone() * local.right_child[digest_idx],
-            );
-        }
+        assert_array_eq(
+            builder,
+            pvs_digest,
+            local.left_child.map(|x| x * is_leaf.clone()),
+        );
+        assert_zeros(&mut builder.when(is_leaf), local.right_child);
     }
 }
 
-pub fn generate_proving_input(user_pvs: Vec<F>) -> AirProofRawInput<F> {
+pub fn generate_proving_ctx(
+    user_pvs: Vec<F>,
+) -> (AirProvingContextV2<CpuBackendV2>, Vec<[F; WIDTH]>) {
     let num_user_pvs = user_pvs.len();
 
-    // Each leaf consumes `2 * DIGEST_SIZE` public values (left digest || right digest).
-    // We require at least one leaf (so at least one Poseidon2 hash), and a full binary tree.
-    debug_assert!(num_user_pvs >= 2 * DIGEST_SIZE);
-    debug_assert!(num_user_pvs % (2 * DIGEST_SIZE) == 0);
+    // Each leaf consumes `DIGEST_SIZE` public values, which is padded and hashed before
+    // being inserted into the Merkle tree. We require at least one leaf (so at least one
+    // Poseidon2 hash), and a full binary tree.
+    debug_assert!(num_user_pvs >= DIGEST_SIZE);
+    debug_assert!(num_user_pvs % DIGEST_SIZE == 0);
     debug_assert!((num_user_pvs / DIGEST_SIZE).is_power_of_two());
 
-    // One selector per leaf PV chunk (each leaf consumes 2 digests).
-    let encoder = Encoder::new(num_user_pvs / (2 * DIGEST_SIZE), MAX_ENCODER_DEGREE, true);
+    // One selector per leaf PV chunk (each leaf consumes 1 digest).
+    let encoder = Encoder::new(num_user_pvs / DIGEST_SIZE, MAX_ENCODER_DEGREE, true);
 
-    let num_pv_chunks = num_user_pvs / DIGEST_SIZE;
+    let num_pv_digests = num_user_pvs / DIGEST_SIZE;
     let const_width = UserPvsCommitCols::<u8>::width();
     let width = const_width + encoder.width();
-    let mut trace = vec![F::ZERO; num_pv_chunks * width];
+    let mut trace = vec![F::ZERO; 2 * num_pv_digests * width];
     let mut chunks = trace.chunks_mut(width);
 
-    let mut next_layer = Vec::with_capacity(num_pv_chunks >> 1);
+    let mut next_layer = Vec::with_capacity(num_pv_digests);
+    let mut poseidon2_compress_inputs = Vec::with_capacity(2 * num_pv_digests - 1);
 
-    // Write leaf nodes that read left and right children from pvs
-    for children in user_pvs.chunks(2 * DIGEST_SIZE) {
+    // Write leaf nodes that read each digest child from pvs
+    for pv_digest in user_pvs.chunks(DIGEST_SIZE) {
         let chunk = chunks.next().unwrap();
         let cols: &mut UserPvsCommitCols<F> = chunk[..const_width].borrow_mut();
 
         let row_idx = next_layer.len();
-        let left: [F; DIGEST_SIZE] = children[..DIGEST_SIZE].try_into().unwrap();
-        let right: [F; DIGEST_SIZE] = children[DIGEST_SIZE..].try_into().unwrap();
+        let left: [F; DIGEST_SIZE] = pv_digest[..DIGEST_SIZE].try_into().unwrap();
+        let right: [F; DIGEST_SIZE] = [F::ZERO; DIGEST_SIZE];
         let parent = poseidon2_compress(left, right);
+        poseidon2_compress_inputs.push(digests_to_poseidon2_input(left, right));
 
         cols.row_idx = F::from_usize(row_idx);
-        cols.send_type = if num_pv_chunks == 2 { F::TWO } else { F::ONE };
+        cols.send_type = if num_pv_digests == 1 { F::TWO } else { F::ONE };
         cols.receive_type = F::ONE;
         cols.parent = parent;
         cols.is_right_child = F::from_bool(row_idx & 1 == 1);
@@ -350,6 +354,7 @@ pub fn generate_proving_input(user_pvs: Vec<F>) -> AirProofRawInput<F> {
             let left = next_layer[2 * parent_idx];
             let right = next_layer[2 * parent_idx + 1];
             let parent = poseidon2_compress(left, right);
+            poseidon2_compress_inputs.push(digests_to_poseidon2_input(left, right));
 
             cols.row_idx = F::from_usize(row_idx);
             cols.send_type = if parent_layer_len > 1 { F::ONE } else { F::TWO };
@@ -365,15 +370,17 @@ pub fn generate_proving_input(user_pvs: Vec<F>) -> AirProofRawInput<F> {
         next_layer.truncate(parent_layer_len);
     }
 
-    debug_assert_eq!(row_idx + 1, num_pv_chunks);
+    debug_assert_eq!(row_idx + 1, 2 * num_pv_digests);
     let last_chunk = chunks.next().unwrap();
     let last_cols: &mut UserPvsCommitCols<F> = last_chunk[..const_width].borrow_mut();
     last_cols.row_idx = F::from_usize(row_idx);
     last_cols.is_right_child = F::ONE;
 
-    AirProofRawInput {
-        cached_mains: vec![],
-        common_main: Some(Arc::new(RowMajorMatrix::new(trace, width))),
-        public_values: user_pvs,
-    }
+    (
+        AirProvingContextV2::simple(
+            ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width)),
+            user_pvs,
+        ),
+        poseidon2_compress_inputs,
+    )
 }

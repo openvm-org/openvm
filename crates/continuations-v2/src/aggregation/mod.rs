@@ -2,18 +2,12 @@ use std::sync::Arc;
 
 #[cfg(feature = "cuda")]
 use cuda_backend_v2::GpuBackendV2;
-use eyre::Result;
 use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use recursion_circuit::system::VerifierSubCircuit;
-use stark_backend_v2::{
-    DIGEST_SIZE, F, StarkWhirEngine,
-    keygen::types::MultiStarkVerifyingKeyV2,
-    proof::Proof,
-    prover::{CpuBackendV2, ProverBackendV2, ProvingContextV2},
-};
+use stark_backend_v2::prover::CpuBackendV2;
 
-use crate::circuit::nonroot::NonRootTraceGen;
+use crate::circuit::{nonroot::NonRootTraceGenImpl, root::RootTraceGenImpl};
 
 mod compression;
 mod nonroot;
@@ -24,27 +18,6 @@ pub use compression::*;
 pub use nonroot::*;
 pub use root::*;
 pub use utils::*;
-
-pub const DEFAULT_MAX_NUM_PROOFS: usize = 4;
-
-pub trait AggregationProver<PB: ProverBackendV2> {
-    /// Verifying key used to verify the result of agg_prove
-    fn get_vk(&self) -> Arc<MultiStarkVerifyingKeyV2>;
-    /// Commit of verifier circuit's cached trace
-    fn get_cached_commit(&self, is_recursive: bool) -> PB::Commitment;
-    fn generate_proving_ctx(
-        &self,
-        proofs: &[Proof],
-        user_pv_commit: Option<[F; DIGEST_SIZE]>,
-        is_recursive: bool,
-    ) -> ProvingContextV2<PB>;
-    fn agg_prove<E: StarkWhirEngine<PB = PB>>(
-        &self,
-        proofs: &[Proof],
-        user_pv_commit: Option<[F; DIGEST_SIZE]>,
-        is_recursive: bool,
-    ) -> Result<Proof>;
-}
 
 // TODO: move to stark-backend-v2
 pub trait Circuit {
@@ -58,13 +31,16 @@ impl<C: Circuit> Circuit for Arc<C> {
 }
 
 pub type NonRootCpuProver<const MAX_NUM_PROOFS: usize> =
-    NonRootAggregationProver<CpuBackendV2, VerifierSubCircuit<MAX_NUM_PROOFS>, NonRootTraceGen>;
+    NonRootAggregationProver<CpuBackendV2, VerifierSubCircuit<MAX_NUM_PROOFS>, NonRootTraceGenImpl>;
 pub type CompressionCpuProver =
-    CompressionProver<CpuBackendV2, VerifierSubCircuit<1>, NonRootTraceGen>;
+    CompressionProver<CpuBackendV2, VerifierSubCircuit<1>, NonRootTraceGenImpl>;
+pub type RootCpuProver = RootProver<CpuBackendV2, VerifierSubCircuit<1>, RootTraceGenImpl>;
 
 #[cfg(feature = "cuda")]
 pub type NonRootGpuProver<const MAX_NUM_PROOFS: usize> =
-    NonRootAggregationProver<GpuBackendV2, VerifierSubCircuit<MAX_NUM_PROOFS>, NonRootTraceGen>;
+    NonRootAggregationProver<GpuBackendV2, VerifierSubCircuit<MAX_NUM_PROOFS>, NonRootTraceGenImpl>;
 #[cfg(feature = "cuda")]
 pub type CompressionGpuProver =
-    CompressionProver<GpuBackendV2, VerifierSubCircuit<1>, NonRootTraceGen>;
+    CompressionProver<GpuBackendV2, VerifierSubCircuit<1>, NonRootTraceGenImpl>;
+#[cfg(feature = "cuda")]
+pub type RootGpuProver = RootProver<GpuBackendV2, VerifierSubCircuit<1>, RootTraceGenImpl>;

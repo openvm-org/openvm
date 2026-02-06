@@ -6,6 +6,7 @@ use openvm_circuit::{
     arch::{
         ContinuationVmProver, VirtualMachine, VmCircuitConfig, VmInstance, instructions::exe::VmExe,
     },
+    system::memory::merkle::public_values::UserPublicValuesProof,
     utils::test_utils::test_system_config,
 };
 use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImBuilder, Rv32ImConfig};
@@ -19,18 +20,22 @@ use openvm_transpiler::{
 };
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use stark_backend_v2::{
-    F, StarkEngineV2, SystemParams, WhirConfig, WhirParams,
+    DIGEST_SIZE, F, StarkEngineV2, SystemParams, WhirConfig, WhirParams,
     keygen::types::MultiStarkVerifyingKeyV2, proof::Proof,
 };
+#[cfg(feature = "cuda")]
+use test_case::test_case;
 use tracing::Level;
-
-use crate::aggregation::{AggregationProver, DEFAULT_MAX_NUM_PROOFS};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use crate::aggregation::NonRootGpuProver as NonRootProver;
-        use cuda_backend_v2::{BabyBearPoseidon2GpuEngineV2};
+        use crate::aggregation::CompressionGpuProver as CompressionProver;
+        use crate::aggregation::RootGpuProver as RootProver;
+        use cuda_backend_v2::{BabyBearPoseidon2GpuEngineV2, GpuBackendV2};
+        use stark_backend_v2::prover::CommittedTraceDataV2;
         type Engine = BabyBearPoseidon2GpuEngineV2;
+        type PB = GpuBackendV2;
     } else {
         use crate::aggregation::NonRootCpuProver as NonRootProver;
         use stark_backend_v2::{BabyBearPoseidon2CpuEngineV2, poseidon2::sponge::DuplexSponge};
@@ -39,6 +44,7 @@ cfg_if::cfg_if! {
 }
 
 const LOG_MAX_TRACE_HEIGHT: usize = 20;
+const DEFAULT_MAX_NUM_PROOFS: usize = 4;
 
 fn app_system_params() -> SystemParams {
     let l_skip = 4;
@@ -72,6 +78,16 @@ fn internal_system_params() -> SystemParams {
     app_system_params()
 }
 
+#[cfg(feature = "cuda")]
+fn compression_system_params() -> SystemParams {
+    app_system_params()
+}
+
+#[cfg(feature = "cuda")]
+fn root_system_params() -> SystemParams {
+    app_system_params()
+}
+
 fn test_rv32im_config() -> Rv32ImConfig {
     Rv32ImConfig {
         rv32i: Rv32IConfig {
@@ -82,7 +98,13 @@ fn test_rv32im_config() -> Rv32ImConfig {
     }
 }
 
-fn run_leaf_aggregation(log_fib_input: usize) -> Result<(Arc<MultiStarkVerifyingKeyV2>, Proof)> {
+fn run_leaf_aggregation(
+    log_fib_input: usize,
+) -> Result<(
+    Arc<MultiStarkVerifyingKeyV2>,
+    Proof,
+    UserPublicValuesProof<DIGEST_SIZE, F>,
+)> {
     let config = test_rv32im_config();
     let elf = Elf::decode(
         include_bytes!("../programs/examples/fibonacci.elf"),
@@ -120,7 +142,53 @@ fn run_leaf_aggregation(log_fib_input: usize) -> Result<(Arc<MultiStarkVerifying
     let leaf_vk = leaf_prover.get_vk();
     let engine = Engine::new(leaf_vk.inner.params.clone());
     engine.verify(&leaf_vk, &leaf_proof)?;
-    Ok((leaf_vk, leaf_proof))
+    Ok((leaf_vk, leaf_proof, app_proof.user_public_values))
+}
+
+// Feature-gated because full aggregation is too slow without CUDA. Many tests below
+// (including all that use run_full_aggregation) are similarly gated.
+#[cfg(feature = "cuda")]
+fn run_full_aggregation(
+    log_fib_input: usize,
+    extra_recursive_layers: usize,
+) -> Result<(
+    Arc<MultiStarkVerifyingKeyV2>,
+    CommittedTraceDataV2<PB>,
+    Proof,
+    UserPublicValuesProof<DIGEST_SIZE, F>,
+)> {
+    let (leaf_vk, leaf_proof, user_pvs_proof) = run_leaf_aggregation(log_fib_input)?;
+
+    let internal_for_leaf_prover = NonRootProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
+        leaf_vk,
+        internal_system_params(),
+        false,
+    );
+    let internal_for_leaf_proof =
+        internal_for_leaf_prover.agg_prove::<Engine>(&[leaf_proof], None, false)?;
+
+    let internal_recursive_prover = NonRootProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
+        internal_for_leaf_prover.get_vk(),
+        internal_system_params(),
+        true,
+    );
+    let mut internal_recursive_proof =
+        internal_recursive_prover.agg_prove::<Engine>(&[internal_for_leaf_proof], None, false)?;
+
+    for _internal_recursive_layer in 0..extra_recursive_layers {
+        internal_recursive_proof = internal_recursive_prover.agg_prove::<Engine>(
+            &[internal_recursive_proof],
+            None,
+            true,
+        )?;
+    }
+
+    Ok((
+        internal_recursive_prover.get_vk(),
+        internal_recursive_prover.get_self_vk_pcs_data().unwrap(),
+        internal_recursive_proof,
+        user_pvs_proof,
+    ))
 }
 
 #[test]
@@ -181,34 +249,58 @@ fn test_internal_recursive_vk_stabilization() -> Result<()> {
 fn test_internal_recursive_deep_layers() -> Result<()> {
     // This test is too slow to run on CPU
     setup_tracing_with_log_level(Level::INFO);
-    let (leaf_vk, leaf_proof) = run_leaf_aggregation(10)?;
+    let (internal_recursive_vk, _, internal_recursive_proof, _) = run_full_aggregation(10, 3)?;
+    let engine = Engine::new(internal_recursive_vk.inner.params.clone());
+    engine.verify(&internal_recursive_vk, &internal_recursive_proof)?;
+    Ok(())
+}
 
-    let internal_for_leaf_prover = NonRootProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
-        leaf_vk,
-        internal_system_params(),
-        false,
+#[test]
+#[cfg(feature = "cuda")]
+fn test_compression_prover() -> Result<()> {
+    setup_tracing_with_log_level(Level::INFO);
+    let (internal_recursive_vk, internal_recursive_pcs_data, internal_recursive_proof, _) =
+        run_full_aggregation(10, 0)?;
+
+    let compression_prover = CompressionProver::new::<Engine>(
+        internal_recursive_vk,
+        internal_recursive_pcs_data,
+        compression_system_params(),
     );
-    let internal_for_leaf_proof =
-        internal_for_leaf_prover.agg_prove::<Engine>(&[leaf_proof], None, false)?;
+    let compression_proof =
+        compression_prover.compress_prove::<Engine>(internal_recursive_proof)?;
 
-    let internal_recursive_prover = NonRootProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
-        internal_for_leaf_prover.get_vk(),
-        internal_system_params(),
-        true,
-    );
-    let mut internal_recursive_proof =
-        internal_recursive_prover.agg_prove::<Engine>(&[internal_for_leaf_proof], None, false)?;
-
-    let vk = internal_recursive_prover.get_vk();
+    let vk = compression_prover.get_vk();
     let engine = Engine::new(vk.inner.params.clone());
+    engine.verify(&vk, &compression_proof)?;
+    Ok(())
+}
 
-    for _internal_recursive_layer in 1..4 {
-        internal_recursive_proof = internal_recursive_prover.agg_prove::<Engine>(
-            &[internal_recursive_proof],
-            None,
-            true,
-        )?;
-        engine.verify(&vk, &internal_recursive_proof)?;
-    }
+#[cfg(feature = "cuda")]
+#[test_case(0 ; "internal_recursive_vk_commit not set")]
+#[test_case(1 ; "internal_recursive_vk_commit set")]
+fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
+    setup_tracing_with_log_level(Level::INFO);
+    let (
+        internal_recursive_vk,
+        internal_recursive_pcs_data,
+        internal_recursive_proof,
+        user_pvs_proof,
+    ) = run_full_aggregation(10, extra_recursive_layers)?;
+
+    let system_config = test_rv32im_config().rv32i.system;
+
+    let root_prover = RootProver::new::<Engine>(
+        internal_recursive_vk,
+        internal_recursive_pcs_data,
+        root_system_params(),
+        system_config.memory_config.memory_dimensions(),
+        system_config.num_public_values,
+    );
+    let root_proof = root_prover.root_prove::<Engine>(internal_recursive_proof, &user_pvs_proof)?;
+
+    let vk = root_prover.get_vk();
+    let engine = Engine::new(vk.inner.params.clone());
+    engine.verify(&vk, &root_proof)?;
     Ok(())
 }

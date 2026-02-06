@@ -1,7 +1,6 @@
 use std::{
     array::from_fn,
     borrow::{Borrow, BorrowMut},
-    sync::Arc,
 };
 
 use itertools::Itertools;
@@ -13,18 +12,24 @@ use openvm_circuit_primitives::utils::not;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_util::log2_strict_usize,
-    prover::types::AirProofRawInput,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use recursion_circuit::bus::{Poseidon2CompressBus, Poseidon2CompressMessage};
-use stark_backend_v2::{DIGEST_SIZE, F, poseidon2::sponge::poseidon2_compress};
+use stark_backend_v2::{
+    DIGEST_SIZE, F,
+    poseidon2::{WIDTH, sponge::poseidon2_compress},
+    prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
+};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use crate::circuit::root::bus::{
-    MemoryMerkleCommitBus, MemoryMerkleCommitMessage, UserPvsCommitBus, UserPvsCommitMessage,
+use crate::circuit::root::{
+    bus::{
+        MemoryMerkleCommitBus, MemoryMerkleCommitMessage, UserPvsCommitBus, UserPvsCommitMessage,
+    },
+    digests_to_poseidon2_input,
 };
 
 #[repr(C)]
@@ -48,7 +53,7 @@ pub struct UserPvsInMemoryAir {
     pub memory_merkle_commit_bus: MemoryMerkleCommitBus,
 
     // Used to constrain that the user public values reside in the correct address space
-    addr_space_height: usize,
+    expected_proof_len: usize,
     merkle_path_branch_bits: u32,
 }
 
@@ -65,11 +70,12 @@ impl UserPvsInMemoryAir {
         let pv_height = log2_strict_usize(num_user_pvs / DIGEST_SIZE);
         let merkle_path_branch_bits = u32::try_from(pv_start_idx >> pv_height)
             .expect("merkle_path_branch_bits must fit in u32");
+        let expected_proof_len = memory_dimensions.overall_height() - pv_height;
         Self {
             poseidon2_compress_bus,
             user_pvs_commit_bus,
             memory_merkle_commit_bus,
-            addr_space_height: memory_dimensions.addr_space_height,
+            expected_proof_len,
             merkle_path_branch_bits,
         }
     }
@@ -145,7 +151,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UserPvsInMemoryAir {
         );
         when_last.assert_eq(
             local.row_idx_exp_2,
-            AB::F::from_usize(1 << self.addr_space_height),
+            AB::F::from_usize(1 << self.expected_proof_len),
         );
         when_last.assert_zero(local.is_right_child);
 
@@ -162,11 +168,8 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UserPvsInMemoryAir {
                 + not(local.is_right_child) * local.sibling[i]
         });
 
-        let poseidon2_input: [AB::Expr; POSEIDON2_WIDTH] = left
-            .into_iter()
-            .chain(right)
-            .collect_array()
-            .unwrap();
+        let poseidon2_input: [AB::Expr; POSEIDON2_WIDTH] =
+            left.into_iter().chain(right).collect_array().unwrap();
         let should_hash = next.is_valid * (AB::Expr::TWO - next.is_valid);
 
         self.poseidon2_compress_bus.lookup_key(
@@ -193,11 +196,12 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UserPvsInMemoryAir {
 
 pub fn generate_proving_input(
     user_pv_commit: [F; DIGEST_SIZE],
-    merkle_proof: Vec<[F; DIGEST_SIZE]>,
+    merkle_proof: &[[F; DIGEST_SIZE]],
     memory_dimensions: MemoryDimensions,
     num_user_pvs: usize,
-) -> AirProofRawInput<F> {
-    let num_layers = merkle_proof.len() + 1;
+) -> (AirProvingContextV2<CpuBackendV2>, Vec<[F; WIDTH]>) {
+    let merkle_proof_len = merkle_proof.len();
+    let num_layers = merkle_proof_len + 1;
     let height = num_layers.next_power_of_two();
     let width = UserPvsInMemoryCols::<u8>::width();
 
@@ -215,7 +219,9 @@ pub fn generate_proving_input(
     let merkle_path_branch_bits = pv_start_idx >> pv_height;
     let mut current_branch_bits = 0;
 
-    for (i, sibling) in merkle_proof.into_iter().enumerate() {
+    let mut poseidon2_compress_inputs = Vec::with_capacity(merkle_proof_len);
+
+    for (i, &sibling) in merkle_proof.into_iter().enumerate() {
         let chunk = chunks.next().unwrap();
         let cols: &mut UserPvsInMemoryCols<F> = chunk.borrow_mut();
         let is_right_child = merkle_path_branch_bits & (1 << i) != 0;
@@ -231,18 +237,20 @@ pub fn generate_proving_input(
         let left = if is_right_child { sibling } else { current };
         let right = if is_right_child { current } else { sibling };
         current = poseidon2_compress(left, right);
+        poseidon2_compress_inputs.push(digests_to_poseidon2_input(left, right));
     }
 
     let last_chunk = chunks.next().unwrap();
     let last_row: &mut UserPvsInMemoryCols<F> = last_chunk.borrow_mut();
     last_row.is_valid = F::ONE;
     last_row.node_commit = current;
-    last_row.row_idx_exp_2 = F::from_usize(1 << (num_layers - 1));
+    last_row.row_idx_exp_2 = F::from_usize(1 << merkle_proof_len);
     last_row.merkle_path_branch_bits = F::from_usize(current_branch_bits);
 
-    AirProofRawInput {
-        cached_mains: vec![],
-        common_main: Some(Arc::new(RowMajorMatrix::new(trace, width))),
-        public_values: vec![],
-    }
+    (
+        AirProvingContextV2::simple_no_pis(ColMajorMatrix::from_row_major(&RowMajorMatrix::new(
+            trace, width,
+        ))),
+        poseidon2_compress_inputs,
+    )
 }
