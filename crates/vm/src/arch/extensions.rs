@@ -22,18 +22,19 @@ use openvm_circuit_primitives::var_range::{
 use openvm_instructions::{PhantomDiscriminant, VmOpcode};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    engine::StarkEngine,
     interaction::BusIndex,
-    keygen::types::MultiStarkProvingKey,
-    prover::{
-        cpu::CpuBackend,
-        hal::ProverBackend,
-        types::{AirProvingContext, ProvingContext},
-    },
+    prover::MatrixDimensions,
     rap::AnyRap,
-    AirRef, AnyChip, Chip,
+    AirRef,
 };
 use rustc_hash::FxHashMap;
+use stark_backend_v2::{
+    prover::{
+        AirProvingContextV2 as AirProvingContext, CpuBackendV2, ProverBackendV2 as ProverBackend,
+        ProvingContextV2 as ProvingContext,
+    },
+    AnyChip, ChipV2 as Chip, StarkEngineV2 as StarkEngine,
+};
 use tracing::info_span;
 
 use super::{GenerationError, PhantomSubExecutor, SystemConfig};
@@ -464,15 +465,6 @@ impl<SC: StarkGenericConfig> AirInventory<SC> {
         self.config.num_airs() + self.ext_airs.len()
     }
 
-    /// Standalone function to generate proving key and verifying key for this circuit.
-    pub fn keygen<E: StarkEngine<SC = SC>>(self, engine: &E) -> MultiStarkProvingKey<SC> {
-        let mut builder = engine.keygen_builder();
-        for air in self.into_airs() {
-            builder.add_air(air);
-        }
-        builder.generate_pk()
-    }
-
     /// Returns the maximum number of bits used to represent addresses in memory
     pub fn pointer_max_bits(&self) -> usize {
         self.config.memory_config.pointer_max_bits
@@ -597,7 +589,7 @@ where
 }
 
 // SharedVariableRangeCheckerChip is only used by the CPU backend.
-impl<SC, RA> ChipInventory<SC, RA, CpuBackend<SC>>
+impl<SC, RA> ChipInventory<SC, RA, CpuBackendV2>
 where
     SC: StarkGenericConfig,
 {
@@ -711,15 +703,10 @@ where
                 ),
             )
             .enumerate()
-            .filter(|(_air_id, ctx)| {
-                (!ctx.cached_mains.is_empty() || ctx.common_main.is_some())
-                    && ctx.main_trace_height() > 0
-            })
+            .filter(|(_air_id, ctx)| ctx.common_main.height() > 0)
             .collect();
 
-        Ok(ProvingContext {
-            per_air: ctx_without_empties,
-        })
+        Ok(ProvingContext::new(ctx_without_empties))
     }
 }
 
