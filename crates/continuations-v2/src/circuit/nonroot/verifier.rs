@@ -112,12 +112,6 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
                 AB::F::from_u32(DEFAULT_SUSPEND_EXIT_CODE),
             );
 
-        // constrain that user_pv_commit is unset for non-terminal segments
-        assert_zeros(
-            &mut builder.when(not(local.child_pvs.is_terminate)),
-            local.child_pvs.user_pv_commit,
-        );
-
         // when local and next are valid, constrain increasing proof_idx and adjacency
         let mut when_both = builder.when(and(local.is_valid, not(local.is_last)));
         when_both.assert_eq(local.child_pvs.final_pc, next.child_pvs.initial_pc);
@@ -147,23 +141,23 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
         );
         assert_array_eq(
             &mut when_both,
-            local.child_pvs.app_vk_commit,
-            next.child_pvs.app_vk_commit,
+            local.child_pvs.app_dag_commit,
+            next.child_pvs.app_dag_commit,
         );
         assert_array_eq(
             &mut when_both,
-            local.child_pvs.leaf_vk_commit,
-            next.child_pvs.leaf_vk_commit,
+            local.child_pvs.leaf_dag_commit,
+            next.child_pvs.leaf_dag_commit,
         );
         assert_array_eq(
             &mut when_both,
-            local.child_pvs.internal_for_leaf_vk_commit,
-            next.child_pvs.internal_for_leaf_vk_commit,
+            local.child_pvs.internal_for_leaf_dag_commit,
+            next.child_pvs.internal_for_leaf_dag_commit,
         );
         assert_array_eq(
             &mut when_both,
-            local.child_pvs.internal_recursive_vk_commit,
-            next.child_pvs.internal_recursive_vk_commit,
+            local.child_pvs.internal_recursive_dag_commit,
+            next.child_pvs.internal_recursive_dag_commit,
         );
 
         // constraints for basic validity
@@ -192,22 +186,22 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
 
         assert_zeros(
             &mut builder.when(not(local.has_verifier_pvs)),
-            local.child_pvs.app_vk_commit,
+            local.child_pvs.app_dag_commit,
         );
         assert_zeros(
             &mut builder.when(
                 (local.child_pvs.internal_flag - AB::F::ONE)
                     * (local.child_pvs.internal_flag - AB::F::TWO),
             ),
-            local.child_pvs.leaf_vk_commit,
+            local.child_pvs.leaf_dag_commit,
         );
         assert_zeros(
             &mut builder.when(local.child_pvs.internal_flag - AB::F::TWO),
-            local.child_pvs.internal_for_leaf_vk_commit,
+            local.child_pvs.internal_for_leaf_dag_commit,
         );
         assert_zeros(
             &mut builder.when(local.child_pvs.recursion_flag - AB::F::TWO),
-            local.child_pvs.internal_recursive_vk_commit,
+            local.child_pvs.internal_recursive_dag_commit,
         );
 
         /*
@@ -222,7 +216,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
         let verifier_pvs_id_cond = is_internal * verifier_pvs_id;
 
         let connector_id_cond = AB::Expr::from_usize(CONNECTOR_AIR_ID) * is_leaf.clone();
-        let connector_pvs_offset = is_internal * AB::F::from_usize(2 * DIGEST_SIZE);
+        let connector_pvs_offset = is_internal * AB::F::from_usize(DIGEST_SIZE);
 
         self.public_values_bus.receive(
             builder,
@@ -303,17 +297,6 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
                 PublicValuesBusMessage {
                     air_idx: verifier_pvs_id.into(),
                     pv_idx: AB::Expr::from_usize(didx),
-                    value: local.child_pvs.user_pv_commit[didx].into(),
-                },
-                local.is_valid * is_internal,
-            );
-
-            self.public_values_bus.receive(
-                builder,
-                local.proof_idx,
-                PublicValuesBusMessage {
-                    air_idx: verifier_pvs_id.into(),
-                    pv_idx: AB::Expr::from_usize(didx + DIGEST_SIZE),
                     value: local.child_pvs.program_commit[didx].into(),
                 },
                 local.is_valid * is_internal,
@@ -347,7 +330,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
                 PublicValuesBusMessage {
                     air_idx: verifier_pvs_id.into(),
                     pv_idx: verifier_pvs_offset.clone() + AB::F::from_usize(didx + 1),
-                    value: local.child_pvs.app_vk_commit[didx].into(),
+                    value: local.child_pvs.app_dag_commit[didx].into(),
                 },
                 local.is_valid * is_internal,
             );
@@ -358,7 +341,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
                 PublicValuesBusMessage {
                     air_idx: verifier_pvs_id.into(),
                     pv_idx: verifier_pvs_offset.clone() + AB::F::from_usize(didx + DIGEST_SIZE + 1),
-                    value: local.child_pvs.leaf_vk_commit[didx].into(),
+                    value: local.child_pvs.leaf_dag_commit[didx].into(),
                 },
                 local.is_valid * is_internal,
             );
@@ -370,7 +353,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
                     air_idx: verifier_pvs_id.into(),
                     pv_idx: verifier_pvs_offset.clone()
                         + AB::F::from_usize(didx + 2 * DIGEST_SIZE + 1),
-                    value: local.child_pvs.internal_for_leaf_vk_commit[didx].into(),
+                    value: local.child_pvs.internal_for_leaf_dag_commit[didx].into(),
                 },
                 local.is_valid * is_internal,
             );
@@ -381,7 +364,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
                 PublicValuesBusMessage {
                     air_idx: verifier_pvs_id.into(),
                     pv_idx: recursive_pvs_offset.clone() + AB::F::from_usize(didx + 1),
-                    value: local.child_pvs.internal_recursive_vk_commit[didx].into(),
+                    value: local.child_pvs.internal_recursive_dag_commit[didx].into(),
                 },
                 local.is_valid * is_internal,
             );
@@ -395,7 +378,6 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
          */
         let &NonRootVerifierPvs::<_> {
             initial_pc,
-            user_pv_commit,
             program_commit: app_commit,
             is_terminate,
             final_pc,
@@ -403,11 +385,11 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             initial_root,
             final_root,
             internal_flag,
-            app_vk_commit,
-            leaf_vk_commit,
-            internal_for_leaf_vk_commit,
+            app_dag_commit,
+            leaf_dag_commit,
+            internal_for_leaf_dag_commit,
             recursion_flag,
-            internal_recursive_vk_commit,
+            internal_recursive_dag_commit,
         } = builder.public_values().borrow();
 
         // constrain first proof pvs
@@ -439,11 +421,6 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             .when(local.is_last)
             .assert_eq(local.child_pvs.exit_code, exit_code);
         assert_array_eq(
-            &mut builder.when(local.is_last),
-            local.child_pvs.user_pv_commit,
-            user_pv_commit,
-        );
-        assert_array_eq(
             &mut builder.when(local.is_valid),
             local.child_pvs.program_commit,
             app_commit,
@@ -469,11 +446,11 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             .when_ne(local.child_pvs.internal_flag, AB::F::TWO)
             .assert_eq(internal_flag, local.child_pvs.internal_flag + AB::F::ONE);
 
-        // constrain app_vk_commit is set at all internal levels
+        // constrain app_dag_commit is set at all internal levels
         assert_array_eq(
             &mut builder.when(local.has_verifier_pvs),
-            local.child_pvs.app_vk_commit,
-            app_vk_commit,
+            local.child_pvs.app_dag_commit,
+            app_dag_commit,
         );
 
         // constrain verifier-specific pvs at all internal_recursive levels
@@ -482,8 +459,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             .assert_zero(internal_flag.into() - AB::F::TWO);
         assert_array_eq(
             &mut builder.when(local.child_pvs.internal_flag),
-            local.child_pvs.leaf_vk_commit,
-            leaf_vk_commit,
+            local.child_pvs.leaf_dag_commit,
+            leaf_dag_commit,
         );
 
         // constrain recursion_flag is 1 at the first internal_recursive level
@@ -497,8 +474,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             .assert_eq(recursion_flag, AB::F::TWO);
         assert_array_eq(
             &mut builder.when(local.child_pvs.recursion_flag),
-            local.child_pvs.internal_for_leaf_vk_commit,
-            internal_for_leaf_vk_commit,
+            local.child_pvs.internal_for_leaf_dag_commit,
+            internal_for_leaf_dag_commit,
         );
 
         // constrain verifier-specific pvs at internal_recursive levels after the second
@@ -506,8 +483,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             &mut builder.when(
                 local.child_pvs.recursion_flag * (local.child_pvs.recursion_flag - AB::F::ONE),
             ),
-            local.child_pvs.internal_recursive_vk_commit,
-            internal_recursive_vk_commit,
+            local.child_pvs.internal_recursive_dag_commit,
+            internal_recursive_dag_commit,
         );
 
         /*
@@ -528,12 +505,12 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
         let cached_commit = from_fn(|i| {
             is_leaf.clone() * local.child_pvs.program_commit[i]
                 + is_internal
-                    * (is_internal_flag_zero.clone() * local.child_pvs.app_vk_commit[i]
-                        + is_internal_flag_one.clone() * local.child_pvs.leaf_vk_commit[i]
+                    * (is_internal_flag_zero.clone() * local.child_pvs.app_dag_commit[i]
+                        + is_internal_flag_one.clone() * local.child_pvs.leaf_dag_commit[i]
                         + is_recursion_flag_one.clone()
-                            * local.child_pvs.internal_for_leaf_vk_commit[i]
+                            * local.child_pvs.internal_for_leaf_dag_commit[i]
                         + is_recursion_flag_two.clone()
-                            * local.child_pvs.internal_recursive_vk_commit[i])
+                            * local.child_pvs.internal_recursive_dag_commit[i])
         });
 
         self.cached_commit_bus.receive(
@@ -559,8 +536,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
 
 pub fn generate_proving_ctx(
     proofs: &[Proof],
-    user_pv_commit: Option<[F; DIGEST_SIZE]>,
-    child_vk_commit: [F; DIGEST_SIZE],
+    child_is_app: bool,
+    child_dag_commit: [F; DIGEST_SIZE],
 ) -> AirProvingContextV2<CpuBackendV2> {
     let num_proofs = proofs.len();
     let height = num_proofs.next_power_of_two();
@@ -579,7 +556,8 @@ pub fn generate_proving_ctx(
         cols.is_valid = F::ONE;
         cols.is_last = F::from_bool(proof_idx + 1 == num_proofs);
 
-        if let Some(user_pv_commit) = user_pv_commit {
+        // The child_vk may either be for the app layer or an aggregation layer
+        if child_is_app {
             cols.child_pvs.program_commit = proof.trace_vdata[PROGRAM_AIR_ID]
                 .as_ref()
                 .unwrap()
@@ -595,10 +573,6 @@ pub fn generate_proving_ctx(
             cols.child_pvs.final_pc = final_pc;
             cols.child_pvs.exit_code = exit_code;
             cols.child_pvs.is_terminate = is_terminate;
-
-            if is_terminate != F::ZERO {
-                cols.child_pvs.user_pv_commit = user_pv_commit;
-            }
 
             let &MemoryMerklePvs::<_, DIGEST_SIZE> {
                 initial_root,
@@ -631,19 +605,19 @@ pub fn generate_proving_ctx(
 
     match child_level {
         VerifierChildLevel::App => {
-            pvs.app_vk_commit = child_vk_commit;
+            pvs.app_dag_commit = child_dag_commit;
         }
         VerifierChildLevel::Leaf => {
-            pvs.leaf_vk_commit = child_vk_commit;
+            pvs.leaf_dag_commit = child_dag_commit;
             pvs.internal_flag = F::ONE;
         }
         VerifierChildLevel::InternalForLeaf => {
-            pvs.internal_for_leaf_vk_commit = child_vk_commit;
+            pvs.internal_for_leaf_dag_commit = child_dag_commit;
             pvs.internal_flag = F::TWO;
             pvs.recursion_flag = F::ONE;
         }
         VerifierChildLevel::InternalRecursive => {
-            pvs.internal_recursive_vk_commit = child_vk_commit;
+            pvs.internal_recursive_dag_commit = child_dag_commit;
             pvs.internal_flag = F::TWO;
             pvs.recursion_flag = F::TWO;
         }

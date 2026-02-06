@@ -56,12 +56,12 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UserPvsReceiverAir {
 
 pub fn generate_proving_ctx(
     proofs: &[Proof],
-    app_child: bool,
+    child_is_app: bool,
 ) -> AirProvingContextV2<CpuBackendV2> {
     const APP_RESERVED_IDX: [usize; 3] = [PROGRAM_AIR_ID, CONNECTOR_AIR_ID, MERKLE_AIR_ID];
     const VERIFIER_RESERVED_IDX: [usize; 2] = [VERIFIER_PVS_AIR_ID, CONSTRAINT_EVAL_AIR_ID];
 
-    let reserved_air_idx = if app_child {
+    let reserved_air_idx = if child_is_app {
         APP_RESERVED_IDX.as_slice()
     } else {
         VERIFIER_RESERVED_IDX.as_slice()

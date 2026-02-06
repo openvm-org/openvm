@@ -8,18 +8,16 @@ pub enum VerifyStarkError {
     StarkVerificationFailure(#[from] VerifierError),
     #[error("User public value proof verification failed with error: {0}")]
     UserPvsVerificationFailure(#[from] UserPublicValuesProofError),
-    #[error("Invalid user pv commit: expected {expected:?}, actual {actual:?}")]
-    UserPvCommitMismatch { expected: Digest, actual: Digest },
     #[error("Invalid app exe commit: expected {expected:?}, actual {actual:?}")]
     AppExeCommitMismatch { expected: Digest, actual: Digest },
-    #[error("Invalid app vk commit: expected {expected:?}, actual {actual:?}")]
-    AppVkCommitMismatch { expected: Digest, actual: Digest },
-    #[error("Invalid leaf vk commit: expected {expected:?}, actual {actual:?}")]
-    LeafVkCommitMismatch { expected: Digest, actual: Digest },
-    #[error("Invalid internal for leaf vk commit: expected {expected:?}, actual {actual:?}")]
-    InternalForLeafVkCommitMismatch { expected: Digest, actual: Digest },
-    #[error("Invalid internal recursive vk commit: expected {expected:?}, actual {actual:?}")]
-    InternalRecursiveVkCommitMismatch { expected: Digest, actual: Digest },
+    #[error("Invalid app DAG commit: expected {expected:?}, actual {actual:?}")]
+    AppDagCommitMismatch { expected: Digest, actual: Digest },
+    #[error("Invalid leaf DAG commit: expected {expected:?}, actual {actual:?}")]
+    LeafDagCommitMismatch { expected: Digest, actual: Digest },
+    #[error("Invalid internal for leaf DAG commit: expected {expected:?}, actual {actual:?}")]
+    InternalForLeafDagCommitMismatch { expected: Digest, actual: Digest },
+    #[error("Invalid internal recursive DAG commit: expected {expected:?}, actual {actual:?}")]
+    InternalRecursiveDagCommitMismatch { expected: Digest, actual: Digest },
     #[error("Invalid compression commit: expected {expected:?}, actual {actual:?}")]
     CompressionCommitMismatch { expected: Vec<F>, actual: Vec<F> },
     #[error("Compression commit should not be defined if not enabled, actual {actual:?}")]

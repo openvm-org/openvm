@@ -26,16 +26,16 @@ pub struct VerificationBaseline {
     pub memory_dimensions: MemoryDimensions,
     /// Cached trace commit of the leaf verifier circuit's SymbolicExpressionAir, which is
     /// derived from the app_vk
-    pub app_vk_commit: Digest,
+    pub app_dag_commit: Digest,
     /// Cached trace commit of the internal-for-leaf verifier circuit's SymbolicExpressionAir,
     /// which is derived from the leaf_vk
-    pub leaf_vk_commit: Digest,
+    pub leaf_dag_commit: Digest,
     /// Cached trace commit of the first (i.e. index 0) internal-recursive layer verifier
     /// circuit's SymbolicExpressionAir, which is derived from the internal_for_leaf_vk
-    pub internal_for_leaf_vk_commit: Digest,
+    pub internal_for_leaf_dag_commit: Digest,
     /// Cached trace commit of each subsequent (i.e. index > 0) internal-recursive layer
     /// verifier's SymbolicExpressionAir, which is derived from the internal_recursive_vk
-    pub internal_recursive_vk_commit: Digest,
+    pub internal_recursive_dag_commit: Digest,
     /// In-circuit generated commit of the internal-recursive layer's DAG if the compression
     /// layer is enabled. If so, it should be match the public values of DagCommitAir, which
     /// should be the last AIR in the compression layer circuit.

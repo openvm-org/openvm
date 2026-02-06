@@ -53,7 +53,6 @@ pub fn verify_vm_stark_proof_decoded(
     engine.verify(&vk.mvk, &proof.inner)?;
 
     let &NonRootVerifierPvs::<F> {
-        user_pv_commit,
         program_commit,
         initial_pc,
         exit_code,
@@ -61,11 +60,11 @@ pub fn verify_vm_stark_proof_decoded(
         initial_root,
         final_root,
         internal_flag,
-        app_vk_commit,
-        leaf_vk_commit,
-        internal_for_leaf_vk_commit,
+        app_dag_commit,
+        leaf_dag_commit,
+        internal_for_leaf_dag_commit,
         recursion_flag,
-        internal_recursive_vk_commit,
+        internal_recursive_dag_commit,
         ..
     } = proof.inner.public_values[VERIFIER_PVS_AIR_ID]
         .as_slice()
@@ -76,14 +75,6 @@ pub fn verify_vm_stark_proof_decoded(
     proof
         .user_pvs_proof
         .verify(&hasher, vk.baseline.memory_dimensions, final_root)?;
-
-    // Check that user_pv_commit is equal to the commit given in the merkle proof
-    if user_pv_commit != proof.user_pvs_proof.public_values_commit {
-        return Err(VerifyStarkError::UserPvCommitMismatch {
-            expected: proof.user_pvs_proof.public_values_commit,
-            actual: user_pv_commit,
-        });
-    }
 
     // Check that the app_commit is as expected.
     let claimed_app_exe_commit =
@@ -106,27 +97,27 @@ pub fn verify_vm_stark_proof_decoded(
         return Err(VerifyStarkError::InvalidInternalFlag(internal_flag));
     }
 
-    // Check app_vk_commit against expected_commits.
-    if app_vk_commit != vk.baseline.app_vk_commit {
-        return Err(VerifyStarkError::AppVkCommitMismatch {
-            expected: vk.baseline.app_vk_commit,
-            actual: app_vk_commit,
+    // Check app_dag_commit against expected_commits.
+    if app_dag_commit != vk.baseline.app_dag_commit {
+        return Err(VerifyStarkError::AppDagCommitMismatch {
+            expected: vk.baseline.app_dag_commit,
+            actual: app_dag_commit,
         });
     }
 
-    // Check leaf_vk_commit against expected_commits.
-    if leaf_vk_commit != vk.baseline.leaf_vk_commit {
-        return Err(VerifyStarkError::LeafVkCommitMismatch {
-            expected: vk.baseline.leaf_vk_commit,
-            actual: leaf_vk_commit,
+    // Check leaf_dag_commit against expected_commits.
+    if leaf_dag_commit != vk.baseline.leaf_dag_commit {
+        return Err(VerifyStarkError::LeafDagCommitMismatch {
+            expected: vk.baseline.leaf_dag_commit,
+            actual: leaf_dag_commit,
         });
     }
 
-    // Check internal_for_leaf_vk_commit against expected_commits.
-    if internal_for_leaf_vk_commit != vk.baseline.internal_for_leaf_vk_commit {
-        return Err(VerifyStarkError::InternalForLeafVkCommitMismatch {
-            expected: vk.baseline.internal_for_leaf_vk_commit,
-            actual: internal_for_leaf_vk_commit,
+    // Check internal_for_leaf_dag_commit against expected_commits.
+    if internal_for_leaf_dag_commit != vk.baseline.internal_for_leaf_dag_commit {
+        return Err(VerifyStarkError::InternalForLeafDagCommitMismatch {
+            expected: vk.baseline.internal_for_leaf_dag_commit,
+            actual: internal_for_leaf_dag_commit,
         });
     }
 
@@ -136,11 +127,11 @@ pub fn verify_vm_stark_proof_decoded(
         return Err(VerifyStarkError::InvalidRecursionFlag(recursion_flag));
     }
 
-    // Check internal_recursive_vk_commit against expected_commits.
-    if internal_recursive_vk_commit != vk.baseline.internal_recursive_vk_commit {
-        return Err(VerifyStarkError::InternalRecursiveVkCommitMismatch {
-            expected: vk.baseline.internal_recursive_vk_commit,
-            actual: internal_recursive_vk_commit,
+    // Check internal_recursive_dag_commit against expected_commits.
+    if internal_recursive_dag_commit != vk.baseline.internal_recursive_dag_commit {
+        return Err(VerifyStarkError::InternalRecursiveDagCommitMismatch {
+            expected: vk.baseline.internal_recursive_dag_commit,
+            actual: internal_recursive_dag_commit,
         });
     }
 
