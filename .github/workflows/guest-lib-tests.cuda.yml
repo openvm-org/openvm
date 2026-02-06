@@ -30,10 +30,7 @@ jobs:
     strategy:
       matrix:
         crates: # group crates on the same runner based on test time
-          - { names: "sha2_256", path: "sha2", filter: "sha256" }
-          - { names: "sha2_384", path: "sha2", filter: "sha384" }
-          - { names: "sha2_512", path: "sha2", filter: "sha512" }
-          - { names: "keccak256", path: "keccak256" }
+          - { names: "sha2 keccak256" }
           - { names: "verify_stark" }
           - { names: "ruint k256 p256" }
           - { names: "ff_derive pairing" }
@@ -55,13 +52,7 @@ jobs:
               - "extensions/rv32-adapters/**"
               - ".github/workflows/guest-lib-tests.cuda.yml"
               - "crates/sdk/guest/fib/**"
-            sha2_256:
-              - "extensions/sha2/**"
-              - "guest-libs/sha2/**"
-            sha2_384:
-              - "extensions/sha2/**"
-              - "guest-libs/sha2/**"
-            sha2_512:
+            sha2:
               - "extensions/sha2/**"
               - "guest-libs/sha2/**"
             keccak256:
@@ -140,15 +131,9 @@ jobs:
             if [[ "$COMMON_CHANGED" == "true" || "$crate_changed" == "true" ]]; then
               echo "::group::Running tests for $crate"
 
-              # Determine the actual directory path
-              CRATE_PATH="${{ matrix.crates.path }}"
-              if [[ -z "$CRATE_PATH" ]]; then
-                CRATE_PATH="$crate"
-              fi
-
               # Run guest library tests
-              if [ -d "guest-libs/$CRATE_PATH" ]; then
-                pushd guest-libs/$CRATE_PATH
+              if [ -d "guest-libs/$crate" ]; then
+                pushd guest-libs/$crate
 
                 # Handle special feature args for pairing crate
                 SPECIAL_ARGS=""
@@ -157,24 +142,12 @@ jobs:
                 elif [[ "$crate" == "ruint" ]]; then
                   # only run integration tests because other tests are not OpenVM related
                   SPECIAL_ARGS="test_matrix_power"
-                elif [[ "$crate" == sha2_* ]]; then
-                  # only run proving tests
-                  SPECIAL_ARGS="--run-ignored=ignored-only"
-                  if [[ ${{ github.event_name }} == "push" && ${{ github.ref }} == "refs/heads/main" ]]; then
-                    SPECIAL_ARGS="$SPECIAL_ARGS --features=long_proving_tests"
-                  fi
-                elif [[ "$crate" == "keccak256" ]]; then
+                elif [[ "$crate" == "sha2" || "$crate" == "keccak256" ]]; then
                   # also run proving tests
                   SPECIAL_ARGS="--run-ignored=all"
                 fi
 
-                # Build the command
-                CMD="${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} $SPECIAL_ARGS --no-tests=pass --test-threads=1"
-                # Apply test filter if specified
-                if [[ -n "${{ matrix.crates.filter }}" ]]; then
-                  CMD="$CMD -E 'test(/${{ matrix.crates.filter }}/)'"
-                fi
-                eval $CMD
+                ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} $SPECIAL_ARGS --no-tests=pass --test-threads=1
                 popd
               fi
               echo "::endgroup::"
