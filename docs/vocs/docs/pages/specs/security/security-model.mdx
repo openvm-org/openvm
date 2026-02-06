@@ -6,20 +6,20 @@ assumptions for OpenVM. For a technical overview of the OpenVM design, see the
 
 ## Cryptographic Security
 
-OpenVM targets 100 bits of security and relies upon a FRI-based backend for STARK 
+OpenVM targets 100 bits of provable security and relies upon a FRI-based backend for STARK 
 proofs and a halo2-based backend for EVM proofs. 
 
 ### Cryptographic Assumptions
 
 The STARKs for OpenVM use FRI over the BabyBear field as implemented in [Plonky3](https://github.com/Plonky3/Plonky3)
-with [logUp](https://eprint.iacr.org/2022/1530.pdf) for lookup arguments. We 
+with [LogUp](https://eprint.iacr.org/2022/1530.pdf) for lookup arguments. We 
 use the following assumptions in our soundness analysis:
 
 - We use proof-of-work grinding to increase bits of security as described in 
 [Section 3.11.3 of the ethSTARK paper](https://eprint.iacr.org/2021/582.pdf).
-- We use proof-of-work grinding to boost logUp soundness as described in
+- We use proof-of-work grinding to boost LogUp soundness as described in
 [Section 4 of our analysis](https://github.com/openvm-org/stark-backend/blob/main/docs/Soundness_of_Interactions_via_LogUp.pdf).
-- We analyze STARK soundness under the toy problem conjecture from [Conjecture 1 of the ethSTARK paper](https://eprint.iacr.org/2021/582.pdf).
+- We analyze STARK soundness using theorems on batched FRI and DEEP-ALI with correlated agreement in the unique decoding regime (UDR).
 
 The EVM proofs for OpenVM use halo2 with a KZG backend as originally designed by [ZCash](https://zcash.github.io/halo2/)
 and forked by [PSE](https://github.com/privacy-scaling-explorations/halo2) and [Axiom](https://github.com/axiom-crypto/halo2).
@@ -35,22 +35,23 @@ We now specify security parameters used in the proofs:
 * **EVM proofs**: `static_verifier`
 
 involved in the [Continuations Design](/specs/architecture/continuations) under default settings.
-These parameters are of two types:
+These parameters are of three types:
 
-* **FRI parameters**: `log_blowup`, `num_queries`, and `proof_of_work_bits` control the soundness of the FRI
+* **FRI parameters**: `log_blowup`, `num_queries`, `query_proof_of_work_bits`, and `commit_proof_of_work_bits` to control the soundness of the FRI
 argument used to generate proofs for the STARKs.
-* **logUp parameters**: `max_interaction_count`, `log_max_message_length`, and `log_up_pow_bits` are parameters
-controlling the soundness of the logUp argument as described in [our soundness analysis](https://github.com/openvm-org/stark-backend/blob/main/docs/Soundness_of_Interactions_via_LogUp.pdf).
+* **LogUp parameters**: `max_interaction_count`, `log_max_message_length`, and `log_up_pow_bits` are parameters
+controlling the soundness of the LogUp argument as described in [our soundness analysis](https://github.com/openvm-org/stark-backend/blob/main/docs/Soundness_of_Interactions_via_LogUp.pdf).
+* **DEEP-ALI parameters**: `deep_pow_bits` to control the soundness of the DEEP algebraic linking (DEEP-ALI) argument used in the STARK protocol.
 
 The concrete parameter values used by OpenVM are specified in the table below.
 
-| Proof | Type | Security Bits | `log_blowup` | `num_queries` | `proof_of_work_bits` | `max_interaction_count` | `log_max_message_length` | `log_up_pow_bits` |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `app` | STARK | 100 | 1 | 100 | 16 | `15 * 2^27 + 1` | 7 | 16 |
-| `leaf` | STARK | 100 | 1 | 100 | 16 | `15 * 2^27 + 1` | 7 | 16 |
-| `internal` | STARK | 100 | 2 | 44 | 16 | `15 * 2^27 + 1` | 7 | 16 |
-| `root` | STARK | 100 | 3 | 30 | 16 | `15 * 2^27 + 1` | 7 | 16 |
-| `static_verifier` | Halo2 | 100+ | -- | -- | -- | -- | -- | -- |
+| Proof | Type | Security Bits | `log_blowup` | `num_queries` | `query_proof_of_work_bits` | `commit_proof_of_work_bits` | `max_interaction_count` | `log_max_message_length` | `log_up_pow_bits` | `deep_pow_bits` |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `app` | STARK | 100 | 1 | 193 | 20 | 20 | `15 * 2^27 + 1` | 7 | 18 | 5 |
+| `leaf` | STARK | 100 | 1 | 193 | 20 | 20 | `15 * 2^27 + 1` | 7 | 18 | 5 |
+| `internal` | STARK | 100 | 2 | 118 | 20 | 16 | `15 * 2^27 + 1` | 7 | 18 | 5 |
+| `root` | STARK | 100 | 3 | 97 | 20 | 16 | `15 * 2^27 + 1` | 7 | 18 | 5 |
+| `static_verifier` | Halo2 | 100+ | -- | -- | -- | -- | -- | -- | -- | -- |
 
 ### Details on Universal Trusted Setup
 

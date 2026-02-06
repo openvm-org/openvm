@@ -312,7 +312,7 @@ never contain such a write and conforms to the RV32IM specification.
 #### ALU
 
 In all ALU instructions, the operand `d` is fixed to be `1`. The operand `e` must be either `0` or `1`. When `e = 0`,
-the `c` operand is expected to be of the form `F::from_canonical_u32(c_i16 as i24 as u24 as u32)` where `c_i16` is type
+the `c` operand is expected to be of the form `F::from_u32(c_i16 as i24 as u24 as u32)` where `c_i16` is type
 `i16`. In other words we take signed 16-bits in two's complement, sign extend to 24-bits, consider the 24-bits as
 unsigned integer, and convert to field element. In the instructions below, `[c:4]_0` should be interpreted as
 `c_i16 as i32` sign extended to 32-bits.
@@ -342,7 +342,7 @@ signed 32-bit addition with the value of the register `[b:4]_1`. For consistency
 we define the shorthand `r32{c}(b)` to mean `r32{c,g}(b)` where `g` is set to the most significant bit of `c`.
 Memory access to `ptr: i32` in address space `e` is only valid if `0 <= ptr < 2^addr_max_bits` and
 `ptr` is naturally aligned (i.e., `ptr` must be divisible by the data size in bytes), in
-which case it is an access to `F::from_canonical_u32(ptr as u32)`.
+which case it is an access to `F::from_u32(ptr as u32)`.
 The data size is `1` for LOADB_RV32, LOADBU_RV32, STOREB_RV32, `2` for LOADH_RV32, LOADHU_RV32, STOREH_RV32, and `4` for LOADW_RV32, STOREW_RV32.
 
 All load/store instructions always do block accesses of block size `4`, even for LOADB_RV32 and STOREB_RV32.
@@ -371,7 +371,7 @@ For branch instructions, we fix `d = e = 1`. For jump instructions, we fix `d = 
 | BLTU_RV32  | `a,b,c,1,1`      | `if(u32([a:4]_1) < u32([b:4]_1)) pc += c`                                                                                                                                                                                                                                                                                                                                   |
 | BGEU_RV32  | `a,b,c,1,1`      | `if(u32([a:4]_1) >= u32([b:4]_1)) pc += c`                                                                                                                                                                                                                                                                                                                                  |
 | JAL_RV32   | `a,_,c,1,_,f`    | `if(f!=0) [a:4]_1 = decompose(pc+4); pc += c`. The operand `f` is assumed to be boolean. The `pc` increment is always done regardless of `f`'s value. Here `i32(c)`must be in`[-2^24, 2^24)`.                                                                                                                                                                                 |
-| JALR_RV32  | `a,b,c,1,_,f,g` | `if(f!=0) [a:4]_1 = decompose(pc+4); pc = F::from_canonical_u32(i32([b:4]_1) + sign_extend(decompose(c)[0:2], g) as u32)`. Constrains that `i32([b:4]_1) + sign_extend(decompose(c)[0:2], g) is in [0, 2^PC_BITS)`. Here `u32(c)` must be in `[0, 2^16)`. The operands `f` and `g` are assumed to be boolean. The `pc` assignment is always done regardless of `f`'s value. |
+| JALR_RV32  | `a,b,c,1,_,f,g` | `if(f!=0) [a:4]_1 = decompose(pc+4); pc = F::from_u32(i32([b:4]_1) + sign_extend(decompose(c)[0:2], g) as u32)`. Constrains that `i32([b:4]_1) + sign_extend(decompose(c)[0:2], g) is in [0, 2^PC_BITS)`. Here `u32(c)` must be in `[0, 2^16)`. The operands `f` and `g` are assumed to be boolean. The `pc` assignment is always done regardless of `f`'s value. |
 | LUI_RV32   | `a,_,c,1,_,1`    | `[a:4]_1 = u32(c) << 12`. Here `i32(c)` must be in `[0, 2^20)`.                                                                                                                                                                                                                                                                                                             |
 | AUIPC_RV32 | `a,_,c,1,_,_`    | `[a:4]_1 = decompose(pc) + (decompose(c) << 8)`. Here `i32(c)` must be in `[0, 2^24)`.                                                                                                                                                                                                                                                                                     |
 
@@ -533,7 +533,7 @@ The native extension defines the following phantom sub-instructions.
 | Name            | Discriminant | Operands      | Description                                                                                                                                                                                                                          |
 | --------------- | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | NativePrint     | 0x10         | `a,_,c_upper` | Prints `[a]_{c_upper}` to stdout on the host machine.                                                                                                                                                                                |
-| NativeHintInput | 0x11         | `_`           | Pops a vector `hint` of field elements from `input_stream` and sets `hint_stream` to equal the vector `[[F::from_canonical_usize(hint.len())], hint].concat()`. The hint stream must previously be empty.                            |
+| NativeHintInput | 0x11         | `_`           | Pops a vector `hint` of field elements from `input_stream` and sets `hint_stream` to equal the vector `[[F::from_usize(hint.len())], hint].concat()`. The hint stream must previously be empty.                            |
 | NativeHintBits  | 0x12         | `a,b,c_upper` | Sets `hint_stream` to be the least significant `b` bits of `([a]_{c_upper}).as_canonical_u32()`. The hint stream must previously be empty.                                                                                           |
 | NativeHintLoad  | 0x13         | `_`           | Pops a vector `hint` of field elements from `input_stream` and appends it to `hint_space`. Sets `hint_stream` to contain a length-1 vector containing the index of `hint` in `hint_space`. The hint stream must previously be empty. |
 | NativeHintFelt  | 0x14         | `_`           | Pops a field element from `input_stream` and set `hint_stream` equal to it. The hint stream must previously be empty.                                                                                                                |

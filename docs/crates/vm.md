@@ -369,7 +369,7 @@ where
     fn start_offset(&self) -> usize;
 
     fn start_offset_expr(&self) -> AB::Expr {
-        AB::Expr::from_canonical_usize(self.start_offset())
+        AB::Expr::from_usize(self.start_offset())
     }
 
     fn expr_to_global_expr(&self, local_expr: impl Into<AB::Expr>) -> AB::Expr {
@@ -377,7 +377,7 @@ where
     }
 
     fn opcode_to_global_expr(&self, local_opcode: impl LocalOpcode) -> AB::Expr {
-        self.expr_to_global_expr(AB::Expr::from_canonical_usize(local_opcode.local_usize()))
+        self.expr_to_global_expr(AB::Expr::from_usize(local_opcode.local_usize()))
     }
 }
 

@@ -7,6 +7,15 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 
 ## Unreleased
 
+## v1.5.0 (2026-02-05)
+
+### Added
+- Formal verification of the RV32IM VM extension in Lean.
+
+### Changed
+- Updated Plonky3 to crates.io `v0.4.1`.
+- Updated STARK protocol to 100 bits of provable security with FRI.
+
 ## v1.4.3 (2026-01-11)
 
 ### Changed
