@@ -30,9 +30,7 @@ jobs:
     strategy:
       matrix:
         crate:
-          - { name: "sha2_256", path: "sha2", filter: "sha256" }
-          - { name: "sha2_384", path: "sha2", filter: "sha384" }
-          - { name: "sha2_512", path: "sha2", filter: "sha512" }
+          - { name: "sha2", path: "sha2" }
           - { name: "keccak256", path: "keccak256" }
           - { name: "ff_derive", path: "ff_derive" }
           - { name: "k256", path: "k256" }
@@ -78,16 +76,9 @@ jobs:
         run: |
           rustup component add rust-src --toolchain nightly-2025-08-02
           FEATURE_ARGS=""
-          if [[ "${{ matrix.crate.name }}" == sha2_* || "${{ matrix.crate.name }}" == "keccak256" ]]; then
+          if [[ "${{ matrix.crate.name }}" == "sha2" || "${{ matrix.crate.name }}" == "keccak256" ]]; then
             FEATURE_ARGS="--features=aot"
           elif [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
             FEATURE_ARGS="--features=bn254,bls12_381,aot"
           fi
-
-          # Build the command
-          CMD="cargo nextest run --cargo-profile=fast $FEATURE_ARGS --no-tests=pass --test-threads=1"
-          # Apply test filter if specified
-          if [[ -n "${{ matrix.crate.filter }}" ]]; then
-            CMD="$CMD -E 'test(/${{ matrix.crate.filter }}/)'"
-          fi
-          eval $CMD
+          cargo nextest run --cargo-profile=fast $FEATURE_ARGS --no-tests=pass --test-threads=1
