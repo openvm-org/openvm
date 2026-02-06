@@ -8,10 +8,8 @@ pub const VERIFIER_PVS_AIR_ID: usize = 0;
 #[derive(AlignedBorrow, Clone, Copy)]
 pub struct NonRootVerifierPvs<F> {
     //////////////////////////////////////////////////////////////////////
-    /// APP COMMIT PVS
+    /// PROGRAM COMMIT PVS
     //////////////////////////////////////////////////////////////////////
-    /// Merkle root commit of user-defined public values.
-    pub user_pv_commit: [F; DIGEST_SIZE],
     /// Cached trace commit of the app verifier circuit's ProgramAir.
     pub program_commit: [F; DIGEST_SIZE],
 
@@ -44,13 +42,13 @@ pub struct NonRootVerifierPvs<F> {
     pub internal_flag: F,
     /// Cached trace commit of the leaf verifier circuit's SymbolicExpressionAir, which is
     /// derived from the app_vk
-    pub app_vk_commit: [F; DIGEST_SIZE],
+    pub app_dag_commit: [F; DIGEST_SIZE],
     /// Cached trace commit of the internal-for-leaf verifier circuit's SymbolicExpressionAir,
     /// which is derived from the leaf_vk
-    pub leaf_vk_commit: [F; DIGEST_SIZE],
+    pub leaf_dag_commit: [F; DIGEST_SIZE],
     /// Cached trace commit of the first (i.e. index 0) internal-recursive layer verifier
     /// circuit's SymbolicExpressionAir, which is derived from the internal_for_leaf_vk
-    pub internal_for_leaf_vk_commit: [F; DIGEST_SIZE],
+    pub internal_for_leaf_dag_commit: [F; DIGEST_SIZE],
 
     //////////////////////////////////////////////////////////////////////
     /// VERIFIER-SPECIFIC RECURSION PVS
@@ -61,5 +59,5 @@ pub struct NonRootVerifierPvs<F> {
     pub recursion_flag: F,
     /// Cached trace commit of each subsequent (i.e. index > 0) internal-recursive layer
     /// verifier's SymbolicExpressionAir, which is derived from the internal_recursive_vk
-    pub internal_recursive_vk_commit: [F; DIGEST_SIZE],
+    pub internal_recursive_dag_commit: [F; DIGEST_SIZE],
 }
