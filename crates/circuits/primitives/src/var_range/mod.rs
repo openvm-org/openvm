@@ -14,7 +14,7 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
@@ -134,7 +134,7 @@ impl<AB: InteractionBuilder> Air<AB> for VariableRangeCheckerAir {
         builder.when_last_row().assert_zero(local.value);
         builder.when_last_row().assert_eq(
             local.max_bits,
-            AB::F::from_canonical_usize(self.bus.range_max_bits + 1),
+            AB::F::from_usize(self.bus.range_max_bits + 1),
         );
         builder.when_last_row().assert_zero(local.mult);
 

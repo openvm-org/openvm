@@ -23,7 +23,7 @@ use openvm_poseidon2_air::Poseidon2Config;
 use openvm_rv32im_circuit::BranchEqualCoreAir;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    p3_field::{Field, PrimeField32},
+    p3_field::PrimeField32,
 };
 use serde::{Deserialize, Serialize};
 use stark_backend_v2::{
@@ -282,7 +282,7 @@ where
     E::SC: StarkGenericConfig,
     E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
     RA: RowMajorMatrixArena<Val<E::SC>>,
-    Val<SC>: VmField,
+    Val<E::SC>: VmField,
 {
     fn extend_prover(
         &self,

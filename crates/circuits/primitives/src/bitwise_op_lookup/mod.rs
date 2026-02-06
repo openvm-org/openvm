@@ -85,7 +85,7 @@ impl<AB: InteractionBuilder, const NUM_BITS: usize> Air<AB>
             bits.iter()
                 .enumerate()
                 .fold(AB::Expr::ZERO, |acc, (i, &bit)| {
-                    acc + bit * AB::Expr::from_canonical_usize(1 << i)
+                    acc + bit * AB::Expr::from_usize(1 << i)
                 })
         };
         let x_reconstructed = reconstruct(&local.x_bits);
@@ -101,14 +101,13 @@ impl<AB: InteractionBuilder, const NUM_BITS: usize> Air<AB>
             .enumerate()
             .fold(AB::Expr::ZERO, |acc, (i, (&x_bit, &y_bit))| {
                 let xor_bit = x_bit + y_bit - AB::Expr::TWO * x_bit * y_bit;
-                acc + xor_bit * AB::Expr::from_canonical_usize(1 << i)
+                acc + xor_bit * AB::Expr::from_usize(1 << i)
             });
 
         // 4. Combined index: idx = x * (2^NUM_BITS) + y
-        let combined_idx = x_reconstructed.clone() * AB::Expr::from_canonical_usize(1 << NUM_BITS)
-            + y_reconstructed.clone();
-        let next_combined_idx = reconstruct(&next.x_bits)
-            * AB::Expr::from_canonical_usize(1 << NUM_BITS)
+        let combined_idx =
+            x_reconstructed.clone() * AB::Expr::from_usize(1 << NUM_BITS) + y_reconstructed.clone();
+        let next_combined_idx = reconstruct(&next.x_bits) * AB::Expr::from_usize(1 << NUM_BITS)
             + reconstruct(&next.y_bits);
 
         // 5. Constrain that combined index increments by 1 each row
@@ -120,7 +119,7 @@ impl<AB: InteractionBuilder, const NUM_BITS: usize> Air<AB>
         builder.when_first_row().assert_zero(combined_idx.clone());
         builder.when_last_row().assert_eq(
             combined_idx,
-            AB::Expr::from_canonical_usize((1 << (2 * NUM_BITS)) - 1),
+            AB::Expr::from_usize((1 << (2 * NUM_BITS)) - 1),
         );
 
         // 7. Use reconstructed values for lookup bus interactions
