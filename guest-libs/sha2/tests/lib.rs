@@ -79,47 +79,42 @@ mod tests {
                 .with_extension(Sha2TranspilerExtension),
         )?;
 
-        for test_vector in parse_test_vectors(test_vector_file_name) {
-            let mut stdin = StdIn::default();
-            stdin.write(&match sha2_type {
-                Sha2Type::Sha256 => 256u32,
-                Sha2Type::Sha384 => 384u32,
-                Sha2Type::Sha512 => 512u32,
-            });
+        let test_vectors = parse_test_vectors(test_vector_file_name);
+        let mut stdin = StdIn::default();
+        stdin.write(&match sha2_type {
+            Sha2Type::Sha256 => 256u32,
+            Sha2Type::Sha384 => 384u32,
+            Sha2Type::Sha512 => 512u32,
+        });
+        stdin.write(&(test_vectors.len() as u32));
+        for test_vector in &test_vectors {
             stdin.write(&test_vector.input);
             stdin.write(&test_vector.expected_output);
+        }
 
-            if prove {
-                air_test_with_min_segments(
-                    Sha2Rv32Builder,
-                    config.clone(),
-                    openvm_exe.clone(),
-                    stdin,
-                    1,
-                );
-            } else {
-                let executor = VmExecutor::new(config.clone())?;
-                let interpreter = executor.instance(&openvm_exe)?;
-                #[allow(unused_variables)]
-                let state = interpreter.execute(stdin.clone(), None)?;
+        if prove {
+            air_test_with_min_segments(Sha2Rv32Builder, config, openvm_exe, stdin, 1);
+        } else {
+            let executor = VmExecutor::new(config.clone())?;
+            let interpreter = executor.instance(&openvm_exe)?;
+            #[allow(unused_variables)]
+            let state = interpreter.execute(stdin.clone(), None)?;
 
-                #[cfg(feature = "aot")]
-                {
-                    use openvm_circuit::{arch::VmState, system::memory::online::GuestMemory};
-                    let naive_interpreter = executor.interpreter_instance(&openvm_exe)?;
-                    let naive_state = naive_interpreter.execute(stdin, None)?;
-                    let assert_vm_state_eq =
-                        |lhs: &VmState<BabyBear, GuestMemory>,
-                         rhs: &VmState<BabyBear, GuestMemory>| {
-                            assert_eq!(lhs.pc(), rhs.pc());
-                            for r in 0..32 {
-                                let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
-                                let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
-                                assert_eq!(a, b);
-                            }
-                        };
-                    assert_vm_state_eq(&state, &naive_state);
-                }
+            #[cfg(feature = "aot")]
+            {
+                use openvm_circuit::{arch::VmState, system::memory::online::GuestMemory};
+                let naive_interpreter = executor.interpreter_instance(&openvm_exe)?;
+                let naive_state = naive_interpreter.execute(stdin, None)?;
+                let assert_vm_state_eq =
+                    |lhs: &VmState<BabyBear, GuestMemory>, rhs: &VmState<BabyBear, GuestMemory>| {
+                        assert_eq!(lhs.pc(), rhs.pc());
+                        for r in 0..32 {
+                            let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
+                            let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
+                            assert_eq!(a, b);
+                        }
+                    };
+                assert_vm_state_eq(&state, &naive_state);
             }
         }
 
@@ -148,26 +143,20 @@ mod tests {
     #[ignore = "proving on CPU is slow"]
     fn test_sha256_prove() -> Result<()> {
         test_sha2_base("SHA256ShortMsg.rsp", Sha2Type::Sha256, true)?;
-        #[cfg(feature = "long_proving_tests")]
-        test_sha2_base("SHA256LongMsg.rsp", Sha2Type::Sha256, true)?;
-        Ok(())
+        test_sha2_base("SHA256LongMsg.rsp", Sha2Type::Sha256, true)
     }
 
     #[test]
     #[ignore = "proving on CPU is slow"]
     fn test_sha384_prove() -> Result<()> {
         test_sha2_base("SHA384ShortMsg.rsp", Sha2Type::Sha384, true)?;
-        #[cfg(feature = "long_proving_tests")]
-        test_sha2_base("SHA384LongMsg.rsp", Sha2Type::Sha384, true)?;
-        Ok(())
+        test_sha2_base("SHA384LongMsg.rsp", Sha2Type::Sha384, true)
     }
 
     #[test]
     #[ignore = "proving on CPU is slow"]
     fn test_sha512_prove() -> Result<()> {
         test_sha2_base("SHA512ShortMsg.rsp", Sha2Type::Sha512, true)?;
-        #[cfg(feature = "long_proving_tests")]
-        test_sha2_base("SHA512LongMsg.rsp", Sha2Type::Sha512, true)?;
-        Ok(())
+        test_sha2_base("SHA512LongMsg.rsp", Sha2Type::Sha512, true)
     }
 }
