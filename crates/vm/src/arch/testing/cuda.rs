@@ -639,7 +639,7 @@ impl GpuChipTester {
             for (air, ctx) in airs
                 .into_iter()
                 .zip(ctxs)
-                .filter(|(_, ctx)| ctx.common_main.is_some())
+                .filter(|(_, ctx)| ctx.main_trace_height() > 0)
             {
                 self = self.load_air_proving_ctx(air, ctx);
             }
