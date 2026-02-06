@@ -35,10 +35,7 @@ use crate::{
         CONSTRAINT_EVAL_AIR_ID, CONSTRAINT_EVAL_CACHED_INDEX,
         root::{
             RootVerifierPvs,
-            bus::{
-                MemoryMerkleCommitBus, MemoryMerkleCommitMessage, UserPvsCommitBus,
-                UserPvsCommitMessage,
-            },
+            bus::{MemoryMerkleCommitBus, MemoryMerkleCommitMessage},
             digests_to_poseidon2_input, pad_slice_to_poseidon2_input,
         },
     },
@@ -59,11 +56,9 @@ pub struct RootVerifierPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,
     pub poseidon2_compress_bus: Poseidon2CompressBus,
-
-    pub user_pvs_commit_bus: UserPvsCommitBus,
     pub memory_merkle_commit_bus: MemoryMerkleCommitBus,
 
-    pub expected_internal_recursive_vk_commit: CommitBytes,
+    pub expected_internal_recursive_dag_commit: CommitBytes,
 }
 
 impl<F: Field> BaseAir<F> for RootVerifierPvsAir {
@@ -104,19 +99,11 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
 
         /*
          * UserPvsCommitAir's public values are the original app user public values, and
-         * thus it needs to constrain that user_pv_commit is the values' merkle root. We
-         * also need to constrain that the revealed public values were part of the final
-         * memory state - we do this in UserPvsInMemoryAir, which expects to receive both
-         * user_pv_commit and final_root.
+         * constrains that the Merkle root of those public values is some user_pvs_commit.
+         * We also need to constrain that the revealed public values were part of the final
+         * memory state - we do this in UserPvsInMemoryAir, which has to receive final_root
+         * in order to verify a Merkle proof from user_pvs_commit to it.
          */
-        self.user_pvs_commit_bus.send(
-            builder,
-            UserPvsCommitMessage {
-                user_pvs_commit: local.child_pvs.user_pv_commit,
-            },
-            AB::F::TWO,
-        );
-
         self.memory_merkle_commit_bus.send(
             builder,
             MemoryMerkleCommitMessage {
@@ -130,7 +117,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
          * being read here are correct. All public values will be at VERIFIER_PVS_AIR_ID.
          */
         let verifier_pvs_id = AB::Expr::from_usize(VERIFIER_PVS_AIR_ID);
-        let connector_pvs_offset = AB::Expr::from_usize(2 * DIGEST_SIZE);
+        let connector_pvs_offset = AB::Expr::from_usize(DIGEST_SIZE);
 
         self.public_values_bus.receive(
             builder,
@@ -210,17 +197,6 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                 PublicValuesBusMessage {
                     air_idx: verifier_pvs_id.clone(),
                     pv_idx: AB::Expr::from_usize(didx),
-                    value: local.child_pvs.user_pv_commit[didx].into(),
-                },
-                AB::F::ONE,
-            );
-
-            self.public_values_bus.receive(
-                builder,
-                AB::F::ZERO,
-                PublicValuesBusMessage {
-                    air_idx: verifier_pvs_id.clone(),
-                    pv_idx: AB::Expr::from_usize(didx + DIGEST_SIZE),
                     value: local.child_pvs.program_commit[didx].into(),
                 },
                 AB::F::ONE,
@@ -254,7 +230,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                 PublicValuesBusMessage {
                     air_idx: verifier_pvs_id.clone(),
                     pv_idx: verifier_pvs_offset.clone() + AB::F::from_usize(didx + 1),
-                    value: local.child_pvs.app_vk_commit[didx].into(),
+                    value: local.child_pvs.app_dag_commit[didx].into(),
                 },
                 AB::F::ONE,
             );
@@ -265,7 +241,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                 PublicValuesBusMessage {
                     air_idx: verifier_pvs_id.clone(),
                     pv_idx: verifier_pvs_offset.clone() + AB::F::from_usize(didx + DIGEST_SIZE + 1),
-                    value: local.child_pvs.leaf_vk_commit[didx].into(),
+                    value: local.child_pvs.leaf_dag_commit[didx].into(),
                 },
                 AB::F::ONE,
             );
@@ -277,7 +253,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                     air_idx: verifier_pvs_id.clone(),
                     pv_idx: verifier_pvs_offset.clone()
                         + AB::F::from_usize(didx + 2 * DIGEST_SIZE + 1),
-                    value: local.child_pvs.internal_for_leaf_vk_commit[didx].into(),
+                    value: local.child_pvs.internal_for_leaf_dag_commit[didx].into(),
                 },
                 AB::F::ONE,
             );
@@ -288,7 +264,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                 PublicValuesBusMessage {
                     air_idx: verifier_pvs_id.clone(),
                     pv_idx: recursive_pvs_offset.clone() + AB::F::from_usize(didx + 1),
-                    value: local.child_pvs.internal_recursive_vk_commit[didx].into(),
+                    value: local.child_pvs.internal_recursive_dag_commit[didx].into(),
                 },
                 AB::F::ONE,
             );
@@ -297,15 +273,15 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         /*
          * We also need to receive the cached commit from ProofShapeModule, which is either for
          * the internal-for-leaf (i.e. if recursion_flag == 1) or internal-recursive layer. In
-         * the former case we constrain child_pvs.internal_recursive_vk_commit to be unset (i.e.
+         * the former case we constrain child_pvs.internal_recursive_dag_commit to be unset (i.e.
          * all 0), and in the latter we constrain it to be equal to a pre-generated constant as
          * it should be the same regardless of app_vk (provided internal system params are the
          * same).
          */
         let cached_commit = from_fn(|i| {
-            local.child_pvs.internal_for_leaf_vk_commit[i]
+            local.child_pvs.internal_for_leaf_dag_commit[i]
                 * (AB::Expr::TWO - local.child_pvs.recursion_flag)
-                + local.child_pvs.internal_recursive_vk_commit[i]
+                + local.child_pvs.internal_recursive_dag_commit[i]
                     * (local.child_pvs.recursion_flag - AB::F::ONE)
         });
         self.cached_commit_bus.receive(
@@ -321,36 +297,36 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
 
         assert_zeros(
             &mut builder.when_ne(local.child_pvs.recursion_flag, AB::F::TWO),
-            local.child_pvs.internal_recursive_vk_commit,
+            local.child_pvs.internal_recursive_dag_commit,
         );
 
         assert_array_eq(
             &mut builder.when_ne(local.child_pvs.recursion_flag, AB::F::ONE),
-            local.child_pvs.internal_recursive_vk_commit,
+            local.child_pvs.internal_recursive_dag_commit,
             <CommitBytes as Into<[u32; DIGEST_SIZE]>>::into(
-                self.expected_internal_recursive_vk_commit,
+                self.expected_internal_recursive_dag_commit,
             )
             .map(AB::F::from_u32),
         );
 
         /*
          * Finally, we need to constrain that the public values this AIR produces are consistent
-         * with the child's. The app_vk_commit, leaf_vk_commit, and internal_for_leaf_vk_commit
+         * with the child's. The app_dag_commit, leaf_dag_commit, and internal_for_leaf_dag_commit
          * are simply constrained to be equal to the child's.
          */
         let &RootVerifierPvs::<_> {
             app_exe_commit,
-            app_vk_commit,
-            leaf_vk_commit,
-            internal_for_leaf_vk_commit,
+            app_dag_commit,
+            leaf_dag_commit,
+            internal_for_leaf_dag_commit,
         } = builder.public_values().borrow();
 
-        assert_array_eq(builder, local.child_pvs.app_vk_commit, app_vk_commit);
-        assert_array_eq(builder, local.child_pvs.leaf_vk_commit, leaf_vk_commit);
+        assert_array_eq(builder, local.child_pvs.app_dag_commit, app_dag_commit);
+        assert_array_eq(builder, local.child_pvs.leaf_dag_commit, leaf_dag_commit);
         assert_array_eq(
             builder,
-            local.child_pvs.internal_for_leaf_vk_commit,
-            internal_for_leaf_vk_commit,
+            local.child_pvs.internal_for_leaf_dag_commit,
+            internal_for_leaf_dag_commit,
         );
 
         /*
@@ -469,9 +445,9 @@ pub fn generate_proving_ctx(proof: &Proof) -> (AirProvingContextV2<CpuBackendV2>
         cols.initial_pc_hash,
     ));
 
-    root_pvs.app_vk_commit = child_pvs.app_vk_commit;
-    root_pvs.leaf_vk_commit = child_pvs.leaf_vk_commit;
-    root_pvs.internal_for_leaf_vk_commit = child_pvs.internal_for_leaf_vk_commit;
+    root_pvs.app_dag_commit = child_pvs.app_dag_commit;
+    root_pvs.leaf_dag_commit = child_pvs.leaf_dag_commit;
+    root_pvs.internal_for_leaf_dag_commit = child_pvs.internal_for_leaf_dag_commit;
 
     (
         AirProvingContextV2 {

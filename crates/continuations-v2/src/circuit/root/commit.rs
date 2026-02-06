@@ -227,9 +227,10 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         /*
          * Send and receive external messages. At every valid node we have to receive
          * a message from the Poseidon2 peripheral AIR to constrain that parent is the
-         * compression hash of left_child and right_child. At the root node we receive
-         * the commit in public values to ensure they're a match. Note a row is valid
-         * iff it is not the last, i.e. iff send_type (or receive_type) is non-zero.
+         * compression hash of left_child and right_child. At the root node we send the
+         * commit to UserPvsInMemoryAir, which constrains that it is in the correct
+         * position in the final memory Merkle tree. Note a row is valid iff it is not
+         * the last, i.e. iff send_type (or equivalently receive_type) is non-zero.
          */
         let is_valid = local.send_type * (AB::Expr::from_u8(3) - local.send_type) * half;
         let is_root = local.send_type * (local.send_type - AB::F::ONE) * half;
@@ -250,7 +251,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             is_valid,
         );
 
-        self.user_pvs_commit_bus.receive(
+        self.user_pvs_commit_bus.send(
             builder,
             UserPvsCommitMessage {
                 user_pvs_commit: local.parent,
