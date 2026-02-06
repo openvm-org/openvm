@@ -50,7 +50,7 @@ use crate::{
         MemoryConfig, PreflightExecutor, Streams, VmStateMut, CONST_BLOCK_SIZE,
     },
     system::{
-        cuda::{poseidon2::Poseidon2PeripheryChipGPU, DIGEST_WIDTH},
+        cuda::poseidon2::Poseidon2PeripheryChipGPU,
         memory::{
             offline_checker::{MemoryBridge, MemoryBus},
             MemoryAirInventory, SharedMemoryHelper,
@@ -303,7 +303,7 @@ impl GpuChipTestBuilder {
         )));
         Self {
             memory: DeviceMemoryTester::persistent(
-                default_tracing_memory(&mem_config, DIGEST_WIDTH),
+                default_tracing_memory(&mem_config, CONST_BLOCK_SIZE),
                 mem_bus,
                 mem_config,
                 range_checker.clone(),
