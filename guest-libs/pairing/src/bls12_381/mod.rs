@@ -4,7 +4,7 @@ use core::ops::Neg;
 
 use openvm_algebra_guest::IntMod;
 use openvm_algebra_moduli_macros::moduli_declare;
-use openvm_ecc_guest::{weierstrass::IntrinsicCurve, CyclicGroup, Group};
+use openvm_ecc_guest::weierstrass::{CyclicGroup, Group, IntrinsicCurve};
 
 mod fp12;
 mod fp2;
@@ -71,7 +71,7 @@ impl IntrinsicCurve for Bls12_381 {
     type Point = G1Affine;
 
     fn msm(coeffs: &[Self::Scalar], bases: &[Self::Point]) -> Self::Point {
-        openvm_ecc_guest::msm(coeffs, bases)
+        openvm_ecc_guest::weierstrass::msm(coeffs, bases)
     }
 }
 
@@ -79,7 +79,7 @@ impl IntrinsicCurve for Bls12_381 {
 // but not special E(Fp2) intrinsics.
 mod g2 {
     use openvm_algebra_guest::Field;
-    use openvm_ecc_guest::{
+    use openvm_ecc_guest::weierstrass::{
         impl_sw_affine, impl_sw_group_ops, weierstrass::WeierstrassPoint, AffinePoint, Group,
     };
 

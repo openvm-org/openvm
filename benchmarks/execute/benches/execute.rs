@@ -26,8 +26,6 @@ use openvm_continuations::{
     verifier::{internal::types::InternalVmVerifierInput, leaf::types::LeafVmVerifierInput},
     SC,
 };
-use openvm_ecc_circuit::{EccCpuProverExt, WeierstrassExtension, WeierstrassExtensionExecutor};
-use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use openvm_native_circuit::NativeCpuBuilder;
@@ -66,6 +64,10 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
+use openvm_weierstrass_circuit::{
+    EccCpuProverExt, WeierstrassExtension, WeierstrassExtensionExecutor,
+};
+use openvm_weierstrass_transpiler::EccTranspilerExtension;
 use serde::{Deserialize, Serialize};
 
 const APP_PROGRAMS: &[&str] = &[

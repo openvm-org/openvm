@@ -1,5 +1,5 @@
 use openvm_algebra_guest::{field::FieldExtension, Field};
-use openvm_ecc_guest::AffinePoint;
+use openvm_ecc_guest::weierstrass::AffinePoint;
 
 // Currently this is only used by VM runtime execution and not implemented for guest programs.
 #[allow(non_snake_case)]

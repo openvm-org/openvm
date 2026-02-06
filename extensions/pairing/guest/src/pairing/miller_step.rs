@@ -1,7 +1,7 @@
 use core::ops::{Add, Mul, Neg, Sub};
 
 use openvm_algebra_guest::{DivUnsafe, Field};
-use openvm_ecc_guest::AffinePoint;
+use openvm_ecc_guest::weierstrass::AffinePoint;
 
 use super::{PairingIntrinsics, UnevaluatedLine};
 

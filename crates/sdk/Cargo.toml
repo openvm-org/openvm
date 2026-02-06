@@ -14,8 +14,10 @@ openvm-algebra-transpiler = { workspace = true }
 openvm-bigint-circuit = { workspace = true }
 openvm-bigint-transpiler = { workspace = true }
 openvm-build = { workspace = true }
-openvm-ecc-circuit = { workspace = true }
-openvm-ecc-transpiler = { workspace = true }
+openvm-weierstrass-circuit = { workspace = true }
+openvm-weierstrass-transpiler = { workspace = true }
+openvm-edwards-circuit = { workspace = true }
+openvm-edwards-transpiler = { workspace = true }
 openvm-keccak256-circuit = { workspace = true }
 openvm-keccak256-transpiler = { workspace = true }
 openvm-sha2-circuit = { workspace = true }
@@ -90,7 +92,8 @@ tco = [
     "openvm-keccak256-circuit/tco",
     "openvm-bigint-circuit/tco",
     "openvm-algebra-circuit/tco",
-    "openvm-ecc-circuit/tco",
+    "openvm-weierstrass-circuit/tco",
+    "openvm-edwards-circuit/tco",
     "openvm-pairing-circuit/tco",
 ]
 aot = [
@@ -101,7 +104,8 @@ aot = [
     "openvm-keccak256-circuit/aot",
     "openvm-bigint-circuit/aot",
     "openvm-algebra-circuit/aot",
-    "openvm-ecc-circuit/aot",
+    "openvm-weierstrass-circuit/aot",
+    "openvm-edwards-circuit/aot",
     "openvm-pairing-circuit/aot",
 ]
 unprotected = ["openvm-circuit/unprotected"]
@@ -127,7 +131,8 @@ cuda = [
     "openvm-circuit/cuda",
     "openvm-algebra-circuit/cuda",
     "openvm-bigint-circuit/cuda",
-    "openvm-ecc-circuit/cuda",
+    "openvm-weierstrass-circuit/cuda",
+    "openvm-edwards-circuit/cuda",
     "openvm-keccak256-circuit/cuda",
     "openvm-sha2-circuit/cuda",
     "openvm-pairing-circuit/cuda",

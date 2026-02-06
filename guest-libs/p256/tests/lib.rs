@@ -6,10 +6,6 @@ mod guest_tests {
         arch::instructions::exe::VmExe,
         utils::{air_test, test_system_config},
     };
-    use openvm_ecc_circuit::{
-        CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, P256_CONFIG,
-    };
-    use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
@@ -17,6 +13,10 @@ mod guest_tests {
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
+    use openvm_weierstrass_circuit::{
+        CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, P256_CONFIG,
+    };
+    use openvm_weierstrass_transpiler::EccTranspilerExtension;
 
     use crate::guest_tests::ecdsa_config::EcdsaBuilder;
 
@@ -95,11 +95,11 @@ mod guest_tests {
             },
             derive::VmConfig,
         };
-        use openvm_ecc_circuit::{
+        use openvm_sha2_circuit::{Sha2, Sha2Executor, Sha2ProverExt};
+        use openvm_weierstrass_circuit::{
             CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig,
             Rv32WeierstrassConfigExecutor,
         };
-        use openvm_sha2_circuit::{Sha2, Sha2Executor, Sha2ProverExt};
         use serde::{Deserialize, Serialize};
         #[cfg(feature = "cuda")]
         use {
@@ -268,7 +268,7 @@ mod guest_tests {
 mod host_tests {
     use hex_literal::hex;
     use openvm_algebra_guest::IntMod;
-    use openvm_ecc_guest::{msm, weierstrass::WeierstrassPoint, Group};
+    use openvm_ecc_guest::weierstrass::{msm, weierstrass::WeierstrassPoint, Group};
     use p256::{P256Coord, P256Point, P256Scalar};
 
     #[test]

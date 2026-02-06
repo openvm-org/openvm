@@ -8,8 +8,8 @@ edition = "2021"
 openvm = { path = "../../../../crates/toolchain/openvm" }
 openvm-algebra-guest = { path = "../../../../extensions/algebra/guest" }
 openvm-algebra-moduli-macros = { path = "../../../../extensions/algebra/moduli-macros/" }
-openvm-ecc-guest = { path = "../../../../extensions/ecc/guest" }
-openvm-ecc-sw-macros = { path = "../../../../extensions/ecc/sw-macros/" }
+openvm-ecc-guest = { path = "../../../../extensions/ecc_guest" }
+openvm-ecc-sw-macros = { path = "../../../../extensions/weierstrass_ec/sw-macros/" }
 openvm-p256 = { path = "../../", package = "p256" }
 openvm-sha2 = { path = "../../../sha2/" }
 
