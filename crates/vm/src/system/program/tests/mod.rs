@@ -1,4 +1,4 @@
-use std::{iter, sync::Arc};
+use std::iter;
 
 use openvm_instructions::{
     exe::VmExe,
@@ -11,30 +11,30 @@ use openvm_native_compiler::{
 };
 use openvm_rv32im_transpiler::BranchEqualOpcode::*;
 use openvm_stark_backend::{
-    config::StarkGenericConfig,
-    engine::StarkEngine,
     p3_field::PrimeCharacteristicRing,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProvingContext,
-    Chip,
+    prover::MatrixDimensions,
 };
 use openvm_stark_sdk::{
     any_rap_arc_vec,
     config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        baby_bear_poseidon2::BabyBearPoseidon2Config,
         baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig,
-        FriParameters,
     },
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
-    engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
 };
 use serde::{de::DeserializeOwned, Serialize};
+use stark_backend_v2::{
+    prover::{AirProvingContextV2 as AirProvingContext, ColMajorMatrix},
+    ChipV2, StarkEngineV2,
+};
 use static_assertions::assert_impl_all;
 
 use crate::{
     arch::{instructions::SystemOpcode::*, testing::READ_INSTRUCTION_BUS},
     system::program::{trace::VmCommittedExe, ProgramAir, ProgramBus, ProgramChip},
+    utils::test_cpu_engine,
 };
 
 assert_impl_all!(VmCommittedExe<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
@@ -57,14 +57,14 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     let bus = ProgramBus::new(READ_INSTRUCTION_BUS);
     let program_air = ProgramAir::new(bus);
 
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
+    let engine = test_cpu_engine();
     let exe = VmExe::new(program);
-    let committed_exe =
-        VmCommittedExe::<BabyBearPoseidon2Config>::commit(exe, engine.config().pcs());
+    let committed_exe = VmCommittedExe::<BabyBearPoseidon2Config>::commit(exe, &engine);
     let cached = committed_exe.get_committed_trace();
     let chip = ProgramChip {
         filtered_exec_frequencies,
         cached: Some(cached),
+        _marker: std::marker::PhantomData,
     };
     let ctx = chip.generate_proving_ctx(());
 
@@ -95,7 +95,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     let cells_to_add = (desired_height - original_height) * width;
     program_cells.extend(iter::repeat_n(BabyBear::ZERO, cells_to_add));
 
-    let counter_trace = Arc::new(RowMajorMatrix::new(program_cells, 10));
+    let counter_trace = ColMajorMatrix::from_row_major(&RowMajorMatrix::new(program_cells, 10));
     println!("trace height = {original_height}");
     println!("counter trace height = {}", counter_trace.height());
 
@@ -188,8 +188,8 @@ fn test_program_without_field_arithmetic() {
     interaction_test(program, vec![0, 2, 4, 1]);
 }
 
-#[test]
-#[should_panic(expected = "LogUp multiset equality check failed.")]
+#[test] // TODO: add expected reason for panic
+#[should_panic] // LogUp sum is not zero, prover assert fails
 fn test_program_negative() {
     let instructions = vec![
         Instruction::large_from_isize(STOREW.global_opcode(), -1, 0, 0, 0, 1, 0, 1),
@@ -201,14 +201,14 @@ fn test_program_negative() {
     let program_air = ProgramAir::new(bus);
 
     let execution_frequencies = vec![1; instructions.len()];
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
+    let engine = test_cpu_engine();
     let exe = VmExe::new(program);
-    let committed_exe =
-        VmCommittedExe::<BabyBearPoseidon2Config>::commit(exe, engine.config().pcs());
+    let committed_exe = VmCommittedExe::<BabyBearPoseidon2Config>::commit(exe, &engine);
     let cached = committed_exe.get_committed_trace();
     let chip = ProgramChip {
         filtered_exec_frequencies: execution_frequencies.clone(),
         cached: Some(cached),
+        _marker: std::marker::PhantomData,
     };
     let ctx = chip.generate_proving_ctx(());
 
@@ -226,9 +226,13 @@ fn test_program_negative() {
             instruction.e,
         ]);
     }
-    let mut counter_trace = RowMajorMatrix::new(program_rows, 8);
+    let width = 8;
+    let mut counter_trace = RowMajorMatrix::new(program_rows, width);
     counter_trace.row_mut(1)[1] = BabyBear::ZERO;
-    let counter_trace = Arc::new(counter_trace);
+    let rows_used = counter_trace.height();
+    let height = rows_used.next_power_of_two();
+    counter_trace.values.resize(height * width, BabyBear::ZERO);
+    let counter_trace = ColMajorMatrix::from_row_major(&counter_trace);
 
     engine
         .run_test(

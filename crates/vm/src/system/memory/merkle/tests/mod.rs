@@ -9,8 +9,6 @@ use openvm_stark_backend::{
     interaction::{PermutationCheckBus, PermutationInteractionType},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
-    prover::types::AirProvingContext,
-    Chip,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
@@ -18,6 +16,10 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
 use rand::RngCore;
+use stark_backend_v2::{
+    prover::{AirProvingContextV2 as AirProvingContext, ColMajorMatrix},
+    Chip, StarkEngineV2,
+};
 
 use crate::{
     arch::{
@@ -37,6 +39,7 @@ use crate::{
         },
         poseidon2::Poseidon2PeripheryChip,
     },
+    utils::test_cpu_engine,
 };
 
 mod util;
@@ -166,21 +169,23 @@ fn test(
         dummy_interaction_trace_rows,
         dummy_interaction_air.field_width() + 1,
     );
-    let dummy_interaction_api = AirProvingContext::simple_no_pis(Arc::new(dummy_interaction_trace));
+    let dummy_interaction_api =
+        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&dummy_interaction_trace));
 
-    BabyBearPoseidon2Engine::run_test_fast(
-        vec![
-            Arc::new(chip.air),
-            Arc::new(dummy_interaction_air),
-            Arc::new(hash_test_chip.air()),
-        ],
-        vec![
-            chip_api,
-            dummy_interaction_api,
-            hash_test_chip.generate_proving_ctx(),
-        ],
-    )
-    .expect("Verification failed");
+    test_cpu_engine()
+        .run_test(
+            vec![
+                Arc::new(chip.air),
+                Arc::new(dummy_interaction_air),
+                Arc::new(hash_test_chip.air()),
+            ],
+            vec![
+                AirProvingContext::from_v1_no_cached(chip_api),
+                dummy_interaction_api,
+                AirProvingContext::from_v1_no_cached(hash_test_chip.generate_proving_ctx()),
+            ],
+        )
+        .expect("Verification failed");
 }
 
 fn random_test(
@@ -321,11 +326,15 @@ fn expand_test_no_accesses() {
 
     chip.finalize(&memory, &BTreeMap::new(), &hash_test_chip);
     let trace = chip.generate_proving_ctx();
-    BabyBearPoseidon2Engine::run_test_fast(
-        vec![Arc::new(chip.air), Arc::new(hash_test_chip.air())],
-        vec![trace, hash_test_chip.generate_proving_ctx()],
-    )
-    .expect("Empty touched memory doesn't work");
+    test_cpu_engine()
+        .run_test(
+            vec![Arc::new(chip.air), Arc::new(hash_test_chip.air())],
+            [trace, hash_test_chip.generate_proving_ctx()]
+                .map(AirProvingContext::from_v1_no_cached)
+                .into_iter()
+                .collect(),
+        )
+        .expect("Empty touched memory doesn't work");
 }
 
 #[test]
