@@ -85,7 +85,7 @@ fn test_range_tuple_chip() {
                             range_checker.add_count(&v);
                             iter::once(1).chain(v)
                         })
-                        .map(FieldAlgebra::from_wrapped_u32)
+                        .map(PrimeCharacteristicRing::from_u32)
                         .collect(),
                     sizes.len() + 1,
                 )
@@ -130,7 +130,7 @@ fn negative_test_range_tuple_chip() {
                 range_checker.add_count(v);
                 iter::once(1).chain(v.iter().cloned())
             })
-            .map(FieldAlgebra::from_wrapped_u32)
+            .map(PrimeCharacteristicRing::from_u32)
             .collect(),
         sizes.len() + 1,
     );

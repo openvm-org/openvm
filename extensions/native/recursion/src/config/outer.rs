@@ -66,6 +66,7 @@ pub(crate) fn new_from_outer_vkv2(
         quotient_degree,
         symbolic_constraints,
         rap_phase_seq_kind: _,
+        max_constraint_degree: _,
     } = vk;
     StarkVerificationAdvice {
         preprocessed_data: preprocessed_data.map(|data| {
