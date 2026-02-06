@@ -14,7 +14,6 @@ As in v1, OpenVM v2 starts with a list of app segment proofs, which are generate
 
 The final internal-recursive proof will expose the following public values:
 
-- `user_pv_commit`: Merkle root of the user public values exposed at the app level
 - `program_commit`: Program code commitment
 - `initial_pc`: Initial program counter at the start of app execution
 - `final_pc`: Final program counter after app execution
@@ -24,7 +23,7 @@ The final internal-recursive proof will expose the following public values:
 - `final_root`: Merkle root of VM memory after app execution
 - `internal_flag`: Internal aggregation layer indicator (0, 1, or 2)
 - `recursion_flag`: Internal aggregation recursive layer indicator (0, 1, or 2)
-- `app_vk_commit`, `leaf_vk_commit`, `internal_for_leaf_vk_commit`, `internal_recursive_vk_commit`: Commits to the app, leaf, internal-for-leaf, and internal-recursive vk DAGs respectively via the cached trace commits of their parent verifier circuits
+- `app_dag_commit`, `leaf_dag_commit`, `internal_for_leaf_dag_commit`, `internal_recursive_dag_commit`: Commits to the app, leaf, internal-for-leaf, and internal-recursive vk DAGs respectively via the cached trace commits of their parent verifier circuits
 - `compression_commit` (optional): DAG commit of the internal-recursive layer if the compression layer is enabled
 
 ## Verification Checks
@@ -38,7 +37,7 @@ The final internal-recursive STARK proof is verified using the internal-recursiv
 Given a fixed VM and executable, we must certain exposed public values against a set of baseline artifacts (which can be generated ahead of time given the exe and VM, app, and aggregation configs).
 
 - `program_commit`, `initial_root`, and `initial_pc` are hash-compressed and compared against a baseline `app_exe_commit`, which is derived from the `VmConfig`, `VmExe`, `MemoryConfig`, and application `SystemParams`.
-- `app_vk_commit`, `leaf_vk_commit`, `internal_for_leaf_vk_commit`, and `internal_recursive_vk_commit` are also compared against a pre-computed baseline
+- `app_dag_commit`, `leaf_dag_commit`, `internal_for_leaf_dag_commit`, and `internal_recursive_dag_commit` are also compared against a pre-computed baseline
 - `compression_commit` (if compression is enabled) is verified against the expected DAG commit of the compression layer
 
 **Other Public Values Validation:**

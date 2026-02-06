@@ -79,7 +79,7 @@ where
         let proof_slice = &[proof];
         let verifier_pvs_ctx = self.agg_node_tracegen.generate_verifier_pvs_ctx(
             proof_slice,
-            None,
+            false,
             self.child_vk_pcs_data.commitment.clone(),
         );
         let subcircuit_ctxs = self
@@ -92,7 +92,7 @@ where
             );
         let agg_other_ctxs = self
             .agg_node_tracegen
-            .generate_other_proving_ctxs(proof_slice, None);
+            .generate_other_proving_ctxs(proof_slice, false);
 
         let dag_commit_ctx = AirProvingContextV2 {
             cached_mains: vec![],

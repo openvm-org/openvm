@@ -22,13 +22,13 @@ pub trait NonRootTraceGen<PB: ProverBackendV2> {
     fn generate_verifier_pvs_ctx(
         &self,
         proofs: &[Proof],
-        user_pv_commit: Option<[F; DIGEST_SIZE]>,
-        child_vk_commit: PB::Commitment,
+        child_is_app: bool,
+        child_dag_commit: PB::Commitment,
     ) -> AirProvingContextV2<PB>;
     fn generate_other_proving_ctxs(
         &self,
         proofs: &[Proof],
-        user_pv_commit: Option<[F; DIGEST_SIZE]>,
+        child_is_app: bool,
     ) -> Vec<AirProvingContextV2<PB>>;
 }
 
@@ -42,21 +42,18 @@ impl NonRootTraceGen<CpuBackendV2> for NonRootTraceGenImpl {
     fn generate_verifier_pvs_ctx(
         &self,
         proofs: &[Proof],
-        user_pv_commit: Option<[F; DIGEST_SIZE]>,
-        child_vk_commit: [F; DIGEST_SIZE],
+        child_is_app: bool,
+        child_dag_commit: [F; DIGEST_SIZE],
     ) -> AirProvingContextV2<CpuBackendV2> {
-        verifier::generate_proving_ctx(proofs, user_pv_commit, child_vk_commit)
+        verifier::generate_proving_ctx(proofs, child_is_app, child_dag_commit)
     }
 
     fn generate_other_proving_ctxs(
         &self,
         proofs: &[Proof],
-        user_pv_commit: Option<[F; DIGEST_SIZE]>,
+        child_is_app: bool,
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
-        vec![receiver::generate_proving_ctx(
-            proofs,
-            user_pv_commit.is_some(),
-        )]
+        vec![receiver::generate_proving_ctx(proofs, child_is_app)]
     }
 }
 
@@ -69,19 +66,19 @@ impl NonRootTraceGen<GpuBackendV2> for NonRootTraceGenImpl {
     fn generate_verifier_pvs_ctx(
         &self,
         proofs: &[Proof],
-        user_pv_commit: Option<[F; DIGEST_SIZE]>,
-        child_vk_commit: [F; DIGEST_SIZE],
+        child_is_app: bool,
+        child_dag_commit: [F; DIGEST_SIZE],
     ) -> AirProvingContextV2<GpuBackendV2> {
-        let cpu_ctx = verifier::generate_proving_ctx(proofs, user_pv_commit, child_vk_commit);
+        let cpu_ctx = verifier::generate_proving_ctx(proofs, child_is_app, child_dag_commit);
         transport_air_proving_ctx_to_device(cpu_ctx)
     }
 
     fn generate_other_proving_ctxs(
         &self,
         proofs: &[Proof],
-        user_pv_commit: Option<[F; DIGEST_SIZE]>,
+        child_is_app: bool,
     ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
-        let cpu_ctx = receiver::generate_proving_ctx(proofs, user_pv_commit.is_some());
+        let cpu_ctx = receiver::generate_proving_ctx(proofs, child_is_app);
         vec![transport_air_proving_ctx_to_device(cpu_ctx)]
     }
 }

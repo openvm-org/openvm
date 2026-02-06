@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use continuations_v2::aggregation::ChildVkKind;
 use eyre::Result;
 use openvm_circuit::arch::ContinuationVmProof;
 use stark_backend_v2::{SC, keygen::types::MultiStarkVerifyingKeyV2};
@@ -98,13 +99,8 @@ impl AggProver {
                 .chunks(self.agg_tree_config.num_children_leaf)
                 .enumerate()
                 .map(|(leaf_node_idx, proofs)| {
-                    info_span!("single_leaf_agg", idx = leaf_node_idx).in_scope(|| {
-                        self.leaf_prover.agg_prove::<E>(
-                            proofs,
-                            Some(continuation_proof.user_public_values.public_values_commit),
-                            false,
-                        )
-                    })
+                    info_span!("single_leaf_agg", idx = leaf_node_idx)
+                        .in_scope(|| self.leaf_prover.agg_prove::<E>(proofs, ChildVkKind::App))
                 })
                 .collect::<Result<Vec<_>>>()
         })?;
@@ -119,7 +115,7 @@ impl AggProver {
                         internal_node_idx += 1;
                         info_span!("single_internal_agg", idx = internal_node_idx).in_scope(|| {
                             self.internal_for_leaf_prover
-                                .agg_prove::<E>(proofs, None, false)
+                                .agg_prove::<E>(proofs, ChildVkKind::Standard)
                         })
                     })
                     .collect::<Result<Vec<_>>>()
@@ -134,7 +130,7 @@ impl AggProver {
                         internal_node_idx += 1;
                         info_span!("single_internal_agg", idx = internal_node_idx).in_scope(|| {
                             self.internal_recursive_prover
-                                .agg_prove::<E>(proofs, None, false)
+                                .agg_prove::<E>(proofs, ChildVkKind::Standard)
                         })
                     })
                     .collect::<Result<Vec<_>>>()
@@ -154,7 +150,7 @@ impl AggProver {
                         internal_node_idx += 1;
                         info_span!("single_internal_agg", idx = internal_node_idx).in_scope(|| {
                             self.internal_recursive_prover
-                                .agg_prove::<E>(proofs, None, true)
+                                .agg_prove::<E>(proofs, ChildVkKind::RecursiveSelf)
                         })
                     })
                     .collect::<Result<Vec<_>>>()
@@ -188,7 +184,7 @@ impl AggProver {
             info_span!("single_internal_agg", idx = metadata.internal_node_idx).in_scope(|| {
                 metadata.internal_node_idx += 1;
                 self.internal_recursive_prover
-                    .agg_prove::<E>(&[proof.inner], None, true)
+                    .agg_prove::<E>(&[proof.inner], ChildVkKind::RecursiveSelf)
             })
         })?;
         Ok(proof)

@@ -77,16 +77,16 @@ where
         VerificationBaseline {
             app_exe_commit: self.app_prover.app_exe_commit(),
             memory_dimensions: self.app_prover.memory_dimensions(),
-            app_vk_commit: self.agg_prover.leaf_prover.get_cached_commit(false),
-            leaf_vk_commit: self
+            app_dag_commit: self.agg_prover.leaf_prover.get_cached_commit(false),
+            leaf_dag_commit: self
                 .agg_prover
                 .internal_for_leaf_prover
                 .get_cached_commit(false),
-            internal_for_leaf_vk_commit: self
+            internal_for_leaf_dag_commit: self
                 .agg_prover
                 .internal_recursive_prover
                 .get_cached_commit(false),
-            internal_recursive_vk_commit: self
+            internal_recursive_dag_commit: self
                 .agg_prover
                 .internal_recursive_prover
                 .get_cached_commit(true),
