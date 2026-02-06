@@ -8,7 +8,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, InjectiveMonomial, PrimeField};
 use recursion_circuit::system::{AggregationSubCircuit, VerifierTraceGen};
 use stark_backend_v2::{
-    DIGEST_SIZE, F, SC, StarkWhirEngine, SystemParams,
+    DIGEST_SIZE, StarkWhirEngine, SystemParams,
     keygen::types::{MultiStarkProvingKeyV2, MultiStarkVerifyingKeyV2},
     poseidon2::sponge::DuplexSpongeRecorder,
     proof::Proof,
@@ -20,11 +20,10 @@ use stark_backend_v2::{
 use tracing::instrument;
 
 use crate::{
-    aggregation::{AggregationProver, Circuit, trace_heights_tracing_info},
+    aggregation::{Circuit, trace_heights_tracing_info},
     circuit::{
-        AggNodeTraceGen,
         dag_commit::{DagCommitAir, generate_dag_commit_proving_ctx},
-        nonroot::{receiver::UserPvsReceiverAir, verifier::VerifierPvsAir},
+        nonroot::{NonRootTraceGen, receiver::UserPvsReceiverAir, verifier::VerifierPvsAir},
     },
 };
 
@@ -35,30 +34,27 @@ pub struct CompressionCircuit<S: AggregationSubCircuit> {
 
 impl<S: AggregationSubCircuit> Circuit for CompressionCircuit<S> {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
-        let public_values_bus = self.verifier_circuit.public_values_bus();
+        let bus_inventory = self.verifier_circuit.bus_inventory();
+        let public_values_bus = bus_inventory.public_values_bus;
         [Arc::new(VerifierPvsAir {
             public_values_bus,
-            cached_commit_bus: self.verifier_circuit.cached_commit_bus(),
+            cached_commit_bus: bus_inventory.cached_commit_bus,
         }) as AirRef<BabyBearPoseidon2Config>]
         .into_iter()
         .chain(self.verifier_circuit.airs())
         .chain([
             Arc::new(UserPvsReceiverAir { public_values_bus }) as AirRef<BabyBearPoseidon2Config>
         ])
-        .chain([
-            Arc::new(DagCommitAir::new(self.verifier_circuit.dag_commit_bus()))
-                as AirRef<BabyBearPoseidon2Config>,
-        ])
+        .chain([Arc::new(DagCommitAir::new(bus_inventory.dag_commit_bus))
+            as AirRef<BabyBearPoseidon2Config>])
         .collect_vec()
     }
 }
 
-/*
- * Struct to wrap and compress an aggregation Proof by a) producing a specialized
- * recursion circuit with no cached trace and b) using optimal SystemParams for
- * proof size. Note that this should NOT be used recursively.
- */
-pub struct CompressionProver<PB: ProverBackendV2, S: AggregationSubCircuit, T: AggNodeTraceGen<PB>>
+/// Wraps and compresses an aggregation Proof by a) producing a specialized
+/// recursion circuit with no cached trace and b) using optimal SystemParams for
+/// proof size. Note that this should NOT be used recursively.
+pub struct CompressionProver<PB: ProverBackendV2, S: AggregationSubCircuit, T: NonRootTraceGen<PB>>
 {
     pk: Arc<MultiStarkProvingKeyV2>,
     vk: Arc<MultiStarkVerifyingKeyV2>,
@@ -73,44 +69,30 @@ pub struct CompressionProver<PB: ProverBackendV2, S: AggregationSubCircuit, T: A
     dag_commit_pvs: [PB::Val; DIGEST_SIZE],
 }
 
-impl<PB, S, T> AggregationProver<PB> for CompressionProver<PB, S, T>
+impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: NonRootTraceGen<PB>>
+    CompressionProver<PB, S, T>
 where
-    PB: ProverBackendV2,
-    S: AggregationSubCircuit + VerifierTraceGen<PB>,
-    T: AggNodeTraceGen<PB>,
     PB::Matrix: Clone,
 {
-    fn get_vk(&self) -> Arc<MultiStarkVerifyingKeyV2> {
-        self.vk.clone()
-    }
-
-    fn get_cached_commit(&self, _is_recursive: bool) -> <PB as ProverBackendV2>::Commitment {
-        self.child_vk_pcs_data.commitment.clone()
-    }
-
     #[instrument(name = "trace_gen", skip_all)]
-    fn generate_proving_ctx(
-        &self,
-        proofs: &[Proof],
-        user_pv_commit: Option<[F; DIGEST_SIZE]>,
-        _is_recursive: bool,
-    ) -> ProvingContextV2<PB> {
+    pub fn generate_proving_ctx(&self, proof: Proof) -> ProvingContextV2<PB> {
+        let proof_slice = &[proof];
         let verifier_pvs_ctx = self.agg_node_tracegen.generate_verifier_pvs_ctx(
-            proofs,
-            user_pv_commit,
+            proof_slice,
+            None,
             self.child_vk_pcs_data.commitment.clone(),
         );
         let subcircuit_ctxs = self
             .circuit
             .verifier_circuit
-            .generate_proving_ctxs::<DuplexSpongeRecorder>(
+            .generate_proving_ctxs_base::<DuplexSpongeRecorder>(
                 &self.child_vk,
                 self.child_vk_pcs_data.clone(),
-                proofs,
+                proof_slice,
             );
         let agg_other_ctxs = self
             .agg_node_tracegen
-            .generate_other_proving_ctxs(proofs, user_pv_commit);
+            .generate_other_proving_ctxs(proof_slice, None);
 
         let dag_commit_ctx = AirProvingContextV2 {
             cached_mains: vec![],
@@ -129,33 +111,26 @@ where
     }
 
     #[instrument(name = "total_proof", skip_all)]
-    fn agg_prove<E: StarkWhirEngine<PB = PB>>(
-        &self,
-        proofs: &[Proof],
-        user_pv_commit: Option<[F; DIGEST_SIZE]>,
-        _is_recursive: bool,
-    ) -> Result<Proof> {
-        let ctx = self.generate_proving_ctx(proofs, user_pv_commit, false);
+    pub fn compress_prove<E: StarkWhirEngine<PB = PB>>(&self, proof: Proof) -> Result<Proof> {
+        let ctx = self.generate_proving_ctx(proof);
         if tracing::enabled!(tracing::Level::DEBUG) {
             trace_heights_tracing_info(&ctx.per_trace, &self.circuit.airs());
         }
         let engine = E::new(self.pk.params.clone());
         #[cfg(debug_assertions)]
         crate::aggregation::debug_constraints(&self.circuit, &ctx.per_trace, &engine);
-        let proof = engine.prove(
-            &engine.device().transport_pk_to_device(self.pk.as_ref()),
-            ctx,
-        );
+        let d_pk = engine.device().transport_pk_to_device(self.pk.as_ref());
+        let proof = engine.prove(&d_pk, ctx);
         #[cfg(debug_assertions)]
         engine.verify(&self.vk, &proof)?;
         Ok(proof)
     }
 }
 
-impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: AggNodeTraceGen<PB>>
+impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: NonRootTraceGen<PB>>
     CompressionProver<PB, S, T>
 {
-    pub fn new<E: StarkWhirEngine<SC = SC, PB = PB>>(
+    pub fn new<E: StarkWhirEngine<PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKeyV2>,
         child_vk_pcs_data: CommittedTraceDataV2<PB>,
         system_params: SystemParams,
@@ -185,7 +160,7 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ag
         }
     }
 
-    pub fn from_pk<E: StarkWhirEngine<SC = SC, PB = PB>>(
+    pub fn from_pk<E: StarkWhirEngine<PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKeyV2>,
         child_vk_pcs_data: CommittedTraceDataV2<PB>,
         pk: Arc<MultiStarkProvingKeyV2>,
@@ -225,5 +200,13 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ag
 
     pub fn get_pk(&self) -> Arc<MultiStarkProvingKeyV2> {
         self.pk.clone()
+    }
+
+    pub fn get_vk(&self) -> Arc<MultiStarkVerifyingKeyV2> {
+        self.vk.clone()
+    }
+
+    pub fn get_cached_commit(&self) -> <PB as ProverBackendV2>::Commitment {
+        self.child_vk_pcs_data.commitment.clone()
     }
 }
