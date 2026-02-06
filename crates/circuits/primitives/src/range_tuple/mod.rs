@@ -13,7 +13,7 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir, PairBuilder},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
@@ -100,10 +100,9 @@ impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupl
         // (T2): The trace ends with `(size[0]-1, ..., size[N-1]-1)`.
         for i in 0..N {
             builder.when_first_row().assert_zero(local.tuple[i]);
-            builder.when_last_row().assert_eq(
-                local.tuple[i],
-                AB::F::from_canonical_u32(self.bus.sizes[i] - 1),
-            );
+            builder
+                .when_last_row()
+                .assert_eq(local.tuple[i], AB::F::from_u32(self.bus.sizes[i] - 1));
         }
 
         // (T4): Between consecutive tuples, column `0` can stay the same or increment.
@@ -116,10 +115,7 @@ impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupl
             builder
                 .when_ne(next.tuple[i] - local.tuple[i], AB::Expr::ZERO)
                 .when_ne(next.tuple[i] - local.tuple[i], AB::Expr::ONE)
-                .assert_eq(
-                    local.tuple[i],
-                    AB::F::from_canonical_u32(self.bus.sizes[i] - 1),
-                );
+                .assert_eq(local.tuple[i], AB::F::from_u32(self.bus.sizes[i] - 1));
             builder
                 .when_ne(next.tuple[i] - local.tuple[i], AB::Expr::ZERO)
                 .when_ne(next.tuple[i] - local.tuple[i], AB::Expr::ONE)
@@ -130,7 +126,7 @@ impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupl
             .when_ne(next.tuple[N - 1] - local.tuple[N - 1], AB::Expr::ONE)
             .assert_eq(
                 local.tuple[N - 1],
-                AB::F::from_canonical_u32(self.bus.sizes[N - 1] - 1),
+                AB::F::from_u32(self.bus.sizes[N - 1] - 1),
             );
         builder
             .when_ne(next.tuple[N - 1] - local.tuple[N - 1], AB::Expr::ONE)
@@ -141,8 +137,8 @@ impl<AB: InteractionBuilder + PairBuilder, const N: usize> Air<AB> for RangeTupl
         for i in 0..N - 1 {
             let x = next.tuple[i] - local.tuple[i];
             let y = next.tuple[i + 1] - local.tuple[i + 1];
-            let a = -AB::F::from_canonical_u32(self.bus.sizes[i] - 1);
-            let b = -AB::F::from_canonical_u32(self.bus.sizes[i + 1] - 1);
+            let a = -AB::F::from_u32(self.bus.sizes[i] - 1);
+            let b = -AB::F::from_u32(self.bus.sizes[i + 1] - 1);
             // See range_tuple/README.md
             builder.assert_zero(
                 y.clone() * (y.clone() - AB::Expr::ONE) * (-x.clone() * (a + AB::F::ONE) + a)
