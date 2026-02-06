@@ -200,6 +200,72 @@ pub mod poseidon2 {
     }
 }
 
+pub mod inventory {
+    use super::*;
+
+    extern "C" {
+        fn _inventory_merge_records_get_temp_bytes(
+            d_flags: *mut u32,
+            in_num_records: usize,
+            h_temp_bytes_out: *mut usize,
+        ) -> i32;
+
+        fn _inventory_merge_records(
+            d_in_records: *const u32,
+            in_num_records: usize,
+            d_initial_mem: *const *const std::ffi::c_void,
+            d_addr_space_offsets: *const u32,
+            d_tmp_records: *mut u32,
+            d_out_records: *mut u32,
+            d_flags: *mut u32,
+            d_positions: *mut u32,
+            d_temp_storage: *mut std::ffi::c_void,
+            temp_storage_bytes: usize,
+            out_num_records: *mut usize,
+        ) -> i32;
+    }
+
+    pub unsafe fn merge_records(
+        d_in_records: &DeviceBuffer<u32>,
+        in_num_records: usize,
+        d_initial_mem: &DeviceBuffer<*const std::ffi::c_void>,
+        d_addr_space_offsets: &DeviceBuffer<u32>,
+        d_tmp_records: &DeviceBuffer<u32>,
+        d_out_records: &DeviceBuffer<u32>,
+        d_flags: &DeviceBuffer<u32>,
+        d_positions: &DeviceBuffer<u32>,
+        d_temp_storage: &DeviceBuffer<u8>,
+        temp_storage_bytes: usize,
+        d_out_num_records: &DeviceBuffer<usize>,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_inventory_merge_records(
+            d_in_records.as_ptr(),
+            in_num_records,
+            d_initial_mem.as_ptr(),
+            d_addr_space_offsets.as_ptr(),
+            d_tmp_records.as_mut_ptr(),
+            d_out_records.as_mut_ptr(),
+            d_flags.as_mut_ptr(),
+            d_positions.as_mut_ptr(),
+            d_temp_storage.as_mut_raw_ptr(),
+            temp_storage_bytes,
+            d_out_num_records.as_mut_ptr(),
+        ))
+    }
+
+    pub unsafe fn merge_records_get_temp_bytes(
+        d_flags: &DeviceBuffer<u32>,
+        in_num_records: usize,
+        h_temp_bytes_out: &mut usize,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_inventory_merge_records_get_temp_bytes(
+            d_flags.as_mut_ptr(),
+            in_num_records,
+            h_temp_bytes_out,
+        ))
+    }
+}
+
 pub mod program {
     use super::*;
 
