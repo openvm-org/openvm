@@ -1,22 +1,22 @@
 use std::{mem::size_of, sync::Arc};
 
+use cuda_backend_v2::{GpuBackendV2 as GpuBackend, GpuDeviceV2 as GpuDevice};
 use openvm_circuit::{system::program::ProgramExecutionCols, utils::next_power_of_two_or_zero};
-use openvm_cuda_backend::{
-    base::DeviceMatrix, gpu_device::GpuDevice, prover_backend::GpuBackend, types::F,
-};
+use openvm_cuda_backend::{base::DeviceMatrix, types::F};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode,
 };
-use openvm_stark_backend::{
-    prover::{
-        hal::{MatrixDimensions, TraceCommitter},
-        types::{AirProvingContext, CommittedTraceData},
-    },
-    Chip,
-};
+use openvm_stark_backend::prover::MatrixDimensions;
 use p3_field::PrimeCharacteristicRing;
+use stark_backend_v2::{
+    prover::{
+        AirProvingContextV2 as AirProvingContext, CommittedTraceDataV2 as CommittedTraceData,
+        TraceCommitterV2,
+    },
+    ChipV2 as Chip,
+};
 
 use crate::cuda_abi::program;
 
@@ -77,11 +77,11 @@ impl ProgramChipGPU {
         trace: DeviceMatrix<F>,
         device: &GpuDevice,
     ) -> CommittedTraceData<GpuBackend> {
-        let (root, pcs_data) = device.commit(std::slice::from_ref(&trace));
+        let (commitment, data) = device.commit(&[&trace]);
         CommittedTraceData {
-            commitment: root,
-            trace,
-            data: pcs_data,
+            commitment,
+            data: Arc::new(data),
+            height: trace.height(),
         }
     }
 }
@@ -95,7 +95,7 @@ impl Default for ProgramChipGPU {
 impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
     fn generate_proving_ctx(&self, filtered_exec_freqs: Vec<u32>) -> AirProvingContext<GpuBackend> {
         let cached = self.cached.clone().expect("Cached program must be loaded");
-        let height = cached.trace.height();
+        let height = cached.height;
         let filtered_len = filtered_exec_freqs.len();
         assert!(
             filtered_len <= height,
@@ -114,11 +114,11 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
             buffer.fill_zero_suffix(filtered_len).unwrap();
         }
 
-        let trace = DeviceMatrix::new(Arc::new(buffer), height, 1);
+        let common_main = DeviceMatrix::new(Arc::new(buffer), height, 1);
 
         AirProvingContext {
             cached_mains: vec![cached],
-            common_main: Some(trace),
+            common_main,
             public_values: vec![],
         }
     }
@@ -126,11 +126,9 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
 
 #[cfg(test)]
 mod tests {
+    use cuda_backend_v2::assert_eq_host_and_device_matrix_col_maj;
     use openvm_circuit::system::program::trace::VmCommittedExe;
-    use openvm_cuda_backend::{
-        data_transporter::assert_eq_host_and_device_matrix, engine::GpuBabyBearPoseidon2Engine,
-        prelude::F,
-    };
+    use openvm_cuda_backend::prelude::{F, SC};
     use openvm_instructions::{
         exe::VmExe,
         instruction::Instruction,
@@ -143,30 +141,24 @@ mod tests {
         NativeLoadStoreOpcode::*,
     };
     use openvm_rv32im_transpiler::BranchEqualOpcode::*;
-    use openvm_stark_backend::config::StarkGenericConfig;
-    use openvm_stark_sdk::{
-        config::{
-            baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-            FriParameters,
-        },
-        engine::{StarkEngine, StarkFriEngine},
-    };
+    use stark_backend_v2::StarkEngineV2;
 
     use super::ProgramChipGPU;
+    use crate::utils::{test_cpu_engine, test_gpu_engine};
 
     fn test_cached_committed_trace_data(program: Program<F>) {
-        let gpu_engine = GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(2));
+        let gpu_engine = test_gpu_engine();
         let gpu_device = gpu_engine.device();
         let gpu_trace = ProgramChipGPU::generate_cached_trace(program.clone());
         let gpu_cached = ProgramChipGPU::get_committed_trace(gpu_trace, gpu_device);
 
-        let cpu_engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(2));
+        let cpu_engine = test_cpu_engine();
         let cpu_exe = VmExe::new(program.clone());
-        let cpu_committed_exe =
-            VmCommittedExe::<BabyBearPoseidon2Config>::commit(cpu_exe, cpu_engine.config().pcs());
+        let cpu_committed_exe = VmCommittedExe::<SC>::commit(cpu_exe, &cpu_engine);
         let cpu_cached = cpu_committed_exe.get_committed_trace();
 
-        assert_eq_host_and_device_matrix(cpu_cached.trace, &gpu_cached.trace);
+        // NOTE: This compares the stacked matrices, not the original cached trace
+        assert_eq_host_and_device_matrix_col_maj(&cpu_cached.data.matrix, &gpu_cached.data.matrix);
         assert_eq!(gpu_cached.commitment, cpu_cached.commitment);
     }
 
