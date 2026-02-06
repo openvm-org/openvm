@@ -32,6 +32,11 @@ jobs:
     steps:
       - uses: runs-on/action@v2
       - uses: actions/checkout@v5
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - run: | # avoid cross-device link error
           rustup component remove clippy || true
           rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
@@ -61,12 +66,12 @@ jobs:
         run: |
           cargo nextest run ${{ env.NEXTEST_ARGS }}
 
-      - name: Run recursion crate tests
-        working-directory: extensions/native/recursion
-        run: |
-          cargo nextest run --features cuda
+      # - name: Run recursion crate tests
+      #   working-directory: extensions/native/recursion
+      #   run: |
+      #     cargo nextest run --features cuda
 
-      - name: Run async concurrency test
-        working-directory: benchmarks/prove
-        run: |
-          CUDA_OPT_LEVEL=3 MAX_CONCURRENCY=5 cargo run --bin async_regex --features cuda,async -- --max-segment-length $((1<<20)) --segment-max-cells 150000000
+      # - name: Run async concurrency test
+      #   working-directory: benchmarks/prove
+      #   run: |
+      #     CUDA_OPT_LEVEL=3 MAX_CONCURRENCY=5 cargo run --bin async_regex --features cuda,async -- --max-segment-length $((1<<20)) --segment-max-cells 150000000

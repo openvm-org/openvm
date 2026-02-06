@@ -9,18 +9,20 @@ use openvm_stark_backend::{
     AirRef, Chip,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
-    engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };
 use rand::Rng;
+use stark_backend_v2::{prover::AirProvingContextV2, StarkEngineV2};
 use test_log::test;
 
-use crate::system::memory::{
-    offline_checker::MemoryBus, volatile::VolatileBoundaryChip, TimestampedEquipartition,
-    TimestampedValues,
+use crate::{
+    system::memory::{
+        offline_checker::MemoryBus, volatile::VolatileBoundaryChip, TimestampedEquipartition,
+        TimestampedValues,
+    },
+    utils::test_cpu_engine,
 };
 
 type Val = BabyBear;
@@ -130,19 +132,23 @@ fn boundary_air_test() {
         );
     }
 
-    BabyBearPoseidon2Engine::run_test_fast(
-        vec![
-            boundary_air,
-            Arc::new(range_checker.air),
-            Arc::new(init_memory_dummy_air),
-            Arc::new(final_memory_dummy_air),
-        ],
-        vec![
-            boundary_ctx,
-            range_checker.generate_proving_ctx(()),
-            AirProvingContext::simple_no_pis(init_memory_trace),
-            AirProvingContext::simple_no_pis(final_memory_trace),
-        ],
-    )
-    .expect("Verification failed");
+    test_cpu_engine()
+        .run_test(
+            vec![
+                boundary_air,
+                Arc::new(range_checker.air),
+                Arc::new(init_memory_dummy_air),
+                Arc::new(final_memory_dummy_air),
+            ],
+            [
+                boundary_ctx,
+                range_checker.generate_proving_ctx(()),
+                AirProvingContext::simple_no_pis(init_memory_trace),
+                AirProvingContext::simple_no_pis(final_memory_trace),
+            ]
+            .map(AirProvingContextV2::from_v1_no_cached)
+            .into_iter()
+            .collect(),
+        )
+        .expect("Verification failed");
 }

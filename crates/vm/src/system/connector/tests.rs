@@ -6,19 +6,13 @@ use std::{
 use openvm_instructions::{
     instruction::Instruction, program::Program, LocalOpcode, SystemOpcode::TERMINATE,
 };
-use openvm_stark_backend::{
-    config::StarkGenericConfig,
-    engine::StarkEngine,
-    p3_field::PrimeCharacteristicRing,
-    prover::{cpu::CpuBackend, types::AirProvingContext},
-};
+use openvm_stark_backend::p3_field::PrimeCharacteristicRing,
 use openvm_stark_sdk::{
-    config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        FriParameters,
-    },
-    engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
+};
+use stark_backend_v2::{
+    prover::{AirProvingContextV2 as AirProvingContext, CpuBackendV2},
+    StarkEngineV2,
 };
 
 use super::VmConnectorPvs;
@@ -31,11 +25,12 @@ use crate::{
         program::trace::VmCommittedExe,
         SystemCpuBuilder,
     },
+    utils::test_cpu_engine,
 };
 
 type F = BabyBear;
 type SC = BabyBearPoseidon2Config;
-type PB = CpuBackend<SC>;
+type PB = CpuBackendV2;
 
 #[test]
 fn test_vm_connector_happy_path() {
@@ -48,6 +43,7 @@ fn test_vm_connector_happy_path() {
 }
 
 #[test]
+#[cfg_attr(debug_assertions, should_panic)] // Debug assertion will fail in the prover
 fn test_vm_connector_wrong_exit_code() {
     let exit_code = 1789;
     test_impl(false, exit_code, |air_ctx| {
@@ -57,6 +53,7 @@ fn test_vm_connector_wrong_exit_code() {
 }
 
 #[test]
+#[cfg_attr(debug_assertions, should_panic)] // Debug assertion will fail in the prover
 fn test_vm_connector_wrong_is_terminate() {
     let exit_code = 1789;
     test_impl(false, exit_code, |air_ctx| {
@@ -67,7 +64,7 @@ fn test_vm_connector_wrong_is_terminate() {
 
 fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingContext<PB>)) {
     let vm_config = SystemConfig::default().without_continuations();
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
+    let engine = test_cpu_engine();
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(engine, SystemCpuBuilder, vm_config.clone()).unwrap();
     let vk = pk.get_vk();
@@ -82,11 +79,8 @@ fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingCo
     )];
 
     let program = Program::from_instructions(&instructions);
-    let committed_exe = Arc::new(VmCommittedExe::<SC>::commit(
-        program.into(),
-        vm.engine.config().pcs(),
-    ));
-    let max_trace_heights = vec![0; vk.total_widths().len()];
+    let committed_exe = Arc::new(VmCommittedExe::<SC>::commit(program.into(), &vm.engine));
+    let max_trace_heights = vec![0; vk.inner.per_air.len()];
     let memory = GuestMemory::new(AddressMap::from_mem_config(&vm_config.memory_config));
     vm.transport_init_memory_to_device(&memory);
     vm.load_program(committed_exe.get_committed_trace());
@@ -109,7 +103,7 @@ fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingCo
         .generate_proving_ctx(system_records, record_arenas)
         .unwrap();
     let connector_air_ctx = &mut ctx
-        .per_air
+        .per_trace
         .iter_mut()
         .find(|(air_id, _)| *air_id == CONNECTOR_AIR_ID)
         .unwrap()

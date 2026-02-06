@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+use cuda_backend_v2::{
+    BabyBearPoseidon2GpuEngineV2 as BabyBearPoseidon2GpuEngine, GpuBackendV2 as GpuBackend,
+};
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena, SystemConfig, VmBuilder,
@@ -13,7 +16,6 @@ use openvm_circuit_primitives::{
     },
     var_range::{VariableRangeCheckerAir, VariableRangeCheckerChip, VariableRangeCheckerChipGPU},
 };
-use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_baby_bear::BabyBear;
 
@@ -65,7 +67,7 @@ pub const PV_EXECUTOR_IDX: usize = 0;
 #[derive(Clone)]
 pub struct SystemGpuBuilder;
 
-impl VmBuilder<GpuBabyBearPoseidon2Engine> for SystemGpuBuilder {
+impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
     type VmConfig = SystemConfig;
     type RecordArena = DenseRecordArena;
     type SystemChipInventory = SystemChipInventoryGPU;
