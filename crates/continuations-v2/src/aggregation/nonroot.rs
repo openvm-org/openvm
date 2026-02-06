@@ -18,11 +18,8 @@ use stark_backend_v2::{
 use tracing::instrument;
 
 use crate::{
-    aggregation::{AggregationProver, Circuit, trace_heights_tracing_info},
-    circuit::{
-        AggNodeTraceGen,
-        nonroot::{receiver::UserPvsReceiverAir, verifier::VerifierPvsAir},
-    },
+    aggregation::{Circuit, trace_heights_tracing_info},
+    circuit::nonroot::{NonRootTraceGen, receiver::UserPvsReceiverAir, verifier::VerifierPvsAir},
 };
 
 #[derive(derive_new::new, Clone)]
@@ -32,10 +29,11 @@ pub struct NonRootCircuit<S: AggregationSubCircuit> {
 
 impl<S: AggregationSubCircuit> Circuit for NonRootCircuit<S> {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
-        let public_values_bus = self.verifier_circuit.public_values_bus();
+        let bus_inventory = self.verifier_circuit.bus_inventory();
+        let public_values_bus = bus_inventory.public_values_bus;
         [Arc::new(VerifierPvsAir {
             public_values_bus,
-            cached_commit_bus: self.verifier_circuit.cached_commit_bus(),
+            cached_commit_bus: bus_inventory.cached_commit_bus,
         }) as AirRef<BabyBearPoseidon2Config>]
         .into_iter()
         .chain(self.verifier_circuit.airs())
@@ -46,13 +44,11 @@ impl<S: AggregationSubCircuit> Circuit for NonRootCircuit<S> {
     }
 }
 
-/*
- * Struct to generate an aggregation proof
- */
+/// Generates an aggregation proof for non-root layers (leaf and internal).
 pub struct NonRootAggregationProver<
     PB: ProverBackendV2,
     S: AggregationSubCircuit,
-    T: AggNodeTraceGen<PB>,
+    T: NonRootTraceGen<PB>,
 > {
     pk: Arc<MultiStarkProvingKeyV2>,
     d_pk: DeviceMultiStarkProvingKeyV2<PB>,
@@ -68,34 +64,20 @@ pub struct NonRootAggregationProver<
     self_vk_pcs_data: Option<CommittedTraceDataV2<PB>>,
 }
 
-impl<PB, S, T> AggregationProver<PB> for NonRootAggregationProver<PB, S, T>
+impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: NonRootTraceGen<PB>>
+    NonRootAggregationProver<PB, S, T>
 where
-    PB: ProverBackendV2,
-    S: AggregationSubCircuit + VerifierTraceGen<PB>,
-    T: AggNodeTraceGen<PB>,
     PB::Matrix: Clone,
 {
-    fn get_vk(&self) -> Arc<MultiStarkVerifyingKeyV2> {
-        self.vk.clone()
-    }
-
-    fn get_cached_commit(&self, is_recursive: bool) -> PB::Commitment {
-        if is_recursive {
-            self.self_vk_pcs_data.as_ref().unwrap().commitment.clone()
-        } else {
-            self.child_vk_pcs_data.commitment.clone()
-        }
-    }
-
     #[instrument(name = "trace_gen", skip_all)]
-    fn generate_proving_ctx(
+    pub fn generate_proving_ctx(
         &self,
         proofs: &[Proof],
         user_pv_commit: Option<[F; DIGEST_SIZE]>,
-        is_recursive: bool,
+        is_self_recursive: bool,
     ) -> ProvingContextV2<PB> {
         assert!(proofs.len() <= self.circuit.verifier_circuit.max_num_proofs());
-        let (child_vk, child_vk_commit) = if is_recursive {
+        let (child_vk, child_vk_commit) = if is_self_recursive {
             (&self.vk, self.self_vk_pcs_data.clone().unwrap())
         } else {
             (&self.child_vk, self.child_vk_pcs_data.clone())
@@ -108,7 +90,7 @@ where
         let subcircuit_ctxs = self
             .circuit
             .verifier_circuit
-            .generate_proving_ctxs::<DuplexSpongeRecorder>(
+            .generate_proving_ctxs_base::<DuplexSpongeRecorder>(
                 child_vk,
                 child_vk_commit.clone(),
                 proofs,
@@ -127,13 +109,13 @@ where
     }
 
     #[instrument(name = "total_proof", skip_all)]
-    fn agg_prove<E: StarkWhirEngine<PB = PB>>(
+    pub fn agg_prove<E: StarkWhirEngine<PB = PB>>(
         &self,
         proofs: &[Proof],
         user_pv_commit: Option<[F; DIGEST_SIZE]>,
-        is_recursive: bool,
+        is_self_recursive: bool,
     ) -> Result<Proof> {
-        let ctx = self.generate_proving_ctx(proofs, user_pv_commit, is_recursive);
+        let ctx = self.generate_proving_ctx(proofs, user_pv_commit, is_self_recursive);
         if tracing::enabled!(tracing::Level::DEBUG) {
             trace_heights_tracing_info(&ctx.per_trace, &self.circuit.airs());
         }
@@ -147,13 +129,13 @@ where
     }
 }
 
-impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: AggNodeTraceGen<PB>>
+impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: NonRootTraceGen<PB>>
     NonRootAggregationProver<PB, S, T>
 {
     pub fn new<E: StarkWhirEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKeyV2>,
         system_params: SystemParams,
-        is_recursive: bool,
+        is_self_recursive: bool,
     ) -> Self {
         let verifier_circuit = S::new(child_vk.clone(), true, true);
         let engine = E::new(system_params);
@@ -161,7 +143,7 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ag
         let circuit = Arc::new(NonRootCircuit::new(Arc::new(verifier_circuit)));
         let (pk, vk) = engine.keygen(&circuit.airs());
         let d_pk = engine.device().transport_pk_to_device(&pk);
-        let self_vk_pcs_data = if is_recursive {
+        let self_vk_pcs_data = if is_self_recursive {
             Some(circuit.verifier_circuit.commit_child_vk(&engine, &vk))
         } else {
             None
@@ -170,7 +152,7 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ag
             pk: Arc::new(pk),
             d_pk,
             vk: Arc::new(vk),
-            agg_node_tracegen: T::new(),
+            agg_node_tracegen: NonRootTraceGen::new(),
             child_vk,
             child_vk_pcs_data,
             circuit,
@@ -181,7 +163,7 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ag
     pub fn from_pk<E: StarkWhirEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKeyV2>,
         pk: Arc<MultiStarkProvingKeyV2>,
-        is_recursive: bool,
+        is_self_recursive: bool,
     ) -> Self {
         let verifier_circuit = S::new(child_vk.clone(), true, true);
         let engine = E::new(pk.params.clone());
@@ -190,7 +172,7 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ag
         let circuit = Arc::new(NonRootCircuit::new(Arc::new(verifier_circuit)));
         let vk = Arc::new(pk.get_vk());
         let d_pk = engine.device().transport_pk_to_device(&pk);
-        let self_vk_pcs_data = if is_recursive {
+        let self_vk_pcs_data = if is_self_recursive {
             Some(circuit.verifier_circuit.commit_child_vk(&engine, &vk))
         } else {
             None
@@ -199,7 +181,7 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ag
             pk,
             d_pk,
             vk,
-            agg_node_tracegen: T::new(),
+            agg_node_tracegen: NonRootTraceGen::new(),
             child_vk,
             child_vk_pcs_data,
             circuit,
@@ -213,6 +195,18 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ag
 
     pub fn get_pk(&self) -> Arc<MultiStarkProvingKeyV2> {
         self.pk.clone()
+    }
+
+    pub fn get_vk(&self) -> Arc<MultiStarkVerifyingKeyV2> {
+        self.vk.clone()
+    }
+
+    pub fn get_cached_commit(&self, is_self_recursive: bool) -> PB::Commitment {
+        if is_self_recursive {
+            self.self_vk_pcs_data.as_ref().unwrap().commitment.clone()
+        } else {
+            self.child_vk_pcs_data.commitment.clone()
+        }
     }
 
     pub fn get_self_vk_pcs_data(&self) -> Option<CommittedTraceDataV2<PB>>

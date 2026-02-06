@@ -56,27 +56,38 @@ pub trait VerifierTraceGen<PB: ProverBackendV2> {
         continuations_enabled: bool,
         has_cached: bool,
     ) -> Self;
+
     fn commit_child_vk<E: StarkEngineV2<SC = SC, PB = PB>>(
         &self,
         engine: &E,
         child_vk: &MultiStarkVerifyingKeyV2,
     ) -> CommittedTraceDataV2<PB>;
+
     /// The generic `TS` allows using different transcript implementations for debugging purposes.
-    /// The default type is use is `DuplexSpongeRecorder`.
+    /// The default type to use is `DuplexSpongeRecorder`.
     fn generate_proving_ctxs<TS: FiatShamirTranscript + TranscriptHistory + Default>(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
         child_vk_pcs_data: CommittedTraceDataV2<PB>,
         proofs: &[Proof],
+        external_poseidon2_compress_inputs: &Vec<[PB::Val; WIDTH]>,
     ) -> Vec<AirProvingContextV2<PB>>;
+
+    fn generate_proving_ctxs_base<TS: FiatShamirTranscript + TranscriptHistory + Default>(
+        &self,
+        child_vk: &MultiStarkVerifyingKeyV2,
+        child_vk_pcs_data: CommittedTraceDataV2<PB>,
+        proofs: &[Proof],
+    ) -> Vec<AirProvingContextV2<PB>> {
+        self.generate_proving_ctxs::<TS>(child_vk, child_vk_pcs_data, proofs, &vec![])
+    }
 }
 
 // Trait to help make AIR generation generic
 pub trait AggregationSubCircuit {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>>;
-    fn public_values_bus(&self) -> PublicValuesBus;
-    fn cached_commit_bus(&self) -> CachedCommitBus;
-    fn dag_commit_bus(&self) -> DagCommitBus;
+    fn bus_inventory(&self) -> &BusInventory;
+    fn next_bus_idx(&self) -> BusIndex;
     fn max_num_proofs(&self) -> usize;
 }
 
@@ -404,11 +415,15 @@ impl<'a> TraceModuleRef<'a> {
         proofs: &[Proof],
         preflights: &[Preflight],
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+        external_poseidon2_compress_inputs: &Vec<[F; WIDTH]>,
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         match self {
-            TraceModuleRef::Transcript(module) => {
-                module.generate_proving_ctxs(child_vk, proofs, preflights, &())
-            }
+            TraceModuleRef::Transcript(module) => module.generate_proving_ctxs(
+                child_vk,
+                proofs,
+                preflights,
+                external_poseidon2_compress_inputs,
+            ),
             TraceModuleRef::ProofShape(module) => {
                 module.generate_proving_ctxs(child_vk, proofs, preflights, &())
             }
@@ -432,7 +447,8 @@ impl<'a> TraceModuleRef<'a> {
 ///
 /// This struct is stateful.
 pub struct VerifierSubCircuit<const MAX_NUM_PROOFS: usize> {
-    pub bus_inventory: BusInventory,
+    bus_inventory: BusInventory,
+    bus_idx_manager: BusIndexManager,
 
     transcript: TranscriptModule,
     proof_shape: ProofShapeModule,
@@ -455,8 +471,8 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         continuations_enabled: bool,
         has_cached: bool,
     ) -> Self {
-        let mut b = BusIndexManager::new();
-        let bus_inventory = BusInventory::new(&mut b);
+        let mut bus_idx_manager = BusIndexManager::new();
+        let bus_inventory = BusInventory::new(&mut bus_idx_manager);
         let power_checker_trace = Arc::new(PowerCheckerTraceGenerator::<2, 32>::default());
         let power_checker_air = Arc::new(PowerCheckerAir::<2, 32> {
             pow_bus: bus_inventory.power_checker_bus,
@@ -468,25 +484,26 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         let child_mvk_frame = child_mvk.as_ref().into();
         let proof_shape = ProofShapeModule::new(
             &child_mvk_frame,
-            &mut b,
+            &mut bus_idx_manager,
             bus_inventory.clone(),
             power_checker_trace.clone(),
             continuations_enabled,
         );
-        let gkr = GkrModule::new(&child_mvk, &mut b, bus_inventory.clone());
+        let gkr = GkrModule::new(&child_mvk, &mut bus_idx_manager, bus_inventory.clone());
         let batch_constraint = BatchConstraintModule::new(
             &child_mvk,
-            &mut b,
+            &mut bus_idx_manager,
             bus_inventory.clone(),
             MAX_NUM_PROOFS,
             power_checker_trace.clone(),
             has_cached,
         );
-        let stacking = StackingModule::new(&child_mvk, &mut b, bus_inventory.clone());
-        let whir = WhirModule::new(&child_mvk, &mut b, bus_inventory.clone());
+        let stacking = StackingModule::new(&child_mvk, &mut bus_idx_manager, bus_inventory.clone());
+        let whir = WhirModule::new(&child_mvk, &mut bus_idx_manager, bus_inventory.clone());
 
         VerifierSubCircuit {
             bus_inventory,
+            bus_idx_manager,
             transcript,
             proof_shape,
             gkr,
@@ -815,16 +832,12 @@ impl<const MAX_NUM_PROOFS: usize> AggregationSubCircuit for VerifierSubCircuit<M
             .collect()
     }
 
-    fn public_values_bus(&self) -> PublicValuesBus {
-        self.bus_inventory.public_values_bus
+    fn bus_inventory(&self) -> &BusInventory {
+        &self.bus_inventory
     }
 
-    fn cached_commit_bus(&self) -> CachedCommitBus {
-        self.bus_inventory.cached_commit_bus
-    }
-
-    fn dag_commit_bus(&self) -> DagCommitBus {
-        self.bus_inventory.dag_commit_bus
+    fn next_bus_idx(&self) -> BusIndex {
+        self.bus_idx_manager.bus_idx_max
     }
 
     fn max_num_proofs(&self) -> usize {
@@ -857,6 +870,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
         child_vk: &MultiStarkVerifyingKeyV2,
         child_vk_pcs_data: CommittedTraceDataV2<CpuBackendV2>,
         proofs: &[Proof],
+        external_poseidon2_compress_inputs: &Vec<[F; WIDTH]>,
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
         // Use std::thread::scope for preflight parallelism. With only 3-4 proofs max, this avoids
@@ -897,7 +911,13 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
             .into_par_iter()
             .map(|module| {
                 let _guard = span.enter();
-                module.generate_cpu_ctxs(child_vk, proofs, &preflights, &exp_bits_len_gen)
+                module.generate_cpu_ctxs(
+                    child_vk,
+                    proofs,
+                    &preflights,
+                    &exp_bits_len_gen,
+                    external_poseidon2_compress_inputs,
+                )
             })
             .collect::<Vec<_>>();
         if self.batch_constraint.has_cached {
@@ -953,11 +973,15 @@ pub mod cuda_tracegen {
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
             exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+            external_poseidon2_compress_inputs: &Vec<[F; WIDTH]>,
         ) -> Vec<AirProvingContextV2<cuda_backend_v2::GpuBackendV2>> {
             match self {
-                TraceModuleRef::Transcript(module) => {
-                    module.generate_proving_ctxs(child_vk, proofs, preflights, &())
-                }
+                TraceModuleRef::Transcript(module) => module.generate_proving_ctxs(
+                    child_vk,
+                    proofs,
+                    preflights,
+                    external_poseidon2_compress_inputs,
+                ),
                 TraceModuleRef::ProofShape(module) => {
                     module.generate_proving_ctxs(child_vk, proofs, preflights, &())
                 }
@@ -1002,6 +1026,7 @@ pub mod cuda_tracegen {
             child_vk: &MultiStarkVerifyingKeyV2,
             child_vk_pcs_data: CommittedTraceDataV2<GpuBackendV2>,
             proofs: &[Proof],
+            external_poseidon2_compress_inputs: &Vec<[F; WIDTH]>,
         ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
             debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
             let child_vk_gpu = VerifyingKeyGpu::new(child_vk);
@@ -1057,6 +1082,7 @@ pub mod cuda_tracegen {
                         &proofs_gpu,
                         &preflights_gpu,
                         &exp_bits_len_gen,
+                        external_poseidon2_compress_inputs,
                     )
                 })
                 .collect::<Vec<_>>();

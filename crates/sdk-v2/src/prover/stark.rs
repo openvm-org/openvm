@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use continuations_v2::aggregation::AggregationProver;
 use eyre::Result;
 use openvm_circuit::arch::{
     Executor, MeteredExecutor, PreflightExecutor, VmBuilder, VmExecutionConfig,
@@ -15,7 +14,7 @@ use verify_stark::{NonRootStarkProof, vk::VerificationBaseline};
 
 use crate::{
     SC, StdIn,
-    prover::{AggProver, AppProver, vm::types::VmProvingKey},
+    prover::{AggProver, AppProver, CompressionProver, vm::types::VmProvingKey},
 };
 
 pub struct StarkProver<E, VB>
@@ -25,6 +24,7 @@ where
 {
     pub app_prover: AppProver<E, VB>,
     pub agg_prover: Arc<AggProver>,
+    pub compression_prover: Option<Arc<CompressionProver>>,
 }
 
 impl<E, VB> StarkProver<E, VB>
@@ -39,10 +39,12 @@ where
         app_vm_pk: &VmProvingKey<VB::VmConfig>,
         app_exe: Arc<VmExe<Val<SC>>>,
         agg_prover: Arc<AggProver>,
+        compression_prover: Option<Arc<CompressionProver>>,
     ) -> Result<Self> {
         Ok(Self {
             app_prover: AppProver::new(vm_builder, app_vm_pk, app_exe)?,
             agg_prover,
+            compression_prover,
         })
     }
 
@@ -53,7 +55,22 @@ where
             + PreflightExecutor<Val<SC>, VB::RecordArena>,
     {
         let continuation_proof = self.app_prover.prove(input)?;
-        self.agg_prover.prove(continuation_proof)
+        let (mut stark_proof, mut internal_metadata) = self.agg_prover.prove(continuation_proof)?;
+        if let Some(compression_prover) = self.compression_prover.as_ref() {
+            // We add two additional internal_recursive layers before the compression layer to
+            // minimize the input size. The first internal_recursive layer will have a single
+            // child proof, and thus may have 2-3x fewer trace cells than the previous layer.
+            // The second will also only have a single child, and it may require 2-3x fewer
+            // hashes (and thus Poseidon2 trace rows) than the first.
+            const ADDITIONAL_INTERNAL_RECURSIVE_LAYERS: usize = 2;
+            for _ in 0..ADDITIONAL_INTERNAL_RECURSIVE_LAYERS {
+                stark_proof = self
+                    .agg_prover
+                    .wrap_proof(stark_proof, &mut internal_metadata)?;
+            }
+            stark_proof = compression_prover.prove(stark_proof)?;
+        }
+        Ok(stark_proof)
     }
 
     pub fn generate_baseline(&self) -> VerificationBaseline {
@@ -74,10 +91,9 @@ where
                 .internal_recursive_prover
                 .get_cached_commit(true),
             compression_commit: self
-                .agg_prover
                 .compression_prover
                 .as_ref()
-                .map(|prover| prover.get_dag_commit()),
+                .map(|prover| prover.0.get_dag_commit()),
         }
     }
 }

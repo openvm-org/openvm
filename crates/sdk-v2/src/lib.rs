@@ -8,8 +8,7 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-use config::{AggregationTreeConfig, AppConfig};
-use continuations_v2::aggregation::AggregationProver;
+use config::AppConfig;
 use getset::{Getters, MutGetters, WithSetters};
 use keygen::{AppProvingKey, AppVerifyingKey};
 use openvm_build::{
@@ -40,9 +39,12 @@ use verify_stark::{
 };
 
 use crate::{
-    config::{AggregationConfig, AggregationSystemParams},
+    config::{
+        AggregationConfig, AggregationSystemParams, AggregationTreeConfig, DEFAULT_ROOT_LOG_BLOWUP,
+        default_root_params,
+    },
     keygen::AggProvingKey,
-    prover::{AggProver, AppProver, StarkProver},
+    prover::{AggProver, AppProver, CompressionProver, RootProver, StarkProver},
     types::ExecutableFormat,
 };
 
@@ -116,6 +118,8 @@ where
 
     app_pk: OnceLock<AppProvingKey<VB::VmConfig>>,
     agg_prover: OnceLock<Arc<AggProver>>,
+    compression_prover: OnceLock<Option<Arc<CompressionProver>>>,
+    root_prover: OnceLock<Arc<RootProver>>,
 
     _phantom: PhantomData<E>,
 }
@@ -184,13 +188,9 @@ where
     where
         VB: Default,
     {
-        let system_config = app_config.app_vm_config.as_ref();
         let executor = VmExecutor::new(app_config.app_vm_config.clone())
             .map_err(|e| SdkError::Vm(e.into()))?;
-        let agg_config = AggregationConfig {
-            max_num_user_public_values: system_config.num_public_values,
-            params: agg_params,
-        };
+        let agg_config = AggregationConfig { params: agg_params };
         Ok(Self {
             app_config,
             agg_config,
@@ -200,6 +200,8 @@ where
             executor,
             app_pk: OnceLock::new(),
             agg_prover: OnceLock::new(),
+            compression_prover: OnceLock::new(),
+            root_prover: OnceLock::new(),
             _phantom: Default::default(),
         })
     }
@@ -381,24 +383,6 @@ where
 
     // ========================= Prover Constructors =========================
 
-    /// Constructs a new [StarkProver] instance for the given executable.
-    /// This function will generate the [AppProvingKey] if it does not already
-    /// exist.
-    pub fn prover(
-        &self,
-        app_exe: impl Into<ExecutableFormat>,
-    ) -> Result<StarkProver<E, VB>, SdkError> {
-        let app_exe = self.convert_to_exe(app_exe)?;
-        let app_pk = self.app_pk();
-        let stark_prover = StarkProver::<E, _>::new(
-            self.app_vm_builder.clone(),
-            &app_pk.app_vm_pk,
-            app_exe,
-            self.agg_prover(),
-        )?;
-        Ok(stark_prover)
-    }
-
     /// This constructor is for generating app proofs that do not require a single aggregate STARK
     /// proof of the full program execution. For a single STARK proof, use the
     /// [`prove`](Self::prove) method instead.
@@ -416,6 +400,27 @@ where
         Ok(prover)
     }
 
+    /// Constructs a new [StarkProver] instance for the given executable.
+    /// This function will generate the [AppProvingKey] if it does not already
+    /// exist.
+    pub fn prover(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+    ) -> Result<StarkProver<E, VB>, SdkError> {
+        let app_exe = self.convert_to_exe(app_exe)?;
+        let app_pk = self.app_pk();
+        let stark_prover = StarkProver::<E, _>::new(
+            self.app_vm_builder.clone(),
+            &app_pk.app_vm_pk,
+            app_exe,
+            self.agg_prover(),
+            self.compression_prover(),
+        )?;
+        Ok(stark_prover)
+    }
+
+    // ===================== Component Prover Constructors =====================
+
     pub fn agg_prover(&self) -> Arc<AggProver> {
         let app_pk = self.app_pk();
         self.agg_prover
@@ -424,6 +429,48 @@ where
                     Arc::new(app_pk.app_vm_pk.vm_pk.get_vk()),
                     self.agg_config.clone(),
                     self.agg_tree_config,
+                ))
+            })
+            .clone()
+    }
+
+    pub fn compression_prover(&self) -> Option<Arc<CompressionProver>> {
+        self.compression_prover
+            .get_or_init(|| {
+                self.agg_config.params.compression.as_ref().map(|params| {
+                    let agg_prover = self.agg_prover();
+                    Arc::new(CompressionProver::new(
+                        agg_prover.internal_recursive_prover.get_vk(),
+                        agg_prover
+                            .internal_recursive_prover
+                            .get_self_vk_pcs_data()
+                            .unwrap(),
+                        params.clone(),
+                    ))
+                })
+            })
+            .clone()
+    }
+
+    pub fn root_prover(&self) -> Arc<RootProver> {
+        self.root_prover
+            .get_or_init(|| {
+                let system_config = self.app_config.app_vm_config.as_ref();
+                let memory_dimensions = system_config.memory_config.memory_dimensions();
+                let num_user_pvs = system_config.num_public_values;
+
+                // TODO[INT-6073]: store root_params
+                let root_params = default_root_params(DEFAULT_ROOT_LOG_BLOWUP);
+                let agg_prover = self.agg_prover();
+                Arc::new(RootProver::new(
+                    agg_prover.internal_recursive_prover.get_vk(),
+                    agg_prover
+                        .internal_recursive_prover
+                        .get_self_vk_pcs_data()
+                        .unwrap(),
+                    root_params,
+                    memory_dimensions,
+                    num_user_pvs,
                 ))
             })
             .clone()
@@ -475,17 +522,18 @@ where
             leaf_pk: agg_prover.leaf_prover.get_pk(),
             internal_for_leaf_pk: agg_prover.internal_for_leaf_prover.get_pk(),
             internal_recursive_pk: agg_prover.internal_recursive_prover.get_pk(),
-            compression_pk: agg_prover
-                .compression_prover
+            compression_pk: self
+                .compression_prover()
                 .as_ref()
-                .map(|prover| prover.get_pk()),
+                .map(|prover| prover.0.get_pk()),
         }
     }
 
     pub fn agg_vk(&self) -> Arc<MultiStarkVerifyingKey> {
         let agg_prover = self.agg_prover();
-        if let Some(prover) = agg_prover.compression_prover.as_ref() {
-            prover.get_vk()
+        let compression_prover = self.compression_prover();
+        if let Some(prover) = compression_prover.as_ref() {
+            prover.0.get_vk()
         } else {
             agg_prover.internal_recursive_prover.get_vk()
         }

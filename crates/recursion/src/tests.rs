@@ -104,7 +104,8 @@ fn test_recursion_circuit_single_fib(
 
     let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
+    let ctxs =
+        circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
     debug(&circuit.airs(), &pk.per_air, &ctxs);
 }
 
@@ -125,7 +126,8 @@ fn test_recursion_circuit_many_fib_airs() {
 
     let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
+    let ctxs =
+        circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
     debug(&circuit.airs(), &pk.per_air, &ctxs);
 }
 
@@ -162,7 +164,8 @@ fn test_recursion_circuit_many_fib_airs_some_missing() {
 
     let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
+    let ctxs =
+        circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
     debug(&circuit.airs(), &pk.per_air, &ctxs);
 }
 
@@ -179,7 +182,8 @@ fn test_recursion_circuit_interactions(l_skip: usize, n_stack: usize, k_whir: us
 
     let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
+    let ctxs =
+        circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
     debug(&circuit.airs(), &pk.per_air, &ctxs);
 }
 
@@ -218,7 +222,8 @@ fn test_preflight_cached_trace(l_skip: usize, n_stack: usize, k_whir: usize) {
 
     let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
+    let ctxs =
+        circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
     debug(&circuit.airs(), &pk.per_air, &ctxs);
 }
 
@@ -246,7 +251,8 @@ fn test_preflight_preprocessed_trace(
 
     let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
+    let ctxs =
+        circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
     debug(&circuit.airs(), &pk.per_air, &ctxs);
 }
 
@@ -275,7 +281,8 @@ fn test_preflight_multi_interaction_trace(
 
     let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
+    let ctxs =
+        circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
     debug(&circuit.airs(), &pk.per_air, &ctxs);
 }
 
@@ -300,7 +307,8 @@ fn test_preflight_mixture_trace(
 
     let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
+    let ctxs =
+        circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
     debug(&circuit.airs(), &pk.per_air, &ctxs);
 }
 
@@ -343,7 +351,7 @@ fn test_recursion_circuit_two_fib_proofs(log_trace_degree: usize) {
 
     let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(
+    let ctxs = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
         &vk,
         vk_commit_data,
         &[proof1, proof2],
@@ -375,7 +383,7 @@ fn test_recursion_circuit_multiple_fib_proofs(log_trace_degree: usize) {
 
     let (circuit, pk) = verifier_circuit_keygen::<5>(&vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(
+    let ctxs = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
         &vk,
         vk_commit_data,
         &[proof1, proof2, proof3, proof4, proof5],
@@ -414,7 +422,7 @@ fn test_recursion_circuit_two_preprocessed(
 
     let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(
+    let ctxs = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
         &vk,
         vk_commit_data,
         &[proof1, proof2],
@@ -446,7 +454,7 @@ fn test_recursion_circuit_multiple_preprocessed(l_skip: usize, n_stack: usize, k
 
     let (circuit, pk) = verifier_circuit_keygen::<5>(&vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(
+    let ctxs = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
         &vk,
         vk_commit_data,
         &[proof1, proof2, proof3, proof4, proof5],
@@ -464,7 +472,7 @@ fn test_recursion_circuit_two_interactions() {
 
     let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(
+    let ctxs = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
         &vk,
         vk_commit_data,
         &[proof.clone(), proof],
@@ -483,7 +491,7 @@ fn test_recursion_circuit_multiple_interactions() {
 
     let (circuit, pk) = verifier_circuit_keygen::<5>(&vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(
+    let ctxs = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
         &vk,
         vk_commit_data,
         &[
@@ -507,7 +515,7 @@ fn test_recursion_circuit_two_cached() {
 
     let (circuit, pk) = verifier_circuit_keygen::<5>(&vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(
+    let ctxs = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
         &vk,
         vk_commit_data,
         &[proof.clone(), proof],
@@ -525,7 +533,7 @@ fn test_recursion_circuit_multiple_cached() {
 
     let (circuit, pk) = verifier_circuit_keygen::<5>(&vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(
+    let ctxs = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
         &vk,
         vk_commit_data,
         &[
@@ -555,7 +563,7 @@ fn run_negative_hypercube_test<Fx: TestFixture>(
 
     let (circuit, pk) = verifier_circuit_keygen::<5>(&vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(
+    let ctxs = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
         &vk,
         vk_commit_data,
         &(0..num_proofs).map(|_| proof.clone()).collect_vec(),
@@ -655,10 +663,16 @@ mod cuda {
 
         let vk_commit_data_cpu = circuit.commit_child_vk(&cpu_engine, &vk);
         let vk_commit_data_gpu = circuit.commit_child_vk(&gpu_engine, &vk);
-        let cpu_ctx =
-            circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(&vk, vk_commit_data_cpu, &proofs);
-        let gpu_ctx =
-            circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(&vk, vk_commit_data_gpu, &proofs);
+        let cpu_ctx = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
+            &vk,
+            vk_commit_data_cpu,
+            &proofs,
+        );
+        let gpu_ctx = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
+            &vk,
+            vk_commit_data_gpu,
+            &proofs,
+        );
 
         #[cfg(feature = "touchemall")]
         for (i, gpu) in gpu_ctx.iter().enumerate() {

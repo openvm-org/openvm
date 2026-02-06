@@ -9,6 +9,7 @@ pub const DEFAULT_APP_LOG_BLOWUP: usize = 1;
 pub const DEFAULT_LEAF_LOG_BLOWUP: usize = 2;
 pub const DEFAULT_INTERNAL_LOG_BLOWUP: usize = 2;
 pub const DEFAULT_COMPRESSION_LOG_BLOWUP: usize = 4;
+pub const DEFAULT_ROOT_LOG_BLOWUP: usize = 2;
 
 // WARNING: These currently serve as both the DEFAULT and MAXIMUM number of
 // children for the leaf and internal aggregation layers, as the max number
@@ -36,7 +37,6 @@ impl AppConfig<SdkVmConfig> {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AggregationConfig {
-    pub max_num_user_public_values: usize,
     pub params: AggregationSystemParams,
 }
 
@@ -140,6 +140,14 @@ pub fn default_compression_params(log_blowup: usize) -> SystemParams {
         logup: log_up_security_params_baby_bear_100_bits(),
         max_constraint_degree,
     }
+}
+
+pub fn default_root_params(log_blowup: usize) -> SystemParams {
+    let l_skip = 2;
+    let n_stack = 17;
+    let k_whir = 4;
+    let max_constraint_degree = 4;
+    generic_system_params(log_blowup, l_skip, n_stack, k_whir, max_constraint_degree)
 }
 
 pub fn generic_system_params(

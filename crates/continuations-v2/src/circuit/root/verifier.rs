@@ -5,6 +5,7 @@ use std::{
 
 use openvm_circuit::arch::ExitCode;
 use openvm_circuit_primitives::utils::assert_array_eq;
+use openvm_poseidon2_air::Permutation;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -12,26 +13,33 @@ use openvm_stark_backend::{
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use recursion_circuit::bus::{
-    CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
-    PublicValuesBus, PublicValuesBusMessage,
+use recursion_circuit::{
+    bus::{
+        CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
+        PublicValuesBus, PublicValuesBusMessage,
+    },
+    utils::assert_zeros,
 };
 use stark_backend_v2::{
     DIGEST_SIZE, F,
-    poseidon2::sponge::{poseidon2_compress, poseidon2_hash_slice},
+    poseidon2::{WIDTH, poseidon2_perm, sponge::poseidon2_compress},
     proof::Proof,
     prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
 use verify_stark::pvs::{NonRootVerifierPvs, VERIFIER_PVS_AIR_ID};
 
-use crate::circuit::{
-    CONSTRAINT_EVAL_AIR_ID, CONSTRAINT_EVAL_CACHED_INDEX,
-    root::{
-        RootVerifierPvs,
-        bus::{
-            MemoryMerkleCommitBus, MemoryMerkleCommitMessage, UserPvsCommitBus,
-            UserPvsCommitMessage,
+use crate::{
+    bn254::CommitBytes,
+    circuit::{
+        CONSTRAINT_EVAL_AIR_ID, CONSTRAINT_EVAL_CACHED_INDEX,
+        root::{
+            RootVerifierPvs,
+            bus::{
+                MemoryMerkleCommitBus, MemoryMerkleCommitMessage, UserPvsCommitBus,
+                UserPvsCommitMessage,
+            },
+            digests_to_poseidon2_input, pad_slice_to_poseidon2_input,
         },
     },
 };
@@ -47,7 +55,7 @@ pub struct RootVerifierPvsCols<F> {
     pub intermediate_exe_commit: [F; DIGEST_SIZE],
 }
 
-pub struct RootVerifierPvsAir<F> {
+pub struct RootVerifierPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,
     pub poseidon2_compress_bus: Poseidon2CompressBus,
@@ -55,23 +63,23 @@ pub struct RootVerifierPvsAir<F> {
     pub user_pvs_commit_bus: UserPvsCommitBus,
     pub memory_merkle_commit_bus: MemoryMerkleCommitBus,
 
-    pub expected_internal_recursive_vk_commit: [F; DIGEST_SIZE],
+    pub expected_internal_recursive_vk_commit: CommitBytes,
 }
 
-impl<F: Field> BaseAir<F> for RootVerifierPvsAir<F> {
+impl<F: Field> BaseAir<F> for RootVerifierPvsAir {
     fn width(&self) -> usize {
         RootVerifierPvsCols::<u8>::width()
     }
 }
-impl<F: Field> BaseAirWithPublicValues<F> for RootVerifierPvsAir<F> {
+impl<F: Field> BaseAirWithPublicValues<F> for RootVerifierPvsAir {
     fn num_public_values(&self) -> usize {
         RootVerifierPvs::<u8>::width()
     }
 }
-impl<F: Field> PartitionedBaseAir<F> for RootVerifierPvsAir<F> {}
+impl<F: Field> PartitionedBaseAir<F> for RootVerifierPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
-    for RootVerifierPvsAir<AB::F>
+    for RootVerifierPvsAir
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -287,26 +295,42 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         }
 
         /*
-         * We also need to receive the cached commit from ProofShapeModule, which is for the
-         * internal-recursive layer. Note that given some internal system params config for
-         * any app_vk the internal-recursive commit will be constant, and thus we cosntrain
-         * it to be that constant.
+         * We also need to receive the cached commit from ProofShapeModule, which is either for
+         * the internal-for-leaf (i.e. if recursion_flag == 1) or internal-recursive layer. In
+         * the former case we constrain child_pvs.internal_recursive_vk_commit to be unset (i.e.
+         * all 0), and in the latter we constrain it to be equal to a pre-generated constant as
+         * it should be the same regardless of app_vk (provided internal system params are the
+         * same).
          */
+        let cached_commit = from_fn(|i| {
+            local.child_pvs.internal_for_leaf_vk_commit[i]
+                * (AB::Expr::TWO - local.child_pvs.recursion_flag)
+                + local.child_pvs.internal_recursive_vk_commit[i]
+                    * (local.child_pvs.recursion_flag - AB::F::ONE)
+        });
         self.cached_commit_bus.receive(
             builder,
             AB::F::ZERO,
             CachedCommitBusMessage {
                 air_idx: AB::Expr::from_usize(CONSTRAINT_EVAL_AIR_ID),
                 cached_idx: AB::Expr::from_usize(CONSTRAINT_EVAL_CACHED_INDEX),
-                cached_commit: local.child_pvs.internal_recursive_vk_commit.map(Into::into),
+                cached_commit,
             },
             AB::F::ONE,
         );
 
-        assert_array_eq(
-            builder,
+        assert_zeros(
+            &mut builder.when_ne(local.child_pvs.recursion_flag, AB::F::TWO),
             local.child_pvs.internal_recursive_vk_commit,
-            self.expected_internal_recursive_vk_commit,
+        );
+
+        assert_array_eq(
+            &mut builder.when_ne(local.child_pvs.recursion_flag, AB::F::ONE),
+            local.child_pvs.internal_recursive_vk_commit,
+            <CommitBytes as Into<[u32; DIGEST_SIZE]>>::into(
+                self.expected_internal_recursive_vk_commit,
+            )
+            .map(AB::F::from_u32),
         );
 
         /*
@@ -331,19 +355,16 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
 
         /*
          * The app_exe_commit is a commit to the app program, initial memory state, and initial
-         * PC. Child public values program_commit, initial_root, and initial_pc are inidivudally
+         * PC. Child public values program_commit, initial_root, and initial_pc are individually
          * hashed and then permuted together to produce app_exe_commit.
          */
         self.poseidon2_compress_bus.lookup_key(
             builder,
             Poseidon2CompressMessage {
-                input: from_fn(|i| {
-                    if i < DIGEST_SIZE {
-                        local.child_pvs.program_commit[i].into()
-                    } else {
-                        AB::Expr::ZERO
-                    }
-                }),
+                input: pad_slice_to_poseidon2_input(
+                    &local.child_pvs.program_commit.map(Into::into),
+                    AB::Expr::ZERO,
+                ),
                 output: local.program_commit_hash.map(Into::into),
             },
             AB::F::ONE,
@@ -352,13 +373,10 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         self.poseidon2_compress_bus.lookup_key(
             builder,
             Poseidon2CompressMessage {
-                input: from_fn(|i| {
-                    if i < DIGEST_SIZE {
-                        local.child_pvs.initial_root[i].into()
-                    } else {
-                        AB::Expr::ZERO
-                    }
-                }),
+                input: pad_slice_to_poseidon2_input(
+                    &local.child_pvs.initial_root.map(Into::into),
+                    AB::Expr::ZERO,
+                ),
                 output: local.initial_root_hash.map(Into::into),
             },
             AB::F::ONE,
@@ -367,13 +385,10 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         self.poseidon2_compress_bus.lookup_key(
             builder,
             Poseidon2CompressMessage {
-                input: from_fn(|i| {
-                    if i == 0 {
-                        local.child_pvs.initial_pc.into()
-                    } else {
-                        AB::Expr::ZERO
-                    }
-                }),
+                input: pad_slice_to_poseidon2_input(
+                    &[local.child_pvs.initial_pc.into()],
+                    AB::Expr::ZERO,
+                ),
                 output: local.initial_pc_hash.map(Into::into),
             },
             AB::F::ONE,
@@ -382,13 +397,10 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         self.poseidon2_compress_bus.lookup_key(
             builder,
             Poseidon2CompressMessage {
-                input: from_fn(|i| {
-                    if i < DIGEST_SIZE {
-                        local.program_commit_hash[i]
-                    } else {
-                        local.initial_root_hash[i - DIGEST_SIZE]
-                    }
-                }),
+                input: digests_to_poseidon2_input(
+                    local.program_commit_hash,
+                    local.initial_root_hash,
+                ),
                 output: local.intermediate_exe_commit,
             },
             AB::F::ONE,
@@ -397,13 +409,11 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         self.poseidon2_compress_bus.lookup_key(
             builder,
             Poseidon2CompressMessage {
-                input: from_fn(|i| {
-                    if i < DIGEST_SIZE {
-                        local.intermediate_exe_commit[i].into()
-                    } else {
-                        local.initial_pc_hash[i - DIGEST_SIZE].into()
-                    }
-                }),
+                input: digests_to_poseidon2_input(
+                    local.intermediate_exe_commit,
+                    local.initial_pc_hash,
+                )
+                .map(Into::into),
                 output: app_exe_commit.map(Into::into),
             },
             AB::F::ONE,
@@ -411,7 +421,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
     }
 }
 
-pub fn generate_proving_ctx(proof: Proof) -> AirProvingContextV2<CpuBackendV2> {
+pub fn generate_proving_ctx(proof: &Proof) -> (AirProvingContextV2<CpuBackendV2>, Vec<[F; WIDTH]>) {
     let width = RootVerifierPvsCols::<u8>::width();
     let mut trace = vec![F::ZERO; width];
     let cols: &mut RootVerifierPvsCols<F> = trace.as_mut_slice().borrow_mut();
@@ -420,24 +430,55 @@ pub fn generate_proving_ctx(proof: Proof) -> AirProvingContextV2<CpuBackendV2> {
 
     cols.child_pvs = *child_pvs;
 
-    cols.program_commit_hash = poseidon2_hash_slice(&child_pvs.program_commit);
-    cols.initial_root_hash = poseidon2_hash_slice(&child_pvs.initial_root);
-    cols.initial_pc_hash = poseidon2_hash_slice(&[child_pvs.initial_pc]);
+    let padded_program_commit = pad_slice_to_poseidon2_input(&child_pvs.program_commit, F::ZERO);
+    let padded_initial_root = pad_slice_to_poseidon2_input(&child_pvs.initial_root, F::ZERO);
+    let padded_initial_pc = pad_slice_to_poseidon2_input(&[child_pvs.initial_pc], F::ZERO);
+
+    let perm = poseidon2_perm();
+    cols.program_commit_hash = perm.permute(padded_program_commit)[..DIGEST_SIZE]
+        .try_into()
+        .unwrap();
+    cols.initial_root_hash = perm.permute(padded_initial_root)[..DIGEST_SIZE]
+        .try_into()
+        .unwrap();
+    cols.initial_pc_hash = perm.permute(padded_initial_pc)[..DIGEST_SIZE]
+        .try_into()
+        .unwrap();
+
+    let mut poseidon2_compress_inputs = Vec::with_capacity(5);
+    poseidon2_compress_inputs.extend_from_slice(&[
+        padded_program_commit,
+        padded_initial_root,
+        padded_initial_pc,
+    ]);
+
     cols.intermediate_exe_commit =
         poseidon2_compress(cols.program_commit_hash, cols.initial_root_hash);
+    poseidon2_compress_inputs.push(digests_to_poseidon2_input(
+        cols.program_commit_hash,
+        cols.initial_root_hash,
+    ));
 
     let mut public_values = vec![F::ZERO; RootVerifierPvs::<u8>::width()];
     let root_pvs: &mut RootVerifierPvs<F> = public_values.as_mut_slice().borrow_mut();
 
     root_pvs.app_exe_commit =
         poseidon2_compress(cols.intermediate_exe_commit, cols.initial_pc_hash);
+    poseidon2_compress_inputs.push(digests_to_poseidon2_input(
+        cols.intermediate_exe_commit,
+        cols.initial_pc_hash,
+    ));
+
     root_pvs.app_vk_commit = child_pvs.app_vk_commit;
     root_pvs.leaf_vk_commit = child_pvs.leaf_vk_commit;
     root_pvs.internal_for_leaf_vk_commit = child_pvs.internal_for_leaf_vk_commit;
 
-    AirProvingContextV2 {
-        cached_mains: vec![],
-        common_main: ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width)),
-        public_values,
-    }
+    (
+        AirProvingContextV2 {
+            cached_mains: vec![],
+            common_main: ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width)),
+            public_values,
+        },
+        poseidon2_compress_inputs,
+    )
 }

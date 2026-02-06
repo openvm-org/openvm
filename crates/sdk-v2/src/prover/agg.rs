@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use continuations_v2::aggregation::AggregationProver;
 use eyre::Result;
 use openvm_circuit::arch::ContinuationVmProof;
 use stark_backend_v2::{SC, keygen::types::MultiStarkVerifyingKeyV2};
@@ -17,11 +16,9 @@ use crate::{
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use continuations_v2::aggregation::NonRootGpuProver as NonRootAggregationProver;
-        use continuations_v2::aggregation::CompressionGpuProver as CompressionProver;
         type E = cuda_backend_v2::BabyBearPoseidon2GpuEngineV2;
     } else {
         use continuations_v2::aggregation::NonRootCpuProver as NonRootAggregationProver;
-        use continuations_v2::aggregation::CompressionCpuProver as CompressionProver;
         type E = stark_backend_v2::BabyBearPoseidon2CpuEngineV2;
     }
 }
@@ -30,8 +27,12 @@ pub struct AggProver {
     pub leaf_prover: NonRootAggregationProver<MAX_NUM_CHILDREN_LEAF>,
     pub internal_for_leaf_prover: NonRootAggregationProver<MAX_NUM_CHILDREN_INTERNAL>,
     pub internal_recursive_prover: NonRootAggregationProver<MAX_NUM_CHILDREN_INTERNAL>,
-    pub compression_prover: Option<CompressionProver>,
     pub agg_tree_config: AggregationTreeConfig,
+}
+
+pub struct InternalLayerMetadata {
+    pub internal_recursive_layer: u32,
+    pub internal_node_idx: u32,
 }
 
 impl AggProver {
@@ -54,18 +55,10 @@ impl AggProver {
             agg_config.params.internal.clone(),
             true,
         );
-        let compression_prover = agg_config.params.compression.map(|compression_params| {
-            CompressionProver::new::<E>(
-                internal_recursive_prover.get_vk(),
-                internal_recursive_prover.get_self_vk_pcs_data().unwrap(),
-                compression_params,
-            )
-        });
         Self {
             leaf_prover,
             internal_for_leaf_prover,
             internal_recursive_prover,
-            compression_prover,
             agg_tree_config,
         }
     }
@@ -86,23 +79,18 @@ impl AggProver {
             agg_pk.internal_recursive_pk,
             true,
         );
-        let compression_prover = agg_pk.compression_pk.map(|compression_params| {
-            CompressionProver::from_pk::<E>(
-                internal_recursive_prover.get_vk(),
-                internal_recursive_prover.get_self_vk_pcs_data().unwrap(),
-                compression_params,
-            )
-        });
         Self {
             leaf_prover,
             internal_for_leaf_prover,
             internal_recursive_prover,
-            compression_prover,
             agg_tree_config,
         }
     }
 
-    pub fn prove(&self, continuation_proof: ContinuationVmProof<SC>) -> Result<NonRootStarkProof> {
+    pub fn prove(
+        &self,
+        continuation_proof: ContinuationVmProof<SC>,
+    ) -> Result<(NonRootStarkProof, InternalLayerMetadata)> {
         // Verify app-layer proofs and generate leaf-layer proofs
         let leaf_proofs = info_span!("agg_layer", group = "leaf").in_scope(|| {
             continuation_proof
@@ -174,42 +162,35 @@ impl AggProver {
             internal_recursive_layer += 1;
         }
 
-        let inner = if let Some(compression_prover) = self.compression_prover.as_ref() {
-            // We add two additional internal_recursive layers before the compression layer to
-            // minimize the input size. The first internal_recursive layer will have a single
-            // child proof, and thus may have 2-3x fewer trace cells than the previous layer.
-            //
-            // The second will also only have a single child, and it may require 2-3x fewer
-            // hashes (and thus Poseidon2 trace rows) than the first.
-            const ADDITIONAL_INTERNAL_RECURSIVE_LAYERS: usize = 2;
+        Ok((
+            NonRootStarkProof {
+                inner: internal_proofs.pop().unwrap(),
+                user_pvs_proof: continuation_proof.user_public_values,
+            },
+            InternalLayerMetadata {
+                internal_recursive_layer: internal_recursive_layer as u32,
+                internal_node_idx: internal_node_idx as u32,
+            },
+        ))
+    }
 
-            let mut inner = internal_proofs[0].clone();
-            for _ in 0..ADDITIONAL_INTERNAL_RECURSIVE_LAYERS {
-                inner = info_span!(
-                    "agg_layer",
-                    group = format!("internal_recursive.{internal_recursive_layer}")
-                )
-                .in_scope(|| {
-                    info_span!("single_internal_agg", idx = internal_node_idx).in_scope(|| {
-                        internal_node_idx += 1;
-                        self.internal_recursive_prover
-                            .agg_prove::<E>(&[inner], None, true)
-                    })
-                })?;
-                internal_recursive_layer += 1;
-            }
-
-            info_span!("agg_layer", group = format!("compression")).in_scope(|| {
-                info_span!("compression")
-                    .in_scope(|| compression_prover.agg_prove::<E>(&[inner], None, false))
-            })?
-        } else {
-            internal_proofs[0].clone()
-        };
-
-        Ok(NonRootStarkProof {
-            inner,
-            user_pvs_proof: continuation_proof.user_public_values,
-        })
+    pub fn wrap_proof(
+        &self,
+        mut proof: NonRootStarkProof,
+        metadata: &mut InternalLayerMetadata,
+    ) -> Result<NonRootStarkProof> {
+        proof.inner = info_span!(
+            "agg_layer",
+            group = format!("internal_recursive.{}", metadata.internal_recursive_layer)
+        )
+        .in_scope(|| {
+            metadata.internal_recursive_layer += 1;
+            info_span!("single_internal_agg", idx = metadata.internal_node_idx).in_scope(|| {
+                metadata.internal_node_idx += 1;
+                self.internal_recursive_prover
+                    .agg_prove::<E>(&[proof.inner], None, true)
+            })
+        })?;
+        Ok(proof)
     }
 }

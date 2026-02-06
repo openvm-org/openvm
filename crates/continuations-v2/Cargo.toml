@@ -24,6 +24,7 @@ tracing.workspace = true
 eyre.workspace = true
 derive-new.workspace = true
 cfg-if.workspace = true
+num-bigint.workspace = true
 
 openvm-cuda-common = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
