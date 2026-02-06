@@ -14,10 +14,7 @@ use openvm_circuit_derive::VmConfig;
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
-use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    p3_field::PrimeField32,
-};
+use openvm_stark_backend::config::{StarkGenericConfig, Val};
 use serde::{Deserialize, Serialize};
 use stark_backend_v2::{
     prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
