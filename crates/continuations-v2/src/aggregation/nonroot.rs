@@ -6,7 +6,7 @@ use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use recursion_circuit::system::{AggregationSubCircuit, VerifierTraceGen};
 use stark_backend_v2::{
-    DIGEST_SIZE, F, SC, StarkWhirEngine, SystemParams,
+    SC, StarkWhirEngine, SystemParams,
     keygen::types::{MultiStarkProvingKeyV2, MultiStarkVerifyingKeyV2},
     poseidon2::sponge::DuplexSpongeRecorder,
     proof::Proof,
@@ -64,6 +64,14 @@ pub struct NonRootAggregationProver<
     self_vk_pcs_data: Option<CommittedTraceDataV2<PB>>,
 }
 
+/// Struct to determine if NonRootAggregationProver is proving a special case,
+/// i.e. if the child_vk is the app_vk or if it should use its own vk as child.
+pub enum ChildVkKind {
+    Standard,
+    App,
+    RecursiveSelf,
+}
+
 impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: NonRootTraceGen<PB>>
     NonRootAggregationProver<PB, S, T>
 where
@@ -73,31 +81,32 @@ where
     pub fn generate_proving_ctx(
         &self,
         proofs: &[Proof],
-        user_pv_commit: Option<[F; DIGEST_SIZE]>,
-        is_self_recursive: bool,
+        child_vk_kind: ChildVkKind,
     ) -> ProvingContextV2<PB> {
         assert!(proofs.len() <= self.circuit.verifier_circuit.max_num_proofs());
-        let (child_vk, child_vk_commit) = if is_self_recursive {
-            (&self.vk, self.self_vk_pcs_data.clone().unwrap())
-        } else {
-            (&self.child_vk, self.child_vk_pcs_data.clone())
+
+        let (child_vk, child_dag_commit) = match child_vk_kind {
+            ChildVkKind::RecursiveSelf => (&self.vk, self.self_vk_pcs_data.clone().unwrap()),
+            _ => (&self.child_vk, self.child_vk_pcs_data.clone()),
         };
+        let child_is_app = matches!(child_vk_kind, ChildVkKind::App);
+
         let verifier_pvs_ctx = self.agg_node_tracegen.generate_verifier_pvs_ctx(
             proofs,
-            user_pv_commit,
-            child_vk_commit.commitment.clone(),
+            child_is_app,
+            child_dag_commit.commitment.clone(),
         );
         let subcircuit_ctxs = self
             .circuit
             .verifier_circuit
             .generate_proving_ctxs_base::<DuplexSpongeRecorder>(
                 child_vk,
-                child_vk_commit.clone(),
+                child_dag_commit.clone(),
                 proofs,
             );
         let agg_other_ctxs = self
             .agg_node_tracegen
-            .generate_other_proving_ctxs(proofs, user_pv_commit);
+            .generate_other_proving_ctxs(proofs, child_is_app);
 
         ProvingContextV2 {
             per_trace: once(verifier_pvs_ctx)
@@ -112,10 +121,9 @@ where
     pub fn agg_prove<E: StarkWhirEngine<PB = PB>>(
         &self,
         proofs: &[Proof],
-        user_pv_commit: Option<[F; DIGEST_SIZE]>,
-        is_self_recursive: bool,
+        child_vk_kind: ChildVkKind,
     ) -> Result<Proof> {
-        let ctx = self.generate_proving_ctx(proofs, user_pv_commit, is_self_recursive);
+        let ctx = self.generate_proving_ctx(proofs, child_vk_kind);
         if tracing::enabled!(tracing::Level::DEBUG) {
             trace_heights_tracing_info(&ctx.per_trace, &self.circuit.airs());
         }

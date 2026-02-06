@@ -33,7 +33,7 @@ use crate::{
 #[derive(derive_new::new, Clone)]
 pub struct RootCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
-    internal_recursive_vk_commit: CommitBytes,
+    internal_recursive_dag_commit: CommitBytes,
     memory_dimensions: MemoryDimensions,
     num_user_pvs: usize,
 }
@@ -51,9 +51,11 @@ impl<S: AggregationSubCircuit> Circuit for RootCircuit<S> {
             public_values_bus: bus_inventory.public_values_bus,
             cached_commit_bus: bus_inventory.cached_commit_bus,
             poseidon2_compress_bus: bus_inventory.poseidon2_compress_bus,
-            user_pvs_commit_bus,
             memory_merkle_commit_bus,
-            expected_internal_recursive_vk_commit: self.internal_recursive_vk_commit.clone().into(),
+            expected_internal_recursive_dag_commit: self
+                .internal_recursive_dag_commit
+                .clone()
+                .into(),
         };
         let user_pvs_commit_air = UserPvsCommitAir::new(
             bus_inventory.poseidon2_compress_bus,
@@ -170,10 +172,10 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ro
     {
         let verifier_circuit = S::new(child_vk.clone(), true, true);
         let engine = E::new(system_params);
-        let internal_recursive_vk_commit = child_vk_pcs_data.commitment.clone().into();
+        let internal_recursive_dag_commit = child_vk_pcs_data.commitment.clone().into();
         let circuit = Arc::new(RootCircuit::new(
             Arc::new(verifier_circuit),
-            internal_recursive_vk_commit,
+            internal_recursive_dag_commit,
             memory_dimensions,
             num_user_pvs,
         ));
@@ -201,10 +203,10 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ro
         PB::Commitment: Into<CommitBytes>,
     {
         let verifier_circuit = S::new(child_vk.clone(), true, true);
-        let internal_recursive_vk_commit = child_vk_pcs_data.commitment.clone().into();
+        let internal_recursive_dag_commit = child_vk_pcs_data.commitment.clone().into();
         let circuit = Arc::new(RootCircuit::new(
             Arc::new(verifier_circuit),
-            internal_recursive_vk_commit,
+            internal_recursive_dag_commit,
             memory_dimensions,
             num_user_pvs,
         ));

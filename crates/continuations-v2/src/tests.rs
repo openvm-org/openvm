@@ -27,6 +27,8 @@ use stark_backend_v2::{
 use test_case::test_case;
 use tracing::Level;
 
+use crate::aggregation::ChildVkKind;
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use crate::aggregation::NonRootGpuProver as NonRootProver;
@@ -133,11 +135,7 @@ fn run_leaf_aggregation(
         leaf_system_params(),
         false,
     );
-    let leaf_proof = leaf_prover.agg_prove::<Engine>(
-        &app_proof.per_segment,
-        Some(app_proof.user_public_values.public_values_commit),
-        false,
-    )?;
+    let leaf_proof = leaf_prover.agg_prove::<Engine>(&app_proof.per_segment, ChildVkKind::App)?;
 
     let leaf_vk = leaf_prover.get_vk();
     let engine = Engine::new(leaf_vk.inner.params.clone());
@@ -165,22 +163,19 @@ fn run_full_aggregation(
         false,
     );
     let internal_for_leaf_proof =
-        internal_for_leaf_prover.agg_prove::<Engine>(&[leaf_proof], None, false)?;
+        internal_for_leaf_prover.agg_prove::<Engine>(&[leaf_proof], ChildVkKind::Standard)?;
 
     let internal_recursive_prover = NonRootProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         internal_for_leaf_prover.get_vk(),
         internal_system_params(),
         true,
     );
-    let mut internal_recursive_proof =
-        internal_recursive_prover.agg_prove::<Engine>(&[internal_for_leaf_proof], None, false)?;
+    let mut internal_recursive_proof = internal_recursive_prover
+        .agg_prove::<Engine>(&[internal_for_leaf_proof], ChildVkKind::Standard)?;
 
     for _internal_recursive_layer in 0..extra_recursive_layers {
-        internal_recursive_proof = internal_recursive_prover.agg_prove::<Engine>(
-            &[internal_recursive_proof],
-            None,
-            true,
-        )?;
+        internal_recursive_proof = internal_recursive_prover
+            .agg_prove::<Engine>(&[internal_recursive_proof], ChildVkKind::RecursiveSelf)?;
     }
 
     Ok((
@@ -277,8 +272,8 @@ fn test_compression_prover() -> Result<()> {
 }
 
 #[cfg(feature = "cuda")]
-#[test_case(0 ; "internal_recursive_vk_commit not set")]
-#[test_case(1 ; "internal_recursive_vk_commit set")]
+#[test_case(0 ; "internal_recursive_dag_commit not set")]
+#[test_case(1 ; "internal_recursive_dag_commit set")]
 fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
     setup_tracing_with_log_level(Level::INFO);
     let (
