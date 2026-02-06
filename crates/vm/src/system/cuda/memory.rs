@@ -262,7 +262,9 @@ impl MemoryInventoryGPU {
                             .skip(ADDR_SPACE_OFFSET as usize)
                         {
                             offsets.push(acc);
-                            acc = acc.checked_add(addr_sp.layout.size() as u32);
+                            acc = acc
+                                .checked_add(addr_sp.layout.size() as u32)
+                                .expect("address space offset overflow");
                         }
                         offsets.push(acc);
                         offsets
@@ -381,7 +383,7 @@ mod tests {
     use openvm_circuit::{
         arch::{testing::POSEIDON2_DIRECT_BUS, vm_poseidon2_config, MemoryConfig},
         system::{
-            memory::{merkle::MerkleTree, online::GuestMemory, AddressMap},
+            memory::{merkle::MerkleTree, online::GuestMemory, AddressMap, TimestampedValues},
             poseidon2::Poseidon2PeripheryChip,
         },
     };
@@ -389,7 +391,10 @@ mod tests {
         VariableRangeCheckerChip, VariableRangeCheckerChipGPU,
     };
     use openvm_cuda_backend::prelude::F;
-    use openvm_instructions::riscv::RV32_REGISTER_AS;
+    use openvm_instructions::{
+        riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+        NATIVE_AS,
+    };
 
     use super::*;
     use crate::arch::testing::default_var_range_checker_bus;
@@ -397,12 +402,37 @@ mod tests {
     #[test]
     fn test_empty_touched_memory_uses_full_chunk_values() {
         let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
-        addr_spaces[RV32_REGISTER_AS as usize].num_cells = DIGEST_WIDTH;
+        for addr_space in [RV32_REGISTER_AS, RV32_MEMORY_AS, NATIVE_AS] {
+            addr_spaces[addr_space as usize].num_cells = 2 * DIGEST_WIDTH;
+        }
         let mem_config = MemoryConfig::new(2, addr_spaces, 4, 29, 17, 32);
 
         let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
         unsafe {
             memory.write::<u8, DIGEST_WIDTH>(RV32_REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
+            memory.write::<u8, { DIGEST_WIDTH / 2 }>(RV32_MEMORY_AS, 0, [9, 10, 11, 12]);
+            memory.write::<F, { DIGEST_WIDTH * 2 }>(
+                NATIVE_AS,
+                0,
+                [
+                    F::from_canonical_u32(21),
+                    F::from_canonical_u32(22),
+                    F::from_canonical_u32(23),
+                    F::from_canonical_u32(24),
+                    F::from_canonical_u32(25),
+                    F::from_canonical_u32(26),
+                    F::from_canonical_u32(27),
+                    F::from_canonical_u32(28),
+                    F::from_canonical_u32(21),
+                    F::from_canonical_u32(22),
+                    F::from_canonical_u32(23),
+                    F::from_canonical_u32(24),
+                    F::from_canonical_u32(25),
+                    F::from_canonical_u32(26),
+                    F::from_canonical_u32(27),
+                    F::from_canonical_u32(28),
+                ],
+            );
         }
 
         let cpu_hasher =
@@ -435,8 +465,155 @@ mod tests {
             DenseRecordArena::with_byte_capacity(0),
             TouchedMemory::Persistent(Vec::new()),
         );
+        let boundary_ctx = ctxs.first().expect("missing boundary ctx");
+        assert!(
+            boundary_ctx.common_main.is_none(),
+            "boundary trace should be empty for empty touched memory"
+        );
+        assert!(
+            boundary_ctx.public_values.is_empty(),
+            "boundary chip should not emit public values"
+        );
+
         let merkle_ctx = ctxs
-            .into_iter()
+            .iter()
+            .find(|ctx| ctx.public_values.len() >= 2 * DIGEST_WIDTH)
+            .expect("missing merkle ctx");
+        let gpu_root_slice =
+            &merkle_ctx.public_values[merkle_ctx.public_values.len() - DIGEST_WIDTH..];
+        let gpu_root: [F; DIGEST_WIDTH] = gpu_root_slice.try_into().unwrap();
+
+        assert_eq!(expected_root, gpu_root);
+    }
+
+    #[test]
+    fn test_touched_memory_updates_memory_address_space() {
+        let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
+        for addr_space in [RV32_REGISTER_AS, RV32_MEMORY_AS, NATIVE_AS] {
+            addr_spaces[addr_space as usize].num_cells = 2 * DIGEST_WIDTH;
+        }
+        let mem_config = MemoryConfig::new(2, addr_spaces, 4, 29, 17, 32);
+
+        let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
+        unsafe {
+            memory.write::<u8, DIGEST_WIDTH>(RV32_REGISTER_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
+            memory.write::<u8, { DIGEST_WIDTH / 2 }>(RV32_MEMORY_AS, 0, [9, 10, 11, 12]);
+            memory.write::<F, { DIGEST_WIDTH * 2 }>(
+                NATIVE_AS,
+                0,
+                [
+                    F::from_canonical_u32(21),
+                    F::from_canonical_u32(22),
+                    F::from_canonical_u32(23),
+                    F::from_canonical_u32(24),
+                    F::from_canonical_u32(25),
+                    F::from_canonical_u32(26),
+                    F::from_canonical_u32(27),
+                    F::from_canonical_u32(28),
+                    F::from_canonical_u32(21),
+                    F::from_canonical_u32(22),
+                    F::from_canonical_u32(23),
+                    F::from_canonical_u32(24),
+                    F::from_canonical_u32(25),
+                    F::from_canonical_u32(26),
+                    F::from_canonical_u32(27),
+                    F::from_canonical_u32(28),
+                ],
+            );
+        }
+
+        let mut final_memory = memory.clone();
+        let touched_bytes = [101u8, 102, 103, 104];
+        let touched_bytes_late = [111u8, 112, 113, 114];
+        let touched_native_values = [
+            F::from_canonical_u32(201),
+            F::from_canonical_u32(202),
+            F::from_canonical_u32(203),
+            F::from_canonical_u32(204),
+        ];
+        unsafe {
+            final_memory.write::<u8, { crate::arch::CONST_BLOCK_SIZE }>(
+                RV32_MEMORY_AS,
+                0,
+                touched_bytes,
+            );
+            final_memory.write::<u8, { crate::arch::CONST_BLOCK_SIZE }>(
+                RV32_MEMORY_AS,
+                crate::arch::CONST_BLOCK_SIZE as u32,
+                touched_bytes_late,
+            );
+            final_memory.write::<F, { crate::arch::CONST_BLOCK_SIZE }>(
+                NATIVE_AS,
+                DIGEST_WIDTH as u32,
+                touched_native_values,
+            );
+        }
+
+        let cpu_hasher =
+            Poseidon2PeripheryChip::new(vm_poseidon2_config(), POSEIDON2_DIRECT_BUS, 3);
+        let cpu_merkle_tree = MerkleTree::<F, DIGEST_WIDTH>::from_memory(
+            &final_memory.memory,
+            &mem_config.memory_dimensions(),
+            &cpu_hasher,
+        );
+        let expected_root = cpu_merkle_tree.root();
+
+        let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(Arc::new(
+            VariableRangeCheckerChip::new(default_var_range_checker_bus()),
+        )));
+        let max_buffer_size = (mem_config
+            .addr_spaces
+            .iter()
+            .map(|ashc| ashc.num_cells * 2 + mem_config.memory_dimensions().overall_height())
+            .sum::<usize>()
+            * 2)
+        .next_power_of_two()
+            * 2
+            * DIGEST_WIDTH;
+        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(max_buffer_size, 1));
+        let mut inventory =
+            MemoryInventoryGPU::persistent(mem_config.clone(), range_checker, hasher_chip);
+        inventory.set_initial_memory(&memory.memory);
+
+        let touched_memory = vec![
+            (
+                (RV32_MEMORY_AS, 0),
+                TimestampedValues {
+                    timestamp: 1,
+                    values: touched_bytes.map(F::from_canonical_u8),
+                },
+            ),
+            (
+                (RV32_MEMORY_AS, crate::arch::CONST_BLOCK_SIZE as u32),
+                TimestampedValues {
+                    timestamp: 3,
+                    values: touched_bytes_late.map(F::from_canonical_u8),
+                },
+            ),
+            (
+                (NATIVE_AS, DIGEST_WIDTH as u32),
+                TimestampedValues {
+                    timestamp: 2,
+                    values: touched_native_values,
+                },
+            ),
+        ];
+        let ctxs = inventory.generate_proving_ctxs(
+            DenseRecordArena::with_byte_capacity(0),
+            TouchedMemory::Persistent(touched_memory),
+        );
+        let boundary_ctx = ctxs.first().expect("missing boundary ctx");
+        assert!(
+            boundary_ctx.common_main.is_some(),
+            "boundary trace should be present when touched memory is non-empty"
+        );
+        assert!(
+            boundary_ctx.public_values.is_empty(),
+            "boundary chip should not emit public values"
+        );
+
+        let merkle_ctx = ctxs
+            .iter()
             .find(|ctx| ctx.public_values.len() >= 2 * DIGEST_WIDTH)
             .expect("missing merkle ctx");
         let gpu_root_slice =
