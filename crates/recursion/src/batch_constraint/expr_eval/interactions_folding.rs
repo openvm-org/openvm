@@ -31,6 +31,7 @@ use crate::{
     bus::{AirShapeBus, AirShapeBusMessage, AirShapeProperty, TranscriptBus},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
+    tracegen::RowMajorChip,
     utils::{
         MultiProofVecVec, MultiVecWithBounds, assert_zeros, ext_field_add, ext_field_multiply,
     },
@@ -356,7 +357,7 @@ pub(in crate::batch_constraint) struct InteractionsFoldingRecord {
     is_bus_index: bool,
 }
 
-pub(in crate::batch_constraint) struct InteractionsFoldingBlob {
+pub(crate) struct InteractionsFoldingBlob {
     pub(in crate::batch_constraint) records: MultiProofVecVec<InteractionsFoldingRecord>,
     // (n, value), n is before lift, can be negative
     pub(in crate::batch_constraint) folded_claims: MultiProofVecVec<(isize, EF)>,
@@ -488,166 +489,188 @@ impl InteractionsFoldingBlob {
     }
 }
 
-#[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
-pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
-    vk: &MultiStarkVerifyingKeyV2,
-    blob: &BatchConstraintBlobCpu,
-    preflights: &[&Preflight],
-) -> RowMajorMatrix<F> {
-    let eq_3b_blob = &blob.common_blob.eq_3b_blob;
-    let if_blob = blob.if_blob.as_ref().unwrap();
+pub struct InteractionsFoldingTraceGenerator;
 
-    let width = InteractionsFoldingCols::<F>::width();
+impl RowMajorChip<F> for InteractionsFoldingTraceGenerator {
+    type Ctx<'a> = (
+        &'a MultiStarkVerifyingKeyV2,
+        &'a BatchConstraintBlobCpu,
+        &'a [&'a Preflight],
+    );
 
-    let total_height = if_blob.records.len();
-    let padding_height = total_height.next_power_of_two();
-    let mut trace = vec![F::ZERO; padding_height * width];
+    #[tracing::instrument(level = "trace", skip_all)]
+    fn generate_trace(
+        &self,
+        ctx: &Self::Ctx<'_>,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
+        let (vk, blob, preflights) = ctx;
+        let eq_3b_blob = &blob.common_blob.eq_3b_blob;
+        let if_blob = blob.if_blob.as_ref().unwrap();
 
-    let mut cur_height = 0;
-    for (pidx, preflight) in preflights.iter().enumerate() {
-        let beta_tidx = preflight.proof_shape.post_tidx + 2 + D_EF;
-        let beta_slice = &preflight.transcript.values()[beta_tidx..beta_tidx + D_EF];
-        let records = &if_blob.records[pidx];
-        let eq_3bs = &eq_3b_blob.all_stacked_ids[pidx];
+        let width = InteractionsFoldingCols::<F>::width();
 
-        let mut is_first_in_message_indices = vec![];
-        let mut cur_eq3b_idx = -1i32;
-        let mut was_first_interaction_in_message = false;
-        trace[cur_height * width..(cur_height + records.len()) * width]
-            .chunks_exact_mut(width)
-            .enumerate()
-            .for_each(|(i, chunk)| {
-                let cols: &mut InteractionsFoldingCols<_> = chunk.borrow_mut();
-                let record = &records[i];
-                let air_idx = preflight.proof_shape.sorted_trace_vdata[record.sort_idx].0;
-                cols.is_valid = F::ONE;
-                cols.proof_idx = F::from_usize(pidx);
-                cols.beta_tidx = F::from_usize(beta_tidx);
-                cols.air_idx = F::from_usize(record.air_idx);
-                cols.sort_idx = F::from_usize(record.sort_idx);
-                cols.interaction_idx = F::from_usize(record.interaction_idx);
-                cols.node_idx = F::from_usize(record.node_idx);
-                cols.has_interactions = F::from_bool(record.has_interactions);
-                cols.is_first_in_air = F::from_bool(record.is_first_in_air);
-                cols.is_first_in_message = F::from_bool(record.is_mult || !record.has_interactions);
-                cols.is_second_in_message = F::from_bool(was_first_interaction_in_message);
-                was_first_interaction_in_message = record.is_mult;
-                cols.is_bus_index = F::from_bool(record.is_bus_index);
-                cols.idx_in_message = F::from_usize(record.idx_in_message);
-                cols.loop_aux.is_transition[0] = F::ONE;
-                cols.loop_aux.is_transition[1] = F::from_bool(!record.is_last_in_air);
-                if !record.is_bus_index {
-                    cols.value.copy_from_slice(
-                        blob.common_blob.expr_evals[[pidx, air_idx]][record.node_idx]
-                            .as_basis_coefficients_slice(),
-                    );
-                } else {
-                    cols.value[0] = cols.node_idx;
-                }
-                cols.beta.copy_from_slice(beta_slice);
+        let total_height = if_blob.records.len();
+        let padding_height = if let Some(height) = required_height {
+            if height < total_height {
+                return None;
+            }
+            height
+        } else {
+            total_height.next_power_of_two()
+        };
+        let mut trace = vec![F::ZERO; padding_height * width];
 
-                if !record.has_interactions || record.is_mult {
-                    cur_eq3b_idx += 1;
-                }
-                if record.has_interactions {
-                    cols.eq_3b.copy_from_slice(
-                        eq_3bs[cur_eq3b_idx as usize]
-                            .eq_mle(
-                                &preflight.batch_constraint.xi,
-                                vk.inner.params.l_skip,
-                                preflight.proof_shape.n_logup,
-                            )
-                            .as_basis_coefficients_slice(),
-                    );
-                }
+        let mut cur_height = 0;
+        for (pidx, preflight) in preflights.iter().enumerate() {
+            let beta_tidx = preflight.proof_shape.post_tidx + 2 + D_EF;
+            let beta_slice = &preflight.transcript.values()[beta_tidx..beta_tidx + D_EF];
+            let records = &if_blob.records[pidx];
+            let eq_3bs = &eq_3b_blob.all_stacked_ids[pidx];
 
-                if cols.is_first_in_message == F::ONE && record.has_interactions {
-                    is_first_in_message_indices.push(i);
-                }
-            });
+            let mut is_first_in_message_indices = vec![];
+            let mut cur_eq3b_idx = -1i32;
+            let mut was_first_interaction_in_message = false;
+            trace[cur_height * width..(cur_height + records.len()) * width]
+                .chunks_exact_mut(width)
+                .enumerate()
+                .for_each(|(i, chunk)| {
+                    let cols: &mut InteractionsFoldingCols<_> = chunk.borrow_mut();
+                    let record = &records[i];
+                    let air_idx = preflight.proof_shape.sorted_trace_vdata[record.sort_idx].0;
+                    cols.is_valid = F::ONE;
+                    cols.proof_idx = F::from_usize(pidx);
+                    cols.beta_tidx = F::from_usize(beta_tidx);
+                    cols.air_idx = F::from_usize(record.air_idx);
+                    cols.sort_idx = F::from_usize(record.sort_idx);
+                    cols.interaction_idx = F::from_usize(record.interaction_idx);
+                    cols.node_idx = F::from_usize(record.node_idx);
+                    cols.has_interactions = F::from_bool(record.has_interactions);
+                    cols.is_first_in_air = F::from_bool(record.is_first_in_air);
+                    cols.is_first_in_message =
+                        F::from_bool(record.is_mult || !record.has_interactions);
+                    cols.is_second_in_message = F::from_bool(was_first_interaction_in_message);
+                    was_first_interaction_in_message = record.is_mult;
+                    cols.is_bus_index = F::from_bool(record.is_bus_index);
+                    cols.idx_in_message = F::from_usize(record.idx_in_message);
+                    cols.loop_aux.is_transition[0] = F::ONE;
+                    cols.loop_aux.is_transition[1] = F::from_bool(!record.is_last_in_air);
+                    if !record.is_bus_index {
+                        cols.value.copy_from_slice(
+                            blob.common_blob.expr_evals[[pidx, air_idx]][record.node_idx]
+                                .as_basis_coefficients_slice(),
+                        );
+                    } else {
+                        cols.value[0] = cols.node_idx;
+                    }
+                    cols.beta.copy_from_slice(beta_slice);
 
-        // Setting `cur_sum` and final acc
-        let mut cur_sum = EF::ZERO;
-        let beta = EF::from_basis_coefficients_slice(beta_slice).unwrap();
-        let mut cur_acc_num = EF::ZERO;
-        let mut cur_acc_denom = EF::ZERO;
-        trace[cur_height * width..(cur_height + records.len()) * width]
-            .chunks_exact_mut(width)
-            .enumerate()
-            .rev()
-            .for_each(|(i, chunk)| {
-                let cols: &mut InteractionsFoldingCols<_> = chunk.borrow_mut();
-                // Handling cur_sum
-                if cols.is_first_in_message == F::ONE {
-                    cols.cur_sum.copy_from_slice(&cols.value);
-                    cur_sum = EF::ZERO;
-                } else {
-                    cur_sum =
-                        cur_sum * beta + EF::from_basis_coefficients_slice(&cols.value).unwrap();
-                    cols.cur_sum
-                        .copy_from_slice(cur_sum.as_basis_coefficients_slice());
-                }
+                    if !record.has_interactions || record.is_mult {
+                        cur_eq3b_idx += 1;
+                    }
+                    if record.has_interactions {
+                        cols.eq_3b.copy_from_slice(
+                            eq_3bs[cur_eq3b_idx as usize]
+                                .eq_mle(
+                                    &preflight.batch_constraint.xi,
+                                    vk.inner.params.l_skip,
+                                    preflight.proof_shape.n_logup,
+                                )
+                                .as_basis_coefficients_slice(),
+                        );
+                    }
 
-                // Adding to the final acc
-                if cols.is_first_in_message == F::ONE {
-                    // Case 1: first in message, only accumulate the num
-                    cur_acc_num += EF::from_basis_coefficients_slice(&cols.cur_sum).unwrap()
-                        * EF::from_basis_coefficients_slice(&cols.eq_3b).unwrap();
-                    if cols.has_interactions == F::ZERO {
-                        // AIR with no interactions doesn't have "second in message"
+                    if cols.is_first_in_message == F::ONE && record.has_interactions {
+                        is_first_in_message_indices.push(i);
+                    }
+                });
+
+            // Setting `cur_sum` and final acc
+            let mut cur_sum = EF::ZERO;
+            let beta = EF::from_basis_coefficients_slice(beta_slice).unwrap();
+            let mut cur_acc_num = EF::ZERO;
+            let mut cur_acc_denom = EF::ZERO;
+            trace[cur_height * width..(cur_height + records.len()) * width]
+                .chunks_exact_mut(width)
+                .enumerate()
+                .rev()
+                .for_each(|(i, chunk)| {
+                    let cols: &mut InteractionsFoldingCols<_> = chunk.borrow_mut();
+                    // Handling cur_sum
+                    if cols.is_first_in_message == F::ONE {
+                        cols.cur_sum.copy_from_slice(&cols.value);
+                        cur_sum = EF::ZERO;
+                    } else {
+                        cur_sum = cur_sum * beta
+                            + EF::from_basis_coefficients_slice(&cols.value).unwrap();
+                        cols.cur_sum
+                            .copy_from_slice(cur_sum.as_basis_coefficients_slice());
+                    }
+
+                    // Adding to the final acc
+                    if cols.is_first_in_message == F::ONE {
+                        // Case 1: first in message, only accumulate the num
+                        cur_acc_num += EF::from_basis_coefficients_slice(&cols.cur_sum).unwrap()
+                            * EF::from_basis_coefficients_slice(&cols.eq_3b).unwrap();
+                        if cols.has_interactions == F::ZERO {
+                            // AIR with no interactions doesn't have "second in message"
+                            cur_acc_denom += EF::from_basis_coefficients_slice(&cols.cur_sum)
+                                .unwrap()
+                                * EF::from_basis_coefficients_slice(&cols.eq_3b).unwrap();
+                        }
+                    } else if is_first_in_message_indices.contains(&(i - 1)) {
+                        // Case 2: second in message, accumulate the denom
                         cur_acc_denom += EF::from_basis_coefficients_slice(&cols.cur_sum).unwrap()
                             * EF::from_basis_coefficients_slice(&cols.eq_3b).unwrap();
                     }
-                } else if is_first_in_message_indices.contains(&(i - 1)) {
-                    // Case 2: second in message, accumulate the denom
-                    cur_acc_denom += EF::from_basis_coefficients_slice(&cols.cur_sum).unwrap()
-                        * EF::from_basis_coefficients_slice(&cols.eq_3b).unwrap();
-                }
-                cols.final_acc_num
-                    .copy_from_slice(cur_acc_num.as_basis_coefficients_slice());
-                cols.final_acc_denom
-                    .copy_from_slice(cur_acc_denom.as_basis_coefficients_slice());
+                    cols.final_acc_num
+                        .copy_from_slice(cur_acc_num.as_basis_coefficients_slice());
+                    cols.final_acc_denom
+                        .copy_from_slice(cur_acc_denom.as_basis_coefficients_slice());
 
-                // Reset per AIR
-                if cols.is_first_in_air == F::ONE {
-                    cur_acc_num = EF::ZERO;
-                    cur_acc_denom = EF::ZERO;
-                }
+                    // Reset per AIR
+                    if cols.is_first_in_air == F::ONE {
+                        cur_acc_num = EF::ZERO;
+                        cur_acc_denom = EF::ZERO;
+                    }
+                });
+
+            // Setting is_first and is_last for this proof
+            {
+                let cols: &mut InteractionsFoldingCols<_> =
+                    trace[cur_height * width..(cur_height + 1) * width].borrow_mut();
+                cols.is_first = F::ONE;
+            }
+            cur_height += records.len();
+            {
+                let cols: &mut InteractionsFoldingCols<_> =
+                    trace[(cur_height - 1) * width..cur_height * width].borrow_mut();
+                cols.is_last = F::ONE;
+                cols.loop_aux.is_transition[0] = F::ZERO;
+            }
+        }
+        trace[total_height * width..]
+            .par_chunks_mut(width)
+            .enumerate()
+            .for_each(|(i, chunk)| {
+                let cols: &mut InteractionsFoldingCols<F> = chunk.borrow_mut();
+                cols.proof_idx = F::from_usize(preflights.len() + i);
+                cols.is_first = F::ONE;
+                cols.is_last = F::ONE;
+                cols.is_first_in_air = F::ONE;
+                cols.is_first_in_message = F::ONE;
             });
 
-        // Setting is_first and is_last for this proof
-        {
-            let cols: &mut InteractionsFoldingCols<_> =
-                trace[cur_height * width..(cur_height + 1) * width].borrow_mut();
-            cols.is_first = F::ONE;
-        }
-        cur_height += records.len();
-        {
-            let cols: &mut InteractionsFoldingCols<_> =
-                trace[(cur_height - 1) * width..cur_height * width].borrow_mut();
-            cols.is_last = F::ONE;
-            cols.loop_aux.is_transition[0] = F::ZERO;
-        }
+        Some(RowMajorMatrix::new(trace, width))
     }
-    trace[total_height * width..]
-        .par_chunks_mut(width)
-        .enumerate()
-        .for_each(|(i, chunk)| {
-            let cols: &mut InteractionsFoldingCols<F> = chunk.borrow_mut();
-            cols.proof_idx = F::from_usize(preflights.len() + i);
-            cols.is_first = F::ONE;
-            cols.is_last = F::ONE;
-            cols.is_first_in_air = F::ONE;
-            cols.is_first_in_message = F::ONE;
-        });
-
-    RowMajorMatrix::new(trace, width)
 }
 
 #[cfg(feature = "cuda")]
 pub(in crate::batch_constraint) mod cuda {
+    use cuda_backend_v2::GpuBackendV2;
     use openvm_cuda_backend::{base::DeviceMatrix, chip::UInt2};
     use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
+    use stark_backend_v2::prover::AirProvingContextV2;
 
     use super::*;
     use crate::{
@@ -656,6 +679,7 @@ pub(in crate::batch_constraint) mod cuda {
             interactions_folding_tracegen_temp_bytes,
         },
         cuda::{preflight::PreflightGpu, vk::VerifyingKeyGpu},
+        tracegen::ModuleChip,
     };
 
     pub struct InteractionsFoldingBlobGpu {
@@ -797,133 +821,150 @@ pub(in crate::batch_constraint) mod cuda {
         }
     }
 
-    #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
-    pub fn generate_interactions_folding_trace(
-        child_vk: &VerifyingKeyGpu,
-        preflights_gpu: &[PreflightGpu],
-        blob: &InteractionsFoldingBlobGpu,
-    ) -> DeviceMatrix<F> {
-        let num_airs = preflights_gpu
-            .iter()
-            .map(|preflight| preflight.cpu.proof_shape.sorted_trace_vdata.len() as u32)
-            .collect_vec();
-        let n_logups = preflights_gpu
-            .iter()
-            .map(|p| p.proof_shape.n_logup as u32)
-            .collect_vec();
-        let mut num_valid_rows = 0u32;
+    impl ModuleChip<GpuBackendV2> for InteractionsFoldingTraceGenerator {
+        type Ctx<'a> = (
+            &'a VerifyingKeyGpu,
+            &'a [PreflightGpu],
+            &'a InteractionsFoldingBlobGpu,
+        );
 
-        let mut row_bounds = Vec::with_capacity(preflights_gpu.len());
-        let mut air_interaction_bounds = Vec::with_capacity(preflights_gpu.len());
-        let mut interaction_row_bounds = Vec::with_capacity(preflights_gpu.len());
+        #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
+        fn generate_proving_ctx(
+            &self,
+            ctx: &Self::Ctx<'_>,
+            required_height: Option<usize>,
+        ) -> Option<AirProvingContextV2<GpuBackendV2>> {
+            let (child_vk, preflights_gpu, blob) = ctx;
 
-        let expected_num_valid_rows = blob.node_idxs.len();
-        let mut idx_keys = Vec::with_capacity(expected_num_valid_rows);
-        let mut flat_values = Vec::with_capacity(expected_num_valid_rows);
+            let num_airs = preflights_gpu
+                .iter()
+                .map(|preflight| preflight.cpu.proof_shape.sorted_trace_vdata.len() as u32)
+                .collect_vec();
+            let n_logups = preflights_gpu
+                .iter()
+                .map(|p| p.proof_shape.n_logup as u32)
+                .collect_vec();
+            let mut num_valid_rows = 0u32;
 
-        for (proof_idx, proof_values) in blob.values.iter().enumerate() {
-            let mut proof_num_rows = 0;
-            let mut proof_num_interactions = 0;
-            let mut proof_air_interaction_bounds = Vec::with_capacity(num_airs[proof_idx] as usize);
-            let mut proof_interaction_row_bounds = vec![];
+            let mut row_bounds = Vec::with_capacity(preflights_gpu.len());
+            let mut air_interaction_bounds = Vec::with_capacity(preflights_gpu.len());
+            let mut interaction_row_bounds = Vec::with_capacity(preflights_gpu.len());
 
-            for air_values in proof_values {
-                for interaction_values in air_values {
-                    let global_interaction_idx = proof_num_interactions;
-                    proof_num_interactions += 1;
-                    for v in interaction_values {
-                        flat_values.push(*v);
-                        idx_keys.push(UInt2 {
-                            x: proof_idx as u32,
-                            y: global_interaction_idx,
-                        });
+            let expected_num_valid_rows = blob.node_idxs.len();
+            let mut idx_keys = Vec::with_capacity(expected_num_valid_rows);
+            let mut flat_values = Vec::with_capacity(expected_num_valid_rows);
+
+            for (proof_idx, proof_values) in blob.values.iter().enumerate() {
+                let mut proof_num_rows = 0;
+                let mut proof_num_interactions = 0;
+                let mut proof_air_interaction_bounds =
+                    Vec::with_capacity(num_airs[proof_idx] as usize);
+                let mut proof_interaction_row_bounds = vec![];
+
+                for air_values in proof_values {
+                    for interaction_values in air_values {
+                        let global_interaction_idx = proof_num_interactions;
+                        proof_num_interactions += 1;
+                        for v in interaction_values {
+                            flat_values.push(*v);
+                            idx_keys.push(UInt2 {
+                                x: proof_idx as u32,
+                                y: global_interaction_idx,
+                            });
+                        }
+                        proof_num_rows += interaction_values.len() as u32;
+                        proof_interaction_row_bounds.push(proof_num_rows);
                     }
-                    proof_num_rows += interaction_values.len() as u32;
-                    proof_interaction_row_bounds.push(proof_num_rows);
+                    proof_air_interaction_bounds.push(proof_num_interactions);
                 }
-                proof_air_interaction_bounds.push(proof_num_interactions);
+
+                num_valid_rows += proof_num_rows;
+                row_bounds.push(num_valid_rows);
+                air_interaction_bounds.push(proof_air_interaction_bounds.to_device().unwrap());
+                interaction_row_bounds.push(proof_interaction_row_bounds.to_device().unwrap());
             }
 
-            num_valid_rows += proof_num_rows;
-            row_bounds.push(num_valid_rows);
-            air_interaction_bounds.push(proof_air_interaction_bounds.to_device().unwrap());
-            interaction_row_bounds.push(proof_interaction_row_bounds.to_device().unwrap());
+            assert_eq!(num_valid_rows as usize, expected_num_valid_rows);
+
+            let records = blob
+                .interaction_records
+                .iter()
+                .map(|records| records.to_device().unwrap())
+                .collect_vec();
+            let xis = preflights_gpu
+                .iter()
+                .map(|preflight| preflight.cpu.batch_constraint.xi.to_device().unwrap())
+                .collect_vec();
+
+            let height = if let Some(height) = required_height {
+                if height < num_valid_rows as usize {
+                    return None;
+                }
+                height
+            } else {
+                (num_valid_rows as usize).next_power_of_two()
+            };
+            let width = InteractionsFoldingCols::<F>::width();
+            let d_trace = DeviceMatrix::<F>::with_capacity(height, width);
+
+            let d_idx_keys = idx_keys.to_device().unwrap();
+            let d_values = flat_values.to_device().unwrap();
+            let d_node_idxs = blob.node_idxs.to_device().unwrap();
+            let d_cur_sum_evals = DeviceBuffer::<AffineFpExt>::with_capacity(d_values.len());
+
+            let d_air_interaction_bounds = air_interaction_bounds
+                .iter()
+                .map(|b| b.as_ptr())
+                .collect_vec();
+            let d_interaction_row_bounds = interaction_row_bounds
+                .iter()
+                .map(|b| b.as_ptr())
+                .collect_vec();
+            let d_sorted_trace_vdata = preflights_gpu
+                .iter()
+                .map(|preflight| preflight.proof_shape.sorted_trace_heights.as_ptr())
+                .collect_vec();
+            let d_records = records.iter().map(|b| b.as_ptr()).collect_vec();
+            let d_xis = xis.iter().map(|b| b.as_ptr()).collect_vec();
+
+            let d_per_proof = blob.interactions_folding_per_proof.to_device().unwrap();
+
+            unsafe {
+                let temp_bytes = interactions_folding_tracegen_temp_bytes(
+                    d_trace.buffer(),
+                    height,
+                    &d_idx_keys,
+                    &d_cur_sum_evals,
+                    num_valid_rows as u32,
+                )
+                .unwrap();
+                let d_temp_buffer = DeviceBuffer::<u8>::with_capacity(temp_bytes);
+                interactions_folding_tracegen(
+                    d_trace.buffer(),
+                    height,
+                    width,
+                    &d_idx_keys,
+                    &d_cur_sum_evals,
+                    &d_values,
+                    &d_node_idxs,
+                    &row_bounds,
+                    d_air_interaction_bounds,
+                    d_interaction_row_bounds,
+                    d_sorted_trace_vdata,
+                    d_records,
+                    d_xis,
+                    &d_per_proof,
+                    &num_airs,
+                    &n_logups,
+                    preflights_gpu.len() as u32,
+                    num_valid_rows as u32,
+                    child_vk.system_params.l_skip as u32,
+                    &d_temp_buffer,
+                    temp_bytes,
+                )
+                .unwrap();
+            }
+            Some(AirProvingContextV2::simple_no_pis(d_trace))
         }
-
-        assert_eq!(num_valid_rows as usize, expected_num_valid_rows);
-
-        let records = blob
-            .interaction_records
-            .iter()
-            .map(|records| records.to_device().unwrap())
-            .collect_vec();
-        let xis = preflights_gpu
-            .iter()
-            .map(|preflight| preflight.cpu.batch_constraint.xi.to_device().unwrap())
-            .collect_vec();
-
-        let height = (num_valid_rows as usize).next_power_of_two();
-        let width = InteractionsFoldingCols::<F>::width();
-        let d_trace = DeviceMatrix::<F>::with_capacity(height, width);
-
-        let d_idx_keys = idx_keys.to_device().unwrap();
-        let d_values = flat_values.to_device().unwrap();
-        let d_node_idxs = blob.node_idxs.to_device().unwrap();
-        let d_cur_sum_evals = DeviceBuffer::<AffineFpExt>::with_capacity(d_values.len());
-
-        let d_air_interaction_bounds = air_interaction_bounds
-            .iter()
-            .map(|b| b.as_ptr())
-            .collect_vec();
-        let d_interaction_row_bounds = interaction_row_bounds
-            .iter()
-            .map(|b| b.as_ptr())
-            .collect_vec();
-        let d_sorted_trace_vdata = preflights_gpu
-            .iter()
-            .map(|preflight| preflight.proof_shape.sorted_trace_heights.as_ptr())
-            .collect_vec();
-        let d_records = records.iter().map(|b| b.as_ptr()).collect_vec();
-        let d_xis = xis.iter().map(|b| b.as_ptr()).collect_vec();
-
-        let d_per_proof = blob.interactions_folding_per_proof.to_device().unwrap();
-
-        unsafe {
-            let temp_bytes = interactions_folding_tracegen_temp_bytes(
-                d_trace.buffer(),
-                height,
-                &d_idx_keys,
-                &d_cur_sum_evals,
-                num_valid_rows as u32,
-            )
-            .unwrap();
-            let d_temp_buffer = DeviceBuffer::<u8>::with_capacity(temp_bytes);
-            interactions_folding_tracegen(
-                d_trace.buffer(),
-                height,
-                width,
-                &d_idx_keys,
-                &d_cur_sum_evals,
-                &d_values,
-                &d_node_idxs,
-                &row_bounds,
-                d_air_interaction_bounds,
-                d_interaction_row_bounds,
-                d_sorted_trace_vdata,
-                d_records,
-                d_xis,
-                &d_per_proof,
-                &num_airs,
-                &n_logups,
-                preflights_gpu.len() as u32,
-                num_valid_rows as u32,
-                child_vk.system_params.l_skip as u32,
-                &d_temp_buffer,
-                temp_bytes,
-            )
-            .unwrap();
-        }
-
-        d_trace
     }
 }
