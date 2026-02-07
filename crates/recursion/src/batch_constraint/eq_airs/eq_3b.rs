@@ -25,6 +25,7 @@ use crate::{
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
+    tracegen::RowMajorChip,
     utils::{
         MultiProofVecVec, base_to_ext, ext_field_add, ext_field_multiply,
         ext_field_multiply_scalar, ext_field_one_minus,
@@ -398,201 +399,239 @@ pub(crate) fn generate_eq_3b_blob(
     blob
 }
 
-#[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
-pub(crate) fn generate_eq_3b_trace(
-    vk: &MultiStarkVerifyingKeyV2,
-    blob: &Eq3bBlob,
-    preflights: &[&Preflight],
-) -> RowMajorMatrix<F> {
-    let width = Eq3bColumns::<F>::width();
-    let l_skip = vk.inner.params.l_skip;
-    let total_height = preflights
-        .iter()
-        .enumerate()
-        .map(|(i, p)| {
-            let num_dummy_records = blob.all_stacked_ids[i]
-                .iter()
-                .filter(|record| record.no_interactions)
-                .count();
+pub struct Eq3bTraceGenerator;
 
-            (p.proof_shape.n_logup + 1) * (blob.all_stacked_ids[i].len() - num_dummy_records)
-                + num_dummy_records
-        })
-        .sum::<usize>();
-    let padding_height = total_height.next_power_of_two();
-    let mut trace = vec![F::ZERO; padding_height * width];
+impl RowMajorChip<F> for Eq3bTraceGenerator {
+    type Ctx<'a> = (
+        &'a MultiStarkVerifyingKeyV2,
+        &'a Eq3bBlob,
+        &'a [&'a Preflight],
+    );
 
-    let mut cur_height = 0;
-    for (pidx, preflight) in preflights.iter().enumerate() {
-        let xi = &preflight.batch_constraint.xi;
-        let n_logup = preflight.proof_shape.n_logup;
+    #[tracing::instrument(level = "trace", skip_all)]
+    fn generate_trace(
+        &self,
+        ctx: &Self::Ctx<'_>,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
+        let (vk, blob, preflights) = ctx;
+        let width = Eq3bColumns::<F>::width();
+        let l_skip = vk.inner.params.l_skip;
 
-        let stacked_ids = &blob.all_stacked_ids[pidx];
-        let one_height = n_logup + 1;
+        let total_valid = preflights
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                let num_dummy_records = blob.all_stacked_ids[i]
+                    .iter()
+                    .filter(|record| record.no_interactions)
+                    .count();
+                (p.proof_shape.n_logup + 1) * (blob.all_stacked_ids[i].len() - num_dummy_records)
+                    + num_dummy_records
+            })
+            .sum();
+        let padding_height = if let Some(height) = required_height {
+            if height < total_valid {
+                return None;
+            }
+            height
+        } else {
+            total_valid.next_power_of_two()
+        };
 
-        for (j, record) in stacked_ids.iter().enumerate() {
-            let this_height = if record.no_interactions {
-                1
-            } else {
-                one_height
-            };
-            let shifted_idx = record.stacked_idx >> l_skip;
-            let mut cur_eq = EF::ONE;
-            trace[cur_height * width..(cur_height + this_height) * width]
-                .chunks_exact_mut(width)
-                .enumerate()
-                .for_each(|(n, chunk)| {
-                    let cols: &mut Eq3bColumns<_> = chunk.borrow_mut();
-                    cols.is_valid = F::ONE;
-                    cols.is_first = F::from_bool(j == 0 && n == 0);
-                    cols.proof_idx = F::from_usize(pidx);
+        let mut trace = vec![F::ZERO; padding_height * width];
 
-                    cols.sort_idx = F::from_u32(record.sort_idx);
-                    cols.interaction_idx = F::from_u32(record.interaction_idx);
-                    cols.n_lift = F::from_u32(record.n_lift);
-                    cols.two_to_the_n_lift = F::from_usize(1 << record.n_lift);
-                    cols.n = F::from_usize(n);
-                    cols.n_at_least_n_lift = F::from_bool(n >= record.n_lift as usize);
-                    cols.has_no_interactions = F::from_bool(record.no_interactions);
-                    cols.hypercube_volume = F::from_usize(1 << n);
-                    cols.is_first_in_air = F::from_bool(
-                        record.interaction_idx == 0 && n == 0 || record.no_interactions,
-                    );
-                    cols.is_first_in_interaction = F::from_bool(n == 0 || record.no_interactions);
-                    cols.idx = F::from_u32(shifted_idx & ((1 << n) - 1));
-                    cols.running_idx = F::from_u32(shifted_idx);
-                    let nth_bit = (shifted_idx & (1 << n)) > 0;
-                    cols.nth_bit = F::from_bool(nth_bit);
-                    cols.loop_aux.is_transition[0] = F::from_bool(
-                        j + 1 < stacked_ids.len() || (n < n_logup && !record.no_interactions),
-                    );
-                    cols.loop_aux.is_transition[1] = F::from_bool(
-                        (!record.is_last_in_air || n < n_logup) && !record.no_interactions,
-                    );
-                    let xi = if (record.n_lift as usize..n_logup).contains(&n) {
-                        xi[l_skip + n]
-                    } else if nth_bit {
-                        EF::ONE
-                    } else {
-                        EF::ZERO
-                    };
-                    cols.xi.copy_from_slice(xi.as_basis_coefficients_slice());
-                    cols.eq
-                        .copy_from_slice(cur_eq.as_basis_coefficients_slice());
-                    cur_eq *= if nth_bit { xi } else { EF::ONE - xi };
-                });
-            cur_height += this_height;
+        let mut cur_height = 0;
+        for (pidx, preflight) in preflights.iter().enumerate() {
+            let xi = &preflight.batch_constraint.xi;
+            let n_logup = preflight.proof_shape.n_logup;
+
+            let stacked_ids = &blob.all_stacked_ids[pidx];
+            let one_height = n_logup + 1;
+
+            for (j, record) in stacked_ids.iter().enumerate() {
+                let this_height = if record.no_interactions {
+                    1
+                } else {
+                    one_height
+                };
+                let shifted_idx = record.stacked_idx >> l_skip;
+                let mut cur_eq = EF::ONE;
+                trace[cur_height * width..(cur_height + this_height) * width]
+                    .chunks_exact_mut(width)
+                    .enumerate()
+                    .for_each(|(n, chunk)| {
+                        let cols: &mut Eq3bColumns<_> = chunk.borrow_mut();
+                        cols.is_valid = F::ONE;
+                        cols.is_first = F::from_bool(j == 0 && n == 0);
+                        cols.proof_idx = F::from_usize(pidx);
+
+                        cols.sort_idx = F::from_u32(record.sort_idx);
+                        cols.interaction_idx = F::from_u32(record.interaction_idx);
+                        cols.n_lift = F::from_u32(record.n_lift);
+                        cols.two_to_the_n_lift = F::from_usize(1 << record.n_lift);
+                        cols.n = F::from_usize(n);
+                        cols.n_at_least_n_lift = F::from_bool(n >= record.n_lift as usize);
+                        cols.has_no_interactions = F::from_bool(record.no_interactions);
+                        cols.hypercube_volume = F::from_usize(1 << n);
+                        cols.is_first_in_air = F::from_bool(
+                            record.interaction_idx == 0 && n == 0 || record.no_interactions,
+                        );
+                        cols.is_first_in_interaction =
+                            F::from_bool(n == 0 || record.no_interactions);
+                        cols.idx = F::from_u32(shifted_idx & ((1 << n) - 1));
+                        cols.running_idx = F::from_u32(shifted_idx);
+                        let nth_bit = (shifted_idx & (1 << n)) > 0;
+                        cols.nth_bit = F::from_bool(nth_bit);
+                        cols.loop_aux.is_transition[0] = F::from_bool(
+                            j + 1 < stacked_ids.len() || (n < n_logup && !record.no_interactions),
+                        );
+                        cols.loop_aux.is_transition[1] = F::from_bool(
+                            (!record.is_last_in_air || n < n_logup) && !record.no_interactions,
+                        );
+                        let xi = if (record.n_lift as usize..n_logup).contains(&n) {
+                            xi[l_skip + n]
+                        } else if nth_bit {
+                            EF::ONE
+                        } else {
+                            EF::ZERO
+                        };
+                        cols.xi.copy_from_slice(xi.as_basis_coefficients_slice());
+                        cols.eq
+                            .copy_from_slice(cur_eq.as_basis_coefficients_slice());
+                        cur_eq *= if nth_bit { xi } else { EF::ONE - xi };
+                    });
+                cur_height += this_height;
+            }
         }
+
+        trace[cur_height * width..]
+            .par_chunks_mut(width)
+            .enumerate()
+            .for_each(|(i, chunk)| {
+                let cols: &mut Eq3bColumns<F> = chunk.borrow_mut();
+                cols.proof_idx = F::from_usize(preflights.len() + i);
+                cols.is_first = F::ONE;
+                cols.is_first_in_air = F::ONE;
+                cols.is_first_in_interaction = F::ONE;
+            });
+
+        Some(RowMajorMatrix::new(trace, width))
     }
-
-    trace[cur_height * width..]
-        .par_chunks_mut(width)
-        .enumerate()
-        .for_each(|(i, chunk)| {
-            let cols: &mut Eq3bColumns<F> = chunk.borrow_mut();
-            cols.proof_idx = F::from_usize(preflights.len() + i);
-            cols.is_first = F::ONE;
-            cols.is_first_in_air = F::ONE;
-            cols.is_first_in_interaction = F::ONE;
-        });
-
-    RowMajorMatrix::new(trace, width)
 }
 
 #[cfg(feature = "cuda")]
 pub(in crate::batch_constraint) mod cuda {
-    use cuda_backend_v2::F;
+    use cuda_backend_v2::{F, GpuBackendV2};
     use openvm_cuda_backend::base::DeviceMatrix;
     use openvm_cuda_common::copy::MemCopyH2D;
+    use stark_backend_v2::prover::AirProvingContextV2;
 
     use super::*;
     use crate::{
         batch_constraint::cuda_abi::eq_3b_tracegen,
         cuda::{preflight::PreflightGpu, to_device_or_nullptr},
+        tracegen::ModuleChip,
         utils::MultiVecWithBounds,
     };
 
-    #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
-    pub fn generate_eq_3b_trace(
-        child_vk: &MultiStarkVerifyingKeyV2,
-        blob: &Eq3bBlob,
-        preflights: &[PreflightGpu],
-    ) -> DeviceMatrix<F> {
-        debug_assert_eq!(blob.all_stacked_ids.num_proofs(), preflights.len());
+    impl ModuleChip<GpuBackendV2> for Eq3bTraceGenerator {
+        type Ctx<'a> = (
+            &'a MultiStarkVerifyingKeyV2,
+            &'a Eq3bBlob,
+            &'a [PreflightGpu],
+        );
 
-        let num_proofs = preflights.len();
-        let width = Eq3bColumns::<F>::width();
-        let l_skip = child_vk.inner.params.l_skip;
+        #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
+        fn generate_proving_ctx(
+            &self,
+            ctx: &Self::Ctx<'_>,
+            required_height: Option<usize>,
+        ) -> Option<AirProvingContextV2<GpuBackendV2>> {
+            let (child_vk, blob, preflights) = ctx;
+            debug_assert_eq!(blob.all_stacked_ids.num_proofs(), preflights.len());
 
-        let mut device_records =
-            MultiVecWithBounds::<_, 1>::with_capacity(blob.all_stacked_ids.len());
-        let mut record_idxs = MultiVecWithBounds::<_, 1>::with_capacity(blob.record_idxs.len());
+            let num_proofs = preflights.len();
+            let width = Eq3bColumns::<F>::width();
+            let l_skip = child_vk.inner.params.l_skip;
 
-        let mut rows_per_proof_bounds = Vec::with_capacity(num_proofs + 1);
-        rows_per_proof_bounds.push(0);
+            let mut device_records =
+                MultiVecWithBounds::<_, 1>::with_capacity(blob.all_stacked_ids.len());
+            let mut record_idxs = MultiVecWithBounds::<_, 1>::with_capacity(blob.record_idxs.len());
 
-        let mut n_logups = Vec::with_capacity(num_proofs);
-        let mut all_xi = MultiVecWithBounds::<_, 1>::new();
+            let mut rows_per_proof_bounds = Vec::with_capacity(num_proofs + 1);
+            rows_per_proof_bounds.push(0);
 
-        let mut num_valid_rows = 0usize;
+            let mut n_logups = Vec::with_capacity(num_proofs);
+            let mut all_xi = MultiVecWithBounds::<_, 1>::new();
 
-        for (pidx, preflight) in preflights.iter().enumerate() {
-            let records = &blob.all_stacked_ids[pidx];
+            let mut num_valid_rows = 0usize;
 
-            device_records.extend(records.iter().cloned());
-            device_records.close_level(0);
-            record_idxs.extend(blob.record_idxs[pidx].iter().cloned());
-            record_idxs.close_level(0);
+            for (pidx, preflight) in preflights.iter().enumerate() {
+                let records = &blob.all_stacked_ids[pidx];
 
-            let n_logup = preflight.cpu.proof_shape.n_logup;
-            n_logups.push(n_logup);
+                device_records.extend(records.iter().cloned());
+                device_records.close_level(0);
+                record_idxs.extend(blob.record_idxs[pidx].iter().cloned());
+                record_idxs.close_level(0);
 
-            let one_height = n_logup + 1;
-            let rows_for_proof = records.iter().fold(0, |acc, record| {
-                acc + if record.no_interactions {
-                    1
-                } else {
-                    one_height
+                let n_logup = preflight.cpu.proof_shape.n_logup;
+                n_logups.push(n_logup);
+
+                let one_height = n_logup + 1;
+                let rows_for_proof = records.iter().fold(0, |acc, record| {
+                    acc + if record.no_interactions {
+                        1
+                    } else {
+                        one_height
+                    }
+                });
+                num_valid_rows += rows_for_proof;
+                rows_per_proof_bounds.push(num_valid_rows);
+
+                all_xi.extend(preflight.cpu.batch_constraint.xi.iter().cloned());
+                all_xi.close_level(0);
+            }
+
+            let height = if let Some(height) = required_height {
+                if height < num_valid_rows {
+                    return None;
                 }
-            });
-            num_valid_rows += rows_for_proof;
-            rows_per_proof_bounds.push(num_valid_rows);
+                height
+            } else {
+                num_valid_rows.max(1).next_power_of_two()
+            };
+            let d_trace = DeviceMatrix::with_capacity(height, width);
 
-            all_xi.extend(preflight.cpu.batch_constraint.xi.iter().cloned());
-            all_xi.close_level(0);
+            let d_records = to_device_or_nullptr(&device_records.data).unwrap();
+            let d_record_bounds = device_records.bounds[0].to_device().unwrap();
+            let d_record_idxs = to_device_or_nullptr(&record_idxs.data).unwrap();
+            let d_record_idxs_bounds = record_idxs.bounds[0].to_device().unwrap();
+            let d_rows_per_proof_bounds = rows_per_proof_bounds.to_device().unwrap();
+            let d_n_logups = n_logups.to_device().unwrap();
+            let d_xis = to_device_or_nullptr(&all_xi.data).unwrap();
+            let d_xi_bounds = all_xi.bounds[0].to_device().unwrap();
+
+            unsafe {
+                eq_3b_tracegen(
+                    d_trace.buffer(),
+                    num_valid_rows,
+                    height,
+                    num_proofs,
+                    l_skip,
+                    &d_records,
+                    &d_record_bounds,
+                    &d_record_idxs,
+                    &d_record_idxs_bounds,
+                    &d_rows_per_proof_bounds,
+                    &d_n_logups,
+                    &d_xis,
+                    &d_xi_bounds,
+                )
+                .unwrap();
+            }
+
+            Some(AirProvingContextV2::simple_no_pis(d_trace))
         }
-
-        let height = num_valid_rows.max(1).next_power_of_two();
-        let trace = DeviceMatrix::with_capacity(height, width);
-
-        let d_records = to_device_or_nullptr(&device_records.data).unwrap();
-        let d_record_bounds = device_records.bounds[0].to_device().unwrap();
-        let d_record_idxs = to_device_or_nullptr(&record_idxs.data).unwrap();
-        let d_record_idxs_bounds = record_idxs.bounds[0].to_device().unwrap();
-        let d_rows_per_proof_bounds = rows_per_proof_bounds.to_device().unwrap();
-        let d_n_logups = n_logups.to_device().unwrap();
-        let d_xis = to_device_or_nullptr(&all_xi.data).unwrap();
-        let d_xi_bounds = all_xi.bounds[0].to_device().unwrap();
-
-        unsafe {
-            eq_3b_tracegen(
-                trace.buffer(),
-                num_valid_rows,
-                height,
-                num_proofs,
-                l_skip,
-                &d_records,
-                &d_record_bounds,
-                &d_record_idxs,
-                &d_record_idxs_bounds,
-                &d_rows_per_proof_bounds,
-                &d_n_logups,
-                &d_xis,
-                &d_xi_bounds,
-            )
-            .unwrap();
-        }
-
-        trace
     }
 }

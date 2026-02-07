@@ -42,6 +42,7 @@ use crate::{
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
+    tracegen::RowMajorChip,
 };
 
 #[repr(C)]
@@ -139,28 +140,40 @@ pub(in crate::proof_shape) struct ProofShapeChip<const NUM_LIMBS: usize, const L
     pow_checker: Arc<PowerCheckerTraceGenerator<2, 32>>,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, LIMB_BITS> {
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
+    for ProofShapeChip<NUM_LIMBS, LIMB_BITS>
+{
+    type Ctx<'a> = (&'a MultiStarkVerifyingKeyV2, &'a [Proof], &'a [Preflight]);
+
     #[tracing::instrument(level = "trace", skip_all)]
-    pub(in crate::proof_shape) fn generate_trace(
+    fn generate_trace(
         &self,
-        child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
-        preflights: &[Preflight],
-    ) -> RowMajorMatrix<F> {
+        ctx: &Self::Ctx<'_>,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
+        let (child_vk, proofs, preflights) = ctx;
+        let num_valid_rows = proofs.len() * (child_vk.inner.per_air.len() + 1);
+        let height = if let Some(height) = required_height {
+            if height < num_valid_rows {
+                return None;
+            }
+            height
+        } else {
+            num_valid_rows.next_power_of_two()
+        };
         let idx_encoder = &self.idx_encoder;
         let min_cached_idx = self.min_cached_idx;
         let max_cached = self.max_cached;
         let range_checker = &self.range_checker;
         let pow_checker = &self.pow_checker;
         let num_airs = child_vk.inner.per_air.len();
-        let num_rows = (proofs.len() * (num_airs + 1)).next_power_of_two();
         let cols_width = ProofShapeCols::<usize, NUM_LIMBS>::width();
         let total_width = self.idx_encoder.width() + cols_width + self.max_cached * DIGEST_SIZE;
         let l_skip = child_vk.inner.params.l_skip;
 
         debug_assert_eq!(proofs.len(), preflights.len());
 
-        let mut trace = vec![F::ZERO; num_rows * total_width];
+        let mut trace = vec![F::ZERO; height * total_width];
         let mut chunks = trace.chunks_exact_mut(total_width);
 
         for (proof_idx, (proof, preflight)) in proofs.iter().zip(preflights.iter()).enumerate() {
@@ -423,7 +436,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
             cols.proof_idx = F::from_usize(proofs.len());
         }
 
-        RowMajorMatrix::new(trace, total_width)
+        Some(RowMajorMatrix::new(trace, total_width))
     }
 }
 

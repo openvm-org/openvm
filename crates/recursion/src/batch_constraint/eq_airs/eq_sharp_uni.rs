@@ -30,6 +30,7 @@ use crate::{
     bus::{XiRandomnessBus, XiRandomnessMessage},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
+    tracegen::RowMajorChip,
     utils::{
         MultiProofVecVec, base_to_ext, ext_field_add, ext_field_multiply,
         ext_field_multiply_scalar, ext_field_one_minus, ext_field_subtract,
@@ -482,112 +483,148 @@ pub fn generate_eq_sharp_uni_blob(
     blob
 }
 
-#[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
-pub(crate) fn generate_eq_sharp_uni_trace(
-    vk: &MultiStarkVerifyingKeyV2,
-    blob: &EqSharpUniBlob,
-    preflights: &[&Preflight],
-) -> RowMajorMatrix<F> {
-    let width = EqSharpUniCols::<F>::width();
-    let l_skip = vk.inner.params.l_skip;
-    let one_height = (1 << l_skip) - 1;
-    let total_height = one_height * preflights.len();
+pub struct EqSharpUniTraceGenerator;
 
-    let padded_height = total_height.next_power_of_two();
-    let mut trace = vec![F::ZERO; padded_height * width];
+impl RowMajorChip<F> for EqSharpUniTraceGenerator {
+    type Ctx<'a> = (
+        &'a MultiStarkVerifyingKeyV2,
+        &'a EqSharpUniBlob,
+        &'a [&'a Preflight],
+    );
 
-    for pidx in 0..preflights.len() {
-        let records = &blob.records[pidx];
-        trace[(pidx * one_height * width)..((pidx + 1) * one_height * width)]
-            .par_chunks_exact_mut(width)
-            .zip(records.par_iter())
+    #[tracing::instrument(level = "trace", skip_all)]
+    fn generate_trace(
+        &self,
+        ctx: &Self::Ctx<'_>,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
+        let (vk, blob, preflights) = ctx;
+        let width = EqSharpUniCols::<F>::width();
+        let l_skip = vk.inner.params.l_skip;
+        let one_height = (1 << l_skip) - 1;
+        let total_height = one_height * preflights.len();
+
+        let padded_height = if let Some(height) = required_height {
+            if height < total_height {
+                return None;
+            }
+            height
+        } else {
+            total_height.next_power_of_two()
+        };
+        let mut trace = vec![F::ZERO; padded_height * width];
+
+        for pidx in 0..preflights.len() {
+            let records = &blob.records[pidx];
+            trace[(pidx * one_height * width)..((pidx + 1) * one_height * width)]
+                .par_chunks_exact_mut(width)
+                .zip(records.par_iter())
+                .enumerate()
+                .for_each(|(i, (chunk, record))| {
+                    let cols: &mut EqSharpUniCols<_> = chunk.borrow_mut();
+                    cols.is_valid = F::ONE;
+                    cols.is_first = F::from_bool(i == 0);
+                    cols.is_last = F::from_bool(i + 1 == one_height);
+                    cols.proof_idx = F::from_usize(pidx);
+                    cols.is_first_iter = F::ONE;
+                    cols.xi_idx = F::from_u32(record.xi_idx);
+                    cols.xi
+                        .copy_from_slice(record.xi.as_basis_coefficients_slice());
+                    cols.iter_idx = F::from_u32(record.iter_idx);
+                    cols.is_first_iter = F::from_bool(record.iter_idx == 0);
+                    cols.product_before
+                        .copy_from_slice(record.product.as_basis_coefficients_slice());
+                    cols.root = record.root;
+                    cols.root_pow = record.root_pow;
+                    cols.root_half_order = F::from_u32(record.root_half_order);
+                });
+        }
+
+        trace[total_height * width..]
+            .par_chunks_mut(width)
             .enumerate()
-            .for_each(|(i, (chunk, record))| {
-                let cols: &mut EqSharpUniCols<_> = chunk.borrow_mut();
-                cols.is_valid = F::ONE;
-                cols.is_first = F::from_bool(i == 0);
-                cols.is_last = F::from_bool(i + 1 == one_height);
-                cols.proof_idx = F::from_usize(pidx);
-                cols.is_first_iter = F::ONE;
-                cols.xi_idx = F::from_u32(record.xi_idx);
-                cols.xi
-                    .copy_from_slice(record.xi.as_basis_coefficients_slice());
-                cols.iter_idx = F::from_u32(record.iter_idx);
-                cols.is_first_iter = F::from_bool(record.iter_idx == 0);
-                cols.product_before
-                    .copy_from_slice(record.product.as_basis_coefficients_slice());
-                cols.root = record.root;
-                cols.root_pow = record.root_pow;
-                cols.root_half_order = F::from_u32(record.root_half_order);
+            .for_each(|(i, chunk)| {
+                let cols: &mut EqSharpUniCols<F> = chunk.borrow_mut();
+                cols.proof_idx = F::from_usize(preflights.len() + i);
+                cols.is_first = F::ONE;
+                cols.is_last = F::ONE;
             });
+
+        Some(RowMajorMatrix::new(trace, width))
     }
-
-    trace[total_height * width..]
-        .par_chunks_mut(width)
-        .enumerate()
-        .for_each(|(i, chunk)| {
-            let cols: &mut EqSharpUniCols<F> = chunk.borrow_mut();
-            cols.proof_idx = F::from_usize(preflights.len() + i);
-            cols.is_first = F::ONE;
-            cols.is_last = F::ONE;
-        });
-
-    RowMajorMatrix::new(trace, width)
 }
 
-#[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
-pub(crate) fn generate_eq_sharp_uni_receiver_trace(
-    vk: &MultiStarkVerifyingKeyV2,
-    blob: &EqSharpUniBlob,
-    preflights: &[&Preflight],
-) -> RowMajorMatrix<F> {
-    let l_skip = vk.inner.params.l_skip;
+pub struct EqSharpUniReceiverTraceGenerator;
 
-    let width = EqSharpUniReceiverCols::<F>::width();
-    let one_height = 1 << l_skip;
-    let total_height = one_height * preflights.len();
-    let padded_height = total_height.next_power_of_two();
-    let mut trace = vec![F::ZERO; padded_height * width];
+impl RowMajorChip<F> for EqSharpUniReceiverTraceGenerator {
+    type Ctx<'a> = (
+        &'a MultiStarkVerifyingKeyV2,
+        &'a EqSharpUniBlob,
+        &'a [&'a Preflight],
+    );
 
-    for pidx in 0..preflights.len() {
-        let products = &blob.final_products[pidx];
-        let r = blob.rs[pidx];
-        trace[(pidx * one_height * width)..((pidx + 1) * one_height * width)]
-            .par_chunks_exact_mut(width)
-            .zip(products.par_iter())
+    #[tracing::instrument(level = "trace", skip_all)]
+    fn generate_trace(
+        &self,
+        ctx: &Self::Ctx<'_>,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
+        let (vk, blob, preflights) = ctx;
+        let l_skip = vk.inner.params.l_skip;
+
+        let width = EqSharpUniReceiverCols::<F>::width();
+        let one_height = 1 << l_skip;
+        let total_height = one_height * preflights.len();
+        let padded_height = if let Some(height) = required_height {
+            if height < total_height {
+                return None;
+            }
+            height
+        } else {
+            total_height.next_power_of_two()
+        };
+        let mut trace = vec![F::ZERO; padded_height * width];
+
+        for pidx in 0..preflights.len() {
+            let products = &blob.final_products[pidx];
+            let r = blob.rs[pidx];
+            trace[(pidx * one_height * width)..((pidx + 1) * one_height * width)]
+                .par_chunks_exact_mut(width)
+                .zip(products.par_iter())
+                .enumerate()
+                .for_each(|(i, (chunk, product))| {
+                    let cols: &mut EqSharpUniReceiverCols<_> = chunk.borrow_mut();
+                    cols.is_valid = F::ONE;
+                    cols.is_first = F::from_bool(i == 0);
+                    cols.is_last = F::from_bool(i + 1 == one_height);
+                    cols.proof_idx = F::from_usize(pidx);
+                    cols.coeff
+                        .copy_from_slice(product.as_basis_coefficients_slice());
+                    cols.r.copy_from_slice(r.as_basis_coefficients_slice());
+                    cols.idx = F::from_usize(i);
+                });
+            let mut cur_sum = EF::ZERO;
+            trace[(pidx * one_height * width)..((pidx + 1) * one_height * width)]
+                .chunks_exact_mut(width)
+                .rev()
+                .for_each(|chunk| {
+                    let cols: &mut EqSharpUniReceiverCols<_> = chunk.borrow_mut();
+                    cur_sum = cur_sum * r + EF::from_basis_coefficients_slice(&cols.coeff).unwrap();
+                    cols.cur_sum
+                        .copy_from_slice(cur_sum.as_basis_coefficients_slice());
+                });
+        }
+
+        trace[total_height * width..]
+            .par_chunks_mut(width)
             .enumerate()
-            .for_each(|(i, (chunk, product))| {
-                let cols: &mut EqSharpUniReceiverCols<_> = chunk.borrow_mut();
-                cols.is_valid = F::ONE;
-                cols.is_first = F::from_bool(i == 0);
-                cols.is_last = F::from_bool(i + 1 == one_height);
-                cols.proof_idx = F::from_usize(pidx);
-                cols.coeff
-                    .copy_from_slice(product.as_basis_coefficients_slice());
-                cols.r.copy_from_slice(r.as_basis_coefficients_slice());
-                cols.idx = F::from_usize(i);
+            .for_each(|(i, chunk)| {
+                let cols: &mut EqSharpUniReceiverCols<F> = chunk.borrow_mut();
+                cols.proof_idx = F::from_usize(preflights.len() + i);
+                cols.is_first = F::ONE;
+                cols.is_last = F::ONE;
             });
-        let mut cur_sum = EF::ZERO;
-        trace[(pidx * one_height * width)..((pidx + 1) * one_height * width)]
-            .chunks_exact_mut(width)
-            .rev()
-            .for_each(|chunk| {
-                let cols: &mut EqSharpUniReceiverCols<_> = chunk.borrow_mut();
-                cur_sum = cur_sum * r + EF::from_basis_coefficients_slice(&cols.coeff).unwrap();
-                cols.cur_sum
-                    .copy_from_slice(cur_sum.as_basis_coefficients_slice());
-            });
+
+        Some(RowMajorMatrix::new(trace, width))
     }
-
-    trace[total_height * width..]
-        .par_chunks_mut(width)
-        .enumerate()
-        .for_each(|(i, chunk)| {
-            let cols: &mut EqSharpUniReceiverCols<F> = chunk.borrow_mut();
-            cols.proof_idx = F::from_usize(preflights.len() + i);
-            cols.is_first = F::ONE;
-            cols.is_last = F::ONE;
-        });
-
-    RowMajorMatrix::new(trace, width)
 }

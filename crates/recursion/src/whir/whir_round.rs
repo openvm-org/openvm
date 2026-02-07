@@ -19,6 +19,7 @@ use crate::{
     primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
+    tracegen::{RowMajorChip, StandardTracegenCtx},
     utils::{ext_field_add, ext_field_multiply, ext_field_subtract},
     whir::bus::{
         FinalPolyMleEvalBus, FinalPolyMleEvalMessage, FinalPolyQueryEvalBus,
@@ -349,21 +350,30 @@ impl WhirRoundAir {
     }
 }
 
-#[tracing::instrument(level = "trace", skip_all)]
-pub(crate) fn generate_trace(
-    mvk: &MultiStarkVerifyingKeyV2,
-    proofs: &[&Proof],
-    preflights: &[&Preflight],
-) -> RowMajorMatrix<F> {
-    let params = &mvk.inner.params;
-    let num_rounds = params.num_whir_rounds();
-    // Encoder requires at least 2 flags to work correctly
-    let encoder = Encoder::new(num_rounds.max(2), 2, false);
-    match encoder.width() {
-        1 => generate_trace_impl::<1>(mvk, proofs, preflights, &encoder),
-        2 => generate_trace_impl::<2>(mvk, proofs, preflights, &encoder),
-        3 => generate_trace_impl::<3>(mvk, proofs, preflights, &encoder),
-        w => panic!("unsupported encoder width: {w}"),
+pub(crate) struct WhirRoundTraceGenerator;
+
+impl RowMajorChip<F> for WhirRoundTraceGenerator {
+    type Ctx<'a> = StandardTracegenCtx<'a>;
+
+    #[tracing::instrument(level = "trace", skip_all)]
+    fn generate_trace(
+        &self,
+        ctx: &Self::Ctx<'_>,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
+        let mvk = ctx.vk;
+        let proofs = ctx.proofs;
+        let preflights = ctx.preflights;
+        let params = &mvk.inner.params;
+        let num_rounds = params.num_whir_rounds();
+        // Encoder requires at least 2 flags to work correctly
+        let encoder = Encoder::new(num_rounds.max(2), 2, false);
+        match encoder.width() {
+            1 => generate_trace_impl::<1>(mvk, proofs, preflights, &encoder, required_height),
+            2 => generate_trace_impl::<2>(mvk, proofs, preflights, &encoder, required_height),
+            3 => generate_trace_impl::<3>(mvk, proofs, preflights, &encoder, required_height),
+            w => panic!("unsupported encoder width: {w}"),
+        }
     }
 }
 
@@ -372,7 +382,8 @@ fn generate_trace_impl<const ENC_WIDTH: usize>(
     proofs: &[&Proof],
     preflights: &[&Preflight],
     whir_round_encoder: &Encoder,
-) -> RowMajorMatrix<F> {
+    required_height: Option<usize>,
+) -> Option<RowMajorMatrix<F>> {
     debug_assert_eq!(proofs.len(), preflights.len());
 
     let params = &mvk.inner.params;
@@ -383,7 +394,14 @@ fn generate_trace_impl<const ENC_WIDTH: usize>(
     let rows_per_proof = params.num_whir_rounds();
     let total_valid_rows = rows_per_proof * proofs.len();
 
-    let height = total_valid_rows.next_power_of_two();
+    let height = if let Some(h) = required_height {
+        if h < total_valid_rows {
+            return None;
+        }
+        h
+    } else {
+        total_valid_rows.next_power_of_two()
+    };
     let width = WhirRoundCols::<F, ENC_WIDTH>::width();
     let mut trace = F::zero_vec(width * height);
 
@@ -450,5 +468,5 @@ fn generate_trace_impl<const ENC_WIDTH: usize>(
             }
         });
 
-    RowMajorMatrix::new(trace, width)
+    Some(RowMajorMatrix::new(trace, width))
 }

@@ -10,6 +10,7 @@ pub mod subairs;
 pub mod system;
 #[cfg(test)]
 mod tests;
+pub mod tracegen;
 pub mod transcript;
 pub mod utils;
 pub mod whir;

@@ -41,6 +41,7 @@ use crate::{
         SelUniBusMessage,
     },
     system::Preflight,
+    tracegen::RowMajorChip,
     utils::{
         MultiVecWithBounds, base_to_ext, ext_field_add, ext_field_multiply,
         ext_field_multiply_scalar, ext_field_subtract, scalar_subtract_ext_field,
@@ -180,11 +181,7 @@ where
                 builder.assert_tern(flag);
             }
 
-            let cached_slice_expr = cached_slice
-                .iter()
-                .copied()
-                .map(Into::into)
-                .collect_vec();
+            let cached_slice_expr = cached_slice.iter().copied().map(Into::into).collect_vec();
 
             self.dag_commit_bus.send(
                 builder,
@@ -416,204 +413,216 @@ where
     }
 }
 
-/// Returns the common main trace.
-#[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
-pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
-    child_vk: &MultiStarkVerifyingKeyV2,
-    proofs: &[&Proof],
-    preflights: &[&Preflight],
-    max_num_proofs: usize,
-    has_cached: bool,
-    expr_evals: &MultiVecWithBounds<EF, 2>,
-) -> RowMajorMatrix<F> {
-    let l_skip = child_vk.inner.params.l_skip;
+pub struct SymbolicExpressionTraceGenerator {
+    pub max_num_proofs: usize,
+    pub has_cached: bool,
+}
 
-    let single_main_width = SingleMainSymbolicExpressionColumns::<F>::width();
-    let cached_width = CachedSymbolicExpressionColumns::<F>::width();
-    let main_width =
-        single_main_width * max_num_proofs + if has_cached { 0 } else { 1 + cached_width };
+pub(crate) struct SymbolicExpressionCtx<'a> {
+    pub vk: &'a MultiStarkVerifyingKeyV2,
+    pub proofs: &'a [&'a Proof],
+    pub preflights: &'a [&'a Preflight],
+    pub expr_evals: &'a MultiVecWithBounds<EF, 2>,
+}
 
-    struct Record {
-        args: [F; 2 * D_EF],
-        sort_idx: usize,
-        n_abs: usize,
-        is_n_neg: usize,
-    }
-    let mut records = vec![];
+impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
+    type Ctx<'a> = SymbolicExpressionCtx<'a>;
 
-    for (proof_idx, (proof, preflight)) in zip(proofs, preflights).enumerate() {
-        let rs = &preflight.batch_constraint.sumcheck_rnd;
-        let (&rs_0, rs_rest) = rs.split_first().unwrap();
-        let mut is_first_uni_by_log_height = vec![];
-        let mut is_last_uni_by_log_height = vec![];
+    #[tracing::instrument(level = "trace", skip_all)]
+    fn generate_trace(
+        &self,
+        ctx: &Self::Ctx<'_>,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
+        let child_vk = ctx.vk;
+        let proofs = ctx.proofs;
+        let preflights = ctx.preflights;
+        let max_num_proofs = self.max_num_proofs;
+        let has_cached = self.has_cached;
+        let expr_evals = ctx.expr_evals;
+        let trace_height = required_height;
+        let l_skip = child_vk.inner.params.l_skip;
 
-        for (log_height, &r_pow) in rs_0
-            .exp_powers_of_2()
-            .take(l_skip + 1)
-            .collect::<Vec<_>>()
-            .iter()
-            .rev()
-            .enumerate()
-        {
-            is_first_uni_by_log_height.push(eval_eq_uni_at_one(log_height, r_pow));
-            is_last_uni_by_log_height.push(eval_eq_uni_at_one(
-                log_height,
-                r_pow * F::two_adic_generator(log_height),
-            ));
+        let single_main_width = SingleMainSymbolicExpressionColumns::<F>::width();
+        let cached_width = CachedSymbolicExpressionColumns::<F>::width();
+        let main_width =
+            single_main_width * max_num_proofs + if has_cached { 0 } else { 1 + cached_width };
+
+        struct Record {
+            args: [F; 2 * D_EF],
+            sort_idx: usize,
+            n_abs: usize,
+            is_n_neg: usize,
         }
-        let mut is_first_mle_by_n = vec![EF::ONE];
-        let mut is_last_mle_by_n = vec![EF::ONE];
-        for (i, &r) in rs_rest.iter().enumerate() {
-            is_first_mle_by_n.push(is_first_mle_by_n[i] * (EF::ONE - r));
-            is_last_mle_by_n.push(is_last_mle_by_n[i] * r);
-        }
+        let mut records = vec![];
 
-        for (air_idx, vk) in child_vk.inner.per_air.iter().enumerate() {
-            let constraints = &vk.symbolic_constraints.constraints;
-            let expr_evals = &expr_evals[[proof_idx, air_idx]];
+        for (proof_idx, (proof, preflight)) in zip(proofs, preflights).enumerate() {
+            let rs = &preflight.batch_constraint.sumcheck_rnd;
+            let (&rs_0, rs_rest) = rs.split_first().unwrap();
+            let mut is_first_uni_by_log_height = vec![];
+            let mut is_last_uni_by_log_height = vec![];
 
-            // TODO: don't do any pushes at all for absent traces
-            if expr_evals.is_empty() {
-                let n = constraints.nodes.len()
-                    + vk.symbolic_constraints
-                        .interactions
-                        .iter()
-                        .map(|i| 1 + i.message.len())
-                        .sum::<usize>()
-                    + vk.unused_variables.len();
-
-                records.resize_with(records.len() + n, || None);
-                continue;
-            }
-
-            let sort_idx = preflight
-                .proof_shape
-                .sorted_trace_vdata
+            for (log_height, &r_pow) in rs_0
+                .exp_powers_of_2()
+                .take(l_skip + 1)
+                .collect::<Vec<_>>()
                 .iter()
-                .position(|(idx, _)| *idx == air_idx)
-                .unwrap();
-
-            // TODO sort_idx in trace
-            let log_height = proof.trace_vdata[air_idx].as_ref().unwrap().log_height;
-            let (n_abs, is_n_neg) = if log_height < l_skip {
-                (l_skip - log_height, 1)
-            } else {
-                (log_height - l_skip, 0)
-            };
-
-            for (node_idx, node) in constraints.nodes.iter().enumerate() {
-                let mut record = Record {
-                    args: [F::ZERO; 2 * D_EF],
-                    sort_idx,
-                    n_abs,
-                    is_n_neg,
-                };
-                match node {
-                    SymbolicExpressionNode::Variable(var) => match var.entry {
-                        Entry::Preprocessed { .. } => {
-                            record.args[..D_EF].copy_from_slice(
-                                expr_evals[node_idx].as_basis_coefficients_slice(),
-                            );
-                        }
-                        Entry::Main { .. } => {
-                            record.args[..D_EF].copy_from_slice(
-                                expr_evals[node_idx].as_basis_coefficients_slice(),
-                            );
-                        }
-                        Entry::Permutation { .. } => unreachable!(),
-                        Entry::Public => record.args[..D_EF]
-                            .copy_from_slice(expr_evals[node_idx].as_basis_coefficients_slice()),
-                        Entry::Challenge => unreachable!(),
-                        Entry::Exposed => unreachable!(),
-                    },
-                    SymbolicExpressionNode::IsFirstRow => {
-                        record.args[..D_EF].copy_from_slice(
-                            is_first_uni_by_log_height[min(log_height, l_skip)]
-                                .as_basis_coefficients_slice(),
-                        );
-                        record.args[D_EF..2 * D_EF].copy_from_slice(
-                            is_first_mle_by_n[log_height.saturating_sub(l_skip)]
-                                .as_basis_coefficients_slice(),
-                        );
-                    }
-                    SymbolicExpressionNode::IsLastRow | SymbolicExpressionNode::IsTransition => {
-                        record.args[..D_EF].copy_from_slice(
-                            is_last_uni_by_log_height[min(log_height, l_skip)]
-                                .as_basis_coefficients_slice(),
-                        );
-                        record.args[D_EF..2 * D_EF].copy_from_slice(
-                            is_last_mle_by_n[log_height.saturating_sub(l_skip)]
-                                .as_basis_coefficients_slice(),
-                        );
-                    }
-                    SymbolicExpressionNode::Constant(_) => {}
-                    SymbolicExpressionNode::Add {
-                        left_idx,
-                        right_idx,
-                        degree_multiple: _,
-                    } => {
-                        record.args[..D_EF]
-                            .copy_from_slice(expr_evals[*left_idx].as_basis_coefficients_slice());
-                        record.args[D_EF..2 * D_EF]
-                            .copy_from_slice(expr_evals[*right_idx].as_basis_coefficients_slice());
-                    }
-                    SymbolicExpressionNode::Sub {
-                        left_idx,
-                        right_idx,
-                        degree_multiple: _,
-                    } => {
-                        record.args[..D_EF]
-                            .copy_from_slice(expr_evals[*left_idx].as_basis_coefficients_slice());
-                        record.args[D_EF..2 * D_EF]
-                            .copy_from_slice(expr_evals[*right_idx].as_basis_coefficients_slice());
-                    }
-                    SymbolicExpressionNode::Neg {
-                        idx,
-                        degree_multiple: _,
-                    } => {
-                        record.args[..D_EF]
-                            .copy_from_slice(expr_evals[*idx].as_basis_coefficients_slice());
-                    }
-                    SymbolicExpressionNode::Mul {
-                        left_idx,
-                        right_idx,
-                        degree_multiple: _,
-                    } => {
-                        record.args[..D_EF]
-                            .copy_from_slice(expr_evals[*left_idx].as_basis_coefficients_slice());
-                        record.args[D_EF..2 * D_EF]
-                            .copy_from_slice(expr_evals[*right_idx].as_basis_coefficients_slice());
-                    }
-                };
-                records.push(Some(record));
+                .rev()
+                .enumerate()
+            {
+                is_first_uni_by_log_height.push(eval_eq_uni_at_one(log_height, r_pow));
+                is_last_uni_by_log_height.push(eval_eq_uni_at_one(
+                    log_height,
+                    r_pow * F::two_adic_generator(log_height),
+                ));
             }
-            for interaction in &vk.symbolic_constraints.interactions {
-                let mut args = [F::ZERO; 2 * D_EF];
-                args[..D_EF]
-                    .copy_from_slice(expr_evals[interaction.count].as_basis_coefficients_slice());
-                records.push(Some(Record {
-                    args,
-                    sort_idx,
-                    n_abs,
-                    is_n_neg,
-                }));
+            let mut is_first_mle_by_n = vec![EF::ONE];
+            let mut is_last_mle_by_n = vec![EF::ONE];
+            for (i, &r) in rs_rest.iter().enumerate() {
+                is_first_mle_by_n.push(is_first_mle_by_n[i] * (EF::ONE - r));
+                is_last_mle_by_n.push(is_last_mle_by_n[i] * r);
+            }
 
-                for &node_idx in &interaction.message {
+            for (air_idx, vk) in child_vk.inner.per_air.iter().enumerate() {
+                let constraints = &vk.symbolic_constraints.constraints;
+                let expr_evals = &expr_evals[[proof_idx, air_idx]];
+
+                // TODO: don't do any pushes at all for absent traces
+                if expr_evals.is_empty() {
+                    let n = constraints.nodes.len()
+                        + vk.symbolic_constraints
+                            .interactions
+                            .iter()
+                            .map(|i| 1 + i.message.len())
+                            .sum::<usize>()
+                        + vk.unused_variables.len();
+
+                    records.resize_with(records.len() + n, || None);
+                    continue;
+                }
+
+                let sort_idx = preflight
+                    .proof_shape
+                    .sorted_trace_vdata
+                    .iter()
+                    .position(|(idx, _)| *idx == air_idx)
+                    .unwrap();
+
+                // TODO sort_idx in trace
+                let log_height = proof.trace_vdata[air_idx].as_ref().unwrap().log_height;
+                let (n_abs, is_n_neg) = if log_height < l_skip {
+                    (l_skip - log_height, 1)
+                } else {
+                    (log_height - l_skip, 0)
+                };
+
+                for (node_idx, node) in constraints.nodes.iter().enumerate() {
+                    let mut record = Record {
+                        args: [F::ZERO; 2 * D_EF],
+                        sort_idx,
+                        n_abs,
+                        is_n_neg,
+                    };
+                    match node {
+                        SymbolicExpressionNode::Variable(var) => match var.entry {
+                            Entry::Preprocessed { .. } => {
+                                record.args[..D_EF].copy_from_slice(
+                                    expr_evals[node_idx].as_basis_coefficients_slice(),
+                                );
+                            }
+                            Entry::Main { .. } => {
+                                record.args[..D_EF].copy_from_slice(
+                                    expr_evals[node_idx].as_basis_coefficients_slice(),
+                                );
+                            }
+                            Entry::Permutation { .. } => unreachable!(),
+                            Entry::Public => record.args[..D_EF].copy_from_slice(
+                                expr_evals[node_idx].as_basis_coefficients_slice(),
+                            ),
+                            Entry::Challenge => unreachable!(),
+                            Entry::Exposed => unreachable!(),
+                        },
+                        SymbolicExpressionNode::IsFirstRow => {
+                            record.args[..D_EF].copy_from_slice(
+                                is_first_uni_by_log_height[min(log_height, l_skip)]
+                                    .as_basis_coefficients_slice(),
+                            );
+                            record.args[D_EF..2 * D_EF].copy_from_slice(
+                                is_first_mle_by_n[log_height.saturating_sub(l_skip)]
+                                    .as_basis_coefficients_slice(),
+                            );
+                        }
+                        SymbolicExpressionNode::IsLastRow
+                        | SymbolicExpressionNode::IsTransition => {
+                            record.args[..D_EF].copy_from_slice(
+                                is_last_uni_by_log_height[min(log_height, l_skip)]
+                                    .as_basis_coefficients_slice(),
+                            );
+                            record.args[D_EF..2 * D_EF].copy_from_slice(
+                                is_last_mle_by_n[log_height.saturating_sub(l_skip)]
+                                    .as_basis_coefficients_slice(),
+                            );
+                        }
+                        SymbolicExpressionNode::Constant(_) => {}
+                        SymbolicExpressionNode::Add {
+                            left_idx,
+                            right_idx,
+                            degree_multiple: _,
+                        } => {
+                            record.args[..D_EF].copy_from_slice(
+                                expr_evals[*left_idx].as_basis_coefficients_slice(),
+                            );
+                            record.args[D_EF..2 * D_EF].copy_from_slice(
+                                expr_evals[*right_idx].as_basis_coefficients_slice(),
+                            );
+                        }
+                        SymbolicExpressionNode::Sub {
+                            left_idx,
+                            right_idx,
+                            degree_multiple: _,
+                        } => {
+                            record.args[..D_EF].copy_from_slice(
+                                expr_evals[*left_idx].as_basis_coefficients_slice(),
+                            );
+                            record.args[D_EF..2 * D_EF].copy_from_slice(
+                                expr_evals[*right_idx].as_basis_coefficients_slice(),
+                            );
+                        }
+                        SymbolicExpressionNode::Neg {
+                            idx,
+                            degree_multiple: _,
+                        } => {
+                            record.args[..D_EF]
+                                .copy_from_slice(expr_evals[*idx].as_basis_coefficients_slice());
+                        }
+                        SymbolicExpressionNode::Mul {
+                            left_idx,
+                            right_idx,
+                            degree_multiple: _,
+                        } => {
+                            record.args[..D_EF].copy_from_slice(
+                                expr_evals[*left_idx].as_basis_coefficients_slice(),
+                            );
+                            record.args[D_EF..2 * D_EF].copy_from_slice(
+                                expr_evals[*right_idx].as_basis_coefficients_slice(),
+                            );
+                        }
+                    };
+                    records.push(Some(record));
+                }
+                for interaction in &vk.symbolic_constraints.interactions {
                     let mut args = [F::ZERO; 2 * D_EF];
-                    args[..D_EF]
-                        .copy_from_slice(expr_evals[node_idx].as_basis_coefficients_slice());
+                    args[..D_EF].copy_from_slice(
+                        expr_evals[interaction.count].as_basis_coefficients_slice(),
+                    );
                     records.push(Some(Record {
                         args,
                         sort_idx,
                         n_abs,
                         is_n_neg,
                     }));
-                }
-            }
-            let mut node_idx = constraints.nodes.len();
-            for unused_var in &vk.unused_variables {
-                match unused_var.entry {
-                    Entry::Preprocessed { .. } => {
+
+                    for &node_idx in &interaction.message {
                         let mut args = [F::ZERO; 2 * D_EF];
                         args[..D_EF]
                             .copy_from_slice(expr_evals[node_idx].as_basis_coefficients_slice());
@@ -624,111 +633,136 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
                             is_n_neg,
                         }));
                     }
-                    Entry::Main { .. } => {
-                        let mut args = [F::ZERO; 2 * D_EF];
-                        args[..D_EF]
-                            .copy_from_slice(expr_evals[node_idx].as_basis_coefficients_slice());
-                        records.push(Some(Record {
-                            args,
-                            sort_idx,
-                            n_abs,
-                            is_n_neg,
-                        }));
-                    }
-                    Entry::Permutation { .. }
-                    | Entry::Public
-                    | Entry::Challenge
-                    | Entry::Exposed => {
-                        unreachable!()
-                    }
                 }
-                node_idx += 1;
+                let mut node_idx = constraints.nodes.len();
+                for unused_var in &vk.unused_variables {
+                    match unused_var.entry {
+                        Entry::Preprocessed { .. } => {
+                            let mut args = [F::ZERO; 2 * D_EF];
+                            args[..D_EF].copy_from_slice(
+                                expr_evals[node_idx].as_basis_coefficients_slice(),
+                            );
+                            records.push(Some(Record {
+                                args,
+                                sort_idx,
+                                n_abs,
+                                is_n_neg,
+                            }));
+                        }
+                        Entry::Main { .. } => {
+                            let mut args = [F::ZERO; 2 * D_EF];
+                            args[..D_EF].copy_from_slice(
+                                expr_evals[node_idx].as_basis_coefficients_slice(),
+                            );
+                            records.push(Some(Record {
+                                args,
+                                sort_idx,
+                                n_abs,
+                                is_n_neg,
+                            }));
+                        }
+                        Entry::Permutation { .. }
+                        | Entry::Public
+                        | Entry::Challenge
+                        | Entry::Exposed => {
+                            unreachable!()
+                        }
+                    }
+                    node_idx += 1;
+                }
             }
         }
-    }
 
-    // records are ordered per proof; we now interleave them
+        // records are ordered per proof; we now interleave them
 
-    let num_valid_rows = records.len() / proofs.len();
-    let height = num_valid_rows.next_power_of_two();
-    let mut main_trace = F::zero_vec(main_width * height);
-
-    let (encoder, cached_records) = if has_cached {
-        (None, None)
-    } else {
-        let encoder = Encoder::new(NodeKind::COUNT, ENCODER_MAX_DEGREE, true);
-        assert_eq!(encoder.width(), NUM_FLAGS);
-        let cached_records = build_cached_records(child_vk);
-        debug_assert_eq!(cached_records.len(), num_valid_rows);
-        (Some(encoder), Some(cached_records))
-    };
-
-    main_trace
-        .par_chunks_exact_mut(main_width)
-        .enumerate()
-        .for_each(|(row_idx, row)| {
-            // When has_cached == false we prepend row_idx for all rows
-            let row_offset = if has_cached {
-                0
-            } else {
-                row[0] = F::from_usize(row_idx);
-                1
-            };
-
-            if row_idx >= num_valid_rows {
-                return;
+        let num_valid_rows = records.len() / proofs.len();
+        let height = if let Some(height) = trace_height {
+            if height < num_valid_rows {
+                return None;
             }
+            height
+        } else {
+            num_valid_rows.next_power_of_two()
+        };
+        let mut main_trace = F::zero_vec(main_width * height);
 
-            let row = &mut row[row_offset..];
+        let (encoder, cached_records) = if has_cached {
+            (None, None)
+        } else {
+            let encoder = Encoder::new(NodeKind::COUNT, ENCODER_MAX_DEGREE, true);
+            assert_eq!(encoder.width(), NUM_FLAGS);
+            let cached_records = build_cached_records(child_vk);
+            debug_assert_eq!(cached_records.len(), num_valid_rows);
+            (Some(encoder), Some(cached_records))
+        };
 
-            let main_offset = if has_cached {
-                0
-            } else {
-                let record = &cached_records.as_ref().unwrap()[row_idx];
-                let encoder = encoder.as_ref().unwrap();
-                let cols: &mut CachedSymbolicExpressionColumns<_> =
-                    row[..cached_width].borrow_mut();
-
-                for (i, x) in encoder
-                    .get_flag_pt(record.kind as usize)
-                    .into_iter()
-                    .enumerate()
-                {
-                    cols.flags[i] = F::from_u32(x);
-                }
-                cols.air_idx = F::from_usize(record.air_idx);
-                cols.node_or_interaction_idx = F::from_usize(record.node_idx);
-                cols.attrs = record.attrs.map(F::from_usize);
-                cols.is_constraint = F::from_bool(record.is_constraint);
-                cols.constraint_idx = F::from_usize(record.constraint_idx);
-                cols.fanout = F::from_usize(record.fanout);
-
-                cached_width
-            };
-
-            for proof_idx in 0..max_num_proofs {
-                if proof_idx >= proofs.len() {
-                    continue;
-                }
-
-                let record_idx = proof_idx * num_valid_rows + row_idx;
-                let Some(record) = records[record_idx].as_ref() else {
-                    continue;
+        main_trace
+            .par_chunks_exact_mut(main_width)
+            .enumerate()
+            .for_each(|(row_idx, row)| {
+                // When has_cached == false we prepend row_idx for all rows
+                let row_offset = if has_cached {
+                    0
+                } else {
+                    row[0] = F::from_usize(row_idx);
+                    1
                 };
 
-                let start = main_offset + proof_idx * single_main_width;
-                let end = start + single_main_width;
-                let cols: &mut SingleMainSymbolicExpressionColumns<_> =
-                    row[start..end].borrow_mut();
-                cols.is_present = F::ONE;
-                cols.args = record.args;
-                cols.sort_idx = F::from_usize(record.sort_idx);
-                cols.n_abs = F::from_usize(record.n_abs);
-                cols.is_n_neg = F::from_usize(record.is_n_neg);
-            }
-        });
+                if row_idx >= num_valid_rows {
+                    return;
+                }
 
-    RowMajorMatrix::new(main_trace, main_width)
+                let row = &mut row[row_offset..];
+
+                let main_offset = if has_cached {
+                    0
+                } else {
+                    let record = &cached_records.as_ref().unwrap()[row_idx];
+                    let encoder = encoder.as_ref().unwrap();
+                    let cols: &mut CachedSymbolicExpressionColumns<_> =
+                        row[..cached_width].borrow_mut();
+
+                    for (i, x) in encoder
+                        .get_flag_pt(record.kind as usize)
+                        .into_iter()
+                        .enumerate()
+                    {
+                        cols.flags[i] = F::from_u32(x);
+                    }
+                    cols.air_idx = F::from_usize(record.air_idx);
+                    cols.node_or_interaction_idx = F::from_usize(record.node_idx);
+                    cols.attrs = record.attrs.map(F::from_usize);
+                    cols.is_constraint = F::from_bool(record.is_constraint);
+                    cols.constraint_idx = F::from_usize(record.constraint_idx);
+                    cols.fanout = F::from_usize(record.fanout);
+
+                    cached_width
+                };
+
+                for proof_idx in 0..max_num_proofs {
+                    if proof_idx >= proofs.len() {
+                        continue;
+                    }
+
+                    let record_idx = proof_idx * num_valid_rows + row_idx;
+                    let Some(record) = records[record_idx].as_ref() else {
+                        continue;
+                    };
+
+                    let start = main_offset + proof_idx * single_main_width;
+                    let end = start + single_main_width;
+                    let cols: &mut SingleMainSymbolicExpressionColumns<_> =
+                        row[start..end].borrow_mut();
+                    cols.is_present = F::ONE;
+                    cols.args = record.args;
+                    cols.sort_idx = F::from_usize(record.sort_idx);
+                    cols.n_abs = F::from_usize(record.n_abs);
+                    cols.is_n_neg = F::from_usize(record.is_n_neg);
+                }
+            });
+
+        Some(RowMajorMatrix::new(main_trace, main_width))
+    }
 }
 
 #[derive(Debug, Clone, Copy, EnumIter, EnumCount)]
@@ -1055,185 +1089,209 @@ pub fn cached_symbolic_expr_cols_to_digest<F: PrimeCharacteristicRing>(
 #[cfg(feature = "cuda")]
 pub(in crate::batch_constraint) mod cuda {
 
-    use cuda_backend_v2::{EF, F};
+    use cuda_backend_v2::{F, GpuBackendV2};
     use openvm_cuda_backend::base::DeviceMatrix;
     use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
+    use stark_backend_v2::prover::AirProvingContextV2;
 
     use super::*;
     use crate::{
         batch_constraint::{cuda_abi::sym_expr_common_tracegen, cuda_utils::*},
         cuda::{preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr},
+        tracegen::ModuleChip,
     };
 
-    #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
-    pub fn generate_sym_expr_trace(
-        child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[ProofGpu],
-        preflights: &[PreflightGpu],
-        max_num_proofs: usize,
-        has_cached: bool,
-        expr_evals: &MultiVecWithBounds<EF, 2>,
-    ) -> DeviceMatrix<F> {
-        debug_assert_eq!(proofs.len(), preflights.len());
+    pub struct SymbolicExpressionGpuCtx<'a> {
+        pub vk: &'a MultiStarkVerifyingKeyV2,
+        pub proofs: &'a [ProofGpu],
+        pub preflights: &'a [PreflightGpu],
+        pub expr_evals: &'a MultiVecWithBounds<stark_backend_v2::EF, 2>,
+    }
 
-        let num_airs = child_vk.inner.per_air.len();
+    impl ModuleChip<GpuBackendV2> for SymbolicExpressionTraceGenerator {
+        type Ctx<'a> = SymbolicExpressionGpuCtx<'a>;
 
-        let mut constraint_nodes = MultiVecWithBounds::<_, 1>::new();
+        #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
+        fn generate_proving_ctx(
+            &self,
+            ctx: &Self::Ctx<'_>,
+            required_height: Option<usize>,
+        ) -> Option<AirProvingContextV2<GpuBackendV2>> {
+            let child_vk = ctx.vk;
+            let proofs = ctx.proofs;
+            let preflights = ctx.preflights;
+            let max_num_proofs = self.max_num_proofs;
+            let has_cached = self.has_cached;
+            let expr_evals = ctx.expr_evals;
 
-        let mut interactions = MultiVecWithBounds::<_, 1>::new();
+            debug_assert_eq!(proofs.len(), preflights.len());
 
-        let mut interaction_messages = Vec::new();
+            let num_airs = child_vk.inner.per_air.len();
 
-        let mut unused_variables = MultiVecWithBounds::<_, 1>::new();
+            let mut constraint_nodes = MultiVecWithBounds::<_, 1>::new();
 
-        let mut record_bounds = Vec::with_capacity(num_airs + 1);
-        record_bounds.push(0);
+            let mut interactions = MultiVecWithBounds::<_, 1>::new();
 
-        let mut total_rows = 0;
+            let mut interaction_messages = Vec::new();
 
-        for vk in &child_vk.inner.per_air {
-            let constraints = &vk.symbolic_constraints.constraints;
-            for node in &constraints.nodes {
-                constraint_nodes.push(flatten_constraint_node(vk, node));
-            }
-            constraint_nodes.close_level(0);
+            let mut unused_variables = MultiVecWithBounds::<_, 1>::new();
 
-            for interaction in &vk.symbolic_constraints.interactions {
-                let message_start = interaction_messages.len();
-                interaction_messages.extend(&interaction.message);
-                interactions.push(FlatInteraction {
-                    count: interaction.count as u32,
-                    message_start: message_start as u32,
-                    message_len: interaction.message.len() as u32,
-                    bus_index: u32::from(interaction.bus_index),
-                    count_weight: interaction.count_weight,
-                });
-            }
-            interactions.close_level(0);
+            let mut record_bounds = Vec::with_capacity(num_airs + 1);
+            record_bounds.push(0);
 
-            for unused in &vk.unused_variables {
-                unused_variables.push(flatten_unused_symbolic_variable(unused));
-            }
-            unused_variables.close_level(0);
+            let mut total_rows = 0;
 
-            let interaction_message_rows: usize = vk
-                .symbolic_constraints
-                .interactions
-                .iter()
-                .map(|interaction| interaction.message.len())
-                .sum();
-            let rows_for_air = constraints.nodes.len()
-                + vk.symbolic_constraints.interactions.len()
-                + interaction_message_rows
-                + vk.unused_variables.len();
-            total_rows += rows_for_air;
-            record_bounds.push(total_rows as u32);
-        }
+            for vk in &child_vk.inner.per_air {
+                let constraints = &vk.symbolic_constraints.constraints;
+                for node in &constraints.nodes {
+                    constraint_nodes.push(flatten_constraint_node(vk, node));
+                }
+                constraint_nodes.close_level(0);
 
-        let mut air_ids_per_record = vec![0; total_rows];
-        for i in 0..(record_bounds.len() - 1) {
-            air_ids_per_record[(record_bounds[i] as usize)..(record_bounds[i + 1] as usize)]
-                .fill(i as u32);
-        }
+                for interaction in &vk.symbolic_constraints.interactions {
+                    let message_start = interaction_messages.len();
+                    interaction_messages.extend(&interaction.message);
+                    interactions.push(FlatInteraction {
+                        count: interaction.count as u32,
+                        message_start: message_start as u32,
+                        message_len: interaction.message.len() as u32,
+                        bus_index: u32::from(interaction.bus_index),
+                        count_weight: interaction.count_weight,
+                    });
+                }
+                interactions.close_level(0);
 
-        let height = total_rows.max(1).next_power_of_two();
-        let cached_width = CachedSymbolicExpressionColumns::<F>::width();
-        let width = SingleMainSymbolicExpressionColumns::<F>::width() * max_num_proofs
-            + if has_cached { 0 } else { cached_width + 1 };
-        let trace = DeviceMatrix::with_capacity(height, width);
+                for unused in &vk.unused_variables {
+                    unused_variables.push(flatten_unused_symbolic_variable(unused));
+                }
+                unused_variables.close_level(0);
 
-        let d_log_heights = proofs
-            .iter()
-            .flat_map(|proof| {
-                proof
-                    .cpu
-                    .trace_vdata
+                let interaction_message_rows: usize = vk
+                    .symbolic_constraints
+                    .interactions
                     .iter()
-                    .map(|v| v.as_ref().map_or(0, |td| td.log_height))
-            })
-            .collect::<Vec<_>>()
-            .to_device()
-            .unwrap();
-
-        let mut sort_idx_by_air_idx = vec![0usize; num_airs * proofs.len()];
-        for (chunk, preflight) in sort_idx_by_air_idx
-            .chunks_exact_mut(num_airs)
-            .zip(preflights.iter())
-        {
-            for (sort_idx, (air_idx, _)) in preflight
-                .cpu
-                .proof_shape
-                .sorted_trace_vdata
-                .iter()
-                .enumerate()
-            {
-                chunk[*air_idx] = sort_idx;
+                    .map(|interaction| interaction.message.len())
+                    .sum();
+                let rows_for_air = constraints.nodes.len()
+                    + vk.symbolic_constraints.interactions.len()
+                    + interaction_message_rows
+                    + vk.unused_variables.len();
+                total_rows += rows_for_air;
+                record_bounds.push(total_rows as u32);
             }
+
+            let mut air_ids_per_record = vec![0; total_rows];
+            for i in 0..(record_bounds.len() - 1) {
+                air_ids_per_record[(record_bounds[i] as usize)..(record_bounds[i + 1] as usize)]
+                    .fill(i as u32);
+            }
+
+            let height = if let Some(height) = required_height {
+                if height < total_rows {
+                    return None;
+                }
+                height
+            } else {
+                total_rows.max(1).next_power_of_two()
+            };
+            let cached_width = CachedSymbolicExpressionColumns::<F>::width();
+            let width = SingleMainSymbolicExpressionColumns::<F>::width() * max_num_proofs
+                + if has_cached { 0 } else { cached_width + 1 };
+            let trace = DeviceMatrix::with_capacity(height, width);
+
+            let d_log_heights = proofs
+                .iter()
+                .flat_map(|proof| {
+                    proof
+                        .cpu
+                        .trace_vdata
+                        .iter()
+                        .map(|v| v.as_ref().map_or(0, |td| td.log_height))
+                })
+                .collect::<Vec<_>>()
+                .to_device()
+                .unwrap();
+
+            let mut sort_idx_by_air_idx = vec![0usize; num_airs * proofs.len()];
+            for (chunk, preflight) in sort_idx_by_air_idx
+                .chunks_exact_mut(num_airs)
+                .zip(preflights.iter())
+            {
+                for (sort_idx, (air_idx, _)) in preflight
+                    .cpu
+                    .proof_shape
+                    .sorted_trace_vdata
+                    .iter()
+                    .enumerate()
+                {
+                    chunk[*air_idx] = sort_idx;
+                }
+            }
+            let d_sort_idx_by_air_idx = sort_idx_by_air_idx.to_device().unwrap();
+
+            let d_expr_evals = expr_evals.data.to_device().unwrap();
+            let d_ee_bounds_0 = expr_evals.bounds[0].to_device().unwrap();
+            let d_ee_bounds_1 = expr_evals.bounds[1].to_device().unwrap();
+
+            let d_constraint_nodes = constraint_nodes.data.to_device().unwrap();
+            let d_constraint_nodes_bounds = constraint_nodes.bounds[0].to_device().unwrap();
+            let d_interactions = to_device_or_nullptr(&interactions.data).unwrap();
+            let d_interactions_bounds = interactions.bounds[0].to_device().unwrap();
+            let d_interaction_messages = to_device_or_nullptr(&interaction_messages).unwrap();
+            let d_unused_variables = to_device_or_nullptr(&unused_variables.data).unwrap();
+            let d_unused_variables_bounds = unused_variables.bounds[0].to_device().unwrap();
+            let d_record_bounds = record_bounds.to_device().unwrap();
+            let d_air_ids_per_record = air_ids_per_record.to_device().unwrap();
+
+            let mut sumcheck_data = Vec::new();
+            let mut sumcheck_bounds = Vec::with_capacity(preflights.len() + 1);
+            sumcheck_bounds.push(0);
+            for preflight in preflights {
+                sumcheck_data.extend_from_slice(&preflight.cpu.batch_constraint.sumcheck_rnd);
+                sumcheck_bounds.push(sumcheck_data.len());
+            }
+            let d_sumcheck_rnds = if sumcheck_data.is_empty() {
+                DeviceBuffer::new()
+            } else {
+                sumcheck_data.to_device().unwrap()
+            };
+            let d_sumcheck_bounds = sumcheck_bounds.to_device().unwrap();
+
+            let d_cached_records = (!has_cached)
+                .then(|| build_cached_gpu_records(child_vk).to_device())
+                .transpose()
+                .unwrap();
+
+            unsafe {
+                sym_expr_common_tracegen(
+                    trace.buffer(),
+                    height,
+                    child_vk.inner.params.l_skip,
+                    &d_log_heights,
+                    &d_sort_idx_by_air_idx,
+                    num_airs,
+                    proofs.len(),
+                    max_num_proofs,
+                    &d_expr_evals,
+                    &d_ee_bounds_0,
+                    &d_ee_bounds_1,
+                    &d_constraint_nodes,
+                    &d_constraint_nodes_bounds,
+                    &d_interactions,
+                    &d_interactions_bounds,
+                    &d_interaction_messages,
+                    &d_unused_variables,
+                    &d_unused_variables_bounds,
+                    &d_record_bounds,
+                    &d_air_ids_per_record,
+                    total_rows,
+                    &d_sumcheck_rnds,
+                    &d_sumcheck_bounds,
+                    d_cached_records.as_ref(),
+                )
+                .unwrap();
+            }
+            Some(AirProvingContextV2::simple_no_pis(trace))
         }
-        let d_sort_idx_by_air_idx = sort_idx_by_air_idx.to_device().unwrap();
-
-        let d_expr_evals = expr_evals.data.to_device().unwrap();
-        let d_ee_bounds_0 = expr_evals.bounds[0].to_device().unwrap();
-        let d_ee_bounds_1 = expr_evals.bounds[1].to_device().unwrap();
-
-        let d_constraint_nodes = constraint_nodes.data.to_device().unwrap();
-        let d_constraint_nodes_bounds = constraint_nodes.bounds[0].to_device().unwrap();
-        let d_interactions = to_device_or_nullptr(&interactions.data).unwrap();
-        let d_interactions_bounds = interactions.bounds[0].to_device().unwrap();
-        let d_interaction_messages = to_device_or_nullptr(&interaction_messages).unwrap();
-        let d_unused_variables = to_device_or_nullptr(&unused_variables.data).unwrap();
-        let d_unused_variables_bounds = unused_variables.bounds[0].to_device().unwrap();
-        let d_record_bounds = record_bounds.to_device().unwrap();
-        let d_air_ids_per_record = air_ids_per_record.to_device().unwrap();
-
-        let mut sumcheck_data = Vec::new();
-        let mut sumcheck_bounds = Vec::with_capacity(preflights.len() + 1);
-        sumcheck_bounds.push(0);
-        for preflight in preflights {
-            sumcheck_data.extend_from_slice(&preflight.cpu.batch_constraint.sumcheck_rnd);
-            sumcheck_bounds.push(sumcheck_data.len());
-        }
-        let d_sumcheck_rnds = if sumcheck_data.is_empty() {
-            DeviceBuffer::new()
-        } else {
-            sumcheck_data.to_device().unwrap()
-        };
-        let d_sumcheck_bounds = sumcheck_bounds.to_device().unwrap();
-
-        let d_cached_records = (!has_cached)
-            .then(|| build_cached_gpu_records(child_vk).to_device())
-            .transpose()
-            .unwrap();
-
-        unsafe {
-            sym_expr_common_tracegen(
-                trace.buffer(),
-                height,
-                child_vk.inner.params.l_skip,
-                &d_log_heights,
-                &d_sort_idx_by_air_idx,
-                num_airs,
-                proofs.len(),
-                max_num_proofs,
-                &d_expr_evals,
-                &d_ee_bounds_0,
-                &d_ee_bounds_1,
-                &d_constraint_nodes,
-                &d_constraint_nodes_bounds,
-                &d_interactions,
-                &d_interactions_bounds,
-                &d_interaction_messages,
-                &d_unused_variables,
-                &d_unused_variables_bounds,
-                &d_record_bounds,
-                &d_air_ids_per_record,
-                total_rows,
-                &d_sumcheck_rnds,
-                &d_sumcheck_bounds,
-                d_cached_records.as_ref(),
-            )
-            .unwrap();
-        }
-        trace
     }
 }

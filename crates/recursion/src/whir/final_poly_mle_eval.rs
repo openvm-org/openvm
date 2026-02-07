@@ -16,14 +16,12 @@ use openvm_stark_backend::{
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{BasedVectorSpace, Field, PrimeCharacteristicRing, extension::BinomiallyExtendable};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{
-    D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, poly_common::Squarable, proof::Proof,
-};
+use stark_backend_v2::{D_EF, EF, F, poly_common::Squarable};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{TranscriptBus, WhirOpeningPointBus, WhirOpeningPointMessage},
-    system::Preflight,
+    tracegen::{RowMajorChip, StandardTracegenCtx},
     utils::{ext_field_add, ext_field_multiply},
     whir::bus::{
         FinalPolyFoldingBus, FinalPolyFoldingMessage, FinalPolyMleEvalBus, FinalPolyMleEvalMessage,
@@ -235,103 +233,119 @@ where
     }
 }
 
-#[tracing::instrument(level = "trace", skip_all)]
-pub(crate) fn generate_trace(
-    mvk: &MultiStarkVerifyingKeyV2,
-    proofs: &[&Proof],
-    preflights: &[&Preflight],
-) -> RowMajorMatrix<F> {
-    debug_assert_eq!(proofs.len(), preflights.len());
+pub(crate) struct FinalPolyMleEvalTraceGenerator;
 
-    let params = &mvk.inner.params;
-    let num_vars = params.log_final_poly_len();
+impl RowMajorChip<F> for FinalPolyMleEvalTraceGenerator {
+    type Ctx<'a> = StandardTracegenCtx<'a>;
 
-    let rows_per_proof = (1 << (num_vars + 1)) - 1;
-    let total_valid_rows = rows_per_proof * proofs.len();
-    let height = total_valid_rows.next_power_of_two();
-    let width = FinalyPolyMleEvalCols::<F>::width();
+    #[tracing::instrument(level = "trace", skip_all)]
+    fn generate_trace(
+        &self,
+        ctx: &Self::Ctx<'_>,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
+        let mvk = ctx.vk;
+        let proofs = ctx.proofs;
+        let preflights = ctx.preflights;
+        debug_assert_eq!(proofs.len(), preflights.len());
 
-    let mut trace = vec![F::ZERO; height * width];
+        let params = &mvk.inner.params;
+        let num_vars = params.log_final_poly_len();
 
-    let tidx_base_offset = params.k_whir() * (D_EF * 3 + 2);
-    let mut global_row = 0usize;
+        let rows_per_proof = (1 << (num_vars + 1)) - 1;
+        let total_valid_rows = rows_per_proof * proofs.len();
+        let height = if let Some(h) = required_height {
+            if h < total_valid_rows {
+                return None;
+            }
+            h
+        } else {
+            total_valid_rows.next_power_of_two()
+        };
+        let width = FinalyPolyMleEvalCols::<F>::width();
 
-    for (proof_idx, proof) in proofs.iter().enumerate() {
-        let preflight = &preflights[proof_idx];
+        let mut trace = vec![F::ZERO; height * width];
 
-        let num_sumcheck_rounds = params.n_stack + params.l_skip - num_vars;
-        let (stacking_first, stacking_rest) =
-            preflight.stacking.sumcheck_rnd.split_first().unwrap();
-        let u_all = stacking_first
-            .exp_powers_of_2()
-            .take(params.l_skip)
-            .chain(stacking_rest.iter().copied())
-            .collect::<Vec<_>>();
-        let eval_points = &u_all[num_sumcheck_rounds..num_sumcheck_rounds + num_vars];
+        let tidx_base_offset = params.k_whir() * (D_EF * 3 + 2);
+        let mut global_row = 0usize;
 
-        let result = preflight.whir.final_poly_at_u;
-        let eq_alpha_u = preflight.whir.eq_partials.last().unwrap();
+        for (proof_idx, proof) in proofs.iter().enumerate() {
+            let preflight = &preflights[proof_idx];
 
-        let mut buf = proof.whir_proof.final_poly.clone();
-        let tidx = preflight.whir.tidx_per_round.last().unwrap() + tidx_base_offset;
+            let num_sumcheck_rounds = params.n_stack + params.l_skip - num_vars;
+            let (stacking_first, stacking_rest) =
+                preflight.stacking.sumcheck_rnd.split_first().unwrap();
+            let u_all = stacking_first
+                .exp_powers_of_2()
+                .take(params.l_skip)
+                .chain(stacking_rest.iter().copied())
+                .collect::<Vec<_>>();
+            let eval_points = &u_all[num_sumcheck_rounds..num_sumcheck_rounds + num_vars];
 
-        let mut row_in_proof = 0usize;
+            let result = preflight.whir.final_poly_at_u;
+            let eq_alpha_u = preflight.whir.eq_partials.last().unwrap();
 
-        for layer in 0..=num_vars {
-            let len = 1 << (num_vars - layer);
-            let point = if layer > 0 {
-                eval_points[num_vars - layer]
-            } else {
-                EF::ZERO
-            };
+            let mut buf = proof.whir_proof.final_poly.clone();
+            let tidx = preflight.whir.tidx_per_round.last().unwrap() + tidx_base_offset;
 
-            let (left_slice, right_slice) = buf.split_at_mut(len);
-            for node_idx in 0..len {
-                let row_idx = global_row + row_in_proof;
-                let row = &mut trace[row_idx * width..(row_idx + 1) * width];
-                let cols: &mut FinalyPolyMleEvalCols<F> = row.borrow_mut();
+            let mut row_in_proof = 0usize;
 
-                let (left, right, value) = if layer == 0 {
-                    let coeff = left_slice[node_idx];
-                    (coeff, EF::ZERO, coeff)
+            for layer in 0..=num_vars {
+                let len = 1 << (num_vars - layer);
+                let point = if layer > 0 {
+                    eval_points[num_vars - layer]
                 } else {
-                    let l = left_slice[node_idx];
-                    let r = right_slice[node_idx];
-                    let value = l + r * point;
-                    left_slice[node_idx] = value;
-                    (l, r, value)
+                    EF::ZERO
                 };
 
-                cols.is_enabled = F::ONE;
-                cols.proof_idx = F::from_usize(proof_idx);
-                cols.is_root = F::from_bool(layer == num_vars);
-                cols.layer = F::from_usize(layer);
-                cols.layer_inv = cols.layer.try_inverse().unwrap_or_default();
-                cols.node_idx = F::from_usize(node_idx);
-                cols.node_idx_inv = cols.node_idx.try_inverse().unwrap_or_default();
-                cols.tidx_final_poly_start = F::from_usize(tidx);
-                cols.point
-                    .copy_from_slice(point.as_basis_coefficients_slice());
-                cols.left_value
-                    .copy_from_slice(left.as_basis_coefficients_slice());
-                cols.right_value
-                    .copy_from_slice(right.as_basis_coefficients_slice());
-                cols.value
-                    .copy_from_slice(value.as_basis_coefficients_slice());
-                cols.result
-                    .copy_from_slice(result.as_basis_coefficients_slice());
-                cols.eq_alpha_u
-                    .copy_from_slice(eq_alpha_u.as_basis_coefficients_slice());
-                cols.num_nodes_in_layer = F::from_usize(1 << (num_vars - layer));
-                cols.is_nonleaf_and_first_in_layer = F::from_bool(layer != 0 && node_idx == 0);
+                let (left_slice, right_slice) = buf.split_at_mut(len);
+                for node_idx in 0..len {
+                    let row_idx = global_row + row_in_proof;
+                    let row = &mut trace[row_idx * width..(row_idx + 1) * width];
+                    let cols: &mut FinalyPolyMleEvalCols<F> = row.borrow_mut();
 
-                row_in_proof += 1;
+                    let (left, right, value) = if layer == 0 {
+                        let coeff = left_slice[node_idx];
+                        (coeff, EF::ZERO, coeff)
+                    } else {
+                        let l = left_slice[node_idx];
+                        let r = right_slice[node_idx];
+                        let value = l + r * point;
+                        left_slice[node_idx] = value;
+                        (l, r, value)
+                    };
+
+                    cols.is_enabled = F::ONE;
+                    cols.proof_idx = F::from_usize(proof_idx);
+                    cols.is_root = F::from_bool(layer == num_vars);
+                    cols.layer = F::from_usize(layer);
+                    cols.layer_inv = cols.layer.try_inverse().unwrap_or_default();
+                    cols.node_idx = F::from_usize(node_idx);
+                    cols.node_idx_inv = cols.node_idx.try_inverse().unwrap_or_default();
+                    cols.tidx_final_poly_start = F::from_usize(tidx);
+                    cols.point
+                        .copy_from_slice(point.as_basis_coefficients_slice());
+                    cols.left_value
+                        .copy_from_slice(left.as_basis_coefficients_slice());
+                    cols.right_value
+                        .copy_from_slice(right.as_basis_coefficients_slice());
+                    cols.value
+                        .copy_from_slice(value.as_basis_coefficients_slice());
+                    cols.result
+                        .copy_from_slice(result.as_basis_coefficients_slice());
+                    cols.eq_alpha_u
+                        .copy_from_slice(eq_alpha_u.as_basis_coefficients_slice());
+                    cols.num_nodes_in_layer = F::from_usize(1 << (num_vars - layer));
+                    cols.is_nonleaf_and_first_in_layer = F::from_bool(layer != 0 && node_idx == 0);
+
+                    row_in_proof += 1;
+                }
             }
+
+            debug_assert_eq!(row_in_proof, rows_per_proof);
+            global_row += row_in_proof;
         }
 
-        debug_assert_eq!(row_in_proof, rows_per_proof);
-        global_row += row_in_proof;
+        Some(RowMajorMatrix::new(trace, width))
     }
-
-    RowMajorMatrix::new(trace, width)
 }
