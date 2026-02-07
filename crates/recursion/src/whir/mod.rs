@@ -4,11 +4,10 @@ use std::sync::Arc;
 use itertools::{Itertools, izip};
 use openvm_circuit_primitives::encoder::Encoder;
 use openvm_stark_backend::AirRef;
+use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, PrimeCharacteristicRing, PrimeField32, TwoAdicField};
 use p3_matrix::dense::RowMajorMatrix;
-#[cfg(not(debug_assertions))]
-use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
     EF, F, SystemParams, WhirConfig,
     keygen::types::MultiStarkVerifyingKeyV2,
@@ -18,16 +17,17 @@ use stark_backend_v2::{
         sponge::{FiatShamirTranscript, TranscriptHistory},
     },
     proof::{Proof, WhirProof},
-    prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2, poly::Mle},
+    prover::{AirProvingContextV2, CpuBackendV2, poly::Mle},
 };
 use strum::EnumDiscriminants;
 
 use crate::{
     primitives::exp_bits_len::ExpBitsLenTraceGenerator,
     system::{
-        AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, ModuleChip, Preflight,
-        TraceGenModule, WhirPreflight,
+        AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, Preflight, TraceGenModule,
+        WhirPreflight,
     },
+    tracegen::{ModuleChip, RowMajorChip, StandardTracegenCtx},
     whir::{
         bus::{
             FinalPolyFoldingBus, FinalPolyMleEvalBus, FinalPolyQueryEvalBus, VerifyQueriesBus,
@@ -661,6 +661,14 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for WhirModule {
         let proofs = proofs.iter().collect_vec();
         let preflights = preflights.iter().collect_vec();
         let blob = self.generate_blob(child_vk, &proofs, &preflights, exp_bits_len_gen);
+        let ctx = (
+            StandardTracegenCtx {
+                vk: child_vk,
+                proofs: &proofs,
+                preflights: &preflights,
+            },
+            &blob,
+        );
 
         let chips = [
             WhirModuleChip::WhirRound,
@@ -672,13 +680,10 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for WhirModule {
             WhirModuleChip::FinalPolyMleEval,
             WhirModuleChip::FinalPolyQueryEval,
         ];
-        #[cfg(debug_assertions)]
-        let iter = chips.iter();
-        #[cfg(not(debug_assertions))]
-        let iter = chips.par_iter();
-        iter.map(|chip| chip.generate_trace_row_major(child_vk, &proofs, &preflights, &blob))
-            .map(|trace| ColMajorMatrix::from_row_major(&trace))
-            .map(AirProvingContextV2::simple_no_pis)
+        // TODO[INT-6027]: Use required_height properly
+        chips
+            .par_iter()
+            .map(|chip| chip.generate_proving_ctx(&ctx, None).unwrap())
             .collect()
     }
 }
@@ -747,46 +752,8 @@ enum WhirModuleChip {
     FinalPolyQueryEval,
 }
 
-impl WhirModuleChip {
-    fn generate_trace_row_major(
-        &self,
-        child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[&Proof],
-        preflights: &[&Preflight],
-        blob: &WhirBlobCpu,
-    ) -> RowMajorMatrix<F> {
-        use WhirModuleChip::*;
-        match self {
-            WhirRound => whir_round::generate_trace(child_vk, proofs, preflights),
-            Sumcheck => sumcheck::generate_trace(child_vk, proofs, preflights),
-            Query => query::generate_trace(child_vk, proofs, preflights),
-            InitialOpenedValues => initial_opened_values::generate_trace(
-                &child_vk.inner.params,
-                proofs,
-                preflights,
-                &blob.codeword_value_accs,
-                &blob.iov_rows_per_proof_psums,
-                &blob.commits_per_proof_psums,
-                &blob.stacking_chunks_psums,
-                &blob.stacking_widths_psums,
-                &blob.mu_pows,
-            ),
-            NonInitialOpenedValues => {
-                non_initial_opened_values::generate_trace(child_vk, proofs, preflights)
-            }
-            Folding => folding::generate_trace(child_vk, proofs, preflights),
-            FinalPolyMleEval => final_poly_mle_eval::generate_trace(child_vk, proofs, preflights),
-            FinalPolyQueryEval => final_poly_query_eval::generate_trace(
-                child_vk,
-                proofs,
-                &blob.final_poly_query_eval_records,
-            ),
-        }
-    }
-}
-
-impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for WhirModuleChip {
-    type ModuleSpecificCtx = WhirBlobCpu;
+impl RowMajorChip<F> for WhirModuleChip {
+    type Ctx<'a> = (StandardTracegenCtx<'a>, &'a WhirBlobCpu);
 
     #[tracing::instrument(
         name = "wrapper.generate_trace",
@@ -796,19 +763,53 @@ impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for WhirModuleChip {
     )]
     fn generate_trace(
         &self,
-        child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
-        preflights: &[Preflight],
-        blob: &WhirBlobCpu,
-    ) -> ColMajorMatrix<F> {
-        let proofs = proofs.iter().collect_vec();
-        let preflights = preflights.iter().collect_vec();
-        ColMajorMatrix::from_row_major(&self.generate_trace_row_major(
-            child_vk,
-            &proofs,
-            &preflights,
-            blob,
-        ))
+        ctx: &Self::Ctx<'_>,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
+        use WhirModuleChip::*;
+        let child_vk = ctx.0.vk;
+        let proofs = ctx.0.proofs;
+        let preflights = ctx.0.preflights;
+        let blob = ctx.1;
+        match self {
+            WhirRound => {
+                whir_round::WhirRoundTraceGenerator.generate_trace(&ctx.0, required_height)
+            }
+            Sumcheck => {
+                sumcheck::WhirSumcheckTraceGenerator.generate_trace(&ctx.0, required_height)
+            }
+            Query => query::WhirQueryTraceGenerator.generate_trace(&ctx.0, required_height),
+            InitialOpenedValues => initial_opened_values::InitialOpenedValuesTraceGenerator
+                .generate_trace(
+                    &initial_opened_values::InitialOpenedValuesCtx {
+                        params: &child_vk.inner.params,
+                        proofs,
+                        preflights,
+                        codeword_value_accs: &blob.codeword_value_accs,
+                        rows_per_proof_psums: &blob.iov_rows_per_proof_psums,
+                        commits_per_proof_psums: &blob.commits_per_proof_psums,
+                        stacking_chunks_psums: &blob.stacking_chunks_psums,
+                        stacking_widths_psums: &blob.stacking_widths_psums,
+                        mu_pows: &blob.mu_pows,
+                    },
+                    required_height,
+                ),
+            NonInitialOpenedValues => {
+                non_initial_opened_values::NonInitialOpenedValuesTraceGenerator
+                    .generate_trace(&ctx.0, required_height)
+            }
+            Folding => folding::FoldingTraceGenerator.generate_trace(&ctx.0, required_height),
+            FinalPolyMleEval => final_poly_mle_eval::FinalPolyMleEvalTraceGenerator
+                .generate_trace(&ctx.0, required_height),
+            FinalPolyQueryEval => final_poly_query_eval::FinalPolyQueryEvalTraceGenerator
+                .generate_trace(
+                    &final_poly_query_eval::FinalPolyQueryEvalCtx {
+                        vk: child_vk,
+                        records: &blob.final_poly_query_eval_records,
+                    },
+                    required_height,
+                ),
+        }
     }
 }
 
@@ -817,7 +818,6 @@ mod cuda_tracegen {
     use std::cmp;
 
     use cuda_backend_v2::GpuBackendV2;
-    use openvm_cuda_backend::{base::DeviceMatrix, data_transporter::transport_matrix_to_device};
     use openvm_cuda_common::d_buffer::DeviceBuffer;
     use openvm_stark_backend::p3_maybe_rayon::prelude::*;
     use stark_backend_v2::poseidon2::{CHUNK, WIDTH};
@@ -828,6 +828,7 @@ mod cuda_tracegen {
             GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr,
             vk::VerifyingKeyGpu,
         },
+        tracegen::cuda::{StandardTracegenGpuCtx, generate_gpu_proving_ctx},
         whir::cuda_abi::PoseidonStatePair,
     };
 
@@ -1025,45 +1026,67 @@ mod cuda_tracegen {
         }
     }
 
-    impl WhirModuleChip {
-        #[tracing::instrument(
-            name = "wrapper.generate_trace",
-            level = "trace",
-            skip_all,
-            fields(air = %self)
-        )]
-        fn generate_gpu_trace(
+    impl ModuleChip<GpuBackendV2> for WhirModuleChip {
+        type Ctx<'a> = (StandardTracegenGpuCtx<'a>, &'a WhirBlobGpu, &'a WhirBlobCpu);
+
+        fn generate_proving_ctx(
             &self,
-            child_vk: &VerifyingKeyGpu,
-            proofs_cpu: &[&Proof],
-            preflights_cpu: &[&Preflight],
-            blob: &WhirBlobGpu,
-            blob_cpu: &WhirBlobCpu,
-        ) -> DeviceMatrix<F> {
+            ctx: &Self::Ctx<'_>,
+            required_height: Option<usize>,
+        ) -> Option<AirProvingContextV2<GpuBackendV2>> {
             match self {
-                WhirModuleChip::InitialOpenedValues => initial_opened_values::cuda::generate_trace(
-                    proofs_cpu.len(),
-                    &blob,
-                    &child_vk.system_params,
-                ),
+                WhirModuleChip::InitialOpenedValues => {
+                    initial_opened_values::cuda::InitialOpenedValuesGpuTraceGenerator
+                        .generate_proving_ctx(
+                            &initial_opened_values::cuda::InitialOpenedValuesGpuCtx {
+                                num_proofs: ctx.0.proofs.len(),
+                                blob: ctx.1,
+                                params: &ctx.0.vk.system_params,
+                            },
+                            required_height,
+                        )
+                }
                 WhirModuleChip::NonInitialOpenedValues => {
-                    non_initial_opened_values::cuda::generate_trace(&blob, &child_vk.system_params)
+                    non_initial_opened_values::cuda::NonInitialOpenedValuesGpuTraceGenerator
+                        .generate_proving_ctx(
+                            &non_initial_opened_values::cuda::NonInitialOpenedValuesGpuCtx {
+                                blob: ctx.1,
+                                params: &ctx.0.vk.system_params,
+                            },
+                            required_height,
+                        )
                 }
                 WhirModuleChip::FinalPolyQueryEval => {
-                    final_poly_query_eval::cuda::generate_trace(&blob, &child_vk.system_params)
+                    final_poly_query_eval::cuda::FinalPolyQueryEvalGpuTraceGenerator
+                        .generate_proving_ctx(
+                            &final_poly_query_eval::cuda::FinalPolyQueryEvalGpuCtx {
+                                blob: ctx.1,
+                                params: &ctx.0.vk.system_params,
+                            },
+                            required_height,
+                        )
                 }
-                WhirModuleChip::Folding => {
-                    folding::cuda::generate_trace(&blob, &child_vk.system_params, proofs_cpu.len())
-                }
+                WhirModuleChip::Folding => folding::cuda::FoldingGpuTraceGenerator
+                    .generate_proving_ctx(
+                        &folding::cuda::FoldingGpuCtx {
+                            blob: ctx.1,
+                            params: &ctx.0.vk.system_params,
+                            num_proofs: ctx.0.proofs.len(),
+                        },
+                        required_height,
+                    ),
                 _ => {
-                    // Fall back to CPU impl.
-                    let mat = self.generate_trace_row_major(
-                        &child_vk.cpu,
-                        &proofs_cpu,
-                        &preflights_cpu,
-                        &blob_cpu,
+                    let proofs_cpu = ctx.0.proofs.iter().map(|p| &p.cpu).collect_vec();
+                    let preflights_cpu = ctx.0.preflights.iter().map(|p| &p.cpu).collect_vec();
+                    let cpu_ctx = (
+                        StandardTracegenCtx {
+                            vk: &ctx.0.vk.cpu,
+                            proofs: &proofs_cpu,
+                            preflights: &preflights_cpu,
+                        },
+                        ctx.2,
                     );
-                    transport_matrix_to_device(Arc::new(mat))
+                    generate_gpu_proving_ctx(self, &cpu_ctx, required_height)
                 }
             }
         }
@@ -1093,6 +1116,15 @@ mod cuda_tracegen {
                 exp_bits_len_gen,
             );
             let blob_gpu = WhirBlobGpu::new(&proofs_cpu, &preflights_cpu, &blob);
+            let ctx = (
+                StandardTracegenGpuCtx {
+                    vk: child_vk,
+                    proofs,
+                    preflights,
+                },
+                &blob_gpu,
+                &blob,
+            );
 
             let gpu_chips = [
                 WhirModuleChip::InitialOpenedValues,
@@ -1110,46 +1142,21 @@ mod cuda_tracegen {
             // Launch all CUDA tracegen kernels serially first (default stream).
             let indexed_gpu_ctxs = gpu_chips
                 .iter()
-                .map(|chip| {
-                    let mat = chip.generate_gpu_trace(
-                        child_vk,
-                        &proofs_cpu,
-                        &preflights_cpu,
-                        &blob_gpu,
-                        &blob,
-                    );
-                    (chip.index(), AirProvingContextV2::simple_no_pis(mat))
-                })
+                .map(|chip| (chip.index(), chip.generate_proving_ctx(&ctx, None)))
                 .collect::<Vec<_>>();
 
-            // Then run CPU tracegen for the remaining AIRs in parallel (no H2D inside par_iter).
-            let indexed_cpu_traces_rm = cpu_chips
+            // Then run CPU tracegen for the remaining AIRs in parallel.
+            let indexed_cpu_ctxs = cpu_chips
                 .par_iter()
-                .map(|chip| {
-                    (
-                        chip.index(),
-                        chip.generate_trace_row_major(
-                            &child_vk.cpu,
-                            &proofs_cpu,
-                            &preflights_cpu,
-                            &blob,
-                        ),
-                    )
-                })
+                .map(|chip| (chip.index(), chip.generate_proving_ctx(&ctx, None)))
                 .collect::<Vec<_>>();
 
-            // Transfer CPU traces H2D serially (default stream).
-            let mut indexed_cpu_ctxs = Vec::with_capacity(indexed_cpu_traces_rm.len());
-            for (idx, trace_rm) in indexed_cpu_traces_rm {
-                let mat = transport_matrix_to_device(Arc::new(trace_rm));
-                indexed_cpu_ctxs.push((idx, AirProvingContextV2::simple_no_pis(mat)));
-            }
-
+            // TODO[INT-6027]: Use required_height properly
             indexed_gpu_ctxs
                 .into_iter()
                 .chain(indexed_cpu_ctxs)
                 .sorted_by(|a, b| a.0.cmp(&b.0))
-                .map(|(_idx, ctx)| ctx)
+                .map(|(_idx, ctx)| ctx.unwrap())
                 .collect()
         }
     }
