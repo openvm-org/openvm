@@ -14,7 +14,7 @@ use p3_field::{
     BasedVectorSpace, PrimeCharacteristicRing, PrimeField32, extension::BinomiallyExtendable,
 };
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
+use stark_backend_v2::{D_EF, EF, F};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -30,7 +30,7 @@ use crate::{
         utils::{compute_coefficients, get_stacked_slice_data},
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
-    system::Preflight,
+    tracegen::{RowMajorChip, StandardTracegenCtx},
     utils::{assert_one_ext, ext_field_add, ext_field_multiply},
 };
 
@@ -289,23 +289,39 @@ where
 ///////////////////////////////////////////////////////////////////////////
 pub struct StackingClaimsTraceGenerator;
 
-impl StackingClaimsTraceGenerator {
+impl RowMajorChip<F> for StackingClaimsTraceGenerator {
+    type Ctx<'a> = StandardTracegenCtx<'a>;
+
     #[tracing::instrument(level = "trace", skip_all)]
-    pub fn generate_trace(
-        vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[&Proof],
-        preflights: &[&Preflight],
-    ) -> RowMajorMatrix<F> {
+    fn generate_trace(
+        &self,
+        ctx: &Self::Ctx<'_>,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
+        let vk = ctx.vk;
+        let proofs = ctx.proofs;
+        let preflights = ctx.preflights;
         debug_assert_eq!(proofs.len(), preflights.len());
 
         let width = StackingClaimsCols::<usize>::width();
+        let minimum_height: usize = proofs.iter().fold(0, |acc, proof| {
+            acc + proof
+                .stacking_proof
+                .stacking_openings
+                .iter()
+                .fold(0, |acc, openings| acc + openings.len())
+        });
+        let height = if let Some(height) = required_height {
+            if height < minimum_height {
+                return None;
+            }
+            height
+        } else {
+            minimum_height.next_power_of_two()
+        };
 
-        if proofs.is_empty() {
-            return RowMajorMatrix::new(vec![F::ZERO; width], width);
-        }
-
-        let mut combined_trace = Vec::<F>::new();
-        let mut total_rows = 0usize;
+        let mut trace = vec![F::ZERO; height * width];
+        let mut chunks = trace.chunks_mut(width);
 
         for (proof_idx, (proof, preflight)) in proofs.iter().zip(preflights).enumerate() {
             let claims = proof
@@ -342,13 +358,6 @@ impl StackingClaimsTraceGenerator {
             let num_rows = claims.len();
             let proof_idx_value = F::from_usize(proof_idx);
 
-            let mut trace = vec![F::ZERO; num_rows * width];
-
-            for chunk in trace.chunks_mut(width) {
-                let cols: &mut StackingClaimsCols<F> = chunk.borrow_mut();
-                cols.proof_idx = proof_idx_value;
-            }
-
             let initial_tidx = preflight.stacking.intermediate_tidx[2];
 
             let mu = preflight.stacking.stacking_batching_challenge;
@@ -357,10 +366,12 @@ impl StackingClaimsTraceGenerator {
             let mut final_s_eval = EF::ZERO;
             let mut whir_claim = EF::ZERO;
 
-            for (idx, (&(commit_idx, stacked_col_idx, &claim), coeff, chunk)) in
-                izip!(&claims, coeffs, trace.chunks_mut(width)).enumerate()
+            for (idx, (&(commit_idx, stacked_col_idx, &claim), coeff)) in
+                izip!(&claims, coeffs).enumerate()
             {
+                let chunk = chunks.next().unwrap();
                 let cols: &mut StackingClaimsCols<F> = chunk.borrow_mut();
+
                 cols.proof_idx = proof_idx_value;
                 cols.is_valid = F::ONE;
                 cols.is_first = F::from_bool(idx == 0);
@@ -386,41 +397,32 @@ impl StackingClaimsTraceGenerator {
                 cols.whir_claim
                     .copy_from_slice(whir_claim.as_basis_coefficients_slice());
             }
-
-            combined_trace.extend(trace);
-            total_rows += num_rows;
         }
 
-        let padded_rows = total_rows.next_power_of_two();
-        if padded_rows > total_rows {
-            let padding_start = combined_trace.len();
-            combined_trace.resize(padded_rows * width, F::ZERO);
+        let padding_proof_idx = F::from_usize(proofs.len());
+        let mut chunks = chunks.peekable();
 
-            let padding_proof_idx = F::from_usize(proofs.len());
-            let mut chunks = combined_trace[padding_start..].chunks_mut(width);
-            let num_padded_rows = padded_rows - total_rows;
-            for i in 0..num_padded_rows {
-                let chunk = chunks.next().unwrap();
-                let cols: &mut StackingClaimsCols<F> = chunk.borrow_mut();
-                cols.proof_idx = padding_proof_idx;
-                if i + 1 == num_padded_rows {
-                    cols.is_last = F::ONE;
-                }
+        while let Some(chunk) = chunks.next() {
+            let cols: &mut StackingClaimsCols<F> = chunk.borrow_mut();
+            cols.proof_idx = padding_proof_idx;
+            if chunks.peek().is_none() {
+                cols.is_last = F::ONE;
             }
         }
 
-        RowMajorMatrix::new(combined_trace, width)
+        Some(RowMajorMatrix::new(trace, width))
     }
 }
 
 #[cfg(feature = "cuda")]
 pub(crate) mod cuda {
+    use cuda_backend_v2::GpuBackendV2;
     use openvm_cuda_backend::base::DeviceMatrix;
     use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
+    use stark_backend_v2::prover::AirProvingContextV2;
 
     use super::*;
     use crate::{
-        cuda::{preflight::PreflightGpu, proof::ProofGpu},
         stacking::{
             cuda_abi::{
                 ClaimsRecordsPerProof, StackingClaim, stacking_claims_tracegen,
@@ -428,90 +430,108 @@ pub(crate) mod cuda {
             },
             cuda_tracegen::StackingBlob,
         },
+        tracegen::{ModuleChip, cuda::StandardTracegenGpuCtx},
     };
 
-    #[tracing::instrument(level = "trace", skip_all)]
-    pub fn generate_trace(
-        proofs_gpu: &[ProofGpu],
-        preflights_gpu: &[PreflightGpu],
-        blob: &StackingBlob,
-    ) -> DeviceMatrix<F> {
-        let mut num_valid_rows = 0;
-        let mut row_bounds = Vec::with_capacity(proofs_gpu.len());
-        let claims = proofs_gpu
-            .iter()
-            .map(|proof| {
-                let ret = proof
-                    .cpu
-                    .stacking_proof
-                    .stacking_openings
-                    .iter()
-                    .enumerate()
-                    .flat_map(|(commit_idx, openings)| {
-                        openings
-                            .iter()
-                            .enumerate()
-                            .map(move |(stacked_col_idx, opening)| StackingClaim {
-                                commit_idx: commit_idx as u32,
-                                stacked_col_idx: stacked_col_idx as u32,
-                                claim: *opening,
-                            })
-                    })
-                    .collect_vec();
-                num_valid_rows += ret.len();
-                row_bounds.push(num_valid_rows as u32);
-                ret.to_device().unwrap()
-            })
-            .collect_vec();
-        let mu_pows = preflights_gpu
-            .iter()
-            .enumerate()
-            .map(|(proof_idx, preflight)| {
-                let mu = preflight.cpu.stacking.stacking_batching_challenge;
-                mu.powers()
-                    .take(claims[proof_idx].len())
-                    .collect_vec()
-                    .to_device()
-                    .unwrap()
-            })
-            .collect_vec();
+    pub struct StackingClaimsTraceGeneratorGpu;
 
-        let height = num_valid_rows.next_power_of_two();
-        let width = StackingClaimsCols::<usize>::width();
-        let d_trace = DeviceMatrix::with_capacity(height, width);
+    impl ModuleChip<GpuBackendV2> for StackingClaimsTraceGeneratorGpu {
+        type Ctx<'a> = (StandardTracegenGpuCtx<'a>, &'a StackingBlob);
 
-        let d_claims = claims.iter().map(|buf| buf.as_ptr()).collect_vec();
-        let d_coeffs = blob.coeffs.iter().map(|buf| buf.as_ptr()).collect_vec();
-        let d_mu_pows = mu_pows.iter().map(|buf| buf.as_ptr()).collect_vec();
-        let d_records = preflights_gpu
-            .iter()
-            .map(|preflight| ClaimsRecordsPerProof {
-                initial_tidx: preflight.cpu.stacking.intermediate_tidx[2] as u32,
-                mu: preflight.cpu.stacking.stacking_batching_challenge,
-            })
-            .collect_vec()
-            .to_device()
-            .unwrap();
+        fn generate_proving_ctx(
+            &self,
+            ctx: &Self::Ctx<'_>,
+            required_height: Option<usize>,
+        ) -> Option<stark_backend_v2::prover::AirProvingContextV2<GpuBackendV2>> {
+            let proofs_gpu = ctx.0.proofs;
+            let preflights_gpu = ctx.0.preflights;
+            let blob = ctx.1;
 
-        unsafe {
-            let temp_bytes = stacking_claims_tracegen_temp_bytes(d_trace.buffer(), height).unwrap();
-            let d_temp_buffer = DeviceBuffer::<u8>::with_capacity(temp_bytes);
-            stacking_claims_tracegen(
-                d_trace.buffer(),
-                height,
-                width,
-                &row_bounds,
-                d_claims,
-                d_coeffs,
-                d_mu_pows,
-                &d_records,
-                proofs_gpu.len() as u32,
-                &d_temp_buffer,
-                temp_bytes,
-            )
-            .unwrap();
+            let mut num_valid_rows = 0;
+            let mut row_bounds = Vec::with_capacity(proofs_gpu.len());
+            let claims = proofs_gpu
+                .iter()
+                .map(|proof| {
+                    let ret = proof
+                        .cpu
+                        .stacking_proof
+                        .stacking_openings
+                        .iter()
+                        .enumerate()
+                        .flat_map(|(commit_idx, openings)| {
+                            openings
+                                .iter()
+                                .enumerate()
+                                .map(move |(stacked_col_idx, opening)| StackingClaim {
+                                    commit_idx: commit_idx as u32,
+                                    stacked_col_idx: stacked_col_idx as u32,
+                                    claim: *opening,
+                                })
+                        })
+                        .collect_vec();
+                    num_valid_rows += ret.len();
+                    row_bounds.push(num_valid_rows as u32);
+                    ret.to_device().unwrap()
+                })
+                .collect_vec();
+            let mu_pows = preflights_gpu
+                .iter()
+                .enumerate()
+                .map(|(proof_idx, preflight)| {
+                    let mu = preflight.cpu.stacking.stacking_batching_challenge;
+                    mu.powers()
+                        .take(claims[proof_idx].len())
+                        .collect_vec()
+                        .to_device()
+                        .unwrap()
+                })
+                .collect_vec();
+
+            let height = if let Some(height) = required_height {
+                if height < num_valid_rows {
+                    return None;
+                }
+                height
+            } else {
+                num_valid_rows.next_power_of_two()
+            };
+            let width = StackingClaimsCols::<usize>::width();
+            let d_trace = DeviceMatrix::with_capacity(height, width);
+
+            let d_claims = claims.iter().map(|buf| buf.as_ptr()).collect_vec();
+            let d_coeffs = blob.coeffs.iter().map(|buf| buf.as_ptr()).collect_vec();
+            let d_mu_pows = mu_pows.iter().map(|buf| buf.as_ptr()).collect_vec();
+            let d_records = preflights_gpu
+                .iter()
+                .map(|preflight| ClaimsRecordsPerProof {
+                    initial_tidx: preflight.cpu.stacking.intermediate_tidx[2] as u32,
+                    mu: preflight.cpu.stacking.stacking_batching_challenge,
+                })
+                .collect_vec()
+                .to_device()
+                .unwrap();
+
+            unsafe {
+                let temp_bytes =
+                    stacking_claims_tracegen_temp_bytes(d_trace.buffer(), height).unwrap();
+                let d_temp_buffer = DeviceBuffer::<u8>::with_capacity(temp_bytes);
+                stacking_claims_tracegen(
+                    d_trace.buffer(),
+                    height,
+                    width,
+                    &row_bounds,
+                    d_claims,
+                    d_coeffs,
+                    d_mu_pows,
+                    &d_records,
+                    proofs_gpu.len() as u32,
+                    &d_temp_buffer,
+                    temp_bytes,
+                )
+                .unwrap();
+            }
+
+            Some(AirProvingContextV2::simple_no_pis(d_trace))
         }
-
-        d_trace
     }
 }

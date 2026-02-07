@@ -72,22 +72,23 @@ use stark_backend_v2::{
     poly_common::{interpolate_cubic_at_0123, interpolate_linear_at_01},
     poseidon2::sponge::{FiatShamirTranscript, ReadOnlyTranscript, TranscriptHistory},
     proof::{GkrProof, Proof},
-    prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
+    prover::{AirProvingContextV2, CpuBackendV2},
 };
 
 use crate::{
     gkr::{
         bus::{GkrLayerInputBus, GkrLayerOutputBus, GkrXiSamplerBus},
-        input::{GkrInputAir, GkrInputRecord},
-        layer::{GkrLayerAir, GkrLayerRecord},
-        sumcheck::{GkrLayerSumcheckAir, GkrSumcheckRecord},
-        xi_sampler::{GkrXiSamplerAir, GkrXiSamplerRecord},
+        input::{GkrInputAir, GkrInputRecord, GkrInputTraceGenerator},
+        layer::{GkrLayerAir, GkrLayerRecord, GkrLayerTraceGenerator},
+        sumcheck::{GkrLayerSumcheckAir, GkrSumcheckRecord, GkrSumcheckTraceGenerator},
+        xi_sampler::{GkrXiSamplerAir, GkrXiSamplerRecord, GkrXiSamplerTraceGenerator},
     },
     primitives::exp_bits_len::ExpBitsLenTraceGenerator,
     system::{
-        AirModule, BusIndexManager, BusInventory, GkrPreflight, GlobalCtxCpu, ModuleChip,
-        Preflight, TraceGenModule,
+        AirModule, BusIndexManager, BusInventory, GkrPreflight, GlobalCtxCpu, Preflight,
+        TraceGenModule,
     },
+    tracegen::{ModuleChip, RowMajorChip},
 };
 
 // Internal bus definitions
@@ -528,17 +529,15 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for GkrModule {
             GkrModuleChip::LayerSumcheck,
             GkrModuleChip::XiSampler,
         ];
-        let iter = chips.par_iter();
+
         let span = tracing::Span::current();
-        iter.map(|chip| {
-            let _guard = span.enter();
-            AirProvingContextV2::simple_no_pis(
-                ModuleChip::<GlobalCtxCpu, CpuBackendV2>::generate_trace(
-                    chip, child_vk, proofs, preflights, &blob,
-                ),
-            )
-        })
-        .collect()
+        chips
+            .par_iter()
+            .map(|chip| {
+                let _guard = span.enter();
+                chip.generate_proving_ctx(&blob, None).unwrap()
+            })
+            .collect()
     }
 }
 
@@ -552,8 +551,8 @@ enum GkrModuleChip {
     XiSampler,
 }
 
-impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for GkrModuleChip {
-    type ModuleSpecificCtx = GkrBlobCpu;
+impl RowMajorChip<F> for GkrModuleChip {
+    type Ctx<'a> = GkrBlobCpu;
 
     #[tracing::instrument(
         name = "wrapper.generate_trace",
@@ -563,23 +562,23 @@ impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for GkrModuleChip {
     )]
     fn generate_trace(
         &self,
-        _child_vk: &MultiStarkVerifyingKeyV2,
-        _proofs: &[Proof],
-        _preflights: &[Preflight],
-        blob: &GkrBlobCpu,
-    ) -> ColMajorMatrix<F> {
-        ColMajorMatrix::from_row_major(&self.generate_trace_row_major(blob))
-    }
-}
-
-impl GkrModuleChip {
-    fn generate_trace_row_major(&self, blob: &GkrBlobCpu) -> RowMajorMatrix<F> {
+        blob: &Self::Ctx<'_>,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
         use GkrModuleChip::*;
         match self {
-            Input => input::generate_trace(&blob.input_records, &blob.q0_claims),
-            Layer => layer::generate_trace(&blob.layer_records, &blob.mus_records, &blob.q0_claims),
-            LayerSumcheck => sumcheck::generate_trace(&blob.sumcheck_records, &blob.mus_records),
-            XiSampler => xi_sampler::generate_trace(&blob.xi_sampler_records),
+            Input => GkrInputTraceGenerator
+                .generate_trace(&(&blob.input_records, &blob.q0_claims), required_height),
+            Layer => GkrLayerTraceGenerator.generate_trace(
+                &(&blob.layer_records, &blob.mus_records, &blob.q0_claims),
+                required_height,
+            ),
+            LayerSumcheck => GkrSumcheckTraceGenerator.generate_trace(
+                &(&blob.sumcheck_records, &blob.mus_records),
+                required_height,
+            ),
+            XiSampler => GkrXiSamplerTraceGenerator
+                .generate_trace(&blob.xi_sampler_records.as_slice(), required_height),
         }
     }
 }
@@ -588,33 +587,13 @@ impl GkrModuleChip {
 mod cuda_tracegen {
     use cuda_backend_v2::GpuBackendV2;
     use itertools::Itertools;
-    use openvm_cuda_backend::{base::DeviceMatrix, data_transporter::transport_matrix_to_device};
     use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 
     use super::*;
-    use crate::cuda::{
-        GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu,
+    use crate::{
+        cuda::{GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
+        tracegen::cuda::generate_gpu_proving_ctx,
     };
-
-    impl ModuleChip<GlobalCtxGpu, GpuBackendV2> for GkrModuleChip {
-        type ModuleSpecificCtx = GkrBlobCpu;
-
-        #[tracing::instrument(
-            name = "wrapper.generate_trace",
-            level = "trace",
-            skip_all,
-            fields(air = %self)
-        )]
-        fn generate_trace(
-            &self,
-            _child_vk: &VerifyingKeyGpu,
-            _proofs: &[ProofGpu],
-            _preflights: &[PreflightGpu],
-            blob: &GkrBlobCpu,
-        ) -> DeviceMatrix<F> {
-            transport_matrix_to_device(Arc::new(self.generate_trace_row_major(blob)))
-        }
-    }
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for GkrModule {
         type ModuleSpecificCtx = ExpBitsLenTraceGenerator;
@@ -645,17 +624,13 @@ mod cuda_tracegen {
                 GkrModuleChip::XiSampler,
             ];
 
-            // Parallelize CPU trace generation; do H2D transfers serially to avoid CUDA stream
-            // subtleties (same pattern as BatchConstraintModule).
-            let traces_rm = chips
+            let span = tracing::Span::current();
+            chips
                 .par_iter()
-                .map(|chip| chip.generate_trace_row_major(&blob))
-                .collect::<Vec<_>>();
-
-            traces_rm
-                .into_iter()
-                .map(|trace_rm| transport_matrix_to_device(Arc::new(trace_rm)))
-                .map(AirProvingContextV2::simple_no_pis)
+                .map(|chip| {
+                    let _guard = span.enter();
+                    generate_gpu_proving_ctx(chip, &blob, None).unwrap()
+                })
                 .collect()
         }
     }

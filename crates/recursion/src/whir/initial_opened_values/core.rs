@@ -29,6 +29,7 @@ use crate::{
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
+    tracegen::RowMajorChip,
     utils::{ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
     whir::bus::{VerifyQueryBus, VerifyQueryBusMessage, WhirFoldingBus, WhirFoldingBusMessage},
 };
@@ -318,28 +319,54 @@ where
     }
 }
 
-#[tracing::instrument(level = "trace", skip_all)]
-pub(crate) fn generate_trace(
-    params: &SystemParams,
-    proofs: &[&Proof],
-    preflights: &[&Preflight],
-    codeword_value_accs: &[EF],
-    rows_per_proof_psums: &[usize],
-    commits_per_proof_psums: &[usize],
-    stacking_chunks_psums: &[usize], // proof x commit
-    stacking_widths_psums: &[usize],
-    mu_pows: &[EF],
-) -> RowMajorMatrix<F> {
-    debug_assert_eq!(proofs.len(), preflights.len());
+pub(crate) struct InitialOpenedValuesCtx<'a> {
+    pub params: &'a SystemParams,
+    pub proofs: &'a [&'a Proof],
+    pub preflights: &'a [&'a Preflight],
+    pub codeword_value_accs: &'a [EF],
+    pub rows_per_proof_psums: &'a [usize],
+    pub commits_per_proof_psums: &'a [usize],
+    pub stacking_chunks_psums: &'a [usize],
+    pub stacking_widths_psums: &'a [usize],
+    pub mu_pows: &'a [EF],
+}
 
-    let k_whir = params.k_whir();
+pub(crate) struct InitialOpenedValuesTraceGenerator;
 
-    let omega_k = F::two_adic_generator(k_whir);
-    let height = codeword_value_accs.len().next_power_of_two();
+impl RowMajorChip<F> for InitialOpenedValuesTraceGenerator {
+    type Ctx<'a> = InitialOpenedValuesCtx<'a>;
+
+    #[tracing::instrument(level = "trace", skip_all)]
+    fn generate_trace(
+        &self,
+        ctx: &Self::Ctx<'_>,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
+        let params = ctx.params;
+        let proofs = ctx.proofs;
+        let preflights = ctx.preflights;
+        let codeword_value_accs = ctx.codeword_value_accs;
+        let rows_per_proof_psums = ctx.rows_per_proof_psums;
+        let commits_per_proof_psums = ctx.commits_per_proof_psums;
+        let stacking_chunks_psums = ctx.stacking_chunks_psums;
+        let stacking_widths_psums = ctx.stacking_widths_psums;
+        let mu_pows = ctx.mu_pows;
+        debug_assert_eq!(proofs.len(), preflights.len());
+
+        let k_whir = params.k_whir();
+
+        let omega_k = F::two_adic_generator(k_whir);
+        let num_valid_rows = codeword_value_accs.len();
+        let height = if let Some(h) = required_height {
+            if h < num_valid_rows {
+                return None;
+            }
+            h
+        } else {
+            num_valid_rows.next_power_of_two()
+        };
     let width = InitialOpenedValuesCols::<F>::width();
     let mut trace = vec![F::ZERO; height * width];
-
-    let num_valid_rows = codeword_value_accs.len();
     trace
         .par_chunks_exact_mut(width)
         .take(num_valid_rows)
@@ -446,5 +473,6 @@ pub(crate) fn generate_trace(
             cols.post_state = states[chunk_idx];
         });
 
-    RowMajorMatrix::new(trace, width)
+        Some(RowMajorMatrix::new(trace, width))
+    }
 }

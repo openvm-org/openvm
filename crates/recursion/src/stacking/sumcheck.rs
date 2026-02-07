@@ -21,9 +21,7 @@ use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
     D_EF, EF, F,
-    keygen::types::MultiStarkVerifyingKeyV2,
     poly_common::{eval_eq_uni, eval_eq_uni_at_one, interpolate_quadratic_at_012},
-    proof::Proof,
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
 
@@ -41,7 +39,7 @@ use crate::{
         utils::get_stacked_slice_data,
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
-    system::Preflight,
+    tracegen::{RowMajorChip, StandardTracegenCtx},
     utils::{
         assert_zeros, ext_field_add, ext_field_multiply, ext_field_multiply_scalar,
         ext_field_one_minus, ext_field_subtract,
@@ -454,20 +452,21 @@ where
 ///////////////////////////////////////////////////////////////////////////
 pub struct SumcheckRoundsTraceGenerator;
 
-impl SumcheckRoundsTraceGenerator {
+impl RowMajorChip<F> for SumcheckRoundsTraceGenerator {
+    type Ctx<'a> = StandardTracegenCtx<'a>;
+
     #[tracing::instrument(level = "trace", skip_all)]
-    pub fn generate_trace(
-        vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[&Proof],
-        preflights: &[&Preflight],
-    ) -> RowMajorMatrix<F> {
+    fn generate_trace(
+        &self,
+        ctx: &Self::Ctx<'_>,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
+        let vk = ctx.vk;
+        let proofs = ctx.proofs;
+        let preflights = ctx.preflights;
         debug_assert_eq!(proofs.len(), preflights.len());
 
         let width = SumcheckRoundsCols::<usize>::width();
-
-        if proofs.is_empty() {
-            return RowMajorMatrix::new(vec![F::ZERO; width], width);
-        }
 
         let traces = proofs
             .par_iter()
@@ -534,11 +533,6 @@ impl SumcheckRoundsTraceGenerator {
                 let proof_idx_value = F::from_usize(proof_idx);
 
                 let mut trace = vec![F::ZERO; num_rows * width];
-
-                for chunk in trace.chunks_mut(width) {
-                    let cols: &mut SumcheckRoundsCols<F> = chunk.borrow_mut();
-                    cols.proof_idx = proof_idx_value;
-                }
 
                 let u = &preflight.stacking.sumcheck_rnd[1..];
                 let batch_sumcheck_randomness = preflight.batch_constraint_sumcheck_randomness();
@@ -620,30 +614,35 @@ impl SumcheckRoundsTraceGenerator {
             })
             .collect::<Vec<_>>();
 
-        let total_rows: usize = traces.iter().map(|(_trace, rows)| *rows).sum();
-        let padded_rows = total_rows.next_power_of_two();
-        let mut combined_trace = Vec::with_capacity(padded_rows * width);
+        let num_valid_rows = traces.iter().map(|(_trace, num_rows)| *num_rows).sum();
+        let height = if let Some(height) = required_height {
+            if height < num_valid_rows {
+                return None;
+            }
+            height
+        } else {
+            num_valid_rows.next_power_of_two()
+        };
+
+        let mut combined_trace = Vec::with_capacity(height * width);
         for (trace, _num_rows) in traces {
             combined_trace.extend(trace);
         }
 
-        if padded_rows > total_rows {
-            let padding_start = combined_trace.len();
-            combined_trace.resize(padded_rows * width, F::ZERO);
+        let padding_proof_idx = F::from_usize(proofs.len());
+        combined_trace.resize(height * width, F::ZERO);
+        let mut chunks = combined_trace[num_valid_rows * width..]
+            .chunks_mut(width)
+            .peekable();
 
-            let padding_proof_idx = F::from_usize(proofs.len());
-            let mut chunks = combined_trace[padding_start..].chunks_mut(width);
-            let num_padded_rows = padded_rows - total_rows;
-            for i in 0..num_padded_rows {
-                let chunk = chunks.next().unwrap();
-                let cols: &mut SumcheckRoundsCols<F> = chunk.borrow_mut();
-                cols.proof_idx = padding_proof_idx;
-                if i + 1 == num_padded_rows {
-                    cols.is_last = F::ONE;
-                }
+        while let Some(chunk) = chunks.next() {
+            let cols: &mut SumcheckRoundsCols<F> = chunk.borrow_mut();
+            cols.proof_idx = padding_proof_idx;
+            if chunks.peek().is_none() {
+                cols.is_last = F::ONE;
             }
         }
 
-        RowMajorMatrix::new(combined_trace, width)
+        Some(RowMajorMatrix::new(combined_trace, width))
     }
 }

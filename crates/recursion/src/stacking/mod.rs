@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use itertools::{Itertools, izip};
 use openvm_stark_backend::AirRef;
+use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
@@ -10,7 +11,7 @@ use stark_backend_v2::{
     keygen::types::MultiStarkVerifyingKeyV2,
     poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
     proof::{Proof, StackingProof},
-    prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
+    prover::{AirProvingContextV2, CpuBackendV2},
 };
 use strum::EnumDiscriminants;
 
@@ -25,9 +26,10 @@ use crate::{
         univariate::{UnivariateRoundAir, UnivariateRoundTraceGenerator},
     },
     system::{
-        AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, ModuleChip, Preflight,
-        StackingPreflight, TraceGenModule,
+        AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, Preflight, StackingPreflight,
+        TraceGenModule,
     },
+    tracegen::{ModuleChip, RowMajorChip, StandardTracegenCtx},
 };
 
 mod bus;
@@ -228,38 +230,8 @@ enum StackingModuleChip {
     EqBits,
 }
 
-impl StackingModuleChip {
-    fn generate_trace_row_major(
-        &self,
-        child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[&Proof],
-        preflights: &[&Preflight],
-    ) -> RowMajorMatrix<F> {
-        match self {
-            StackingModuleChip::OpeningClaims => {
-                OpeningClaimsTraceGenerator::generate_trace(child_vk, proofs, preflights)
-            }
-            StackingModuleChip::UnivariateRound => {
-                UnivariateRoundTraceGenerator::generate_trace(child_vk, proofs, preflights)
-            }
-            StackingModuleChip::SumcheckRounds => {
-                SumcheckRoundsTraceGenerator::generate_trace(child_vk, proofs, preflights)
-            }
-            StackingModuleChip::StackingClaims => {
-                StackingClaimsTraceGenerator::generate_trace(child_vk, proofs, preflights)
-            }
-            StackingModuleChip::EqBase => {
-                EqBaseTraceGenerator::generate_trace(child_vk, proofs, preflights)
-            }
-            StackingModuleChip::EqBits => {
-                EqBitsTraceGenerator::generate_trace(child_vk, proofs, preflights)
-            }
-        }
-    }
-}
-
-impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for StackingModuleChip {
-    type ModuleSpecificCtx = ();
+impl RowMajorChip<F> for StackingModuleChip {
+    type Ctx<'a> = StandardTracegenCtx<'a>;
 
     #[tracing::instrument(
         name = "wrapper.generate_trace",
@@ -269,18 +241,25 @@ impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for StackingModuleChip {
     )]
     fn generate_trace(
         &self,
-        child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
-        preflights: &[Preflight],
-        _ctx: &(),
-    ) -> ColMajorMatrix<F> {
-        let proofs = proofs.iter().collect_vec();
-        let preflights = preflights.iter().collect_vec();
-        ColMajorMatrix::from_row_major(&self.generate_trace_row_major(
-            child_vk,
-            &proofs,
-            &preflights,
-        ))
+        ctx: &Self::Ctx<'_>,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
+        match self {
+            StackingModuleChip::OpeningClaims => {
+                OpeningClaimsTraceGenerator.generate_trace(ctx, required_height)
+            }
+            StackingModuleChip::UnivariateRound => {
+                UnivariateRoundTraceGenerator.generate_trace(ctx, required_height)
+            }
+            StackingModuleChip::SumcheckRounds => {
+                SumcheckRoundsTraceGenerator.generate_trace(ctx, required_height)
+            }
+            StackingModuleChip::StackingClaims => {
+                StackingClaimsTraceGenerator.generate_trace(ctx, required_height)
+            }
+            StackingModuleChip::EqBase => EqBaseTraceGenerator.generate_trace(ctx, required_height),
+            StackingModuleChip::EqBits => EqBitsTraceGenerator.generate_trace(ctx, required_height),
+        }
     }
 }
 
@@ -293,9 +272,13 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for StackingModule {
         child_vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
         preflights: &[Preflight],
-        _ctx: &(),
+        _module_ctx: &(),
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
-        // TODO: parallelize
+        let ctx = StandardTracegenCtx {
+            vk: child_vk,
+            proofs: &proofs.iter().collect_vec(),
+            preflights: &preflights.iter().collect_vec(),
+        };
         let chips = [
             StackingModuleChip::OpeningClaims,
             StackingModuleChip::UnivariateRound,
@@ -304,18 +287,10 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for StackingModule {
             StackingModuleChip::EqBase,
             StackingModuleChip::EqBits,
         ];
+        // TODO[INT-6027]: Use required_height properly
         chips
-            .iter()
-            .map(|chip| {
-                ModuleChip::<GlobalCtxCpu, CpuBackendV2>::generate_trace(
-                    chip,
-                    child_vk,
-                    proofs,
-                    preflights,
-                    &(),
-                )
-            })
-            .map(AirProvingContextV2::simple_no_pis)
+            .par_iter()
+            .map(|chip| chip.generate_proving_ctx(&ctx, None).unwrap())
             .collect()
     }
 }
@@ -324,22 +299,55 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for StackingModule {
 mod cuda_tracegen {
     use cuda_backend_v2::{EF, GpuBackendV2};
     use itertools::Itertools;
-    use openvm_cuda_backend::{base::DeviceMatrix, data_transporter::transport_matrix_to_device};
     use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
     use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 
     use super::*;
     use crate::{
         cuda::{GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
-        stacking::cuda_abi::{
-            PolyPrecomputation, StackedSliceData, StackedTraceData, compute_coefficients,
-            compute_coefficients_temp_bytes, stacked_slice_data,
+        stacking::{
+            claims::cuda::StackingClaimsTraceGeneratorGpu,
+            cuda_abi::{
+                PolyPrecomputation, StackedSliceData, StackedTraceData, compute_coefficients,
+                compute_coefficients_temp_bytes, stacked_slice_data,
+            },
+            opening::cuda::OpeningClaimsTraceGeneratorGpu,
         },
+        tracegen::cuda::{StandardTracegenGpuCtx, generate_gpu_proving_ctx},
     };
 
     impl StackingModuleChip {
         fn index(&self) -> usize {
             StackingModuleChipDiscriminants::from(self) as usize
+        }
+    }
+
+    impl ModuleChip<GpuBackendV2> for StackingModuleChip {
+        type Ctx<'a> = (StandardTracegenGpuCtx<'a>, &'a StackingBlob);
+
+        fn generate_proving_ctx(
+            &self,
+            ctx: &Self::Ctx<'_>,
+            required_height: Option<usize>,
+        ) -> Option<AirProvingContextV2<GpuBackendV2>> {
+            match self {
+                StackingModuleChip::OpeningClaims => {
+                    OpeningClaimsTraceGeneratorGpu.generate_proving_ctx(ctx, required_height)
+                }
+                StackingModuleChip::StackingClaims => {
+                    StackingClaimsTraceGeneratorGpu.generate_proving_ctx(ctx, required_height)
+                }
+                _ => {
+                    let proofs_cpu = ctx.0.proofs.iter().map(|p| &p.cpu).collect_vec();
+                    let preflights_cpu = ctx.0.preflights.iter().map(|p| &p.cpu).collect_vec();
+                    let cpu_ctx = StandardTracegenCtx {
+                        vk: &ctx.0.vk.cpu,
+                        proofs: &proofs_cpu,
+                        preflights: &preflights_cpu,
+                    };
+                    generate_gpu_proving_ctx(self, &cpu_ctx, required_height)
+                }
+            }
         }
     }
 
@@ -517,45 +525,6 @@ mod cuda_tracegen {
         }
     }
 
-    impl ModuleChip<GlobalCtxGpu, GpuBackendV2> for StackingModuleChip {
-        type ModuleSpecificCtx = StackingBlob;
-
-        #[tracing::instrument(
-            name = "wrapper.generate_trace",
-            level = "trace",
-            skip_all,
-            fields(air = %self)
-        )]
-        fn generate_trace(
-            &self,
-            child_vk: &VerifyingKeyGpu,
-            proofs: &[ProofGpu],
-            preflights: &[PreflightGpu],
-            ctx: &StackingBlob,
-        ) -> DeviceMatrix<F> {
-            match self {
-                StackingModuleChip::OpeningClaims => {
-                    opening::cuda::generate_trace(child_vk, proofs, preflights, ctx)
-                }
-                StackingModuleChip::StackingClaims => {
-                    claims::cuda::generate_trace(proofs, preflights, ctx)
-                }
-                _ => {
-                    let proofs = proofs.iter().map(|proof| &proof.cpu).collect_vec();
-                    let preflights = preflights
-                        .iter()
-                        .map(|preflight| &preflight.cpu)
-                        .collect_vec();
-                    transport_matrix_to_device(Arc::new(self.generate_trace_row_major(
-                        &child_vk.cpu,
-                        &proofs,
-                        &preflights,
-                    )))
-                }
-            }
-        }
-    }
-
     impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for StackingModule {
         type ModuleSpecificCtx = ();
 
@@ -568,6 +537,14 @@ mod cuda_tracegen {
             _module_ctx: &(),
         ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
             let blob = StackingBlob::new(child_vk, proofs, preflights);
+            let ctx = (
+                StandardTracegenGpuCtx {
+                    vk: child_vk,
+                    proofs,
+                    preflights,
+                },
+                &blob,
+            );
 
             let gpu_chips = [
                 StackingModuleChip::OpeningClaims,
@@ -583,43 +560,21 @@ mod cuda_tracegen {
             // Launch all GPU tracegen kernels serially first (default stream).
             let indexed_gpu_ctxs = gpu_chips
                 .iter()
-                .map(|chip| {
-                    let trace = ModuleChip::<GlobalCtxGpu, GpuBackendV2>::generate_trace(
-                        chip, child_vk, proofs, preflights, &blob,
-                    );
-                    (chip.index(), AirProvingContextV2::simple_no_pis(trace))
-                })
+                .map(|chip| (chip.index(), chip.generate_proving_ctx(&ctx, None)))
                 .collect::<Vec<_>>();
 
             // Then run CPU tracegen for remaining AIRs in parallel
-            let proofs_cpu = proofs.iter().map(|proof| &proof.cpu).collect_vec();
-            let preflights_cpu = preflights
-                .iter()
-                .map(|preflight| &preflight.cpu)
-                .collect_vec();
-
-            let indexed_cpu_traces_rm = cpu_chips
+            let indexed_cpu_ctxs = cpu_chips
                 .par_iter()
-                .map(|chip| {
-                    (
-                        chip.index(),
-                        chip.generate_trace_row_major(&child_vk.cpu, &proofs_cpu, &preflights_cpu),
-                    )
-                })
+                .map(|chip| (chip.index(), chip.generate_proving_ctx(&ctx, None)))
                 .collect::<Vec<_>>();
 
-            // Transfer CPU traces H2D serially (default stream).
-            let mut indexed_cpu_ctxs = Vec::with_capacity(indexed_cpu_traces_rm.len());
-            for (idx, trace_rm) in indexed_cpu_traces_rm {
-                let trace = transport_matrix_to_device(Arc::new(trace_rm));
-                indexed_cpu_ctxs.push((idx, AirProvingContextV2::simple_no_pis(trace)));
-            }
-
+            // TODO[INT-6027]: Use required_height properly
             indexed_gpu_ctxs
                 .into_iter()
                 .chain(indexed_cpu_ctxs)
                 .sorted_by(|a, b| a.0.cmp(&b.0))
-                .map(|(_idx, ctx)| ctx)
+                .map(|(_idx, ctx)| ctx.unwrap())
                 .collect()
         }
     }
