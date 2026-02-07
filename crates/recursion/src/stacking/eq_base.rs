@@ -18,9 +18,7 @@ use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
     D_EF, EF, F,
-    keygen::types::MultiStarkVerifyingKeyV2,
     poly_common::{Squarable, eval_eq_uni, eval_rot_kernel_prism},
-    proof::Proof,
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
 
@@ -35,7 +33,7 @@ use crate::{
         EqRandValuesLookupMessage,
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
-    system::Preflight,
+    tracegen::{RowMajorChip, StandardTracegenCtx},
     utils::{
         assert_one_ext, ext_field_add, ext_field_add_scalar, ext_field_multiply,
         ext_field_multiply_scalar, ext_field_subtract,
@@ -431,22 +429,23 @@ where
 ///////////////////////////////////////////////////////////////////////////
 pub struct EqBaseTraceGenerator;
 
-impl EqBaseTraceGenerator {
+impl RowMajorChip<F> for EqBaseTraceGenerator {
+    type Ctx<'a> = StandardTracegenCtx<'a>;
+
     #[tracing::instrument(level = "trace", skip_all)]
-    pub fn generate_trace(
-        vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[&Proof],
-        preflights: &[&Preflight],
-    ) -> RowMajorMatrix<F> {
+    fn generate_trace(
+        &self,
+        ctx: &Self::Ctx<'_>,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
+        let vk = ctx.vk;
+        let proofs = ctx.proofs;
+        let preflights = ctx.preflights;
         debug_assert_eq!(proofs.len(), preflights.len());
 
         let width = EqBaseCols::<usize>::width();
 
-        if proofs.is_empty() {
-            return RowMajorMatrix::new(vec![F::ZERO; width], width);
-        }
-
-        let num_rows = vk.inner.params.l_skip + 1;
+        let num_rows_per_proof = vk.inner.params.l_skip + 1;
         let traces = proofs
             .par_iter()
             .zip(preflights.par_iter())
@@ -468,12 +467,7 @@ impl EqBaseTraceGenerator {
 
                 let proof_idx_value = F::from_usize(proof_idx);
 
-                let mut trace = vec![F::ZERO; num_rows * width];
-
-                for chunk in trace.chunks_mut(width) {
-                    let cols: &mut EqBaseCols<F> = chunk.borrow_mut();
-                    cols.proof_idx = proof_idx_value;
-                }
+                let mut trace = vec![F::ZERO; num_rows_per_proof * width];
 
                 let omega = F::two_adic_generator(vk.inner.params.l_skip);
                 let mut u = preflight.stacking.sumcheck_rnd[0];
@@ -492,9 +486,10 @@ impl EqBaseTraceGenerator {
                     .take(vk.inner.params.l_skip + 1)
                     .collect_vec();
 
-                for (row_idx, chunk) in trace.chunks_mut(width).take(num_rows).enumerate() {
+                for (row_idx, chunk) in trace.chunks_mut(width).take(num_rows_per_proof).enumerate()
+                {
                     let cols: &mut EqBaseCols<F> = chunk.borrow_mut();
-                    let is_last = row_idx + 1 == num_rows;
+                    let is_last = row_idx + 1 == num_rows_per_proof;
 
                     cols.proof_idx = proof_idx_value;
                     cols.is_valid = F::ONE;
@@ -557,34 +552,39 @@ impl EqBaseTraceGenerator {
                     prod_r_omega_1 *= r_omega + F::ONE;
                 }
 
-                (trace, num_rows)
+                (trace, num_rows_per_proof)
             })
             .collect::<Vec<_>>();
 
-        let total_rows: usize = traces.iter().map(|(_trace, rows)| *rows).sum();
-        let padded_rows = total_rows.next_power_of_two();
-        let mut combined_trace = Vec::with_capacity(padded_rows * width);
+        let num_valid_rows = traces.iter().map(|(_trace, num_rows)| *num_rows).sum();
+        let height = if let Some(height) = required_height {
+            if height < num_valid_rows {
+                return None;
+            }
+            height
+        } else {
+            num_valid_rows.next_power_of_two()
+        };
+
+        let mut combined_trace = Vec::with_capacity(height * width);
         for (trace, _num_rows) in traces {
             combined_trace.extend(trace);
         }
 
-        if padded_rows > total_rows {
-            let padding_start = combined_trace.len();
-            combined_trace.resize(padded_rows * width, F::ZERO);
+        let padding_proof_idx = F::from_usize(proofs.len());
+        combined_trace.resize(height * width, F::ZERO);
+        let mut chunks = combined_trace[num_valid_rows * width..]
+            .chunks_mut(width)
+            .peekable();
 
-            let padding_proof_idx = F::from_usize(proofs.len());
-            let mut chunks = combined_trace[padding_start..].chunks_mut(width);
-            let num_padded_rows = padded_rows - total_rows;
-            for i in 0..num_padded_rows {
-                let chunk = chunks.next().unwrap();
-                let cols: &mut EqBaseCols<F> = chunk.borrow_mut();
-                cols.proof_idx = padding_proof_idx;
-                if i + 1 == num_padded_rows {
-                    cols.is_last = F::ONE;
-                }
+        while let Some(chunk) = chunks.next() {
+            let cols: &mut EqBaseCols<F> = chunk.borrow_mut();
+            cols.proof_idx = padding_proof_idx;
+            if chunks.peek().is_none() {
+                cols.is_last = F::ONE;
             }
         }
 
-        RowMajorMatrix::new(combined_trace, width)
+        Some(RowMajorMatrix::new(combined_trace, width))
     }
 }

@@ -10,16 +10,14 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, extension::BinomiallyExtendable};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{
-    D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, poly_common::Squarable, proof::Proof,
-};
+use stark_backend_v2::{D_EF, F, poly_common::Squarable};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{TranscriptBus, WhirOpeningPointBus, WhirOpeningPointMessage},
     primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
-    system::Preflight,
+    tracegen::{RowMajorChip, StandardTracegenCtx},
     utils::{eq_1, ext_field_multiply, interpolate_quadratic},
     whir::bus::{
         WhirAlphaBus, WhirAlphaMessage, WhirEqAlphaUBus, WhirEqAlphaUMessage, WhirSumcheckBus,
@@ -250,105 +248,122 @@ where
     }
 }
 
-#[tracing::instrument(level = "trace", skip_all)]
-pub(crate) fn generate_trace(
-    vk: &MultiStarkVerifyingKeyV2,
-    proofs: &[&Proof],
-    preflights: &[&Preflight],
-) -> RowMajorMatrix<F> {
-    debug_assert_eq!(proofs.len(), preflights.len());
+pub(crate) struct WhirSumcheckTraceGenerator;
 
-    let params = &vk.inner.params;
-    let k_whir = params.k_whir();
-    let num_whir_rounds = params.num_whir_rounds();
+impl RowMajorChip<F> for WhirSumcheckTraceGenerator {
+    type Ctx<'a> = StandardTracegenCtx<'a>;
 
-    let whir_opening_point_per_proof = preflights
-        .iter()
-        .map(|preflight| {
-            let sumcheck_rnd = &preflight.stacking.sumcheck_rnd;
-            sumcheck_rnd[0]
-                .exp_powers_of_2()
-                .take(params.l_skip)
-                .chain(sumcheck_rnd.iter().skip(1).copied())
-                .collect_vec()
-        })
-        .collect_vec();
+    #[tracing::instrument(level = "trace", skip_all)]
+    fn generate_trace(
+        &self,
+        ctx: &Self::Ctx<'_>,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
+        let vk = ctx.vk;
+        let proofs = ctx.proofs;
+        let preflights = ctx.preflights;
+        debug_assert_eq!(proofs.len(), preflights.len());
 
-    let num_queries_per_round: Vec<usize> =
-        params.whir.rounds.iter().map(|r| r.num_queries).collect();
-    let mut alpha_lookup_counts = vec![0usize; params.num_whir_sumcheck_rounds()];
-    let mut base = 0usize;
-    for r in 0..num_whir_rounds {
-        let q = num_queries_per_round[r];
-        for j in 0..k_whir {
-            alpha_lookup_counts[r * k_whir + j] = base + q * (1 << (k_whir - 1 - j));
+        let params = &vk.inner.params;
+        let k_whir = params.k_whir();
+        let num_whir_rounds = params.num_whir_rounds();
+
+        let whir_opening_point_per_proof = preflights
+            .iter()
+            .map(|preflight| {
+                let sumcheck_rnd = &preflight.stacking.sumcheck_rnd;
+                sumcheck_rnd[0]
+                    .exp_powers_of_2()
+                    .take(params.l_skip)
+                    .chain(sumcheck_rnd.iter().skip(1).copied())
+                    .collect_vec()
+            })
+            .collect_vec();
+
+        let num_queries_per_round: Vec<usize> =
+            params.whir.rounds.iter().map(|r| r.num_queries).collect();
+        let mut alpha_lookup_counts = vec![0usize; params.num_whir_sumcheck_rounds()];
+        let mut base = 0usize;
+        for r in 0..num_whir_rounds {
+            let q = num_queries_per_round[r];
+            for j in 0..k_whir {
+                alpha_lookup_counts[r * k_whir + j] = base + q * (1 << (k_whir - 1 - j));
+            }
+            base += q + 1; // OOD query (or final poly) + in-domain queries
         }
-        base += q + 1; // OOD query (or final poly) + in-domain queries
+
+        let rows_per_proof = params.num_whir_sumcheck_rounds();
+        let total_valid_rows = rows_per_proof * proofs.len();
+
+        let width = SumcheckCols::<F>::width();
+        let height = if let Some(h) = required_height {
+            if h < total_valid_rows {
+                return None;
+            }
+            h
+        } else {
+            total_valid_rows.next_power_of_two()
+        };
+        let mut trace = F::zero_vec(width * height);
+
+        trace
+            .par_chunks_exact_mut(width)
+            .take(total_valid_rows)
+            .enumerate()
+            .for_each(|(row_idx, row)| {
+                let proof_idx = row_idx / rows_per_proof;
+                let i = row_idx % rows_per_proof;
+
+                let whir_round = i / k_whir;
+                let j = i % k_whir;
+
+                let proof = &proofs[proof_idx];
+                let whir = &preflights[proof_idx].whir;
+
+                let num_rounds = params.num_whir_rounds();
+                debug_assert_eq!(whir.alphas.len(), num_rounds * k_whir);
+
+                let is_first_in_group = j == 0;
+                let last_group_row_idx = (whir_round + 1) * k_whir - 1;
+                let tidx = whir.tidx_per_round[whir_round] + (3 * D_EF + 2) * j;
+
+                let cols: &mut SumcheckCols<F> = row.borrow_mut();
+                cols.is_enabled = F::ONE;
+                cols.proof_idx = F::from_usize(proof_idx);
+                cols.is_first_in_proof = F::from_bool(i == 0);
+                cols.is_first_in_round = F::from_bool(is_first_in_group);
+                cols.whir_round = F::from_usize(whir_round);
+                cols.subidx = F::from_usize(j);
+                cols.tidx = F::from_usize(tidx);
+                let sumcheck_polys = &proof.whir_proof.whir_sumcheck_polys[i];
+                cols.ev1
+                    .copy_from_slice(sumcheck_polys[0].as_basis_coefficients_slice());
+                cols.ev2
+                    .copy_from_slice(sumcheck_polys[1].as_basis_coefficients_slice());
+                cols.folding_pow_witness = proof.whir_proof.folding_pow_witnesses[i];
+                cols.folding_pow_sample = whir.folding_pow_samples[i];
+                cols.eq_partial
+                    .copy_from_slice(whir.eq_partials[i].as_basis_coefficients_slice());
+                cols.alpha
+                    .copy_from_slice(whir.alphas[i].as_basis_coefficients_slice());
+                cols.u.copy_from_slice(
+                    whir_opening_point_per_proof[proof_idx][i].as_basis_coefficients_slice(),
+                );
+                cols.pre_claim.copy_from_slice(
+                    if is_first_in_group {
+                        whir.initial_claim_per_round[whir_round]
+                    } else {
+                        whir.post_sumcheck_claims[i - 1]
+                    }
+                    .as_basis_coefficients_slice(),
+                );
+                cols.post_group_claim.copy_from_slice(
+                    whir.post_sumcheck_claims[last_group_row_idx].as_basis_coefficients_slice(),
+                );
+                cols.alpha_lookup_count =
+                    F::from_usize(alpha_lookup_counts[whir_round * k_whir + j]);
+            });
+
+        Some(RowMajorMatrix::new(trace, width))
     }
-
-    let rows_per_proof = params.num_whir_sumcheck_rounds();
-    let total_valid_rows = rows_per_proof * proofs.len();
-
-    let width = SumcheckCols::<F>::width();
-    let height = total_valid_rows.next_power_of_two();
-    let mut trace = F::zero_vec(width * height);
-
-    trace
-        .par_chunks_exact_mut(width)
-        .take(total_valid_rows)
-        .enumerate()
-        .for_each(|(row_idx, row)| {
-            let proof_idx = row_idx / rows_per_proof;
-            let i = row_idx % rows_per_proof;
-
-            let whir_round = i / k_whir;
-            let j = i % k_whir;
-
-            let proof = &proofs[proof_idx];
-            let whir = &preflights[proof_idx].whir;
-
-            let num_rounds = params.num_whir_rounds();
-            debug_assert_eq!(whir.alphas.len(), num_rounds * k_whir);
-
-            let is_first_in_group = j == 0;
-            let last_group_row_idx = (whir_round + 1) * k_whir - 1;
-            let tidx = whir.tidx_per_round[whir_round] + (3 * D_EF + 2) * j;
-
-            let cols: &mut SumcheckCols<F> = row.borrow_mut();
-            cols.is_enabled = F::ONE;
-            cols.proof_idx = F::from_usize(proof_idx);
-            cols.is_first_in_proof = F::from_bool(i == 0);
-            cols.is_first_in_round = F::from_bool(is_first_in_group);
-            cols.whir_round = F::from_usize(whir_round);
-            cols.subidx = F::from_usize(j);
-            cols.tidx = F::from_usize(tidx);
-            let sumcheck_polys = &proof.whir_proof.whir_sumcheck_polys[i];
-            cols.ev1
-                .copy_from_slice(sumcheck_polys[0].as_basis_coefficients_slice());
-            cols.ev2
-                .copy_from_slice(sumcheck_polys[1].as_basis_coefficients_slice());
-            cols.folding_pow_witness = proof.whir_proof.folding_pow_witnesses[i];
-            cols.folding_pow_sample = whir.folding_pow_samples[i];
-            cols.eq_partial
-                .copy_from_slice(whir.eq_partials[i].as_basis_coefficients_slice());
-            cols.alpha
-                .copy_from_slice(whir.alphas[i].as_basis_coefficients_slice());
-            cols.u.copy_from_slice(
-                whir_opening_point_per_proof[proof_idx][i].as_basis_coefficients_slice(),
-            );
-            cols.pre_claim.copy_from_slice(
-                if is_first_in_group {
-                    whir.initial_claim_per_round[whir_round]
-                } else {
-                    whir.post_sumcheck_claims[i - 1]
-                }
-                .as_basis_coefficients_slice(),
-            );
-            cols.post_group_claim.copy_from_slice(
-                whir.post_sumcheck_claims[last_group_row_idx].as_basis_coefficients_slice(),
-            );
-            cols.alpha_lookup_count = F::from_usize(alpha_lookup_counts[whir_round * k_whir + j]);
-        });
-
-    RowMajorMatrix::new(trace, width)
 }

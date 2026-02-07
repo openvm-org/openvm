@@ -2,10 +2,13 @@ use core::{borrow::BorrowMut, convert::TryInto};
 
 use p3_field::{BasedVectorSpace, PrimeCharacteristicRing};
 use p3_matrix::dense::RowMajorMatrix;
-use stark_backend_v2::{EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
+use stark_backend_v2::{EF, F};
 
 use super::WhirFoldingCols;
-use crate::{system::Preflight, whir::total_num_queries};
+use crate::{
+    tracegen::{RowMajorChip, StandardTracegenCtx},
+    whir::total_num_queries,
+};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
@@ -63,58 +66,73 @@ impl FoldRecord {
     }
 }
 
-#[tracing::instrument(level = "trace", skip_all)]
-pub fn generate_trace(
-    mvk: &MultiStarkVerifyingKeyV2,
-    _proofs: &[&Proof],
-    preflights: &[&Preflight],
-) -> RowMajorMatrix<F> {
-    let params = &mvk.inner.params;
+pub(crate) struct FoldingTraceGenerator;
 
-    let num_queries_per_round: Vec<usize> =
-        params.whir.rounds.iter().map(|r| r.num_queries).collect();
-    let k_whir = params.k_whir();
-    let internal_nodes = (1 << k_whir) - 1;
+impl RowMajorChip<F> for FoldingTraceGenerator {
+    type Ctx<'a> = StandardTracegenCtx<'a>;
 
-    let num_rows_per_proof = total_num_queries(&num_queries_per_round) * internal_nodes;
-    let num_valid_rows = num_rows_per_proof * preflights.len();
-    let height = num_valid_rows.next_power_of_two();
-    let width = WhirFoldingCols::<F>::width();
+    #[tracing::instrument(level = "trace", skip_all)]
+    fn generate_trace(
+        &self,
+        ctx: &Self::Ctx<'_>,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
+        let mvk = ctx.vk;
+        let preflights = ctx.preflights;
+        let params = &mvk.inner.params;
 
-    let mut trace = vec![F::ZERO; height * width];
+        let num_queries_per_round: Vec<usize> =
+            params.whir.rounds.iter().map(|r| r.num_queries).collect();
+        let k_whir = params.k_whir();
+        let internal_nodes = (1 << k_whir) - 1;
 
-    for (row_idx, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
-        let proof_idx = row_idx / num_rows_per_proof;
-        let i = row_idx % num_rows_per_proof;
+        let num_rows_per_proof = total_num_queries(&num_queries_per_round) * internal_nodes;
+        let num_valid_rows = num_rows_per_proof * preflights.len();
+        let height = if let Some(h) = required_height {
+            if h < num_valid_rows {
+                return None;
+            }
+            h
+        } else {
+            num_valid_rows.next_power_of_two()
+        };
+        let width = WhirFoldingCols::<F>::width();
 
-        let preflight = &preflights[proof_idx];
+        let mut trace = vec![F::ZERO; height * width];
 
-        let record = preflight.whir.fold_records[i];
-        let height = record.height as usize;
+        for (row_idx, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
+            let proof_idx = row_idx / num_rows_per_proof;
+            let i = row_idx % num_rows_per_proof;
 
-        let cols: &mut WhirFoldingCols<F> = row.borrow_mut();
-        cols.is_valid = F::ONE;
-        cols.proof_idx = F::from_usize(proof_idx);
-        cols.is_root = F::from_bool(record.coset_size == 1);
-        cols.alpha
-            .copy_from_slice(record.alpha.as_basis_coefficients_slice());
-        cols.height = F::from_usize(height);
-        cols.whir_round = F::from_u32(record.whir_round);
-        cols.query_idx = F::from_u32(record.query_idx);
-        cols.coset_idx = F::from_u32(record.coset_idx);
-        cols.left_value
-            .copy_from_slice(record.left_value.as_basis_coefficients_slice());
-        cols.right_value
-            .copy_from_slice(record.right_value.as_basis_coefficients_slice());
-        cols.value
-            .copy_from_slice(record.value.as_basis_coefficients_slice());
-        cols.twiddle = record.twiddle;
-        cols.coset_shift = record.coset_shift;
-        cols.coset_size = F::from_u32(record.coset_size);
-        cols.z_final = record.z_final;
-        cols.y_final
-            .copy_from_slice(record.y_final.as_basis_coefficients_slice());
+            let preflight = &preflights[proof_idx];
+
+            let record = preflight.whir.fold_records[i];
+            let height = record.height as usize;
+
+            let cols: &mut WhirFoldingCols<F> = row.borrow_mut();
+            cols.is_valid = F::ONE;
+            cols.proof_idx = F::from_usize(proof_idx);
+            cols.is_root = F::from_bool(record.coset_size == 1);
+            cols.alpha
+                .copy_from_slice(record.alpha.as_basis_coefficients_slice());
+            cols.height = F::from_usize(height);
+            cols.whir_round = F::from_u32(record.whir_round);
+            cols.query_idx = F::from_u32(record.query_idx);
+            cols.coset_idx = F::from_u32(record.coset_idx);
+            cols.left_value
+                .copy_from_slice(record.left_value.as_basis_coefficients_slice());
+            cols.right_value
+                .copy_from_slice(record.right_value.as_basis_coefficients_slice());
+            cols.value
+                .copy_from_slice(record.value.as_basis_coefficients_slice());
+            cols.twiddle = record.twiddle;
+            cols.coset_shift = record.coset_shift;
+            cols.coset_size = F::from_u32(record.coset_size);
+            cols.z_final = record.z_final;
+            cols.y_final
+                .copy_from_slice(record.y_final.as_basis_coefficients_slice());
+        }
+
+        Some(RowMajorMatrix::new(trace, width))
     }
-
-    RowMajorMatrix::new(trace, width)
 }

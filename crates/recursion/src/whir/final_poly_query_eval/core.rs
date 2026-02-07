@@ -17,6 +17,7 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 use crate::{
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
+    tracegen::RowMajorChip,
     utils::{eq_1, ext_field_add, ext_field_multiply},
     whir::bus::{
         FinalPolyQueryEvalBus, FinalPolyQueryEvalMessage, WhirAlphaBus, WhirAlphaMessage,
@@ -520,100 +521,121 @@ fn compute_indices_from_row_idx(
     )
 }
 
-#[tracing::instrument(level = "trace", skip_all)]
-pub(crate) fn generate_trace(
-    mvk: &MultiStarkVerifyingKeyV2,
-    _proofs: &[&Proof],
-    records: &[FinalPolyQueryEvalRecord],
-) -> RowMajorMatrix<F> {
-    let params = &mvk.inner.params;
-    let k_whir = params.k_whir();
-    let num_queries_per_round: Vec<usize> =
-        params.whir.rounds.iter().map(|r| r.num_queries).collect();
-    let final_poly_len = 1usize << params.log_final_poly_len();
-    let num_whir_rounds = params.num_whir_rounds();
+pub(crate) struct FinalPolyQueryEvalCtx<'a> {
+    pub vk: &'a MultiStarkVerifyingKeyV2,
+    pub records: &'a [FinalPolyQueryEvalRecord],
+}
 
-    let round_offsets = compute_round_offsets(
-        num_whir_rounds,
-        k_whir,
-        final_poly_len,
-        &num_queries_per_round,
-    );
-    let rows_per_proof = *round_offsets
-        .last()
-        .expect("round offsets vector must include sentinel");
-    debug_assert!(rows_per_proof > 0);
-    let total_valid_rows = records.len();
-    let height = total_valid_rows.next_power_of_two();
-    let width = FinalyPolyQueryEvalCols::<F>::width();
-    let mut trace = F::zero_vec(width * height);
-    trace
-        .par_chunks_exact_mut(width)
-        .zip(records.par_iter())
-        .enumerate()
-        .for_each(|(row_idx, (row, record))| {
-            let (proof_idx, whir_round, query_idx, phase_idx, eval_idx, num_alphas) =
-                compute_indices_from_row_idx(
-                    row_idx,
-                    rows_per_proof,
-                    &round_offsets,
-                    num_whir_rounds,
-                    k_whir,
-                    final_poly_len,
-                );
+pub(crate) struct FinalPolyQueryEvalTraceGenerator;
 
-            let is_first_in_phase = eval_idx == 0;
-            let is_first_in_query = is_first_in_phase && (phase_idx == 0 || num_alphas == 0);
-            let is_first_in_round = is_first_in_query && query_idx == 0;
-            let is_first_in_proof = is_first_in_round && whir_round == 0;
+impl RowMajorChip<F> for FinalPolyQueryEvalTraceGenerator {
+    type Ctx<'a> = FinalPolyQueryEvalCtx<'a>;
 
-            let num_in_domain_queries = num_queries_per_round[whir_round];
-            let is_same_phase = if phase_idx == 0 {
-                eval_idx + 1 < num_alphas
-            } else {
-                eval_idx + 1 < final_poly_len
-            };
-            let is_same_query = is_same_phase || phase_idx == 0;
-            let is_same_round = is_same_query || query_idx < num_in_domain_queries;
-            let is_same_proof = is_same_round || whir_round + 1 < num_whir_rounds;
+    #[tracing::instrument(level = "trace", skip_all)]
+    fn generate_trace(
+        &self,
+        ctx: &Self::Ctx<'_>,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
+        let mvk = ctx.vk;
+        let records = ctx.records;
 
-            let cols: &mut FinalyPolyQueryEvalCols<F> = row.borrow_mut();
-            cols.is_enabled = F::ONE;
-            cols.proof_idx = F::from_usize(proof_idx);
-            cols.whir_round = F::from_usize(whir_round);
-            cols.query_idx = F::from_usize(query_idx);
-            cols.phase_idx = F::from_usize(phase_idx);
-            cols.eval_idx = F::from_usize(eval_idx);
-            cols.is_first_in_proof = F::from_bool(is_first_in_proof);
-            cols.is_first_in_round = F::from_bool(is_first_in_round);
-            cols.is_first_in_query = F::from_bool(is_first_in_query);
-            cols.is_first_in_phase = F::from_bool(is_first_in_phase);
-            cols.is_query_zero = F::from_bool(query_idx == 0);
-            cols.is_last_round = F::from_bool(whir_round + 1 == num_whir_rounds);
+        let params = &mvk.inner.params;
+        let k_whir = params.k_whir();
+        let num_queries_per_round: Vec<usize> =
+            params.whir.rounds.iter().map(|r| r.num_queries).collect();
+        let final_poly_len = 1usize << params.log_final_poly_len();
+        let num_whir_rounds = params.num_whir_rounds();
 
-            let is_q0_last = query_idx == 0 && (whir_round + 1 == num_whir_rounds);
-            let do_carry = (!is_same_query) && is_same_proof && !is_q0_last;
-            cols.do_carry = F::from_bool(do_carry);
+        let round_offsets = compute_round_offsets(
+            num_whir_rounds,
+            k_whir,
+            final_poly_len,
+            &num_queries_per_round,
+        );
+        let rows_per_proof = *round_offsets
+            .last()
+            .expect("round offsets vector must include sentinel");
+        debug_assert!(rows_per_proof > 0);
+        let total_valid_rows = records.len();
+        let height = if let Some(h) = required_height {
+            if h < total_valid_rows {
+                return None;
+            }
+            h
+        } else {
+            total_valid_rows.next_power_of_two()
+        };
+        let width = FinalyPolyQueryEvalCols::<F>::width();
+        let mut trace = F::zero_vec(width * height);
+        trace
+            .par_chunks_exact_mut(width)
+            .zip(records.par_iter())
+            .enumerate()
+            .for_each(|(row_idx, (row, record))| {
+                let (proof_idx, whir_round, query_idx, phase_idx, eval_idx, num_alphas) =
+                    compute_indices_from_row_idx(
+                        row_idx,
+                        rows_per_proof,
+                        &round_offsets,
+                        num_whir_rounds,
+                        k_whir,
+                        final_poly_len,
+                    );
 
-            cols.gamma_eq_acc
-                .copy_from_slice(record.gamma_eq_acc.as_basis_coefficients_slice());
+                let is_first_in_phase = eval_idx == 0;
+                let is_first_in_query = is_first_in_phase && (phase_idx == 0 || num_alphas == 0);
+                let is_first_in_round = is_first_in_query && query_idx == 0;
+                let is_first_in_proof = is_first_in_round && whir_round == 0;
 
-            cols.alpha
-                .copy_from_slice(record.alpha.as_basis_coefficients_slice());
-            cols.gamma
-                .copy_from_slice(record.gamma.as_basis_coefficients_slice());
-            cols.gamma_pow
-                .copy_from_slice(record.gamma_pow.as_basis_coefficients_slice());
+                let num_in_domain_queries = num_queries_per_round[whir_round];
+                let is_same_phase = if phase_idx == 0 {
+                    eval_idx + 1 < num_alphas
+                } else {
+                    eval_idx + 1 < final_poly_len
+                };
+                let is_same_query = is_same_phase || phase_idx == 0;
+                let is_same_round = is_same_query || query_idx < num_in_domain_queries;
+                let is_same_proof = is_same_round || whir_round + 1 < num_whir_rounds;
 
-            cols.query_pow
-                .copy_from_slice(record.query_pow.as_basis_coefficients_slice());
-            cols.final_poly_coeff
-                .copy_from_slice(record.final_poly_coeff.as_basis_coefficients_slice());
-            cols.final_value_acc
-                .copy_from_slice(record.final_value_acc.as_basis_coefficients_slice());
-            cols.horner_acc
-                .copy_from_slice(record.horner_acc.as_basis_coefficients_slice());
-        });
+                let cols: &mut FinalyPolyQueryEvalCols<F> = row.borrow_mut();
+                cols.is_enabled = F::ONE;
+                cols.proof_idx = F::from_usize(proof_idx);
+                cols.whir_round = F::from_usize(whir_round);
+                cols.query_idx = F::from_usize(query_idx);
+                cols.phase_idx = F::from_usize(phase_idx);
+                cols.eval_idx = F::from_usize(eval_idx);
+                cols.is_first_in_proof = F::from_bool(is_first_in_proof);
+                cols.is_first_in_round = F::from_bool(is_first_in_round);
+                cols.is_first_in_query = F::from_bool(is_first_in_query);
+                cols.is_first_in_phase = F::from_bool(is_first_in_phase);
+                cols.is_query_zero = F::from_bool(query_idx == 0);
+                cols.is_last_round = F::from_bool(whir_round + 1 == num_whir_rounds);
 
-    RowMajorMatrix::new(trace, width)
+                let is_q0_last = query_idx == 0 && (whir_round + 1 == num_whir_rounds);
+                let do_carry = (!is_same_query) && is_same_proof && !is_q0_last;
+                cols.do_carry = F::from_bool(do_carry);
+
+                cols.gamma_eq_acc
+                    .copy_from_slice(record.gamma_eq_acc.as_basis_coefficients_slice());
+
+                cols.alpha
+                    .copy_from_slice(record.alpha.as_basis_coefficients_slice());
+                cols.gamma
+                    .copy_from_slice(record.gamma.as_basis_coefficients_slice());
+                cols.gamma_pow
+                    .copy_from_slice(record.gamma_pow.as_basis_coefficients_slice());
+
+                cols.query_pow
+                    .copy_from_slice(record.query_pow.as_basis_coefficients_slice());
+                cols.final_poly_coeff
+                    .copy_from_slice(record.final_poly_coeff.as_basis_coefficients_slice());
+                cols.final_value_acc
+                    .copy_from_slice(record.final_value_acc.as_basis_coefficients_slice());
+                cols.horner_acc
+                    .copy_from_slice(record.horner_acc.as_basis_coefficients_slice());
+            });
+
+        Some(RowMajorMatrix::new(trace, width))
+    }
 }

@@ -30,6 +30,7 @@ use crate::{
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
+    tracegen::RowMajorChip,
     utils::{
         MultiVecWithBounds, base_to_ext, ext_field_add, ext_field_add_scalar, ext_field_multiply,
         ext_field_multiply_scalar, ext_field_subtract,
@@ -76,21 +77,45 @@ pub struct EqNegCols<F> {
 ///////////////////////////////////////////////////////////////////////////
 pub struct EqNegTraceGenerator;
 
-impl EqNegTraceGenerator {
+impl RowMajorChip<F> for EqNegTraceGenerator {
+    type Ctx<'a> = (
+        &'a MultiStarkVerifyingKeyV2,
+        &'a [&'a Preflight],
+        &'a MultiVecWithBounds<SelectorCount, 1>,
+    );
+
     #[tracing::instrument(level = "trace", skip_all)]
-    pub fn generate_trace(
-        vk: &MultiStarkVerifyingKeyV2,
-        preflights: &[&Preflight],
-        selector_counts: &MultiVecWithBounds<SelectorCount, 1>,
-    ) -> RowMajorMatrix<F> {
+    fn generate_trace(
+        &self,
+        ctx: &Self::Ctx<'_>,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
+        let (vk, preflights, selector_counts) = ctx;
         let l_skip = vk.inner.params.l_skip;
         let width = EqNegCols::<usize>::width();
-        if l_skip == 0 {
-            return RowMajorMatrix::new(vec![], width);
-        }
-        let height = (l_skip * (l_skip + 3)) / 2;
 
-        let mut trace = vec![F::ZERO; (preflights.len() * height).next_power_of_two() * width];
+        if l_skip == 0 {
+            let ret = if let Some(height) = required_height {
+                // We essentially fill the trace with dummy rows as we do below, but
+                // instead of proof_idx being preflights.len() it is 0
+                Some(RowMajorMatrix::new(vec![F::ZERO; height * width], width))
+            } else {
+                Some(RowMajorMatrix::new(vec![], width))
+            };
+            return ret;
+        }
+
+        let total_valid = preflights.len() * (l_skip * (l_skip + 3)) / 2;
+
+        let padded_height = if let Some(height) = required_height {
+            if height < total_valid {
+                return None;
+            }
+            height
+        } else {
+            total_valid.next_power_of_two()
+        };
+        let mut trace = vec![F::ZERO; padded_height * width];
         let mut chunks = trace.chunks_exact_mut(width);
 
         for (proof_idx, preflight) in preflights.iter().enumerate() {
@@ -195,7 +220,7 @@ impl EqNegTraceGenerator {
             cols.proof_idx = F::from_usize(preflights.len());
         }
 
-        RowMajorMatrix::new(trace, width)
+        Some(RowMajorMatrix::new(trace, width))
     }
 }
 

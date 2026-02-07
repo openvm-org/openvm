@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use cuda_backend_v2::Digest;
+use cuda_backend_v2::{Digest, GpuBackendV2};
 use itertools::Itertools;
-use openvm_cuda_backend::{base::DeviceMatrix, types::F};
+use openvm_cuda_backend::base::DeviceMatrix;
 use openvm_cuda_common::{copy::MemCopyH2D, memory_manager::MemTracker};
-use stark_backend_v2::DIGEST_SIZE;
+use stark_backend_v2::{DIGEST_SIZE, prover::AirProvingContextV2};
 
 use crate::{
     cuda::{preflight::PreflightGpu, vk::VerifyingKeyGpu},
@@ -12,6 +12,7 @@ use crate::{
         pow::cuda::PowerCheckerGpuTraceGenerator, range::cuda::RangeCheckerGpuTraceGenerator,
     },
     proof_shape::{cuda_abi::proof_shape_tracegen, proof_shape::ProofShapeCols},
+    tracegen::ModuleChip,
 };
 
 #[repr(C)]
@@ -48,21 +49,32 @@ pub(in crate::proof_shape) struct ProofShapeChipGpu<const NUM_LIMBS: usize, cons
 
 const NUM_LIMBS: usize = 4;
 const LIMB_BITS: usize = 8;
-impl ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
+impl ModuleChip<GpuBackendV2> for ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
+    type Ctx<'a> = (&'a VerifyingKeyGpu, &'a [PreflightGpu]);
+
     #[tracing::instrument(level = "trace", skip_all)]
-    pub(in crate::proof_shape) fn generate_trace(
+    fn generate_proving_ctx(
         &self,
-        vk_gpu: &VerifyingKeyGpu,
-        preflights_gpu: &[PreflightGpu],
-    ) -> DeviceMatrix<F> {
+        ctx: &Self::Ctx<'_>,
+        height: Option<usize>,
+    ) -> Option<AirProvingContextV2<GpuBackendV2>> {
+        let (vk_gpu, preflights_gpu) = ctx;
         let mem = MemTracker::start("tracegen.proof_shape");
+        let num_valid_rows = preflights_gpu.len() * (vk_gpu.per_air.len() + 1);
+        let height = if let Some(height) = height {
+            if height < num_valid_rows {
+                return None;
+            }
+            height
+        } else {
+            num_valid_rows.next_power_of_two()
+        };
         let encoder_width = self.encoder_width;
         let min_cached_idx = self.min_cached_idx;
         let max_cached = self.max_cached;
         let range_checker = &self.range_checker;
         let pow_checker = &self.pow_checker;
         let num_airs = vk_gpu.per_air.len();
-        let height = (preflights_gpu.len() * (num_airs + 1)).next_power_of_two();
         let width =
             ProofShapeCols::<u8, NUM_LIMBS>::width() + encoder_width + max_cached * DIGEST_SIZE;
         let trace = DeviceMatrix::with_capacity(height, width);
@@ -123,6 +135,6 @@ impl ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
             .unwrap();
         }
         mem.emit_metrics();
-        trace
+        Some(AirProvingContextV2::simple_no_pis(trace))
     }
 }
