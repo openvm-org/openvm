@@ -1,5 +1,6 @@
 use core::cmp::min;
 
+#[cfg(feature = "import_sha2")]
 use sha2::digest::{
     consts::{U32, U48, U64},
     FixedOutput, HashMarker, Output, OutputSizeUser, Update,
@@ -54,7 +55,7 @@ impl Sha256 {
         }
     }
 
-    fn update(&mut self, mut input: &[u8]) {
+    pub fn update(&mut self, mut input: &[u8]) {
         self.len = self.len.checked_add(input.len() as u64).unwrap();
         while !input.is_empty() {
             let to_copy = min(input.len(), SHA256_BLOCK_BYTES - self.idx);
@@ -68,7 +69,7 @@ impl Sha256 {
         }
     }
 
-    fn finalize(mut self) -> [u8; SHA256_DIGEST_BYTES] {
+    pub fn finalize(mut self) -> [u8; SHA256_DIGEST_BYTES] {
         // pad positive amount so that length is multiple of SHA256_BLOCK_BYTES
         // (extra 8 bytes are for message length)
         let num_bytes_of_padding = SHA256_BLOCK_BYTES - (self.idx + 8) % SHA256_BLOCK_BYTES;
@@ -92,11 +93,19 @@ impl Sha256 {
             self.state.as_mut_ptr() as *mut u8,
         );
     }
+
+    #[cfg(not(feature = "import_sha2"))]
+    pub fn digest(input: &[u8]) -> [u8; SHA256_DIGEST_BYTES] {
+        let mut hasher = Self::new();
+        hasher.update(input);
+        hasher.finalize()
+    }
 }
 
 // We will implement FixedOutput, Default, Update, and HashMarker for Sha256 so that
 // the blanket implementation of sha2::Digest is available.
 // See: https://docs.rs/sha2/latest/sha2/trait.Digest.html#impl-Digest-for-D
+#[cfg(feature = "import_sha2")]
 impl Update for Sha256 {
     fn update(&mut self, input: &[u8]) {
         self.update(input);
@@ -105,16 +114,19 @@ impl Update for Sha256 {
 
 // OutputSizeUser is required for FixedOutput
 // See: https://docs.rs/digest/0.10.7/digest/trait.FixedOutput.html
+#[cfg(feature = "import_sha2")]
 impl OutputSizeUser for Sha256 {
     type OutputSize = U32;
 }
 
+#[cfg(feature = "import_sha2")]
 impl FixedOutput for Sha256 {
     fn finalize_into(self, out: &mut Output<Self>) {
         out.copy_from_slice(&self.finalize());
     }
 }
 
+#[cfg(feature = "import_sha2")]
 impl HashMarker for Sha256 {}
 
 const SHA512_STATE_WORDS: usize = 8;
@@ -161,7 +173,7 @@ impl Sha512 {
         }
     }
 
-    fn update(&mut self, mut input: &[u8]) {
+    pub fn update(&mut self, mut input: &[u8]) {
         self.len = self.len.checked_add(input.len() as u128).unwrap();
         while !input.is_empty() {
             let to_copy = min(input.len(), SHA512_BLOCK_BYTES - self.idx);
@@ -175,7 +187,7 @@ impl Sha512 {
         }
     }
 
-    fn finalize(mut self) -> [u8; SHA512_DIGEST_BYTES] {
+    pub fn finalize(mut self) -> [u8; SHA512_DIGEST_BYTES] {
         // pad positive amount so that length is multiple of SHA512_BLOCK_BYTES
         // (extra 16 bytes are for message length)
         let num_bytes_of_padding = SHA512_BLOCK_BYTES - (self.idx + 16) % SHA512_BLOCK_BYTES;
@@ -199,11 +211,19 @@ impl Sha512 {
             self.state.as_mut_ptr() as *mut u8,
         );
     }
+
+    #[cfg(not(feature = "import_sha2"))]
+    pub fn digest(input: &[u8]) -> [u8; SHA512_DIGEST_BYTES] {
+        let mut hasher = Self::new();
+        hasher.update(input);
+        hasher.finalize()
+    }
 }
 
 // We will implement FixedOutput, Default, Update, and HashMarker for Sha512 so that
 // the blanket implementation of sha2::Digest is available.
 // See: https://docs.rs/sha2/latest/sha2/trait.Digest.html#impl-Digest-for-D
+#[cfg(feature = "import_sha2")]
 impl Update for Sha512 {
     fn update(&mut self, input: &[u8]) {
         self.update(input);
@@ -212,16 +232,19 @@ impl Update for Sha512 {
 
 // OutputSizeUser is required for FixedOutput
 // See: https://docs.rs/digest/0.10.7/digest/trait.FixedOutput.html
+#[cfg(feature = "import_sha2")]
 impl OutputSizeUser for Sha512 {
     type OutputSize = U64;
 }
 
+#[cfg(feature = "import_sha2")]
 impl FixedOutput for Sha512 {
     fn finalize_into(self, out: &mut Output<Self>) {
         out.copy_from_slice(&self.finalize());
     }
 }
 
+#[cfg(feature = "import_sha2")]
 impl HashMarker for Sha512 {}
 
 const SHA384_DIGEST_BYTES: usize = 48;
@@ -264,11 +287,19 @@ impl Sha384 {
         let digest = self.inner.finalize();
         digest[..SHA384_DIGEST_BYTES].try_into().unwrap()
     }
+
+    #[cfg(not(feature = "import_sha2"))]
+    pub fn digest(input: &[u8]) -> [u8; SHA384_DIGEST_BYTES] {
+        let mut hasher = Self::new();
+        hasher.update(input);
+        hasher.finalize()
+    }
 }
 
 // We will implement FixedOutput, Default, Update, and HashMarker for Sha384 so that
 // the blanket implementation of sha2::Digest is available.
 // See: https://docs.rs/sha2/latest/sha2/trait.Digest.html#impl-Digest-for-D
+#[cfg(feature = "import_sha2")]
 impl Update for Sha384 {
     fn update(&mut self, input: &[u8]) {
         self.update(input);
@@ -277,14 +308,17 @@ impl Update for Sha384 {
 
 // OutputSizeUser is required for FixedOutput
 // See: https://docs.rs/digest/0.10.7/digest/trait.FixedOutput.html
+#[cfg(feature = "import_sha2")]
 impl OutputSizeUser for Sha384 {
     type OutputSize = U48;
 }
 
+#[cfg(feature = "import_sha2")]
 impl FixedOutput for Sha384 {
     fn finalize_into(self, out: &mut Output<Self>) {
         out.copy_from_slice(&self.finalize());
     }
 }
 
+#[cfg(feature = "import_sha2")]
 impl HashMarker for Sha384 {}
