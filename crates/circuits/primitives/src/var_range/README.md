@@ -7,7 +7,7 @@ Conceptually, this works like `range_max_bits` different lookup tables stacked t
 - One table for 2-bit values
 - And so on up to `range_max_bits`-bit values
 
-With a selector column indicating which bit-size to check against.
+With the `max_bits` column indicating which bit-size to check against.
 
 For example, with `range_max_bits = 3`, the lookup table contains:
 - All 1-bit values: 0, 1
@@ -19,15 +19,14 @@ The chip uses gate-based constraints to generate the trace columns instead of a 
 **Columns:**
 - `value`: The value being range checked
 - `max_bits`: The maximum number of bits for this value
-- `two_to_max_bits`: Helper column storing $2^{\mathtt{max\_bits}}$, used to detect wrap transitions
-- `selector_inverse`: The inverse of the selector `(value + 1 - two_to_max_bits)`, used to create a boolean selector for wrap detection
-- `is_not_wrap`: Boolean selector (1 if NOT wrapping, 0 if wrapping), used to reduce degree of transition constraints
+- `two_to_max_bits`: Helper column storing $2^{\mathtt{max\_bits}}$
 - `mult`: Multiplicity column tracking how many range checks are requested for each `(value, max_bits)` pair
 
-The constraints enforce the enumeration pattern by:
-1. Starting at `[0, 0]` (first-row constraints)
-2. Detecting wrap transitions when `value` reaches $2^{\mathtt{max\_bits}} - 1$ using the selector-based detection
-3. Enforcing correct progression: increment `value`, or wrap to `[0, max_bits+1]`
-4. Ending with a dummy row `[0, range_max_bits+1]` to make trace height a power of 2, constraining this row to have mult=0
+The constraints enforce the enumeration pattern by observing that `value + two_to_max_bits` equals `row_index + 1` (a strictly increasing sequence). By constraining this sum to increase by exactly 1 each row, combined with constraints that `value` can only be 0 or increment and `max_bits` can only stay or increment, the trace is forced into the correct enumeration:
+1. First row: start at `[value=0, max_bits=0, two_to_max_bits=1]`
+2. Transitions: `max_bits` can only stay the same or increment by 1; `value` can only be 0 or increment by 1; `two_to_max_bits` doubles when `max_bits` increments; and `value + two_to_max_bits` increases by exactly 1 each row
+3. Last row: end at `[value=0, max_bits=range_max_bits+1, mult=0]` (dummy row to make trace height a power of 2)
+
+The last-row constraint acts as a checksum—if the trace ever "cheats" (e.g., `value` continues past $2^{\mathtt{max\_bits}} - 1$ instead of wrapping to 0), it cannot reach the required final state.
 
 The functionality and usage of the chip are very similar to those of the [Range Checker](../range/README.md) chip.
