@@ -1,6 +1,9 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    iter::zip,
+};
 
-use itertools::izip;
+use itertools::{Itertools, izip};
 use openvm_circuit_primitives::{
     SubAir,
     utils::{and, assert_array_eq, not},
@@ -19,8 +22,9 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        ColumnClaimsBus, ColumnClaimsMessage, LiftedHeightsBus, LiftedHeightsBusMessage,
-        StackingModuleBus, StackingModuleMessage, TranscriptBus, TranscriptBusMessage,
+        AirShapeBus, AirShapeBusMessage, AirShapeProperty, ColumnClaimsBus, ColumnClaimsMessage,
+        LiftedHeightsBus, LiftedHeightsBusMessage, StackingModuleBus, StackingModuleMessage,
+        TranscriptBus, TranscriptBusMessage,
     },
     stacking::{
         bus::{
@@ -34,7 +38,7 @@ use crate::{
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     tracegen::{RowMajorChip, StandardTracegenCtx},
-    utils::{assert_one_ext, ext_field_add, ext_field_multiply},
+    utils::{assert_one_ext, ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
 };
 
 ///////////////////////////////////////////////////////////////////////////
@@ -55,6 +59,7 @@ pub struct OpeningClaimsCols<F> {
     pub col_idx: F,
     pub col_claim: [F; D_EF],
     pub rot_claim: [F; D_EF],
+    pub need_rot: F,
 
     // Used to constrain the order of received messages
     pub is_main: F,
@@ -82,6 +87,9 @@ pub struct OpeningClaimsCols<F> {
     pub k_rot_in: [F; D_EF],
     pub eq_bits: [F; D_EF],
 
+    // This is either `k_rot_in` or zero, depending on `need_rot`
+    pub k_rot_in_when_needed: [F; D_EF],
+
     // Intermediate values to compute claim coefficient
     pub lambda_pow_eq_bits: [F; D_EF],
 
@@ -101,6 +109,7 @@ pub struct OpeningClaimsAir {
     pub stacking_module_bus: StackingModuleBus,
     pub column_claims_bus: ColumnClaimsBus,
     pub transcript_bus: TranscriptBus,
+    pub air_shape_bus: AirShapeBus,
 
     // Internal buses
     pub stacking_tidx_bus: StackingModuleTidxBus,
@@ -162,6 +171,7 @@ where
         builder.assert_bool(local.is_valid);
         builder.assert_bool(local.is_first);
         builder.assert_bool(local.is_last);
+        builder.assert_bool(local.need_rot);
         builder
             .when(and(local.is_valid, local.is_last))
             .assert_zero((local.proof_idx + AB::F::ONE - next.proof_idx) * next.proof_idx);
@@ -231,6 +241,12 @@ where
             },
             local.is_valid,
         );
+
+        for i in 0..D_EF {
+            builder
+                .when(and(local.is_valid, not(local.need_rot)))
+                .assert_zero(local.rot_claim[i]);
+        }
         self.column_claims_bus.send(
             builder,
             local.proof_idx,
@@ -241,7 +257,7 @@ where
                 claim: local.rot_claim.map(Into::into),
                 is_rot: AB::Expr::ONE,
             },
-            local.is_valid,
+            local.is_valid * local.need_rot,
         );
 
         assert_array_eq(
@@ -350,12 +366,18 @@ where
         );
 
         assert_array_eq(
+            builder,
+            local.k_rot_in_when_needed,
+            ext_field_multiply_scalar(local.k_rot_in, local.need_rot),
+        );
+
+        assert_array_eq(
             &mut builder.when(local.is_first),
             ext_field_multiply(
                 local.lambda_pow_eq_bits,
                 ext_field_add::<AB::Expr>(
                     local.eq_in,
-                    ext_field_multiply(local.lambda, local.k_rot_in),
+                    ext_field_multiply(local.lambda, local.k_rot_in_when_needed),
                 ),
             ),
             local.stacking_claim_coefficient,
@@ -367,7 +389,7 @@ where
                 next.lambda_pow_eq_bits,
                 ext_field_add::<AB::Expr>(
                     next.eq_in,
-                    ext_field_multiply(next.lambda, next.k_rot_in),
+                    ext_field_multiply(next.lambda, next.k_rot_in_when_needed),
                 ),
             ),
             next.stacking_claim_coefficient,
@@ -381,7 +403,7 @@ where
                     next.lambda_pow_eq_bits,
                     ext_field_add::<AB::Expr>(
                         next.eq_in,
-                        ext_field_multiply(next.lambda, next.k_rot_in),
+                        ext_field_multiply(next.lambda, next.k_rot_in_when_needed),
                     ),
                 ),
             ),
@@ -443,6 +465,17 @@ where
                 num_bits: AB::Expr::from_usize(self.n_stack + self.l_skip)
                     - local.log_lifted_height,
                 eval: local.eq_bits.map(Into::into),
+            },
+            local.is_valid,
+        );
+
+        self.air_shape_bus.receive(
+            builder,
+            local.proof_idx,
+            AirShapeBusMessage {
+                sort_idx: local.sort_idx.into(),
+                property_idx: AirShapeProperty::NeedRot.to_field(),
+                value: local.need_rot.into(),
             },
             local.is_valid,
         );
@@ -530,9 +563,12 @@ impl RowMajorChip<F> for OpeningClaimsTraceGenerator {
         debug_assert_eq!(proofs.len(), preflights.len());
 
         let width = OpeningClaimsCols::<usize>::width();
-        let minimum_height: usize = proofs
-            .iter()
-            .fold(0, |acc, proof| acc + sorted_column_claims(proof).len());
+        let column_claims = zip(proofs.iter(), preflights.iter())
+            .map(|(proof, preflight)| {
+                sorted_column_claims(vk, proof, &preflight.proof_shape.sorted_trace_vdata)
+            })
+            .collect_vec();
+        let minimum_height: usize = column_claims.iter().map(|c| c.len()).sum();
         let height = if let Some(height) = required_height {
             if height < minimum_height {
                 return None;
@@ -545,8 +581,9 @@ impl RowMajorChip<F> for OpeningClaimsTraceGenerator {
         let mut trace = vec![F::ZERO; height * width];
         let mut chunks = trace.chunks_mut(width);
 
-        for (proof_idx, (proof, preflight)) in proofs.iter().zip(preflights).enumerate() {
-            let claims = sorted_column_claims(proof);
+        for (proof_idx, (proof, preflight, claims)) in
+            izip!(proofs, preflights, column_claims).enumerate()
+        {
             let stacked_slices =
                 get_stacked_slice_data(vk, &preflight.proof_shape.sorted_trace_vdata);
 
@@ -581,7 +618,7 @@ impl RowMajorChip<F> for OpeningClaimsTraceGenerator {
                 .unwrap_or(num_rows - 1);
 
             for (row_idx, (claim, slice, (eq_in, k_rot_in, eq_bits))) in
-                izip!(claims, stacked_slices, per_slice).enumerate()
+                izip!(claims, stacked_slices, per_slice,).enumerate()
             {
                 let chunk = chunks.next().unwrap();
                 let ColumnOpeningPair {
@@ -604,6 +641,7 @@ impl RowMajorChip<F> for OpeningClaimsTraceGenerator {
                     .copy_from_slice(col_claim.as_basis_coefficients_slice());
                 cols.rot_claim
                     .copy_from_slice(rot_claim.as_basis_coefficients_slice());
+                cols.need_rot = F::from_bool(slice.need_rot);
 
                 cols.is_main = F::from_bool(part_idx == 0);
                 cols.is_transition_main =
@@ -638,6 +676,10 @@ impl RowMajorChip<F> for OpeningClaimsTraceGenerator {
                     .copy_from_slice(eq_in.as_basis_coefficients_slice());
                 cols.k_rot_in
                     .copy_from_slice(k_rot_in.as_basis_coefficients_slice());
+                if slice.need_rot {
+                    cols.k_rot_in_when_needed
+                        .copy_from_slice(k_rot_in.as_basis_coefficients_slice());
+                }
                 cols.eq_bits
                     .copy_from_slice(eq_bits.as_basis_coefficients_slice());
 
@@ -645,8 +687,9 @@ impl RowMajorChip<F> for OpeningClaimsTraceGenerator {
                 cols.lambda_pow_eq_bits
                     .copy_from_slice(lambda_pow_eq_bits.as_basis_coefficients_slice());
 
+                let k_rot_term = if slice.need_rot { k_rot_in } else { EF::ZERO };
                 stacking_claim_coefficient +=
-                    lambda_pow_eq_bits * (eq_in + preflight.stacking.lambda * k_rot_in);
+                    lambda_pow_eq_bits * (eq_in + preflight.stacking.lambda * k_rot_term);
                 cols.stacking_claim_coefficient
                     .copy_from_slice(stacking_claim_coefficient.as_basis_coefficients_slice());
                 if slice.is_last_for_claim {
@@ -720,17 +763,22 @@ pub(crate) mod cuda {
             let mut last_main_idx_per_proof = Vec::with_capacity(proofs_gpu.len());
             let claims = proofs_gpu
                 .iter()
-                .map(|proof| {
-                    let claims = sorted_column_claims(&proof.cpu)
-                        .into_iter()
-                        .map(|claim| ColumnOpeningClaims {
-                            sort_idx: claim.sort_idx as u32,
-                            part_idx: claim.part_idx as u32,
-                            col_idx: claim.col_idx as u32,
-                            col_claim: claim.col_claim,
-                            rot_claim: claim.rot_claim,
-                        })
-                        .collect_vec();
+                .zip_eq(preflights_gpu.iter())
+                .map(|(proof, preflight)| {
+                    let claims = sorted_column_claims(
+                        &child_vk.cpu,
+                        &proof.cpu,
+                        &preflight.cpu.proof_shape.sorted_trace_vdata,
+                    )
+                    .into_iter()
+                    .map(|claim| ColumnOpeningClaims {
+                        sort_idx: claim.sort_idx as u32,
+                        part_idx: claim.part_idx as u32,
+                        col_idx: claim.col_idx as u32,
+                        col_claim: claim.col_claim,
+                        rot_claim: claim.rot_claim,
+                    })
+                    .collect_vec();
                     let last_main_idx = claims
                         .iter()
                         .enumerate()
