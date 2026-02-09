@@ -5,7 +5,6 @@ use itertools::Itertools;
 use openvm_stark_backend::{
     AirRef,
     air_builders::symbolic::{SymbolicExpressionNode, symbolic_variable::Entry},
-    keygen::types::TraceWidth,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, PrimeCharacteristicRing, TwoAdicField};
@@ -16,7 +15,7 @@ use stark_backend_v2::{
     keygen::types::MultiStarkVerifyingKeyV2,
     poly_common::{eval_eq_sharp_uni, eval_eq_uni, eval_eq_uni_at_one},
     poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
-    proof::{BatchConstraintProof, Proof},
+    proof::{BatchConstraintProof, Proof, column_openings_by_rot},
     prover::{
         AirProvingContextV2, ColMajorMatrix, CommittedTraceDataV2, CpuBackendV2, TraceCommitterV2,
     },
@@ -116,7 +115,6 @@ pub struct BatchConstraintModule {
 
     l_skip: usize,
     max_constraint_degree: usize,
-    widths: Vec<TraceWidth>,
 
     max_num_proofs: usize,
     pub(crate) has_cached: bool,
@@ -134,12 +132,6 @@ impl BatchConstraintModule {
     ) -> Self {
         let l_skip = child_vk.inner.params.l_skip;
         let max_constraint_degree = child_vk.max_constraint_degree();
-        let widths = child_vk
-            .inner
-            .per_air
-            .iter()
-            .map(|vk| vk.params.width.clone())
-            .collect_vec();
         BatchConstraintModule {
             transcript_bus: bus_inventory.transcript_bus,
             constraint_sumcheck_randomness_bus: bus_inventory.constraint_randomness_bus,
@@ -174,7 +166,6 @@ impl BatchConstraintModule {
             pow_checker,
             l_skip,
             max_constraint_degree,
-            widths,
             max_num_proofs,
             has_cached,
             dag_commit_bus: bus_inventory.dag_commit_bus,
@@ -182,8 +173,13 @@ impl BatchConstraintModule {
     }
 
     #[tracing::instrument(level = "trace", skip_all)]
-    pub fn run_preflight<TS>(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS)
-    where
+    pub fn run_preflight<TS>(
+        &self,
+        child_vk: &MultiStarkVerifyingKeyV2,
+        proof: &Proof,
+        preflight: &mut Preflight,
+        ts: &mut TS,
+    ) where
         TS: FiatShamirTranscript + TranscriptHistory,
     {
         let BatchConstraintProof {
@@ -236,22 +232,19 @@ impl BatchConstraintModule {
 
         // Common main
         for (sort_idx, (air_id, _)) in preflight.proof_shape.sorted_trace_vdata.iter().enumerate() {
-            let width = &self.widths[*air_id];
-
-            for col_idx in 0..width.common_main {
-                let (col_opening, rot_opening) = column_openings[sort_idx][0][col_idx];
+            let need_rot = child_vk.inner.per_air[*air_id].params.need_rot;
+            for (col_opening, rot_opening) in
+                column_openings_by_rot(&column_openings[sort_idx][0], need_rot)
+            {
                 ts.observe_ext(col_opening);
                 ts.observe_ext(rot_opening);
             }
         }
 
         for (sort_idx, (air_id, _)) in preflight.proof_shape.sorted_trace_vdata.iter().enumerate() {
-            let width = &self.widths[*air_id];
-            let widths = width.preprocessed.iter().chain(width.cached_mains.iter());
-
-            for (i, w) in widths.enumerate() {
-                for col_idx in 0..*w {
-                    let (col_opening, rot_opening) = column_openings[sort_idx][i + 1][col_idx];
+            let need_rot = child_vk.inner.per_air[*air_id].params.need_rot;
+            for part in column_openings[sort_idx].iter().skip(1) {
+                for (col_opening, rot_opening) in column_openings_by_rot(part, need_rot) {
                     ts.observe_ext(col_opening);
                     ts.observe_ext(rot_opening);
                 }
@@ -497,6 +490,8 @@ impl BatchConstraintBlob {
                     continue;
                 }
 
+                let need_rot = child_vk.per_air[air_idx].params.need_rot;
+                let openings_per_col = if need_rot { 2 } else { 1 };
                 let openings = &proof.batch_constraint_proof.column_openings;
                 let (sorted_idx, vdata) = preflight
                     .proof_shape
@@ -521,19 +516,15 @@ impl BatchConstraintBlob {
                     match node {
                         SymbolicExpressionNode::Variable(var) => match var.entry {
                             Entry::Preprocessed { offset } => {
-                                expr_evals[node_idx] = match offset {
-                                    0 => openings[sorted_idx][1][var.index].0,
-                                    1 => openings[sorted_idx][1][var.index].1,
-                                    _ => unreachable!(),
-                                };
+                                debug_assert!(offset < openings_per_col);
+                                expr_evals[node_idx] =
+                                    openings[sorted_idx][1][var.index * openings_per_col + offset];
                             }
                             Entry::Main { part_index, offset } => {
                                 let part = vk.dag_main_part_index_to_commit_index(part_index);
-                                expr_evals[node_idx] = match offset {
-                                    0 => openings[sorted_idx][part][var.index].0,
-                                    1 => openings[sorted_idx][part][var.index].1,
-                                    _ => unreachable!(),
-                                };
+                                debug_assert!(offset < openings_per_col);
+                                expr_evals[node_idx] = openings[sorted_idx][part]
+                                    [var.index * openings_per_col + offset];
                             }
                             Entry::Permutation { .. } => unreachable!(),
                             Entry::Public => {
@@ -599,19 +590,15 @@ impl BatchConstraintBlob {
                 for unused_var in &vk.unused_variables {
                     match unused_var.entry {
                         Entry::Preprocessed { offset } => {
-                            expr_evals[node_idx] = if offset == 0 {
-                                openings[sorted_idx][1][unused_var.index].0
-                            } else {
-                                openings[sorted_idx][1][unused_var.index].1
-                            };
+                            debug_assert!(offset < openings_per_col);
+                            expr_evals[node_idx] = openings[sorted_idx][1]
+                                [unused_var.index * openings_per_col + offset];
                         }
                         Entry::Main { part_index, offset } => {
                             let part = vk.dag_main_part_index_to_commit_index(part_index);
-                            expr_evals[node_idx] = if offset == 0 {
-                                openings[sorted_idx][part][unused_var.index].0
-                            } else {
-                                openings[sorted_idx][part][unused_var.index].1
-                            };
+                            debug_assert!(offset < openings_per_col);
+                            expr_evals[node_idx] = openings[sorted_idx][part]
+                                [unused_var.index * openings_per_col + offset];
                         }
                         Entry::Permutation { .. }
                         | Entry::Public
