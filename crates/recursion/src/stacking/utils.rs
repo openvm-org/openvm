@@ -4,7 +4,7 @@ use stark_backend_v2::{
     EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
     poly_common::{eval_eq_mle, eval_eq_prism, eval_in_uni, eval_rot_kernel_prism},
-    proof::{Proof, TraceVData},
+    proof::{Proof, TraceVData, column_openings_by_rot},
 };
 
 pub struct StackedSliceData {
@@ -13,6 +13,7 @@ pub struct StackedSliceData {
     pub row_idx: usize,
     pub n: isize,
     pub is_last_for_claim: bool,
+    pub need_rot: bool,
 }
 
 pub fn get_stacked_slice_data(
@@ -27,7 +28,7 @@ pub fn get_stacked_slice_data(
 
     let stacked_height = 1 << (vk.inner.params.l_skip + vk.inner.params.n_stack);
 
-    let mut push_res = |log_height: usize, is_last_for_commit| {
+    let mut push_res = |log_height: usize, is_last_for_commit, need_rot: bool| {
         let n = log_height as isize - vk.inner.params.l_skip as isize;
         let col_height = 1 << (n.max(0) as usize + vk.inner.params.l_skip);
         debug_assert!(row_idx + col_height <= stacked_height);
@@ -37,6 +38,7 @@ pub fn get_stacked_slice_data(
             row_idx,
             n,
             is_last_for_claim: is_last_for_commit || row_idx + col_height == stacked_height,
+            need_rot,
         });
         if is_last_for_commit {
             commit_idx += 1;
@@ -52,15 +54,17 @@ pub fn get_stacked_slice_data(
 
     for (sort_idx, (air_idx, vdata)) in sorted_trace_vdata.iter().enumerate() {
         let common_width = vk.inner.per_air[*air_idx].params.width.common_main;
+        let need_rot = vk.inner.per_air[*air_idx].params.need_rot;
         for trace_col_idx in 0..common_width {
             let last_air = sort_idx + 1 == sorted_trace_vdata.len();
             let last_col = trace_col_idx + 1 == common_width;
-            push_res(vdata.log_height, last_air && last_col);
+            push_res(vdata.log_height, last_air && last_col, need_rot);
         }
     }
 
     for (air_idx, vdata) in sorted_trace_vdata {
         let trace_width = &vk.inner.per_air[*air_idx].params.width;
+        let need_rot = vk.inner.per_air[*air_idx].params.need_rot;
         let part_widths = trace_width
             .preprocessed
             .iter()
@@ -68,13 +72,14 @@ pub fn get_stacked_slice_data(
         for &part_width in part_widths {
             for part_col_idx in 0..part_width {
                 let is_last = part_col_idx + 1 == part_width;
-                push_res(vdata.log_height, is_last);
+                push_res(vdata.log_height, is_last, need_rot);
             }
         }
     }
     res
 }
 
+#[derive(Clone)]
 pub(in crate::stacking) struct ColumnOpeningPair {
     pub sort_idx: usize,
     pub part_idx: usize,
@@ -83,12 +88,21 @@ pub(in crate::stacking) struct ColumnOpeningPair {
     pub rot_claim: EF,
 }
 
-pub fn sorted_column_claims(proof: &Proof) -> Vec<ColumnOpeningPair> {
+pub fn sorted_column_claims(
+    vk: &MultiStarkVerifyingKeyV2,
+    proof: &Proof,
+    sorted_trace_vdata: &[(usize, TraceVData)],
+) -> Vec<ColumnOpeningPair> {
     let mut ret = Vec::new();
     let column_openings = &proof.batch_constraint_proof.column_openings;
 
     for (sort_idx, parts) in column_openings.iter().enumerate() {
-        for (col_idx, &(col_claim, rot_claim)) in parts[0].iter().enumerate() {
+        let need_rot = vk.inner.per_air[sorted_trace_vdata[sort_idx].0]
+            .params
+            .need_rot;
+        for (col_idx, (col_claim, rot_claim)) in
+            column_openings_by_rot(&parts[0], need_rot).enumerate()
+        {
             let opening_pair = ColumnOpeningPair {
                 sort_idx,
                 part_idx: 0,
@@ -101,8 +115,13 @@ pub fn sorted_column_claims(proof: &Proof) -> Vec<ColumnOpeningPair> {
     }
 
     for (sort_idx, parts) in column_openings.iter().enumerate() {
+        let need_rot = vk.inner.per_air[sorted_trace_vdata[sort_idx].0]
+            .params
+            .need_rot;
         for (part_idx, cols) in parts.iter().enumerate().skip(1) {
-            for (col_idx, &(col_claim, rot_claim)) in cols.iter().enumerate() {
+            for (col_idx, (col_claim, rot_claim)) in
+                column_openings_by_rot(cols, need_rot).enumerate()
+            {
                 let opening_pair = ColumnOpeningPair {
                     sort_idx,
                     part_idx,
@@ -152,10 +171,12 @@ pub fn compute_coefficients(
             (l_skip, &r[..=n_lift])
         };
         let eq_prism = eval_eq_prism(l, &u[..=n_lift], rs_n);
+        let mut batched = lambda_powers[2 * i] * eq_prism;
         let rot_kernel_prism = eval_rot_kernel_prism(l, &u[..=n_lift], rs_n);
-        coeffs[slice.commit_idx][slice.col_idx] += eq_mle
-            * (lambda_powers[2 * i] * eq_prism + lambda_powers[2 * i + 1] * rot_kernel_prism)
-            * ind;
+        if slice.need_rot {
+            batched += lambda_powers[2 * i + 1] * rot_kernel_prism;
+        }
+        coeffs[slice.commit_idx][slice.col_idx] += eq_mle * batched * ind;
         per_slice.push((eq_prism * ind, rot_kernel_prism * ind, eq_mle));
     }
     (coeffs, per_slice)
