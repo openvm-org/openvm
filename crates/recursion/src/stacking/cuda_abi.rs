@@ -11,6 +11,7 @@ pub struct StackedTraceData {
     pub start_row_idx: u32,
     pub log_height: u32,
     pub width: u32,
+    pub need_rot: u32,
 }
 
 #[repr(C)]
@@ -21,6 +22,7 @@ pub struct StackedSliceData {
     pub row_idx: u32,
     pub n: i32,
     pub is_last_for_claim: bool,
+    pub need_rot: u32,
 }
 
 #[repr(C)]

@@ -375,7 +375,7 @@ impl<'a> TraceModuleRef<'a> {
             }
             TraceModuleRef::Gkr(module) => module.run_preflight(proof, preflight, sponge),
             TraceModuleRef::BatchConstraint(module) => {
-                module.run_preflight(proof, preflight, sponge)
+                module.run_preflight(child_vk, proof, preflight, sponge)
             }
             TraceModuleRef::Stacking(module) => module.run_preflight(proof, preflight, sponge),
             TraceModuleRef::Whir(module) => module.run_preflight(proof, preflight, sponge),

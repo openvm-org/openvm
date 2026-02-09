@@ -28,6 +28,7 @@ template <typename T> struct OpeningClaimsCols {
     T col_idx;
     T col_claim[D_EF];
     T rot_claim[D_EF];
+    T need_rot;
 
     T is_main;
     T is_transition_main;
@@ -49,6 +50,8 @@ template <typename T> struct OpeningClaimsCols {
     T eq_in[D_EF];
     T k_rot_in[D_EF];
     T eq_bits[D_EF];
+
+    T k_rot_in_when_needed[D_EF];
 
     T lambda_pow_eq_bits[D_EF];
 
@@ -123,6 +126,7 @@ __global__ void opening_claims_tracegen(
     COL_WRITE_VALUE(row, OpeningClaimsCols, col_idx, claim.col_idx);
     COL_WRITE_ARRAY(row, OpeningClaimsCols, col_claim, claim.col_claim.elems);
     COL_WRITE_ARRAY(row, OpeningClaimsCols, rot_claim, claim.rot_claim.elems);
+    COL_WRITE_VALUE(row, OpeningClaimsCols, need_rot, slice.need_rot);
 
     COL_WRITE_VALUE(row, OpeningClaimsCols, is_main, claim.part_idx == 0);
     COL_WRITE_VALUE(
@@ -154,13 +158,19 @@ __global__ void opening_claims_tracegen(
 
     COL_WRITE_ARRAY(row, OpeningClaimsCols, eq_in, eq_in.elems);
     COL_WRITE_ARRAY(row, OpeningClaimsCols, k_rot_in, k_rot_in.elems);
+    if (slice.need_rot) {
+        COL_WRITE_ARRAY(row, OpeningClaimsCols, k_rot_in_when_needed, k_rot_in.elems);
+    } else {
+        row.fill_zero(COL_INDEX(OpeningClaimsCols, k_rot_in_when_needed), D_EF);
+    }
     COL_WRITE_ARRAY(row, OpeningClaimsCols, eq_bits, eq_bits.elems);
 
     FpExt lambda_pow_eq_bits = lambda_pow * eq_bits;
     COL_WRITE_ARRAY(row, OpeningClaimsCols, lambda_pow_eq_bits, lambda_pow_eq_bits.elems);
 
     // Needs to be accumulated via prefix scan by key (commit_idx)
-    FpExt stacking_claim_coefficient = lambda_pow_eq_bits * (eq_in + lambda * k_rot_in);
+    FpExt k_rot_term = slice.need_rot ? k_rot_in : FpExt(Fp::zero());
+    FpExt stacking_claim_coefficient = lambda_pow_eq_bits * (eq_in + lambda * k_rot_term);
     COL_WRITE_ARRAY(
         row, OpeningClaimsCols, stacking_claim_coefficient, stacking_claim_coefficient.elems
     );

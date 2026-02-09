@@ -384,6 +384,7 @@ define_typed_lookup_bus!(Poseidon2CompressBus, Poseidon2CompressMessage);
 pub(crate) enum AirShapeProperty {
     AirId,
     NumInteractions,
+    NeedRot,
 }
 
 impl AirShapeProperty {

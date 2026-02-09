@@ -61,6 +61,8 @@ pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
     pub log_height: F,
     /// When `is_present`, constrained to equal `log_height - l_skip < 0 ? 1 : 0`.
     pub n_sign_bit: F,
+    /// Whether this AIR needs rotation openings.
+    pub need_rot: F,
 
     // First possible tidx and non-main cidx of the current AIR
     pub starting_tidx: F,
@@ -101,6 +103,7 @@ pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
     pub is_n_max_greater: F,
 
     pub num_air_id_lookups: F,
+    pub num_columns: F,
 }
 
 // Variable-length columns are stored at the end
@@ -201,6 +204,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
                 cols.sorted_idx = F::from_usize(sorted_idx);
                 cols.log_height = F::from_usize(log_height);
                 cols.n_sign_bit = F::from_bool(n.is_negative());
+                cols.need_rot = F::from_bool(child_vk.inner.per_air[*idx].params.need_rot);
                 sorted_idx += 1;
 
                 cols.starting_tidx = F::from_usize(preflight.proof_shape.starting_tidx[*idx]);
@@ -226,6 +230,11 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
 
                 cols.n_max = F::from_usize(preflight.proof_shape.n_max);
                 cols.num_air_id_lookups = F::from_usize(bc_air_shape_lookups[*idx]);
+                let trace_width = &child_vk.inner.per_air[*idx].params.width;
+                let num_columns = trace_width.common_main
+                    + trace_width.preprocessed.iter().copied().sum::<usize>()
+                    + trace_width.cached_mains.iter().copied().sum::<usize>();
+                cols.num_columns = F::from_usize(num_columns);
 
                 let vcols: &mut ProofShapeVarColsMut<'_, F> = &mut borrow_var_cols_mut(
                     &mut chunk[cols_width..],
@@ -306,6 +315,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
                 cols.idx = F::from_usize(idx);
                 cols.sorted_idx = F::from_usize(sorted_idx);
                 sorted_idx += 1;
+                cols.need_rot = F::ZERO;
 
                 cols.num_present = num_present;
 
@@ -314,6 +324,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
 
                 cols.total_interactions_limbs = total_interactions_f;
                 cols.n_max = F::from_usize(preflight.proof_shape.n_max);
+                cols.num_columns = F::ZERO;
 
                 let vcols: &mut ProofShapeVarColsMut<'_, F> = &mut borrow_var_cols_mut(
                     &mut chunk[cols_width..],
@@ -353,6 +364,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
 
                 cols.proof_idx = F::from_usize(proof_idx);
                 cols.is_last = F::ONE;
+                cols.need_rot = F::ZERO;
+                cols.num_columns = F::ZERO;
                 cols.starting_tidx = F::from_usize(preflight.proof_shape.post_tidx);
                 cols.num_present = num_present;
 
@@ -813,12 +826,30 @@ where
             local.is_present,
         );
 
+        self.air_shape_bus.send(
+            builder,
+            local.proof_idx,
+            AirShapeBusMessage {
+                sort_idx: local.sorted_idx.into(),
+                property_idx: AirShapeProperty::NeedRot.to_field(),
+                value: local.need_rot.into(),
+            },
+            local.is_present * local.num_columns,
+        );
+
         ///////////////////////////////////////////////////////////////////////////////////////////
         // HYPERDIM (SIGNED N) LOOKUP
         ///////////////////////////////////////////////////////////////////////////////////////////
         let l_skip = AB::F::from_usize(self.l_skip);
         let n = local.log_height.into() - l_skip;
         builder.assert_bool(local.n_sign_bit);
+        builder.assert_bool(local.need_rot);
+        builder
+            .when(not(local.is_present))
+            .assert_zero(local.need_rot);
+        builder
+            .when(not(local.is_present))
+            .assert_zero(local.num_columns);
         let n_abs = select(local.n_sign_bit, -n.clone(), n.clone());
         // We range check `n_abs` is in `[0, 32)`.
         // We constrain `n = n_sign_bit ? -n_abs : n_abs` and `n := log_height - l_skip`.

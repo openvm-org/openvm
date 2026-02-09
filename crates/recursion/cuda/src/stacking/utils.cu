@@ -46,7 +46,7 @@ __global__ void stacked_slice_data_kernel(
     // slice_offsets contains starting global slice idx for each trace
     auto [global_slice_offset, record_idx] =
         binary_search(slice_offsets, global_slice_idx, num_airs + num_commits - 1);
-    auto [commit_idx, start_col_idx, start_row_idx, log_height, width] =
+    auto [commit_idx, start_col_idx, start_row_idx, log_height, width, need_rot] =
         stacked_trace_data[record_idx];
 
     uint32_t slice_height = 1 << std::max(log_height, l_skip);
@@ -64,7 +64,7 @@ __global__ void stacked_slice_data_kernel(
         (commit_idx == 0 && record_idx + 1 == num_airs && trace_col_idx + 1 == width) ||
         (commit_idx != 0 && trace_col_idx + 1 == width);
 
-    out[global_slice_idx] = {commit_idx, col_idx, row_idx, n, is_last_for_claim};
+    out[global_slice_idx] = {commit_idx, col_idx, row_idx, n, is_last_for_claim, need_rot};
 }
 
 __global__ void compute_coefficients_kernel(
@@ -85,7 +85,8 @@ __global__ void compute_coefficients_kernel(
         return;
     }
 
-    auto [commit_idx, col_idx, row_idx, n, is_last_for_claim] = slice_data[global_slice_idx];
+    auto [commit_idx, col_idx, row_idx, n, is_last_for_claim, need_rot] =
+        slice_data[global_slice_idx];
     uint32_t n_lift = n > 0 ? (uint32_t)n : 0;
 
     uint32_t num_bits = n_stack - n_lift;
@@ -102,9 +103,12 @@ __global__ void compute_coefficients_kernel(
     FpExt eq_prism = eval_eq_prism_ext(u, r_n, n_lift + 1, l_skip) * ind;
     FpExt rot_kernel_prism = eval_rot_kernel_prism_ext(u, r_n, n_lift + 1, l_skip) * ind;
 
-    coeff_terms[global_slice_idx] =
-        eq_bits * (lambda_pows[global_slice_idx << 1] * eq_prism +
-                   lambda_pows[(global_slice_idx << 1) + 1] * rot_kernel_prism);
+    FpExt coeff_term = eq_bits * (lambda_pows[global_slice_idx << 1] * eq_prism);
+    if (need_rot) {
+        coeff_term =
+            coeff_term + (eq_bits * (lambda_pows[(global_slice_idx << 1) + 1] * rot_kernel_prism));
+    }
+    coeff_terms[global_slice_idx] = coeff_term;
     coeff_term_keys[global_slice_idx] = ((uint64_t)commit_idx << 32) | (uint64_t)col_idx;
     precomps[global_slice_idx] = {eq_prism, rot_kernel_prism, eq_bits};
 }
