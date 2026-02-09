@@ -48,3 +48,6 @@ jobs:
           # or https://code.claude.com/docs/en/cli-reference for available options
           # claude_args: '--allowed-tools Bash(gh pr:*)'
 
+          claude_args: |
+            --model claude-opus-4-6
+            --allowedTools "Edit" "Write" "Bash(git:*)" "Bash(gh pr:*)" "Bash(cargo:*)"
