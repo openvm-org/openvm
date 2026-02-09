@@ -3,7 +3,7 @@
 OpenVM supports an extensible instruction set, with different groups of opcodes supported by different VM extensions.
 This specification describes the overall architecture and default VM extensions which ship with OpenVM, which are:
 
-- [RV32IM/RV64IM](#rv32imrv64im-extensions): An extension supporting the 32-bit and 64-bit RISC-V ISA with multiplication.
+- [RV32IM/RV64IM](#rv32imrv64im-extensions): Extensions supporting the 32-bit and 64-bit RISC-V ISA with multiplication.
 - [Native](#native-extension): An extension supporting native field arithmetic for proof recursion and aggregation.
 - [Keccak-256](#keccak-extension): An extension implementing the Keccak-256 hash function compatibly with RISC-V memory.
 - [SHA2](#sha-2-extension): An extension implementing the SHA-256 and SHA-512 hash functions compatibly with RISC-V memory.
@@ -258,10 +258,6 @@ new extension to be compatible with some extensions, you need select some compat
 We now specify instructions supported by the default VM extensions shipping with OpenVM. Unless otherwise specified,
 instructions will set `to_pc = from_pc + DEFAULT_PC_STEP`. We will use the following notation:
 
-- `u32(x)` where `x: [F; 4]` consists of 4 bytes will mean the casting from little-endian bytes in 2's complement to
-  unsigned 32-bit integer.
-- `i32(x)` where `x: [F; 4]` consists of 4 bytes will mean the casting from little-endian bytes in 2's complement to
-  signed 32-bit integer.
 - `uXLEN(x)` where `x: [F; LIMBS]` consists of LIMBS bytes will mean the casting from little-endian bytes in 2's complement to
   unsigned XLEN-bit integer.
 - `iXLEN(x)` where `x: [F; LIMBS]` consists of LIMBS bytes will mean the casting from little-endian bytes in 2's complement to
@@ -271,8 +267,7 @@ instructions will set `to_pc = from_pc + DEFAULT_PC_STEP`. We will use the follo
   if `c.as_canonical_u32() < F::modulus() / 2` then `iXLEN(c) = c.as_canonical_u32() as iXLEN` else
   `iXLEN(c) = c.as_canonical_u32() - F::modulus() as iXLEN`.
 - `decompose(c)` where `c` is a field element means `(c.as_canonical_u32() as uXLEN).to_le_bytes()`, i.e., LIMBS little-endian bytes (zero-extended).
-- `r32{0}(a) := i32([a:4]_1)` means casting the value at `[a:4]_1` to `i32`.
-- `rXLEN{0}(a) := iXLEN([a:LIMBS]_1)` means casting the register value at `[a:LIMBS]_1` to `iXLEN`.
+- `reg{0}(a) := iXLEN([a:LIMBS]_1)` means casting the value at `[a:LIMBS]_1` to `iXLEN`.
 
 In the specification, operands marked with `_` are not used and should be set to zero. Trailing unused operands should
 also be set to zero.
@@ -326,8 +321,8 @@ never contain such a write and conforms to the RV32IM/RV64IM specification.
 In all ALU instructions, the operand `d` is fixed to be `1`. The operand `e` must be either `0` or `1`. When `e = 0`,
 the `c` operand is expected to be of the form `F::from_canonical_u32(c_i16 as i24 as u24 as u32)` where `c_i16` is type
 `i16`. In other words we take signed 16-bits in two's complement, sign extend to 24-bits, consider the 24-bits as
-unsigned integer, and convert to field element. In the instructions below, `[c:LIMBS]_0` should be interpreted as
-`c_i16 as iXLEN` sign extended to XLEN bits.
+unsigned integer, and convert to field element. In the instruction descriptions below, `[c:LIMBS]_0` should be interpreted 
+as `c_i16 as iXLEN` sign extended to XLEN bits.
 
 | Name                | Operands    | Description                                                                                                |
 | ------------------- | ----------- | ---------------------------------------------------------------------------------------------------------- |
@@ -339,46 +334,44 @@ unsigned integer, and convert to field element. In the instructions below, `[c:L
 | OR_RV32/OR_RV64     | `a,b,c,1,e` | `[a:LIMBS]_1 = [b:LIMBS]_1 \| [c:LIMBS]_e`                                                                 |
 | AND_RV32/AND_RV64   | `a,b,c,1,e` | `[a:LIMBS]_1 = [b:LIMBS]_1 & [c:LIMBS]_e`                                                                  |
 | SLL_RV32/SLL_RV64   | `a,b,c,1,e` | `[a:LIMBS]_1 = [b:LIMBS]_1 << [c:LIMBS]_e`                                                                 |
-| SLLW_RV64           | `a,b,c,1,e` | `[a:8]_1 = sign_extend([b:4]_1 << [c:4]_e[0:4])`. RV64 only. Shifts lower 32 bits left, sign-extends to 64 bits. |
-| SRL_RV32/SRL_RV64   | `a,b,c,1,e` | `[a:LIMBS]_1 = [b:LIMBS]_1 >> [c:LIMBS]_e`                                                                 |
-| SRLW_RV64           | `a,b,c,1,e` | `[a:8]_1 = sign_extend([b:4]_1 >> [c:4]_e[0:4])`. RV64 only. Shifts lower 32 bits right (logical), sign-extends to 64 bits. |
-| SRA_RV32/SRA_RV64   | `a,b,c,1,e` | `[a:LIMBS]_1 = [b:LIMBS]_1 >> [c:LIMBS]_e` MSB extends                                                     |
-| SRAW_RV64           | `a,b,c,1,e` | `[a:8]_1 = sign_extend(i32([b:4]_1) >> [c:4]_e[0:4])`. RV64 only. Shifts lower 32 bits right (arithmetic), sign-extends to 64 bits. |
+| SLLW_RV64           | `a,b,c,1,e` | `[a:8]_1 = sign_extend([b:4]_1 << [c:4]_e)`. RV64 only. Shifts lower 32 bits left, sign-extends to 64 bits. |
+| SRL_RV32/SRL_RV64   | `a,b,c,1,e` | `[a:LIMBS]_1 = [b:LIMBS]_1 >> [c:LIMBS]_e`. Shifts XLEN bits right, sign-extends to XLEN bits.  |
+| SRLW_RV64           | `a,b,c,1,e` | `[a:8]_1 = sign_extend([b:4]_1 >> [c:4]_e)`. RV64 only. Shifts lower 32 bits right, sign-extends to 64 bits. |
+| SRA_RV32/SRA_RV64   | `a,b,c,1,e` | `[a:LIMBS]_1 = [b:LIMBS]_1 >> [c:LIMBS]_e`. Shifts XLEN bits right, most significant bit extends.  |                                                    |
+| SRAW_RV64           | `a,b,c,1,e` | `[a:8]_1 = sign_extend([b:4]_1 >> [c:4]_e)`. RV64 only. Shifts lower 32 bits right, most significant bit extends to 64 bits. |
 | SLT_RV32/SLT_RV64   | `a,b,c,1,e` | `[a:LIMBS]_1 = iXLEN([b:LIMBS]_1) < iXLEN([c:LIMBS]_e) ? 1 : 0`                                            |
 | SLTU_RV32/SLTU_RV64 | `a,b,c,1,e` | `[a:LIMBS]_1 = uXLEN([b:LIMBS]_1) < uXLEN([c:LIMBS]_e) ? 1 : 0`                                            |
-
-For shift instructions, the shift amount is the low 5 bits of the source for RV32, the low 6 bits for RV64, and the low 5 bits for RV64 W variants.
 
 #### Load/Store
 
 For all load/store instructions, we assume the operand `c` is in `[0, 2^16)`, and we fix address spaces `d = 1`.
 The address space `e` is `2` for load instructions, and can be `2`, `3`, or `4` for store instructions.
-The operand `g` must be a boolean. We let `sign_extend(decompose(c)[0:2], g)` denote the `i32` defined by first taking
-the unsigned integer encoding of `c` as 16 bits, then sign extending it to 32 bits using the sign bit `g`, and considering
-the 32 bits as the 2's complement of an `i32`.
-We will use shorthand `r32{c,g}(b) := i32([b:4]_1) + sign_extend(decompose(c)[0:2], g)` as `i32`. This means performing
-signed 32-bit addition with the value of the register `[b:4]_1`. For consistency with other notation,
-we define the shorthand `r32{c}(b)` to mean `r32{c,g}(b)` where `g` is set to the most significant bit of `c`.
+The operand `g` must be a boolean. We let `sign_extend(decompose(c)[0:2], g)` denote the `iXLEN` defined by first taking
+the unsigned integer encoding of `c` as 16 bits, then sign extending it to XLEN bits using the sign bit `g`, and considering
+the XLEN bits as the 2's complement of an `iXLEN`.
+We will use shorthand `reg{c,g}(b) := iXLEN([b:4]_1) + sign_extend(decompose(c)[0:2], g)` as `iXLEN`. This means performing
+signed addition with the value of the register `[b:4]_1`. For consistency with other notation,
+we define the shorthand `reg{c}(b)` to mean `reg{c,g}(b)` where `g` is set to the most significant bit of `c`.
 Memory access to `ptr: i32` in address space `e` is only valid if `0 <= ptr < 2^addr_max_bits` and
 `ptr` is naturally aligned (i.e., `ptr` must be divisible by the data size in bytes), in
 which case it is an access to `F::from_canonical_u32(ptr as u32)`.
-The data size is `1` for LOADB_RV32/LOADB_RV64, LOADBU_RV32/LOADBU_RV64, STOREB_RV32/STOREB_RV64, `2` for LOADH_RV32/LOADH_RV64, LOADHU_RV32/LOADHU_RV64, STOREH_RV32/STOREH_RV64, `4` for LOADW_RV32/LOADW_RV64, LOADWU_RV64, STOREW_RV32/STOREW_RV64, and `8` for LOADD_RV64, STORED_RV64.
+The data size is `1` for LOADB/STOREB, `2` for LOADH/STOREH, `4` for LOADW/STOREW, and `8` for LOADD_RV64/STORED_RV64.
 
-All load/store instructions always do block accesses of block size `LIMBS`, even for LOADB/STOREB.
+All load/store instructions always do block accesses of block size `LIMBS`.
 
 | Name                        | Operands        | Description                                                                                                                                                                         |
 | --------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| LOADB_RV32/LOADB_RV64       | `a,b,c,1,e,f,g` | `if(f!=0) [a:LIMBS]_1 = sign_extend([r32{c,g}(b):1]_e)` The operand `f` is assumed to be boolean. Must sign-extend the byte read from memory, which is represented in 2's complement.   |
-| LOADH_RV32/LOADH_RV64       | `a,b,c,1,e,f,g` | `if(f!=0) [a:LIMBS]_1 = sign_extend([r32{c,g}(b):2]_e)` The operand `f` is assumed to be boolean. Must sign-extend the number read from memory, which is represented in 2's complement. |
-| LOADW_RV32/LOADW_RV64       | `a,b,c,1,e,f,g` | `if(f!=0) [a:LIMBS]_1 = sign_extend([r32{c,g}(b):4]_e)` The operand `f` is assumed to be boolean. For RV64, sign-extends the 32-bit value to 64 bits.                               |
-| LOADD_RV64                  | `a,b,c,1,e,f,g` | `if(f!=0) [a:8]_1 = [r32{c,g}(b):8]_e` RV64 only. The operand `f` is assumed to be boolean.                                                                                         |
-| LOADBU_RV32/LOADBU_RV64     | `a,b,c,1,e,f,g` | `if(f!=0) [a:LIMBS]_1 = zero_extend([r32{c,g}(b):1]_e)` The operand `f` is assumed to be boolean. Must zero-extend the number read from memory.                                     |
-| LOADHU_RV32/LOADHU_RV64     | `a,b,c,1,e,f,g` | `if(f!=0) [a:LIMBS]_1 = zero_extend([r32{c,g}(b):2]_e)` The operand `f` is assumed to be boolean. Must zero-extend the number read from memory.                                     |
-| LOADWU_RV64                 | `a,b,c,1,e,f,g` | `if(f!=0) [a:8]_1 = zero_extend([r32{c,g}(b):4]_e)` RV64 only. The operand `f` is assumed to be boolean. Zero-extends the 32-bit value to 64 bits.                                  |
-| STOREB_RV32/STOREB_RV64     | `a,b,c,1,e,1,g` | `[r32{c,g}(b):1]_e <- [a:1]_1`                                                                                                                                                      |
-| STOREH_RV32/STOREH_RV64     | `a,b,c,1,e,1,g` | `[r32{c,g}(b):2]_e <- [a:2]_1`                                                                                                                                                      |
-| STOREW_RV32/STOREW_RV64     | `a,b,c,1,e,1,g` | `[r32{c,g}(b):4]_e <- [a:4]_1`                                                                                                                                                      |
-| STORED_RV64                 | `a,b,c,1,e,1,g` | `[r32{c,g}(b):8]_e <- [a:8]_1` RV64 only.                                                                                                                                           |
+| LOADB_RV32/LOADB_RV64       | `a,b,c,1,e,f,g` | `if(f!=0) [a:LIMBS]_1 = sign_extend([reg{c,g}(b):1]_e)` The operand `f` is assumed to be boolean. Must sign-extend the byte read from memory, which is represented in 2's complement.   |
+| LOADH_RV32/LOADH_RV64       | `a,b,c,1,e,f,g` | `if(f!=0) [a:LIMBS]_1 = sign_extend([reg{c,g}(b):2]_e)` The operand `f` is assumed to be boolean. Must sign-extend the number read from memory, which is represented in 2's complement. |
+| LOADW_RV32/LOADW_RV64       | `a,b,c,1,e,f,g` | `if(f!=0) [a:LIMBS]_1 = sign_extend([reg{c,g}(b):4]_e)` The operand `f` is assumed to be boolean. For RV64, sign-extends the 32-bit value to 64 bits.                               |
+| LOADD_RV64                  | `a,b,c,1,e,f,g` | `if(f!=0) [a:8]_1 = [reg{c,g}(b):8]_e` RV64 only. The operand `f` is assumed to be boolean.                                                                                         |
+| LOADBU_RV32/LOADBU_RV64     | `a,b,c,1,e,f,g` | `if(f!=0) [a:LIMBS]_1 = zero_extend([reg{c,g}(b):1]_e)` The operand `f` is assumed to be boolean. Must zero-extend the byte read from memory.                                     |
+| LOADHU_RV32/LOADHU_RV64     | `a,b,c,1,e,f,g` | `if(f!=0) [a:LIMBS]_1 = zero_extend([reg{c,g}(b):2]_e)` The operand `f` is assumed to be boolean. Must zero-extend the number read from memory.                                     |
+| LOADWU_RV64                 | `a,b,c,1,e,f,g` | `if(f!=0) [a:8]_1 = zero_extend([reg{c,g}(b):4]_e)` RV64 only. The operand `f` is assumed to be boolean. Zero-extends the 32-bit value to 64 bits.                                  |
+| STOREB_RV32/STOREB_RV64     | `a,b,c,1,e,1,g` | `[reg{c,g}(b):1]_e <- [a:1]_1`                                                                                                                                                      |
+| STOREH_RV32/STOREH_RV64     | `a,b,c,1,e,1,g` | `[reg{c,g}(b):2]_e <- [a:2]_1`                                                                                                                                                      |
+| STOREW_RV32/STOREW_RV64     | `a,b,c,1,e,1,g` | `[reg{c,g}(b):4]_e <- [a:4]_1`                                                                                                                                                      |
+| STORED_RV64                 | `a,b,c,1,e,1,g` | `[reg{c,g}(b):8]_e <- [a:8]_1` RV64 only.                                                                                                                                           |
 
 #### Branch/Jump/Upper Immediate
 
@@ -393,9 +386,9 @@ For branch instructions, we fix `d = e = 1`. For jump instructions, we fix `d = 
 | BLTU_RV32/BLTU_RV64 | `a,b,c,1,1`      | `if(uXLEN([a:LIMBS]_1) < uXLEN([b:LIMBS]_1)) pc += c`                                                                                                                                                                                                                                                                                                                       |
 | BGEU_RV32/BGEU_RV64 | `a,b,c,1,1`      | `if(uXLEN([a:LIMBS]_1) >= uXLEN([b:LIMBS]_1)) pc += c`                                                                                                                                                                                                                                                                                                                      |
 | JAL_RV32/JAL_RV64   | `a,_,c,1,_,f`    | `if(f!=0) [a:LIMBS]_1 = decompose(pc+DEFAULT_PC_STEP); pc += c`. The operand `f` is assumed to be boolean. The `pc` increment is always done regardless of `f`'s value. Here `iXLEN(c)` must be in `[-2^24, 2^24)`.                                                                                                                                                         |
-| JALR_RV32/JALR_RV64 | `a,b,c,1,_,f,g`  | `if(f!=0) [a:LIMBS]_1 = decompose(pc+DEFAULT_PC_STEP); pc = F::from_canonical_u64(iXLEN([b:LIMBS]_1) + sign_extend(decompose(c)[0:2], g) as uXLEN)`. Constrains that `iXLEN([b:LIMBS]_1) + sign_extend(decompose(c)[0:2], g)` is in `[0, 2^PC_BITS)`. Here `uXLEN(c)` must be in `[0, 2^16)`. The operands `f` and `g` are assumed to be boolean. The `pc` assignment is always done regardless of `f`'s value. |
-| LUI_RV32/LUI_RV64   | `a,_,c,1,_,1`    | `[a:LIMBS]_1 = uXLEN(c) << 12`. Here `iXLEN(c)` must be in `[0, 2^20)`. The immediate is sign-extended.                                                                                                                                                                                                                                                                     |
-| AUIPC_RV32/AUIPC_RV64 | `a,_,c,1,_,_`  | `[a:LIMBS]_1 = decompose(pc + (iXLEN(c) << 8))`. Here `iXLEN(c)` must be in `[-2^23, 2^23)`. The immediate is sign-extended, and the addition is performed as wrapping `iXLEN` arithmetic.                                                                                                                                                                                  |
+| JALR_RV32/JALR_RV64 | `a,b,c,1,_,f,g`  | `if(f!=0) [a:LIMBS]_1 = decompose(pc+DEFAULT_PC_STEP); pc = F::from_canonical_u32(iXLEN([b:LIMBS]_1 as u32) + sign_extend(decompose(c)[0:2], g) as uXLEN)`. Constrains that `iXLEN([b:LIMBS]_1) + sign_extend(decompose(c)[0:2], g)` is in `[0, 2^PC_BITS)`. Here `uXLEN(c)` must be in `[0, 2^16)`. The operands `f` and `g` are assumed to be boolean. The `pc` assignment is always done regardless of `f`'s value. |
+| LUI_RV32/LUI_RV64   | `a,_,c,1,_,1`    | `[a:LIMBS]_1 = uXLEN(c) << 12`. Here `uXLEN(c)` must be in `[0, 2^20)`. The immediate is sign-extended.                                                                                                                                                                                                                                                                     |
+| AUIPC_RV32/AUIPC_RV64 | `a,_,c,1,_,_`  | `[a:LIMBS]_1 = decompose(pc) + (decompose(iXLEN(c)) << 8)`. Here `iXLEN(c)` must be in `[-2^23, 2^23)`. The immediate is sign-extended, and the addition is performed as wrapping `iXLEN` arithmetic.                                                                                                                                                                                  |
 
 For branch and JAL instructions, the instructions assume that the operand `iXLEN(c)` is in `[-2^24,2^24)`. The
 assignment `pc += c` is done as field elements.
@@ -405,8 +398,10 @@ In valid programs, the `from_pc` is always in `[0, 2^PC_BITS)`. We will only use
 
 For JALR, we treat `c` in `[0, 2^16)` as a raw encoding of 16-bits.
 The operand `g` must be a boolean. We let `sign_extend(decompose(c)[0:2], g)` denote the `iXLEN` defined by first taking
-the unsigned integer encoding of `c` as 16 bits, then sign extending it to XLEN bits using the sign bit `g`, and considering the XLEN bits as the 2's complement of an `iXLEN`. Then it is added to the register value `iXLEN([b:LIMBS]_1)`, where XLEN-bit overflow is ignored. The instruction is only valid if the resulting `iXLEN` is in range `[0, 2^PC_BITS)`. The
-result is then cast to `uXLEN` and then to `F` and assigned to `pc`.
+the unsigned integer encoding of `c` as 16 bits, then sign extending it to XLEN bits using the sign bit `g`, and considering the XLEN bits as the 2's complement of an `iXLEN`. 
+Then it is added to the register value `iXLEN([b:LIMBS]_1)`, where XLEN-bit overflow is ignored. 
+The instruction is only valid if the resulting `iXLEN` is in range `[0, 2^PC_BITS)`.
+The result is then cast to `uXLEN` and then to `F` and assigned to `pc`.
 
 For LUI, we are treating `c` in `[0, 2^20)` as a raw encoding of 20-bits.
 For AUIPC, we are treating `c` as a signed 24-bit value in `[-2^23, 2^23)`. The shift `iXLEN(c) << 8`
@@ -438,12 +433,12 @@ Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 | MULHSU_RV32/MULHSU_RV64 | `a,b,c,1` | `[a:LIMBS]_1 = (sign_extend([b:LIMBS]_1) * zero_extend([c:LIMBS]_1))[LIMBS:2*LIMBS-1]`                                                                                                                                  |
 | MULHU_RV32/MULHU_RV64 | `a,b,c,1` | `[a:LIMBS]_1 = (zero_extend([b:LIMBS]_1) * zero_extend([c:LIMBS]_1))[LIMBS:2*LIMBS-1]`                                                                                                                                   |
 | MULW_RV64             | `a,b,c,1` | `[a:LIMBS]_1 = sign_extend(([b:4]_1 * [c:4]_1)[0:3])`. RV64 only. Multiplies lower 32 bits and sign-extends result to 64 bits.                                                                                           |
-| DIV_RV32/DIV_RV64     | `a,b,c,1` | `[a:LIMBS]_1 = [b:LIMBS]_1 / [c:LIMBS]_1` integer division. Division by zero: if `iXLEN([c:LIMBS]_1) = 0`, set `iXLEN([a:LIMBS]_1) = -1`. Overflow: if `iXLEN([b:LIMBS]_1) = -2^(XLEN-1)` and `iXLEN([c:LIMBS]_1) = -1`, set `iXLEN([a:LIMBS]_1) = -2^(XLEN-1)`. |
-| DIVU_RV32/DIVU_RV64   | `a,b,c,1` | `[a:LIMBS]_1 = [b:LIMBS]_1 / [c:LIMBS]_1` integer division. Division by zero: if `uXLEN([c:LIMBS]_1) = 0`, set `uXLEN([a:LIMBS]_1) = 2^XLEN - 1`.                                                                        |
+| DIV_RV32/DIV_RV64     | `a,b,c,1` | `[a:LIMBS]_1 = [b:LIMBS]_1 / [c:LIMBS]_1` integer division (signed). Division by zero: if `iXLEN([c:LIMBS]_1) = 0`, set `iXLEN([a:LIMBS]_1) = -1`. Overflow: if `iXLEN([b:LIMBS]_1) = -2^(XLEN-1)` and `iXLEN([c:LIMBS]_1) = -1`, set `iXLEN([a:LIMBS]_1) = -2^(XLEN-1)`. |
+| DIVU_RV32/DIVU_RV64   | `a,b,c,1` | `[a:LIMBS]_1 = [b:LIMBS]_1 / [c:LIMBS]_1` integer division (unsigned). Division by zero: if `uXLEN([c:LIMBS]_1) = 0`, set `uXLEN([a:LIMBS]_1) = 2^XLEN - 1`.                                                                        |
 | DIVW_RV64             | `a,b,c,1` | `[a:LIMBS]_1 = sign_extend([b:4]_1 / [c:4]_1)`. RV64 only. Divides lower 32 bits (signed) and sign-extends result to 64 bits.                                                                                            |
 | DIVUW_RV64            | `a,b,c,1` | `[a:LIMBS]_1 = sign_extend([b:4]_1 / [c:4]_1)`. RV64 only. Divides lower 32 bits (unsigned) and sign-extends result to 64 bits.                                                                                          |
-| REM_RV32/REM_RV64     | `a,b,c,1` | `[a:LIMBS]_1 = [b:LIMBS]_1 % [c:LIMBS]_1` integer remainder. Division by zero: if `iXLEN([c:LIMBS]_1) = 0`, set `[a:LIMBS]_1 = [b:LIMBS]_1`. Overflow: if `iXLEN([b:LIMBS]_1) = -2^(XLEN-1)` and `iXLEN([c:LIMBS]_1) = -1`, set `[a:LIMBS]_1 = 0`. |
-| REMU_RV32/REMU_RV64   | `a,b,c,1` | `[a:LIMBS]_1 = [b:LIMBS]_1 % [c:LIMBS]_1` integer remainder. Division by zero: if `uXLEN([c:LIMBS]_1) = 0`, set `[a:LIMBS]_1 = [b:LIMBS]_1`.                                                                             |
+| REM_RV32/REM_RV64     | `a,b,c,1` | `[a:LIMBS]_1 = [b:LIMBS]_1 % [c:LIMBS]_1` integer remainder (signed). Division by zero: if `iXLEN([c:LIMBS]_1) = 0`, set `[a:LIMBS]_1 = [b:LIMBS]_1`. Overflow: if `iXLEN([b:LIMBS]_1) = -2^(XLEN-1)` and `iXLEN([c:LIMBS]_1) = -1`, set `[a:LIMBS]_1 = 0`. |
+| REMU_RV32/REMU_RV64   | `a,b,c,1` | `[a:LIMBS]_1 = [b:LIMBS]_1 % [c:LIMBS]_1` integer remainder (unsigned). Division by zero: if `uXLEN([c:LIMBS]_1) = 0`, set `[a:LIMBS]_1 = [b:LIMBS]_1`.                                                                             |
 | REMW_RV64             | `a,b,c,1` | `[a:LIMBS]_1 = sign_extend([b:4]_1 % [c:4]_1)`. RV64 only. Remainder of lower 32 bits (signed) and sign-extends result to 64 bits.                                                                                       |
 | REMUW_RV64            | `a,b,c,1` | `[a:LIMBS]_1 = sign_extend([b:4]_1 % [c:4]_1)`. RV64 only. Remainder of lower 32 bits (unsigned) and sign-extends result to 64 bits.                                                                                     |
 
@@ -455,8 +450,8 @@ with user input-output.
 
 | Name                               | Operands        | Description                                                                                                                                                                       |
 | ---------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HINT_STOREW_RV32/HINT_STORED_RV64  | `_,b,_,1,2`     | `[rXLEN{0}(b):LIMBS]_2 = next LIMBS bytes from hint stream`. Only valid if next LIMBS values in hint stream are bytes.                                                            |
-| HINT_BUFFER_RV32/HINT_BUFFER_RV64  | `a,b,_,1,2`     | `[rXLEN{0}(b):LIMBS * l]_2 = next LIMBS * l bytes from hint stream` where `l = rXLEN{0}(a)`. Only valid if next `LIMBS * l` values in hint stream are bytes. `l` must be non-zero and <= `MAX_HINT_BUFFER_WORDS` (1,023 words ≈ 4KB). The pointer address `rXLEN{0}(b)` does not need to be a multiple of `LIMBS`. |
+| HINT_STOREW_RV32/HINT_STORED_RV64  | `_,b,_,1,2`     | `[reg{0}(b):LIMBS]_2 = next LIMBS bytes from hint stream`. Only valid if next LIMBS values in hint stream are bytes.                                                            |
+| HINT_BUFFER_RV32/HINT_BUFFER_RV64  | `a,b,_,1,2`     | `[reg{0}(b):LIMBS * l]_2 = next LIMBS * l bytes from hint stream` where `l = reg{0}(a)`. Only valid if next `LIMBS * l` values in hint stream are bytes. `l` must be non-zero and <= `MAX_HINT_BUFFER_WORDS` (1,023 words ≈ 4KB). The pointer address `reg{0}(b)` does not need to be a multiple of `LIMBS`. |
 | REVEAL_RV32/REVEAL_RV64            | `a,b,c,1,3,_,g` | Pseudo-instruction for `STOREW_RV32/STORED_RV64 a,b,c,1,3,_,g` writing to the user IO address space `3`. Only valid when continuations are enabled.                               |
 
 > **Note:** The `MAX_HINT_BUFFER_WORDS` bound on `HINT_BUFFER_RV32` is enforced by both the executor and AIR constraints. The SDK's `hint_buffer_chunked` function automatically splits larger reads into multiple `HINT_BUFFER_RV32` instructions.
@@ -468,9 +463,9 @@ The RV32IM/RV64IM extension defines the following phantom sub-instructions.
 | Name                                | Discriminant | Operands | Description                                                                                                                                            |
 | ----------------------------------- | ------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Rv32HintInput/Rv64HintInput         | 0x20         | `_`      | Pops a vector `hint` of field elements from the input stream and resets the hint stream to equal the vector `[(hint.len() as u32).to_le_bytes()), hint].concat()`. |
-| Rv32PrintStr/Rv64PrintStr           | 0x21         | `a,b,_`  | Peeks at `[rXLEN{0}(a):rXLEN{0}(b)]_2`, tries to convert to byte array and then UTF-8 string and prints to host stdout. Prints error message if conversion fails. Does not change any VM state. |
-| Rv32HintRandom/Rv64HintRandom       | 0x22         | `a,_,_`  | Resets the hint stream to `LIMBS * rXLEN{0}(a)` random bytes. The source of randomness is deterministic using a fixed-seed RNG (`rand::rngs::StdRng`). Its result is not constrained in any way. |
-| Rv32HintLoadByKey/Rv64HintLoadByKey | 0x23         | `a,b,_`  | Look up the value by key `[rXLEN{0}(a):rXLEN{0}(b)]_2` and prepend the value into `input_stream`. The logical value is `Vec<Vec<F>>`. The serialization of `Vec` follows the format `[length, <content>]`. Both length and content encoded as little-endian bytes. |
+| Rv32PrintStr/Rv64PrintStr           | 0x21         | `a,b,_`  | Peeks at `[reg{0}(a):reg{0}(b)]_2`, tries to convert to byte array and then UTF-8 string and prints to host stdout. Prints error message if conversion fails. Does not change any VM state. |
+| Rv32HintRandom/Rv64HintRandom       | 0x22         | `a,_,_`  | Resets the hint stream to `LIMBS * reg{0}(a)` random bytes. The source of randomness is deterministic using a fixed-seed RNG (`rand::rngs::StdRng`). Its result is not constrained in any way. |
+| Rv32HintLoadByKey/Rv64HintLoadByKey | 0x23         | `a,b,_`  | Look up the value by key `[reg{0}(a):reg{0}(b)]_2` and prepend the value into `input_stream`. The logical value is `Vec<Vec<F>>`. The serialization of `Vec` follows the format `[length, <content>]`. Both length and content encoded as little-endian bytes. |
 
 ### Native Extension
 
@@ -576,7 +571,7 @@ all memory cells are constrained to be bytes.
 
 | Name           | Operands    | Description                                                                                                       |
 | -------------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
-| KECCAK256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = keccak256([r32{0}(b)..r32{0}(b)+r32{0}(c)]_2)`. Performs memory accesses with block size `4`. |
+| KECCAK256_RV32 | `a,b,c,1,2` | `[reg{0}(a):32]_2 = keccak256([reg{0}(b)..reg{0}(b)+reg{0}(c)]_2)`. Performs memory accesses with block size `4`. |
 
 ### SHA-2 Extension
 
@@ -585,8 +580,8 @@ meaning all memory cells are constrained to be bytes.
 
 | Name        | Operands    | Description                                                                                                                                                              |
 | ----------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| SHA256_UPDATE_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = compress256([r32{0}(b):32]_2, [r32{0}(c):64]_2)`. where `compress256(state, input)` is the SHA-256 block compression function which returns the updated state. This instruction performs memory reads and writes with block size `4`. |
-| SHA512_UPDATE_RV32 | `a,b,c,1,2` | `[r32{0}(a):64]_2 = compress512([r32{0}(b):64]_2, [r32{0}(c):128]_2)`. where `compress512(state, input)` is the SHA-512 block compression function which returns the updated state. This instruction performs memory reads and writes with block size `4`. |
+| SHA256_UPDATE_RV32 | `a,b,c,1,2` | `[reg{0}(a):32]_2 = compress256([reg{0}(b):32]_2, [reg{0}(c):64]_2)`. where `compress256(state, input)` is the SHA-256 block compression function which returns the updated state. This instruction performs memory reads and writes with block size `4`. |
+| SHA512_UPDATE_RV32 | `a,b,c,1,2` | `[reg{0}(a):64]_2 = compress512([reg{0}(b):64]_2, [reg{0}(c):128]_2)`. where `compress512(state, input)` is the SHA-512 block compression function which returns the updated state. This instruction performs memory reads and writes with block size `4`. |
 
 ### BigInt Extension
 
@@ -601,27 +596,27 @@ performs block accesses with block size `4` in address space `1` and block size 
 
 | Name         | Operands    | Description                                                                                                                          |
 | ------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| ADD256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 + [r32{0}(c):32]_2`. Overflow is ignored and the lower 256-bits are written to the destination. |
-| SUB256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 - [r32{0}(c):32]_2`. Overflow is ignored and the lower 256-bits are written to the destination. |
-| XOR256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 ^ [r32{0}(c):32]_2`                                                                             |
-| OR256_RV32   | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 \| [r32{0}(c):32]_2`                                                                            |
-| AND256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 & [r32{0}(c):32]_2`                                                                             |
-| SLL256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 << [r32{0}(c):32]_2`                                                                            |
-| SRL256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 >> [r32{0}(c):32]_2`                                                                            |
-| SRA256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = [r32{0}(b):32]_2 >> [r32{0}(c):32]_2` MSB extends                                                                |
-| SLT256_RV32  | `a,b,c,1,2` | `[r32{0}(a):32]_2 = i256([r32{0}(b):32]_2) < i256([r32{0}(c):32]_2) ? 1 : 0`                                                         |
-| SLTU256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = u256([r32{0}(b):32]_2) < u256([r32{0}(c):32]_2) ? 1 : 0`                                                         |
+| ADD256_RV32  | `a,b,c,1,2` | `[reg{0}(a):32]_2 = [reg{0}(b):32]_2 + [reg{0}(c):32]_2`. Overflow is ignored and the lower 256-bits are written to the destination. |
+| SUB256_RV32  | `a,b,c,1,2` | `[reg{0}(a):32]_2 = [reg{0}(b):32]_2 - [reg{0}(c):32]_2`. Overflow is ignored and the lower 256-bits are written to the destination. |
+| XOR256_RV32  | `a,b,c,1,2` | `[reg{0}(a):32]_2 = [reg{0}(b):32]_2 ^ [reg{0}(c):32]_2`                                                                             |
+| OR256_RV32   | `a,b,c,1,2` | `[reg{0}(a):32]_2 = [reg{0}(b):32]_2 \| [reg{0}(c):32]_2`                                                                            |
+| AND256_RV32  | `a,b,c,1,2` | `[reg{0}(a):32]_2 = [reg{0}(b):32]_2 & [reg{0}(c):32]_2`                                                                             |
+| SLL256_RV32  | `a,b,c,1,2` | `[reg{0}(a):32]_2 = [reg{0}(b):32]_2 << [reg{0}(c):32]_2`                                                                            |
+| SRL256_RV32  | `a,b,c,1,2` | `[reg{0}(a):32]_2 = [reg{0}(b):32]_2 >> [reg{0}(c):32]_2`                                                                            |
+| SRA256_RV32  | `a,b,c,1,2` | `[reg{0}(a):32]_2 = [reg{0}(b):32]_2 >> [reg{0}(c):32]_2` MSB extends                                                                |
+| SLT256_RV32  | `a,b,c,1,2` | `[reg{0}(a):32]_2 = i256([reg{0}(b):32]_2) < i256([reg{0}(c):32]_2) ? 1 : 0`                                                         |
+| SLTU256_RV32 | `a,b,c,1,2` | `[reg{0}(a):32]_2 = u256([reg{0}(b):32]_2) < u256([reg{0}(c):32]_2) ? 1 : 0`                                                         |
 
 #### 256-bit Branch
 
 | Name         | Operands    | Description                                                    |
 | ------------ | ----------- | -------------------------------------------------------------- |
-| BEQ256_RV32  | `a,b,c,1,2` | `if([r32{0}(a):32]_2 == [r32{0}(b):32]_2) pc += c`             |
-| BNE256_RV32  | `a,b,c,1,2` | `if([r32{0}(a):32]_2 != [r32{0}(b):32]_2) pc += c`             |
-| BLT256_RV32  | `a,b,c,1,2` | `if(i256([r32{0}(a):32]_2) < i256([r32{0}(b):32]_2)) pc += c`  |
-| BGE256_RV32  | `a,b,c,1,2` | `if(i256([r32{0}(a):32]_2) >= i256([r32{0}(b):32]_2)) pc += c` |
-| BLTU256_RV32 | `a,b,c,1,2` | `if(u256([r32{0}(a):32]_2) < u256([r32{0}(b):32]_2)) pc += c`  |
-| BGEU256_RV32 | `a,b,c,1,2` | `if(u256([r32{0}(a):32]_2) >= u256([r32{0}(b):32]_2)) pc += c` |
+| BEQ256_RV32  | `a,b,c,1,2` | `if([reg{0}(a):32]_2 == [reg{0}(b):32]_2) pc += c`             |
+| BNE256_RV32  | `a,b,c,1,2` | `if([reg{0}(a):32]_2 != [reg{0}(b):32]_2) pc += c`             |
+| BLT256_RV32  | `a,b,c,1,2` | `if(i256([reg{0}(a):32]_2) < i256([reg{0}(b):32]_2)) pc += c`  |
+| BGE256_RV32  | `a,b,c,1,2` | `if(i256([reg{0}(a):32]_2) >= i256([reg{0}(b):32]_2)) pc += c` |
+| BLTU256_RV32 | `a,b,c,1,2` | `if(u256([reg{0}(a):32]_2) < u256([reg{0}(b):32]_2)) pc += c`  |
+| BGEU256_RV32 | `a,b,c,1,2` | `if(u256([reg{0}(a):32]_2) >= u256([reg{0}(b):32]_2)) pc += c` |
 
 #### 256-bit Multiplication
 
@@ -630,7 +625,7 @@ Below `x[n:m]` denotes the bits from `n` to `m` inclusive of `x`.
 
 | Name        | Operands    | Description                                                       |
 | ----------- | ----------- | ----------------------------------------------------------------- |
-| MUL256_RV32 | `a,b,c,1,2` | `[r32{0}(a):32]_2 = ([r32{0}(b):32]_2 * [r32{0}(c):32]_2)[0:255]` |
+| MUL256_RV32 | `a,b,c,1,2` | `[reg{0}(a):32]_2 = ([reg{0}(b):32]_2 * [reg{0}(c):32]_2)[0:255]` |
 
 ### Algebra Extension
 
@@ -645,9 +640,9 @@ space `2`.
 
 An element in the ring of integers modulo `N`is represented as an unsigned big integer with `N::NUM_LIMBS` limbs with
 each limb having `LIMB_BITS = 8` bits. For each instruction, the input elements
-`[r32{0}(b): N::NUM_LIMBS]_2, [r32{0}(c):N::NUM_LIMBS]_2` are assumed to be unsigned big integers in little-endian
+`[reg{0}(b): N::NUM_LIMBS]_2, [reg{0}(c):N::NUM_LIMBS]_2` are assumed to be unsigned big integers in little-endian
 format with each limb having `LIMB_BITS` bits. However, the big integers are **not** required to be less than `N`. Under
-these conditions, the output element `[r32{0}(a): N::NUM_LIMBS]_2` written to memory will be an unsigned big integer of
+these conditions, the output element `[reg{0}(a): N::NUM_LIMBS]_2` written to memory will be an unsigned big integer of
 the same format that is congruent modulo `N` to the respective operation applied to the two inputs.
 
 For each instruction, the operand `d` is fixed to be `1` and `e` is fixed to be `2`.
@@ -656,23 +651,23 @@ address space `2`, where `N::NUM_LIMBS` is divisible by `N::BLOCK_SIZE`. Recall 
 
 | Name                      | Operands    | Description                                                                                                                                                                                                |
 | ------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ADDMOD_RV32\<N\>          | `a,b,c,1,2` | `[r32{0}(a): N::NUM_LIMBS]_2 = [r32{0}(b): N::NUM_LIMBS]_2 + [r32{0}(c): N::NUM_LIMBS]_2 (mod N)`                                                                                                          |
-| SUBMOD_RV32\<N\>          | `a,b,c,1,2` | `[r32{0}(a): N::NUM_LIMBS]_2 = [r32{0}(b): N::NUM_LIMBS]_2 - [r32{0}(c): N::NUM_LIMBS]_2 (mod N)`                                                                                                          |
-| SETUP_ADDSUBMOD_RV32\<N\> | `a,b,c,1,2` | `assert([r32{0}(b): N::NUM_LIMBS]_2 == N)` for the chip that handles add and sub. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): N::NUM_LIMBS]_2` |
-| MULMOD_RV32\<N\>          | `a,b,c,1,2` | `[r32{0}(a): N::NUM_LIMBS]_2 = [r32{0}(b): N::NUM_LIMBS]_2 * [r32{0}(c): N::NUM_LIMBS]_2 (mod N)`                                                                                                          |
-| DIVMOD_RV32\<N\>          | `a,b,c,1,2` | `[r32{0}(a): N::NUM_LIMBS]_2 = [r32{0}(b): N::NUM_LIMBS]_2 / [r32{0}(c): N::NUM_LIMBS]_2 (mod N)`. Undefined behavior if `gcd([r32{0}(c): N::NUM_LIMBS]_2, N) != 1`.                                       |
-| SETUP_MULDIVMOD_RV32\<N\> | `a,b,c,1,2` | `assert([r32{0}(b): N::NUM_LIMBS]_2 == N)` for the chip that handles mul and div. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): N::NUM_LIMBS]_2` |
+| ADDMOD_RV32\<N\>          | `a,b,c,1,2` | `[reg{0}(a): N::NUM_LIMBS]_2 = [reg{0}(b): N::NUM_LIMBS]_2 + [reg{0}(c): N::NUM_LIMBS]_2 (mod N)`                                                                                                          |
+| SUBMOD_RV32\<N\>          | `a,b,c,1,2` | `[reg{0}(a): N::NUM_LIMBS]_2 = [reg{0}(b): N::NUM_LIMBS]_2 - [reg{0}(c): N::NUM_LIMBS]_2 (mod N)`                                                                                                          |
+| SETUP_ADDSUBMOD_RV32\<N\> | `a,b,c,1,2` | `assert([reg{0}(b): N::NUM_LIMBS]_2 == N)` for the chip that handles add and sub. For the sake of implementation convenience it also writes something (can be anything) into `[reg{0}(a): N::NUM_LIMBS]_2` |
+| MULMOD_RV32\<N\>          | `a,b,c,1,2` | `[reg{0}(a): N::NUM_LIMBS]_2 = [reg{0}(b): N::NUM_LIMBS]_2 * [reg{0}(c): N::NUM_LIMBS]_2 (mod N)`                                                                                                          |
+| DIVMOD_RV32\<N\>          | `a,b,c,1,2` | `[reg{0}(a): N::NUM_LIMBS]_2 = [reg{0}(b): N::NUM_LIMBS]_2 / [reg{0}(c): N::NUM_LIMBS]_2 (mod N)`. Undefined behavior if `gcd([reg{0}(c): N::NUM_LIMBS]_2, N) != 1`.                                       |
+| SETUP_MULDIVMOD_RV32\<N\> | `a,b,c,1,2` | `assert([reg{0}(b): N::NUM_LIMBS]_2 == N)` for the chip that handles mul and div. For the sake of implementation convenience it also writes something (can be anything) into `[reg{0}(a): N::NUM_LIMBS]_2` |
 
 #### Modular Branching
 
 The configuration of `N` is the same as above. For each instruction, the input elements
-`[r32{0}(b): N::NUM_LIMBS]_2, [r32{0}(c): N::NUM_LIMBS]_2` are assumed to be unsigned big integers in little-endian
+`[reg{0}(b): N::NUM_LIMBS]_2, [reg{0}(c): N::NUM_LIMBS]_2` are assumed to be unsigned big integers in little-endian
 format with each limb having `LIMB_BITS` bits.
 
 | Name                    | Operands    | Description                                                                                                                                                                                                                                                                                         |
 | ----------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ISEQMOD_RV32\<N\>       | `a,b,c,1,2` | `[a:4]_1 = [r32{0}(b): N::NUM_LIMBS]_2 == [r32{0}(c): N::NUM_LIMBS]_2 (mod N) ? 1 : 0`. Enforces that `[r32{0}(b): N::NUM_LIMBS]_2, [r32{0}(c): N::NUM_LIMBS]_2` are less than `N` and then sets the register value of `[a:4]_1` to `1` or `0` depending on whether the two big integers are equal. |
-| SETUP_ISEQMOD_RV32\<N\> | `a,b,c,1,2` | `assert([r32{0}(b): N::NUM_LIMBS]_2 == N)` in the chip that handles modular equality. For the sake of implementation convenience it also writes something (can be anything) into register value of `[a:4]_1`                                                                                        |
+| ISEQMOD_RV32\<N\>       | `a,b,c,1,2` | `[a:4]_1 = [reg{0}(b): N::NUM_LIMBS]_2 == [reg{0}(c): N::NUM_LIMBS]_2 (mod N) ? 1 : 0`. Enforces that `[reg{0}(b): N::NUM_LIMBS]_2, [reg{0}(c): N::NUM_LIMBS]_2` are less than `N` and then sets the register value of `[a:4]_1` to `1` or `0` depending on whether the two big integers are equal. |
+| SETUP_ISEQMOD_RV32\<N\> | `a,b,c,1,2` | `assert([reg{0}(b): N::NUM_LIMBS]_2 == N)` in the chip that handles modular equality. For the sake of implementation convenience it also writes something (can be anything) into register value of `[a:4]_1`                                                                                        |
 
 #### Phantom Sub-Instructions
 
@@ -680,7 +675,7 @@ format with each limb having `LIMB_BITS` bits.
 | Name           | Discriminant | Operands      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | -------------- | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | HintNonQr\<N\>  | 0x50         | `_,_,c_upper` | Use `c_upper` to determine the index of the modulus from the list of supported moduli. Reset the hint stream to equal a quadratic nonresidue modulo `N`. |
-| HintSqrt\<N\>   | 0x51         | `a,_,c_upper` | Use `c_upper` to determine the index of the modulus from the list of supported moduli. Read from memory `x = [r32{0}(a): N::NUM_LIMBS]_2`.  If `x` is a quadratic residue modulo `N`, reset the hint stream to `[1u8, 0u8, 0u8, 0u8]` followed by a square root of `x`.  If `x` is not a quadratic residue, reset the hint stream to `[0u8; 4]` followed by a square root of `x * non_qr`, where `non_qr` is the quadratic nonresidue returned by `HintNonQr<N>`. |
+| HintSqrt\<N\>   | 0x51         | `a,_,c_upper` | Use `c_upper` to determine the index of the modulus from the list of supported moduli. Read from memory `x = [reg{0}(a): N::NUM_LIMBS]_2`.  If `x` is a quadratic residue modulo `N`, reset the hint stream to `[1u8, 0u8, 0u8, 0u8]` followed by a square root of `x`.  If `x` is not a quadratic residue, reset the hint stream to `[0u8; 4]` followed by a square root of `x * non_qr`, where `non_qr` is the quadratic nonresidue returned by `HintNonQr<N>`. |
 
 #
 
@@ -697,21 +692,21 @@ and the block size for memory accesses is the block size of `Fp`.
 We use the following notation below:
 
 ```
-r32_fp2(a) -> Fp2 {
-    let c0 = [r32{0}(a): Fp::NUM_LIMBS]_2;
-    let c1 = [r32{0}(a) + Fp::NUM_LIMBS: Fp::NUM_LIMBS]_2;
+reg_fp2(a) -> Fp2 {
+    let c0 = [reg{0}(a): Fp::NUM_LIMBS]_2;
+    let c1 = [reg{0}(a) + Fp::NUM_LIMBS: Fp::NUM_LIMBS]_2;
     return Fp2 { c0, c1 };
 }
 ```
 
 | Name                | Operands    | Description                                                                                                                                                                  |
 | ------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ADD\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) + r32_fp2(c)`                                                                                                                                   |
-| SUB\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) - r32_fp2(c)`                                                                                                                                   |
-| SETUP_ADDSUB\<Fp2\> | `a,b,c,1,2` | `assert([r32_fp2(b).c0 == N)` for the chip that handles add and sub. For the sake of implementation convenience it also writes something (can be anything) into `r32_fp2(a)` |
-| MUL\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) * r32_fp2(c)`                                                                                                                                   |
-| DIV\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) / r32_fp2(c)`                                                                                                                                   |
-| SETUP_MULDIV\<Fp2\> | `a,b,c,1,2` | `assert([r32_fp2(b).c0 == N)` for the chip that handles mul and div. For the sake of implementation convenience it also writes something (can be anything) into `r32_fp2(a)` |
+| ADD\<Fp2\>          | `a,b,c,1,2` | Set `reg_fp2(a) = reg_fp2(b) + reg_fp2(c)`                                                                                                                                   |
+| SUB\<Fp2\>          | `a,b,c,1,2` | Set `reg_fp2(a) = reg_fp2(b) - reg_fp2(c)`                                                                                                                                   |
+| SETUP_ADDSUB\<Fp2\> | `a,b,c,1,2` | `assert([reg_fp2(b).c0 == N)` for the chip that handles add and sub. For the sake of implementation convenience it also writes something (can be anything) into `reg_fp2(a)` |
+| MUL\<Fp2\>          | `a,b,c,1,2` | Set `reg_fp2(a) = reg_fp2(b) * reg_fp2(c)`                                                                                                                                   |
+| DIV\<Fp2\>          | `a,b,c,1,2` | Set `reg_fp2(a) = reg_fp2(b) / reg_fp2(c)`                                                                                                                                   |
+| SETUP_MULDIV\<Fp2\> | `a,b,c,1,2` | `assert([reg_fp2(b).c0 == N)` for the chip that handles mul and div. For the sake of implementation convenience it also writes something (can be anything) into `reg_fp2(a)` |
 
 ### Elliptic Curve Extension
 
@@ -731,19 +726,19 @@ represented as `2 * C::COORD_SIZE` contiguous cells in memory.
 We use the following notation below:
 
 ```
-r32_ec_point(a) -> EcPoint {
-    let x = [r32{0}(a): C::COORD_SIZE]_2;
-    let y = [r32{0}(a) + C::COORD_SIZE: C::COORD_SIZE]_2;
+reg_ec_point(a) -> EcPoint {
+    let x = [reg{0}(a): C::COORD_SIZE]_2;
+    let y = [reg{0}(a) + C::COORD_SIZE: C::COORD_SIZE]_2;
     return EcPoint(x, y);
 }
 ```
 
 | Name                 | Operands    | Description                                                                                                                                                                                                                                                                                    |
 | -------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| EC_ADD_NE\<C\>       | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `r32_ec_point(b).x, r32_ec_point(c).x` are not equal in the coordinate field.           |
-| SETUP_EC_ADD_NE\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).x != r32_ec_point(c).x)`   |
-| EC_DOUBLE\<C\>       | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                                     |
-| SETUP_EC_DOUBLE\<C\> | `a,b,_,1,2` | `assert(r32_ec_point(b).x == C::MODULUS && r32_ec_point(b).y == C::A)` in the chip for EC DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).y != 0 mod C::MODULUS)` |
+| EC_ADD_NE\<C\>       | `a,b,c,1,2` | Set `reg_ec_point(a) = reg_ec_point(b) + reg_ec_point(c)` (curve addition). Assumes that `reg_ec_point(b), reg_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `reg_ec_point(b).x, reg_ec_point(c).x` are not equal in the coordinate field.           |
+| SETUP_EC_ADD_NE\<C\> | `a,b,c,1,2` | `assert(reg_ec_point(b).x == C::MODULUS)` in the chip for EC ADD. For the sake of implementation convenience it also writes something (can be anything) into `[reg{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(reg_ec_point(b).x != reg_ec_point(c).x)`   |
+| EC_DOUBLE\<C\>       | `a,b,_,1,2` | Set `reg_ec_point(a) = 2 * reg_ec_point(b)`. This doubles the input point. Assumes that `reg_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                                     |
+| SETUP_EC_DOUBLE\<C\> | `a,b,_,1,2` | `assert(reg_ec_point(b).x == C::MODULUS && reg_ec_point(b).y == C::A)` in the chip for EC DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[reg{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(reg_ec_point(b).y != 0 mod C::MODULUS)` |
 
 ### Pairing Extension
 
@@ -759,7 +754,7 @@ The pairing extension defines the following phantom sub-instructions.
 
 | Name         | Discriminant | Operands      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ------------ | ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| HintFinalExp | 0x30         | `a,b,c_upper` | Uses `c_upper = PAIRING_IDX` to determine the curve: `BN254 = 0, BLS12-381 = 1`. `a` is a pointer to `(p_ptr, p_len): (u32, u32)` in memory, and `b` is a pointer to `(q_ptr, q_len): (u32, u32)` in memory (e.g., `p_ptr = [r32{0}(a)..r32{0}(a) + 4]_2`). The sub-instruction peeks at `P = [p_ptr..p_ptr + p_len * size_of<Fp>() * 2]_2` and `Q = [q_ptr..q_ptr + q_len * size_of<Fp2>() * 2]_2` and views `P` as a list of `G1Affine` elements and `Q` as a list of `G2Affine` elements. It computes the multi-Miller loop on `(P, Q)` and then the final exponentiation hint `(residue_witness, scaling_factor): (Fp12, Fp12)`. It resets the hint stream to equal `(residue_witness, scaling_factor)` as `NUM_LIMBS * 12 * 2` bytes. |
+| HintFinalExp | 0x30         | `a,b,c_upper` | Uses `c_upper = PAIRING_IDX` to determine the curve: `BN254 = 0, BLS12-381 = 1`. `a` is a pointer to `(p_ptr, p_len): (u32, u32)` in memory, and `b` is a pointer to `(q_ptr, q_len): (u32, u32)` in memory (e.g., `p_ptr = [reg{0}(a)..reg{0}(a) + 4]_2`). The sub-instruction peeks at `P = [p_ptr..p_ptr + p_len * size_of<Fp>() * 2]_2` and `Q = [q_ptr..q_ptr + q_len * size_of<Fp2>() * 2]_2` and views `P` as a list of `G1Affine` elements and `Q` as a list of `G2Affine` elements. It computes the multi-Miller loop on `(P, Q)` and then the final exponentiation hint `(residue_witness, scaling_factor): (Fp12, Fp12)`. It resets the hint stream to equal `(residue_witness, scaling_factor)` as `NUM_LIMBS * 12 * 2` bytes. |
 
 ## Acknowledgements
 
