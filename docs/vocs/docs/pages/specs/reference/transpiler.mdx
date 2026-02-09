@@ -200,13 +200,13 @@ Each VM extension's behavior is specified below.
 | divcomplex   | DIV\<Fp2\> `ind(rd), ind(rs1), ind(rs2), 1, 2`                                                                                                     |
 | setupcomplex | SETUP_ADDSUB_RV32\<Fp2\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) = 0`, SETUP_MULDIV_RV32\<Fp2\> `ind(rd), ind(rs1), x0, 1, 2` if `ind(rs2) = 1` |
 
-### Elliptic Curve Extension
+### Short Weierstrass Elliptic Curve Extension
 
 | RISC-V Inst     | OpenVM Instruction                                                                                                                                                |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| sw_add_ne\<C\>  | EC_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`                                                                                                           |
-| sw_double\<C\>  | EC_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), 0, 1, 2`                                                                                                                  |
-| setup\<C\>      | SETUP_EC_ADD_NE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `ind(rs2) != 0`, SETUP_EC_DOUBLE_RV32\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `ind(rs2) = 0` |
+| sw_add_proj\<C\>  | SW_EC_ADD_PROJ\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2`                                                                                                           |
+| sw_double_proj\<C\>  | SW_EC_DOUBLE_PROJ\<C\> `ind(rd), ind(rs1), 0, 1, 2`                                                                                                                  |
+| sw_setup\<C\>      | SETUP_SW_EC_ADD_PROJ\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `ind(rs2) != 0`, SETUP_SW_EC_DOUBLE_PROJ\<C\> `ind(rd), ind(rs1), ind(rs2), 1, 2` if `ind(rs2) = 0` |
 
 ### Pairing Extension
 
