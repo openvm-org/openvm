@@ -3,11 +3,12 @@ use std::{array, iter, sync::Arc};
 use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*, prover::types::AirProvingContext, utils::disable_debug_builder,
-    AirRef,
+    verifier::VerificationError, AirRef,
 };
 use openvm_stark_sdk::{
-    any_rap_arc_vec, dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
-    p3_baby_bear::BabyBear, utils::create_seeded_rng,
+    any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
+    engine::StarkFriEngine, p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
 use rand::Rng;
 use stark_backend_v2::{
@@ -148,13 +149,6 @@ fn negative_test_range_tuple_chip() {
 
     // Corrupt the trace to make it invalid
     range_trace.values[0] = BabyBear::from_u32(99);
-
-    let traces = [range_trace]
-        .into_iter()
-        .map(Arc::new)
-        .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
-        .collect::<Vec<_>>();
 
     disable_debug_builder();
     let error = BabyBearBlake3Engine::run_simple_test_no_pis_fast(
