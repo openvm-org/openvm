@@ -14,7 +14,6 @@ use openvm_circuit::{
     system::SystemExecutor,
     utils::air_test,
 };
-use openvm_ecc_circuit::{SECP256K1_MODULUS, SECP256K1_ORDER};
 use openvm_instructions::exe::VmExe;
 use openvm_platform::memory::MEM_SIZE;
 use openvm_rv32im_circuit::{
@@ -25,6 +24,7 @@ use openvm_rv32im_transpiler::{
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
+use openvm_weierstrass_circuit::{SECP256K1_MODULUS, SECP256K1_ORDER};
 use serde::{Deserialize, Serialize};
 use test_case::test_case;
 

@@ -7,7 +7,7 @@ use openvm_algebra_guest::{
     field::{ComplexConjugate, FieldExtension},
     DivUnsafe, Field,
 };
-use openvm_ecc_guest::AffinePoint;
+use openvm_ecc_guest::weierstrass::AffinePoint;
 use openvm_pairing_guest::{
     bls12_381::{BLS12_381_PSEUDO_BINARY_ENCODING, BLS12_381_SEED_ABS},
     pairing::{

@@ -192,13 +192,22 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | Algebra | `ModularPhantom::HintSqrt` | HintSqrt\<N\> |
 
 
-## Elliptic Curve Extension
+## Short Weierstrass Elliptic Curve Extension
 
 #### Instructions
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
-| Elliptic Curve | `Rv32WeierstrassOpcode::EC_ADD_NE` | EC_ADD_NE\<C\> |
-| Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_ADD_NE` | SETUP_EC_ADD_NE\<C\> |
-| Elliptic Curve | `Rv32WeierstrassOpcode::EC_DOUBLE` | EC_DOUBLE\<C\> |
-| Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_DOUBLE` | SETUP_EC_DOUBLE\<C\> |
+| Short Weierstrass Elliptic Curve | `Rv32WeierstrassOpcode::SW_EC_ADD_NE` | SW_EC_ADD_NE\<C\> |
+| Short Weierstrass Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_SW_EC_ADD_NE` | SETUP_SW_EC_ADD_NE\<C\> |
+| Short Weierstrass Elliptic Curve | `Rv32WeierstrassOpcode::SW_EC_DOUBLE` | SW_EC_DOUBLE\<C\> |
+| Short Weierstrass Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_SW_EC_DOUBLE` | SETUP_SW_EC_DOUBLE\<C\> |
+
+## Twisted Edwards Elliptic Curve Extension
+
+#### Instructions
+
+| VM Extension | `LocalOpcode` | ISA Instruction |
+| ------------- | ---------- | ------------- |
+| Twisted Edwards Elliptic Curve | `Rv32TeOpcode::TE_EC_ADD` | TE_EC_ADD\<C\> |
+| Twisted Edwards Elliptic Curve | `Rv32TeOpcode::SETUP_TE_EC_ADD` | SETUP_TE_EC_ADD\<C\> |

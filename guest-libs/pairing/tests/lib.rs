@@ -15,14 +15,10 @@ mod bn254 {
         air_test, air_test_impl, air_test_with_min_segments, test_system_config,
         TestStarkEngine as Engine,
     };
-    use openvm_ecc_circuit::{
-        CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, WeierstrassExtension,
-    };
-    use openvm_ecc_guest::{
+    use openvm_ecc_guest::weierstrass::{
         algebra::{field::FieldExtension, IntMod},
         AffinePoint,
     };
-    use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_instructions::exe::VmExe;
     use openvm_pairing_circuit::{
         PairingCurve, PairingExtension, Rv32PairingBuilder, Rv32PairingConfig,
@@ -41,6 +37,10 @@ mod bn254 {
     };
     use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
+    use openvm_weierstrass_circuit::{
+        CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, WeierstrassExtension,
+    };
+    use openvm_weierstrass_transpiler::EccTranspilerExtension;
     use rand::SeedableRng;
 
     type F = BabyBear;
@@ -482,14 +482,10 @@ mod bls12_381 {
             TestStarkEngine as Engine,
         },
     };
-    use openvm_ecc_circuit::{
-        CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, WeierstrassExtension,
-    };
-    use openvm_ecc_guest::{
+    use openvm_ecc_guest::weierstrass::{
         algebra::{field::FieldExtension, IntMod},
         AffinePoint,
     };
-    use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_pairing_circuit::{
         PairingCurve, PairingExtension, Rv32PairingBuilder, Rv32PairingConfig,
     };
@@ -510,6 +506,10 @@ mod bls12_381 {
     };
     use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
+    use openvm_weierstrass_circuit::{
+        CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, WeierstrassExtension,
+    };
+    use openvm_weierstrass_transpiler::EccTranspilerExtension;
     use rand::SeedableRng;
 
     type F = BabyBear;

@@ -8,7 +8,6 @@ use openvm_ruint::aliases::U256;
 use openvm_sha2::sha256;
 #[allow(unused_imports)]
 use {
-    openvm_ecc_guest::{weierstrass::WeierstrassPoint, CyclicGroup},
     openvm_k256::{Secp256k1Coord, Secp256k1Point, Secp256k1Scalar},
     openvm_p256::{P256Coord, P256Point, P256Scalar},
     openvm_pairing::{
@@ -19,6 +18,7 @@ use {
         bn254::{Bn254, Bn254Fp, Bn254Fp2, Bn254G1Affine, Bn254Scalar, G2Affine as Bn254G2Affine},
         PairingCheck,
     },
+    openvm_ecc_guest::weierstrass::{weierstrass::WeierstrassPoint, CyclicGroup},
 };
 
 // Note: these will all currently be represented as bytes32 even though they could be smaller

@@ -3,9 +3,9 @@ use core::ops::{Add, Neg};
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
 use openvm_algebra_moduli_macros::moduli_declare;
-use openvm_ecc_guest::{
-    weierstrass::{CachedMulTable, IntrinsicCurve, WeierstrassPoint},
-    CyclicGroup, Group,
+use openvm_ecc_guest::weierstrass::{
+    weierstrass::{CachedMulTable, WeierstrassPoint},
+    CyclicGroup, Group, IntrinsicCurve,
 };
 use openvm_ecc_sw_macros::sw_declare;
 
@@ -65,7 +65,7 @@ impl IntrinsicCurve for NistP256 {
             let table = CachedMulTable::<Self>::new_with_prime_order(bases, 4);
             table.windowed_mul(coeffs)
         } else {
-            openvm_ecc_guest::msm(coeffs, bases)
+            openvm_ecc_guest::weierstrass::msm(coeffs, bases)
         }
     }
 }

@@ -33,8 +33,8 @@ num-bigint = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils", "parallel"] }
 openvm-transpiler.workspace = true
 openvm-algebra-transpiler.workspace = true
-openvm-ecc-transpiler.workspace = true
-openvm-ecc-circuit.workspace = true
+openvm-weierstrass-transpiler.workspace = true
+openvm-weierstrass-circuit.workspace = true
 openvm-sha2-circuit.workspace = true
 openvm-sha2-transpiler.workspace = true
 openvm-rv32im-transpiler.workspace = true
@@ -77,7 +77,7 @@ test-vectors = []
 # Internal feature for testing only.
 cuda = [
     "openvm-circuit/cuda",
-    "openvm-ecc-circuit/cuda",
+    "openvm-weierstrass-circuit/cuda",
     "openvm-sha2-circuit/cuda",
 ]
 tco = ["openvm-circuit/tco"]

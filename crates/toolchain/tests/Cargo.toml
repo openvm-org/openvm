@@ -23,7 +23,7 @@ openvm-bigint-circuit.workspace = true
 openvm-rv32im-circuit.workspace = true
 openvm-rv32im-transpiler.workspace = true
 openvm-algebra-circuit.workspace = true
-openvm-ecc-circuit = { workspace = true }
+openvm-weierstrass-circuit = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-platform = { workspace = true }
 test-case.workspace = true
@@ -44,7 +44,7 @@ aot = [
     "openvm-rv32im-circuit/aot",
     "openvm-algebra-circuit/aot",
     "openvm-bigint-circuit/aot",
-    "openvm-ecc-circuit/aot",
+    "openvm-weierstrass-circuit/aot",
 ]
 touchemall = [
     "cuda",

@@ -1,0 +1,36 @@
+[package]
+name = "openvm-edwards-guest"
+description = "OpenVM guest library for elliptic curve cryptography with twisted Edwards curves"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+openvm = { workspace = true }
+serde = { workspace = true }
+strum_macros.workspace = true
+openvm-custom-insn = { workspace = true }
+openvm-rv32im-guest = { workspace = true }
+openvm-algebra-guest = { workspace = true }
+openvm-weierstrass-guest = { workspace = true }
+openvm-ecc-te-macros = { workspace = true }
+once_cell = { workspace = true, features = ["race", "alloc"] }
+
+# Used for `halo2curves` feature
+halo2curves-axiom = { workspace = true, optional = true }
+
+[features]
+default = []
+halo2curves = ["dep:halo2curves-axiom", "openvm-algebra-guest/halo2curves"]
+std = ["alloc"]
+alloc = []
+
+[package.metadata.cargo-shear]
+ignored = [
+    "openvm",
+    "openvm-custom-insn",
+    "openvm-rv32im-guest",
+    "halo2curves-axiom",
+]

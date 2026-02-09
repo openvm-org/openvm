@@ -10,7 +10,7 @@ pub use ecdsa_core::{
     RecoveryId,
 };
 #[cfg(feature = "ecdsa")]
-use openvm_ecc_guest::ecdsa::VerifyCustomHook;
+use openvm_ecc_guest::weierstrass::ecdsa::VerifyCustomHook;
 #[cfg(feature = "ecdsa")]
 use {
     super::{Scalar, Secp256k1Point},
@@ -25,11 +25,11 @@ pub type Signature = ecdsa_core::Signature<Secp256k1>;
 
 /// ECDSA/secp256k1 signing key
 #[cfg(feature = "ecdsa")]
-pub type SigningKey = openvm_ecc_guest::ecdsa::SigningKey<Secp256k1>;
+pub type SigningKey = openvm_ecc_guest::weierstrass::ecdsa::SigningKey<Secp256k1>;
 
 /// ECDSA/secp256k1 verification key (i.e. public key)
 #[cfg(feature = "ecdsa")]
-pub type VerifyingKey = openvm_ecc_guest::ecdsa::VerifyingKey<Secp256k1>;
+pub type VerifyingKey = openvm_ecc_guest::weierstrass::ecdsa::VerifyingKey<Secp256k1>;
 
 // We implement the trait so that patched libraries can compile when they only need ECDSA
 // verification and not signing
@@ -67,7 +67,7 @@ impl VerifyPrimitive<Secp256k1> for Secp256k1Point {
     ) -> Result<(), ecdsa_core::Error> {
         self.verify_hook(z, sig)?;
 
-        openvm_ecc_guest::ecdsa::verify_prehashed::<Secp256k1>(
+        openvm_ecc_guest::weierstrass::ecdsa::verify_prehashed::<Secp256k1>(
             *self,
             z.as_slice(),
             sig.to_bytes().as_slice(),

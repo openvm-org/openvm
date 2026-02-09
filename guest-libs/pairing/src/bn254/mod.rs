@@ -5,9 +5,8 @@ use core::ops::{Add, Neg};
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
 use openvm_algebra_moduli_macros::moduli_declare;
-use openvm_ecc_guest::{
-    weierstrass::{CachedMulTable, IntrinsicCurve},
-    CyclicGroup, Group,
+use openvm_ecc_guest::weierstrass::{
+    weierstrass::CachedMulTable, CyclicGroup, Group, IntrinsicCurve,
 };
 use openvm_ecc_sw_macros::sw_declare;
 use openvm_pairing_guest::pairing::PairingIntrinsics;
@@ -61,7 +60,7 @@ impl CyclicGroup for G1Affine {
 mod g2 {
     use hex_literal::hex;
     use openvm_algebra_guest::Field;
-    use openvm_ecc_guest::{
+    use openvm_ecc_guest::weierstrass::{
         impl_sw_affine, impl_sw_group_ops, weierstrass::WeierstrassPoint, AffinePoint, Group,
     };
 
@@ -155,7 +154,7 @@ impl IntrinsicCurve for Bn254 {
             let table = CachedMulTable::<Self>::new_with_prime_order(bases, 4);
             table.windowed_mul(coeffs)
         } else {
-            openvm_ecc_guest::msm(coeffs, bases)
+            openvm_ecc_guest::weierstrass::msm(coeffs, bases)
         }
     }
 }

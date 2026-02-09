@@ -6,7 +6,7 @@ use halo2curves_axiom::bn256::{
 use num_bigint::BigUint;
 use num_traits::One;
 use openvm_algebra_guest::{field::FieldExtension, IntMod};
-use openvm_ecc_guest::{weierstrass::WeierstrassPoint, AffinePoint};
+use openvm_ecc_guest::weierstrass::{weierstrass::WeierstrassPoint, AffinePoint};
 use openvm_pairing_guest::{
     bn254::{BN254_MODULUS, BN254_ORDER},
     pairing::{FinalExp, MultiMillerLoop, PairingCheck, PairingIntrinsics},

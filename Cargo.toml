@@ -54,11 +54,16 @@ members = [
     "extensions/sha2/circuit",
     "extensions/sha2/transpiler",
     "extensions/sha2/guest",
-    "extensions/ecc/circuit",
-    "extensions/ecc/transpiler",
-    "extensions/ecc/guest",
-    "extensions/ecc/sw-macros",
-    "extensions/ecc/tests",
+    "extensions/weierstrass_ec/circuit",
+    "extensions/weierstrass_ec/transpiler",
+    "extensions/weierstrass_ec/guest",
+    "extensions/weierstrass_ec/sw-macros",
+    "extensions/weierstrass_ec/tests",
+    "extensions/edwards_ec/circuit",
+    "extensions/edwards_ec/transpiler",
+    "extensions/edwards_ec/guest",
+    "extensions/edwards_ec/te-macros",
+    "extensions/edwards_ec/tests",
     "extensions/pairing/circuit",
     "extensions/pairing/guest",
     "guest-libs/ff_derive/",
@@ -164,10 +169,15 @@ openvm-algebra-transpiler = { path = "extensions/algebra/transpiler", default-fe
 openvm-algebra-guest = { path = "extensions/algebra/guest", default-features = false }
 openvm-algebra-moduli-macros = { path = "extensions/algebra/moduli-macros", default-features = false }
 openvm-algebra-complex-macros = { path = "extensions/algebra/complex-macros", default-features = false }
-openvm-ecc-circuit = { path = "extensions/ecc/circuit", default-features = false }
-openvm-ecc-transpiler = { path = "extensions/ecc/transpiler", default-features = false }
-openvm-ecc-guest = { path = "extensions/ecc/guest", default-features = false }
-openvm-ecc-sw-macros = { path = "extensions/ecc/sw-macros", default-features = false }
+openvm-weierstrass-circuit = { path = "extensions/weierstrass_ec/circuit", default-features = false }
+openvm-weierstrass-transpiler = { path = "extensions/weierstrass_ec/transpiler", default-features = false }
+openvm-weierstrass-guest = { path = "extensions/weierstrass_ec/guest", default-features = false }
+openvm-ecc-sw-macros = { path = "extensions/weierstrass_ec/sw-macros", default-features = false }
+openvm-edwards-circuit = { path = "extensions/edwards_ec/circuit", default-features = false }
+openvm-edwards-transpiler = { path = "extensions/edwards_ec/transpiler", default-features = false }
+openvm-edwards-guest = { path = "extensions/edwards_ec/guest", default-features = false }
+openvm-ecc-guest = { path = "extensions/ecc_guest/", default-features = false }
+openvm-ecc-te-macros = { path = "extensions/edwards_ec/te-macros", default-features = false }
 openvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features = false }
 openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
