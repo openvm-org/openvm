@@ -1,0 +1,37 @@
+#![no_std]
+extern crate alloc;
+
+use strum_macros::FromRepr;
+
+/// This is custom-0 defined in RISC-V spec document
+pub const SYSTEM_OPCODE: u8 = 0x0b;
+pub const CSR_OPCODE: u8 = 0b1110011;
+pub const CSRRW_FUNCT3: u8 = 0b001;
+pub const RV64_ALU_OPCODE: u8 = 0b0110011;
+pub const OPCODE_OP_32: u8 = 0b0111011;
+pub const OPCODE_OP_IMM_32: u8 = 0b0011011;
+pub const RV64M_FUNCT7: u8 = 0x01;
+
+pub const TERMINATE_FUNCT3: u8 = 0b000;
+pub const HINT_FUNCT3: u8 = 0b001;
+pub const HINT_STORED_IMM: u32 = 0;
+pub const HINT_BUFFER_IMM: u32 = 1;
+pub const REVEAL_FUNCT3: u8 = 0b010;
+pub const PHANTOM_FUNCT3: u8 = 0b011;
+pub const NATIVE_STORED_FUNCT3: u8 = 0b111;
+pub const NATIVE_STORED_FUNCT7: u32 = 2;
+
+/// Maximum number of bits for hint buffer size (in dwords for RV64).
+pub const MAX_HINT_BUFFER_DWORDS_BITS: usize = 10;
+/// Maximum number of dwords that can be read in a single HINT_BUFFER instruction.
+pub const MAX_HINT_BUFFER_DWORDS: usize = (1 << MAX_HINT_BUFFER_DWORDS_BITS) - 1;
+
+/// imm options for system phantom instructions
+#[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
+#[repr(u16)]
+pub enum PhantomImm {
+    HintInput = 0,
+    PrintStr,
+    HintRandom,
+    HintLoadByKey,
+}

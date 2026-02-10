@@ -7014,6 +7014,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-rv64im-guest"
+version = "1.4.3"
+dependencies = [
+ "openvm-custom-insn",
+ "p3-field",
+ "strum_macros 0.26.4",
+]
+
+[[package]]
+name = "openvm-rv64im-transpiler"
+version = "1.4.3"
+dependencies = [
+ "elf",
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-platform",
+ "openvm-rv64im-guest",
+ "openvm-stark-backend",
+ "openvm-transpiler",
+ "p3-baby-bear",
+ "rrs-lib",
+ "serde",
+ "strum 0.26.3",
+ "tracing",
+]
+
+[[package]]
 name = "openvm-scripts"
 version = "1.4.3"
 dependencies = [

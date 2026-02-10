@@ -1,0 +1,18 @@
+[package]
+name = "openvm-rv64im-guest"
+description = "OpenVM guest library for RISC-V 64-bit IM instruction set"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+openvm-custom-insn = { workspace = true }
+strum_macros = { workspace = true }
+
+[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+p3-field = { workspace = true }
+
+[features]
+default = []
