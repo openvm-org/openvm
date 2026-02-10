@@ -16,7 +16,7 @@ use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use openvm_weierstrass_transpiler::Rv32WeierstrassOpcode;
 
-use crate::{ec_double_ne_expr, EccRecord};
+use crate::{ec_double_proj_expr, EccRecord};
 
 #[derive(new)]
 pub struct WeierstrassDoubleChipGpu<const BLOCKS: usize, const BLOCK_SIZE: usize> {
@@ -25,6 +25,7 @@ pub struct WeierstrassDoubleChipGpu<const BLOCKS: usize, const BLOCK_SIZE: usize
     pub config: ExprBuilderConfig,
     pub offset: usize,
     pub a_biguint: BigUint,
+    pub b_biguint: BigUint,
     pub pointer_max_bits: u32,
     pub timestamp_max_bits: u32,
 }
@@ -34,7 +35,12 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
 {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         let range_bus = self.range_checker.cpu_chip.as_ref().unwrap().bus();
-        let expr = ec_double_ne_expr(self.config.clone(), range_bus, self.a_biguint.clone());
+        let expr = ec_double_proj_expr(
+            self.config.clone(),
+            range_bus,
+            self.a_biguint.clone(),
+            self.b_biguint.clone(),
+        );
 
         let total_input_limbs = expr.builder.num_input * expr.canonical_num_limbs();
         let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
@@ -57,8 +63,8 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
         let num_records = records.len() / record_size;
 
         let local_opcode_idx = vec![
-            Rv32WeierstrassOpcode::SW_EC_DOUBLE as usize,
-            Rv32WeierstrassOpcode::SETUP_SW_EC_DOUBLE as usize,
+            Rv32WeierstrassOpcode::SW_EC_DOUBLE_PROJ as usize,
+            Rv32WeierstrassOpcode::SETUP_SW_EC_DOUBLE_PROJ as usize,
         ];
 
         let air = FieldExpressionCoreAir::new(expr, self.offset, local_opcode_idx, vec![]);

@@ -1,5 +1,5 @@
 mod add_ne;
-mod curves;
+pub mod curves;
 mod double;
 
 pub use add_ne::*;
@@ -7,6 +7,9 @@ pub use double::*;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod projective_test;
 
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionFiller};

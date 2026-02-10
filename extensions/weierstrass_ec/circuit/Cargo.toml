@@ -37,6 +37,7 @@ cfg-if = { workspace = true }
 
 halo2curves-axiom = { workspace = true }
 blstrs = { workspace = true }
+k256 = { workspace = true, features = ["arithmetic", "expose-field"] }
 
 [dev-dependencies]
 openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
@@ -45,6 +46,14 @@ openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
 lazy_static = { workspace = true }
+k256 = { workspace = true, features = ["arithmetic"] }
+p256 = { workspace = true, features = ["arithmetic"] }
+bls12_381 = { workspace = true }
+criterion = "0.5"
+
+[[bench]]
+name = "projective_ec"
+harness = false
 
 [features]
 default = []

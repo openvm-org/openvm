@@ -2002,6 +2002,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "bls12_381"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7bc6d6292be3a19e6379786dac800f551e5865a5bb51ebbe3064ab80433f403"
+dependencies = [
+ "ff 0.13.1",
+ "group 0.13.0",
+ "rand_core 0.6.4",
+ "subtle",
+]
+
+[[package]]
 name = "blst"
 version = "0.3.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5132,7 +5144,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a575df5f985fe1cd5b2b05664ff6accfc46559032b954529fd225a2168d27b0f"
 dependencies = [
  "bitvec",
- "bls12_381",
+ "bls12_381 0.7.1",
  "ff 0.12.1",
  "group 0.12.1",
  "rand_core 0.6.4",
@@ -5156,10 +5168,8 @@ dependencies = [
  "openvm-algebra-moduli-macros",
  "openvm-algebra-transpiler",
  "openvm-circuit",
- "openvm-ecc-circuit",
  "openvm-ecc-guest",
  "openvm-ecc-sw-macros",
- "openvm-ecc-transpiler",
  "openvm-rv32im-transpiler",
  "openvm-sha2-circuit",
  "openvm-sha2-transpiler",
@@ -5167,6 +5177,8 @@ dependencies = [
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
+ "openvm-weierstrass-circuit",
+ "openvm-weierstrass-transpiler",
  "rand 0.8.5",
  "serde",
  "signature 2.2.0",
@@ -6106,12 +6118,12 @@ dependencies = [
  "openvm-algebra-circuit",
  "openvm-algebra-transpiler",
  "openvm-circuit",
- "openvm-ecc-circuit",
  "openvm-instructions",
  "openvm-rv32im-transpiler",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
+ "openvm-weierstrass-circuit",
 ]
 
 [[package]]
@@ -6143,8 +6155,6 @@ dependencies = [
  "openvm-bigint-transpiler",
  "openvm-circuit",
  "openvm-continuations",
- "openvm-ecc-circuit",
- "openvm-ecc-transpiler",
  "openvm-keccak256-circuit",
  "openvm-keccak256-transpiler",
  "openvm-native-circuit",
@@ -6159,6 +6169,8 @@ dependencies = [
  "openvm-sha2-transpiler",
  "openvm-stark-sdk",
  "openvm-transpiler",
+ "openvm-weierstrass-circuit",
+ "openvm-weierstrass-transpiler",
  "rand 0.8.5",
  "serde",
  "tracing",
@@ -6438,76 +6450,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-ecc-circuit"
-version = "1.4.3"
-dependencies = [
- "blstrs",
- "cfg-if",
- "derive-new 0.6.0",
- "derive_more 1.0.0",
- "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
- "hex-literal 0.4.1",
- "lazy_static",
- "num-bigint 0.4.6",
- "num-traits",
- "once_cell",
- "openvm-algebra-circuit",
- "openvm-circuit",
- "openvm-circuit-derive",
- "openvm-circuit-primitives",
- "openvm-cuda-backend",
- "openvm-cuda-common",
- "openvm-ecc-transpiler",
- "openvm-instructions",
- "openvm-mod-circuit-builder",
- "openvm-pairing-guest",
- "openvm-rv32-adapters",
- "openvm-stark-backend",
- "openvm-stark-sdk",
- "rand 0.8.5",
- "serde",
- "serde_with",
- "strum 0.26.3",
-]
-
-[[package]]
 name = "openvm-ecc-guest"
 version = "1.4.3"
 dependencies = [
- "ecdsa 0.16.9",
- "elliptic-curve 0.13.8",
- "group 0.13.0",
- "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
- "once_cell",
+ "hex-literal 0.4.1",
+ "lazy_static",
+ "num-bigint 0.4.6",
  "openvm",
  "openvm-algebra-guest",
- "openvm-custom-insn",
- "openvm-ecc-sw-macros",
- "openvm-rv32im-guest",
+ "openvm-edwards-guest",
+ "openvm-weierstrass-guest",
  "serde",
- "strum_macros 0.26.4",
-]
-
-[[package]]
-name = "openvm-ecc-integration-tests"
-version = "1.4.3"
-dependencies = [
- "eyre",
- "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
- "hex-literal 0.4.1",
- "num-bigint 0.4.6",
- "openvm-algebra-transpiler",
- "openvm-circuit",
- "openvm-ecc-circuit",
- "openvm-ecc-transpiler",
- "openvm-rv32im-transpiler",
- "openvm-sdk",
- "openvm-stark-sdk",
- "openvm-toolchain-tests",
- "openvm-transpiler",
- "serde",
- "serde_with",
- "toml 0.8.23",
 ]
 
 [[package]]
@@ -6520,7 +6473,84 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-ecc-transpiler"
+name = "openvm-ecc-te-macros"
+version = "1.4.3"
+dependencies = [
+ "openvm-macros-common",
+ "quote",
+ "syn 2.0.114",
+]
+
+[[package]]
+name = "openvm-edwards-circuit"
+version = "1.4.3"
+dependencies = [
+ "cfg-if",
+ "derive-new 0.6.0",
+ "derive_more 1.0.0",
+ "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "num-integer",
+ "num-traits",
+ "once_cell",
+ "openvm-algebra-circuit",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-circuit-primitives",
+ "openvm-cuda-backend",
+ "openvm-cuda-common",
+ "openvm-ecc-guest",
+ "openvm-edwards-transpiler",
+ "openvm-instructions",
+ "openvm-mod-circuit-builder",
+ "openvm-rv32-adapters",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "rand 0.8.5",
+ "serde",
+ "serde_with",
+ "strum 0.26.3",
+]
+
+[[package]]
+name = "openvm-edwards-guest"
+version = "1.4.3"
+dependencies = [
+ "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
+ "once_cell",
+ "openvm",
+ "openvm-algebra-guest",
+ "openvm-custom-insn",
+ "openvm-ecc-te-macros",
+ "openvm-rv32im-guest",
+ "openvm-weierstrass-guest",
+ "serde",
+ "strum_macros 0.26.4",
+]
+
+[[package]]
+name = "openvm-edwards-integration-tests"
+version = "1.4.3"
+dependencies = [
+ "eyre",
+ "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "openvm-algebra-transpiler",
+ "openvm-circuit",
+ "openvm-edwards-circuit",
+ "openvm-edwards-transpiler",
+ "openvm-rv32im-transpiler",
+ "openvm-sdk",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+ "toml 0.8.23",
+]
+
+[[package]]
+name = "openvm-edwards-transpiler"
 version = "1.4.3"
 dependencies = [
  "openvm-ecc-guest",
@@ -6803,10 +6833,8 @@ dependencies = [
  "openvm-algebra-transpiler",
  "openvm-circuit",
  "openvm-custom-insn",
- "openvm-ecc-circuit",
  "openvm-ecc-guest",
  "openvm-ecc-sw-macros",
- "openvm-ecc-transpiler",
  "openvm-instructions",
  "openvm-pairing",
  "openvm-pairing-circuit",
@@ -6818,6 +6846,8 @@ dependencies = [
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
+ "openvm-weierstrass-circuit",
+ "openvm-weierstrass-transpiler",
  "rand 0.8.5",
  "serde",
 ]
@@ -6838,7 +6868,6 @@ dependencies = [
  "openvm-circuit-derive",
  "openvm-circuit-primitives",
  "openvm-cuda-backend",
- "openvm-ecc-circuit",
  "openvm-ecc-guest",
  "openvm-instructions",
  "openvm-mod-circuit-builder",
@@ -6847,6 +6876,7 @@ dependencies = [
  "openvm-rv32im-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",
+ "openvm-weierstrass-circuit",
  "rand 0.8.5",
  "serde",
  "strum 0.26.3",
@@ -7054,8 +7084,8 @@ dependencies = [
  "openvm-circuit",
  "openvm-continuations",
  "openvm-cuda-backend",
- "openvm-ecc-circuit",
- "openvm-ecc-transpiler",
+ "openvm-edwards-circuit",
+ "openvm-edwards-transpiler",
  "openvm-keccak256-circuit",
  "openvm-keccak256-transpiler",
  "openvm-native-circuit",
@@ -7071,6 +7101,8 @@ dependencies = [
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-transpiler",
+ "openvm-weierstrass-circuit",
+ "openvm-weierstrass-transpiler",
  "p3-fri",
  "rand 0.8.5",
  "rrs-lib",
@@ -7244,7 +7276,6 @@ dependencies = [
  "openvm-bigint-circuit",
  "openvm-build",
  "openvm-circuit",
- "openvm-ecc-circuit",
  "openvm-instructions",
  "openvm-platform",
  "openvm-rv32im-circuit",
@@ -7252,6 +7283,7 @@ dependencies = [
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-transpiler",
+ "openvm-weierstrass-circuit",
  "rand 0.8.5",
  "serde",
  "tempfile",
@@ -7284,6 +7316,97 @@ dependencies = [
  "openvm-sdk",
  "openvm-stark-sdk",
  "openvm-verify-stark",
+]
+
+[[package]]
+name = "openvm-weierstrass-circuit"
+version = "1.4.3"
+dependencies = [
+ "bls12_381 0.8.0",
+ "blstrs",
+ "cfg-if",
+ "criterion",
+ "derive-new 0.6.0",
+ "derive_more 1.0.0",
+ "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
+ "hex-literal 0.4.1",
+ "k256 0.13.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "once_cell",
+ "openvm-algebra-circuit",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-circuit-primitives",
+ "openvm-cuda-backend",
+ "openvm-cuda-common",
+ "openvm-ecc-guest",
+ "openvm-instructions",
+ "openvm-mod-circuit-builder",
+ "openvm-pairing-guest",
+ "openvm-rv32-adapters",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "openvm-weierstrass-transpiler",
+ "p256 0.13.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.8.5",
+ "serde",
+ "serde_with",
+ "strum 0.26.3",
+]
+
+[[package]]
+name = "openvm-weierstrass-guest"
+version = "1.4.3"
+dependencies = [
+ "ecdsa 0.16.9",
+ "elliptic-curve 0.13.8",
+ "group 0.13.0",
+ "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
+ "once_cell",
+ "openvm",
+ "openvm-algebra-guest",
+ "openvm-custom-insn",
+ "openvm-ecc-sw-macros",
+ "openvm-rv32im-guest",
+ "serde",
+ "strum_macros 0.26.4",
+]
+
+[[package]]
+name = "openvm-weierstrass-integration-tests"
+version = "1.4.3"
+dependencies = [
+ "eyre",
+ "halo2curves-axiom 0.7.2 (git+https://github.com/axiom-crypto/halo2curves.git?tag=v0.7.2)",
+ "hex-literal 0.4.1",
+ "num-bigint 0.4.6",
+ "openvm-algebra-transpiler",
+ "openvm-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-sdk",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+ "openvm-weierstrass-circuit",
+ "openvm-weierstrass-transpiler",
+ "serde",
+ "serde_with",
+ "toml 0.8.23",
+]
+
+[[package]]
+name = "openvm-weierstrass-transpiler"
+version = "1.4.3"
+dependencies = [
+ "openvm-ecc-guest",
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-stark-backend",
+ "openvm-transpiler",
+ "rrs-lib",
+ "strum 0.26.3",
 ]
 
 [[package]]
@@ -7334,10 +7457,8 @@ dependencies = [
  "openvm-algebra-moduli-macros",
  "openvm-algebra-transpiler",
  "openvm-circuit",
- "openvm-ecc-circuit",
  "openvm-ecc-guest",
  "openvm-ecc-sw-macros",
- "openvm-ecc-transpiler",
  "openvm-rv32im-transpiler",
  "openvm-sha2-circuit",
  "openvm-sha2-transpiler",
@@ -7345,6 +7466,8 @@ dependencies = [
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
+ "openvm-weierstrass-circuit",
+ "openvm-weierstrass-transpiler",
  "rand 0.8.5",
  "serde",
 ]
@@ -12106,7 +12229,7 @@ dependencies = [
  "ark-std 0.4.0",
  "bitvec",
  "blake2",
- "bls12_381",
+ "bls12_381 0.7.1",
  "byteorder",
  "cfg-if",
  "group 0.12.1",
