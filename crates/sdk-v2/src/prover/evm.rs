@@ -55,9 +55,48 @@ where
             + PreflightExecutor<Val<SC>, VB::RecordArena>,
     {
         let continuation_proof = self.app_prover.prove(input)?;
-        let (stark_proof, _internal_metadata) = self.agg_prover.prove(continuation_proof)?;
-        // TODO[INT-6027]: Wrap stark_proof until root_proof can be constant-sized
-        let root_proof = self.root_prover.prove(stark_proof)?;
+        let (mut stark_proof, mut internal_metadata) = self.agg_prover.prove(continuation_proof)?;
+
+        const ADDITIONAL_INTERNAL_RECURSIVE_LAYERS: usize = 2;
+        for _ in 0..ADDITIONAL_INTERNAL_RECURSIVE_LAYERS {
+            stark_proof = self
+                .agg_prover
+                .wrap_proof(stark_proof, &mut internal_metadata)?;
+        }
+
+        let root_ctx = {
+            const MAX_ROOT_TRACEGEN_RETRIES: usize = 8;
+            let mut attempt = 0usize;
+            loop {
+                if let Some(ctx) = self.root_prover.generate_proving_ctx(stark_proof.clone()) {
+                    break ctx;
+                }
+                if attempt >= MAX_ROOT_TRACEGEN_RETRIES {
+                    return Err(eyre::eyre!(
+                        "root tracegen returned None after {MAX_ROOT_TRACEGEN_RETRIES} retries"
+                    ));
+                }
+                stark_proof = self
+                    .agg_prover
+                    .wrap_proof(stark_proof, &mut internal_metadata)?;
+                attempt += 1;
+            }
+        };
+
+        #[cfg(test)]
+        for ((air_idx, air_ctx), expected_height) in root_ctx
+            .per_trace
+            .iter()
+            .zip(self.root_prover.0.get_trace_heights().unwrap())
+        {
+            assert_eq!(
+                air_ctx.height(),
+                expected_height,
+                "height mismatch at {air_idx}"
+            )
+        }
+
+        let root_proof = self.root_prover.prove_from_ctx(root_ctx)?;
         Ok(root_proof)
     }
 }

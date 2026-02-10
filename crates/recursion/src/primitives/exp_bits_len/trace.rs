@@ -80,12 +80,19 @@ impl ExpBitsLenCpuTraceGenerator {
     }
 
     #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
-    pub fn generate_trace_row_major(self) -> RowMajorMatrix<F> {
+    pub fn generate_trace_row_major(self, required_height: Option<usize>) -> Option<RowMajorMatrix<F>> {
         let records = self.requests.into_inner().unwrap();
         let num_valid_rows = records.last().map(|record| record.end_row()).unwrap_or(0);
         let width = ExpBitsLenCols::<F>::width();
 
-        let padded_rows = num_valid_rows.next_power_of_two();
+        let padded_rows = if let Some(height) = required_height {
+            if height < num_valid_rows {
+                return None;
+            }
+            height
+        } else {
+            num_valid_rows.next_power_of_two()
+        };
         let mut trace = vec![F::ZERO; padded_rows * width];
 
         // Split trace into chunks for each request
@@ -124,7 +131,7 @@ impl ExpBitsLenCpuTraceGenerator {
             });
         });
 
-        RowMajorMatrix::new(trace, width)
+        Some(RowMajorMatrix::new(trace, width))
     }
 }
 

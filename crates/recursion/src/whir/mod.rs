@@ -19,7 +19,7 @@ use stark_backend_v2::{
     proof::{Proof, WhirProof},
     prover::{AirProvingContextV2, CpuBackendV2, poly::Mle},
 };
-use strum::EnumDiscriminants;
+use strum::{EnumCount, EnumDiscriminants};
 
 use crate::{
     primitives::exp_bits_len::ExpBitsLenTraceGenerator,
@@ -377,6 +377,10 @@ struct WhirBlobCpu {
 }
 
 impl AirModule for WhirModule {
+    fn num_airs(&self) -> usize {
+        WhirModuleChipDiscriminants::COUNT
+    }
+
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let params = &self.params;
         let initial_log_domain_size = params.n_stack + params.l_skip + params.log_blowup;
@@ -657,7 +661,8 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for WhirModule {
         proofs: &[Proof],
         preflights: &[Preflight],
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
-    ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
+        required_heights: Option<&[usize]>,
+    ) -> Option<Vec<AirProvingContextV2<CpuBackendV2>>> {
         let proofs = proofs.iter().collect_vec();
         let preflights = preflights.iter().collect_vec();
         let blob = self.generate_blob(child_vk, &proofs, &preflights, exp_bits_len_gen);
@@ -680,10 +685,18 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for WhirModule {
             WhirModuleChip::FinalPolyMleEval,
             WhirModuleChip::FinalPolyQueryEval,
         ];
-        // TODO[INT-6027]: Use required_height properly
+        let span = tracing::Span::current();
         chips
             .par_iter()
-            .map(|chip| chip.generate_proving_ctx(&ctx, None).unwrap())
+            .map(|chip| {
+                let _guard = span.enter();
+                chip.generate_proving_ctx(
+                    &ctx,
+                    required_heights.map(|heights| heights[chip.index()]),
+                )
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
             .collect()
     }
 }
@@ -740,6 +753,7 @@ fn binary_k_fold(
 }
 
 #[derive(Clone, Copy, strum_macros::Display, EnumDiscriminants)]
+#[strum_discriminants(derive(strum_macros::EnumCount))]
 #[strum_discriminants(repr(usize))]
 enum WhirModuleChip {
     WhirRound,
@@ -750,6 +764,12 @@ enum WhirModuleChip {
     Folding,
     FinalPolyMleEval,
     FinalPolyQueryEval,
+}
+
+impl WhirModuleChip {
+    fn index(&self) -> usize {
+        WhirModuleChipDiscriminants::from(self) as usize
+    }
 }
 
 impl RowMajorChip<F> for WhirModuleChip {
@@ -831,12 +851,6 @@ mod cuda_tracegen {
         tracegen::cuda::{StandardTracegenGpuCtx, generate_gpu_proving_ctx},
         whir::cuda_abi::PoseidonStatePair,
     };
-
-    impl WhirModuleChip {
-        fn index(&self) -> usize {
-            WhirModuleChipDiscriminants::from(self) as usize
-        }
-    }
 
     pub(in crate::whir) struct WhirBlobGpu {
         pub zis: DeviceBuffer<F>,
@@ -1102,7 +1116,8 @@ mod cuda_tracegen {
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
             exp_bits_len_gen: &ExpBitsLenTraceGenerator,
-        ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
+            required_heights: Option<&[usize]>,
+        ) -> Option<Vec<AirProvingContextV2<GpuBackendV2>>> {
             let proofs_cpu = proofs.iter().map(|proof| &proof.cpu).collect_vec();
             let preflights_cpu = preflights
                 .iter()
@@ -1142,13 +1157,31 @@ mod cuda_tracegen {
             // Launch all CUDA tracegen kernels serially first (default stream).
             let indexed_gpu_ctxs = gpu_chips
                 .iter()
-                .map(|chip| (chip.index(), chip.generate_proving_ctx(&ctx, None)))
+                .map(|chip| {
+                    (
+                        chip.index(),
+                        chip.generate_proving_ctx(
+                            &ctx,
+                            required_heights.map(|heights| heights[chip.index()]),
+                        ),
+                    )
+                })
                 .collect::<Vec<_>>();
 
             // Then run CPU tracegen for the remaining AIRs in parallel.
+            let span = tracing::Span::current();
             let indexed_cpu_ctxs = cpu_chips
                 .par_iter()
-                .map(|chip| (chip.index(), chip.generate_proving_ctx(&ctx, None)))
+                .map(|chip| {
+                    let _guard = span.enter();
+                    (
+                        chip.index(),
+                        chip.generate_proving_ctx(
+                            &ctx,
+                            required_heights.map(|heights| heights[chip.index()]),
+                        ),
+                    )
+                })
                 .collect::<Vec<_>>();
 
             // TODO[INT-6027]: Use required_height properly
@@ -1156,7 +1189,7 @@ mod cuda_tracegen {
                 .into_iter()
                 .chain(indexed_cpu_ctxs)
                 .sorted_by(|a, b| a.0.cmp(&b.0))
-                .map(|(_idx, ctx)| ctx.unwrap())
+                .map(|(_idx, ctx)| ctx)
                 .collect()
         }
     }

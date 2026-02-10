@@ -44,7 +44,10 @@ use crate::{
         default_root_params,
     },
     keygen::AggProvingKey,
-    prover::{AggProver, AppProver, CompressionProver, RootProver, StarkProver},
+    prover::{
+        AggProver, AppProver, CompressionProver, EvmProver, RootProver, StarkProver,
+        compute_root_proof_heights,
+    },
     types::ExecutableFormat,
 };
 
@@ -68,6 +71,9 @@ pub mod keygen;
 pub mod prover;
 pub mod types;
 pub mod util;
+
+#[cfg(test)]
+mod tests;
 
 mod error;
 mod stdin;
@@ -419,6 +425,22 @@ where
         Ok(stark_prover)
     }
 
+    pub fn evm_prover(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+    ) -> Result<EvmProver<E, VB>, SdkError> {
+        let app_exe = self.convert_to_exe(app_exe)?;
+        let app_pk = self.app_pk();
+        let evm_prover = EvmProver::<E, _>::new(
+            self.app_vm_builder.clone(),
+            &app_pk.app_vm_pk,
+            app_exe,
+            self.agg_prover(),
+            self.root_prover(),
+        )?;
+        Ok(evm_prover)
+    }
+
     // ===================== Component Prover Constructors =====================
 
     pub fn agg_prover(&self) -> Arc<AggProver> {
@@ -455,12 +477,21 @@ where
     pub fn root_prover(&self) -> Arc<RootProver> {
         self.root_prover
             .get_or_init(|| {
+                // TODO[INT-6073]: store root_params
                 let system_config = self.app_config.app_vm_config.as_ref();
+                let root_params = default_root_params(DEFAULT_ROOT_LOG_BLOWUP);
+
+                let trace_heights = compute_root_proof_heights(
+                    system_config.clone(),
+                    self.agg_config.params.clone(),
+                    self.agg_tree_config,
+                    root_params.clone(),
+                )
+                .expect("Trace heights did not generate properly");
+
                 let memory_dimensions = system_config.memory_config.memory_dimensions();
                 let num_user_pvs = system_config.num_public_values;
 
-                // TODO[INT-6073]: store root_params
-                let root_params = default_root_params(DEFAULT_ROOT_LOG_BLOWUP);
                 let agg_prover = self.agg_prover();
                 Arc::new(RootProver::new(
                     agg_prover.internal_recursive_prover.get_vk(),
@@ -471,6 +502,7 @@ where
                     root_params,
                     memory_dimensions,
                     num_user_pvs,
+                    Some(trace_heights),
                 ))
             })
             .clone()

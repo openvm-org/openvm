@@ -271,7 +271,8 @@ pub fn generate_trace(
     proofs: &[Proof],
     preflights: &[Preflight],
     params: &SystemParams,
-) -> (Vec<F>, Vec<[F; POSEIDON2_WIDTH]>) {
+    required_height: Option<usize>,
+) -> Option<(Vec<F>, Vec<[F; POSEIDON2_WIDTH]>)> {
     let k = params.k_whir();
     let width = MerkleVerifyCols::<F>::width();
     let num_leaves: usize = 1 << k;
@@ -300,7 +301,14 @@ pub fn generate_trace(
         .map(|x| compute_cum_sum(x, |y| *y))
         .collect();
     let num_valid_rows = *num_rows_cum_sums.last().unwrap();
-    let height = num_valid_rows.next_power_of_two();
+    let height = if let Some(height) = required_height {
+        if num_valid_rows > height {
+            return None;
+        }
+        height
+    } else {
+        num_valid_rows.next_power_of_two()
+    };
     let mut trace = vec![F::ZERO; height * width];
     let mut cur_hash = [F::ZERO; DIGEST_SIZE];
     let mut cur_idx = 0;
@@ -460,7 +468,7 @@ pub fn generate_trace(
         }
     }
 
-    (trace, poseidon2_compress_inputs)
+    Some((trace, poseidon2_compress_inputs))
 }
 
 fn build_merkle_logs(preflight: &Preflight, params: &SystemParams) -> Vec<MerkleVerifyLog> {
@@ -701,15 +709,25 @@ pub mod cuda {
     }
 
     #[tracing::instrument(level = "trace", skip_all)]
-    pub(crate) fn generate_trace(blob: &TranscriptBlob) -> DeviceMatrix<F> {
+    pub(crate) fn generate_trace(
+        blob: &TranscriptBlob,
+        required_height: Option<usize>,
+    ) -> Option<DeviceMatrix<F>> {
         let merkle_blob = &blob.merkle_verify_blob;
         let trace_width = MerkleVerifyCols::<F>::width();
-        let trace_height = merkle_blob.total_rows.next_power_of_two().max(1);
+        let trace_height = if let Some(height) = required_height {
+            if height == 0 || merkle_blob.total_rows > height {
+                return None;
+            }
+            height
+        } else {
+            merkle_blob.total_rows.next_power_of_two().max(1)
+        };
         let mut trace = DeviceMatrix::with_capacity(trace_height, trace_width);
         trace.buffer().fill_zero().unwrap();
 
         if merkle_blob.total_rows == 0 || merkle_blob.records.is_empty() {
-            return trace;
+            return Some(trace);
         }
 
         let d_records = merkle_blob.records.to_device().unwrap();
@@ -739,7 +757,7 @@ pub mod cuda {
             .expect("failed to launch merkle verify tracegen");
         }
 
-        trace
+        Some(trace)
     }
 
     fn build_stacking_commits(
