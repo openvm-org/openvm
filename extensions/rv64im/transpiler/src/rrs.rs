@@ -256,10 +256,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_jal(&mut self, dec_insn: JType) -> Self::InstructionResult {
-        from_j_type_rv64(
-            Rv64JalLuiOpcode::JAL.global_opcode().as_usize(),
-            &dec_insn,
-        )
+        from_j_type_rv64(Rv64JalLuiOpcode::JAL.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_jalr(&mut self, dec_insn: IType) -> Self::InstructionResult {
@@ -279,10 +276,8 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
         if dec_insn.rd == 0 {
             return nop();
         }
-        let mut result = from_u_type_rv64(
-            Rv64JalLuiOpcode::LUI.global_opcode().as_usize(),
-            &dec_insn,
-        );
+        let mut result =
+            from_u_type_rv64(Rv64JalLuiOpcode::LUI.global_opcode().as_usize(), &dec_insn);
         result.f = F::ONE;
         result
     }

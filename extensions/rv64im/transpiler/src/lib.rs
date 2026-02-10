@@ -81,10 +81,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64ITranspilerExtension {
             // --- CSR instructions ---
             CSR_OPCODE => {
                 let dec_insn = IType::new(instruction_u32);
-                if dec_insn.funct3 as u8 == CSRRW_FUNCT3
-                    && dec_insn.rs1 == 0
-                    && dec_insn.rd == 0
-                {
+                if dec_insn.funct3 as u8 == CSRRW_FUNCT3 && dec_insn.rs1 == 0 && dec_insn.rd == 0 {
                     return Some(TranspilerOutput::one_to_one(nop()));
                 }
                 eprintln!(
