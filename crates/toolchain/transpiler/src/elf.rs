@@ -19,13 +19,11 @@ use openvm_instructions::exe::FnBound;
 use openvm_instructions::{exe::FnBounds, program::MAX_ALLOWED_PC};
 use openvm_platform::WORD_SIZE;
 
-/// RISC-V 32IM ELF (Executable and Linkable Format) File.
+/// RISC-V ELF (Executable and Linkable Format) File.
 ///
-/// This file represents a binary in the ELF format, specifically the RISC-V 32IM architecture
-/// with the following extensions:
-///
-/// - Base Integer Instruction Set (I)
-/// - Integer Multiplication and Division (M)
+/// This file represents a binary in the ELF format for the RISC-V architecture.
+/// Both 32-bit (RV32) and 64-bit (RV64) ELFs are accepted. The ELF class is stored
+/// so downstream consumers can distinguish between the two.
 ///
 /// This format is commonly used in embedded systems and is supported by many compilers.
 #[derive(Debug, Clone)]
@@ -40,6 +38,8 @@ pub struct Elf {
     pub(crate) memory_image: BTreeMap<u32, u32>,
     /// Debug info for spanning benchmark metrics by function.
     pub(crate) fn_bounds: FnBounds,
+    /// The ELF class (ELF32 or ELF64).
+    pub class: Class,
 }
 
 impl Elf {
@@ -50,6 +50,7 @@ impl Elf {
         pc_base: u32,
         memory_image: BTreeMap<u32, u32>,
         fn_bounds: FnBounds,
+        class: Class,
     ) -> Self {
         Self {
             instructions,
@@ -57,6 +58,7 @@ impl Elf {
             pc_base,
             memory_image,
             fn_bounds,
+            class,
         }
     }
 
@@ -76,8 +78,9 @@ impl Elf {
             .map_err(|err| eyre::eyre!("Elf parse error: {err}"))?;
 
         // Some sanity checks to make sure that the ELF file is valid.
-        if elf.ehdr.class != Class::ELF32 {
-            bail!("Not a 32-bit ELF");
+        let class = elf.ehdr.class;
+        if class != Class::ELF32 && class != Class::ELF64 {
+            bail!("Unsupported ELF class: {class:?}");
         } else if elf.ehdr.e_machine != EM_RISCV {
             bail!("Invalid machine type, must be RISC-V");
         } else if elf.ehdr.e_type != ET_EXEC {
@@ -232,6 +235,7 @@ impl Elf {
             base_address,
             image,
             fn_bounds,
+            class,
         ))
     }
 }
