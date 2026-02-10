@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use openvm_instructions::{
     exe::SparseMemoryImage,
     instruction::Instruction,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS, RV64_REGISTER_NUM_LIMBS},
     utils::isize_to_field,
     LocalOpcode, SystemOpcode, VmOpcode,
 };
@@ -142,6 +142,148 @@ pub fn from_u_type<F: PrimeField32>(opcode: usize, dec_insn: &UType) -> Instruct
         F::ZERO,
         F::from_canonical_u32((dec_insn.imm as u32 >> 12) & 0xfffff),
         F::ONE, // rd is a register
+        F::ZERO,
+        F::ZERO,
+        F::ZERO,
+    )
+}
+
+// ---------------------------------------------------------------------------
+// RV64 variants — identical to the RV32 helpers above but use
+// `RV64_REGISTER_NUM_LIMBS` (8) for register offsets.
+// ---------------------------------------------------------------------------
+
+/// Create a new [`Instruction`] from an R-type instruction (RV64).
+pub fn from_r_type_rv64<F: PrimeField32>(
+    opcode: usize,
+    e_as: usize,
+    dec_insn: &RType,
+    allow_rd_zero: bool,
+) -> Instruction<F> {
+    if !allow_rd_zero && dec_insn.rd == 0 {
+        return nop();
+    }
+    Instruction::new(
+        VmOpcode::from_usize(opcode),
+        F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rd),
+        F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rs1),
+        F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rs2),
+        F::ONE,
+        F::from_canonical_usize(e_as),
+        F::ZERO,
+        F::ZERO,
+    )
+}
+
+/// Create a new [`Instruction`] from an I-type instruction (RV64). Should only be used for ALU
+/// instructions because `imm` is transpiled in a special way.
+pub fn from_i_type_rv64<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instruction<F> {
+    if dec_insn.rd == 0 {
+        return nop();
+    }
+    Instruction::new(
+        VmOpcode::from_usize(opcode),
+        F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rd),
+        F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rs1),
+        F::from_canonical_u32(i12_to_u24(dec_insn.imm)),
+        F::ONE,
+        F::ZERO,
+        F::ZERO,
+        F::ZERO,
+    )
+}
+
+/// Create a new [`Instruction`] from a load operation (RV64).
+pub fn from_load_rv64<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instruction<F> {
+    Instruction::new(
+        VmOpcode::from_usize(opcode),
+        F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rd),
+        F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rs1),
+        F::from_canonical_u32((dec_insn.imm as u32) & 0xffff),
+        F::ONE,
+        F::TWO,
+        F::from_bool(dec_insn.rd != 0),
+        F::from_bool(dec_insn.imm < 0),
+    )
+}
+
+/// Create a new [`Instruction`] from an I-type instruction with a 6-bit shamt (RV64).
+///
+/// `rrs_lib::ITypeShamt` masks shamt to 5 bits, but RV64 needs 6 bits, so the caller must
+/// provide the full 6-bit `shamt6` value extracted from the raw instruction word.
+pub fn from_i_type_shamt_rv64<F: PrimeField32>(
+    opcode: usize,
+    dec_insn: &ITypeShamt,
+    shamt6: u32,
+) -> Instruction<F> {
+    if dec_insn.rd == 0 {
+        return nop();
+    }
+    Instruction::new(
+        VmOpcode::from_usize(opcode),
+        F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rd),
+        F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rs1),
+        F::from_canonical_u32(shamt6),
+        F::ONE,
+        F::ZERO,
+        F::ZERO,
+        F::ZERO,
+    )
+}
+
+/// Create a new [`Instruction`] from an S-type instruction (RV64).
+pub fn from_s_type_rv64<F: PrimeField32>(opcode: usize, dec_insn: &SType) -> Instruction<F> {
+    Instruction::new(
+        VmOpcode::from_usize(opcode),
+        F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rs2),
+        F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rs1),
+        F::from_canonical_u32((dec_insn.imm as u32) & 0xffff),
+        F::ONE,
+        F::TWO,
+        F::ONE,
+        F::from_bool(dec_insn.imm < 0),
+    )
+}
+
+/// Create a new [`Instruction`] from a B-type instruction (RV64).
+pub fn from_b_type_rv64<F: PrimeField32>(opcode: usize, dec_insn: &BType) -> Instruction<F> {
+    Instruction::new(
+        VmOpcode::from_usize(opcode),
+        F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rs1),
+        F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rs2),
+        isize_to_field(dec_insn.imm as isize),
+        F::ONE,
+        F::ONE,
+        F::ZERO,
+        F::ZERO,
+    )
+}
+
+/// Create a new [`Instruction`] from a J-type instruction (RV64).
+pub fn from_j_type_rv64<F: PrimeField32>(opcode: usize, dec_insn: &JType) -> Instruction<F> {
+    Instruction::new(
+        VmOpcode::from_usize(opcode),
+        F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rd),
+        F::ZERO,
+        isize_to_field(dec_insn.imm as isize),
+        F::ONE,
+        F::ZERO,
+        F::from_bool(dec_insn.rd != 0),
+        F::ZERO,
+    )
+}
+
+/// Create a new [`Instruction`] from a U-type instruction (RV64).
+pub fn from_u_type_rv64<F: PrimeField32>(opcode: usize, dec_insn: &UType) -> Instruction<F> {
+    if dec_insn.rd == 0 {
+        return nop();
+    }
+    Instruction::new(
+        VmOpcode::from_usize(opcode),
+        F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rd),
+        F::ZERO,
+        F::from_canonical_u32((dec_insn.imm as u32 >> 12) & 0xfffff),
+        F::ONE,
         F::ZERO,
         F::ZERO,
         F::ZERO,
