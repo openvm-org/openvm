@@ -48,6 +48,7 @@ mod dummy;
 pub(crate) mod frame;
 
 const BATCH_CONSTRAINT_MOD_IDX: usize = 0;
+const POW_CHECKER_HEIGHT: usize = 32;
 
 // Trait to make tracegen functions generic on ProverBackendV2
 pub trait VerifierTraceGen<PB: ProverBackendV2> {
@@ -71,7 +72,8 @@ pub trait VerifierTraceGen<PB: ProverBackendV2> {
         child_vk_pcs_data: CommittedTraceDataV2<PB>,
         proofs: &[Proof],
         external_poseidon2_compress_inputs: &Vec<[PB::Val; WIDTH]>,
-    ) -> Vec<AirProvingContextV2<PB>>;
+        required_heights: Option<&[usize]>,
+    ) -> Option<Vec<AirProvingContextV2<PB>>>;
 
     fn generate_proving_ctxs_base<TS: FiatShamirTranscript + TranscriptHistory + Default>(
         &self,
@@ -79,7 +81,8 @@ pub trait VerifierTraceGen<PB: ProverBackendV2> {
         child_vk_pcs_data: CommittedTraceDataV2<PB>,
         proofs: &[Proof],
     ) -> Vec<AirProvingContextV2<PB>> {
-        self.generate_proving_ctxs::<TS>(child_vk, child_vk_pcs_data, proofs, &vec![])
+        self.generate_proving_ctxs::<TS>(child_vk, child_vk_pcs_data, proofs, &vec![], None)
+            .unwrap()
     }
 }
 
@@ -93,6 +96,7 @@ pub trait AggregationSubCircuit {
 
 // TODO[jpw]: make this generic in <SC: StarkGenericConfig>
 pub trait AirModule {
+    fn num_airs(&self) -> usize;
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>>;
 }
 
@@ -122,7 +126,8 @@ pub trait TraceGenModule<GC: GlobalTraceGenCtx, PB: ProverBackendV2>: Send + Syn
         proofs: &GC::MultiProof,
         preflights: &GC::PreflightRecords,
         ctx: &Self::ModuleSpecificCtx,
-    ) -> Vec<AirProvingContextV2<PB>>;
+        required_heights: Option<&[usize]>,
+    ) -> Option<Vec<AirProvingContextV2<PB>>>;
 }
 
 pub struct GlobalCtxCpu;
@@ -396,29 +401,39 @@ impl<'a> TraceModuleRef<'a> {
         preflights: &[Preflight],
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
         external_poseidon2_compress_inputs: &Vec<[F; WIDTH]>,
-    ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
+        required_heights: Option<&[usize]>,
+    ) -> Option<Vec<AirProvingContextV2<CpuBackendV2>>> {
         match self {
             TraceModuleRef::Transcript(module) => module.generate_proving_ctxs(
                 child_vk,
                 proofs,
                 preflights,
                 external_poseidon2_compress_inputs,
+                required_heights,
             ),
             TraceModuleRef::ProofShape(module) => {
-                module.generate_proving_ctxs(child_vk, proofs, preflights, &())
+                module.generate_proving_ctxs(child_vk, proofs, preflights, &(), required_heights)
             }
-            TraceModuleRef::Gkr(module) => {
-                module.generate_proving_ctxs(child_vk, proofs, preflights, exp_bits_len_gen)
-            }
+            TraceModuleRef::Gkr(module) => module.generate_proving_ctxs(
+                child_vk,
+                proofs,
+                preflights,
+                exp_bits_len_gen,
+                required_heights,
+            ),
             TraceModuleRef::BatchConstraint(module) => {
-                module.generate_proving_ctxs(child_vk, proofs, preflights, &())
+                module.generate_proving_ctxs(child_vk, proofs, preflights, &(), required_heights)
             }
             TraceModuleRef::Stacking(module) => {
-                module.generate_proving_ctxs(child_vk, proofs, preflights, &())
+                module.generate_proving_ctxs(child_vk, proofs, preflights, &(), required_heights)
             }
-            TraceModuleRef::Whir(module) => {
-                module.generate_proving_ctxs(child_vk, proofs, preflights, exp_bits_len_gen)
-            }
+            TraceModuleRef::Whir(module) => module.generate_proving_ctxs(
+                child_vk,
+                proofs,
+                preflights,
+                exp_bits_len_gen,
+                required_heights,
+            ),
         }
     }
 }
@@ -437,8 +452,8 @@ pub struct VerifierSubCircuit<const MAX_NUM_PROOFS: usize> {
     stacking: StackingModule,
     whir: WhirModule,
 
-    power_checker_air: Arc<PowerCheckerAir<2, 32>>,
-    power_checker_trace: Arc<PowerCheckerTraceGenerator<2, 32>>,
+    power_checker_air: Arc<PowerCheckerAir<2, POW_CHECKER_HEIGHT>>,
+    power_checker_trace: Arc<PowerCheckerTraceGenerator<2, POW_CHECKER_HEIGHT>>,
 }
 
 impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
@@ -453,8 +468,9 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
     ) -> Self {
         let mut bus_idx_manager = BusIndexManager::new();
         let bus_inventory = BusInventory::new(&mut bus_idx_manager);
-        let power_checker_trace = Arc::new(PowerCheckerTraceGenerator::<2, 32>::default());
-        let power_checker_air = Arc::new(PowerCheckerAir::<2, 32> {
+        let power_checker_trace =
+            Arc::new(PowerCheckerTraceGenerator::<2, POW_CHECKER_HEIGHT>::default());
+        let power_checker_air = Arc::new(PowerCheckerAir::<2, POW_CHECKER_HEIGHT> {
             pow_bus: bus_inventory.power_checker_bus,
             range_bus: bus_inventory.range_checker_bus,
         });
@@ -791,6 +807,40 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             codeword_states,
         }
     }
+
+    /// Utility function to split a slice of required trace heights per-module. Fails
+    /// an assert if the slice length doesn't match the number of AIRs.
+    #[allow(clippy::type_complexity)]
+    fn split_required_heights<'a>(
+        &self,
+        required_heights: Option<&'a [usize]>,
+    ) -> (Vec<Option<&'a [usize]>>, Option<usize>, Option<usize>) {
+        let bc_n = self.batch_constraint.num_airs();
+        let t_n = self.transcript.num_airs();
+        let ps_n = self.proof_shape.num_airs();
+        let gkr_n = self.gkr.num_airs();
+        let st_n = self.stacking.num_airs();
+        let w_n = self.whir.num_airs();
+        let module_air_counts = [bc_n, t_n, ps_n, gkr_n, st_n, w_n];
+
+        let Some(heights) = required_heights else {
+            return (vec![None; module_air_counts.len()], None, None);
+        };
+
+        let total_module_airs: usize = module_air_counts.iter().sum();
+        let total = total_module_airs + 2; // PowerChecker + ExpBitsLen
+        assert_eq!(heights.len(), total);
+
+        let mut offset = 0usize;
+        let mut per_module = Vec::with_capacity(module_air_counts.len());
+        for n in module_air_counts {
+            per_module.push(Some(&heights[offset..offset + n]));
+            offset += n;
+        }
+        debug_assert_eq!(heights.len() - offset, 2);
+
+        (per_module, Some(heights[offset]), Some(heights[offset + 1]))
+    }
 }
 
 impl<const MAX_NUM_PROOFS: usize> AggregationSubCircuit for VerifierSubCircuit<MAX_NUM_PROOFS> {
@@ -851,7 +901,8 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
         child_vk_pcs_data: CommittedTraceDataV2<CpuBackendV2>,
         proofs: &[Proof],
         external_poseidon2_compress_inputs: &Vec<[F; WIDTH]>,
-    ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
+        required_heights: Option<&[usize]>,
+    ) -> Option<Vec<AirProvingContextV2<CpuBackendV2>>> {
         debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
         // Use std::thread::scope for preflight parallelism. With only 3-4 proofs max, this avoids
         // Rayon's thread pool overhead (wake-up, work stealing, synchronization) while still
@@ -877,6 +928,9 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
         self.power_checker_trace.reset();
         let exp_bits_len_gen = ExpBitsLenTraceGenerator::default();
 
+        let (module_required, power_checker_required, exp_bits_len_required) =
+            self.split_required_heights(required_heights);
+
         // WARNING: SymbolicExpressionAir MUST be the first AIR in verifier circuit
         let modules = vec![
             TraceModuleRef::BatchConstraint(&self.batch_constraint),
@@ -887,9 +941,10 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
             TraceModuleRef::Whir(&self.whir),
         ];
         let span = tracing::Span::current();
-        let mut ctxs_by_module = modules
+        let ctxs_by_module = modules
             .into_par_iter()
-            .map(|module| {
+            .zip(module_required)
+            .map(|(module, required_heights)| {
                 let _guard = span.enter();
                 module.generate_cpu_ctxs(
                     child_vk,
@@ -897,14 +952,21 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
                     &preflights,
                     &exp_bits_len_gen,
                     external_poseidon2_compress_inputs,
+                    required_heights,
                 )
             })
             .collect::<Vec<_>>();
+
+        let mut ctxs_by_module: Vec<Vec<AirProvingContextV2<CpuBackendV2>>> =
+            ctxs_by_module.into_iter().collect::<Option<Vec<_>>>()?;
         if self.batch_constraint.has_cached {
             ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
                 .cached_mains = vec![child_vk_pcs_data];
         }
         let mut ctx_per_trace = ctxs_by_module.into_iter().flatten().collect::<Vec<_>>();
+        if power_checker_required.is_some_and(|h| h != POW_CHECKER_HEIGHT) {
+            return None;
+        }
         // Caution: this must be done after GKR and WHIR tracegen
         tracing::trace_span!("wrapper.generate_proving_ctxs", air_module = "Primitives",).in_scope(
             || {
@@ -917,17 +979,14 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
                         ));
                     },
                 );
-                tracing::trace_span!("wrapper.generate_trace", air = "ExpBitsLen").in_scope(|| {
-                    ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
-                        ColMajorMatrix::from_row_major(
-                            &exp_bits_len_gen.generate_trace_row_major(),
-                        ),
-                    ));
-                });
             },
         );
-
-        ctx_per_trace
+        let exp_bits_trace_rm = tracing::trace_span!("wrapper.generate_trace", air = "ExpBitsLen")
+            .in_scope(|| exp_bits_len_gen.generate_trace_row_major(exp_bits_len_required))?;
+        ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
+            ColMajorMatrix::from_row_major(&exp_bits_trace_rm),
+        ));
+        Some(ctx_per_trace)
     }
 }
 
@@ -954,29 +1013,51 @@ pub mod cuda_tracegen {
             preflights: &[PreflightGpu],
             exp_bits_len_gen: &ExpBitsLenTraceGenerator,
             external_poseidon2_compress_inputs: &Vec<[F; WIDTH]>,
-        ) -> Vec<AirProvingContextV2<cuda_backend_v2::GpuBackendV2>> {
+            required_heights: Option<&[usize]>,
+        ) -> Option<Vec<AirProvingContextV2<GpuBackendV2>>> {
             match self {
                 TraceModuleRef::Transcript(module) => module.generate_proving_ctxs(
                     child_vk,
                     proofs,
                     preflights,
                     external_poseidon2_compress_inputs,
+                    required_heights,
                 ),
-                TraceModuleRef::ProofShape(module) => {
-                    module.generate_proving_ctxs(child_vk, proofs, preflights, &())
-                }
-                TraceModuleRef::Gkr(module) => {
-                    module.generate_proving_ctxs(child_vk, proofs, preflights, exp_bits_len_gen)
-                }
-                TraceModuleRef::BatchConstraint(module) => {
-                    module.generate_proving_ctxs(child_vk, proofs, preflights, &())
-                }
-                TraceModuleRef::Stacking(module) => {
-                    module.generate_proving_ctxs(child_vk, proofs, preflights, &())
-                }
-                TraceModuleRef::Whir(module) => {
-                    module.generate_proving_ctxs(child_vk, proofs, preflights, exp_bits_len_gen)
-                }
+                TraceModuleRef::ProofShape(module) => module.generate_proving_ctxs(
+                    child_vk,
+                    proofs,
+                    preflights,
+                    &(),
+                    required_heights,
+                ),
+                TraceModuleRef::Gkr(module) => module.generate_proving_ctxs(
+                    child_vk,
+                    proofs,
+                    preflights,
+                    exp_bits_len_gen,
+                    required_heights,
+                ),
+                TraceModuleRef::BatchConstraint(module) => module.generate_proving_ctxs(
+                    child_vk,
+                    proofs,
+                    preflights,
+                    &(),
+                    required_heights,
+                ),
+                TraceModuleRef::Stacking(module) => module.generate_proving_ctxs(
+                    child_vk,
+                    proofs,
+                    preflights,
+                    &(),
+                    required_heights,
+                ),
+                TraceModuleRef::Whir(module) => module.generate_proving_ctxs(
+                    child_vk,
+                    proofs,
+                    preflights,
+                    exp_bits_len_gen,
+                    required_heights,
+                ),
             }
         }
     }
@@ -1007,7 +1088,8 @@ pub mod cuda_tracegen {
             child_vk_pcs_data: CommittedTraceDataV2<GpuBackendV2>,
             proofs: &[Proof],
             external_poseidon2_compress_inputs: &Vec<[F; WIDTH]>,
-        ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
+            required_heights: Option<&[usize]>,
+        ) -> Option<Vec<AirProvingContextV2<GpuBackendV2>>> {
             debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
             let child_vk_gpu = VerifyingKeyGpu::new(child_vk);
             let proofs_gpu = proofs
@@ -1037,6 +1119,9 @@ pub mod cuda_tracegen {
             let exp_bits_len_gen = ExpBitsLenTraceGenerator::default();
             self.power_checker_trace.reset();
 
+            let (module_required, power_checker_required, exp_bits_len_required) =
+                self.split_required_heights(required_heights);
+
             // NOTE: avoid par_iter for now so H2D transfer all happens on same stream to avoid sync
             // issues
             let preflights_gpu = zip(proofs, preflights_cpu)
@@ -1054,23 +1139,25 @@ pub mod cuda_tracegen {
             // This can be parallelized to separate streams for more CUDA stream parallelism, but it
             // will require recording events so streams properly sync for cudaMemcpyAsync and kernel
             // launches
-            let mut ctxs_by_module = modules
-                .into_iter()
-                .map(|module| {
-                    module.generate_gpu_ctxs(
-                        &child_vk_gpu,
-                        &proofs_gpu,
-                        &preflights_gpu,
-                        &exp_bits_len_gen,
-                        external_poseidon2_compress_inputs,
-                    )
-                })
-                .collect::<Vec<_>>();
+            let mut ctxs_by_module = Vec::with_capacity(modules.len());
+            for (module, required_heights) in modules.into_iter().zip(module_required) {
+                ctxs_by_module.push(module.generate_gpu_ctxs(
+                    &child_vk_gpu,
+                    &proofs_gpu,
+                    &preflights_gpu,
+                    &exp_bits_len_gen,
+                    external_poseidon2_compress_inputs,
+                    required_heights,
+                )?);
+            }
             if self.batch_constraint.has_cached {
                 ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
                     .cached_mains = vec![child_vk_pcs_data];
             }
             let mut ctx_per_trace = ctxs_by_module.into_iter().flatten().collect::<Vec<_>>();
+            if power_checker_required.is_some_and(|h| h != POW_CHECKER_HEIGHT) {
+                return None;
+            }
             // Caution: this must be done after GKR and WHIR tracegen
             tracing::trace_span!("wrapper.generate_proving_ctxs", air_module = "Primitives",)
                 .in_scope(|| {
@@ -1084,15 +1171,11 @@ pub mod cuda_tracegen {
                             ));
                         },
                     );
-                    tracing::trace_span!("wrapper.generate_trace", air = "ExpBitsLen").in_scope(
-                        || {
-                            let exp_bits_trace = exp_bits_len_gen.generate_trace_device();
-                            ctx_per_trace.push(AirProvingContextV2::simple_no_pis(exp_bits_trace));
-                        },
-                    );
                 });
-
-            ctx_per_trace
+            let exp_bits_trace = tracing::trace_span!("wrapper.generate_trace", air = "ExpBitsLen")
+                .in_scope(|| exp_bits_len_gen.generate_trace_device(exp_bits_len_required))?;
+            ctx_per_trace.push(AirProvingContextV2::simple_no_pis(exp_bits_trace));
+            Some(ctx_per_trace)
         }
     }
 }

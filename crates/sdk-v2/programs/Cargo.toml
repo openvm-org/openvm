@@ -1,0 +1,15 @@
+[workspace]
+[package]
+name = "openvm-continautions-test-programs"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+openvm = { git = "https://github.com/openvm-org/openvm.git", branch = "develop-v2", default-features = false }
+
+[features]
+default = []
+
+[profile.release]
+panic = "abort"
+lto = "thin"

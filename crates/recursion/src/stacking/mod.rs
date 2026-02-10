@@ -13,7 +13,7 @@ use stark_backend_v2::{
     proof::{Proof, StackingProof},
     prover::{AirProvingContextV2, CpuBackendV2},
 };
-use strum::EnumDiscriminants;
+use strum::{EnumCount, EnumDiscriminants};
 
 use crate::{
     stacking::{
@@ -148,6 +148,10 @@ impl StackingModule {
 }
 
 impl AirModule for StackingModule {
+    fn num_airs(&self) -> usize {
+        StackingModuleChipDiscriminants::COUNT
+    }
+
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let opening_air = OpeningClaimsAir {
             lifted_heights_bus: self.bus_inventory.lifted_heights_bus,
@@ -221,6 +225,7 @@ impl AirModule for StackingModule {
 }
 
 #[derive(Clone, Copy, strum_macros::Display, EnumDiscriminants)]
+#[strum_discriminants(derive(strum_macros::EnumCount))]
 #[strum_discriminants(repr(usize))]
 enum StackingModuleChip {
     OpeningClaims,
@@ -229,6 +234,12 @@ enum StackingModuleChip {
     StackingClaims,
     EqBase,
     EqBits,
+}
+
+impl StackingModuleChip {
+    fn index(&self) -> usize {
+        StackingModuleChipDiscriminants::from(self) as usize
+    }
 }
 
 impl RowMajorChip<F> for StackingModuleChip {
@@ -274,7 +285,8 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for StackingModule {
         proofs: &[Proof],
         preflights: &[Preflight],
         _module_ctx: &(),
-    ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
+        required_heights: Option<&[usize]>,
+    ) -> Option<Vec<AirProvingContextV2<CpuBackendV2>>> {
         let ctx = StandardTracegenCtx {
             vk: child_vk,
             proofs: &proofs.iter().collect_vec(),
@@ -288,10 +300,18 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for StackingModule {
             StackingModuleChip::EqBase,
             StackingModuleChip::EqBits,
         ];
-        // TODO[INT-6027]: Use required_height properly
+        let span = tracing::Span::current();
         chips
             .par_iter()
-            .map(|chip| chip.generate_proving_ctx(&ctx, None).unwrap())
+            .map(|chip| {
+                let _guard = span.enter();
+                chip.generate_proving_ctx(
+                    &ctx,
+                    required_heights.map(|heights| heights[chip.index()]),
+                )
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
             .collect()
     }
 }
@@ -316,12 +336,6 @@ mod cuda_tracegen {
         },
         tracegen::cuda::{StandardTracegenGpuCtx, generate_gpu_proving_ctx},
     };
-
-    impl StackingModuleChip {
-        fn index(&self) -> usize {
-            StackingModuleChipDiscriminants::from(self) as usize
-        }
-    }
 
     impl ModuleChip<GpuBackendV2> for StackingModuleChip {
         type Ctx<'a> = (StandardTracegenGpuCtx<'a>, &'a StackingBlob);
@@ -539,7 +553,8 @@ mod cuda_tracegen {
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
             _module_ctx: &(),
-        ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
+            required_heights: Option<&[usize]>,
+        ) -> Option<Vec<AirProvingContextV2<GpuBackendV2>>> {
             let blob = StackingBlob::new(child_vk, proofs, preflights);
             let ctx = (
                 StandardTracegenGpuCtx {
@@ -564,13 +579,31 @@ mod cuda_tracegen {
             // Launch all GPU tracegen kernels serially first (default stream).
             let indexed_gpu_ctxs = gpu_chips
                 .iter()
-                .map(|chip| (chip.index(), chip.generate_proving_ctx(&ctx, None)))
+                .map(|chip| {
+                    (
+                        chip.index(),
+                        chip.generate_proving_ctx(
+                            &ctx,
+                            required_heights.map(|heights| heights[chip.index()]),
+                        ),
+                    )
+                })
                 .collect::<Vec<_>>();
 
             // Then run CPU tracegen for remaining AIRs in parallel
+            let span = tracing::Span::current();
             let indexed_cpu_ctxs = cpu_chips
                 .par_iter()
-                .map(|chip| (chip.index(), chip.generate_proving_ctx(&ctx, None)))
+                .map(|chip| {
+                    let _guard = span.enter();
+                    (
+                        chip.index(),
+                        chip.generate_proving_ctx(
+                            &ctx,
+                            required_heights.map(|heights| heights[chip.index()]),
+                        ),
+                    )
+                })
                 .collect::<Vec<_>>();
 
             // TODO[INT-6027]: Use required_height properly
@@ -578,7 +611,7 @@ mod cuda_tracegen {
                 .into_iter()
                 .chain(indexed_cpu_ctxs)
                 .sorted_by(|a, b| a.0.cmp(&b.0))
-                .map(|(_idx, ctx)| ctx.unwrap())
+                .map(|(_idx, ctx)| ctx)
                 .collect()
         }
     }

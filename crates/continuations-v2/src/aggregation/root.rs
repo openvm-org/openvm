@@ -89,6 +89,7 @@ pub struct RootProver<PB: ProverBackendV2, S: AggregationSubCircuit, T: RootTrac
     child_vk: Arc<MultiStarkVerifyingKeyV2>,
     child_vk_pcs_data: CommittedTraceDataV2<PB>,
     circuit: Arc<RootCircuit<S>>,
+    trace_heights: Option<Vec<usize>>,
 }
 
 impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: RootTraceGen<PB>>
@@ -101,18 +102,24 @@ where
         &self,
         proof: Proof,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
-    ) -> ProvingContextV2<PB> {
+    ) -> Option<ProvingContextV2<PB>> {
         assert_eq!(
             user_pvs_proof.public_values.len(),
             self.circuit.num_user_pvs
         );
 
+        // These AIRs should have the same height regardless of proof or user_pvs_proof
         let (verifier_pvs_ctx, mut poseidon2_inputs) =
             self.agg_node_tracegen.generate_verifier_pvs_ctx(&proof);
         let (agg_other_ctxs, other_inputs) = self
             .agg_node_tracegen
             .generate_other_proving_ctxs(user_pvs_proof, self.circuit.memory_dimensions);
         poseidon2_inputs.extend(other_inputs);
+
+        let verifier_trace_heights = self.trace_heights.as_ref().map(|v| {
+            let num_airs = v.len();
+            &v[1..(num_airs - agg_other_ctxs.len())]
+        });
 
         let subcircuit_ctxs = self
             .circuit
@@ -122,24 +129,23 @@ where
                 self.child_vk_pcs_data.clone(),
                 &[proof],
                 &poseidon2_inputs,
+                verifier_trace_heights,
             );
 
-        ProvingContextV2 {
+        subcircuit_ctxs.map(|subcircuit_ctxs| ProvingContextV2 {
             per_trace: once(verifier_pvs_ctx)
                 .chain(subcircuit_ctxs)
                 .chain(agg_other_ctxs)
                 .enumerate()
                 .collect_vec(),
-        }
+        })
     }
 
     #[instrument(name = "total_proof", skip_all)]
-    pub fn root_prove<E: StarkWhirEngine<PB = PB>>(
+    pub fn root_prove_from_ctx<E: StarkWhirEngine<PB = PB>>(
         &self,
-        proof: Proof,
-        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
+        ctx: ProvingContextV2<PB>,
     ) -> Result<Proof> {
-        let ctx = self.generate_proving_ctx(proof, user_pvs_proof);
         if tracing::enabled!(tracing::Level::DEBUG) {
             trace_heights_tracing_info(&ctx.per_trace, &self.circuit.airs());
         }
@@ -163,6 +169,7 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ro
         system_params: SystemParams,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
+        trace_heights: Option<Vec<usize>>,
     ) -> Self
     where
         E::PD: DeviceDataTransporterV2<PB> + Clone,
@@ -187,6 +194,7 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ro
             child_vk,
             child_vk_pcs_data,
             circuit,
+            trace_heights,
         }
     }
 
@@ -196,6 +204,7 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ro
         pk: Arc<MultiStarkProvingKeyV2>,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
+        trace_heights: Option<Vec<usize>>,
     ) -> Self
     where
         PB::Val: Field + PrimeField32,
@@ -218,6 +227,7 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ro
             child_vk,
             child_vk_pcs_data,
             circuit,
+            trace_heights,
         }
     }
 
@@ -235,5 +245,9 @@ impl<PB: ProverBackendV2, S: AggregationSubCircuit + VerifierTraceGen<PB>, T: Ro
 
     pub fn get_cached_commit(&self) -> <PB as ProverBackendV2>::Commitment {
         self.child_vk_pcs_data.commitment.clone()
+    }
+
+    pub fn get_trace_heights(&self) -> Option<Vec<usize>> {
+        self.trace_heights.clone()
     }
 }

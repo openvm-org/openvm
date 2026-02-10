@@ -225,6 +225,10 @@ impl ProofShapeModule {
 }
 
 impl AirModule for ProofShapeModule {
+    fn num_airs(&self) -> usize {
+        3
+    }
+
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let proof_shape_air = ProofShapeAir::<4, 8> {
             per_air: self.per_air.clone(),
@@ -276,7 +280,8 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for ProofShapeModule {
         proofs: &[Proof],
         preflights: &[Preflight],
         _ctx: &(),
-    ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
+        required_heights: Option<&[usize]>,
+    ) -> Option<Vec<AirProvingContextV2<CpuBackendV2>>> {
         let proof_shape = proof_shape::ProofShapeChip::<4, 8>::new(
             self.idx_encoder.clone(),
             self.min_cached_idx,
@@ -289,25 +294,38 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for ProofShapeModule {
             ProofShapeModuleChip::ProofShape(proof_shape),
             ProofShapeModuleChip::PublicValues,
         ];
-        // TODO[INT-6027]: Use required_height properly
-        let mut ctxs = chips
+        let mut ctxs: Vec<_> = chips
             .par_iter()
-            .map(|chip| chip.generate_proving_ctx(&ctx, None).unwrap())
-            .collect::<Vec<_>>();
+            .map(|chip| {
+                chip.generate_proving_ctx(
+                    &ctx,
+                    required_heights.map(|heights| heights[chip.index()]),
+                )
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .collect::<Option<Vec<_>>>()?;
 
         tracing::trace_span!("wrapper.generate_trace", air = "RangeChecker").in_scope(|| {
             ctxs.push(AirProvingContextV2::simple_no_pis(
                 ColMajorMatrix::from_row_major(&self.range_checker.generate_trace_row_major()),
             ));
         });
-        ctxs
+        Some(ctxs)
     }
 }
 
-#[derive(strum_macros::Display)]
+#[derive(strum_macros::Display, strum::EnumDiscriminants)]
+#[strum_discriminants(repr(usize))]
 enum ProofShapeModuleChip {
     ProofShape(proof_shape::ProofShapeChip<4, 8>),
     PublicValues,
+}
+
+impl ProofShapeModuleChip {
+    fn index(&self) -> usize {
+        ProofShapeModuleChipDiscriminants::from(self) as usize
+    }
 }
 
 impl RowMajorChip<F> for ProofShapeModuleChip {
@@ -361,7 +379,8 @@ mod cuda_tracegen {
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
             _ctx: &(),
-        ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
+            required_heights: Option<&[usize]>,
+        ) -> Option<Vec<AirProvingContextV2<GpuBackendV2>>> {
             use crate::tracegen::ModuleChip;
 
             let range_checker_gpu = Arc::new(RangeCheckerGpuTraceGenerator::<8>::default());
@@ -378,22 +397,27 @@ mod cuda_tracegen {
             // This can be parallelized to separate streams for more CUDA stream parallelism, but it
             // will require recording events so streams properly sync for cudaMemcpyAsync and kernel
             // launches
-            ctxs.push(
-                tracing::trace_span!("wrapper.generate_trace", air = "ProofShape").in_scope(|| {
-                    proof_shape_chip
-                        .generate_proving_ctx(&(child_vk, preflights), None)
-                        .unwrap()
-                }),
-            );
-            ctxs.push(
+            let proof_shape_ctx =
+                tracing::trace_span!("wrapper.generate_trace", air = "ProofShape").in_scope(
+                    || {
+                        proof_shape_chip.generate_proving_ctx(
+                            &(child_vk, preflights),
+                            required_heights.map(|heights| heights[0]),
+                        )
+                    },
+                )?;
+            ctxs.push(proof_shape_ctx);
+
+            let public_values_ctx =
                 tracing::trace_span!("wrapper.generate_trace", air = "PublicValues").in_scope(
                     || {
-                        pvs::cuda::PublicValuesGpuTraceGenerator
-                            .generate_proving_ctx(&(proofs, preflights), None)
-                            .unwrap()
+                        pvs::cuda::PublicValuesGpuTraceGenerator.generate_proving_ctx(
+                            &(proofs, preflights),
+                            required_heights.map(|heights| heights[1]),
+                        )
                     },
-                ),
-            );
+                )?;
+            ctxs.push(public_values_ctx);
             // Drop the proof_shape chip so we can finalize auxiliary traces (it holds Arc clones).
             drop(proof_shape_chip);
             // Caution: proof_shape **must** finish trace gen before range_checker or pow_checker
@@ -406,7 +430,7 @@ mod cuda_tracegen {
             let pow_trace = Arc::try_unwrap(pow_checker_gpu).unwrap().generate_trace();
             accumulate_power_checker_counts_from_gpu(&pow_trace, &self.pow_checker);
 
-            ctxs
+            Some(ctxs)
         }
     }
 

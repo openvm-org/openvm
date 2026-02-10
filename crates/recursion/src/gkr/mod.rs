@@ -74,6 +74,7 @@ use stark_backend_v2::{
     proof::{GkrProof, Proof},
     prover::{AirProvingContextV2, CpuBackendV2},
 };
+use strum::EnumCount;
 
 use crate::{
     gkr::{
@@ -253,6 +254,10 @@ impl GkrModule {
 }
 
 impl AirModule for GkrModule {
+    fn num_airs(&self) -> usize {
+        GkrModuleChipDiscriminants::COUNT
+    }
+
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let gkr_input_air = GkrInputAir {
             l_skip: self.l_skip,
@@ -518,7 +523,8 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for GkrModule {
         proofs: &[Proof],
         preflights: &[Preflight],
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
-    ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
+        required_heights: Option<&[usize]>,
+    ) -> Option<Vec<AirProvingContextV2<CpuBackendV2>>> {
         let proof_refs = proofs.iter().collect_vec();
         let preflight_refs = preflights.iter().collect_vec();
         let blob = self.generate_blob(child_vk, &proof_refs, &preflight_refs, exp_bits_len_gen);
@@ -535,20 +541,33 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for GkrModule {
             .par_iter()
             .map(|chip| {
                 let _guard = span.enter();
-                chip.generate_proving_ctx(&blob, None).unwrap()
+                chip.generate_proving_ctx(
+                    &blob,
+                    required_heights.map(|heights| heights[chip.index()]),
+                )
             })
+            .collect::<Vec<_>>()
+            .into_iter()
             .collect()
     }
 }
 
 // To reduce the number of structs and trait implementations, we collect them into a single enum
 // with enum dispatch.
-#[derive(strum_macros::Display)]
+#[derive(strum_macros::Display, strum::EnumDiscriminants)]
+#[strum_discriminants(derive(strum_macros::EnumCount))]
+#[strum_discriminants(repr(usize))]
 enum GkrModuleChip {
     Input,
     Layer,
     LayerSumcheck,
     XiSampler,
+}
+
+impl GkrModuleChip {
+    fn index(&self) -> usize {
+        GkrModuleChipDiscriminants::from(self) as usize
+    }
 }
 
 impl RowMajorChip<F> for GkrModuleChip {
@@ -605,7 +624,8 @@ mod cuda_tracegen {
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
             exp_bits_len_gen: &ExpBitsLenTraceGenerator,
-        ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
+            required_heights: Option<&[usize]>,
+        ) -> Option<Vec<AirProvingContextV2<GpuBackendV2>>> {
             let proofs_cpu = proofs.iter().map(|proof| &proof.cpu).collect_vec();
             let preflights_cpu = preflights
                 .iter()
@@ -629,8 +649,14 @@ mod cuda_tracegen {
                 .par_iter()
                 .map(|chip| {
                     let _guard = span.enter();
-                    generate_gpu_proving_ctx(chip, &blob, None).unwrap()
+                    generate_gpu_proving_ctx(
+                        chip,
+                        &blob,
+                        required_heights.map(|heights| heights[chip.index()]),
+                    )
                 })
+                .collect::<Vec<_>>()
+                .into_iter()
                 .collect()
         }
     }

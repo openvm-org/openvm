@@ -19,16 +19,26 @@ impl Deref for ExpBitsLenGpuTraceGenerator {
 }
 
 impl ExpBitsLenGpuTraceGenerator {
-    pub fn generate_trace_row_major(self) -> RowMajorMatrix<F> {
-        self.0.generate_trace_row_major()
+    pub fn generate_trace_row_major(
+        self,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
+        self.0.generate_trace_row_major(required_height)
     }
 
     #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
-    pub fn generate_trace_device(self) -> DeviceMatrix<F> {
+    pub fn generate_trace_device(self, required_height: Option<usize>) -> Option<DeviceMatrix<F>> {
         let mem = MemTracker::start("tracegen.exp_bits_len");
         let records = self.0.requests.into_inner().unwrap();
         let num_valid_rows = records.last().map(|record| record.end_row()).unwrap_or(0);
-        let height = num_valid_rows.next_power_of_two();
+        let height = if let Some(height) = required_height {
+            if height < num_valid_rows {
+                return None;
+            }
+            height
+        } else {
+            num_valid_rows.next_power_of_two()
+        };
         let width = ExpBitsLenCols::<u8>::width();
 
         let trace = DeviceMatrix::with_capacity(height, width);
@@ -47,6 +57,6 @@ impl ExpBitsLenGpuTraceGenerator {
         }
 
         mem.emit_metrics();
-        trace
+        Some(trace)
     }
 }

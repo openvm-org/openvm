@@ -291,8 +291,66 @@ fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
         root_system_params(),
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
+        None,
     );
-    let root_proof = root_prover.root_prove::<Engine>(internal_recursive_proof, &user_pvs_proof)?;
+    let ctx = root_prover.generate_proving_ctx(internal_recursive_proof, &user_pvs_proof);
+    let root_proof = root_prover.root_prove_from_ctx::<Engine>(ctx.unwrap())?;
+
+    let vk = root_prover.get_vk();
+    let engine = Engine::new(vk.inner.params.clone());
+    engine.verify(&vk, &root_proof)?;
+    Ok(())
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_root_prover_trace_heights() -> Result<()> {
+    setup_tracing_with_log_level(Level::INFO);
+    let (
+        internal_recursive_vk,
+        internal_recursive_pcs_data,
+        internal_recursive_proof,
+        user_pvs_proof,
+    ) = run_full_aggregation(10, 1)?;
+
+    let system_config = test_rv32im_config().rv32i.system;
+
+    let root_base_prover = RootProver::new::<Engine>(
+        internal_recursive_vk.clone(),
+        internal_recursive_pcs_data.clone(),
+        root_system_params(),
+        system_config.memory_config.memory_dimensions(),
+        system_config.num_public_values,
+        None,
+    );
+    let ctx = root_base_prover
+        .generate_proving_ctx(internal_recursive_proof.clone(), &user_pvs_proof)
+        .unwrap();
+    let mut trace_heights = ctx
+        .per_trace
+        .iter()
+        .map(|(_, air_ctx)| air_ctx.height())
+        .collect_vec();
+
+    const AIR_MODIFIED_HEIGHT_IDX: usize = 2;
+    trace_heights[AIR_MODIFIED_HEIGHT_IDX] *= 2;
+
+    let root_prover = RootProver::new::<Engine>(
+        internal_recursive_vk,
+        internal_recursive_pcs_data,
+        root_system_params(),
+        system_config.memory_config.memory_dimensions(),
+        system_config.num_public_values,
+        Some(trace_heights.clone()),
+    );
+    let ctx = root_prover
+        .generate_proving_ctx(internal_recursive_proof, &user_pvs_proof)
+        .unwrap();
+
+    for ((air_idx, air_ctx), expected_height) in ctx.per_trace.iter().zip(trace_heights) {
+        assert_eq!(air_ctx.height(), expected_height, "air_idx {air_idx}");
+    }
+    let root_proof = root_prover.root_prove_from_ctx::<Engine>(ctx)?;
 
     let vk = root_prover.get_vk();
     let engine = Engine::new(vk.inner.params.clone());

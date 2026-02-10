@@ -20,7 +20,7 @@ use stark_backend_v2::{
         AirProvingContextV2, ColMajorMatrix, CommittedTraceDataV2, CpuBackendV2, TraceCommitterV2,
     },
 };
-use strum::EnumDiscriminants;
+use strum::{EnumCount, EnumDiscriminants};
 
 use crate::{
     batch_constraint::{
@@ -303,6 +303,10 @@ impl BatchConstraintModule {
 }
 
 impl AirModule for BatchConstraintModule {
+    fn num_airs(&self) -> usize {
+        BatchConstraintModuleChipDiscriminants::COUNT
+    }
+
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let l_skip = self.l_skip;
 
@@ -679,7 +683,8 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
         proofs: &[Proof],
         preflights: &[Preflight],
         _ctx: &(),
-    ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
+        required_heights: Option<&[usize]>,
+    ) -> Option<Vec<AirProvingContextV2<CpuBackendV2>>> {
         let blob = BatchConstraintBlobCpu::new(child_vk, proofs, preflights);
         let ctx = (
             StandardTracegenCtx {
@@ -716,8 +721,13 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
             .par_iter()
             .map(|chip| {
                 let _guard = span.enter();
-                chip.generate_proving_ctx(&ctx, None).unwrap()
+                chip.generate_proving_ctx(
+                    &ctx,
+                    required_heights.map(|heights| heights[chip.index()]),
+                )
             })
+            .collect::<Vec<_>>()
+            .into_iter()
             .collect()
     }
 }
@@ -746,6 +756,7 @@ impl BatchConstraintModule {
 
 // NOTE: ordering of enum must match AIR ordering
 #[derive(strum_macros::Display, EnumDiscriminants)]
+#[strum_discriminants(derive(strum_macros::EnumCount))]
 #[strum_discriminants(repr(usize))]
 enum BatchConstraintModuleChip {
     SymbolicExpression {
@@ -766,6 +777,12 @@ enum BatchConstraintModuleChip {
     InteractionsFolding,
     ConstraintsFolding,
     EqNeg,
+}
+
+impl BatchConstraintModuleChip {
+    fn index(&self) -> usize {
+        BatchConstraintModuleChipDiscriminants::from(self) as usize
+    }
 }
 
 impl RowMajorChip<F> for BatchConstraintModuleChip {
@@ -865,12 +882,6 @@ pub mod cuda_tracegen {
         tracegen::cuda::{StandardTracegenGpuCtx, generate_gpu_proving_ctx},
     };
 
-    impl BatchConstraintModuleChip {
-        fn index(&self) -> usize {
-            BatchConstraintModuleChipDiscriminants::from(self) as usize
-        }
-    }
-
     impl ModuleChip<GpuBackendV2> for BatchConstraintModuleChip {
         type Ctx<'a> = (StandardTracegenGpuCtx<'a>, &'a BatchConstraintBlobGpu);
 
@@ -960,7 +971,8 @@ pub mod cuda_tracegen {
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
             _module_ctx: &(),
-        ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
+            required_heights: Option<&[usize]>,
+        ) -> Option<Vec<AirProvingContextV2<GpuBackendV2>>> {
             let blob = BatchConstraintBlobGpu::new(&child_vk, &proofs, &preflights);
             let ctx = (
                 StandardTracegenGpuCtx {
@@ -1003,7 +1015,13 @@ pub mod cuda_tracegen {
                 .map(|chip| {
                     // This span is not very useful because the kernel does not synchronize on host:
                     let _guard = span.enter();
-                    (chip.index(), chip.generate_proving_ctx(&ctx, None))
+                    (
+                        chip.index(),
+                        chip.generate_proving_ctx(
+                            &ctx,
+                            required_heights.map(|heights| heights[chip.index()]),
+                        ),
+                    )
                 })
                 .collect_vec();
 
@@ -1030,7 +1048,14 @@ pub mod cuda_tracegen {
                 .map(|chip| {
                     // span within par_iter to handle parallelism
                     let _guard = span.enter();
-                    (chip.index(), generate_gpu_proving_ctx(chip, &cpu_ctx, None))
+                    (
+                        chip.index(),
+                        generate_gpu_proving_ctx(
+                            chip,
+                            &cpu_ctx,
+                            required_heights.map(|heights| heights[chip.index()]),
+                        ),
+                    )
                 })
                 .collect::<Vec<_>>();
 
@@ -1038,7 +1063,8 @@ pub mod cuda_tracegen {
                 .into_iter()
                 .chain(indexed_cpu_traces)
                 .sorted_by(|a, b| a.0.cmp(&b.0))
-                .map(|(_index, ctx)| ctx.unwrap())
+                .map(|(_index, ctx)| ctx)
+                .into_iter()
                 .collect()
         }
     }
