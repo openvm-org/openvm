@@ -65,7 +65,8 @@ impl TranscriptModule {
         preflights: &[Preflight],
         mut poseidon2_perm_inputs: Vec<[F; POSEIDON2_WIDTH]>,
         mut poseidon2_compress_inputs: Vec<[F; POSEIDON2_WIDTH]>,
-    ) -> TranscriptTraceArtifacts {
+        required_height: Option<usize>,
+    ) -> Option<TranscriptTraceArtifacts> {
         let transcript_width = TranscriptCols::<F>::width();
         let mut valid_rows = Vec::with_capacity(preflights.len());
 
@@ -114,7 +115,14 @@ impl TranscriptModule {
             valid_rows.push(num_valid_rows);
             transcript_valid_rows += num_valid_rows;
         }
-        let transcript_num_rows = transcript_valid_rows.next_power_of_two();
+        let transcript_num_rows = if let Some(height) = required_height {
+            if height < transcript_valid_rows {
+                return None;
+            }
+            height
+        } else {
+            transcript_valid_rows.next_power_of_two()
+        };
         let mut transcript_trace = vec![F::ZERO; transcript_num_rows * transcript_width];
 
         let mut skip = 0;
@@ -199,11 +207,11 @@ impl TranscriptModule {
             assert_eq!(tidx, preflight.transcript.len());
         }
 
-        TranscriptTraceArtifacts {
+        Some(TranscriptTraceArtifacts {
             transcript_trace: RowMajorMatrix::new(transcript_trace, transcript_width),
             poseidon2_perm_inputs,
             poseidon2_compress_inputs,
-        }
+        })
     }
 
     fn dedup_poseidon_inputs(
@@ -254,6 +262,10 @@ impl TranscriptModule {
 }
 
 impl AirModule for TranscriptModule {
+    fn num_airs(&self) -> usize {
+        3
+    }
+
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let transcript_air = TranscriptAir {
             transcript_bus: self.bus_inventory.transcript_bus,
@@ -301,19 +313,42 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
         proofs: &[Proof],
         preflights: &[Preflight],
         external_poseidon2_compress_inputs: &Vec<[F; WIDTH]>,
-    ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
+        required_heights: Option<&[usize]>,
+    ) -> Option<Vec<AirProvingContextV2<CpuBackendV2>>> {
+        let (required_transcript, required_poseidon2, required_merkle_verify) =
+            if let Some(heights) = required_heights {
+                if heights.len() != 3 {
+                    return None;
+                }
+                (Some(heights[0]), Some(heights[1]), Some(heights[2]))
+            } else {
+                (None, None, None)
+            };
+
         let (merkle_verify_trace_vec, poseidon2_compress_inputs) =
             tracing::info_span!("wrapper.generate_trace", air = "MerkleVerify").in_scope(|| {
-                merkle_verify::generate_trace(child_vk, proofs, preflights, &self.params)
-            });
+                merkle_verify::generate_trace(
+                    child_vk,
+                    proofs,
+                    preflights,
+                    &self.params,
+                    required_merkle_verify,
+                )
+            })?;
         let merkle_verify_trace =
             RowMajorMatrix::new(merkle_verify_trace_vec, MerkleVerifyCols::<F>::width());
         let TranscriptTraceArtifacts {
             transcript_trace,
             poseidon2_perm_inputs,
             mut poseidon2_compress_inputs,
-        } = tracing::trace_span!("wrapper.generate_trace", air = "Transcript")
-            .in_scope(|| self.build_trace_artifacts(preflights, vec![], poseidon2_compress_inputs));
+        } = tracing::trace_span!("wrapper.generate_trace", air = "Transcript").in_scope(|| {
+            self.build_trace_artifacts(
+                preflights,
+                vec![],
+                poseidon2_compress_inputs,
+                required_transcript,
+            )
+        })?;
         poseidon2_compress_inputs.extend_from_slice(external_poseidon2_compress_inputs);
 
         let poseidon2_trace =
@@ -327,7 +362,12 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
                         poseidon2_compress_inputs,
                     );
                     let poseidon2_valid_rows = poseidon_states.len();
-                    let poseidon2_num_rows = if poseidon2_valid_rows == 0 {
+                    let poseidon2_num_rows = if let Some(height) = required_poseidon2 {
+                        if height == 0 || poseidon2_valid_rows > height {
+                            return None;
+                        }
+                        height
+                    } else if poseidon2_valid_rows == 0 {
                         1
                     } else {
                         poseidon2_valid_rows.next_power_of_two()
@@ -350,15 +390,19 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
                             cols.permute_mult = F::from_u32(count.perm);
                             cols.compress_mult = F::from_u32(count.compress);
                         });
-                    RowMajorMatrix::new(poseidon_trace, poseidon2_width)
+                    Some(RowMajorMatrix::new(poseidon_trace, poseidon2_width))
                 })
-            });
+            })?;
 
         // Finally, make the RawInput structs
-        [transcript_trace, poseidon2_trace, merkle_verify_trace]
-            .map(|trace| AirProvingContextV2::simple_no_pis(ColMajorMatrix::from_row_major(&trace)))
-            .into_iter()
-            .collect()
+        Some(
+            [transcript_trace, poseidon2_trace, merkle_verify_trace]
+                .map(|trace| {
+                    AirProvingContextV2::simple_no_pis(ColMajorMatrix::from_row_major(&trace))
+                })
+                .into_iter()
+                .collect(),
+        )
     }
 }
 
@@ -463,7 +507,17 @@ mod cuda_tracegen {
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
             external_poseidon2_compress_inputs: &Vec<[F; WIDTH]>,
-        ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
+            required_heights: Option<&[usize]>,
+        ) -> Option<Vec<AirProvingContextV2<GpuBackendV2>>> {
+            let (required_transcript, required_poseidon2, required_merkle_verify) =
+                if let Some(heights) = required_heights {
+                    if heights.len() != 3 {
+                        return None;
+                    }
+                    (Some(heights[0]), Some(heights[1]), Some(heights[2]))
+                } else {
+                    (None, None, None)
+                };
             let blob = TranscriptBlob::new(
                 child_vk,
                 proofs,
@@ -472,12 +526,13 @@ mod cuda_tracegen {
             );
 
             let merkle_trace = tracing::trace_span!("wrapper.generate_trace", air = "MerkleVerify")
-                .in_scope(|| merkle_verify::cuda::generate_trace(&blob));
+                .in_scope(|| merkle_verify::cuda::generate_trace(&blob, required_merkle_verify))?;
             let transcript_trace =
-                tracing::trace_span!("wrapper.generate_trace", air = "Transcript")
-                    .in_scope(|| transcript::cuda::generate_trace(preflights, &blob));
-            let poseidon_trace =
-                trace_span!("wrapper.generate_trace", air = "Poseidon2").in_scope(|| {
+                tracing::trace_span!("wrapper.generate_trace", air = "Transcript").in_scope(
+                    || transcript::cuda::generate_trace(preflights, &blob, required_transcript),
+                )?;
+            let poseidon_trace = trace_span!("wrapper.generate_trace", air = "Poseidon2")
+                .in_scope(|| {
                     trace_span!("generate_trace").in_scope(|| {
                         let poseidon2_width = Poseidon2Cols::<F, SBOX_REGISTERS>::width();
                         let total_poseidon2_inputs = blob.num_prefix_perms
@@ -523,7 +578,12 @@ mod cuda_tracegen {
                                 num_records = *d_num_records.to_host().unwrap().first().unwrap();
                             }
                         }
-                        let poseidon2_num_rows = if num_records == 0 {
+                        let poseidon2_num_rows = if let Some(height) = required_poseidon2 {
+                            if height < num_records {
+                                return None;
+                            }
+                            height
+                        } else if num_records == 0 {
                             1
                         } else {
                             num_records.next_power_of_two()
@@ -542,15 +602,15 @@ mod cuda_tracegen {
                             )
                             .unwrap();
                         }
-                        poseidon_trace_gpu
+                        Some(poseidon_trace_gpu)
                     })
-                });
+                })?;
 
-            vec![
+            Some(vec![
                 AirProvingContextV2::simple_no_pis(transcript_trace),
                 AirProvingContextV2::simple_no_pis(poseidon_trace),
                 AirProvingContextV2::simple_no_pis(merkle_trace),
-            ]
+            ])
         }
     }
 }

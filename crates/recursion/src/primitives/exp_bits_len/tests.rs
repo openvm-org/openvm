@@ -58,7 +58,9 @@ fn test_exp_bits_len_cpu_trace_generation(num_requests: usize) {
         )
     }));
 
-    let trace = generator.generate_trace_row_major();
+    let trace = generator
+        .generate_trace_row_major(None)
+        .expect("trace height should be unconstrained");
     let width = ExpBitsLenCols::<F>::width();
     assert_eq!(trace.width(), width);
 
@@ -118,7 +120,9 @@ mod cuda_tests {
                     req.num_bits as usize,
                 )
             }));
-            cpu_gen.generate_trace_row_major()
+            cpu_gen
+                .generate_trace_row_major(None)
+                .expect("trace height should be unconstrained")
         };
 
         let gpu_trace = {
@@ -130,7 +134,9 @@ mod cuda_tests {
                     req.num_bits as usize,
                 )
             }));
-            gpu_gen.generate_trace_device()
+            gpu_gen
+                .generate_trace_device(None)
+                .expect("trace height should be unconstrained")
         };
 
         assert_eq_host_and_device_matrix(Arc::new(cpu_trace), &gpu_trace);
