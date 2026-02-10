@@ -160,10 +160,10 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64ITranspilerExtension {
                     let dec_insn = ITypeShamt::new(instruction_u32);
                     let shamt6 = (instruction_u32 >> 20) & 0x3f;
                     let funct6 = (instruction_u32 >> 26) & 0x3f;
-                    let shift_opcode = if funct6 == 0b010000 {
-                        Rv64ShiftOpcode::SRA
-                    } else {
-                        Rv64ShiftOpcode::SRL
+                    let shift_opcode = match funct6 {
+                        0b000000 => Rv64ShiftOpcode::SRL,
+                        0b010000 => Rv64ShiftOpcode::SRA,
+                        _ => return Some(TranspilerOutput::one_to_one(unimp())),
                     };
                     Some(from_i_type_shamt_rv64(
                         shift_opcode.global_opcode().as_usize(),
@@ -274,10 +274,10 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64ITranspilerExtension {
                     let dec_insn = ITypeShamt::new(instruction_u32);
                     let shamt5 = (instruction_u32 >> 20) & 0x1f;
                     let funct7 = ((instruction_u32 >> 25) & 0x7f) as u8;
-                    let op = if funct7 == FUNCT7_SUB_SRA {
-                        Rv64ShiftWOpcode::SRAW
-                    } else {
-                        Rv64ShiftWOpcode::SRLW
+                    let op = match funct7 {
+                        0b0000000 => Rv64ShiftWOpcode::SRLW,
+                        FUNCT7_SUB_SRA => Rv64ShiftWOpcode::SRAW,
+                        _ => return Some(TranspilerOutput::one_to_one(unimp())),
                     };
                     Some(from_i_type_shamt_rv64(
                         op.global_opcode().as_usize(),
