@@ -1,5 +1,7 @@
 /// 32-bit register stored as 4 bytes (4 limbs of 8-bits) in OpenVM memory.
 pub const RV32_REGISTER_NUM_LIMBS: usize = 4;
+/// 64-bit register stored as 8 bytes (8 limbs of 8-bits) in OpenVM memory.
+pub const RV64_REGISTER_NUM_LIMBS: usize = 8;
 pub const RV32_CELL_BITS: usize = 8;
 
 pub const RV32_IMM_AS: u32 = 0;
