@@ -259,7 +259,8 @@ pub mod cuda {
     pub(crate) fn generate_trace(
         preflights_gpu: &[PreflightGpu],
         blob: &TranscriptBlob,
-    ) -> DeviceMatrix<F> {
+        required_height: Option<usize>,
+    ) -> Option<DeviceMatrix<F>> {
         let mut num_valid_rows = 0usize;
         let mut row_bounds = Vec::with_capacity(preflights_gpu.len());
 
@@ -293,7 +294,14 @@ pub mod cuda {
             })
             .collect_vec();
 
-        let height = num_valid_rows.next_power_of_two();
+        let height = if let Some(height) = required_height {
+            if height < num_valid_rows {
+                return None;
+            }
+            height
+        } else {
+            num_valid_rows.next_power_of_two()
+        };
         let width = TranscriptCols::<usize>::width();
         let d_trace = DeviceMatrix::with_capacity(height, width);
 
@@ -317,6 +325,6 @@ pub mod cuda {
             .unwrap();
         }
 
-        d_trace
+        Some(d_trace)
     }
 }
