@@ -7002,6 +7002,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-rv64im-circuit"
+version = "1.4.3"
+dependencies = [
+ "cfg-if",
+ "derive-new 0.6.0",
+ "derive_more 1.0.0",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-circuit-primitives-derive",
+ "openvm-instructions",
+ "openvm-rv64im-transpiler",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "serde",
+ "strum 0.26.3",
+ "test-case",
+]
+
+[[package]]
 name = "openvm-rv64im-guest"
 version = "1.4.3"
 dependencies = [
