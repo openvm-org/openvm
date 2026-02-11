@@ -33,8 +33,8 @@ fn rv64_transpiler() -> Transpiler<F> {
 
 // To create ELF directly from .S file, `brew install riscv-gnu-toolchain` and run
 // `riscv64-unknown-elf-gcc -march=rv64im -mabi=lp64 -nostartfiles -e _start -Ttext 0x00200800 -Wl,-N <name>.S -o <name>-from-as`
-#[test_case("tests/data/rv64im-stress-from-as")]
-#[test_case("tests/data/rv64im-intrin-from-as")]
+#[test_case("tests/data/rv64im-stress")]
+#[test_case("tests/data/rv64im-intrin")]
 fn test_decode_rv64_elf(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     assert_eq!(format!("{:?}", elf.class), "ELF64");
@@ -42,8 +42,8 @@ fn test_decode_rv64_elf(elf_path: &str) -> Result<()> {
     Ok(())
 }
 
-#[test_case("tests/data/rv64im-stress-from-as")]
-#[test_case("tests/data/rv64im-intrin-from-as")]
+#[test_case("tests/data/rv64im-stress")]
+#[test_case("tests/data/rv64im-intrin")]
 fn test_transpile_rv64_program(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     let program = rv64_transpiler().transpile(&elf.instructions)?;
@@ -58,7 +58,7 @@ fn test_transpile_rv64_program(elf_path: &str) -> Result<()> {
 /// Verify that no instructions are transpiled as UNIMP.
 /// UNIMP is transpiled as TERMINATE with exit code 2 (c = F::TWO).
 /// Legitimate TERMINATE instructions (exit code 0 or 1) are expected and allowed.
-#[test_case("tests/data/rv64im-stress-from-as")]
+#[test_case("tests/data/rv64im-stress")]
 fn test_transpile_rv64_no_unimp(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     let program = rv64_transpiler().transpile(&elf.instructions)?;
@@ -82,7 +82,7 @@ fn test_transpile_rv64_no_unimp(elf_path: &str) -> Result<()> {
 /// and that the expected opcodes appear in the output.
 #[test]
 fn test_transpile_rv64_custom_opcodes() -> Result<()> {
-    let elf = get_elf("tests/data/rv64im-intrin-from-as")?;
+    let elf = get_elf("tests/data/rv64im-intrin")?;
     let program = rv64_transpiler().transpile(&elf.instructions)?;
 
     let terminate_opcode = SystemOpcode::TERMINATE.global_opcode();
@@ -119,7 +119,7 @@ fn test_transpile_rv64_custom_opcodes() -> Result<()> {
 /// for PrintStr and HintInput.
 #[test]
 fn test_transpile_rv64_phantom_discriminants() -> Result<()> {
-    let elf = get_elf("tests/data/rv64im-intrin-from-as")?;
+    let elf = get_elf("tests/data/rv64im-intrin")?;
     let program = rv64_transpiler().transpile(&elf.instructions)?;
 
     let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
