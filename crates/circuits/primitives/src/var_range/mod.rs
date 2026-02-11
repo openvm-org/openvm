@@ -83,17 +83,30 @@ impl<AB: InteractionBuilder> Air<AB> for VariableRangeCheckerAir {
         builder.when_first_row().assert_zero(local.max_bits);
         builder.when_first_row().assert_one(local.two_to_max_bits);
 
-        // Transition constraints (see README for explanation)
+        // Transition constraints use a "monotonic sum" approach instead of selector-based
+        // branching. The key insight is that (value + two_to_max_bits) equals
+        // (row_index + 1), forming a strictly increasing sequence. Combined with the last-row
+        // constraint, this forces the unique valid trace enumeration.
         let max_bits_delta = next.max_bits - local.max_bits;
-        builder.when_transition().assert_bool(max_bits_delta.clone());
+
+        // max_bits can only stay the same or increment by 1
+        builder
+            .when_transition()
+            .assert_bool(max_bits_delta.clone());
+
+        // value can only increment by 1 or wrap back to 0
         builder
             .when_transition()
             .when(next.value)
             .assert_eq(next.value, local.value + AB::Expr::ONE);
+
+        // two_to_max_bits doubles whenever max_bits increments
         builder.when_transition().assert_eq(
             next.two_to_max_bits,
             local.two_to_max_bits * (AB::Expr::ONE + max_bits_delta),
         );
+
+        // (value + two_to_max_bits) increases by exactly 1 each row
         builder.when_transition().assert_eq(
             local.value + local.two_to_max_bits + AB::Expr::ONE,
             next.value + next.two_to_max_bits,
