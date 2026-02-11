@@ -3,7 +3,10 @@ use std::{
     mem::size_of,
 };
 
-use openvm_circuit::{arch::*, system::memory::online::{GuestMemory, TracingMemory}};
+use openvm_circuit::{
+    arch::*,
+    system::memory::online::{GuestMemory, TracingMemory},
+};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
@@ -46,11 +49,14 @@ impl Rv64JalLuiExecutor {
     #[inline(always)]
     pub(super) fn pre_compute_impl<F: PrimeField32>(
         &self,
+        pc: u32,
         inst: &Instruction<F>,
         data: &mut Rv64JalLuiPreCompute,
     ) -> Result<(bool, bool), StaticProgramError> {
-        let local_opcode =
-            Rv64JalLuiOpcode::from_usize(inst.opcode.local_opcode_idx(self.offset));
+        if inst.d.as_canonical_u32() != RV32_REGISTER_AS {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        }
+        let local_opcode = Rv64JalLuiOpcode::from_usize(inst.opcode.local_opcode_idx(self.offset));
         let is_jal = local_opcode == JAL;
         let signed_imm = get_signed_imm(is_jal, inst.c);
 
@@ -83,7 +89,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64JalLuiExecutor {
     #[cfg(not(feature = "tco"))]
     fn pre_compute<Ctx>(
         &self,
-        _pc: u32,
+        pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
@@ -91,14 +97,14 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64JalLuiExecutor {
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut Rv64JalLuiPreCompute = data.borrow_mut();
-        let (is_jal, enabled) = self.pre_compute_impl(inst, data)?;
+        let (is_jal, enabled) = self.pre_compute_impl(pc, inst, data)?;
         dispatch!(execute_e1_handler, is_jal, enabled)
     }
 
     #[cfg(feature = "tco")]
     fn handler<Ctx>(
         &self,
-        _pc: u32,
+        pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<Handler<F, Ctx>, StaticProgramError>
@@ -106,7 +112,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64JalLuiExecutor {
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut Rv64JalLuiPreCompute = data.borrow_mut();
-        let (is_jal, enabled) = self.pre_compute_impl(inst, data)?;
+        let (is_jal, enabled) = self.pre_compute_impl(pc, inst, data)?;
         dispatch!(execute_e1_handler, is_jal, enabled)
     }
 }
@@ -121,7 +127,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64JalLuiExecutor {
     fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
-        _pc: u32,
+        pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
@@ -130,7 +136,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64JalLuiExecutor {
     {
         let data: &mut E2PreCompute<Rv64JalLuiPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        let (is_jal, enabled) = self.pre_compute_impl(inst, &mut data.data)?;
+        let (is_jal, enabled) = self.pre_compute_impl(pc, inst, &mut data.data)?;
         dispatch!(execute_e2_handler, is_jal, enabled)
     }
 
@@ -138,7 +144,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64JalLuiExecutor {
     fn metered_handler<Ctx>(
         &self,
         chip_idx: usize,
-        _pc: u32,
+        pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<Handler<F, Ctx>, StaticProgramError>
@@ -147,7 +153,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64JalLuiExecutor {
     {
         let data: &mut E2PreCompute<Rv64JalLuiPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        let (is_jal, enabled) = self.pre_compute_impl(inst, &mut data.data)?;
+        let (is_jal, enabled) = self.pre_compute_impl(pc, inst, &mut data.data)?;
         dispatch!(execute_e2_handler, is_jal, enabled)
     }
 }
@@ -253,11 +259,9 @@ unsafe fn execute_e2_impl<
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<Rv64JalLuiPreCompute> = std::slice::from_raw_parts(
-        pre_compute,
-        size_of::<E2PreCompute<Rv64JalLuiPreCompute>>(),
-    )
-    .borrow();
+    let pre_compute: &E2PreCompute<Rv64JalLuiPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<Rv64JalLuiPreCompute>>())
+            .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);

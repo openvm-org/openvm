@@ -3,13 +3,13 @@ use std::{
     mem::size_of,
 };
 
-use openvm_circuit::{arch::*, system::memory::online::{GuestMemory, TracingMemory}};
+use openvm_circuit::{
+    arch::*,
+    system::memory::online::{GuestMemory, TracingMemory},
+};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::RV32_REGISTER_AS,
-    LocalOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
 };
 use openvm_rv64im_transpiler::Rv64MulWOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;

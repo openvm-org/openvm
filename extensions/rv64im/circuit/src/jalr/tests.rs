@@ -1,18 +1,16 @@
-use openvm_circuit::{
-    arch::{execution_mode::ExecutionCtx, InterpreterExecutor, VmExecState, VmState},
-    system::memory::online::{AddressMap, GuestMemory},
-};
 use crate::test_utils::{create_exec_state, execute_instruction, read_reg, write_reg};
-use strum::IntoEnumIterator;
+use openvm_circuit::{
+    arch::{execution_mode::ExecutionCtx, VmExecState},
+    system::memory::online::GuestMemory,
+};
 use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::RV32_REGISTER_AS,
-    LocalOpcode, VmOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode,
+    VmOpcode,
 };
 use openvm_rv64im_transpiler::Rv64JalrOpcode;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use strum::IntoEnumIterator;
 
 use crate::Rv64JalrExecutor;
 
@@ -21,7 +19,6 @@ type F = BabyBear;
 const REG_A: u32 = 0;
 const REG_B: u32 = 8;
 const START_PC: u32 = 0x1000;
-
 
 fn make_jalr_instruction(rd: u32, rs1: u32, imm: i32, enabled: bool) -> Instruction<F> {
     // imm_extended = c + g * 0xffff0000
@@ -55,7 +52,6 @@ fn execute(
     )
 }
 
-
 #[test]
 fn test_jalr_basic() {
     let executor = Rv64JalrExecutor::new(Rv64JalrOpcode::CLASS_OFFSET);
@@ -67,7 +63,10 @@ fn test_jalr_basic() {
 
     // to_pc = (0x2000 + 100) & ~1 = 0x2064
     assert_eq!(pc, 0x2064);
-    assert_eq!(read_reg(&mut state, REG_A), (START_PC + DEFAULT_PC_STEP) as u64);
+    assert_eq!(
+        read_reg(&mut state, REG_A),
+        (START_PC + DEFAULT_PC_STEP) as u64
+    );
 }
 
 #[test]
@@ -81,7 +80,10 @@ fn test_jalr_negative_offset() {
 
     // to_pc = (0x3000 + (-100)) & ~1 = (0x3000 - 100) & ~1 = 0x2F9C
     assert_eq!(pc, 0x2F9C);
-    assert_eq!(read_reg(&mut state, REG_A), (START_PC + DEFAULT_PC_STEP) as u64);
+    assert_eq!(
+        read_reg(&mut state, REG_A),
+        (START_PC + DEFAULT_PC_STEP) as u64
+    );
 }
 
 #[test]
@@ -112,7 +114,7 @@ fn test_jalr_disabled_does_not_write_rd() {
 }
 
 #[test]
-fn test_jalr_uses_64_bit_rs1() {
+fn test_jalr_small_rs1_value() {
     let executor = Rv64JalrExecutor::new(Rv64JalrOpcode::CLASS_OFFSET);
     let mut state = create_exec_state(START_PC);
 
@@ -151,5 +153,28 @@ fn test_jalr_imm_minus_one() {
 
     // (0x2002 + (-1)) & ~1 = 0x2001 & ~1 = 0x2000
     assert_eq!(pc, 0x2000);
-    assert_eq!(read_reg(&mut state, REG_A), (START_PC + DEFAULT_PC_STEP) as u64);
+    assert_eq!(
+        read_reg(&mut state, REG_A),
+        (START_PC + DEFAULT_PC_STEP) as u64
+    );
+}
+
+#[test]
+#[should_panic]
+fn test_jalr_invalid_instruction_rejected() {
+    let executor = Rv64JalrExecutor::new(Rv64JalrOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // Invalid: d must be RV32_REGISTER_AS.
+    let inst = Instruction::new(
+        VmOpcode::from_usize(Rv64JalrOpcode::JALR.global_opcode_usize()),
+        F::from_canonical_u32(REG_A),
+        F::from_canonical_u32(REG_B),
+        F::from_canonical_u32(0),
+        F::ZERO,
+        F::ZERO,
+        F::ONE,
+        F::ZERO,
+    );
+    execute(&executor, &mut state, &inst);
 }

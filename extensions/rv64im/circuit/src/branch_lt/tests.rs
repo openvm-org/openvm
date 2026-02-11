@@ -1,17 +1,15 @@
+use crate::test_utils::{create_exec_state, execute_instruction, write_reg};
 use openvm_circuit::{
-    arch::{execution_mode::ExecutionCtx, InterpreterExecutor, VmExecState, VmState},
-    system::memory::online::{AddressMap, GuestMemory},
+    arch::{execution_mode::ExecutionCtx, VmExecState},
+    system::memory::online::GuestMemory,
 };
-use crate::test_utils::{create_exec_state, execute_instruction, read_reg, write_reg};
-use strum::IntoEnumIterator;
 use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::RV32_REGISTER_AS,
-    LocalOpcode, VmOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
+    VmOpcode,
 };
 use openvm_rv64im_transpiler::Rv64BranchLessThanOpcode;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use strum::IntoEnumIterator;
 
 use crate::Rv64BranchLessThanExecutor;
 
@@ -20,7 +18,6 @@ type F = BabyBear;
 const REG_A: u32 = 0;
 const REG_B: u32 = 8;
 const START_PC: u32 = 0x1000;
-
 
 fn make_instruction(
     opcode: Rv64BranchLessThanOpcode,
@@ -55,7 +52,6 @@ fn execute(
         START_PC,
     )
 }
-
 
 #[test]
 fn test_blt_less_branches() {
@@ -188,4 +184,25 @@ fn test_bge_negative_less_than_positive_falls_through() {
     let pc = execute(&executor, &mut state, &inst);
 
     assert_eq!(pc, START_PC + DEFAULT_PC_STEP);
+}
+
+#[test]
+#[should_panic]
+fn test_branch_lt_invalid_instruction_rejected() {
+    let executor = Rv64BranchLessThanExecutor::new(Rv64BranchLessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let inst = Instruction::from_usize::<7>(
+        VmOpcode::from_usize(Rv64BranchLessThanOpcode::BLT.global_opcode_usize()),
+        [
+            REG_A as usize,
+            REG_B as usize,
+            4,
+            0, // invalid d
+            0,
+            0,
+            0,
+        ],
+    );
+    let _ = execute(&executor, &mut state, &inst);
 }

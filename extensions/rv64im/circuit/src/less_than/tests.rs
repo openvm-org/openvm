@@ -1,9 +1,8 @@
-use openvm_circuit::{
-    arch::{execution_mode::ExecutionCtx, InterpreterExecutor, VmExecState, VmState},
-    system::memory::online::{AddressMap, GuestMemory},
-};
 use crate::test_utils::{create_exec_state, execute_instruction, read_reg, write_reg};
-use strum::IntoEnumIterator;
+use openvm_circuit::{
+    arch::{execution_mode::ExecutionCtx, VmExecState},
+    system::memory::online::GuestMemory,
+};
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -12,6 +11,7 @@ use openvm_instructions::{
 };
 use openvm_rv64im_transpiler::Rv64LessThanOpcode;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use strum::IntoEnumIterator;
 
 use crate::Rv64LessThanExecutor;
 
@@ -22,13 +22,7 @@ const REG_B: u32 = 8;
 const REG_C: u32 = 16;
 const START_PC: u32 = 0x1000;
 
-
-fn make_reg_instruction(
-    opcode: Rv64LessThanOpcode,
-    rd: u32,
-    rs1: u32,
-    rs2: u32,
-) -> Instruction<F> {
+fn make_reg_instruction(opcode: Rv64LessThanOpcode, rd: u32, rs1: u32, rs2: u32) -> Instruction<F> {
     Instruction::from_usize::<7>(
         VmOpcode::from_usize(opcode.global_opcode_usize()),
         [
@@ -43,12 +37,7 @@ fn make_reg_instruction(
     )
 }
 
-fn make_imm_instruction(
-    opcode: Rv64LessThanOpcode,
-    rd: u32,
-    rs1: u32,
-    imm: u32,
-) -> Instruction<F> {
+fn make_imm_instruction(opcode: Rv64LessThanOpcode, rd: u32, rs1: u32, imm: u32) -> Instruction<F> {
     Instruction::from_usize::<7>(
         VmOpcode::from_usize(opcode.global_opcode_usize()),
         [
@@ -76,7 +65,6 @@ fn execute(
         START_PC,
     )
 }
-
 
 // ---------------------------------------------------------------------------
 // SLT (signed) register tests
@@ -329,6 +317,28 @@ fn test_slt_negative_less_than_negative() {
     execute(&executor, &mut state, &inst);
 
     assert_eq!(read_reg(&state, REG_A), 1);
+}
+
+#[test]
+#[should_panic]
+fn test_less_than_invalid_instruction_rejected() {
+    let executor = Rv64LessThanExecutor::new(Rv64LessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // Invalid: e must be RV32_IMM_AS or RV32_REGISTER_AS.
+    let inst = Instruction::from_usize::<7>(
+        VmOpcode::from_usize(Rv64LessThanOpcode::SLT.global_opcode_usize()),
+        [
+            REG_A as usize,
+            REG_B as usize,
+            REG_C as usize,
+            RV32_REGISTER_AS as usize,
+            999,
+            0,
+            0,
+        ],
+    );
+    execute(&executor, &mut state, &inst);
 }
 
 #[test]

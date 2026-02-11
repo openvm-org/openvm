@@ -1,17 +1,15 @@
-use openvm_circuit::{
-    arch::{execution_mode::ExecutionCtx, InterpreterExecutor, VmExecState, VmState},
-    system::memory::online::{AddressMap, GuestMemory},
-};
 use crate::test_utils::{create_exec_state, execute_instruction, read_reg, write_reg};
-use strum::IntoEnumIterator;
+use openvm_circuit::{
+    arch::{execution_mode::ExecutionCtx, VmExecState},
+    system::memory::online::GuestMemory,
+};
 use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::RV32_REGISTER_AS,
-    LocalOpcode, VmOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
+    VmOpcode,
 };
 use openvm_rv64im_transpiler::Rv64DivRemWOpcode;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use strum::IntoEnumIterator;
 
 use crate::Rv64DivRemWExecutor;
 
@@ -21,7 +19,6 @@ const REG_A: u32 = 0;
 const REG_B: u32 = 8;
 const REG_C: u32 = 16;
 const START_PC: u32 = 0x1000;
-
 
 fn make_instruction(opcode: Rv64DivRemWOpcode, rd: u32, rs1: u32, rs2: u32) -> Instruction<F> {
     Instruction::from_usize::<7>(
@@ -51,7 +48,6 @@ fn execute(
         START_PC,
     )
 }
-
 
 #[test]
 fn test_divw_basic() {
@@ -186,4 +182,64 @@ fn test_remuw_by_zero() {
 
     // Returns dividend (lower 32 bits), sign-extended
     assert_eq!(read_reg(&state, REG_A), 42);
+}
+
+#[test]
+fn test_divw_negative_by_positive_truncates_toward_zero() {
+    let executor = Rv64DivRemWExecutor::new(Rv64DivRemWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, (-7i32) as u32 as u64);
+    write_reg(&mut state, REG_C, 3);
+    let inst = make_instruction(Rv64DivRemWOpcode::DIVW, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), (-2i32) as i64 as u64);
+}
+
+#[test]
+fn test_divw_positive_by_negative_truncates_toward_zero() {
+    let executor = Rv64DivRemWExecutor::new(Rv64DivRemWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, 7);
+    write_reg(&mut state, REG_C, (-3i32) as u32 as u64);
+    let inst = make_instruction(Rv64DivRemWOpcode::DIVW, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), (-2i32) as i64 as u64);
+}
+
+#[test]
+fn test_remw_signed_keeps_dividend_sign() {
+    let executor = Rv64DivRemWExecutor::new(Rv64DivRemWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, (-7i32) as u32 as u64);
+    write_reg(&mut state, REG_C, 3);
+    let inst = make_instruction(Rv64DivRemWOpcode::REMW, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), (-1i32) as i64 as u64);
+}
+
+#[test]
+#[should_panic]
+fn test_divrem_w_invalid_instruction_rejected() {
+    let executor = Rv64DivRemWExecutor::new(Rv64DivRemWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let inst = Instruction::from_usize::<7>(
+        VmOpcode::from_usize(Rv64DivRemWOpcode::DIVW.global_opcode_usize()),
+        [
+            REG_A as usize,
+            REG_B as usize,
+            REG_C as usize,
+            0, // invalid d
+            RV32_REGISTER_AS as usize,
+            0,
+            0,
+        ],
+    );
+    let _ = execute(&executor, &mut state, &inst);
 }

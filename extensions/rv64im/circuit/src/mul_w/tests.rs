@@ -1,17 +1,15 @@
-use openvm_circuit::{
-    arch::{execution_mode::ExecutionCtx, InterpreterExecutor, VmExecState, VmState},
-    system::memory::online::{AddressMap, GuestMemory},
-};
 use crate::test_utils::{create_exec_state, execute_instruction, read_reg, write_reg};
-use strum::IntoEnumIterator;
+use openvm_circuit::{
+    arch::{execution_mode::ExecutionCtx, VmExecState},
+    system::memory::online::GuestMemory,
+};
 use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::RV32_REGISTER_AS,
-    LocalOpcode, VmOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
+    VmOpcode,
 };
 use openvm_rv64im_transpiler::Rv64MulWOpcode;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use strum::IntoEnumIterator;
 
 use crate::Rv64MulWExecutor;
 
@@ -21,7 +19,6 @@ const REG_A: u32 = 0;
 const REG_B: u32 = 8;
 const REG_C: u32 = 16;
 const START_PC: u32 = 0x1000;
-
 
 fn make_instruction(rd: u32, rs1: u32, rs2: u32) -> Instruction<F> {
     Instruction::from_usize::<7>(
@@ -51,7 +48,6 @@ fn execute(
         START_PC,
     )
 }
-
 
 #[test]
 fn test_mulw_basic() {
@@ -104,4 +100,26 @@ fn test_mulw_advances_pc() {
 
     let pc = execute(&executor, &mut state, &inst);
     assert_eq!(pc, START_PC + DEFAULT_PC_STEP);
+}
+
+#[test]
+#[should_panic]
+fn test_mulw_invalid_instruction_rejected() {
+    let executor = Rv64MulWExecutor::new(Rv64MulWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // Invalid: d must be RV32_REGISTER_AS.
+    let inst = Instruction::from_usize::<7>(
+        VmOpcode::from_usize(Rv64MulWOpcode::MULW.global_opcode_usize()),
+        [
+            REG_A as usize,
+            REG_B as usize,
+            REG_C as usize,
+            0,
+            RV32_REGISTER_AS as usize,
+            0,
+            0,
+        ],
+    );
+    execute(&executor, &mut state, &inst);
 }

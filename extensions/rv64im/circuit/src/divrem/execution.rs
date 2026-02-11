@@ -3,13 +3,13 @@ use std::{
     mem::size_of,
 };
 
-use openvm_circuit::{arch::*, system::memory::online::{GuestMemory, TracingMemory}};
+use openvm_circuit::{
+    arch::*,
+    system::memory::online::{GuestMemory, TracingMemory},
+};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::RV32_REGISTER_AS,
-    LocalOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
 };
 use openvm_rv64im_transpiler::Rv64DivRemOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -35,8 +35,7 @@ impl Rv64DivRemExecutor {
         inst: &Instruction<F>,
         data: &mut Rv64DivRemPreCompute,
     ) -> Result<Rv64DivRemOpcode, StaticProgramError> {
-        let local_opcode =
-            Rv64DivRemOpcode::from_usize(inst.opcode.local_opcode_idx(self.offset));
+        let local_opcode = Rv64DivRemOpcode::from_usize(inst.opcode.local_opcode_idx(self.offset));
         if inst.d.as_canonical_u32() != RV32_REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
@@ -188,7 +187,11 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: DivRemOp
     let rs1 = exec_state.vm_read::<u8, 8>(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs2 = exec_state.vm_read::<u8, 8>(RV32_REGISTER_AS, pre_compute.c as u32);
     let result = <OP as DivRemOp64>::compute(u64::from_le_bytes(rs1), u64::from_le_bytes(rs2));
-    exec_state.vm_write::<u8, 8>(RV32_REGISTER_AS, pre_compute.a as u32, &result.to_le_bytes());
+    exec_state.vm_write::<u8, 8>(
+        RV32_REGISTER_AS,
+        pre_compute.a as u32,
+        &result.to_le_bytes(),
+    );
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }
@@ -210,11 +213,9 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: Di
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<Rv64DivRemPreCompute> = std::slice::from_raw_parts(
-        pre_compute,
-        size_of::<E2PreCompute<Rv64DivRemPreCompute>>(),
-    )
-    .borrow();
+    let pre_compute: &E2PreCompute<Rv64DivRemPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<Rv64DivRemPreCompute>>())
+            .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);

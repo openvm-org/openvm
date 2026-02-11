@@ -1,17 +1,15 @@
 use derive_more::derive::From;
-use openvm_circuit::{
-    arch::{
-        AirInventory, AirInventoryError, ExecutorInventoryBuilder, ExecutorInventoryError,
-        VmCircuitExtension, VmExecutionExtension,
-    },
+use openvm_circuit::arch::{
+    AirInventory, AirInventoryError, ExecutorInventoryBuilder, ExecutorInventoryError,
+    VmCircuitExtension, VmExecutionExtension,
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
 use openvm_instructions::LocalOpcode;
 use openvm_rv64im_transpiler::{
     Rv64AuipcOpcode, Rv64BaseAluOpcode, Rv64BaseAluWOpcode, Rv64BranchEqualOpcode,
-    Rv64BranchLessThanOpcode, Rv64DivRemOpcode, Rv64DivRemWOpcode, Rv64JalLuiOpcode,
-    Rv64JalrOpcode, Rv64LessThanOpcode, Rv64MulHOpcode, Rv64MulOpcode, Rv64MulWOpcode,
-    Rv64ShiftOpcode, Rv64ShiftWOpcode,
+    Rv64BranchLessThanOpcode, Rv64DivRemOpcode, Rv64DivRemWOpcode, Rv64HintStoreOpcode,
+    Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LessThanOpcode, Rv64LoadStoreOpcode, Rv64MulHOpcode,
+    Rv64MulOpcode, Rv64MulWOpcode, Rv64ShiftOpcode, Rv64ShiftWOpcode,
 };
 use openvm_stark_backend::{config::StarkGenericConfig, p3_field::PrimeField32};
 use serde::{Deserialize, Serialize};
@@ -19,9 +17,10 @@ use strum::IntoEnumIterator;
 
 use crate::{
     Rv64AuipcExecutor, Rv64BaseAluExecutor, Rv64BaseAluWExecutor, Rv64BranchEqualExecutor,
-    Rv64BranchLessThanExecutor, Rv64DivRemExecutor, Rv64DivRemWExecutor, Rv64JalLuiExecutor,
-    Rv64JalrExecutor, Rv64LessThanExecutor, Rv64MulExecutor, Rv64MulHExecutor, Rv64MulWExecutor,
-    Rv64ShiftExecutor, Rv64ShiftWExecutor,
+    Rv64BranchLessThanExecutor, Rv64DivRemExecutor, Rv64DivRemWExecutor, Rv64HintStoreExecutor,
+    Rv64JalLuiExecutor, Rv64JalrExecutor, Rv64LessThanExecutor, Rv64LoadSignExtendExecutor,
+    Rv64LoadStoreExecutor, Rv64MulExecutor, Rv64MulHExecutor, Rv64MulWExecutor, Rv64ShiftExecutor,
+    Rv64ShiftWExecutor,
 };
 
 /// RISC-V 64-bit Base Integer Extension (RV64I).
@@ -48,6 +47,8 @@ pub enum Rv64IExecutor {
     JalLui(Rv64JalLuiExecutor),
     Jalr(Rv64JalrExecutor),
     Auipc(Rv64AuipcExecutor),
+    LoadStore(Rv64LoadStoreExecutor),
+    LoadSignExtend(Rv64LoadSignExtendExecutor),
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
@@ -76,16 +77,10 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         )?;
 
         let shift = Rv64ShiftExecutor::new(Rv64ShiftOpcode::CLASS_OFFSET);
-        inventory.add_executor(
-            shift,
-            Rv64ShiftOpcode::iter().map(|x| x.global_opcode()),
-        )?;
+        inventory.add_executor(shift, Rv64ShiftOpcode::iter().map(|x| x.global_opcode()))?;
 
         let shift_w = Rv64ShiftWExecutor::new(Rv64ShiftWOpcode::CLASS_OFFSET);
-        inventory.add_executor(
-            shift_w,
-            Rv64ShiftWOpcode::iter().map(|x| x.global_opcode()),
-        )?;
+        inventory.add_executor(shift_w, Rv64ShiftWOpcode::iter().map(|x| x.global_opcode()))?;
 
         let branch_eq = Rv64BranchEqualExecutor::new(Rv64BranchEqualOpcode::CLASS_OFFSET);
         inventory.add_executor(
@@ -100,21 +95,32 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         )?;
 
         let jal_lui = Rv64JalLuiExecutor::new(Rv64JalLuiOpcode::CLASS_OFFSET);
-        inventory.add_executor(
-            jal_lui,
-            Rv64JalLuiOpcode::iter().map(|x| x.global_opcode()),
-        )?;
+        inventory.add_executor(jal_lui, Rv64JalLuiOpcode::iter().map(|x| x.global_opcode()))?;
 
         let jalr = Rv64JalrExecutor::new(Rv64JalrOpcode::CLASS_OFFSET);
-        inventory.add_executor(
-            jalr,
-            Rv64JalrOpcode::iter().map(|x| x.global_opcode()),
-        )?;
+        inventory.add_executor(jalr, Rv64JalrOpcode::iter().map(|x| x.global_opcode()))?;
 
         let auipc = Rv64AuipcExecutor::new(Rv64AuipcOpcode::CLASS_OFFSET);
+        inventory.add_executor(auipc, Rv64AuipcOpcode::iter().map(|x| x.global_opcode()))?;
+
+        let loadstore = Rv64LoadStoreExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
         inventory.add_executor(
-            auipc,
-            Rv64AuipcOpcode::iter().map(|x| x.global_opcode()),
+            loadstore,
+            Rv64LoadStoreOpcode::iter()
+                .take(Rv64LoadStoreOpcode::STOREB as usize + 1)
+                .map(|x| x.global_opcode()),
+        )?;
+
+        let load_sign_extend = Rv64LoadSignExtendExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
+        inventory.add_executor(
+            load_sign_extend,
+            [
+                Rv64LoadStoreOpcode::LOADB,
+                Rv64LoadStoreOpcode::LOADH,
+                Rv64LoadStoreOpcode::LOADW,
+            ]
+            .into_iter()
+            .map(|x| x.global_opcode()),
         )?;
 
         Ok(())
@@ -130,6 +136,10 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64I {
 /// RISC-V 64-bit Multiplication Extension (RV64M).
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Rv64M;
+
+/// RISC-V Extension for handling IO (not to be confused with I base extension)
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+pub struct Rv64Io;
 
 /// RISC-V 64-bit M-extension Instruction Executors
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
@@ -148,6 +158,19 @@ pub enum Rv64MExecutor {
     DivRemW(Rv64DivRemWExecutor),
 }
 
+/// RISC-V 64-bit Io Instruction Executors
+#[derive(Clone, Copy, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
+#[cfg_attr(
+    feature = "aot",
+    derive(
+        openvm_circuit_derive::AotExecutor,
+        openvm_circuit_derive::AotMeteredExecutor
+    )
+)]
+pub enum Rv64IoExecutor {
+    HintStore(Rv64HintStoreExecutor),
+}
+
 impl<F: PrimeField32> VmExecutionExtension<F> for Rv64M {
     type Executor = Rv64MExecutor;
 
@@ -156,28 +179,16 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64M {
         inventory: &mut ExecutorInventoryBuilder<F, Rv64MExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         let mul = Rv64MulExecutor::new(Rv64MulOpcode::CLASS_OFFSET);
-        inventory.add_executor(
-            mul,
-            Rv64MulOpcode::iter().map(|x| x.global_opcode()),
-        )?;
+        inventory.add_executor(mul, Rv64MulOpcode::iter().map(|x| x.global_opcode()))?;
 
         let mulh = Rv64MulHExecutor::new(Rv64MulHOpcode::CLASS_OFFSET);
-        inventory.add_executor(
-            mulh,
-            Rv64MulHOpcode::iter().map(|x| x.global_opcode()),
-        )?;
+        inventory.add_executor(mulh, Rv64MulHOpcode::iter().map(|x| x.global_opcode()))?;
 
         let divrem = Rv64DivRemExecutor::new(Rv64DivRemOpcode::CLASS_OFFSET);
-        inventory.add_executor(
-            divrem,
-            Rv64DivRemOpcode::iter().map(|x| x.global_opcode()),
-        )?;
+        inventory.add_executor(divrem, Rv64DivRemOpcode::iter().map(|x| x.global_opcode()))?;
 
         let mul_w = Rv64MulWExecutor::new(Rv64MulWOpcode::CLASS_OFFSET);
-        inventory.add_executor(
-            mul_w,
-            Rv64MulWOpcode::iter().map(|x| x.global_opcode()),
-        )?;
+        inventory.add_executor(mul_w, Rv64MulWOpcode::iter().map(|x| x.global_opcode()))?;
 
         let divrem_w = Rv64DivRemWExecutor::new(Rv64DivRemWOpcode::CLASS_OFFSET);
         inventory.add_executor(
@@ -190,6 +201,28 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64M {
 }
 
 impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64M {
+    fn extend_circuit(&self, _inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
+        Ok(())
+    }
+}
+
+impl<F: PrimeField32> VmExecutionExtension<F> for Rv64Io {
+    type Executor = Rv64IoExecutor;
+
+    fn extend_execution(
+        &self,
+        inventory: &mut ExecutorInventoryBuilder<F, Rv64IoExecutor>,
+    ) -> Result<(), ExecutorInventoryError> {
+        let hint_store = Rv64HintStoreExecutor::new(Rv64HintStoreOpcode::CLASS_OFFSET);
+        inventory.add_executor(
+            hint_store,
+            Rv64HintStoreOpcode::iter().map(|x| x.global_opcode()),
+        )?;
+        Ok(())
+    }
+}
+
+impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64Io {
     fn extend_circuit(&self, _inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         Ok(())
     }

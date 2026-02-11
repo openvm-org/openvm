@@ -1,17 +1,15 @@
+use crate::test_utils::{create_exec_state, execute_instruction, write_reg};
 use openvm_circuit::{
-    arch::{execution_mode::ExecutionCtx, InterpreterExecutor, VmExecState, VmState},
-    system::memory::online::{AddressMap, GuestMemory},
+    arch::{execution_mode::ExecutionCtx, VmExecState},
+    system::memory::online::GuestMemory,
 };
-use crate::test_utils::{create_exec_state, execute_instruction, read_reg, write_reg};
-use strum::IntoEnumIterator;
 use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::RV32_REGISTER_AS,
-    LocalOpcode, VmOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
+    VmOpcode,
 };
 use openvm_rv64im_transpiler::Rv64BranchEqualOpcode;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use strum::IntoEnumIterator;
 
 use crate::Rv64BranchEqualExecutor;
 
@@ -21,13 +19,7 @@ const REG_A: u32 = 0;
 const REG_B: u32 = 8;
 const START_PC: u32 = 0x1000;
 
-
-fn make_instruction(
-    opcode: Rv64BranchEqualOpcode,
-    rs1: u32,
-    rs2: u32,
-    imm: u32,
-) -> Instruction<F> {
+fn make_instruction(opcode: Rv64BranchEqualOpcode, rs1: u32, rs2: u32, imm: u32) -> Instruction<F> {
     Instruction::from_usize::<7>(
         VmOpcode::from_usize(opcode.global_opcode_usize()),
         [
@@ -55,7 +47,6 @@ fn execute(
         START_PC,
     )
 }
-
 
 #[test]
 fn test_beq_equal_branches() {
@@ -122,4 +113,25 @@ fn test_beq_compares_full_64_bits() {
 
     // Should NOT branch — values differ in upper 32 bits
     assert_eq!(pc, START_PC + DEFAULT_PC_STEP);
+}
+
+#[test]
+#[should_panic]
+fn test_branch_eq_invalid_instruction_rejected() {
+    let executor = Rv64BranchEqualExecutor::new(Rv64BranchEqualOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let inst = Instruction::from_usize::<7>(
+        VmOpcode::from_usize(Rv64BranchEqualOpcode::BEQ.global_opcode_usize()),
+        [
+            REG_A as usize,
+            REG_B as usize,
+            4,
+            0, // invalid d
+            0,
+            0,
+            0,
+        ],
+    );
+    let _ = execute(&executor, &mut state, &inst);
 }

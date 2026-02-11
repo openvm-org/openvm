@@ -3,13 +3,13 @@ use std::{
     mem::size_of,
 };
 
-use openvm_circuit::{arch::*, system::memory::online::{GuestMemory, TracingMemory}};
+use openvm_circuit::{
+    arch::*,
+    system::memory::online::{GuestMemory, TracingMemory},
+};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::RV32_REGISTER_AS,
-    LocalOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
 };
 use openvm_rv64im_transpiler::Rv64MulHOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -31,10 +31,13 @@ impl Rv64MulHExecutor {
     #[inline(always)]
     pub(super) fn pre_compute_impl<F: PrimeField32>(
         &self,
-        _pc: u32,
+        pc: u32,
         inst: &Instruction<F>,
         data: &mut Rv64MulHPreCompute,
     ) -> Result<Rv64MulHOpcode, StaticProgramError> {
+        if inst.d.as_canonical_u32() != RV32_REGISTER_AS {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        }
         *data = Rv64MulHPreCompute {
             a: inst.a.as_canonical_u32() as u8,
             b: inst.b.as_canonical_u32() as u8,

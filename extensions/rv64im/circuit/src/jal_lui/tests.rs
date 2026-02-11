@@ -1,18 +1,16 @@
+use crate::test_utils::{create_exec_state, execute_instruction, read_reg};
 use openvm_circuit::{
-    arch::{execution_mode::ExecutionCtx, InterpreterExecutor, VmExecState, VmState},
-    system::memory::online::{AddressMap, GuestMemory},
+    arch::{execution_mode::ExecutionCtx, VmExecState},
+    system::memory::online::GuestMemory,
 };
-use crate::test_utils::{create_exec_state, execute_instruction, read_reg, write_reg};
-use strum::IntoEnumIterator;
 use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::RV32_REGISTER_AS,
-    LocalOpcode, VmOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode,
+    VmOpcode,
 };
 use openvm_rv64im_transpiler::Rv64JalLuiOpcode;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use strum::IntoEnumIterator;
 
 use crate::Rv64JalLuiExecutor;
 
@@ -69,7 +67,6 @@ fn execute(
     )
 }
 
-
 #[test]
 fn test_jal_jumps_and_writes_rd() {
     let executor = Rv64JalLuiExecutor::new(Rv64JalLuiOpcode::CLASS_OFFSET);
@@ -79,7 +76,10 @@ fn test_jal_jumps_and_writes_rd() {
     let pc = execute(&executor, &mut state, &inst);
 
     assert_eq!(pc, START_PC + 200);
-    assert_eq!(read_reg(&mut state, REG_A), (START_PC + DEFAULT_PC_STEP) as u64);
+    assert_eq!(
+        read_reg(&mut state, REG_A),
+        (START_PC + DEFAULT_PC_STEP) as u64
+    );
 }
 
 #[test]
@@ -91,7 +91,10 @@ fn test_jal_negative_offset() {
     let pc = execute(&executor, &mut state, &inst);
 
     assert_eq!(pc, START_PC.wrapping_sub(100));
-    assert_eq!(read_reg(&mut state, REG_A), (START_PC + DEFAULT_PC_STEP) as u64);
+    assert_eq!(
+        read_reg(&mut state, REG_A),
+        (START_PC + DEFAULT_PC_STEP) as u64
+    );
 }
 
 #[test]
@@ -158,4 +161,24 @@ fn test_lui_zero() {
 
     assert_eq!(pc, START_PC + DEFAULT_PC_STEP);
     assert_eq!(read_reg(&mut state, REG_A), 0);
+}
+
+#[test]
+#[should_panic]
+fn test_jal_lui_invalid_instruction_rejected() {
+    let executor = Rv64JalLuiExecutor::new(Rv64JalLuiOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // Invalid: d must be RV32_REGISTER_AS.
+    let inst = Instruction::new(
+        VmOpcode::from_usize(Rv64JalLuiOpcode::JAL.global_opcode_usize()),
+        F::from_canonical_u32(REG_A),
+        F::ZERO,
+        F::from_canonical_u32(4),
+        F::ZERO,
+        F::ZERO,
+        F::ONE,
+        F::ZERO,
+    );
+    execute(&executor, &mut state, &inst);
 }

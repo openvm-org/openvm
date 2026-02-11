@@ -3,7 +3,10 @@ use std::{
     mem::size_of,
 };
 
-use openvm_circuit::{arch::*, system::memory::online::{GuestMemory, TracingMemory}};
+use openvm_circuit::{
+    arch::*,
+    system::memory::online::{GuestMemory, TracingMemory},
+};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -38,7 +41,13 @@ impl Rv64LessThanExecutor {
         data: &mut Rv64LessThanPreCompute,
     ) -> Result<(bool, bool), StaticProgramError> {
         let Instruction {
-            opcode, a, b, c, d, e, ..
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            ..
         } = inst;
         let e_u32 = e.as_canonical_u32();
         if d.as_canonical_u32() != RV32_REGISTER_AS

@@ -1,17 +1,15 @@
-use openvm_circuit::{
-    arch::{execution_mode::ExecutionCtx, InterpreterExecutor, VmExecState, VmState},
-    system::memory::online::{AddressMap, GuestMemory},
-};
 use crate::test_utils::{create_exec_state, execute_instruction, read_reg, write_reg};
-use strum::IntoEnumIterator;
+use openvm_circuit::{
+    arch::{execution_mode::ExecutionCtx, VmExecState},
+    system::memory::online::GuestMemory,
+};
 use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::RV32_REGISTER_AS,
-    LocalOpcode, VmOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
+    VmOpcode,
 };
 use openvm_rv64im_transpiler::Rv64DivRemOpcode;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use strum::IntoEnumIterator;
 
 use crate::Rv64DivRemExecutor;
 
@@ -21,7 +19,6 @@ const REG_A: u32 = 0;
 const REG_B: u32 = 8;
 const REG_C: u32 = 16;
 const START_PC: u32 = 0x1000;
-
 
 fn make_instruction(opcode: Rv64DivRemOpcode, rd: u32, rs1: u32, rs2: u32) -> Instruction<F> {
     Instruction::from_usize::<7>(
@@ -51,7 +48,6 @@ fn execute(
         START_PC,
     )
 }
-
 
 // ---------------------------------------------------------------------------
 // DIV (signed)
@@ -212,4 +208,77 @@ fn test_divrem_advances_pc() {
 
     let pc = execute(&executor, &mut state, &inst);
     assert_eq!(pc, START_PC + DEFAULT_PC_STEP);
+}
+
+#[test]
+fn test_div_negative_by_positive_truncates_toward_zero() {
+    let executor = Rv64DivRemExecutor::new(Rv64DivRemOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, (-7i64) as u64);
+    write_reg(&mut state, REG_C, 3);
+    let inst = make_instruction(Rv64DivRemOpcode::DIV, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), (-2i64) as u64);
+}
+
+#[test]
+fn test_div_positive_by_negative_truncates_toward_zero() {
+    let executor = Rv64DivRemExecutor::new(Rv64DivRemOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, 7);
+    write_reg(&mut state, REG_C, (-3i64) as u64);
+    let inst = make_instruction(Rv64DivRemOpcode::DIV, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), (-2i64) as u64);
+}
+
+#[test]
+fn test_rem_signed_keeps_dividend_sign() {
+    let executor = Rv64DivRemExecutor::new(Rv64DivRemOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, (-7i64) as u64);
+    write_reg(&mut state, REG_C, 3);
+    let inst = make_instruction(Rv64DivRemOpcode::REM, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), (-1i64) as u64);
+}
+
+#[test]
+fn test_rem_signed_negative_divisor() {
+    let executor = Rv64DivRemExecutor::new(Rv64DivRemOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, 7);
+    write_reg(&mut state, REG_C, (-3i64) as u64);
+    let inst = make_instruction(Rv64DivRemOpcode::REM, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 1);
+}
+
+#[test]
+#[should_panic]
+fn test_divrem_invalid_instruction_rejected() {
+    let executor = Rv64DivRemExecutor::new(Rv64DivRemOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let inst = Instruction::from_usize::<7>(
+        VmOpcode::from_usize(Rv64DivRemOpcode::DIV.global_opcode_usize()),
+        [
+            REG_A as usize,
+            REG_B as usize,
+            REG_C as usize,
+            0, // invalid d
+            RV32_REGISTER_AS as usize,
+            0,
+            0,
+        ],
+    );
+    let _ = execute(&executor, &mut state, &inst);
 }

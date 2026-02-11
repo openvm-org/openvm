@@ -1,9 +1,8 @@
-use openvm_circuit::{
-    arch::{execution_mode::ExecutionCtx, InterpreterExecutor, VmExecState, VmState},
-    system::memory::online::{AddressMap, GuestMemory},
-};
 use crate::test_utils::{create_exec_state, execute_instruction, read_reg, write_reg};
-use strum::IntoEnumIterator;
+use openvm_circuit::{
+    arch::{execution_mode::ExecutionCtx, VmExecState},
+    system::memory::online::GuestMemory,
+};
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -12,6 +11,7 @@ use openvm_instructions::{
 };
 use openvm_rv64im_transpiler::Rv64BaseAluWOpcode;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use strum::IntoEnumIterator;
 
 use super::execution::sign_extend_32_to_64;
 use crate::Rv64BaseAluWExecutor;
@@ -23,13 +23,7 @@ const REG_B: u32 = 8;
 const REG_C: u32 = 16;
 const START_PC: u32 = 0x1000;
 
-
-fn make_reg_instruction(
-    opcode: Rv64BaseAluWOpcode,
-    rd: u32,
-    rs1: u32,
-    rs2: u32,
-) -> Instruction<F> {
+fn make_reg_instruction(opcode: Rv64BaseAluWOpcode, rd: u32, rs1: u32, rs2: u32) -> Instruction<F> {
     Instruction::from_usize::<7>(
         VmOpcode::from_usize(opcode.global_opcode_usize()),
         [
@@ -44,12 +38,7 @@ fn make_reg_instruction(
     )
 }
 
-fn make_imm_instruction(
-    opcode: Rv64BaseAluWOpcode,
-    rd: u32,
-    rs1: u32,
-    imm: u32,
-) -> Instruction<F> {
+fn make_imm_instruction(opcode: Rv64BaseAluWOpcode, rd: u32, rs1: u32, imm: u32) -> Instruction<F> {
     Instruction::from_usize::<7>(
         VmOpcode::from_usize(opcode.global_opcode_usize()),
         [
@@ -77,7 +66,6 @@ fn execute(
         START_PC,
     )
 }
-
 
 // ---------------------------------------------------------------------------
 // sign_extend_32_to_64 helper tests
@@ -267,4 +255,14 @@ fn test_addw_does_not_clobber_sources() {
     assert_eq!(read_reg(&state, REG_A), 100);
     assert_eq!(read_reg(&state, REG_B), 42);
     assert_eq!(read_reg(&state, REG_C), 58);
+}
+
+#[test]
+#[should_panic]
+fn test_subw_immediate_invalid_instruction_rejected() {
+    let executor = Rv64BaseAluWExecutor::new(Rv64BaseAluWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let inst = make_imm_instruction(Rv64BaseAluWOpcode::SUBW, REG_A, REG_B, 1);
+    let _ = execute(&executor, &mut state, &inst);
 }
