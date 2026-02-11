@@ -3,7 +3,10 @@ use std::{
     mem::size_of,
 };
 
-use openvm_circuit::{arch::*, system::memory::online::{GuestMemory, TracingMemory}};
+use openvm_circuit::{
+    arch::*,
+    system::memory::online::{GuestMemory, TracingMemory},
+};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -44,10 +47,15 @@ impl Rv64BaseAluWExecutor {
         data: &mut Rv64BaseAluWPreCompute,
     ) -> Result<bool, StaticProgramError> {
         let Instruction {
-            opcode, a, b, c, d, e, ..
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            ..
         } = inst;
-        let local_opcode =
-            Rv64BaseAluWOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let local_opcode = Rv64BaseAluWOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         let e_u32 = e.as_canonical_u32();
         if (d.as_canonical_u32() != RV32_REGISTER_AS)
             || !(e_u32 == RV32_IMM_AS || e_u32 == RV32_REGISTER_AS)

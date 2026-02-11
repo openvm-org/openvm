@@ -1,9 +1,8 @@
-use openvm_circuit::{
-    arch::{execution_mode::ExecutionCtx, InterpreterExecutor, VmExecState, VmState},
-    system::memory::online::{AddressMap, GuestMemory},
-};
 use crate::test_utils::{create_exec_state, execute_instruction, read_reg, write_reg};
-use strum::IntoEnumIterator;
+use openvm_circuit::{
+    arch::{execution_mode::ExecutionCtx, VmExecState},
+    system::memory::online::GuestMemory,
+};
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -12,6 +11,7 @@ use openvm_instructions::{
 };
 use openvm_rv64im_transpiler::Rv64BaseAluOpcode;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use strum::IntoEnumIterator;
 
 use super::execution::imm24_sign_extend_to_u64;
 use crate::Rv64BaseAluExecutor;
@@ -24,7 +24,6 @@ const REG_B: u32 = 8; // rs1
 const REG_C: u32 = 16; // rs2
 
 const START_PC: u32 = 0x1000;
-
 
 fn make_reg_instruction(opcode: Rv64BaseAluOpcode, rd: u32, rs1: u32, rs2: u32) -> Instruction<F> {
     Instruction::from_usize::<7>(
@@ -70,7 +69,6 @@ fn execute(
         START_PC,
     )
 }
-
 
 // ---------------------------------------------------------------------------
 // imm24_sign_extend_to_u64 helper tests
@@ -372,4 +370,26 @@ fn test_and_with_all_ones_is_identity() {
     execute(&executor, &mut state, &inst);
 
     assert_eq!(read_reg(&state, REG_A), 0xDEADBEEFCAFEBABE);
+}
+
+#[test]
+#[should_panic]
+fn test_base_alu_invalid_instruction_rejected() {
+    let executor = Rv64BaseAluExecutor::new(Rv64BaseAluOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let inst = Instruction::from_usize::<7>(
+        VmOpcode::from_usize(Rv64BaseAluOpcode::ADD.global_opcode_usize()),
+        [
+            REG_A as usize,
+            REG_B as usize,
+            REG_C as usize,
+            0, // invalid d (must be RV32_REGISTER_AS)
+            RV32_REGISTER_AS as usize,
+            0,
+            0,
+        ],
+    );
+
+    let _ = execute(&executor, &mut state, &inst);
 }

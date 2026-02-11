@@ -3,7 +3,10 @@ use std::{
     mem::size_of,
 };
 
-use openvm_circuit::{arch::*, system::memory::online::{GuestMemory, TracingMemory}};
+use openvm_circuit::{
+    arch::*,
+    system::memory::online::{GuestMemory, TracingMemory},
+};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS,
@@ -194,11 +197,9 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<Rv64AuipcPreCompute> = std::slice::from_raw_parts(
-        pre_compute,
-        size_of::<E2PreCompute<Rv64AuipcPreCompute>>(),
-    )
-    .borrow();
+    let pre_compute: &E2PreCompute<Rv64AuipcPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<Rv64AuipcPreCompute>>())
+            .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);

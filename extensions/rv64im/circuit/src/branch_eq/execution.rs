@@ -3,7 +3,10 @@ use std::{
     mem::size_of,
 };
 
-use openvm_circuit::{arch::*, system::memory::online::{GuestMemory, TracingMemory}};
+use openvm_circuit::{
+    arch::*,
+    system::memory::online::{GuestMemory, TracingMemory},
+};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
@@ -35,8 +38,7 @@ impl Rv64BranchEqualExecutor {
         let &Instruction {
             opcode, a, b, c, d, ..
         } = inst;
-        let local_opcode =
-            Rv64BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let local_opcode = Rv64BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         let c = c.as_canonical_u32();
         let imm = if F::ORDER_U32 - c < c {
             -((F::ORDER_U32 - c) as isize)

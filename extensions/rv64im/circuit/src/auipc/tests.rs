@@ -1,18 +1,16 @@
+use crate::test_utils::{create_exec_state, execute_instruction, read_reg};
 use openvm_circuit::{
-    arch::{execution_mode::ExecutionCtx, InterpreterExecutor, VmExecState, VmState},
-    system::memory::online::{AddressMap, GuestMemory},
+    arch::{execution_mode::ExecutionCtx, VmExecState},
+    system::memory::online::GuestMemory,
 };
-use crate::test_utils::{create_exec_state, execute_instruction, read_reg, write_reg};
-use strum::IntoEnumIterator;
 use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::RV32_REGISTER_AS,
-    LocalOpcode, VmOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode,
+    VmOpcode,
 };
 use openvm_rv64im_transpiler::Rv64AuipcOpcode;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use strum::IntoEnumIterator;
 
 use crate::Rv64AuipcExecutor;
 
@@ -48,7 +46,6 @@ fn execute(
         START_PC,
     )
 }
-
 
 #[test]
 fn test_auipc_basic() {
@@ -108,4 +105,23 @@ fn test_auipc_large_positive() {
     // rd = 0x1000 + 0x7FFFF000 = 0x80000000
     // Bit 31 is set → sign-extends to 0xFFFFFFFF_80000000
     assert_eq!(read_reg(&mut state, REG_A), 0xFFFFFFFF_80000000u64);
+}
+
+#[test]
+#[should_panic]
+fn test_auipc_invalid_instruction_rejected() {
+    let executor = Rv64AuipcExecutor::new(Rv64AuipcOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let inst = Instruction::new(
+        VmOpcode::from_usize(Rv64AuipcOpcode::AUIPC.global_opcode_usize()),
+        F::from_canonical_u32(REG_A),
+        F::ZERO,
+        F::from_canonical_u32(0x10),
+        F::ZERO, // invalid d (must be RV32_REGISTER_AS)
+        F::ZERO,
+        F::ZERO,
+        F::ZERO,
+    );
+    let _ = execute(&executor, &mut state, &inst);
 }

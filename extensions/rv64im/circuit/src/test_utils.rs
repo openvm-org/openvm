@@ -1,11 +1,15 @@
 use openvm_circuit::arch::{
-    execution_mode::ExecutionCtx, ExecutorInventory, InterpretedInstance, InterpreterExecutor,
-    MemoryConfig, SystemConfig, VmExecState, VmState,
+    execution_mode::ExecutionCtx, InterpreterExecutor, MemoryConfig, VmExecState, VmState,
 };
 use openvm_circuit::system::memory::online::{AddressMap, GuestMemory};
-use openvm_instructions::{exe::VmExe, instruction::Instruction, program::Program, VmOpcode};
 use openvm_instructions::riscv::RV32_REGISTER_AS;
+use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
+
+#[cfg(feature = "tco")]
+use openvm_circuit::arch::{ExecutorInventory, InterpretedInstance, SystemConfig};
+#[cfg(feature = "tco")]
+use openvm_instructions::{exe::VmExe, program::Program};
 
 pub fn rv64_mem_config() -> MemoryConfig {
     let mut config = MemoryConfig::default();
@@ -14,7 +18,9 @@ pub fn rv64_mem_config() -> MemoryConfig {
     config
 }
 
-pub fn create_exec_state<F: PrimeField32>(pc_start: u32) -> VmExecState<F, GuestMemory, ExecutionCtx> {
+pub fn create_exec_state<F: PrimeField32>(
+    pc_start: u32,
+) -> VmExecState<F, GuestMemory, ExecutionCtx> {
     let mem = GuestMemory::new(AddressMap::from_mem_config(&rv64_mem_config()));
     let vm_state = VmState::new_with_defaults(pc_start, mem, vec![] as Vec<Vec<F>>, 0, 0);
     VmExecState::new(vm_state, ExecutionCtx::new(None))
@@ -38,6 +44,25 @@ pub fn read_reg<F: PrimeField32>(
 ) -> u64 {
     let bytes: [u8; 8] = unsafe { state.memory.read::<u8, 8>(RV32_REGISTER_AS, reg) };
     u64::from_le_bytes(bytes)
+}
+
+pub const DATA_MEM_AS: u32 = 2;
+
+pub fn write_mem<F: PrimeField32>(
+    state: &mut VmExecState<F, GuestMemory, ExecutionCtx>,
+    addr: u32,
+    val: [u8; 8],
+) {
+    unsafe {
+        state.memory.write::<u8, 8>(DATA_MEM_AS, addr, val);
+    }
+}
+
+pub fn read_mem<F: PrimeField32>(
+    state: &VmExecState<F, GuestMemory, ExecutionCtx>,
+    addr: u32,
+) -> [u8; 8] {
+    unsafe { state.memory.read::<u8, 8>(DATA_MEM_AS, addr) }
 }
 
 pub fn execute_instruction<F, E, I>(
@@ -66,9 +91,8 @@ where
     }
     #[cfg(feature = "tco")]
     {
-        let mut inventory = ExecutorInventory::<E>::new(SystemConfig::default_from_memory(
-            rv64_mem_config(),
-        ));
+        let mut inventory =
+            ExecutorInventory::<E>::new(SystemConfig::default_from_memory(rv64_mem_config()));
         inventory
             .add_executor(executor.clone(), opcodes)
             .expect("add_executor should succeed");
@@ -91,9 +115,7 @@ where
             InterpretedInstance::new(&inventory, &exe).expect("interpreter build must succeed");
 
         state.ctx.instret_left = 0;
-        let handler = interpreter
-            .get_handler(pc)
-            .expect("handler should exist");
+        let handler = interpreter.get_handler(pc).expect("handler should exist");
         unsafe { handler(&interpreter, state) };
     }
     state.pc()
