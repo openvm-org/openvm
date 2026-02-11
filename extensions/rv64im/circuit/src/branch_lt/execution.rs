@@ -60,12 +60,12 @@ impl Rv64BranchLessThanExecutor {
 
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
-        match $local_opcode {
-            Rv64BranchLessThanOpcode::BLT => Ok($execute_impl::<_, _, BltOp64>),
-            Rv64BranchLessThanOpcode::BLTU => Ok($execute_impl::<_, _, BltuOp64>),
-            Rv64BranchLessThanOpcode::BGE => Ok($execute_impl::<_, _, BgeOp64>),
-            Rv64BranchLessThanOpcode::BGEU => Ok($execute_impl::<_, _, BgeuOp64>),
-        }
+        Ok(match $local_opcode {
+            Rv64BranchLessThanOpcode::BLT => $execute_impl::<_, _, BltOp64>,
+            Rv64BranchLessThanOpcode::BLTU => $execute_impl::<_, _, BltuOp64>,
+            Rv64BranchLessThanOpcode::BGE => $execute_impl::<_, _, BgeOp64>,
+            Rv64BranchLessThanOpcode::BGEU => $execute_impl::<_, _, BgeuOp64>,
+        })
     };
 }
 

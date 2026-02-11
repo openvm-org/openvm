@@ -50,12 +50,12 @@ impl Rv64DivRemExecutor {
 
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
-        match $local_opcode {
-            Rv64DivRemOpcode::DIV => Ok($execute_impl::<_, _, DivOp64>),
-            Rv64DivRemOpcode::DIVU => Ok($execute_impl::<_, _, DivuOp64>),
-            Rv64DivRemOpcode::REM => Ok($execute_impl::<_, _, RemOp64>),
-            Rv64DivRemOpcode::REMU => Ok($execute_impl::<_, _, RemuOp64>),
-        }
+        Ok(match $local_opcode {
+            Rv64DivRemOpcode::DIV => $execute_impl::<_, _, DivOp64>,
+            Rv64DivRemOpcode::DIVU => $execute_impl::<_, _, DivuOp64>,
+            Rv64DivRemOpcode::REM => $execute_impl::<_, _, RemOp64>,
+            Rv64DivRemOpcode::REMU => $execute_impl::<_, _, RemuOp64>,
+        })
     };
 }
 

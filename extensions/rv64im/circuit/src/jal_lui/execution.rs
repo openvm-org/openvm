@@ -71,12 +71,12 @@ impl Rv64JalLuiExecutor {
 
 macro_rules! dispatch {
     ($execute_impl:ident, $is_jal:ident, $enabled:ident) => {
-        match ($is_jal, $enabled) {
-            (true, true) => Ok($execute_impl::<_, _, true, true>),
-            (true, false) => Ok($execute_impl::<_, _, true, false>),
-            (false, true) => Ok($execute_impl::<_, _, false, true>),
-            (false, false) => Ok($execute_impl::<_, _, false, false>),
-        }
+        Ok(match ($is_jal, $enabled) {
+            (true, true) => $execute_impl::<_, _, true, true>,
+            (true, false) => $execute_impl::<_, _, true, false>,
+            (false, true) => $execute_impl::<_, _, false, true>,
+            (false, false) => $execute_impl::<_, _, false, false>,
+        })
     };
 }
 
