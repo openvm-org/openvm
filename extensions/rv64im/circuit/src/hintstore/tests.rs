@@ -265,6 +265,86 @@ fn test_mem_ptr_uses_lower_32_bits() {
 }
 
 #[test]
+fn test_hint_stored_insufficient_data() {
+    let executor = Rv64HintStoreExecutor::new(Rv64HintStoreOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let mem_ptr: u32 = 0x100;
+    write_reg(&mut state, REG_MEM_PTR, mem_ptr as u64);
+    // Need 8 hint bytes for HINT_STORED, provide only 7
+    push_hint_bytes(&mut state, &[1u8; 7]);
+
+    execute(
+        &executor,
+        &mut state,
+        &make_hint_stored_instruction(REG_MEM_PTR),
+    );
+
+    assert!(matches!(
+        state.exit_code,
+        Err(ExecutionError::HintOutOfBounds { .. })
+    ));
+}
+
+#[test]
+fn test_hint_stored_consecutive_calls() {
+    let executor = Rv64HintStoreExecutor::new(Rv64HintStoreOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let mem_ptr1: u32 = 0x100;
+    let mem_ptr2: u32 = 0x108;
+    let data1 = [1u8, 2, 3, 4, 5, 6, 7, 8];
+    let data2 = [9u8, 10, 11, 12, 13, 14, 15, 16];
+    push_hint_bytes(&mut state, &data1);
+    push_hint_bytes(&mut state, &data2);
+
+    // First store
+    write_reg(&mut state, REG_MEM_PTR, mem_ptr1 as u64);
+    execute(
+        &executor,
+        &mut state,
+        &make_hint_stored_instruction(REG_MEM_PTR),
+    );
+    assert_eq!(read_mem(&state, mem_ptr1), data1);
+
+    // Second store consumes next 8 bytes from hint stream
+    write_reg(&mut state, REG_MEM_PTR, mem_ptr2 as u64);
+    execute(
+        &executor,
+        &mut state,
+        &make_hint_stored_instruction(REG_MEM_PTR),
+    );
+    assert_eq!(read_mem(&state, mem_ptr2), data2);
+
+    // Hint stream should be empty
+    assert_eq!(state.streams.hint_stream.len(), 0);
+}
+
+#[test]
+fn test_hint_buffer_num_dwords_from_register() {
+    let executor = Rv64HintStoreExecutor::new(Rv64HintStoreOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let mem_ptr: u32 = 0x200;
+    // num_dwords has upper 32 bits set, lower 32 = 2
+    write_reg(&mut state, REG_NUM_DWORDS, 0xDEAD_0000_0000_0002u64);
+    write_reg(&mut state, REG_MEM_PTR, mem_ptr as u64);
+
+    let expected = [1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+    push_hint_bytes(&mut state, &expected);
+
+    execute(
+        &executor,
+        &mut state,
+        &make_hint_buffer_instruction(REG_NUM_DWORDS, REG_MEM_PTR),
+    );
+
+    // Should use lower 32 bits of num_dwords (2), reading 16 bytes
+    assert_eq!(read_mem(&state, mem_ptr), expected[..8]);
+    assert_eq!(read_mem(&state, mem_ptr + 8), expected[8..16]);
+}
+
+#[test]
 #[should_panic]
 fn test_hintstore_invalid_instruction_rejected() {
     let executor = Rv64HintStoreExecutor::new(Rv64HintStoreOpcode::CLASS_OFFSET);

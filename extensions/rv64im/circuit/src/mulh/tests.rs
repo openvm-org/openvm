@@ -188,6 +188,66 @@ fn test_mulh_negative_times_negative() {
 }
 
 #[test]
+fn test_mulhu_with_zero() {
+    let executor = Rv64MulHExecutor::new(Rv64MulHOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, u64::MAX);
+    write_reg(&mut state, REG_C, 0);
+    let inst = make_instruction(Rv64MulHOpcode::MULHU, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 0);
+}
+
+#[test]
+fn test_mulhsu_large_values() {
+    let executor = Rv64MulHExecutor::new(Rv64MulHOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // rs1 = -1 (signed), rs2 = u64::MAX (unsigned)
+    // (-1) * (2^64-1) = -(2^64-1) = -2^64 + 1
+    // In 128-bit signed: 0xFFFFFFFFFFFFFFFF_0000000000000001
+    // Upper 64 bits: 0xFFFFFFFFFFFFFFFF
+    write_reg(&mut state, REG_B, u64::MAX); // -1 as signed
+    write_reg(&mut state, REG_C, u64::MAX);
+    let inst = make_instruction(Rv64MulHOpcode::MULHSU, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), u64::MAX);
+}
+
+#[test]
+fn test_mulh_i64_min_times_i64_min() {
+    let executor = Rv64MulHExecutor::new(Rv64MulHOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // i64::MIN * i64::MIN = (-2^63)^2 = 2^126
+    // Full 128-bit: 0x40000000_00000000_00000000_00000000
+    // Upper 64 bits: 0x4000000000000000
+    write_reg(&mut state, REG_B, i64::MIN as u64);
+    write_reg(&mut state, REG_C, i64::MIN as u64);
+    let inst = make_instruction(Rv64MulHOpcode::MULH, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 0x4000000000000000);
+}
+
+#[test]
+fn test_mulhu_one() {
+    let executor = Rv64MulHExecutor::new(Rv64MulHOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // u64::MAX * 1 fits in 64 bits, upper 64 = 0
+    write_reg(&mut state, REG_B, u64::MAX);
+    write_reg(&mut state, REG_C, 1);
+    let inst = make_instruction(Rv64MulHOpcode::MULHU, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 0);
+}
+
+#[test]
 #[should_panic]
 fn test_mulh_invalid_instruction_rejected() {
     let executor = Rv64MulHExecutor::new(Rv64MulHOpcode::CLASS_OFFSET);

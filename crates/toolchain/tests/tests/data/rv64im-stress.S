@@ -16,6 +16,9 @@
 .text
 .global _start
 _start:
+    # Initialise the stack pointer to a valid address within POINTER_MAX_BITS (29).
+    # STACK_TOP = 0x200400, same as the OpenVM platform constant.
+    li   sp, 0x200400
 
 # ===================================================================
 # 1. Base ALU (R-type): add, sub, xor, or, and

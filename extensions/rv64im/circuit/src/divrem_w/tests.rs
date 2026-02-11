@@ -224,6 +224,74 @@ fn test_remw_signed_keeps_dividend_sign() {
 }
 
 #[test]
+fn test_remw_overflow() {
+    let executor = Rv64DivRemWExecutor::new(Rv64DivRemWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // i32::MIN % -1 = 0 (overflow case)
+    write_reg(&mut state, REG_B, 0x80000000); // i32::MIN
+    write_reg(&mut state, REG_C, 0xFFFFFFFF); // -1 as u32
+    let inst = make_instruction(Rv64DivRemWOpcode::REMW, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 0);
+}
+
+#[test]
+fn test_divuw_with_upper_32_bits() {
+    let executor = Rv64DivRemWExecutor::new(Rv64DivRemWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // Upper 32 bits should be ignored for W-variants
+    write_reg(&mut state, REG_B, 0xDEADBEEF_00000064); // lower 32 = 100
+    write_reg(&mut state, REG_C, 0xCAFEBABE_0000000A); // lower 32 = 10
+    let inst = make_instruction(Rv64DivRemWOpcode::DIVUW, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 10);
+}
+
+#[test]
+fn test_remuw_with_upper_32_bits() {
+    let executor = Rv64DivRemWExecutor::new(Rv64DivRemWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, 0xDEADBEEF_00000067); // lower 32 = 103
+    write_reg(&mut state, REG_C, 0xCAFEBABE_0000000A); // lower 32 = 10
+    let inst = make_instruction(Rv64DivRemWOpcode::REMUW, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 3);
+}
+
+#[test]
+fn test_divw_negative_quotient_sign_extension() {
+    let executor = Rv64DivRemWExecutor::new(Rv64DivRemWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // -10 / 3 = -3 in 32-bit, sign-extended to 64 bits
+    write_reg(&mut state, REG_B, (-10i32) as u32 as u64);
+    write_reg(&mut state, REG_C, 3);
+    let inst = make_instruction(Rv64DivRemWOpcode::DIVW, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), (-3i32) as i64 as u64);
+}
+
+#[test]
+fn test_divrem_w_register_aliasing_rd_eq_rs1() {
+    let executor = Rv64DivRemWExecutor::new(Rv64DivRemWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, 42);
+    write_reg(&mut state, REG_C, 7);
+    let inst = make_instruction(Rv64DivRemWOpcode::DIVW, REG_A, REG_A, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 6);
+}
+
+#[test]
 #[should_panic]
 fn test_divrem_w_invalid_instruction_rejected() {
     let executor = Rv64DivRemWExecutor::new(Rv64DivRemWOpcode::CLASS_OFFSET);

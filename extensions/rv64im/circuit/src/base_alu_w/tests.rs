@@ -258,6 +258,61 @@ fn test_addw_does_not_clobber_sources() {
 }
 
 #[test]
+fn test_addw_result_zero() {
+    let executor = Rv64BaseAluWExecutor::new(Rv64BaseAluWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // 0xFFFFFFFF + 1 = 0x00000000 in 32 bits, zero-extended
+    write_reg(&mut state, REG_B, 0xFFFFFFFF);
+    write_reg(&mut state, REG_C, 1);
+    let inst = make_reg_instruction(Rv64BaseAluWOpcode::ADDW, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 0);
+}
+
+#[test]
+fn test_subw_negative_result() {
+    let executor = Rv64BaseAluWExecutor::new(Rv64BaseAluWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // 10 - 20 = -10 in 32-bit, sign-extended to 64 bits
+    write_reg(&mut state, REG_B, 10);
+    write_reg(&mut state, REG_C, 20);
+    let inst = make_reg_instruction(Rv64BaseAluWOpcode::SUBW, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), (-10i32) as i64 as u64);
+}
+
+#[test]
+fn test_addw_register_aliasing_rd_eq_rs1() {
+    let executor = Rv64BaseAluWExecutor::new(Rv64BaseAluWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, 100);
+    write_reg(&mut state, REG_C, 200);
+    let inst = make_reg_instruction(Rv64BaseAluWOpcode::ADDW, REG_A, REG_A, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 300);
+}
+
+#[test]
+fn test_subw_i32_min() {
+    let executor = Rv64BaseAluWExecutor::new(Rv64BaseAluWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // i32::MIN - 1 overflows: 0x80000000 - 1 = 0x7FFFFFFF
+    write_reg(&mut state, REG_B, 0x80000000);
+    write_reg(&mut state, REG_C, 1);
+    let inst = make_reg_instruction(Rv64BaseAluWOpcode::SUBW, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 0x7FFFFFFF);
+}
+
+#[test]
 #[should_panic]
 fn test_subw_immediate_invalid_instruction_rejected() {
     let executor = Rv64BaseAluWExecutor::new(Rv64BaseAluWOpcode::CLASS_OFFSET);

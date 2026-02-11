@@ -4,12 +4,12 @@ use openvm_circuit::arch::{
     VmCircuitExtension, VmExecutionExtension,
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{LocalOpcode, PhantomDiscriminant};
 use openvm_rv64im_transpiler::{
     Rv64AuipcOpcode, Rv64BaseAluOpcode, Rv64BaseAluWOpcode, Rv64BranchEqualOpcode,
     Rv64BranchLessThanOpcode, Rv64DivRemOpcode, Rv64DivRemWOpcode, Rv64HintStoreOpcode,
     Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LessThanOpcode, Rv64LoadStoreOpcode, Rv64MulHOpcode,
-    Rv64MulOpcode, Rv64MulWOpcode, Rv64ShiftOpcode, Rv64ShiftWOpcode,
+    Rv64MulOpcode, Rv64MulWOpcode, Rv64Phantom, Rv64ShiftOpcode, Rv64ShiftWOpcode,
 };
 use openvm_stark_backend::{config::StarkGenericConfig, p3_field::PrimeField32};
 use serde::{Deserialize, Serialize};
@@ -123,6 +123,24 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
             .map(|x| x.global_opcode()),
         )?;
 
+        // Register phantom sub-executors for hint/IO operations.
+        inventory.add_phantom_sub_executor(
+            phantom::Rv64HintInputSubEx,
+            PhantomDiscriminant(Rv64Phantom::HintInput as u16),
+        )?;
+        inventory.add_phantom_sub_executor(
+            phantom::Rv64HintRandomSubEx,
+            PhantomDiscriminant(Rv64Phantom::HintRandom as u16),
+        )?;
+        inventory.add_phantom_sub_executor(
+            phantom::Rv64PrintStrSubEx,
+            PhantomDiscriminant(Rv64Phantom::PrintStr as u16),
+        )?;
+        inventory.add_phantom_sub_executor(
+            phantom::Rv64HintLoadByKeySubEx,
+            PhantomDiscriminant(Rv64Phantom::HintLoadByKey as u16),
+        )?;
+
         Ok(())
     }
 }
@@ -225,5 +243,166 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64Io {
 impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64Io {
     fn extend_circuit(&self, _inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         Ok(())
+    }
+}
+
+mod phantom {
+    use eyre::bail;
+    use openvm_circuit::{
+        arch::{PhantomSubExecutor, Streams},
+        system::memory::online::GuestMemory,
+    };
+    use openvm_instructions::{
+        riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+        PhantomDiscriminant,
+    };
+    use openvm_stark_backend::p3_field::{Field, PrimeField32};
+    use rand::{rngs::StdRng, Rng};
+
+    /// Read an RV64 register (8 bytes) and return the lower 32 bits as u32.
+    fn read_rv64_register(memory: &GuestMemory, ptr: u32) -> u32 {
+        let bytes: [u8; 8] = unsafe { memory.read::<u8, 8>(RV32_REGISTER_AS, ptr) };
+        u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
+    }
+
+    fn memory_read_byte(memory: &GuestMemory, address_space: u32, ptr: u32) -> u8 {
+        let bytes: [u8; 1] = unsafe { memory.read::<u8, 1>(address_space, ptr) };
+        bytes[0]
+    }
+
+    pub struct Rv64HintInputSubEx;
+    pub struct Rv64HintRandomSubEx;
+    pub struct Rv64PrintStrSubEx;
+    pub struct Rv64HintLoadByKeySubEx;
+
+    impl<F: Field> PhantomSubExecutor<F> for Rv64HintInputSubEx {
+        fn phantom_execute(
+            &self,
+            _: &GuestMemory,
+            streams: &mut Streams<F>,
+            _: &mut StdRng,
+            _: PhantomDiscriminant,
+            _: u32,
+            _: u32,
+            _: u16,
+        ) -> eyre::Result<()> {
+            let mut hint = match streams.input_stream.pop_front() {
+                Some(hint) => hint,
+                None => {
+                    bail!("EndOfInputStream");
+                }
+            };
+            streams.hint_stream.clear();
+            streams.hint_stream.extend(
+                (hint.len() as u32)
+                    .to_le_bytes()
+                    .iter()
+                    .map(|b| F::from_canonical_u8(*b)),
+            );
+            // Extend by 0 for 8-byte (doubleword) alignment
+            let capacity = hint.len().div_ceil(8) * 8;
+            hint.resize(capacity, F::ZERO);
+            streams.hint_stream.extend(hint);
+            Ok(())
+        }
+    }
+
+    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv64HintRandomSubEx {
+        fn phantom_execute(
+            &self,
+            memory: &GuestMemory,
+            streams: &mut Streams<F>,
+            rng: &mut StdRng,
+            _: PhantomDiscriminant,
+            a: u32,
+            _: u32,
+            _: u16,
+        ) -> eyre::Result<()> {
+            static WARN_ONCE: std::sync::Once = std::sync::Once::new();
+            WARN_ONCE.call_once(|| {
+                eprintln!("WARNING: Using fixed-seed RNG for deterministic randomness. Consider security implications for your use case.");
+            });
+
+            let len = read_rv64_register(memory, a) as usize;
+            streams.hint_stream.clear();
+            streams.hint_stream.extend(
+                std::iter::repeat_with(|| F::from_canonical_u8(rng.gen::<u8>())).take(len * 8),
+            );
+            Ok(())
+        }
+    }
+
+    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv64PrintStrSubEx {
+        fn phantom_execute(
+            &self,
+            memory: &GuestMemory,
+            _: &mut Streams<F>,
+            _: &mut StdRng,
+            _: PhantomDiscriminant,
+            a: u32,
+            b: u32,
+            _: u16,
+        ) -> eyre::Result<()> {
+            let rd = read_rv64_register(memory, a);
+            let rs1 = read_rv64_register(memory, b);
+            let bytes = (0..rs1)
+                .map(|i| memory_read_byte(memory, RV32_MEMORY_AS, rd + i))
+                .collect::<Vec<u8>>();
+            let peeked_str = String::from_utf8(bytes)?;
+            print!("{peeked_str}");
+            Ok(())
+        }
+    }
+
+    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv64HintLoadByKeySubEx {
+        fn phantom_execute(
+            &self,
+            memory: &GuestMemory,
+            streams: &mut Streams<F>,
+            _: &mut StdRng,
+            _: PhantomDiscriminant,
+            a: u32,
+            b: u32,
+            _: u16,
+        ) -> eyre::Result<()> {
+            let ptr = read_rv64_register(memory, a);
+            let len = read_rv64_register(memory, b);
+            let key: Vec<u8> = (0..len)
+                .map(|i| memory_read_byte(memory, RV32_MEMORY_AS, ptr + i))
+                .collect();
+            if let Some(val) = streams.kv_store.get(&key) {
+                let to_push = hint_load_by_key_decode::<F>(val);
+                for input in to_push.into_iter().rev() {
+                    streams.input_stream.push_front(input);
+                }
+            } else {
+                bail!("Rv64HintLoadByKey: key not found");
+            }
+            Ok(())
+        }
+    }
+
+    pub fn hint_load_by_key_decode<F: PrimeField32>(value: &[u8]) -> Vec<Vec<F>> {
+        let mut offset = 0;
+        let len = extract_u32(value, offset) as usize;
+        offset += 4;
+        let mut ret = Vec::with_capacity(len);
+        for _ in 0..len {
+            let v_len = extract_u32(value, offset) as usize;
+            offset += 4;
+            let v = (0..v_len)
+                .map(|_| {
+                    let ret = F::from_canonical_u32(extract_u32(value, offset));
+                    offset += 4;
+                    ret
+                })
+                .collect();
+            ret.push(v);
+        }
+        ret
+    }
+
+    fn extract_u32(value: &[u8], offset: usize) -> u32 {
+        u32::from_le_bytes(value[offset..offset + 4].try_into().unwrap())
     }
 }

@@ -355,6 +355,99 @@ fn test_sra_by_33() {
     assert_eq!(read_reg(&state, REG_A), ((i64::MIN) >> 33) as u64);
 }
 
+// ---------------------------------------------------------------------------
+// SRL/SRA 6-bit mask tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_srl_6bit_mask() {
+    let executor = Rv64ShiftExecutor::new(Rv64ShiftOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // 64 & 0x3F = 0, so shift amount is 0 (identity)
+    write_reg(&mut state, REG_B, 0xDEADBEEFCAFEBABE);
+    write_reg(&mut state, REG_C, 64);
+    let inst = make_reg_instruction(Rv64ShiftOpcode::SRL, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 0xDEADBEEFCAFEBABE);
+}
+
+#[test]
+fn test_sra_6bit_mask() {
+    let executor = Rv64ShiftExecutor::new(Rv64ShiftOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // 128 & 0x3F = 0, so shift amount is 0 (identity)
+    write_reg(&mut state, REG_B, 0x8000_0000_0000_0000);
+    write_reg(&mut state, REG_C, 128);
+    let inst = make_reg_instruction(Rv64ShiftOpcode::SRA, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 0x8000_0000_0000_0000);
+}
+
+// ---------------------------------------------------------------------------
+// Shift by 63 for SRL/SRA
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_srl_by_63() {
+    let executor = Rv64ShiftExecutor::new(Rv64ShiftOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, u64::MAX);
+    write_reg(&mut state, REG_C, 63);
+    let inst = make_reg_instruction(Rv64ShiftOpcode::SRL, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 1);
+}
+
+#[test]
+fn test_sra_by_63_negative() {
+    let executor = Rv64ShiftExecutor::new(Rv64ShiftOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, 0x8000_0000_0000_0000); // i64::MIN
+    write_reg(&mut state, REG_C, 63);
+    let inst = make_reg_instruction(Rv64ShiftOpcode::SRA, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    // i64::MIN >> 63 = -1 (fills with ones)
+    assert_eq!(read_reg(&state, REG_A), u64::MAX);
+}
+
+#[test]
+fn test_sra_by_63_positive() {
+    let executor = Rv64ShiftExecutor::new(Rv64ShiftOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, i64::MAX as u64);
+    write_reg(&mut state, REG_C, 63);
+    let inst = make_reg_instruction(Rv64ShiftOpcode::SRA, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 0);
+}
+
+// ---------------------------------------------------------------------------
+// Register aliasing
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sll_register_aliasing_rd_eq_rs1() {
+    let executor = Rv64ShiftExecutor::new(Rv64ShiftOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, 1);
+    write_reg(&mut state, REG_C, 10);
+    let inst = make_reg_instruction(Rv64ShiftOpcode::SLL, REG_A, REG_A, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 1 << 10);
+}
+
 #[test]
 #[should_panic]
 fn test_shift_invalid_instruction_rejected() {

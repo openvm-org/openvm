@@ -372,6 +372,79 @@ fn test_and_with_all_ones_is_identity() {
     assert_eq!(read_reg(&state, REG_A), 0xDEADBEEFCAFEBABE);
 }
 
+// ---------------------------------------------------------------------------
+// Register aliasing (rd == rs1)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_add_register_aliasing_rd_eq_rs1() {
+    let executor = Rv64BaseAluExecutor::new(Rv64BaseAluOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, 100);
+    write_reg(&mut state, REG_C, 200);
+    let inst = make_reg_instruction(Rv64BaseAluOpcode::ADD, REG_A, REG_A, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 300);
+}
+
+#[test]
+fn test_sub_register_aliasing_rd_eq_rs1() {
+    let executor = Rv64BaseAluExecutor::new(Rv64BaseAluOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, 500);
+    write_reg(&mut state, REG_C, 200);
+    let inst = make_reg_instruction(Rv64BaseAluOpcode::SUB, REG_A, REG_A, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 300);
+}
+
+#[test]
+fn test_add_register_aliasing_rd_eq_rs2() {
+    let executor = Rv64BaseAluExecutor::new(Rv64BaseAluOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, 100);
+    write_reg(&mut state, REG_A, 200);
+    let inst = make_reg_instruction(Rv64BaseAluOpcode::ADD, REG_A, REG_B, REG_A);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 300);
+}
+
+// ---------------------------------------------------------------------------
+// AND/XOR immediate with sign-extended value
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_and_imm_sign_extended() {
+    let executor = Rv64BaseAluExecutor::new(Rv64BaseAluOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, 0xFFFF_FFFF_FFFF_FFFF);
+    // 0x800000 sign-extends to 0xFFFFFFFFFF800000
+    let inst = make_imm_instruction(Rv64BaseAluOpcode::AND, REG_A, REG_B, 0x800000);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 0xFFFF_FFFF_FF80_0000);
+}
+
+#[test]
+fn test_xor_imm_sign_extended() {
+    let executor = Rv64BaseAluExecutor::new(Rv64BaseAluOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, 0);
+    // 0x800000 sign-extends to 0xFFFFFFFFFF800000
+    let inst = make_imm_instruction(Rv64BaseAluOpcode::XOR, REG_A, REG_B, 0x800000);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 0xFFFF_FFFF_FF80_0000);
+}
+
 #[test]
 #[should_panic]
 fn test_base_alu_invalid_instruction_rejected() {

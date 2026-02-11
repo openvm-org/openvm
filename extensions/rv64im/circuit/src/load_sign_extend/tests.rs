@@ -446,6 +446,102 @@ fn test_load_sign_extend_uses_lower_32_bits_of_rs1() {
     assert_eq!(read_reg(&state, REG_RD), 0xFFFF_FFFF_FFFF_FF80);
 }
 
+// ---------------------------------------------------------------------------
+// Max positive values
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_loadb_i8_max() {
+    let executor = Rv64LoadSignExtendExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let addr: u32 = 0x100;
+    let mut data = [0u8; 8];
+    data[0] = i8::MAX as u8; // 0x7F
+    write_mem(&mut state, addr, data);
+    write_reg(&mut state, REG_RS1, addr as u64);
+
+    let inst = make_load_instruction(LOADB, REG_RD, REG_RS1, 0);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_RD), 0x7F);
+}
+
+#[test]
+fn test_loadh_i16_max() {
+    let executor = Rv64LoadSignExtendExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let addr: u32 = 0x100;
+    let val = (i16::MAX as u16).to_le_bytes();
+    let mut data = [0u8; 8];
+    data[0] = val[0];
+    data[1] = val[1];
+    write_mem(&mut state, addr, data);
+    write_reg(&mut state, REG_RS1, addr as u64);
+
+    let inst = make_load_instruction(LOADH, REG_RD, REG_RS1, 0);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_RD), 0x7FFF);
+}
+
+#[test]
+fn test_loadw_i32_max() {
+    let executor = Rv64LoadSignExtendExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let addr: u32 = 0x100;
+    let mut data = [0u8; 8];
+    data[..4].copy_from_slice(&(i32::MAX as u32).to_le_bytes());
+    write_mem(&mut state, addr, data);
+    write_reg(&mut state, REG_RS1, addr as u64);
+
+    let inst = make_load_instruction(LOADW, REG_RD, REG_RS1, 0);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_RD), 0x7FFFFFFF);
+}
+
+// ---------------------------------------------------------------------------
+// Negative immediate offsets
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_loadh_with_negative_imm() {
+    let executor = Rv64LoadSignExtendExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let target_addr: u32 = 0x100;
+    let mut data = [0u8; 8];
+    data[0] = 0xFF;
+    data[1] = 0x7F; // 0x7FFF, positive halfword
+    write_mem(&mut state, target_addr, data);
+    write_reg(&mut state, REG_RS1, (target_addr + 8) as u64);
+
+    let inst = make_load_instruction(LOADH, REG_RD, REG_RS1, -8);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_RD), 0x7FFF);
+}
+
+#[test]
+fn test_loadw_with_negative_imm() {
+    let executor = Rv64LoadSignExtendExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let target_addr: u32 = 0x100;
+    let mut data = [0u8; 8];
+    data[..4].copy_from_slice(&0x80000000u32.to_le_bytes());
+    write_mem(&mut state, target_addr, data);
+    write_reg(&mut state, REG_RS1, (target_addr + 16) as u64);
+
+    let inst = make_load_instruction(LOADW, REG_RD, REG_RS1, -16);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_RD), 0xFFFF_FFFF_8000_0000);
+}
+
 #[test]
 #[should_panic]
 fn test_load_sign_extend_invalid_instruction_rejected() {

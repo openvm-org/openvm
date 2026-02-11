@@ -565,6 +565,153 @@ fn test_loadstore_uses_lower_32_bits_of_rs1() {
     assert_eq!(read_reg(&state, REG_RD), data);
 }
 
+// ---------------------------------------------------------------------------
+// LOADD/STORED alignment error tests (must be 8-byte aligned)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_loadd_unaligned_shift1_sets_error() {
+    let executor = Rv64LoadStoreExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let addr: u32 = 0x100;
+    write_mem(&mut state, addr, [0u8; 8]);
+    write_reg(&mut state, REG_RS1, (addr + 1) as u64);
+
+    let inst = make_load_instruction(LOADD, REG_RD, REG_RS1, 0);
+    execute(&executor, &mut state, &inst);
+
+    assert!(matches!(state.exit_code, Err(ExecutionError::Fail { .. })));
+}
+
+#[test]
+fn test_loadd_unaligned_shift4_sets_error() {
+    let executor = Rv64LoadStoreExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let addr: u32 = 0x100;
+    write_mem(&mut state, addr, [0u8; 8]);
+    write_reg(&mut state, REG_RS1, (addr + 4) as u64);
+
+    let inst = make_load_instruction(LOADD, REG_RD, REG_RS1, 0);
+    execute(&executor, &mut state, &inst);
+
+    assert!(matches!(state.exit_code, Err(ExecutionError::Fail { .. })));
+}
+
+#[test]
+fn test_stored_unaligned_shift1_sets_error() {
+    let executor = Rv64LoadStoreExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let addr: u32 = 0x200;
+    write_mem(&mut state, addr, [0u8; 8]);
+    write_reg(&mut state, REG_RS1, (addr + 1) as u64);
+    write_reg(&mut state, REG_RS2, 0x1234);
+
+    let inst = make_store_instruction(STORED, REG_RS2, REG_RS1, 0);
+    execute(&executor, &mut state, &inst);
+
+    assert!(matches!(state.exit_code, Err(ExecutionError::Fail { .. })));
+}
+
+#[test]
+fn test_stored_unaligned_shift4_sets_error() {
+    let executor = Rv64LoadStoreExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let addr: u32 = 0x200;
+    write_mem(&mut state, addr, [0u8; 8]);
+    write_reg(&mut state, REG_RS1, (addr + 4) as u64);
+    write_reg(&mut state, REG_RS2, 0x1234);
+
+    let inst = make_store_instruction(STORED, REG_RS2, REG_RS1, 0);
+    execute(&executor, &mut state, &inst);
+
+    assert!(matches!(state.exit_code, Err(ExecutionError::Fail { .. })));
+}
+
+// ---------------------------------------------------------------------------
+// Store-then-load round-trip
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_stored_then_loadd_roundtrip() {
+    let executor = Rv64LoadStoreExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let addr: u32 = 0x300;
+    let val: u64 = 0xDEADBEEF_CAFEBABE;
+    write_reg(&mut state, REG_RS1, addr as u64);
+    write_reg(&mut state, REG_RS2, val);
+
+    // Store
+    let store_inst = make_store_instruction(STORED, REG_RS2, REG_RS1, 0);
+    execute(&executor, &mut state, &store_inst);
+
+    // Load back into a different register
+    let load_inst = make_load_instruction(LOADD, REG_RD, REG_RS1, 0);
+    execute(&executor, &mut state, &load_inst);
+
+    assert_eq!(read_reg(&state, REG_RD), val);
+}
+
+#[test]
+fn test_storew_then_loadwu_roundtrip() {
+    let executor = Rv64LoadStoreExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let addr: u32 = 0x300;
+    let val: u64 = 0x12345678;
+    write_reg(&mut state, REG_RS1, addr as u64);
+    write_reg(&mut state, REG_RS2, val);
+
+    let store_inst = make_store_instruction(STOREW, REG_RS2, REG_RS1, 0);
+    execute(&executor, &mut state, &store_inst);
+
+    let load_inst = make_load_instruction(LOADWU, REG_RD, REG_RS1, 0);
+    execute(&executor, &mut state, &load_inst);
+
+    assert_eq!(read_reg(&state, REG_RD), val);
+}
+
+// ---------------------------------------------------------------------------
+// Negative immediate offset
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_loadd_with_negative_imm() {
+    let executor = Rv64LoadStoreExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let target_addr: u32 = 0x100;
+    let data = 0xAAAA_BBBB_CCCC_DDDDu64;
+    write_mem(&mut state, target_addr, data.to_le_bytes());
+    // rs1 points 8 past target, use imm=-8
+    write_reg(&mut state, REG_RS1, (target_addr + 8) as u64);
+
+    let inst = make_load_instruction(LOADD, REG_RD, REG_RS1, -8);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_RD), data);
+}
+
+#[test]
+fn test_stored_with_negative_imm() {
+    let executor = Rv64LoadStoreExecutor::new(Rv64LoadStoreOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let target_addr: u32 = 0x200;
+    let val: u64 = 0x1111_2222_3333_4444;
+    write_reg(&mut state, REG_RS1, (target_addr + 16) as u64);
+    write_reg(&mut state, REG_RS2, val);
+
+    let inst = make_store_instruction(STORED, REG_RS2, REG_RS1, -16);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_mem(&state, target_addr), val.to_le_bytes());
+}
+
 #[test]
 #[should_panic]
 fn test_loadstore_invalid_instruction_rejected() {

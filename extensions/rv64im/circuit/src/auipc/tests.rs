@@ -108,6 +108,43 @@ fn test_auipc_large_positive() {
 }
 
 #[test]
+fn test_auipc_max_imm20() {
+    let executor = Rv64AuipcExecutor::new(Rv64AuipcOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // upper 20 bits = 0xFFFFF → offset = 0xFFFFF000
+    // c = (0xFFFFF000 >> 8) = 0xFFFFF0
+    let inst = make_auipc_instruction(REG_A, 0xFFFFF0);
+    let pc = execute(&executor, &mut state, &inst);
+
+    assert_eq!(pc, START_PC + DEFAULT_PC_STEP);
+    // rd = 0x1000 + 0xFFFFF000 = 0x100000000, truncated to 32 bits = 0x00000000
+    // sign-extended: 0x0000_0000_0000_0000
+    let expected = (START_PC as u64).wrapping_add(0xFFFFF000u64);
+    let expected_32 = expected as u32;
+    assert_eq!(read_reg(&mut state, REG_A), expected_32 as i32 as i64 as u64);
+}
+
+// In TCO mode the program array is sized by (pc - pc_base) / step.
+// high_pc = 0xFFFFF000 with pc_base = 0x1000 would allocate ~1 billion entries.
+#[cfg(not(feature = "tco"))]
+#[test]
+fn test_auipc_pc_offset_wrapping() {
+    let executor = Rv64AuipcExecutor::new(Rv64AuipcOpcode::CLASS_OFFSET);
+    // Use a high PC so adding offset wraps past u32::MAX
+    let high_pc: u32 = 0xFFFFF000;
+    let mut state = create_exec_state(high_pc);
+
+    // offset = 0x1000 → pc + offset = 0x100000000 wraps to 0x00000000
+    let inst = make_auipc_instruction(REG_A, 0x10);
+    let pc = execute(&executor, &mut state, &inst);
+
+    assert_eq!(pc, high_pc + DEFAULT_PC_STEP);
+    // 0xFFFFF000 + 0x1000 = 0x100000000, truncated to 0x00000000
+    assert_eq!(read_reg(&mut state, REG_A), 0);
+}
+
+#[test]
 #[should_panic]
 fn test_auipc_invalid_instruction_rejected() {
     let executor = Rv64AuipcExecutor::new(Rv64AuipcOpcode::CLASS_OFFSET);
