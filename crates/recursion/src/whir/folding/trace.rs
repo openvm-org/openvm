@@ -29,6 +29,7 @@ pub struct FoldRecord {
 }
 
 impl FoldRecord {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         whir_round: usize,
         query_idx: usize,
