@@ -5,14 +5,14 @@ use std::{
 
 use eyre::Result;
 use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
-use openvm_instructions::{LocalOpcode, SystemOpcode};
+use openvm_instructions::{riscv::RV32_MEMORY_AS, LocalOpcode, SystemOpcode};
 use openvm_platform::memory::MEM_SIZE;
 use openvm_rv64im_circuit::Rv64ImConfig;
 use openvm_rv64im_transpiler::{
     Rv64HintStoreOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension,
     Rv64MTranspilerExtension, Rv64Phantom,
 };
-use openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_sdk::openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use test_case::test_case;
@@ -175,12 +175,19 @@ fn test_transpile_rv64_phantom_discriminants() -> Result<()> {
 // ---------------------------------------------------------------------------
 
 fn execute_rv64_elf(elf_path: &str) -> Result<openvm_circuit::arch::VmState<F, openvm_circuit::system::memory::online::GuestMemory>> {
+    execute_rv64_elf_with_input(elf_path, vec![])
+}
+
+fn execute_rv64_elf_with_input(
+    elf_path: &str,
+    input: Vec<Vec<F>>,
+) -> Result<openvm_circuit::arch::VmState<F, openvm_circuit::system::memory::online::GuestMemory>> {
     let elf = get_elf(elf_path)?;
     let exe = VmExe::from_elf(elf, rv64_transpiler())?;
     let config = Rv64ImConfig::default();
     let executor = VmExecutor::new(config)?;
     let instance = executor.instance(&exe)?;
-    Ok(instance.execute(vec![] as Vec<Vec<F>>, None)?)
+    Ok(instance.execute(input, None)?)
 }
 
 /// Execute the comprehensive RV64IM stress test through the full pipeline:
@@ -198,5 +205,54 @@ fn test_execute_rv64_stress() -> Result<()> {
 #[test]
 fn test_execute_rv64_fail_detected() {
     let result = execute_rv64_elf("tests/data/rv64im-fail");
-    assert!(result.is_err(), "expected execution to fail with non-zero exit code");
+    assert!(
+        result.is_err(),
+        "expected execution to fail with non-zero exit code"
+    );
+}
+
+/// Execute the intrinsic test through the full pipeline:
+/// ELF decode -> transpile -> interpreter execution.
+/// The intrin test exercises PHANTOM (HintInput, PrintStr), HINT_STORED, HINT_BUFFER,
+/// and TERMINATE. We provide distinguishable hint data so we can verify the values
+/// written to memory by hint_stored and hint_buffer.
+///
+/// Data flow:
+///   - phantom_hint_input: pops the 72-element input Vec<F>, writes 4-byte length prefix
+///     + data to hint_stream → [F(72), F(0), F(0), F(0), F(10), F(11), ..., F(81)]
+///   - hint_stored (1 dword at 0x300100): pops 8 elements → [72, 0, 0, 0, 10, 11, 12, 13]
+///   - hint_buffer (8 dwords at 0x300200): pops 64 elements → sequential bytes 14..77
+#[test]
+fn test_execute_rv64_intrin() -> Result<()> {
+    // Use distinguishable input values so we can verify hint_stored and hint_buffer
+    // wrote the correct data to memory.
+    let hint_data: Vec<F> = (0u32..72)
+        .map(|i| F::from_canonical_u32(i + 10))
+        .collect();
+    let state = execute_rv64_elf_with_input("tests/data/rv64im-intrin", vec![hint_data])?;
+
+    // Verify hint_stored wrote the correct dword at 0x300100:
+    // first 4 bytes are the length prefix (72 as u32 LE), next 4 are data[0..4].
+    let stored: [u8; 8] =
+        unsafe { state.memory.read::<u8, 8>(RV32_MEMORY_AS, 0x300100) };
+    assert_eq!(
+        stored,
+        [72, 0, 0, 0, 10, 11, 12, 13],
+        "hint_stored: expected length prefix (72,0,0,0) + first 4 data bytes (10,11,12,13)"
+    );
+
+    // Verify hint_buffer wrote 8 correct dwords starting at 0x300200.
+    for dword_idx in 0u32..8 {
+        let addr = 0x300200 + dword_idx * 8;
+        let actual: [u8; 8] =
+            unsafe { state.memory.read::<u8, 8>(RV32_MEMORY_AS, addr) };
+        let expected: [u8; 8] =
+            std::array::from_fn(|j| (14 + dword_idx * 8 + j as u32) as u8);
+        assert_eq!(
+            actual, expected,
+            "hint_buffer dword {dword_idx} at {addr:#x}"
+        );
+    }
+
+    Ok(())
 }
