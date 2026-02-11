@@ -3,21 +3,20 @@ use std::sync::Arc;
 
 use itertools::{Itertools, izip};
 use openvm_circuit_primitives::encoder::Encoder;
-use openvm_stark_backend::AirRef;
-use openvm_stark_backend::p3_maybe_rayon::prelude::*;
+use openvm_stark_backend::{AirRef, p3_maybe_rayon::prelude::*};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, PrimeCharacteristicRing, PrimeField32, TwoAdicField};
 use p3_matrix::dense::RowMajorMatrix;
 use stark_backend_v2::{
     EF, F, SystemParams, WhirConfig,
     keygen::types::MultiStarkVerifyingKeyV2,
-    poly_common::{Squarable, interpolate_quadratic_at_012},
+    poly_common::{Squarable, eval_mle_evals_at_point, interpolate_quadratic_at_012},
     poseidon2::{
         CHUNK,
         sponge::{FiatShamirTranscript, TranscriptHistory},
     },
     proof::{Proof, WhirProof},
-    prover::{AirProvingContextV2, CpuBackendV2, poly::Mle},
+    prover::{AirProvingContextV2, CpuBackendV2},
 };
 use strum::{EnumCount, EnumDiscriminants};
 
@@ -236,7 +235,9 @@ impl WhirModule {
                 alphas.push(alpha);
 
                 let uj = u[i * k_whir + j];
-                eq_partial *= EF::ONE - alpha - uj + alpha * uj.double();
+                // Möbius eq kernel: mobius_eq_1(u, alpha) = (1 - 2*u)*(1 - alpha) + u*alpha
+                //                              = 1 - alpha - 2*u + 3*u*alpha
+                eq_partial *= EF::ONE - alpha - uj.double() + EF::from_u8(3) * uj * alpha;
                 eq_partials.push(eq_partial);
 
                 claim = interpolate_quadratic_at_012(&[ev0, ev1, ev2], alpha);
@@ -337,9 +338,10 @@ impl WhirModule {
         initial_claim_per_round.push(claim);
         debug_assert!(sumcheck_poly_iter.next().is_none());
 
-        let f = Mle::from_coeffs(final_poly.clone());
+        // Evaluate the MLE of the table `final_poly` (interpreted as hypercube evaluations)
+        // at `u[t..]`. This matches the eval-to-coeff RS encoding semantics.
         let t = k_whir * num_whir_rounds;
-        let final_poly_at_u = f.eval_at_point(&u[t..]);
+        let final_poly_at_u = eval_mle_evals_at_point(&mut final_poly.clone(), &u[t..]);
         let query_offsets = query_offsets(&num_queries_per_round);
 
         preflight.whir = WhirPreflight {

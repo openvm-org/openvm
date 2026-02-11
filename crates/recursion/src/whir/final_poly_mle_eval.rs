@@ -22,7 +22,7 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 use crate::{
     bus::{TranscriptBus, WhirOpeningPointBus, WhirOpeningPointMessage},
     tracegen::{RowMajorChip, StandardTracegenCtx},
-    utils::{ext_field_add, ext_field_multiply},
+    utils::{ext_field_add, ext_field_multiply, ext_field_subtract},
     whir::bus::{
         FinalPolyFoldingBus, FinalPolyFoldingMessage, FinalPolyMleEvalBus, FinalPolyMleEvalMessage,
         WhirEqAlphaUBus, WhirEqAlphaUMessage, WhirFinalPolyBus, WhirFinalPolyBusMessage,
@@ -176,12 +176,16 @@ where
             local.is_enabled - local.is_root,
         );
 
+        // Evaluation-form MLE folding: value = left + (right - left) * point
         assert_array_eq(
             &mut builder.when(is_nonleaf.clone()),
             local.value.map(Into::into),
             ext_field_add::<AB::Expr>(
                 local.left_value,
-                ext_field_multiply::<AB::Expr>(local.right_value, local.point),
+                ext_field_multiply::<AB::Expr>(
+                    ext_field_subtract::<AB::Expr>(local.right_value, local.left_value),
+                    local.point,
+                ),
             ),
         );
         assert_array_eq(
@@ -310,7 +314,8 @@ impl RowMajorChip<F> for FinalPolyMleEvalTraceGenerator {
                     } else {
                         let l = left_slice[node_idx];
                         let r = right_slice[node_idx];
-                        let value = l + r * point;
+                        // Evaluation-form MLE folding: value = l + (r - l) * point
+                        let value = l + (r - l) * point;
                         left_slice[node_idx] = value;
                         (l, r, value)
                     };
