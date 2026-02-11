@@ -54,8 +54,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<WeierstrassAir<2, 2, 32>>()?;
-                let addne = WeierstrassAddNeChipGpu::<2, 32>::new(
+                inventory.next_air::<WeierstrassAir<2, 3, 32>>()?;
+                let addne = WeierstrassAddNeChipGpu::<3, 32>::new(
                     range_checker.clone(),
                     bitwise_lu.clone(),
                     config.clone(),
@@ -65,8 +65,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 );
                 inventory.add_executor_chip(addne);
 
-                inventory.next_air::<WeierstrassAir<1, 2, 32>>()?;
-                let double = WeierstrassDoubleChipGpu::<2, 32>::new(
+                inventory.next_air::<WeierstrassAir<1, 3, 32>>()?;
+                let double = WeierstrassDoubleChipGpu::<3, 32>::new(
                     range_checker.clone(),
                     bitwise_lu.clone(),
                     config,
@@ -83,8 +83,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<WeierstrassAir<2, 6, 16>>()?;
-                let addne = WeierstrassAddNeChipGpu::<6, 16>::new(
+                inventory.next_air::<WeierstrassAir<2, 9, 16>>()?;
+                let addne = WeierstrassAddNeChipGpu::<9, 16>::new(
                     range_checker.clone(),
                     bitwise_lu.clone(),
                     config.clone(),
@@ -94,8 +94,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 );
                 inventory.add_executor_chip(addne);
 
-                inventory.next_air::<WeierstrassAir<1, 6, 16>>()?;
-                let double = WeierstrassDoubleChipGpu::<6, 16>::new(
+                inventory.next_air::<WeierstrassAir<1, 9, 16>>()?;
+                let double = WeierstrassDoubleChipGpu::<9, 16>::new(
                     range_checker.clone(),
                     bitwise_lu.clone(),
                     config,

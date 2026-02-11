@@ -10,7 +10,6 @@ use openvm_circuit::{
     system::memory::{online::GuestMemory, POINTER_MAX_BITS},
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
-use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -18,9 +17,10 @@ use openvm_instructions::{
 };
 use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpr};
 use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_weierstrass_transpiler::Rv32WeierstrassOpcode;
 
 use super::EcDoubleExecutor;
-use crate::weierstrass_chip::curves::{ec_double, get_curve_type, CurveType};
+use crate::weierstrass_chip::curves::{ec_double_proj, get_curve_type, CurveType};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -79,7 +79,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleExecutor<BLOCKS, 
         };
 
         let local_opcode = opcode.local_opcode_idx(self.offset);
-        let is_setup = local_opcode == Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize;
+        let is_setup = local_opcode == Rv32WeierstrassOpcode::SETUP_SW_EC_DOUBLE_PROJ as usize;
 
         Ok(is_setup)
     }
@@ -262,8 +262,12 @@ unsafe fn execute_e12_impl<
     };
 
     if IS_SETUP {
-        let input_prime = BigUint::from_bytes_le(read_data[..BLOCKS / 2].as_flattened());
+        // For projective coordinates, BLOCKS = 3 * blocks_per_coord
+        // Setup input contains: X=modulus, Y=a, Z=b
+        let blocks_per_coord = BLOCKS / 3;
 
+        // Validate X coordinate = modulus
+        let input_prime = BigUint::from_bytes_le(read_data[..blocks_per_coord].as_flattened());
         if input_prime != pre_compute.expr.builder.prime {
             let err = ExecutionError::Fail {
                 pc,
@@ -272,13 +276,26 @@ unsafe fn execute_e12_impl<
             return Err(err);
         }
 
-        // Extract second field element as the a coefficient
-        let input_a = BigUint::from_bytes_le(read_data[BLOCKS / 2..].as_flattened());
+        // Validate Y coordinate = a coefficient
+        let input_a = BigUint::from_bytes_le(
+            read_data[blocks_per_coord..2 * blocks_per_coord].as_flattened(),
+        );
         let coeff_a = &pre_compute.expr.setup_values[0];
         if input_a != *coeff_a {
             let err = ExecutionError::Fail {
                 pc,
                 msg: "EcDouble: mismatched coeff_a",
+            };
+            return Err(err);
+        }
+
+        // Validate Z coordinate = b coefficient
+        let input_b = BigUint::from_bytes_le(read_data[2 * blocks_per_coord..].as_flattened());
+        let coeff_b = &pre_compute.expr.setup_values[1];
+        if input_b != *coeff_b {
+            let err = ExecutionError::Fail {
+                pc,
+                msg: "EcDouble: mismatched coeff_b",
             };
             return Err(err);
         }
@@ -293,7 +310,7 @@ unsafe fn execute_e12_impl<
         )
         .into()
     } else {
-        ec_double::<CURVE_TYPE, BLOCKS, BLOCK_SIZE>(read_data)
+        ec_double_proj::<CURVE_TYPE, BLOCKS, BLOCK_SIZE>(read_data)
     };
 
     let rd_val = u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));
