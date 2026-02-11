@@ -148,6 +148,10 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64ITranspilerExtension {
                 FUNCT3_SLL => {
                     // SLLI with 6-bit shamt
                     let dec_insn = ITypeShamt::new(instruction_u32);
+                    let funct6 = (instruction_u32 >> 26) & 0x3f;
+                    if funct6 != 0b000000 {
+                        return Some(TranspilerOutput::one_to_one(unimp()));
+                    }
                     let shamt6 = (instruction_u32 >> 20) & 0x3f;
                     Some(from_i_type_shamt_rv64(
                         Rv64ShiftOpcode::SLL.global_opcode().as_usize(),
@@ -214,6 +218,9 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64ITranspilerExtension {
                 }
                 match funct3 {
                     FUNCT3_ADDW_SUBW => {
+                        if funct7 != 0b0000000 && funct7 != FUNCT7_SUB_SRA {
+                            return Some(TranspilerOutput::one_to_one(unimp()));
+                        }
                         let op = if funct7 == FUNCT7_SUB_SRA {
                             Rv64BaseAluWOpcode::SUBW
                         } else {
@@ -226,13 +233,21 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64ITranspilerExtension {
                             false,
                         ))
                     }
-                    FUNCT3_SLLW => Some(from_r_type_rv64(
-                        Rv64ShiftWOpcode::SLLW.global_opcode().as_usize(),
-                        1,
-                        &dec_insn,
-                        false,
-                    )),
+                    FUNCT3_SLLW => {
+                        if funct7 != 0b0000000 {
+                            return Some(TranspilerOutput::one_to_one(unimp()));
+                        }
+                        Some(from_r_type_rv64(
+                            Rv64ShiftWOpcode::SLLW.global_opcode().as_usize(),
+                            1,
+                            &dec_insn,
+                            false,
+                        ))
+                    }
                     FUNCT3_SRLW_SRAW => {
+                        if funct7 != 0b0000000 && funct7 != FUNCT7_SUB_SRA {
+                            return Some(TranspilerOutput::one_to_one(unimp()));
+                        }
                         let op = if funct7 == FUNCT7_SUB_SRA {
                             Rv64ShiftWOpcode::SRAW
                         } else {
@@ -262,6 +277,10 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64ITranspilerExtension {
                 FUNCT3_SLLW => {
                     // SLLIW — 5-bit shamt (bits [24:20])
                     let dec_insn = ITypeShamt::new(instruction_u32);
+                    let funct7 = ((instruction_u32 >> 25) & 0x7f) as u8;
+                    if funct7 != 0b0000000 {
+                        return Some(TranspilerOutput::one_to_one(unimp()));
+                    }
                     let shamt5 = (instruction_u32 >> 20) & 0x1f;
                     Some(from_i_type_shamt_rv64(
                         Rv64ShiftWOpcode::SLLW.global_opcode().as_usize(),
