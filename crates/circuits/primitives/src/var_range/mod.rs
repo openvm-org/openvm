@@ -78,46 +78,30 @@ impl<AB: InteractionBuilder> Air<AB> for VariableRangeCheckerAir {
         let local: &VariableRangeCols<AB::Var> = (*local).borrow();
         let next: &VariableRangeCols<AB::Var> = (*next).borrow();
 
-        // First-row constraints: ensure we start at [0, 0] with two_to_max_bits = 1.
+        // First row: start at [value=0, max_bits=0, two_to_max_bits=1]
         builder.when_first_row().assert_zero(local.value);
         builder.when_first_row().assert_zero(local.max_bits);
         builder.when_first_row().assert_one(local.two_to_max_bits);
 
-        // Transition constraints use a "monotonic sum" approach instead of selector-based branching.
-        // The key insight is that (value + two_to_max_bits) equals (row_index + 1), forming a
-        // strictly increasing sequence. Combined with the last-row constraint, this forces the
-        // unique valid trace enumeration.
-
-        // Constraint 1: max_bits can only stay the same or increment by 1
-        // (next.max_bits - local.max_bits) * (next.max_bits - local.max_bits - 1) = 0
+        // Transition constraints (see README for explanation)
         let max_bits_delta = next.max_bits - local.max_bits;
+        builder.when_transition().assert_bool(max_bits_delta.clone());
         builder
             .when_transition()
-            .assert_zero(max_bits_delta.clone() * (max_bits_delta.clone() - AB::Expr::ONE));
-
-        // Constraint 2: value can only be 0 or increment by 1
-        // next.value * (next.value - local.value - 1) = 0
-        builder
-            .when_transition()
-            .assert_zero(next.value * (next.value - local.value - AB::Expr::ONE));
-
-        // Constraint 3: two_to_max_bits = 2^max_bits (inductive)
-        // next.two_to_max_bits = local.two_to_max_bits * (1 + max_bits_delta)
+            .when(next.value)
+            .assert_eq(next.value, local.value + AB::Expr::ONE);
         builder.when_transition().assert_eq(
             next.two_to_max_bits,
             local.two_to_max_bits * (AB::Expr::ONE + max_bits_delta),
         );
-
-        // Constraint 4: (value + two_to_max_bits) increases by exactly 1 each row
-        // local.value + local.two_to_max_bits + 1 = next.value + next.two_to_max_bits
         builder.when_transition().assert_eq(
             local.value + local.two_to_max_bits + AB::Expr::ONE,
             next.value + next.two_to_max_bits,
         );
 
-        // Last-row constraints: ensure we end at the dummy row [0, range_max_bits+1].
-        // This acts as a "checksum" - if the trace ever cheats (e.g., value continues past
-        // 2^max_bits - 1 instead of wrapping), it cannot reach this required final state.
+        // Last row: end at [value=0, max_bits=range_max_bits+1, mult=0]
+        // If value ever skips wrapping to 0, the monotonic sum constraint forces it to keep
+        // incrementing, making this final state unreachable.
         builder.when_last_row().assert_zero(local.value);
         builder.when_last_row().assert_eq(
             local.max_bits,

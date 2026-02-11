@@ -27,6 +27,6 @@ The constraints enforce the enumeration pattern by observing that `value + two_t
 2. Transitions: `max_bits` can only stay the same or increment by 1; `value` can only be 0 or increment by 1; `two_to_max_bits` doubles when `max_bits` increments; and `value + two_to_max_bits` increases by exactly 1 each row
 3. Last row: end at `[value=0, max_bits=range_max_bits+1, mult=0]` (dummy row to make trace height a power of 2)
 
-The last-row constraint acts as a checksum—if the trace ever "cheats" (e.g., `value` continues past $2^{\mathtt{max\_bits}} - 1$ instead of wrapping to 0), it cannot reach the required final state.
+The last-row constraint ensures correctness: if `value` ever continues past $2^{\mathtt{max\_bits}} - 1$ instead of wrapping to 0, the monotonic sum constraint forces `value` to keep incrementing and it can never return to 0, making the required final state unreachable.
 
 The functionality and usage of the chip are very similar to those of the [Range Checker](../range/README.md) chip.
