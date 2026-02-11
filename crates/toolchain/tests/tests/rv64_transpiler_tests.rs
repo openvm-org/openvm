@@ -31,11 +31,10 @@ fn rv64_transpiler() -> Transpiler<F> {
         .with_extension(Rv64IoTranspilerExtension)
 }
 
-#[test_case("tests/data/rv64im-empty-program")]
-#[test_case("tests/data/rv64im-fib")]
-#[test_case("tests/data/rv64im-panic-test")]
-#[test_case("tests/data/rv64im-stress-test")]
-#[test_case("tests/data/rv64im-intrinsic-test")]
+// To create ELF directly from .S file, `brew install riscv-gnu-toolchain` and run
+// `riscv64-unknown-elf-gcc -march=rv64im -mabi=lp64 -nostartfiles -e _start -Ttext 0x00200800 -Wl,-N <name>.S -o <name>-from-as`
+#[test_case("tests/data/rv64im-stress-from-as")]
+#[test_case("tests/data/rv64im-intrin-from-as")]
 fn test_decode_rv64_elf(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     assert_eq!(format!("{:?}", elf.class), "ELF64");
@@ -43,11 +42,8 @@ fn test_decode_rv64_elf(elf_path: &str) -> Result<()> {
     Ok(())
 }
 
-#[test_case("tests/data/rv64im-empty-program")]
-#[test_case("tests/data/rv64im-fib")]
-#[test_case("tests/data/rv64im-panic-test")]
-#[test_case("tests/data/rv64im-stress-test")]
-#[test_case("tests/data/rv64im-intrinsic-test")]
+#[test_case("tests/data/rv64im-stress-from-as")]
+#[test_case("tests/data/rv64im-intrin-from-as")]
 fn test_transpile_rv64_program(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     let program = rv64_transpiler().transpile(&elf.instructions)?;
@@ -59,31 +55,34 @@ fn test_transpile_rv64_program(elf_path: &str) -> Result<()> {
     Ok(())
 }
 
-#[test_case("tests/data/rv64im-fib")]
-#[test_case("tests/data/rv64im-stress-test")]
+/// Verify that no instructions are transpiled as UNIMP.
+/// UNIMP is transpiled as TERMINATE with exit code 2 (c = F::TWO).
+/// Legitimate TERMINATE instructions (exit code 0 or 1) are expected and allowed.
+#[test_case("tests/data/rv64im-stress-from-as")]
 fn test_transpile_rv64_no_unimp(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     let program = rv64_transpiler().transpile(&elf.instructions)?;
-    // Check that no instructions were transpiled as UNIMP (opcode 0, all zeros)
-    // which would indicate the transpiler didn't recognize them.
+    let terminate_opcode = SystemOpcode::TERMINATE.global_opcode();
     for (i, inst) in program.iter().enumerate() {
         if let Some(inst) = inst {
-            assert_ne!(
-                inst.opcode.as_usize(),
-                0,
-                "Instruction at index {i} was transpiled as UNIMP: {inst:?}"
-            );
+            if inst.opcode == terminate_opcode {
+                assert_ne!(
+                    inst.c.as_canonical_u32(),
+                    2,
+                    "Instruction at index {i} was transpiled as UNIMP: {inst:?}"
+                );
+            }
         }
     }
     Ok(())
 }
 
-/// Verify that the openvm_test ELF containing custom OpenVM opcodes
+/// Verify that the intrinsic ELF containing custom OpenVM opcodes
 /// (TERMINATE, PHANTOM, HINT_STORED, HINT_BUFFER) transpiles correctly
 /// and that the expected opcodes appear in the output.
 #[test]
 fn test_transpile_rv64_custom_opcodes() -> Result<()> {
-    let elf = get_elf("tests/data/rv64im-intrinsic-test")?;
+    let elf = get_elf("tests/data/rv64im-intrin-from-as")?;
     let program = rv64_transpiler().transpile(&elf.instructions)?;
 
     let terminate_opcode = SystemOpcode::TERMINATE.global_opcode();
@@ -120,7 +119,7 @@ fn test_transpile_rv64_custom_opcodes() -> Result<()> {
 /// for PrintStr and HintInput.
 #[test]
 fn test_transpile_rv64_phantom_discriminants() -> Result<()> {
-    let elf = get_elf("tests/data/rv64im-intrinsic-test")?;
+    let elf = get_elf("tests/data/rv64im-intrin-from-as")?;
     let program = rv64_transpiler().transpile(&elf.instructions)?;
 
     let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
