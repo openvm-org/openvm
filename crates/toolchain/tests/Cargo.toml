@@ -40,7 +40,14 @@ num-bigint.workspace = true
 default = ["parallel"]
 parallel = ["openvm-circuit/parallel"]
 cuda = ["openvm-rv32im-circuit/cuda"]
-tco = ["openvm-circuit/tco"]
+tco = [
+    "openvm-circuit/tco",
+    "openvm-rv32im-circuit/tco",
+    "openvm-rv64im-circuit/tco",
+    "openvm-bigint-circuit/tco",
+    "openvm-algebra-circuit/tco",
+    "openvm-ecc-circuit/tco",
+]
 aot = [
     "openvm-circuit/aot",
     "openvm-rv32im-circuit/aot",
