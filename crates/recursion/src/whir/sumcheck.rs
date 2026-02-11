@@ -18,7 +18,7 @@ use crate::{
     primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     tracegen::{RowMajorChip, StandardTracegenCtx},
-    utils::{eq_1, ext_field_multiply, interpolate_quadratic},
+    utils::{ext_field_multiply, mobius_eq_1, interpolate_quadratic},
     whir::bus::{
         WhirAlphaBus, WhirAlphaMessage, WhirEqAlphaUBus, WhirEqAlphaUMessage, WhirSumcheckBus,
         WhirSumcheckBusMessage,
@@ -165,16 +165,17 @@ where
         );
         when_sumcheck_transition
             .assert_eq(next.tidx, local.tidx + AB::Expr::from_usize(3 * D_EF + 2));
+        // Use Möbius-adjusted equality kernel instead of eq_1 for eval-to-coeff RS encoding
         assert_array_eq(
             &mut when_sumcheck_transition,
             next.eq_partial,
-            ext_field_multiply::<AB::Expr>(local.eq_partial, eq_1::<AB::Expr>(next.alpha, next.u)),
+            ext_field_multiply::<AB::Expr>(local.eq_partial, mobius_eq_1::<AB::Expr>(next.u, next.alpha)),
         );
 
         assert_array_eq(
             &mut builder.when(local.is_first_in_proof),
             local.eq_partial,
-            eq_1::<AB::Expr>(local.alpha, local.u),
+            mobius_eq_1::<AB::Expr>(local.u, local.alpha),
         );
 
         self.transcript_bus
