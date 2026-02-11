@@ -117,6 +117,27 @@ where
     ext_field_add(one_minus_x_plus_y, two_xy)
 }
 
+/// Per-coordinate Möbius-adjusted equality kernel for eval-to-coeff RS encoding:
+/// ```text
+/// mobius_eq_1(u, x) = (1 - 2*u)*(1 - x) + u*x
+///                   = 1 - x - 2*u + 3*u*x
+/// ```
+pub fn mobius_eq_1<FA>(u: [impl Into<FA>; D_EF], x: [impl Into<FA>; D_EF]) -> [FA; D_EF]
+where
+    FA: PrimeCharacteristicRing,
+    FA::PrimeSubfield: BinomiallyExtendable<D_EF>,
+{
+    let omega = u.map(Into::into);
+    let x = x.map(Into::into);
+    // mobius_eq_1(u, x) = 1 - x - 2*u + 3*u*x
+    let omega_x = ext_field_multiply::<FA>(omega.clone(), x.clone());
+    let three_omega_x = ext_field_multiply_scalar::<FA>(omega_x, FA::from_u8(3));
+    let two_omega = ext_field_multiply_scalar::<FA>(omega.clone(), FA::TWO);
+    let x_plus_2omega = ext_field_add::<FA>(x, two_omega);
+    let one_minus_rest = scalar_subtract_ext_field::<FA>(FA::ONE, x_plus_2omega);
+    ext_field_add(one_minus_rest, three_omega_x)
+}
+
 pub fn assert_zeros<AB, const N: usize>(builder: &mut AB, array: [impl Into<AB::Expr>; N])
 where
     AB: AirBuilder,
