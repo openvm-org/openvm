@@ -22,8 +22,6 @@ use openvm_stark_backend::{
 };
 use tracing::instrument;
 
-use crate::utils::select;
-
 mod bus;
 pub use bus::*;
 
@@ -42,14 +40,8 @@ pub struct VariableRangeCols<T> {
     pub value: T,
     /// The maximum number of bits for this value
     pub max_bits: T,
-    /// Helper column used to handle wrap-around transitions, stores 2^max_bits
+    /// Helper column storing 2^max_bits, used in constraints
     pub two_to_max_bits: T,
-    /// The inverse of the selector (value + 1 - two_to_max_bits), unconstrained if selector is 0.
-    /// Used to create a boolean selector for detecting wrap transitions
-    pub selector_inverse: T,
-    /// Boolean selector: 1 if NOT a wrap transition, 0 if wrapping
-    /// Used to reduce degree of transition constraints
-    pub is_not_wrap: T,
     /// Number of range checks requested for each (value, max_bits) pair
     pub mult: T,
 }
@@ -86,51 +78,43 @@ impl<AB: InteractionBuilder> Air<AB> for VariableRangeCheckerAir {
         let local: &VariableRangeCols<AB::Var> = (*local).borrow();
         let next: &VariableRangeCols<AB::Var> = (*next).borrow();
 
-        // First-row constraints: ensure we start at [0, 0] with two_to_max_bits = 1.
-        // Note: selector_inverse is unconstrained on the first row because selector = 0.
+        // First row: start at [value=0, max_bits=0, two_to_max_bits=1]
         builder.when_first_row().assert_zero(local.value);
         builder.when_first_row().assert_zero(local.max_bits);
         builder.when_first_row().assert_one(local.two_to_max_bits);
 
-        // The selector is (value + 1 - two_to_max_bits), which is 0 when it is a wrap transition.
-        let selector = local.value + AB::Expr::ONE - local.two_to_max_bits;
-        // Constraints to ensure that is_not_wrap is 1 when selector is non-zero, and 0 when
-        // selector is 0.
-        builder.when(selector.clone()).assert_one(local.is_not_wrap);
-        builder.assert_eq(local.is_not_wrap, selector.clone() * local.selector_inverse);
+        // Transition constraints use a "monotonic sum" approach instead of selector-based
+        // branching. The key insight is that (value + two_to_max_bits) equals
+        // (row_index + 1), forming a strictly increasing sequence. Combined with the last-row
+        // constraint, this forces the unique valid trace enumeration.
+        let max_bits_delta = next.max_bits - local.max_bits;
 
-        // If not a wrap transition, value should increment by 1, otherwise, value should reset to 0
-        builder.when_transition().assert_eq(
-            next.value,
-            select::<AB::Expr>(
-                local.is_not_wrap,
-                local.value + AB::Expr::ONE,
-                AB::Expr::ZERO,
-            ),
-        );
-        // If not a wrap transition, max_bits should stay the same, otherwise, max_bits should
-        // increment by 1
-        builder.when_transition().assert_eq(
-            next.max_bits,
-            select::<AB::Expr>(
-                local.is_not_wrap,
-                local.max_bits,
-                local.max_bits + AB::Expr::ONE,
-            ),
-        );
-        // If not wrap transition, two_to_max_bits should stay the same, otherwise, two_to_max_bits
-        // should be multiplied by 2
+        // max_bits can only stay the same or increment by 1
+        builder
+            .when_transition()
+            .assert_bool(max_bits_delta.clone());
+
+        // value can only increment by 1 or wrap back to 0
+        builder
+            .when_transition()
+            .when(next.value)
+            .assert_eq(next.value, local.value + AB::Expr::ONE);
+
+        // two_to_max_bits doubles whenever max_bits increments
         builder.when_transition().assert_eq(
             next.two_to_max_bits,
-            select::<AB::Expr>(
-                local.is_not_wrap,
-                local.two_to_max_bits,
-                local.two_to_max_bits * AB::Expr::TWO,
-            ),
+            local.two_to_max_bits * (AB::Expr::ONE + max_bits_delta),
         );
 
-        // Ensure the last row is our dummy row: value=0, max_bits=range_max_bits+1, mult=0
-        // This dummy row makes the trace height a power of 2.
+        // (value + two_to_max_bits) increases by exactly 1 each row
+        builder.when_transition().assert_eq(
+            local.value + local.two_to_max_bits + AB::Expr::ONE,
+            next.value + next.two_to_max_bits,
+        );
+
+        // Last row: end at [value=0, max_bits=range_max_bits+1, mult=0]
+        // If value ever skips wrapping to 0, the monotonic sum constraint forces it to keep
+        // incrementing, making this final state unreachable.
         builder.when_last_row().assert_zero(local.value);
         builder.when_last_row().assert_eq(
             local.max_bits,
@@ -208,13 +192,9 @@ impl VariableRangeCheckerChip {
             let two_to_max_bits = 1 << max_bits;
             let value = i + 1 - two_to_max_bits;
 
-            // Convert to field elements before computing selector
             cols.value = F::from_usize(value);
             cols.max_bits = F::from_u32(max_bits);
             cols.two_to_max_bits = F::from_usize(two_to_max_bits);
-            let selector = cols.value + F::ONE - cols.two_to_max_bits;
-            cols.selector_inverse = selector.try_inverse().unwrap_or(F::ZERO);
-            cols.is_not_wrap = F::from_bool(!selector.is_zero());
             cols.mult = F::from_u32(self.count[i].swap(0, std::sync::atomic::Ordering::Relaxed));
         }
         RowMajorMatrix::new(rows, NUM_VARIABLE_RANGE_COLS)
