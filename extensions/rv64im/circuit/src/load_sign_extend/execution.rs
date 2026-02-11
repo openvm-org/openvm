@@ -86,15 +86,15 @@ impl Rv64LoadSignExtendExecutor {
 
 macro_rules! dispatch {
     ($execute_impl:ident, $load_type:ident, $enabled:ident) => {
-        match ($load_type, $enabled) {
-            (0, true) => Ok($execute_impl::<_, _, 0, true>),
-            (0, false) => Ok($execute_impl::<_, _, 0, false>),
-            (1, true) => Ok($execute_impl::<_, _, 1, true>),
-            (1, false) => Ok($execute_impl::<_, _, 1, false>),
-            (2, true) => Ok($execute_impl::<_, _, 2, true>),
-            (2, false) => Ok($execute_impl::<_, _, 2, false>),
+        Ok(match ($load_type, $enabled) {
+            (0, true) => $execute_impl::<_, _, 0, true>,
+            (0, false) => $execute_impl::<_, _, 0, false>,
+            (1, true) => $execute_impl::<_, _, 1, true>,
+            (1, false) => $execute_impl::<_, _, 1, false>,
+            (2, true) => $execute_impl::<_, _, 2, true>,
+            (2, false) => $execute_impl::<_, _, 2, false>,
             _ => unreachable!(),
-        }
+        })
     };
 }
 

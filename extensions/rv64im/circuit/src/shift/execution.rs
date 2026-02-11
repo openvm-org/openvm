@@ -67,14 +67,14 @@ impl Rv64ShiftExecutor {
 
 macro_rules! dispatch {
     ($execute_impl:ident, $is_imm:ident, $shift_opcode:ident) => {
-        match ($is_imm, $shift_opcode) {
-            (true, Rv64ShiftOpcode::SLL) => Ok($execute_impl::<_, _, true, SllOp64>),
-            (false, Rv64ShiftOpcode::SLL) => Ok($execute_impl::<_, _, false, SllOp64>),
-            (true, Rv64ShiftOpcode::SRL) => Ok($execute_impl::<_, _, true, SrlOp64>),
-            (false, Rv64ShiftOpcode::SRL) => Ok($execute_impl::<_, _, false, SrlOp64>),
-            (true, Rv64ShiftOpcode::SRA) => Ok($execute_impl::<_, _, true, SraOp64>),
-            (false, Rv64ShiftOpcode::SRA) => Ok($execute_impl::<_, _, false, SraOp64>),
-        }
+        Ok(match ($is_imm, $shift_opcode) {
+            (true, Rv64ShiftOpcode::SLL) => $execute_impl::<_, _, true, SllOp64>,
+            (false, Rv64ShiftOpcode::SLL) => $execute_impl::<_, _, false, SllOp64>,
+            (true, Rv64ShiftOpcode::SRL) => $execute_impl::<_, _, true, SrlOp64>,
+            (false, Rv64ShiftOpcode::SRL) => $execute_impl::<_, _, false, SrlOp64>,
+            (true, Rv64ShiftOpcode::SRA) => $execute_impl::<_, _, true, SraOp64>,
+            (false, Rv64ShiftOpcode::SRA) => $execute_impl::<_, _, false, SraOp64>,
+        })
     };
 }
 

@@ -51,11 +51,11 @@ impl Rv64MulHExecutor {
 
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
-        match $local_opcode {
-            Rv64MulHOpcode::MULH => Ok($execute_impl::<_, _, MulHOp64Signed>),
-            Rv64MulHOpcode::MULHSU => Ok($execute_impl::<_, _, MulHSuOp64>),
-            Rv64MulHOpcode::MULHU => Ok($execute_impl::<_, _, MulHUOp64>),
-        }
+        Ok(match $local_opcode {
+            Rv64MulHOpcode::MULH => $execute_impl::<_, _, MulHOp64Signed>,
+            Rv64MulHOpcode::MULHSU => $execute_impl::<_, _, MulHSuOp64>,
+            Rv64MulHOpcode::MULHU => $execute_impl::<_, _, MulHUOp64>,
+        })
     };
 }
 

@@ -57,10 +57,10 @@ impl Rv64HintStoreExecutor {
 
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
-        match $local_opcode {
-            HINT_STORED => Ok($execute_impl::<_, _, true>),
-            HINT_BUFFER => Ok($execute_impl::<_, _, false>),
-        }
+        Ok(match $local_opcode {
+            HINT_STORED => $execute_impl::<_, _, true>,
+            HINT_BUFFER => $execute_impl::<_, _, false>,
+        })
     };
 }
 

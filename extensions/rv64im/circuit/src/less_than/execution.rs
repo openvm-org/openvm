@@ -74,12 +74,12 @@ impl Rv64LessThanExecutor {
 
 macro_rules! dispatch {
     ($execute_impl:ident, $is_imm:ident, $is_sltu:ident) => {
-        match ($is_imm, $is_sltu) {
-            (true, true) => Ok($execute_impl::<_, _, true, true>),
-            (true, false) => Ok($execute_impl::<_, _, true, false>),
-            (false, true) => Ok($execute_impl::<_, _, false, true>),
-            (false, false) => Ok($execute_impl::<_, _, false, false>),
-        }
+        Ok(match ($is_imm, $is_sltu) {
+            (true, true) => $execute_impl::<_, _, true, true>,
+            (true, false) => $execute_impl::<_, _, true, false>,
+            (false, true) => $execute_impl::<_, _, false, true>,
+            (false, false) => $execute_impl::<_, _, false, false>,
+        })
     };
 }
 
