@@ -367,3 +367,59 @@ fn test_sltu_equal_values() {
 
     assert_eq!(read_reg(&state, REG_A), 0);
 }
+
+#[test]
+fn test_sltu_imm_sign_extended() {
+    let executor = Rv64LessThanExecutor::new(Rv64LessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // 0x800000 sign-extends to 0xFFFFFFFFFF800000 as a 64-bit unsigned value
+    // Any small value < 0xFFFFFFFFFF800000 unsigned → true
+    write_reg(&mut state, REG_B, 100);
+    let inst = make_imm_instruction(Rv64LessThanOpcode::SLTU, REG_A, REG_B, 0x800000);
+    execute(&executor, &mut state, &inst);
+
+    // 100 < 0xFFFFFFFFFF800000 → true
+    assert_eq!(read_reg(&state, REG_A), 1);
+}
+
+#[test]
+fn test_slt_upper_32_bit_difference() {
+    let executor = Rv64LessThanExecutor::new(Rv64LessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // Same lower 32 bits, different upper 32 bits
+    write_reg(&mut state, REG_B, 0x00000001_00000042);
+    write_reg(&mut state, REG_C, 0x00000002_00000042);
+    let inst = make_reg_instruction(Rv64LessThanOpcode::SLT, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 1);
+}
+
+#[test]
+fn test_sltu_upper_32_bit_difference() {
+    let executor = Rv64LessThanExecutor::new(Rv64LessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, 0x00000002_00000042);
+    write_reg(&mut state, REG_C, 0x00000001_00000042);
+    let inst = make_reg_instruction(Rv64LessThanOpcode::SLTU, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    // 0x200000042 > 0x100000042 → not less → 0
+    assert_eq!(read_reg(&state, REG_A), 0);
+}
+
+#[test]
+fn test_slt_register_aliasing_rd_eq_rs1() {
+    let executor = Rv64LessThanExecutor::new(Rv64LessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, 10);
+    write_reg(&mut state, REG_C, 20);
+    let inst = make_reg_instruction(Rv64LessThanOpcode::SLT, REG_A, REG_A, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 1);
+}

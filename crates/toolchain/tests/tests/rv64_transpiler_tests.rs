@@ -4,15 +4,17 @@ use std::{
 };
 
 use eyre::Result;
+use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
 use openvm_instructions::{LocalOpcode, SystemOpcode};
 use openvm_platform::memory::MEM_SIZE;
+use openvm_rv64im_circuit::Rv64ImConfig;
 use openvm_rv64im_transpiler::{
     Rv64HintStoreOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension,
     Rv64MTranspilerExtension, Rv64Phantom,
 };
 use openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
-use openvm_transpiler::{elf::Elf, transpiler::Transpiler};
+use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use test_case::test_case;
 
 type F = BabyBear;
@@ -38,7 +40,10 @@ fn rv64_transpiler() -> Transpiler<F> {
 fn test_decode_rv64_elf(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     assert_eq!(format!("{:?}", elf.class), "ELF64");
-    assert!(!elf.instructions.is_empty(), "ELF should contain instructions");
+    assert!(
+        !elf.instructions.is_empty(),
+        "ELF should contain instructions"
+    );
     Ok(())
 }
 
@@ -107,10 +112,22 @@ fn test_transpile_rv64_custom_opcodes() -> Result<()> {
         }
     }
 
-    assert!(found_terminate, "Expected TERMINATE opcode in transpiled program");
-    assert!(found_phantom, "Expected PHANTOM opcode in transpiled program");
-    assert!(found_hint_stored, "Expected HINT_STORED opcode in transpiled program");
-    assert!(found_hint_buffer, "Expected HINT_BUFFER opcode in transpiled program");
+    assert!(
+        found_terminate,
+        "Expected TERMINATE opcode in transpiled program"
+    );
+    assert!(
+        found_phantom,
+        "Expected PHANTOM opcode in transpiled program"
+    );
+    assert!(
+        found_hint_stored,
+        "Expected HINT_STORED opcode in transpiled program"
+    );
+    assert!(
+        found_hint_buffer,
+        "Expected HINT_BUFFER opcode in transpiled program"
+    );
 
     Ok(())
 }
@@ -151,4 +168,35 @@ fn test_transpile_rv64_phantom_discriminants() -> Result<()> {
     );
 
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// End-to-end execution tests
+// ---------------------------------------------------------------------------
+
+fn execute_rv64_elf(elf_path: &str) -> Result<openvm_circuit::arch::VmState<F, openvm_circuit::system::memory::online::GuestMemory>> {
+    let elf = get_elf(elf_path)?;
+    let exe = VmExe::from_elf(elf, rv64_transpiler())?;
+    let config = Rv64ImConfig::default();
+    let executor = VmExecutor::new(config)?;
+    let instance = executor.instance(&exe)?;
+    Ok(instance.execute(vec![] as Vec<Vec<F>>, None)?)
+}
+
+/// Execute the comprehensive RV64IM stress test through the full pipeline:
+/// ELF decode -> transpile -> interpreter execution.
+/// The stress test covers every RV64IM instruction and terminates with exit code 0 on success.
+#[test]
+fn test_execute_rv64_stress() -> Result<()> {
+    let _state = execute_rv64_elf("tests/data/rv64im-stress")?;
+    Ok(())
+}
+
+/// Verify that a program with a deliberate assertion failure (assert_eq(0, 1))
+/// is detected as a non-zero exit code error. This ensures the test harness
+/// actually catches failures in guest programs.
+#[test]
+fn test_execute_rv64_fail_detected() {
+    let result = execute_rv64_elf("tests/data/rv64im-fail");
+    assert!(result.is_err(), "expected execution to fail with non-zero exit code");
 }

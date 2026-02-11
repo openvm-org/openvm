@@ -103,6 +103,89 @@ fn test_mulw_advances_pc() {
 }
 
 #[test]
+fn test_mulw_by_zero() {
+    let executor = Rv64MulWExecutor::new(Rv64MulWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, 12345);
+    write_reg(&mut state, REG_C, 0);
+    let inst = make_instruction(REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 0);
+}
+
+#[test]
+fn test_mulw_by_one() {
+    let executor = Rv64MulWExecutor::new(Rv64MulWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, 42);
+    write_reg(&mut state, REG_C, 1);
+    let inst = make_instruction(REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 42);
+}
+
+#[test]
+fn test_mulw_negative_times_negative() {
+    let executor = Rv64MulWExecutor::new(Rv64MulWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // (-2i32) * (-3i32) = 6i32, sign-extended to 64 bits = 6
+    write_reg(&mut state, REG_B, (-2i32) as u32 as u64);
+    write_reg(&mut state, REG_C, (-3i32) as u32 as u64);
+    let inst = make_instruction(REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 6);
+}
+
+#[test]
+fn test_mulw_negative_times_positive() {
+    let executor = Rv64MulWExecutor::new(Rv64MulWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // (-3i32) * 5i32 = -15i32, sign-extended
+    write_reg(&mut state, REG_B, (-3i32) as u32 as u64);
+    write_reg(&mut state, REG_C, 5);
+    let inst = make_instruction(REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), (-15i32) as i64 as u64);
+}
+
+#[test]
+fn test_mulw_wrapping_overflow() {
+    let executor = Rv64MulWExecutor::new(Rv64MulWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // 0x7FFFFFFF * 2 = 0xFFFFFFFE (wraps in 32 bits), sign-extended
+    write_reg(&mut state, REG_B, 0x7FFFFFFF);
+    write_reg(&mut state, REG_C, 2);
+    let inst = make_instruction(REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    let result = (0x7FFFFFFFu32).wrapping_mul(2);
+    assert_eq!(read_reg(&state, REG_A), result as i32 as i64 as u64);
+}
+
+#[test]
+fn test_mulw_register_aliasing_rd_eq_rs1() {
+    let executor = Rv64MulWExecutor::new(Rv64MulWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // rd == rs1: should read rs1 before writing rd
+    write_reg(&mut state, REG_A, 7);
+    write_reg(&mut state, REG_C, 6);
+    let inst = make_instruction(REG_A, REG_A, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 42);
+}
+
+#[test]
 #[should_panic]
 fn test_mulw_invalid_instruction_rejected() {
     let executor = Rv64MulWExecutor::new(Rv64MulWOpcode::CLASS_OFFSET);

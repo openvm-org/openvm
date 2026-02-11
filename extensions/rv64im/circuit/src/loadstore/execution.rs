@@ -368,8 +368,11 @@ impl Rv64LoadStoreOp<U8> for LoadDOp {
     fn compute_write_data(
         write_data: &mut [U8; RV64_NUM_LIMBS],
         read_data: [u8; RV64_NUM_LIMBS],
-        _shift_amount: usize,
+        shift_amount: usize,
     ) -> bool {
+        if shift_amount != 0 {
+            return false;
+        }
         *write_data = read_data.map(U8);
         true
     }
@@ -451,8 +454,11 @@ impl Rv64LoadStoreOp<U8> for StoreDOp {
     fn compute_write_data(
         write_data: &mut [U8; RV64_NUM_LIMBS],
         read_data: [u8; RV64_NUM_LIMBS],
-        _shift_amount: usize,
+        shift_amount: usize,
     ) -> bool {
+        if shift_amount != 0 {
+            return false;
+        }
         *write_data = read_data.map(U8);
         true
     }
@@ -523,8 +529,11 @@ impl<F: PrimeField32> Rv64LoadStoreOp<F> for StoreDOp {
     fn compute_write_data(
         write_data: &mut [F; RV64_NUM_LIMBS],
         read_data: [u8; RV64_NUM_LIMBS],
-        _shift_amount: usize,
+        shift_amount: usize,
     ) -> bool {
+        if shift_amount != 0 {
+            return false;
+        }
         *write_data = read_data.map(F::from_canonical_u8);
         true
     }

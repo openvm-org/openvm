@@ -20,6 +20,8 @@ derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 cfg-if.workspace = true
 serde = { workspace = true, features = ["derive", "std"] }
+eyre.workspace = true
+rand.workspace = true
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }

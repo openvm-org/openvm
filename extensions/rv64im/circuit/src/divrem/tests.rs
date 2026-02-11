@@ -263,6 +263,71 @@ fn test_rem_signed_negative_divisor() {
 }
 
 #[test]
+fn test_divu_large_values() {
+    let executor = Rv64DivRemExecutor::new(Rv64DivRemOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, u64::MAX);
+    write_reg(&mut state, REG_C, 2);
+    let inst = make_instruction(Rv64DivRemOpcode::DIVU, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), u64::MAX / 2);
+}
+
+#[test]
+fn test_div_zero_divided_by_nonzero() {
+    let executor = Rv64DivRemExecutor::new(Rv64DivRemOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, 0);
+    write_reg(&mut state, REG_C, 42);
+    let inst = make_instruction(Rv64DivRemOpcode::DIV, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 0);
+}
+
+#[test]
+fn test_rem_exact_division() {
+    let executor = Rv64DivRemExecutor::new(Rv64DivRemOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, 42);
+    write_reg(&mut state, REG_C, 7);
+    let inst = make_instruction(Rv64DivRemOpcode::REM, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 0);
+}
+
+#[test]
+fn test_remu_large_values() {
+    let executor = Rv64DivRemExecutor::new(Rv64DivRemOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, u64::MAX);
+    write_reg(&mut state, REG_C, 10);
+    let inst = make_instruction(Rv64DivRemOpcode::REMU, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), u64::MAX % 10);
+}
+
+#[test]
+fn test_div_register_aliasing_rd_eq_rs1() {
+    let executor = Rv64DivRemExecutor::new(Rv64DivRemOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, 42);
+    write_reg(&mut state, REG_C, 7);
+    let inst = make_instruction(Rv64DivRemOpcode::DIV, REG_A, REG_A, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 6);
+}
+
+#[test]
 #[should_panic]
 fn test_divrem_invalid_instruction_rejected() {
     let executor = Rv64DivRemExecutor::new(Rv64DivRemOpcode::CLASS_OFFSET);

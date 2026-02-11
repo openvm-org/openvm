@@ -160,6 +160,41 @@ fn test_jalr_imm_minus_one() {
 }
 
 #[test]
+fn test_jalr_rs1_eq_rd() {
+    let executor = Rv64JalrExecutor::new(Rv64JalrOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // rs1 == rd: should read rs1 before writing rd
+    write_reg(&mut state, REG_A, 0x2000);
+    let inst = make_jalr_instruction(REG_A, REG_A, 100, true);
+    let pc = execute(&executor, &mut state, &inst);
+
+    // to_pc = (0x2000 + 100) & ~1 = 0x2064
+    assert_eq!(pc, 0x2064);
+    // rd should be written with return address (old PC + DEFAULT_PC_STEP)
+    assert_eq!(
+        read_reg(&mut state, REG_A),
+        (START_PC + DEFAULT_PC_STEP) as u64
+    );
+}
+
+#[test]
+fn test_jalr_zero_plus_zero() {
+    let executor = Rv64JalrExecutor::new(Rv64JalrOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, 0);
+    let inst = make_jalr_instruction(REG_A, REG_B, 0, true);
+    let pc = execute(&executor, &mut state, &inst);
+
+    assert_eq!(pc, 0);
+    assert_eq!(
+        read_reg(&mut state, REG_A),
+        (START_PC + DEFAULT_PC_STEP) as u64
+    );
+}
+
+#[test]
 #[should_panic]
 fn test_jalr_invalid_instruction_rejected() {
     let executor = Rv64JalrExecutor::new(Rv64JalrOpcode::CLASS_OFFSET);

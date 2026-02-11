@@ -251,6 +251,105 @@ fn test_sraw_imm_negative() {
     assert_eq!(read_reg(&state, REG_A), 0xFFFFFFFFF8000000);
 }
 
+// ---------------------------------------------------------------------------
+// SRLW/SRAW 5-bit mask wrapping
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_srlw_5bit_mask() {
+    let executor = Rv64ShiftWExecutor::new(Rv64ShiftWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // 32 & 0x1F = 0, so shift amount is 0 (identity in 32 bits)
+    write_reg(&mut state, REG_B, 0xFF);
+    write_reg(&mut state, REG_C, 32);
+    let inst = make_reg_instruction(Rv64ShiftWOpcode::SRLW, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 0xFF);
+}
+
+#[test]
+fn test_sraw_5bit_mask() {
+    let executor = Rv64ShiftWExecutor::new(Rv64ShiftWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // 32 & 0x1F = 0, identity
+    write_reg(&mut state, REG_B, 0x80000000); // negative in 32-bit
+    write_reg(&mut state, REG_C, 32);
+    let inst = make_reg_instruction(Rv64ShiftWOpcode::SRAW, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    // Identity → 0x80000000 sign-extended to 0xFFFFFFFF80000000
+    assert_eq!(read_reg(&state, REG_A), 0xFFFFFFFF80000000);
+}
+
+// ---------------------------------------------------------------------------
+// Shift by zero (identity)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sllw_by_zero() {
+    let executor = Rv64ShiftWExecutor::new(Rv64ShiftWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, 0x12345678);
+    write_reg(&mut state, REG_C, 0);
+    let inst = make_reg_instruction(Rv64ShiftWOpcode::SLLW, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 0x12345678);
+}
+
+#[test]
+fn test_srlw_by_zero() {
+    let executor = Rv64ShiftWExecutor::new(Rv64ShiftWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, 0x80000000);
+    write_reg(&mut state, REG_C, 0);
+    let inst = make_reg_instruction(Rv64ShiftWOpcode::SRLW, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    // 0x80000000 with no shift, then sign-extended
+    assert_eq!(read_reg(&state, REG_A), 0xFFFFFFFF80000000);
+}
+
+// ---------------------------------------------------------------------------
+// SLLW shift out all bits
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sllw_shift_31_shifts_out() {
+    let executor = Rv64ShiftWExecutor::new(Rv64ShiftWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // 0xFFFFFFFF << 31 = 0x80000000 in 32 bits, sign-extended
+    write_reg(&mut state, REG_B, 0xFFFFFFFF);
+    write_reg(&mut state, REG_C, 31);
+    let inst = make_reg_instruction(Rv64ShiftWOpcode::SLLW, REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 0xFFFFFFFF80000000);
+}
+
+// ---------------------------------------------------------------------------
+// Register aliasing
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_sllw_register_aliasing_rd_eq_rs1() {
+    let executor = Rv64ShiftWExecutor::new(Rv64ShiftWOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, 1);
+    write_reg(&mut state, REG_C, 4);
+    let inst = make_reg_instruction(Rv64ShiftWOpcode::SLLW, REG_A, REG_A, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 16);
+}
+
 #[test]
 #[should_panic]
 fn test_shift_w_invalid_instruction_rejected() {

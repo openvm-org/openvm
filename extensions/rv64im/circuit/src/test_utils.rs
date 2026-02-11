@@ -1,8 +1,8 @@
 use openvm_circuit::arch::{
-    execution_mode::ExecutionCtx, InterpreterExecutor, MemoryConfig, VmExecState, VmState,
+    execution_mode::ExecutionCtx, InterpreterExecutor, VmExecState, VmState,
 };
 use openvm_circuit::system::memory::online::{AddressMap, GuestMemory};
-use openvm_instructions::riscv::RV32_REGISTER_AS;
+use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -11,12 +11,7 @@ use openvm_circuit::arch::{ExecutorInventory, InterpretedInstance, SystemConfig}
 #[cfg(feature = "tco")]
 use openvm_instructions::{exe::VmExe, program::Program};
 
-pub fn rv64_mem_config() -> MemoryConfig {
-    let mut config = MemoryConfig::default();
-    // Expand register space for 32 RV64 registers (32 * 8 = 256 bytes)
-    config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 32 * 8;
-    config
-}
+use crate::rv64_mem_config;
 
 pub fn create_exec_state<F: PrimeField32>(
     pc_start: u32,
@@ -46,7 +41,7 @@ pub fn read_reg<F: PrimeField32>(
     u64::from_le_bytes(bytes)
 }
 
-pub const DATA_MEM_AS: u32 = 2;
+pub const DATA_MEM_AS: u32 = RV32_MEMORY_AS;
 
 pub fn write_mem<F: PrimeField32>(
     state: &mut VmExecState<F, GuestMemory, ExecutionCtx>,

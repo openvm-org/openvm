@@ -143,6 +143,60 @@ fn test_mul_negative_times_negative() {
 }
 
 #[test]
+fn test_mul_negative_times_positive() {
+    let executor = Rv64MulExecutor::new(Rv64MulOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // (-3) * 5 = -15 (lower 64 bits)
+    write_reg(&mut state, REG_B, (-3i64) as u64);
+    write_reg(&mut state, REG_C, 5);
+    let inst = make_instruction(REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), (-15i64) as u64);
+}
+
+#[test]
+fn test_mul_i64_min_times_one() {
+    let executor = Rv64MulExecutor::new(Rv64MulOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, i64::MIN as u64);
+    write_reg(&mut state, REG_C, 1);
+    let inst = make_instruction(REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), i64::MIN as u64);
+}
+
+#[test]
+fn test_mul_u64_max_times_u64_max() {
+    let executor = Rv64MulExecutor::new(Rv64MulOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_B, u64::MAX);
+    write_reg(&mut state, REG_C, u64::MAX);
+    let inst = make_instruction(REG_A, REG_B, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    // Lower 64 bits of (2^64-1)^2 = 1
+    assert_eq!(read_reg(&state, REG_A), 1);
+}
+
+#[test]
+fn test_mul_register_aliasing_rd_eq_rs1() {
+    let executor = Rv64MulExecutor::new(Rv64MulOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, 7);
+    write_reg(&mut state, REG_C, 6);
+    let inst = make_instruction(REG_A, REG_A, REG_C);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&state, REG_A), 42);
+}
+
+#[test]
 #[should_panic]
 fn test_mul_invalid_instruction_rejected() {
     let executor = Rv64MulExecutor::new(Rv64MulOpcode::CLASS_OFFSET);

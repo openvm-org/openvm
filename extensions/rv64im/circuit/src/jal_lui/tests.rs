@@ -164,6 +164,51 @@ fn test_lui_zero() {
 }
 
 #[test]
+fn test_lui_max_imm20() {
+    let executor = Rv64JalLuiExecutor::new(Rv64JalLuiOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // max imm20 = 0xFFFFF → result = 0xFFFFF << 12 = 0xFFFFF000
+    // Bit 31 is set → sign-extends to 0xFFFFFFFF_FFFFF000
+    let inst = make_lui_instruction(REG_A, 0xFFFFF);
+    let pc = execute(&executor, &mut state, &inst);
+
+    assert_eq!(pc, START_PC + DEFAULT_PC_STEP);
+    assert_eq!(read_reg(&mut state, REG_A), 0xFFFFFFFF_FFFFF000u64);
+}
+
+// JAL with offset=0 jumps to its own address, creating a self-loop.
+// In TCO mode the interpreter re-dispatches indefinitely, so skip this test.
+#[cfg(not(feature = "tco"))]
+#[test]
+fn test_jal_zero_offset() {
+    let executor = Rv64JalLuiExecutor::new(Rv64JalLuiOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let inst = make_jal_instruction(REG_A, 0, true);
+    let pc = execute(&executor, &mut state, &inst);
+
+    // Jump to current PC (loop)
+    assert_eq!(pc, START_PC);
+    assert_eq!(
+        read_reg(&mut state, REG_A),
+        (START_PC + DEFAULT_PC_STEP) as u64
+    );
+}
+
+#[test]
+fn test_lui_one() {
+    let executor = Rv64JalLuiExecutor::new(Rv64JalLuiOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // imm20 = 1 → result = 0x1000
+    let inst = make_lui_instruction(REG_A, 1);
+    execute(&executor, &mut state, &inst);
+
+    assert_eq!(read_reg(&mut state, REG_A), 0x1000u64);
+}
+
+#[test]
 #[should_panic]
 fn test_jal_lui_invalid_instruction_rejected() {
     let executor = Rv64JalLuiExecutor::new(Rv64JalLuiOpcode::CLASS_OFFSET);
