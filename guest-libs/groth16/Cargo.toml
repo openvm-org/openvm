@@ -1,0 +1,17 @@
+[package]
+name = "openvm-groth16"
+description = "OpenVM guest library for Groth16 proofs verification"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+openvm-groth16-guest = { version = "1.5.0", path = "../../extensions/groth16/guest" }
+openvm-platform = { workspace = true, default-features = false }
+
+[features]
+default = []
