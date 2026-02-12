@@ -20,7 +20,7 @@ use openvm_mod_circuit_builder::{
 use openvm_rv32_adapters::{
     Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
 };
-use openvm_weierstrass_transpiler::Rv32WeierstrassOpcode;
+use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 
 use super::{WeierstrassAir, WeierstrassChip};
 
@@ -126,11 +126,11 @@ fn ec_add_proj_general_expr(
     let t2 = t0 - t2 * a.clone();
     let t4 = t4 * b3_const + t2 * a;
 
+    let mut x3_out = t3.clone() * x3.clone() - t5.clone() * t4.clone();
+    x3_out.save_output();
+
     let mut y3_out = x3.clone() * z3.clone() + t1.clone() * t4.clone();
     y3_out.save_output();
-
-    let mut x3_out = t3.clone() * x3 - t5.clone() * t4.clone();
-    x3_out.save_output();
 
     let mut z3_out = t5 * z3 + t3 * t1;
     z3_out.save_output();
@@ -144,7 +144,7 @@ fn ec_add_proj_general_expr(
 /// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with three elements
 /// per input ProjectivePoint, BLOCKS = 9. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 3.
 #[derive(Clone, PreflightExecutor, Deref, DerefMut)]
-pub struct EcAddNeExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub struct EcAddExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     FieldExpressionExecutor<Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
 );
 
@@ -165,7 +165,7 @@ fn gen_base_expr(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn get_ec_addne_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_ec_add_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     exec_bridge: ExecutionBridge,
     mem_bridge: MemoryBridge,
     config: ExprBuilderConfig,
@@ -188,26 +188,26 @@ pub fn get_ec_addne_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     )
 }
 
-pub fn get_ec_addne_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_ec_add_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,
     offset: usize,
     a: BigUint,
     b: BigUint,
-) -> EcAddNeExecutor<BLOCKS, BLOCK_SIZE> {
+) -> EcAddExecutor<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a, b);
-    EcAddNeExecutor(FieldExpressionExecutor::new(
+    EcAddExecutor(FieldExpressionExecutor::new(
         Rv32VecHeapAdapterExecutor::new(pointer_max_bits),
         expr,
         offset,
         local_opcode_idx,
         vec![],
-        "EcAddNe",
+        "EcAdd",
     ))
 }
 
-pub fn get_ec_addne_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_ec_add_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     config: ExprBuilderConfig,
     mem_helper: SharedMemoryHelper<F>,
     range_checker: SharedVariableRangeCheckerChip,

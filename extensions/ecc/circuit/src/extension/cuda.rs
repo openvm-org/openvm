@@ -17,7 +17,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use strum::EnumCount;
 
 use crate::{
-    Rv32WeierstrassConfig, WeierstrassAddNeChipGpu, WeierstrassAir, WeierstrassDoubleChipGpu,
+    Rv32WeierstrassConfig, WeierstrassAddChipGpu, WeierstrassAir, WeierstrassDoubleChipGpu,
     WeierstrassExtension,
 };
 
@@ -55,7 +55,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 };
 
                 inventory.next_air::<WeierstrassAir<2, 3, 32>>()?;
-                let addne = WeierstrassAddNeChipGpu::<3, 32>::new(
+                let ec_add = WeierstrassAddChipGpu::<3, 32>::new(
                     range_checker.clone(),
                     bitwise_lu.clone(),
                     config.clone(),
@@ -63,7 +63,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     pointer_max_bits as u32,
                     timestamp_max_bits as u32,
                 );
-                inventory.add_executor_chip(addne);
+                inventory.add_executor_chip(ec_add);
 
                 inventory.next_air::<WeierstrassAir<1, 3, 32>>()?;
                 let double = WeierstrassDoubleChipGpu::<3, 32>::new(
@@ -84,7 +84,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 };
 
                 inventory.next_air::<WeierstrassAir<2, 9, 16>>()?;
-                let addne = WeierstrassAddNeChipGpu::<9, 16>::new(
+                let ec_add = WeierstrassAddChipGpu::<9, 16>::new(
                     range_checker.clone(),
                     bitwise_lu.clone(),
                     config.clone(),
@@ -92,7 +92,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     pointer_max_bits as u32,
                     timestamp_max_bits as u32,
                 );
-                inventory.add_executor_chip(addne);
+                inventory.add_executor_chip(ec_add);
 
                 inventory.next_air::<WeierstrassAir<1, 9, 16>>()?;
                 let double = WeierstrassDoubleChipGpu::<9, 16>::new(

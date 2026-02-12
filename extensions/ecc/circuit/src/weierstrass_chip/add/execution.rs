@@ -17,26 +17,26 @@ use openvm_instructions::{
 };
 use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpr};
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_weierstrass_transpiler::Rv32WeierstrassOpcode;
+use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 
-use super::EcAddNeExecutor;
+use super::EcAddExecutor;
 use crate::weierstrass_chip::curves::{ec_add_proj, get_curve_type, CurveType};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
-struct EcAddNePreCompute<'a> {
+struct EcAddPreCompute<'a> {
     expr: &'a FieldExpr,
     rs_addrs: [u8; 2],
     a: u8,
     flag_idx: u8,
 }
 
-impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeExecutor<BLOCKS, BLOCK_SIZE> {
+impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddExecutor<BLOCKS, BLOCK_SIZE> {
     fn pre_compute_impl<F: PrimeField32>(
         &'a self,
         pc: u32,
         inst: &Instruction<F>,
-        data: &mut EcAddNePreCompute<'a>,
+        data: &mut EcAddPreCompute<'a>,
     ) -> Result<bool, StaticProgramError> {
         let Instruction {
             opcode,
@@ -78,7 +78,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeExecutor<BLOCKS, B
         }
 
         let rs_addrs = from_fn(|i| if i == 0 { b } else { c } as u8);
-        *data = EcAddNePreCompute {
+        *data = EcAddPreCompute {
             expr: &self.expr,
             rs_addrs,
             a: a as u8,
@@ -143,11 +143,11 @@ macro_rules! dispatch {
     };
 }
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterExecutor<F>
-    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
+    for EcAddExecutor<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
-        size_of::<EcAddNePreCompute>()
+        size_of::<EcAddPreCompute>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -160,7 +160,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterE
     where
         Ctx: ExecutionCtxTrait,
     {
-        let pre_compute: &mut EcAddNePreCompute = data.borrow_mut();
+        let pre_compute: &mut EcAddPreCompute = data.borrow_mut();
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
 
         dispatch!(execute_e1_handler, pre_compute, is_setup)
@@ -176,7 +176,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterE
     where
         Ctx: ExecutionCtxTrait,
     {
-        let pre_compute: &mut EcAddNePreCompute = data.borrow_mut();
+        let pre_compute: &mut EcAddPreCompute = data.borrow_mut();
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
 
         dispatch!(execute_e1_handler, pre_compute, is_setup)
@@ -185,16 +185,16 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterE
 
 #[cfg(feature = "aot")]
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> AotExecutor<F>
-    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
+    for EcAddExecutor<BLOCKS, BLOCK_SIZE>
 {
 }
 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterMeteredExecutor<F>
-    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
+    for EcAddExecutor<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
-        size_of::<E2PreCompute<EcAddNePreCompute>>()
+        size_of::<E2PreCompute<EcAddPreCompute>>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -208,7 +208,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterM
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let pre_compute: &mut E2PreCompute<EcAddNePreCompute> = data.borrow_mut();
+        let pre_compute: &mut E2PreCompute<EcAddPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 
         let pre_compute_pure = &mut pre_compute.data;
@@ -227,7 +227,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterM
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let pre_compute: &mut E2PreCompute<EcAddNePreCompute> = data.borrow_mut();
+        let pre_compute: &mut E2PreCompute<EcAddPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 
         let pre_compute_pure = &mut pre_compute.data;
@@ -237,7 +237,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterM
 }
 #[cfg(feature = "aot")]
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> AotMeteredExecutor<F>
-    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
+    for EcAddExecutor<BLOCKS, BLOCK_SIZE>
 {
 }
 
@@ -250,7 +250,7 @@ unsafe fn execute_e12_impl<
     const CURVE_TYPE: u8,
     const IS_SETUP: bool,
 >(
-    pre_compute: &EcAddNePreCompute,
+    pre_compute: &EcAddPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pc = exec_state.pc();
@@ -275,7 +275,7 @@ unsafe fn execute_e12_impl<
         if input_prime != pre_compute.expr.prime {
             let err = ExecutionError::Fail {
                 pc,
-                msg: "EcAddNe: mismatched prime",
+                msg: "EcAdd: mismatched prime",
             };
             return Err(err);
         }
@@ -288,7 +288,7 @@ unsafe fn execute_e12_impl<
         if input_a != *coeff_a {
             let err = ExecutionError::Fail {
                 pc,
-                msg: "EcAddNe: mismatched coeff_a",
+                msg: "EcAdd: mismatched coeff_a",
             };
             return Err(err);
         }
@@ -299,7 +299,7 @@ unsafe fn execute_e12_impl<
         if input_b != *coeff_b {
             let err = ExecutionError::Fail {
                 pc,
-                msg: "EcAddNe: mismatched coeff_b",
+                msg: "EcAdd: mismatched coeff_b",
             };
             return Err(err);
         }
@@ -343,8 +343,8 @@ unsafe fn execute_e1_impl<
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &EcAddNePreCompute =
-        std::slice::from_raw_parts(pre_compute, size_of::<EcAddNePreCompute>()).borrow();
+    let pre_compute: &EcAddPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<EcAddPreCompute>()).borrow();
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, IS_SETUP>(pre_compute, exec_state)
 }
 
@@ -361,8 +361,8 @@ unsafe fn execute_e2_impl<
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let e2_pre_compute: &E2PreCompute<EcAddNePreCompute> =
-        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<EcAddNePreCompute>>())
+    let e2_pre_compute: &E2PreCompute<EcAddPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<EcAddPreCompute>>())
             .borrow();
     exec_state
         .ctx

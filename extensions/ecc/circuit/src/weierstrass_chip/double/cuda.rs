@@ -14,7 +14,7 @@ use openvm_mod_circuit_builder::{
 };
 use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
-use openvm_weierstrass_transpiler::Rv32WeierstrassOpcode;
+use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 
 use crate::{ec_double_proj_expr, EccRecord};
 

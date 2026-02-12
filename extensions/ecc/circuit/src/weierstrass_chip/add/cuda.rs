@@ -14,12 +14,12 @@ use openvm_mod_circuit_builder::{
 };
 use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
-use openvm_weierstrass_transpiler::Rv32WeierstrassOpcode;
+use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 
 use crate::{ec_add_proj_expr, EccRecord};
 
 #[derive(new)]
-pub struct WeierstrassAddNeChipGpu<const BLOCKS: usize, const BLOCK_SIZE: usize> {
+pub struct WeierstrassAddChipGpu<const BLOCKS: usize, const BLOCK_SIZE: usize> {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
     pub config: ExprBuilderConfig,
@@ -31,7 +31,7 @@ pub struct WeierstrassAddNeChipGpu<const BLOCKS: usize, const BLOCK_SIZE: usize>
 }
 
 impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBackend>
-    for WeierstrassAddNeChipGpu<BLOCKS, BLOCK_SIZE>
+    for WeierstrassAddChipGpu<BLOCKS, BLOCK_SIZE>
 {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         let range_bus = self.range_checker.cpu_chip.as_ref().unwrap().bus();

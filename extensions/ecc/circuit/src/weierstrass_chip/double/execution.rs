@@ -17,7 +17,7 @@ use openvm_instructions::{
 };
 use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpr};
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_weierstrass_transpiler::Rv32WeierstrassOpcode;
+use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 
 use super::EcDoubleExecutor;
 use crate::weierstrass_chip::curves::{ec_double_proj, get_curve_type, CurveType};

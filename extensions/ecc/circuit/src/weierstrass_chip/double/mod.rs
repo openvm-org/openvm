@@ -20,7 +20,7 @@ use openvm_mod_circuit_builder::{
 use openvm_rv32_adapters::{
     Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
 };
-use openvm_weierstrass_transpiler::Rv32WeierstrassOpcode;
+use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 
 use super::{WeierstrassAir, WeierstrassChip};
 
@@ -64,18 +64,21 @@ fn ec_double_proj_a0_expr(
 
     let t0 = y1.clone() * y1.clone();
     let z3 = t0.clone().int_mul(8);
-    let t1 = y1 * z1.clone();
+    let t1 = y1.clone() * z1.clone();
     let t2 = z1.clone() * z1 * b3_const;
 
-    let mut z3_out = t1.clone() * z3.clone();
-    z3_out.save_output();
-
+    let x3 = t2.clone() * z3.clone();
+    let y3 = t0.clone() + t2.clone();
     let t0 = t0 - t2.clone().int_mul(3);
-    let mut y3_out = t0.clone() * t0.clone() + t2 * (z3 + t0.clone().int_mul(4));
+
+    let mut x3_out = (t0.clone() * (x1 * y1)).int_mul(2);
+    x3_out.save_output();
+
+    let mut y3_out = x3 + t0.clone() * y3;
     y3_out.save_output();
 
-    let mut x3_out = (t0 * (x1 * t1)).int_mul(2);
-    x3_out.save_output();
+    let mut z3_out = t1 * z3;
+    z3_out.save_output();
 
     let builder = (*builder).borrow().clone();
     FieldExpr::new_with_setup_values(builder, range_bus, true, vec![a, b])
@@ -112,12 +115,12 @@ fn ec_double_proj_general_expr(
     let t2 = t2 * a.clone();
     let t3 = (t0.clone() - t2.clone()) * a + z3 * b3_const;
 
-    let mut y3_out = t1.clone() * t1.clone() - y3_sq + (t0.clone().int_mul(3) + t2) * t3.clone();
-    y3_out.save_output();
-
     let t2_yz = (y1 * z1).int_mul(2);
     let mut x3_out = x3 - t2_yz.clone() * t3.clone();
     x3_out.save_output();
+
+    let mut y3_out = t1.clone() * t1.clone() - y3_sq + (t0.clone().int_mul(3) + t2) * t3.clone();
+    y3_out.save_output();
 
     let mut z3_out = (t2_yz * t1).int_mul(4);
     z3_out.save_output();
