@@ -325,10 +325,14 @@ mod phantom {
                 eprintln!("WARNING: Using fixed-seed RNG for deterministic randomness. Consider security implications for your use case.");
             });
 
-            let len = read_rv64_register(memory, a as u64) as u32 as usize;
+            let len = usize::try_from(read_rv64_register(memory, a as u64))
+                .map_err(|_| eyre::eyre!("Rv64HintRandom: length does not fit usize"))?;
+            let num_bytes = len
+                .checked_mul(8)
+                .ok_or_else(|| eyre::eyre!("Rv64HintRandom: length overflow"))?;
             streams.hint_stream.clear();
             streams.hint_stream.extend(
-                std::iter::repeat_with(|| F::from_canonical_u8(rng.gen::<u8>())).take(len * 8),
+                std::iter::repeat_with(|| F::from_canonical_u8(rng.gen::<u8>())).take(num_bytes),
             );
             Ok(())
         }

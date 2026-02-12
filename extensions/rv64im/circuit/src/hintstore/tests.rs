@@ -332,8 +332,10 @@ fn test_hint_buffer_num_dwords_from_register() {
     write_reg(&mut state, REG_NUM_DWORDS, 0xDEAD_0000_0000_0002u64);
     write_reg(&mut state, REG_MEM_PTR, mem_ptr as u64);
 
-    let expected = [1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
-    push_hint_bytes(&mut state, &expected);
+    // Preserve memory to ensure no write occurs on failure.
+    let sentinel = [0xABu8; 8];
+    write_mem(&mut state, mem_ptr, sentinel);
+    push_hint_bytes(&mut state, &[1u8; 16]);
 
     execute(
         &executor,
@@ -341,9 +343,11 @@ fn test_hint_buffer_num_dwords_from_register() {
         &make_hint_buffer_instruction(REG_NUM_DWORDS, REG_MEM_PTR),
     );
 
-    // Should use lower 32 bits of num_dwords (2), reading 16 bytes
-    assert_eq!(read_mem(&state, mem_ptr), expected[..8]);
-    assert_eq!(read_mem(&state, mem_ptr + 8), expected[8..16]);
+    assert!(matches!(
+        state.exit_code,
+        Err(ExecutionError::HintBufferTooLarge { .. })
+    ));
+    assert_eq!(read_mem(&state, mem_ptr), sentinel);
 }
 
 #[test]
