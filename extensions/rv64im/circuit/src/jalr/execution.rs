@@ -16,7 +16,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 pub(super) struct Rv64JalrPreCompute {
-    imm_extended: u32,
+    imm_extended: u64,
     a: u8,
     b: u8,
 }
@@ -34,7 +34,8 @@ impl Rv64JalrExecutor {
         inst: &Instruction<F>,
         data: &mut Rv64JalrPreCompute,
     ) -> Result<bool, StaticProgramError> {
-        let imm_extended = inst.c.as_canonical_u32() + inst.g.as_canonical_u32() * 0xffff0000;
+        let imm_extended = (inst.c.as_canonical_u32() + inst.g.as_canonical_u32() * 0xffff0000)
+            as i32 as i64 as u64;
         if inst.d.as_canonical_u32() != RV32_REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
@@ -183,8 +184,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLE
     let pc = exec_state.pc();
     let rs1 = exec_state.vm_read::<u8, 8>(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs1_val = u64::from_le_bytes(rs1);
-    // Sign-extend imm_extended from 32-bit to 64-bit, then add to rs1
-    let to_pc = rs1_val.wrapping_add(pre_compute.imm_extended as i32 as i64 as u64);
+    let to_pc = rs1_val.wrapping_add(pre_compute.imm_extended);
     let to_pc = (to_pc & !1) as u32; // clear bit 0 and truncate to u32 for PC
     let rd: [u8; 8] = ((pc + DEFAULT_PC_STEP) as u64).to_le_bytes();
 

@@ -1,6 +1,3 @@
-use crate::test_utils::{
-    create_exec_state, execute_instruction, read_mem, read_reg, write_mem, write_reg, DATA_MEM_AS,
-};
 use openvm_circuit::arch::ExecutionError;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
@@ -10,7 +7,13 @@ use openvm_rv64im_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use strum::IntoEnumIterator;
 
-use crate::Rv64LoadStoreExecutor;
+use crate::{
+    test_utils::{
+        create_exec_state, execute_instruction, read_mem, read_reg, write_mem, write_reg,
+        DATA_MEM_AS,
+    },
+    Rv64LoadStoreExecutor,
+};
 
 type F = BabyBear;
 

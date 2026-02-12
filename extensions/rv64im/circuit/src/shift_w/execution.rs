@@ -17,8 +17,7 @@ use openvm_instructions::{
 use openvm_rv64im_transpiler::Rv64ShiftWOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::base_alu::imm24_sign_extend_to_u64;
-use crate::base_alu_w::sign_extend_32_to_64;
+use crate::{base_alu::imm24_sign_extend_to_u64, base_alu_w::sign_extend_32_to_64};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]

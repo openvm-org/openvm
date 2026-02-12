@@ -1,4 +1,3 @@
-use crate::test_utils::{create_exec_state, execute_instruction, read_reg, write_reg};
 use openvm_circuit::{
     arch::{execution_mode::ExecutionCtx, VmExecState},
     system::memory::online::GuestMemory,
@@ -13,7 +12,10 @@ use openvm_rv64im_transpiler::Rv64ShiftWOpcode;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use strum::IntoEnumIterator;
 
-use crate::Rv64ShiftWExecutor;
+use crate::{
+    test_utils::{create_exec_state, execute_instruction, read_reg, write_reg},
+    Rv64ShiftWExecutor,
+};
 
 type F = BabyBear;
 

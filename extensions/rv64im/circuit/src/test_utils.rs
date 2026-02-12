@@ -1,15 +1,17 @@
-use openvm_circuit::arch::{
-    execution_mode::ExecutionCtx, InterpreterExecutor, VmExecState, VmState,
-};
-use openvm_circuit::system::memory::online::{AddressMap, GuestMemory};
-use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
-use openvm_instructions::{instruction::Instruction, VmOpcode};
-use openvm_stark_backend::p3_field::PrimeField32;
-
 #[cfg(feature = "tco")]
 use openvm_circuit::arch::{ExecutorInventory, InterpretedInstance, SystemConfig};
+use openvm_circuit::{
+    arch::{execution_mode::ExecutionCtx, InterpreterExecutor, VmExecState, VmState},
+    system::memory::online::{AddressMap, GuestMemory},
+};
 #[cfg(feature = "tco")]
 use openvm_instructions::{exe::VmExe, program::Program};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    VmOpcode,
+};
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::rv64_mem_config;
 
