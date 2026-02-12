@@ -426,7 +426,7 @@ where
 
 // Returns (result, limb_shift, bit_shift)
 #[inline(always)]
-pub fn run_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(super) fn run_shift<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     opcode: ShiftOpcode,
     x: &[u8; NUM_LIMBS],
     y: &[u8; NUM_LIMBS],

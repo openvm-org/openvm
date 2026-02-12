@@ -289,7 +289,7 @@ where
 }
 
 #[inline(always)]
-pub fn run_alu<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(super) fn run_alu<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     opcode: BaseAluOpcode,
     x: &[u8; NUM_LIMBS],
     y: &[u8; NUM_LIMBS],
