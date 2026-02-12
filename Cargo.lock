@@ -6504,6 +6504,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-groth16"
+version = "1.5.0"
+dependencies = [
+ "openvm-groth16-guest",
+ "openvm-platform",
+]
+
+[[package]]
+name = "openvm-groth16-circuit"
+version = "1.5.0"
+dependencies = [
+ "openvm-platform",
+]
+
+[[package]]
+name = "openvm-groth16-guest"
+version = "1.5.0"
+dependencies = [
+ "openvm-platform",
+]
+
+[[package]]
+name = "openvm-groth16-transpiler"
+version = "1.5.0"
+dependencies = [
+ "openvm-platform",
+]
+
+[[package]]
 name = "openvm-instructions"
 version = "1.5.0"
 dependencies = [

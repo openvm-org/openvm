@@ -61,6 +61,9 @@ members = [
     "extensions/ecc/tests",
     "extensions/pairing/circuit",
     "extensions/pairing/guest",
+    "extensions/groth16/guest",
+    "extensions/groth16/circuit",
+    "extensions/groth16/transpiler",
     "guest-libs/ff_derive/",
     "guest-libs/k256/",
     "guest-libs/p256/",
@@ -69,6 +72,7 @@ members = [
     "guest-libs/ruint/",
     "guest-libs/sha2/",
     "guest-libs/verify_stark/",
+    "guest-libs/groth16",
     "scripts",
 ]
 exclude = ["crates/sdk/example", "benchmarks/guest/**"]
