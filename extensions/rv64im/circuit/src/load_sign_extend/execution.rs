@@ -21,7 +21,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 pub(super) struct Rv64LoadSignExtendPreCompute {
-    imm_extended: u32,
+    imm_extended: u64,
     a: u8,
     b: u8,
     e: u8,
@@ -71,7 +71,7 @@ impl Rv64LoadSignExtendExecutor {
 
         let imm = c.as_canonical_u32();
         let imm_sign = g.as_canonical_u32();
-        let imm_extended = imm + imm_sign * 0xffff0000;
+        let imm_extended = (imm + imm_sign * 0xffff0000) as i32 as i64 as u64;
 
         *data = Rv64LoadSignExtendPreCompute {
             imm_extended,
@@ -229,14 +229,15 @@ unsafe fn execute_e12_impl<
     let pc = exec_state.pc();
     let rs1_bytes: [u8; RV64_NUM_LIMBS] =
         exec_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
-    let rs1_val = u32::from_le_bytes([rs1_bytes[0], rs1_bytes[1], rs1_bytes[2], rs1_bytes[3]]);
+    let rs1_val = u64::from_le_bytes(rs1_bytes);
     let ptr_val = rs1_val.wrapping_add(pre_compute.imm_extended);
-    debug_assert!(ptr_val < (1 << POINTER_MAX_BITS));
+    debug_assert!((ptr_val as u32) < (1 << POINTER_MAX_BITS));
 
     let shift_amount = ptr_val % 8;
     let aligned_ptr = ptr_val - shift_amount;
 
-    let read_data: [u8; RV64_NUM_LIMBS] = exec_state.vm_read(pre_compute.e as u32, aligned_ptr);
+    let read_data: [u8; RV64_NUM_LIMBS] =
+        exec_state.vm_read(pre_compute.e as u32, aligned_ptr as u32);
 
     let write_data: [u8; RV64_NUM_LIMBS] = match LOAD_TYPE {
         0 => {

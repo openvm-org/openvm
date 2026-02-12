@@ -1,18 +1,19 @@
-use crate::test_utils::{create_exec_state, execute_instruction, read_reg};
 use openvm_circuit::{
     arch::{execution_mode::ExecutionCtx, VmExecState},
     system::memory::online::GuestMemory,
 };
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode,
-    VmOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode, VmOpcode,
 };
 use openvm_rv64im_transpiler::Rv64AuipcOpcode;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use strum::IntoEnumIterator;
 
-use crate::Rv64AuipcExecutor;
+use crate::{
+    test_utils::{create_exec_state, execute_instruction, read_reg},
+    Rv64AuipcExecutor,
+};
 
 type F = BabyBear;
 
@@ -122,7 +123,10 @@ fn test_auipc_max_imm20() {
     // sign-extended: 0x0000_0000_0000_0000
     let expected = (START_PC as u64).wrapping_add(0xFFFFF000u64);
     let expected_32 = expected as u32;
-    assert_eq!(read_reg(&mut state, REG_A), expected_32 as i32 as i64 as u64);
+    assert_eq!(
+        read_reg(&mut state, REG_A),
+        expected_32 as i32 as i64 as u64
+    );
 }
 
 // In TCO mode the program array is sized by (pc - pc_base) / step.

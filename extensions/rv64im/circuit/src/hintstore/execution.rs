@@ -171,15 +171,10 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
 
     let mem_ptr_bytes: [u8; RV64_NUM_LIMBS] =
         exec_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
-    let mem_ptr = u32::from_le_bytes([
-        mem_ptr_bytes[0],
-        mem_ptr_bytes[1],
-        mem_ptr_bytes[2],
-        mem_ptr_bytes[3],
-    ]);
+    let mem_ptr = u64::from_le_bytes(mem_ptr_bytes);
 
     let num_dwords = if IS_HINT_STORED {
-        1
+        1u32
     } else {
         let num_dwords_bytes: [u8; RV64_NUM_LIMBS] =
             exec_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32);
@@ -202,7 +197,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
         return Err(ExecutionError::HintOutOfBounds { pc });
     }
 
-    for dword_index in 0..num_dwords {
+    for dword_index in 0..num_dwords as u64 {
         let data: [u8; RV64_NUM_LIMBS] = std::array::from_fn(|_| {
             exec_state
                 .streams
@@ -213,7 +208,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
         });
         exec_state.vm_write(
             RV32_MEMORY_AS,
-            mem_ptr + (RV64_NUM_LIMBS as u32 * dword_index),
+            (mem_ptr + RV64_NUM_LIMBS as u64 * dword_index) as u32,
             &data,
         );
     }

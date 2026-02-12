@@ -1,4 +1,3 @@
-use crate::test_utils::{create_exec_state, execute_instruction, write_reg};
 use openvm_circuit::{
     arch::{execution_mode::ExecutionCtx, VmExecState},
     system::memory::online::GuestMemory,
@@ -12,7 +11,10 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use strum::IntoEnumIterator;
 
-use crate::Rv64BranchEqualExecutor;
+use crate::{
+    test_utils::{create_exec_state, execute_instruction, write_reg},
+    Rv64BranchEqualExecutor,
+};
 
 type F = BabyBear;
 

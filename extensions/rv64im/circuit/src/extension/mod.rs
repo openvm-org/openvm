@@ -259,14 +259,14 @@ mod phantom {
     use openvm_stark_backend::p3_field::{Field, PrimeField32};
     use rand::{rngs::StdRng, Rng};
 
-    /// Read an RV64 register (8 bytes) and return the lower 32 bits as u32.
-    fn read_rv64_register(memory: &GuestMemory, ptr: u32) -> u32 {
-        let bytes: [u8; 8] = unsafe { memory.read::<u8, 8>(RV32_REGISTER_AS, ptr) };
-        u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])
+    /// Read an RV64 register (8 bytes) and return the full 64-bit value.
+    fn read_rv64_register(memory: &GuestMemory, ptr: u64) -> u64 {
+        let bytes: [u8; 8] = unsafe { memory.read::<u8, 8>(RV32_REGISTER_AS, ptr as u32) };
+        u64::from_le_bytes(bytes)
     }
 
-    fn memory_read_byte(memory: &GuestMemory, address_space: u32, ptr: u32) -> u8 {
-        let bytes: [u8; 1] = unsafe { memory.read::<u8, 1>(address_space, ptr) };
+    fn memory_read_byte(memory: &GuestMemory, address_space: u32, ptr: u64) -> u8 {
+        let bytes: [u8; 1] = unsafe { memory.read::<u8, 1>(address_space, ptr as u32) };
         bytes[0]
     }
 
@@ -293,8 +293,10 @@ mod phantom {
                 }
             };
             streams.hint_stream.clear();
+            // Push length as u64 (8 field elements) to match HINT_STORED's
+            // doubleword read granularity.
             streams.hint_stream.extend(
-                (hint.len() as u32)
+                (hint.len() as u64)
                     .to_le_bytes()
                     .iter()
                     .map(|b| F::from_canonical_u8(*b)),
@@ -323,7 +325,7 @@ mod phantom {
                 eprintln!("WARNING: Using fixed-seed RNG for deterministic randomness. Consider security implications for your use case.");
             });
 
-            let len = read_rv64_register(memory, a) as usize;
+            let len = read_rv64_register(memory, a as u64) as u32 as usize;
             streams.hint_stream.clear();
             streams.hint_stream.extend(
                 std::iter::repeat_with(|| F::from_canonical_u8(rng.gen::<u8>())).take(len * 8),
@@ -343,8 +345,8 @@ mod phantom {
             b: u32,
             _: u16,
         ) -> eyre::Result<()> {
-            let rd = read_rv64_register(memory, a);
-            let rs1 = read_rv64_register(memory, b);
+            let rd = read_rv64_register(memory, a as u64);
+            let rs1 = read_rv64_register(memory, b as u64);
             let bytes = (0..rs1)
                 .map(|i| memory_read_byte(memory, RV32_MEMORY_AS, rd + i))
                 .collect::<Vec<u8>>();
@@ -365,8 +367,8 @@ mod phantom {
             b: u32,
             _: u16,
         ) -> eyre::Result<()> {
-            let ptr = read_rv64_register(memory, a);
-            let len = read_rv64_register(memory, b);
+            let ptr = read_rv64_register(memory, a as u64);
+            let len = read_rv64_register(memory, b as u64);
             let key: Vec<u8> = (0..len)
                 .map(|i| memory_read_byte(memory, RV32_MEMORY_AS, ptr + i))
                 .collect();

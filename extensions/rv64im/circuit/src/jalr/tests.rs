@@ -1,18 +1,19 @@
-use crate::test_utils::{create_exec_state, execute_instruction, read_reg, write_reg};
 use openvm_circuit::{
     arch::{execution_mode::ExecutionCtx, VmExecState},
     system::memory::online::GuestMemory,
 };
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode,
-    VmOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode, VmOpcode,
 };
 use openvm_rv64im_transpiler::Rv64JalrOpcode;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use strum::IntoEnumIterator;
 
-use crate::Rv64JalrExecutor;
+use crate::{
+    test_utils::{create_exec_state, execute_instruction, read_reg, write_reg},
+    Rv64JalrExecutor,
+};
 
 type F = BabyBear;
 

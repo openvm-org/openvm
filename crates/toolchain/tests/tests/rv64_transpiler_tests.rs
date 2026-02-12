@@ -12,8 +12,10 @@ use openvm_rv64im_transpiler::{
     Rv64HintStoreOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension,
     Rv64MTranspilerExtension, Rv64Phantom,
 };
-use openvm_stark_sdk::openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::{
+    openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32},
+    p3_baby_bear::BabyBear,
+};
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use test_case::test_case;
 
@@ -34,9 +36,11 @@ fn rv64_transpiler() -> Transpiler<F> {
 }
 
 // To create ELF directly from .S file, `brew install riscv-gnu-toolchain` and run
-// `riscv64-unknown-elf-gcc -march=rv64im -mabi=lp64 -nostartfiles -e _start -Ttext 0x00200800 -Wl,-N <name>.S -o <name>-from-as`
+// `riscv64-unknown-elf-gcc -march=rv64im -mabi=lp64 -nostartfiles -e _start -Ttext 0x00200800
+// -Wl,-N <name>.S -o <name>-from-as`
 #[test_case("tests/data/rv64im-stress")]
 #[test_case("tests/data/rv64im-intrin")]
+#[test_case("tests/data/rv64im-intrin-full")]
 fn test_decode_rv64_elf(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     assert_eq!(format!("{:?}", elf.class), "ELF64");
@@ -49,6 +53,7 @@ fn test_decode_rv64_elf(elf_path: &str) -> Result<()> {
 
 #[test_case("tests/data/rv64im-stress")]
 #[test_case("tests/data/rv64im-intrin")]
+#[test_case("tests/data/rv64im-intrin-full")]
 fn test_transpile_rv64_program(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     let program = rv64_transpiler().transpile(&elf.instructions)?;
@@ -174,7 +179,9 @@ fn test_transpile_rv64_phantom_discriminants() -> Result<()> {
 // End-to-end execution tests
 // ---------------------------------------------------------------------------
 
-fn execute_rv64_elf(elf_path: &str) -> Result<openvm_circuit::arch::VmState<F, openvm_circuit::system::memory::online::GuestMemory>> {
+fn execute_rv64_elf(
+    elf_path: &str,
+) -> Result<openvm_circuit::arch::VmState<F, openvm_circuit::system::memory::online::GuestMemory>> {
     execute_rv64_elf_with_input(elf_path, vec![])
 }
 
@@ -218,39 +225,100 @@ fn test_execute_rv64_fail_detected() {
 /// written to memory by hint_stored and hint_buffer.
 ///
 /// Data flow:
-///   - phantom_hint_input: pops the 72-element input Vec<F>, writes 4-byte length prefix
-///     + data to hint_stream → [F(72), F(0), F(0), F(0), F(10), F(11), ..., F(81)]
-///   - hint_stored (1 dword at 0x300100): pops 8 elements → [72, 0, 0, 0, 10, 11, 12, 13]
-///   - hint_buffer (8 dwords at 0x300200): pops 64 elements → sequential bytes 14..77
+///   - phantom_hint_input: pops the 72-element input Vec<F>, writes 8-byte length prefix (u64 LE) +
+///     data to hint_stream → [F(72), F(0), ..x6.., F(10), F(11), ..., F(81)]
+///   - hint_stored (1 dword at 0x300100): pops 8 elements → [72, 0, 0, 0, 0, 0, 0, 0]
+///   - hint_buffer (8 dwords at 0x300200): pops 64 elements → sequential bytes 10..73
 #[test]
 fn test_execute_rv64_intrin() -> Result<()> {
     // Use distinguishable input values so we can verify hint_stored and hint_buffer
     // wrote the correct data to memory.
-    let hint_data: Vec<F> = (0u32..72)
-        .map(|i| F::from_canonical_u32(i + 10))
-        .collect();
+    let hint_data: Vec<F> = (0u32..72).map(|i| F::from_canonical_u32(i + 10)).collect();
     let state = execute_rv64_elf_with_input("tests/data/rv64im-intrin", vec![hint_data])?;
 
     // Verify hint_stored wrote the correct dword at 0x300100:
-    // first 4 bytes are the length prefix (72 as u32 LE), next 4 are data[0..4].
-    let stored: [u8; 8] =
-        unsafe { state.memory.read::<u8, 8>(RV32_MEMORY_AS, 0x300100) };
+    // all 8 bytes are the length prefix (72 as u64 LE).
+    let stored: [u8; 8] = unsafe { state.memory.read::<u8, 8>(RV32_MEMORY_AS, 0x300100) };
     assert_eq!(
         stored,
-        [72, 0, 0, 0, 10, 11, 12, 13],
-        "hint_stored: expected length prefix (72,0,0,0) + first 4 data bytes (10,11,12,13)"
+        [72, 0, 0, 0, 0, 0, 0, 0],
+        "hint_stored: expected length prefix as u64 LE (72,0,0,0,0,0,0,0)"
     );
 
     // Verify hint_buffer wrote 8 correct dwords starting at 0x300200.
+    // Data now starts from the first element (10) since the length is a full dword.
     for dword_idx in 0u32..8 {
         let addr = 0x300200 + dword_idx * 8;
-        let actual: [u8; 8] =
-            unsafe { state.memory.read::<u8, 8>(RV32_MEMORY_AS, addr) };
-        let expected: [u8; 8] =
-            std::array::from_fn(|j| (14 + dword_idx * 8 + j as u32) as u8);
+        let actual: [u8; 8] = unsafe { state.memory.read::<u8, 8>(RV32_MEMORY_AS, addr) };
+        let expected: [u8; 8] = std::array::from_fn(|j| (10 + dword_idx * 8 + j as u32) as u8);
         assert_eq!(
             actual, expected,
             "hint_buffer dword {dword_idx} at {addr:#x}"
+        );
+    }
+
+    Ok(())
+}
+
+/// Comprehensive intrinsic test that verifies correctness of HINT_STORED,
+/// HINT_BUFFER, and PHANTOM(HintInput) through **two rounds** of hint data.
+/// The assembly test itself asserts (via branch-to-fail) that:
+///   - The u64 length prefix is correct in each round
+///   - All data bytes match the expected sequential patterns
+///
+/// We additionally check the final memory state from Rust.
+#[test]
+fn test_execute_rv64_intrin_full() -> Result<()> {
+    // Round 1: 24 field elements [0x10..0x27]
+    let input0: Vec<F> = (0u32..24)
+        .map(|i| F::from_canonical_u32(i + 0x10))
+        .collect();
+    // Round 2: 16 field elements [0xA0..0xAF]
+    let input1: Vec<F> = (0u32..16)
+        .map(|i| F::from_canonical_u32(i + 0xA0))
+        .collect();
+
+    let state = execute_rv64_elf_with_input("tests/data/rv64im-intrin-full", vec![input0, input1])?;
+
+    // --- Round 1 verification from Rust side ---
+
+    // hint_stored wrote length dword at 0x300100: 24 as u64 LE
+    let stored1: [u8; 8] = unsafe { state.memory.read::<u8, 8>(RV32_MEMORY_AS, 0x300100) };
+    assert_eq!(
+        stored1,
+        [24, 0, 0, 0, 0, 0, 0, 0],
+        "Round 1: hint_stored length should be 24 as u64 LE"
+    );
+
+    // hint_buffer wrote 3 dwords at 0x300200
+    for dword_idx in 0u32..3 {
+        let addr = 0x300200 + dword_idx * 8;
+        let actual: [u8; 8] = unsafe { state.memory.read::<u8, 8>(RV32_MEMORY_AS, addr) };
+        let expected: [u8; 8] = std::array::from_fn(|j| (0x10 + dword_idx * 8 + j as u32) as u8);
+        assert_eq!(
+            actual, expected,
+            "Round 1: hint_buffer dword {dword_idx} at {addr:#x}"
+        );
+    }
+
+    // --- Round 2 verification from Rust side ---
+
+    // hint_stored wrote length dword at 0x300300: 16 as u64 LE
+    let stored2: [u8; 8] = unsafe { state.memory.read::<u8, 8>(RV32_MEMORY_AS, 0x300300) };
+    assert_eq!(
+        stored2,
+        [16, 0, 0, 0, 0, 0, 0, 0],
+        "Round 2: hint_stored length should be 16 as u64 LE"
+    );
+
+    // hint_buffer wrote 2 dwords at 0x300400
+    for dword_idx in 0u32..2 {
+        let addr = 0x300400 + dword_idx * 8;
+        let actual: [u8; 8] = unsafe { state.memory.read::<u8, 8>(RV32_MEMORY_AS, addr) };
+        let expected: [u8; 8] = std::array::from_fn(|j| (0xA0 + dword_idx * 8 + j as u32) as u8);
+        assert_eq!(
+            actual, expected,
+            "Round 2: hint_buffer dword {dword_idx} at {addr:#x}"
         );
     }
 

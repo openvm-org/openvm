@@ -3,8 +3,10 @@
 #![cfg_attr(feature = "tco", allow(internal_features))]
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
 
-use openvm_circuit::arch::{InitFileGenerator, MemoryConfig, SystemConfig};
-use openvm_circuit::system::SystemExecutor;
+use openvm_circuit::{
+    arch::{InitFileGenerator, MemoryConfig, SystemConfig},
+    system::SystemExecutor,
+};
 use openvm_circuit_derive::VmConfig;
 use openvm_instructions::riscv::RV32_REGISTER_AS;
 use serde::{Deserialize, Serialize};
@@ -92,10 +94,7 @@ impl Rv64IConfig {
         }
     }
 
-    pub fn with_public_values_and_segment_len(
-        public_values: usize,
-        segment_len: usize,
-    ) -> Self {
+    pub fn with_public_values_and_segment_len(public_values: usize, segment_len: usize) -> Self {
         let system = SystemConfig::default_from_memory(rv64_mem_config())
             .with_public_values(public_values)
             .with_max_segment_len(segment_len);
@@ -126,10 +125,7 @@ impl Rv64ImConfig {
         }
     }
 
-    pub fn with_public_values_and_segment_len(
-        public_values: usize,
-        segment_len: usize,
-    ) -> Self {
+    pub fn with_public_values_and_segment_len(public_values: usize, segment_len: usize) -> Self {
         Self {
             rv64i: Rv64IConfig::with_public_values_and_segment_len(public_values, segment_len),
             mul: Default::default(),
