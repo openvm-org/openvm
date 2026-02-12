@@ -347,7 +347,7 @@ where
 
 // returns mulh[[s]u], mul, carry, x_ext, y_ext
 #[inline(always)]
-pub(super) fn run_mulh<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub fn run_mulh<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     opcode: MulHOpcode,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],

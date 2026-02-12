@@ -250,7 +250,7 @@ where
 
 // returns mul, carry
 #[inline(always)]
-pub(super) fn run_mul<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub fn run_mul<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u8; NUM_LIMBS],
     y: &[u8; NUM_LIMBS],
 ) -> ([u8; NUM_LIMBS], [u32; NUM_LIMBS]) {
