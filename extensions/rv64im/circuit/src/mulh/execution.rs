@@ -11,6 +11,8 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
 };
+use openvm_rv32im_circuit::run_mulh;
+use openvm_rv32im_transpiler::MulHOpcode;
 use openvm_rv64im_transpiler::Rv64MulHOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -20,6 +22,7 @@ pub(super) struct Rv64MulHPreCompute {
     a: u8,
     b: u8,
     c: u8,
+    local_opcode: u8,
 }
 
 #[derive(Clone, Copy, derive_new::new)]
@@ -34,29 +37,19 @@ impl Rv64MulHExecutor {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut Rv64MulHPreCompute,
-    ) -> Result<Rv64MulHOpcode, StaticProgramError> {
+    ) -> Result<(), StaticProgramError> {
         if inst.d.as_canonical_u32() != RV32_REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
+        let local_opcode_idx = inst.opcode.local_opcode_idx(self.offset);
         *data = Rv64MulHPreCompute {
             a: inst.a.as_canonical_u32() as u8,
             b: inst.b.as_canonical_u32() as u8,
             c: inst.c.as_canonical_u32() as u8,
+            local_opcode: Rv64MulHOpcode::from_usize(local_opcode_idx) as u8,
         };
-        Ok(Rv64MulHOpcode::from_usize(
-            inst.opcode.local_opcode_idx(self.offset),
-        ))
+        Ok(())
     }
-}
-
-macro_rules! dispatch {
-    ($execute_impl:ident, $local_opcode:ident) => {
-        Ok(match $local_opcode {
-            Rv64MulHOpcode::MULH => $execute_impl::<_, _, MulHOp64Signed>,
-            Rv64MulHOpcode::MULHSU => $execute_impl::<_, _, MulHSuOp64>,
-            Rv64MulHOpcode::MULHU => $execute_impl::<_, _, MulHUOp64>,
-        })
-    };
 }
 
 impl<F: PrimeField32> InterpreterExecutor<F> for Rv64MulHExecutor {
@@ -76,8 +69,8 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64MulHExecutor {
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut Rv64MulHPreCompute = data.borrow_mut();
-        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        dispatch!(execute_e1_handler, local_opcode)
+        self.pre_compute_impl(pc, inst, data)?;
+        Ok(execute_e1_impl)
     }
 
     #[cfg(feature = "tco")]
@@ -91,8 +84,8 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64MulHExecutor {
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut Rv64MulHPreCompute = data.borrow_mut();
-        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        dispatch!(execute_e1_handler, local_opcode)
+        self.pre_compute_impl(pc, inst, data)?;
+        Ok(execute_e1_handler)
     }
 }
 
@@ -115,8 +108,8 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64MulHExecutor {
     {
         let data: &mut E2PreCompute<Rv64MulHPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        dispatch!(execute_e2_handler, local_opcode)
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        Ok(execute_e2_impl)
     }
 
     #[cfg(feature = "tco")]
@@ -132,8 +125,8 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64MulHExecutor {
     {
         let data: &mut E2PreCompute<Rv64MulHPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        dispatch!(execute_e2_handler, local_opcode)
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        Ok(execute_e2_handler)
     }
 }
 
@@ -180,14 +173,18 @@ impl<F: PrimeField32> AotMeteredExecutor<F> for Rv64MulHExecutor {
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: MulHOp64>(
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &Rv64MulHPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1 = exec_state.vm_read::<u8, 8>(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs2 = exec_state.vm_read::<u8, 8>(RV32_REGISTER_AS, pre_compute.c as u32);
-    let rd = <OP as MulHOp64>::compute(u64::from_le_bytes(rs1), u64::from_le_bytes(rs2));
-    exec_state.vm_write::<u8, 8>(RV32_REGISTER_AS, pre_compute.a as u32, &rd.to_le_bytes());
+    let x32: [u32; 8] = std::array::from_fn(|i| rs1[i] as u32);
+    let y32: [u32; 8] = std::array::from_fn(|i| rs2[i] as u32);
+    let opcode = MulHOpcode::from_usize(pre_compute.local_opcode as usize);
+    let mulh_result = run_mulh::<8, 8>(opcode, &x32, &y32).0;
+    let rd: [u8; 8] = std::array::from_fn(|i| mulh_result[i] as u8);
+    exec_state.vm_write::<u8, 8>(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
@@ -195,18 +192,18 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: MulHOp64
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: MulHOp64>(
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &Rv64MulHPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<Rv64MulHPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, OP>(pre_compute, exec_state);
+    execute_e12_impl(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: MulHOp64>(
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -216,39 +213,5 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: Mu
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, OP>(&pre_compute.data, exec_state);
-}
-
-trait MulHOp64 {
-    fn compute(rs1: u64, rs2: u64) -> u64;
-}
-struct MulHOp64Signed;
-struct MulHSuOp64;
-struct MulHUOp64;
-
-impl MulHOp64 for MulHOp64Signed {
-    #[inline(always)]
-    fn compute(rs1: u64, rs2: u64) -> u64 {
-        let rs1 = rs1 as i64 as i128;
-        let rs2 = rs2 as i64 as i128;
-        (rs1.wrapping_mul(rs2) >> 64) as u64
-    }
-}
-
-impl MulHOp64 for MulHSuOp64 {
-    #[inline(always)]
-    fn compute(rs1: u64, rs2: u64) -> u64 {
-        let rs1 = rs1 as i64 as i128;
-        let rs2 = rs2 as u128 as i128;
-        (rs1.wrapping_mul(rs2) >> 64) as u64
-    }
-}
-
-impl MulHOp64 for MulHUOp64 {
-    #[inline(always)]
-    fn compute(rs1: u64, rs2: u64) -> u64 {
-        let rs1 = rs1 as u128;
-        let rs2 = rs2 as u128;
-        ((rs1.wrapping_mul(rs2)) >> 64) as u64
-    }
+    execute_e12_impl(&pre_compute.data, exec_state);
 }

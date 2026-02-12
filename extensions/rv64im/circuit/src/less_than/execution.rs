@@ -14,6 +14,7 @@ use openvm_instructions::{
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
+use openvm_rv32im_circuit::run_less_than;
 use openvm_rv64im_transpiler::Rv64LessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -219,11 +220,7 @@ unsafe fn execute_e12_impl<
     } else {
         exec_state.vm_read::<u8, 8>(RV32_REGISTER_AS, pre_compute.c as u32)
     };
-    let cmp_result = if IS_SLTU {
-        u64::from_le_bytes(rs1) < u64::from_le_bytes(rs2)
-    } else {
-        (u64::from_le_bytes(rs1) as i64) < (u64::from_le_bytes(rs2) as i64)
-    };
+    let cmp_result = run_less_than::<8, 8>(!IS_SLTU, &rs1, &rs2).0;
     let mut rd = [0u8; 8];
     rd[0] = cmp_result as u8;
     exec_state.vm_write::<u8, 8>(RV32_REGISTER_AS, pre_compute.a as u32, &rd);

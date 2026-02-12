@@ -11,6 +11,7 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
 };
+use openvm_rv32im_circuit::run_divrem;
 use openvm_rv64im_transpiler::Rv64DivRemOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -20,6 +21,7 @@ pub(super) struct Rv64DivRemPreCompute {
     a: u8,
     b: u8,
     c: u8,
+    local_opcode: u8,
 }
 
 #[derive(Clone, Copy, derive_new::new)]
@@ -34,7 +36,7 @@ impl Rv64DivRemExecutor {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut Rv64DivRemPreCompute,
-    ) -> Result<Rv64DivRemOpcode, StaticProgramError> {
+    ) -> Result<(), StaticProgramError> {
         let local_opcode = Rv64DivRemOpcode::from_usize(inst.opcode.local_opcode_idx(self.offset));
         if inst.d.as_canonical_u32() != RV32_REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
@@ -43,20 +45,10 @@ impl Rv64DivRemExecutor {
             a: inst.a.as_canonical_u32() as u8,
             b: inst.b.as_canonical_u32() as u8,
             c: inst.c.as_canonical_u32() as u8,
+            local_opcode: local_opcode as u8,
         };
-        Ok(local_opcode)
+        Ok(())
     }
-}
-
-macro_rules! dispatch {
-    ($execute_impl:ident, $local_opcode:ident) => {
-        Ok(match $local_opcode {
-            Rv64DivRemOpcode::DIV => $execute_impl::<_, _, DivOp64>,
-            Rv64DivRemOpcode::DIVU => $execute_impl::<_, _, DivuOp64>,
-            Rv64DivRemOpcode::REM => $execute_impl::<_, _, RemOp64>,
-            Rv64DivRemOpcode::REMU => $execute_impl::<_, _, RemuOp64>,
-        })
-    };
 }
 
 impl<F: PrimeField32> InterpreterExecutor<F> for Rv64DivRemExecutor {
@@ -76,8 +68,8 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64DivRemExecutor {
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut Rv64DivRemPreCompute = data.borrow_mut();
-        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        dispatch!(execute_e1_handler, local_opcode)
+        self.pre_compute_impl(pc, inst, data)?;
+        Ok(execute_e1_impl)
     }
 
     #[cfg(feature = "tco")]
@@ -91,8 +83,8 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64DivRemExecutor {
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut Rv64DivRemPreCompute = data.borrow_mut();
-        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        dispatch!(execute_e1_handler, local_opcode)
+        self.pre_compute_impl(pc, inst, data)?;
+        Ok(execute_e1_handler)
     }
 }
 
@@ -115,8 +107,8 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64DivRemExecutor {
     {
         let data: &mut E2PreCompute<Rv64DivRemPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        dispatch!(execute_e2_handler, local_opcode)
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        Ok(execute_e2_impl)
     }
 
     #[cfg(feature = "tco")]
@@ -132,8 +124,8 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64DivRemExecutor {
     {
         let data: &mut E2PreCompute<Rv64DivRemPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        dispatch!(execute_e2_handler, local_opcode)
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        Ok(execute_e2_handler)
     }
 }
 
@@ -180,36 +172,39 @@ impl<F: PrimeField32> AotMeteredExecutor<F> for Rv64DivRemExecutor {
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: DivRemOp64>(
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &Rv64DivRemPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1 = exec_state.vm_read::<u8, 8>(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs2 = exec_state.vm_read::<u8, 8>(RV32_REGISTER_AS, pre_compute.c as u32);
-    let result = <OP as DivRemOp64>::compute(u64::from_le_bytes(rs1), u64::from_le_bytes(rs2));
-    exec_state.vm_write::<u8, 8>(
-        RV32_REGISTER_AS,
-        pre_compute.a as u32,
-        &result.to_le_bytes(),
-    );
+    let local_opcode = Rv64DivRemOpcode::from_usize(pre_compute.local_opcode as usize);
+    let signed = matches!(local_opcode, Rv64DivRemOpcode::DIV | Rv64DivRemOpcode::REM);
+    let is_rem = matches!(local_opcode, Rv64DivRemOpcode::REM | Rv64DivRemOpcode::REMU);
+    let x32: [u32; 8] = std::array::from_fn(|i| rs1[i] as u32);
+    let y32: [u32; 8] = std::array::from_fn(|i| rs2[i] as u32);
+    let (quotient, remainder, ..) = run_divrem::<8, 8>(signed, &x32, &y32);
+    let result = if is_rem { remainder } else { quotient };
+    let rd: [u8; 8] = std::array::from_fn(|i| result[i] as u8);
+    exec_state.vm_write::<u8, 8>(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: DivRemOp64>(
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &Rv64DivRemPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<Rv64DivRemPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, OP>(pre_compute, exec_state);
+    execute_e12_impl(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: DivRemOp64>(
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -219,61 +214,5 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: Di
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, OP>(&pre_compute.data, exec_state);
-}
-
-trait DivRemOp64 {
-    fn compute(rs1: u64, rs2: u64) -> u64;
-}
-struct DivOp64;
-struct DivuOp64;
-struct RemOp64;
-struct RemuOp64;
-
-impl DivRemOp64 for DivOp64 {
-    #[inline(always)]
-    fn compute(rs1: u64, rs2: u64) -> u64 {
-        let rs1 = rs1 as i64;
-        let rs2 = rs2 as i64;
-        match (rs1, rs2) {
-            (_, 0) => u64::MAX,
-            (i64::MIN, -1) => rs1 as u64,
-            _ => (rs1 / rs2) as u64,
-        }
-    }
-}
-
-impl DivRemOp64 for DivuOp64 {
-    #[inline(always)]
-    fn compute(rs1: u64, rs2: u64) -> u64 {
-        if rs2 == 0 {
-            u64::MAX
-        } else {
-            rs1 / rs2
-        }
-    }
-}
-
-impl DivRemOp64 for RemOp64 {
-    #[inline(always)]
-    fn compute(rs1: u64, rs2: u64) -> u64 {
-        let rs1 = rs1 as i64;
-        let rs2 = rs2 as i64;
-        match (rs1, rs2) {
-            (_, 0) => rs1 as u64,
-            (i64::MIN, -1) => 0,
-            _ => (rs1 % rs2) as u64,
-        }
-    }
-}
-
-impl DivRemOp64 for RemuOp64 {
-    #[inline(always)]
-    fn compute(rs1: u64, rs2: u64) -> u64 {
-        if rs2 == 0 {
-            rs1
-        } else {
-            rs1 % rs2
-        }
-    }
+    execute_e12_impl(&pre_compute.data, exec_state);
 }

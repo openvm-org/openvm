@@ -343,7 +343,7 @@ where
 
 #[derive(Debug, Eq, PartialEq)]
 #[repr(u8)]
-pub(super) enum DivRemCoreSpecialCase {
+pub enum DivRemCoreSpecialCase {
     None,
     ZeroDivisor,
     SignedOverflow,
@@ -568,7 +568,7 @@ where
 // Returns (quotient, remainder, x_sign, y_sign, q_sign, case) where case = 0 for normal, 1
 // for zero divisor, and 2 for signed overflow
 #[inline(always)]
-pub(super) fn run_divrem<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub fn run_divrem<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     signed: bool,
     x: &[u32; NUM_LIMBS],
     y: &[u32; NUM_LIMBS],
