@@ -1,0 +1,15 @@
+[package]
+name = "openvm-groth16-circuit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+openvm-platform = { workspace = true, default-features = false }
+
+[features]
+default = []
