@@ -23,7 +23,7 @@ openvm-stark-sdk = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 stark-backend-v2 = { workspace = true }
-cuda-backend-v2 = { workspace = true, optional = true }
+#cuda-backend-v2 = { workspace = true, optional = true }
 
 itertools.workspace = true
 tracing.workspace = true
