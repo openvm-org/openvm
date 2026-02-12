@@ -109,7 +109,7 @@ cuda = [
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
     "dep:openvm-cuda-builder",
-    "dep:cuda-backend-v2",
+    #"dep:cuda-backend-v2",
 ]
 touchemall = [
     "cuda",
