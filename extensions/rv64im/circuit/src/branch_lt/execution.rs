@@ -11,7 +11,6 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
 };
-use openvm_rv32im_circuit::run_cmp;
 use openvm_rv64im_transpiler::Rv64BranchLessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -21,7 +20,6 @@ pub(super) struct Rv64BranchLtPreCompute {
     imm: isize,
     a: u8,
     b: u8,
-    local_opcode: u8,
 }
 
 #[derive(Clone, Copy, derive_new::new)]
@@ -36,7 +34,7 @@ impl Rv64BranchLessThanExecutor {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut Rv64BranchLtPreCompute,
-    ) -> Result<(), StaticProgramError> {
+    ) -> Result<Rv64BranchLessThanOpcode, StaticProgramError> {
         let &Instruction {
             opcode, a, b, c, d, ..
         } = inst;
@@ -55,10 +53,20 @@ impl Rv64BranchLessThanExecutor {
             imm,
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
-            local_opcode: local_opcode as u8,
         };
-        Ok(())
+        Ok(local_opcode)
     }
+}
+
+macro_rules! dispatch {
+    ($execute_impl:ident, $local_opcode:ident) => {
+        Ok(match $local_opcode {
+            Rv64BranchLessThanOpcode::BLT => $execute_impl::<_, _, BltOp64>,
+            Rv64BranchLessThanOpcode::BLTU => $execute_impl::<_, _, BltuOp64>,
+            Rv64BranchLessThanOpcode::BGE => $execute_impl::<_, _, BgeOp64>,
+            Rv64BranchLessThanOpcode::BGEU => $execute_impl::<_, _, BgeuOp64>,
+        })
+    };
 }
 
 impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BranchLessThanExecutor {
@@ -78,8 +86,8 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BranchLessThanExecutor {
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut Rv64BranchLtPreCompute = data.borrow_mut();
-        self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_impl)
+        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
+        dispatch!(execute_e1_handler, local_opcode)
     }
 
     #[cfg(feature = "tco")]
@@ -93,8 +101,8 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BranchLessThanExecutor {
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut Rv64BranchLtPreCompute = data.borrow_mut();
-        self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_handler)
+        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
+        dispatch!(execute_e1_handler, local_opcode)
     }
 }
 
@@ -117,8 +125,8 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64BranchLessThanExecut
     {
         let data: &mut E2PreCompute<Rv64BranchLtPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_impl)
+        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        dispatch!(execute_e2_handler, local_opcode)
     }
 
     #[cfg(feature = "tco")]
@@ -134,8 +142,8 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64BranchLessThanExecut
     {
         let data: &mut E2PreCompute<Rv64BranchLtPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_handler)
+        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        dispatch!(execute_e2_handler, local_opcode)
     }
 }
 
@@ -182,14 +190,14 @@ impl<F: PrimeField32> AotMeteredExecutor<F> for Rv64BranchLessThanExecutor {
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLtOp64>(
     pre_compute: &Rv64BranchLtPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let mut pc = exec_state.pc();
     let rs1 = exec_state.vm_read::<u8, 8>(RV32_REGISTER_AS, pre_compute.a as u32);
     let rs2 = exec_state.vm_read::<u8, 8>(RV32_REGISTER_AS, pre_compute.b as u32);
-    let jmp = run_cmp::<8, 8>(pre_compute.local_opcode, &rs1, &rs2).0;
+    let jmp = <OP as BranchLtOp64>::compute(u64::from_le_bytes(rs1), u64::from_le_bytes(rs2));
     if jmp {
         pc = (pc as isize + pre_compute.imm) as u32;
     } else {
@@ -200,18 +208,18 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLtOp64>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &Rv64BranchLtPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<Rv64BranchLtPreCompute>()).borrow();
-    execute_e12_impl(pre_compute, exec_state);
+    execute_e12_impl::<F, CTX, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: BranchLtOp64>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -223,5 +231,38 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl(&pre_compute.data, exec_state);
+    execute_e12_impl::<F, CTX, OP>(&pre_compute.data, exec_state);
+}
+
+trait BranchLtOp64 {
+    fn compute(rs1: u64, rs2: u64) -> bool;
+}
+struct BltOp64;
+struct BltuOp64;
+struct BgeOp64;
+struct BgeuOp64;
+
+impl BranchLtOp64 for BltOp64 {
+    #[inline(always)]
+    fn compute(rs1: u64, rs2: u64) -> bool {
+        (rs1 as i64) < (rs2 as i64)
+    }
+}
+impl BranchLtOp64 for BltuOp64 {
+    #[inline(always)]
+    fn compute(rs1: u64, rs2: u64) -> bool {
+        rs1 < rs2
+    }
+}
+impl BranchLtOp64 for BgeOp64 {
+    #[inline(always)]
+    fn compute(rs1: u64, rs2: u64) -> bool {
+        (rs1 as i64) >= (rs2 as i64)
+    }
+}
+impl BranchLtOp64 for BgeuOp64 {
+    #[inline(always)]
+    fn compute(rs1: u64, rs2: u64) -> bool {
+        rs1 >= rs2
+    }
 }

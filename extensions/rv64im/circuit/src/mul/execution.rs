@@ -11,7 +11,6 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
 };
-use openvm_rv32im_circuit::run_mul;
 use openvm_rv64im_transpiler::Rv64MulOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -179,8 +178,10 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 ) {
     let rs1 = exec_state.vm_read::<u8, 8>(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs2 = exec_state.vm_read::<u8, 8>(RV32_REGISTER_AS, pre_compute.c as u32);
-    let rd = run_mul::<8, 8>(&rs1, &rs2).0;
-    exec_state.vm_write::<u8, 8>(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
+    let rs1 = u64::from_le_bytes(rs1);
+    let rs2 = u64::from_le_bytes(rs2);
+    let rd = rs1.wrapping_mul(rs2);
+    exec_state.vm_write::<u8, 8>(RV32_REGISTER_AS, pre_compute.a as u32, &rd.to_le_bytes());
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));

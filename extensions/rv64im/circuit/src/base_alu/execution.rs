@@ -14,8 +14,6 @@ use openvm_instructions::{
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32im_circuit::run_alu;
-use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_rv64im_transpiler::Rv64BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -32,7 +30,6 @@ pub(super) struct Rv64BaseAluPreCompute {
     c: u64,
     a: u8,
     b: u8,
-    local_opcode: u8,
 }
 
 #[derive(Clone, Copy, derive_new::new)]
@@ -65,20 +62,30 @@ impl Rv64BaseAluExecutor {
             },
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
-            local_opcode: Rv64BaseAluOpcode::from_usize(inst.opcode.local_opcode_idx(self.offset))
-                as u8,
         };
         Ok(is_imm)
     }
 }
 
 macro_rules! dispatch {
-    ($execute_impl:ident, $is_imm:ident) => {
-        Ok(if $is_imm {
-            $execute_impl::<_, _, true>
-        } else {
-            $execute_impl::<_, _, false>
-        })
+    ($execute_impl:ident, $is_imm:ident, $opcode:expr, $offset:expr) => {
+        Ok(
+            match (
+                $is_imm,
+                Rv64BaseAluOpcode::from_usize($opcode.local_opcode_idx($offset)),
+            ) {
+                (true, Rv64BaseAluOpcode::ADD) => $execute_impl::<_, _, true, AddOp64>,
+                (false, Rv64BaseAluOpcode::ADD) => $execute_impl::<_, _, false, AddOp64>,
+                (true, Rv64BaseAluOpcode::SUB) => $execute_impl::<_, _, true, SubOp64>,
+                (false, Rv64BaseAluOpcode::SUB) => $execute_impl::<_, _, false, SubOp64>,
+                (true, Rv64BaseAluOpcode::XOR) => $execute_impl::<_, _, true, XorOp64>,
+                (false, Rv64BaseAluOpcode::XOR) => $execute_impl::<_, _, false, XorOp64>,
+                (true, Rv64BaseAluOpcode::OR) => $execute_impl::<_, _, true, OrOp64>,
+                (false, Rv64BaseAluOpcode::OR) => $execute_impl::<_, _, false, OrOp64>,
+                (true, Rv64BaseAluOpcode::AND) => $execute_impl::<_, _, true, AndOp64>,
+                (false, Rv64BaseAluOpcode::AND) => $execute_impl::<_, _, false, AndOp64>,
+            },
+        )
     };
 }
 
@@ -101,7 +108,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BaseAluExecutor {
         let data: &mut Rv64BaseAluPreCompute = data.borrow_mut();
         let is_imm = self.pre_compute_impl(pc, inst, data)?;
 
-        dispatch!(execute_e1_handler, is_imm)
+        dispatch!(execute_e1_handler, is_imm, inst.opcode, self.offset)
     }
 
     #[cfg(feature = "tco")]
@@ -117,7 +124,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BaseAluExecutor {
         let data: &mut Rv64BaseAluPreCompute = data.borrow_mut();
         let is_imm = self.pre_compute_impl(pc, inst, data)?;
 
-        dispatch!(execute_e1_handler, is_imm)
+        dispatch!(execute_e1_handler, is_imm, inst.opcode, self.offset)
     }
 }
 
@@ -142,7 +149,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64BaseAluExecutor {
         data.chip_idx = chip_idx as u32;
         let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
 
-        dispatch!(execute_e2_handler, is_imm)
+        dispatch!(execute_e2_handler, is_imm, inst.opcode, self.offset)
     }
 
     #[cfg(feature = "tco")]
@@ -160,7 +167,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64BaseAluExecutor {
         data.chip_idx = chip_idx as u32;
         let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
 
-        dispatch!(execute_e2_handler, is_imm)
+        dispatch!(execute_e2_handler, is_imm, inst.opcode, self.offset)
     }
 }
 
@@ -207,7 +214,12 @@ impl<F: PrimeField32> AotMeteredExecutor<F> for Rv64BaseAluExecutor {
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_IMM: bool>(
+unsafe fn execute_e12_impl<
+    F: PrimeField32,
+    CTX: ExecutionCtxTrait,
+    const IS_IMM: bool,
+    OP: AluOp64,
+>(
     pre_compute: &Rv64BaseAluPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -217,8 +229,10 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_IMM
     } else {
         exec_state.vm_read::<u8, 8>(RV32_REGISTER_AS, pre_compute.c as u32)
     };
-    let opcode = BaseAluOpcode::from_usize(pre_compute.local_opcode as usize);
-    let rd = run_alu::<8, 8>(opcode, &rs1, &rs2);
+    let rs1 = u64::from_le_bytes(rs1);
+    let rs2 = u64::from_le_bytes(rs2);
+    let rd = <OP as AluOp64>::compute(rs1, rs2);
+    let rd = rd.to_le_bytes();
     exec_state.vm_write::<u8, 8>(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
@@ -226,18 +240,28 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_IMM
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_IMM: bool>(
+unsafe fn execute_e1_impl<
+    F: PrimeField32,
+    CTX: ExecutionCtxTrait,
+    const IS_IMM: bool,
+    OP: AluOp64,
+>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &Rv64BaseAluPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<Rv64BaseAluPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, IS_IMM>(pre_compute, exec_state);
+    execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const IS_IMM: bool>(
+unsafe fn execute_e2_impl<
+    F: PrimeField32,
+    CTX: MeteredExecutionCtxTrait,
+    const IS_IMM: bool,
+    OP: AluOp64,
+>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -249,5 +273,44 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const 
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, IS_IMM>(&pre_compute.data, exec_state);
+    execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, exec_state);
+}
+
+trait AluOp64 {
+    fn compute(rs1: u64, rs2: u64) -> u64;
+}
+struct AddOp64;
+struct SubOp64;
+struct XorOp64;
+struct OrOp64;
+struct AndOp64;
+impl AluOp64 for AddOp64 {
+    #[inline(always)]
+    fn compute(rs1: u64, rs2: u64) -> u64 {
+        rs1.wrapping_add(rs2)
+    }
+}
+impl AluOp64 for SubOp64 {
+    #[inline(always)]
+    fn compute(rs1: u64, rs2: u64) -> u64 {
+        rs1.wrapping_sub(rs2)
+    }
+}
+impl AluOp64 for XorOp64 {
+    #[inline(always)]
+    fn compute(rs1: u64, rs2: u64) -> u64 {
+        rs1 ^ rs2
+    }
+}
+impl AluOp64 for OrOp64 {
+    #[inline(always)]
+    fn compute(rs1: u64, rs2: u64) -> u64 {
+        rs1 | rs2
+    }
+}
+impl AluOp64 for AndOp64 {
+    #[inline(always)]
+    fn compute(rs1: u64, rs2: u64) -> u64 {
+        rs1 & rs2
+    }
 }
