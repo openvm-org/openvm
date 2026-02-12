@@ -174,26 +174,33 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
     let mem_ptr = u64::from_le_bytes(mem_ptr_bytes);
 
     let num_dwords = if IS_HINT_STORED {
-        1u32
+        1u64
     } else {
         let num_dwords_bytes: [u8; RV64_NUM_LIMBS] =
             exec_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32);
-        u32::from_le_bytes([
-            num_dwords_bytes[0],
-            num_dwords_bytes[1],
-            num_dwords_bytes[2],
-            num_dwords_bytes[3],
-        ])
+        u64::from_le_bytes(num_dwords_bytes)
     };
-    if num_dwords > MAX_HINT_BUFFER_DWORDS as u32 {
+    if num_dwords > MAX_HINT_BUFFER_DWORDS as u64 {
         return Err(ExecutionError::HintBufferTooLarge {
             pc,
-            num_words: num_dwords,
+            num_words: u32::try_from(num_dwords).unwrap_or(u32::MAX),
             max_hint_buffer_words: MAX_HINT_BUFFER_DWORDS as u32,
         });
     }
 
-    if exec_state.streams.hint_stream.len() < RV64_NUM_LIMBS * num_dwords as usize {
+    let num_dwords_usize = usize::try_from(num_dwords).map_err(|_| ExecutionError::Fail {
+        pc,
+        msg: "Rv64HintStore: num_dwords does not fit usize",
+    })?;
+    let required_hint_len =
+        RV64_NUM_LIMBS
+            .checked_mul(num_dwords_usize)
+            .ok_or(ExecutionError::Fail {
+                pc,
+                msg: "Rv64HintStore: required hint length overflow",
+            })?;
+
+    if exec_state.streams.hint_stream.len() < required_hint_len {
         return Err(ExecutionError::HintOutOfBounds { pc });
     }
 
@@ -214,7 +221,10 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
     }
 
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
-    Ok(num_dwords)
+    u32::try_from(num_dwords).map_err(|_| ExecutionError::Fail {
+        pc,
+        msg: "Rv64HintStore: num_dwords does not fit u32",
+    })
 }
 
 #[create_handler]
