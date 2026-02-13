@@ -29,8 +29,8 @@ pub const SW_FUNCT3: u8 = 0b001;
 #[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
 #[repr(u8)]
 pub enum SwBaseFunct7 {
-    SwAddNe = 0,
-    SwDouble,
+    SwAddProj = 0,
+    SwDoubleProj,
     SwSetup,
 }
 

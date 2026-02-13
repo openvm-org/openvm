@@ -5,7 +5,8 @@ use openvm_algebra_guest::{Field, IntMod};
 
 use super::group::Group;
 
-/// Short Weierstrass curve affine point.
+/// Short Weierstrass curve point in projective coordinates (X, Y, Z).
+/// The affine point is (X/Z, Y/Z). The identity is represented as (0, 1, 0).
 pub trait WeierstrassPoint: Clone + Sized {
     /// The `a` coefficient in the Weierstrass curve equation `y^2 = x^3 + a x + b`.
     const CURVE_A: Self::Coordinate;
@@ -15,77 +16,48 @@ pub trait WeierstrassPoint: Clone + Sized {
 
     type Coordinate: Field;
 
-    /// The concatenated `x, y` coordinates of the affine point, where
+    /// The concatenated `x, y, z` coordinates of the projective point, where
     /// coordinates are in little endian.
     ///
     /// **Warning**: The memory layout of `Self` is expected to pack
-    /// `x` and `y` contiguously with no unallocated space in between.
+    /// `x`, `y`, and `z` contiguously with no unallocated space in between.
     fn as_le_bytes(&self) -> &[u8];
 
-    /// Raw constructor without asserting point is on the curve.
+    /// Raw constructor without asserting point is on the curve. Sets z = 1.
     fn from_xy_unchecked(x: Self::Coordinate, y: Self::Coordinate) -> Self;
-    fn into_coords(self) -> (Self::Coordinate, Self::Coordinate);
+    /// Raw constructor from projective coordinates.
+    fn from_xyz_unchecked(x: Self::Coordinate, y: Self::Coordinate, z: Self::Coordinate) -> Self;
+    fn into_coords(self) -> (Self::Coordinate, Self::Coordinate, Self::Coordinate);
     fn x(&self) -> &Self::Coordinate;
     fn y(&self) -> &Self::Coordinate;
+    fn z(&self) -> &Self::Coordinate;
     fn x_mut(&mut self) -> &mut Self::Coordinate;
     fn y_mut(&mut self) -> &mut Self::Coordinate;
+    fn z_mut(&mut self) -> &mut Self::Coordinate;
 
     /// Calls any setup required for this curve. The implementation should internally use `OnceBool`
     /// to ensure that setup is only called once.
     fn set_up_once();
 
-    /// Add implementation that handles identity and whether points are equal or not.
+    /// Complete projective addition formula.
     ///
-    /// # Safety
-    /// - If `CHECK_SETUP` is true, checks if setup has been called for this curve and if not, calls
-    ///   `Self::set_up_once()`. Only set `CHECK_SETUP` to `false` if you are sure that setup has
-    ///   been called already.
-    fn add_assign_impl<const CHECK_SETUP: bool>(&mut self, p2: &Self);
+    /// If `CHECK_SETUP` is true, checks if setup has been called for this curve and if not, calls
+    /// `Self::set_up_once()`. Only set `CHECK_SETUP` to `false` if you are sure that setup has
+    /// been called already.
+    fn add_impl<const CHECK_SETUP: bool>(&self, p2: &Self) -> Self;
 
-    /// Double implementation that handles identity.
+    /// Complete projective doubling formula.
     ///
-    /// # Safety
-    /// - If `CHECK_SETUP` is true, checks if setup has been called for this curve and if not, calls
-    ///   `Self::set_up_once()`. Only set `CHECK_SETUP` to `false` if you are sure that setup has
-    ///   been called already.
-    fn double_assign_impl<const CHECK_SETUP: bool>(&mut self);
+    /// If `CHECK_SETUP` is true, checks if setup has been called for this curve and if not, calls
+    /// `Self::set_up_once()`. Only set `CHECK_SETUP` to `false` if you are sure that setup has
+    /// been called already.
+    fn double_impl<const CHECK_SETUP: bool>(&self) -> Self;
 
-    /// # Safety
-    /// - Assumes self != +- p2 and self != identity and p2 != identity.
-    /// - If `CHECK_SETUP` is true, checks if setup has been called for this curve and if not, calls
-    ///   `Self::set_up_once()`. Only set `CHECK_SETUP` to `false` if you are sure that setup has
-    ///   been called already.
-    unsafe fn add_ne_nonidentity<const CHECK_SETUP: bool>(&self, p2: &Self) -> Self;
-    /// # Safety
-    /// - Assumes self != +- p2 and self != identity and p2 != identity.
-    /// - If `CHECK_SETUP` is true, checks if setup has been called for this curve and if not, calls
-    ///   `Self::set_up_once()`. Only set `CHECK_SETUP` to `false` if you are sure that setup has
-    ///   been called already.
-    unsafe fn add_ne_assign_nonidentity<const CHECK_SETUP: bool>(&mut self, p2: &Self);
-    /// # Safety
-    /// - Assumes self != +- p2 and self != identity and p2 != identity.
-    /// - If `CHECK_SETUP` is true, checks if setup has been called for this curve and if not, calls
-    ///   `Self::set_up_once()`. Only set `CHECK_SETUP` to `false` if you are sure that setup has
-    ///   been called already.
-    unsafe fn sub_ne_nonidentity<const CHECK_SETUP: bool>(&self, p2: &Self) -> Self;
-    /// # Safety
-    /// - Assumes self != +- p2 and self != identity and p2 != identity.
-    /// - If `CHECK_SETUP` is true, checks if setup has been called for this curve and if not, calls
-    ///   `Self::set_up_once()`. Only set `CHECK_SETUP` to `false` if you are sure that setup has
-    ///   been called already.
-    unsafe fn sub_ne_assign_nonidentity<const CHECK_SETUP: bool>(&mut self, p2: &Self);
-    /// # Safety
-    /// - Assumes self != identity and 2 * self != identity.
-    /// - If `CHECK_SETUP` is true, checks if setup has been called for this curve and if not, calls
-    ///   `Self::set_up_once()`. Only set `CHECK_SETUP` to `false` if you are sure that setup has
-    ///   been called already.
-    unsafe fn double_nonidentity<const CHECK_SETUP: bool>(&self) -> Self;
-    /// # Safety
-    /// - Assumes self != identity and 2 * self != identity.
-    /// - If `CHECK_SETUP` is true, checks if setup has been called for this curve and if not, calls
-    ///   `Self::set_up_once()`. Only set `CHECK_SETUP` to `false` if you are sure that setup has
-    ///   been called already.
-    unsafe fn double_assign_nonidentity<const CHECK_SETUP: bool>(&mut self);
+    /// Normalize to affine coordinates: (X/Z, Y/Z, 1). Returns identity for z=0.
+    fn normalize(&self) -> Self;
+
+    /// Check if this point is the identity (z == 0).
+    fn is_identity(&self) -> bool;
 
     #[inline(always)]
     fn from_xy(x: Self::Coordinate, y: Self::Coordinate) -> Option<Self>
@@ -268,38 +240,105 @@ where
     }
 }
 
-/// Macro to generate a newtype wrapper for [AffinePoint](crate::AffinePoint)
-/// that implements elliptic curve operations by using the underlying field operations according to
-/// the [formulas](https://www.hyperelliptic.org/EFD/g1p/auto-shortw.html) for short Weierstrass curves.
+/// Macro to generate a projective point type for short Weierstrass curves.
+/// Implements elliptic curve operations using complete projective formulas
+/// from ePrint 2015/1060 (no DivUnsafe needed for add/double).
 ///
 /// The following imports are required:
 /// ```rust
-/// use core::ops::AddAssign;
-///
-/// use openvm_algebra_guest::{DivUnsafe, Field};
-/// use openvm_ecc_guest::{weierstrass::WeierstrassPoint, AffinePoint, Group};
+/// use openvm_algebra_guest::Field;
+/// use openvm_ecc_guest::weierstrass::WeierstrassPoint;
 /// ```
 #[macro_export]
-macro_rules! impl_sw_affine {
-    // Assumes `a = 0` in curve equation. `$three` should be a constant expression for `3` of type
-    // `$field`.
-    ($struct_name:ident, $field:ty, $three:expr, $b:expr) => {
-        /// A newtype wrapper for [AffinePoint] that implements elliptic curve operations
-        /// by using the underlying field operations according to the [formulas](https://www.hyperelliptic.org/EFD/g1p/auto-shortw.html) for short Weierstrass curves.
+macro_rules! impl_sw_proj {
+    // Assumes `a = 0` in curve equation `y^2 = x^3 + a*x + b`.
+    ($struct_name:ident, $field:ty, $b:expr) => {
+        /// A projective point on a short Weierstrass curve, implementing elliptic curve operations
+        /// using complete formulas from [ePrint 2015/1060](https://eprint.iacr.org/2015/1060).
         #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-        #[repr(transparent)]
-        pub struct $struct_name(AffinePoint<$field>);
+        #[repr(C)]
+        pub struct $struct_name {
+            pub x: $field,
+            pub y: $field,
+            pub z: $field,
+        }
 
         impl $struct_name {
-            pub const fn new(x: $field, y: $field) -> Self {
-                Self(AffinePoint::new(x, y))
+            pub const fn new(x: $field, y: $field, z: $field) -> Self {
+                Self { x, y, z }
+            }
+
+            /// Complete projective addition for a=0 curves.
+            /// Algorithm 7 from ePrint 2015/1060.
+            #[inline(always)]
+            fn add_a0(
+                x1: &$field,
+                y1: &$field,
+                z1: &$field,
+                x2: &$field,
+                y2: &$field,
+                z2: &$field,
+                b3: &$field,
+            ) -> Self {
+                let t0 = x1 * x2;
+                let t1 = y1 * y2;
+                let t2 = z1 * z2;
+                let t3 = &(x1 + y1) * &(x2 + y2) - &t0 - &t1;
+                let t4 = &(y1 + z1) * &(y2 + z2) - &t1 - &t2;
+                let y3_temp = &(x1 + z1) * &(x2 + z2) - &t0 - &t2;
+                let x3_coeff = &t0 + &t0 + &t0; // 3*t0
+                let t2_b3 = b3 * &t2;
+                let z3_temp = &t1 + &t2_b3;
+                let t1_sub = &t1 - &t2_b3;
+                let y3_b3 = b3 * &y3_temp;
+                let x3_out = &t3 * &t1_sub - &t4 * &y3_b3;
+                let y3_out = &t1_sub * &z3_temp + &y3_b3 * &x3_coeff;
+                let z3_out = &z3_temp * &t4 + &x3_coeff * &t3;
+                Self {
+                    x: x3_out,
+                    y: y3_out,
+                    z: z3_out,
+                }
+            }
+
+            /// Complete projective doubling for a=0 curves.
+            /// Algorithm 9 from ePrint 2015/1060.
+            #[inline(always)]
+            fn double_a0(x1: &$field, y1: &$field, z1: &$field, b3: &$field) -> Self {
+                let t0 = y1 * y1;
+                let t0_2 = &t0 + &t0;
+                let t0_4 = &t0_2 + &t0_2;
+                let z3_8t0 = &t0_4 + &t0_4; // 8*t0
+                let t1 = y1 * z1;
+                let z1_sq = z1 * z1;
+                let t2 = b3 * &z1_sq;
+                let x3_temp = &t2 * &z3_8t0;
+                let y3 = &t0 + &t2;
+                let z3 = &t1 * &z3_8t0;
+                let t2_2 = &t2 + &t2;
+                let t2_3 = &t2_2 + &t2;
+                let t0 = &t0 - &t2_3;
+                let y3_part = &t0 * &y3;
+                let y3 = &y3_part + &x3_temp;
+                let t1 = x1 * y1;
+                let x3_part = &t0 * &t1;
+                let x3 = &x3_part + &x3_part; // 2 * t0 * t1
+                Self {
+                    x: x3,
+                    y: y3,
+                    z: z3,
+                }
             }
         }
 
         impl WeierstrassPoint for $struct_name {
             const CURVE_A: $field = <$field>::ZERO;
             const CURVE_B: $field = $b;
-            const IDENTITY: Self = Self(AffinePoint::new(<$field>::ZERO, <$field>::ZERO));
+            const IDENTITY: Self = Self {
+                x: <$field>::ZERO,
+                y: <$field>::ONE,
+                z: <$field>::ZERO,
+            };
 
             type Coordinate = $field;
 
@@ -313,109 +352,76 @@ macro_rules! impl_sw_affine {
                 }
             }
             fn from_xy_unchecked(x: Self::Coordinate, y: Self::Coordinate) -> Self {
-                Self(AffinePoint::new(x, y))
+                Self {
+                    x,
+                    y,
+                    z: <$field>::ONE,
+                }
             }
-            fn into_coords(self) -> (Self::Coordinate, Self::Coordinate) {
-                (self.0.x, self.0.y)
+            fn from_xyz_unchecked(
+                x: Self::Coordinate,
+                y: Self::Coordinate,
+                z: Self::Coordinate,
+            ) -> Self {
+                Self { x, y, z }
+            }
+            fn into_coords(self) -> (Self::Coordinate, Self::Coordinate, Self::Coordinate) {
+                (self.x, self.y, self.z)
             }
             fn x(&self) -> &Self::Coordinate {
-                &self.0.x
+                &self.x
             }
             fn y(&self) -> &Self::Coordinate {
-                &self.0.y
+                &self.y
+            }
+            fn z(&self) -> &Self::Coordinate {
+                &self.z
             }
             fn x_mut(&mut self) -> &mut Self::Coordinate {
-                &mut self.0.x
+                &mut self.x
             }
             fn y_mut(&mut self) -> &mut Self::Coordinate {
-                &mut self.0.y
+                &mut self.y
+            }
+            fn z_mut(&mut self) -> &mut Self::Coordinate {
+                &mut self.z
             }
 
             fn set_up_once() {
-                // There are no special opcodes for curve operations in this case, so no additional
-                // setup is required.
-                //
-                // Since the `Self::Coordinate` is abstract, any set up required by the field is not
-                // handled here.
+                // No special opcodes for curve operations in this case.
             }
 
-            fn add_assign_impl<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
-                if self == &<Self as WeierstrassPoint>::IDENTITY {
-                    *self = p2.clone();
-                } else if p2 == &<Self as WeierstrassPoint>::IDENTITY {
-                    // do nothing
-                } else if self.x() == p2.x() {
-                    if self.y() + p2.y() == <Self::Coordinate as openvm_algebra_guest::Field>::ZERO
-                    {
-                        *self = <Self as WeierstrassPoint>::IDENTITY;
-                    } else {
-                        unsafe {
-                            self.double_assign_nonidentity::<CHECK_SETUP>();
-                        }
-                    }
+            fn add_impl<const CHECK_SETUP: bool>(&self, p2: &Self) -> Self {
+                let b3 = &(&<Self as WeierstrassPoint>::CURVE_B
+                    + &<Self as WeierstrassPoint>::CURVE_B)
+                    + &<Self as WeierstrassPoint>::CURVE_B;
+                Self::add_a0(&self.x, &self.y, &self.z, &p2.x, &p2.y, &p2.z, &b3)
+            }
+
+            fn double_impl<const CHECK_SETUP: bool>(&self) -> Self {
+                let b3 = &(&<Self as WeierstrassPoint>::CURVE_B
+                    + &<Self as WeierstrassPoint>::CURVE_B)
+                    + &<Self as WeierstrassPoint>::CURVE_B;
+                Self::double_a0(&self.x, &self.y, &self.z, &b3)
+            }
+
+            fn normalize(&self) -> Self {
+                use openvm_algebra_guest::DivUnsafe;
+                if self.z == <$field>::ZERO {
+                    <Self as WeierstrassPoint>::IDENTITY
                 } else {
-                    unsafe {
-                        self.add_ne_assign_nonidentity::<CHECK_SETUP>(p2);
+                    let x = (&self.x).div_unsafe(&self.z);
+                    let y = (&self.y).div_unsafe(&self.z);
+                    Self {
+                        x,
+                        y,
+                        z: <$field>::ONE,
                     }
                 }
             }
 
-            #[inline(always)]
-            fn double_assign_impl<const CHECK_SETUP: bool>(&mut self) {
-                if self != &<Self as WeierstrassPoint>::IDENTITY {
-                    unsafe {
-                        self.double_assign_nonidentity::<CHECK_SETUP>();
-                    }
-                }
-            }
-
-            unsafe fn double_nonidentity<const CHECK_SETUP: bool>(&self) -> Self {
-                use openvm_algebra_guest::DivUnsafe;
-                // lambda = (3*x1^2+a)/(2*y1)
-                // assume a = 0
-                let lambda = (&THREE * self.x() * self.x()).div_unsafe(self.y() + self.y());
-                // x3 = lambda^2-x1-x1
-                let x3 = &lambda * &lambda - self.x() - self.x();
-                // y3 = lambda * (x1-x3) - y1
-                let y3 = lambda * (self.x() - &x3) - self.y();
-                Self(AffinePoint::new(x3, y3))
-            }
-
-            #[inline(always)]
-            unsafe fn double_assign_nonidentity<const CHECK_SETUP: bool>(&mut self) {
-                *self = self.double_nonidentity::<CHECK_SETUP>();
-            }
-
-            unsafe fn add_ne_nonidentity<const CHECK_SETUP: bool>(&self, p2: &Self) -> Self {
-                use openvm_algebra_guest::DivUnsafe;
-                // lambda = (y2-y1)/(x2-x1)
-                // x3 = lambda^2-x1-x2
-                // y3 = lambda*(x1-x3)-y1
-                let lambda = (p2.y() - self.y()).div_unsafe(p2.x() - self.x());
-                let x3 = &lambda * &lambda - self.x() - p2.x();
-                let y3 = lambda * (self.x() - &x3) - self.y();
-                Self(AffinePoint::new(x3, y3))
-            }
-
-            #[inline(always)]
-            unsafe fn add_ne_assign_nonidentity<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
-                *self = self.add_ne_nonidentity::<CHECK_SETUP>(p2);
-            }
-
-            unsafe fn sub_ne_nonidentity<const CHECK_SETUP: bool>(&self, p2: &Self) -> Self {
-                use openvm_algebra_guest::DivUnsafe;
-                // lambda = (y2+y1)/(x1-x2)
-                // x3 = lambda^2-x1-x2
-                // y3 = lambda*(x1-x3)-y1
-                let lambda = (p2.y() + self.y()).div_unsafe(self.x() - p2.x());
-                let x3 = &lambda * &lambda - self.x() - p2.x();
-                let y3 = lambda * (self.x() - &x3) - self.y();
-                Self(AffinePoint::new(x3, y3))
-            }
-
-            #[inline(always)]
-            unsafe fn sub_ne_assign_nonidentity<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
-                *self = self.sub_ne_nonidentity::<CHECK_SETUP>(p2);
+            fn is_identity(&self) -> bool {
+                self.z == <$field>::ZERO
             }
         }
 
@@ -424,7 +430,7 @@ macro_rules! impl_sw_affine {
 
             #[inline(always)]
             fn neg(mut self) -> Self::Output {
-                self.0.y.neg_assign();
+                self.y.neg_assign();
                 self
             }
         }
@@ -437,23 +443,12 @@ macro_rules! impl_sw_affine {
                 self.clone().neg()
             }
         }
-
-        impl From<$struct_name> for AffinePoint<$field> {
-            fn from(value: $struct_name) -> Self {
-                value.0
-            }
-        }
-
-        impl From<AffinePoint<$field>> for $struct_name {
-            fn from(value: AffinePoint<$field>) -> Self {
-                Self(value)
-            }
-        }
     };
 }
 
 /// Implements `Group` on `$struct_name` assuming that `$struct_name` implements `WeierstrassPoint`.
 /// Assumes that `Neg` is implemented for `&$struct_name`.
+/// Complete projective formulas handle all edge cases, so no branching is needed.
 #[macro_export]
 macro_rules! impl_sw_group_ops {
     ($struct_name:ident, $field:ty) => {
@@ -464,26 +459,17 @@ macro_rules! impl_sw_group_ops {
 
             #[inline(always)]
             fn double(&self) -> Self {
-                if self.is_identity() {
-                    self.clone()
-                } else {
-                    unsafe { self.double_nonidentity::<true>() }
-                }
+                self.double_impl::<true>()
             }
 
             #[inline(always)]
             fn double_assign(&mut self) {
-                self.double_assign_impl::<true>();
+                *self = self.double_impl::<true>();
             }
 
-            // This implementation is the same as the default implementation in the `Group` trait,
-            // but it was found that overriding the default implementation reduced the cycle count
-            // by 50% on the ecrecover benchmark.
-            // We hypothesize that this is due to compiler optimizations that are not possible when
-            // the `is_identity` function is defined in a different source file.
             #[inline(always)]
             fn is_identity(&self) -> bool {
-                self == &<Self as Group>::IDENTITY
+                <Self as WeierstrassPoint>::is_identity(self)
             }
         }
 
@@ -491,10 +477,8 @@ macro_rules! impl_sw_group_ops {
             type Output = Self;
 
             #[inline(always)]
-            fn add(mut self, p2: &$struct_name) -> Self::Output {
-                use core::ops::AddAssign;
-                self.add_assign(p2);
-                self
+            fn add(self, p2: &$struct_name) -> Self::Output {
+                self.add_impl::<true>(p2)
             }
         }
 
@@ -503,7 +487,7 @@ macro_rules! impl_sw_group_ops {
 
             #[inline(always)]
             fn add(self, rhs: Self) -> Self::Output {
-                self.add(&rhs)
+                self.add_impl::<true>(&rhs)
             }
         }
 
@@ -512,33 +496,21 @@ macro_rules! impl_sw_group_ops {
 
             #[inline(always)]
             fn add(self, p2: &$struct_name) -> Self::Output {
-                if self.is_identity() {
-                    p2.clone()
-                } else if p2.is_identity() {
-                    self.clone()
-                } else if WeierstrassPoint::x(self) == WeierstrassPoint::x(p2) {
-                    if self.y() + p2.y() == <$field as openvm_algebra_guest::Field>::ZERO {
-                        <$struct_name as WeierstrassPoint>::IDENTITY
-                    } else {
-                        unsafe { self.double_nonidentity::<true>() }
-                    }
-                } else {
-                    unsafe { self.add_ne_nonidentity::<true>(p2) }
-                }
+                self.add_impl::<true>(p2)
             }
         }
 
         impl core::ops::AddAssign<&$struct_name> for $struct_name {
             #[inline(always)]
             fn add_assign(&mut self, p2: &$struct_name) {
-                self.add_assign_impl::<true>(p2);
+                *self = self.add_impl::<true>(p2);
             }
         }
 
         impl core::ops::AddAssign for $struct_name {
             #[inline(always)]
             fn add_assign(&mut self, rhs: Self) {
-                self.add_assign(&rhs);
+                *self = self.add_impl::<true>(&rhs);
             }
         }
 
@@ -547,7 +519,7 @@ macro_rules! impl_sw_group_ops {
 
             #[inline(always)]
             fn sub(self, rhs: &$struct_name) -> Self::Output {
-                core::ops::Sub::sub(&self, rhs)
+                self.add_impl::<true>(&core::ops::Neg::neg(rhs))
             }
         }
 
@@ -556,7 +528,7 @@ macro_rules! impl_sw_group_ops {
 
             #[inline(always)]
             fn sub(self, rhs: Self) -> Self::Output {
-                self.sub(&rhs)
+                self.add_impl::<true>(&core::ops::Neg::neg(rhs))
             }
         }
 
@@ -565,49 +537,21 @@ macro_rules! impl_sw_group_ops {
 
             #[inline(always)]
             fn sub(self, p2: &$struct_name) -> Self::Output {
-                if p2.is_identity() {
-                    self.clone()
-                } else if self.is_identity() {
-                    core::ops::Neg::neg(p2)
-                } else if WeierstrassPoint::x(self) == WeierstrassPoint::x(p2) {
-                    if self.y() == p2.y() {
-                        <$struct_name as WeierstrassPoint>::IDENTITY
-                    } else {
-                        unsafe { self.double_nonidentity::<true>() }
-                    }
-                } else {
-                    unsafe { self.sub_ne_nonidentity::<true>(p2) }
-                }
+                self.add_impl::<true>(&core::ops::Neg::neg(p2))
             }
         }
 
         impl core::ops::SubAssign<&$struct_name> for $struct_name {
             #[inline(always)]
             fn sub_assign(&mut self, p2: &$struct_name) {
-                if p2.is_identity() {
-                    // do nothing
-                } else if self.is_identity() {
-                    *self = core::ops::Neg::neg(p2);
-                } else if WeierstrassPoint::x(self) == WeierstrassPoint::x(p2) {
-                    if self.y() == p2.y() {
-                        *self = <$struct_name as WeierstrassPoint>::IDENTITY
-                    } else {
-                        unsafe {
-                            self.double_assign_nonidentity::<true>();
-                        }
-                    }
-                } else {
-                    unsafe {
-                        self.sub_ne_assign_nonidentity::<true>(p2);
-                    }
-                }
+                *self = self.add_impl::<true>(&core::ops::Neg::neg(p2));
             }
         }
 
         impl core::ops::SubAssign for $struct_name {
             #[inline(always)]
             fn sub_assign(&mut self, rhs: Self) {
-                self.sub_assign(&rhs);
+                *self = self.add_impl::<true>(&core::ops::Neg::neg(rhs));
             }
         }
     };
