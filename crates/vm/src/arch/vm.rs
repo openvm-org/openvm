@@ -52,7 +52,7 @@ use tracing::{info_span, instrument};
 #[cfg(feature = "aot")]
 use super::aot::AotInstance;
 use super::{
-    execution_mode::{ExecutionCtx, MeteredCostCtx, MeteredCtx, PreflightCtx, Segment},
+    execution_mode::{ExecutionCtx, MeteredCostCtx, MeteredCtx, PreflightCtx},
     hasher::poseidon2::vm_poseidon2_hasher,
     interpreter::InterpretedInstance,
     interpreter_preflight::PreflightInterpretedInstance,
@@ -1185,35 +1185,100 @@ where
         let metered_ctx = vm.build_metered_ctx(&self.exe);
         let metered_interpreter = vm.metered_interpreter(&self.exe)?;
         let (segments, _) = metered_interpreter.execute_metered(input, metered_ctx)?;
-        let mut proofs = Vec::with_capacity(segments.len());
+        let segments: Vec<_> = segments.into_iter().collect();
+        let num_segments = segments.len();
+        let mut proofs = Vec::with_capacity(num_segments);
         let mut state = self.state.take();
-        for (seg_idx, segment) in segments.into_iter().enumerate() {
-            let _segment_span = info_span!("prove_segment", segment = seg_idx).entered();
-            // We need a separate span so the metric label includes "segment" from _segment_span
+        // cached_preflight holds the result of a preflight that was run in parallel with the
+        // previous segment's prove. None for the first segment.
+        let mut cached_preflight: Option<
+            Result<PreflightExecutionOutput<Val<E::SC>, VB::RecordArena>, ExecutionError>,
+        > = None;
+        for seg_idx in 0..num_segments {
+            let segment = &segments[seg_idx];
+            let _segment_span =
+                info_span!("prove_segment", segment = seg_idx).entered();
             let _prove_span = info_span!("total_proof").entered();
-            let Segment {
-                num_insns,
-                trace_heights,
-                ..
-            } = segment;
-            let from_state = Option::take(&mut state).unwrap();
-            vm.transport_init_memory_to_device(&from_state.memory);
-            let PreflightExecutionOutput {
-                system_records,
-                record_arenas,
-                to_state,
-            } = vm.execute_preflight(
-                &mut self.interpreter,
-                from_state,
-                Some(num_insns),
-                &trace_heights,
-            )?;
-            state = Some(to_state);
+            let num_insns = segment.num_insns;
+            let trace_heights = &segment.trace_heights;
 
+            // Step 1: Get preflight results (either cached from previous overlap, or run now)
+            let (system_records, record_arenas) =
+                if let Some(preflight_result) = cached_preflight.take() {
+                    let PreflightExecutionOutput {
+                        system_records,
+                        record_arenas,
+                        to_state,
+                    } = preflight_result?;
+                    state = Some(to_state);
+                    (system_records, record_arenas)
+                } else {
+                    let from_state = Option::take(&mut state).unwrap();
+                    vm.transport_init_memory_to_device(&from_state.memory);
+                    let PreflightExecutionOutput {
+                        system_records,
+                        record_arenas,
+                        to_state,
+                    } = vm.execute_preflight(
+                        &mut self.interpreter,
+                        from_state,
+                        Some(num_insns),
+                        trace_heights,
+                    )?;
+                    state = Some(to_state);
+                    (system_records, record_arenas)
+                };
+
+            // Step 2: Generate proving context (needs &mut vm)
             let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
             modify_ctx(seg_idx, &mut ctx);
-            let proof = vm.engine.prove(vm.pk(), ctx);
-            proofs.push(proof);
+
+            // Step 3: Prove, optionally overlapping with next preflight
+            if seg_idx < num_segments - 1 {
+                // Transport next segment's memory to GPU before prove starts.
+                // generate_proving_ctxs already cleared initial_memory, so this is safe.
+                vm.transport_init_memory_to_device(&state.as_ref().unwrap().memory);
+                let next_from_state = state.take().unwrap();
+                let next_num_insns = segments[seg_idx + 1].num_insns;
+                let next_trace_heights = segments[seg_idx + 1].trace_heights.clone();
+
+                // Overlap: spawn prove on background thread, run preflight on main thread.
+                // prove only needs &engine and &pk (immutable reads).
+                // preflight needs &vm (immutable) and &mut interpreter (separate field).
+                //
+                // SAFETY: We use raw pointers (cast to usize for Send) to bypass
+                // Send/Sync bounds that the compiler cannot verify. This is safe:
+                // 1. std::thread::scope guarantees all spawned threads join before
+                //    the scope exits, so all pointed-to data remains valid.
+                // 2. The spawned thread only reads engine and pk (no mutation).
+                // 3. The main thread accesses vm via execute_preflight(&self) which
+                //    is an immutable borrow — no aliasing with the spawned thread's
+                //    reads of engine/pk (sub-fields of vm).
+                // 4. The interpreter (&mut) is only accessed on the main thread.
+                let engine_addr = &vm.engine as *const E as usize;
+                let pk_addr =
+                    vm.pk() as *const DeviceMultiStarkProvingKey<E::PB> as usize;
+
+                let proof = std::thread::scope(|s| {
+                    let prove_handle = s.spawn(move || unsafe {
+                        let engine = &*(engine_addr as *const E);
+                        let pk =
+                            &*(pk_addr as *const DeviceMultiStarkProvingKey<E::PB>);
+                        engine.prove(pk, ctx)
+                    });
+                    cached_preflight = Some(vm.execute_preflight(
+                        &mut self.interpreter,
+                        next_from_state,
+                        Some(next_num_insns),
+                        &next_trace_heights,
+                    ));
+                    prove_handle.join().unwrap()
+                });
+                proofs.push(proof);
+            } else {
+                let proof = vm.engine.prove(vm.pk(), ctx);
+                proofs.push(proof);
+            }
         }
         let to_state = state.unwrap();
         let final_memory = &to_state.memory.memory;
