@@ -9,9 +9,9 @@ homepage.workspace = true
 repository.workspace = true
 license.workspace = true
 
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+[dependencies]
 openvm-native-recursion.workspace = true
-openvm-rv32im-guest.workspace = true
+openvm-rv64im-guest.workspace = true
 openvm-sdk = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 

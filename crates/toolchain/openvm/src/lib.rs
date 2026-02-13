@@ -8,37 +8,34 @@
 extern crate alloc;
 
 // always include rust_rt so the memory allocator is enabled
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_guest)]
 use core::arch::asm;
 
 pub use openvm_platform as platform;
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_guest)]
 #[allow(unused_imports)]
 use openvm_platform::rust_rt;
-#[cfg(target_os = "zkvm")]
-pub use openvm_rv32im_guest::*;
+#[cfg(openvm_guest)]
+pub use openvm_rv64im_guest::*;
 
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_guest)]
 mod getrandom;
 pub mod io;
-#[cfg(all(feature = "std", target_os = "zkvm"))]
+#[cfg(all(feature = "std", openvm_guest))]
 pub mod pal_abi;
 pub mod process;
 pub mod serde;
 
-#[cfg(not(target_os = "zkvm"))]
-pub mod utils;
-
-#[cfg(not(target_os = "zkvm"))]
+#[cfg(not(openvm_guest))]
 pub mod host;
 
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_guest)]
 core::arch::global_asm!(include_str!("memset.s"));
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_guest)]
 core::arch::global_asm!(include_str!("memcpy.s"));
 
 fn _fault() -> ! {
-    #[cfg(target_os = "zkvm")]
+    #[cfg(openvm_guest)]
     unsafe {
         asm!("sw x0, 1(x0)")
     };
@@ -73,7 +70,7 @@ fn _fault() -> ! {
 ///
 /// fn main() { }
 /// ```
-#[cfg(all(not(feature = "std"), target_os = "zkvm"))]
+#[cfg(all(not(feature = "std"), openvm_guest))]
 #[macro_export]
 macro_rules! entry {
     ($path:path) => {
@@ -92,13 +89,13 @@ macro_rules! entry {
 }
 /// This macro does nothing. You should name the function `main` so that the normal rust main
 /// function setup is used.
-#[cfg(any(feature = "std", not(target_os = "zkvm")))]
+#[cfg(any(feature = "std", not(openvm_guest)))]
 #[macro_export]
 macro_rules! entry {
     ($path:path) => {};
 }
 
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_guest)]
 #[no_mangle]
 unsafe extern "C" fn __start() -> ! {
     #[cfg(feature = "heap-embedded-alloc")]
@@ -115,13 +112,13 @@ unsafe extern "C" fn __start() -> ! {
     unreachable!()
 }
 
-#[cfg(target_os = "zkvm")]
-static STACK_TOP: u32 = openvm_platform::memory::STACK_TOP;
+#[cfg(openvm_guest)]
+static STACK_TOP: u64 = openvm_platform::memory::STACK_TOP;
 
 // Entry point; sets up global pointer and stack pointer and passes
-// to zkvm_start.  TODO: when asm_const is stabilized, use that here
+// to __start.  TODO: when asm_const is stabilized, use that here
 // instead of defining a symbol and dereferencing it.
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_guest)]
 core::arch::global_asm!(
     r#"
 .section .text._start;
@@ -132,7 +129,7 @@ _start:
     la gp, __global_pointer$;
     .option pop;
     la sp, {0};
-    lw sp, 0(sp);
+    ld sp, 0(sp);
     call __start;
 "#,
     sym STACK_TOP
@@ -144,18 +141,18 @@ _start:
 #[allow(unused_variables)]
 pub fn memory_barrier<T>(ptr: *const T) {
     // SAFETY: This passes a pointer in, but does nothing with it.
-    #[cfg(target_os = "zkvm")]
+    #[cfg(openvm_guest)]
     unsafe {
         asm!("/* {0} */", in(reg) (ptr))
     }
-    #[cfg(not(target_os = "zkvm"))]
+    #[cfg(not(openvm_guest))]
     core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst)
 }
 
 // When std is not linked, register a panic handler here so the user does not
 // have to. If std is linked, it will define the panic handler instead. This
 // panic handler must not be included.
-#[cfg(all(target_os = "zkvm", not(feature = "std")))]
+#[cfg(all(openvm_guest, not(feature = "std")))]
 #[panic_handler]
 fn panic_impl(panic_info: &core::panic::PanicInfo) -> ! {
     use core::fmt::Write;

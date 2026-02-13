@@ -1,5 +1,5 @@
 use openvm_native_recursion::hints::Hintable;
-use openvm_rv32im_guest::hint_load_by_key_encode;
+use openvm_rv64im_guest::hint_load_by_key_encode;
 use openvm_sdk::SC;
 use openvm_stark_sdk::{openvm_stark_backend::proof::Proof, p3_baby_bear::BabyBear};
 

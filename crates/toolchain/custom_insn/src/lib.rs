@@ -320,7 +320,7 @@ pub fn custom_insn_r(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     handle_reg_arg(&mut template, &mut args, &rs2, "rs2");
 
     let expanded = quote::quote! {
-        #[cfg(target_os = "zkvm")]
+        #[cfg(openvm_guest)]
         unsafe {
             core::arch::asm!(
                 #template,
@@ -379,7 +379,7 @@ pub fn custom_insn_i(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     handle_reg_arg(&mut template, &mut args, &imm, "imm");
 
     let expanded = quote::quote! {
-        #[cfg(target_os = "zkvm")]
+        #[cfg(openvm_guest)]
         unsafe {
             core::arch::asm!(
                 #template,

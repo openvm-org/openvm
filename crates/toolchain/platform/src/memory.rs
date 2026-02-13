@@ -4,13 +4,13 @@ pub const GUEST_MIN_MEM: usize = 0x0000_0400;
 pub const GUEST_MAX_MEM: usize = MEM_SIZE;
 
 /// Top of stack; stack grows down from this location.
-pub const STACK_TOP: u32 = 0x0020_0400;
+pub const STACK_TOP: u64 = 0x0020_0400;
 /// Program (text followed by data and then bss) gets loaded in
 /// starting at this location.  HEAP begins right afterwards.
-pub const TEXT_START: u32 = 0x0020_0800;
+pub const TEXT_START: u64 = 0x0020_0800;
 
 /// Returns whether `addr` is within guest memory bounds.
-pub fn is_guest_memory(addr: u32) -> bool {
+pub fn is_guest_memory(addr: u64) -> bool {
     GUEST_MIN_MEM <= (addr as usize) && (addr as usize) < GUEST_MAX_MEM
 }
 
@@ -22,7 +22,7 @@ pub fn is_guest_memory(addr: u32) -> bool {
 pub unsafe extern "C" fn sys_alloc_aligned(bytes: usize, align: usize) -> *mut u8 {
     use crate::print::println;
 
-    #[cfg(target_os = "zkvm")]
+    #[cfg(openvm_guest)]
     extern "C" {
         // This symbol is defined by the loader and marks the end
         // of all elf sections, so this is where we start our
@@ -40,7 +40,7 @@ pub unsafe extern "C" fn sys_alloc_aligned(bytes: usize, align: usize) -> *mut u
     // SAFETY: Single threaded, so nothing else can touch this while we're working.
     let mut heap_pos = unsafe { HEAP_POS };
 
-    #[cfg(target_os = "zkvm")]
+    #[cfg(openvm_guest)]
     if heap_pos == 0 {
         heap_pos = unsafe { (&_end) as *const u8 as usize };
     }

@@ -5,7 +5,7 @@
 /// system operations in the same way: there is no operating system and even the standard
 /// library should be directly handled with intrinsics.
 use openvm_platform::{fileno::*, memory::sys_alloc_aligned, rust_rt::terminate, WORD_SIZE};
-use openvm_rv32im_guest::{hint_buffer_chunked, hint_random, raw_print_str_from_bytes};
+use openvm_rv64im_guest::{hint_buffer_chunked, hint_random, raw_print_str_from_bytes};
 
 const DIGEST_WORDS: usize = 8;
 

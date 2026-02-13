@@ -2,10 +2,10 @@
 extern crate alloc;
 
 /// Library functions for user input/output.
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_guest)]
 mod io;
 
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_guest)]
 pub use io::*;
 use strum_macros::FromRepr;
 
@@ -46,7 +46,7 @@ pub enum PhantomImm {
 }
 
 /// Encode a 2d-array of field elements into bytes for `hint_load_by_key`
-#[cfg(not(target_os = "zkvm"))]
+#[cfg(not(openvm_guest))]
 pub fn hint_load_by_key_encode<F: p3_field::PrimeField32>(
     value: &[alloc::vec::Vec<F>],
 ) -> alloc::vec::Vec<u8> {

@@ -1,4 +1,12 @@
 #![no_std]
+extern crate alloc;
+
+/// Library functions for user input/output.
+#[cfg(openvm_guest)]
+mod io;
+
+#[cfg(openvm_guest)]
+pub use io::*;
 use strum_macros::FromRepr;
 
 /// This is custom-0 defined in RISC-V spec document
@@ -37,4 +45,23 @@ pub enum PhantomImm {
     PrintStr,
     HintRandom,
     HintLoadByKey,
+}
+
+/// Encode a 2d-array of field elements into bytes for `hint_load_by_key`.
+///
+/// Uses u64 framing to match the RV64 serde word model.
+#[cfg(not(openvm_guest))]
+pub fn hint_load_by_key_encode<F: p3_field::PrimeField32>(
+    value: &[alloc::vec::Vec<F>],
+) -> alloc::vec::Vec<u8> {
+    let len = value.len();
+    let mut ret = (len as u64).to_le_bytes().to_vec();
+    for v in value {
+        ret.extend((v.len() as u64).to_le_bytes());
+        ret.extend(
+            v.iter()
+                .flat_map(|x| (x.as_canonical_u32() as u64).to_le_bytes()),
+        );
+    }
+    ret
 }

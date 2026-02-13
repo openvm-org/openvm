@@ -1,4 +1,4 @@
-//! Hints emulation for the non-zkVM environment.
+//! Hints emulation for the non-guest environment.
 
 use alloc::vec::Vec;
 
@@ -31,9 +31,9 @@ mod input {
     }
 
     thread_local! {
-        /// Hint streams in the non-zkVM environment.
+        /// Hint streams in the non-guest environment.
         pub static HINTS: RefCell<HostInputStream> = const { RefCell::new(HostInputStream::new()) };
-        /// Current hint stream in the non-zkVM environment.
+        /// Current hint stream in the non-guest environment.
         pub static HINT_STREAM: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     }
 
@@ -44,7 +44,7 @@ mod input {
                 .into_iter()
                 .rev()
                 .map(|v| {
-                    let len = v.len() as u32;
+                    let len = v.len() as u64;
                     len.to_le_bytes()
                         .into_iter()
                         .chain(v.iter().cloned())
@@ -67,7 +67,7 @@ pub fn hint_input() {
                 std::io::stdin()
                     .read_to_end(&mut buf)
                     .expect("Failed to read from stdin");
-                let hint = [&(buf.len() as u32).to_le_bytes(), &buf[..]].concat();
+                let hint = [&(buf.len() as u64).to_le_bytes(), &buf[..]].concat();
                 HINT_STREAM.replace(hint);
             }
             HostInputStream::Internal(hints) => {
@@ -92,13 +92,13 @@ pub fn read_n_bytes(_n: usize) -> Vec<u8> {
     }
 }
 
-/// Read the next 4 bytes from the hint stream as a `u32`.
-pub fn read_u32() -> u32 {
-    let bytes: Vec<u8> = read_n_bytes(4);
-    u32::from_le_bytes(bytes.try_into().unwrap())
+/// Read the next 8 bytes from the hint stream as a `u64`.
+pub fn read_u64() -> u64 {
+    let bytes: Vec<u8> = read_n_bytes(8);
+    u64::from_le_bytes(bytes.try_into().unwrap())
 }
 
-#[cfg(all(feature = "std", test, not(target_os = "zkvm")))]
+#[cfg(all(feature = "std", test, not(openvm_guest)))]
 mod tests {
     use alloc::vec;
 
@@ -109,9 +109,9 @@ mod tests {
     fn test_read_hints() {
         set_hints(vec![vec![1, 2, 3, 4]; 3]);
         hint_input();
-        assert_eq!(read_u32(), 4);
+        assert_eq!(read_u64(), 4);
         hint_input();
-        assert_eq!(read_n_bytes(8), vec![4, 0, 0, 0, 1, 2, 3, 4]);
+        assert_eq!(read_n_bytes(12), vec![4, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4]);
         assert_eq!(read_vec(), vec![1, 2, 3, 4]);
     }
 }
