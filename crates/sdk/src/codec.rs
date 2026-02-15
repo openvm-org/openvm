@@ -92,7 +92,7 @@ impl Encode for Proof<SC> {
     /// Encode a proof using FRI as the PCS with `BabyBearPoseidon2Config`.
     /// The Merkle tree hashes have digest `[F; 8]`.
     /// ```
-    /// pub struct Proof<SC: StarkGenericConfig> {
+    /// pub struct Proof<SC: StarkProtocolConfig> {
     ///     pub commitments: Commitments<Com<SC>>,
     ///     pub opening: OpeningProof<PcsProof<SC>, SC::Challenge>,
     ///     pub per_air: Vec<AirProofData<Val<SC>, SC::Challenge>>,

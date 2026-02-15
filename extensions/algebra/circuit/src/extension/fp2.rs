@@ -21,15 +21,13 @@ use openvm_circuit_primitives::{
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     p3_field::PrimeField32,
+    prover::{CpuBackend, CpuDevice},
+    StarkEngine,
 };
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
-use stark_backend_v2::{
-    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
-    StarkEngineV2 as StarkEngine,
-};
 use strum::EnumCount;
 
 use crate::{
@@ -178,7 +176,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Fp2Extension {
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Fp2Extension {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
@@ -276,7 +274,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Fp2Extension {
 // BitwiseOperationLookupChip) are specific to CpuBackend.
 impl<E, RA> VmProverExtension<E, RA, Fp2Extension> for AlgebraCpuProverExt
 where
-    E::SC: StarkGenericConfig,
+    E::SC: StarkProtocolConfig,
     E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
     RA: RowMajorMatrixArena<Val<E::SC>>,
     Val<E::SC>: PrimeField32,

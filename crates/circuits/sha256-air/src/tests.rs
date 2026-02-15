@@ -12,7 +12,7 @@ use openvm_circuit_primitives::{
     SubAir,
 };
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     interaction::{BusIndex, InteractionBuilder},
     p3_air::{Air, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
@@ -60,7 +60,7 @@ pub struct Sha256TestChip {
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
 }
 
-impl<SC: StarkGenericConfig> Chip<RecordType, CpuBackend<SC>> for Sha256TestChip
+impl<SC: StarkProtocolConfig> Chip<RecordType, CpuBackend<SC>> for Sha256TestChip
 where
     Val<SC>: PrimeField32,
 {
@@ -76,7 +76,7 @@ where
 }
 
 #[allow(clippy::type_complexity)]
-fn create_air_with_air_ctx<SC: StarkGenericConfig>() -> (
+fn create_air_with_air_ctx<SC: StarkProtocolConfig>() -> (
     (AirRef<SC>, AirProvingContext<CpuBackend<SC>>),
     (
         BitwiseOperationLookupAir<RV32_CELL_BITS>,

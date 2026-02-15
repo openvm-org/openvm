@@ -9,6 +9,8 @@ use openvm_stark_backend::{
     interaction::{PermutationCheckBus, PermutationInteractionType},
     p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
+    prover::{AirProvingContext, ColMajorMatrix},
+    StarkEngine,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
@@ -16,10 +18,6 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
 use rand::RngCore;
-use stark_backend_v2::{
-    prover::{AirProvingContextV2 as AirProvingContext, ColMajorMatrix},
-    StarkEngineV2,
-};
 
 use crate::{
     arch::{

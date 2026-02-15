@@ -5,8 +5,8 @@ use openvm_stark_backend::{
     interaction::BusIndex,
     p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
-    prover::{cpu::CpuBackend, types::AirProvingContext},
-    AirRef, Chip,
+    prover::{cpu::CpuBackend, types::AirProvingContext, AirProvingContext},
+    AirRef, Chip, StarkEngine,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
@@ -14,7 +14,6 @@ use openvm_stark_sdk::{
     utils::create_seeded_rng,
 };
 use rand::Rng;
-use stark_backend_v2::{prover::AirProvingContextV2, StarkEngineV2};
 use test_log::test;
 
 use crate::{
@@ -146,7 +145,7 @@ fn boundary_air_test() {
                 AirProvingContext::simple_no_pis(init_memory_trace),
                 AirProvingContext::simple_no_pis(final_memory_trace),
             ]
-            .map(AirProvingContextV2::from_v1_no_cached)
+            .map(AirProvingContext::from_v1_no_cached)
             .into_iter()
             .collect(),
         )

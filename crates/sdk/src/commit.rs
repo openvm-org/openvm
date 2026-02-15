@@ -5,7 +5,7 @@ use openvm_circuit::arch::{instructions::exe::VmExe, MemoryConfig};
 pub use openvm_circuit::system::program::trace::VmCommittedExe;
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_stark_backend::{
-    config::{Com, StarkGenericConfig, Val},
+    config::{Com, StarkProtocolConfig, Val},
     engine::StarkEngine,
     p3_field::{PrimeField, PrimeField32},
 };
@@ -90,7 +90,7 @@ impl AppExecutionCommit {
     /// Users should use this function to compute `AppExecutionCommit` and check it against the
     /// final proof.
     #[instrument(name = "AppExecutionCommit::compute", skip_all)]
-    pub fn compute<SC: StarkGenericConfig>(
+    pub fn compute<SC: StarkProtocolConfig>(
         app_memory_config: &MemoryConfig,
         app_exe: &VmExe<Val<SC>>,
         app_program_commit: Com<SC>,

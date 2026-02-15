@@ -1,6 +1,4 @@
-use cuda_backend_v2::{
-    BabyBearPoseidon2GpuEngineV2 as GpuBabyBearPoseidon2Engine, GpuBackendV2 as GpuBackend,
-};
+use cuda_backend_v2::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
 use openvm_circuit::{
     arch::{ChipInventory, ChipInventoryError, DenseRecordArena, VmProverExtension},
     system::cuda::extensions::get_inventory_range_checker,

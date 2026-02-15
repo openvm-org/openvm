@@ -22,7 +22,7 @@ use openvm_stark_sdk::{
     },
     engine::StarkFriEngine,
     openvm_stark_backend::{
-        config::{Com, StarkGenericConfig},
+        config::{Com, StarkProtocolConfig},
         keygen::types::MultiStarkVerifyingKey,
         proof::Proof,
     },
@@ -205,7 +205,7 @@ where
 ///
 /// `next_log_blowup` refers to the `log_blowup` of the next verifier in the chain; this determines
 /// a maximum trace height.
-fn check_recursive_verifier_size<SC: StarkGenericConfig>(
+fn check_recursive_verifier_size<SC: StarkProtocolConfig>(
     vk: &MultiStarkVerifyingKey<SC>,
     fri_params: FriParameters,
     next_log_blowup: usize,

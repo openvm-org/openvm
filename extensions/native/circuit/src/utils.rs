@@ -26,13 +26,11 @@ pub mod test_utils {
     use openvm_native_compiler::conversion::AS;
     use openvm_stark_backend::{
         config::Domain, p3_commit::PolynomialSpace, p3_field::PrimeField32,
+        BabyBearPoseidon2CpuEngine as BabyBearPoseidon2Engine, StarkEngine, StarkWhirEngine,
+        SystemParams,
     };
     use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear};
     use rand::{rngs::StdRng, Rng};
-    use stark_backend_v2::{
-        BabyBearPoseidon2CpuEngineV2 as BabyBearPoseidon2Engine, StarkEngineV2 as StarkEngine,
-        StarkWhirEngine, SystemParams,
-    };
 
     use crate::{NativeConfig, NativeCpuBuilder, Rv32WithKernelsConfig};
 
@@ -83,7 +81,7 @@ pub mod test_utils {
         VirtualMachineError,
     >
     where
-        E: StarkWhirEngine + StarkEngine<SC = stark_backend_v2::SC>,
+        E: StarkWhirEngine + StarkEngine<SC = openvm_stark_backend::SC>,
         Domain<E::SC>: PolynomialSpace<Val = BabyBear>,
         VB: VmBuilder<E, VmConfig = NativeConfig>,
         <VB::VmConfig as VmExecutionConfig<BabyBear>>::Executor:

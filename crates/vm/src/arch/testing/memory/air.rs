@@ -1,7 +1,7 @@
 use std::{mem::size_of, sync::Arc};
 
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
     p3_field::{PrimeCharacteristicRing, PrimeField32},
@@ -125,7 +125,7 @@ impl<F: PrimeField32> MemoryDummyChip<F> {
     }
 }
 
-impl<SC: StarkGenericConfig, RA> Chip<RA, CpuBackend<SC>> for MemoryDummyChip<Val<SC>>
+impl<SC: StarkProtocolConfig, RA> Chip<RA, CpuBackend<SC>> for MemoryDummyChip<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {

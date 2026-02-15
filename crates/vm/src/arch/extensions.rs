@@ -21,20 +21,13 @@ use openvm_circuit_primitives::var_range::{
 };
 use openvm_instructions::{PhantomDiscriminant, VmOpcode};
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     interaction::BusIndex,
-    prover::MatrixDimensions,
+    prover::{AirProvingContext, CpuBackend, MatrixDimensions, ProverBackend, ProvingContext},
     rap::AnyRap,
-    AirRef,
+    AirRef, AnyChip, Chip, StarkEngine,
 };
 use rustc_hash::FxHashMap;
-use stark_backend_v2::{
-    prover::{
-        AirProvingContextV2 as AirProvingContext, CpuBackendV2, ProverBackendV2 as ProverBackend,
-        ProvingContextV2 as ProvingContext,
-    },
-    AnyChip, ChipV2 as Chip, StarkEngineV2 as StarkEngine,
-};
 use tracing::info_span;
 
 use super::{GenerationError, PhantomSubExecutor, SystemConfig};
@@ -78,7 +71,7 @@ pub trait VmExecutionExtension<F> {
 }
 
 /// Extension of the VM circuit. Allows _in-order_ addition of new AIRs with interactions.
-pub trait VmCircuitExtension<SC: StarkGenericConfig> {
+pub trait VmCircuitExtension<SC: StarkProtocolConfig> {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError>;
 }
 
@@ -134,7 +127,7 @@ pub struct ExecutorInventoryBuilder<'a, F, E> {
 }
 
 #[derive(Clone, Getters, CopyGetters)]
-pub struct AirInventory<SC: StarkGenericConfig> {
+pub struct AirInventory<SC: StarkProtocolConfig> {
     #[get = "pub"]
     config: SystemConfig,
     /// The system AIRs required by the circuit architecture.
@@ -164,7 +157,7 @@ pub struct BusIndexManager {
 #[derive(Getters)]
 pub struct ChipInventory<SC, RA, PB>
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     PB: ProverBackend,
 {
     /// Read-only view of AIRs, as constructed via the [VmCircuitExtension] trait.
@@ -192,7 +185,7 @@ where
 #[derive(Getters)]
 pub struct VmChipComplex<SC, RA, PB, SCC>
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     PB: ProverBackend,
 {
     /// System chip complex responsible for trace generation of [SystemAirInventory]
@@ -400,7 +393,7 @@ impl<F, E> ExecutorInventoryBuilder<'_, F, E> {
     }
 }
 
-impl<SC: StarkGenericConfig> AirInventory<SC> {
+impl<SC: StarkProtocolConfig> AirInventory<SC> {
     /// Outside of this crate, [AirInventory] must be constructed via [SystemConfig].
     pub(crate) fn new(
         config: SystemConfig,
@@ -485,7 +478,7 @@ impl BusIndexManager {
 
 impl<SC, RA, PB> ChipInventory<SC, RA, PB>
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     PB: ProverBackend,
 {
     pub fn new(airs: AirInventory<SC>) -> Self {
@@ -589,9 +582,9 @@ where
 }
 
 // SharedVariableRangeCheckerChip is only used by the CPU backend.
-impl<SC, RA> ChipInventory<SC, RA, CpuBackendV2>
+impl<SC, RA> ChipInventory<SC, RA, CpuBackend>
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
 {
     pub fn range_checker(&self) -> Result<&SharedVariableRangeCheckerChip, ChipInventoryError> {
         self.find_chip::<SharedVariableRangeCheckerChip>()
@@ -640,7 +633,7 @@ pub enum ChipInventoryError {
 
 impl<SC, RA, PB, SCC> VmChipComplex<SC, RA, PB, SCC>
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     RA: Arena,
     PB: ProverBackend,
     SCC: SystemChipComplex<RA, PB>,
@@ -727,7 +720,7 @@ impl<F, EXT: VmExecutionExtension<F>> VmExecutionExtension<F> for Option<EXT> {
     }
 }
 
-impl<SC: StarkGenericConfig, EXT: VmCircuitExtension<SC>> VmCircuitExtension<SC> for Option<EXT> {
+impl<SC: StarkProtocolConfig, EXT: VmCircuitExtension<SC>> VmCircuitExtension<SC> for Option<EXT> {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         if let Some(extension) = self {
             extension.extend_circuit(inventory)

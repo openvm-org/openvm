@@ -2,12 +2,14 @@ use std::{iter, sync::Arc};
 
 use list::ListChip;
 use openvm_stark_backend::{
-    p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*, prover::types::AirProvingContext,
-    AirRef,
+    p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*,
+    prover::{types::AirProvingContext, AirProvingContext},
+    test_utils::test_engine_small,
+    AirRef, StarkEngine,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
-use stark_backend_v2::{prover::AirProvingContextV2, test_utils::test_engine_small, StarkEngineV2};
 
 use crate::range::{bus::RangeCheckBus, RangeCheckerChip};
 
@@ -63,7 +65,7 @@ fn test_list_range_checker() {
         .chain(iter::once(range_trace))
         .map(Arc::new)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
+        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()

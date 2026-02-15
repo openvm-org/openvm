@@ -14,7 +14,7 @@ use openvm_circuit_primitives::{
     var_range::SharedVariableRangeCheckerChip, TraceSubRowGenerator,
 };
 use openvm_stark_backend::{
-    config::{Domain, StarkGenericConfig},
+    config::{Domain, StarkProtocolConfig},
     p3_air::BaseAir,
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
@@ -160,7 +160,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         }
     }
 
-    pub fn generate_proving_ctx<SC: StarkGenericConfig>(
+    pub fn generate_proving_ctx<SC: StarkProtocolConfig>(
         &mut self,
     ) -> Vec<AirProvingContext<CpuBackend<SC>>>
     where

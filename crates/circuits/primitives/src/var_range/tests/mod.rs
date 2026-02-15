@@ -1,13 +1,16 @@
 use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::*, prover::types::AirProvingContext, utils::disable_debug_builder,
-    AirRef,
+    p3_field::PrimeCharacteristicRing,
+    p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*,
+    prover::{types::AirProvingContext, AirProvingContext},
+    test_utils::test_engine_small,
+    utils::disable_debug_builder,
+    AirRef, StarkEngine,
 };
 use openvm_stark_sdk::{any_rap_arc_vec, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
-use stark_backend_v2::{prover::AirProvingContextV2, test_utils::test_engine_small, StarkEngineV2};
 #[cfg(feature = "cuda")]
 use {
     crate::var_range::{VariableRangeCheckerAir, VariableRangeCheckerChipGPU},
@@ -92,7 +95,7 @@ fn test_variable_range_checker_chip_send() {
         .chain(iter::once(var_range_checker_trace))
         .map(Arc::new)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
+        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()
@@ -144,7 +147,7 @@ fn negative_test_variable_range_checker_chip_send() {
         .into_iter()
         .map(Arc::new)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
+        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();
@@ -209,7 +212,7 @@ fn test_variable_range_checker_chip_range_check() {
         .chain(iter::once(var_range_checker_trace))
         .map(Arc::new)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
+        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()
@@ -259,7 +262,7 @@ fn negative_test_variable_range_checker_chip_range_check() {
         .into_iter()
         .map(Arc::new)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
+        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();

@@ -10,12 +10,12 @@ use openvm_circuit::{
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
 use openvm_circuit_derive::{Executor, MeteredExecutor, PreflightExecutor, VmConfig};
-use openvm_stark_backend::config::{StarkGenericConfig, Val};
-use serde::{Deserialize, Serialize};
-use stark_backend_v2::{
-    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
-    StarkEngineV2 as StarkEngine,
+use openvm_stark_backend::{
+    config::{StarkProtocolConfig, Val},
+    prover::{CpuBackend, CpuDevice},
+    StarkEngine,
 };
+use serde::{Deserialize, Serialize};
 
 pub mod adapters;
 mod auipc;
@@ -54,7 +54,7 @@ pub use extension::*;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        use cuda_backend_v2::{GpuBackendV2 as GpuBackend, BabyBearPoseidon2GpuEngineV2 as GpuBabyBearPoseidon2Engine};
+        use cuda_backend_v2::{GpuBackend as GpuBackend, BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine};
         use openvm_circuit::arch::DenseRecordArena;
         use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};
         use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
@@ -152,10 +152,10 @@ impl Rv32ImConfig {
 #[derive(Clone)]
 pub struct Rv32ICpuBuilder;
 
-type SC = stark_backend_v2::SC;
+type SC = openvm_stark_backend::SC;
 impl<E> VmBuilder<E> for Rv32ICpuBuilder
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
     Val<SC>: VmField,
 {
@@ -185,7 +185,7 @@ pub struct Rv32ImCpuBuilder;
 
 impl<E> VmBuilder<E> for Rv32ImCpuBuilder
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
     Val<SC>: VmField,
 {

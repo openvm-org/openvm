@@ -1,6 +1,4 @@
-use cuda_backend_v2::{
-    BabyBearPoseidon2GpuEngineV2 as GpuBabyBearPoseidon2Engine, GpuBackendV2 as GpuBackend,
-};
+use cuda_backend_v2::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
 use openvm_algebra_transpiler::{Fp2Opcode, Rv32ModularArithmeticOpcode};
 use openvm_circuit::{
     arch::{

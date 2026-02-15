@@ -13,7 +13,8 @@ use openvm_rv32im_transpiler::BranchEqualOpcode::*;
 use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::MatrixDimensions,
+    prover::{AirProvingContext, ColMajorMatrix, MatrixDimensions},
+    Chip, StarkEngine,
 };
 use openvm_stark_sdk::{
     any_rap_arc_vec,
@@ -25,10 +26,6 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 use serde::{de::DeserializeOwned, Serialize};
-use stark_backend_v2::{
-    prover::{AirProvingContextV2 as AirProvingContext, ColMajorMatrix},
-    ChipV2, StarkEngineV2,
-};
 use static_assertions::assert_impl_all;
 
 use crate::{

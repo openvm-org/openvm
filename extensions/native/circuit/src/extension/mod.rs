@@ -22,14 +22,12 @@ use openvm_native_compiler::{
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_rv32im_circuit::BranchEqualCoreAir;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     p3_field::PrimeField32,
+    prover::{CpuBackend, CpuDevice},
+    StarkEngine,
 };
 use serde::{Deserialize, Serialize};
-use stark_backend_v2::{
-    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
-    StarkEngineV2 as StarkEngine,
-};
 use strum::IntoEnumIterator;
 
 use crate::{
@@ -206,7 +204,7 @@ impl<F: VmField> VmExecutionExtension<F> for Native {
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Native
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Native
 where
     Val<SC>: VmField,
 {
@@ -279,7 +277,7 @@ pub struct NativeCpuProverExt;
 // BitwiseOperationLookupChip) are specific to CpuBackend.
 impl<E, RA> VmProverExtension<E, RA, Native> for NativeCpuProverExt
 where
-    E::SC: StarkGenericConfig,
+    E::SC: StarkProtocolConfig,
     E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
     RA: RowMajorMatrixArena<Val<E::SC>>,
     Val<E::SC>: VmField,
@@ -529,7 +527,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for CastFExtension {
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for CastFExtension {
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for CastFExtension {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
@@ -550,7 +548,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for CastFExtension {
 
 impl<E, RA> VmProverExtension<E, RA, CastFExtension> for NativeCpuProverExt
 where
-    E::SC: StarkGenericConfig,
+    E::SC: StarkProtocolConfig,
     E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
     RA: RowMajorMatrixArena<Val<E::SC>>,
     Val<E::SC>: PrimeField32,

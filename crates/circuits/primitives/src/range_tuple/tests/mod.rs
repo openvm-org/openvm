@@ -1,9 +1,15 @@
 use std::{array, iter, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::*, prover::types::AirProvingContext, utils::disable_debug_builder,
-    verifier::VerificationError, AirRef,
+    p3_field::PrimeCharacteristicRing,
+    p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*,
+    poseidon2::sponge::DuplexSponge,
+    prover::{types::AirProvingContext, AirProvingContext},
+    test_utils::{test_engine_small, test_system_params_small},
+    utils::disable_debug_builder,
+    verifier::VerificationError,
+    AirRef, BabyBearPoseidon2CpuEngine, StarkEngine,
 };
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,
@@ -11,12 +17,6 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
 use rand::Rng;
-use stark_backend_v2::{
-    poseidon2::sponge::DuplexSponge,
-    prover::AirProvingContextV2,
-    test_utils::{test_engine_small, test_system_params_small},
-    BabyBearPoseidon2CpuEngineV2, StarkEngineV2,
-};
 #[cfg(feature = "cuda")]
 use {
     crate::range_tuple::{RangeTupleCheckerAir, RangeTupleCheckerChipGPU},

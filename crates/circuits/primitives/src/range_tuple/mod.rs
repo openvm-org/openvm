@@ -10,7 +10,7 @@ use std::{
 };
 
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir, PairBuilder},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
@@ -225,7 +225,8 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
     }
 }
 
-impl<R, SC: StarkGenericConfig, const N: usize> Chip<R, CpuBackend<SC>> for RangeTupleCheckerChip<N>
+impl<R, SC: StarkProtocolConfig, const N: usize> Chip<R, CpuBackend<SC>>
+    for RangeTupleCheckerChip<N>
 where
     Val<SC>: PrimeField32,
 {

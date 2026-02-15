@@ -6,23 +6,20 @@ use openvm_circuit_primitives::var_range::{
 };
 use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, NATIVE_AS};
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     interaction::PermutationCheckBus,
     p3_matrix::dense::RowMajorMatrix,
     p3_util::log2_strict_usize,
-    prover::{cpu::CpuBackend, types::AirProvingContext},
+    prover::{cpu::CpuBackend, types::AirProvingContext, AirProvingContext},
     rap::AnyRap,
-    AirRef, Chip,
+    verifier::VerifierError,
+    AirRef, Chip, StarkEngine, VerificationData,
 };
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing_with_log_level},
     p3_baby_bear::BabyBear,
 };
 use rand::{rngs::StdRng, RngCore, SeedableRng};
-use stark_backend_v2::{
-    prover::AirProvingContextV2, verifier::VerifierError, StarkEngineV2,
-    VerificationDataV2 as VerificationData,
-};
 use tracing::Level;
 
 use crate::{
@@ -284,7 +281,7 @@ impl<F: VmField> VmChipTestBuilder<F> {
     }
 }
 
-pub type TestSC = stark_backend_v2::SC;
+pub type TestSC = openvm_stark_backend::SC;
 
 impl VmChipTestBuilder<BabyBear> {
     pub fn build(self) -> VmChipTester<TestSC> {
@@ -396,7 +393,7 @@ impl<F: VmField> Default for VmChipTestBuilder<F> {
     }
 }
 
-pub struct VmChipTester<SC: StarkGenericConfig>
+pub struct VmChipTester<SC: StarkProtocolConfig>
 where
     Val<SC>: VmField,
 {
@@ -406,7 +403,7 @@ where
 
 impl<SC> Default for VmChipTester<SC>
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     Val<SC>: VmField,
 {
     fn default() -> Self {
@@ -419,7 +416,7 @@ where
 
 impl<SC> VmChipTester<SC>
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     Val<SC>: VmField,
 {
     pub fn load<E, A, C>(
@@ -552,7 +549,7 @@ impl VmChipTester<BabyBearPoseidon2Config> {
         let (airs, ctxs): (Vec<_>, Vec<_>) = self
             .air_ctxs
             .into_iter()
-            .map(|(air, ctx_v1)| (air, AirProvingContextV2::from_v1_no_cached(ctx_v1)))
+            .map(|(air, ctx_v1)| (air, AirProvingContext::from_v1_no_cached(ctx_v1)))
             .unzip();
         test_cpu_engine().run_test(airs, ctxs)
     }

@@ -10,7 +10,7 @@ use openvm_circuit_primitives::var_range::{
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::LocalOpcode;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
@@ -280,7 +280,7 @@ impl<F> VmConnectorChip<F> {
 
 impl<RA, SC> Chip<RA, CpuBackend<SC>> for VmConnectorChip<Val<SC>>
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     Val<SC>: PrimeField32,
 {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {

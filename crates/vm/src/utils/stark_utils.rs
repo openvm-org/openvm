@@ -1,15 +1,14 @@
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
     config::{Com, Val},
+    keygen::types::MultiStarkVerifyingKey,
     p3_field::PrimeField32,
+    proof::Proof,
+    BabyBearPoseidon2CpuEngine, StarkEngine, StarkWhirEngine, SystemParams,
 };
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing},
     p3_baby_bear::BabyBear,
-};
-use stark_backend_v2::{
-    keygen::types::MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey, proof::Proof,
-    BabyBearPoseidon2CpuEngineV2, StarkEngineV2 as StarkEngine, StarkWhirEngine, SystemParams,
 };
 
 #[cfg(feature = "aot")]
@@ -26,15 +25,15 @@ use crate::{
 };
 
 /// Supports `trace height <= 2^20`.
-pub fn test_cpu_engine() -> BabyBearPoseidon2CpuEngineV2 {
+pub fn test_cpu_engine() -> BabyBearPoseidon2CpuEngine {
     setup_tracing();
-    BabyBearPoseidon2CpuEngineV2::new(SystemParams::new_for_testing(20))
+    BabyBearPoseidon2CpuEngine::new(SystemParams::new_for_testing(20))
 }
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         pub use openvm_cuda_backend::{chip::cpu_proving_ctx_to_gpu};
-        pub use cuda_backend_v2::BabyBearPoseidon2GpuEngineV2 as TestStarkEngine;
+        pub use cuda_backend_v2::BabyBearPoseidon2GpuEngine as TestStarkEngine;
         use crate::arch::DenseRecordArena;
         pub type TestRecordArena = DenseRecordArena;
 
@@ -43,7 +42,7 @@ cfg_if::cfg_if! {
             TestStarkEngine::new(SystemParams::new_for_testing(20))
         }
     } else {
-        pub use stark_backend_v2::BabyBearPoseidon2CpuEngineV2 as TestStarkEngine;
+        pub use openvm_stark_backend::BabyBearPoseidon2CpuEngine as TestStarkEngine;
         use crate::arch::MatrixRecordArena;
         pub type TestRecordArena = MatrixRecordArena<BabyBear>;
     }
@@ -196,7 +195,7 @@ pub fn air_test_impl<E, VB>(
     debug: bool,
 ) -> eyre::Result<(Option<MemoryImage>, Vec<(MultiStarkVerifyingKey, Proof)>)>
 where
-    E: StarkWhirEngine + StarkEngine<SC = stark_backend_v2::SC>,
+    E: StarkWhirEngine + StarkEngine<SC = openvm_stark_backend::SC>,
     Val<E::SC>: PrimeField32,
     VB: VmBuilder<E>,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>

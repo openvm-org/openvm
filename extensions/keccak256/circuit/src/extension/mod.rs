@@ -24,14 +24,12 @@ use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     p3_field::PrimeField32,
+    prover::{CpuBackend, CpuDevice},
+    StarkEngine,
 };
 use serde::{Deserialize, Serialize};
-use stark_backend_v2::{
-    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
-    StarkEngineV2 as StarkEngine,
-};
 use strum::IntoEnumIterator;
 
 use crate::{KeccakVmAir, KeccakVmChip, KeccakVmExecutor, KeccakVmFiller};
@@ -84,10 +82,10 @@ impl InitFileGenerator for Keccak256Rv32Config {}
 #[derive(Clone)]
 pub struct Keccak256Rv32CpuBuilder;
 
-type SC = stark_backend_v2::SC;
+type SC = openvm_stark_backend::SC;
 impl<E> VmBuilder<E> for Keccak256Rv32CpuBuilder
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
     Val<SC>: VmField,
 {
@@ -152,7 +150,7 @@ impl<F> VmExecutionExtension<F> for Keccak256 {
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Keccak256 {
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
@@ -193,7 +191,7 @@ pub struct Keccak256CpuProverExt;
 // BitwiseOperationLookupChip) are specific to CpuBackend.
 impl<E, RA> VmProverExtension<E, RA, Keccak256> for Keccak256CpuProverExt
 where
-    E::SC: StarkGenericConfig,
+    E::SC: StarkProtocolConfig,
     E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
     RA: RowMajorMatrixArena<Val<E::SC>>,
     Val<E::SC>: PrimeField32,

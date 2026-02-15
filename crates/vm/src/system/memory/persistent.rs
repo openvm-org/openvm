@@ -7,7 +7,7 @@ use std::{
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     interaction::{InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{PrimeCharacteristicRing, PrimeField32},
@@ -248,7 +248,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
 
 impl<const CHUNK: usize, RA, SC> Chip<RA, CpuBackend<SC>> for PersistentBoundaryChip<Val<SC>, CHUNK>
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     Val<SC>: PrimeField32,
 {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {

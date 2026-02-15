@@ -17,13 +17,13 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    BabyBearPoseidon2CpuEngine as BabyBearPoseidon2Engine, SystemParams,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };
 use rand::{rngs::StdRng, Rng};
-use stark_backend_v2::{BabyBearPoseidon2CpuEngineV2 as BabyBearPoseidon2Engine, SystemParams};
 
 use super::air::VerifyBatchBus;
 use crate::poseidon2::{

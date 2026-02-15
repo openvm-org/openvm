@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use openvm_native_circuit::test_native_config;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     interaction::BusIndex,
     p3_field::PrimeField32,
     p3_matrix::dense::RowMajorMatrix,
@@ -27,7 +27,7 @@ use openvm_stark_sdk::{
 
 use crate::{stark::VerifierProgram, types::new_from_inner_multi_vk};
 
-pub fn _fibonacci_test_proof_input<SC: StarkGenericConfig>(n: usize) -> ProofInputForTest<SC>
+pub fn _fibonacci_test_proof_input<SC: StarkProtocolConfig>(n: usize) -> ProofInputForTest<SC>
 where
     Val<SC>: PrimeField32,
 {
@@ -40,7 +40,7 @@ where
     }
 }
 
-pub fn _interaction_test_proof_input<SC: StarkGenericConfig>() -> ProofInputForTest<SC>
+pub fn _interaction_test_proof_input<SC: StarkProtocolConfig>() -> ProofInputForTest<SC>
 where
     Val<SC>: PrimeField32,
 {
@@ -70,7 +70,7 @@ where
     ProofInputForTest { airs, per_air }
 }
 
-pub fn _unordered_test_proof_input<SC: StarkGenericConfig>() -> ProofInputForTest<SC>
+pub fn _unordered_test_proof_input<SC: StarkProtocolConfig>() -> ProofInputForTest<SC>
 where
     Val<SC>: PrimeField32,
 {

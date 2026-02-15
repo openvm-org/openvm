@@ -12,7 +12,7 @@
 // use openvm_native_compiler::{asm::AsmBuilder, ir::Felt};
 // use openvm_native_recursion::testing_utils::inner::run_recursive_test;
 // use openvm_stark_backend::{
-//     config::{Domain, StarkGenericConfig, Val},
+//     config::{Domain, StarkProtocolConfig, Val},
 //     p3_commit::PolynomialSpace,
 //     p3_field::{extension::BinomialExtensionField, PrimeCharacteristicRing},
 //     prover::{
@@ -64,7 +64,7 @@
 //     n: u32,
 // ) -> ProofInputForTest<SC>
 // where
-//     SC: StarkGenericConfig,
+//     SC: StarkProtocolConfig,
 //     E: StarkFriEngine<SC = SC>,
 //     CpuEngine: StarkFriEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
 //     Domain<SC>: PolynomialSpace<Val = BabyBear>,

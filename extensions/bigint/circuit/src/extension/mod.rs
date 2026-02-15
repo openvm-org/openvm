@@ -28,14 +28,12 @@ use openvm_circuit_primitives::{
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_rv32im_circuit::Rv32ImCpuProverExt;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     p3_field::PrimeField32,
+    prover::{CpuBackend, CpuDevice},
+    StarkEngine,
 };
 use serde::{Deserialize, Serialize};
-use stark_backend_v2::{
-    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
-    StarkEngineV2 as StarkEngine,
-};
 
 use crate::*;
 
@@ -147,7 +145,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Int256 {
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Int256 {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
@@ -235,7 +233,7 @@ pub struct Int256CpuProverExt;
 // BitwiseOperationLookupChip) are specific to CpuBackend.
 impl<E, RA> VmProverExtension<E, RA, Int256> for Int256CpuProverExt
 where
-    E::SC: StarkGenericConfig,
+    E::SC: StarkProtocolConfig,
     E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
     RA: RowMajorMatrixArena<Val<E::SC>>,
     Val<E::SC>: PrimeField32,
@@ -354,10 +352,10 @@ where
 #[derive(Clone)]
 pub struct Int256Rv32CpuBuilder;
 
-type SC = stark_backend_v2::SC;
+type SC = openvm_stark_backend::SC;
 impl<E> VmBuilder<E> for Int256Rv32CpuBuilder
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
     Val<SC>: VmField,
 {

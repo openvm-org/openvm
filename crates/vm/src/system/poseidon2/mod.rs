@@ -13,7 +13,7 @@ use std::sync::Arc;
 use openvm_circuit_primitives::Chip;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     interaction::{BusIndex, LookupBus},
     AirRef, ChipUsageGetter,
 };
@@ -64,7 +64,7 @@ pub fn new_poseidon2_periphery_air<SC>(
     max_constraint_degree: usize,
 ) -> AirRef<SC>
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     Val<SC>: VmField,
 {
     if max_constraint_degree >= 7 {

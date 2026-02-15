@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use cuda_backend_v2::{
-    BabyBearPoseidon2GpuEngineV2 as BabyBearPoseidon2GpuEngine, GpuBackendV2 as GpuBackend,
-};
+use cuda_backend_v2::{BabyBearPoseidon2GpuEngine, GpuBackend};
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena, SystemConfig, VmBuilder,

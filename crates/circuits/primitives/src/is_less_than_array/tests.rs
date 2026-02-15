@@ -9,12 +9,13 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::types::AirProvingContext,
+    prover::{types::AirProvingContext, AirProvingContext},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    test_utils::test_engine_small,
     utils::disable_debug_builder,
+    StarkEngine,
 };
 use openvm_stark_sdk::any_rap_arc_vec;
-use stark_backend_v2::{prover::AirProvingContextV2, test_utils::test_engine_small, StarkEngineV2};
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::less_than::less_than_array_dummy_tracegen,
@@ -173,7 +174,7 @@ fn test_is_less_than_tuple_chip() {
         .into_iter()
         .map(Arc::new)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
+        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()
@@ -197,7 +198,7 @@ fn test_is_less_than_tuple_chip_negative() {
         .into_iter()
         .map(Arc::new)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
+        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();
@@ -221,7 +222,7 @@ fn test_is_less_than_tuple_chip_nonzero_diff() {
         .into_iter()
         .map(Arc::new)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
+        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();

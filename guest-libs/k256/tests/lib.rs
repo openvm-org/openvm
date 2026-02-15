@@ -119,7 +119,7 @@ mod guest_tests {
                 system::SystemChipInventory,
             },
             openvm_stark_backend::{
-                config::{StarkGenericConfig, Val},
+                config::{StarkProtocolConfig, Val},
                 engine::StarkEngine,
                 prover::cpu::{CpuBackend, CpuDevice},
             },
@@ -158,7 +158,7 @@ mod guest_tests {
         #[cfg(not(feature = "cuda"))]
         impl<E, SC> VmBuilder<E> for EcdsaBuilder
         where
-            SC: StarkGenericConfig,
+            SC: StarkProtocolConfig,
             E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
             Val<SC>: VmField,
         {

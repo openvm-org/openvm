@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing},
@@ -231,7 +231,7 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChip<NUM_BITS> {
     }
 }
 
-impl<R, SC: StarkGenericConfig, const NUM_BITS: usize> Chip<R, CpuBackend<SC>>
+impl<R, SC: StarkProtocolConfig, const NUM_BITS: usize> Chip<R, CpuBackend<SC>>
     for BitwiseOperationLookupChip<NUM_BITS>
 {
     /// Generates trace and resets all internal counters to 0.

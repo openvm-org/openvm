@@ -45,15 +45,15 @@ use openvm_native_compiler::{
     NativePhantom, NativeRangeCheckOpcode, Poseidon2Opcode,
 };
 use openvm_rv32im_transpiler::BranchEqualOpcode::*;
-use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+use openvm_stark_backend::{
+    p3_field::PrimeCharacteristicRing, poseidon2::sponge::DuplexSponge, BabyBearPoseidon2CpuEngine,
+    SystemParams,
+};
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing},
     p3_baby_bear::BabyBear,
 };
 use rand::Rng;
-use stark_backend_v2::{
-    poseidon2::sponge::DuplexSponge, BabyBearPoseidon2CpuEngineV2, SystemParams,
-};
 use test_log::test;
 
 pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize
@@ -110,7 +110,7 @@ fn test_vm_1() {
 // See crates/sdk/src/prover/root.rs for intended usage
 #[test]
 fn test_vm_override_trace_heights() -> eyre::Result<()> {
-    let e = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(SystemParams::new_for_testing(20));
+    let e = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(SystemParams::new_for_testing(20));
     let program = Program::<BabyBear>::from_instructions(&[
         Instruction::large_from_isize(ADD.global_opcode(), 0, 4, 0, 4, 0, 0, 0),
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
@@ -201,7 +201,7 @@ fn test_vm_1_optional_air() -> eyre::Result<()> {
     let cached_program_trace = vm.commit_program_on_device(&program);
     let exe = Arc::new(VmExe::new(program));
     let mut prover = VmInstance::new(vm, exe, cached_program_trace)?;
-    let proof: stark_backend_v2::proof::Proof =
+    let proof: openvm_stark_backend::proof::Proof =
         SingleSegmentVmProver::prove(&mut prover, vec![], &vec![256; num_airs])?;
     assert!(
         proof.trace_vdata.iter().filter(|v| v.is_some()).count() < num_airs,

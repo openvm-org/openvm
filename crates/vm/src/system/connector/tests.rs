@@ -6,13 +6,13 @@ use std::{
 use openvm_instructions::{
     instruction::Instruction, program::Program, LocalOpcode, SystemOpcode::TERMINATE,
 };
-use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+use openvm_stark_backend::{
+    p3_field::PrimeCharacteristicRing,
+    prover::{AirProvingContext, CpuBackend},
+    StarkEngine,
+};
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
-};
-use stark_backend_v2::{
-    prover::{AirProvingContextV2 as AirProvingContext, CpuBackendV2},
-    StarkEngineV2,
 };
 
 use super::VmConnectorPvs;
@@ -30,7 +30,7 @@ use crate::{
 
 type F = BabyBear;
 type SC = BabyBearPoseidon2Config;
-type PB = CpuBackendV2;
+type PB = CpuBackend;
 
 #[test]
 fn test_vm_connector_happy_path() {

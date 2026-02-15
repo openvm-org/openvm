@@ -17,14 +17,12 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_instructions::*;
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     p3_field::PrimeField32,
+    prover::{CpuBackend, CpuDevice},
+    StarkEngine,
 };
 use serde::{Deserialize, Serialize};
-use stark_backend_v2::{
-    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
-    StarkEngineV2 as StarkEngine,
-};
 use strum::IntoEnumIterator;
 
 use crate::*;
@@ -73,7 +71,7 @@ impl<F> VmExecutionExtension<F> for Sha256 {
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Sha256 {
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Sha256 {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
 
@@ -106,7 +104,7 @@ pub struct Sha2CpuProverExt;
 // BitwiseOperationLookupChip) are specific to CpuBackend.
 impl<E, RA> VmProverExtension<E, RA, Sha256> for Sha2CpuProverExt
 where
-    E::SC: StarkGenericConfig,
+    E::SC: StarkProtocolConfig,
     E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
     RA: RowMajorMatrixArena<Val<E::SC>>,
     Val<E::SC>: PrimeField32,

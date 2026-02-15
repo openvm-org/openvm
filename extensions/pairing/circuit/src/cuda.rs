@@ -1,9 +1,7 @@
 //! GPU builder where the [Rv32ModularBuilder], [AlgebraProverExt], and [EccProverExt] will use
 //! either cuda tracegen or hybrid CPU tracegen depending on what [openvm_algebra_circuit] and
 //! [openvm_ecc_circuit] crates export.
-use cuda_backend_v2::{
-    BabyBearPoseidon2GpuEngineV2 as GpuBabyBearPoseidon2Engine, GpuBackendV2 as GpuBackend,
-};
+use cuda_backend_v2::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
 use openvm_algebra_circuit::{AlgebraProverExt, Rv32ModularBuilder};
 use openvm_circuit::{
     arch::{

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use openvm_circuit_primitives::{is_less_than::IsLtSubAir, var_range::VariableRangeCheckerBus};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     interaction::PermutationCheckBus,
     p3_field::Field,
     p3_util::{log2_ceil_usize, log2_strict_usize},
@@ -72,13 +72,13 @@ impl<S, T> MemoryAddress<S, T> {
 }
 
 #[derive(Clone)]
-pub struct MemoryAirInventory<SC: StarkGenericConfig> {
+pub struct MemoryAirInventory<SC: StarkProtocolConfig> {
     pub bridge: MemoryBridge,
     pub interface: MemoryInterfaceAirs,
     pub access_adapters: Vec<AirRef<SC>>,
 }
 
-impl<SC: StarkGenericConfig> MemoryAirInventory<SC> {
+impl<SC: StarkProtocolConfig> MemoryAirInventory<SC> {
     pub fn new(
         bridge: MemoryBridge,
         mem_config: &MemoryConfig,

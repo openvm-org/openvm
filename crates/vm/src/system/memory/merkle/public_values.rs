@@ -1,12 +1,13 @@
 use std::io::{self, Write};
 
 use itertools::Itertools;
-use openvm_stark_backend::{p3_field::PrimeField32, p3_util::log2_strict_usize};
-use serde::{Deserialize, Serialize};
-use stark_backend_v2::{
+use openvm_stark_backend::{
     codec::{Decode, Encode},
+    p3_field::PrimeField32,
+    p3_util::log2_strict_usize,
     DIGEST_SIZE, F,
 };
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::instrument;
 

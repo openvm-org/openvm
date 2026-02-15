@@ -54,7 +54,7 @@ use openvm_stark_sdk::{
     engine::{StarkEngine, StarkFriEngine},
     openvm_stark_backend::{
         self,
-        config::{StarkGenericConfig, Val},
+        config::{StarkProtocolConfig, Val},
         keygen::types::MultiStarkProvingKey,
         proof::Proof,
         prover::{
@@ -192,7 +192,7 @@ impl InitFileGenerator for ExecuteConfig {
 pub struct ExecuteBuilder;
 impl<E, SC> VmBuilder<E> for ExecuteBuilder
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
 {

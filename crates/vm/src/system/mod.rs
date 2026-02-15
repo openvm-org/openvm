@@ -12,19 +12,13 @@ use openvm_instructions::{
     LocalOpcode, PhantomDiscriminant, PublishOpcode, SysPhantom, SystemOpcode,
 };
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     interaction::{LookupBus, PermutationCheckBus},
     p3_field::{Field, PrimeField32},
-    AirRef, Chip as ChipV1,
+    prover::{AirProvingContext, CommittedTraceData, CpuBackend, CpuDevice, ProverBackend},
+    AirRef, Chip as ChipV1, StarkEngine,
 };
 use rustc_hash::FxHashMap;
-use stark_backend_v2::{
-    prover::{
-        AirProvingContextV2 as AirProvingContext, CommittedTraceDataV2 as CommittedTraceData,
-        CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice, ProverBackendV2 as ProverBackend,
-    },
-    StarkEngineV2 as StarkEngine,
-};
 
 use self::{connector::VmConnectorAir, program::ProgramAir, public_values::PublicValuesAir};
 use crate::{
@@ -167,7 +161,7 @@ pub struct SystemPort {
 }
 
 #[derive(Clone)]
-pub struct SystemAirInventory<SC: StarkGenericConfig> {
+pub struct SystemAirInventory<SC: StarkProtocolConfig> {
     pub program: ProgramAir,
     pub connector: VmConnectorAir,
     pub memory: MemoryAirInventory<SC>,
@@ -176,7 +170,7 @@ pub struct SystemAirInventory<SC: StarkGenericConfig> {
     pub public_values: Option<PublicValuesAir>,
 }
 
-impl<SC: StarkGenericConfig> SystemAirInventory<SC> {
+impl<SC: StarkProtocolConfig> SystemAirInventory<SC> {
     pub fn new(
         config: &SystemConfig,
         port: SystemPort,
@@ -297,7 +291,7 @@ impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
 
 impl<SC> VmCircuitConfig<SC> for SystemConfig
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     Val<SC>: VmField,
 {
     /// Every VM circuit within the OpenVM circuit architecture **must** be initialized from the
@@ -361,7 +355,7 @@ where
 
 /// Base system chips for CPU backend. These chips must exactly correspond to the AIRs in
 /// [SystemAirInventory].
-pub struct SystemChipInventory<SC: StarkGenericConfig>
+pub struct SystemChipInventory<SC: StarkProtocolConfig>
 where
     Val<SC>: VmField,
 {
@@ -374,7 +368,7 @@ where
 
 // Note[jpw]: We could get rid of the `mem_inventory` input because `MemoryController` doesn't need
 // the buses for tracegen. We leave it to use old interfaces.
-impl<SC: StarkGenericConfig> SystemChipInventory<SC>
+impl<SC: StarkProtocolConfig> SystemChipInventory<SC>
 where
     Val<SC>: VmField,
 {
@@ -439,11 +433,11 @@ where
     }
 }
 
-type SC = stark_backend_v2::SC;
+type SC = openvm_stark_backend::SC;
 impl<RA> SystemChipComplex<RA, CpuBackend> for SystemChipInventory<SC>
 where
     RA: RowMajorMatrixArena<Val<SC>>,
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     Val<SC>: VmField,
 {
     fn load_program(&mut self, cached_program_trace: CommittedTraceData<CpuBackend>) {
@@ -474,7 +468,7 @@ where
             chip.inner.set_public_values(public_values);
         }
         self.program_chip.filtered_exec_frequencies = filtered_exec_frequencies;
-        let program_ctx = stark_backend_v2::ChipV2::generate_proving_ctx(&self.program_chip, ());
+        let program_ctx = openvm_stark_backend::Chip::generate_proving_ctx(&self.program_chip, ());
         self.connector_chip.begin(from_state);
         self.connector_chip.end(to_state, exit_code);
         let connector_ctx = self.connector_chip.generate_proving_ctx(());
@@ -635,7 +629,7 @@ where
     }
 }
 
-impl<SC: StarkGenericConfig> SystemWithFixedTraceHeights for SystemChipInventory<SC>
+impl<SC: StarkProtocolConfig> SystemWithFixedTraceHeights for SystemChipInventory<SC>
 where
     Val<SC>: VmField,
 {

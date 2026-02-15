@@ -39,7 +39,7 @@ use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     engine::{StarkEngine, StarkFriEngine},
     openvm_stark_backend::{
-        config::StarkGenericConfig, proof::Proof, prover::hal::DeviceDataTransporter,
+        config::StarkProtocolConfig, proof::Proof, prover::hal::DeviceDataTransporter,
     },
     p3_baby_bear::BabyBear,
 };

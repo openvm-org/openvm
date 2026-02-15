@@ -12,12 +12,12 @@ use openvm_circuit_derive::VmConfig;
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
-use openvm_stark_backend::config::{StarkGenericConfig, Val};
-use serde::{Deserialize, Serialize};
-use stark_backend_v2::{
-    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
-    StarkEngineV2 as StarkEngine,
+use openvm_stark_backend::{
+    config::{StarkProtocolConfig, Val},
+    prover::{CpuBackend, CpuDevice},
+    StarkEngine,
 };
+use serde::{Deserialize, Serialize};
 
 mod modular;
 pub use modular::*;
@@ -115,10 +115,10 @@ impl InitFileGenerator for Rv32ModularWithFp2Config {
 #[derive(Clone)]
 pub struct Rv32ModularCpuBuilder;
 
-type SC = stark_backend_v2::SC;
+type SC = openvm_stark_backend::SC;
 impl<E> VmBuilder<E> for Rv32ModularCpuBuilder
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
     Val<SC>: VmField,
 {
@@ -154,7 +154,7 @@ pub struct Rv32ModularWithFp2CpuBuilder;
 
 impl<E> VmBuilder<E> for Rv32ModularWithFp2CpuBuilder
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
     Val<SC>: VmField,
 {

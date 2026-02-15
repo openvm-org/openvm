@@ -2,7 +2,7 @@ use std::{borrow::BorrowMut, mem::size_of, sync::Arc};
 
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     prover::{cpu::CpuBackend, types::AirProvingContext},
@@ -55,7 +55,7 @@ impl<F: Field> ProgramTester<F> {
     }
 }
 
-impl<SC: StarkGenericConfig, RA> Chip<RA, CpuBackend<SC>> for ProgramTester<Val<SC>> {
+impl<SC: StarkProtocolConfig, RA> Chip<RA, CpuBackend<SC>> for ProgramTester<Val<SC>> {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();

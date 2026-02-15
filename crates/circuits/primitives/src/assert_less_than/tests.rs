@@ -13,12 +13,13 @@ use openvm_stark_backend::{
         Matrix,
     },
     p3_maybe_rayon::prelude::*,
-    prover::types::AirProvingContext,
+    prover::{types::AirProvingContext, AirProvingContext},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    test_utils::test_engine_small,
     utils::disable_debug_builder,
+    StarkEngine,
 };
 use openvm_stark_sdk::{any_rap_arc_vec, p3_baby_bear::BabyBear};
-use stark_backend_v2::{prover::AirProvingContextV2, test_utils::test_engine_small, StarkEngineV2};
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::less_than::assert_less_than_dummy_tracegen,
@@ -143,7 +144,7 @@ fn test_assert_less_than_chip_lt() {
         .into_iter()
         .map(Arc::new)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
+        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()
@@ -169,7 +170,7 @@ fn test_lt_chip_decomp_does_not_divide() {
         .into_iter()
         .map(Arc::new)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
+        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()
@@ -199,7 +200,7 @@ fn test_assert_less_than_negative_1() {
         .into_iter()
         .map(Arc::new)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
+        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();
@@ -228,7 +229,7 @@ fn test_assert_less_than_negative_2() {
         .into_iter()
         .map(Arc::new)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
+        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();
@@ -253,7 +254,7 @@ fn test_assert_less_than_with_non_power_of_two_pairs() {
         .into_iter()
         .map(Arc::new)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
+        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()

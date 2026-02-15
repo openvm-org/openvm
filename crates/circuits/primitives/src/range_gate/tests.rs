@@ -1,16 +1,19 @@
 use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::*, prover::types::AirProvingContext, utils::disable_debug_builder,
-    AirRef,
+    p3_field::PrimeCharacteristicRing,
+    p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*,
+    prover::{types::AirProvingContext, AirProvingContext},
+    test_utils::test_engine_small,
+    utils::disable_debug_builder,
+    AirRef, StarkEngine,
 };
 use openvm_stark_sdk::{
     any_rap_arc_vec, dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
 use rand::Rng;
-use stark_backend_v2::{prover::AirProvingContextV2, test_utils::test_engine_small, StarkEngineV2};
 
 use crate::{range::RangeCheckBus, range_gate::RangeCheckerGateChip};
 
@@ -71,7 +74,7 @@ fn test_range_gate_chip() {
         .chain(iter::once(range_trace))
         .map(Arc::new)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
+        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()
@@ -106,7 +109,7 @@ fn negative_test_range_gate_chip() {
         .into_iter()
         .map(Arc::new)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
+        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();

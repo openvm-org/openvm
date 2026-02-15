@@ -1,6 +1,6 @@
 use derivative::Derivative;
 use openvm_stark_backend::{
-    config::{Com, StarkGenericConfig},
+    config::{Com, StarkProtocolConfig},
     keygen::types::MultiStarkProvingKey,
 };
 use openvm_stark_sdk::config::FriParameters;
@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
     deserialize = "MultiStarkProvingKey<SC>: Deserialize<'de>, VC: Deserialize<'de>"
 ))]
 #[derivative(Clone(bound = "Com<SC>: Clone, VC: Clone"))]
-pub struct VmProvingKey<SC: StarkGenericConfig, VC> {
+pub struct VmProvingKey<SC: StarkProtocolConfig, VC> {
     pub fri_params: FriParameters,
     pub vm_config: VC,
     pub vm_pk: MultiStarkProvingKey<SC>,

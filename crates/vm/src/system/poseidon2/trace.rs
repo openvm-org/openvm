@@ -2,7 +2,7 @@ use std::{borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     p3_air::BaseAir,
     p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
@@ -14,7 +14,7 @@ use openvm_stark_backend::{
 use super::{columns::*, Poseidon2PeripheryBaseChip, PERIPHERY_POSEIDON2_WIDTH};
 use crate::arch::VmField;
 
-impl<RA, SC: StarkGenericConfig, const SBOX_REGISTERS: usize> Chip<RA, CpuBackend<SC>>
+impl<RA, SC: StarkProtocolConfig, const SBOX_REGISTERS: usize> Chip<RA, CpuBackend<SC>>
     for Poseidon2PeripheryBaseChip<Val<SC>, SBOX_REGISTERS>
 where
     Val<SC>: VmField,

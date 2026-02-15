@@ -3,7 +3,7 @@ use std::{array::from_fn, borrow::Borrow, marker::PhantomData, sync::Arc};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::PrimeCharacteristicRing,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
@@ -152,7 +152,7 @@ pub struct VmChipWrapper<F, FILLER> {
 
 impl<SC, FILLER, RA> Chip<RA, CpuBackend<SC>> for VmChipWrapper<Val<SC>, FILLER>
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     FILLER: TraceFiller<Val<SC>>,
     RA: RowMajorMatrixArena<Val<SC>>,
 {

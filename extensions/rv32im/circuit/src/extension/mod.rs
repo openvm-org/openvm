@@ -27,14 +27,12 @@ use openvm_rv32im_transpiler::{
     Rv32LoadStoreOpcode, Rv32Phantom, ShiftOpcode,
 };
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     p3_field::PrimeField32,
+    prover::{CpuBackend, CpuDevice},
+    StarkEngine,
 };
 use serde::{Deserialize, Serialize};
-use stark_backend_v2::{
-    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
-    StarkEngineV2 as StarkEngine,
-};
 use strum::IntoEnumIterator;
 
 use crate::{adapters::*, *};
@@ -220,7 +218,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv32I {
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv32I {
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv32I {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
@@ -324,7 +322,7 @@ pub struct Rv32ImCpuProverExt;
 // BitwiseOperationLookupChip) are specific to CpuBackend.
 impl<E, RA> VmProverExtension<E, RA, Rv32I> for Rv32ImCpuProverExt
 where
-    E::SC: StarkGenericConfig,
+    E::SC: StarkProtocolConfig,
     E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
     RA: RowMajorMatrixArena<Val<E::SC>>,
     Val<E::SC>: PrimeField32,
@@ -484,7 +482,7 @@ impl<F> VmExecutionExtension<F> for Rv32M {
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv32M {
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv32M {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
@@ -549,7 +547,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv32M {
 // BitwiseOperationLookupChip) are specific to CpuBackend.
 impl<E, RA> VmProverExtension<E, RA, Rv32M> for Rv32ImCpuProverExt
 where
-    E::SC: StarkGenericConfig,
+    E::SC: StarkProtocolConfig,
     E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
     RA: RowMajorMatrixArena<Val<E::SC>>,
     Val<E::SC>: PrimeField32,
@@ -653,7 +651,7 @@ impl<F> VmExecutionExtension<F> for Rv32Io {
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv32Io {
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv32Io {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
@@ -693,7 +691,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv32Io {
 // BitwiseOperationLookupChip) are specific to CpuBackend.
 impl<E, RA> VmProverExtension<E, RA, Rv32Io> for Rv32ImCpuProverExt
 where
-    E::SC: StarkGenericConfig,
+    E::SC: StarkProtocolConfig,
     E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
     RA: RowMajorMatrixArena<Val<E::SC>>,
     Val<E::SC>: PrimeField32,

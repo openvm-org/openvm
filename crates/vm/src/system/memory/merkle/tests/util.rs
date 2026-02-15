@@ -4,7 +4,7 @@ use std::{
 };
 
 use openvm_stark_backend::{
-    config::{Domain, StarkGenericConfig},
+    config::{Domain, StarkProtocolConfig},
     p3_air::BaseAir,
     p3_commit::PolynomialSpace,
     p3_field::Field,
@@ -55,7 +55,7 @@ impl<const CHUNK: usize, F: Field> HashTestChip<CHUNK, F> {
     }
     pub fn generate_proving_ctx<SC>(&mut self) -> AirProvingContext<CpuBackend<SC>>
     where
-        SC: StarkGenericConfig,
+        SC: StarkProtocolConfig,
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         AirProvingContext::simple_no_pis(Arc::new(self.trace()))

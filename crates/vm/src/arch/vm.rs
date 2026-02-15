@@ -22,30 +22,25 @@ use openvm_instructions::{
     program::Program,
 };
 use openvm_stark_backend::{
-    config::{Com, StarkGenericConfig, Val},
+    config::{Com, StarkProtocolConfig, Val},
+    keygen::{
+        types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
+        MultiStarkKeygenBuilder,
+    },
     p3_field::{
         BasedVectorSpace, InjectiveMonomial, PrimeCharacteristicRing, PrimeField32, TwoAdicField,
     },
     p3_util::{log2_ceil_usize, log2_strict_usize},
-    prover::MatrixDimensions,
+    proof::Proof,
+    prover::{
+        ColMajorMatrix, CommittedTraceData, DeviceDataTransporter, DeviceMultiStarkProvingKey,
+        MatrixDimensions, ProverBackend, ProvingContext, TraceCommitter,
+    },
+    verifier::VerifierError as VerificationError,
+    StarkEngine,
 };
 use p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
-use stark_backend_v2::{
-    keygen::MultiStarkKeygenBuilderV2,
-    keygen::types::{
-        MultiStarkProvingKeyV2 as MultiStarkProvingKey,
-        MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey,
-    },
-    proof::Proof,
-    prover::{
-        ColMajorMatrix, CommittedTraceDataV2 as CommittedTraceData, DeviceDataTransporterV2,
-        DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
-        ProverBackendV2 as ProverBackend, ProvingContextV2 as ProvingContext, TraceCommitterV2,
-    },
-    verifier::VerifierError as VerificationError,
-    StarkEngineV2 as StarkEngine,
-};
 use thiserror::Error;
 use tracing::{info_span, instrument};
 
@@ -403,7 +398,7 @@ pub enum VirtualMachineError {
 
 /// The [VirtualMachine] struct contains the API to generate proofs for _arbitrary_ programs for a
 /// fixed set of OpenVM instructions and a fixed VM circuit corresponding to those instructions. The
-/// API is specific to a particular [StarkEngine], which specifies a fixed [StarkGenericConfig] and
+/// API is specific to a particular [StarkEngine], which specifies a fixed [StarkProtocolConfig] and
 /// [ProverBackend] via associated types. The [VmProverBuilder] also fixes the choice of
 /// `RecordArena` associated to the prover backend via an associated type.
 ///
@@ -452,10 +447,10 @@ where
         config: VB::VmConfig,
     ) -> Result<(Self, MultiStarkProvingKey), VirtualMachineError>
     where
-        E: StarkEngine<SC = stark_backend_v2::SC>,
+        E: StarkEngine<SC = openvm_stark_backend::SC>,
     {
         let system_config = config.as_ref();
-        let mut keygen_builder = MultiStarkKeygenBuilderV2::new(engine.config().clone());
+        let mut keygen_builder = MultiStarkKeygenBuilder::new(engine.config().clone());
         let circuit = config.create_airs()?;
         for (air_id, air) in circuit.into_airs().enumerate() {
             if system_config.is_required_air_id(air_id) {
@@ -972,7 +967,7 @@ where
                     let air_names = pk.air_name.clone();
                     // TODO[jpw]: revisit v2 width calculation
                     let width = pk.vk.params.width.total_width(
-                        <<E::SC as StarkGenericConfig>::Challenge as BasedVectorSpace<
+                        <<E::SC as StarkProtocolConfig>::Challenge as BasedVectorSpace<
                             Val<E::SC>,
                         >>::DIMENSION,
                     );
@@ -1004,7 +999,7 @@ where
             .iter()
             .map(|pk| {
                 pk.vk.params.width.total_width(
-                        <<E::SC as StarkGenericConfig>::Challenge as BasedVectorSpace<
+                        <<E::SC as StarkProtocolConfig>::Challenge as BasedVectorSpace<
                             Val<E::SC>,
                         >>::DIMENSION,
                     )
@@ -1033,7 +1028,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{VirtualMachine, CONNECTOR_AIR_ID, PROGRAM_AIR_ID, SystemConfig};
+    use super::{SystemConfig, VirtualMachine, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
     use crate::{system::SystemCpuBuilder, utils::test_cpu_engine};
 
     #[test]
@@ -1059,13 +1054,13 @@ mod tests {
     serialize = "Com<SC>: Serialize",
     deserialize = "Com<SC>: Deserialize<'de>"
 ))]
-pub struct ContinuationVmProof<SC: StarkGenericConfig> {
+pub struct ContinuationVmProof<SC: StarkProtocolConfig> {
     pub per_segment: Vec<Proof>,
     pub user_public_values: UserPublicValuesProof<{ CHUNK }, Val<SC>>,
 }
 
 /// Prover for a specific exe in a specific continuation VM using a specific Stark config.
-pub trait ContinuationVmProver<SC: StarkGenericConfig> {
+pub trait ContinuationVmProver<SC: StarkProtocolConfig> {
     fn prove(
         &mut self,
         input: impl Into<Streams<Val<SC>>>,
@@ -1077,7 +1072,7 @@ pub trait ContinuationVmProver<SC: StarkGenericConfig> {
 /// Does not run metered execution and directly runs preflight execution. The `prove` function must
 /// be provided with the expected maximum `trace_heights` to use to allocate record arena
 /// capacities.
-pub trait SingleSegmentVmProver<SC: StarkGenericConfig> {
+pub trait SingleSegmentVmProver<SC: StarkProtocolConfig> {
     fn prove(
         &mut self,
         input: impl Into<Streams<Val<SC>>>,
@@ -1451,7 +1446,7 @@ where
     })
 }
 
-impl<SC: StarkGenericConfig> Clone for ContinuationVmProof<SC>
+impl<SC: StarkProtocolConfig> Clone for ContinuationVmProof<SC>
 where
     Com<SC>: Clone,
 {
@@ -1564,7 +1559,7 @@ mod vm_metrics {
                 main_cells_used += width.main_width() * *height;
                 total_cells_used +=
                     width.total_width(
-                        <<E::SC as StarkGenericConfig>::Challenge as BasedVectorSpace<
+                        <<E::SC as StarkProtocolConfig>::Challenge as BasedVectorSpace<
                             Val<E::SC>,
                         >>::DIMENSION,
                     ) * *height;

@@ -11,7 +11,7 @@ use std::{
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
@@ -224,7 +224,7 @@ impl VariableRangeCheckerChip {
 }
 
 // We allow any `R` type so this can work with arbitrary record arenas.
-impl<R, SC: StarkGenericConfig> Chip<R, CpuBackend<SC>> for VariableRangeCheckerChip
+impl<R, SC: StarkProtocolConfig> Chip<R, CpuBackend<SC>> for VariableRangeCheckerChip
 where
     Val<SC>: PrimeField32,
 {

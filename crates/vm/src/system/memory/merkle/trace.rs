@@ -4,7 +4,7 @@ use std::{
 };
 
 use openvm_stark_backend::{
-    config::{Domain, StarkGenericConfig, Val},
+    config::{Domain, StarkProtocolConfig, Val},
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
     p3_matrix::dense::RowMajorMatrix,
@@ -48,7 +48,7 @@ where
 {
     pub fn generate_proving_ctx<SC>(&mut self) -> AirProvingContext<CpuBackend<SC>>
     where
-        SC: StarkGenericConfig,
+        SC: StarkProtocolConfig,
         Domain<SC>: PolynomialSpace<Val = F>,
     {
         assert!(

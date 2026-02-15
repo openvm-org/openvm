@@ -1,9 +1,11 @@
 use openvm_circuit::{arch::PUBLIC_VALUES_AIR_ID, utils::air_test_impl};
 use openvm_native_circuit::{execute_program_with_config, test_native_config, NativeCpuBuilder};
 use openvm_native_compiler::{asm::AsmBuilder, prelude::*};
-use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, PrimeCharacteristicRing};
+use openvm_stark_backend::{
+    p3_field::{extension::BinomialExtensionField, PrimeCharacteristicRing},
+    BabyBearPoseidon2CpuEngine as BabyBearPoseidon2Engine, SystemParams,
+};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
-use stark_backend_v2::{BabyBearPoseidon2CpuEngineV2 as BabyBearPoseidon2Engine, SystemParams};
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;

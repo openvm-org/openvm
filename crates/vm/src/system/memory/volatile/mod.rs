@@ -15,7 +15,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
@@ -225,7 +225,7 @@ impl<F: PrimeField32> VolatileBoundaryChip<F> {
     }
 }
 
-impl<RA, SC: StarkGenericConfig> Chip<RA, CpuBackend<SC>> for VolatileBoundaryChip<Val<SC>>
+impl<RA, SC: StarkProtocolConfig> Chip<RA, CpuBackend<SC>> for VolatileBoundaryChip<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {

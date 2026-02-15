@@ -12,6 +12,7 @@ type InnerSC = BabyBearPoseidon2Config;
 pub mod inner {
     use openvm_native_circuit::{test_native_config, NativeCpuBuilder};
     use openvm_native_compiler::conversion::CompilerOptions;
+    use openvm_stark_backend::{BabyBearPoseidon2CpuEngine, SystemParams};
     use openvm_stark_sdk::{
         config::{
             baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
@@ -19,7 +20,6 @@ pub mod inner {
         },
         engine::{StarkFriEngine, VerificationDataWithFriParams},
     };
-    use stark_backend_v2::{BabyBearPoseidon2CpuEngineV2, SystemParams};
 
     use super::*;
     use crate::{hints::Hintable, stark::VerifierProgram, types::new_from_inner_multi_vk};
@@ -62,7 +62,7 @@ pub mod inner {
 
         let compiler_options = CompilerOptions::default();
         let (program, witness_stream) = build_verification_program(vparams, compiler_options);
-        air_test_impl::<BabyBearPoseidon2CpuEngineV2, _>(
+        air_test_impl::<BabyBearPoseidon2CpuEngine, _>(
             SystemParams::new_for_testing(20),
             NativeCpuBuilder,
             test_native_config(),

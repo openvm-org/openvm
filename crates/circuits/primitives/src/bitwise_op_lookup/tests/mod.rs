@@ -5,13 +5,13 @@ use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
-    prover::types::AirProvingContext,
+    prover::{types::AirProvingContext, AirProvingContext},
+    test_utils::test_engine_small,
     utils::disable_debug_builder,
-    AirRef,
+    AirRef, StarkEngine,
 };
 use openvm_stark_sdk::{any_rap_arc_vec, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
-use stark_backend_v2::{prover::AirProvingContextV2, test_utils::test_engine_small, StarkEngineV2};
 #[cfg(feature = "cuda")]
 use {
     crate::bitwise_op_lookup::{BitwiseOperationLookupAir, BitwiseOperationLookupChipGPU},
@@ -113,7 +113,7 @@ fn test_bitwise_operation_lookup() {
         .into_iter()
         .map(Arc::new)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
+        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()
@@ -154,7 +154,7 @@ fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperation)) {
         .into_iter()
         .map(Arc::new)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
+        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();

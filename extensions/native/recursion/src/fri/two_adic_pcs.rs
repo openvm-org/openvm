@@ -634,7 +634,7 @@ pub mod tests {
         ir::{Array, RVar, DIGEST_SIZE},
     };
     use openvm_stark_backend::{
-        config::{StarkGenericConfig, Val},
+        config::{StarkProtocolConfig, Val},
         engine::StarkEngine,
         p3_challenger::{CanObserve, FieldChallenger},
         p3_commit::Pcs,
@@ -665,9 +665,9 @@ pub mod tests {
     ) -> (Program<BabyBear>, Vec<Vec<BabyBear>>) {
         type SC = BabyBearPoseidon2Config;
         type F = Val<SC>;
-        type EF = <SC as StarkGenericConfig>::Challenge;
-        type Challenger = <SC as StarkGenericConfig>::Challenger;
-        type ScPcs = <SC as StarkGenericConfig>::Pcs;
+        type EF = <SC as StarkProtocolConfig>::Challenge;
+        type Challenger = <SC as StarkProtocolConfig>::Challenger;
+        type ScPcs = <SC as StarkProtocolConfig>::Pcs;
 
         let mut rng = StdRng::seed_from_u64(0);
         let log_degrees = &[nb_log2_rows];

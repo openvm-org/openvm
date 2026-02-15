@@ -2,7 +2,7 @@ use std::{borrow::BorrowMut, mem::size_of, sync::Arc};
 
 use air::DummyExecutionInteractionCols;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     prover::{cpu::CpuBackend, types::AirProvingContext},
@@ -52,7 +52,7 @@ impl<F: PrimeField32> ExecutionTester<F> {
     }
 }
 
-impl<SC: StarkGenericConfig, RA> Chip<RA, CpuBackend<SC>> for ExecutionTester<Val<SC>>
+impl<SC: StarkProtocolConfig, RA> Chip<RA, CpuBackend<SC>> for ExecutionTester<Val<SC>>
 where
     Val<SC>: Field,
 {

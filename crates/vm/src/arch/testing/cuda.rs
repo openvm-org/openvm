@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use cuda_backend_v2::BabyBearPoseidon2GpuEngineV2;
+use cuda_backend_v2::BabyBearPoseidon2GpuEngine;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{
         BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -27,17 +27,14 @@ use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
     p3_air::BaseAir,
     p3_field::{PrimeCharacteristicRing, PrimeField32},
-    prover::{cpu::CpuBackend, types::AirProvingContext, MatrixDimensions},
+    prover::{cpu::CpuBackend, types::AirProvingContext, AirProvingContext, MatrixDimensions},
     rap::AnyRap,
     utils::disable_debug_builder,
-    AirRef, Chip,
+    verifier::VerifierError,
+    AirRef, Chip, StarkEngine, VerificationData,
 };
 use openvm_stark_sdk::config::setup_tracing_with_log_level;
 use rand::{rngs::StdRng, Rng, SeedableRng};
-use stark_backend_v2::{
-    prover::AirProvingContextV2, verifier::VerifierError, StarkEngineV2,
-    VerificationDataV2 as VerificationData,
-};
 use tracing::Level;
 
 #[cfg(feature = "metrics")]
@@ -690,7 +687,7 @@ impl GpuChipTester {
         self
     }
 
-    pub fn test<P: Fn() -> BabyBearPoseidon2GpuEngineV2>(
+    pub fn test<P: Fn() -> BabyBearPoseidon2GpuEngine>(
         self,
         engine_provider: P,
     ) -> Result<VerificationData, VerifierError> {
@@ -698,7 +695,7 @@ impl GpuChipTester {
             self.airs,
             self.ctxs
                 .into_iter()
-                .map(AirProvingContextV2::from_v1_no_cached)
+                .map(AirProvingContext::from_v1_no_cached)
                 .collect(),
         )
     }

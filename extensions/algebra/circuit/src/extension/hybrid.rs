@@ -1,8 +1,6 @@
 //! Prover extension for the GPU backend which still does trace generation on CPU.
 
-use cuda_backend_v2::{
-    BabyBearPoseidon2GpuEngineV2 as GpuBabyBearPoseidon2Engine, GpuBackendV2 as GpuBackend,
-};
+use cuda_backend_v2::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::*,
@@ -33,11 +31,10 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     prover::{
         cpu::CpuBackend as CpuBackendV1, types::AirProvingContext as AirProvingContextV1,
-        MatrixDimensions,
+        AirProvingContext, MatrixDimensions,
     },
-    Chip as ChipV1,
+    Chip as ChipV1, Chip,
 };
-use stark_backend_v2::{prover::AirProvingContextV2 as AirProvingContext, ChipV2 as Chip};
 use strum::EnumCount;
 
 use crate::{

@@ -14,7 +14,7 @@ use std::{
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
+    config::{StarkProtocolConfig, Val},
     interaction::{BusIndex, InteractionBuilder, LookupBus},
     p3_air::{Air, BaseAir, PairBuilder},
     p3_field::Field,
@@ -170,7 +170,7 @@ impl<const M: usize> XorLookupChip<M> {
     }
 }
 
-impl<R, SC: StarkGenericConfig, const M: usize> Chip<R, CpuBackend<SC>> for XorLookupChip<M> {
+impl<R, SC: StarkProtocolConfig, const M: usize> Chip<R, CpuBackend<SC>> for XorLookupChip<M> {
     fn generate_proving_ctx(&self, _: R) -> AirProvingContext<CpuBackend<SC>> {
         let trace = self.generate_trace::<Val<SC>>();
         AirProvingContext::simple_no_pis(Arc::new(trace))

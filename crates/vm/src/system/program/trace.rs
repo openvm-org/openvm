@@ -9,19 +9,17 @@ use openvm_instructions::{
     LocalOpcode, SystemOpcode,
 };
 use openvm_stark_backend::{
-    config::{Com, PcsProverData, StarkGenericConfig, Val},
+    config::{Com, PcsProverData, StarkProtocolConfig, Val},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
+    prover::{
+        stacked_pcs::StackedPcsData, AirProvingContext, ColMajorMatrix, CommittedTraceData,
+        CpuBackend, TraceCommitter,
+    },
+    Chip, StarkEngine,
 };
 use serde::{Deserialize, Serialize};
-use stark_backend_v2::{
-    prover::{
-        stacked_pcs::StackedPcsData, AirProvingContextV2 as AirProvingContext, ColMajorMatrix,
-        CommittedTraceDataV2 as CommittedTraceData, CpuBackendV2 as CpuBackend, TraceCommitterV2,
-    },
-    ChipV2 as Chip, StarkEngineV2 as StarkEngine,
-};
 
 use super::{Instruction, ProgramExecutionCols, EXIT_CODE_FAIL};
 use crate::{
@@ -43,16 +41,16 @@ use crate::{
     deserialize = "VmExe<Val<SC>>: Deserialize<'de>, Com<SC>: Deserialize<'de>, PcsProverData<SC>: Deserialize<'de>"
 ))]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
-pub struct VmCommittedExe<SC: StarkGenericConfig> {
+pub struct VmCommittedExe<SC: StarkProtocolConfig> {
     /// Raw executable.
     pub exe: Arc<VmExe<Val<SC>>>,
     program_commitment: Com<SC>,
     /// Program ROM as cached trace matrix.
     pub trace: Arc<RowMajorMatrix<Val<SC>>>,
-    pub prover_data: Arc<StackedPcsData<stark_backend_v2::F, stark_backend_v2::Digest>>,
+    pub prover_data: Arc<StackedPcsData<openvm_stark_backend::F, openvm_stark_backend::Digest>>,
 }
 
-type SC = stark_backend_v2::SC;
+type SC = openvm_stark_backend::SC;
 impl VmCommittedExe<SC> {
     /// Creates [VmCommittedExe] from [VmExe] by using `pcs` to commit to the
     /// program code as a _cached trace_ matrix.

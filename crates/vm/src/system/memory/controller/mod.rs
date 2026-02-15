@@ -10,7 +10,7 @@ use openvm_circuit_primitives::{
     TraceSubRowGenerator,
 };
 use openvm_stark_backend::{
-    config::{Domain, StarkGenericConfig},
+    config::{Domain, StarkProtocolConfig},
     interaction::PermutationCheckBus,
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
@@ -266,7 +266,7 @@ impl<F: VmField> MemoryController<F> {
     // there's no need for any memory chip to implement the Chip trait. We do it when convenient,
     // but all that matters is that you can tracegen all the trace matrices for the memory AIRs
     // _somehow_.
-    pub fn generate_proving_ctx<SC: StarkGenericConfig>(
+    pub fn generate_proving_ctx<SC: StarkProtocolConfig>(
         &mut self,
         access_adapter_records: DenseRecordArena,
         touched_memory: TouchedMemory<F>,
