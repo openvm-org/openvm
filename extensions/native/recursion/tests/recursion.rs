@@ -18,7 +18,7 @@
 //     prover::{
 //         cpu::{CpuBackend, CpuDevice},
 //         hal::{DeviceDataTransporter, ProverBackend, TraceCommitter},
-//         types::AirProvingContext,
+//         AirProvingContext,
 //     },
 // };
 // use openvm_stark_sdk::{

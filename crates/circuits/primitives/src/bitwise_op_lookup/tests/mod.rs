@@ -5,7 +5,7 @@ use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
-    prover::{types::AirProvingContext, AirProvingContext},
+    prover::AirProvingContext,
     test_utils::test_engine_small,
     utils::disable_debug_builder,
     AirRef, StarkEngine,
@@ -22,7 +22,7 @@ use {
         types::{F, SC},
     },
     openvm_cuda_common::copy::MemCopyH2D as _,
-    openvm_stark_backend::{p3_air::BaseAir, prover::types::AirProvingContext, Chip},
+    openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext, Chip},
     openvm_stark_sdk::{
         config::FriParameters, dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     },

@@ -12,7 +12,7 @@ use openvm_sdk::{
     prover::vm::{new_local_prover, types::VmProvingKey},
     Sdk, StdIn, F, SC,
 };
-use openvm_stark_backend::{config::StarkProtocolConfig, p3_field::BasedVectorSpace};
+use openvm_stark_backend::{StarkProtocolConfig, p3_field::BasedVectorSpace};
 use openvm_stark_sdk::bench::run_with_metric_collection;
 
 fn verify_native_max_trace_heights(

@@ -5,9 +5,8 @@ use openvm_circuit::arch::{instructions::exe::VmExe, MemoryConfig};
 pub use openvm_circuit::system::program::trace::VmCommittedExe;
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_stark_backend::{
-    config::{Com, StarkProtocolConfig, Val},
-    engine::StarkEngine,
     p3_field::{PrimeField, PrimeField32},
+    Com, StarkEngine, StarkProtocolConfig, Val,
 };
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},

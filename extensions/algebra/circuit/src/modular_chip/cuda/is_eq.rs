@@ -11,7 +11,7 @@ use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types:
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_rv32_adapters::{Rv32IsEqualModAdapterCols, Rv32IsEqualModAdapterRecord};
-use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
+use openvm_stark_backend::{prover::AirProvingContext, Chip};
 
 use super::cuda_abi::is_eq_cuda::tracegen as modular_is_equal_tracegen;
 use crate::modular_chip::{ModularIsEqualCoreCols, ModularIsEqualRecord};

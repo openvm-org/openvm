@@ -5,7 +5,7 @@ use openvm_stark_backend::{
     interaction::BusIndex,
     p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
-    prover::{cpu::CpuBackend, types::AirProvingContext, AirProvingContext},
+    prover::{AirProvingContext, CpuBackend},
     AirRef, Chip, StarkEngine,
 };
 use openvm_stark_sdk::{

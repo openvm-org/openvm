@@ -11,7 +11,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, prover_backend::GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_stark_backend::prover::types::AirProvingContext;
+use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::cuda_abi::access_adapters::tracegen;
 
@@ -168,7 +168,7 @@ mod tests {
     };
     use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
     use openvm_cuda_backend::{data_transporter::assert_eq_host_and_device_matrix, prelude::SC};
-    use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::hal::MatrixDimensions};
+    use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::MatrixDimensions};
     use rand::{rngs::StdRng, Rng, SeedableRng};
 
     use super::*;

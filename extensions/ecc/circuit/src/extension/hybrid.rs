@@ -20,7 +20,7 @@ use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
 use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    prover::{cpu::CpuBackend as CpuBackendV1, AirProvingContext},
+    prover::{AirProvingContext, CpuBackend as CpuBackendV1},
     Chip as ChipV1, Chip,
 };
 

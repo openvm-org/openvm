@@ -6,7 +6,7 @@ use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types::F};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_rv32im_circuit::BranchEqualCoreCols;
-use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
+use openvm_stark_backend::{prover::AirProvingContext, Chip};
 
 use super::NativeBranchEqualCoreRecord;
 use crate::{

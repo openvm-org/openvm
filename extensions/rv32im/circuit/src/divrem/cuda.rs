@@ -9,7 +9,7 @@ use openvm_circuit_primitives::{
 use openvm_cuda_backend::{base::DeviceMatrix, chip::UInt2, prover_backend::GpuBackend, types::F};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
-use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
+use openvm_stark_backend::{prover::AirProvingContext, Chip};
 
 use crate::{
     adapters::{Rv32MultAdapterCols, Rv32MultAdapterRecord},

@@ -1,13 +1,9 @@
 use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_field::PrimeCharacteristicRing,
-    p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::*,
-    prover::{types::AirProvingContext, AirProvingContext},
-    test_utils::test_engine_small,
-    utils::disable_debug_builder,
-    AirRef, StarkEngine,
+    p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*, prover::AirProvingContext, test_utils::test_engine_small,
+    utils::disable_debug_builder, AirRef, StarkEngine,
 };
 use openvm_stark_sdk::{any_rap_arc_vec, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
@@ -21,7 +17,7 @@ use {
         types::{F, SC},
     },
     openvm_cuda_common::copy::MemCopyH2D as _,
-    openvm_stark_backend::{p3_air::BaseAir, prover::types::AirProvingContext, Chip},
+    openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext, Chip},
     openvm_stark_sdk::{
         config::FriParameters, dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     },

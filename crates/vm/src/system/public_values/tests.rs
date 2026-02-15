@@ -8,11 +8,10 @@ use openvm_stark_backend::{
     p3_air::{Air, AirBuilderWithPublicValues},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProvingContext,
-    rap::PartitionedBaseAir,
+    prover::AirProvingContext,
     utils::disable_debug_builder,
     verifier::VerificationError,
-    AirRef,
+    AirRef, PartitionedBaseAir,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine,

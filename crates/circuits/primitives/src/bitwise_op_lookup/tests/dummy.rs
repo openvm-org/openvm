@@ -3,7 +3,7 @@ use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
 use crate::bitwise_op_lookup::bus::BitwiseOperationLookupBus;
@@ -46,7 +46,7 @@ pub mod cuda {
 
     use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types::F};
     use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer};
-    use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
+    use openvm_stark_backend::{prover::AirProvingContext, Chip};
 
     use crate::{
         bitwise_op_lookup::BitwiseOperationLookupChipGPU,

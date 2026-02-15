@@ -8,7 +8,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types::F};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
+use openvm_stark_backend::{prover::AirProvingContext, Chip};
 
 use super::{FriReducedOpeningRecordMut, OVERALL_WIDTH};
 use crate::cuda_abi::fri_cuda;

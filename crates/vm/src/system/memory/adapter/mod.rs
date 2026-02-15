@@ -20,7 +20,7 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
     p3_matrix::dense::RowMajorMatrix,
     p3_util::log2_strict_usize,
-    prover::{cpu::CpuBackend, types::AirProvingContext},
+    prover::{AirProvingContext, CpuBackend},
 };
 
 use crate::{

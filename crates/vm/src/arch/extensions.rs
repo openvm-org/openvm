@@ -21,11 +21,9 @@ use openvm_circuit_primitives::var_range::{
 };
 use openvm_instructions::{PhantomDiscriminant, VmOpcode};
 use openvm_stark_backend::{
-    config::{StarkProtocolConfig, Val},
     interaction::BusIndex,
     prover::{AirProvingContext, CpuBackend, MatrixDimensions, ProverBackend, ProvingContext},
-    rap::AnyRap,
-    AirRef, AnyChip, Chip, StarkEngine,
+    AirRef, AnyAir, AnyChip, Chip, StarkEngine, StarkProtocolConfig, Val,
 };
 use rustc_hash::FxHashMap;
 use tracing::info_span;
@@ -428,7 +426,7 @@ impl<SC: StarkProtocolConfig> AirInventory<SC> {
             .filter_map(|air| air.as_any().downcast_ref())
     }
 
-    pub fn add_air<A: AnyRap<SC> + 'static>(&mut self, air: A) {
+    pub fn add_air<A: AnyAir<SC> + 'static>(&mut self, air: A) {
         self.add_air_ref(Arc::new(air));
     }
 

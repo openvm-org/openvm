@@ -16,7 +16,7 @@ use openvm_cuda_common::{
 use openvm_stark_backend::{
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
     p3_util::log2_ceil_usize,
-    prover::types::AirProvingContext,
+    prover::AirProvingContext,
 };
 use p3_field::PrimeCharacteristicRing;
 

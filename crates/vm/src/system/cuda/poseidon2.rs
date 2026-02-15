@@ -11,7 +11,7 @@ use openvm_cuda_common::{
     d_buffer::DeviceBuffer,
 };
 use openvm_stark_backend::{
-    prover::{hal::MatrixDimensions, types::AirProvingContext},
+    prover::{hal::MatrixDimensions, AirProvingContext},
     Chip,
 };
 

@@ -5,7 +5,7 @@ use openvm_stark_backend::{
     config::{StarkProtocolConfig, Val},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
-    prover::{cpu::CpuBackend, types::AirProvingContext},
+    prover::{AirProvingContext, CpuBackend},
     Chip, ChipUsageGetter,
 };
 

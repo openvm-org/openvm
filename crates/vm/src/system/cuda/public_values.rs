@@ -12,7 +12,7 @@ use openvm_circuit_primitives::{encoder::Encoder, var_range::VariableRangeChecke
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, prover_backend::GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::{
-    prover::{hal::MatrixDimensions, types::AirProvingContext},
+    prover::{hal::MatrixDimensions, AirProvingContext},
     Chip,
 };
 

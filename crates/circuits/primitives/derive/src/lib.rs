@@ -132,7 +132,7 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
             new_generics.params.push(syn::parse_quote! { R });
             new_generics
                 .params
-                .push(syn::parse_quote! { PB: openvm_stark_backend::prover::hal::ProverBackend });
+                .push(syn::parse_quote! { PB: openvm_stark_backend::prover::ProverBackend });
             let (impl_generics, _, _) = new_generics.split_for_impl();
 
             // Check if the struct has only one unnamed field
@@ -152,7 +152,7 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
                 .push(syn::parse_quote! { #inner_ty: openvm_stark_backend::Chip<R, PB> });
             quote! {
                 impl #impl_generics openvm_stark_backend::Chip<R, PB> for #name #ty_generics #where_clause {
-                    fn generate_proving_ctx(&self, records: R) -> openvm_stark_backend::prover::types::AirProvingContext<PB> {
+                    fn generate_proving_ctx(&self, records: R) -> openvm_stark_backend::prover::AirProvingContext<PB> {
                         self.0.generate_proving_ctx(records)
                     }
                 }
@@ -189,7 +189,7 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
             new_generics.params.push(syn::parse_quote! { R });
             new_generics
                 .params
-                .push(syn::parse_quote! { PB: openvm_stark_backend::prover::hal::ProverBackend });
+                .push(syn::parse_quote! { PB: openvm_stark_backend::prover::ProverBackend });
             let (impl_generics, _, _) = new_generics.split_for_impl();
 
             // Implement Chip whenever the inner type implements Chip
@@ -232,7 +232,7 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
 
             quote! {
                 impl #impl_generics openvm_stark_backend::Chip<R, PB> for #name #ty_generics #where_clause {
-                    fn generate_proving_ctx(&self, records: R) -> openvm_stark_backend::prover::types::AirProvingContext<PB> {
+                    fn generate_proving_ctx(&self, records: R) -> openvm_stark_backend::prover::AirProvingContext<PB> {
                         match self {
                             #(#generate_proving_ctx_arms,)*
                         }

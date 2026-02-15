@@ -1,7 +1,7 @@
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
-    config::StarkProtocolConfig,
     prover::{CommittedTraceData, CpuBackend},
+    StarkProtocolConfig,
 };
 
 #[cfg(test)]

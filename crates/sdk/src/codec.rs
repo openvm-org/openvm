@@ -9,12 +9,12 @@ use openvm_continuations::verifier::{
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_native_recursion::hints::{InnerBatchOpening, InnerFriProof, InnerQueryProof};
 use openvm_stark_backend::{
-    config::Com,
     interaction::{fri_log_up::FriLogUpPartialProof, RapPhaseSeqKind},
     p3_field::{
         extension::BinomialExtensionField, BasedVectorSpace, PrimeCharacteristicRing, PrimeField32,
     },
     proof::{AdjacentOpenedValues, AirProofData, Commitments, OpenedValues, OpeningProof, Proof},
+    Com,
 };
 use p3_fri::CommitPhaseProofStep;
 

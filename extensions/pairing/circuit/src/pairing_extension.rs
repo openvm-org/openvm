@@ -19,7 +19,7 @@ use openvm_pairing_guest::{
     bn254::{BN254_ECC_STRUCT_NAME, BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
 };
 use openvm_pairing_transpiler::PairingPhantom;
-use openvm_stark_backend::{config::StarkProtocolConfig, p3_field::Field, StarkEngine};
+use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig};
 use serde::{Deserialize, Serialize};
 use strum::FromRepr;
 

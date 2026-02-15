@@ -7,11 +7,10 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::{types::AirProvingContext, AirProvingContext},
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    prover::AirProvingContext,
     test_utils::test_engine_small,
     utils::disable_debug_builder,
-    StarkEngine,
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine,
 };
 use openvm_stark_sdk::any_rap_arc_vec;
 #[cfg(feature = "cuda")]

@@ -13,7 +13,7 @@ use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_stark_backend::{
     p3_field::PrimeField32,
     p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
-    prover::{hal::MatrixDimensions, types::AirProvingContext},
+    prover::{hal::MatrixDimensions, AirProvingContext},
     Chip,
 };
 
@@ -192,7 +192,7 @@ mod tests {
     };
     use openvm_stark_backend::{
         p3_util::log2_ceil_usize,
-        prover::{cpu::CpuBackend, types::AirProvingContext},
+        prover::{AirProvingContext, CpuBackend},
         Chip,
     };
     use openvm_stark_sdk::utils::create_seeded_rng;

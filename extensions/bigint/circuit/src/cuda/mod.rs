@@ -20,7 +20,7 @@ use openvm_rv32im_circuit::{
     BranchLessThanCoreCols, BranchLessThanCoreRecord, LessThanCoreCols, LessThanCoreRecord,
     MultiplicationCoreCols, MultiplicationCoreRecord, ShiftCoreCols, ShiftCoreRecord,
 };
-use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
+use openvm_stark_backend::{prover::AirProvingContext, Chip};
 
 mod cuda_abi;
 

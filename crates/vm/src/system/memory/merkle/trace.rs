@@ -8,7 +8,7 @@ use openvm_stark_backend::{
     p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
     p3_matrix::dense::RowMajorMatrix,
-    prover::{cpu::CpuBackend, types::AirProvingContext},
+    prover::{AirProvingContext, CpuBackend},
     ChipUsageGetter,
 };
 use tracing::instrument;

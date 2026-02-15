@@ -23,15 +23,13 @@ use openvm_cuda_backend::{
 use openvm_instructions::{program::PC_BITS, riscv::RV32_REGISTER_AS};
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
-    config::Val,
     interaction::{LookupBus, PermutationCheckBus},
     p3_air::BaseAir,
     p3_field::{PrimeCharacteristicRing, PrimeField32},
-    prover::{cpu::CpuBackend, types::AirProvingContext, AirProvingContext, MatrixDimensions},
-    rap::AnyRap,
+    prover::{AirProvingContext, CpuBackend, MatrixDimensions},
     utils::disable_debug_builder,
     verifier::VerifierError,
-    AirRef, Chip, StarkEngine, VerificationData,
+    AirRef, AnyAir, Chip, StarkEngine, Val, VerificationData,
 };
 use openvm_stark_sdk::config::setup_tracing_with_log_level;
 use rand::{rngs::StdRng, Rng, SeedableRng};
@@ -516,7 +514,7 @@ pub struct GpuChipTester {
 impl GpuChipTester {
     pub fn load<A, G, RA>(mut self, air: A, gpu_chip: G, gpu_arena: RA) -> Self
     where
-        A: AnyRap<SC> + 'static,
+        A: AnyAir<SC> + 'static,
         G: Chip<RA, GpuBackend>,
     {
         let proving_ctx = gpu_chip.generate_proving_ctx(gpu_arena);
@@ -528,7 +526,7 @@ impl GpuChipTester {
 
     pub fn load_harness<E, A, G, RA>(self, harness: TestChipHarness<F, E, A, G, RA>) -> Self
     where
-        A: AnyRap<SC> + 'static,
+        A: AnyAir<SC> + 'static,
         G: Chip<RA, GpuBackend>,
     {
         self.load(harness.air, harness.chip, harness.arena)
@@ -536,7 +534,7 @@ impl GpuChipTester {
 
     pub fn load_periphery<A, G>(self, air: A, gpu_chip: G) -> Self
     where
-        A: AnyRap<SC> + 'static,
+        A: AnyAir<SC> + 'static,
         G: Chip<(), GpuBackend>,
     {
         self.load(air, gpu_chip, ())
@@ -567,7 +565,7 @@ impl GpuChipTester {
         cpu_arena: CRA,
     ) -> Self
     where
-        A: AnyRap<SC> + 'static,
+        A: AnyAir<SC> + 'static,
         C: Chip<CRA, CpuBackend<SC>>,
         G: Chip<RA, GpuBackend>,
     {
@@ -597,7 +595,7 @@ impl GpuChipTester {
         harness: GpuTestChipHarness<Val<SC>, E, A, GpuChip, CpuChip>,
     ) -> Self
     where
-        A: AnyRap<SC> + 'static,
+        A: AnyAir<SC> + 'static,
         CpuChip: Chip<MatrixRecordArena<Val<SC>>, CpuBackend<SC>>,
         GpuChip: Chip<DenseRecordArena, GpuBackend>,
     {

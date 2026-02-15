@@ -3,9 +3,7 @@ use std::array;
 use openvm_native_compiler::prelude::*;
 use openvm_native_recursion::hints::Hintable;
 use openvm_stark_sdk::openvm_stark_backend::{
-    config::{StarkProtocolConfig, Val},
-    p3_field::PrimeCharacteristicRing,
-    proof::Proof,
+    p3_field::PrimeCharacteristicRing, proof::Proof, StarkProtocolConfig, Val,
 };
 
 use crate::{

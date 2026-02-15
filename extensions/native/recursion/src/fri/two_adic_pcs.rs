@@ -634,12 +634,11 @@ pub mod tests {
         ir::{Array, RVar, DIGEST_SIZE},
     };
     use openvm_stark_backend::{
-        config::{StarkProtocolConfig, Val},
-        engine::StarkEngine,
         p3_challenger::{CanObserve, FieldChallenger},
         p3_commit::Pcs,
         p3_field::coset::TwoAdicMultiplicativeCoset,
         p3_matrix::dense::RowMajorMatrix,
+        StarkEngine, StarkProtocolConfig, Val,
     };
     use openvm_stark_sdk::{
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},

@@ -7,7 +7,6 @@ use openvm_native_compiler::ir::{
 };
 use openvm_native_compiler_derive::iter_zip;
 use openvm_stark_backend::{
-    config::Com,
     keygen::types::TraceWidth,
     p3_commit::{BatchOpening, ExtensionMmcs},
     p3_field::{
@@ -15,6 +14,7 @@ use openvm_stark_backend::{
     },
     p3_util::log2_strict_usize,
     proof::{AdjacentOpenedValues, AirProofData, Commitments, OpenedValues, OpeningProof, Proof},
+    Com,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,

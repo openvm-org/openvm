@@ -119,9 +119,8 @@ mod guest_tests {
                 system::SystemChipInventory,
             },
             openvm_stark_backend::{
-                config::{StarkProtocolConfig, Val},
-                engine::StarkEngine,
-                prover::cpu::{CpuBackend, CpuDevice},
+                prover::{CpuBackend, CpuDevice},
+                StarkEngine, StarkProtocolConfig, Val,
             },
         };
 

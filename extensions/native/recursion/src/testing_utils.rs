@@ -1,5 +1,5 @@
 use openvm_circuit::{arch::instructions::program::Program, utils::air_test_impl};
-use openvm_stark_backend::engine::VerificationData;
+use openvm_stark_backend::VerificationData;
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
     utils::ProofInputForTest,

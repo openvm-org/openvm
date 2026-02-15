@@ -16,7 +16,7 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
     p3_util::{log2_ceil_usize, log2_strict_usize},
-    prover::{cpu::CpuBackend, types::AirProvingContext},
+    prover::{AirProvingContext, CpuBackend},
     Chip,
 };
 use serde::{Deserialize, Serialize};

@@ -54,12 +54,12 @@ use openvm_stark_sdk::{
     engine::{StarkEngine, StarkFriEngine},
     openvm_stark_backend::{
         self,
-        config::{StarkProtocolConfig, Val},
+        StarkProtocolConfig, Val,
         keygen::types::MultiStarkProvingKey,
         proof::Proof,
         prover::{
-            cpu::{CpuBackend, CpuDevice},
-            hal::DeviceDataTransporter,
+            CpuBackend, CpuDevice,
+            DeviceDataTransporter,
         },
     },
     p3_baby_bear::BabyBear,

@@ -971,7 +971,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
             }
         }
 
-        impl<SC: openvm_stark_backend::config::StarkProtocolConfig> ::openvm_circuit::arch::VmCircuitConfig<SC> for #name #circuit_where_clause {
+        impl<SC: openvm_stark_backend::StarkProtocolConfig> ::openvm_circuit::arch::VmCircuitConfig<SC> for #name #circuit_where_clause {
             fn create_airs(
                 &self,
             ) -> Result<::openvm_circuit::arch::AirInventory<SC>, ::openvm_circuit::arch::AirInventoryError> {

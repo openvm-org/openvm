@@ -9,7 +9,7 @@ use openvm_circuit::{
 use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types::F};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::{
-    prover::{hal::MatrixDimensions, types::AirProvingContext},
+    prover::{hal::MatrixDimensions, AirProvingContext},
     Chip,
 };
 

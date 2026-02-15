@@ -197,9 +197,9 @@ mod tests {
         ir::Felt,
     };
     use openvm_stark_backend::{
-        config::{StarkProtocolConfig, Val},
         p3_challenger::{CanObserve, CanSample},
         p3_field::PrimeCharacteristicRing,
+        StarkProtocolConfig, Val,
     };
     use openvm_stark_sdk::{
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},

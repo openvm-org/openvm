@@ -6,14 +6,12 @@ use openvm_circuit_primitives::var_range::{
 };
 use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, NATIVE_AS};
 use openvm_stark_backend::{
-    config::{StarkProtocolConfig, Val},
     interaction::PermutationCheckBus,
     p3_matrix::dense::RowMajorMatrix,
     p3_util::log2_strict_usize,
-    prover::{cpu::CpuBackend, types::AirProvingContext, AirProvingContext},
-    rap::AnyRap,
+    prover::{AirProvingContext, CpuBackend},
     verifier::VerifierError,
-    AirRef, Chip, StarkEngine, VerificationData,
+    AirRef, AnyAir, Chip, StarkEngine, StarkProtocolConfig, Val, VerificationData,
 };
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing_with_log_level},
@@ -424,7 +422,7 @@ where
         harness: TestChipHarness<Val<SC>, E, A, C, MatrixRecordArena<Val<SC>>>,
     ) -> Self
     where
-        A: AnyRap<SC> + 'static,
+        A: AnyAir<SC> + 'static,
         C: Chip<MatrixRecordArena<Val<SC>>, CpuBackend<SC>>,
     {
         let arena = harness.arena;
@@ -441,7 +439,7 @@ where
 
     pub fn load_periphery<A, C>(self, (air, chip): (A, C)) -> Self
     where
-        A: AnyRap<SC> + 'static,
+        A: AnyAir<SC> + 'static,
         C: Chip<(), CpuBackend<SC>>,
     {
         let air = Arc::new(air) as AirRef<SC>;
@@ -513,7 +511,7 @@ where
         modify_trace: P,
     ) -> Self
     where
-        A: AnyRap<SC> + 'static,
+        A: AnyAir<SC> + 'static,
         C: Chip<MatrixRecordArena<Val<SC>>, CpuBackend<SC>>,
         P: Fn(&mut RowMajorMatrix<Val<SC>>),
     {

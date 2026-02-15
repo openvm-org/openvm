@@ -13,7 +13,7 @@ use openvm_mod_circuit_builder::{
     ExprBuilderConfig, FieldExpressionChipGPU, FieldExpressionCoreAir, FieldExpressionMetadata,
 };
 use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
-use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
+use openvm_stark_backend::{prover::AirProvingContext, Chip};
 
 use crate::{fp2_chip::fp2_muldiv_expr, AlgebraRecord};
 

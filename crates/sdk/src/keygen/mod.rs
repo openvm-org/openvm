@@ -11,9 +11,8 @@ use openvm_continuations::verifier::{
 use openvm_native_circuit::{NativeConfig, NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_stark_backend::{
-    config::Val,
-    engine::StarkEngine,
     p3_field::{BasedVectorSpace, PrimeField32, TwoAdicField},
+    StarkEngine, Val,
 };
 use openvm_stark_sdk::{
     config::{
@@ -22,9 +21,7 @@ use openvm_stark_sdk::{
     },
     engine::StarkFriEngine,
     openvm_stark_backend::{
-        config::{Com, StarkProtocolConfig},
-        keygen::types::MultiStarkVerifyingKey,
-        proof::Proof,
+        keygen::types::MultiStarkVerifyingKey, proof::Proof, Com, StarkProtocolConfig,
     },
 };
 use serde::{Deserialize, Serialize};

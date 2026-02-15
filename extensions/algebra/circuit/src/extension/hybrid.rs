@@ -30,8 +30,8 @@ use openvm_rv32im_circuit::Rv32ImGpuProverExt;
 use openvm_stark_backend::{
     p3_air::BaseAir,
     prover::{
-        cpu::CpuBackend as CpuBackendV1, types::AirProvingContext as AirProvingContextV1,
-        AirProvingContext, MatrixDimensions,
+        AirProvingContext as AirProvingContextV1, AirProvingContext, CpuBackend as CpuBackendV1,
+        MatrixDimensions,
     },
     Chip as ChipV1, Chip,
 };

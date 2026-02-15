@@ -7,7 +7,7 @@ use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
-    prover::{cpu::CpuBackend, types::AirProvingContext},
+    prover::{AirProvingContext, CpuBackend},
     Chip, ChipUsageGetter,
 };
 

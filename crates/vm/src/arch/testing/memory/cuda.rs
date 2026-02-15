@@ -15,7 +15,7 @@ use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types:
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::{
     p3_field::{PrimeCharacteristicRing, PrimeField32},
-    prover::types::AirProvingContext,
+    prover::AirProvingContext,
     Chip, ChipUsageGetter,
 };
 
