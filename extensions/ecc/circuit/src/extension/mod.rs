@@ -72,11 +72,10 @@ impl InitFileGenerator for Rv32WeierstrassConfig {
 #[derive(Clone)]
 pub struct Rv32WeierstrassCpuBuilder;
 
-type SC = openvm_stark_backend::SC;
-impl<E> VmBuilder<E> for Rv32WeierstrassCpuBuilder
+impl<SC, E> VmBuilder<E> for Rv32WeierstrassCpuBuilder
 where
     SC: StarkProtocolConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
 {
     type VmConfig = Rv32WeierstrassConfig;

@@ -80,11 +80,10 @@ impl InitFileGenerator for NativeConfig {}
 #[derive(Clone, Default)]
 pub struct NativeCpuBuilder;
 
-type SC = openvm_stark_backend::SC;
-impl<E> VmBuilder<E> for NativeCpuBuilder
+impl<SC, E> VmBuilder<E> for NativeCpuBuilder
 where
     SC: StarkProtocolConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
 {
     type VmConfig = NativeConfig;
@@ -184,10 +183,10 @@ impl InitFileGenerator for Rv32WithKernelsConfig {}
 #[derive(Clone)]
 pub struct Rv32WithKernelsCpuBuilder;
 
-impl<E> VmBuilder<E> for Rv32WithKernelsCpuBuilder
+impl<SC, E> VmBuilder<E> for Rv32WithKernelsCpuBuilder
 where
     SC: StarkProtocolConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
 {
     type VmConfig = Rv32WithKernelsConfig;

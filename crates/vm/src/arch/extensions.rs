@@ -580,7 +580,7 @@ where
 }
 
 // SharedVariableRangeCheckerChip is only used by the CPU backend.
-impl<SC, RA> ChipInventory<SC, RA, CpuBackend>
+impl<SC, RA> ChipInventory<SC, RA, CpuBackend<SC>>
 where
     SC: StarkProtocolConfig,
 {

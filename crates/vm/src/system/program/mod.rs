@@ -21,7 +21,7 @@ pub struct ProgramChip<SC: StarkProtocolConfig> {
     /// `i` -> frequency of instruction in `i`th row of trace matrix. This requires filtering
     /// `program.instructions_and_debug_infos` to remove gaps.
     pub(super) filtered_exec_frequencies: Vec<u32>,
-    pub(super) cached: Option<CommittedTraceData<CpuBackend>>,
+    pub(super) cached: Option<CommittedTraceData<CpuBackend<SC>>>,
     _marker: std::marker::PhantomData<SC>,
 }
 

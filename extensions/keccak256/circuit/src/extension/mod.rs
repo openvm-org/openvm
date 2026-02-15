@@ -82,11 +82,10 @@ impl InitFileGenerator for Keccak256Rv32Config {}
 #[derive(Clone)]
 pub struct Keccak256Rv32CpuBuilder;
 
-type SC = openvm_stark_backend::SC;
-impl<E> VmBuilder<E> for Keccak256Rv32CpuBuilder
+impl<SC, E> VmBuilder<E> for Keccak256Rv32CpuBuilder
 where
     SC: StarkProtocolConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
 {
     type VmConfig = Keccak256Rv32Config;
@@ -192,14 +191,14 @@ pub struct Keccak256CpuProverExt;
 impl<E, RA> VmProverExtension<E, RA, Keccak256> for Keccak256CpuProverExt
 where
     E::SC: StarkProtocolConfig,
-    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<PB = CpuBackend<E::SC>, PD = CpuDevice<E::SC>>,
     RA: RowMajorMatrixArena<Val<E::SC>>,
     Val<E::SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
         _: &Keccak256,
-        inventory: &mut ChipInventory<E::SC, RA, CpuBackend>,
+        inventory: &mut ChipInventory<E::SC, RA, CpuBackend<E::SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();

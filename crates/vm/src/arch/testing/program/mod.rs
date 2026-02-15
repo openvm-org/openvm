@@ -69,4 +69,3 @@ impl<SC: StarkProtocolConfig, RA> Chip<RA, CpuBackend<SC>> for ProgramTester<Val
         AirProvingContext::simple_no_pis(Arc::new(RowMajorMatrix::new(values, width)))
     }
 }
-

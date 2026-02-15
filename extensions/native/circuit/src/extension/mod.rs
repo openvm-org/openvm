@@ -278,14 +278,14 @@ pub struct NativeCpuProverExt;
 impl<E, RA> VmProverExtension<E, RA, Native> for NativeCpuProverExt
 where
     E::SC: StarkProtocolConfig,
-    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<PB = CpuBackend<E::SC>, PD = CpuDevice<E::SC>>,
     RA: RowMajorMatrixArena<Val<E::SC>>,
     Val<E::SC>: VmField,
 {
     fn extend_prover(
         &self,
         _: &Native,
-        inventory: &mut ChipInventory<E::SC, RA, CpuBackend>,
+        inventory: &mut ChipInventory<E::SC, RA, CpuBackend<E::SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -549,14 +549,14 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for CastFExtension {
 impl<E, RA> VmProverExtension<E, RA, CastFExtension> for NativeCpuProverExt
 where
     E::SC: StarkProtocolConfig,
-    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<PB = CpuBackend<E::SC>, PD = CpuDevice<E::SC>>,
     RA: RowMajorMatrixArena<Val<E::SC>>,
     Val<E::SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
         _: &CastFExtension,
-        inventory: &mut ChipInventory<E::SC, RA, CpuBackend>,
+        inventory: &mut ChipInventory<E::SC, RA, CpuBackend<E::SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();

@@ -50,11 +50,13 @@ pub struct VmCommittedExe<SC: StarkProtocolConfig> {
     pub prover_data: Arc<StackedPcsData<openvm_stark_backend::F, openvm_stark_backend::Digest>>,
 }
 
-type SC = openvm_stark_backend::SC;
-impl VmCommittedExe<SC> {
+impl<SC: StarkProtocolConfig> VmCommittedExe<SC> {
     /// Creates [VmCommittedExe] from [VmExe] by using `pcs` to commit to the
     /// program code as a _cached trace_ matrix.
-    pub fn commit<E: StarkEngine<PB = CpuBackend>>(exe: VmExe<Val<SC>>, e: &E) -> Self {
+    pub fn commit<E: StarkEngine<SC = SC, PB = CpuBackend<SC>>>(
+        exe: VmExe<Val<SC>>,
+        e: &E,
+    ) -> Self {
         let trace = generate_cached_trace(&exe.program);
         let (commit, prover_data) = e
             .device()
@@ -70,7 +72,7 @@ impl VmCommittedExe<SC> {
         self.program_commitment
     }
 
-    pub fn get_committed_trace(&self) -> CommittedTraceData<CpuBackend> {
+    pub fn get_committed_trace(&self) -> CommittedTraceData<CpuBackend<SC>> {
         CommittedTraceData {
             commitment: self.prover_data.commit(),
             data: self.prover_data.clone(),
@@ -116,10 +118,10 @@ impl VmCommittedExe<SC> {
     }
 }
 
-impl Chip<(), CpuBackend> for ProgramChip<SC> {
+impl<SC: StarkProtocolConfig> Chip<(), CpuBackend<SC>> for ProgramChip<SC> {
     /// The cached program trace is cloned and left for future use. The clone is cheap because the
     /// cached trace is behind smart pointers. The execution frequencies are left unchanged.
-    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<CpuBackend> {
+    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<CpuBackend<SC>> {
         let cached = self
             .cached
             .clone()

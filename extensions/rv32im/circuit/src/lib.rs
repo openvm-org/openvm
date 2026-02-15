@@ -152,11 +152,10 @@ impl Rv32ImConfig {
 #[derive(Clone)]
 pub struct Rv32ICpuBuilder;
 
-type SC = openvm_stark_backend::SC;
-impl<E> VmBuilder<E> for Rv32ICpuBuilder
+impl<SC, E> VmBuilder<E> for Rv32ICpuBuilder
 where
     SC: StarkProtocolConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
 {
     type VmConfig = Rv32IConfig;
@@ -183,10 +182,10 @@ where
 #[derive(Clone)]
 pub struct Rv32ImCpuBuilder;
 
-impl<E> VmBuilder<E> for Rv32ImCpuBuilder
+impl<SC, E> VmBuilder<E> for Rv32ImCpuBuilder
 where
     SC: StarkProtocolConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
 {
     type VmConfig = Rv32ImConfig;

@@ -193,9 +193,12 @@ pub fn air_test_impl<E, VB>(
     input: impl Into<Streams<Val<E::SC>>>,
     min_segments: usize,
     debug: bool,
-) -> eyre::Result<(Option<MemoryImage>, Vec<(MultiStarkVerifyingKey, Proof)>)>
+) -> eyre::Result<(
+    Option<MemoryImage>,
+    Vec<(MultiStarkVerifyingKey<E::SC>, Proof<E::SC>)>,
+)>
 where
-    E: StarkWhirEngine + StarkEngine<SC = openvm_stark_backend::SC>,
+    E: StarkWhirEngine + StarkEngine,
     Val<E::SC>: PrimeField32,
     VB: VmBuilder<E>,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>

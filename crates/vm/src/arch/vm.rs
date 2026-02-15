@@ -445,10 +445,7 @@ where
         engine: E,
         builder: VB,
         config: VB::VmConfig,
-    ) -> Result<(Self, MultiStarkProvingKey), VirtualMachineError>
-    where
-        E: StarkEngine<SC = openvm_stark_backend::SC>,
-    {
+    ) -> Result<(Self, MultiStarkProvingKey<E::SC>), VirtualMachineError> {
         let system_config = config.as_ref();
         let mut keygen_builder = MultiStarkKeygenBuilder::new(engine.config().clone());
         let circuit = config.create_airs()?;
@@ -838,7 +835,7 @@ where
         state: VmState<Val<E::SC>, GuestMemory>,
         num_insns: Option<u64>,
         trace_heights: &[u32],
-    ) -> Result<(Proof, Option<GuestMemory>), VirtualMachineError>
+    ) -> Result<(Proof<E::SC>, Option<GuestMemory>), VirtualMachineError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
@@ -866,8 +863,8 @@ where
     /// or [`verify_single`] directly instead.
     pub fn verify(
         &self,
-        vk: &MultiStarkVerifyingKey,
-        proofs: &[Proof],
+        vk: &MultiStarkVerifyingKey<E::SC>,
+        proofs: &[Proof<E::SC>],
     ) -> Result<(), VmVerificationError>
     where
         Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
@@ -1055,7 +1052,7 @@ mod tests {
     deserialize = "Com<SC>: Deserialize<'de>"
 ))]
 pub struct ContinuationVmProof<SC: StarkProtocolConfig> {
-    pub per_segment: Vec<Proof>,
+    pub per_segment: Vec<Proof<SC>>,
     pub user_public_values: UserPublicValuesProof<{ CHUNK }, Val<SC>>,
 }
 
@@ -1077,7 +1074,7 @@ pub trait SingleSegmentVmProver<SC: StarkProtocolConfig> {
         &mut self,
         input: impl Into<Streams<Val<SC>>>,
         trace_heights: &[u32],
-    ) -> Result<Proof, VirtualMachineError>;
+    ) -> Result<Proof<SC>, VirtualMachineError>;
 }
 
 /// Virtual machine prover instance for a fixed VM config and a fixed program. For use in proving a
@@ -1241,7 +1238,7 @@ where
         &mut self,
         input: impl Into<Streams<Val<E::SC>>>,
         trace_heights: &[u32],
-    ) -> Result<Proof, VirtualMachineError> {
+    ) -> Result<Proof<E::SC>, VirtualMachineError> {
         self.reset_state(input);
         let vm = &mut self.vm;
         let exe = &self.exe;
@@ -1271,8 +1268,8 @@ where
 /// to the [VmCommittedExe].
 pub fn verify_single<E>(
     engine: &E,
-    vk: &MultiStarkVerifyingKey,
-    proof: &Proof,
+    vk: &MultiStarkVerifyingKey<E::SC>,
+    proof: &Proof<E::SC>,
 ) -> Result<(), VerificationError>
 where
     E: StarkEngine,
@@ -1312,8 +1309,8 @@ pub struct VerifiedExecutionPayload<F> {
 // @dev: This function doesn't need to be generic in `VC`.
 pub fn verify_segments<E>(
     engine: &E,
-    vk: &MultiStarkVerifyingKey,
-    proofs: &[Proof],
+    vk: &MultiStarkVerifyingKey<E::SC>,
+    proofs: &[Proof<E::SC>],
 ) -> Result<VerifiedExecutionPayload<Val<E::SC>>, VmVerificationError>
 where
     E: StarkEngine,

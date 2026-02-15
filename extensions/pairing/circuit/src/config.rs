@@ -72,11 +72,10 @@ impl InitFileGenerator for Rv32PairingConfig {
 #[derive(Clone)]
 pub struct Rv32PairingCpuBuilder;
 
-type SC = openvm_stark_backend::SC;
-impl<E> VmBuilder<E> for Rv32PairingCpuBuilder
+impl<SC, E> VmBuilder<E> for Rv32PairingCpuBuilder
 where
     SC: StarkProtocolConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
 {
     type VmConfig = Rv32PairingConfig;

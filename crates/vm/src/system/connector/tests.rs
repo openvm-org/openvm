@@ -30,7 +30,7 @@ use crate::{
 
 type F = BabyBear;
 type SC = BabyBearPoseidon2Config;
-type PB = CpuBackend;
+type PB = CpuBackend<SC>;
 
 #[test]
 fn test_vm_connector_happy_path() {

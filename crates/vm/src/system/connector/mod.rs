@@ -311,4 +311,3 @@ where
         AirProvingContext::simple(trace, public_values)
     }
 }
-

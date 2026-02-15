@@ -16,7 +16,7 @@ use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
     p3_field::{Field, PrimeField32},
     prover::{AirProvingContext, CommittedTraceData, CpuBackend, CpuDevice, ProverBackend},
-    AirRef, Chip as ChipV1, StarkEngine,
+    AirRef, StarkEngine,
 };
 use rustc_hash::FxHashMap;
 
@@ -433,14 +433,13 @@ where
     }
 }
 
-type SC = openvm_stark_backend::SC;
-impl<RA> SystemChipComplex<RA, CpuBackend> for SystemChipInventory<SC>
+impl<RA, SC> SystemChipComplex<RA, CpuBackend<SC>> for SystemChipInventory<SC>
 where
     RA: RowMajorMatrixArena<Val<SC>>,
     SC: StarkProtocolConfig,
     Val<SC>: VmField,
 {
-    fn load_program(&mut self, cached_program_trace: CommittedTraceData<CpuBackend>) {
+    fn load_program(&mut self, cached_program_trace: CommittedTraceData<CpuBackend<SC>>) {
         let _ = self.program_chip.cached.replace(cached_program_trace);
     }
 
@@ -453,7 +452,7 @@ where
         &mut self,
         system_records: SystemRecords<Val<SC>>,
         mut record_arenas: Vec<RA>,
-    ) -> Vec<AirProvingContext<CpuBackend>> {
+    ) -> Vec<AirProvingContext<CpuBackend<SC>>> {
         let SystemRecords {
             from_state,
             to_state,
@@ -468,7 +467,7 @@ where
             chip.inner.set_public_values(public_values);
         }
         self.program_chip.filtered_exec_frequencies = filtered_exec_frequencies;
-        let program_ctx = openvm_stark_backend::Chip::generate_proving_ctx(&self.program_chip, ());
+        let program_ctx = self.program_chip.generate_proving_ctx(());
         self.connector_chip.begin(from_state);
         self.connector_chip.end(to_state, exit_code);
         let connector_ctx = self.connector_chip.generate_proving_ctx(());
@@ -482,15 +481,10 @@ where
             .memory_controller
             .generate_proving_ctx(access_adapter_records, touched_memory);
 
-        [program_ctx]
+        [program_ctx, connector_ctx]
             .into_iter()
-            .chain(
-                [connector_ctx]
-                    .into_iter()
-                    .chain(pv_ctx)
-                    .chain(memory_ctxs)
-                    .map(AirProvingContext::from_v1_no_cached),
-            )
+            .chain(pv_ctx)
+            .chain(memory_ctxs)
             .collect()
     }
 
@@ -542,21 +536,22 @@ where
 #[derive(Clone)]
 pub struct SystemCpuBuilder;
 
-impl<E> VmBuilder<E> for SystemCpuBuilder
+impl<SC, E> VmBuilder<E> for SystemCpuBuilder
 where
-    E: StarkEngine<PB = CpuBackend, PD = CpuDevice, SC = SC>,
-    Val<E::SC>: VmField,
+    SC: StarkProtocolConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    Val<SC>: VmField,
 {
     type VmConfig = SystemConfig;
-    type RecordArena = MatrixRecordArena<Val<E::SC>>;
-    type SystemChipInventory = SystemChipInventory<E::SC>;
+    type RecordArena = MatrixRecordArena<Val<SC>>;
+    type SystemChipInventory = SystemChipInventory<SC>;
 
     fn create_chip_complex(
         &self,
         config: &SystemConfig,
-        airs: AirInventory<E::SC>,
+        airs: AirInventory<SC>,
     ) -> Result<
-        VmChipComplex<E::SC, MatrixRecordArena<Val<E::SC>>, CpuBackend, SystemChipInventory<E::SC>>,
+        VmChipComplex<SC, MatrixRecordArena<Val<SC>>, CpuBackend<SC>, SystemChipInventory<SC>>,
         ChipInventoryError,
     > {
         let range_bus = airs.range_checker().bus;
@@ -587,11 +582,11 @@ where
             // ATTENTION: The threshold 7 here must match the one in `new_poseidon2_periphery_air`
             let direct_bus = if config.max_constraint_degree >= 7 {
                 inventory
-                    .next_air::<Poseidon2PeripheryAir<Val<E::SC>, 0>>()?
+                    .next_air::<Poseidon2PeripheryAir<Val<SC>, 0>>()?
                     .bus
             } else {
                 inventory
-                    .next_air::<Poseidon2PeripheryAir<Val<E::SC>, 1>>()?
+                    .next_air::<Poseidon2PeripheryAir<Val<SC>, 1>>()?
                     .bus
             };
             let chip = Arc::new(Poseidon2PeripheryChip::new(

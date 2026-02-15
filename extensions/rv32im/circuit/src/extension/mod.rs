@@ -323,14 +323,14 @@ pub struct Rv32ImCpuProverExt;
 impl<E, RA> VmProverExtension<E, RA, Rv32I> for Rv32ImCpuProverExt
 where
     E::SC: StarkProtocolConfig,
-    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<PB = CpuBackend<E::SC>, PD = CpuDevice<E::SC>>,
     RA: RowMajorMatrixArena<Val<E::SC>>,
     Val<E::SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
         _: &Rv32I,
-        inventory: &mut ChipInventory<E::SC, RA, CpuBackend>,
+        inventory: &mut ChipInventory<E::SC, RA, CpuBackend<E::SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -548,14 +548,14 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv32M {
 impl<E, RA> VmProverExtension<E, RA, Rv32M> for Rv32ImCpuProverExt
 where
     E::SC: StarkProtocolConfig,
-    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<PB = CpuBackend<E::SC>, PD = CpuDevice<E::SC>>,
     RA: RowMajorMatrixArena<Val<E::SC>>,
     Val<E::SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
         extension: &Rv32M,
-        inventory: &mut ChipInventory<E::SC, RA, CpuBackend>,
+        inventory: &mut ChipInventory<E::SC, RA, CpuBackend<E::SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -692,14 +692,14 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv32Io {
 impl<E, RA> VmProverExtension<E, RA, Rv32Io> for Rv32ImCpuProverExt
 where
     E::SC: StarkProtocolConfig,
-    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<PB = CpuBackend<E::SC>, PD = CpuDevice<E::SC>>,
     RA: RowMajorMatrixArena<Val<E::SC>>,
     Val<E::SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
         _: &Rv32Io,
-        inventory: &mut ChipInventory<E::SC, RA, CpuBackend>,
+        inventory: &mut ChipInventory<E::SC, RA, CpuBackend<E::SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();

@@ -115,11 +115,10 @@ impl InitFileGenerator for Rv32ModularWithFp2Config {
 #[derive(Clone)]
 pub struct Rv32ModularCpuBuilder;
 
-type SC = openvm_stark_backend::SC;
-impl<E> VmBuilder<E> for Rv32ModularCpuBuilder
+impl<SC, E> VmBuilder<E> for Rv32ModularCpuBuilder
 where
     SC: StarkProtocolConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
 {
     type VmConfig = Rv32ModularConfig;
@@ -152,10 +151,10 @@ where
 #[derive(Clone)]
 pub struct Rv32ModularWithFp2CpuBuilder;
 
-impl<E> VmBuilder<E> for Rv32ModularWithFp2CpuBuilder
+impl<SC, E> VmBuilder<E> for Rv32ModularWithFp2CpuBuilder
 where
     SC: StarkProtocolConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
 {
     type VmConfig = Rv32ModularWithFp2Config;

@@ -137,4 +137,3 @@ where
         AirProvingContext::simple_no_pis(trace)
     }
 }
-

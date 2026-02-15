@@ -81,7 +81,7 @@ pub mod test_utils {
         VirtualMachineError,
     >
     where
-        E: StarkWhirEngine + StarkEngine<SC = openvm_stark_backend::SC>,
+        E: StarkWhirEngine + StarkEngine,
         Domain<E::SC>: PolynomialSpace<Val = BabyBear>,
         VB: VmBuilder<E, VmConfig = NativeConfig>,
         <VB::VmConfig as VmExecutionConfig<BabyBear>>::Executor:

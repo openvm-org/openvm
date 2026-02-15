@@ -75,11 +75,10 @@ impl InitFileGenerator for Sha256Rv32Config {}
 #[derive(Clone)]
 pub struct Sha256Rv32CpuBuilder;
 
-type SC = openvm_stark_backend::SC;
-impl<E> VmBuilder<E> for Sha256Rv32CpuBuilder
+impl<SC, E> VmBuilder<E> for Sha256Rv32CpuBuilder
 where
     SC: StarkProtocolConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
 {
     type VmConfig = Sha256Rv32Config;

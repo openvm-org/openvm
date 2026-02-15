@@ -174,4 +174,3 @@ impl<R, SC: StarkProtocolConfig, const M: usize> Chip<R, CpuBackend<SC>> for Xor
         AirProvingContext::simple_no_pis(Arc::new(trace))
     }
 }
-

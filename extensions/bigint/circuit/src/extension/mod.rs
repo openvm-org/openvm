@@ -234,14 +234,14 @@ pub struct Int256CpuProverExt;
 impl<E, RA> VmProverExtension<E, RA, Int256> for Int256CpuProverExt
 where
     E::SC: StarkProtocolConfig,
-    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<PB = CpuBackend<E::SC>, PD = CpuDevice<E::SC>>,
     RA: RowMajorMatrixArena<Val<E::SC>>,
     Val<E::SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
         extension: &Int256,
-        inventory: &mut ChipInventory<E::SC, RA, CpuBackend>,
+        inventory: &mut ChipInventory<E::SC, RA, CpuBackend<E::SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -352,11 +352,10 @@ where
 #[derive(Clone)]
 pub struct Int256Rv32CpuBuilder;
 
-type SC = openvm_stark_backend::SC;
-impl<E> VmBuilder<E> for Int256Rv32CpuBuilder
+impl<SC, E> VmBuilder<E> for Int256Rv32CpuBuilder
 where
     SC: StarkProtocolConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
 {
     type VmConfig = Int256Rv32Config;

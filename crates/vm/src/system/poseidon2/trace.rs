@@ -66,4 +66,3 @@ where
         AirProvingContext::simple_no_pis(Arc::new(RowMajorMatrix::new(values, width)))
     }
 }
-

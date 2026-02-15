@@ -279,7 +279,7 @@ impl<F: VmField> VmChipTestBuilder<F> {
     }
 }
 
-pub type TestSC = openvm_stark_backend::SC;
+pub type TestSC = BabyBearPoseidon2Config;
 
 impl VmChipTestBuilder<BabyBear> {
     pub fn build(self) -> VmChipTester<TestSC> {

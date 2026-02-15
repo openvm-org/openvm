@@ -232,4 +232,3 @@ where
         AirProvingContext::simple_no_pis(Arc::new(trace))
     }
 }
-

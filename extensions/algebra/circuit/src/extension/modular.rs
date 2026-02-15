@@ -354,14 +354,14 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for ModularExtension {
 impl<E, RA> VmProverExtension<E, RA, ModularExtension> for AlgebraCpuProverExt
 where
     E::SC: StarkProtocolConfig,
-    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<PB = CpuBackend<E::SC>, PD = CpuDevice<E::SC>>,
     RA: RowMajorMatrixArena<Val<E::SC>>,
     Val<E::SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
         extension: &ModularExtension,
-        inventory: &mut ChipInventory<E::SC, RA, CpuBackend>,
+        inventory: &mut ChipInventory<E::SC, RA, CpuBackend<E::SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
