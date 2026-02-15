@@ -17,8 +17,8 @@ use {
     dummy::cuda::DummyInteractionChipGPU,
     openvm_cuda_backend::{
         base::DeviceMatrix,
-        engine::GpuBabyBearPoseidon2Engine,
-        types::{F, SC},
+        prelude::{F, SC},
+        GpuBabyBearPoseidon2Engine,
     },
     openvm_cuda_common::copy::MemCopyH2D as _,
     openvm_stark_backend::{

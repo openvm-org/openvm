@@ -2,13 +2,14 @@ use std::sync::{atomic::Ordering, Arc};
 
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer};
-use openvm_stark_backend::{prover::AirProvingContext, Chip};
+use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
     bitwise_op_lookup::{
         BitwiseOperationLookupChip, BitwiseOperationLookupCols, NUM_BITWISE_OP_LOOKUP_MULT_COLS,
     },
     cuda_abi::bitwise_op_lookup::tracegen,
+    Chip,
 };
 
 pub struct BitwiseOperationLookupChipGPU<const NUM_BITS: usize> {

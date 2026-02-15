@@ -16,9 +16,7 @@ use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::is_zero,
-    openvm_cuda_backend::{
-        base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, types::F,
-    },
+    openvm_cuda_backend::{assert_eq_host_and_device_matrix, base::DeviceMatrix, prelude::F},
     openvm_cuda_common::copy::MemCopyH2D as _,
     openvm_stark_backend::p3_field::PrimeField32,
     openvm_stark_sdk::utils::create_seeded_rng,

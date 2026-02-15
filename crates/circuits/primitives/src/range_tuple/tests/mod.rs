@@ -19,8 +19,8 @@ use {
     dummy::DummyInteractionChipGPU,
     openvm_cuda_backend::{
         base::DeviceMatrix,
-        engine::GpuBabyBearPoseidon2Engine,
-        types::{F, SC},
+        prelude::{F, SC},
+        GpuBabyBearPoseidon2Engine,
     },
     openvm_cuda_common::copy::MemCopyH2D as _,
     openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext, Chip},
@@ -269,11 +269,11 @@ fn test_cuda_range_tuple_hybrid() {
     let dummy_air = DummyInteractionAir::new(TUPLE_SIZE, true, bus.inner.index);
     let cpu_proving_ctx = AirProvingContext {
         cached_mains: vec![],
-        common_main: Some(DeviceMatrix::new(
+        common_main: DeviceMatrix::new(
             Arc::new(cpu_dummy_trace),
             NUM_INPUTS,
             BaseAir::<F>::width(&dummy_air),
-        )),
+        ),
         public_values: vec![],
     };
 

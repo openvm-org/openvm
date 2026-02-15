@@ -1,12 +1,11 @@
 use std::marker::PhantomData;
 
 use openvm_cuda_backend::{
-    base::DeviceMatrix, prelude::SC, transport_matrix_h2d_col_major, GpuBackend,
+    base::DeviceMatrix, data_transporter::transport_matrix_h2d_col_major, prelude::SC, GpuBackend,
 };
-use openvm_stark_backend::{
-    prover::{AirProvingContext, CpuBackend},
-    Chip,
-};
+use openvm_stark_backend::prover::{AirProvingContext, CpuBackend};
+
+use crate::Chip;
 
 pub fn get_empty_air_proving_ctx() -> AirProvingContext<GpuBackend> {
     AirProvingContext {
