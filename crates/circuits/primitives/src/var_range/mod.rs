@@ -11,13 +11,12 @@ use std::{
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    get_air_name,
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{AirProvingContext, CpuBackend},
-    BaseAirWithPublicValues, Chip, ChipUsageGetter, PartitionedBaseAir, StarkProtocolConfig, Val,
+    BaseAirWithPublicValues, Chip, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 use tracing::instrument;
 
@@ -234,17 +233,3 @@ where
     }
 }
 
-impl ChipUsageGetter for VariableRangeCheckerChip {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-    fn constant_trace_height(&self) -> Option<usize> {
-        Some(self.count.len())
-    }
-    fn current_trace_height(&self) -> usize {
-        self.count.len()
-    }
-    fn trace_width(&self) -> usize {
-        NUM_VARIABLE_RANGE_COLS
-    }
-}

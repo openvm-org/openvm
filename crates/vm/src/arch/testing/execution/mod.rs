@@ -6,7 +6,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     prover::{AirProvingContext, CpuBackend},
-    Chip, ChipUsageGetter,
+    Chip,
 };
 
 use crate::arch::{ExecutionBus, ExecutionState};
@@ -58,7 +58,7 @@ where
 {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         let height = self.records.len().next_power_of_two();
-        let width = self.trace_width();
+        let width = size_of::<DummyExecutionInteractionCols<u8>>();
         let mut values = Val::<SC>::zero_vec(height * width);
         // This zip only goes through records. The padding rows between records.len()..height
         // are filled with zeros - in particular count = 0 so nothing is added to bus.
@@ -66,17 +66,5 @@ where
             *row.borrow_mut() = *record;
         }
         AirProvingContext::simple_no_pis(Arc::new(RowMajorMatrix::new(values, width)))
-    }
-}
-impl<F: Field> ChipUsageGetter for ExecutionTester<F> {
-    fn air_name(&self) -> String {
-        "ExecutionDummyAir".to_string()
-    }
-    fn current_trace_height(&self) -> usize {
-        self.records.len()
-    }
-
-    fn trace_width(&self) -> usize {
-        size_of::<DummyExecutionInteractionCols<u8>>()
     }
 }

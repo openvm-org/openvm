@@ -21,7 +21,7 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::{AirProvingContext, CpuBackend},
-    BaseAirWithPublicValues, Chip, ChipUsageGetter, PartitionedBaseAir, StarkProtocolConfig, Val,
+    BaseAirWithPublicValues, Chip, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 use static_assertions::const_assert;
 use tracing::instrument;
@@ -231,7 +231,7 @@ where
         // Volatile memory requires the starting and final memory to be in equipartition with block
         // size `1`. When block size is `1`, then the `label` is the same as the address
         // pointer.
-        let width = self.trace_width();
+        let width = VolatileBoundaryCols::<Val<SC>>::width();
         let addr_lt_air = &self.air.addr_lt_air;
         // TEMP[jpw]: clone
         let final_memory = self
@@ -310,20 +310,3 @@ where
     }
 }
 
-impl<F: PrimeField32> ChipUsageGetter for VolatileBoundaryChip<F> {
-    fn air_name(&self) -> String {
-        "Boundary".to_string()
-    }
-
-    fn current_trace_height(&self) -> usize {
-        if let Some(final_memory) = &self.final_memory {
-            final_memory.len()
-        } else {
-            0
-        }
-    }
-
-    fn trace_width(&self) -> usize {
-        VolatileBoundaryCols::<F>::width()
-    }
-}

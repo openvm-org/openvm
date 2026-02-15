@@ -9,7 +9,6 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
     p3_matrix::dense::RowMajorMatrix,
     prover::{AirProvingContext, CpuBackend},
-    ChipUsageGetter,
 };
 use tracing::instrument;
 
@@ -90,20 +89,6 @@ where
         AirProvingContext::simple(trace, pvs)
     }
 }
-impl<const CHUNK: usize, F: PrimeField32> ChipUsageGetter for MemoryMerkleChip<CHUNK, F> {
-    fn air_name(&self) -> String {
-        "Merkle".to_string()
-    }
-
-    fn current_trace_height(&self) -> usize {
-        self.final_state.as_ref().map(|s| s.rows.len()).unwrap_or(0)
-    }
-
-    fn trace_width(&self) -> usize {
-        MemoryMerkleCols::<F, CHUNK>::width()
-    }
-}
-
 pub trait SerialReceiver<T> {
     fn receive(&self, msg: T);
 }

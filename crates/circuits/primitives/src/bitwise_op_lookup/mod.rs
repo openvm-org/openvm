@@ -5,13 +5,12 @@ use std::{
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    get_air_name,
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{AirProvingContext, CpuBackend},
-    BaseAirWithPublicValues, Chip, ChipUsageGetter, PartitionedBaseAir, StarkProtocolConfig, Val,
+    BaseAirWithPublicValues, Chip, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 
 mod bus;
@@ -240,17 +239,3 @@ impl<R, SC: StarkProtocolConfig, const NUM_BITS: usize> Chip<R, CpuBackend<SC>>
     }
 }
 
-impl<const NUM_BITS: usize> ChipUsageGetter for BitwiseOperationLookupChip<NUM_BITS> {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-    fn constant_trace_height(&self) -> Option<usize> {
-        Some(1 << (2 * NUM_BITS))
-    }
-    fn current_trace_height(&self) -> usize {
-        1 << (2 * NUM_BITS)
-    }
-    fn trace_width(&self) -> usize {
-        BitwiseOperationLookupCols::<u8, NUM_BITS>::width()
-    }
-}

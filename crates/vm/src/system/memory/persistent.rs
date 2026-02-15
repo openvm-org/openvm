@@ -13,7 +13,7 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::{AirProvingContext, CpuBackend},
-    BaseAirWithPublicValues, Chip, ChipUsageGetter, PartitionedBaseAir, StarkProtocolConfig, Val,
+    BaseAirWithPublicValues, Chip, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 use rustc_hash::FxHashSet;
 use tracing::instrument;
@@ -297,16 +297,3 @@ where
     }
 }
 
-impl<const CHUNK: usize, F: PrimeField32> ChipUsageGetter for PersistentBoundaryChip<F, CHUNK> {
-    fn air_name(&self) -> String {
-        "Boundary".to_string()
-    }
-
-    fn current_trace_height(&self) -> usize {
-        2 * self.touched_labels.len()
-    }
-
-    fn trace_width(&self) -> usize {
-        PersistentBoundaryCols::<F, CHUNK>::width()
-    }
-}

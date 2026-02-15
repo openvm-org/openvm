@@ -6,7 +6,7 @@ use openvm_stark_backend::{
     p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{AirProvingContext, CpuBackend},
-    BaseAirWithPublicValues, Chip, ChipUsageGetter, PartitionedBaseAir, StarkProtocolConfig, Val,
+    BaseAirWithPublicValues, Chip, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 
 use crate::system::memory::{offline_checker::MemoryBus, MemoryAddress};
@@ -128,8 +128,8 @@ where
     Val<SC>: PrimeField32,
 {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
-        let height = self.current_trace_height().next_power_of_two();
-        let width = self.trace_width();
+        let width = BaseAir::<Val<SC>>::width(&self.air);
+        let height = (self.trace.len() / width).next_power_of_two();
         let mut trace = self.trace.clone();
         trace.resize(height * width, Val::<SC>::ZERO);
 
@@ -138,14 +138,3 @@ where
     }
 }
 
-impl<F: PrimeField32> ChipUsageGetter for MemoryDummyChip<F> {
-    fn air_name(&self) -> String {
-        format!("MemoryDummyAir<{}>", self.air.block_size)
-    }
-    fn current_trace_height(&self) -> usize {
-        self.trace.len() / self.trace_width()
-    }
-    fn trace_width(&self) -> usize {
-        BaseAir::<F>::width(&self.air)
-    }
-}

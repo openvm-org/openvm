@@ -8,7 +8,7 @@ use openvm_stark_backend::{
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
     prover::{AirProvingContext, CpuBackend},
-    Chip, ChipUsageGetter,
+    Chip,
 };
 
 use super::{columns::*, Poseidon2PeripheryBaseChip, PERIPHERY_POSEIDON2_WIDTH};
@@ -21,8 +21,13 @@ where
 {
     /// Generates trace and clears internal records state.
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
-        let height = next_power_of_two_or_zero(self.current_trace_height());
-        let width = self.trace_width();
+        let current_height = if self.nonempty.load(std::sync::atomic::Ordering::Relaxed) {
+            self.records.len()
+        } else {
+            0
+        };
+        let height = next_power_of_two_or_zero(current_height);
+        let width = self.air.width();
 
         let mut inputs = Vec::with_capacity(height);
         let mut multiplicities = Vec::with_capacity(height);
@@ -62,23 +67,3 @@ where
     }
 }
 
-impl<F: VmField, const SBOX_REGISTERS: usize> ChipUsageGetter
-    for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
-{
-    fn air_name(&self) -> String {
-        format!("Poseidon2PeripheryAir<F, {SBOX_REGISTERS}>")
-    }
-
-    fn current_trace_height(&self) -> usize {
-        if self.nonempty.load(std::sync::atomic::Ordering::Relaxed) {
-            // Not to call `DashMap::len` too often
-            self.records.len()
-        } else {
-            0
-        }
-    }
-
-    fn trace_width(&self) -> usize {
-        self.air.width()
-    }
-}

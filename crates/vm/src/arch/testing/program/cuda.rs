@@ -9,7 +9,7 @@ use openvm_circuit::{
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types::F};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_stark_backend::{prover::AirProvingContext, Chip, ChipUsageGetter};
+use openvm_stark_backend::{prover::AirProvingContext, Chip};
 
 use crate::cuda_abi::program_testing;
 
@@ -29,24 +29,10 @@ impl DeviceProgramTester {
     }
 }
 
-impl ChipUsageGetter for DeviceProgramTester {
-    fn air_name(&self) -> String {
-        self.0.air_name()
-    }
-
-    fn current_trace_height(&self) -> usize {
-        self.0.current_trace_height()
-    }
-
-    fn trace_width(&self) -> usize {
-        self.0.trace_width()
-    }
-}
-
 impl<RA> Chip<RA, GpuBackend> for DeviceProgramTester {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
-        let height = next_power_of_two_or_zero(self.0.current_trace_height());
-        let width = self.0.trace_width();
+        let height = next_power_of_two_or_zero(self.0.records.len());
+        let width = ProgramTester::<F>::width();
 
         if height == 0 {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());

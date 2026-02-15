@@ -14,9 +14,10 @@ use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRang
 use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types::F};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::{
+    p3_air::BaseAir,
     p3_field::{PrimeCharacteristicRing, PrimeField32},
     prover::AirProvingContext,
-    Chip, ChipUsageGetter,
+    Chip,
 };
 
 use crate::{
@@ -170,24 +171,10 @@ impl FixedSizeMemoryTester {
     }
 }
 
-impl ChipUsageGetter for FixedSizeMemoryTester {
-    fn air_name(&self) -> String {
-        self.0.air_name()
-    }
-
-    fn current_trace_height(&self) -> usize {
-        self.0.current_trace_height()
-    }
-
-    fn trace_width(&self) -> usize {
-        self.0.trace_width()
-    }
-}
-
 impl<RA> Chip<RA, GpuBackend> for FixedSizeMemoryTester {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
-        let height = self.0.current_trace_height().next_power_of_two();
-        let width = self.0.trace_width();
+        let width = BaseAir::<F>::width(&self.0.air);
+        let height = (self.0.trace.len() / width).next_power_of_two();
 
         let mut records = self.0.trace.clone();
         records.resize(height * width, F::ZERO);

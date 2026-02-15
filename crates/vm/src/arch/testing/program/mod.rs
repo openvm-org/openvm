@@ -6,7 +6,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     prover::{AirProvingContext, CpuBackend},
-    Chip, ChipUsageGetter,
+    Chip,
 };
 
 use crate::{
@@ -58,7 +58,7 @@ impl<F: Field> ProgramTester<F> {
 impl<SC: StarkProtocolConfig, RA> Chip<RA, CpuBackend<SC>> for ProgramTester<Val<SC>> {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         let height = self.records.len().next_power_of_two();
-        let width = self.trace_width();
+        let width = Self::width();
         let mut values = Val::<SC>::zero_vec(height * width);
         // This zip only goes through records. The padding rows between records.len()..height
         // are filled with zeros - in particular count = 0 so nothing is added to bus.
@@ -70,14 +70,3 @@ impl<SC: StarkProtocolConfig, RA> Chip<RA, CpuBackend<SC>> for ProgramTester<Val
     }
 }
 
-impl<F: Field> ChipUsageGetter for ProgramTester<F> {
-    fn air_name(&self) -> String {
-        "ProgramDummyAir".to_string()
-    }
-    fn current_trace_height(&self) -> usize {
-        self.records.len()
-    }
-    fn trace_width(&self) -> usize {
-        Self::width()
-    }
-}

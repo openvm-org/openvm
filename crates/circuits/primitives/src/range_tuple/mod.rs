@@ -10,13 +10,12 @@ use std::{
 };
 
 use openvm_stark_backend::{
-    get_air_name,
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir, PairBuilder},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{AirProvingContext, CpuBackend},
-    BaseAirWithPublicValues, Chip, ChipUsageGetter, PartitionedBaseAir, StarkProtocolConfig, Val,
+    BaseAirWithPublicValues, Chip, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 
 mod bus;
@@ -235,17 +234,3 @@ where
     }
 }
 
-impl<const N: usize> ChipUsageGetter for RangeTupleCheckerChip<N> {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-    fn constant_trace_height(&self) -> Option<usize> {
-        Some(self.count.len())
-    }
-    fn current_trace_height(&self) -> usize {
-        self.count.len()
-    }
-    fn trace_width(&self) -> usize {
-        N + 1
-    }
-}

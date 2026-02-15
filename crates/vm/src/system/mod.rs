@@ -506,8 +506,6 @@ where
 
     #[cfg(feature = "metrics")]
     fn finalize_trace_heights(&self, heights: &mut [usize]) {
-        use openvm_stark_backend::ChipUsageGetter;
-
         use crate::system::memory::interface::MemoryInterface;
 
         let boundary_idx = PUBLIC_VALUES_AIR_ID + usize::from(self.public_values_chip.is_some());
@@ -530,15 +528,6 @@ where
                 heights[boundary_idx] = boundary_height;
                 heights[boundary_idx + 1] = merkle_chip.current_height;
                 access_adapter_offset += 1;
-
-                // Poseidon2Periphery height also varies based on memory, so set it now even though
-                // it's not a system chip:
-                let poseidon_chip = self.memory_controller.hasher_chip.as_ref().unwrap();
-                let poseidon_height = poseidon_chip.current_trace_height();
-                // We know the chip insertion index, which starts from *the end* of the the AIR
-                // ordering
-                let poseidon_idx = heights.len() - 1 - POSEIDON2_INSERTION_IDX;
-                heights[poseidon_idx] = poseidon_height;
             }
         }
         let access_heights = &self

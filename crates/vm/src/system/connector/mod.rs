@@ -15,7 +15,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{AirProvingContext, CpuBackend},
-    BaseAirWithPublicValues, Chip, ChipUsageGetter, PartitionedBaseAir, StarkProtocolConfig, Val,
+    BaseAirWithPublicValues, Chip, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 use serde::{Deserialize, Serialize};
 
@@ -298,7 +298,7 @@ where
 
         let trace = Arc::new(RowMajorMatrix::new(
             [initial_state.flatten(), final_state.flatten()].concat(),
-            self.trace_width(),
+            ConnectorCols::<Val<SC>>::width(),
         ));
 
         let mut public_values = Val::<SC>::zero_vec(VmConnectorPvs::<Val<SC>>::width());
@@ -312,20 +312,3 @@ where
     }
 }
 
-impl<F: PrimeField32> ChipUsageGetter for VmConnectorChip<F> {
-    fn air_name(&self) -> String {
-        "VmConnectorAir".to_string()
-    }
-
-    fn constant_trace_height(&self) -> Option<usize> {
-        Some(2)
-    }
-
-    fn current_trace_height(&self) -> usize {
-        2
-    }
-
-    fn trace_width(&self) -> usize {
-        ConnectorCols::<F>::width()
-    }
-}

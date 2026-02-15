@@ -14,13 +14,12 @@ use std::{
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    get_air_name,
     interaction::{BusIndex, InteractionBuilder, LookupBus},
     p3_air::{Air, BaseAir, PairBuilder},
     p3_field::Field,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{AirProvingContext, CpuBackend},
-    BaseAirWithPublicValues, Chip, ChipUsageGetter, PartitionedBaseAir, StarkProtocolConfig, Val,
+    BaseAirWithPublicValues, Chip, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 
 use super::bus::XorBus;
@@ -176,16 +175,3 @@ impl<R, SC: StarkProtocolConfig, const M: usize> Chip<R, CpuBackend<SC>> for Xor
     }
 }
 
-impl<const M: usize> ChipUsageGetter for XorLookupChip<M> {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-
-    fn current_trace_height(&self) -> usize {
-        1 << (2 * M)
-    }
-
-    fn trace_width(&self) -> usize {
-        NUM_XOR_LOOKUP_COLS
-    }
-}
