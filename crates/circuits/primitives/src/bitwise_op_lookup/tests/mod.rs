@@ -2,15 +2,15 @@ use std::{iter, sync::Arc};
 
 use dummy::DummyAir;
 use openvm_stark_backend::{
+    any_air_arc_vec,
     p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
-    prover::AirProvingContext,
-    test_utils::test_engine_small,
+    prover::{AirProvingContext, ColMajorMatrix},
     utils::disable_debug_builder,
     AirRef, StarkEngine,
 };
-use openvm_stark_sdk::{any_rap_arc_vec, p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{config::baby_bear_poseidon2::*, utils::create_seeded_rng};
 use rand::Rng;
 #[cfg(feature = "cuda")]
 use {
@@ -22,13 +22,15 @@ use {
         types::{F, SC},
     },
     openvm_cuda_common::copy::MemCopyH2D as _,
+    openvm_stark_backend::test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext, Chip},
-    openvm_stark_sdk::{
-        config::FriParameters, dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
-    },
+    openvm_stark_sdk::config::FriParameters,
 };
 
-use crate::bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip};
+use crate::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
+    utils::test_engine_small,
+};
 
 mod dummy;
 
@@ -106,14 +108,13 @@ fn test_bitwise_operation_lookup() {
                 4,
             )
         })
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .collect::<Vec<RowMajorMatrix<F>>>();
     traces.push(lookup.generate_trace());
 
     let traces = traces
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()
@@ -129,7 +130,7 @@ fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperation)) {
     list.push(bad_row);
 
     let dummy = DummyAir::new(bus);
-    let chips = any_rap_arc_vec![dummy, lookup.air];
+    let chips = any_air_arc_vec![dummy, lookup.air];
 
     let traces = vec![
         RowMajorMatrix::new(
@@ -151,10 +152,9 @@ fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperation)) {
     ];
 
     let traces = traces
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();

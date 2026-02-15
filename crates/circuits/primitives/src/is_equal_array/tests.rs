@@ -5,18 +5,16 @@ use std::{
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
+    any_air_arc_vec,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
+    prover::{AirProvingContext, ColMajorMatrix},
     utils::disable_debug_builder,
-    verifier::VerificationError,
-    BaseAirWithPublicValues, PartitionedBaseAir,
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine,
 };
-use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear, utils::create_seeded_rng,
-};
+use openvm_stark_sdk::{config::baby_bear_poseidon2::*, utils::create_seeded_rng};
 use rand::Rng;
 use test_case::test_case;
 #[cfg(feature = "cuda")]
@@ -31,7 +29,7 @@ use {
 };
 
 use super::{IsEqArrayAuxCols, IsEqArrayIo, IsEqArraySubAir};
-use crate::{SubAir, TraceSubRowGenerator};
+use crate::{utils::test_engine_small, SubAir, TraceSubRowGenerator};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -112,11 +110,17 @@ fn test_is_eq_array_single_row(x: [u32; 3], y: [u32; 3], is_equal: u32) {
     let chip = IsEqArrayChip::new(vec![(x, y)]);
     let air = chip.air;
     let trace = chip.generate_trace();
-    let row: &IsEqArrayCols<BabyBear, 3> = trace.values.as_slice().borrow();
+    let row: &IsEqArrayCols<F, 3> = trace.values.as_slice().borrow();
 
     assert_eq!(row.out, PrimeCharacteristicRing::from_u32(is_equal));
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
+    let traces = vec![trace]
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
+        .map(AirProvingContext::simple_no_pis)
+        .collect::<Vec<_>>();
+    test_engine_small()
+        .run_test(any_air_arc_vec![air], traces)
         .expect("Verification failed");
 }
 
@@ -142,7 +146,13 @@ fn test_is_eq_array_multi_rows() {
 
     let trace = chip.generate_trace();
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
+    let traces = vec![trace]
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
+        .map(AirProvingContext::simple_no_pis)
+        .collect::<Vec<_>>();
+    test_engine_small()
+        .run_test(any_air_arc_vec![air], traces)
         .expect("Verification failed");
 }
 
@@ -161,12 +171,17 @@ fn test_is_eq_array_single_row_fail(x: [u32; 3], y: [u32; 3]) {
     let mut trace = chip.generate_trace();
 
     disable_debug_builder();
-    let row: &mut IsEqArrayCols<BabyBear, 3> = trace.values.as_mut_slice().borrow_mut();
-    row.out = BabyBear::ONE - row.out;
-    assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
-            .err(),
-        Some(VerificationError::OodEvaluationMismatch),
+    let row: &mut IsEqArrayCols<F, 3> = trace.values.as_mut_slice().borrow_mut();
+    row.out = F::ONE - row.out;
+    let traces = vec![trace]
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
+        .map(AirProvingContext::simple_no_pis)
+        .collect::<Vec<_>>();
+    assert!(
+        test_engine_small()
+            .run_test(any_air_arc_vec![air], traces)
+            .is_err(),
         "Expected constraint to fail"
     );
 }
@@ -178,7 +193,7 @@ fn test_is_eq_array_fail_rand() {
     let mut rng = create_seeded_rng();
     let pairs: Vec<_> = (0..height)
         .map(|_| {
-            let x = from_fn(|_| BabyBear::from_u32(rng.random::<u32>()));
+            let x = from_fn(|_| F::from_u32(rng.random::<u32>()));
             (x, x)
         })
         .collect();
@@ -190,14 +205,16 @@ fn test_is_eq_array_fail_rand() {
     for i in 0..height {
         for j in 0..N {
             let mut prank_trace = trace.clone();
-            prank_trace.row_mut(i)[j] += BabyBear::from_u32(rng.random::<u32>() + 1);
-            assert_eq!(
-                BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-                    any_rap_arc_vec![air],
-                    vec![prank_trace]
-                )
-                .err(),
-                Some(VerificationError::OodEvaluationMismatch),
+            prank_trace.row_mut(i)[j] += F::from_u32(rng.random::<u32>() + 1);
+            let traces = vec![prank_trace]
+                .iter()
+                .map(ColMajorMatrix::from_row_major)
+                .map(AirProvingContext::simple_no_pis)
+                .collect::<Vec<_>>();
+            assert!(
+                test_engine_small()
+                    .run_test(any_air_arc_vec![air], traces)
+                    .is_err(),
                 "Expected constraint to fail"
             );
         }

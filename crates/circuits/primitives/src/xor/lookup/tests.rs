@@ -7,14 +7,11 @@ use openvm_stark_backend::{
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
     prover::{AirProvingContext, ColMajorMatrix},
-    test_utils::test_system_params_small,
+    test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     utils::disable_debug_builder,
     AirRef, StarkEngine,
 };
-use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::*,
-    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
-};
+use openvm_stark_sdk::{config::baby_bear_poseidon2::*, utils::create_seeded_rng};
 use rand::Rng;
 
 use crate::{utils::test_engine_small, xor::XorLookupChip};
@@ -79,15 +76,17 @@ fn test_xor_limbs_chip() {
     }
     all_chips.push(Arc::new(xor_chip.air));
 
-    let all_traces = requesters_traces
+    let all_traces_vec: Vec<_> = requesters_traces
         .into_iter()
         .chain(iter::once(xor_trace))
-        .map(Arc::new)
+        .collect();
+    let all_traces = all_traces_vec
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
-    BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(test_system_params_small(3, 9, 3))
+    test_engine_small()
         .run_test(all_chips, all_traces)
         .expect("Verification failed");
 }

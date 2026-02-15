@@ -6,6 +6,7 @@ use std::{
 use derive_new::new;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
+    any_air_arc_vec,
     p3_air::{Air, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{
@@ -13,12 +14,11 @@ use openvm_stark_backend::{
         Matrix,
     },
     p3_maybe_rayon::prelude::*,
-    prover::AirProvingContext,
-    test_utils::test_engine_small,
+    prover::{AirProvingContext, ColMajorMatrix},
     utils::disable_debug_builder,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine,
 };
-use openvm_stark_sdk::{any_rap_arc_vec, p3_baby_bear::BabyBear};
+use openvm_stark_sdk::config::baby_bear_poseidon2::*;
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::less_than::assert_less_than_dummy_tracegen,
@@ -29,7 +29,10 @@ use {
 };
 
 use super::*;
-use crate::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use crate::{
+    utils::test_engine_small,
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+};
 
 // We only create an Air for testing purposes
 
@@ -134,16 +137,15 @@ fn test_assert_less_than_chip_lt() {
 
     let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
     let mut chip = AssertLessThanChip::<AUX_LEN>::new(max_bits, range_checker.clone());
-    let airs = any_rap_arc_vec![chip.air, range_checker.air];
+    let airs = any_air_arc_vec![chip.air, range_checker.air];
     chip.pairs = vec![(14321, 26883), (0, 1), (28, 120), (337, 456)];
     let trace = chip.generate_trace();
-    let range_trace: DenseMatrix<BabyBear> = range_checker.generate_trace();
+    let range_trace: DenseMatrix<F> = range_checker.generate_trace();
 
     let traces = [trace, range_trace]
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()
@@ -160,16 +162,15 @@ fn test_lt_chip_decomp_does_not_divide() {
 
     let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
     let mut chip = AssertLessThanChip::<AUX_LEN>::new(max_bits, range_checker.clone());
-    let airs = any_rap_arc_vec![chip.air, range_checker.air];
+    let airs = any_air_arc_vec![chip.air, range_checker.air];
     chip.pairs = vec![(14321, 26883), (0, 1), (28, 120), (337, 456)];
     let trace = chip.generate_trace();
-    let range_trace: DenseMatrix<BabyBear> = range_checker.generate_trace();
+    let range_trace: DenseMatrix<F> = range_checker.generate_trace();
 
     let traces = [trace, range_trace]
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()
@@ -187,7 +188,7 @@ fn test_assert_less_than_negative_1() {
 
     let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
     let mut chip = AssertLessThanChip::<AUX_LEN>::new(max_bits, range_checker.clone());
-    let airs = any_rap_arc_vec![chip.air, range_checker.air];
+    let airs = any_air_arc_vec![chip.air, range_checker.air];
     chip.pairs = vec![(28, 29)];
     let mut trace = chip.generate_trace();
     let range_trace = range_checker.generate_trace();
@@ -196,10 +197,9 @@ fn test_assert_less_than_negative_1() {
     trace.values.swap(0, 1);
 
     let traces = [trace, range_trace]
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();
@@ -216,7 +216,7 @@ fn test_assert_less_than_negative_2() {
 
     let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
     let mut chip = AssertLessThanChip::<AUX_LEN>::new(max_bits, range_checker.clone());
-    let airs = any_rap_arc_vec![chip.air, range_checker.air];
+    let airs = any_air_arc_vec![chip.air, range_checker.air];
     chip.pairs = vec![(28, 29)];
     let mut trace = chip.generate_trace();
     let range_trace = range_checker.generate_trace();
@@ -225,10 +225,9 @@ fn test_assert_less_than_negative_2() {
     trace.values[3] = PrimeCharacteristicRing::from_u64(1 << decomp as u64);
 
     let traces = [trace, range_trace]
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();
@@ -244,16 +243,15 @@ fn test_assert_less_than_with_non_power_of_two_pairs() {
 
     let range_checker = Arc::new(VariableRangeCheckerChip::new(bus));
     let mut chip = AssertLessThanChip::<AUX_LEN>::new(max_bits, range_checker.clone());
-    let airs = any_rap_arc_vec![chip.air, range_checker.air];
+    let airs = any_air_arc_vec![chip.air, range_checker.air];
     chip.pairs = vec![(14321, 26883), (0, 1), (28, 120)];
     let trace = chip.generate_trace();
-    let range_trace: DenseMatrix<BabyBear> = range_checker.generate_trace();
+    let range_trace: DenseMatrix<F> = range_checker.generate_trace();
 
     let traces = [trace, range_trace]
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()

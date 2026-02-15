@@ -1,11 +1,15 @@
 use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::*, prover::AirProvingContext, test_utils::test_engine_small,
-    utils::disable_debug_builder, AirRef, StarkEngine,
+    any_air_arc_vec,
+    p3_field::PrimeCharacteristicRing,
+    p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*,
+    prover::{AirProvingContext, ColMajorMatrix},
+    utils::disable_debug_builder,
+    AirRef, StarkEngine,
 };
-use openvm_stark_sdk::{any_rap_arc_vec, p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{config::baby_bear_poseidon2::*, utils::create_seeded_rng};
 use rand::Rng;
 #[cfg(feature = "cuda")]
 use {
@@ -17,16 +21,20 @@ use {
         types::{F, SC},
     },
     openvm_cuda_common::copy::MemCopyH2D as _,
-    openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext, Chip},
-    openvm_stark_sdk::{
-        config::FriParameters, dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
+    openvm_stark_backend::{
+        p3_air::BaseAir, prover::AirProvingContext,
+        test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, Chip,
     },
+    openvm_stark_sdk::config::FriParameters,
 };
 
-use crate::var_range::{
-    bus::VariableRangeCheckerBus,
-    tests::dummy::{TestRangeCheckAir, TestSendAir},
-    VariableRangeCheckerChip,
+use crate::{
+    utils::test_engine_small,
+    var_range::{
+        bus::VariableRangeCheckerBus,
+        tests::dummy::{TestRangeCheckAir, TestSendAir},
+        VariableRangeCheckerChip,
+    },
 };
 
 pub mod dummy;
@@ -82,16 +90,18 @@ fn test_variable_range_checker_chip_send() {
                 2,
             )
         })
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .collect::<Vec<RowMajorMatrix<F>>>();
 
-    let var_range_checker_trace: RowMajorMatrix<BabyBear> = var_range_checker.generate_trace();
+    let var_range_checker_trace: RowMajorMatrix<F> = var_range_checker.generate_trace();
 
-    let all_traces = lists_traces
+    let all_traces_vec: Vec<_> = lists_traces
         .into_iter()
         .chain(iter::once(var_range_checker_trace))
-        .map(Arc::new)
+        .collect();
+    let all_traces = all_traces_vec
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()
@@ -124,7 +134,7 @@ fn negative_test_variable_range_checker_chip_send() {
 
     // generate dummy AIR chip
     let list_chip = TestSendAir::new(bus);
-    let all_chips = any_rap_arc_vec![list_chip, var_range_checker.air];
+    let all_chips = any_air_arc_vec![list_chip, var_range_checker.air];
 
     // generate trace with a [val, bits] pair such that val >= 2^bits (i.e. [4, 2])
     let list_trace = RowMajorMatrix::new(
@@ -140,10 +150,9 @@ fn negative_test_variable_range_checker_chip_send() {
     );
     let var_range_trace = var_range_checker.generate_trace();
     let all_traces = [list_trace, var_range_trace]
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();
@@ -199,16 +208,18 @@ fn test_variable_range_checker_chip_range_check() {
                 1,
             )
         })
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .collect::<Vec<RowMajorMatrix<F>>>();
 
     let var_range_checker_trace = var_range_checker.generate_trace();
 
-    let all_traces = lists_traces
+    let all_traces_vec: Vec<_> = lists_traces
         .into_iter()
         .chain(iter::once(var_range_checker_trace))
-        .map(Arc::new)
+        .collect();
+    let all_traces = all_traces_vec
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()
@@ -239,7 +250,7 @@ fn negative_test_variable_range_checker_chip_range_check() {
 
     // generate dummy AIR chip
     let list_chip = TestRangeCheckAir::new(bus, MAX_BITS);
-    let all_chips = any_rap_arc_vec![list_chip, var_range_checker.air];
+    let all_chips = any_air_arc_vec![list_chip, var_range_checker.air];
 
     // generate trace with one value >= 2^max_bits (i.e. MAX_VAL)
     let list_trace = RowMajorMatrix::new(
@@ -255,10 +266,9 @@ fn negative_test_variable_range_checker_chip_range_check() {
     );
     let var_range_trace = var_range_checker.generate_trace();
     let all_traces = [list_trace, var_range_trace]
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();

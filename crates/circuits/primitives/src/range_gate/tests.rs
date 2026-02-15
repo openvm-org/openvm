@@ -1,17 +1,19 @@
 use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::*, prover::AirProvingContext, test_utils::test_engine_small,
-    utils::disable_debug_builder, AirRef, StarkEngine,
+    any_air_arc_vec,
+    p3_field::PrimeCharacteristicRing,
+    p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*,
+    prover::{AirProvingContext, ColMajorMatrix},
+    test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
+    utils::disable_debug_builder,
+    AirRef, StarkEngine,
 };
-use openvm_stark_sdk::{
-    any_rap_arc_vec, dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
-    p3_baby_bear::BabyBear, utils::create_seeded_rng,
-};
+use openvm_stark_sdk::{config::baby_bear_poseidon2::*, utils::create_seeded_rng};
 use rand::Rng;
 
-use crate::{range::RangeCheckBus, range_gate::RangeCheckerGateChip};
+use crate::{range::RangeCheckBus, range_gate::RangeCheckerGateChip, utils::test_engine_small};
 
 #[test]
 fn test_range_gate_chip() {
@@ -55,7 +57,7 @@ fn test_range_gate_chip() {
                 2,
             )
         })
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .collect::<Vec<RowMajorMatrix<F>>>();
 
     let range_trace = range_checker.generate_trace();
 
@@ -65,12 +67,14 @@ fn test_range_gate_chip() {
         .collect::<Vec<_>>();
     all_chips.push(Arc::new(range_checker.air));
 
-    let all_traces = lists_traces
+    let all_traces_vec: Vec<_> = lists_traces
         .into_iter()
         .chain(iter::once(range_trace))
-        .map(Arc::new)
+        .collect();
+    let all_traces = all_traces_vec
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()
@@ -102,14 +106,13 @@ fn negative_test_range_gate_chip() {
     );
 
     let traces = [range_trace]
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();
     test_engine_small()
-        .run_test(any_rap_arc_vec![range_checker.air], traces)
+        .run_test(any_air_arc_vec![range_checker.air], traces)
         .unwrap();
 }

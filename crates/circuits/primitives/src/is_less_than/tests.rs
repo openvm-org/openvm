@@ -2,17 +2,16 @@ use std::sync::Arc;
 
 use derive_new::new;
 use openvm_stark_backend::{
+    any_air_arc_vec,
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::AirProvingContext,
-    test_utils::test_engine_small,
+    prover::{AirProvingContext, ColMajorMatrix},
     utils::disable_debug_builder,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine,
 };
-use openvm_stark_sdk::any_rap_arc_vec;
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::less_than::less_than_dummy_tracegen,
@@ -25,6 +24,7 @@ use {
 use super::IsLessThanIo;
 use crate::{
     is_less_than::IsLtSubAir,
+    utils::test_engine_small,
     var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
     SubAir, TraceSubRowGenerator,
 };
@@ -139,16 +139,15 @@ fn setup() -> (IsLessThanChip, Arc<VariableRangeCheckerChip>) {
 #[test]
 fn test_is_less_than_chip_lt() {
     let (mut chip, range_checker) = setup();
-    let airs = any_rap_arc_vec![chip.air, range_checker.air];
+    let airs = any_air_arc_vec![chip.air, range_checker.air];
     chip.pairs = vec![(14321, 26883), (1, 0), (773, 773), (337, 456)];
     let trace = chip.generate_trace();
     let range_trace = range_checker.generate_trace();
 
     let traces = [trace, range_trace]
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()
@@ -159,16 +158,15 @@ fn test_is_less_than_chip_lt() {
 #[test]
 fn test_lt_chip_decomp_does_not_divide() {
     let (mut chip, range_checker) = setup();
-    let airs = any_rap_arc_vec![chip.air, range_checker.air];
+    let airs = any_air_arc_vec![chip.air, range_checker.air];
     chip.pairs = vec![(14321, 26883), (1, 0), (773, 773), (337, 456)];
     let trace = chip.generate_trace();
     let range_trace = range_checker.generate_trace();
 
     let traces = [trace, range_trace]
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()
@@ -180,7 +178,7 @@ fn test_lt_chip_decomp_does_not_divide() {
 #[should_panic]
 fn test_is_less_than_negative() {
     let (mut chip, range_checker) = setup();
-    let airs = any_rap_arc_vec![chip.air, range_checker.air];
+    let airs = any_air_arc_vec![chip.air, range_checker.air];
     chip.pairs = vec![(446, 553)];
     let mut trace = chip.generate_trace();
     let range_trace = range_checker.generate_trace();
@@ -188,10 +186,9 @@ fn test_is_less_than_negative() {
     trace.values[2] = PrimeCharacteristicRing::from_u64(0);
 
     let traces = [trace, range_trace]
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();

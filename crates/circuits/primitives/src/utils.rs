@@ -83,11 +83,12 @@ pub fn compose<F: PrimeCharacteristicRing>(a: &[impl Into<F> + Clone], limb_size
 pub use test_utils::*;
 #[cfg(test)]
 mod test_utils {
-    use openvm_stark_backend::{test_utils::default_test_params_small, StarkEngine};
+    use openvm_stark_backend::{test_utils::test_system_params_small, StarkEngine};
     use openvm_stark_sdk::{config::baby_bear_poseidon2::*, utils::setup_tracing};
 
     pub fn test_engine_small() -> BabyBearPoseidon2CpuEngine<DuplexSponge> {
         setup_tracing();
-        BabyBearPoseidon2CpuEngine::new(default_test_params_small())
+        // l_skip + n_stack must be >= chip trace heights in tests
+        BabyBearPoseidon2CpuEngine::new(test_system_params_small(3, 9, 3))
     }
 }

@@ -5,16 +5,15 @@ use std::{
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
+    any_air_arc_vec,
     p3_air::{Air, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::AirProvingContext,
-    test_utils::test_engine_small,
+    prover::{AirProvingContext, ColMajorMatrix},
     utils::disable_debug_builder,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine,
 };
-use openvm_stark_sdk::any_rap_arc_vec;
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::less_than::less_than_array_dummy_tracegen,
@@ -25,6 +24,7 @@ use {
 };
 
 use super::*;
+use crate::utils::test_engine_small;
 
 #[repr(C)]
 #[derive(AlignedBorrow, Clone, Copy, Debug)]
@@ -170,14 +170,13 @@ fn test_is_less_than_tuple_chip() {
     let range_checker_trace = range_checker.generate_trace();
 
     let traces = [trace, range_checker_trace]
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()
-        .run_test(any_rap_arc_vec![air, range_checker.air], traces)
+        .run_test(any_air_arc_vec![air, range_checker.air], traces)
         .expect("Verification failed");
 }
 
@@ -194,15 +193,14 @@ fn test_is_less_than_tuple_chip_negative() {
     trace.values[2] = PrimeCharacteristicRing::from_u64(0);
 
     let traces = [trace, range_checker_trace]
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();
     test_engine_small()
-        .run_test(any_rap_arc_vec![air, range_checker.air], traces)
+        .run_test(any_air_arc_vec![air, range_checker.air], traces)
         .unwrap();
 }
 
@@ -218,15 +216,14 @@ fn test_is_less_than_tuple_chip_nonzero_diff() {
     let range_checker_trace = range_checker.generate_trace();
 
     let traces = [trace, range_checker_trace]
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();
     test_engine_small()
-        .run_test(any_rap_arc_vec![air, range_checker.air], traces)
+        .run_test(any_air_arc_vec![air, range_checker.air], traces)
         .unwrap();
 }
 
