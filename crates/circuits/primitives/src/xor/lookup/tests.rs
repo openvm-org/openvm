@@ -1,23 +1,23 @@
 use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
+    any_air_arc_vec,
     interaction::BusIndex,
     p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
-    poseidon2::sponge::DuplexSponge,
-    prover::AirProvingContext,
-    test_utils::{test_engine_small, test_system_params_small},
+    prover::{AirProvingContext, ColMajorMatrix},
+    test_utils::test_system_params_small,
     utils::disable_debug_builder,
-    AirRef, BabyBearPoseidon2CpuEngine, StarkEngine,
+    AirRef, StarkEngine,
 };
 use openvm_stark_sdk::{
-    any_rap_arc_vec, dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
-    p3_baby_bear::BabyBear, utils::create_seeded_rng,
+    config::baby_bear_poseidon2::*,
+    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, utils::create_seeded_rng,
 };
 use rand::Rng;
 
-use crate::xor::XorLookupChip;
+use crate::{utils::test_engine_small, xor::XorLookupChip};
 
 const BYTE_XOR_BUS: BusIndex = 10;
 
@@ -69,7 +69,7 @@ fn test_xor_limbs_chip() {
                 4,
             )
         })
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .collect::<Vec<RowMajorMatrix<F>>>();
 
     let xor_trace = xor_chip.generate_trace();
 
@@ -133,7 +133,7 @@ fn negative_test_xor_limbs_chip() {
                     iter::once(count).chain(fields).chain(iter::once(z))
                 }
             })
-            .map(PrimeCharacteristicRing::from_u32)
+            .map(F::from_u32)
             .collect(),
         4,
     );
@@ -141,14 +141,13 @@ fn negative_test_xor_limbs_chip() {
     let xor_trace = xor_chip.generate_trace();
 
     let traces = [requester_trace, xor_trace]
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContext::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();
     test_engine_small()
-        .run_test(any_rap_arc_vec![requester, xor_chip.air], traces)
+        .run_test(any_air_arc_vec![requester, xor_chip.air], traces)
         .unwrap();
 }

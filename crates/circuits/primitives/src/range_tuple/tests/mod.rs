@@ -9,7 +9,7 @@ use openvm_stark_backend::{
     test_utils::{test_engine_small, test_system_params_small},
     utils::disable_debug_builder,
     verifier::VerificationError,
-    AirRef, BabyBearPoseidon2CpuEngine, StarkEngine,
+    AirRef, BabyBearPoseidon2CpuEngine,
 };
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine,

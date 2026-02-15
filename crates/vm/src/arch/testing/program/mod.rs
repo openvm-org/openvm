@@ -6,12 +6,12 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     prover::{AirProvingContext, CpuBackend},
-    Chip,
 };
 
 use crate::{
     arch::ExecutionState,
     system::program::{ProgramBus, ProgramExecutionCols},
+    Chip,
 };
 
 pub mod air;
