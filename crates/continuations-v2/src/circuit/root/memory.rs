@@ -12,17 +12,16 @@ use openvm_circuit_primitives::utils::not;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_util::log2_strict_usize,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    BaseAirWithPublicValues, PartitionedBaseAir,
+};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{
+    poseidon2_compress_with_capacity, BabyBearPoseidon2Config, DIGEST_SIZE, F,
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing};
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use recursion_circuit::bus::{Poseidon2CompressBus, Poseidon2CompressMessage};
-use stark_backend_v2::{
-    DIGEST_SIZE, F,
-    poseidon2::{WIDTH, sponge::poseidon2_compress},
-    prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
-};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::circuit::root::{
@@ -199,7 +198,10 @@ pub fn generate_proving_input(
     merkle_proof: &[[F; DIGEST_SIZE]],
     memory_dimensions: MemoryDimensions,
     num_user_pvs: usize,
-) -> (AirProvingContextV2<CpuBackendV2>, Vec<[F; WIDTH]>) {
+) -> (
+    AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>,
+    Vec<[F; POSEIDON2_WIDTH]>,
+) {
     let merkle_proof_len = merkle_proof.len();
     let num_layers = merkle_proof_len + 1;
     let height = num_layers.next_power_of_two();
@@ -236,7 +238,7 @@ pub fn generate_proving_input(
 
         let left = if is_right_child { sibling } else { current };
         let right = if is_right_child { current } else { sibling };
-        current = poseidon2_compress(left, right);
+        current = poseidon2_compress_with_capacity(left, right).0;
         poseidon2_compress_inputs.push(digests_to_poseidon2_input(left, right));
     }
 
@@ -248,7 +250,7 @@ pub fn generate_proving_input(
     last_row.merkle_path_branch_bits = F::from_usize(current_branch_bits);
 
     (
-        AirProvingContextV2::simple_no_pis(ColMajorMatrix::from_row_major(&RowMajorMatrix::new(
+        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&RowMajorMatrix::new(
             trace, width,
         ))),
         poseidon2_compress_inputs,

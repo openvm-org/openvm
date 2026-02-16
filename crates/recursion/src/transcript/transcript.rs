@@ -1,8 +1,7 @@
 use core::borrow::Borrow;
 
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing};
@@ -155,9 +154,8 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
 
 #[cfg(feature = "cuda")]
 pub mod cuda {
-    use cuda_backend_v2::F;
     use itertools::Itertools;
-    use openvm_cuda_backend::base::DeviceMatrix;
+    use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
     use openvm_cuda_common::copy::MemCopyH2D;
 
     use crate::{

@@ -3,16 +3,21 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use openvm_circuit::arch::ExitCode;
+use openvm_circuit::arch::{ExitCode, POSEIDON2_WIDTH};
 use openvm_circuit_primitives::utils::assert_array_eq;
 use openvm_poseidon2_air::Permutation;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    proof::Proof,
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    BaseAirWithPublicValues, PartitionedBaseAir,
+};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{
+    poseidon2_compress_with_capacity, poseidon2_perm, BabyBearPoseidon2Config, DIGEST_SIZE, F,
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing};
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use recursion_circuit::{
     bus::{
         CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
@@ -20,24 +25,17 @@ use recursion_circuit::{
     },
     utils::assert_zeros,
 };
-use stark_backend_v2::{
-    DIGEST_SIZE, F,
-    poseidon2::{WIDTH, poseidon2_perm, sponge::poseidon2_compress},
-    proof::Proof,
-    prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
-};
 use stark_recursion_circuit_derive::AlignedBorrow;
 use verify_stark::pvs::{NonRootVerifierPvs, VERIFIER_PVS_AIR_ID};
 
 use crate::{
     bn254::CommitBytes,
     circuit::{
-        CONSTRAINT_EVAL_AIR_ID, CONSTRAINT_EVAL_CACHED_INDEX,
         root::{
-            RootVerifierPvs,
             bus::{MemoryMerkleCommitBus, MemoryMerkleCommitMessage},
-            digests_to_poseidon2_input, pad_slice_to_poseidon2_input,
+            digests_to_poseidon2_input, pad_slice_to_poseidon2_input, RootVerifierPvs,
         },
+        CONSTRAINT_EVAL_AIR_ID, CONSTRAINT_EVAL_CACHED_INDEX,
     },
 };
 
@@ -311,8 +309,9 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
 
         /*
          * Finally, we need to constrain that the public values this AIR produces are consistent
-         * with the child's. The app_dag_commit, leaf_dag_commit, and internal_for_leaf_dag_commit
-         * are simply constrained to be equal to the child's.
+         * with the child's. The app_dag_commit, leaf_dag_commit, and
+         * internal_for_leaf_dag_commit are simply constrained to be equal to the
+         * child's.
          */
         let &RootVerifierPvs::<_> {
             app_exe_commit,
@@ -397,7 +396,12 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
     }
 }
 
-pub fn generate_proving_ctx(proof: &Proof) -> (AirProvingContextV2<CpuBackendV2>, Vec<[F; WIDTH]>) {
+pub fn generate_proving_ctx(
+    proof: &Proof<BabyBearPoseidon2Config>,
+) -> (
+    AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>,
+    Vec<[F; POSEIDON2_WIDTH]>,
+) {
     let width = RootVerifierPvsCols::<u8>::width();
     let mut trace = vec![F::ZERO; width];
     let cols: &mut RootVerifierPvsCols<F> = trace.as_mut_slice().borrow_mut();
@@ -429,7 +433,7 @@ pub fn generate_proving_ctx(proof: &Proof) -> (AirProvingContextV2<CpuBackendV2>
     ]);
 
     cols.intermediate_exe_commit =
-        poseidon2_compress(cols.program_commit_hash, cols.initial_root_hash);
+        poseidon2_compress_with_capacity(cols.program_commit_hash, cols.initial_root_hash).0;
     poseidon2_compress_inputs.push(digests_to_poseidon2_input(
         cols.program_commit_hash,
         cols.initial_root_hash,
@@ -439,7 +443,7 @@ pub fn generate_proving_ctx(proof: &Proof) -> (AirProvingContextV2<CpuBackendV2>
     let root_pvs: &mut RootVerifierPvs<F> = public_values.as_mut_slice().borrow_mut();
 
     root_pvs.app_exe_commit =
-        poseidon2_compress(cols.intermediate_exe_commit, cols.initial_pc_hash);
+        poseidon2_compress_with_capacity(cols.intermediate_exe_commit, cols.initial_pc_hash).0;
     poseidon2_compress_inputs.push(digests_to_poseidon2_input(
         cols.intermediate_exe_commit,
         cols.initial_pc_hash,
@@ -450,7 +454,7 @@ pub fn generate_proving_ctx(proof: &Proof) -> (AirProvingContextV2<CpuBackendV2>
     root_pvs.internal_for_leaf_dag_commit = child_pvs.internal_for_leaf_dag_commit;
 
     (
-        AirProvingContextV2 {
+        AirProvingContext {
             cached_mains: vec![],
             common_main: ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width)),
             public_values,

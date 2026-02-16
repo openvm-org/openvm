@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use eyre::Result;
-use stark_backend_v2::{
-    StarkEngineV2, SystemParams,
-    keygen::types::{MultiStarkProvingKeyV2, MultiStarkVerifyingKeyV2},
-    prover::CommittedTraceDataV2,
+use openvm_stark_backend::{
+    keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
+    prover::CommittedTraceData,
+    StarkEngine, SystemParams,
 };
 use tracing::info_span;
 use verify_stark::NonRootStarkProof;
@@ -12,10 +12,10 @@ use verify_stark::NonRootStarkProof;
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use continuations_v2::aggregation::CompressionGpuProver as CompressionInnerProver;
-        type E = cuda_backend_v2::BabyBearPoseidon2GpuEngineV2;
+        type E = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
     } else {
         use continuations_v2::aggregation::CompressionCpuProver as CompressionInnerProver;
-        type E = stark_backend_v2::BabyBearPoseidon2CpuEngineV2;
+        type E = openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine;
     }
 }
 
@@ -23,8 +23,8 @@ pub struct CompressionProver(pub CompressionInnerProver);
 
 impl CompressionProver {
     pub fn new(
-        internal_recursive_vk: Arc<MultiStarkVerifyingKeyV2>,
-        internal_recursive_vk_pcs_data: CommittedTraceDataV2<<E as StarkEngineV2>::PB>,
+        internal_recursive_vk: Arc<MultiStarkVerifyingKey<crate::SC>>,
+        internal_recursive_vk_pcs_data: CommittedTraceData<<E as StarkEngine>::PB>,
         system_params: SystemParams,
     ) -> Self {
         let inner = CompressionInnerProver::new::<E>(
@@ -36,9 +36,9 @@ impl CompressionProver {
     }
 
     pub fn from_pk(
-        internal_recursive_vk: Arc<MultiStarkVerifyingKeyV2>,
-        internal_recursive_vk_pcs_data: CommittedTraceDataV2<<E as StarkEngineV2>::PB>,
-        pk: Arc<MultiStarkProvingKeyV2>,
+        internal_recursive_vk: Arc<MultiStarkVerifyingKey<crate::SC>>,
+        internal_recursive_vk_pcs_data: CommittedTraceData<<E as StarkEngine>::PB>,
+        pk: Arc<MultiStarkProvingKey<crate::SC>>,
     ) -> Self {
         let inner = CompressionInnerProver::from_pk::<E>(
             internal_recursive_vk,

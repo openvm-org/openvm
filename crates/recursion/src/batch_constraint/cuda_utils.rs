@@ -1,12 +1,15 @@
-use cuda_backend_v2::{Digest, F};
-use openvm_stark_backend::air_builders::symbolic::{
-    SymbolicExpressionNode,
-    symbolic_variable::{Entry, SymbolicVariable},
+use openvm_cuda_backend::prelude::{Digest, F};
+use openvm_stark_backend::{
+    air_builders::symbolic::{
+        symbolic_variable::{Entry, SymbolicVariable},
+        SymbolicExpressionNode,
+    },
+    keygen::types::{MultiStarkVerifyingKey, StarkVerifyingKey},
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::PrimeCharacteristicRing;
-use stark_backend_v2::keygen::types::{MultiStarkVerifyingKeyV2, StarkVerifyingKeyV2};
 
-use crate::batch_constraint::expr_eval::{NodeKind, build_cached_records};
+use crate::batch_constraint::expr_eval::{build_cached_records, NodeKind};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -48,7 +51,7 @@ pub struct CachedGpuRecord {
 }
 
 pub(crate) fn build_cached_gpu_records(
-    child_vk: &MultiStarkVerifyingKeyV2,
+    child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
 ) -> Vec<CachedGpuRecord> {
     build_cached_records(child_vk)
         .iter()
@@ -63,7 +66,7 @@ pub(crate) fn build_cached_gpu_records(
 }
 
 pub(super) fn flatten_constraint_node(
-    vk: &StarkVerifyingKeyV2<F, Digest>,
+    vk: &StarkVerifyingKey<F, Digest>,
     node: &SymbolicExpressionNode<F>,
 ) -> FlatSymbolicConstraintNode {
     match node {

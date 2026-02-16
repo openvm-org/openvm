@@ -1,20 +1,20 @@
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
+use openvm_stark_backend::StarkEngine;
 use openvm_transpiler::elf::Elf;
-use stark_backend_v2::StarkEngineV2;
 
 use crate::{
-    Sdk, StdIn,
     config::{
-        AggregationSystemParams, DEFAULT_APP_L_SKIP, DEFAULT_APP_LOG_BLOWUP, default_app_params,
+        default_app_params, AggregationSystemParams, DEFAULT_APP_LOG_BLOWUP, DEFAULT_APP_L_SKIP,
     },
+    Sdk, StdIn,
 };
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        type E = cuda_backend_v2::BabyBearPoseidon2GpuEngineV2;
+        type E = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
     } else {
-        type E = stark_backend_v2::BabyBearPoseidon2CpuEngineV2;
+        type E = openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine;
     }
 }
 

@@ -2,24 +2,20 @@ use std::sync::Arc;
 
 use eyre::Result;
 use openvm_circuit::arch::{
-    Executor, MeteredExecutor, PreflightExecutor, VmBuilder, VmExecutionConfig,
-    instructions::exe::VmExe,
+    instructions::exe::VmExe, Executor, MeteredExecutor, PreflightExecutor, VmBuilder,
+    VmExecutionConfig,
 };
-use openvm_stark_backend::{
-    config::{Com, Val},
-    p3_field::PrimeField32,
-};
-use stark_backend_v2::{StarkWhirEngine, poseidon2::CHUNK};
-use verify_stark::{NonRootStarkProof, vk::VerificationBaseline};
+use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, Val};
+use verify_stark::{vk::VerificationBaseline, NonRootStarkProof};
 
 use crate::{
-    SC, StdIn,
-    prover::{AggProver, AppProver, CompressionProver, vm::types::VmProvingKey},
+    prover::{vm::types::VmProvingKey, AggProver, AppProver, CompressionProver},
+    StdIn, SC,
 };
 
 pub struct StarkProver<E, VB>
 where
-    E: StarkWhirEngine,
+    E: StarkEngine,
     VB: VmBuilder<E>,
 {
     pub app_prover: AppProver<E, VB>,
@@ -29,10 +25,9 @@ where
 
 impl<E, VB> StarkProver<E, VB>
 where
-    E: StarkWhirEngine<SC = SC>,
+    E: StarkEngine<SC = SC>,
     VB: VmBuilder<E>,
     Val<SC>: PrimeField32,
-    Com<SC>: AsRef<[Val<SC>; CHUNK]> + From<[Val<SC>; CHUNK]> + Into<[Val<SC>; CHUNK]>,
 {
     pub fn new(
         vm_builder: VB,

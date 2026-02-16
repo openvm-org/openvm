@@ -2,18 +2,20 @@ use std::borrow::Borrow;
 
 use eyre::Result;
 use openvm_circuit::{
-    arch::{ExitCode, hasher::poseidon2::vm_poseidon2_hasher},
+    arch::{hasher::poseidon2::vm_poseidon2_hasher, ExitCode},
     system::{
         memory::merkle::public_values::UserPublicValuesProof, program::trace::compute_exe_commit,
     },
 };
-use p3_field::{PrimeCharacteristicRing, PrimeField32};
-use stark_backend_v2::{
-    BabyBearPoseidon2CpuEngineV2, DIGEST_SIZE, F, StarkEngineV2,
+use openvm_stark_backend::{
     codec::{Decode, Encode},
-    poseidon2::sponge::DuplexSponge,
     proof::Proof,
+    StarkEngine,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{
+    BabyBearPoseidon2Config as SC, BabyBearPoseidon2CpuEngine, DuplexSponge, DIGEST_SIZE, F,
+};
+use p3_field::{PrimeCharacteristicRing, PrimeField32};
 
 use crate::{
     error::VerifyStarkError,
@@ -26,10 +28,29 @@ pub mod pvs;
 pub mod vk;
 
 // Final internal recursive STARK proof to be verified against the baseline
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug)]
 pub struct NonRootStarkProof {
-    pub inner: Proof,
+    pub inner: Proof<SC>,
     pub user_pvs_proof: UserPublicValuesProof<DIGEST_SIZE, F>,
+}
+
+impl Encode for NonRootStarkProof {
+    fn encode<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        self.inner.encode(writer)?;
+        self.user_pvs_proof.encode::<SC, _>(writer)?;
+        Ok(())
+    }
+}
+
+impl Decode for NonRootStarkProof {
+    fn decode<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+        let inner = Proof::<SC>::decode(reader)?;
+        let user_pvs_proof = UserPublicValuesProof::decode::<SC, _>(reader)?;
+        Ok(Self {
+            inner,
+            user_pvs_proof,
+        })
+    }
 }
 
 /// Verifies a non-root VM STARK proof (as a byte stream) given the internal-recursive
@@ -49,7 +70,7 @@ pub fn verify_vm_stark_proof_decoded(
     proof: &NonRootStarkProof,
 ) -> Result<(), VerifyStarkError> {
     // Verify the STARK proof.
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(vk.mvk.inner.params.clone());
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(vk.mvk.inner.params.clone());
     engine.verify(&vk.mvk, &proof.inner)?;
 
     let &NonRootVerifierPvs::<F> {

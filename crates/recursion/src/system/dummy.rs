@@ -1,6 +1,7 @@
 // Utilities for dummy tracegen
+use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, proof::Proof};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, EF, F};
 use p3_field::{BasedVectorSpace, PrimeCharacteristicRing};
-use stark_backend_v2::{EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 
 use crate::{
     bus::{CommitmentsBusMessage, ConstraintSumcheckRandomness, WhirModuleMessage},
@@ -22,7 +23,7 @@ impl Preflight {
             .collect()
     }
 
-    pub fn whir_module_msg(&self, proof: &Proof) -> WhirModuleMessage<F> {
+    pub fn whir_module_msg(&self, proof: &Proof<BabyBearPoseidon2Config>) -> WhirModuleMessage<F> {
         let mu = self.stacking.stacking_batching_challenge;
         let mut mu_pows = mu.powers();
         let mut claim = EF::ZERO;
@@ -38,7 +39,10 @@ impl Preflight {
         }
     }
 
-    pub fn whir_commitments_msgs(&self, proof: &Proof) -> Vec<CommitmentsBusMessage<F>> {
+    pub fn whir_commitments_msgs(
+        &self,
+        proof: &Proof<BabyBearPoseidon2Config>,
+    ) -> Vec<CommitmentsBusMessage<F>> {
         let mut messages = vec![];
         for (i, commit) in proof.whir_proof.codeword_commits.iter().enumerate() {
             messages.push(CommitmentsBusMessage {
@@ -52,8 +56,8 @@ impl Preflight {
 
     pub fn stacking_commitments_msgs(
         &self,
-        vk: &MultiStarkVerifyingKeyV2,
-        proof: &Proof,
+        vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proof: &Proof<BabyBearPoseidon2Config>,
     ) -> Vec<CommitmentsBusMessage<F>> {
         let mut messages = vec![];
         messages.push(CommitmentsBusMessage {

@@ -1,12 +1,10 @@
 use std::ops::Index;
 
+use openvm_poseidon2_air::POSEIDON2_WIDTH;
+use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_perm, CHUNK, D_EF, F};
 use p3_air::AirBuilder;
-use p3_field::{Field, PrimeCharacteristicRing, extension::BinomiallyExtendable};
+use p3_field::{extension::BinomiallyExtendable, Field, PrimeCharacteristicRing};
 use p3_symmetric::Permutation;
-use stark_backend_v2::{
-    D_EF, F,
-    poseidon2::{CHUNK, WIDTH, poseidon2_perm},
-};
 
 // TODO(ayush): move somewhere else
 pub const MAX_CONSTRAINT_DEGREE: usize = 4;
@@ -47,7 +45,7 @@ where
 pub fn ext_field_multiply<FA>(x: [impl Into<FA>; D_EF], y: [impl Into<FA>; D_EF]) -> [FA; D_EF]
 where
     FA: PrimeCharacteristicRing,
-    FA::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    FA::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     let [x0, x1, x2, x3] = x.map(Into::into);
     let [y0, y1, y2, y3] = y.map(Into::into);
@@ -105,7 +103,7 @@ where
 pub fn eq_1<FA>(x: [impl Into<FA>; D_EF], y: [impl Into<FA>; D_EF]) -> [FA; D_EF]
 where
     FA: PrimeCharacteristicRing,
-    FA::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    FA::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     let x = x.map(Into::into);
     let y = y.map(Into::into);
@@ -125,7 +123,7 @@ where
 pub fn mobius_eq_1<FA>(u: [impl Into<FA>; D_EF], x: [impl Into<FA>; D_EF]) -> [FA; D_EF]
 where
     FA: PrimeCharacteristicRing,
-    FA::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    FA::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     let omega = u.map(Into::into);
     let x = x.map(Into::into);
@@ -287,7 +285,7 @@ pub fn interpolate_quadratic<FA>(
 ) -> [FA; D_EF]
 where
     FA: PrimeCharacteristicRing,
-    FA::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    FA::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     let pre_claim = pre_claim.map(Into::into);
     let ev1 = ev1.map(Into::into);
@@ -311,11 +309,11 @@ where
     )
 }
 
-pub fn poseidon2_hash_slice(vals: &[F]) -> ([F; CHUNK], Vec<[F; WIDTH]>) {
+pub fn poseidon2_hash_slice(vals: &[F]) -> ([F; CHUNK], Vec<[F; POSEIDON2_WIDTH]>) {
     let num_chunks = vals.len().div_ceil(CHUNK);
     let mut pre_states = Vec::with_capacity(num_chunks);
     let perm = poseidon2_perm();
-    let mut state = [F::ZERO; WIDTH];
+    let mut state = [F::ZERO; POSEIDON2_WIDTH];
     let mut i = 0;
     for &val in vals {
         state[i] = val;
@@ -336,12 +334,16 @@ pub fn poseidon2_hash_slice(vals: &[F]) -> ([F; CHUNK], Vec<[F; WIDTH]>) {
 #[inline]
 pub fn poseidon2_hash_slice_with_states(
     vals: &[F],
-) -> ([F; CHUNK], Vec<[F; WIDTH]>, Vec<[F; WIDTH]>) {
+) -> (
+    [F; CHUNK],
+    Vec<[F; POSEIDON2_WIDTH]>,
+    Vec<[F; POSEIDON2_WIDTH]>,
+) {
     let num_chunks = vals.len().div_ceil(CHUNK);
     let mut pre_states = Vec::with_capacity(num_chunks);
     let mut post_states = Vec::with_capacity(num_chunks);
     let perm = poseidon2_perm();
-    let mut state = [F::ZERO; WIDTH];
+    let mut state = [F::ZERO; POSEIDON2_WIDTH];
     let mut i = 0;
     for &val in vals {
         state[i] = val;

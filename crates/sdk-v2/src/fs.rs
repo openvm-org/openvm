@@ -1,11 +1,11 @@
 use std::{
-    fs::{File, create_dir_all, read, write},
+    fs::{create_dir_all, read, write, File},
     path::Path,
 };
 
 use eyre::{Report, Result};
-use serde::{Serialize, de::DeserializeOwned};
-use stark_backend_v2::codec::{Decode, Encode};
+use openvm_stark_backend::codec::{Decode, Encode};
+use serde::{de::DeserializeOwned, Serialize};
 
 pub fn read_object_from_file<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> Result<T> {
     read_from_file_bitcode(path)
