@@ -9,6 +9,7 @@ use transpiler::{Transpiler, TranspilerError};
 use crate::util::elf_memory_image_to_openvm_memory_image;
 
 pub mod elf;
+pub mod decoder;
 pub mod transpiler;
 pub mod util;
 

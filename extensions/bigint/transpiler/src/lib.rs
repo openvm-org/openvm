@@ -9,7 +9,7 @@ use openvm_rv32im_transpiler::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
-use rrs_lib::instruction_formats::{BType, RType};
+use openvm_transpiler::decoder::{BType, RType};
 use strum::IntoEnumIterator;
 
 // =================================================================================================

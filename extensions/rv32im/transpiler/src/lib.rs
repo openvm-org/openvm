@@ -12,14 +12,11 @@ use openvm_rv32im_guest::{
 pub use openvm_rv32im_guest::{MAX_HINT_BUFFER_WORDS, MAX_HINT_BUFFER_WORDS_BITS};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{
+    decoder::{process_instruction, IType, RType},
     util::{nop, unimp},
     TranspilerExtension, TranspilerOutput,
 };
 use rrs::InstructionTranspiler;
-use rrs_lib::{
-    instruction_formats::{IType, RType},
-    process_instruction,
-};
 
 mod instructions;
 pub mod rrs;

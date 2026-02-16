@@ -2,19 +2,19 @@ use std::marker::PhantomData;
 
 use openvm_instructions::{instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, *};
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_transpiler::util::{
-    from_b_type_rv64, from_i_type_rv64, from_j_type_rv64, from_load_rv64, from_r_type_rv64,
-    from_s_type_rv64, from_u_type_rv64, nop,
-};
-use rrs_lib::{
-    instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType},
-    InstructionProcessor,
+use openvm_transpiler::{
+    decoder::{BType, IType, ITypeShamt, InstructionProcessor, JType, RType, SType, UType},
+    util::{
+        from_b_type_rv64, from_i_type_rv64, from_i_type_shamt_rv64, from_j_type_rv64,
+        from_load_rv64, from_r_type_rv64, from_s_type_rv64, from_u_type_rv64, nop,
+    },
 };
 
 use crate::{
-    Rv64AuipcOpcode, Rv64BaseAluOpcode, Rv64BranchEqualOpcode, Rv64BranchLessThanOpcode,
-    Rv64DivRemOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LessThanOpcode, Rv64LoadStoreOpcode,
-    Rv64MulHOpcode, Rv64MulOpcode, Rv64ShiftOpcode,
+    Rv64AuipcOpcode, Rv64BaseAluOpcode, Rv64BaseAluWOpcode, Rv64BranchEqualOpcode,
+    Rv64BranchLessThanOpcode, Rv64DivRemOpcode, Rv64DivRemWOpcode, Rv64JalLuiOpcode,
+    Rv64JalrOpcode, Rv64LessThanOpcode, Rv64LoadStoreOpcode, Rv64MulHOpcode, Rv64MulOpcode,
+    Rv64MulWOpcode, Rv64ShiftOpcode, Rv64ShiftWOpcode,
 };
 
 /// A transpiler that converts the 32-bit encoded instructions into OpenVM instructions (RV64).
@@ -93,9 +93,8 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
         )
     }
 
-    // 6-bit shift immediates are intercepted in lib.rs; these should never be reached.
-    fn process_slli(&mut self, _dec_insn: ITypeShamt) -> Self::InstructionResult {
-        unreachable!("SLLI is intercepted in lib.rs for 6-bit shamt handling")
+    fn process_slli(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
+        from_i_type_shamt_rv64(Rv64ShiftOpcode::SLL.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_srl(&mut self, dec_insn: RType) -> Self::InstructionResult {
@@ -107,8 +106,8 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
         )
     }
 
-    fn process_srli(&mut self, _dec_insn: ITypeShamt) -> Self::InstructionResult {
-        unreachable!("SRLI is intercepted in lib.rs for 6-bit shamt handling")
+    fn process_srli(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
+        from_i_type_shamt_rv64(Rv64ShiftOpcode::SRL.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_sra(&mut self, dec_insn: RType) -> Self::InstructionResult {
@@ -120,8 +119,8 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
         )
     }
 
-    fn process_srai(&mut self, _dec_insn: ITypeShamt) -> Self::InstructionResult {
-        unreachable!("SRAI is intercepted in lib.rs for 6-bit shamt handling")
+    fn process_srai(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
+        from_i_type_shamt_rv64(Rv64ShiftOpcode::SRA.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_slt(&mut self, dec_insn: RType) -> Self::InstructionResult {
@@ -170,7 +169,6 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
         )
     }
 
-    // In RV64, LW is sign-extending (32-bit load into 64-bit register).
     fn process_lw(&mut self, dec_insn: IType) -> Self::InstructionResult {
         from_load_rv64(
             Rv64LoadStoreOpcode::LOADW.global_opcode().as_usize(),
@@ -192,6 +190,20 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
         )
     }
 
+    fn process_lwu(&mut self, dec_insn: IType) -> Self::InstructionResult {
+        from_load_rv64(
+            Rv64LoadStoreOpcode::LOADWU.global_opcode().as_usize(),
+            &dec_insn,
+        )
+    }
+
+    fn process_ld(&mut self, dec_insn: IType) -> Self::InstructionResult {
+        from_load_rv64(
+            Rv64LoadStoreOpcode::LOADD.global_opcode().as_usize(),
+            &dec_insn,
+        )
+    }
+
     fn process_sb(&mut self, dec_insn: SType) -> Self::InstructionResult {
         from_s_type_rv64(
             Rv64LoadStoreOpcode::STOREB.global_opcode().as_usize(),
@@ -209,6 +221,13 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     fn process_sw(&mut self, dec_insn: SType) -> Self::InstructionResult {
         from_s_type_rv64(
             Rv64LoadStoreOpcode::STOREW.global_opcode().as_usize(),
+            &dec_insn,
+        )
+    }
+
+    fn process_sd(&mut self, dec_insn: SType) -> Self::InstructionResult {
+        from_s_type_rv64(
+            Rv64LoadStoreOpcode::STORED.global_opcode().as_usize(),
             &dec_insn,
         )
     }
@@ -373,5 +392,120 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     fn process_fence(&mut self, dec_insn: IType) -> Self::InstructionResult {
         tracing::debug!("Transpiling fence ({:?}) to nop", dec_insn);
         nop()
+    }
+
+    // ── RV64 OP-32 ───────────────────────────────────────────────────────
+
+    fn process_addw(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type_rv64(
+            Rv64BaseAluWOpcode::ADDW.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_subw(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type_rv64(
+            Rv64BaseAluWOpcode::SUBW.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_sllw(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type_rv64(
+            Rv64ShiftWOpcode::SLLW.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_srlw(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type_rv64(
+            Rv64ShiftWOpcode::SRLW.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_sraw(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type_rv64(
+            Rv64ShiftWOpcode::SRAW.global_opcode().as_usize(),
+            1,
+            &dec_insn,
+            false,
+        )
+    }
+
+    // ── RV64 OP-IMM-32 ──────────────────────────────────────────────────
+
+    fn process_addiw(&mut self, dec_insn: IType) -> Self::InstructionResult {
+        from_i_type_rv64(
+            Rv64BaseAluWOpcode::ADDW.global_opcode().as_usize(),
+            &dec_insn,
+        )
+    }
+
+    fn process_slliw(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
+        from_i_type_shamt_rv64(Rv64ShiftWOpcode::SLLW.global_opcode().as_usize(), &dec_insn)
+    }
+
+    fn process_srliw(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
+        from_i_type_shamt_rv64(Rv64ShiftWOpcode::SRLW.global_opcode().as_usize(), &dec_insn)
+    }
+
+    fn process_sraiw(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
+        from_i_type_shamt_rv64(Rv64ShiftWOpcode::SRAW.global_opcode().as_usize(), &dec_insn)
+    }
+
+    // ── RV64M OP-32 ─────────────────────────────────────────────────────
+
+    fn process_mulw(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type_rv64(
+            Rv64MulWOpcode::MULW.global_opcode().as_usize(),
+            0,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_divw(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type_rv64(
+            Rv64DivRemWOpcode::DIVW.global_opcode().as_usize(),
+            0,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_divuw(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type_rv64(
+            Rv64DivRemWOpcode::DIVUW.global_opcode().as_usize(),
+            0,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_remw(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type_rv64(
+            Rv64DivRemWOpcode::REMW.global_opcode().as_usize(),
+            0,
+            &dec_insn,
+            false,
+        )
+    }
+
+    fn process_remuw(&mut self, dec_insn: RType) -> Self::InstructionResult {
+        from_r_type_rv64(
+            Rv64DivRemWOpcode::REMUW.global_opcode().as_usize(),
+            0,
+            &dec_insn,
+            false,
+        )
     }
 }

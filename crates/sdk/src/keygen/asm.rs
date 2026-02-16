@@ -6,7 +6,7 @@ use openvm_circuit::arch::instructions::{
 use openvm_continuations::F;
 use openvm_native_compiler::{asm::A0, conversion::AS, NativeJalOpcode};
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
-use rrs_lib::instruction_formats::IType;
+use openvm_transpiler::decoder::IType;
 
 const OPCODE: u32 = 0x0b;
 const FUNCT3: u32 = 0b111;
