@@ -172,16 +172,16 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | Algebra | `ModularPhantom::HintNonQr` | HintNonQr\<N\> |
 | Algebra | `ModularPhantom::HintSqrt` | HintSqrt\<N\> |
 
-## Elliptic Curve Extension
+## Short Weierstrass Elliptic Curve Extension
 
 #### Instructions
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
-| Elliptic Curve | `Rv64WeierstrassOpcode::EC_ADD_NE` | EC_ADD_NE_RV64\<C\> |
-| Elliptic Curve | `Rv64WeierstrassOpcode::SETUP_EC_ADD_NE` | SETUP_EC_ADD_NE_RV64\<C\> |
-| Elliptic Curve | `Rv64WeierstrassOpcode::EC_DOUBLE` | EC_DOUBLE_RV64\<C\> |
-| Elliptic Curve | `Rv64WeierstrassOpcode::SETUP_EC_DOUBLE` | SETUP_EC_DOUBLE_RV64\<C\> |
+| Short Weierstrass Elliptic Curve | `Rv64WeierstrassOpcode::SW_EC_ADD_PROJ` | SW_EC_ADD_PROJ_RV64\<C\> |
+| Short Weierstrass Elliptic Curve | `Rv64WeierstrassOpcode::SETUP_SW_EC_ADD_PROJ` | SETUP_SW_EC_ADD_PROJ_RV64\<C\> |
+| Short Weierstrass Elliptic Curve | `Rv64WeierstrassOpcode::SW_EC_DOUBLE_PROJ` | SW_EC_DOUBLE_PROJ_RV64\<C\> |
+| Short Weierstrass Elliptic Curve | `Rv64WeierstrassOpcode::SETUP_SW_EC_DOUBLE_PROJ` | SETUP_SW_EC_DOUBLE_PROJ_RV64\<C\> |
 
 ## Pairing Extension
 
