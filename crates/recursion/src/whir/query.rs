@@ -1,17 +1,16 @@
 use core::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit_primitives::{SubAir, utils::assert_array_eq};
+use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{D_EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    BasedVectorSpace, PrimeCharacteristicRing, TwoAdicField, extension::BinomiallyExtendable,
+    extension::BinomiallyExtendable, BasedVectorSpace, PrimeCharacteristicRing, TwoAdicField,
 };
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{D_EF, F};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -71,7 +70,7 @@ impl<F> BaseAir<F> for WhirQueryAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for WhirQueryAir
 where
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();

@@ -4,22 +4,19 @@ use core::{
     cmp::min,
 };
 
-use openvm_circuit_primitives::{SubAir, utils::assert_array_eq};
+use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
+use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, proof::Proof, BaseAirWithPublicValues, PartitionedBaseAir,
+    SystemParams,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, CHUNK, D_EF, EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    BasedVectorSpace, PrimeCharacteristicRing, TwoAdicField, extension::BinomiallyExtendable,
+    extension::BinomiallyExtendable, BasedVectorSpace, PrimeCharacteristicRing, TwoAdicField,
 };
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{
-    D_EF, EF, F, SystemParams,
-    poseidon2::{CHUNK, WIDTH},
-    proof::Proof,
-};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -52,8 +49,8 @@ pub(in crate::whir::initial_opened_values) struct InitialOpenedValuesCols<T> {
     // TODO: reduce number of mu pows
     mu_pows: [[T; 4]; CHUNK],
     mu: [T; 4],
-    pre_state: [T; WIDTH],
-    post_state: [T; WIDTH],
+    pre_state: [T; POSEIDON2_WIDTH],
+    post_state: [T; POSEIDON2_WIDTH],
     // TODO: consider removing these from this AIR and passing them directly to `WhirFoldingAir`.
     twiddle: T,
     zi_root: T,
@@ -83,7 +80,8 @@ impl<F> BaseAir<F> for InitialOpenedValuesAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for InitialOpenedValuesAir
 where
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF> + TwoAdicField,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield:
+        BinomiallyExtendable<{ D_EF }> + TwoAdicField,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -321,7 +319,7 @@ where
 
 pub(crate) struct InitialOpenedValuesCtx<'a> {
     pub params: &'a SystemParams,
-    pub proofs: &'a [&'a Proof],
+    pub proofs: &'a [&'a Proof<BabyBearPoseidon2Config>],
     pub preflights: &'a [&'a Preflight],
     pub codeword_value_accs: &'a [EF],
     pub rows_per_proof_psums: &'a [usize],
@@ -365,113 +363,115 @@ impl RowMajorChip<F> for InitialOpenedValuesTraceGenerator {
         } else {
             num_valid_rows.next_power_of_two()
         };
-    let width = InitialOpenedValuesCols::<F>::width();
-    let mut trace = vec![F::ZERO; height * width];
-    trace
-        .par_chunks_exact_mut(width)
-        .take(num_valid_rows)
-        .zip(codeword_value_accs)
-        .enumerate()
-        .for_each(|(row_idx, (row, &codeword_value_acc))| {
-            let proof_idx = rows_per_proof_psums[1..].partition_point(|&x| x <= row_idx);
-            let preflight = &preflights[proof_idx];
+        let width = InitialOpenedValuesCols::<F>::width();
+        let mut trace = vec![F::ZERO; height * width];
+        trace
+            .par_chunks_exact_mut(width)
+            .take(num_valid_rows)
+            .zip(codeword_value_accs)
+            .enumerate()
+            .for_each(|(row_idx, (row, &codeword_value_acc))| {
+                let proof_idx = rows_per_proof_psums[1..].partition_point(|&x| x <= row_idx);
+                let preflight = &preflights[proof_idx];
 
-            let record_idx = row_idx - rows_per_proof_psums[proof_idx];
+                let record_idx = row_idx - rows_per_proof_psums[proof_idx];
 
-            let cp_start = commits_per_proof_psums[proof_idx];
-            let cp_end = commits_per_proof_psums[proof_idx + 1];
+                let cp_start = commits_per_proof_psums[proof_idx];
+                let cp_end = commits_per_proof_psums[proof_idx + 1];
 
-            let chunks_before_proof = stacking_chunks_psums[cp_start];
-            let chunks_after_proof = stacking_chunks_psums[cp_end];
+                let chunks_before_proof = stacking_chunks_psums[cp_start];
+                let chunks_after_proof = stacking_chunks_psums[cp_end];
 
-            let records_per_coset_idx = chunks_after_proof - chunks_before_proof;
+                let records_per_coset_idx = chunks_after_proof - chunks_before_proof;
 
-            let coset_idx = (record_idx / records_per_coset_idx) % (1 << k_whir);
-            let num_initial_queries = params.whir.rounds.first().unwrap().num_queries;
-            let query_idx = (record_idx / (records_per_coset_idx << k_whir)) % num_initial_queries;
+                let coset_idx = (record_idx / records_per_coset_idx) % (1 << k_whir);
+                let num_initial_queries = params.whir.rounds.first().unwrap().num_queries;
+                let query_idx =
+                    (record_idx / (records_per_coset_idx << k_whir)) % num_initial_queries;
 
-            let local_chunk_idx = record_idx % records_per_coset_idx;
-            let absolute_chunk_idx = chunks_before_proof + local_chunk_idx;
-            let rel_commit_idx = stacking_chunks_psums[cp_start + 1..=cp_end]
-                .partition_point(|&x| x <= absolute_chunk_idx);
-            let commit_idx = rel_commit_idx;
+                let local_chunk_idx = record_idx % records_per_coset_idx;
+                let absolute_chunk_idx = chunks_before_proof + local_chunk_idx;
+                let rel_commit_idx = stacking_chunks_psums[cp_start + 1..=cp_end]
+                    .partition_point(|&x| x <= absolute_chunk_idx);
+                let commit_idx = rel_commit_idx;
 
-            let commit_chunks_before = stacking_chunks_psums[cp_start + commit_idx];
-            let chunk_idx = absolute_chunk_idx - commit_chunks_before;
+                let commit_chunks_before = stacking_chunks_psums[cp_start + commit_idx];
+                let chunk_idx = absolute_chunk_idx - commit_chunks_before;
 
-            let num_chunks = stacking_chunks_psums[cp_start + commit_idx + 1]
-                - stacking_chunks_psums[cp_start + commit_idx];
+                let num_chunks = stacking_chunks_psums[cp_start + commit_idx + 1]
+                    - stacking_chunks_psums[cp_start + commit_idx];
 
-            let mu = preflight.stacking.stacking_batching_challenge;
+                let mu = preflight.stacking.stacking_batching_challenge;
 
-            let cols: &mut InitialOpenedValuesCols<F> = row.borrow_mut();
+                let cols: &mut InitialOpenedValuesCols<F> = row.borrow_mut();
 
-            let is_first_in_commit = chunk_idx == 0;
-            let is_first_in_coset = is_first_in_commit && commit_idx == 0;
-            let is_first_in_query = is_first_in_coset && coset_idx == 0;
-            let is_first_in_proof = is_first_in_query && query_idx == 0;
+                let is_first_in_commit = chunk_idx == 0;
+                let is_first_in_coset = is_first_in_commit && commit_idx == 0;
+                let is_first_in_query = is_first_in_coset && coset_idx == 0;
+                let is_first_in_proof = is_first_in_query && query_idx == 0;
 
-            let is_same_commit = chunk_idx < num_chunks - 1;
-            let chunk_len = if is_same_commit {
-                CHUNK
-            } else {
-                let width = stacking_widths_psums[cp_start + commit_idx + 1]
-                    - stacking_widths_psums[cp_start + commit_idx];
-                if width % CHUNK == 0 {
+                let is_same_commit = chunk_idx < num_chunks - 1;
+                let chunk_len = if is_same_commit {
                     CHUNK
                 } else {
-                    width % CHUNK
+                    let width = stacking_widths_psums[cp_start + commit_idx + 1]
+                        - stacking_widths_psums[cp_start + commit_idx];
+                    if width % CHUNK == 0 {
+                        CHUNK
+                    } else {
+                        width % CHUNK
+                    }
+                };
+
+                cols.proof_idx = F::from_usize(proof_idx);
+                cols.is_first_in_proof = F::from_bool(is_first_in_proof);
+                cols.is_first_in_query = F::from_bool(is_first_in_query);
+                cols.is_first_in_coset = F::from_bool(is_first_in_coset);
+                cols.is_first_in_commit = F::from_bool(is_first_in_commit);
+                cols.query_idx = F::from_usize(query_idx);
+                cols.commit_idx = F::from_usize(commit_idx);
+                cols.col_chunk_idx = F::from_usize(chunk_idx);
+                cols.coset_idx = F::from_usize(coset_idx);
+                for flag in cols.flags.iter_mut().take(chunk_len) {
+                    *flag = F::ONE;
                 }
-            };
+                cols.twiddle = omega_k.exp_u64(coset_idx as u64);
+                cols.codeword_value_acc
+                    .copy_from_slice(codeword_value_acc.as_basis_coefficients_slice());
+                cols.zi_root = preflight.whir.zj_roots[0][query_idx];
+                cols.zi = preflight.whir.zjs[0][query_idx];
+                cols.yi.copy_from_slice(
+                    preflight.whir.yjs[0][query_idx].as_basis_coefficients_slice(),
+                );
+                cols.mu.copy_from_slice(mu.as_basis_coefficients_slice());
+                cols.merkle_idx_bit_src = preflight.whir.queries[query_idx];
 
-            cols.proof_idx = F::from_usize(proof_idx);
-            cols.is_first_in_proof = F::from_bool(is_first_in_proof);
-            cols.is_first_in_query = F::from_bool(is_first_in_query);
-            cols.is_first_in_coset = F::from_bool(is_first_in_coset);
-            cols.is_first_in_commit = F::from_bool(is_first_in_commit);
-            cols.query_idx = F::from_usize(query_idx);
-            cols.commit_idx = F::from_usize(commit_idx);
-            cols.col_chunk_idx = F::from_usize(chunk_idx);
-            cols.coset_idx = F::from_usize(coset_idx);
-            for flag in cols.flags.iter_mut().take(chunk_len) {
-                *flag = F::ONE;
-            }
-            cols.twiddle = omega_k.exp_u64(coset_idx as u64);
-            cols.codeword_value_acc
-                .copy_from_slice(codeword_value_acc.as_basis_coefficients_slice());
-            cols.zi_root = preflight.whir.zj_roots[0][query_idx];
-            cols.zi = preflight.whir.zjs[0][query_idx];
-            cols.yi
-                .copy_from_slice(preflight.whir.yjs[0][query_idx].as_basis_coefficients_slice());
-            cols.mu.copy_from_slice(mu.as_basis_coefficients_slice());
-            cols.merkle_idx_bit_src = preflight.whir.queries[query_idx];
+                let width_before_proof = stacking_widths_psums[cp_start];
+                let exponent_base_in_proof =
+                    stacking_widths_psums[cp_start + commit_idx] - width_before_proof;
+                let exponent_base = exponent_base_in_proof;
 
-            let width_before_proof = stacking_widths_psums[cp_start];
-            let exponent_base_in_proof =
-                stacking_widths_psums[cp_start + commit_idx] - width_before_proof;
-            let exponent_base = exponent_base_in_proof;
+                for offset in 0..CHUNK {
+                    let exponent = exponent_base + chunk_idx * CHUNK + min(offset, chunk_len - 1);
+                    let mu_pow = mu_pows[width_before_proof + exponent];
+                    cols.mu_pows[offset].copy_from_slice(mu_pow.as_basis_coefficients_slice());
+                }
 
-            for offset in 0..CHUNK {
-                let exponent = exponent_base + chunk_idx * CHUNK + min(offset, chunk_len - 1);
-                let mu_pow = mu_pows[width_before_proof + exponent];
-                cols.mu_pows[offset].copy_from_slice(mu_pow.as_basis_coefficients_slice());
-            }
+                let states = &preflight.initial_row_states[commit_idx][query_idx][coset_idx];
+                let opened_row = &proofs[proof_idx].whir_proof.initial_round_opened_rows
+                    [commit_idx][query_idx][coset_idx];
+                let chunk_start = chunk_idx * CHUNK;
 
-            let states = &preflight.initial_row_states[commit_idx][query_idx][coset_idx];
-            let opened_row = &proofs[proof_idx].whir_proof.initial_round_opened_rows[commit_idx]
-                [query_idx][coset_idx];
-            let chunk_start = chunk_idx * CHUNK;
-
-            // Reconstruct pre_state: start from previous post_state, overwrite with chunk data
-            cols.pre_state = if chunk_idx > 0 {
-                states[chunk_idx - 1]
-            } else {
-                [F::ZERO; WIDTH]
-            };
-            cols.pre_state[..chunk_len]
-                .copy_from_slice(&opened_row[chunk_start..chunk_start + chunk_len]);
-            cols.post_state = states[chunk_idx];
-        });
+                // Reconstruct pre_state: start from previous post_state, overwrite with chunk data
+                cols.pre_state = if chunk_idx > 0 {
+                    states[chunk_idx - 1]
+                } else {
+                    [F::ZERO; POSEIDON2_WIDTH]
+                };
+                cols.pre_state[..chunk_len]
+                    .copy_from_slice(&opened_row[chunk_start..chunk_start + chunk_len]);
+                cols.post_state = states[chunk_idx];
+            });
 
         Some(RowMajorMatrix::new(trace, width))
     }

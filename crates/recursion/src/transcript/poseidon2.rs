@@ -2,12 +2,11 @@ use core::borrow::Borrow;
 use std::{array::from_fn, sync::Arc};
 
 use openvm_poseidon2_air::{
-    BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS, Poseidon2SubAir, Poseidon2SubCols,
+    Poseidon2SubAir, Poseidon2SubCols, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS,
 };
 use openvm_stark_backend::{
-    air_builders::sub::SubAirBuilder,
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    air_builders::sub::SubAirBuilder, interaction::InteractionBuilder, BaseAirWithPublicValues,
+    PartitionedBaseAir,
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;

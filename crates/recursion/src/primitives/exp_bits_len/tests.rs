@@ -1,14 +1,13 @@
 use core::borrow::Borrow;
 
-use openvm_stark_sdk::config::setup_tracing_with_log_level;
+use openvm_stark_sdk::{config::baby_bear_poseidon2::F, utils::setup_tracing_with_log_level};
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::Matrix;
-use stark_backend_v2::F;
 use tracing::Level;
 
 use super::{
     air::ExpBitsLenCols,
-    trace::{ExpBitsLenCpuTraceGenerator, NUM_BITS_MAX_PLUS_ONE, fill_valid_rows},
+    trace::{fill_valid_rows, ExpBitsLenCpuTraceGenerator, NUM_BITS_MAX_PLUS_ONE},
 };
 
 #[derive(Clone, Debug)]

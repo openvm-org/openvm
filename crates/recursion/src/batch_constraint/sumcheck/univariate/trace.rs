@@ -1,10 +1,10 @@
 use std::borrow::BorrowMut;
 
-use openvm_circuit_primitives::{TraceSubRowGenerator, is_equal::IsEqSubAir};
+use openvm_circuit_primitives::{is_equal::IsEqSubAir, TraceSubRowGenerator};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{D_EF, EF, F};
 use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, TwoAdicField};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{D_EF, EF, F};
 
 use super::UnivariateSumcheckCols;
 use crate::tracegen::{RowMajorChip, StandardTracegenCtx};

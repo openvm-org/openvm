@@ -5,13 +5,14 @@ use std::{
 
 use eyre::{Report, Result};
 use openvm_circuit::system::memory::dimensions::MemoryDimensions;
+use openvm_stark_backend::keygen::types::MultiStarkVerifyingKey;
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, Digest};
 use serde::{Deserialize, Serialize};
-use stark_backend_v2::{Digest, keygen::types::MultiStarkVerifyingKeyV2};
 
 /// Verifying key and artifacts used to verify a STARK proof for a fixed VM and executable
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NonRootStarkVerifyingKey {
-    pub mvk: MultiStarkVerifyingKeyV2,
+    pub mvk: MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
     pub baseline: VerificationBaseline,
 }
 

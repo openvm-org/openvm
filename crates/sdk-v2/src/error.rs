@@ -3,6 +3,8 @@ use openvm_transpiler::transpiler::TranspilerError;
 use thiserror::Error;
 use verify_stark::error::VerifyStarkError;
 
+use crate::SC;
+
 #[derive(Error, Debug)]
 pub enum SdkError {
     #[error("I/O error: {0}")]
@@ -23,8 +25,8 @@ pub enum SdkError {
     Other(#[from] eyre::Error),
 }
 
-impl From<VmVerificationError> for SdkError {
-    fn from(error: VmVerificationError) -> Self {
-        SdkError::Vm(error.into())
+impl From<VmVerificationError<SC>> for SdkError {
+    fn from(error: VmVerificationError<SC>) -> Self {
+        SdkError::Other(error.into())
     }
 }

@@ -3,20 +3,21 @@ name = "verify-stark"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Lightweight crate to verify a v2 STARK proof"
+description = "Lightweight crate to verify a STARK proof for an OpenVM virtual machine."
 
 [dependencies]
-openvm-circuit = { workspace = true }
-stark-backend-v2 = { workspace = true }
-stark-recursion-circuit-derive = { workspace = true }
+openvm-stark-backend.workspace = true
+openvm-stark-sdk.workspace = true
+openvm-circuit.workspace = true
+stark-recursion-circuit-derive.workspace = true
 
-bitcode = { workspace = true }
-eyre = { workspace = true }
-p3-field = { workspace = true }
-serde = { workspace = true }
-thiserror = { workspace = true }
-zstd = { workspace = true }
+bitcode.workspace = true
+eyre.workspace = true
+p3-field.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+zstd.workspace = true
 
 [features]
 default = ["parallel"]
-parallel = ["stark-backend-v2/parallel"]
+parallel = ["openvm-stark-backend/parallel"]

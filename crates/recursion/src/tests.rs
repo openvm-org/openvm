@@ -2,29 +2,21 @@ use std::{collections::BTreeSet, sync::Arc};
 
 use itertools::Itertools;
 use openvm_stark_backend::{
-    AirRef,
-    engine::StarkEngine,
-    keygen::types::{MultiStarkProvingKey, StarkProvingKey},
-    prover::types::AirProofRawInput,
+    keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
+    prover::{AirProvingContext, CpuBackend, ProvingContext},
+    test_utils::{
+        default_test_params_small, test_system_params_small,
+        test_system_params_small_with_poly_len, CachedFixture11, FibFixture, InteractionsFixture11,
+        MixtureFixture, PreprocessedFibFixture, SelfInteractionFixture, TestFixture,
+    },
+    AirRef, StarkEngine, SystemParams, TranscriptHistory,
 };
 use openvm_stark_sdk::{
-    config::{
-        FriParameters,
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        setup_tracing_with_log_level,
+    config::baby_bear_poseidon2::{
+        default_duplex_sponge_recorder, default_duplex_sponge_validator, BabyBearPoseidon2Config,
+        BabyBearPoseidon2CpuEngine, DuplexSponge, DuplexSpongeRecorder,
     },
-    engine::StarkFriEngine,
-};
-use stark_backend_v2::{
-    BabyBearPoseidon2CpuEngineV2, F, SystemParams,
-    keygen::types::MultiStarkVerifyingKeyV2,
-    poseidon2::sponge::{DuplexSponge, DuplexSpongeRecorder, TranscriptHistory},
-    prover::{AirProvingContextV2, CpuBackendV2, StridedColMajorMatrixView},
-    test_utils::{
-        CachedFixture11, DuplexSpongeValidator, FibFixture, InteractionsFixture11, MixtureFixture,
-        PreprocessedFibFixture, SelfInteractionFixture, TestFixture, default_test_params_small,
-        test_system_params_small, test_system_params_small_with_poly_len,
-    },
+    utils::setup_tracing_with_log_level,
 };
 use test_case::{test_case, test_matrix};
 use tracing::Level;
@@ -34,52 +26,34 @@ use crate::{
     utils::MAX_CONSTRAINT_DEGREE,
 };
 
-pub fn test_engine_small() -> BabyBearPoseidon2CpuEngineV2<DuplexSponge> {
+pub fn test_engine_small() -> BabyBearPoseidon2CpuEngine<DuplexSponge> {
     let mut params = default_test_params_small();
     params.max_constraint_degree = MAX_CONSTRAINT_DEGREE;
-    BabyBearPoseidon2CpuEngineV2::new(params)
+    BabyBearPoseidon2CpuEngine::new(params)
 }
 
-// TODO[jpw]: switch to v2 types (currently using v1 for debugging)
 fn verifier_circuit_keygen<const MAX_NUM_PROOFS: usize>(
-    child_vk: &MultiStarkVerifyingKeyV2,
+    engine: &BabyBearPoseidon2CpuEngine<DuplexSponge>,
+    child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
 ) -> (
     VerifierSubCircuit<MAX_NUM_PROOFS>,
     MultiStarkProvingKey<BabyBearPoseidon2Config>,
 ) {
     let circuit = VerifierSubCircuit::new(Arc::new(child_vk.clone()));
-    let engine_v1 = BabyBearPoseidon2Engine::new(FriParameters::standard_with_100_bits_security(2));
-    let mut keygen_builder = engine_v1.keygen_builder();
-    for air in circuit.airs() {
-        keygen_builder.add_air(air);
-    }
-    (circuit, keygen_builder.generate_pk())
+    let (pk, _vk) = engine.keygen(&circuit.airs());
+    (circuit, pk)
 }
 
 fn debug(
+    engine: &BabyBearPoseidon2CpuEngine<DuplexSponge>,
     airs: &[AirRef<BabyBearPoseidon2Config>],
-    pk: &[StarkProvingKey<BabyBearPoseidon2Config>],
-    ctxs: &[AirProvingContextV2<CpuBackendV2>],
+    ctxs: Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>,
 ) {
     for (air_idx, air) in airs.iter().enumerate() {
         tracing::debug!(%air_idx, air_name = %air.name());
     }
-    let transpose = |mat: StridedColMajorMatrixView<F>| Arc::new(mat.to_row_major_matrix());
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let inputs = ctxs
-        .iter()
-        .map(|ctx| AirProofRawInput {
-            cached_mains: ctx
-                .cached_mains
-                .iter()
-                .map(|cd| transpose(cd.data.mat_view(0)))
-                .collect_vec(),
-            common_main: Some(transpose(ctx.common_main.as_view().into())),
-            public_values: ctx.public_values.clone(),
-        })
-        .collect_vec();
-
-    engine.debug(airs, pk, &inputs);
+    let ctx = ProvingContext::new(ctxs.into_iter().enumerate().collect());
+    engine.debug(airs, &ctx);
 }
 
 #[test_matrix(
@@ -98,15 +72,19 @@ fn test_recursion_circuit_single_fib(
         return;
     }
     let params = test_system_params_small(l_skip, n_stack, k_whir);
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params);
     let fib = FibFixture::new(0, 1, 1 << log_trace_degree);
     let (vk, proof) = fib.keygen_and_prove(&engine);
 
-    let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
+    let (circuit, _pk) = verifier_circuit_keygen::<2>(&engine, &vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs =
-        circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
-    debug(&circuit.airs(), &pk.per_air, &ctxs);
+    let ctxs = circuit.generate_proving_ctxs_base(
+        &vk,
+        vk_commit_data,
+        &[proof],
+        default_duplex_sponge_recorder(),
+    );
+    debug(&engine, &circuit.airs(), ctxs);
 }
 
 #[test]
@@ -120,15 +98,19 @@ fn test_recursion_circuit_many_fib_airs() {
         return;
     }
     let params = test_system_params_small(l_skip, n_stack, k_whir);
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params);
     let fib = FibFixture::new_with_num_airs(0, 1, 1 << log_trace_degree, 9);
     let (vk, proof) = fib.keygen_and_prove(&engine);
 
-    let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
+    let (circuit, _pk) = verifier_circuit_keygen::<2>(&engine, &vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs =
-        circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
-    debug(&circuit.airs(), &pk.per_air, &ctxs);
+    let ctxs = circuit.generate_proving_ctxs_base(
+        &vk,
+        vk_commit_data,
+        &[proof],
+        default_duplex_sponge_recorder(),
+    );
+    debug(&engine, &circuit.airs(), ctxs);
 }
 
 #[test]
@@ -142,7 +124,7 @@ fn test_recursion_circuit_many_fib_airs_some_missing() {
         return;
     }
     let params = test_system_params_small(l_skip, n_stack, k_whir);
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params);
     let empty_air_indices = vec![1, 3, 6];
     let fib = FibFixture::new_with_num_airs(0, 1, 1 << log_trace_degree, 9)
         .with_empty_air_indices(empty_air_indices.clone());
@@ -162,11 +144,15 @@ fn test_recursion_circuit_many_fib_airs_some_missing() {
         }
     }
 
-    let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
+    let (circuit, _pk) = verifier_circuit_keygen::<2>(&engine, &vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs =
-        circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
-    debug(&circuit.airs(), &pk.per_air, &ctxs);
+    let ctxs = circuit.generate_proving_ctxs_base(
+        &vk,
+        vk_commit_data,
+        &[proof],
+        default_duplex_sponge_recorder(),
+    );
+    debug(&engine, &circuit.airs(), ctxs);
 }
 
 #[test_case(2, 8, 3)]
@@ -176,15 +162,19 @@ fn test_recursion_circuit_many_fib_airs_some_missing() {
 fn test_recursion_circuit_interactions(l_skip: usize, n_stack: usize, k_whir: usize) {
     setup_tracing_with_log_level(Level::DEBUG);
     let params = test_system_params_small(l_skip, n_stack, k_whir);
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params);
     let fx = InteractionsFixture11;
     let (vk, proof) = fx.keygen_and_prove(&engine);
 
-    let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
+    let (circuit, _pk) = verifier_circuit_keygen::<2>(&engine, &vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs =
-        circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
-    debug(&circuit.airs(), &pk.per_air, &ctxs);
+    let ctxs = circuit.generate_proving_ctxs_base(
+        &vk,
+        vk_commit_data,
+        &[proof],
+        default_duplex_sponge_recorder(),
+    );
+    debug(&engine, &circuit.airs(), ctxs);
 }
 
 #[test_case(2, 8, 3, 5)]
@@ -197,15 +187,15 @@ fn test_preflight_single_fib_sponge(
     log_trace_degree: usize,
 ) {
     let params = test_system_params_small(l_skip, n_stack, k_whir);
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSpongeRecorder>::new(params);
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSpongeRecorder>::new(params);
     let fib = FibFixture::new(0, 1, 1 << log_trace_degree);
     let (pk, vk) = fib.keygen(&engine);
 
-    let mut prover_sponge = DuplexSpongeRecorder::default();
+    let mut prover_sponge = default_duplex_sponge_recorder();
     let proof = fib.prove_from_transcript(&engine, &pk, &mut prover_sponge);
     let prover_sponge_len = prover_sponge.len();
 
-    let preflight_sponge = DuplexSpongeValidator::new(prover_sponge.into_log());
+    let preflight_sponge = default_duplex_sponge_validator(prover_sponge.into_log());
     let circuit = VerifierSubCircuit::<2>::new(Arc::new(vk.clone()));
     let preflight = circuit.run_preflight(preflight_sponge, &vk, &proof);
     assert_eq!(preflight.transcript.len(), prover_sponge_len);
@@ -216,15 +206,19 @@ fn test_preflight_single_fib_sponge(
 #[test_case(5, 6, 4)]
 fn test_preflight_cached_trace(l_skip: usize, n_stack: usize, k_whir: usize) {
     let params = test_system_params_small(l_skip, n_stack, k_whir);
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params.clone());
-    let fx = CachedFixture11::new(params);
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params.clone());
+    let fx = CachedFixture11::new(BabyBearPoseidon2Config::default_from_params(params));
     let (vk, proof) = fx.keygen_and_prove(&engine);
 
-    let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
+    let (circuit, _pk) = verifier_circuit_keygen::<2>(&engine, &vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs =
-        circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
-    debug(&circuit.airs(), &pk.per_air, &ctxs);
+    let ctxs = circuit.generate_proving_ctxs_base(
+        &vk,
+        vk_commit_data,
+        &[proof],
+        default_duplex_sponge_recorder(),
+    );
+    debug(&engine, &circuit.airs(), ctxs);
 }
 
 #[test_matrix(
@@ -243,17 +237,21 @@ fn test_preflight_preprocessed_trace(
         return;
     }
     let params = test_system_params_small(l_skip, n_stack, k_whir);
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params);
     let height = 1 << log_trace_height;
     let sels = (0..height).map(|i| i % 2 == 0).collect_vec();
     let fx = PreprocessedFibFixture::new(0, 1, sels);
     let (vk, proof) = fx.keygen_and_prove(&engine);
 
-    let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
+    let (circuit, _pk) = verifier_circuit_keygen::<2>(&engine, &vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs =
-        circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
-    debug(&circuit.airs(), &pk.per_air, &ctxs);
+    let ctxs = circuit.generate_proving_ctxs_base(
+        &vk,
+        vk_commit_data,
+        &[proof],
+        default_duplex_sponge_recorder(),
+    );
+    debug(&engine, &circuit.airs(), ctxs);
 }
 
 #[test_case(2, 8, 3, 5)]
@@ -266,7 +264,7 @@ fn test_preflight_multi_interaction_trace(
     log_trace_height: usize,
 ) {
     let params = test_system_params_small(l_skip, n_stack, k_whir);
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params);
     let fx = SelfInteractionFixture {
         widths: vec![4, 7, 8, 8, 10, 100],
         log_height: log_trace_height,
@@ -277,13 +275,17 @@ fn test_preflight_multi_interaction_trace(
     // Due to the size of SelfInteractionAir, SymbolicExpressionAir's cached trace
     // may be of height up to 2^12
     let params = test_system_params_small(l_skip, n_stack.max(12 - l_skip), k_whir);
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params);
 
-    let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
+    let (circuit, _pk) = verifier_circuit_keygen::<2>(&engine, &vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs =
-        circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
-    debug(&circuit.airs(), &pk.per_air, &ctxs);
+    let ctxs = circuit.generate_proving_ctxs_base(
+        &vk,
+        vk_commit_data,
+        &[proof],
+        default_duplex_sponge_recorder(),
+    );
+    debug(&engine, &circuit.airs(), ctxs);
 }
 
 #[test_case(2, 8, 3, 5)]
@@ -296,34 +298,41 @@ fn test_preflight_mixture_trace(
     log_trace_height: usize,
 ) {
     let params = test_system_params_small(l_skip, n_stack, k_whir);
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params.clone());
-    let fx = MixtureFixture::standard(log_trace_height, params);
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params.clone());
+    let fx = MixtureFixture::standard(
+        log_trace_height,
+        BabyBearPoseidon2Config::default_from_params(params),
+    );
     let (vk, proof) = fx.keygen_and_prove(&engine);
 
     // Due to the size of SelfInteractionAir, SymbolicExpressionAir's cached trace
     // may be of height up to 2^12
     let params = test_system_params_small(l_skip, n_stack.max(12 - l_skip), k_whir);
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params);
 
-    let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
+    let (circuit, _pk) = verifier_circuit_keygen::<2>(&engine, &vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs =
-        circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(&vk, vk_commit_data, &[proof]);
-    debug(&circuit.airs(), &pk.per_air, &ctxs);
+    let ctxs = circuit.generate_proving_ctxs_base(
+        &vk,
+        vk_commit_data,
+        &[proof],
+        default_duplex_sponge_recorder(),
+    );
+    debug(&engine, &circuit.airs(), ctxs);
 }
 
 #[test]
 fn test_preflight_interactions() {
     let params = default_test_params_small();
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSpongeRecorder>::new(params);
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSpongeRecorder>::new(params);
     let fx = InteractionsFixture11;
     let (pk, vk) = fx.keygen(&engine);
 
-    let mut prover_sponge = DuplexSpongeRecorder::default();
+    let mut prover_sponge = default_duplex_sponge_recorder();
     let proof = fx.prove_from_transcript(&engine, &pk, &mut prover_sponge);
     let prover_sponge_len = prover_sponge.len();
 
-    let preflight_sponge = DuplexSpongeValidator::new(prover_sponge.into_log());
+    let preflight_sponge = default_duplex_sponge_validator(prover_sponge.into_log());
     let circuit = VerifierSubCircuit::<2>::new(Arc::new(vk.clone()));
     let preflight = circuit.run_preflight(preflight_sponge, &vk, &proof);
     assert_eq!(preflight.transcript.len(), prover_sponge_len);
@@ -341,7 +350,7 @@ fn test_preflight_interactions() {
 fn test_recursion_circuit_two_fib_proofs(log_trace_degree: usize) {
     let params = default_test_params_small();
 
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params);
 
     let fib1 = FibFixture::new(0, 1, 1 << log_trace_degree);
     let fib2 = FibFixture::new(1, 1, 1 << log_trace_degree);
@@ -349,14 +358,15 @@ fn test_recursion_circuit_two_fib_proofs(log_trace_degree: usize) {
     let (vk, proof1) = fib1.keygen_and_prove(&engine);
     let (_, proof2) = fib2.keygen_and_prove(&engine);
 
-    let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
+    let (circuit, _pk) = verifier_circuit_keygen::<2>(&engine, &vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
+    let ctxs = circuit.generate_proving_ctxs_base(
         &vk,
         vk_commit_data,
         &[proof1, proof2],
+        default_duplex_sponge_recorder(),
     );
-    debug(&circuit.airs(), &pk.per_air, &ctxs);
+    debug(&engine, &circuit.airs(), ctxs);
 }
 
 #[test_case(10 ; "fib log_height maximum (i.e. equals n_stack + l_skip)")]
@@ -367,7 +377,7 @@ fn test_recursion_circuit_two_fib_proofs(log_trace_degree: usize) {
 fn test_recursion_circuit_multiple_fib_proofs(log_trace_degree: usize) {
     let params = default_test_params_small();
 
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params);
 
     let fib1 = FibFixture::new(0, 1, 1 << log_trace_degree);
     let fib2 = FibFixture::new(1, 1, 1 << log_trace_degree);
@@ -381,14 +391,15 @@ fn test_recursion_circuit_multiple_fib_proofs(log_trace_degree: usize) {
     let (_, proof4) = fib4.keygen_and_prove(&engine);
     let (_, proof5) = fib5.keygen_and_prove(&engine);
 
-    let (circuit, pk) = verifier_circuit_keygen::<5>(&vk);
+    let (circuit, _pk) = verifier_circuit_keygen::<5>(&engine, &vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
+    let ctxs = circuit.generate_proving_ctxs_base(
         &vk,
         vk_commit_data,
         &[proof1, proof2, proof3, proof4, proof5],
+        default_duplex_sponge_recorder(),
     );
-    debug(&circuit.airs(), &pk.per_air, &ctxs);
+    debug(&engine, &circuit.airs(), ctxs);
 }
 
 #[test_matrix(
@@ -409,7 +420,7 @@ fn test_recursion_circuit_two_preprocessed(
     }
     let params =
         test_system_params_small_with_poly_len(l_skip, n_stack, k_whir, log_final_poly_len, 3);
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params);
 
     let height = 1 << log_trace_height;
     let sels = (0..height).map(|i| i % 2 == 0).collect_vec();
@@ -420,14 +431,15 @@ fn test_recursion_circuit_two_preprocessed(
     let (vk, proof1) = preprocessed1.keygen_and_prove(&engine);
     let (_, proof2) = preprocessed2.keygen_and_prove(&engine);
 
-    let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
+    let (circuit, _pk) = verifier_circuit_keygen::<2>(&engine, &vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
+    let ctxs = circuit.generate_proving_ctxs_base(
         &vk,
         vk_commit_data,
         &[proof1, proof2],
+        default_duplex_sponge_recorder(),
     );
-    debug(&circuit.airs(), &pk.per_air, &ctxs);
+    debug(&engine, &circuit.airs(), ctxs);
 }
 
 #[test_case(2, 8, 3)]
@@ -435,7 +447,7 @@ fn test_recursion_circuit_two_preprocessed(
 #[test_case(6, 5, 4)]
 fn test_recursion_circuit_multiple_preprocessed(l_skip: usize, n_stack: usize, k_whir: usize) {
     let params = test_system_params_small(l_skip, n_stack, k_whir);
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params);
 
     let height = 1 << 4;
     let sels = (0..height).map(|i| i % 2 == 0).collect_vec();
@@ -452,46 +464,48 @@ fn test_recursion_circuit_multiple_preprocessed(l_skip: usize, n_stack: usize, k
     let (_, proof4) = preprocessed4.keygen_and_prove(&engine);
     let (_, proof5) = preprocessed5.keygen_and_prove(&engine);
 
-    let (circuit, pk) = verifier_circuit_keygen::<5>(&vk);
+    let (circuit, _pk) = verifier_circuit_keygen::<5>(&engine, &vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
+    let ctxs = circuit.generate_proving_ctxs_base(
         &vk,
         vk_commit_data,
         &[proof1, proof2, proof3, proof4, proof5],
+        default_duplex_sponge_recorder(),
     );
-    debug(&circuit.airs(), &pk.per_air, &ctxs);
+    debug(&engine, &circuit.airs(), ctxs);
 }
 
 #[test]
 fn test_recursion_circuit_two_interactions() {
     let params = default_test_params_small();
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params);
 
     let fx = InteractionsFixture11;
     let (vk, proof) = fx.keygen_and_prove(&engine);
 
-    let (circuit, pk) = verifier_circuit_keygen::<2>(&vk);
+    let (circuit, _pk) = verifier_circuit_keygen::<2>(&engine, &vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
+    let ctxs = circuit.generate_proving_ctxs_base(
         &vk,
         vk_commit_data,
         &[proof.clone(), proof],
+        default_duplex_sponge_recorder(),
     );
-    debug(&circuit.airs(), &pk.per_air, &ctxs);
+    debug(&engine, &circuit.airs(), ctxs);
 }
 
 #[test]
 fn test_recursion_circuit_multiple_interactions() {
     let params = default_test_params_small();
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params);
 
     // Generate multiple interaction proofs - they should use the same VK
     let fx = InteractionsFixture11;
     let (vk, proof) = fx.keygen_and_prove(&engine);
 
-    let (circuit, pk) = verifier_circuit_keygen::<5>(&vk);
+    let (circuit, _pk) = verifier_circuit_keygen::<5>(&engine, &vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
+    let ctxs = circuit.generate_proving_ctxs_base(
         &vk,
         vk_commit_data,
         &[
@@ -501,39 +515,41 @@ fn test_recursion_circuit_multiple_interactions() {
             proof.clone(),
             proof,
         ],
+        default_duplex_sponge_recorder(),
     );
-    debug(&circuit.airs(), &pk.per_air, &ctxs);
+    debug(&engine, &circuit.airs(), ctxs);
 }
 
 #[test]
 fn test_recursion_circuit_two_cached() {
     let params = default_test_params_small();
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params.clone());
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params.clone());
 
-    let fx = CachedFixture11::new(params);
+    let fx = CachedFixture11::new(BabyBearPoseidon2Config::default_from_params(params));
     let (vk, proof) = fx.keygen_and_prove(&engine);
 
-    let (circuit, pk) = verifier_circuit_keygen::<5>(&vk);
+    let (circuit, _pk) = verifier_circuit_keygen::<5>(&engine, &vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
+    let ctxs = circuit.generate_proving_ctxs_base(
         &vk,
         vk_commit_data,
         &[proof.clone(), proof],
+        default_duplex_sponge_recorder(),
     );
-    debug(&circuit.airs(), &pk.per_air, &ctxs);
+    debug(&engine, &circuit.airs(), ctxs);
 }
 
 #[test]
 fn test_recursion_circuit_multiple_cached() {
     let params = default_test_params_small();
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params.clone());
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params.clone());
 
-    let fx = CachedFixture11::new(params);
+    let fx = CachedFixture11::new(BabyBearPoseidon2Config::default_from_params(params));
     let (vk, proof) = fx.keygen_and_prove(&engine);
 
-    let (circuit, pk) = verifier_circuit_keygen::<5>(&vk);
+    let (circuit, _pk) = verifier_circuit_keygen::<5>(&engine, &vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
+    let ctxs = circuit.generate_proving_ctxs_base(
         &vk,
         vk_commit_data,
         &[
@@ -543,32 +559,34 @@ fn test_recursion_circuit_multiple_cached() {
             proof.clone(),
             proof,
         ],
+        default_duplex_sponge_recorder(),
     );
-    debug(&circuit.airs(), &pk.per_air, &ctxs);
+    debug(&engine, &circuit.airs(), ctxs);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // NEGATIVE HYPERCUBE TESTS
 ///////////////////////////////////////////////////////////////////////////////
-fn run_negative_hypercube_test<Fx: TestFixture>(
+fn run_negative_hypercube_test<Fx: TestFixture<BabyBearPoseidon2Config>>(
     fx: Fx,
     mut params: SystemParams,
     num_proofs: usize,
 ) {
     params.l_skip += 3;
-    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params);
     assert!(num_proofs <= 5);
 
     let (vk, proof) = fx.keygen_and_prove(&engine);
 
-    let (circuit, pk) = verifier_circuit_keygen::<5>(&vk);
+    let (circuit, _pk) = verifier_circuit_keygen::<5>(&engine, &vk);
     let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
-    let ctxs = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
+    let ctxs = circuit.generate_proving_ctxs_base(
         &vk,
         vk_commit_data,
         &(0..num_proofs).map(|_| proof.clone()).collect_vec(),
+        default_duplex_sponge_recorder(),
     );
-    debug(&circuit.airs(), &pk.per_air, &ctxs);
+    debug(&engine, &circuit.airs(), ctxs);
 }
 
 #[test_case(1)]
@@ -587,7 +605,9 @@ fn test_neg_hypercube_cached(num_proofs: usize) {
     // +3 to params.l_skip
     let mut fx_params = params.clone();
     fx_params.l_skip += 3;
-    let fx = CachedFixture11::new(fx_params.clone());
+    let fx = CachedFixture11::new(BabyBearPoseidon2Config::default_from_params(
+        fx_params.clone(),
+    ));
     run_negative_hypercube_test(fx, params, num_proofs);
 }
 
@@ -620,7 +640,7 @@ fn test_neg_hypercube_mixture(num_proofs: usize) {
     // +3 to params.l_skip
     let mut fx_params = params.clone();
     fx_params.l_skip += 3;
-    let fx = MixtureFixture::standard(3, fx_params);
+    let fx = MixtureFixture::standard(3, BabyBearPoseidon2Config::default_from_params(fx_params));
     run_negative_hypercube_test(fx, params, num_proofs);
 }
 
@@ -629,26 +649,25 @@ fn test_neg_hypercube_mixture(num_proofs: usize) {
 ///////////////////////////////////////////////////////////////////////////////
 #[cfg(feature = "cuda")]
 mod cuda {
-    use cuda_backend_v2::BabyBearPoseidon2GpuEngineV2;
     use itertools::zip_eq;
+    use openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
     use openvm_cuda_common::copy::MemCopyD2H;
-    use openvm_stark_backend::prover::MatrixDimensions;
-    use openvm_stark_sdk::config::setup_tracing_with_log_level;
-    use stark_backend_v2::prover::MatrixView;
+    use openvm_stark_backend::prover::{MatrixDimensions, MatrixView};
+    use openvm_stark_sdk::{config::baby_bear_poseidon2::F, utils::setup_tracing_with_log_level};
     use test_case::test_matrix;
     use tracing::Level;
 
     use super::*;
 
     /// `params` are system parameters of the parent.
-    fn compare_cpu_tracegen_vs_gpu_tracegen<Fx: TestFixture>(
+    fn compare_cpu_tracegen_vs_gpu_tracegen<Fx: TestFixture<BabyBearPoseidon2Config>>(
         fx: Fx,
         params: SystemParams,
         num_proofs: usize,
     ) {
         setup_tracing_with_log_level(Level::INFO);
-        let cpu_engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params.clone());
-        let gpu_engine = BabyBearPoseidon2GpuEngineV2::new(params);
+        let cpu_engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params.clone());
+        let gpu_engine = BabyBearPoseidon2GpuEngine::new(params);
         let (pk, vk) = fx.keygen(&cpu_engine);
         assert!(num_proofs <= 5);
         let proofs = (0..num_proofs)
@@ -663,15 +682,17 @@ mod cuda {
 
         let vk_commit_data_cpu = circuit.commit_child_vk(&cpu_engine, &vk);
         let vk_commit_data_gpu = circuit.commit_child_vk(&gpu_engine, &vk);
-        let cpu_ctx = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
+        let cpu_ctx = circuit.generate_proving_ctxs_base(
             &vk,
             vk_commit_data_cpu,
             &proofs,
+            default_duplex_sponge_recorder(),
         );
-        let gpu_ctx = circuit.generate_proving_ctxs_base::<DuplexSpongeRecorder>(
+        let gpu_ctx = circuit.generate_proving_ctxs_base(
             &vk,
             vk_commit_data_gpu,
             &proofs,
+            default_duplex_sponge_recorder(),
         );
 
         #[cfg(feature = "touchemall")]
@@ -697,11 +718,9 @@ mod cuda {
         }
 
         const POSEIDON2_AIR_ID: usize = 14;
-        assert!(
-            circuit.airs()[POSEIDON2_AIR_ID]
-                .name()
-                .starts_with("Poseidon2Air")
-        );
+        assert!(circuit.airs()[POSEIDON2_AIR_ID]
+            .name()
+            .starts_with("Poseidon2Air"));
 
         let non_deterministic_air_idxs = [
             POSEIDON2_AIR_ID,
@@ -782,7 +801,7 @@ mod cuda {
     )]
     fn test_cuda_tracegen_cached(l_skip: usize, n_stack: usize, k_whir: usize, num_proofs: usize) {
         let params = test_system_params_small(l_skip, n_stack, k_whir);
-        let fx = CachedFixture11::new(params.clone());
+        let fx = CachedFixture11::new(BabyBearPoseidon2Config::default_from_params(params.clone()));
         compare_cpu_tracegen_vs_gpu_tracegen(fx, params, num_proofs);
     }
 
@@ -844,7 +863,10 @@ mod cuda {
     ) {
         let n_stack = 12 - l_skip;
         let params = test_system_params_small(l_skip, n_stack, k_whir);
-        let fx = MixtureFixture::standard(log_trace_degree, params.clone());
+        let fx = MixtureFixture::standard(
+            log_trace_degree,
+            BabyBearPoseidon2Config::default_from_params(params.clone()),
+        );
         compare_cpu_tracegen_vs_gpu_tracegen(fx, params, num_proofs);
     }
 }

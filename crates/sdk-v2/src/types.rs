@@ -6,13 +6,13 @@ use openvm::platform::memory::MEM_SIZE;
 use openvm_circuit::{
     arch::instructions::exe::VmExe, system::memory::merkle::public_values::UserPublicValuesProof,
 };
-use openvm_transpiler::elf::Elf;
-use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
-use stark_backend_v2::{
+use openvm_stark_backend::{
     codec::{Decode, Encode},
     proof::Proof,
 };
+use openvm_transpiler::elf::Elf;
+use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 use verify_stark::NonRootStarkProof;
 
 use crate::OPENVM_VERSION;
@@ -54,7 +54,11 @@ impl VersionedNonRootStarkProof {
         Ok(Self {
             version: format!("v{}", OPENVM_VERSION),
             proof: proof.inner.encode_to_vec()?,
-            user_pvs_proof: proof.user_pvs_proof.encode_to_vec()?,
+            user_pvs_proof: {
+                let mut buf = Vec::new();
+                proof.user_pvs_proof.encode::<crate::SC, _>(&mut buf)?;
+                buf
+            },
         })
     }
 }
@@ -68,8 +72,10 @@ impl TryFrom<VersionedNonRootStarkProof> for NonRootStarkProof {
             ..
         } = proof;
         Ok(Self {
-            inner: Proof::decode_from_bytes(&proof)?,
-            user_pvs_proof: UserPublicValuesProof::decode_from_bytes(&user_pvs_proof)?,
+            inner: Proof::<crate::SC>::decode_from_bytes(&proof)?,
+            user_pvs_proof: UserPublicValuesProof::decode::<crate::SC, _>(
+                &mut std::io::Cursor::new(&user_pvs_proof),
+            )?,
         })
     }
 }

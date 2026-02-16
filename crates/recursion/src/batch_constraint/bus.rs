@@ -1,5 +1,5 @@
+use openvm_stark_sdk::config::baby_bear_poseidon2::D_EF;
 use p3_field::PrimeCharacteristicRing;
-use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::define_typed_per_proof_permutation_bus;

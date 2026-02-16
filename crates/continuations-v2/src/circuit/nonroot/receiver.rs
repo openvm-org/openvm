@@ -2,21 +2,19 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    proof::Proof,
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::PrimeCharacteristicRing;
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use recursion_circuit::bus::{PublicValuesBus, PublicValuesBusMessage};
-use stark_backend_v2::{
-    F,
-    proof::Proof,
-    prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
-};
 use stark_recursion_circuit_derive::AlignedBorrow;
 use verify_stark::pvs::VERIFIER_PVS_AIR_ID;
 
-use crate::circuit::{CONSTRAINT_EVAL_AIR_ID, nonroot::app::*};
+use crate::circuit::{nonroot::app::*, CONSTRAINT_EVAL_AIR_ID};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -55,9 +53,9 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UserPvsReceiverAir {
 }
 
 pub fn generate_proving_ctx(
-    proofs: &[Proof],
+    proofs: &[Proof<BabyBearPoseidon2Config>],
     child_is_app: bool,
-) -> AirProvingContextV2<CpuBackendV2> {
+) -> AirProvingContext<CpuBackend<BabyBearPoseidon2Config>> {
     const APP_RESERVED_IDX: [usize; 3] = [PROGRAM_AIR_ID, CONNECTOR_AIR_ID, MERKLE_AIR_ID];
     const VERIFIER_RESERVED_IDX: [usize; 2] = [VERIFIER_PVS_AIR_ID, CONSTRAINT_EVAL_AIR_ID];
 
@@ -103,7 +101,7 @@ pub fn generate_proving_ctx(
         }
     }
 
-    AirProvingContextV2::simple_no_pis(ColMajorMatrix::from_row_major(&RowMajorMatrix::new(
+    AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&RowMajorMatrix::new(
         trace, width,
     )))
 }

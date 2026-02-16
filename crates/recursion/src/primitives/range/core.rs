@@ -3,13 +3,12 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use itertools::Itertools;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::PrimeCharacteristicRing;
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::F;
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::primitives::bus::{RangeCheckerBus, RangeCheckerBusMessage};

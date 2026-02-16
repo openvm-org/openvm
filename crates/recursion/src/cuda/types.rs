@@ -1,4 +1,4 @@
-use stark_backend_v2::F;
+use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 
 #[repr(C)]
 #[derive(Debug, Default)]
