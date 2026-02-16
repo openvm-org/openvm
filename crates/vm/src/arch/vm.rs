@@ -1547,12 +1547,9 @@ mod vm_metrics {
             for (pk, height) in zip(&self.pk.per_air, heights.iter()) {
                 let width = &pk.vk.params.width;
                 main_cells_used += width.main_width() * *height;
-                total_cells_used +=
-                    width.total_width(
-                        <<E::SC as StarkProtocolConfig>::Challenge as BasedVectorSpace<
-                            Val<E::SC>,
-                        >>::DIMENSION,
-                    ) * *height;
+                total_cells_used += width.total_width(
+                    <<E::SC as StarkProtocolConfig>::EF as BasedVectorSpace<Val<E::SC>>>::DIMENSION,
+                ) * *height;
             }
             tracing::debug!(?heights);
             tracing::info!(main_cells_used, total_cells_used);

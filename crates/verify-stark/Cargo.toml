@@ -19,5 +19,4 @@ thiserror.workspace = true
 zstd.workspace = true
 
 [features]
-default = ["parallel"]
-parallel = ["openvm-stark-backend/parallel"]
+default = []
