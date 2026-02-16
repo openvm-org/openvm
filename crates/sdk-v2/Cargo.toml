@@ -10,16 +10,14 @@ license.workspace = true
 [dependencies]
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true }
+openvm-cuda-backend = { workspace = true, optional = true }
 
 openvm-build = { workspace = true }
 openvm-circuit = { workspace = true }
 openvm-transpiler = { workspace = true }
 openvm = { workspace = true }
 
-cuda-backend-v2 = { workspace = true, optional = true }
 openvm-sdk-config = { workspace = true }
-
-stark-backend-v2 = { workspace = true }
 continuations-v2 = { workspace = true }
 verify-stark = { workspace = true }
 
@@ -75,7 +73,6 @@ jemalloc = ["openvm-circuit/jemalloc", "openvm-sdk-config/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
 
 cuda = [
-    "dep:cuda-backend-v2",
     "openvm-circuit/cuda",
     "openvm-sdk-config/cuda",
     "continuations-v2/cuda",

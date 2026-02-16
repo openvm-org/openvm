@@ -3,13 +3,12 @@ name = "continuations-v2"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-description = "Continuation AIRs and utilities for v2"
+description = "Continuation AIRs and utilities"
 
 [dependencies]
 p3-air = { workspace = true }
 p3-field = { workspace = true }
 p3-matrix = { workspace = true }
-stark-backend-v2 = { workspace = true }
 recursion-circuit = { workspace = true }
 stark-recursion-circuit-derive = { workspace = true }
 verify-stark = { workspace = true }
@@ -28,10 +27,8 @@ num-bigint.workspace = true
 
 openvm-cuda-common = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
-cuda-backend-v2 = { workspace = true, optional = true }
 
 [dev-dependencies]
-stark-backend-v2 = { workspace = true, features = ["test-utils"] }
 openvm-rv32im-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32im-transpiler = { workspace = true }
 openvm-toolchain-tests = { workspace = true }
@@ -43,14 +40,13 @@ openvm-cuda-builder = { workspace = true, optional = true }
 
 [features]
 default = ["parallel"]
-parallel = ["stark-backend-v2/parallel", "recursion-circuit/parallel"]
+parallel = ["openvm-circuit/parallel", "recursion-circuit/parallel"]
 metrics = ["openvm-circuit/metrics"]
 
 cuda = [
     "dep:openvm-cuda-builder",
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
-    "dep:cuda-backend-v2",
     "openvm-circuit-primitives/cuda",
     "openvm-circuit/cuda",
     "openvm-rv32im-circuit/cuda",

@@ -6,9 +6,7 @@ edition.workspace = true
 
 [dependencies]
 openvm-stark-backend = { workspace = true }
-stark-backend-v2 = { workspace = true }
 openvm-cuda-backend = { workspace = true, optional = true }
-cuda-backend-v2 = { workspace = true, optional = true }
 
 openvm-algebra-circuit = { workspace = true }
 openvm-algebra-transpiler = { workspace = true }
@@ -37,7 +35,6 @@ cfg-if.workspace = true
 [features]
 cuda = [
     "dep:openvm-cuda-backend",
-    "dep:cuda-backend-v2",
     "openvm-circuit/cuda",
     "openvm-algebra-circuit/cuda",
     "openvm-bigint-circuit/cuda",
