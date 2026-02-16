@@ -270,6 +270,10 @@ pub struct StackingPreflight {
     pub post_tidx: usize,
     pub univariate_poly_rand_eval: EF,
     pub stacking_batching_challenge: EF,
+    /// PoW witness for μ batching challenge.
+    pub mu_pow_witness: F,
+    /// PoW sample for μ batching challenge.
+    pub mu_pow_sample: F,
     pub lambda: EF,
     pub sumcheck_rnd: Vec<EF>,
 }
