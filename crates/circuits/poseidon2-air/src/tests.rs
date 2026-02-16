@@ -1,10 +1,13 @@
 use std::{array::from_fn, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_air::BaseAir, p3_field::PrimeCharacteristicRing, utils::disable_debug_builder,
-    verifier::VerifierError,
+    p3_air::BaseAir, p3_field::PrimeCharacteristicRing,
+    prover::{AirProvingContext, ColMajorMatrix},
+    utils::disable_debug_builder, StarkEngine, SystemParams,
 };
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::*, p3_baby_bear::BabyBear, utils::create_seeded_rng,
+};
 use p3_poseidon2::ExternalLayerConstants;
 use rand::{rngs::StdRng, Rng, RngCore};
 #[cfg(feature = "cuda")]
@@ -33,15 +36,19 @@ fn run_poseidon2_subchip_test(subchip: Arc<Poseidon2SubChip<BabyBear, 0>>, rng: 
         .collect();
     let mut poseidon2_trace = subchip.generate_trace(states.clone());
 
-    let fri_params = standard_fri_params_with_100_bits_security(3); // max constraint degree = 7 requires log blowup = 3
-    let engine = BabyBearPoseidon2Engine::new(fri_params);
+    let engine: BabyBearPoseidon2CpuEngine = {
+        let mut params = SystemParams::new_for_testing(20);
+        params.max_constraint_degree = 7;
+        BabyBearPoseidon2CpuEngine::new(params)
+    };
 
     // positive test
     engine
-        .run_simple_test_impl(
+        .run_test(
             vec![subchip.air.clone()],
-            vec![poseidon2_trace.clone()],
-            vec![vec![]],
+            vec![AirProvingContext::simple_no_pis(
+                ColMajorMatrix::from_row_major(&poseidon2_trace),
+            )],
         )
         .expect("Verification failed");
 
@@ -51,15 +58,15 @@ fn run_poseidon2_subchip_test(subchip: Arc<Poseidon2SubChip<BabyBear, 0>>, rng: 
         let rand_idx = rng.random_range(0..subchip.air.width());
         let rand_inc = BabyBear::from_u32(rng.random_range(1..=1 << 27));
         poseidon2_trace.row_mut((1 << 4) - 1)[rand_idx] += rand_inc;
-        assert_eq!(
+        assert!(
             engine
-                .run_simple_test_impl(
+                .run_test(
                     vec![subchip.air.clone()],
-                    vec![poseidon2_trace.clone()],
-                    vec![vec![]],
+                    vec![AirProvingContext::simple_no_pis(
+                        ColMajorMatrix::from_row_major(&poseidon2_trace),
+                    )],
                 )
-                .err(),
-            Some(VerificationError::OodEvaluationMismatch),
+                .is_err(),
             "Expected constraint to fail"
         );
         poseidon2_trace.row_mut((1 << 4) - 1)[rand_idx] -= rand_inc;

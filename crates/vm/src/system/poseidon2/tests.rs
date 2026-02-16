@@ -1,14 +1,15 @@
+use std::sync::Arc;
+
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     interaction::LookupBus,
     p3_field::{PrimeCharacteristicRing, PrimeField32},
+    test_utils::dummy_airs::interaction::dummy_interaction_air::{
+        DummyInteractionChip, DummyInteractionData,
+    },
     AirRef,
 };
-use openvm_stark_sdk::{
-    dummy_airs::interaction::dummy_interaction_air::{DummyInteractionChip, DummyInteractionData},
-    p3_baby_bear::BabyBear,
-    utils::create_seeded_rng,
-};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::RngCore;
 
 use crate::{
@@ -77,11 +78,13 @@ fn poseidon2_periphery_direct_test() {
 
     // engine generation
     let tester = VmChipTestBuilder::default();
-    let tester = tester
+    let dummy_ctx = dummy_interaction_chip.generate_proving_ctx();
+    let dummy_air = Arc::new(dummy_interaction_chip.air) as AirRef<TestSC>;
+    let mut tester = tester
         .build()
-        .load_periphery((dummy_interaction_chip.air, dummy_interaction_chip))
         .load_periphery_ref((air, chip))
         .finalize();
+    tester.air_ctxs.push((dummy_air, dummy_ctx));
     tester.simple_test().expect("Verification failed");
 }
 
@@ -131,9 +134,11 @@ fn poseidon2_periphery_duplicate_hashes_test() {
 
     // engine generation
     let tester = VmChipTestBuilder::default();
-    tester
+    let dummy_ctx = dummy_interaction_chip.generate_proving_ctx();
+    let dummy_air = Arc::new(dummy_interaction_chip.air) as AirRef<TestSC>;
+    let mut tester = tester
         .build()
         .load_periphery_ref((air, chip))
-        .load_periphery((dummy_interaction_chip.air, dummy_interaction_chip))
         .finalize();
+    tester.air_ctxs.push((dummy_air, dummy_ctx));
 }

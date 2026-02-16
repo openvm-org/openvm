@@ -10,20 +10,17 @@ use openvm_native_compiler::{
     FieldArithmeticOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*, NativeLoadStoreOpcode::*,
 };
 use openvm_rv32im_transpiler::BranchEqualOpcode::*;
+use openvm_circuit_primitives::Chip;
 use openvm_stark_backend::{
+    any_air_arc_vec,
     p3_field::PrimeCharacteristicRing,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{AirProvingContext, ColMajorMatrix, MatrixDimensions},
-    Chip, StarkEngine,
+    test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
+    StarkEngine,
 };
 use openvm_stark_sdk::{
-    any_rap_arc_vec,
-    config::{
-        baby_bear_poseidon2::BabyBearPoseidon2Config,
-        baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig,
-    },
-    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
-    p3_baby_bear::BabyBear,
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
 };
 use serde::{de::DeserializeOwned, Serialize};
 use static_assertions::assert_impl_all;
@@ -35,7 +32,6 @@ use crate::{
 };
 
 assert_impl_all!(VmCommittedExe<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
-assert_impl_all!(VmCommittedExe<BabyBearPoseidon2RootConfig>: Serialize, DeserializeOwned);
 
 fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     let mut execution_frequencies = vec![0; program.len()];
@@ -98,7 +94,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
 
     engine
         .run_test(
-            any_rap_arc_vec!(program_air, counter_air),
+            any_air_arc_vec!(program_air, counter_air),
             vec![ctx, AirProvingContext::simple_no_pis(counter_trace)],
         )
         .expect("Verification failed");
@@ -233,7 +229,7 @@ fn test_program_negative() {
 
     engine
         .run_test(
-            any_rap_arc_vec!(program_air, counter_air),
+            any_air_arc_vec!(program_air, counter_air),
             vec![ctx, AirProvingContext::simple_no_pis(counter_trace)],
         )
         .expect("Verification failed");

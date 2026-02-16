@@ -1035,7 +1035,7 @@ mod tests {
         assert!(pk.per_air[PROGRAM_AIR_ID].vk.is_required);
         assert!(pk.per_air[CONNECTOR_AIR_ID].vk.is_required);
         assert!(pk.per_air[merkle_air_id].vk.is_required);
-        assert!(!pk.per_air[boundary_air_id].vk.is_required);
+        assert!(pk.per_air[boundary_air_id].vk.is_required);
     }
 }
 

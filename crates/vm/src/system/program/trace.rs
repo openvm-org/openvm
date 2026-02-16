@@ -62,7 +62,7 @@ impl<SC: StarkProtocolConfig> VmCommittedExe<SC> {
             .commit(&[&ColMajorMatrix::from_row_major(&trace)]);
         Self {
             exe: Arc::new(exe),
-            program_commitment: commit.into(),
+            program_commitment: commit,
             trace: Arc::new(trace),
             prover_data: Arc::new(prover_data),
         }

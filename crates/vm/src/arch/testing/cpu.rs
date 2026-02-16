@@ -14,7 +14,7 @@ use openvm_stark_backend::{
     p3_util::log2_strict_usize,
     prover::{AirProvingContext, ColMajorMatrix, CpuBackend, StridedColMajorMatrixView},
     verifier::VerifierError,
-    AirRef, AnyAir, StarkEngine, StarkProtocolConfig, Val, VerificationData,
+    AirRef, AnyAir, StarkEngine, StarkProtocolConfig, SystemParams, Val, VerificationData,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
@@ -553,6 +553,18 @@ impl VmChipTester<BabyBearPoseidon2Config> {
         assert!(self.memory.is_none(), "Memory must be finalized");
         let (airs, ctxs): (Vec<_>, Vec<_>) = self.air_ctxs.into_iter().unzip();
         test_cpu_engine().run_test(airs, ctxs)
+    }
+
+    pub fn simple_test_with_params(
+        self,
+        params: SystemParams,
+    ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerifierError<baby_bear_poseidon2::EF>>
+    {
+        assert!(self.memory.is_none(), "Memory must be finalized");
+        let (airs, ctxs): (Vec<_>, Vec<_>) = self.air_ctxs.into_iter().unzip();
+        let engine: baby_bear_poseidon2::BabyBearPoseidon2CpuEngine =
+            baby_bear_poseidon2::BabyBearPoseidon2CpuEngine::new(params);
+        engine.run_test(airs, ctxs)
     }
 
     pub fn simple_test_with_expected_error(

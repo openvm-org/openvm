@@ -1,16 +1,17 @@
 use std::{collections::HashSet, iter, sync::Arc};
 
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+use openvm_circuit_primitives::Chip;
 use openvm_stark_backend::{
     interaction::BusIndex,
     p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
-    prover::{AirProvingContext, CpuBackend},
-    AirRef, Chip, StarkEngine,
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
+    AirRef, StarkEngine,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
-    dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, p3_baby_bear::BabyBear,
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };
 use rand::Rng;
@@ -72,7 +73,7 @@ fn boundary_air_test() {
     let init_memory_dummy_air = DummyInteractionAir::new(4, false, MEMORY_BUS);
     let final_memory_dummy_air = DummyInteractionAir::new(4, true, MEMORY_BUS);
 
-    let init_memory_trace = Arc::new(RowMajorMatrix::new(
+    let init_memory_trace = ColMajorMatrix::from_row_major(&RowMajorMatrix::new(
         distinct_addresses
             .iter()
             .flat_map(|(addr_space, pointer)| {
@@ -89,7 +90,7 @@ fn boundary_air_test() {
         5,
     ));
 
-    let final_memory_trace = Arc::new(RowMajorMatrix::new(
+    let final_memory_trace = ColMajorMatrix::from_row_major(&RowMajorMatrix::new(
         distinct_addresses
             .iter()
             .flat_map(|(addr_space, pointer)| {
@@ -117,7 +118,7 @@ fn boundary_air_test() {
         boundary_chip.generate_proving_ctx(());
     // test trace height override
     {
-        let overridden_height = boundary_ctx.main_trace_height() * 2;
+        let overridden_height = boundary_ctx.height() * 2;
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
         let mut boundary_chip =
             VolatileBoundaryChip::new(memory_bus, 2, LIMB_BITS, range_checker.clone());
@@ -126,7 +127,7 @@ fn boundary_air_test() {
         let boundary_ctx: AirProvingContext<CpuBackend<BabyBearPoseidon2Config>> =
             boundary_chip.generate_proving_ctx(());
         assert_eq!(
-            boundary_ctx.main_trace_height(),
+            boundary_ctx.height(),
             overridden_height.next_power_of_two()
         );
     }
@@ -139,15 +140,12 @@ fn boundary_air_test() {
                 Arc::new(init_memory_dummy_air),
                 Arc::new(final_memory_dummy_air),
             ],
-            [
+            vec![
                 boundary_ctx,
                 range_checker.generate_proving_ctx(()),
                 AirProvingContext::simple_no_pis(init_memory_trace),
                 AirProvingContext::simple_no_pis(final_memory_trace),
-            ]
-            .map(AirProvingContext::from_v1_no_cached)
-            .into_iter()
-            .collect(),
+            ],
         )
         .expect("Verification failed");
 }

@@ -6,10 +6,12 @@ use openvm_circuit_primitives::{bigint::utils::*, TraceSubRowGenerator};
 use openvm_stark_backend::{
     p3_air::BaseAir, p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
 };
-use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
+use openvm_stark_backend::{
+    any_air_arc_vec,
+    prover::{AirProvingContext, ColMajorMatrix},
+    StarkEngine, SystemParams,
 };
+use openvm_stark_sdk::{config::baby_bear_poseidon2::*, p3_baby_bear::BabyBear};
 
 use crate::{
     test_utils::*, utils::biguint_to_limbs_vec, ExprBuilder, FieldExpr, FieldExprCols,
@@ -91,11 +93,15 @@ fn verify_stark_with_traces(
 ) {
     let trace_matrix = RowMajorMatrix::new(trace, width);
     let range_trace = range_checker.generate_trace();
-    BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-        any_rap_arc_vec![expr, range_checker.air],
-        vec![trace_matrix, range_trace],
-    )
-    .expect("Verification failed");
+    let engine: BabyBearPoseidon2CpuEngine =
+        BabyBearPoseidon2CpuEngine::new(SystemParams::new_for_testing(20));
+    let ctxs = vec![
+        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace_matrix)),
+        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&range_trace)),
+    ];
+    engine
+        .run_test(any_air_arc_vec![expr, range_checker.air], ctxs)
+        .expect("Verification failed");
 }
 
 fn extract_and_verify_result(

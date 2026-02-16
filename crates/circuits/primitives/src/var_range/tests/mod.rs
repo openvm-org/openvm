@@ -11,6 +11,8 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::utils::create_seeded_rng;
 use rand::Rng;
+#[cfg(not(feature = "cuda"))]
+use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 #[cfg(feature = "cuda")]
 use {
     crate::{

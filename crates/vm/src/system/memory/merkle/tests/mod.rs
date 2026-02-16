@@ -5,11 +5,14 @@ use std::{
     sync::Arc,
 };
 
+use openvm_stark_backend::prover::StridedColMajorMatrixView;
+
 use openvm_stark_backend::{
     interaction::{PermutationCheckBus, PermutationInteractionType},
     p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
     prover::{AirProvingContext, ColMajorMatrix},
+    test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     StarkEngine,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
@@ -169,9 +172,9 @@ fn test(
                 Arc::new(hash_test_chip.air()),
             ],
             vec![
-                AirProvingContext::from_v1_no_cached(chip_api),
+                chip_api,
                 dummy_interaction_api,
-                AirProvingContext::from_v1_no_cached(hash_test_chip.generate_proving_ctx()),
+                hash_test_chip.generate_proving_ctx(),
             ],
         )
         .expect("Verification failed");
@@ -318,10 +321,7 @@ fn expand_test_no_accesses() {
     test_cpu_engine()
         .run_test(
             vec![Arc::new(chip.air), Arc::new(hash_test_chip.air())],
-            [trace, hash_test_chip.generate_proving_ctx()]
-                .map(AirProvingContext::from_v1_no_cached)
-                .into_iter()
-                .collect(),
+            vec![trace, hash_test_chip.generate_proving_ctx()],
         )
         .expect("Empty touched memory doesn't work");
 }
@@ -369,7 +369,8 @@ fn expand_test_negative() {
     chip.finalize(&memory, &BTreeMap::new(), &hash_test_chip);
     let mut chip_ctx = chip.generate_proving_ctx();
     {
-        let mut trace = (*chip_ctx.clone().common_main.unwrap()).clone();
+        let mut trace = StridedColMajorMatrixView::from(chip_ctx.common_main.as_view())
+            .to_row_major_matrix();
         for row in trace.rows_mut() {
             let row: &mut MemoryMerkleCols<_, CHUNK> = row.borrow_mut();
             if row.expand_direction == BabyBear::NEG_ONE {
@@ -377,12 +378,13 @@ fn expand_test_negative() {
                 row.right_direction_different = BabyBear::ZERO;
             }
         }
-        chip_ctx.common_main.replace(Arc::new(trace));
+        chip_ctx.common_main = ColMajorMatrix::from_row_major(&trace);
     }
 
-    BabyBearPoseidon2Engine::run_test_fast(
-        vec![Arc::new(chip.air), Arc::new(hash_test_chip.air())],
-        vec![chip_ctx, hash_test_chip.generate_proving_ctx()],
-    )
-    .expect("We tinkered with the trace and now it doesn't pass");
+    test_cpu_engine()
+        .run_test(
+            vec![Arc::new(chip.air), Arc::new(hash_test_chip.air())],
+            vec![chip_ctx, hash_test_chip.generate_proving_ctx()],
+        )
+        .expect("We tinkered with the trace and now it doesn't pass");
 }
