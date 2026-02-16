@@ -142,6 +142,7 @@ impl WhirModule {
         ts: &mut TS,
     ) {
         let WhirProof {
+            mu_pow_witness: _, // Handled in stacking module preflight
             whir_sumcheck_polys,
             codeword_commits,
             ood_values,
@@ -152,7 +153,6 @@ impl WhirModule {
             folding_pow_witnesses,
             query_phase_pow_witnesses,
             final_poly,
-            mu_pow_witness,
         } = &proof.whir_proof;
 
         let &SystemParams {
@@ -513,9 +513,9 @@ impl WhirModule {
         let WhirConfig {
             k: k_whir,
             rounds: _,
+            mu_pow_bits,
             query_phase_pow_bits,
             folding_pow_bits,
-            mu_pow_bits,
         } = whir;
         let num_queries_per_round = num_queries_per_round(&child_vk.inner.params);
         let num_initial_queries = *num_queries_per_round.first().unwrap_or(&0);
@@ -553,6 +553,13 @@ impl WhirModule {
         let mut total_commits = 0;
 
         for (proof, preflight) in zip(proofs, preflights) {
+            // μ PoW lookup (from stacking module)
+            exp_bits_len_gen.add_requests(std::iter::once((
+                F::GENERATOR,
+                preflight.stacking.mu_pow_sample,
+                *mu_pow_bits,
+            )));
+
             exp_bits_len_gen.add_requests(
                 preflight
                     .whir
