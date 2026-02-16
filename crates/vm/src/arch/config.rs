@@ -12,12 +12,9 @@ use openvm_instructions::{
 };
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    p3_field::Field,
-    p3_util::log2_strict_usize,
+    p3_field::Field, p3_util::log2_strict_usize, StarkEngine, StarkProtocolConfig, Val,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use stark_backend_v2::StarkEngineV2 as StarkEngine;
 
 use super::{AnyEnum, VmChipComplex, CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID};
 use crate::{
@@ -67,7 +64,7 @@ pub trait VmConfig<SC>:
     + AsRef<SystemConfig>
     + AsMut<SystemConfig>
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
 {
 }
 
@@ -78,7 +75,7 @@ pub trait VmExecutionConfig<F> {
         -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
 }
 
-pub trait VmCircuitConfig<SC: StarkGenericConfig> {
+pub trait VmCircuitConfig<SC: StarkProtocolConfig> {
     fn create_airs(&self) -> Result<AirInventory<SC>, AirInventoryError>;
 }
 
@@ -104,7 +101,7 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
 
 impl<SC, VC> VmConfig<SC> for VC
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     VC: Clone
         + Serialize
         + DeserializeOwned

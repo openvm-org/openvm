@@ -3,7 +3,7 @@ use std::sync::Arc;
 use openvm_circuit::arch::{
     instructions::exe::VmExe, VirtualMachine, VirtualMachineError, VmBuilder, VmInstance,
 };
-use openvm_stark_backend::{config::Val, prover::hal::DeviceDataTransporter};
+use openvm_stark_backend::{prover::DeviceDataTransporter, Val};
 use openvm_stark_sdk::engine::StarkFriEngine;
 
 use crate::prover::vm::types::VmProvingKey;

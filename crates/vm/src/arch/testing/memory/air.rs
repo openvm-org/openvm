@@ -1,14 +1,13 @@
-use std::{mem::size_of, sync::Arc};
+use std::mem::size_of;
 
+use openvm_circuit_primitives::Chip;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
     p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::{cpu::CpuBackend, types::AirProvingContext},
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 
 use crate::system::memory::{offline_checker::MemoryBus, MemoryAddress};
@@ -125,29 +124,18 @@ impl<F: PrimeField32> MemoryDummyChip<F> {
     }
 }
 
-impl<SC: StarkGenericConfig, RA> Chip<RA, CpuBackend<SC>> for MemoryDummyChip<Val<SC>>
+impl<SC: StarkProtocolConfig, RA> Chip<RA, CpuBackend<SC>> for MemoryDummyChip<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
-        let height = self.current_trace_height().next_power_of_two();
-        let width = self.trace_width();
+        let width = BaseAir::<Val<SC>>::width(&self.air);
+        let height = (self.trace.len() / width).next_power_of_two();
         let mut trace = self.trace.clone();
         trace.resize(height * width, Val::<SC>::ZERO);
 
-        let trace = Arc::new(RowMajorMatrix::new(trace, width));
+        let trace_row_maj = RowMajorMatrix::new(trace, width);
+        let trace = ColMajorMatrix::from_row_major(&trace_row_maj);
         AirProvingContext::simple_no_pis(trace)
-    }
-}
-
-impl<F: PrimeField32> ChipUsageGetter for MemoryDummyChip<F> {
-    fn air_name(&self) -> String {
-        format!("MemoryDummyAir<{}>", self.air.block_size)
-    }
-    fn current_trace_height(&self) -> usize {
-        self.trace.len() / self.trace_width()
-    }
-    fn trace_width(&self) -> usize {
-        BaseAir::<F>::width(&self.air)
     }
 }

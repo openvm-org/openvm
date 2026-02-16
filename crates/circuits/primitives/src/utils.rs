@@ -78,3 +78,25 @@ pub fn compose<F: PrimeCharacteristicRing>(a: &[impl Into<F> + Clone], limb_size
         acc + x.clone().into() * F::from_usize(1 << (i * limb_size))
     })
 }
+
+#[cfg(test)]
+pub use test_utils::*;
+#[cfg(test)]
+mod test_utils {
+    #[cfg(feature = "cuda")]
+    use openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
+    use openvm_stark_backend::{test_utils::test_system_params_small, StarkEngine};
+    use openvm_stark_sdk::{config::baby_bear_poseidon2::*, utils::setup_tracing};
+
+    pub fn test_engine_small() -> BabyBearPoseidon2CpuEngine<DuplexSponge> {
+        setup_tracing();
+        // l_skip + n_stack must be >= chip trace heights in tests
+        BabyBearPoseidon2CpuEngine::new(test_system_params_small(3, 9, 3))
+    }
+
+    #[cfg(feature = "cuda")]
+    pub fn test_gpu_engine_small() -> BabyBearPoseidon2GpuEngine {
+        setup_tracing();
+        BabyBearPoseidon2GpuEngine::new(test_system_params_small(4, 12, 4))
+    }
+}

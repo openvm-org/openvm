@@ -8,15 +8,11 @@ use openvm_stark_backend::{
     p3_air::{Air, AirBuilderWithPublicValues},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProvingContext,
-    rap::PartitionedBaseAir,
+    prover::{AirProvingContext, ColMajorMatrix},
     utils::disable_debug_builder,
-    verifier::VerificationError,
-    AirRef,
+    AirRef, PartitionedBaseAir, StarkEngine,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
-    engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
     utils::{create_seeded_rng, to_field_vec},
 };
@@ -37,6 +33,7 @@ use crate::{
             PublicValuesAir, PublicValuesChip, PublicValuesExecutor, PublicValuesFiller,
         },
     },
+    utils::test_cpu_engine,
 };
 #[cfg(feature = "cuda")]
 use crate::{
@@ -221,11 +218,15 @@ fn public_values_happy_path_1() {
     let trace = RowMajorMatrix::new_row(cols.flatten());
     let pvs = to_field_vec(vec![0, 0, 12]);
 
-    BabyBearPoseidon2Engine::run_test_fast(
-        vec![air],
-        vec![AirProvingContext::simple(Arc::new(trace), pvs)],
-    )
-    .expect("Verification failed");
+    test_cpu_engine()
+        .run_test(
+            vec![air],
+            vec![AirProvingContext::simple(
+                ColMajorMatrix::from_row_major(&trace),
+                pvs,
+            )],
+        )
+        .expect("Verification failed");
 }
 
 #[test]
@@ -242,14 +243,15 @@ fn public_values_neg_pv_not_match() {
     let pvs = to_field_vec(vec![0, 0, 56456]);
 
     disable_debug_builder();
-    assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(
+    assert!(test_cpu_engine()
+        .run_test(
             vec![air],
-            vec![AirProvingContext::simple(Arc::new(trace), pvs)]
+            vec![AirProvingContext::simple(
+                ColMajorMatrix::from_row_major(&trace),
+                pvs,
+            )]
         )
-        .err(),
-        Some(VerificationError::OodEvaluationMismatch)
-    );
+        .is_err());
 }
 
 #[test]
@@ -266,14 +268,15 @@ fn public_values_neg_index_out_of_bound() {
     let pvs = to_field_vec(vec![0, 0, 0]);
 
     disable_debug_builder();
-    assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(
+    assert!(test_cpu_engine()
+        .run_test(
             vec![air],
-            vec![AirProvingContext::simple(Arc::new(trace), pvs)]
+            vec![AirProvingContext::simple(
+                ColMajorMatrix::from_row_major(&trace),
+                pvs,
+            )]
         )
-        .err(),
-        Some(VerificationError::OodEvaluationMismatch)
-    );
+        .is_err());
 }
 
 #[test]
@@ -307,14 +310,15 @@ fn public_values_neg_double_publish_impl(actual_pv: u32) {
     let pvs = to_field_vec(vec![0, 0, actual_pv]);
 
     disable_debug_builder();
-    assert_eq!(
-        BabyBearPoseidon2Engine::run_test_fast(
+    assert!(test_cpu_engine()
+        .run_test(
             vec![air],
-            vec![AirProvingContext::simple(Arc::new(trace), pvs)]
+            vec![AirProvingContext::simple(
+                ColMajorMatrix::from_row_major(&trace),
+                pvs,
+            )]
         )
-        .err(),
-        Some(VerificationError::OodEvaluationMismatch)
-    );
+        .is_err());
 }
 
 #[cfg(feature = "cuda")]

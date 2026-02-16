@@ -1,7 +1,7 @@
 use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing},
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    BaseAirWithPublicValues, PartitionedBaseAir,
 };
 use p3_poseidon2_air::{Poseidon2Air, Poseidon2Cols};
 

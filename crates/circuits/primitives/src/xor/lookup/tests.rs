@@ -1,23 +1,20 @@
 use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
-    interaction::BusIndex, p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::*, prover::types::AirProvingContext, utils::disable_debug_builder,
-    AirRef,
+    any_air_arc_vec,
+    interaction::BusIndex,
+    p3_field::PrimeCharacteristicRing,
+    p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*,
+    prover::{AirProvingContext, ColMajorMatrix},
+    test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
+    utils::disable_debug_builder,
+    AirRef, StarkEngine,
 };
-use openvm_stark_sdk::{
-    any_rap_arc_vec, dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
-    p3_baby_bear::BabyBear, utils::create_seeded_rng,
-};
+use openvm_stark_sdk::{config::baby_bear_poseidon2::*, utils::create_seeded_rng};
 use rand::Rng;
-use stark_backend_v2::{
-    poseidon2::sponge::DuplexSponge,
-    prover::AirProvingContextV2,
-    test_utils::{test_engine_small, test_system_params_small},
-    BabyBearPoseidon2CpuEngineV2, StarkEngineV2,
-};
 
-use crate::xor::XorLookupChip;
+use crate::{utils::test_engine_small, xor::XorLookupChip};
 
 const BYTE_XOR_BUS: BusIndex = 10;
 
@@ -69,7 +66,7 @@ fn test_xor_limbs_chip() {
                 4,
             )
         })
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .collect::<Vec<RowMajorMatrix<F>>>();
 
     let xor_trace = xor_chip.generate_trace();
 
@@ -79,15 +76,17 @@ fn test_xor_limbs_chip() {
     }
     all_chips.push(Arc::new(xor_chip.air));
 
-    let all_traces = requesters_traces
+    let all_traces_vec: Vec<_> = requesters_traces
         .into_iter()
         .chain(iter::once(xor_trace))
-        .map(Arc::new)
+        .collect();
+    let all_traces = all_traces_vec
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
         .collect::<Vec<_>>();
 
-    BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(test_system_params_small(3, 9, 3))
+    test_engine_small()
         .run_test(all_chips, all_traces)
         .expect("Verification failed");
 }
@@ -133,7 +132,7 @@ fn negative_test_xor_limbs_chip() {
                     iter::once(count).chain(fields).chain(iter::once(z))
                 }
             })
-            .map(PrimeCharacteristicRing::from_u32)
+            .map(F::from_u32)
             .collect(),
         4,
     );
@@ -141,14 +140,13 @@ fn negative_test_xor_limbs_chip() {
     let xor_trace = xor_chip.generate_trace();
 
     let traces = [requester_trace, xor_trace]
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();
     test_engine_small()
-        .run_test(any_rap_arc_vec![requester, xor_chip.air], traces)
+        .run_test(any_air_arc_vec![requester, xor_chip.air], traces)
         .unwrap();
 }

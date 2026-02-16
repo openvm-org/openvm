@@ -4,27 +4,23 @@ use derive_more::derive::From;
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
 #[cfg(feature = "aot")]
 use openvm_circuit_derive::{AotExecutor, AotMeteredExecutor};
-use openvm_circuit_primitives::var_range::{
-    SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus,
-    VariableRangeCheckerChip,
+use openvm_circuit_primitives::{
+    var_range::{
+        SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus,
+        VariableRangeCheckerChip,
+    },
+    Chip,
 };
 use openvm_instructions::{
     LocalOpcode, PhantomDiscriminant, PublishOpcode, SysPhantom, SystemOpcode,
 };
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     interaction::{LookupBus, PermutationCheckBus},
     p3_field::{Field, PrimeField32},
-    AirRef, Chip as ChipV1,
+    prover::{AirProvingContext, CommittedTraceData, CpuBackend, CpuDevice, ProverBackend},
+    AirRef, StarkEngine, StarkProtocolConfig, Val,
 };
 use rustc_hash::FxHashMap;
-use stark_backend_v2::{
-    prover::{
-        AirProvingContextV2 as AirProvingContext, CommittedTraceDataV2 as CommittedTraceData,
-        CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice, ProverBackendV2 as ProverBackend,
-    },
-    StarkEngineV2 as StarkEngine,
-};
 
 use self::{connector::VmConnectorAir, program::ProgramAir, public_values::PublicValuesAir};
 use crate::{
@@ -167,7 +163,7 @@ pub struct SystemPort {
 }
 
 #[derive(Clone)]
-pub struct SystemAirInventory<SC: StarkGenericConfig> {
+pub struct SystemAirInventory<SC: StarkProtocolConfig> {
     pub program: ProgramAir,
     pub connector: VmConnectorAir,
     pub memory: MemoryAirInventory<SC>,
@@ -176,7 +172,7 @@ pub struct SystemAirInventory<SC: StarkGenericConfig> {
     pub public_values: Option<PublicValuesAir>,
 }
 
-impl<SC: StarkGenericConfig> SystemAirInventory<SC> {
+impl<SC: StarkProtocolConfig> SystemAirInventory<SC> {
     pub fn new(
         config: &SystemConfig,
         port: SystemPort,
@@ -297,7 +293,7 @@ impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
 
 impl<SC> VmCircuitConfig<SC> for SystemConfig
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     Val<SC>: VmField,
 {
     /// Every VM circuit within the OpenVM circuit architecture **must** be initialized from the
@@ -361,7 +357,7 @@ where
 
 /// Base system chips for CPU backend. These chips must exactly correspond to the AIRs in
 /// [SystemAirInventory].
-pub struct SystemChipInventory<SC: StarkGenericConfig>
+pub struct SystemChipInventory<SC: StarkProtocolConfig>
 where
     Val<SC>: VmField,
 {
@@ -374,7 +370,7 @@ where
 
 // Note[jpw]: We could get rid of the `mem_inventory` input because `MemoryController` doesn't need
 // the buses for tracegen. We leave it to use old interfaces.
-impl<SC: StarkGenericConfig> SystemChipInventory<SC>
+impl<SC: StarkProtocolConfig> SystemChipInventory<SC>
 where
     Val<SC>: VmField,
 {
@@ -439,14 +435,13 @@ where
     }
 }
 
-type SC = stark_backend_v2::SC;
-impl<RA> SystemChipComplex<RA, CpuBackend> for SystemChipInventory<SC>
+impl<RA, SC> SystemChipComplex<RA, CpuBackend<SC>> for SystemChipInventory<SC>
 where
     RA: RowMajorMatrixArena<Val<SC>>,
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     Val<SC>: VmField,
 {
-    fn load_program(&mut self, cached_program_trace: CommittedTraceData<CpuBackend>) {
+    fn load_program(&mut self, cached_program_trace: CommittedTraceData<CpuBackend<SC>>) {
         let _ = self.program_chip.cached.replace(cached_program_trace);
     }
 
@@ -459,7 +454,7 @@ where
         &mut self,
         system_records: SystemRecords<Val<SC>>,
         mut record_arenas: Vec<RA>,
-    ) -> Vec<AirProvingContext<CpuBackend>> {
+    ) -> Vec<AirProvingContext<CpuBackend<SC>>> {
         let SystemRecords {
             from_state,
             to_state,
@@ -474,7 +469,7 @@ where
             chip.inner.set_public_values(public_values);
         }
         self.program_chip.filtered_exec_frequencies = filtered_exec_frequencies;
-        let program_ctx = stark_backend_v2::ChipV2::generate_proving_ctx(&self.program_chip, ());
+        let program_ctx = self.program_chip.generate_proving_ctx(());
         self.connector_chip.begin(from_state);
         self.connector_chip.end(to_state, exit_code);
         let connector_ctx = self.connector_chip.generate_proving_ctx(());
@@ -488,15 +483,10 @@ where
             .memory_controller
             .generate_proving_ctx(access_adapter_records, touched_memory);
 
-        [program_ctx]
+        [program_ctx, connector_ctx]
             .into_iter()
-            .chain(
-                [connector_ctx]
-                    .into_iter()
-                    .chain(pv_ctx)
-                    .chain(memory_ctxs)
-                    .map(AirProvingContext::from_v1_no_cached),
-            )
+            .chain(pv_ctx)
+            .chain(memory_ctxs)
             .collect()
     }
 
@@ -512,8 +502,6 @@ where
 
     #[cfg(feature = "metrics")]
     fn finalize_trace_heights(&self, heights: &mut [usize]) {
-        use openvm_stark_backend::ChipUsageGetter;
-
         use crate::system::memory::interface::MemoryInterface;
 
         let boundary_idx = PUBLIC_VALUES_AIR_ID + usize::from(self.public_values_chip.is_some());
@@ -536,15 +524,6 @@ where
                 heights[boundary_idx] = boundary_height;
                 heights[boundary_idx + 1] = merkle_chip.current_height;
                 access_adapter_offset += 1;
-
-                // Poseidon2Periphery height also varies based on memory, so set it now even though
-                // it's not a system chip:
-                let poseidon_chip = self.memory_controller.hasher_chip.as_ref().unwrap();
-                let poseidon_height = poseidon_chip.current_trace_height();
-                // We know the chip insertion index, which starts from *the end* of the the AIR
-                // ordering
-                let poseidon_idx = heights.len() - 1 - POSEIDON2_INSERTION_IDX;
-                heights[poseidon_idx] = poseidon_height;
             }
         }
         let access_heights = &self
@@ -559,21 +538,23 @@ where
 #[derive(Clone)]
 pub struct SystemCpuBuilder;
 
-impl<E> VmBuilder<E> for SystemCpuBuilder
+impl<SC, E> VmBuilder<E> for SystemCpuBuilder
 where
-    E: StarkEngine<PB = CpuBackend, PD = CpuDevice, SC = SC>,
-    Val<E::SC>: VmField,
+    SC: StarkProtocolConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    Val<SC>: VmField,
+    SC::EF: Ord,
 {
     type VmConfig = SystemConfig;
-    type RecordArena = MatrixRecordArena<Val<E::SC>>;
-    type SystemChipInventory = SystemChipInventory<E::SC>;
+    type RecordArena = MatrixRecordArena<Val<SC>>;
+    type SystemChipInventory = SystemChipInventory<SC>;
 
     fn create_chip_complex(
         &self,
         config: &SystemConfig,
-        airs: AirInventory<E::SC>,
+        airs: AirInventory<SC>,
     ) -> Result<
-        VmChipComplex<E::SC, MatrixRecordArena<Val<E::SC>>, CpuBackend, SystemChipInventory<E::SC>>,
+        VmChipComplex<SC, MatrixRecordArena<Val<SC>>, CpuBackend<SC>, SystemChipInventory<SC>>,
         ChipInventoryError,
     > {
         let range_bus = airs.range_checker().bus;
@@ -604,11 +585,11 @@ where
             // ATTENTION: The threshold 7 here must match the one in `new_poseidon2_periphery_air`
             let direct_bus = if config.max_constraint_degree >= 7 {
                 inventory
-                    .next_air::<Poseidon2PeripheryAir<Val<E::SC>, 0>>()?
+                    .next_air::<Poseidon2PeripheryAir<Val<SC>, 0>>()?
                     .bus
             } else {
                 inventory
-                    .next_air::<Poseidon2PeripheryAir<Val<E::SC>, 1>>()?
+                    .next_air::<Poseidon2PeripheryAir<Val<SC>, 1>>()?
                     .bus
             };
             let chip = Arc::new(Poseidon2PeripheryChip::new(
@@ -635,7 +616,7 @@ where
     }
 }
 
-impl<SC: StarkGenericConfig> SystemWithFixedTraceHeights for SystemChipInventory<SC>
+impl<SC: StarkProtocolConfig> SystemWithFixedTraceHeights for SystemChipInventory<SC>
 where
     Val<SC>: VmField,
 {

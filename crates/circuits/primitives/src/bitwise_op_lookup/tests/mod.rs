@@ -2,33 +2,41 @@ use std::{iter, sync::Arc};
 
 use dummy::DummyAir;
 use openvm_stark_backend::{
+    any_air_arc_vec,
     p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
-    prover::types::AirProvingContext,
+    prover::{AirProvingContext, ColMajorMatrix},
     utils::disable_debug_builder,
-    AirRef,
+    AirRef, StarkEngine,
 };
-use openvm_stark_sdk::{any_rap_arc_vec, p3_baby_bear::BabyBear, utils::create_seeded_rng};
+#[cfg(not(feature = "cuda"))]
+use openvm_stark_sdk::config::baby_bear_poseidon2::F;
+use openvm_stark_sdk::utils::create_seeded_rng;
 use rand::Rng;
-use stark_backend_v2::{prover::AirProvingContextV2, test_utils::test_engine_small, StarkEngineV2};
 #[cfg(feature = "cuda")]
 use {
-    crate::bitwise_op_lookup::{BitwiseOperationLookupAir, BitwiseOperationLookupChipGPU},
+    crate::{
+        bitwise_op_lookup::{BitwiseOperationLookupAir, BitwiseOperationLookupChipGPU},
+        utils::test_gpu_engine_small,
+        Chip,
+    },
     dummy::cuda::DummyInteractionChipGPU,
     openvm_cuda_backend::{
         base::DeviceMatrix,
-        engine::GpuBabyBearPoseidon2Engine,
-        types::{F, SC},
+        prelude::{F, SC},
     },
     openvm_cuda_common::copy::MemCopyH2D as _,
-    openvm_stark_backend::{p3_air::BaseAir, prover::types::AirProvingContext, Chip},
-    openvm_stark_sdk::{
-        config::FriParameters, dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
+    openvm_stark_backend::{
+        p3_air::BaseAir,
+        test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     },
 };
 
-use crate::bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip};
+use crate::{
+    bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip},
+    utils::test_engine_small,
+};
 
 mod dummy;
 
@@ -106,14 +114,13 @@ fn test_bitwise_operation_lookup() {
                 4,
             )
         })
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .collect::<Vec<RowMajorMatrix<F>>>();
     traces.push(lookup.generate_trace());
 
     let traces = traces
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()
@@ -129,9 +136,9 @@ fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperation)) {
     list.push(bad_row);
 
     let dummy = DummyAir::new(bus);
-    let chips = any_rap_arc_vec![dummy, lookup.air];
+    let chips = any_air_arc_vec![dummy, lookup.air];
 
-    let traces = vec![
+    let traces = [
         RowMajorMatrix::new(
             list.iter()
                 .flat_map(|&(x, y, z, op)| {
@@ -151,10 +158,9 @@ fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperation)) {
     ];
 
     let traces = traces
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();
@@ -230,9 +236,9 @@ fn test_cuda_bitwise_op_lookup() {
     let bitwise_ctx = bitwise.generate_proving_ctx(());
     let ctxs = vec![dummy_ctx, bitwise_ctx];
 
-    let engine: GpuBabyBearPoseidon2Engine =
-        GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
-    engine.run_test(airs, ctxs).expect("Verification failed");
+    test_gpu_engine_small()
+        .run_test(airs, ctxs)
+        .expect("Verification failed");
 }
 
 #[cfg(feature = "cuda")]
@@ -290,11 +296,11 @@ fn test_cuda_bitwise_op_lookup_hybrid() {
     let dummy_air = DummyInteractionAir::new(4, true, bus.inner.index);
     let cpu_proving_ctx = AirProvingContext {
         cached_mains: vec![],
-        common_main: Some(DeviceMatrix::new(
+        common_main: DeviceMatrix::new(
             Arc::new(cpu_dummy_trace),
             NUM_INPUTS,
             BaseAir::<F>::width(&dummy_air),
-        )),
+        ),
         public_values: vec![],
     };
 
@@ -309,6 +315,7 @@ fn test_cuda_bitwise_op_lookup_hybrid() {
         bitwise.generate_proving_ctx(()),
     ];
 
-    let engine = GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
-    engine.run_test(airs, ctxs).expect("Verification failed");
+    test_gpu_engine_small()
+        .run_test(airs, ctxs)
+        .expect("Verification failed");
 }

@@ -1,7 +1,6 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     cmp::min,
-    sync::Arc,
 };
 
 use itertools::zip_eq;
@@ -11,19 +10,17 @@ use openvm_circuit_primitives::{
     },
     utils::{compose, implies},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    SubAir, TraceSubRowGenerator,
+    Chip, SubAir, TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::{cpu::CpuBackend, types::AirProvingContext},
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 use static_assertions::const_assert;
 use tracing::instrument;
@@ -225,7 +222,7 @@ impl<F: PrimeField32> VolatileBoundaryChip<F> {
     }
 }
 
-impl<RA, SC: StarkGenericConfig> Chip<RA, CpuBackend<SC>> for VolatileBoundaryChip<Val<SC>>
+impl<RA, SC: StarkProtocolConfig> Chip<RA, CpuBackend<SC>> for VolatileBoundaryChip<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
@@ -233,7 +230,7 @@ where
         // Volatile memory requires the starting and final memory to be in equipartition with block
         // size `1`. When block size is `1`, then the `label` is the same as the address
         // pointer.
-        let width = self.trace_width();
+        let width = VolatileBoundaryCols::<Val<SC>>::width();
         let addr_lt_air = &self.air.addr_lt_air;
         // TEMP[jpw]: clone
         let final_memory = self
@@ -307,25 +304,7 @@ where
             );
         }
 
-        let trace = Arc::new(RowMajorMatrix::new(rows, width));
-        AirProvingContext::simple_no_pis(trace)
-    }
-}
-
-impl<F: PrimeField32> ChipUsageGetter for VolatileBoundaryChip<F> {
-    fn air_name(&self) -> String {
-        "Boundary".to_string()
-    }
-
-    fn current_trace_height(&self) -> usize {
-        if let Some(final_memory) = &self.final_memory {
-            final_memory.len()
-        } else {
-            0
-        }
-    }
-
-    fn trace_width(&self) -> usize {
-        VolatileBoundaryCols::<F>::width()
+        let trace = RowMajorMatrix::new(rows, width);
+        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace))
     }
 }

@@ -132,7 +132,7 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
             new_generics.params.push(syn::parse_quote! { R });
             new_generics
                 .params
-                .push(syn::parse_quote! { PB: openvm_stark_backend::prover::hal::ProverBackend });
+                .push(syn::parse_quote! { PB: openvm_stark_backend::prover::ProverBackend });
             let (impl_generics, _, _) = new_generics.split_for_impl();
 
             // Check if the struct has only one unnamed field
@@ -149,10 +149,10 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
             let where_clause = new_generics.make_where_clause();
             where_clause
                 .predicates
-                .push(syn::parse_quote! { #inner_ty: openvm_stark_backend::Chip<R, PB> });
+                .push(syn::parse_quote! { #inner_ty: openvm_circuit::primitives::Chip<R, PB> });
             quote! {
-                impl #impl_generics openvm_stark_backend::Chip<R, PB> for #name #ty_generics #where_clause {
-                    fn generate_proving_ctx(&self, records: R) -> openvm_stark_backend::prover::types::AirProvingContext<PB> {
+                impl #impl_generics openvm_circuit::primitives::Chip<R, PB> for #name #ty_generics #where_clause {
+                    fn generate_proving_ctx(&self, records: R) -> openvm_stark_backend::prover::AirProvingContext<PB> {
                         self.0.generate_proving_ctx(records)
                     }
                 }
@@ -176,10 +176,10 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
                 variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 let generate_proving_ctx_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as openvm_stark_backend::Chip<R, PB>>::generate_proving_ctx(x, records)
+                    #name::#variant_name(x) => <#field_ty as openvm_circuit::primitives::Chip<R, PB>>::generate_proving_ctx(x, records)
                 };
                 let where_predicate =
-                    syn::parse_quote! { #field_ty: openvm_stark_backend::Chip<R, PB> };
+                    syn::parse_quote! { #field_ty: openvm_circuit::primitives::Chip<R, PB> };
                 (generate_proving_ctx_arm, where_predicate)
             }).collect();
 
@@ -189,7 +189,7 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
             new_generics.params.push(syn::parse_quote! { R });
             new_generics
                 .params
-                .push(syn::parse_quote! { PB: openvm_stark_backend::prover::hal::ProverBackend });
+                .push(syn::parse_quote! { PB: openvm_stark_backend::prover::ProverBackend });
             let (impl_generics, _, _) = new_generics.split_for_impl();
 
             // Implement Chip whenever the inner type implements Chip
@@ -231,8 +231,8 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
             }
 
             quote! {
-                impl #impl_generics openvm_stark_backend::Chip<R, PB> for #name #ty_generics #where_clause {
-                    fn generate_proving_ctx(&self, records: R) -> openvm_stark_backend::prover::types::AirProvingContext<PB> {
+                impl #impl_generics openvm_circuit::primitives::Chip<R, PB> for #name #ty_generics #where_clause {
+                    fn generate_proving_ctx(&self, records: R) -> openvm_stark_backend::prover::AirProvingContext<PB> {
                         match self {
                             #(#generate_proving_ctx_arms,)*
                         }
@@ -243,101 +243,6 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
         Data::Union(_) => unimplemented!("Unions are not supported"),
     }
 }
-
-#[proc_macro_derive(ChipUsageGetter)]
-pub fn chip_usage_getter_derive(input: TokenStream) -> TokenStream {
-    let ast: syn::DeriveInput = syn::parse(input).unwrap();
-
-    let name = &ast.ident;
-    let generics = &ast.generics;
-    let (impl_generics, ty_generics, _) = generics.split_for_impl();
-
-    match &ast.data {
-        Data::Struct(inner) => {
-            // Check if the struct has only one unnamed field
-            let inner_ty = match &inner.fields {
-                Fields::Unnamed(fields) => {
-                    if fields.unnamed.len() != 1 {
-                        panic!("Only one unnamed field is supported");
-                    }
-                    fields.unnamed.first().unwrap().ty.clone()
-                }
-                _ => panic!("Only unnamed fields are supported"),
-            };
-            // Implement ChipUsageGetter whenever the inner type implements ChipUsageGetter
-            let mut new_generics = generics.clone();
-            let where_clause = new_generics.make_where_clause();
-            where_clause
-                .predicates
-                .push(syn::parse_quote! { #inner_ty: openvm_stark_backend::ChipUsageGetter });
-            quote! {
-                impl #impl_generics openvm_stark_backend::ChipUsageGetter for #name #ty_generics #where_clause {
-                    fn air_name(&self) -> String {
-                        self.0.air_name()
-                    }
-                    fn constant_trace_height(&self) -> Option<usize> {
-                        self.0.constant_trace_height()
-                    }
-                    fn current_trace_height(&self) -> usize {
-                        self.0.current_trace_height()
-                    }
-                    fn trace_width(&self) -> usize {
-                        self.0.trace_width()
-                    }
-                }
-            }
-            .into()
-        }
-        Data::Enum(e) => {
-            let (air_name_arms, constant_trace_height_arms, current_trace_height_arms, trace_width_arms): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) =
-                multiunzip(e.variants.iter().map(|variant| {
-                    let variant_name = &variant.ident;
-                    let air_name_arm = quote! {
-                    #name::#variant_name(x) => openvm_stark_backend::ChipUsageGetter::air_name(x)
-                };
-                    let constant_trace_height_arm = quote! {
-                    #name::#variant_name(x) => openvm_stark_backend::ChipUsageGetter::constant_trace_height(x)
-                };
-                    let current_trace_height_arm = quote! {
-                    #name::#variant_name(x) => openvm_stark_backend::ChipUsageGetter::current_trace_height(x)
-                };
-                    let trace_width_arm = quote! {
-                    #name::#variant_name(x) => openvm_stark_backend::ChipUsageGetter::trace_width(x)
-                };
-                    (air_name_arm, constant_trace_height_arm, current_trace_height_arm, trace_width_arm)
-                }));
-
-            quote! {
-                impl #impl_generics openvm_stark_backend::ChipUsageGetter for #name #ty_generics {
-                    fn air_name(&self) -> String {
-                        match self {
-                            #(#air_name_arms,)*
-                        }
-                    }
-                    fn constant_trace_height(&self) -> Option<usize> {
-                        match self {
-                            #(#constant_trace_height_arms,)*
-                        }
-                    }
-                    fn current_trace_height(&self) -> usize {
-                        match self {
-                            #(#current_trace_height_arms,)*
-                        }
-                    }
-                    fn trace_width(&self) -> usize {
-                        match self {
-                            #(#trace_width_arms,)*
-                        }
-                    }
-
-                }
-            }
-            .into()
-        }
-        Data::Union(_) => unimplemented!("Unions are not supported"),
-    }
-}
-
 #[proc_macro_derive(BytesStateful)]
 pub fn bytes_stateful_derive(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
