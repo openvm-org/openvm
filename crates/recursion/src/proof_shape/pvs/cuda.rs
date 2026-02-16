@@ -1,7 +1,6 @@
-use cuda_backend_v2::GpuBackendV2;
-use openvm_cuda_backend::base::DeviceMatrix;
+use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend};
 use openvm_cuda_common::memory_manager::MemTracker;
-use stark_backend_v2::prover::AirProvingContextV2;
+use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
     cuda::{preflight::PreflightGpu, proof::ProofGpu},
@@ -11,7 +10,7 @@ use crate::{
 
 pub struct PublicValuesGpuTraceGenerator;
 
-impl ModuleChip<GpuBackendV2> for PublicValuesGpuTraceGenerator {
+impl ModuleChip<GpuBackend> for PublicValuesGpuTraceGenerator {
     type Ctx<'a> = (&'a [ProofGpu], &'a [PreflightGpu]);
 
     #[tracing::instrument(level = "trace", skip_all)]
@@ -19,7 +18,7 @@ impl ModuleChip<GpuBackendV2> for PublicValuesGpuTraceGenerator {
         &self,
         ctx: &Self::Ctx<'_>,
         height: Option<usize>,
-    ) -> Option<AirProvingContextV2<GpuBackendV2>> {
+    ) -> Option<AirProvingContext<GpuBackend>> {
         let (proofs_gpu, preflights_gpu) = ctx;
         let mem = MemTracker::start("tracegen.public_values");
         debug_assert_eq!(proofs_gpu.len(), preflights_gpu.len());
@@ -62,6 +61,6 @@ impl ModuleChip<GpuBackendV2> for PublicValuesGpuTraceGenerator {
             .unwrap();
         }
         mem.emit_metrics();
-        Some(AirProvingContextV2::simple_no_pis(trace))
+        Some(AirProvingContext::simple_no_pis(trace))
     }
 }

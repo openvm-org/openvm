@@ -1,11 +1,11 @@
 use itertools::Itertools;
-use p3_field::PrimeCharacteristicRing;
-use stark_backend_v2::{
-    EF, F,
-    keygen::types::MultiStarkVerifyingKeyV2,
+use openvm_stark_backend::{
+    keygen::types::MultiStarkVerifyingKey,
     poly_common::{eval_eq_mle, eval_eq_prism, eval_in_uni, eval_rot_kernel_prism},
-    proof::{Proof, TraceVData, column_openings_by_rot},
+    proof::{column_openings_by_rot, Proof, TraceVData},
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, EF, F};
+use p3_field::PrimeCharacteristicRing;
 
 pub struct StackedSliceData {
     pub commit_idx: usize,
@@ -17,8 +17,8 @@ pub struct StackedSliceData {
 }
 
 pub fn get_stacked_slice_data(
-    vk: &MultiStarkVerifyingKeyV2,
-    sorted_trace_vdata: &[(usize, TraceVData)],
+    vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+    sorted_trace_vdata: &[(usize, TraceVData<BabyBearPoseidon2Config>)],
 ) -> Vec<StackedSliceData> {
     let mut res = Vec::new();
 
@@ -89,9 +89,9 @@ pub(in crate::stacking) struct ColumnOpeningPair {
 }
 
 pub fn sorted_column_claims(
-    vk: &MultiStarkVerifyingKeyV2,
-    proof: &Proof,
-    sorted_trace_vdata: &[(usize, TraceVData)],
+    vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+    proof: &Proof<BabyBearPoseidon2Config>,
+    sorted_trace_vdata: &[(usize, TraceVData<BabyBearPoseidon2Config>)],
 ) -> Vec<ColumnOpeningPair> {
     let mut ret = Vec::new();
     let column_openings = &proof.batch_constraint_proof.column_openings;
@@ -139,7 +139,7 @@ pub fn sorted_column_claims(
 // Returns (coeff, (eq, k_rot, eq_bits))
 #[allow(clippy::type_complexity)]
 pub fn compute_coefficients(
-    proof: &Proof,
+    proof: &Proof<BabyBearPoseidon2Config>,
     slice_data: &[StackedSliceData],
     u: &[EF],
     r: &[EF],

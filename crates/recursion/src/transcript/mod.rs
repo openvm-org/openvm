@@ -2,28 +2,27 @@ use core::borrow::BorrowMut;
 use std::sync::Arc;
 
 use itertools::Itertools;
-use openvm_poseidon2_air::{POSEIDON2_WIDTH, Poseidon2Config, Poseidon2SubChip};
-use openvm_stark_backend::{AirRef, p3_maybe_rayon::prelude::*};
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip, POSEIDON2_WIDTH};
+use openvm_stark_backend::{
+    keygen::types::MultiStarkVerifyingKey,
+    p3_maybe_rayon::prelude::*,
+    proof::Proof,
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    AirRef, SystemParams,
+};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_perm, BabyBearPoseidon2Config, F};
 use p3_air::BaseAir;
 use p3_baby_bear::Poseidon2BabyBear;
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_symmetric::Permutation;
-use stark_backend_v2::{
-    F, SystemParams,
-    keygen::types::MultiStarkVerifyingKeyV2,
-    poseidon2::{WIDTH, poseidon2_perm},
-    proof::Proof,
-    prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
-};
 use tracing::trace_span;
 
 use crate::{
     system::{AirModule, BusInventory, GlobalCtxCpu, Preflight, TraceGenModule},
     transcript::{
         merkle_verify::{MerkleVerifyAir, MerkleVerifyCols},
-        poseidon2::{CHUNK, Poseidon2Air, Poseidon2Cols},
+        poseidon2::{Poseidon2Air, Poseidon2Cols, CHUNK},
         transcript::{TranscriptAir, TranscriptCols},
     },
 };
@@ -302,19 +301,19 @@ pub(super) struct Poseidon2Count {
     pub compress: u32,
 }
 
-impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
+impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for TranscriptModule {
     // External Poseidon2 compress inputs
-    type ModuleSpecificCtx = Vec<[F; WIDTH]>;
+    type ModuleSpecificCtx = Vec<[F; POSEIDON2_WIDTH]>;
 
     #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
         &self,
-        child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proofs: &[Proof<BabyBearPoseidon2Config>],
         preflights: &[Preflight],
-        external_poseidon2_compress_inputs: &Vec<[F; WIDTH]>,
+        external_poseidon2_compress_inputs: &Vec<[F; POSEIDON2_WIDTH]>,
         required_heights: Option<&[usize]>,
-    ) -> Option<Vec<AirProvingContextV2<CpuBackendV2>>> {
+    ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
         let (required_transcript, required_poseidon2, required_merkle_verify) =
             if let Some(heights) = required_heights {
                 if heights.len() != 3 {
@@ -398,7 +397,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
         Some(
             [transcript_trace, poseidon2_trace, merkle_verify_trace]
                 .map(|trace| {
-                    AirProvingContextV2::simple_no_pis(ColMajorMatrix::from_row_major(&trace))
+                    AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace))
                 })
                 .into_iter()
                 .collect(),
@@ -408,9 +407,8 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
 
 #[cfg(feature = "cuda")]
 mod cuda_tracegen {
-    use cuda_backend_v2::GpuBackendV2;
     use itertools::Itertools;
-    use openvm_cuda_backend::{base::DeviceMatrix, types::F};
+    use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
     use openvm_cuda_common::{
         copy::{MemCopyD2H, MemCopyH2D},
         d_buffer::DeviceBuffer,
@@ -419,7 +417,7 @@ mod cuda_tracegen {
 
     use super::*;
     use crate::{
-        cuda::{GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
+        cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu, GlobalCtxGpu},
         transcript::{
             cuda_abi,
             merkle_verify::{self, cuda::MerkleVerifyBlob},
@@ -449,7 +447,7 @@ mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            external_poseidon2_compress_inputs: &Vec<[F; WIDTH]>,
+            external_poseidon2_compress_inputs: &Vec<[F; POSEIDON2_WIDTH]>,
         ) -> Self {
             let poseidon2_perm_inputs = preflights
                 .iter()
@@ -497,8 +495,8 @@ mod cuda_tracegen {
         }
     }
 
-    impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for TranscriptModule {
-        type ModuleSpecificCtx = Vec<[F; WIDTH]>;
+    impl TraceGenModule<GlobalCtxGpu, GpuBackend> for TranscriptModule {
+        type ModuleSpecificCtx = Vec<[F; POSEIDON2_WIDTH]>;
 
         #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(
@@ -506,9 +504,9 @@ mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            external_poseidon2_compress_inputs: &Vec<[F; WIDTH]>,
+            external_poseidon2_compress_inputs: &Vec<[F; POSEIDON2_WIDTH]>,
             required_heights: Option<&[usize]>,
-        ) -> Option<Vec<AirProvingContextV2<GpuBackendV2>>> {
+        ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             let (required_transcript, required_poseidon2, required_merkle_verify) =
                 if let Some(heights) = required_heights {
                     if heights.len() != 3 {
@@ -607,9 +605,9 @@ mod cuda_tracegen {
                 })?;
 
             Some(vec![
-                AirProvingContextV2::simple_no_pis(transcript_trace),
-                AirProvingContextV2::simple_no_pis(poseidon_trace),
-                AirProvingContextV2::simple_no_pis(merkle_trace),
+                AirProvingContext::simple_no_pis(transcript_trace),
+                AirProvingContext::simple_no_pis(poseidon_trace),
+                AirProvingContext::simple_no_pis(merkle_trace),
             ])
         }
     }

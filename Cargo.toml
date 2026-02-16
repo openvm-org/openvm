@@ -13,8 +13,10 @@ members = [
     # "benchmarks/execute",
     # "benchmarks/prove",
     "crates/prof",
-    # "crates/sdk",
     # "crates/cli",
+    # "crates/sdk",
+    "crates/sdk-v2",
+    "crates/sdk-config",
     "crates/circuits/mod-builder",
     "crates/circuits/poseidon2-air",
     "crates/circuits/primitives",
@@ -28,17 +30,15 @@ members = [
     "crates/toolchain/platform",
     "crates/toolchain/tests",
     "crates/continuations",
+    "crates/continuations-v2",
+    "crates/recursion",
+    "crates/verify-stark",
     "crates/vm",
     "extensions/rv32im/circuit",
     "extensions/rv32im/transpiler",
     "extensions/rv32im/guest",
     "extensions/rv32im/tests",
     "extensions/rv32-adapters",
-    # "extensions/native/circuit",
-    # "extensions/native/compiler",
-    # "extensions/native/compiler/derive",
-    # "extensions/native/recursion",
-    # "extensions/native/transpiler",
     "extensions/algebra/circuit",
     "extensions/algebra/transpiler",
     "extensions/algebra/guest",
@@ -113,11 +113,12 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2-rebase", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2-rebase", default-features = false }
-openvm-cuda-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2-rebase", default-features = false }
-openvm-cuda-builder = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2-rebase", default-features = false }
-openvm-cuda-common = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2-rebase", default-features = false }
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
+openvm-codec-derive = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
+openvm-cuda-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
+openvm-cuda-builder = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
+openvm-cuda-common = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
 
 # OpenVM
 openvm-sdk = { path = "crates/sdk", default-features = false }
@@ -137,7 +138,13 @@ openvm-toolchain-tests = { path = "crates/toolchain/tests", default-features = f
 openvm-custom-insn = { path = "crates/toolchain/custom_insn", default-features = false }
 openvm-circuit = { path = "crates/vm", default-features = false }
 openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
+recursion-circuit = { path = "crates/recursion", default-features = false }
+stark-recursion-circuit-derive = { path = "crates/recursion/derive", default-features = false }
 openvm-continuations = { path = "crates/continuations", default-features = false }
+continuations-v2 = { path = "crates/continuations-v2", default-features = false }
+verify-stark = { path = "crates/verify-stark", default-features = false }
+sdk-v2 = { path = "crates/sdk-v2", default-features = false }
+openvm-sdk-config = { path = "crates/sdk-config", default-features = false }
 cargo-openvm = { path = "crates/cli", default-features = false }
 
 # Extensions
@@ -177,12 +184,15 @@ openvm-verify-stark = { path = "guest-libs/verify_stark", default-features = fal
 openvm-benchmarks-utils = { path = "benchmarks/utils", default-features = false }
 
 # Plonky3
+p3-air = { version = "=0.4.1", default-features = false }
 p3-field = { version = "=0.4.1", default-features = false }
 p3-baby-bear = { version = "=0.4.1", default-features = false }
 p3-bn254 = { version = "=0.4.1", default-features = false }
 p3-dft = { version = "=0.4.1", default-features = false }
 p3-fri = { version = "=0.4.1", default-features = false }
 p3-keccak-air = { version = "=0.4.1", default-features = false }
+p3-matrix = { version = "=0.4.1", default-features = false }
+p3-maybe-rayon = { version = "=0.4.1", default-features = false }
 p3-merkle-tree = { version = "=0.4.1", default-features = false }
 p3-poseidon2 = { version = "=0.4.1", default-features = false }
 p3-poseidon2-air = { version = "=0.4.1", default-features = false }
@@ -232,6 +242,7 @@ tracing-subscriber = { version = "0.3.20", features = ["std", "env-filter"] }
 tokio = "1" # >=1.0.0 to allow downstream flexibility
 abi_stable = "0.11.3"
 bytesize = "2.0"
+zstd = { version = "0.13", default-features = false }
 
 # default-features = false for no_std for use in guest programs
 itertools = { version = "0.14.0", default-features = false }
@@ -255,19 +266,6 @@ blstrs = { version = "0.7.1", default-features = true }
 
 # specific to CUDA and GPU
 cuda-runtime-sys = "0.3.0-alpha.1"
-
-# For local development. Add to your `.cargo/config.toml`
-# [patch."https://github.com/Plonky3/Plonky3.git"]
-# p3-field = { path = "../Plonky3/field" }
-# p3-baby-bear = { path = "../Plonky3/baby-bear" }
-# p3-dft = { path = "../Plonky3/dft" }
-# p3-fri = { path = "../Plonky3/fri" }
-# p3-keccak-air = { path = "../Plonky3/keccak-air" }
-# p3-merkle-tree = { path = "../Plonky3/merkle-tree" }
-# p3-monty-31 = { path = "../Plonky3/monty-31" }
-# p3-poseidon2 = { path = "../Plonky3/poseidon2" }
-# p3-poseidon2-air = { path = "../Plonky3/poseidon2-air" }
-# p3-symmetric = { path = "../Plonky3/symmetric" }
 
 [workspace.metadata.cargo-shear]
 ignored = ["cargo-openvm"]

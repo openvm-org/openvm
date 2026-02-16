@@ -1,9 +1,9 @@
 use std::borrow::BorrowMut;
 
-use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, batch_multiplicative_inverse};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{D_EF, EF, F};
+use p3_field::{batch_multiplicative_inverse, BasedVectorSpace, PrimeCharacteristicRing};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{D_EF, EF, F};
 
 use super::MultilinearSumcheckCols;
 use crate::tracegen::{RowMajorChip, StandardTracegenCtx};

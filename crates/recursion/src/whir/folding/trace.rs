@@ -1,8 +1,8 @@
 use core::{borrow::BorrowMut, convert::TryInto};
 
+use openvm_stark_sdk::config::baby_bear_poseidon2::{EF, F};
 use p3_field::{BasedVectorSpace, PrimeCharacteristicRing};
 use p3_matrix::dense::RowMajorMatrix;
-use stark_backend_v2::{EF, F};
 
 use super::WhirFoldingCols;
 use crate::{

@@ -1,4 +1,4 @@
-use cuda_backend_v2::{EF, F};
+use openvm_cuda_backend::prelude::{EF, F};
 use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
 
 pub use crate::system::PoseidonStatePair;

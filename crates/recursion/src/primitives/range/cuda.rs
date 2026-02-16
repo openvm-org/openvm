@@ -1,4 +1,4 @@
-use openvm_cuda_backend::{base::DeviceMatrix, types::F};
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
 use openvm_cuda_common::memory_manager::MemTracker;
 
 use crate::primitives::{cuda_abi::range_checker_tracegen, range::RangeCheckerCols};

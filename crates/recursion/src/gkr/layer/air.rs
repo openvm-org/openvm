@@ -1,25 +1,24 @@
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::{SubAir, utils::assert_array_eq};
+use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::D_EF;
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{Field, PrimeCharacteristicRing, extension::BinomiallyExtendable};
+use p3_field::{extension::BinomiallyExtendable, Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
-use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{TranscriptBus, XiRandomnessBus, XiRandomnessMessage},
     gkr::{
-        GkrSumcheckChallengeBus, GkrSumcheckChallengeMessage,
         bus::{
             GkrLayerInputBus, GkrLayerInputMessage, GkrLayerOutputBus, GkrLayerOutputMessage,
             GkrSumcheckInputBus, GkrSumcheckInputMessage, GkrSumcheckOutputBus,
             GkrSumcheckOutputMessage,
         },
+        GkrSumcheckChallengeBus, GkrSumcheckChallengeMessage,
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{assert_zeros, ext_field_add, ext_field_multiply, ext_field_subtract},
@@ -91,7 +90,7 @@ impl<F: Field> PartitionedBaseAir<F> for GkrLayerAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrLayerAir
 where
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -352,7 +351,7 @@ fn compute_recursive_relations<F, FA>(
 where
     F: Into<FA> + Copy,
     FA: PrimeCharacteristicRing,
-    FA::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    FA::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     let p_cross_term = ext_field_add::<FA>(
         ext_field_multiply::<FA>(p_xi_0, q_xi_1),
@@ -367,7 +366,7 @@ fn interpolate_linear_at_01<F, FA>(evals: [[F; D_EF]; 2], x: [F; D_EF]) -> [FA; 
 where
     F: Into<FA> + Copy,
     FA: PrimeCharacteristicRing,
-    FA::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    FA::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     let p: [FA; D_EF] = ext_field_subtract(evals[1], evals[0]);
     ext_field_add(ext_field_multiply::<FA>(p, x), evals[0])
@@ -388,7 +387,7 @@ pub(super) fn reduce_to_single_evaluation<F, FA>(
 where
     F: Into<FA> + Copy,
     FA: PrimeCharacteristicRing,
-    FA::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    FA::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     let numer = interpolate_linear_at_01([p_xi_0, p_xi_1], mu);
     let denom = interpolate_linear_at_01([q_xi_0, q_xi_1], mu);

@@ -3,23 +3,17 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use openvm_stark_backend::{
-    AirRef,
-    air_builders::symbolic::{SymbolicExpressionNode, symbolic_variable::Entry},
+    air_builders::symbolic::{symbolic_variable::Entry, SymbolicExpressionNode},
+    keygen::types::MultiStarkVerifyingKey,
+    poly_common::{eval_eq_sharp_uni, eval_eq_uni, eval_eq_uni_at_one},
+    proof::{column_openings_by_rot, BatchConstraintProof, Proof},
+    prover::{AirProvingContext, ColMajorMatrix, CommittedTraceData, CpuBackend, TraceCommitter},
+    AirRef, FiatShamirTranscript, StarkEngine, TranscriptHistory,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, EF, F};
 use p3_field::{Field, PrimeCharacteristicRing, TwoAdicField};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
-use stark_backend_v2::{
-    EF, F, SC, StarkEngineV2,
-    keygen::types::MultiStarkVerifyingKeyV2,
-    poly_common::{eval_eq_sharp_uni, eval_eq_uni, eval_eq_uni_at_one},
-    poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
-    proof::{BatchConstraintProof, Proof, column_openings_by_rot},
-    prover::{
-        AirProvingContextV2, ColMajorMatrix, CommittedTraceDataV2, CpuBackendV2, TraceCommitterV2,
-    },
-};
 use strum::{EnumCount, EnumDiscriminants};
 
 use crate::{
@@ -31,22 +25,22 @@ use crate::{
             UnivariateSumcheckInputBus,
         },
         eq_airs::{
-            Eq3bAir, Eq3bBlob, EqNegAir, EqNegTraceGenerator, EqNsAir, EqSharpUniAir,
-            EqSharpUniBlob, EqSharpUniReceiverAir, EqUniAir, generate_eq_sharp_uni_blob,
+            generate_eq_sharp_uni_blob, Eq3bAir, Eq3bBlob, EqNegAir, EqNegTraceGenerator, EqNsAir,
+            EqSharpUniAir, EqSharpUniBlob, EqSharpUniReceiverAir, EqUniAir,
         },
         expr_eval::{
             ConstraintsFoldingAir, ConstraintsFoldingBlob, InteractionsFoldingAir,
             InteractionsFoldingBlob, SymbolicExpressionAir,
         },
         expression_claim::{
-            ExpressionClaimAir, ExpressionClaimBlob, ExpressionClaimTraceGenerator,
-            generate_expression_claim_blob,
+            generate_expression_claim_blob, ExpressionClaimAir, ExpressionClaimBlob,
+            ExpressionClaimTraceGenerator,
         },
         fractions_folder::{FractionsFolderAir, FractionsFolderTraceGenerator},
         sumcheck::{
-            MultilinearSumcheckAir, UnivariateSumcheckAir,
             multilinear::MultilinearSumcheckTraceGenerator,
-            univariate::UnivariateSumcheckTraceGenerator,
+            univariate::UnivariateSumcheckTraceGenerator, MultilinearSumcheckAir,
+            UnivariateSumcheckAir,
         },
     },
     bus::{
@@ -123,7 +117,7 @@ pub struct BatchConstraintModule {
 
 impl BatchConstraintModule {
     pub fn new(
-        child_vk: &MultiStarkVerifyingKeyV2,
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         b: &mut BusIndexManager,
         bus_inventory: BusInventory,
         max_num_proofs: usize,
@@ -175,12 +169,12 @@ impl BatchConstraintModule {
     #[tracing::instrument(level = "trace", skip_all)]
     pub fn run_preflight<TS>(
         &self,
-        child_vk: &MultiStarkVerifyingKeyV2,
-        proof: &Proof,
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proof: &Proof<BabyBearPoseidon2Config>,
         preflight: &mut Preflight,
         ts: &mut TS,
     ) where
-        TS: FiatShamirTranscript + TranscriptHistory,
+        TS: FiatShamirTranscript<BabyBearPoseidon2Config> + TranscriptHistory,
     {
         let BatchConstraintProof {
             numerator_term_per_air,
@@ -451,8 +445,8 @@ pub struct SelectorCount {
 
 impl BatchConstraintBlob {
     pub fn new(
-        child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[&Proof],
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proofs: &[&Proof<BabyBearPoseidon2Config>],
         preflights: &[&Preflight],
     ) -> Self {
         let child_vk = &child_vk.inner;
@@ -644,8 +638,8 @@ pub(crate) struct BatchConstraintBlobCpu {
 impl BatchConstraintBlobCpu {
     #[tracing::instrument(name = "generate_blob", skip_all)]
     pub fn new(
-        child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proofs: &[Proof<BabyBearPoseidon2Config>],
         preflights: &[Preflight],
     ) -> Self {
         let proofs = proofs.iter().collect_vec();
@@ -670,7 +664,7 @@ impl BatchConstraintBlobCpu {
     }
 }
 
-impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
+impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for BatchConstraintModule {
     type ModuleSpecificCtx = ();
 
     /// **Note**: This generates all common main traces but leaves the cached trace for
@@ -679,12 +673,12 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
     #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
         &self,
-        child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proofs: &[Proof<BabyBearPoseidon2Config>],
         preflights: &[Preflight],
         _ctx: &(),
         required_heights: Option<&[usize]>,
-    ) -> Option<Vec<AirProvingContextV2<CpuBackendV2>>> {
+    ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
         let blob = BatchConstraintBlobCpu::new(child_vk, proofs, preflights);
         let ctx = (
             StandardTracegenCtx {
@@ -738,15 +732,15 @@ impl BatchConstraintModule {
     pub fn commit_child_vk<E>(
         &self,
         engine: &E,
-        child_vk: &MultiStarkVerifyingKeyV2,
-    ) -> CommittedTraceDataV2<CpuBackendV2>
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+    ) -> CommittedTraceData<CpuBackend<BabyBearPoseidon2Config>>
     where
-        E: StarkEngineV2<SC = SC, PB = CpuBackendV2>,
+        E: StarkEngine<SC = BabyBearPoseidon2Config, PB = CpuBackend<BabyBearPoseidon2Config>>,
     {
         let cached_trace_rm = expr_eval::generate_symbolic_expr_cached_trace(child_vk);
         let cached_trace = ColMajorMatrix::from_row_major(&cached_trace_rm);
         let (commitment, data) = engine.device().commit(&[&cached_trace]);
-        CommittedTraceDataV2 {
+        CommittedTraceData {
             commitment,
             data: Arc::new(data),
             trace: cached_trace,
@@ -870,7 +864,7 @@ impl RowMajorChip<F> for BatchConstraintModuleChip {
 
 #[cfg(feature = "cuda")]
 pub mod cuda_tracegen {
-    use cuda_backend_v2::{GpuBackendV2, transport_matrix_h2d_col_major};
+    use openvm_cuda_backend::{data_transporter::transport_matrix_h2d_col_major, GpuBackend};
 
     use super::*;
     use crate::{
@@ -878,18 +872,18 @@ pub mod cuda_tracegen {
             constraints_folding::cuda::ConstraintsFoldingBlobGpu,
             interactions_folding::cuda::InteractionsFoldingBlobGpu,
         },
-        cuda::{GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
-        tracegen::cuda::{StandardTracegenGpuCtx, generate_gpu_proving_ctx},
+        cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu, GlobalCtxGpu},
+        tracegen::cuda::{generate_gpu_proving_ctx, StandardTracegenGpuCtx},
     };
 
-    impl ModuleChip<GpuBackendV2> for BatchConstraintModuleChip {
+    impl ModuleChip<GpuBackend> for BatchConstraintModuleChip {
         type Ctx<'a> = (StandardTracegenGpuCtx<'a>, &'a BatchConstraintBlobGpu);
 
         fn generate_proving_ctx(
             &self,
             ctx: &Self::Ctx<'_>,
             required_height: Option<usize>,
-        ) -> Option<AirProvingContextV2<GpuBackendV2>> {
+        ) -> Option<AirProvingContext<GpuBackend>> {
             use BatchConstraintModuleChip::*;
             let child_vk = ctx.0.vk;
             let proofs = ctx.0.proofs;
@@ -961,7 +955,7 @@ pub mod cuda_tracegen {
         }
     }
 
-    impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for BatchConstraintModule {
+    impl TraceGenModule<GlobalCtxGpu, GpuBackend> for BatchConstraintModule {
         type ModuleSpecificCtx = ();
 
         #[tracing::instrument(skip_all)]
@@ -972,7 +966,7 @@ pub mod cuda_tracegen {
             preflights: &[PreflightGpu],
             _module_ctx: &(),
             required_heights: Option<&[usize]>,
-        ) -> Option<Vec<AirProvingContextV2<GpuBackendV2>>> {
+        ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             let blob = BatchConstraintBlobGpu::new(&child_vk, &proofs, &preflights);
             let ctx = (
                 StandardTracegenGpuCtx {
@@ -1075,17 +1069,17 @@ pub mod cuda_tracegen {
         pub fn commit_child_vk_gpu<E>(
             &self,
             engine: &E,
-            child_vk: &MultiStarkVerifyingKeyV2,
-        ) -> CommittedTraceDataV2<GpuBackendV2>
+            child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        ) -> CommittedTraceData<GpuBackend>
         where
-            E: StarkEngineV2<SC = SC, PB = GpuBackendV2>,
+            E: StarkEngine<SC = BabyBearPoseidon2Config, PB = GpuBackend>,
         {
             let cached_trace = expr_eval::generate_symbolic_expr_cached_trace(child_vk);
             // TODO: gpu transpose
             let cached_trace = ColMajorMatrix::from_row_major(&cached_trace);
             let d_cached_trace = transport_matrix_h2d_col_major(&cached_trace).unwrap();
             let (commitment, data) = engine.device().commit(&[&d_cached_trace]);
-            CommittedTraceDataV2 {
+            CommittedTraceData {
                 commitment,
                 trace: d_cached_trace,
                 data: Arc::new(data),

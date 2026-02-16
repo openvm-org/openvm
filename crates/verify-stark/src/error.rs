@@ -1,11 +1,12 @@
 use openvm_circuit::system::memory::merkle::public_values::UserPublicValuesProofError;
-use stark_backend_v2::{Digest, F, verifier::VerifierError};
+use openvm_stark_backend::verifier::VerifierError;
+use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum VerifyStarkError {
     #[error("Stark verifier failed with error: {0}")]
-    StarkVerificationFailure(#[from] VerifierError),
+    StarkVerificationFailure(#[from] VerifierError<EF>),
     #[error("User public value proof verification failed with error: {0}")]
     UserPvsVerificationFailure(#[from] UserPublicValuesProofError),
     #[error("Invalid app exe commit: expected {expected:?}, actual {actual:?}")]

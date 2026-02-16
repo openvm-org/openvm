@@ -4,31 +4,18 @@ use core::borrow::Borrow;
 
 use openvm_circuit_primitives::SubAir;
 use openvm_stark_backend::{
-    AirRef,
-    engine::StarkEngine,
+    any_air_arc_vec,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::Field,
-    p3_matrix::{Matrix, dense::RowMajorMatrix},
-    prover::types::AirProofRawInput,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
-    utils::disable_debug_builder,
-};
-use openvm_stark_sdk::{
-    any_rap_arc_vec,
-    config::{
-        FriParameters,
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-    },
-    engine::StarkFriEngine,
-};
-use stark_backend_v2::{
-    F, StarkEngineV2,
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{
-        AirProvingContextV2, ColMajorMatrix, CpuBackendV2, DeviceDataTransporterV2,
-        ProvingContextV2,
+        AirProvingContext, ColMajorMatrix, CpuBackend, DeviceDataTransporter, ProvingContext,
     },
+    utils::disable_debug_builder,
     verifier::VerifierError,
+    AirRef, BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine, StarkProtocolConfig,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 
 use super::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir};
 use crate::{tests::test_engine_small, utils::MAX_CONSTRAINT_DEGREE};
@@ -101,11 +88,12 @@ fn generate_trace<
     F: Field,
     const DEPTH_MINUS_ONE: usize,
     const DEPTH_MINUS_TWO: usize,
-    const WIDTH: usize,
+    const POSEIDON2_WIDTH: usize,
 >(
-    rows: Vec<[u32; WIDTH]>,
+    rows: Vec<[u32; POSEIDON2_WIDTH]>,
 ) -> RowMajorMatrix<F> {
-    let mut rows: Vec<[F; WIDTH]> = rows.into_iter().map(|r| r.map(F::from_u32)).collect();
+    let mut rows: Vec<[F; POSEIDON2_WIDTH]> =
+        rows.into_iter().map(|r| r.map(F::from_u32)).collect();
 
     let io_width = size_of::<NestedForLoopIoCols<u8, DEPTH_MINUS_ONE>>();
 
@@ -121,54 +109,45 @@ fn generate_trace<
         })
         .unwrap_or([F::ZERO; DEPTH_MINUS_ONE]);
 
-    let mut padding_row = [F::ZERO; WIDTH];
+    let mut padding_row = [F::ZERO; POSEIDON2_WIDTH];
     padding_row[1..(DEPTH_MINUS_ONE + 1)].copy_from_slice(&padding_counters[..DEPTH_MINUS_ONE]);
 
     let padded_len = rows.len().next_power_of_two().max(4);
     rows.resize(padded_len, padding_row);
 
-    RowMajorMatrix::new(rows.into_flattened(), WIDTH)
-}
-
-// TODO(ayush): add debug method to v2 engine
-fn debug_constraints(airs: &[AirRef<BabyBearPoseidon2Config>], traces: &[RowMajorMatrix<F>]) {
-    // Use v1 engine for debug
-    let engine_v1 = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let mut keygen_builder = engine_v1.keygen_builder();
-    for air in airs {
-        keygen_builder.add_air(air.clone());
-    }
-    let pk_v1 = keygen_builder.generate_pk();
-
-    let proof_inputs: Vec<_> = traces
-        .iter()
-        .map(|trace| AirProofRawInput {
-            cached_mains: vec![],
-            common_main: Some(trace.clone().into()),
-            public_values: vec![],
-        })
-        .collect();
-
-    engine_v1.debug(airs, &pk_v1.per_air, &proof_inputs);
+    RowMajorMatrix::new(rows.into_flattened(), POSEIDON2_WIDTH)
 }
 
 fn prove_and_verify(
     airs: Vec<AirRef<BabyBearPoseidon2Config>>,
     traces: Vec<RowMajorMatrix<F>>,
-) -> Result<(), VerifierError> {
-    debug_constraints(&airs, &traces);
-
+) -> Result<(), VerifierError<<BabyBearPoseidon2Config as StarkProtocolConfig>::EF>> {
     let engine = test_engine_small();
+
+    // Debug constraints using v2 engine
+    let debug_ctx = ProvingContext::new(
+        traces
+            .iter()
+            .enumerate()
+            .map(|(air_idx, trace)| {
+                (
+                    air_idx,
+                    AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(trace)),
+                )
+            })
+            .collect(),
+    );
+    engine.debug(&airs, &debug_ctx);
     let (pk, vk) = engine.keygen(&airs);
 
-    let ctx: ProvingContextV2<CpuBackendV2> = ProvingContextV2::new(
+    let ctx: ProvingContext<CpuBackend<BabyBearPoseidon2Config>> = ProvingContext::new(
         traces
             .into_iter()
             .enumerate()
             .map(|(air_idx, trace)| {
                 (
                     air_idx,
-                    AirProvingContextV2::simple_no_pis(ColMajorMatrix::from_row_major(&trace)),
+                    AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace)),
                 )
             })
             .collect(),
@@ -176,12 +155,12 @@ fn prove_and_verify(
 
     let device = engine.device();
     let d_pk = device.transport_pk_to_device(&pk);
-    let d_ctx: ProvingContextV2<CpuBackendV2> = ProvingContextV2::new(
+    let d_ctx: ProvingContext<CpuBackend<BabyBearPoseidon2Config>> = ProvingContext::new(
         ctx.into_iter()
             .map(|(air_idx, air_ctx)| {
                 (
                     air_idx,
-                    AirProvingContextV2 {
+                    AirProvingContext {
                         cached_mains: vec![],
                         common_main: device.transport_matrix_to_device(&air_ctx.common_main),
                         public_values: air_ctx.public_values,
@@ -199,7 +178,7 @@ fn prove_and_verify_test_air<const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO
     trace: RowMajorMatrix<F>,
 ) {
     disable_debug_builder();
-    let airs = any_rap_arc_vec![TestAir::<DEPTH_MINUS_ONE, DEPTH_MINUS_TWO>];
+    let airs = any_air_arc_vec![TestAir::<DEPTH_MINUS_ONE, DEPTH_MINUS_TWO>];
     prove_and_verify(airs, vec![trace]).unwrap();
 }
 
@@ -210,7 +189,7 @@ fn prove_and_verify_test_air<const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO
 #[test]
 fn test_max_constraint_degree() {
     let engine = test_engine_small();
-    let airs = any_rap_arc_vec![TestAir::<1, 0>];
+    let airs = any_air_arc_vec![TestAir::<1, 0>];
     let (_pk, vk) = engine.keygen(&airs);
 
     assert!(vk.max_constraint_degree() <= MAX_CONSTRAINT_DEGREE);
@@ -473,7 +452,7 @@ fn test_fail_iteration_boundary_missing_is_first() {
 #[test]
 fn test_nested_max_constraint_degree() {
     let engine = test_engine_small();
-    let airs = any_rap_arc_vec![TestAir::<2, 1>];
+    let airs = any_air_arc_vec![TestAir::<2, 1>];
     let (_pk, vk) = engine.keygen(&airs);
 
     assert!(vk.max_constraint_degree() <= MAX_CONSTRAINT_DEGREE);
@@ -689,7 +668,7 @@ fn test_three_loops_fail_outer_boundary_missing_start() {
 #[test]
 fn test_four_loops_max_constraint_degree() {
     let engine = test_engine_small();
-    let airs = any_rap_arc_vec![TestAir::<3, 2>];
+    let airs = any_air_arc_vec![TestAir::<3, 2>];
     let (_pk, vk) = engine.keygen(&airs);
 
     assert!(vk.max_constraint_degree() <= MAX_CONSTRAINT_DEGREE);

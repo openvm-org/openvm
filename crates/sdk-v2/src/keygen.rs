@@ -6,17 +6,14 @@ use openvm_circuit::{
     arch::{AirInventoryError, SystemConfig, VmCircuitConfig},
     system::memory::dimensions::MemoryDimensions,
 };
-use serde::{Deserialize, Serialize};
-use stark_backend_v2::{
-    BabyBearPoseidon2CpuEngineV2, StarkEngineV2,
-    keygen::types::{
-        MultiStarkProvingKeyV2 as MultiStarkProvingKey,
-        MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey,
-    },
-    poseidon2::sponge::DuplexSponge,
+use openvm_stark_backend::{
+    keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
+    StarkEngine,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine, DuplexSponge};
+use serde::{Deserialize, Serialize};
 
-use crate::{SC, config::AppConfig, prover::vm::types::VmProvingKey};
+use crate::{config::AppConfig, prover::vm::types::VmProvingKey, SC};
 
 /// This is lightweight to clone as it contains smart pointers to the proving keys.
 #[derive(Clone, Serialize, Deserialize)]
@@ -26,16 +23,16 @@ pub struct AppProvingKey<VC> {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AppVerifyingKey {
-    pub vk: MultiStarkVerifyingKey,
+    pub vk: MultiStarkVerifyingKey<SC>,
     pub memory_dimensions: MemoryDimensions,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AggProvingKey {
-    pub leaf_pk: Arc<MultiStarkProvingKey>,
-    pub internal_for_leaf_pk: Arc<MultiStarkProvingKey>,
-    pub internal_recursive_pk: Arc<MultiStarkProvingKey>,
-    pub compression_pk: Option<Arc<MultiStarkProvingKey>>,
+    pub leaf_pk: Arc<MultiStarkProvingKey<SC>>,
+    pub internal_for_leaf_pk: Arc<MultiStarkProvingKey<SC>>,
+    pub internal_recursive_pk: Arc<MultiStarkProvingKey<SC>>,
+    pub compression_pk: Option<Arc<MultiStarkProvingKey<SC>>>,
 }
 
 impl<VC> AppProvingKey<VC>
@@ -43,7 +40,7 @@ where
     VC: Clone + VmCircuitConfig<SC> + AsRef<SystemConfig>,
 {
     pub fn keygen(config: AppConfig<VC>) -> Result<Self, AirInventoryError> {
-        let app_engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(config.system_params);
+        let app_engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(config.system_params);
         let app_vm_pk = {
             let vm_pk = app_engine
                 .keygen(

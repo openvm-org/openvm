@@ -1,18 +1,17 @@
 use std::borrow::Borrow;
 
 use openvm_circuit_primitives::{
-    SubAir,
     is_equal::{IsEqSubAir, IsEqualAuxCols, IsEqualIo},
     utils::{assert_array_eq, not},
+    SubAir,
 };
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::D_EF;
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{PrimeCharacteristicRing, TwoAdicField, extension::BinomiallyExtendable};
+use p3_field::{extension::BinomiallyExtendable, PrimeCharacteristicRing, TwoAdicField};
 use p3_matrix::Matrix;
-use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -78,7 +77,8 @@ impl<F> BaseAir<F> for UnivariateSumcheckAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UnivariateSumcheckAir
 where
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF> + TwoAdicField,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield:
+        BinomiallyExtendable<{ D_EF }> + TwoAdicField,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();

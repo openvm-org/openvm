@@ -1,6 +1,6 @@
 #[cfg(feature = "cuda")]
 use {
-    openvm_cuda_builder::{CudaBuilder, cuda_available},
+    openvm_cuda_builder::{cuda_available, CudaBuilder},
     std::process::exit,
 };
 
@@ -16,14 +16,13 @@ fn main() {
             .include_from_dep("DEP_CUDA_COMMON_INCLUDE")
             .include_from_dep("DEP_CIRCUIT_PRIMITIVES_CUDA_INCLUDE")
             .include("cuda/include")
-            .include("../cuda-backend/cuda/include")
-            .include("../../openvm/crates/circuits/poseidon2-air/cuda/include");
+            .include("../circuits/poseidon2-air/cuda/include");
 
         common.emit_link_directives();
 
         common
             .clone()
-            .library_name("cuda-recursion-v2")
+            .library_name("cuda-recursion")
             .files_from_glob("cuda/src/**/*.cu")
             .build();
     }

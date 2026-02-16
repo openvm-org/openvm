@@ -1,10 +1,11 @@
 use core::borrow::BorrowMut;
 use std::sync::{LazyLock, Mutex};
 
+use openvm_stark_backend::poly_common::Squarable;
+use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 use p3_field::{Field, PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{F, poly_common::Squarable};
 
 use super::air::ExpBitsLenCols;
 
@@ -80,7 +81,10 @@ impl ExpBitsLenCpuTraceGenerator {
     }
 
     #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
-    pub fn generate_trace_row_major(self, required_height: Option<usize>) -> Option<RowMajorMatrix<F>> {
+    pub fn generate_trace_row_major(
+        self,
+        required_height: Option<usize>,
+    ) -> Option<RowMajorMatrix<F>> {
         let records = self.requests.into_inner().unwrap();
         let num_valid_rows = records.last().map(|record| record.end_row()).unwrap_or(0);
         let width = ExpBitsLenCols::<F>::width();

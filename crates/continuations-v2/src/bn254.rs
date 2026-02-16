@@ -1,9 +1,9 @@
 use std::array::from_fn;
 
 use num_bigint::BigUint;
-use openvm_stark_sdk::p3_bn254::Bn254;
+use openvm_stark_sdk::config::baby_bear_poseidon2::{DIGEST_SIZE, F};
+use p3_bn254::Bn254;
 use p3_field::{PrimeCharacteristicRing, PrimeField, PrimeField32};
-use stark_backend_v2::{DIGEST_SIZE, F};
 
 pub const BN254_BYTES: usize = 32;
 

@@ -1,16 +1,17 @@
 use itertools::Itertools;
-use stark_backend_v2::{
-    Digest, F, SystemParams,
+use openvm_stark_backend::{
     keygen::types::{
-        MultiStarkVerifyingKeyV2, StarkVerifyingKeyV2, StarkVerifyingParamsV2,
+        MultiStarkVerifyingKey, StarkVerifyingKey, StarkVerifyingParams,
         VerifierSinglePreprocessedData,
     },
+    SystemParams,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, Digest, F};
 
 /*
  * Modified versions of the STARK and multi-STARK verifying keys for AirModule
  * implementations. AirModules should use MultiStarkVerifyingKeyFrame instead
- * of MultiStarkVerifyingKeyV2 in their AIRs, as use of some fields in the
+ * of MultiStarkVerifyingKey<BabyBearPoseidon2Config> in their AIRs, as use of some fields in the
  * latter will compromise internal vk stability. For more information on what
  * can be used in AIRs and how, see crates/recursion/README.md.
  */
@@ -18,7 +19,7 @@ use stark_backend_v2::{
 #[derive(Clone)]
 pub struct StarkVkeyFrame {
     pub preprocessed_data: Option<VerifierSinglePreprocessedData<Digest>>,
-    pub params: StarkVerifyingParamsV2,
+    pub params: StarkVerifyingParams,
     pub num_interactions: usize,
     pub max_constraint_degree: u8,
     pub is_required: bool,
@@ -31,8 +32,8 @@ pub struct MultiStarkVkeyFrame {
     pub max_constraint_degree: usize,
 }
 
-impl From<&StarkVerifyingKeyV2<F, Digest>> for StarkVkeyFrame {
-    fn from(vk: &StarkVerifyingKeyV2<F, Digest>) -> Self {
+impl From<&StarkVerifyingKey<F, Digest>> for StarkVkeyFrame {
+    fn from(vk: &StarkVerifyingKey<F, Digest>) -> Self {
         Self {
             preprocessed_data: vk.preprocessed_data.clone(),
             params: vk.params.clone(),
@@ -43,8 +44,8 @@ impl From<&StarkVerifyingKeyV2<F, Digest>> for StarkVkeyFrame {
     }
 }
 
-impl From<&MultiStarkVerifyingKeyV2> for MultiStarkVkeyFrame {
-    fn from(mvk: &MultiStarkVerifyingKeyV2) -> Self {
+impl From<&MultiStarkVerifyingKey<BabyBearPoseidon2Config>> for MultiStarkVkeyFrame {
+    fn from(mvk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>) -> Self {
         Self {
             params: mvk.inner.params.clone(),
             per_air: mvk.inner.per_air.iter().map(Into::into).collect_vec(),

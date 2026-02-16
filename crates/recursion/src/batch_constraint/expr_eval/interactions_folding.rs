@@ -2,38 +2,36 @@ use std::borrow::{Borrow, BorrowMut};
 
 use itertools::Itertools;
 use openvm_circuit_primitives::{
-    SubAir,
     utils::{assert_array_eq, not},
+    SubAir,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    keygen::types::{MultiStarkVerifyingKey, MultiStarkVerifyingKey0},
+    BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, D_EF, EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, extension::BinomiallyExtendable};
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_field::{extension::BinomiallyExtendable, BasedVectorSpace, PrimeCharacteristicRing};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{
-    D_EF, EF, F,
-    keygen::types::{MultiStarkVerifyingKey0V2, MultiStarkVerifyingKeyV2},
-};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     batch_constraint::{
-        BatchConstraintBlobCpu,
         bus::{
             Eq3bBus, Eq3bMessage, ExpressionClaimBus, ExpressionClaimMessage,
             InteractionsFoldingBus, InteractionsFoldingMessage,
         },
         eq_airs::Eq3bBlob,
+        BatchConstraintBlobCpu,
     },
     bus::{AirShapeBus, AirShapeBusMessage, AirShapeProperty, TranscriptBus},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     tracegen::RowMajorChip,
     utils::{
-        MultiProofVecVec, MultiVecWithBounds, assert_zeros, ext_field_add, ext_field_multiply,
+        assert_zeros, ext_field_add, ext_field_multiply, MultiProofVecVec, MultiVecWithBounds,
     },
 };
 
@@ -98,7 +96,7 @@ impl<F> BaseAir<F> for InteractionsFoldingAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for InteractionsFoldingAir
 where
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -365,7 +363,7 @@ pub(crate) struct InteractionsFoldingBlob {
 
 impl InteractionsFoldingBlob {
     pub fn new(
-        vk: &MultiStarkVerifyingKey0V2,
+        vk: &MultiStarkVerifyingKey0<BabyBearPoseidon2Config>,
         expr_evals: &MultiVecWithBounds<EF, 2>,
         eq_3b_blob: &Eq3bBlob,
         preflights: &[&Preflight],
@@ -493,7 +491,7 @@ pub struct InteractionsFoldingTraceGenerator;
 
 impl RowMajorChip<F> for InteractionsFoldingTraceGenerator {
     type Ctx<'a> = (
-        &'a MultiStarkVerifyingKeyV2,
+        &'a MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         &'a BatchConstraintBlobCpu,
         &'a [&'a Preflight],
     );
@@ -667,16 +665,16 @@ impl RowMajorChip<F> for InteractionsFoldingTraceGenerator {
 
 #[cfg(feature = "cuda")]
 pub(in crate::batch_constraint) mod cuda {
-    use cuda_backend_v2::GpuBackendV2;
-    use openvm_cuda_backend::{base::DeviceMatrix, chip::UInt2};
+    use openvm_circuit_primitives::cuda_abi::UInt2;
+    use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend};
     use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
-    use stark_backend_v2::prover::AirProvingContextV2;
+    use openvm_stark_backend::prover::AirProvingContext;
 
     use super::*;
     use crate::{
         batch_constraint::cuda_abi::{
-            AffineFpExt, FpExtWithTidx, InteractionRecord, interactions_folding_tracegen,
-            interactions_folding_tracegen_temp_bytes,
+            interactions_folding_tracegen, interactions_folding_tracegen_temp_bytes, AffineFpExt,
+            FpExtWithTidx, InteractionRecord,
         },
         cuda::{preflight::PreflightGpu, vk::VerifyingKeyGpu},
         tracegen::ModuleChip,
@@ -821,7 +819,7 @@ pub(in crate::batch_constraint) mod cuda {
         }
     }
 
-    impl ModuleChip<GpuBackendV2> for InteractionsFoldingTraceGenerator {
+    impl ModuleChip<GpuBackend> for InteractionsFoldingTraceGenerator {
         type Ctx<'a> = (
             &'a VerifyingKeyGpu,
             &'a [PreflightGpu],
@@ -833,7 +831,7 @@ pub(in crate::batch_constraint) mod cuda {
             &self,
             ctx: &Self::Ctx<'_>,
             required_height: Option<usize>,
-        ) -> Option<AirProvingContextV2<GpuBackendV2>> {
+        ) -> Option<AirProvingContext<GpuBackend>> {
             let (child_vk, preflights_gpu, blob) = ctx;
 
             let num_airs = preflights_gpu
@@ -964,7 +962,7 @@ pub(in crate::batch_constraint) mod cuda {
                 )
                 .unwrap();
             }
-            Some(AirProvingContextV2::simple_no_pis(d_trace))
+            Some(AirProvingContext::simple_no_pis(d_trace))
         }
     }
 }

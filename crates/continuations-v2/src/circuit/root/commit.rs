@@ -3,25 +3,24 @@ use std::borrow::{Borrow, BorrowMut};
 use itertools::Itertools;
 use openvm_circuit::arch::POSEIDON2_WIDTH;
 use openvm_circuit_primitives::{
-    SubAir,
     encoder::Encoder,
     utils::{assert_array_eq, not},
+    SubAir,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    BaseAirWithPublicValues, PartitionedBaseAir,
+};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{
+    poseidon2_compress_with_capacity, BabyBearPoseidon2Config, DIGEST_SIZE, F,
 };
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing};
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use recursion_circuit::{
     bus::{Poseidon2CompressBus, Poseidon2CompressMessage},
     utils::assert_zeros,
-};
-use stark_backend_v2::{
-    DIGEST_SIZE, F,
-    poseidon2::{WIDTH, sponge::poseidon2_compress},
-    prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
 
@@ -50,8 +49,10 @@ pub struct UserPvsCommitCols<F> {
 }
 
 /**
- * Builds a binary Merkle tree to decommit and expose the raw user public values. Constrains that:
- * - leaf nodes read single digests from exposed PVs, compress with zeros, and compute leaf hashes
+ * Builds a binary Merkle tree to decommit and expose the raw user public values. Constrains
+ * that:
+ * - leaf nodes read single digests from exposed PVs, compress with zeros, and compute leaf
+ *   hashes
  * - internal nodes receive children from an internal permutation bus
  * - root commitment is sent to `UserPvsCommitBus`
  */
@@ -291,7 +292,10 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
 
 pub fn generate_proving_ctx(
     user_pvs: Vec<F>,
-) -> (AirProvingContextV2<CpuBackendV2>, Vec<[F; WIDTH]>) {
+) -> (
+    AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>,
+    Vec<[F; POSEIDON2_WIDTH]>,
+) {
     let num_user_pvs = user_pvs.len();
 
     // Each leaf consumes `DIGEST_SIZE` public values, which is padded and hashed before
@@ -321,7 +325,7 @@ pub fn generate_proving_ctx(
         let row_idx = next_layer.len();
         let left: [F; DIGEST_SIZE] = pv_digest[..DIGEST_SIZE].try_into().unwrap();
         let right: [F; DIGEST_SIZE] = [F::ZERO; DIGEST_SIZE];
-        let parent = poseidon2_compress(left, right);
+        let parent = poseidon2_compress_with_capacity(left, right).0;
         poseidon2_compress_inputs.push(digests_to_poseidon2_input(left, right));
 
         cols.row_idx = F::from_usize(row_idx);
@@ -354,7 +358,7 @@ pub fn generate_proving_ctx(
 
             let left = next_layer[2 * parent_idx];
             let right = next_layer[2 * parent_idx + 1];
-            let parent = poseidon2_compress(left, right);
+            let parent = poseidon2_compress_with_capacity(left, right).0;
             poseidon2_compress_inputs.push(digests_to_poseidon2_input(left, right));
 
             cols.row_idx = F::from_usize(row_idx);
@@ -378,7 +382,7 @@ pub fn generate_proving_ctx(
     last_cols.is_right_child = F::ONE;
 
     (
-        AirProvingContextV2::simple(
+        AirProvingContext::simple(
             ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width)),
             user_pvs,
         ),

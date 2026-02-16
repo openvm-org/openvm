@@ -7,7 +7,7 @@ use openvm_stark_backend::prover::MatrixDimensions;
 
 use crate::{
     cuda::types::MerkleVerifyRecord,
-    transcript::{Poseidon2Count, transcript::cuda::TranscriptAirRecord},
+    transcript::{transcript::cuda::TranscriptAirRecord, Poseidon2Count},
 };
 
 extern "C" {

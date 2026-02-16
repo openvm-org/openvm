@@ -1,14 +1,13 @@
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::{SubAir, utils::assert_array_eq};
+use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::D_EF;
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{Field, PrimeCharacteristicRing, extension::BinomiallyExtendable};
+use p3_field::{extension::BinomiallyExtendable, Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
-use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -110,7 +109,7 @@ impl<F: Field> PartitionedBaseAir<F> for GkrLayerSumcheckAir {}
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrLayerSumcheckAir
 where
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -322,7 +321,7 @@ pub(super) fn interpolate_cubic_at_0123<F, FA>(
 where
     F: Into<FA> + Copy,
     FA: PrimeCharacteristicRing,
-    FA::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    FA::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     let three: FA = FA::from_usize(3);
     let inv2: FA = FA::from_prime_subfield(FA::PrimeSubfield::from_usize(2).inverse());
@@ -378,7 +377,7 @@ pub(super) fn update_eq<F, FA>(
 where
     F: Into<FA> + Copy,
     FA: PrimeCharacteristicRing,
-    FA::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    FA::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     ext_field_multiply::<FA>(
         eq_in,

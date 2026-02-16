@@ -92,28 +92,26 @@ impl<SC: StarkProtocolConfig> VmCommittedExe<SC> {
     ///
     /// **Note**: This function recomputes the Merkle tree for the initial memory image.
     pub fn compute_exe_commit(
-        program_commitment: &Com<SC>,
+        program_commitment: &[Val<SC>; CHUNK],
         exe: &VmExe<Val<SC>>,
         memory_config: &MemoryConfig,
-    ) -> Com<SC>
+    ) -> [Val<SC>; CHUNK]
     where
-        Com<SC>: AsRef<[Val<SC>; CHUNK]> + From<[Val<SC>; CHUNK]>,
         Val<SC>: PrimeField32,
     {
         let hasher = vm_poseidon2_hasher();
         let memory_dimensions = memory_config.memory_dimensions();
-        let app_program_commit: &[Val<SC>; CHUNK] = program_commitment.as_ref();
         let mem_config = memory_config;
         let mut memory_image = AddressMap::new(mem_config.addr_spaces.clone());
         memory_image.set_from_sparse(&exe.init_memory);
         let init_memory_commit =
             MerkleTree::from_memory(&memory_image, &memory_dimensions, &hasher).root();
-        Com::<SC>::from(compute_exe_commit(
+        compute_exe_commit(
             &hasher,
-            app_program_commit,
+            program_commitment,
             &init_memory_commit,
             Val::<SC>::from_u32(exe.pc_start),
-        ))
+        )
     }
 }
 

@@ -1,28 +1,26 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit_primitives::{
-    SubAir,
     utils::{and, assert_array_eq, not},
+    SubAir,
 };
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, keygen::types::MultiStarkVerifyingKey,
+    poly_common::eval_eq_uni_at_one, BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, D_EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    BasedVectorSpace, Field, PrimeCharacteristicRing, PrimeField32, TwoAdicField,
-    extension::BinomiallyExtendable,
+    extension::BinomiallyExtendable, BasedVectorSpace, Field, PrimeCharacteristicRing,
+    PrimeField32, TwoAdicField,
 };
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{
-    D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, poly_common::eval_eq_uni_at_one,
-};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     batch_constraint::{
-        SelectorCount,
         bus::{EqNegInternalBus, EqNegInternalMessage},
+        SelectorCount,
     },
     bus::{
         EqNegBaseRandBus, EqNegBaseRandMessage, EqNegResultBus, EqNegResultMessage, SelUniBus,
@@ -32,8 +30,8 @@ use crate::{
     system::Preflight,
     tracegen::RowMajorChip,
     utils::{
-        MultiVecWithBounds, base_to_ext, ext_field_add, ext_field_add_scalar, ext_field_multiply,
-        ext_field_multiply_scalar, ext_field_subtract,
+        base_to_ext, ext_field_add, ext_field_add_scalar, ext_field_multiply,
+        ext_field_multiply_scalar, ext_field_subtract, MultiVecWithBounds,
     },
 };
 
@@ -79,7 +77,7 @@ pub struct EqNegTraceGenerator;
 
 impl RowMajorChip<F> for EqNegTraceGenerator {
     type Ctx<'a> = (
-        &'a MultiStarkVerifyingKeyV2,
+        &'a MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         &'a [&'a Preflight],
         &'a MultiVecWithBounds<SelectorCount, 1>,
     );
@@ -246,7 +244,7 @@ impl<F> BaseAir<F> for EqNegAir {
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for EqNegAir
 where
     AB::F: PrimeField32 + TwoAdicField,
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();

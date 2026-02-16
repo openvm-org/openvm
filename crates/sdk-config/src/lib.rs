@@ -19,22 +19,20 @@ use openvm_rv32im_transpiler::*;
 use openvm_sha256_circuit::*;
 use openvm_sha256_transpiler::*;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     p3_field::Field,
+    prover::{CpuBackend, CpuDevice},
+    StarkEngine, StarkProtocolConfig, Val,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
-use stark_backend_v2::{
-    F, StarkEngineV2 as StarkEngine,
-    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
-};
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use openvm_algebra_circuit::AlgebraProverExt;
         use openvm_bigint_circuit::Int256GpuProverExt;
         use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};
-        use cuda_backend_v2::{
-            BabyBearPoseidon2GpuEngineV2, GpuBackendV2 as GpuBackend
+        use openvm_cuda_backend::{
+            BabyBearPoseidon2GpuEngine, GpuBackend
         };
         use openvm_ecc_circuit::EccProverExt;
         use openvm_keccak256_circuit::Keccak256GpuProverExt;
@@ -316,7 +314,7 @@ where
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitConfig<SC> for SdkVmConfig
+impl<SC: StarkProtocolConfig> VmCircuitConfig<SC> for SdkVmConfig
 where
     SdkVmConfigInner: VmCircuitConfig<SC>,
 {
@@ -325,10 +323,11 @@ where
     }
 }
 
-type SC = stark_backend_v2::SC;
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+type SC = BabyBearPoseidon2Config;
 impl<E> VmBuilder<E> for SdkVmCpuBuilder
 where
-    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
 {
     type VmConfig = SdkVmConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
@@ -385,7 +384,7 @@ where
 pub struct SdkVmGpuBuilder;
 
 #[cfg(feature = "cuda")]
-impl VmBuilder<BabyBearPoseidon2GpuEngineV2> for SdkVmGpuBuilder {
+impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
     type VmConfig = SdkVmConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
     type RecordArena = DenseRecordArena;
@@ -398,7 +397,7 @@ impl VmBuilder<BabyBearPoseidon2GpuEngineV2> for SdkVmGpuBuilder {
         VmChipComplex<SC, Self::RecordArena, GpuBackend, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
-        type E = BabyBearPoseidon2GpuEngineV2;
+        type E = BabyBearPoseidon2GpuEngine;
 
         let config = config.to_inner();
         let mut chip_complex =

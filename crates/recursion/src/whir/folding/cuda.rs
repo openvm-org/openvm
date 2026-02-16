@@ -1,7 +1,7 @@
-use cuda_backend_v2::GpuBackendV2;
-use openvm_cuda_backend::base::DeviceMatrix;
+use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend};
 use openvm_cuda_common::memory_manager::MemTracker;
-use stark_backend_v2::{F, SystemParams, prover::AirProvingContextV2};
+use openvm_stark_backend::{prover::AirProvingContext, SystemParams};
+use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 
 use super::WhirFoldingCols;
 use crate::{
@@ -20,7 +20,7 @@ pub(in crate::whir) struct FoldingGpuCtx<'a> {
 
 pub(in crate::whir) struct FoldingGpuTraceGenerator;
 
-impl ModuleChip<GpuBackendV2> for FoldingGpuTraceGenerator {
+impl ModuleChip<GpuBackend> for FoldingGpuTraceGenerator {
     type Ctx<'a> = FoldingGpuCtx<'a>;
 
     #[tracing::instrument(level = "trace", skip_all)]
@@ -28,7 +28,7 @@ impl ModuleChip<GpuBackendV2> for FoldingGpuTraceGenerator {
         &self,
         ctx: &Self::Ctx<'_>,
         required_height: Option<usize>,
-    ) -> Option<AirProvingContextV2<GpuBackendV2>> {
+    ) -> Option<AirProvingContext<GpuBackend>> {
         let blob = ctx.blob;
         let params = ctx.params;
         let num_proofs = ctx.num_proofs;
@@ -70,6 +70,6 @@ impl ModuleChip<GpuBackendV2> for FoldingGpuTraceGenerator {
         }
 
         mem.emit_metrics();
-        Some(AirProvingContextV2::simple_no_pis(trace))
+        Some(AirProvingContext::simple_no_pis(trace))
     }
 }

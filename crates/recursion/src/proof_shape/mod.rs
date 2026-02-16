@@ -1,20 +1,18 @@
 use core::cmp::Reverse;
 use std::sync::Arc;
 
-use itertools::{Itertools, izip};
+use itertools::{izip, Itertools};
 use openvm_circuit_primitives::encoder::Encoder;
-use openvm_stark_backend::AirRef;
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use openvm_stark_backend::{
+    keygen::types::{MultiStarkVerifyingKey, VerifierSinglePreprocessedData},
+    proof::Proof,
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    AirRef, FiatShamirTranscript, TranscriptHistory,
+};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, Digest, F};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
-use stark_backend_v2::{
-    Digest, F,
-    keygen::types::{MultiStarkVerifyingKeyV2, VerifierSinglePreprocessedData},
-    poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
-    proof::Proof,
-    prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
-};
 
 use crate::{
     primitives::{
@@ -28,8 +26,8 @@ use crate::{
         pvs::PublicValuesAir,
     },
     system::{
-        AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, Preflight, ProofShapePreflight,
-        TraceGenModule, frame::MultiStarkVkeyFrame,
+        frame::MultiStarkVkeyFrame, AirModule, BusIndexManager, BusInventory, GlobalCtxCpu,
+        Preflight, ProofShapePreflight, TraceGenModule,
     },
     tracegen::{ModuleChip, RowMajorChip},
 };
@@ -145,12 +143,12 @@ impl ProofShapeModule {
     #[tracing::instrument(level = "trace", skip_all)]
     pub fn run_preflight<TS>(
         &self,
-        child_vk: &MultiStarkVerifyingKeyV2,
-        proof: &Proof,
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proof: &Proof<BabyBearPoseidon2Config>,
         preflight: &mut Preflight,
         ts: &mut TS,
     ) where
-        TS: FiatShamirTranscript + TranscriptHistory,
+        TS: FiatShamirTranscript<BabyBearPoseidon2Config> + TranscriptHistory,
     {
         let l_skip = child_vk.inner.params.l_skip;
         ts.observe_commit(child_vk.pre_hash);
@@ -270,18 +268,18 @@ impl AirModule for ProofShapeModule {
     }
 }
 
-impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for ProofShapeModule {
+impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for ProofShapeModule {
     type ModuleSpecificCtx = ();
 
     #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
         &self,
-        child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proofs: &[Proof<BabyBearPoseidon2Config>],
         preflights: &[Preflight],
         _ctx: &(),
         required_heights: Option<&[usize]>,
-    ) -> Option<Vec<AirProvingContextV2<CpuBackendV2>>> {
+    ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
         let proof_shape = proof_shape::ProofShapeChip::<4, 8>::new(
             self.idx_encoder.clone(),
             self.min_cached_idx,
@@ -307,7 +305,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for ProofShapeModule {
             .collect::<Option<Vec<_>>>()?;
 
         tracing::trace_span!("wrapper.generate_trace", air = "RangeChecker").in_scope(|| {
-            ctxs.push(AirProvingContextV2::simple_no_pis(
+            ctxs.push(AirProvingContext::simple_no_pis(
                 ColMajorMatrix::from_row_major(&self.range_checker.generate_trace_row_major()),
             ));
         });
@@ -329,7 +327,11 @@ impl ProofShapeModuleChip {
 }
 
 impl RowMajorChip<F> for ProofShapeModuleChip {
-    type Ctx<'a> = (&'a MultiStarkVerifyingKeyV2, &'a [Proof], &'a [Preflight]);
+    type Ctx<'a> = (
+        &'a MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        &'a [Proof<BabyBearPoseidon2Config>],
+        &'a [Preflight],
+    );
 
     #[tracing::instrument(
         name = "wrapper.generate_trace",
@@ -354,22 +356,21 @@ impl RowMajorChip<F> for ProofShapeModuleChip {
 
 #[cfg(feature = "cuda")]
 mod cuda_tracegen {
-    use cuda_backend_v2::GpuBackendV2;
-    use openvm_cuda_backend::base::DeviceMatrix;
+    use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend};
     use openvm_cuda_common::copy::MemCopyD2H;
     use openvm_stark_backend::prover::MatrixDimensions;
     use p3_field::PrimeField32;
 
     use super::*;
     use crate::{
-        cuda::{GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
+        cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu, GlobalCtxGpu},
         primitives::{
-            pow::{PowerCheckerTraceGenerator, cuda::PowerCheckerGpuTraceGenerator},
+            pow::{cuda::PowerCheckerGpuTraceGenerator, PowerCheckerTraceGenerator},
             range::cuda::RangeCheckerGpuTraceGenerator,
         },
     };
 
-    impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for ProofShapeModule {
+    impl TraceGenModule<GlobalCtxGpu, GpuBackend> for ProofShapeModule {
         type ModuleSpecificCtx = ();
 
         #[tracing::instrument(skip_all)]
@@ -380,7 +381,7 @@ mod cuda_tracegen {
             preflights: &[PreflightGpu],
             _ctx: &(),
             required_heights: Option<&[usize]>,
-        ) -> Option<Vec<AirProvingContextV2<GpuBackendV2>>> {
+        ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             use crate::tracegen::ModuleChip;
 
             let range_checker_gpu = Arc::new(RangeCheckerGpuTraceGenerator::<8>::default());
@@ -423,7 +424,7 @@ mod cuda_tracegen {
             // Caution: proof_shape **must** finish trace gen before range_checker or pow_checker
             // can start trace gen with the correct multiplicities
             tracing::trace_span!("wrapper.generate_trace", air = "RangeChecker").in_scope(|| {
-                ctxs.push(AirProvingContextV2::simple_no_pis(
+                ctxs.push(AirProvingContext::simple_no_pis(
                     Arc::try_unwrap(range_checker_gpu).unwrap().generate_trace(),
                 ));
             });

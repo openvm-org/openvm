@@ -1,10 +1,10 @@
 #[cfg(feature = "cuda")]
-use cuda_backend_v2::{GpuBackendV2, transport_air_proving_ctx_to_device};
-use stark_backend_v2::{
-    DIGEST_SIZE, F,
+use openvm_cuda_backend::{data_transporter::transport_air_proving_ctx_to_device, GpuBackend};
+use openvm_stark_backend::{
     proof::Proof,
-    prover::{AirProvingContextV2, CpuBackendV2, ProverBackendV2},
+    prover::{AirProvingContext, CpuBackend, ProverBackend},
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
 
 pub mod app {
     pub use openvm_circuit::arch::{
@@ -17,67 +17,67 @@ pub mod receiver;
 pub mod verifier;
 
 // Trait that non-root and compression provers use to remain generic in PB
-pub trait NonRootTraceGen<PB: ProverBackendV2> {
+pub trait NonRootTraceGen<PB: ProverBackend> {
     fn new() -> Self;
     fn generate_verifier_pvs_ctx(
         &self,
-        proofs: &[Proof],
+        proofs: &[Proof<BabyBearPoseidon2Config>],
         child_is_app: bool,
         child_dag_commit: PB::Commitment,
-    ) -> AirProvingContextV2<PB>;
+    ) -> AirProvingContext<PB>;
     fn generate_other_proving_ctxs(
         &self,
-        proofs: &[Proof],
+        proofs: &[Proof<BabyBearPoseidon2Config>],
         child_is_app: bool,
-    ) -> Vec<AirProvingContextV2<PB>>;
+    ) -> Vec<AirProvingContext<PB>>;
 }
 
 pub struct NonRootTraceGenImpl;
 
-impl NonRootTraceGen<CpuBackendV2> for NonRootTraceGenImpl {
+impl NonRootTraceGen<CpuBackend<BabyBearPoseidon2Config>> for NonRootTraceGenImpl {
     fn new() -> Self {
         Self
     }
 
     fn generate_verifier_pvs_ctx(
         &self,
-        proofs: &[Proof],
+        proofs: &[Proof<BabyBearPoseidon2Config>],
         child_is_app: bool,
         child_dag_commit: [F; DIGEST_SIZE],
-    ) -> AirProvingContextV2<CpuBackendV2> {
+    ) -> AirProvingContext<CpuBackend<BabyBearPoseidon2Config>> {
         verifier::generate_proving_ctx(proofs, child_is_app, child_dag_commit)
     }
 
     fn generate_other_proving_ctxs(
         &self,
-        proofs: &[Proof],
+        proofs: &[Proof<BabyBearPoseidon2Config>],
         child_is_app: bool,
-    ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
+    ) -> Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>> {
         vec![receiver::generate_proving_ctx(proofs, child_is_app)]
     }
 }
 
 #[cfg(feature = "cuda")]
-impl NonRootTraceGen<GpuBackendV2> for NonRootTraceGenImpl {
+impl NonRootTraceGen<GpuBackend> for NonRootTraceGenImpl {
     fn new() -> Self {
         Self
     }
 
     fn generate_verifier_pvs_ctx(
         &self,
-        proofs: &[Proof],
+        proofs: &[Proof<BabyBearPoseidon2Config>],
         child_is_app: bool,
         child_dag_commit: [F; DIGEST_SIZE],
-    ) -> AirProvingContextV2<GpuBackendV2> {
+    ) -> AirProvingContext<GpuBackend> {
         let cpu_ctx = verifier::generate_proving_ctx(proofs, child_is_app, child_dag_commit);
         transport_air_proving_ctx_to_device(cpu_ctx)
     }
 
     fn generate_other_proving_ctxs(
         &self,
-        proofs: &[Proof],
+        proofs: &[Proof<BabyBearPoseidon2Config>],
         child_is_app: bool,
-    ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
+    ) -> Vec<AirProvingContext<GpuBackend>> {
         let cpu_ctx = receiver::generate_proving_ctx(proofs, child_is_app);
         vec![transport_air_proving_ctx_to_device(cpu_ctx)]
     }

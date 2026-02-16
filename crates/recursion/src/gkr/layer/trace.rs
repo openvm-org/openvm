@@ -1,11 +1,11 @@
 use core::borrow::BorrowMut;
 
 use openvm_stark_backend::p3_maybe_rayon::prelude::*;
+use openvm_stark_sdk::config::baby_bear_poseidon2::{D_EF, EF, F};
 use p3_field::{BasedVectorSpace, PrimeCharacteristicRing};
 use p3_matrix::dense::RowMajorMatrix;
-use stark_backend_v2::{D_EF, EF, F};
 
-use super::{GkrLayerCols, air::reduce_to_single_evaluation};
+use super::{air::reduce_to_single_evaluation, GkrLayerCols};
 use crate::tracegen::RowMajorChip;
 
 /// Minimal record for parallel gkr layer trace generation

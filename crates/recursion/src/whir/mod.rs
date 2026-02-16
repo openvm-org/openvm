@@ -1,23 +1,19 @@
 use core::{cmp, iter::zip};
 use std::sync::Arc;
 
-use itertools::{Itertools, izip};
+use itertools::{izip, Itertools};
 use openvm_circuit_primitives::encoder::Encoder;
-use openvm_stark_backend::{AirRef, p3_maybe_rayon::prelude::*};
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use openvm_stark_backend::{
+    keygen::types::MultiStarkVerifyingKey,
+    p3_maybe_rayon::prelude::*,
+    poly_common::{eval_mle_evals_at_point, interpolate_quadratic_at_012, Squarable},
+    proof::{Proof, WhirProof},
+    prover::{AirProvingContext, CpuBackend},
+    AirRef, FiatShamirTranscript, SystemParams, TranscriptHistory, WhirConfig,
+};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, CHUNK, EF, F};
 use p3_field::{Field, PrimeCharacteristicRing, PrimeField32, TwoAdicField};
 use p3_matrix::dense::RowMajorMatrix;
-use stark_backend_v2::{
-    EF, F, SystemParams, WhirConfig,
-    keygen::types::MultiStarkVerifyingKeyV2,
-    poly_common::{Squarable, eval_mle_evals_at_point, interpolate_quadratic_at_012},
-    poseidon2::{
-        CHUNK,
-        sponge::{FiatShamirTranscript, TranscriptHistory},
-    },
-    proof::{Proof, WhirProof},
-    prover::{AirProvingContextV2, CpuBackendV2},
-};
 use strum::{EnumCount, EnumDiscriminants};
 
 use crate::{
@@ -102,7 +98,7 @@ pub struct WhirModule {
 
 impl WhirModule {
     pub fn new(
-        child_vk: &MultiStarkVerifyingKeyV2,
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         b: &mut BusIndexManager,
         bus_inventory: BusInventory,
     ) -> Self {
@@ -139,9 +135,9 @@ impl WhirModule {
 
 impl WhirModule {
     #[tracing::instrument(level = "trace", skip_all)]
-    pub fn run_preflight<TS: FiatShamirTranscript + TranscriptHistory>(
+    pub fn run_preflight<TS: FiatShamirTranscript<BabyBearPoseidon2Config> + TranscriptHistory>(
         &self,
-        proof: &Proof,
+        proof: &Proof<BabyBearPoseidon2Config>,
         preflight: &mut Preflight,
         ts: &mut TS,
     ) {
@@ -156,6 +152,7 @@ impl WhirModule {
             folding_pow_witnesses,
             query_phase_pow_witnesses,
             final_poly,
+            mu_pow_witness,
         } = &proof.whir_proof;
 
         let &SystemParams {
@@ -499,8 +496,8 @@ impl WhirModule {
     #[tracing::instrument(skip_all)]
     fn generate_blob(
         &self,
-        child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[&Proof],
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proofs: &[&Proof<BabyBearPoseidon2Config>],
         preflights: &[&Preflight],
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
     ) -> WhirBlobCpu {
@@ -518,6 +515,7 @@ impl WhirModule {
             rounds: _,
             query_phase_pow_bits,
             folding_pow_bits,
+            mu_pow_bits,
         } = whir;
         let num_queries_per_round = num_queries_per_round(&child_vk.inner.params);
         let num_initial_queries = *num_queries_per_round.first().unwrap_or(&0);
@@ -653,18 +651,18 @@ impl WhirModule {
     }
 }
 
-impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for WhirModule {
+impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for WhirModule {
     type ModuleSpecificCtx = ExpBitsLenTraceGenerator;
 
     #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
         &self,
-        child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proofs: &[Proof<BabyBearPoseidon2Config>],
         preflights: &[Preflight],
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
         required_heights: Option<&[usize]>,
-    ) -> Option<Vec<AirProvingContextV2<CpuBackendV2>>> {
+    ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
         let proofs = proofs.iter().collect_vec();
         let preflights = preflights.iter().collect_vec();
         let blob = self.generate_blob(child_vk, &proofs, &preflights, exp_bits_len_gen);
@@ -839,18 +837,19 @@ impl RowMajorChip<F> for WhirModuleChip {
 mod cuda_tracegen {
     use std::cmp;
 
-    use cuda_backend_v2::GpuBackendV2;
+    use openvm_cuda_backend::GpuBackend;
     use openvm_cuda_common::d_buffer::DeviceBuffer;
+    use openvm_poseidon2_air::POSEIDON2_WIDTH;
     use openvm_stark_backend::p3_maybe_rayon::prelude::*;
-    use stark_backend_v2::poseidon2::{CHUNK, WIDTH};
+    use openvm_stark_sdk::config::baby_bear_poseidon2::CHUNK;
 
     use super::*;
     use crate::{
         cuda::{
-            GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr,
-            vk::VerifyingKeyGpu,
+            preflight::PreflightGpu, proof::ProofGpu, to_device_or_nullptr, vk::VerifyingKeyGpu,
+            GlobalCtxGpu,
         },
-        tracegen::cuda::{StandardTracegenGpuCtx, generate_gpu_proving_ctx},
+        tracegen::cuda::{generate_gpu_proving_ctx, StandardTracegenGpuCtx},
         whir::cuda_abi::PoseidonStatePair,
     };
 
@@ -874,7 +873,7 @@ mod cuda_tracegen {
     }
 
     fn build_initial_poseidon_state_pairs(
-        proofs: &[&Proof],
+        proofs: &[&Proof<BabyBearPoseidon2Config>],
         preflights: &[&Preflight],
     ) -> Vec<PoseidonStatePair> {
         let expected_pairs: usize = preflights
@@ -908,7 +907,7 @@ mod cuda_tracegen {
                             let mut pre_state = if chunk_idx > 0 {
                                 chunk_states[chunk_idx - 1]
                             } else {
-                                [F::ZERO; WIDTH]
+                                [F::ZERO; POSEIDON2_WIDTH]
                             };
                             let chunk_start = chunk_idx * CHUNK;
                             let chunk_len = cmp::min(CHUNK, opened_row.len() - chunk_start);
@@ -928,7 +927,11 @@ mod cuda_tracegen {
 
     impl WhirBlobGpu {
         // TODO: Receive PreflightGPU?
-        fn new(proofs: &[&Proof], preflights: &[&Preflight], blob: &WhirBlobCpu) -> Self {
+        fn new(
+            proofs: &[&Proof<BabyBearPoseidon2Config>],
+            preflights: &[&Preflight],
+            blob: &WhirBlobCpu,
+        ) -> Self {
             let mus = to_device_or_nullptr(
                 &preflights
                     .iter()
@@ -1009,7 +1012,8 @@ mod cuda_tracegen {
                 to_device_or_nullptr(&codeword_opened_values_host).unwrap();
 
             // Must be in same order as codeword_opened_values
-            let mut codeword_states_host = Vec::with_capacity(codeword_opened_values_cap * WIDTH);
+            let mut codeword_states_host =
+                Vec::with_capacity(codeword_opened_values_cap * POSEIDON2_WIDTH);
             for preflight in preflights.iter() {
                 for round in preflight.codeword_states.iter() {
                     for query in round.iter() {
@@ -1042,14 +1046,14 @@ mod cuda_tracegen {
         }
     }
 
-    impl ModuleChip<GpuBackendV2> for WhirModuleChip {
+    impl ModuleChip<GpuBackend> for WhirModuleChip {
         type Ctx<'a> = (StandardTracegenGpuCtx<'a>, &'a WhirBlobGpu, &'a WhirBlobCpu);
 
         fn generate_proving_ctx(
             &self,
             ctx: &Self::Ctx<'_>,
             required_height: Option<usize>,
-        ) -> Option<AirProvingContextV2<GpuBackendV2>> {
+        ) -> Option<AirProvingContext<GpuBackend>> {
             match self {
                 WhirModuleChip::InitialOpenedValues => {
                     initial_opened_values::cuda::InitialOpenedValuesGpuTraceGenerator
@@ -1108,7 +1112,7 @@ mod cuda_tracegen {
         }
     }
 
-    impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for WhirModule {
+    impl TraceGenModule<GlobalCtxGpu, GpuBackend> for WhirModule {
         type ModuleSpecificCtx = ExpBitsLenTraceGenerator;
 
         #[tracing::instrument(skip_all)]
@@ -1119,7 +1123,7 @@ mod cuda_tracegen {
             preflights: &[PreflightGpu],
             exp_bits_len_gen: &ExpBitsLenTraceGenerator,
             required_heights: Option<&[usize]>,
-        ) -> Option<Vec<AirProvingContextV2<GpuBackendV2>>> {
+        ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             let proofs_cpu = proofs.iter().map(|proof| &proof.cpu).collect_vec();
             let preflights_cpu = preflights
                 .iter()

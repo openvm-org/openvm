@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
-use stark_backend_v2::{Digest, SystemParams, keygen::types::MultiStarkVerifyingKeyV2};
+use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, SystemParams};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, Digest};
 
 use crate::cuda::types::AirData;
 
@@ -14,14 +15,14 @@ pub struct VerifyingKeyGpu {
     // TODO[TEMP]: cpu vk for hybrid usage; remove this when no longer needed
     // If you need something from `cpu` for actual cuda tracegen, move it to a direct field of
     // VerifyingKeyGpu. Host and/or device types allowed.
-    pub cpu: MultiStarkVerifyingKeyV2,
+    pub cpu: MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
     pub per_air: DeviceBuffer<AirData>,
     pub system_params: SystemParams,
     pub pre_hash: Digest,
 }
 
 impl VerifyingKeyGpu {
-    pub fn new(vk: &MultiStarkVerifyingKeyV2) -> Self {
+    pub fn new(vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>) -> Self {
         let per_air = vk
             .inner
             .per_air

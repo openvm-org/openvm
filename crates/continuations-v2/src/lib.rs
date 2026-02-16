@@ -4,3 +4,5 @@ pub mod circuit;
 
 #[cfg(test)]
 mod tests;
+
+pub type SC = recursion_circuit::prelude::SC;

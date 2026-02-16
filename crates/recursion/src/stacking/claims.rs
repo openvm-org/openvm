@@ -1,20 +1,19 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use itertools::{Itertools, izip};
+use itertools::{izip, Itertools};
 use openvm_circuit_primitives::{
-    SubAir,
     utils::{and, assert_array_eq, not},
+    SubAir,
 };
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{D_EF, EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    BasedVectorSpace, PrimeCharacteristicRing, PrimeField32, extension::BinomiallyExtendable,
+    extension::BinomiallyExtendable, BasedVectorSpace, PrimeCharacteristicRing, PrimeField32,
 };
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{D_EF, EF, F};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -95,7 +94,7 @@ impl<F> BaseAir<F> for StackingClaimsAir {
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for StackingClaimsAir
 where
     AB::F: PrimeField32,
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -416,33 +415,32 @@ impl RowMajorChip<F> for StackingClaimsTraceGenerator {
 
 #[cfg(feature = "cuda")]
 pub(crate) mod cuda {
-    use cuda_backend_v2::GpuBackendV2;
-    use openvm_cuda_backend::base::DeviceMatrix;
+    use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend};
     use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
-    use stark_backend_v2::prover::AirProvingContextV2;
+    use openvm_stark_backend::prover::AirProvingContext;
 
     use super::*;
     use crate::{
         stacking::{
             cuda_abi::{
-                ClaimsRecordsPerProof, StackingClaim, stacking_claims_tracegen,
-                stacking_claims_tracegen_temp_bytes,
+                stacking_claims_tracegen, stacking_claims_tracegen_temp_bytes,
+                ClaimsRecordsPerProof, StackingClaim,
             },
             cuda_tracegen::StackingBlob,
         },
-        tracegen::{ModuleChip, cuda::StandardTracegenGpuCtx},
+        tracegen::{cuda::StandardTracegenGpuCtx, ModuleChip},
     };
 
     pub struct StackingClaimsTraceGeneratorGpu;
 
-    impl ModuleChip<GpuBackendV2> for StackingClaimsTraceGeneratorGpu {
+    impl ModuleChip<GpuBackend> for StackingClaimsTraceGeneratorGpu {
         type Ctx<'a> = (StandardTracegenGpuCtx<'a>, &'a StackingBlob);
 
         fn generate_proving_ctx(
             &self,
             ctx: &Self::Ctx<'_>,
             required_height: Option<usize>,
-        ) -> Option<stark_backend_v2::prover::AirProvingContextV2<GpuBackendV2>> {
+        ) -> Option<openvm_stark_backend::prover::AirProvingContext<GpuBackend>> {
             let proofs_gpu = ctx.0.proofs;
             let preflights_gpu = ctx.0.preflights;
             let blob = ctx.1;
@@ -531,7 +529,7 @@ pub(crate) mod cuda {
                 .unwrap();
             }
 
-            Some(AirProvingContextV2::simple_no_pis(d_trace))
+            Some(AirProvingContext::simple_no_pis(d_trace))
         }
     }
 }
