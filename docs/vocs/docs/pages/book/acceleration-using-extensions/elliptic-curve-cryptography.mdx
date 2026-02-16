@@ -15,12 +15,13 @@ Developers can enable arbitrary Weierstrass curves by configuring this extension
   It's a group that has a generator, so it defines `GENERATOR` and `NEG_GENERATOR`.
 
 - `WeierstrassPoint` trait:
-  It represents an affine point on a Weierstrass elliptic curve and it extends `Group`.
+  It represents a point on a Weierstrass elliptic curve and it extends `Group`. Internally, points use projective coordinates `(X, Y, Z)` for efficient computation, but the API provides affine coordinate access.
 
   - `Coordinate` type is the type of the coordinates of the point, and it implements `IntMod`.
-  - `x()`, `y()` are used to get the affine coordinates
-  - `from_xy` is a constructor for the point, which checks if the point is either identity or on the affine curve.
-  - The point supports elliptic curve operations through intrinsic functions `add_ne_nonidentity` and `double_nonidentity`.
+  - `x()`, `y()`, `z()` are used to get the projective coordinates
+  - `normalize()` converts from projective to affine coordinates `(X/Z, Y/Z, 1)` (requires one field inversion). Returns identity for `Z=0`.
+  - `from_xy` is a constructor for the point, which checks if the point is either identity or on the curve.
+  - The point supports elliptic curve operations through intrinsic functions that use complete formulas (handling all edge cases including identity and equal points).
   - `decompress`: Sometimes an elliptic curve point is compressed and represented by its `x` coordinate and the odd/even parity of the `y` coordinate. `decompress` is used to decompress the point back to `(x, y)`.
 
 - `msm`: for multi-scalar multiplication.
