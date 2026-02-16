@@ -11,9 +11,9 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine,
 };
-use test_case::test_case;
 #[cfg(not(feature = "cuda"))]
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
+use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::is_zero,

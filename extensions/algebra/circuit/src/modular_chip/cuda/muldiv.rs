@@ -4,7 +4,7 @@ use derive_new::new;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::arch::{AdapterCoreLayout, DenseRecordArena, RecordSeeker};
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
@@ -13,7 +13,6 @@ use openvm_mod_circuit_builder::{
     ExprBuilderConfig, FieldExpressionChipGPU, FieldExpressionCoreAir, FieldExpressionMetadata,
 };
 use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
-use openvm_circuit_primitives::Chip;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{modular_chip::muldiv_expr, AlgebraRecord};

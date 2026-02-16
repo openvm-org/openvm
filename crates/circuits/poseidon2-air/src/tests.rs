@@ -1,9 +1,11 @@
 use std::{array::from_fn, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_air::BaseAir, p3_field::PrimeCharacteristicRing,
+    p3_air::BaseAir,
+    p3_field::PrimeCharacteristicRing,
     prover::{AirProvingContext, ColMajorMatrix},
-    utils::disable_debug_builder, StarkEngine, SystemParams,
+    utils::disable_debug_builder,
+    StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::*, p3_baby_bear::BabyBear, utils::create_seeded_rng,

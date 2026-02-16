@@ -2,10 +2,9 @@ use std::{borrow::Borrow, mem::size_of, slice::from_raw_parts, sync::Arc};
 
 use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
-use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
-use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend, prelude::F};
+use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_circuit_primitives::Chip;
 use openvm_stark_backend::prover::AirProvingContext;
 use p3_field::{Field, PrimeField32};
 

@@ -21,7 +21,6 @@ use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use crate::system::cuda::public_values::PublicValuesChipGPU;
 use crate::{
-    utils::test_cpu_engine,
     arch::{
         testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
         Arena, MemoryConfig, PreflightExecutor, SystemConfig, VmCoreAir,
@@ -34,6 +33,7 @@ use crate::{
             PublicValuesAir, PublicValuesChip, PublicValuesExecutor, PublicValuesFiller,
         },
     },
+    utils::test_cpu_engine,
 };
 #[cfg(feature = "cuda")]
 use crate::{
@@ -243,17 +243,15 @@ fn public_values_neg_pv_not_match() {
     let pvs = to_field_vec(vec![0, 0, 56456]);
 
     disable_debug_builder();
-    assert!(
-        test_cpu_engine()
-            .run_test(
-                vec![air],
-                vec![AirProvingContext::simple(
-                    ColMajorMatrix::from_row_major(&trace),
-                    pvs,
-                )]
-            )
-            .is_err()
-    );
+    assert!(test_cpu_engine()
+        .run_test(
+            vec![air],
+            vec![AirProvingContext::simple(
+                ColMajorMatrix::from_row_major(&trace),
+                pvs,
+            )]
+        )
+        .is_err());
 }
 
 #[test]
@@ -270,17 +268,15 @@ fn public_values_neg_index_out_of_bound() {
     let pvs = to_field_vec(vec![0, 0, 0]);
 
     disable_debug_builder();
-    assert!(
-        test_cpu_engine()
-            .run_test(
-                vec![air],
-                vec![AirProvingContext::simple(
-                    ColMajorMatrix::from_row_major(&trace),
-                    pvs,
-                )]
-            )
-            .is_err()
-    );
+    assert!(test_cpu_engine()
+        .run_test(
+            vec![air],
+            vec![AirProvingContext::simple(
+                ColMajorMatrix::from_row_major(&trace),
+                pvs,
+            )]
+        )
+        .is_err());
 }
 
 #[test]
@@ -314,17 +310,15 @@ fn public_values_neg_double_publish_impl(actual_pv: u32) {
     let pvs = to_field_vec(vec![0, 0, actual_pv]);
 
     disable_debug_builder();
-    assert!(
-        test_cpu_engine()
-            .run_test(
-                vec![air],
-                vec![AirProvingContext::simple(
-                    ColMajorMatrix::from_row_major(&trace),
-                    pvs,
-                )]
-            )
-            .is_err()
-    );
+    assert!(test_cpu_engine()
+        .run_test(
+            vec![air],
+            vec![AirProvingContext::simple(
+                ColMajorMatrix::from_row_major(&trace),
+                pvs,
+            )]
+        )
+        .is_err());
 }
 
 #[cfg(feature = "cuda")]

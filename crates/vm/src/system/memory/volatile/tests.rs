@@ -1,7 +1,9 @@
 use std::{collections::HashSet, iter, sync::Arc};
 
-use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
-use openvm_circuit_primitives::Chip;
+use openvm_circuit_primitives::{
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    Chip,
+};
 use openvm_stark_backend::{
     interaction::BusIndex,
     p3_field::PrimeCharacteristicRing,
@@ -126,10 +128,7 @@ fn boundary_air_test() {
         boundary_chip.finalize(final_memory.clone());
         let boundary_ctx: AirProvingContext<CpuBackend<BabyBearPoseidon2Config>> =
             boundary_chip.generate_proving_ctx(());
-        assert_eq!(
-            boundary_ctx.height(),
-            overridden_height.next_power_of_two()
-        );
+        assert_eq!(boundary_ctx.height(), overridden_height.next_power_of_two());
     }
 
     test_cpu_engine()

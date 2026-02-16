@@ -5,8 +5,10 @@ use openvm_stark_backend::{
     p3_field::{extension::BinomialExtensionField, PrimeCharacteristicRing},
     SystemParams,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine as BabyBearPoseidon2Engine;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine as BabyBearPoseidon2Engine,
+    p3_baby_bear::BabyBear,
+};
 
 type F = BabyBear;
 type EF = BinomialExtensionField<BabyBear, 4>;

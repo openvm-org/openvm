@@ -48,11 +48,9 @@ pub mod cuda {
     use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer};
     use openvm_stark_backend::prover::AirProvingContext;
 
-    use crate::Chip;
-
     use crate::{
         bitwise_op_lookup::BitwiseOperationLookupChipGPU,
-        cuda_abi::bitwise_op_lookup::dummy_tracegen,
+        cuda_abi::bitwise_op_lookup::dummy_tracegen, Chip,
     };
 
     const RECORD_WIDTH: usize = 3;

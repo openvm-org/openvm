@@ -1,7 +1,4 @@
-use std::{
-    borrow::BorrowMut,
-    sync::atomic::AtomicU32,
-};
+use std::{borrow::BorrowMut, sync::atomic::AtomicU32};
 
 use openvm_stark_backend::{
     p3_field::PrimeField32,

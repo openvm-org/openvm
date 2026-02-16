@@ -1,7 +1,6 @@
 //! Prover extension for the GPU backend which still does trace generation on CPU.
 
 use openvm_algebra_circuit::Rv32ModularHybridBuilder;
-use openvm_circuit_primitives::hybrid_chip::cpu_proving_ctx_to_gpu;
 use openvm_circuit::{
     arch::*,
     system::{
@@ -12,6 +11,7 @@ use openvm_circuit::{
         memory::SharedMemoryHelper,
     },
 };
+use openvm_circuit_primitives::{hybrid_chip::cpu_proving_ctx_to_gpu, Chip};
 use openvm_cuda_backend::{
     base::DeviceMatrix,
     prelude::{F, SC},
@@ -19,7 +19,6 @@ use openvm_cuda_backend::{
 };
 use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
 use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
-use openvm_circuit_primitives::Chip;
 use openvm_stark_backend::{
     p3_air::BaseAir,
     prover::{AirProvingContext, CpuBackend},

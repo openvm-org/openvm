@@ -5,13 +5,11 @@ use std::{
     sync::Arc,
 };
 
-use openvm_stark_backend::prover::StridedColMajorMatrixView;
-
 use openvm_stark_backend::{
     interaction::{PermutationCheckBus, PermutationInteractionType},
     p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
-    prover::{AirProvingContext, ColMajorMatrix},
+    prover::{AirProvingContext, ColMajorMatrix, StridedColMajorMatrixView},
     test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     StarkEngine,
 };
@@ -369,8 +367,8 @@ fn expand_test_negative() {
     chip.finalize(&memory, &BTreeMap::new(), &hash_test_chip);
     let mut chip_ctx = chip.generate_proving_ctx();
     {
-        let mut trace = StridedColMajorMatrixView::from(chip_ctx.common_main.as_view())
-            .to_row_major_matrix();
+        let mut trace =
+            StridedColMajorMatrixView::from(chip_ctx.common_main.as_view()).to_row_major_matrix();
         for row in trace.rows_mut() {
             let row: &mut MemoryMerkleCols<_, CHUNK> = row.borrow_mut();
             if row.expand_direction == BabyBear::NEG_ONE {

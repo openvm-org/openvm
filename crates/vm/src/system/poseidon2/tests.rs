@@ -80,10 +80,7 @@ fn poseidon2_periphery_direct_test() {
     let tester = VmChipTestBuilder::default();
     let dummy_ctx = dummy_interaction_chip.generate_proving_ctx();
     let dummy_air = Arc::new(dummy_interaction_chip.air) as AirRef<TestSC>;
-    let mut tester = tester
-        .build()
-        .load_periphery_ref((air, chip))
-        .finalize();
+    let mut tester = tester.build().load_periphery_ref((air, chip)).finalize();
     tester.air_ctxs.push((dummy_air, dummy_ctx));
     tester.simple_test().expect("Verification failed");
 }
@@ -136,9 +133,6 @@ fn poseidon2_periphery_duplicate_hashes_test() {
     let tester = VmChipTestBuilder::default();
     let dummy_ctx = dummy_interaction_chip.generate_proving_ctx();
     let dummy_air = Arc::new(dummy_interaction_chip.air) as AirRef<TestSC>;
-    let mut tester = tester
-        .build()
-        .load_periphery_ref((air, chip))
-        .finalize();
+    let mut tester = tester.build().load_periphery_ref((air, chip)).finalize();
     tester.air_ctxs.push((dummy_air, dummy_ctx));
 }

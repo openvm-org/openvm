@@ -83,9 +83,9 @@ pub mod cuda {
     use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer};
     use openvm_stark_backend::prover::AirProvingContext;
 
-    use crate::Chip;
-
-    use crate::{cuda_abi::var_range::dummy_tracegen, var_range::VariableRangeCheckerChipGPU};
+    use crate::{
+        cuda_abi::var_range::dummy_tracegen, var_range::VariableRangeCheckerChipGPU, Chip,
+    };
 
     /// Width of the dummy trace: [count, value, bits] = 3 columns
     /// Define the width of the dummy instead of using constant from var_range

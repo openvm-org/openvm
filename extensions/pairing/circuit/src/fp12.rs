@@ -208,11 +208,12 @@ mod tests {
     use openvm_mod_circuit_builder::{test_utils::*, *};
     use openvm_pairing_guest::bn254::BN254_MODULUS;
     use openvm_stark_backend::{
-        p3_air::BaseAir, p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
-    };
-    use openvm_stark_backend::{
-        any_air_arc_vec, prover::AirProvingContext, prover::ColMajorMatrix, StarkEngine,
-        SystemParams,
+        any_air_arc_vec,
+        p3_air::BaseAir,
+        p3_field::PrimeCharacteristicRing,
+        p3_matrix::dense::RowMajorMatrix,
+        prover::{AirProvingContext, ColMajorMatrix},
+        StarkEngine, SystemParams,
     };
     use openvm_stark_sdk::{config::baby_bear_poseidon2::*, p3_baby_bear::BabyBear};
     use rand08::{rngs::StdRng, SeedableRng};

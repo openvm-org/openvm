@@ -21,7 +21,7 @@ use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::PrimeCharacteristicRing,
     p3_matrix::Matrix,
-    {BaseAirWithPublicValues, PartitionedBaseAir},
+    BaseAirWithPublicValues, PartitionedBaseAir,
 };
 use p3_keccak_air::{KeccakAir, NUM_KECCAK_COLS as NUM_KECCAK_PERM_COLS, U64_LIMBS};
 

@@ -1,5 +1,6 @@
 use std::iter;
 
+use openvm_circuit_primitives::Chip;
 use openvm_instructions::{
     exe::VmExe,
     instruction::Instruction,
@@ -10,7 +11,6 @@ use openvm_native_compiler::{
     FieldArithmeticOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*, NativeLoadStoreOpcode::*,
 };
 use openvm_rv32im_transpiler::BranchEqualOpcode::*;
-use openvm_circuit_primitives::Chip;
 use openvm_stark_backend::{
     any_air_arc_vec,
     p3_field::PrimeCharacteristicRing,

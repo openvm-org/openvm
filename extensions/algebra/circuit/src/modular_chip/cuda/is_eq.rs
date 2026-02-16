@@ -5,13 +5,12 @@ use num_bigint::BigUint;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs, bitwise_op_lookup::BitwiseOperationLookupChipGPU,
-    var_range::VariableRangeCheckerChipGPU,
+    var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_rv32_adapters::{Rv32IsEqualModAdapterCols, Rv32IsEqualModAdapterRecord};
-use openvm_circuit_primitives::Chip;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use super::cuda_abi::is_eq_cuda::tracegen as modular_is_equal_tracegen;

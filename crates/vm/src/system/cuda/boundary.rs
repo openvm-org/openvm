@@ -183,8 +183,7 @@ mod tests {
             TimestampedValues,
         },
     };
-    use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
-    use openvm_circuit_primitives::Chip;
+    use openvm_circuit_primitives::{var_range::VariableRangeCheckerChip, Chip};
     use openvm_cuda_backend::{
         data_transporter::assert_eq_host_and_device_matrix_col_maj,
         prelude::{F, SC},

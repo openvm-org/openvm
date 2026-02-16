@@ -4,10 +4,10 @@ use num_bigint::BigUint;
 use num_traits::One;
 use openvm_circuit_primitives::{bigint::utils::*, TraceSubRowGenerator};
 use openvm_stark_backend::{
-    p3_air::BaseAir, p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
-};
-use openvm_stark_backend::{
     any_air_arc_vec,
+    p3_air::BaseAir,
+    p3_field::PrimeCharacteristicRing,
+    p3_matrix::dense::RowMajorMatrix,
     prover::{AirProvingContext, ColMajorMatrix},
     StarkEngine, SystemParams,
 };
