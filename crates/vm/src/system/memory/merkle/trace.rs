@@ -1,12 +1,12 @@
 use std::{
     borrow::BorrowMut,
-    sync::{atomic::AtomicU32, Arc},
+    sync::atomic::AtomicU32,
 };
 
 use openvm_stark_backend::{
     p3_field::PrimeField32,
     p3_matrix::dense::RowMajorMatrix,
-    prover::{AirProvingContext, CpuBackend},
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
     StarkProtocolConfig, Val,
 };
 use tracing::instrument;
@@ -82,9 +82,9 @@ where
             *trace_row.borrow_mut() = row;
         }
 
-        let trace = Arc::new(RowMajorMatrix::new(trace, width));
+        let trace = RowMajorMatrix::new(trace, width);
         let pvs = init_root.into_iter().chain(final_root).collect();
-        AirProvingContext::simple(trace, pvs)
+        AirProvingContext::simple(ColMajorMatrix::from_row_major(&trace), pvs)
     }
 }
 pub trait SerialReceiver<T> {

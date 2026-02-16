@@ -16,8 +16,8 @@ use openvm_circuit_primitives::{
     Chip,
 };
 use openvm_cuda_backend::{
-    data_transporter::assert_eq_host_and_device_matrix,
-    prelude::{BabyBearPoseidon2Config, F, SC},
+    data_transporter::assert_eq_host_and_device_matrix_col_maj,
+    prelude::{EF, F, SC},
     BabyBearPoseidon2GpuEngine, GpuBackend,
 };
 use openvm_instructions::{program::PC_BITS, riscv::RV32_REGISTER_AS};
@@ -26,7 +26,7 @@ use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
     p3_air::BaseAir,
     p3_field::{PrimeCharacteristicRing, PrimeField32},
-    prover::{AirProvingContext, CpuBackend, MatrixDimensions},
+    prover::{AirProvingContext, CpuBackend},
     utils::disable_debug_builder,
     verifier::VerifierError,
     AirRef, AnyAir, StarkEngine, Val, VerificationData,
@@ -518,7 +518,7 @@ impl GpuChipTester {
         G: Chip<RA, GpuBackend>,
     {
         let proving_ctx = gpu_chip.generate_proving_ctx(gpu_arena);
-        if matches!(proving_ctx.common_main.as_ref(), Some(trace) if trace.height() > 0) {
+        if proving_ctx.height() > 0 {
             self = self.load_air_proving_ctx(Arc::new(air) as AirRef<SC>, proving_ctx);
         }
         self
@@ -571,20 +571,13 @@ impl GpuChipTester {
     {
         let proving_ctx = gpu_chip.generate_proving_ctx(gpu_arena);
         let expected_trace = cpu_chip.generate_proving_ctx(cpu_arena).common_main;
-        if proving_ctx.common_main.is_none() {
-            assert!(expected_trace.is_none());
-            return self;
-        }
         #[cfg(feature = "touchemall")]
         {
             use openvm_cuda_backend::engine::check_trace_validity;
 
             check_trace_validity(&proving_ctx, &air.name());
         }
-        assert_eq_host_and_device_matrix(
-            expected_trace.unwrap(),
-            proving_ctx.common_main.as_ref().unwrap(),
-        );
+        assert_eq_host_and_device_matrix_col_maj(&expected_trace, &proving_ctx.common_main);
         self.airs.push(Arc::new(air) as AirRef<SC>);
         self.ctxs.push(proving_ctx);
         self
@@ -634,7 +627,7 @@ impl GpuChipTester {
             for (air, ctx) in airs
                 .into_iter()
                 .zip(ctxs)
-                .filter(|(_, ctx)| ctx.main_trace_height() > 0)
+                .filter(|(_, ctx)| ctx.height() > 0)
             {
                 self = self.load_air_proving_ctx(air, ctx);
             }
@@ -688,22 +681,15 @@ impl GpuChipTester {
     pub fn test<P: Fn() -> BabyBearPoseidon2GpuEngine>(
         self,
         engine_provider: P,
-    ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerifierError<BabyBearPoseidon2Config>>
-    {
-        engine_provider().run_test(
-            self.airs,
-            self.ctxs
-                .into_iter()
-                .map(AirProvingContext::from_v1_no_cached)
-                .collect(),
-        )
+    ) -> Result<VerificationData<SC>, VerifierError<EF>> {
+        engine_provider().run_test(self.airs, self.ctxs)
     }
 
-    pub fn simple_test(self) -> Result<VerificationData, VerifierError> {
+    pub fn simple_test(self) -> Result<VerificationData<SC>, VerifierError<EF>> {
         self.test(test_gpu_engine)
     }
 
-    pub fn simple_test_with_expected_error(self, expected_error: VerifierError) {
+    pub fn simple_test_with_expected_error(self, expected_error: VerifierError<EF>) {
         disable_debug_builder();
         let msg = format!(
             "Expected verification to fail with {:?}, but it didn't",

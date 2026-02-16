@@ -864,7 +864,7 @@ where
         proofs: &[Proof<E::SC>],
     ) -> Result<(), VmVerificationError<E::SC>>
     where
-        Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
+        Com<E::SC>: Into<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
         Val<E::SC>: PrimeField32,
     {
         if self.config().as_ref().continuation_enabled {
@@ -1308,7 +1308,7 @@ pub fn verify_segments<E>(
 where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
-    Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]>,
+    Com<E::SC>: Into<[Val<E::SC>; CHUNK]>,
 {
     if proofs.is_empty() {
         return Err(VmVerificationError::ProofNotFound);
@@ -1426,7 +1426,7 @@ where
     }
     let exe_commit = compute_exe_commit(
         &vm_poseidon2_hasher(),
-        program_commit.unwrap().as_ref(),
+        &program_commit.unwrap().into(),
         initial_memory_root.as_ref().unwrap(),
         start_pc.unwrap(),
     );

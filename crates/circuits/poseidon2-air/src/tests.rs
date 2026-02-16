@@ -2,17 +2,9 @@ use std::{array::from_fn, sync::Arc};
 
 use openvm_stark_backend::{
     p3_air::BaseAir, p3_field::PrimeCharacteristicRing, utils::disable_debug_builder,
-    verifier::VerificationError,
+    verifier::VerifierError,
 };
-use openvm_stark_sdk::{
-    config::{
-        baby_bear_poseidon2::BabyBearPoseidon2Engine,
-        fri_params::standard_fri_params_with_100_bits_security,
-    },
-    engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
-    utils::create_seeded_rng,
-};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use p3_poseidon2::ExternalLayerConstants;
 use rand::{rngs::StdRng, Rng, RngCore};
 #[cfg(feature = "cuda")]

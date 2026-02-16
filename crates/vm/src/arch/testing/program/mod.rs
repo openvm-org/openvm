@@ -1,11 +1,11 @@
-use std::{borrow::BorrowMut, mem::size_of, sync::Arc};
+use std::{borrow::BorrowMut, mem::size_of};
 
 use openvm_circuit_primitives::Chip;
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
-    prover::{AirProvingContext, CpuBackend},
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
     StarkProtocolConfig, Val,
 };
 
@@ -66,6 +66,7 @@ impl<SC: StarkProtocolConfig, RA> Chip<RA, CpuBackend<SC>> for ProgramTester<Val
             *(row[..width - 1]).borrow_mut() = *record;
             row[width - 1] = Val::<SC>::ONE;
         }
-        AirProvingContext::simple_no_pis(Arc::new(RowMajorMatrix::new(values, width)))
+        let trace = RowMajorMatrix::new(values, width);
+        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace))
     }
 }

@@ -1,7 +1,6 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     cmp::min,
-    sync::Arc,
 };
 
 use itertools::zip_eq;
@@ -20,7 +19,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::{AirProvingContext, CpuBackend},
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
     BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 use static_assertions::const_assert;
@@ -305,7 +304,7 @@ where
             );
         }
 
-        let trace = Arc::new(RowMajorMatrix::new(rows, width));
-        AirProvingContext::simple_no_pis(trace)
+        let trace = RowMajorMatrix::new(rows, width);
+        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace))
     }
 }

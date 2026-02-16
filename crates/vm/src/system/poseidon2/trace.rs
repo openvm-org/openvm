@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, sync::Arc};
+use std::borrow::BorrowMut;
 
 use openvm_circuit_primitives::{utils::next_power_of_two_or_zero, Chip};
 use openvm_stark_backend::{
@@ -6,7 +6,7 @@ use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
-    prover::{AirProvingContext, CpuBackend},
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
     StarkProtocolConfig, Val,
 };
 
@@ -62,6 +62,7 @@ where
             });
         self.records.clear();
 
-        AirProvingContext::simple_no_pis(Arc::new(RowMajorMatrix::new(values, width)))
+        let trace = RowMajorMatrix::new(values, width);
+        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace))
     }
 }

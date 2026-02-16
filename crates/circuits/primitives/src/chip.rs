@@ -22,3 +22,9 @@ impl<R, PB: ProverBackend, C: Chip<R, PB> + 'static> AnyChip<R, PB> for C {
         self
     }
 }
+
+impl<R, PB: ProverBackend, C: Chip<R, PB> + ?Sized> Chip<R, PB> for std::sync::Arc<C> {
+    fn generate_proving_ctx(&self, records: R) -> AirProvingContext<PB> {
+        (**self).generate_proving_ctx(records)
+    }
+}

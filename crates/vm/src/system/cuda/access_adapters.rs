@@ -148,7 +148,7 @@ impl AccessAdapterInventoryGPU {
             .into_iter()
             .map(|trace| AirProvingContext {
                 cached_mains: vec![],
-                common_main: trace,
+                common_main: trace.unwrap_or_else(DeviceMatrix::dummy),
                 public_values: vec![],
             })
             .collect()

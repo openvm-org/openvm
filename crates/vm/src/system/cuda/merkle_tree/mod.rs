@@ -387,7 +387,7 @@ impl MemoryMerkleTree {
         self.top_roots_host = self.top_roots.to_host().unwrap();
         public_values.extend(self.top_roots_host[0]);
 
-        AirProvingContext::new(Vec::new(), Some(merkle_trace), public_values)
+        AirProvingContext::new(Vec::new(), merkle_trace, public_values)
     }
 
     /// An auxiliary function to calculate the required number of rows for the merkle trace.

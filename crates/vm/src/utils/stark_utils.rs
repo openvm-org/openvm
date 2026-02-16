@@ -37,7 +37,7 @@ cfg_if::cfg_if! {
             TestStarkEngine::new(SystemParams::new_for_testing(20))
         }
     } else {
-        pub use BabyBearPoseidon2CpuEngine as TestStarkEngine;
+        pub use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine as TestStarkEngine;
         use crate::arch::MatrixRecordArena;
         pub type TestRecordArena = MatrixRecordArena<BabyBear>;
     }
@@ -109,7 +109,7 @@ where
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
         + MeteredExecutor<Val<E::SC>>
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
-    Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
+    Com<E::SC>: Into<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
 {
     /*
     Assertions for Pure Execution AOT
@@ -199,7 +199,7 @@ where
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
         + MeteredExecutor<Val<E::SC>>
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
-    Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
+    Com<E::SC>: Into<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
 {
     setup_tracing();
     let engine = E::new(params);
@@ -252,8 +252,12 @@ where
         proofs.push(proof);
     }
     assert!(proofs.len() >= min_segments);
-    vm.verify(&vk, &proofs)
-        .expect("segment proofs should verify");
+    match vm.verify(&vk, &proofs) {
+        Ok(()) => {}
+        Err(err) => {
+            panic!("segment proofs should verify: {err}");
+        }
+    }
     let state = state.unwrap();
     let final_memory = (exit_code == Some(ExitCode::Success as u32)).then_some(state.memory.memory);
     let vdata = proofs

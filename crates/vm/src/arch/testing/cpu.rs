@@ -12,12 +12,13 @@ use openvm_stark_backend::{
     interaction::PermutationCheckBus,
     p3_matrix::dense::RowMajorMatrix,
     p3_util::log2_strict_usize,
-    prover::{AirProvingContext, CpuBackend},
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend, StridedColMajorMatrixView},
     verifier::VerifierError,
     AirRef, AnyAir, StarkEngine, StarkProtocolConfig, Val, VerificationData,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
+    config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
+    p3_baby_bear::BabyBear,
     utils::setup_tracing_with_log_level,
 };
 use rand::{rngs::StdRng, RngCore, SeedableRng};
@@ -482,8 +483,8 @@ where
             );
             let ctxs = memory_controller
                 .generate_proving_ctx(memory.access_adapter_records, touched_memory);
-            for (air, ctx) in zip_eq(mem_inventory.into_airs(), ctxs)
-                .filter(|(_, ctx)| ctx.main_trace_height() > 0)
+            for (air, ctx) in
+                zip_eq(mem_inventory.into_airs(), ctxs).filter(|(_, ctx)| ctx.height() > 0)
             {
                 self.air_ctxs.push((air, ctx));
             }
@@ -520,10 +521,10 @@ where
     {
         let arena = harness.arena;
         let mut ctx = harness.chip.generate_proving_ctx(arena);
-        let trace: Arc<RowMajorMatrix<Val<SC>>> = Option::take(&mut ctx.common_main).unwrap();
-        let mut trace = Arc::into_inner(trace).unwrap();
+        let mut trace =
+            StridedColMajorMatrixView::from(ctx.common_main.as_view()).to_row_major_matrix();
         modify_trace(&mut trace);
-        ctx.common_main = Some(Arc::new(trace));
+        ctx.common_main = ColMajorMatrix::from_row_major(&trace);
         self.air_ctxs.push((Arc::new(harness.air), ctx));
         self
     }
@@ -545,17 +546,19 @@ where
 }
 
 impl VmChipTester<BabyBearPoseidon2Config> {
-    pub fn simple_test(self) -> Result<VerificationData, VerifierError> {
+    pub fn simple_test(
+        self,
+    ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerifierError<baby_bear_poseidon2::EF>>
+    {
         assert!(self.memory.is_none(), "Memory must be finalized");
-        let (airs, ctxs): (Vec<_>, Vec<_>) = self
-            .air_ctxs
-            .into_iter()
-            .map(|(air, ctx_v1)| (air, AirProvingContext::from_v1_no_cached(ctx_v1)))
-            .unzip();
+        let (airs, ctxs): (Vec<_>, Vec<_>) = self.air_ctxs.into_iter().unzip();
         test_cpu_engine().run_test(airs, ctxs)
     }
 
-    pub fn simple_test_with_expected_error(self, expected_error: VerifierError) {
+    pub fn simple_test_with_expected_error(
+        self,
+        expected_error: VerifierError<baby_bear_poseidon2::EF>,
+    ) {
         let msg = format!(
             "Expected verification to fail with {:?}, but it didn't",
             &expected_error
@@ -564,18 +567,3 @@ impl VmChipTester<BabyBearPoseidon2Config> {
         assert_eq!(result.err(), Some(expected_error), "{msg}");
     }
 }
-
-// impl VmChipTester<BabyBearBlake3Config> {
-//     pub fn simple_test(self) -> Result<VerificationData<BabyBearBlake3Config>, VerificationError>
-// {         self.test(|| BabyBearBlake3Engine::new(FriParameters::new_for_testing(1)))
-//     }
-//
-//     pub fn simple_test_with_expected_error(self, expected_error: VerificationError) {
-//         let msg = format!(
-//             "Expected verification to fail with {:?}, but it didn't",
-//             &expected_error
-//         );
-//         let result = self.simple_test();
-//         assert_eq!(result.err(), Some(expected_error), "{msg}");
-//     }
-// }

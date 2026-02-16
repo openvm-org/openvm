@@ -2,7 +2,6 @@ use std::{
     borrow::{Borrow, BorrowMut},
     marker::PhantomData,
     ptr::copy_nonoverlapping,
-    sync::Arc,
 };
 
 pub use air::*;
@@ -18,7 +17,7 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
     p3_matrix::dense::RowMajorMatrix,
     p3_util::log2_strict_usize,
-    prover::{AirProvingContext, CpuBackend},
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
     StarkProtocolConfig,
 };
 
@@ -255,7 +254,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         }
         traces
             .into_iter()
-            .map(|trace| AirProvingContext::simple_no_pis(Arc::new(trace)))
+            .map(|trace| AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace)))
             .collect()
     }
 

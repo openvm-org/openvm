@@ -542,7 +542,8 @@ impl<SC, E> VmBuilder<E> for SystemCpuBuilder
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<E::SC>: VmField,
+    Val<SC>: VmField,
+    SC::EF: Ord,
 {
     type VmConfig = SystemConfig;
     type RecordArena = MatrixRecordArena<Val<SC>>;

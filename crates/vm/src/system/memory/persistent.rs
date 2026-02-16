@@ -2,7 +2,6 @@ use std::{
     array,
     borrow::{Borrow, BorrowMut},
     iter,
-    sync::Arc,
 };
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -12,7 +11,7 @@ use openvm_stark_backend::{
     p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::{AirProvingContext, CpuBackend},
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
     BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 use rustc_hash::FxHashSet;
@@ -292,8 +291,8 @@ where
                         timestamp: Val::<SC>::from_u32(touched_label.final_timestamp),
                     };
                 });
-            Arc::new(RowMajorMatrix::new(rows, width))
+            RowMajorMatrix::new(rows, width)
         };
-        AirProvingContext::simple_no_pis(trace)
+        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace))
     }
 }

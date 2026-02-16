@@ -1,7 +1,6 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     marker::PhantomData,
-    sync::Arc,
 };
 
 use openvm_circuit_primitives::var_range::{
@@ -14,7 +13,7 @@ use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, PairBuilder},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::{AirProvingContext, CpuBackend},
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
     BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 use serde::{Deserialize, Serialize};
@@ -297,10 +296,10 @@ where
             state.map(Val::<SC>::from_u32)
         });
 
-        let trace = Arc::new(RowMajorMatrix::new(
+        let trace = RowMajorMatrix::new(
             [initial_state.flatten(), final_state.flatten()].concat(),
             ConnectorCols::<Val<SC>>::width(),
-        ));
+        );
 
         let mut public_values = Val::<SC>::zero_vec(VmConnectorPvs::<Val<SC>>::width());
         *public_values.as_mut_slice().borrow_mut() = VmConnectorPvs {
@@ -309,6 +308,6 @@ where
             exit_code: final_state.exit_code,
             is_terminate: final_state.is_terminate,
         };
-        AirProvingContext::simple(trace, public_values)
+        AirProvingContext::simple(ColMajorMatrix::from_row_major(&trace), public_values)
     }
 }

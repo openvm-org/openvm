@@ -130,9 +130,7 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
 
         let memory_ctxs = self
             .memory_inventory
-            .generate_proving_ctxs(access_adapter_records, touched_memory)
-            .into_iter()
-            .map(AirProvingContext::from_v1_no_cached);
+            .generate_proving_ctxs(access_adapter_records, touched_memory);
 
         [program_ctx, connector_ctx]
             .into_iter()
