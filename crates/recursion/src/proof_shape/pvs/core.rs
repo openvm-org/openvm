@@ -1,14 +1,13 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit_primitives::{AlignedBorrow, SubAir, utils::not};
+use openvm_circuit_primitives::{utils::not, AlignedBorrow, SubAir};
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, proof::Proof, BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{F, proof::Proof};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 
 use crate::{
     bus::{PublicValuesBus, PublicValuesBusMessage, TranscriptBus, TranscriptBusMessage},
@@ -37,7 +36,7 @@ pub struct PublicValuesCols<F> {
 pub struct PublicValuesTraceGenerator;
 
 impl RowMajorChip<F> for PublicValuesTraceGenerator {
-    type Ctx<'a> = (&'a [Proof], &'a [Preflight]);
+    type Ctx<'a> = (&'a [Proof<BabyBearPoseidon2Config>], &'a [Preflight]);
 
     #[tracing::instrument(level = "trace", skip_all)]
     fn generate_trace(

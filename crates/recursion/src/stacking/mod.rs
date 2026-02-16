@@ -1,18 +1,16 @@
 use std::sync::Arc;
 
-use itertools::{Itertools, izip};
-use openvm_stark_backend::AirRef;
-use openvm_stark_backend::p3_maybe_rayon::prelude::*;
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use itertools::{izip, Itertools};
+use openvm_stark_backend::{
+    keygen::types::MultiStarkVerifyingKey,
+    p3_maybe_rayon::prelude::*,
+    proof::{Proof, StackingProof},
+    prover::{AirProvingContext, CpuBackend},
+    AirRef, FiatShamirTranscript, TranscriptHistory,
+};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
-use stark_backend_v2::{
-    F,
-    keygen::types::MultiStarkVerifyingKeyV2,
-    poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
-    proof::{Proof, StackingProof},
-    prover::{AirProvingContextV2, CpuBackendV2},
-};
 use strum::{EnumCount, EnumDiscriminants};
 
 use crate::{
@@ -64,7 +62,7 @@ pub struct StackingModule {
 
 impl StackingModule {
     pub fn new(
-        child_vk: &MultiStarkVerifyingKeyV2,
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         b: &mut BusIndexManager,
         bus_inventory: BusInventory,
     ) -> Self {
@@ -93,9 +91,13 @@ impl StackingModule {
     }
 
     #[tracing::instrument(level = "trace", skip_all)]
-    pub fn run_preflight<TS>(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS)
-    where
-        TS: FiatShamirTranscript + TranscriptHistory,
+    pub fn run_preflight<TS>(
+        &self,
+        proof: &Proof<BabyBearPoseidon2Config>,
+        preflight: &mut Preflight,
+        ts: &mut TS,
+    ) where
+        TS: FiatShamirTranscript<BabyBearPoseidon2Config> + TranscriptHistory,
     {
         let mut sumcheck_rnd = vec![];
         let mut intermediate_tidx = [0; 3];
@@ -275,18 +277,18 @@ impl RowMajorChip<F> for StackingModuleChip {
     }
 }
 
-impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for StackingModule {
+impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for StackingModule {
     type ModuleSpecificCtx = ();
 
     #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
         &self,
-        child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proofs: &[Proof<BabyBearPoseidon2Config>],
         preflights: &[Preflight],
         _module_ctx: &(),
         required_heights: Option<&[usize]>,
-    ) -> Option<Vec<AirProvingContextV2<CpuBackendV2>>> {
+    ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
         let ctx = StandardTracegenCtx {
             vk: child_vk,
             proofs: &proofs.iter().collect_vec(),
@@ -318,33 +320,33 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for StackingModule {
 
 #[cfg(feature = "cuda")]
 mod cuda_tracegen {
-    use cuda_backend_v2::{EF, GpuBackendV2};
     use itertools::Itertools;
+    use openvm_cuda_backend::{prelude::EF, GpuBackend};
     use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
     use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 
     use super::*;
     use crate::{
-        cuda::{GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
+        cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu, GlobalCtxGpu},
         stacking::{
             claims::cuda::StackingClaimsTraceGeneratorGpu,
             cuda_abi::{
-                PolyPrecomputation, StackedSliceData, StackedTraceData, compute_coefficients,
-                compute_coefficients_temp_bytes, stacked_slice_data,
+                compute_coefficients, compute_coefficients_temp_bytes, stacked_slice_data,
+                PolyPrecomputation, StackedSliceData, StackedTraceData,
             },
             opening::cuda::OpeningClaimsTraceGeneratorGpu,
         },
-        tracegen::cuda::{StandardTracegenGpuCtx, generate_gpu_proving_ctx},
+        tracegen::cuda::{generate_gpu_proving_ctx, StandardTracegenGpuCtx},
     };
 
-    impl ModuleChip<GpuBackendV2> for StackingModuleChip {
+    impl ModuleChip<GpuBackend> for StackingModuleChip {
         type Ctx<'a> = (StandardTracegenGpuCtx<'a>, &'a StackingBlob);
 
         fn generate_proving_ctx(
             &self,
             ctx: &Self::Ctx<'_>,
             required_height: Option<usize>,
-        ) -> Option<AirProvingContextV2<GpuBackendV2>> {
+        ) -> Option<AirProvingContext<GpuBackend>> {
             match self {
                 StackingModuleChip::OpeningClaims => {
                     OpeningClaimsTraceGeneratorGpu.generate_proving_ctx(ctx, required_height)
@@ -543,7 +545,7 @@ mod cuda_tracegen {
         }
     }
 
-    impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for StackingModule {
+    impl TraceGenModule<GlobalCtxGpu, GpuBackend> for StackingModule {
         type ModuleSpecificCtx = ();
 
         #[tracing::instrument(skip_all)]
@@ -554,7 +556,7 @@ mod cuda_tracegen {
             preflights: &[PreflightGpu],
             _module_ctx: &(),
             required_heights: Option<&[usize]>,
-        ) -> Option<Vec<AirProvingContextV2<GpuBackendV2>>> {
+        ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             let blob = StackingBlob::new(child_vk, proofs, preflights);
             let ctx = (
                 StandardTracegenGpuCtx {

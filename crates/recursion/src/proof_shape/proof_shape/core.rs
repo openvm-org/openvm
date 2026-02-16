@@ -6,18 +6,18 @@ use std::{
 
 use itertools::fold;
 use openvm_circuit_primitives::{
-    SubAir,
     encoder::Encoder,
     utils::{and, not, or, select},
+    SubAir,
 };
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, keygen::types::MultiStarkVerifyingKey, proof::Proof,
+    BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing, PrimeField32};
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{DIGEST_SIZE, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -34,11 +34,11 @@ use crate::{
         range::RangeCheckerTraceGenerator,
     },
     proof_shape::{
-        AirMetadata,
         bus::{
             NumPublicValuesBus, NumPublicValuesMessage, ProofShapePermutationBus,
             ProofShapePermutationMessage, StartingTidxBus, StartingTidxMessage,
         },
+        AirMetadata,
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
@@ -117,7 +117,9 @@ pub struct ProofShapeVarColsMut<'a, F> {
     pub cached_commits: &'a mut [[F; DIGEST_SIZE]], // [[F; DIGEST_SIZE]; MAX_CACHED]
 }
 
-pub(crate) fn compute_air_shape_lookup_counts(child_vk: &MultiStarkVerifyingKeyV2) -> Vec<usize> {
+pub(crate) fn compute_air_shape_lookup_counts(
+    child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+) -> Vec<usize> {
     child_vk
         .inner
         .per_air
@@ -146,7 +148,11 @@ pub(in crate::proof_shape) struct ProofShapeChip<const NUM_LIMBS: usize, const L
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
     for ProofShapeChip<NUM_LIMBS, LIMB_BITS>
 {
-    type Ctx<'a> = (&'a MultiStarkVerifyingKeyV2, &'a [Proof], &'a [Preflight]);
+    type Ctx<'a> = (
+        &'a MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        &'a [Proof<BabyBearPoseidon2Config>],
+        &'a [Preflight],
+    );
 
     #[tracing::instrument(level = "trace", skip_all)]
     fn generate_trace(

@@ -1,21 +1,19 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit_primitives::{
-    SubAir,
     utils::{assert_array_eq, not},
+    SubAir,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    keygen::types::{MultiStarkVerifyingKey, MultiStarkVerifyingKey0},
+    BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, D_EF, EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, extension::BinomiallyExtendable};
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_field::{extension::BinomiallyExtendable, BasedVectorSpace, PrimeCharacteristicRing};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{
-    D_EF, EF, F,
-    keygen::types::{MultiStarkVerifyingKey0V2, MultiStarkVerifyingKeyV2},
-};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -27,8 +25,8 @@ use crate::{
     system::Preflight,
     tracegen::RowMajorChip,
     utils::{
-        MultiProofVecVec, base_to_ext, ext_field_add, ext_field_multiply,
-        ext_field_multiply_scalar, ext_field_one_minus,
+        base_to_ext, ext_field_add, ext_field_multiply, ext_field_multiply_scalar,
+        ext_field_one_minus, MultiProofVecVec,
     },
 };
 
@@ -81,7 +79,7 @@ impl<F> BaseAir<F> for Eq3bAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for Eq3bAir
 where
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -349,7 +347,7 @@ impl Eq3bBlob {
 }
 
 pub(crate) fn generate_eq_3b_blob(
-    vk: &MultiStarkVerifyingKey0V2,
+    vk: &MultiStarkVerifyingKey0<BabyBearPoseidon2Config>,
     preflights: &[&Preflight],
 ) -> Eq3bBlob {
     let l_skip = vk.params.l_skip;
@@ -403,7 +401,7 @@ pub struct Eq3bTraceGenerator;
 
 impl RowMajorChip<F> for Eq3bTraceGenerator {
     type Ctx<'a> = (
-        &'a MultiStarkVerifyingKeyV2,
+        &'a MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         &'a Eq3bBlob,
         &'a [&'a Preflight],
     );
@@ -522,10 +520,9 @@ impl RowMajorChip<F> for Eq3bTraceGenerator {
 
 #[cfg(feature = "cuda")]
 pub(in crate::batch_constraint) mod cuda {
-    use cuda_backend_v2::{F, GpuBackendV2};
-    use openvm_cuda_backend::base::DeviceMatrix;
+    use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
     use openvm_cuda_common::copy::MemCopyH2D;
-    use stark_backend_v2::prover::AirProvingContextV2;
+    use openvm_stark_backend::prover::AirProvingContext;
 
     use super::*;
     use crate::{
@@ -535,9 +532,9 @@ pub(in crate::batch_constraint) mod cuda {
         utils::MultiVecWithBounds,
     };
 
-    impl ModuleChip<GpuBackendV2> for Eq3bTraceGenerator {
+    impl ModuleChip<GpuBackend> for Eq3bTraceGenerator {
         type Ctx<'a> = (
-            &'a MultiStarkVerifyingKeyV2,
+            &'a MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
             &'a Eq3bBlob,
             &'a [PreflightGpu],
         );
@@ -547,7 +544,7 @@ pub(in crate::batch_constraint) mod cuda {
             &self,
             ctx: &Self::Ctx<'_>,
             required_height: Option<usize>,
-        ) -> Option<AirProvingContextV2<GpuBackendV2>> {
+        ) -> Option<AirProvingContext<GpuBackend>> {
             let (child_vk, blob, preflights) = ctx;
             debug_assert_eq!(blob.all_stacked_ids.num_proofs(), preflights.len());
 
@@ -631,7 +628,7 @@ pub(in crate::batch_constraint) mod cuda {
                 .unwrap();
             }
 
-            Some(AirProvingContextV2::simple_no_pis(d_trace))
+            Some(AirProvingContext::simple_no_pis(d_trace))
         }
     }
 }

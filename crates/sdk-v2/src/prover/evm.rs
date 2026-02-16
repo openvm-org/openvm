@@ -2,23 +2,19 @@ use std::sync::Arc;
 
 use eyre::Result;
 use openvm_circuit::arch::{
-    Executor, MeteredExecutor, PreflightExecutor, VmBuilder, VmExecutionConfig,
-    instructions::exe::VmExe,
+    instructions::exe::VmExe, Executor, MeteredExecutor, PreflightExecutor, VmBuilder,
+    VmExecutionConfig,
 };
-use openvm_stark_backend::{
-    config::{Com, Val},
-    p3_field::PrimeField32,
-};
-use stark_backend_v2::{StarkWhirEngine, poseidon2::CHUNK, proof::Proof};
+use openvm_stark_backend::{p3_field::PrimeField32, proof::Proof, StarkEngine, Val};
 
 use crate::{
-    SC, StdIn,
-    prover::{AggProver, AppProver, RootProver, vm::types::VmProvingKey},
+    prover::{vm::types::VmProvingKey, AggProver, AppProver, RootProver},
+    StdIn, SC,
 };
 
 pub struct EvmProver<E, VB>
 where
-    E: StarkWhirEngine,
+    E: StarkEngine,
     VB: VmBuilder<E>,
 {
     pub app_prover: AppProver<E, VB>,
@@ -28,10 +24,9 @@ where
 
 impl<E, VB> EvmProver<E, VB>
 where
-    E: StarkWhirEngine<SC = SC>,
+    E: StarkEngine<SC = SC>,
     VB: VmBuilder<E>,
     Val<SC>: PrimeField32,
-    Com<SC>: AsRef<[Val<SC>; CHUNK]> + From<[Val<SC>; CHUNK]> + Into<[Val<SC>; CHUNK]>,
 {
     pub fn new(
         vm_builder: VB,
@@ -48,7 +43,7 @@ where
     }
 
     // TODO[INT-5581]: should output an EvmProof
-    pub fn prove(&mut self, input: StdIn<Val<SC>>) -> Result<Proof>
+    pub fn prove(&mut self, input: StdIn<Val<SC>>) -> Result<Proof<crate::SC>>
     where
         <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor: Executor<Val<SC>>
             + MeteredExecutor<Val<SC>>

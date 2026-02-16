@@ -1,5 +1,4 @@
-use cuda_backend_v2::F;
-use openvm_cuda_backend::base::DeviceMatrix;
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
 use openvm_cuda_common::memory_manager::MemTracker;
 
 use crate::primitives::{cuda_abi::pow_checker_tracegen, pow::PowerCheckerCols};

@@ -6,18 +6,15 @@ use core::{
 use itertools::Itertools;
 pub use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, keygen::types::MultiStarkVerifyingKey, proof::Proof,
+    BaseAirWithPublicValues, PartitionedBaseAir, SystemParams,
+};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{
+    poseidon2_compress_with_capacity, BabyBearPoseidon2Config, CHUNK, DIGEST_SIZE, F,
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::Matrix;
-use stark_backend_v2::{
-    DIGEST_SIZE, F, SystemParams,
-    keygen::types::MultiStarkVerifyingKeyV2,
-    poseidon2::{CHUNK, sponge::poseidon2_compress},
-    proof::Proof,
-};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -267,8 +264,8 @@ fn compute_cum_sum<T>(values: &[T], f: impl Fn(&T) -> usize) -> Vec<usize> {
 
 #[tracing::instrument(level = "trace", skip_all)]
 pub fn generate_trace(
-    mvk: &MultiStarkVerifyingKeyV2,
-    proofs: &[Proof],
+    mvk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+    proofs: &[Proof<BabyBearPoseidon2Config>],
     preflights: &[Preflight],
     params: &SystemParams,
     required_height: Option<usize>,
@@ -406,7 +403,7 @@ pub fn generate_trace(
                 leaf_tree[combination_indices.source_layer][combination_indices.left_source_index];
             cols.right =
                 leaf_tree[combination_indices.source_layer][combination_indices.right_source_index];
-            let output = poseidon2_compress(cols.left, cols.right);
+            let output = poseidon2_compress_with_capacity(cols.left, cols.right).0;
             leaf_tree[combination_indices.result_layer][combination_indices.result_index] = output;
             cols.compression_output = output;
 
@@ -451,7 +448,7 @@ pub fn generate_trace(
                 cols.recv_right = F::ONE;
             }
 
-            let output = poseidon2_compress(cols.left, cols.right);
+            let output = poseidon2_compress_with_capacity(cols.left, cols.right).0;
             cols.compression_output = output;
             let mut input_state = [F::ZERO; POSEIDON2_WIDTH];
             input_state[..DIGEST_SIZE].copy_from_slice(&cols.left);
@@ -761,8 +758,8 @@ pub mod cuda {
     }
 
     fn build_stacking_commits(
-        mvk: &MultiStarkVerifyingKeyV2,
-        proof: &Proof,
+        mvk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proof: &Proof<BabyBearPoseidon2Config>,
         preflight: &Preflight,
     ) -> Vec<[F; DIGEST_SIZE]> {
         let mut commits = vec![proof.common_main_commit];
@@ -777,7 +774,7 @@ pub mod cuda {
 
     fn build_merkle_path(
         log: &MerkleVerifyLog,
-        proof: &Proof,
+        proof: &Proof<BabyBearPoseidon2Config>,
         stacking_commits: &[[F; DIGEST_SIZE]],
     ) -> Vec<[F; DIGEST_SIZE]> {
         let whir_proof = &proof.whir_proof;

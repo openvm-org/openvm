@@ -7,6 +7,7 @@ description = "Lightweight crate to verify a STARK proof for an OpenVM virtual m
 
 [dependencies]
 openvm-stark-backend.workspace = true
+openvm-stark-sdk.workspace = true
 openvm-circuit.workspace = true
 stark-recursion-circuit-derive.workspace = true
 

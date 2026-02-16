@@ -3,40 +3,41 @@ use std::sync::Arc;
 use eyre::Result;
 use openvm_circuit::{
     arch::{
-        SystemConfig,
         instructions::{
-            LocalOpcode, SystemOpcode, exe::VmExe, instruction::Instruction, program::Program,
+            exe::VmExe, instruction::Instruction, program::Program, LocalOpcode, SystemOpcode,
         },
+        SystemConfig,
     },
     system::memory::dimensions::MemoryDimensions,
 };
 use openvm_sdk_config::SdkVmBuilder;
-use stark_backend_v2::{
-    F, StarkEngineV2, SystemParams,
-    keygen::types::{MultiStarkProvingKeyV2, MultiStarkVerifyingKeyV2},
+use openvm_stark_backend::{
+    keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     proof::Proof,
-    prover::{CommittedTraceDataV2, ProvingContextV2},
+    prover::{CommittedTraceData, ProvingContext},
+    StarkEngine, SystemParams,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 use tracing::info_span;
 use verify_stark::NonRootStarkProof;
 
 use crate::{
-    StdIn,
     config::{
-        AggregationConfig, AggregationSystemParams, AggregationTreeConfig, AppConfig,
-        DEFAULT_APP_L_SKIP, DEFAULT_APP_LOG_BLOWUP, default_app_params,
+        default_app_params, AggregationConfig, AggregationSystemParams, AggregationTreeConfig,
+        AppConfig, DEFAULT_APP_LOG_BLOWUP, DEFAULT_APP_L_SKIP,
     },
     keygen::AppProvingKey,
     prover::{AggProver, AppProver},
+    StdIn,
 };
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use continuations_v2::aggregation::RootGpuProver as RootInnerProver;
-        type E = cuda_backend_v2::BabyBearPoseidon2GpuEngineV2;
+        type E = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
     } else {
         use continuations_v2::aggregation::RootCpuProver as RootInnerProver;
-        type E = stark_backend_v2::BabyBearPoseidon2CpuEngineV2;
+        type E = openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine;
     }
 }
 
@@ -44,8 +45,8 @@ pub struct RootProver(pub RootInnerProver);
 
 impl RootProver {
     pub fn new(
-        internal_recursive_vk: Arc<MultiStarkVerifyingKeyV2>,
-        internal_recursive_vk_pcs_data: CommittedTraceDataV2<<E as StarkEngineV2>::PB>,
+        internal_recursive_vk: Arc<MultiStarkVerifyingKey<crate::SC>>,
+        internal_recursive_vk_pcs_data: CommittedTraceData<<E as StarkEngine>::PB>,
         system_params: SystemParams,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
@@ -63,9 +64,9 @@ impl RootProver {
     }
 
     pub fn from_pk(
-        internal_recursive_vk: Arc<MultiStarkVerifyingKeyV2>,
-        internal_recursive_vk_pcs_data: CommittedTraceDataV2<<E as StarkEngineV2>::PB>,
-        pk: Arc<MultiStarkProvingKeyV2>,
+        internal_recursive_vk: Arc<MultiStarkVerifyingKey<crate::SC>>,
+        internal_recursive_vk_pcs_data: CommittedTraceData<<E as StarkEngine>::PB>,
+        pk: Arc<MultiStarkProvingKey<crate::SC>>,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
         trace_heights: Option<Vec<usize>>,
@@ -84,7 +85,7 @@ impl RootProver {
     pub fn generate_proving_ctx(
         &self,
         input: NonRootStarkProof,
-    ) -> Option<ProvingContextV2<<E as StarkEngineV2>::PB>> {
+    ) -> Option<ProvingContext<<E as StarkEngine>::PB>> {
         let ctx = info_span!("tracegen_attempt", group = format!("root")).in_scope(|| {
             self.0
                 .generate_proving_ctx(input.inner, &input.user_pvs_proof)
@@ -92,7 +93,10 @@ impl RootProver {
         ctx
     }
 
-    pub fn prove_from_ctx(&self, ctx: ProvingContextV2<<E as StarkEngineV2>::PB>) -> Result<Proof> {
+    pub fn prove_from_ctx(
+        &self,
+        ctx: ProvingContext<<E as StarkEngine>::PB>,
+    ) -> Result<Proof<crate::SC>> {
         let proof = info_span!("agg_layer", group = format!("root"))
             .in_scope(|| info_span!("root").in_scope(|| self.0.root_prove_from_ctx::<E>(ctx)))?;
         Ok(proof)

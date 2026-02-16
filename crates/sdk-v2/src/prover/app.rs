@@ -3,53 +3,46 @@ use std::sync::{Arc, OnceLock};
 use getset::Getters;
 use openvm_circuit::{
     arch::{
-        ContinuationVmProof, ContinuationVmProver, Executor, MeteredExecutor, PreflightExecutor,
-        VerifiedExecutionPayload, VirtualMachine, VirtualMachineError, VmBuilder,
-        VmExecutionConfig, VmInstance, VmVerificationError,
-        hasher::poseidon2::{Poseidon2Hasher, vm_poseidon2_hasher},
+        hasher::poseidon2::{vm_poseidon2_hasher, Poseidon2Hasher},
         instructions::exe::VmExe,
-        verify_segments,
+        verify_segments, ContinuationVmProof, ContinuationVmProver, Executor, MeteredExecutor,
+        PreflightExecutor, VerifiedExecutionPayload, VirtualMachine, VirtualMachineError,
+        VmBuilder, VmExecutionConfig, VmInstance, VmVerificationError,
     },
-    system::{
-        memory::{CHUNK, dimensions::MemoryDimensions},
-        program::trace::VmCommittedExe,
-    },
+    system::{memory::dimensions::MemoryDimensions, program::trace::VmCommittedExe},
 };
 use openvm_stark_backend::{
-    config::{Com, Val},
-    p3_field::PrimeField32,
+    keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField32, prover::ProverBackend,
+    StarkEngine, Val,
 };
-use stark_backend_v2::{
-    Digest, StarkWhirEngine, keygen::types::MultiStarkVerifyingKeyV2, prover::ProverBackendV2,
-};
+use openvm_stark_sdk::config::baby_bear_poseidon2::Digest;
 use tracing::instrument;
 
 use crate::{
-    F, SC, StdIn,
     prover::vm::{new_local_prover, types::VmProvingKey},
     util::check_max_constraint_degrees,
+    StdIn, F, SC,
 };
 
 #[derive(Getters)]
 pub struct AppProver<E, VB>
 where
-    E: StarkWhirEngine,
+    E: StarkEngine,
     VB: VmBuilder<E>,
 {
     pub program_name: Option<String>,
     #[getset(get = "pub")]
     instance: VmInstance<E, VB>,
     #[getset(get = "pub")]
-    app_vm_vk: MultiStarkVerifyingKeyV2,
+    app_vm_vk: MultiStarkVerifyingKey<E::SC>,
     app_exe_commit: OnceLock<Digest>,
 }
 
 impl<E, VB> AppProver<E, VB>
 where
-    E: StarkWhirEngine,
+    E: StarkEngine<SC = SC>,
     VB: VmBuilder<E>,
     Val<E::SC>: PrimeField32,
-    Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]> + Into<[Val<E::SC>; CHUNK]>,
 {
     /// Creates a new [AppProver] instance. This method will re-commit the `exe` program on device.
     /// If a cached version of the program already exists on device, then directly use the
@@ -69,7 +62,7 @@ where
 
     pub fn new_from_instance(
         instance: VmInstance<E, VB>,
-        app_vm_vk: MultiStarkVerifyingKeyV2,
+        app_vm_vk: MultiStarkVerifyingKey<E::SC>,
     ) -> Self {
         Self {
             program_name: None,
@@ -89,7 +82,7 @@ where
         self
     }
 
-    pub fn app_program_commit(&self) -> <E::PB as ProverBackendV2>::Commitment {
+    pub fn app_program_commit(&self) -> <E::PB as ProverBackend>::Commitment {
         *self.instance().program_commitment()
     }
 
@@ -136,7 +129,8 @@ where
         );
         let proof = ContinuationVmProver::prove(&mut self.instance, input)?;
         #[cfg(debug_assertions)]
-        let _ = verify_app_proof::<E>(&self.app_vm_vk, self.memory_dimensions(), &proof)?;
+        let _ = verify_app_proof::<E>(&self.app_vm_vk, self.memory_dimensions(), &proof)
+            .expect("app proof verification failed");
         Ok(proof)
     }
 
@@ -157,11 +151,11 @@ where
 }
 
 /// Verifies a ContinuationVmProof and returns the app_exe_commit
-pub fn verify_app_proof<E: StarkWhirEngine>(
-    vk: &MultiStarkVerifyingKeyV2,
+pub fn verify_app_proof<E: StarkEngine<SC = SC>>(
+    vk: &MultiStarkVerifyingKey<SC>,
     memory_dimensions: MemoryDimensions,
     proof: &ContinuationVmProof<E::SC>,
-) -> Result<Digest, VmVerificationError> {
+) -> Result<Digest, VmVerificationError<SC>> {
     static POSEIDON2_HASHER: OnceLock<Poseidon2Hasher<F>> = OnceLock::new();
     let engine = E::new(vk.inner.params.clone());
     let VerifiedExecutionPayload {

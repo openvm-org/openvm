@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use cuda_backend_v2::{Digest, GpuBackendV2};
 use itertools::Itertools;
-use openvm_cuda_backend::base::DeviceMatrix;
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::Digest, GpuBackend};
 use openvm_cuda_common::{copy::MemCopyH2D, memory_manager::MemTracker};
-use stark_backend_v2::{DIGEST_SIZE, prover::AirProvingContextV2};
+use openvm_stark_backend::prover::AirProvingContext;
+use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use crate::{
     cuda::{preflight::PreflightGpu, vk::VerifyingKeyGpu},
@@ -49,7 +49,7 @@ pub(in crate::proof_shape) struct ProofShapeChipGpu<const NUM_LIMBS: usize, cons
 
 const NUM_LIMBS: usize = 4;
 const LIMB_BITS: usize = 8;
-impl ModuleChip<GpuBackendV2> for ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
+impl ModuleChip<GpuBackend> for ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
     type Ctx<'a> = (&'a VerifyingKeyGpu, &'a [PreflightGpu]);
 
     #[tracing::instrument(level = "trace", skip_all)]
@@ -57,7 +57,7 @@ impl ModuleChip<GpuBackendV2> for ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
         &self,
         ctx: &Self::Ctx<'_>,
         height: Option<usize>,
-    ) -> Option<AirProvingContextV2<GpuBackendV2>> {
+    ) -> Option<AirProvingContext<GpuBackend>> {
         let (vk_gpu, preflights_gpu) = ctx;
         let mem = MemTracker::start("tracegen.proof_shape");
         let num_valid_rows = preflights_gpu.len() * (vk_gpu.per_air.len() + 1);
@@ -135,6 +135,6 @@ impl ModuleChip<GpuBackendV2> for ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
             .unwrap();
         }
         mem.emit_metrics();
-        Some(AirProvingContextV2::simple_no_pis(trace))
+        Some(AirProvingContext::simple_no_pis(trace))
     }
 }

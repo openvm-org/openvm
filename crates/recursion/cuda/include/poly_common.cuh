@@ -1,10 +1,14 @@
 #include "fp.h"
 #include "fpext.h"
-#include "frac_ext.cuh"
 #include <assert.h>
 #include <cuda_runtime.h>
 #include <stdint.h>
 #include <vector_types.h>
+
+struct FpExtPair {
+    FpExt first;
+    FpExt second;
+};
 
 __device__ __forceinline__ FpExt exp_power_of_2_ext(FpExt x, uint32_t power_log) {
     FpExt res = x;
@@ -53,7 +57,7 @@ __device__ __forceinline__ FpExt eval_eq_mle_ext(const FpExt *x, const FpExt *y,
     return res;
 }
 
-__device__ __forceinline__ FracExt
+__device__ __forceinline__ FpExtPair
 eval_eq_rot_cube_ext(const FpExt *x, const FpExt *y, uint32_t len) {
     FpExt eq = FpExt(Fp::one());
     FpExt rot = FpExt(Fp::one());

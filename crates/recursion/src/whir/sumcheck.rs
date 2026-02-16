@@ -1,16 +1,16 @@
 use core::borrow::{Borrow, BorrowMut};
 
 use itertools::Itertools;
-use openvm_circuit_primitives::{SubAir, utils::assert_array_eq};
+use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, poly_common::Squarable, BaseAirWithPublicValues,
+    PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{D_EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, extension::BinomiallyExtendable};
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_field::{extension::BinomiallyExtendable, BasedVectorSpace, PrimeCharacteristicRing};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{D_EF, F, poly_common::Squarable};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -18,7 +18,7 @@ use crate::{
     primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     tracegen::{RowMajorChip, StandardTracegenCtx},
-    utils::{ext_field_multiply, mobius_eq_1, interpolate_quadratic},
+    utils::{ext_field_multiply, interpolate_quadratic, mobius_eq_1},
     whir::bus::{
         WhirAlphaBus, WhirAlphaMessage, WhirEqAlphaUBus, WhirEqAlphaUMessage, WhirSumcheckBus,
         WhirSumcheckBusMessage,
@@ -81,7 +81,7 @@ impl<F> BaseAir<F> for SumcheckAir {
 
 impl<AB: AirBuilder<F = F> + InteractionBuilder> Air<AB> for SumcheckAir
 where
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -169,7 +169,10 @@ where
         assert_array_eq(
             &mut when_sumcheck_transition,
             next.eq_partial,
-            ext_field_multiply::<AB::Expr>(local.eq_partial, mobius_eq_1::<AB::Expr>(next.u, next.alpha)),
+            ext_field_multiply::<AB::Expr>(
+                local.eq_partial,
+                mobius_eq_1::<AB::Expr>(next.u, next.alpha),
+            ),
         );
 
         assert_array_eq(
