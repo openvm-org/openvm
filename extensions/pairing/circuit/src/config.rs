@@ -14,9 +14,8 @@ use openvm_circuit::{
 use openvm_circuit_derive::VmConfig;
 use openvm_ecc_circuit::{EccCpuProverExt, WeierstrassExtension, WeierstrassExtensionExecutor};
 use openvm_stark_backend::{
-    config::{StarkProtocolConfig, Val},
     prover::{CpuBackend, CpuDevice},
-    StarkEngine,
+    StarkEngine, StarkProtocolConfig, Val,
 };
 use serde::{Deserialize, Serialize};
 
@@ -77,6 +76,7 @@ where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
+    SC::EF: Ord,
 {
     type VmConfig = Rv32PairingConfig;
     type SystemChipInventory = SystemChipInventory<SC>;

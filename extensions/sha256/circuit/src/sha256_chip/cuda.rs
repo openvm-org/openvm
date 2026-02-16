@@ -10,11 +10,12 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
 };
-use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, prover_backend::GpuBackend};
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_sha256_air::{get_sha256_num_blocks, SHA256_HASH_WORDS, SHA256_ROWS_PER_BLOCK};
-use openvm_stark_backend::{prover::AirProvingContext, Chip};
+use openvm_circuit_primitives::Chip;
+use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
     cuda_abi::sha256::{

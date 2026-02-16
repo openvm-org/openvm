@@ -3,8 +3,9 @@ use openvm_native_circuit::{execute_program_with_config, test_native_config, Nat
 use openvm_native_compiler::{asm::AsmBuilder, prelude::*};
 use openvm_stark_backend::{
     p3_field::{extension::BinomialExtensionField, PrimeCharacteristicRing},
-    BabyBearPoseidon2CpuEngine as BabyBearPoseidon2Engine, SystemParams,
+    SystemParams,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine as BabyBearPoseidon2Engine;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 type F = BabyBear;

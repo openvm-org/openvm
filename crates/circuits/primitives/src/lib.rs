@@ -48,4 +48,4 @@ pub use chip::*;
 pub use sub_air::*;
 
 #[cfg(feature = "cuda")]
-pub(crate) mod cuda_abi;
+pub mod cuda_abi;

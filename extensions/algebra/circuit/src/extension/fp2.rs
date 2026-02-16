@@ -21,10 +21,9 @@ use openvm_circuit_primitives::{
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_stark_backend::{
-    config::{StarkProtocolConfig, Val},
     p3_field::PrimeField32,
     prover::{CpuBackend, CpuDevice},
-    StarkEngine,
+    StarkEngine, StarkProtocolConfig, Val,
 };
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
@@ -272,17 +271,18 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Fp2Extension {
 
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, RA> VmProverExtension<E, RA, Fp2Extension> for AlgebraCpuProverExt
+impl<SC, E, RA> VmProverExtension<E, RA, Fp2Extension> for AlgebraCpuProverExt
 where
-    E::SC: StarkProtocolConfig,
-    E: StarkEngine<PB = CpuBackend<E::SC>, PD = CpuDevice<E::SC>>,
-    RA: RowMajorMatrixArena<Val<E::SC>>,
-    Val<E::SC>: PrimeField32,
+    SC: StarkProtocolConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    RA: RowMajorMatrixArena<Val<SC>>,
+    Val<SC>: PrimeField32,
+    SC::EF: Ord,
 {
     fn extend_prover(
         &self,
         extension: &Fp2Extension,
-        inventory: &mut ChipInventory<E::SC, RA, CpuBackend<E::SC>>,
+        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -313,7 +313,7 @@ where
                 };
 
                 inventory.next_air::<Fp2Air<2, 32>>()?;
-                let addsub = get_fp2_addsub_chip::<Val<E::SC>, 2, 32>(
+                let addsub = get_fp2_addsub_chip::<Val<SC>, 2, 32>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -323,7 +323,7 @@ where
                 inventory.add_executor_chip(addsub);
 
                 inventory.next_air::<Fp2Air<2, 32>>()?;
-                let muldiv = get_fp2_muldiv_chip::<Val<E::SC>, 2, 32>(
+                let muldiv = get_fp2_muldiv_chip::<Val<SC>, 2, 32>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -339,7 +339,7 @@ where
                 };
 
                 inventory.next_air::<Fp2Air<6, 16>>()?;
-                let addsub = get_fp2_addsub_chip::<Val<E::SC>, 6, 16>(
+                let addsub = get_fp2_addsub_chip::<Val<SC>, 6, 16>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -349,7 +349,7 @@ where
                 inventory.add_executor_chip(addsub);
 
                 inventory.next_air::<Fp2Air<6, 16>>()?;
-                let muldiv = get_fp2_muldiv_chip::<Val<E::SC>, 6, 16>(
+                let muldiv = get_fp2_muldiv_chip::<Val<SC>, 6, 16>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),

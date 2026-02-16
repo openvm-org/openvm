@@ -26,7 +26,7 @@ use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::Matrix,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    {BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use static_assertions::const_assert_eq;
 use AS::Native;

@@ -13,9 +13,8 @@ use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
 use openvm_stark_backend::{
-    config::{StarkProtocolConfig, Val},
     prover::{CpuBackend, CpuDevice},
-    StarkEngine,
+    StarkEngine, StarkProtocolConfig, Val,
 };
 use serde::{Deserialize, Serialize};
 
@@ -120,6 +119,7 @@ where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
+    SC::EF: Ord,
 {
     type VmConfig = Rv32ModularConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
@@ -156,6 +156,7 @@ where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
+    SC::EF: Ord,
 {
     type VmConfig = Rv32ModularWithFp2Config;
     type SystemChipInventory = SystemChipInventory<SC>;

@@ -6,10 +6,12 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, range_tuple::RangeTupleCheckerChipGPU,
     var_range::VariableRangeCheckerChipGPU,
 };
-use openvm_cuda_backend::{base::DeviceMatrix, chip::UInt2, prover_backend::GpuBackend, types::F};
+use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend, prelude::F};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_stark_backend::{prover::AirProvingContext, Chip};
+use openvm_circuit_primitives::Chip;
+use openvm_stark_backend::prover::AirProvingContext;
 
+use crate::cuda_abi::UInt2;
 use crate::{
     adapters::{
         Rv32MultAdapterCols, Rv32MultAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,

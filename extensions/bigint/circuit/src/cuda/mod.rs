@@ -6,9 +6,8 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, range_tuple::RangeTupleCheckerChipGPU,
     var_range::VariableRangeCheckerChipGPU,
 };
-use openvm_cuda_backend::{
-    base::DeviceMatrix, chip::UInt2, prelude::F, prover_backend::GpuBackend,
-};
+use openvm_circuit_primitives::cuda_abi::UInt2;
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_rv32_adapters::{
     Rv32HeapBranchAdapterCols, Rv32HeapBranchAdapterRecord, Rv32VecHeapAdapterCols,
@@ -20,7 +19,8 @@ use openvm_rv32im_circuit::{
     BranchLessThanCoreCols, BranchLessThanCoreRecord, LessThanCoreCols, LessThanCoreRecord,
     MultiplicationCoreCols, MultiplicationCoreRecord, ShiftCoreCols, ShiftCoreRecord,
 };
-use openvm_stark_backend::{prover::AirProvingContext, Chip};
+use openvm_circuit_primitives::Chip;
+use openvm_stark_backend::prover::AirProvingContext;
 
 mod cuda_abi;
 

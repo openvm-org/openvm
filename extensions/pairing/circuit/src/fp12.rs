@@ -210,10 +210,11 @@ mod tests {
     use openvm_stark_backend::{
         p3_air::BaseAir, p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
     };
-    use openvm_stark_sdk::{
-        any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
-        p3_baby_bear::BabyBear,
+    use openvm_stark_backend::{
+        any_air_arc_vec, prover::AirProvingContext, prover::ColMajorMatrix, StarkEngine,
+        SystemParams,
     };
+    use openvm_stark_sdk::{config::baby_bear_poseidon2::*, p3_baby_bear::BabyBear};
     use rand08::{rngs::StdRng, SeedableRng};
 
     use super::*;
@@ -277,11 +278,15 @@ mod tests {
             );
         }
 
-        BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-            any_rap_arc_vec![air, range_checker.air],
-            vec![trace, range_trace],
-        )
-        .expect("Verification failed");
+        let engine: BabyBearPoseidon2CpuEngine =
+            BabyBearPoseidon2CpuEngine::new(SystemParams::new_for_testing(20));
+        let ctxs = vec![
+            AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace)),
+            AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&range_trace)),
+        ];
+        engine
+            .run_test(any_air_arc_vec![air, range_checker.air], ctxs)
+            .expect("Verification failed");
     }
 
     #[test]

@@ -5,9 +5,10 @@ use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
 };
-use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types::F};
+use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend, prelude::F};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_stark_backend::{prover::AirProvingContext, Chip};
+use openvm_circuit_primitives::Chip;
+use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
     adapters::{Rv32RdWriteAdapterCols, Rv32RdWriteAdapterRecord, RV32_CELL_BITS},

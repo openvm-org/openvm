@@ -11,9 +11,8 @@ use openvm_circuit::{
 };
 use openvm_circuit_derive::{Executor, MeteredExecutor, PreflightExecutor, VmConfig};
 use openvm_stark_backend::{
-    config::{StarkProtocolConfig, Val},
     prover::{CpuBackend, CpuDevice},
-    StarkEngine,
+    StarkEngine, StarkProtocolConfig, Val,
 };
 use serde::{Deserialize, Serialize};
 
@@ -157,6 +156,7 @@ where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
+    SC::EF: Ord,
 {
     type VmConfig = Rv32IConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
@@ -187,6 +187,7 @@ where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
+    SC::EF: Ord,
 {
     type VmConfig = Rv32ImConfig;
     type SystemChipInventory = SystemChipInventory<SC>;

@@ -24,10 +24,9 @@ use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
 use openvm_stark_backend::{
-    config::{StarkProtocolConfig, Val},
     p3_field::PrimeField32,
     prover::{CpuBackend, CpuDevice},
-    StarkEngine,
+    StarkEngine, StarkProtocolConfig, Val,
 };
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
@@ -87,6 +86,7 @@ where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
+    SC::EF: Ord,
 {
     type VmConfig = Keccak256Rv32Config;
     type SystemChipInventory = SystemChipInventory<SC>;
@@ -188,17 +188,18 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Keccak256 {
 pub struct Keccak256CpuProverExt;
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, RA> VmProverExtension<E, RA, Keccak256> for Keccak256CpuProverExt
+impl<SC, E, RA> VmProverExtension<E, RA, Keccak256> for Keccak256CpuProverExt
 where
-    E::SC: StarkProtocolConfig,
-    E: StarkEngine<PB = CpuBackend<E::SC>, PD = CpuDevice<E::SC>>,
-    RA: RowMajorMatrixArena<Val<E::SC>>,
-    Val<E::SC>: PrimeField32,
+    SC: StarkProtocolConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    RA: RowMajorMatrixArena<Val<SC>>,
+    Val<SC>: PrimeField32,
+    SC::EF: Ord,
 {
     fn extend_prover(
         &self,
         _: &Keccak256,
-        inventory: &mut ChipInventory<E::SC, RA, CpuBackend<E::SC>>,
+        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();

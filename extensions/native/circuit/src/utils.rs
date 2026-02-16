@@ -24,12 +24,14 @@ pub mod test_utils {
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     };
     use openvm_native_compiler::conversion::AS;
-    use openvm_stark_backend::{
-        config::Domain, p3_commit::PolynomialSpace, p3_field::PrimeField32,
-        BabyBearPoseidon2CpuEngine as BabyBearPoseidon2Engine, StarkEngine, StarkWhirEngine,
-        SystemParams,
+    use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, SystemParams};
+    use openvm_stark_sdk::{
+        config::baby_bear_poseidon2::{
+            BabyBearPoseidon2Config, BabyBearPoseidon2CpuEngine as BabyBearPoseidon2Engine,
+        },
+        p3_baby_bear::BabyBear,
+        utils::setup_tracing,
     };
-    use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear};
     use rand::{rngs::StdRng, Rng};
 
     use crate::{NativeConfig, NativeCpuBuilder, Rv32WithKernelsConfig};
@@ -81,8 +83,7 @@ pub mod test_utils {
         VirtualMachineError,
     >
     where
-        E: StarkWhirEngine + StarkEngine,
-        Domain<E::SC>: PolynomialSpace<Val = BabyBear>,
+        E: StarkEngine<SC = BabyBearPoseidon2Config>,
         VB: VmBuilder<E, VmConfig = NativeConfig>,
         <VB::VmConfig as VmExecutionConfig<BabyBear>>::Executor:
             PreflightExecutor<BabyBear, VB::RecordArena>,

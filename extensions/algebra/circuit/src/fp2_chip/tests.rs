@@ -361,8 +361,8 @@ mod cuda_tests {
         DenseRecordArena,
     };
     use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
-    use openvm_cuda_backend::prover_backend::GpuBackend;
-    use openvm_stark_backend::Chip;
+    use openvm_circuit_primitives::Chip;
+    use openvm_cuda_backend::GpuBackend;
     use test_case::test_case;
 
     use super::*;
