@@ -1,34 +1,27 @@
 # Short Weierstrass (SW) Curve Operations
 
-The `ec_add_ne` and `ec_double` instructions are implemented in the `weierstrass_chip` module.
+The `sw_ec_add_proj` and `sw_ec_double_proj` instructions are implemented in the `weierstrass_chip` module using projective coordinates.
 
-### 1. `ec_add_ne`
+Points are represented as `(X, Y, Z)` where the affine point is `(X/Z, Y/Z)`. Identity is represented by `Z = 0`.
 
-**Assumptions:**
+All formulas use complete addition formulas from [ePrint 2015/1060](https://eprint.iacr.org/2015/1060.pdf) that handle all edge cases without branching.
 
-- Both points `(x1, y1)` and `(x2, y2)` lie on the curve and are not the identity point.
-- `x1` and `x2` are distinct in the coordinate field.
+### 1. `sw_ec_add_proj`
 
-**Circuit statements:**
+**Input:** Two projective points `(X1, Y1, Z1)` and `(X2, Y2, Z2)` on curve `y^2 = x^3 + ax + b`
 
-- The chip takes two inputs: `(x1, y1)` and `(x2, y2)`, and returns `(x3, y3)` where:
-  - `lambda = (y2 - y1) / (x2 - x1)`
-  - `x3 = lambda^2 - x1 - x2`
-  - `y3 = lambda * (x1 - x3) - y1`
+**Output:** `(X3, Y3, Z3) = (X1, Y1, Z1) + (X2, Y2, Z2)`
 
-- The `EcAddNeChip` constrains that these field expressions are computed correctly over the field `C::Fp`.
+**Formula:** ePrint 2015/1060 Algorithm 1 (general a) or Algorithm 7 (a=0)
 
-### 2. `ec_double`
+The `EcAddExecutor` and its associated `WeierstrassChip` constrain that the projective addition formula is computed correctly over the field `C::Fp`.
 
-**Assumptions:**
+### 2. `sw_ec_double_proj`
 
-- The point `(x1, y1)` lies on the curve and is not the identity point.
+**Input:** One projective point `(X1, Y1, Z1)` on curve `y^2 = x^3 + ax + b`
 
-**Circuit statements:**
+**Output:** `(X3, Y3, Z3) = 2 * (X1, Y1, Z1)`
 
-- The chip takes one input: `(x1, y1)`, and returns `(x3, y3)` where:
-  - `lambda = (3 * x1^2 + a) / (2 * y1)`
-  - `x3 = lambda^2 - 2 * x1`
-  - `y3 = lambda * (x1 - x3) - y1`
+**Formula:** ePrint 2015/1060 Algorithm 3 (general a) or Algorithm 9 (a=0)
 
-- The `EcDoubleChip` constrains that these expressions are computed correctly over the field `C::Fp`. The coefficient `a` is taken from the `CurveConfig`.
+The `EcDoubleExecutor` and its associated `WeierstrassChip` constrain that the projective doubling formula is computed correctly over the field `C::Fp`. The coefficients `a` and `b` are taken from the `CurveConfig`.
