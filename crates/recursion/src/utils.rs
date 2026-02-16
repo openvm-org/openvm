@@ -1,13 +1,45 @@
 use std::ops::Index;
 
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
-use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_perm, CHUNK, D_EF, F};
+use openvm_stark_backend::FiatShamirTranscript;
+use openvm_stark_sdk::config::baby_bear_poseidon2::{
+    poseidon2_perm, BabyBearPoseidon2Config, CHUNK, D_EF, F,
+};
 use p3_air::AirBuilder;
 use p3_field::{extension::BinomiallyExtendable, Field, PrimeCharacteristicRing};
 use p3_symmetric::Permutation;
 
 // TODO(ayush): move somewhere else
 pub const MAX_CONSTRAINT_DEGREE: usize = 4;
+
+/// Returns the number of transcript slots consumed by a proof-of-work check.
+///
+/// When `pow_bits > 0`, PoW uses 2 transcript slots (1 observe + 1 sample).
+/// When `pow_bits == 0`, the stark-backend's `check_witness`/`grind` skip
+/// observe/sample entirely, consuming 0 slots.
+#[inline]
+pub const fn pow_tidx_count(pow_bits: usize) -> usize {
+    if pow_bits > 0 {
+        2
+    } else {
+        0
+    }
+}
+
+/// Runs the PoW observe/sample in a preflight transcript, returning the sample
+/// (or `F::ZERO` when `pow_bits == 0`).
+pub fn pow_observe_sample(
+    ts: &mut impl FiatShamirTranscript<BabyBearPoseidon2Config>,
+    pow_bits: usize,
+    witness: F,
+) -> F {
+    if pow_bits > 0 {
+        ts.observe(witness);
+        ts.sample()
+    } else {
+        F::ZERO
+    }
+}
 
 pub fn base_to_ext<FA>(x: impl Into<FA>) -> [FA; D_EF]
 where

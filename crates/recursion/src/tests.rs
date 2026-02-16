@@ -26,6 +26,15 @@ use crate::{
     utils::MAX_CONSTRAINT_DEGREE,
 };
 
+/// Creates test system params with all PoW bits set to zero.
+fn test_system_params_zero_pow(l_skip: usize, n_stack: usize, k_whir: usize) -> SystemParams {
+    let mut params = test_system_params_small(l_skip, n_stack, k_whir);
+    params.whir.mu_pow_bits = 0;
+    params.whir.folding_pow_bits = 0;
+    params.whir.query_phase_pow_bits = 0;
+    params
+}
+
 pub fn test_engine_small() -> BabyBearPoseidon2CpuEngine<DuplexSponge> {
     let mut params = test_system_params_small(2, 10, 3);
     params.max_constraint_degree = MAX_CONSTRAINT_DEGREE;
@@ -449,6 +458,34 @@ fn test_neg_hypercube_mixture(num_proofs: usize) {
     fx_params.l_skip += 3;
     let fx = MixtureFixture::standard(3, BabyBearPoseidon2Config::default_from_params(fx_params));
     run_negative_hypercube_test(fx, params, num_proofs);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// ZERO POW BITS TESTS
+///////////////////////////////////////////////////////////////////////////////
+
+#[test_case(2, 8, 3, 5)]
+#[test_case(3, 5, 3, 5)]
+fn test_recursion_circuit_zero_pow_bits(
+    l_skip: usize,
+    n_stack: usize,
+    k_whir: usize,
+    log_trace_degree: usize,
+) {
+    let child_params = test_system_params_zero_pow(l_skip, n_stack, k_whir);
+    let child_engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(child_params);
+    let parent_engine = test_engine_small();
+    let fib = FibFixture::new(0, 1, 1 << log_trace_degree);
+    run_test::<2, _>(fib, &child_engine, &parent_engine, 1);
+}
+
+#[test_case(5)]
+fn test_recursion_circuit_zero_pow_bits_two_proofs(log_trace_degree: usize) {
+    let child_params = test_system_params_zero_pow(2, 8, 3);
+    let child_engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(child_params);
+    let parent_engine = test_engine_small();
+    let fib = FibFixture::new(0, 1, 1 << log_trace_degree);
+    run_test::<2, _>(fib, &child_engine, &parent_engine, 2);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -89,6 +89,7 @@ use crate::{
         TraceGenModule,
     },
     tracegen::{ModuleChip, RowMajorChip},
+    utils::{pow_observe_sample, pow_tidx_count},
 };
 
 // Internal bus definitions
@@ -163,8 +164,7 @@ impl GkrModule {
             logup_pow_witness,
         } = &proof.gkr_proof;
 
-        ts.observe(*logup_pow_witness);
-        let _logup_pow_sample = ts.sample();
+        let _logup_pow_sample = pow_observe_sample(ts, self.logup_pow_bits, *logup_pow_witness);
         let _alpha_logup = ts.sample_ext();
         let _beta_logup = ts.sample_ext();
 
@@ -335,14 +335,15 @@ impl GkrModule {
                     logup_pow_witness,
                 } = gkr_proof;
 
-                FiatShamirTranscript::<BabyBearPoseidon2Config>::observe(
-                    &mut ts,
-                    *logup_pow_witness,
-                );
                 let logup_pow_sample =
-                    FiatShamirTranscript::<BabyBearPoseidon2Config>::sample(&mut ts);
-
-                exp_bits_len_gen.add_request(F::GENERATOR, logup_pow_sample, self.logup_pow_bits);
+                    pow_observe_sample(&mut ts, self.logup_pow_bits, *logup_pow_witness);
+                if self.logup_pow_bits > 0 {
+                    exp_bits_len_gen.add_request(
+                        F::GENERATOR,
+                        logup_pow_sample,
+                        self.logup_pow_bits,
+                    );
+                }
 
                 let alpha_logup =
                     FiatShamirTranscript::<BabyBearPoseidon2Config>::sample_ext(&mut ts);
@@ -378,7 +379,9 @@ impl GkrModule {
                 let sumcheck_layer_count = sumcheck_polys.len();
                 let total_sumcheck_rounds: usize = sumcheck_polys.iter().map(Vec::len).sum();
 
-                let tidx_first_gkr_layer = preflight.proof_shape.post_tidx + 2 + 2 * D_EF + D_EF;
+                let logup_pow_offset = pow_tidx_count(self.logup_pow_bits);
+                let tidx_first_gkr_layer =
+                    preflight.proof_shape.post_tidx + logup_pow_offset + 2 * D_EF + D_EF;
                 let mut layer_record = GkrLayerRecord {
                     tidx: tidx_first_gkr_layer,
                     layer_claims: Vec::with_capacity(num_layers),

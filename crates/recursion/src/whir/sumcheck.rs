@@ -18,7 +18,7 @@ use crate::{
     primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     tracegen::{RowMajorChip, StandardTracegenCtx},
-    utils::{ext_field_multiply, interpolate_quadratic, mobius_eq_1},
+    utils::{ext_field_multiply, interpolate_quadratic, mobius_eq_1, pow_tidx_count},
     whir::bus::{
         WhirAlphaBus, WhirAlphaMessage, WhirEqAlphaUBus, WhirEqAlphaUMessage, WhirSumcheckBus,
         WhirSumcheckBusMessage,
@@ -163,8 +163,11 @@ where
             next.post_group_claim,
             local.post_group_claim,
         );
-        when_sumcheck_transition
-            .assert_eq(next.tidx, local.tidx + AB::Expr::from_usize(3 * D_EF + 2));
+        let folding_pow_offset = pow_tidx_count(self.folding_pow_bits);
+        when_sumcheck_transition.assert_eq(
+            next.tidx,
+            local.tidx + AB::Expr::from_usize(3 * D_EF + folding_pow_offset),
+        );
         // Use Möbius-adjusted equality kernel instead of eq_1 for eval-to-coeff RS encoding
         assert_array_eq(
             &mut when_sumcheck_transition,
@@ -190,38 +193,42 @@ where
             local.ev2,
             is_enabled,
         );
-        self.transcript_bus.observe(
-            builder,
-            proof_idx,
-            local.tidx + AB::Expr::from_usize(2 * D_EF),
-            local.folding_pow_witness,
-            is_enabled,
-        );
-        self.transcript_bus.sample(
-            builder,
-            proof_idx,
-            local.tidx + AB::Expr::from_usize(2 * D_EF + 1),
-            local.folding_pow_sample,
-            is_enabled,
-        );
+        if self.folding_pow_bits > 0 {
+            self.transcript_bus.observe(
+                builder,
+                proof_idx,
+                local.tidx + AB::Expr::from_usize(2 * D_EF),
+                local.folding_pow_witness,
+                is_enabled,
+            );
+            self.transcript_bus.sample(
+                builder,
+                proof_idx,
+                local.tidx + AB::Expr::from_usize(2 * D_EF + 1),
+                local.folding_pow_sample,
+                is_enabled,
+            );
+        }
         self.transcript_bus.sample_ext(
             builder,
             proof_idx,
-            local.tidx + AB::Expr::from_usize(2 * D_EF + 2),
+            local.tidx + AB::Expr::from_usize(2 * D_EF + folding_pow_offset),
             local.alpha,
             is_enabled,
         );
 
-        self.exp_bits_len_bus.lookup_key(
-            builder,
-            ExpBitsLenMessage {
-                base: self.generator.into(),
-                bit_src: local.folding_pow_sample.into(),
-                num_bits: AB::Expr::from_usize(self.folding_pow_bits),
-                result: AB::Expr::ONE,
-            },
-            is_enabled,
-        );
+        if self.folding_pow_bits > 0 {
+            self.exp_bits_len_bus.lookup_key(
+                builder,
+                ExpBitsLenMessage {
+                    base: self.generator.into(),
+                    bit_src: local.folding_pow_sample.into(),
+                    num_bits: AB::Expr::from_usize(self.folding_pow_bits),
+                    result: AB::Expr::ONE,
+                },
+                is_enabled,
+            );
+        }
 
         self.alpha_bus.add_key_with_lookups(
             builder,
@@ -329,7 +336,8 @@ impl RowMajorChip<F> for WhirSumcheckTraceGenerator {
 
                 let is_first_in_group = j == 0;
                 let last_group_row_idx = (whir_round + 1) * k_whir - 1;
-                let tidx = whir.tidx_per_round[whir_round] + (3 * D_EF + 2) * j;
+                let folding_pow_offset = pow_tidx_count(params.whir.folding_pow_bits);
+                let tidx = whir.tidx_per_round[whir_round] + (3 * D_EF + folding_pow_offset) * j;
 
                 let cols: &mut SumcheckCols<F> = row.borrow_mut();
                 cols.is_enabled = F::ONE;
