@@ -1,28 +1,32 @@
-use std::{borrow::BorrowMut, sync::Arc};
+use std::borrow::BorrowMut;
 
-use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
+use openvm_circuit_primitives::{utils::next_power_of_two_or_zero, Chip};
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     p3_air::BaseAir,
     p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
-    prover::{cpu::CpuBackend, types::AirProvingContext},
-    Chip, ChipUsageGetter,
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    StarkProtocolConfig, Val,
 };
 
 use super::{columns::*, Poseidon2PeripheryBaseChip, PERIPHERY_POSEIDON2_WIDTH};
 use crate::arch::VmField;
 
-impl<RA, SC: StarkGenericConfig, const SBOX_REGISTERS: usize> Chip<RA, CpuBackend<SC>>
+impl<RA, SC: StarkProtocolConfig, const SBOX_REGISTERS: usize> Chip<RA, CpuBackend<SC>>
     for Poseidon2PeripheryBaseChip<Val<SC>, SBOX_REGISTERS>
 where
     Val<SC>: VmField,
 {
     /// Generates trace and clears internal records state.
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
-        let height = next_power_of_two_or_zero(self.current_trace_height());
-        let width = self.trace_width();
+        let current_height = if self.nonempty.load(std::sync::atomic::Ordering::Relaxed) {
+            self.records.len()
+        } else {
+            0
+        };
+        let height = next_power_of_two_or_zero(current_height);
+        let width = self.air.width();
 
         let mut inputs = Vec::with_capacity(height);
         let mut multiplicities = Vec::with_capacity(height);
@@ -58,27 +62,7 @@ where
             });
         self.records.clear();
 
-        AirProvingContext::simple_no_pis(Arc::new(RowMajorMatrix::new(values, width)))
-    }
-}
-
-impl<F: VmField, const SBOX_REGISTERS: usize> ChipUsageGetter
-    for Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>
-{
-    fn air_name(&self) -> String {
-        format!("Poseidon2PeripheryAir<F, {SBOX_REGISTERS}>")
-    }
-
-    fn current_trace_height(&self) -> usize {
-        if self.nonempty.load(std::sync::atomic::Ordering::Relaxed) {
-            // Not to call `DashMap::len` too often
-            self.records.len()
-        } else {
-            0
-        }
-    }
-
-    fn trace_width(&self) -> usize {
-        self.air.width()
+        let trace = RowMajorMatrix::new(values, width);
+        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace))
     }
 }

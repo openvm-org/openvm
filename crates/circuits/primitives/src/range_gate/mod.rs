@@ -16,7 +16,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_util::indices_arr,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
 pub use crate::range::RangeCheckBus;

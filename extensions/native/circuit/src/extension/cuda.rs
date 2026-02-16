@@ -1,10 +1,8 @@
-use cuda_backend_v2::{
-    BabyBearPoseidon2GpuEngineV2 as GpuBabyBearPoseidon2Engine, GpuBackendV2 as GpuBackend,
-};
 use openvm_circuit::{
     arch::{ChipInventory, ChipInventoryError, DenseRecordArena, VmProverExtension},
     system::cuda::extensions::get_inventory_range_checker,
 };
+use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
 use openvm_native_compiler::BLOCK_LOAD_STORE_SIZE;
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,

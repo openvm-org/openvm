@@ -21,8 +21,6 @@ openvm-rv32-adapters = { workspace = true }
 openvm-algebra-transpiler = { workspace = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
-stark-backend-v2 = { workspace = true }
-cuda-backend-v2 = { workspace = true, optional = true }
 
 num-bigint = { workspace = true, features = ["serde"] }
 num-traits = { workspace = true }
@@ -57,7 +55,6 @@ cuda = [
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
     "dep:openvm-cuda-builder",
-    "dep:cuda-backend-v2",
     "openvm-circuit-primitives/cuda",
     "openvm-mod-circuit-builder/cuda",
     "openvm-circuit/cuda",

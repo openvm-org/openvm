@@ -19,7 +19,7 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
-    rap::BaseAirWithPublicValues,
+    BaseAirWithPublicValues,
 };
 use strum::IntoEnumIterator;
 

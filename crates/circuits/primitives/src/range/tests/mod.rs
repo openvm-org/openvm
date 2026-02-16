@@ -2,14 +2,18 @@ use std::{iter, sync::Arc};
 
 use list::ListChip;
 use openvm_stark_backend::{
-    p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*, prover::types::AirProvingContext,
-    AirRef,
+    p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*,
+    prover::{AirProvingContext, ColMajorMatrix},
+    AirRef, StarkEngine,
 };
-use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use openvm_stark_sdk::{config::baby_bear_poseidon2::*, utils::create_seeded_rng};
 use rand::Rng;
-use stark_backend_v2::{prover::AirProvingContextV2, test_utils::test_engine_small, StarkEngineV2};
 
-use crate::range::{bus::RangeCheckBus, RangeCheckerChip};
+use crate::{
+    range::{bus::RangeCheckBus, RangeCheckerChip},
+    utils::test_engine_small,
+};
 
 /// List chip for testing
 pub mod list;
@@ -48,7 +52,7 @@ fn test_list_range_checker() {
     let lists_traces = lists
         .par_iter()
         .map(|list| list.generate_trace())
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .collect::<Vec<RowMajorMatrix<F>>>();
 
     let range_trace = range_checker.generate_trace();
 
@@ -58,12 +62,14 @@ fn test_list_range_checker() {
     }
     all_chips.push(Arc::new(range_checker.air));
 
-    let all_traces = lists_traces
+    let all_traces_vec: Vec<_> = lists_traces
         .into_iter()
         .chain(iter::once(range_trace))
-        .map(Arc::new)
+        .collect();
+    let all_traces = all_traces_vec
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()

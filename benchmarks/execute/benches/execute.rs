@@ -54,12 +54,12 @@ use openvm_stark_sdk::{
     engine::{StarkEngine, StarkFriEngine},
     openvm_stark_backend::{
         self,
-        config::{StarkGenericConfig, Val},
+        StarkProtocolConfig, Val,
         keygen::types::MultiStarkProvingKey,
         proof::Proof,
         prover::{
-            cpu::{CpuBackend, CpuDevice},
-            hal::DeviceDataTransporter,
+            CpuBackend, CpuDevice,
+            DeviceDataTransporter,
         },
     },
     p3_baby_bear::BabyBear,
@@ -192,7 +192,7 @@ impl InitFileGenerator for ExecuteConfig {
 pub struct ExecuteBuilder;
 impl<E, SC> VmBuilder<E> for ExecuteBuilder
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
 {

@@ -29,7 +29,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    BaseAirWithPublicValues, PartitionedBaseAir,
 };
 use static_assertions::const_assert_eq;
 

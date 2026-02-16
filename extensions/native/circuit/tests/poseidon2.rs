@@ -6,7 +6,7 @@ use openvm_native_compiler::{
 };
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, PrimeCharacteristicRing};
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::default_perm, p3_baby_bear::BabyBear, utils::create_seeded_rng,
+    config::baby_bear_poseidon2::poseidon2_perm, p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
 use p3_symmetric::Permutation;
 use rand::Rng;
@@ -22,7 +22,7 @@ fn test_compiler_poseidon2_permute() {
 
     let random_state_vals: [F; PERMUTATION_WIDTH] = rng.random();
     // Execute the reference permutation
-    let perm = default_perm();
+    let perm = poseidon2_perm();
     let expected_result = perm.permute(random_state_vals);
 
     // Execute the permutation in the VM

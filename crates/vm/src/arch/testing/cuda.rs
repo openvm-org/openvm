@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use cuda_backend_v2::BabyBearPoseidon2GpuEngineV2;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{
         BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -14,30 +13,26 @@ use openvm_circuit_primitives::{
         SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus,
         VariableRangeCheckerChip, VariableRangeCheckerChipGPU,
     },
+    Chip,
 };
 use openvm_cuda_backend::{
-    data_transporter::assert_eq_host_and_device_matrix,
-    prover_backend::GpuBackend,
-    types::{F, SC},
+    data_transporter::assert_eq_host_and_device_matrix_col_maj,
+    prelude::{EF, F, SC},
+    BabyBearPoseidon2GpuEngine, GpuBackend,
 };
 use openvm_instructions::{program::PC_BITS, riscv::RV32_REGISTER_AS};
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
-    config::Val,
     interaction::{LookupBus, PermutationCheckBus},
     p3_air::BaseAir,
     p3_field::{PrimeCharacteristicRing, PrimeField32},
-    prover::{cpu::CpuBackend, types::AirProvingContext, MatrixDimensions},
-    rap::AnyRap,
+    prover::{AirProvingContext, CpuBackend},
     utils::disable_debug_builder,
-    AirRef, Chip,
+    verifier::VerifierError,
+    AirRef, AnyAir, StarkEngine, Val, VerificationData,
 };
-use openvm_stark_sdk::config::setup_tracing_with_log_level;
+use openvm_stark_sdk::utils::setup_tracing_with_log_level;
 use rand::{rngs::StdRng, Rng, SeedableRng};
-use stark_backend_v2::{
-    prover::AirProvingContextV2, verifier::VerifierError, StarkEngineV2,
-    VerificationDataV2 as VerificationData,
-};
 use tracing::Level;
 
 #[cfg(feature = "metrics")]
@@ -519,11 +514,11 @@ pub struct GpuChipTester {
 impl GpuChipTester {
     pub fn load<A, G, RA>(mut self, air: A, gpu_chip: G, gpu_arena: RA) -> Self
     where
-        A: AnyRap<SC> + 'static,
+        A: AnyAir<SC> + 'static,
         G: Chip<RA, GpuBackend>,
     {
         let proving_ctx = gpu_chip.generate_proving_ctx(gpu_arena);
-        if matches!(proving_ctx.common_main.as_ref(), Some(trace) if trace.height() > 0) {
+        if proving_ctx.height() > 0 {
             self = self.load_air_proving_ctx(Arc::new(air) as AirRef<SC>, proving_ctx);
         }
         self
@@ -531,7 +526,7 @@ impl GpuChipTester {
 
     pub fn load_harness<E, A, G, RA>(self, harness: TestChipHarness<F, E, A, G, RA>) -> Self
     where
-        A: AnyRap<SC> + 'static,
+        A: AnyAir<SC> + 'static,
         G: Chip<RA, GpuBackend>,
     {
         self.load(harness.air, harness.chip, harness.arena)
@@ -539,7 +534,7 @@ impl GpuChipTester {
 
     pub fn load_periphery<A, G>(self, air: A, gpu_chip: G) -> Self
     where
-        A: AnyRap<SC> + 'static,
+        A: AnyAir<SC> + 'static,
         G: Chip<(), GpuBackend>,
     {
         self.load(air, gpu_chip, ())
@@ -570,26 +565,19 @@ impl GpuChipTester {
         cpu_arena: CRA,
     ) -> Self
     where
-        A: AnyRap<SC> + 'static,
+        A: AnyAir<SC> + 'static,
         C: Chip<CRA, CpuBackend<SC>>,
         G: Chip<RA, GpuBackend>,
     {
         let proving_ctx = gpu_chip.generate_proving_ctx(gpu_arena);
         let expected_trace = cpu_chip.generate_proving_ctx(cpu_arena).common_main;
-        if proving_ctx.common_main.is_none() {
-            assert!(expected_trace.is_none());
-            return self;
-        }
         #[cfg(feature = "touchemall")]
         {
             use openvm_cuda_backend::engine::check_trace_validity;
 
             check_trace_validity(&proving_ctx, &air.name());
         }
-        assert_eq_host_and_device_matrix(
-            expected_trace.unwrap(),
-            proving_ctx.common_main.as_ref().unwrap(),
-        );
+        assert_eq_host_and_device_matrix_col_maj(&expected_trace, &proving_ctx.common_main);
         self.airs.push(Arc::new(air) as AirRef<SC>);
         self.ctxs.push(proving_ctx);
         self
@@ -600,7 +588,7 @@ impl GpuChipTester {
         harness: GpuTestChipHarness<Val<SC>, E, A, GpuChip, CpuChip>,
     ) -> Self
     where
-        A: AnyRap<SC> + 'static,
+        A: AnyAir<SC> + 'static,
         CpuChip: Chip<MatrixRecordArena<Val<SC>>, CpuBackend<SC>>,
         GpuChip: Chip<DenseRecordArena, GpuBackend>,
     {
@@ -639,7 +627,7 @@ impl GpuChipTester {
             for (air, ctx) in airs
                 .into_iter()
                 .zip(ctxs)
-                .filter(|(_, ctx)| ctx.main_trace_height() > 0)
+                .filter(|(_, ctx)| ctx.height() > 0)
             {
                 self = self.load_air_proving_ctx(air, ctx);
             }
@@ -690,24 +678,18 @@ impl GpuChipTester {
         self
     }
 
-    pub fn test<P: Fn() -> BabyBearPoseidon2GpuEngineV2>(
+    pub fn test<P: Fn() -> BabyBearPoseidon2GpuEngine>(
         self,
         engine_provider: P,
-    ) -> Result<VerificationData, VerifierError> {
-        engine_provider().run_test(
-            self.airs,
-            self.ctxs
-                .into_iter()
-                .map(AirProvingContextV2::from_v1_no_cached)
-                .collect(),
-        )
+    ) -> Result<VerificationData<SC>, VerifierError<EF>> {
+        engine_provider().run_test(self.airs, self.ctxs)
     }
 
-    pub fn simple_test(self) -> Result<VerificationData, VerifierError> {
+    pub fn simple_test(self) -> Result<VerificationData<SC>, VerifierError<EF>> {
         self.test(test_gpu_engine)
     }
 
-    pub fn simple_test_with_expected_error(self, expected_error: VerifierError) {
+    pub fn simple_test_with_expected_error(self, expected_error: VerifierError<EF>) {
         disable_debug_builder();
         let msg = format!(
             "Expected verification to fail with {:?}, but it didn't",
