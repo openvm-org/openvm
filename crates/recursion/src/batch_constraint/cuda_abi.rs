@@ -1,7 +1,7 @@
 #![allow(clippy::missing_safety_doc)]
 
-use cuda_backend_v2::{EF, F};
-use openvm_cuda_backend::chip::UInt2;
+use openvm_circuit_primitives::cuda_abi::UInt2;
+use openvm_cuda_backend::prelude::{EF, F};
 use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
 
 use crate::{

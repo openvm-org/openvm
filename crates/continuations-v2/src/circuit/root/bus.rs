@@ -1,5 +1,5 @@
+use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use recursion_circuit::define_typed_permutation_bus;
-use stark_backend_v2::DIGEST_SIZE;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 #[repr(C)]

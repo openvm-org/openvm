@@ -1,21 +1,20 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use itertools::{Itertools, izip};
+use itertools::{izip, Itertools};
 use openvm_circuit_primitives::{
-    SubAir,
     utils::{and, assert_array_eq, not},
+    SubAir,
 };
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{D_EF, EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    BasedVectorSpace, PrimeCharacteristicRing, PrimeField32, extension::BinomiallyExtendable,
+    extension::BinomiallyExtendable, BasedVectorSpace, PrimeCharacteristicRing, PrimeField32,
 };
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{D_EF, EF, F};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -88,7 +87,7 @@ impl<F> BaseAir<F> for UnivariateRoundAir {
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UnivariateRoundAir
 where
     AB::F: PrimeField32,
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();

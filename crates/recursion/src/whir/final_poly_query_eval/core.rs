@@ -1,17 +1,15 @@
 use core::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit_primitives::{SubAir, utils::assert_array_eq};
+use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, keygen::types::MultiStarkVerifyingKey, proof::Proof,
+    BaseAirWithPublicValues, PartitionedBaseAir, SystemParams,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, D_EF, EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, extension::BinomiallyExtendable};
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_field::{extension::BinomiallyExtendable, BasedVectorSpace, PrimeCharacteristicRing};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{
-    D_EF, EF, F, SystemParams, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof,
-};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -77,7 +75,7 @@ impl<F> BaseAir<F> for FinalPolyQueryEvalAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for FinalPolyQueryEvalAir
 where
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -364,7 +362,7 @@ pub(in crate::whir) struct FinalPolyQueryEvalRecord {
 
 pub(in crate::whir) fn build_final_poly_query_eval_records(
     params: &SystemParams,
-    proofs: &[&Proof],
+    proofs: &[&Proof<BabyBearPoseidon2Config>],
     preflights: &[&Preflight],
 ) -> Vec<FinalPolyQueryEvalRecord> {
     debug_assert_eq!(proofs.len(), preflights.len());
@@ -522,7 +520,7 @@ fn compute_indices_from_row_idx(
 }
 
 pub(crate) struct FinalPolyQueryEvalCtx<'a> {
-    pub vk: &'a MultiStarkVerifyingKeyV2,
+    pub vk: &'a MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
     pub records: &'a [FinalPolyQueryEvalRecord],
 }
 

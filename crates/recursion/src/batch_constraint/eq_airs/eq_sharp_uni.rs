@@ -1,24 +1,22 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit_primitives::{
-    SubAir,
     utils::{assert_array_eq, not},
+    SubAir,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    keygen::types::{MultiStarkVerifyingKey, MultiStarkVerifyingKey0},
+    poly_common::Squarable,
+    BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, D_EF, EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    BasedVectorSpace, Field, PrimeCharacteristicRing, TwoAdicField, extension::BinomiallyExtendable,
+    extension::BinomiallyExtendable, BasedVectorSpace, Field, PrimeCharacteristicRing, TwoAdicField,
 };
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{
-    D_EF, EF, F,
-    keygen::types::{MultiStarkVerifyingKey0V2, MultiStarkVerifyingKeyV2},
-    poly_common::Squarable,
-};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -32,8 +30,8 @@ use crate::{
     system::Preflight,
     tracegen::RowMajorChip,
     utils::{
-        MultiProofVecVec, base_to_ext, ext_field_add, ext_field_multiply,
-        ext_field_multiply_scalar, ext_field_one_minus, ext_field_subtract,
+        base_to_ext, ext_field_add, ext_field_multiply, ext_field_multiply_scalar,
+        ext_field_one_minus, ext_field_subtract, MultiProofVecVec,
     },
 };
 
@@ -76,7 +74,7 @@ impl<F> BaseAir<F> for EqSharpUniAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for EqSharpUniAir
 where
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
     AB::Expr: From<F>,
 {
     fn eval(&self, builder: &mut AB) {
@@ -314,7 +312,7 @@ impl<F> BaseAir<F> for EqSharpUniReceiverAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for EqSharpUniReceiverAir
 where
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -437,7 +435,7 @@ impl EqSharpUniBlob {
 }
 
 pub fn generate_eq_sharp_uni_blob(
-    vk: &MultiStarkVerifyingKey0V2,
+    vk: &MultiStarkVerifyingKey0<BabyBearPoseidon2Config>,
     preflights: &[&Preflight],
 ) -> EqSharpUniBlob {
     let l_skip = vk.params.l_skip;
@@ -487,7 +485,7 @@ pub struct EqSharpUniTraceGenerator;
 
 impl RowMajorChip<F> for EqSharpUniTraceGenerator {
     type Ctx<'a> = (
-        &'a MultiStarkVerifyingKeyV2,
+        &'a MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         &'a EqSharpUniBlob,
         &'a [&'a Preflight],
     );
@@ -558,7 +556,7 @@ pub struct EqSharpUniReceiverTraceGenerator;
 
 impl RowMajorChip<F> for EqSharpUniReceiverTraceGenerator {
     type Ctx<'a> = (
-        &'a MultiStarkVerifyingKeyV2,
+        &'a MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         &'a EqSharpUniBlob,
         &'a [&'a Preflight],
     );

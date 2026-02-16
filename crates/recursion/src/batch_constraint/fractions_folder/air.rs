@@ -1,14 +1,13 @@
 use std::borrow::Borrow;
 
-use openvm_circuit_primitives::{SubAir, utils::assert_array_eq};
+use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::D_EF;
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{PrimeCharacteristicRing, extension::BinomiallyExtendable};
+use p3_field::{extension::BinomiallyExtendable, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
-use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -64,7 +63,7 @@ impl<F> BaseAir<F> for FractionsFolderAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for FractionsFolderAir
 where
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();

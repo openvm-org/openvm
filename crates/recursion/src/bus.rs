@@ -1,7 +1,7 @@
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::interaction::InteractionBuilder;
+use openvm_stark_sdk::config::baby_bear_poseidon2::{DIGEST_SIZE, D_EF};
 use p3_field::PrimeCharacteristicRing;
-use stark_backend_v2::{D_EF, DIGEST_SIZE};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 #[macro_export]

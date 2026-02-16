@@ -1,8 +1,7 @@
-use cuda_backend_v2::{F, GpuBackendV2};
-use openvm_cuda_backend::base::DeviceMatrix;
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::memory_manager::MemTracker;
+use openvm_stark_backend::{prover::AirProvingContext, SystemParams};
 use p3_field::TwoAdicField;
-use stark_backend_v2::{SystemParams, prover::AirProvingContextV2};
 
 use crate::{
     tracegen::ModuleChip,
@@ -20,7 +19,7 @@ pub(in crate::whir) struct InitialOpenedValuesGpuCtx<'a> {
 
 pub(in crate::whir) struct InitialOpenedValuesGpuTraceGenerator;
 
-impl ModuleChip<GpuBackendV2> for InitialOpenedValuesGpuTraceGenerator {
+impl ModuleChip<GpuBackend> for InitialOpenedValuesGpuTraceGenerator {
     type Ctx<'a> = InitialOpenedValuesGpuCtx<'a>;
 
     #[tracing::instrument(level = "trace", skip_all)]
@@ -28,7 +27,7 @@ impl ModuleChip<GpuBackendV2> for InitialOpenedValuesGpuTraceGenerator {
         &self,
         ctx: &Self::Ctx<'_>,
         required_height: Option<usize>,
-    ) -> Option<AirProvingContextV2<GpuBackendV2>> {
+    ) -> Option<AirProvingContext<GpuBackend>> {
         let num_proofs = ctx.num_proofs;
         let blob = ctx.blob;
         let params = ctx.params;
@@ -76,6 +75,6 @@ impl ModuleChip<GpuBackendV2> for InitialOpenedValuesGpuTraceGenerator {
             .unwrap();
         }
         mem.emit_metrics();
-        Some(AirProvingContextV2::simple_no_pis(trace_d))
+        Some(AirProvingContext::simple_no_pis(trace_d))
     }
 }

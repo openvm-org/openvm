@@ -10,13 +10,13 @@ use core::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit_primitives::utils::assert_array_eq;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, poly_common::Squarable, BaseAirWithPublicValues,
+    PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{D_EF, EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{BasedVectorSpace, Field, PrimeCharacteristicRing, extension::BinomiallyExtendable};
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{D_EF, EF, F, poly_common::Squarable};
+use p3_field::{extension::BinomiallyExtendable, BasedVectorSpace, Field, PrimeCharacteristicRing};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -74,7 +74,7 @@ impl<F> BaseAir<F> for FinalPolyMleEvalAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for FinalPolyMleEvalAir
 where
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();

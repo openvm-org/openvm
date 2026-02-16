@@ -1,29 +1,29 @@
 use core::{array, cmp::min, iter::zip};
 use std::borrow::{Borrow, BorrowMut};
 
-use itertools::{Itertools, fold};
+use itertools::{fold, Itertools};
 use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq};
 use openvm_stark_backend::{
     air_builders::{
+        symbolic::{symbolic_variable::Entry, SymbolicExpressionNode},
         PartitionedAirBuilder,
-        symbolic::{SymbolicExpressionNode, symbolic_variable::Entry},
     },
     interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    keygen::types::MultiStarkVerifyingKey,
+    poly_common::{eval_eq_uni_at_one, Squarable},
+    proof::Proof,
+    BaseAirWithPublicValues, PartitionedBaseAir,
+};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{
+    BabyBearPoseidon2Config, DIGEST_SIZE, D_EF, EF, F,
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    BasedVectorSpace, PrimeCharacteristicRing, PrimeField32, TwoAdicField,
-    extension::BinomiallyExtendable,
+    extension::BinomiallyExtendable, BasedVectorSpace, PrimeCharacteristicRing, PrimeField32,
+    TwoAdicField,
 };
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{
-    D_EF, DIGEST_SIZE, EF, F,
-    keygen::types::MultiStarkVerifyingKeyV2,
-    poly_common::{Squarable, eval_eq_uni_at_one},
-    proof::Proof,
-};
 use stark_recursion_circuit_derive::AlignedBorrow;
 use strum::{EnumCount, IntoEnumIterator};
 use strum_macros::EnumIter;
@@ -43,8 +43,8 @@ use crate::{
     system::Preflight,
     tracegen::RowMajorChip,
     utils::{
-        MultiVecWithBounds, base_to_ext, ext_field_add, ext_field_multiply,
-        ext_field_multiply_scalar, ext_field_subtract, scalar_subtract_ext_field,
+        base_to_ext, ext_field_add, ext_field_multiply, ext_field_multiply_scalar,
+        ext_field_subtract, scalar_subtract_ext_field, MultiVecWithBounds,
     },
 };
 const NUM_FLAGS: usize = 4;
@@ -130,7 +130,7 @@ impl<F> BaseAir<F> for SymbolicExpressionAir {
 
 impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for SymbolicExpressionAir
 where
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     fn eval(&self, builder: &mut AB) {
         let main_local = builder
@@ -419,8 +419,8 @@ pub struct SymbolicExpressionTraceGenerator {
 }
 
 pub(crate) struct SymbolicExpressionCtx<'a> {
-    pub vk: &'a MultiStarkVerifyingKeyV2,
-    pub proofs: &'a [&'a Proof],
+    pub vk: &'a MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+    pub proofs: &'a [&'a Proof<BabyBearPoseidon2Config>],
     pub preflights: &'a [&'a Preflight],
     pub expr_evals: &'a MultiVecWithBounds<EF, 2>,
 }
@@ -806,7 +806,9 @@ pub(crate) struct CachedRecord {
     pub(crate) fanout: usize,
 }
 
-pub(crate) fn build_cached_records(child_vk: &MultiStarkVerifyingKeyV2) -> Vec<CachedRecord> {
+pub(crate) fn build_cached_records(
+    child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+) -> Vec<CachedRecord> {
     let mut fanout_per_air = Vec::with_capacity(child_vk.inner.per_air.len());
     for vk in &child_vk.inner.per_air {
         let nodes = &vk.symbolic_constraints.constraints.nodes;
@@ -1019,7 +1021,7 @@ pub(crate) fn build_cached_records(child_vk: &MultiStarkVerifyingKeyV2) -> Vec<C
     fields(air = "SymbolicExpressionAir")
 )]
 pub(crate) fn generate_symbolic_expr_cached_trace(
-    child_vk: &MultiStarkVerifyingKeyV2,
+    child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
 ) -> RowMajorMatrix<F> {
     // 3 var types: main, preprocessed, public value
     // 3 selectors: is_first, is_last, is_transition
@@ -1089,10 +1091,9 @@ pub fn cached_symbolic_expr_cols_to_digest<F: PrimeCharacteristicRing>(
 #[cfg(feature = "cuda")]
 pub(in crate::batch_constraint) mod cuda {
 
-    use cuda_backend_v2::{F, GpuBackendV2};
-    use openvm_cuda_backend::base::DeviceMatrix;
+    use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
     use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
-    use stark_backend_v2::prover::AirProvingContextV2;
+    use openvm_stark_backend::prover::AirProvingContext;
 
     use super::*;
     use crate::{
@@ -1102,13 +1103,13 @@ pub(in crate::batch_constraint) mod cuda {
     };
 
     pub struct SymbolicExpressionGpuCtx<'a> {
-        pub vk: &'a MultiStarkVerifyingKeyV2,
+        pub vk: &'a MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         pub proofs: &'a [ProofGpu],
         pub preflights: &'a [PreflightGpu],
-        pub expr_evals: &'a MultiVecWithBounds<stark_backend_v2::EF, 2>,
+        pub expr_evals: &'a MultiVecWithBounds<openvm_cuda_backend::prelude::EF, 2>,
     }
 
-    impl ModuleChip<GpuBackendV2> for SymbolicExpressionTraceGenerator {
+    impl ModuleChip<GpuBackend> for SymbolicExpressionTraceGenerator {
         type Ctx<'a> = SymbolicExpressionGpuCtx<'a>;
 
         #[tracing::instrument(name = "generate_trace", level = "trace", skip_all)]
@@ -1116,7 +1117,7 @@ pub(in crate::batch_constraint) mod cuda {
             &self,
             ctx: &Self::Ctx<'_>,
             required_height: Option<usize>,
-        ) -> Option<AirProvingContextV2<GpuBackendV2>> {
+        ) -> Option<AirProvingContext<GpuBackend>> {
             let child_vk = ctx.vk;
             let proofs = ctx.proofs;
             let preflights = ctx.preflights;
@@ -1291,7 +1292,7 @@ pub(in crate::batch_constraint) mod cuda {
                 )
                 .unwrap();
             }
-            Some(AirProvingContextV2::simple_no_pis(trace))
+            Some(AirProvingContext::simple_no_pis(trace))
         }
     }
 }

@@ -4,22 +4,17 @@
 //! circuit itself.
 use std::{iter, sync::Arc};
 
-use openvm_stark_backend::{AirRef, interaction::BusIndex};
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use openvm_poseidon2_air::POSEIDON2_WIDTH;
+use openvm_stark_backend::{
+    interaction::BusIndex,
+    keygen::types::MultiStarkVerifyingKey,
+    proof::{Proof, TraceVData},
+    prover::{AirProvingContext, ColMajorMatrix, CommittedTraceData, CpuBackend, ProverBackend},
+    AirRef, FiatShamirTranscript, StarkEngine, TranscriptHistory, TranscriptLog,
+};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, CHUNK, EF, F};
 use p3_field::BasedVectorSpace;
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{
-    EF, F, SC, StarkEngineV2,
-    keygen::types::MultiStarkVerifyingKeyV2,
-    poseidon2::{
-        CHUNK, WIDTH,
-        sponge::{FiatShamirTranscript, TranscriptHistory, TranscriptLog},
-    },
-    proof::{Proof, TraceVData},
-    prover::{
-        AirProvingContextV2, ColMajorMatrix, CommittedTraceDataV2, CpuBackendV2, ProverBackendV2,
-    },
-};
 
 use crate::{
     batch_constraint::{BatchConstraintModule, LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX},
@@ -41,7 +36,7 @@ use crate::{
     stacking::StackingModule,
     transcript::TranscriptModule,
     utils::poseidon2_hash_slice_with_states,
-    whir::{WhirModule, folding::FoldRecord},
+    whir::{folding::FoldRecord, WhirModule},
 };
 
 mod dummy;
@@ -50,39 +45,54 @@ pub(crate) mod frame;
 const BATCH_CONSTRAINT_MOD_IDX: usize = 0;
 const POW_CHECKER_HEIGHT: usize = 32;
 
-// Trait to make tracegen functions generic on ProverBackendV2
-pub trait VerifierTraceGen<PB: ProverBackendV2> {
+// Trait to make tracegen functions generic on ProverBackend
+pub trait VerifierTraceGen<PB: ProverBackend> {
     fn new(
-        child_mvk: Arc<MultiStarkVerifyingKeyV2>,
+        child_mvk: Arc<MultiStarkVerifyingKey<BabyBearPoseidon2Config>>,
         continuations_enabled: bool,
         has_cached: bool,
     ) -> Self;
 
-    fn commit_child_vk<E: StarkEngineV2<SC = SC, PB = PB>>(
+    fn commit_child_vk<E: StarkEngine<SC = BabyBearPoseidon2Config, PB = PB>>(
         &self,
         engine: &E,
-        child_vk: &MultiStarkVerifyingKeyV2,
-    ) -> CommittedTraceDataV2<PB>;
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+    ) -> CommittedTraceData<PB>;
 
     /// The generic `TS` allows using different transcript implementations for debugging purposes.
     /// The default type to use is `DuplexSpongeRecorder`.
-    fn generate_proving_ctxs<TS: FiatShamirTranscript + TranscriptHistory + Default>(
+    fn generate_proving_ctxs<
+        TS: FiatShamirTranscript<BabyBearPoseidon2Config>
+            + TranscriptHistory<F = F, State = [F; POSEIDON2_WIDTH]>,
+    >(
         &self,
-        child_vk: &MultiStarkVerifyingKeyV2,
-        child_vk_pcs_data: CommittedTraceDataV2<PB>,
-        proofs: &[Proof],
-        external_poseidon2_compress_inputs: &Vec<[PB::Val; WIDTH]>,
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        child_vk_pcs_data: CommittedTraceData<PB>,
+        proofs: &[Proof<BabyBearPoseidon2Config>],
+        external_poseidon2_compress_inputs: &Vec<[PB::Val; POSEIDON2_WIDTH]>,
         required_heights: Option<&[usize]>,
-    ) -> Option<Vec<AirProvingContextV2<PB>>>;
+        initial_transcript: TS,
+    ) -> Option<Vec<AirProvingContext<PB>>>;
 
-    fn generate_proving_ctxs_base<TS: FiatShamirTranscript + TranscriptHistory + Default>(
+    fn generate_proving_ctxs_base<
+        TS: FiatShamirTranscript<BabyBearPoseidon2Config>
+            + TranscriptHistory<F = F, State = [F; POSEIDON2_WIDTH]>,
+    >(
         &self,
-        child_vk: &MultiStarkVerifyingKeyV2,
-        child_vk_pcs_data: CommittedTraceDataV2<PB>,
-        proofs: &[Proof],
-    ) -> Vec<AirProvingContextV2<PB>> {
-        self.generate_proving_ctxs::<TS>(child_vk, child_vk_pcs_data, proofs, &vec![], None)
-            .unwrap()
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        child_vk_pcs_data: CommittedTraceData<PB>,
+        proofs: &[Proof<BabyBearPoseidon2Config>],
+        initial_transcript: TS,
+    ) -> Vec<AirProvingContext<PB>> {
+        self.generate_proving_ctxs::<TS>(
+            child_vk,
+            child_vk_pcs_data,
+            proofs,
+            &vec![],
+            None,
+            initial_transcript,
+        )
+        .unwrap()
     }
 }
 
@@ -117,7 +127,7 @@ pub trait GlobalTraceGenCtx {
 /// each proof.
 ///
 /// This function should be expected to be called in parallel, one logical thread per module.
-pub trait TraceGenModule<GC: GlobalTraceGenCtx, PB: ProverBackendV2>: Send + Sync {
+pub trait TraceGenModule<GC: GlobalTraceGenCtx, PB: ProverBackend>: Send + Sync {
     type ModuleSpecificCtx;
 
     fn generate_proving_ctxs(
@@ -127,14 +137,14 @@ pub trait TraceGenModule<GC: GlobalTraceGenCtx, PB: ProverBackendV2>: Send + Syn
         preflights: &GC::PreflightRecords,
         ctx: &Self::ModuleSpecificCtx,
         required_heights: Option<&[usize]>,
-    ) -> Option<Vec<AirProvingContextV2<PB>>>;
+    ) -> Option<Vec<AirProvingContext<PB>>>;
 }
 
 pub struct GlobalCtxCpu;
 
 impl GlobalTraceGenCtx for GlobalCtxCpu {
-    type ChildVerifyingKey = MultiStarkVerifyingKeyV2;
-    type MultiProof = [Proof];
+    type ChildVerifyingKey = MultiStarkVerifyingKey<BabyBearPoseidon2Config>;
+    type MultiProof = [Proof<BabyBearPoseidon2Config>];
     type PreflightRecords = [Preflight];
 }
 
@@ -202,23 +212,23 @@ pub struct BusInventory {
 pub struct Preflight {
     /// The concatenated sequence of observes/samples. Not available during preflight; populated
     /// after.
-    pub transcript: TranscriptLog,
+    pub transcript: TranscriptLog<F, [F; POSEIDON2_WIDTH]>,
     // TODO[jpw]: flatten and remove these preflight types if they are mostly trivial
     pub proof_shape: ProofShapePreflight,
     pub gkr: GkrPreflight,
     pub batch_constraint: BatchConstraintPreflight,
     pub stacking: StackingPreflight,
     pub whir: WhirPreflight,
-    pub poseidon2_perm_inputs: Vec<[F; WIDTH]>,
-    pub poseidon2_compress_inputs: Vec<[F; WIDTH]>,
-    pub initial_row_states: Vec<Vec<Vec<Vec<[F; WIDTH]>>>>,
+    pub poseidon2_perm_inputs: Vec<[F; POSEIDON2_WIDTH]>,
+    pub poseidon2_compress_inputs: Vec<[F; POSEIDON2_WIDTH]>,
+    pub initial_row_states: Vec<Vec<Vec<Vec<[F; POSEIDON2_WIDTH]>>>>,
     /// Indexed by [round][query][coset]. Stores post-permutation state.
-    pub codeword_states: Vec<Vec<Vec<[F; WIDTH]>>>,
+    pub codeword_states: Vec<Vec<Vec<[F; POSEIDON2_WIDTH]>>>,
 }
 
 #[derive(Clone, Debug, Default)]
 pub struct ProofShapePreflight {
-    pub sorted_trace_vdata: Vec<(usize, TraceVData)>,
+    pub sorted_trace_vdata: Vec<(usize, TraceVData<BabyBearPoseidon2Config>)>,
     pub starting_tidx: Vec<usize>,
     pub pvs_tidx: Vec<usize>,
     pub post_tidx: usize,
@@ -337,15 +347,15 @@ impl BusInventory {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct PoseidonStatePair {
-    pub pre_state: [F; WIDTH],
-    pub post_state: [F; WIDTH],
+    pub pre_state: [F; POSEIDON2_WIDTH],
+    pub post_state: [F; POSEIDON2_WIDTH],
 }
 
 struct MerklePrecomputation {
-    poseidon2_perm_inputs: Vec<[F; WIDTH]>,
-    poseidon2_compress_inputs: Vec<[F; WIDTH]>,
-    initial_row_states: Vec<Vec<Vec<Vec<[F; WIDTH]>>>>,
-    codeword_states: Vec<Vec<Vec<[F; WIDTH]>>>,
+    poseidon2_perm_inputs: Vec<[F; POSEIDON2_WIDTH]>,
+    poseidon2_compress_inputs: Vec<[F; POSEIDON2_WIDTH]>,
+    initial_row_states: Vec<Vec<Vec<Vec<[F; POSEIDON2_WIDTH]>>>>,
+    codeword_states: Vec<Vec<Vec<[F; POSEIDON2_WIDTH]>>>,
 }
 
 #[derive(Clone, Copy, strum_macros::Display)]
@@ -367,12 +377,13 @@ impl<'a> TraceModuleRef<'a> {
     )]
     fn run_preflight<TS>(
         self,
-        child_vk: &MultiStarkVerifyingKeyV2,
-        proof: &Proof,
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proof: &Proof<BabyBearPoseidon2Config>,
         preflight: &mut Preflight,
         sponge: &mut TS,
     ) where
-        TS: FiatShamirTranscript + TranscriptHistory,
+        TS: FiatShamirTranscript<BabyBearPoseidon2Config>
+            + TranscriptHistory<F = F, State = [F; POSEIDON2_WIDTH]>,
     {
         match self {
             TraceModuleRef::ProofShape(module) => {
@@ -396,13 +407,13 @@ impl<'a> TraceModuleRef<'a> {
     )]
     fn generate_cpu_ctxs(
         self,
-        child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proofs: &[Proof<BabyBearPoseidon2Config>],
         preflights: &[Preflight],
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
-        external_poseidon2_compress_inputs: &Vec<[F; WIDTH]>,
+        external_poseidon2_compress_inputs: &Vec<[F; POSEIDON2_WIDTH]>,
         required_heights: Option<&[usize]>,
-    ) -> Option<Vec<AirProvingContextV2<CpuBackendV2>>> {
+    ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
         match self {
             TraceModuleRef::Transcript(module) => module.generate_proving_ctxs(
                 child_vk,
@@ -457,12 +468,12 @@ pub struct VerifierSubCircuit<const MAX_NUM_PROOFS: usize> {
 }
 
 impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
-    pub fn new(child_mvk: Arc<MultiStarkVerifyingKeyV2>) -> Self {
+    pub fn new(child_mvk: Arc<MultiStarkVerifyingKey<BabyBearPoseidon2Config>>) -> Self {
         Self::new_with_options(child_mvk, false, true)
     }
 
     pub fn new_with_options(
-        child_mvk: Arc<MultiStarkVerifyingKeyV2>,
+        child_mvk: Arc<MultiStarkVerifyingKey<BabyBearPoseidon2Config>>,
         continuations_enabled: bool,
         has_cached: bool,
     ) -> Self {
@@ -516,11 +527,12 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
     pub fn run_preflight<TS>(
         &self,
         mut sponge: TS,
-        child_vk: &MultiStarkVerifyingKeyV2,
-        proof: &Proof,
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proof: &Proof<BabyBearPoseidon2Config>,
     ) -> Preflight
     where
-        TS: FiatShamirTranscript + TranscriptHistory,
+        TS: FiatShamirTranscript<BabyBearPoseidon2Config>
+            + TranscriptHistory<F = F, State = [F; POSEIDON2_WIDTH]>,
     {
         let mut preflight = Preflight::default();
 
@@ -552,7 +564,9 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
 
     #[cfg_attr(feature = "cuda", allow(dead_code))]
     #[tracing::instrument(name = "compute_merkle_precomputation", level = "info", skip_all)]
-    fn compute_merkle_precomputation(proof: &Proof) -> MerklePrecomputation {
+    fn compute_merkle_precomputation(
+        proof: &Proof<BabyBearPoseidon2Config>,
+    ) -> MerklePrecomputation {
         let initial_chunks: usize = proof
             .whir_proof
             .initial_round_opened_rows
@@ -572,7 +586,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         let mut poseidon2_perm_inputs = Vec::with_capacity(initial_chunks);
         let mut poseidon2_compress_inputs = Vec::with_capacity(codeword_chunks);
 
-        let initial_row_states: Vec<Vec<Vec<Vec<[F; WIDTH]>>>> = proof
+        let initial_row_states: Vec<Vec<Vec<Vec<[F; POSEIDON2_WIDTH]>>>> = proof
             .whir_proof
             .initial_round_opened_rows
             .iter()
@@ -632,13 +646,15 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
 
     #[cfg(feature = "cuda")]
     #[tracing::instrument(name = "compute_merkle_precomputation_cuda", level = "info", skip_all)]
-    fn compute_merkle_precomputation_cuda(proof: &Proof) -> MerklePrecomputation {
+    fn compute_merkle_precomputation_cuda(
+        proof: &Proof<BabyBearPoseidon2Config>,
+    ) -> MerklePrecomputation {
         use openvm_cuda_common::{
             copy::{MemCopyD2H, MemCopyH2D},
             d_buffer::DeviceBuffer,
         };
 
-        use crate::cuda::abi::{VectorDescriptor, merkle_precomputation_hash_vectors};
+        use crate::cuda::abi::{merkle_precomputation_hash_vectors, VectorDescriptor};
 
         let num_chunks = |len: usize| len.div_ceil(CHUNK);
 
@@ -712,8 +728,8 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         let d_descriptors = descriptors
             .to_device()
             .expect("failed to upload descriptors");
-        let d_pre_states = DeviceBuffer::<F>::with_capacity(total_chunks * WIDTH);
-        let d_post_states = DeviceBuffer::<F>::with_capacity(total_chunks * WIDTH);
+        let d_pre_states = DeviceBuffer::<F>::with_capacity(total_chunks * POSEIDON2_WIDTH);
+        let d_post_states = DeviceBuffer::<F>::with_capacity(total_chunks * POSEIDON2_WIDTH);
 
         unsafe {
             merkle_precomputation_hash_vectors(
@@ -733,23 +749,24 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         let post_states_flat = d_post_states
             .to_host()
             .expect("failed to download post_states");
-        debug_assert_eq!(pre_states_flat.len(), total_chunks * WIDTH);
-        debug_assert_eq!(post_states_flat.len(), total_chunks * WIDTH);
+        debug_assert_eq!(pre_states_flat.len(), total_chunks * POSEIDON2_WIDTH);
+        debug_assert_eq!(post_states_flat.len(), total_chunks * POSEIDON2_WIDTH);
 
         // Split pre_states into poseidon permute and compress inputs
-        let (perm_flat, compress_flat) = pre_states_flat.split_at(num_perm_chunks * WIDTH);
-        let poseidon2_perm_inputs: Vec<[F; WIDTH]> = perm_flat
-            .chunks_exact(WIDTH)
+        let (perm_flat, compress_flat) =
+            pre_states_flat.split_at(num_perm_chunks * POSEIDON2_WIDTH);
+        let poseidon2_perm_inputs: Vec<[F; POSEIDON2_WIDTH]> = perm_flat
+            .chunks_exact(POSEIDON2_WIDTH)
             .map(|chunk| chunk.try_into().unwrap())
             .collect();
-        let poseidon2_compress_inputs: Vec<[F; WIDTH]> = compress_flat
-            .chunks_exact(WIDTH)
+        let poseidon2_compress_inputs: Vec<[F; POSEIDON2_WIDTH]> = compress_flat
+            .chunks_exact(POSEIDON2_WIDTH)
             .map(|chunk| chunk.try_into().unwrap())
             .collect();
 
-        let mut post_iter = post_states_flat.chunks_exact(WIDTH);
+        let mut post_iter = post_states_flat.chunks_exact(POSEIDON2_WIDTH);
 
-        let initial_row_states: Vec<Vec<Vec<Vec<[F; WIDTH]>>>> = proof
+        let initial_row_states: Vec<Vec<Vec<Vec<[F; POSEIDON2_WIDTH]>>>> = proof
             .whir_proof
             .initial_round_opened_rows
             .iter()
@@ -770,7 +787,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             })
             .collect();
 
-        let codeword_states: Vec<Vec<Vec<[F; WIDTH]>>> = proof
+        let codeword_states: Vec<Vec<Vec<[F; POSEIDON2_WIDTH]>>> = proof
             .whir_proof
             .codeword_opened_values
             .iter()
@@ -875,34 +892,40 @@ impl<const MAX_NUM_PROOFS: usize> AggregationSubCircuit for VerifierSubCircuit<M
     }
 }
 
-impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
+impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackend<BabyBearPoseidon2Config>>
     for VerifierSubCircuit<MAX_NUM_PROOFS>
 {
     fn new(
-        child_mvk: Arc<MultiStarkVerifyingKeyV2>,
+        child_mvk: Arc<MultiStarkVerifyingKey<BabyBearPoseidon2Config>>,
         continuations_enabled: bool,
         has_cached: bool,
     ) -> Self {
         Self::new_with_options(child_mvk, continuations_enabled, has_cached)
     }
 
-    fn commit_child_vk<E: StarkEngineV2<SC = SC, PB = CpuBackendV2>>(
+    fn commit_child_vk<
+        E: StarkEngine<SC = BabyBearPoseidon2Config, PB = CpuBackend<BabyBearPoseidon2Config>>,
+    >(
         &self,
         engine: &E,
-        child_vk: &MultiStarkVerifyingKeyV2,
-    ) -> CommittedTraceDataV2<CpuBackendV2> {
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+    ) -> CommittedTraceData<CpuBackend<BabyBearPoseidon2Config>> {
         self.batch_constraint.commit_child_vk(engine, child_vk)
     }
 
     #[tracing::instrument(name = "subcircuit_generate_proving_ctxs", skip_all)]
-    fn generate_proving_ctxs<TS: FiatShamirTranscript + TranscriptHistory + Default>(
+    fn generate_proving_ctxs<
+        TS: FiatShamirTranscript<BabyBearPoseidon2Config>
+            + TranscriptHistory<F = F, State = [F; POSEIDON2_WIDTH]>,
+    >(
         &self,
-        child_vk: &MultiStarkVerifyingKeyV2,
-        child_vk_pcs_data: CommittedTraceDataV2<CpuBackendV2>,
-        proofs: &[Proof],
-        external_poseidon2_compress_inputs: &Vec<[F; WIDTH]>,
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        child_vk_pcs_data: CommittedTraceData<CpuBackend<BabyBearPoseidon2Config>>,
+        proofs: &[Proof<BabyBearPoseidon2Config>],
+        external_poseidon2_compress_inputs: &Vec<[F; POSEIDON2_WIDTH]>,
         required_heights: Option<&[usize]>,
-    ) -> Option<Vec<AirProvingContextV2<CpuBackendV2>>> {
+        initial_transcript: TS,
+    ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
         debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
         // Use std::thread::scope for preflight parallelism. With only 3-4 proofs max, this avoids
         // Rayon's thread pool overhead (wake-up, work stealing, synchronization) while still
@@ -912,9 +935,10 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
             let handles: Vec<_> = proofs
                 .iter()
                 .map(|proof| {
-                    s.spawn(|| {
+                    let sponge = initial_transcript.clone();
+                    let span = span.clone();
+                    s.spawn(move || {
                         let _guard = span.enter();
-                        let sponge = TS::default();
                         self.run_preflight(sponge, child_vk, proof)
                     })
                 })
@@ -957,7 +981,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
             })
             .collect::<Vec<_>>();
 
-        let mut ctxs_by_module: Vec<Vec<AirProvingContextV2<CpuBackendV2>>> =
+        let mut ctxs_by_module: Vec<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> =
             ctxs_by_module.into_iter().collect::<Option<Vec<_>>>()?;
         if self.batch_constraint.has_cached {
             ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
@@ -972,7 +996,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
             || {
                 tracing::trace_span!("wrapper.generate_trace", air = "PowerChecker").in_scope(
                     || {
-                        ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
+                        ctx_per_trace.push(AirProvingContext::simple_no_pis(
                             ColMajorMatrix::from_row_major(
                                 &self.power_checker_trace.generate_trace_row_major(),
                             ),
@@ -983,7 +1007,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
         );
         let exp_bits_trace_rm = tracing::trace_span!("wrapper.generate_trace", air = "ExpBitsLen")
             .in_scope(|| exp_bits_len_gen.generate_trace_row_major(exp_bits_len_required))?;
-        ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
+        ctx_per_trace.push(AirProvingContext::simple_no_pis(
             ColMajorMatrix::from_row_major(&exp_bits_trace_rm),
         ));
         Some(ctx_per_trace)
@@ -994,7 +1018,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackendV2>
 pub mod cuda_tracegen {
     use std::iter::zip;
 
-    use cuda_backend_v2::{GpuBackendV2, transport_matrix_h2d_col_major};
+    use openvm_cuda_backend::{data_transporter::transport_matrix_h2d_col_major, GpuBackend};
 
     use super::*;
     use crate::cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu};
@@ -1012,9 +1036,9 @@ pub mod cuda_tracegen {
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
             exp_bits_len_gen: &ExpBitsLenTraceGenerator,
-            external_poseidon2_compress_inputs: &Vec<[F; WIDTH]>,
+            external_poseidon2_compress_inputs: &Vec<[F; POSEIDON2_WIDTH]>,
             required_heights: Option<&[usize]>,
-        ) -> Option<Vec<AirProvingContextV2<GpuBackendV2>>> {
+        ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             match self {
                 TraceModuleRef::Transcript(module) => module.generate_proving_ctxs(
                     child_vk,
@@ -1062,34 +1086,38 @@ pub mod cuda_tracegen {
         }
     }
 
-    impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<GpuBackendV2>
+    impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<GpuBackend>
         for VerifierSubCircuit<MAX_NUM_PROOFS>
     {
         fn new(
-            child_mvk: Arc<MultiStarkVerifyingKeyV2>,
+            child_mvk: Arc<MultiStarkVerifyingKey<BabyBearPoseidon2Config>>,
             continuations_enabled: bool,
             has_cached: bool,
         ) -> Self {
             Self::new_with_options(child_mvk, continuations_enabled, has_cached)
         }
 
-        fn commit_child_vk<E: StarkEngineV2<SC = SC, PB = GpuBackendV2>>(
+        fn commit_child_vk<E: StarkEngine<SC = BabyBearPoseidon2Config, PB = GpuBackend>>(
             &self,
             engine: &E,
-            child_vk: &MultiStarkVerifyingKeyV2,
-        ) -> CommittedTraceDataV2<GpuBackendV2> {
+            child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        ) -> CommittedTraceData<GpuBackend> {
             self.batch_constraint.commit_child_vk_gpu(engine, child_vk)
         }
 
         #[tracing::instrument(name = "subcircuit_generate_proving_ctxs", skip_all)]
-        fn generate_proving_ctxs<TS: FiatShamirTranscript + TranscriptHistory + Default>(
+        fn generate_proving_ctxs<
+            TS: FiatShamirTranscript<BabyBearPoseidon2Config>
+                + TranscriptHistory<F = F, State = [F; POSEIDON2_WIDTH]>,
+        >(
             &self,
-            child_vk: &MultiStarkVerifyingKeyV2,
-            child_vk_pcs_data: CommittedTraceDataV2<GpuBackendV2>,
-            proofs: &[Proof],
-            external_poseidon2_compress_inputs: &Vec<[F; WIDTH]>,
+            child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+            child_vk_pcs_data: CommittedTraceData<GpuBackend>,
+            proofs: &[Proof<BabyBearPoseidon2Config>],
+            external_poseidon2_compress_inputs: &Vec<[F; POSEIDON2_WIDTH]>,
             required_heights: Option<&[usize]>,
-        ) -> Option<Vec<AirProvingContextV2<GpuBackendV2>>> {
+            initial_transcript: TS,
+        ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
             let child_vk_gpu = VerifyingKeyGpu::new(child_vk);
             let proofs_gpu = proofs
@@ -1103,9 +1131,10 @@ pub mod cuda_tracegen {
                 let handles: Vec<_> = proofs
                     .iter()
                     .map(|proof| {
-                        s.spawn(|| {
+                        let sponge = initial_transcript.clone();
+                        let span = span.clone();
+                        s.spawn(move || {
                             let _guard = span.enter();
-                            let sponge = TS::default();
                             self.run_preflight(sponge, child_vk, proof)
                         })
                     })
@@ -1166,7 +1195,7 @@ pub mod cuda_tracegen {
                             let pow_bits_trace = ColMajorMatrix::from_row_major(
                                 &self.power_checker_trace.generate_trace_row_major(),
                             );
-                            ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
+                            ctx_per_trace.push(AirProvingContext::simple_no_pis(
                                 transport_matrix_h2d_col_major(&pow_bits_trace).unwrap(),
                             ));
                         },
@@ -1174,7 +1203,7 @@ pub mod cuda_tracegen {
                 });
             let exp_bits_trace = tracing::trace_span!("wrapper.generate_trace", air = "ExpBitsLen")
                 .in_scope(|| exp_bits_len_gen.generate_trace_device(exp_bits_len_required))?;
-            ctx_per_trace.push(AirProvingContextV2::simple_no_pis(exp_bits_trace));
+            ctx_per_trace.push(AirProvingContext::simple_no_pis(exp_bits_trace));
             Some(ctx_per_trace)
         }
     }

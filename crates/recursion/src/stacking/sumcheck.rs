@@ -5,24 +5,22 @@ use std::{
 
 use itertools::izip;
 use openvm_circuit_primitives::{
-    SubAir,
     utils::{and, assert_array_eq, not},
+    SubAir,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    poly_common::{eval_eq_uni, eval_eq_uni_at_one, interpolate_quadratic_at_012},
+    BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{D_EF, EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    BasedVectorSpace, Field, PrimeCharacteristicRing, PrimeField32, TwoAdicField,
-    extension::BinomiallyExtendable,
+    extension::BinomiallyExtendable, BasedVectorSpace, Field, PrimeCharacteristicRing,
+    PrimeField32, TwoAdicField,
 };
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{
-    D_EF, EF, F,
-    poly_common::{eval_eq_uni, eval_eq_uni_at_one, interpolate_quadratic_at_012},
-};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -123,7 +121,7 @@ impl<F> BaseAir<F> for SumcheckRoundsAir {
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for SumcheckRoundsAir
 where
     AB::F: PrimeField32,
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();

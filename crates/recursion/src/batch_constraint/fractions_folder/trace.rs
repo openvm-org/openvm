@@ -1,9 +1,9 @@
 use std::borrow::BorrowMut;
 
+use openvm_stark_sdk::config::baby_bear_poseidon2::{D_EF, EF, F};
 use p3_field::{BasedVectorSpace, PrimeCharacteristicRing};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{D_EF, EF, F};
 
 use crate::{
     batch_constraint::fractions_folder::FractionsFolderCols,
