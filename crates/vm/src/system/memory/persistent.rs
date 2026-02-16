@@ -2,20 +2,17 @@ use std::{
     array,
     borrow::{Borrow, BorrowMut},
     iter,
-    sync::Arc,
 };
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     interaction::{InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::{cpu::CpuBackend, types::AirProvingContext},
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 use rustc_hash::FxHashSet;
 use tracing::instrument;
@@ -23,6 +20,7 @@ use tracing::instrument;
 use super::{merkle::SerialReceiver, online::INITIAL_TIMESTAMP, TimestampedValues};
 use crate::{
     arch::{hasher::Hasher, ADDR_SPACE_OFFSET},
+    primitives::Chip,
     system::memory::{
         dimensions::MemoryDimensions, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
         TimestampedEquipartition,
@@ -248,7 +246,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
 
 impl<const CHUNK: usize, RA, SC> Chip<RA, CpuBackend<SC>> for PersistentBoundaryChip<Val<SC>, CHUNK>
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     Val<SC>: PrimeField32,
 {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
@@ -293,22 +291,8 @@ where
                         timestamp: Val::<SC>::from_u32(touched_label.final_timestamp),
                     };
                 });
-            Arc::new(RowMajorMatrix::new(rows, width))
+            RowMajorMatrix::new(rows, width)
         };
-        AirProvingContext::simple_no_pis(trace)
-    }
-}
-
-impl<const CHUNK: usize, F: PrimeField32> ChipUsageGetter for PersistentBoundaryChip<F, CHUNK> {
-    fn air_name(&self) -> String {
-        "Boundary".to_string()
-    }
-
-    fn current_trace_height(&self) -> usize {
-        2 * self.touched_labels.len()
-    }
-
-    fn trace_width(&self) -> usize {
-        PersistentBoundaryCols::<F, CHUNK>::width()
+        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace))
     }
 }

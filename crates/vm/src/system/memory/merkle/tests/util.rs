@@ -1,17 +1,13 @@
-use std::{
-    array::from_fn,
-    sync::{Arc, Mutex},
-};
+use std::{array::from_fn, sync::Mutex};
 
 use openvm_stark_backend::{
-    config::{Domain, StarkGenericConfig},
     p3_air::BaseAir,
-    p3_commit::PolynomialSpace,
     p3_field::Field,
     p3_matrix::dense::RowMajorMatrix,
-    prover::{cpu::CpuBackend, types::AirProvingContext},
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
+    StarkProtocolConfig,
 };
-use openvm_stark_sdk::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir;
 
 use crate::arch::{
     hasher::{Hasher, HasherChip},
@@ -55,10 +51,10 @@ impl<const CHUNK: usize, F: Field> HashTestChip<CHUNK, F> {
     }
     pub fn generate_proving_ctx<SC>(&mut self) -> AirProvingContext<CpuBackend<SC>>
     where
-        SC: StarkGenericConfig,
-        Domain<SC>: PolynomialSpace<Val = F>,
+        SC: StarkProtocolConfig<F = F>,
     {
-        AirProvingContext::simple_no_pis(Arc::new(self.trace()))
+        let trace = self.trace();
+        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace))
     }
 }
 

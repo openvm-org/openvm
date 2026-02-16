@@ -11,9 +11,8 @@ use openvm_continuations::verifier::{
 use openvm_native_circuit::{NativeConfig, NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_stark_backend::{
-    config::Val,
-    engine::StarkEngine,
     p3_field::{BasedVectorSpace, PrimeField32, TwoAdicField},
+    StarkEngine, Val,
 };
 use openvm_stark_sdk::{
     config::{
@@ -22,9 +21,7 @@ use openvm_stark_sdk::{
     },
     engine::StarkFriEngine,
     openvm_stark_backend::{
-        config::{Com, StarkGenericConfig},
-        keygen::types::MultiStarkVerifyingKey,
-        proof::Proof,
+        keygen::types::MultiStarkVerifyingKey, proof::Proof, Com, StarkProtocolConfig,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -205,7 +202,7 @@ where
 ///
 /// `next_log_blowup` refers to the `log_blowup` of the next verifier in the chain; this determines
 /// a maximum trace height.
-fn check_recursive_verifier_size<SC: StarkGenericConfig>(
+fn check_recursive_verifier_size<SC: StarkProtocolConfig>(
     vk: &MultiStarkVerifyingKey<SC>,
     fri_params: FriParameters,
     next_log_blowup: usize,

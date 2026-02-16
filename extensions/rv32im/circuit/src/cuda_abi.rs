@@ -1,7 +1,22 @@
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::too_many_arguments)]
 
-use openvm_cuda_backend::{chip::UInt2, prelude::F};
+use openvm_cuda_backend::prelude::F;
+
+/// A struct that has the same memory layout as `uint2` to be used in FFI functions
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct UInt2 {
+    pub x: u32,
+    pub y: u32,
+}
+
+impl UInt2 {
+    pub fn new(x: u32, y: u32) -> Self {
+        Self { x, y }
+    }
+}
+
 use openvm_cuda_common::{
     d_buffer::{DeviceBuffer, DeviceBufferView},
     error::CudaError,

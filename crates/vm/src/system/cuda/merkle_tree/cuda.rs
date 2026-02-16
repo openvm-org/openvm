@@ -1,6 +1,6 @@
 #![allow(clippy::missing_safety_doc)]
 
-use openvm_cuda_backend::{base::DeviceMatrix, types::F};
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
 use openvm_cuda_common::{
     copy::MemCopyH2D, d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t,
 };

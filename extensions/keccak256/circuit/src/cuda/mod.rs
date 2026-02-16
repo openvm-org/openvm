@@ -4,12 +4,12 @@ use derive_new::new;
 use openvm_circuit::arch::{DenseRecordArena, MultiRowLayout, RecordSeeker};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, utils::next_power_of_two_or_zero,
-    var_range::VariableRangeCheckerChipGPU,
+    var_range::VariableRangeCheckerChipGPU, Chip,
 };
-use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, prover_backend::GpuBackend};
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_instructions::riscv::RV32_CELL_BITS;
-use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
+use openvm_stark_backend::prover::AirProvingContext;
 use p3_keccak_air::NUM_ROUNDS;
 
 use crate::{

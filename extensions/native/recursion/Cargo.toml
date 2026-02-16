@@ -13,7 +13,6 @@ openvm-native-compiler = { workspace = true }
 openvm-native-compiler-derive = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true }
-stark-backend-v2 = { workspace = true }
 
 rand08 = { package = "rand", version = "0.8.5", default-features = false, features = ["std_rng"] }
 p3-dft = { workspace = true }

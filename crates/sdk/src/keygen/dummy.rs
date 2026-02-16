@@ -24,10 +24,7 @@ use openvm_native_recursion::hints::Hintable;
 use openvm_rv32im_circuit::{Rv32ImConfig, Rv32ImCpuBuilder};
 use openvm_stark_backend::{
     p3_matrix::dense::RowMajorMatrix,
-    prover::{
-        cpu::CpuBackend,
-        types::{AirProvingContext, ProvingContext},
-    },
+    prover::{AirProvingContext, CpuBackend, ProvingContext},
 };
 use openvm_stark_sdk::{
     config::{

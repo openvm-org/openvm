@@ -2,7 +2,6 @@ use std::{
     borrow::{Borrow, BorrowMut},
     marker::PhantomData,
     ptr::copy_nonoverlapping,
-    sync::Arc,
 };
 
 pub use air::*;
@@ -14,13 +13,12 @@ use openvm_circuit_primitives::{
     var_range::SharedVariableRangeCheckerChip, TraceSubRowGenerator,
 };
 use openvm_stark_backend::{
-    config::{Domain, StarkGenericConfig},
     p3_air::BaseAir,
-    p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
     p3_matrix::dense::RowMajorMatrix,
     p3_util::log2_strict_usize,
-    prover::{cpu::CpuBackend, types::AirProvingContext},
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    StarkProtocolConfig,
 };
 
 use crate::{
@@ -160,12 +158,10 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         }
     }
 
-    pub fn generate_proving_ctx<SC: StarkGenericConfig>(
-        &mut self,
-    ) -> Vec<AirProvingContext<CpuBackend<SC>>>
+    pub fn generate_proving_ctx<SC>(&mut self) -> Vec<AirProvingContext<CpuBackend<SC>>>
     where
         F: PrimeField32,
-        Domain<SC>: PolynomialSpace<Val = F>,
+        SC: StarkProtocolConfig<F = F>,
     {
         let num_adapters = self.chips.len();
 
@@ -258,7 +254,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         }
         traces
             .into_iter()
-            .map(|trace| AirProvingContext::simple_no_pis(Arc::new(trace)))
+            .map(|trace| AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace)))
             .collect()
     }
 

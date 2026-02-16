@@ -7,16 +7,15 @@ use openvm_circuit::{
         TouchedMemory,
     },
 };
-use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
-use openvm_cuda_backend::{prover_backend::GpuBackend, types::F};
+use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
+use openvm_cuda_backend::{prelude::F, GpuBackend};
 use openvm_cuda_common::{
     copy::{cuda_memcpy, MemCopyD2D, MemCopyH2D},
     d_buffer::DeviceBuffer,
     memory_manager::MemTracker,
 };
 use openvm_stark_backend::{
-    p3_field::PrimeCharacteristicRing, p3_util::log2_ceil_usize, prover::types::AirProvingContext,
-    Chip,
+    p3_field::PrimeCharacteristicRing, p3_util::log2_ceil_usize, prover::AirProvingContext,
 };
 use tracing::instrument;
 

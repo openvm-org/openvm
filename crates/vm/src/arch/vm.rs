@@ -22,30 +22,24 @@ use openvm_instructions::{
     program::Program,
 };
 use openvm_stark_backend::{
-    config::{Com, StarkGenericConfig, Val},
+    keygen::{
+        types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
+        MultiStarkKeygenBuilder,
+    },
     p3_field::{
         BasedVectorSpace, InjectiveMonomial, PrimeCharacteristicRing, PrimeField32, TwoAdicField,
     },
     p3_util::{log2_ceil_usize, log2_strict_usize},
-    prover::MatrixDimensions,
+    proof::Proof,
+    prover::{
+        ColMajorMatrix, CommittedTraceData, DeviceDataTransporter, DeviceMultiStarkProvingKey,
+        MatrixDimensions, ProverBackend, ProvingContext, TraceCommitter,
+    },
+    verifier::VerifierError,
+    Com, StarkEngine, StarkProtocolConfig, Val,
 };
 use p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
-use stark_backend_v2::{
-    keygen::MultiStarkKeygenBuilderV2,
-    keygen::types::{
-        MultiStarkProvingKeyV2 as MultiStarkProvingKey,
-        MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey,
-    },
-    proof::Proof,
-    prover::{
-        ColMajorMatrix, CommittedTraceDataV2 as CommittedTraceData, DeviceDataTransporterV2,
-        DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
-        ProverBackendV2 as ProverBackend, ProvingContextV2 as ProvingContext, TraceCommitterV2,
-    },
-    verifier::VerifierError as VerificationError,
-    StarkEngineV2 as StarkEngine,
-};
 use thiserror::Error;
 use tracing::{info_span, instrument};
 
@@ -340,7 +334,7 @@ where
 }
 
 #[derive(Error, Debug)]
-pub enum VmVerificationError {
+pub enum VmVerificationError<SC: StarkProtocolConfig> {
     #[error("no proof is provided")]
     ProofNotFound,
 
@@ -375,7 +369,7 @@ pub enum VmVerificationError {
     SystemAirMissing { air_id: usize },
 
     #[error("stark verification error: {0}")]
-    StarkError(#[from] VerificationError),
+    StarkError(#[from] VerifierError<SC::EF>),
 
     #[error("user public values proof error: {0}")]
     UserPublicValuesError(#[from] UserPublicValuesProofError),
@@ -397,13 +391,11 @@ pub enum VirtualMachineError {
     Generation(#[from] GenerationError),
     #[error("program committed trade data not loaded")]
     ProgramIsNotCommitted,
-    #[error("verification error: {0}")]
-    Verification(#[from] VmVerificationError),
 }
 
 /// The [VirtualMachine] struct contains the API to generate proofs for _arbitrary_ programs for a
 /// fixed set of OpenVM instructions and a fixed VM circuit corresponding to those instructions. The
-/// API is specific to a particular [StarkEngine], which specifies a fixed [StarkGenericConfig] and
+/// API is specific to a particular [StarkEngine], which specifies a fixed [StarkProtocolConfig] and
 /// [ProverBackend] via associated types. The [VmProverBuilder] also fixes the choice of
 /// `RecordArena` associated to the prover backend via an associated type.
 ///
@@ -450,12 +442,9 @@ where
         engine: E,
         builder: VB,
         config: VB::VmConfig,
-    ) -> Result<(Self, MultiStarkProvingKey), VirtualMachineError>
-    where
-        E: StarkEngine<SC = stark_backend_v2::SC>,
-    {
+    ) -> Result<(Self, MultiStarkProvingKey<E::SC>), VirtualMachineError> {
         let system_config = config.as_ref();
-        let mut keygen_builder = MultiStarkKeygenBuilderV2::new(engine.config().clone());
+        let mut keygen_builder = MultiStarkKeygenBuilder::new(engine.config().clone());
         let circuit = config.create_airs()?;
         for (air_id, air) in circuit.into_airs().enumerate() {
             if system_config.is_required_air_id(air_id) {
@@ -843,7 +832,7 @@ where
         state: VmState<Val<E::SC>, GuestMemory>,
         num_insns: Option<u64>,
         trace_heights: &[u32],
-    ) -> Result<(Proof, Option<GuestMemory>), VirtualMachineError>
+    ) -> Result<(Proof<E::SC>, Option<GuestMemory>), VirtualMachineError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
@@ -871,11 +860,11 @@ where
     /// or [`verify_single`] directly instead.
     pub fn verify(
         &self,
-        vk: &MultiStarkVerifyingKey,
-        proofs: &[Proof],
-    ) -> Result<(), VmVerificationError>
+        vk: &MultiStarkVerifyingKey<E::SC>,
+        proofs: &[Proof<E::SC>],
+    ) -> Result<(), VmVerificationError<E::SC>>
     where
-        Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
+        Com<E::SC>: Into<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
         Val<E::SC>: PrimeField32,
     {
         if self.config().as_ref().continuation_enabled {
@@ -963,23 +952,21 @@ where
             Vec<_>,
             Vec<_>,
             Vec<_>,
-        ) =
-            self.pk
-                .per_air
-                .iter()
-                .map(|pk| {
-                    let constant_trace_height = pk.preprocessed_data.as_ref().map(|cd| cd.height());
-                    let air_names = pk.air_name.clone();
-                    // TODO[jpw]: revisit v2 width calculation
-                    let width = pk.vk.params.width.total_width(
-                        <<E::SC as StarkGenericConfig>::Challenge as BasedVectorSpace<
-                            Val<E::SC>,
-                        >>::DIMENSION,
-                    );
-                    let num_interactions = pk.vk.symbolic_constraints.interactions.len();
-                    (constant_trace_height, air_names, width, num_interactions)
-                })
-                .multiunzip();
+        ) = self
+            .pk
+            .per_air
+            .iter()
+            .map(|pk| {
+                let constant_trace_height = pk.preprocessed_data.as_ref().map(|cd| cd.height());
+                let air_names = pk.air_name.clone();
+                // TODO[jpw]: revisit v2 width calculation
+                let width = pk.vk.params.width.total_width(
+                    <<E::SC as StarkProtocolConfig>::EF as BasedVectorSpace<Val<E::SC>>>::DIMENSION,
+                );
+                let num_interactions = pk.vk.symbolic_constraints.interactions.len();
+                (constant_trace_height, air_names, width, num_interactions)
+            })
+            .multiunzip();
 
         // Program trace is the same for all segments
         constant_trace_heights[PROGRAM_AIR_ID] = Some(program_len);
@@ -1004,10 +991,8 @@ where
             .iter()
             .map(|pk| {
                 pk.vk.params.width.total_width(
-                        <<E::SC as StarkGenericConfig>::Challenge as BasedVectorSpace<
-                            Val<E::SC>,
-                        >>::DIMENSION,
-                    )
+                    <<E::SC as StarkProtocolConfig>::EF as BasedVectorSpace<Val<E::SC>>>::DIMENSION,
+                )
             })
             .collect();
 
@@ -1033,7 +1018,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{VirtualMachine, CONNECTOR_AIR_ID, PROGRAM_AIR_ID, SystemConfig};
+    use super::{SystemConfig, VirtualMachine, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
     use crate::{system::SystemCpuBuilder, utils::test_cpu_engine};
 
     #[test]
@@ -1050,7 +1035,7 @@ mod tests {
         assert!(pk.per_air[PROGRAM_AIR_ID].vk.is_required);
         assert!(pk.per_air[CONNECTOR_AIR_ID].vk.is_required);
         assert!(pk.per_air[merkle_air_id].vk.is_required);
-        assert!(!pk.per_air[boundary_air_id].vk.is_required);
+        assert!(pk.per_air[boundary_air_id].vk.is_required);
     }
 }
 
@@ -1059,13 +1044,13 @@ mod tests {
     serialize = "Com<SC>: Serialize",
     deserialize = "Com<SC>: Deserialize<'de>"
 ))]
-pub struct ContinuationVmProof<SC: StarkGenericConfig> {
-    pub per_segment: Vec<Proof>,
+pub struct ContinuationVmProof<SC: StarkProtocolConfig> {
+    pub per_segment: Vec<Proof<SC>>,
     pub user_public_values: UserPublicValuesProof<{ CHUNK }, Val<SC>>,
 }
 
 /// Prover for a specific exe in a specific continuation VM using a specific Stark config.
-pub trait ContinuationVmProver<SC: StarkGenericConfig> {
+pub trait ContinuationVmProver<SC: StarkProtocolConfig> {
     fn prove(
         &mut self,
         input: impl Into<Streams<Val<SC>>>,
@@ -1077,12 +1062,12 @@ pub trait ContinuationVmProver<SC: StarkGenericConfig> {
 /// Does not run metered execution and directly runs preflight execution. The `prove` function must
 /// be provided with the expected maximum `trace_heights` to use to allocate record arena
 /// capacities.
-pub trait SingleSegmentVmProver<SC: StarkGenericConfig> {
+pub trait SingleSegmentVmProver<SC: StarkProtocolConfig> {
     fn prove(
         &mut self,
         input: impl Into<Streams<Val<SC>>>,
         trace_heights: &[u32],
-    ) -> Result<Proof, VirtualMachineError>;
+    ) -> Result<Proof<SC>, VirtualMachineError>;
 }
 
 /// Virtual machine prover instance for a fixed VM config and a fixed program. For use in proving a
@@ -1246,7 +1231,7 @@ where
         &mut self,
         input: impl Into<Streams<Val<E::SC>>>,
         trace_heights: &[u32],
-    ) -> Result<Proof, VirtualMachineError> {
+    ) -> Result<Proof<E::SC>, VirtualMachineError> {
         self.reset_state(input);
         let vm = &mut self.vm;
         let exe = &self.exe;
@@ -1276,9 +1261,9 @@ where
 /// to the [VmCommittedExe].
 pub fn verify_single<E>(
     engine: &E,
-    vk: &MultiStarkVerifyingKey,
-    proof: &Proof,
-) -> Result<(), VerificationError>
+    vk: &MultiStarkVerifyingKey<E::SC>,
+    proof: &Proof<E::SC>,
+) -> Result<(), VerifierError<<E::SC as StarkProtocolConfig>::EF>>
 where
     E: StarkEngine,
 {
@@ -1317,13 +1302,13 @@ pub struct VerifiedExecutionPayload<F> {
 // @dev: This function doesn't need to be generic in `VC`.
 pub fn verify_segments<E>(
     engine: &E,
-    vk: &MultiStarkVerifyingKey,
-    proofs: &[Proof],
-) -> Result<VerifiedExecutionPayload<Val<E::SC>>, VmVerificationError>
+    vk: &MultiStarkVerifyingKey<E::SC>,
+    proofs: &[Proof<E::SC>],
+) -> Result<VerifiedExecutionPayload<Val<E::SC>>, VmVerificationError<E::SC>>
 where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
-    Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]>,
+    Com<E::SC>: Into<[Val<E::SC>; CHUNK]>,
 {
     if proofs.is_empty() {
         return Err(VmVerificationError::ProofNotFound);
@@ -1441,7 +1426,7 @@ where
     }
     let exe_commit = compute_exe_commit(
         &vm_poseidon2_hasher(),
-        &program_commit.unwrap(),
+        &program_commit.unwrap().into(),
         initial_memory_root.as_ref().unwrap(),
         start_pc.unwrap(),
     );
@@ -1451,7 +1436,7 @@ where
     })
 }
 
-impl<SC: StarkGenericConfig> Clone for ContinuationVmProof<SC>
+impl<SC: StarkProtocolConfig> Clone for ContinuationVmProof<SC>
 where
     Com<SC>: Clone,
 {
@@ -1564,7 +1549,7 @@ mod vm_metrics {
                 main_cells_used += width.main_width() * *height;
                 total_cells_used +=
                     width.total_width(
-                        <<E::SC as StarkGenericConfig>::Challenge as BasedVectorSpace<
+                        <<E::SC as StarkProtocolConfig>::Challenge as BasedVectorSpace<
                             Val<E::SC>,
                         >>::DIMENSION,
                     ) * *height;

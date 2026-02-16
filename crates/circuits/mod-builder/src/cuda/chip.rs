@@ -10,7 +10,7 @@ use openvm_circuit::utils::next_power_of_two_or_zero;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
 };
-use openvm_cuda_backend::{base::DeviceMatrix, types::F};
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
 use openvm_cuda_common::{
     copy::{MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,

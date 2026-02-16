@@ -12,12 +12,11 @@ use openvm_circuit_derive::VmConfig;
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
-use openvm_stark_backend::config::{StarkGenericConfig, Val};
-use serde::{Deserialize, Serialize};
-use stark_backend_v2::{
-    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
-    StarkEngineV2 as StarkEngine,
+use openvm_stark_backend::{
+    prover::{CpuBackend, CpuDevice},
+    StarkEngine, StarkProtocolConfig, Val,
 };
+use serde::{Deserialize, Serialize};
 
 mod modular;
 pub use modular::*;
@@ -115,12 +114,12 @@ impl InitFileGenerator for Rv32ModularWithFp2Config {
 #[derive(Clone)]
 pub struct Rv32ModularCpuBuilder;
 
-type SC = stark_backend_v2::SC;
-impl<E> VmBuilder<E> for Rv32ModularCpuBuilder
+impl<SC, E> VmBuilder<E> for Rv32ModularCpuBuilder
 where
-    SC: StarkGenericConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
+    SC: StarkProtocolConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
+    SC::EF: Ord,
 {
     type VmConfig = Rv32ModularConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
@@ -152,11 +151,12 @@ where
 #[derive(Clone)]
 pub struct Rv32ModularWithFp2CpuBuilder;
 
-impl<E> VmBuilder<E> for Rv32ModularWithFp2CpuBuilder
+impl<SC, E> VmBuilder<E> for Rv32ModularWithFp2CpuBuilder
 where
-    SC: StarkGenericConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
+    SC: StarkProtocolConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
+    SC::EF: Ord,
 {
     type VmConfig = Rv32ModularWithFp2Config;
     type SystemChipInventory = SystemChipInventory<SC>;

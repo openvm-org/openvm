@@ -4,9 +4,9 @@ use openvm_native_compiler::ir::{
     Array, Builder, Config, Ext, Felt, MemVariable, Usize, Var, Witness,
 };
 use openvm_stark_backend::{
-    config::Com,
     p3_util::log2_strict_usize,
     proof::{AdjacentOpenedValues, AirProofData, Commitments, OpenedValues, OpeningProof, Proof},
+    Com,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig, p3_baby_bear::BabyBear,
