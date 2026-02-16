@@ -8,7 +8,7 @@ use openvm_instructions::{
     exe::{FnBound, FnBounds},
     program::ProgramDebugInfo,
 };
-use openvm_stark_backend::prover::{hal::ProverBackend, types::DeviceMultiStarkProvingKey};
+use openvm_stark_backend::prover::{DeviceMultiStarkProvingKey, ProverBackend};
 
 use crate::{
     arch::{
