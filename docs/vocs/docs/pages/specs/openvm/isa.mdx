@@ -11,7 +11,7 @@ This specification describes the overall architecture and default VM extensions 
   multiplication. This extension respects the RISC-V memory format.
 - [Algebra](#algebra-extension): An extension supporting modular arithmetic over arbitrary fields and their complex
   field extensions. This extension respects the RISC-V memory format.
-- [Elliptic curve](#elliptic-curve-extension): An extension for elliptic curve operations over Weierstrass curves,
+- [Short Weierstrass Elliptic curve](#short-weierstrass-elliptic-curve-extension): An extension for elliptic curve operations over short Weierstrass curves,
   including addition and doubling. This can be used to implement multi-scalar multiplication and ECDSA scalar
   multiplication. This extension respects the RISC-V memory format.
 - [Pairing](#pairing-extension): An extension containing opcodes used to implement the optimal Ate pairing on the BN254
@@ -685,37 +685,41 @@ r32_fp2(a) -> Fp2 {
 | DIV\<Fp2\>          | `a,b,c,1,2` | Set `r32_fp2(a) = r32_fp2(b) / r32_fp2(c)`                                                                                                                                   |
 | SETUP_MULDIV\<Fp2\> | `a,b,c,1,2` | `assert([r32_fp2(b).c0 == N)` for the chip that handles mul and div. For the sake of implementation convenience it also writes something (can be anything) into `r32_fp2(a)` |
 
-### Elliptic Curve Extension
+### Short Weierstrass Elliptic Curve Extension
 
 The elliptic curve extension supports arithmetic over elliptic curves `C` in Weierstrass form given by
-equation `C: y^2 = x^3 + C::A * x + C::B` where `C::A` and `C::B` are constants in the coordinate field. We note that
-the definitions of the
-curve arithmetic operations do not depend on `C::B`. The VM configuration will specify a list of supported curves. For
+equation `C: y^2 = x^3 + C::A * x + C::B` where `C::A` and `C::B` are constants in the coordinate field. The VM configuration will specify a list of supported curves. For
 each Weierstrass curve `C` there will be associated configuration parameters `C::COORD_SIZE` and `C::BLOCK_SIZE` (
 defined below). The extension operates on address spaces `1` and `2`, meaning all memory cells are constrained to be
 bytes.
 
-An affine curve point `EcPoint(x, y)` is a pair of `x,y` where each element is an array of `C::COORD_SIZE` elements each
-with `LIMB_BITS = 8` bits. When the coordinate field `C::Fp` of `C` is prime, the format of `x,y` is guaranteed to be
+Points are represented in projective coordinates `(X, Y, Z)` where the corresponding affine point is `(X/Z, Y/Z)`.
+The identity point (point at infinity) is represented by `Z = 0`.
+
+A projective curve point `EcPoint(X, Y, Z)` is a triple of `X, Y, Z` where each element is an array of `C::COORD_SIZE` elements each
+with `LIMB_BITS = 8` bits. When the coordinate field `C::Fp` of `C` is prime, the format of `X, Y, Z` is guaranteed to be
 the same as the format used in the [modular arithmetic instructions](#modular-arithmetic). A curve point will be
-represented as `2 * C::COORD_SIZE` contiguous cells in memory.
+represented as `3 * C::COORD_SIZE` contiguous cells in memory.
 
 We use the following notation below:
 
 ```
-r32_ec_point(a) -> EcPoint {
-    let x = [r32{0}(a): C::COORD_SIZE]_2;
-    let y = [r32{0}(a) + C::COORD_SIZE: C::COORD_SIZE]_2;
-    return EcPoint(x, y);
+r32_projective_point(a) -> EcPoint {
+    let X = [r32{0}(a): C::COORD_SIZE]_2;
+    let Y = [r32{0}(a) + C::COORD_SIZE: C::COORD_SIZE]_2;
+    let Z = [r32{0}(a) + 2*C::COORD_SIZE: C::COORD_SIZE]_2;
+    return EcPoint(X, Y, Z);
 }
 ```
 
-| Name                 | Operands    | Description                                                                                                                                                                                                                                                                                    |
-| -------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| EC_ADD_NE\<C\>       | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `r32_ec_point(b).x, r32_ec_point(c).x` are not equal in the coordinate field.           |
-| SETUP_EC_ADD_NE\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).x != r32_ec_point(c).x)`   |
-| EC_DOUBLE\<C\>       | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                                     |
-| SETUP_EC_DOUBLE\<C\> | `a,b,_,1,2` | `assert(r32_ec_point(b).x == C::MODULUS && r32_ec_point(b).y == C::A)` in the chip for EC DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).y != 0 mod C::MODULUS)` |
+The addition and doubling operations use complete formulas from [ePrint 2015/1060](https://eprint.iacr.org/2015/1060.pdf) that handle all edge cases (identity points, equal points, inverse points) without branching.
+
+| Name                    | Operands    | Description                                                                                                                                                                                                                                                                                    |
+| ----------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SW_EC_ADD_PROJ\<C\>       | `a,b,c,1,2` | Set `r32_projective_point(a) = r32_projective_point(b) + r32_projective_point(c)` (curve addition). Assumes that inputs lie on the curve. The complete formula handles all cases including identity points (Z=0) and equal points.           |
+| SETUP_SW_EC_ADD_PROJ\<C\> | `a,b,c,1,2` | `assert(r32_projective_point(b).X == C::MODULUS && r32_projective_point(b).Y == C::A && r32_projective_point(b).Z == C::B)` in the chip for EC ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 3*C::COORD_SIZE]_2`.   |
+| SW_EC_DOUBLE_PROJ\<C\>       | `a,b,_,1,2` | Set `r32_projective_point(a) = 2 * r32_projective_point(b)`. This doubles the input point. Assumes that input lies on the curve. The formula handles identity point (Z=0) and order-2 points (Y=0).                                                                                                                                     |
+| SETUP_SW_EC_DOUBLE_PROJ\<C\> | `a,b,_,1,2` | `assert(r32_projective_point(b).X == C::MODULUS && r32_projective_point(b).Y == C::A && r32_projective_point(b).Z == C::B)` in the chip for EC DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 3*C::COORD_SIZE]_2`. |
 
 ### Pairing Extension
 

@@ -192,13 +192,14 @@ In the tables below, we provide the mapping between the `LocalOpcode` and `Phant
 | Algebra | `ModularPhantom::HintSqrt` | HintSqrt\<N\> |
 
 
-## Elliptic Curve Extension
+## Short Weierstrass Elliptic Curve Extension
 
 #### Instructions
 
 | VM Extension | `LocalOpcode` | ISA Instruction |
 | ------------- | ---------- | ------------- |
-| Elliptic Curve | `Rv32WeierstrassOpcode::EC_ADD_NE` | EC_ADD_NE\<C\> |
-| Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_ADD_NE` | SETUP_EC_ADD_NE\<C\> |
-| Elliptic Curve | `Rv32WeierstrassOpcode::EC_DOUBLE` | EC_DOUBLE\<C\> |
-| Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_EC_DOUBLE` | SETUP_EC_DOUBLE\<C\> |
+| Short Weierstrass Elliptic Curve | `Rv32WeierstrassOpcode::SW_EC_ADD_PROJ` | SW_EC_ADD_PROJ\<C\> |
+| Short Weierstrass Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_SW_EC_ADD_PROJ` | SETUP_SW_EC_ADD_PROJ\<C\> |
+| Short Weierstrass Elliptic Curve | `Rv32WeierstrassOpcode::SW_EC_DOUBLE_PROJ` | SW_EC_DOUBLE_PROJ\<C\> |
+| Short Weierstrass Elliptic Curve | `Rv32WeierstrassOpcode::SETUP_SW_EC_DOUBLE_PROJ` | SETUP_SW_EC_DOUBLE_PROJ\<C\> |
+
