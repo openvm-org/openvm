@@ -10,21 +10,23 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
     AirRef, StarkEngine,
 };
-use openvm_stark_sdk::{config::baby_bear_poseidon2::*, utils::create_seeded_rng};
+use openvm_stark_sdk::utils::create_seeded_rng;
 use rand::Rng;
 #[cfg(feature = "cuda")]
 use {
-    crate::range_tuple::{RangeTupleCheckerAir, RangeTupleCheckerChipGPU},
+    crate::{
+        range_tuple::{RangeTupleCheckerAir, RangeTupleCheckerChipGPU},
+        utils::test_gpu_engine_small,
+        Chip,
+    },
     array::from_fn,
     dummy::DummyInteractionChipGPU,
     openvm_cuda_backend::{
         base::DeviceMatrix,
         prelude::{F, SC},
-        GpuBabyBearPoseidon2Engine,
     },
     openvm_cuda_common::copy::MemCopyH2D as _,
-    openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext, Chip},
-    openvm_stark_sdk::config::FriParameters,
+    openvm_stark_backend::p3_air::BaseAir,
 };
 
 use crate::{
@@ -163,7 +165,7 @@ fn negative_test_range_tuple_chip() {
     let error = test_engine_small()
         .run_test(
             any_air_arc_vec![range_checker.air],
-            vec![range_trace]
+            [range_trace]
                 .iter()
                 .map(ColMajorMatrix::from_row_major)
                 .map(AirProvingContext::simple_no_pis)
@@ -215,8 +217,9 @@ fn test_cuda_range_tuple() {
         range_tuple_checker.generate_proving_ctx(()),
     ];
 
-    let engine = GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
-    engine.run_test(airs, ctxs).expect("Verification failed");
+    test_gpu_engine_small()
+        .run_test(airs, ctxs)
+        .expect("Verification failed");
 }
 
 #[cfg(feature = "cuda")]
@@ -288,6 +291,7 @@ fn test_cuda_range_tuple_hybrid() {
         range_tuple_checker.generate_proving_ctx(()),
     ];
 
-    let engine = GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
-    engine.run_test(airs, ctxs).expect("Verification failed");
+    test_gpu_engine_small()
+        .run_test(airs, ctxs)
+        .expect("Verification failed");
 }

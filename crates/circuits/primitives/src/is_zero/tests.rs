@@ -11,12 +11,13 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::*;
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::is_zero,
-    openvm_cuda_backend::{assert_eq_host_and_device_matrix, base::DeviceMatrix, prelude::F},
+    openvm_cuda_backend::{
+        base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
+    },
     openvm_cuda_common::copy::MemCopyH2D as _,
     openvm_stark_backend::p3_field::PrimeField32,
     openvm_stark_sdk::utils::create_seeded_rng,
@@ -101,7 +102,7 @@ fn test_single_is_zero(x: u32) {
         PrimeCharacteristicRing::from_bool(x == 0)
     );
 
-    let traces = vec![trace]
+    let traces = [trace]
         .iter()
         .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
@@ -129,7 +130,7 @@ fn test_vec_is_zero(x_vec: [u32; 4], expected: [u32; 4]) {
         );
     }
 
-    let traces = vec![trace]
+    let traces = [trace]
         .iter()
         .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
@@ -149,7 +150,7 @@ fn test_single_is_zero_fail(x: u32) {
     trace.values[1] = F::ONE - trace.values[1];
 
     disable_debug_builder();
-    let traces = vec![trace]
+    let traces = [trace]
         .iter()
         .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
@@ -173,7 +174,7 @@ fn test_vec_is_zero_fail(x_vec: [u32; 4], expected: [u32; 4]) {
     disable_debug_builder();
     for (i, _value) in expected.iter().enumerate() {
         trace.row_mut(i)[1] = F::ONE - trace.row_mut(i)[1];
-        let traces = vec![trace.clone()]
+        let traces = [trace.clone()]
             .iter()
             .map(ColMajorMatrix::from_row_major)
             .map(AirProvingContext::simple_no_pis)

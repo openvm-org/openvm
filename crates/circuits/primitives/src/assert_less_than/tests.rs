@@ -18,7 +18,6 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::*;
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::less_than::assert_less_than_dummy_tracegen,

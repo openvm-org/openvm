@@ -16,7 +16,7 @@ use test_case::test_matrix;
 use {
     crate::cuda_abi::is_equal,
     openvm_cuda_backend::{
-        base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, types::F,
+        base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
     },
     openvm_cuda_common::copy::MemCopyH2D as _,
     openvm_stark_backend::p3_field::PrimeField32,
@@ -104,7 +104,7 @@ fn test_single_is_equal(x: u32, y: u32) {
 
     let trace = chip.generate_trace();
 
-    let traces = vec![trace]
+    let traces = [trace]
         .iter()
         .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
@@ -135,7 +135,7 @@ fn test_single_is_zero_fail(x: u32, y: u32) {
     };
 
     disable_debug_builder();
-    let traces = vec![trace]
+    let traces = [trace]
         .iter()
         .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)

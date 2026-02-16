@@ -14,14 +14,14 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine,
 };
-use openvm_stark_sdk::{config::baby_bear_poseidon2::*, utils::create_seeded_rng};
+use openvm_stark_sdk::utils::create_seeded_rng;
 use rand::Rng;
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::is_equal,
     openvm_cuda_backend::{
-        base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, types::F,
+        base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
     },
     openvm_cuda_common::copy::MemCopyH2D as _,
     openvm_stark_backend::p3_field::PrimeField32,
@@ -114,7 +114,7 @@ fn test_is_eq_array_single_row(x: [u32; 3], y: [u32; 3], is_equal: u32) {
 
     assert_eq!(row.out, PrimeCharacteristicRing::from_u32(is_equal));
 
-    let traces = vec![trace]
+    let traces = [trace]
         .iter()
         .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
@@ -146,7 +146,7 @@ fn test_is_eq_array_multi_rows() {
 
     let trace = chip.generate_trace();
 
-    let traces = vec![trace]
+    let traces = [trace]
         .iter()
         .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
@@ -173,7 +173,7 @@ fn test_is_eq_array_single_row_fail(x: [u32; 3], y: [u32; 3]) {
     disable_debug_builder();
     let row: &mut IsEqArrayCols<F, 3> = trace.values.as_mut_slice().borrow_mut();
     row.out = F::ONE - row.out;
-    let traces = vec![trace]
+    let traces = [trace]
         .iter()
         .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
@@ -206,7 +206,7 @@ fn test_is_eq_array_fail_rand() {
         for j in 0..N {
             let mut prank_trace = trace.clone();
             prank_trace.row_mut(i)[j] += F::from_u32(rng.random::<u32>() + 1);
-            let traces = vec![prank_trace]
+            let traces = [prank_trace]
                 .iter()
                 .map(ColMajorMatrix::from_row_major)
                 .map(AirProvingContext::simple_no_pis)

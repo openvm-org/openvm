@@ -9,23 +9,25 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
     AirRef, StarkEngine,
 };
-use openvm_stark_sdk::{config::baby_bear_poseidon2::*, utils::create_seeded_rng};
+use openvm_stark_sdk::utils::create_seeded_rng;
 use rand::Rng;
 #[cfg(feature = "cuda")]
 use {
-    crate::var_range::{VariableRangeCheckerAir, VariableRangeCheckerChipGPU},
+    crate::{
+        utils::test_gpu_engine_small,
+        var_range::{VariableRangeCheckerAir, VariableRangeCheckerChipGPU},
+        Chip,
+    },
     dummy::cuda::DummyInteractionChipGPU,
     openvm_cuda_backend::{
         base::DeviceMatrix,
         prelude::{F, SC},
-        GpuBabyBearPoseidon2Engine,
     },
     openvm_cuda_common::copy::MemCopyH2D as _,
     openvm_stark_backend::{
-        p3_air::BaseAir, prover::AirProvingContext,
-        test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir, Chip,
+        p3_air::BaseAir,
+        test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     },
-    openvm_stark_sdk::config::FriParameters,
 };
 
 use crate::{
@@ -300,8 +302,9 @@ fn test_cuda_var_range() {
         range_checker.generate_proving_ctx(()),
     ];
 
-    let engine = GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
-    engine.run_test(airs, ctxs).expect("Verification failed");
+    test_gpu_engine_small()
+        .run_test(airs, ctxs)
+        .expect("Verification failed");
 }
 
 #[cfg(feature = "cuda")]
@@ -347,11 +350,11 @@ fn test_cuda_var_range_hybrid() {
     let dummy_air = DummyInteractionAir::new(2, true, bus.index());
     let cpu_proving_ctx = AirProvingContext {
         cached_mains: vec![],
-        common_main: Some(DeviceMatrix::new(
+        common_main: DeviceMatrix::new(
             Arc::new(cpu_dummy_trace),
             NUM_INPUTS,
             BaseAir::<F>::width(&dummy_air),
-        )),
+        ),
         public_values: vec![],
     };
 
@@ -366,6 +369,7 @@ fn test_cuda_var_range_hybrid() {
         range_checker.generate_proving_ctx(()),
     ];
 
-    let engine = GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
-    engine.run_test(airs, ctxs).expect("Verification failed");
+    test_gpu_engine_small()
+        .run_test(airs, ctxs)
+        .expect("Verification failed");
 }

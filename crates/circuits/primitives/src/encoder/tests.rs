@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use openvm_cuda_backend::{
-    base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, types::F,
+    base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
 };
 use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix};
 
