@@ -134,11 +134,9 @@ mod tests {
         LocalOpcode,
         SystemOpcode::*,
     };
-    use openvm_native_compiler::{
-        FieldArithmeticOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*,
-        NativeLoadStoreOpcode::*,
+    use openvm_rv32im_transpiler::{
+        BaseAluOpcode::*, BranchEqualOpcode::*, Rv32JalLuiOpcode::*, Rv32LoadStoreOpcode::*,
     };
-    use openvm_rv32im_transpiler::BranchEqualOpcode::*;
     use openvm_stark_backend::StarkEngine;
 
     use super::ProgramChipGPU;
@@ -166,7 +164,7 @@ mod tests {
             Instruction::large_from_isize(STOREW.global_opcode(), 2, 0, 0, 0, 1, 0, 1),
             Instruction::large_from_isize(STOREW.global_opcode(), 1, 1, 0, 0, 1, 0, 1),
             Instruction::from_isize(
-                NativeBranchEqualOpcode(BEQ).global_opcode(),
+                BEQ.global_opcode(),
                 0,
                 0,
                 3 * DEFAULT_PC_STEP as isize,
@@ -193,7 +191,7 @@ mod tests {
         let instructions = vec![
             Instruction::large_from_isize(STOREW.global_opcode(), 5, 0, 0, 0, 1, 0, 1),
             Instruction::from_isize(
-                NativeBranchEqualOpcode(BNE).global_opcode(),
+                BNE.global_opcode(),
                 0,
                 4,
                 3 * DEFAULT_PC_STEP as isize,
@@ -210,7 +208,7 @@ mod tests {
             ),
             Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
             Instruction::from_isize(
-                NativeBranchEqualOpcode(BEQ).global_opcode(),
+                BEQ.global_opcode(),
                 0,
                 5,
                 -(DEFAULT_PC_STEP as isize),
@@ -246,7 +244,7 @@ mod tests {
                 1,
             )),
             Some(Instruction::from_isize(
-                NativeBranchEqualOpcode(BEQ).global_opcode(),
+                BEQ.global_opcode(),
                 0,
                 2,
                 3 * DEFAULT_PC_STEP as isize,

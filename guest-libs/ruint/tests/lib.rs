@@ -3,7 +3,10 @@ mod tests {
     use eyre::Result;
     use openvm_bigint_circuit::{Int256Rv32Builder, Int256Rv32Config};
     use openvm_bigint_transpiler::Int256TranspilerExtension;
-    use openvm_circuit::{arch::Streams, utils::air_test_impl};
+    use openvm_circuit::{
+        arch::Streams,
+        utils::{air_test_impl, TestStarkEngine},
+    };
     use openvm_instructions::exe::VmExe;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -31,7 +34,7 @@ mod tests {
                 .with_extension(Int256TranspilerExtension),
         )?;
         let params = SystemParams::new_for_testing(22);
-        air_test_impl(
+        air_test_impl::<TestStarkEngine, _>(
             params,
             Int256Rv32Builder,
             config,
