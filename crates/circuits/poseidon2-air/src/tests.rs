@@ -16,7 +16,7 @@ use rand::{rngs::StdRng, Rng, RngCore};
 use {
     crate::cuda_abi::poseidon2,
     openvm_cuda_backend::{
-        base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, types::F,
+        base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
     },
     openvm_cuda_common::copy::MemCopyH2D as _,
     openvm_stark_backend::p3_field::PrimeField32,
