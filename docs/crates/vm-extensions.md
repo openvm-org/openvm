@@ -34,7 +34,7 @@ The associated type `Executor` should be an enum of all types implementing the t
 
 ### `VmCircuitExtension`
 ```rust
-pub trait VmCircuitExtension<SC: StarkGenericConfig> {
+pub trait VmCircuitExtension<SC: StarkProtocolConfig> {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError>;
 }
 ```
@@ -65,7 +65,7 @@ where
 ```
 
 The `VmProverExtension` trait is the most customizable, and hence (unfortunately) has the most generics.
-The generics are `E` for [StarkEngine](https://docs.openvm.dev/docs/openvm/openvm_stark_backend/engine/trait.StarkEngine.html), `RA` for record arena, and `EXT` for execution and circuit extension. Note that the `StarkEngine` trait itself has associated types `SC: StarkGenericConfig` and `PB: ProverBackend`.
+The generics are `E` for [StarkEngine](https://docs.openvm.dev/docs/openvm/openvm_stark_backend/engine/trait.StarkEngine.html), `RA` for record arena, and `EXT` for execution and circuit extension. Note that the `StarkEngine` trait itself has associated types `SC: StarkProtocolConfig` and `PB: ProverBackend`.
 The `VmProverExtension` trait is therefore generic over the `ProverBackend` and the trait is designed to allow for different implementations of the prover extension for _the same_ execution and circuit extension `EXT` targeting different prover backends.
 
 Since there are intended to be multiple `VmProverExtension`s for the same `EXT`, the `VmProverExtension` trait is meant to be implemented on a separate struct from `EXT` to get around Rust orphan rules. This separate struct is usually a [zero sized type](https://doc.rust-lang.org/nomicon/exotic-sizes.html#zero-sized-types-zsts) (ZST).
@@ -91,7 +91,7 @@ pub trait VmConfig<SC>:
     + AsRef<SystemConfig>
     + AsMut<SystemConfig>
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
 {
 }
 ```
@@ -116,7 +116,7 @@ The `VmExecutionConfig` defines the collection of `VmExecutionExtension`s that t
 Users typically should not need to implement the `VmExecutionConfig` trait directly and should instead use the [derive macro](#derive-macro).
 
 ```rust
-pub trait VmCircuitConfig<SC: StarkGenericConfig> {
+pub trait VmCircuitConfig<SC: StarkProtocolConfig> {
     fn create_airs(&self) -> Result<AirInventory<SC>, AirInventoryError>;
 }
 ```
@@ -186,7 +186,7 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
     >;
 }
 ```
-The `VmBuilder` trait is meant to be implemented on a zero-sized type (ZST). It has an associated type for the `VmConfig`. The `VmBuilder<E>` is generic in `E: StarkEngine`, where the `StarkEngine` trait itself has associated types `SC: StarkGenericConfig` and `PB: ProverBackend`. The `StarkEngine` trait controls the backend implementation of the proof system for a specific `ProverBackend` with specialized hardware acceleration. For a given `StarkEngine`, the `VmBuilder` trait has an associated type for the `RecordArena`, which is the type of in-memory buffer to use to store records during [preflight execution](./vm.md#preflight-execution). Lastly there is an associated type for `SystemChipInventory` which implements the trace generation for the system chips. There are currently two existing choices of `SystemChipInventory` to use: [`SystemChipInventory`](https://docs.openvm.dev/docs/openvm/openvm_circuit/system/struct.SystemChipInventory.html) for CPU and [`SystemChipInventoryGPU`](../../crates/vm/src/system/cuda/mod.rs) for Nvidia GPU.
+The `VmBuilder` trait is meant to be implemented on a zero-sized type (ZST). It has an associated type for the `VmConfig`. The `VmBuilder<E>` is generic in `E: StarkEngine`, where the `StarkEngine` trait itself has associated types `SC: StarkProtocolConfig` and `PB: ProverBackend`. The `StarkEngine` trait controls the backend implementation of the proof system for a specific `ProverBackend` with specialized hardware acceleration. For a given `StarkEngine`, the `VmBuilder` trait has an associated type for the `RecordArena`, which is the type of in-memory buffer to use to store records during [preflight execution](./vm.md#preflight-execution). Lastly there is an associated type for `SystemChipInventory` which implements the trace generation for the system chips. There are currently two existing choices of `SystemChipInventory` to use: [`SystemChipInventory`](https://docs.openvm.dev/docs/openvm/openvm_circuit/system/struct.SystemChipInventory.html) for CPU and [`SystemChipInventoryGPU`](../../crates/vm/src/system/cuda/mod.rs) for Nvidia GPU.
 
 The `VmBuilder::create_chip_complex` function assumes that it is called after all AIRs have been constructed using the `VmCircuitConfig` trait on the `VmConfig`. In other words, `airs: AirInventory<E::SC>` may be assumed to be the output of `VmCircuitConfig::create_airs()`.
 

@@ -24,6 +24,7 @@ lazy_static.workspace = true
 derivative.workspace = true
 
 [dev-dependencies]
+openvm-stark-backend = { workspace = true, features = ["test-utils"] }
 p3-symmetric = { workspace = true }
 
 [build-dependencies]

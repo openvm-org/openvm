@@ -158,7 +158,7 @@ pub(crate) mod tests {
     use openvm_native_circuit::execute_program;
     use openvm_native_compiler::asm::AsmBuilder;
     use openvm_stark_backend::{
-        config::{Domain, StarkGenericConfig, Val},
+        config::{Domain, StarkProtocolConfig, Val},
         p3_commit::{Pcs, PolynomialSpace},
         p3_field::PrimeField,
     };
@@ -202,9 +202,9 @@ pub(crate) mod tests {
     fn test_domain_impl(static_only: bool) {
         type SC = BabyBearPoseidon2Config;
         type F = Val<SC>;
-        type EF = <SC as StarkGenericConfig>::Challenge;
-        type Challenger = <SC as StarkGenericConfig>::Challenger;
-        type ScPcs = <SC as StarkGenericConfig>::Pcs;
+        type EF = <SC as StarkProtocolConfig>::Challenge;
+        type Challenger = <SC as StarkProtocolConfig>::Challenger;
+        type ScPcs = <SC as StarkProtocolConfig>::Pcs;
 
         let mut rng = create_seeded_rng();
         let security_params = SecurityParameters::standard_fast();

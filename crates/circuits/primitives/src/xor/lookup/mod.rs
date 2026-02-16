@@ -6,25 +6,21 @@
 use std::{
     borrow::Borrow,
     mem::size_of,
-    sync::{
-        atomic::{self, AtomicU32},
-        Arc,
-    },
+    sync::atomic::{self, AtomicU32},
 };
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     interaction::{BusIndex, InteractionBuilder, LookupBus},
     p3_air::{Air, BaseAir, PairBuilder},
     p3_field::Field,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::{cpu::CpuBackend, types::AirProvingContext},
-    rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 
 use super::bus::XorBus;
+use crate::Chip;
 
 #[cfg(test)]
 mod tests;
@@ -170,23 +166,10 @@ impl<const M: usize> XorLookupChip<M> {
     }
 }
 
-impl<R, SC: StarkGenericConfig, const M: usize> Chip<R, CpuBackend<SC>> for XorLookupChip<M> {
+impl<R, SC: StarkProtocolConfig, const M: usize> Chip<R, CpuBackend<SC>> for XorLookupChip<M> {
     fn generate_proving_ctx(&self, _: R) -> AirProvingContext<CpuBackend<SC>> {
-        let trace = self.generate_trace::<Val<SC>>();
-        AirProvingContext::simple_no_pis(Arc::new(trace))
-    }
-}
-
-impl<const M: usize> ChipUsageGetter for XorLookupChip<M> {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-
-    fn current_trace_height(&self) -> usize {
-        1 << (2 * M)
-    }
-
-    fn trace_width(&self) -> usize {
-        NUM_XOR_LOOKUP_COLS
+        let trace_row_maj = self.generate_trace::<Val<SC>>();
+        let trace = ColMajorMatrix::from_row_major(&trace_row_maj);
+        AirProvingContext::simple_no_pis(trace)
     }
 }

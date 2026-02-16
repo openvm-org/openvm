@@ -1,33 +1,44 @@
 use std::{iter, sync::Arc};
 
 use openvm_stark_backend::{
-    p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
-    p3_maybe_rayon::prelude::*, prover::types::AirProvingContext, utils::disable_debug_builder,
-    AirRef,
+    any_air_arc_vec,
+    p3_field::PrimeCharacteristicRing,
+    p3_matrix::dense::RowMajorMatrix,
+    p3_maybe_rayon::prelude::*,
+    prover::{AirProvingContext, ColMajorMatrix},
+    utils::disable_debug_builder,
+    AirRef, StarkEngine,
 };
-use openvm_stark_sdk::{any_rap_arc_vec, p3_baby_bear::BabyBear, utils::create_seeded_rng};
+#[cfg(not(feature = "cuda"))]
+use openvm_stark_sdk::config::baby_bear_poseidon2::F;
+use openvm_stark_sdk::utils::create_seeded_rng;
 use rand::Rng;
-use stark_backend_v2::{prover::AirProvingContextV2, test_utils::test_engine_small, StarkEngineV2};
 #[cfg(feature = "cuda")]
 use {
-    crate::var_range::{VariableRangeCheckerAir, VariableRangeCheckerChipGPU},
+    crate::{
+        utils::test_gpu_engine_small,
+        var_range::{VariableRangeCheckerAir, VariableRangeCheckerChipGPU},
+        Chip,
+    },
     dummy::cuda::DummyInteractionChipGPU,
     openvm_cuda_backend::{
         base::DeviceMatrix,
-        engine::GpuBabyBearPoseidon2Engine,
-        types::{F, SC},
+        prelude::{F, SC},
     },
     openvm_cuda_common::copy::MemCopyH2D as _,
-    openvm_stark_backend::{p3_air::BaseAir, prover::types::AirProvingContext, Chip},
-    openvm_stark_sdk::{
-        config::FriParameters, dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
+    openvm_stark_backend::{
+        p3_air::BaseAir,
+        test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     },
 };
 
-use crate::var_range::{
-    bus::VariableRangeCheckerBus,
-    tests::dummy::{TestRangeCheckAir, TestSendAir},
-    VariableRangeCheckerChip,
+use crate::{
+    utils::test_engine_small,
+    var_range::{
+        bus::VariableRangeCheckerBus,
+        tests::dummy::{TestRangeCheckAir, TestSendAir},
+        VariableRangeCheckerChip,
+    },
 };
 
 pub mod dummy;
@@ -83,16 +94,18 @@ fn test_variable_range_checker_chip_send() {
                 2,
             )
         })
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .collect::<Vec<RowMajorMatrix<F>>>();
 
-    let var_range_checker_trace: RowMajorMatrix<BabyBear> = var_range_checker.generate_trace();
+    let var_range_checker_trace: RowMajorMatrix<F> = var_range_checker.generate_trace();
 
-    let all_traces = lists_traces
+    let all_traces_vec: Vec<_> = lists_traces
         .into_iter()
         .chain(iter::once(var_range_checker_trace))
-        .map(Arc::new)
+        .collect();
+    let all_traces = all_traces_vec
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()
@@ -125,7 +138,7 @@ fn negative_test_variable_range_checker_chip_send() {
 
     // generate dummy AIR chip
     let list_chip = TestSendAir::new(bus);
-    let all_chips = any_rap_arc_vec![list_chip, var_range_checker.air];
+    let all_chips = any_air_arc_vec![list_chip, var_range_checker.air];
 
     // generate trace with a [val, bits] pair such that val >= 2^bits (i.e. [4, 2])
     let list_trace = RowMajorMatrix::new(
@@ -141,10 +154,9 @@ fn negative_test_variable_range_checker_chip_send() {
     );
     let var_range_trace = var_range_checker.generate_trace();
     let all_traces = [list_trace, var_range_trace]
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();
@@ -200,16 +212,18 @@ fn test_variable_range_checker_chip_range_check() {
                 1,
             )
         })
-        .collect::<Vec<RowMajorMatrix<BabyBear>>>();
+        .collect::<Vec<RowMajorMatrix<F>>>();
 
     let var_range_checker_trace = var_range_checker.generate_trace();
 
-    let all_traces = lists_traces
+    let all_traces_vec: Vec<_> = lists_traces
         .into_iter()
         .chain(iter::once(var_range_checker_trace))
-        .map(Arc::new)
+        .collect();
+    let all_traces = all_traces_vec
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     test_engine_small()
@@ -240,7 +254,7 @@ fn negative_test_variable_range_checker_chip_range_check() {
 
     // generate dummy AIR chip
     let list_chip = TestRangeCheckAir::new(bus, MAX_BITS);
-    let all_chips = any_rap_arc_vec![list_chip, var_range_checker.air];
+    let all_chips = any_air_arc_vec![list_chip, var_range_checker.air];
 
     // generate trace with one value >= 2^max_bits (i.e. MAX_VAL)
     let list_trace = RowMajorMatrix::new(
@@ -256,10 +270,9 @@ fn negative_test_variable_range_checker_chip_range_check() {
     );
     let var_range_trace = var_range_checker.generate_trace();
     let all_traces = [list_trace, var_range_trace]
-        .into_iter()
-        .map(Arc::new)
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
-        .map(AirProvingContextV2::from_v1_no_cached)
         .collect::<Vec<_>>();
 
     disable_debug_builder();
@@ -291,8 +304,9 @@ fn test_cuda_var_range() {
         range_checker.generate_proving_ctx(()),
     ];
 
-    let engine = GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
-    engine.run_test(airs, ctxs).expect("Verification failed");
+    test_gpu_engine_small()
+        .run_test(airs, ctxs)
+        .expect("Verification failed");
 }
 
 #[cfg(feature = "cuda")]
@@ -338,11 +352,11 @@ fn test_cuda_var_range_hybrid() {
     let dummy_air = DummyInteractionAir::new(2, true, bus.index());
     let cpu_proving_ctx = AirProvingContext {
         cached_mains: vec![],
-        common_main: Some(DeviceMatrix::new(
+        common_main: DeviceMatrix::new(
             Arc::new(cpu_dummy_trace),
             NUM_INPUTS,
             BaseAir::<F>::width(&dummy_air),
-        )),
+        ),
         public_values: vec![],
     };
 
@@ -357,6 +371,7 @@ fn test_cuda_var_range_hybrid() {
         range_checker.generate_proving_ctx(()),
     ];
 
-    let engine = GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
-    engine.run_test(airs, ctxs).expect("Verification failed");
+    test_gpu_engine_small()
+        .run_test(airs, ctxs)
+        .expect("Verification failed");
 }

@@ -11,16 +11,16 @@ use std::{
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::{cpu::CpuBackend, types::AirProvingContext},
-    rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 use tracing::instrument;
+
+use crate::Chip;
 
 mod bus;
 pub use bus::*;
@@ -224,28 +224,14 @@ impl VariableRangeCheckerChip {
 }
 
 // We allow any `R` type so this can work with arbitrary record arenas.
-impl<R, SC: StarkGenericConfig> Chip<R, CpuBackend<SC>> for VariableRangeCheckerChip
+impl<R, SC: StarkProtocolConfig> Chip<R, CpuBackend<SC>> for VariableRangeCheckerChip
 where
     Val<SC>: PrimeField32,
 {
     /// Generates trace and resets the internal counters all to 0.
     fn generate_proving_ctx(&self, _: R) -> AirProvingContext<CpuBackend<SC>> {
-        let trace = self.generate_trace::<Val<SC>>();
-        AirProvingContext::simple_no_pis(Arc::new(trace))
-    }
-}
-
-impl ChipUsageGetter for VariableRangeCheckerChip {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-    fn constant_trace_height(&self) -> Option<usize> {
-        Some(self.count.len())
-    }
-    fn current_trace_height(&self) -> usize {
-        self.count.len()
-    }
-    fn trace_width(&self) -> usize {
-        NUM_VARIABLE_RANGE_COLS
+        let trace_row_maj = self.generate_trace::<Val<SC>>();
+        let trace = ColMajorMatrix::from_row_major(&trace_row_maj);
+        AirProvingContext::simple_no_pis(trace)
     }
 }

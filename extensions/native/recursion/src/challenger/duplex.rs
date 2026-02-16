@@ -197,9 +197,9 @@ mod tests {
         ir::Felt,
     };
     use openvm_stark_backend::{
-        config::{StarkGenericConfig, Val},
         p3_challenger::{CanObserve, CanSample},
         p3_field::PrimeCharacteristicRing,
+        StarkProtocolConfig, Val,
     };
     use openvm_stark_sdk::{
         config::baby_bear_poseidon2::{default_engine, BabyBearPoseidon2Config},
@@ -219,7 +219,7 @@ mod tests {
 
         type SC = BabyBearPoseidon2Config;
         type F = Val<SC>;
-        type EF = <SC as StarkGenericConfig>::Challenge;
+        type EF = <SC as StarkProtocolConfig>::Challenge;
 
         let engine = default_engine();
         let mut challenger = engine.new_challenger();

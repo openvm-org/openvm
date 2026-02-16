@@ -1,6 +1,6 @@
 use openvm_native_compiler::prelude::*;
 use openvm_native_recursion::{hints::Hintable, vars::StarkProofVariable};
-use openvm_stark_sdk::openvm_stark_backend::{config::Val, proof::Proof};
+use openvm_stark_sdk::openvm_stark_backend::{proof::Proof, Val};
 
 use crate::{verifier::root::types::RootVmVerifierInput, C, SC};
 

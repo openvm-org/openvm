@@ -27,14 +27,11 @@ use openvm_rv32im_transpiler::{
     Rv32LoadStoreOpcode, Rv32Phantom, ShiftOpcode,
 };
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     p3_field::PrimeField32,
+    prover::{CpuBackend, CpuDevice},
+    StarkEngine, StarkProtocolConfig, Val,
 };
 use serde::{Deserialize, Serialize};
-use stark_backend_v2::{
-    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
-    StarkEngineV2 as StarkEngine,
-};
 use strum::IntoEnumIterator;
 
 use crate::{adapters::*, *};
@@ -220,7 +217,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv32I {
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv32I {
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv32I {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
@@ -322,17 +319,18 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv32I {
 pub struct Rv32ImCpuProverExt;
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, RA> VmProverExtension<E, RA, Rv32I> for Rv32ImCpuProverExt
+impl<SC, E, RA> VmProverExtension<E, RA, Rv32I> for Rv32ImCpuProverExt
 where
-    E::SC: StarkGenericConfig,
-    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
-    RA: RowMajorMatrixArena<Val<E::SC>>,
-    Val<E::SC>: PrimeField32,
+    SC: StarkProtocolConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    RA: RowMajorMatrixArena<Val<SC>>,
+    Val<SC>: PrimeField32,
+    SC::EF: Ord,
 {
     fn extend_prover(
         &self,
         _: &Rv32I,
-        inventory: &mut ChipInventory<E::SC, RA, CpuBackend>,
+        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -484,7 +482,7 @@ impl<F> VmExecutionExtension<F> for Rv32M {
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv32M {
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv32M {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
@@ -547,17 +545,18 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv32M {
 
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, RA> VmProverExtension<E, RA, Rv32M> for Rv32ImCpuProverExt
+impl<SC, E, RA> VmProverExtension<E, RA, Rv32M> for Rv32ImCpuProverExt
 where
-    E::SC: StarkGenericConfig,
-    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
-    RA: RowMajorMatrixArena<Val<E::SC>>,
-    Val<E::SC>: PrimeField32,
+    SC: StarkProtocolConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    RA: RowMajorMatrixArena<Val<SC>>,
+    Val<SC>: PrimeField32,
+    SC::EF: Ord,
 {
     fn extend_prover(
         &self,
         extension: &Rv32M,
-        inventory: &mut ChipInventory<E::SC, RA, CpuBackend>,
+        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -653,7 +652,7 @@ impl<F> VmExecutionExtension<F> for Rv32Io {
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv32Io {
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv32Io {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
@@ -691,17 +690,18 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv32Io {
 
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, RA> VmProverExtension<E, RA, Rv32Io> for Rv32ImCpuProverExt
+impl<SC, E, RA> VmProverExtension<E, RA, Rv32Io> for Rv32ImCpuProverExt
 where
-    E::SC: StarkGenericConfig,
-    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
-    RA: RowMajorMatrixArena<Val<E::SC>>,
-    Val<E::SC>: PrimeField32,
+    SC: StarkProtocolConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    RA: RowMajorMatrixArena<Val<SC>>,
+    Val<SC>: PrimeField32,
+    SC::EF: Ord,
 {
     fn extend_prover(
         &self,
         _: &Rv32Io,
-        inventory: &mut ChipInventory<E::SC, RA, CpuBackend>,
+        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();

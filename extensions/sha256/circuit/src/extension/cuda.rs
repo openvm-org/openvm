@@ -1,10 +1,8 @@
-use cuda_backend_v2::{
-    BabyBearPoseidon2GpuEngineV2 as GpuBabyBearPoseidon2Engine, GpuBackendV2 as GpuBackend,
-};
 use openvm_circuit::{
     arch::DenseRecordArena,
     system::cuda::extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
 };
+use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use super::*;

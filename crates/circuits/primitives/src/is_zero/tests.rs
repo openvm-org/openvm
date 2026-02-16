@@ -2,24 +2,23 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
+    any_air_arc_vec,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    prover::{AirProvingContext, ColMajorMatrix},
     utils::disable_debug_builder,
-    verifier::VerificationError,
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine,
 };
-use openvm_stark_sdk::{
-    any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
-    p3_baby_bear::BabyBear,
-};
+#[cfg(not(feature = "cuda"))]
+use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::is_zero,
     openvm_cuda_backend::{
-        base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, types::F,
+        base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, prelude::F,
     },
     openvm_cuda_common::copy::MemCopyH2D as _,
     openvm_stark_backend::p3_field::PrimeField32,
@@ -29,7 +28,7 @@ use {
 };
 
 use super::{IsZeroIo, IsZeroSubAir};
-use crate::{SubAir, TraceSubRowGenerator};
+use crate::{utils::test_engine_small, SubAir, TraceSubRowGenerator};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -96,7 +95,7 @@ impl<F: Field> IsZeroChip<F> {
 #[test_case(97 ; "97 => 0")]
 #[test_case(0 ; "0 => 1")]
 fn test_single_is_zero(x: u32) {
-    let chip = IsZeroChip::new(vec![BabyBear::from_u32(x)]);
+    let chip = IsZeroChip::new(vec![F::from_u32(x)]);
     let air = chip.air;
     let trace = chip.generate_trace();
 
@@ -105,7 +104,13 @@ fn test_single_is_zero(x: u32) {
         PrimeCharacteristicRing::from_bool(x == 0)
     );
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
+    let traces = [trace]
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
+        .map(AirProvingContext::simple_no_pis)
+        .collect::<Vec<_>>();
+    test_engine_small()
+        .run_test(any_air_arc_vec![air], traces)
         .expect("Verification failed");
 }
 
@@ -127,7 +132,13 @@ fn test_vec_is_zero(x_vec: [u32; 4], expected: [u32; 4]) {
         );
     }
 
-    BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
+    let traces = [trace]
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
+        .map(AirProvingContext::simple_no_pis)
+        .collect::<Vec<_>>();
+    test_engine_small()
+        .run_test(any_air_arc_vec![air], traces)
         .expect("Verification failed");
 }
 
@@ -138,13 +149,18 @@ fn test_single_is_zero_fail(x: u32) {
     let chip = IsZeroChip::new(vec![x]);
     let air = chip.air;
     let mut trace = chip.generate_trace();
-    trace.values[1] = BabyBear::ONE - trace.values[1];
+    trace.values[1] = F::ONE - trace.values[1];
 
     disable_debug_builder();
-    assert_eq!(
-        BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
-            .err(),
-        Some(VerificationError::OodEvaluationMismatch),
+    let traces = [trace]
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
+        .map(AirProvingContext::simple_no_pis)
+        .collect::<Vec<_>>();
+    assert!(
+        test_engine_small()
+            .run_test(any_air_arc_vec![air], traces)
+            .is_err(),
         "Expected constraint to fail"
     );
 }
@@ -152,24 +168,26 @@ fn test_single_is_zero_fail(x: u32) {
 #[test_case([1, 2, 7, 0], [0, 0, 0, 1] ; "1, 2, 7, 0 => 0, 0, 0, 1")]
 #[test_case([97, 0, 179, 0], [0, 1, 0, 1] ; "97, 0, 179, 0 => 0, 1, 0, 1")]
 fn test_vec_is_zero_fail(x_vec: [u32; 4], expected: [u32; 4]) {
-    let x_vec: Vec<BabyBear> = x_vec.into_iter().map(BabyBear::from_u32).collect();
+    let x_vec: Vec<F> = x_vec.into_iter().map(F::from_u32).collect();
     let chip = IsZeroChip::new(x_vec);
     let air = chip.air;
     let mut trace = chip.generate_trace();
 
     disable_debug_builder();
     for (i, _value) in expected.iter().enumerate() {
-        trace.row_mut(i)[1] = BabyBear::ONE - trace.row_mut(i)[1];
-        assert_eq!(
-            BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
-                any_rap_arc_vec![air],
-                vec![trace.clone()]
-            )
-            .err(),
-            Some(VerificationError::OodEvaluationMismatch),
+        trace.row_mut(i)[1] = F::ONE - trace.row_mut(i)[1];
+        let traces = [trace.clone()]
+            .iter()
+            .map(ColMajorMatrix::from_row_major)
+            .map(AirProvingContext::simple_no_pis)
+            .collect::<Vec<_>>();
+        assert!(
+            test_engine_small()
+                .run_test(any_air_arc_vec![air], traces)
+                .is_err(),
             "Expected constraint to fail"
         );
-        trace.row_mut(i)[1] = BabyBear::ONE - trace.row_mut(i)[1];
+        trace.row_mut(i)[1] = F::ONE - trace.row_mut(i)[1];
     }
 }
 

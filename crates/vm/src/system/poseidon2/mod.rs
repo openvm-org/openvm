@@ -13,9 +13,8 @@ use std::sync::Arc;
 use openvm_circuit_primitives::Chip;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     interaction::{BusIndex, LookupBus},
-    AirRef, ChipUsageGetter,
+    AirRef, StarkProtocolConfig, Val,
 };
 
 #[cfg(test)]
@@ -64,7 +63,7 @@ pub fn new_poseidon2_periphery_air<SC>(
     max_constraint_degree: usize,
 ) -> AirRef<SC>
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     Val<SC>: VmField,
 {
     if max_constraint_degree >= 7 {
@@ -77,29 +76,6 @@ where
             Arc::new(Poseidon2SubAir::new(poseidon2_config.constants.into())),
             direct_bus,
         ))
-    }
-}
-
-impl<F: VmField> ChipUsageGetter for Poseidon2PeripheryChip<F> {
-    fn air_name(&self) -> String {
-        match self {
-            Poseidon2PeripheryChip::Register0(chip) => chip.air_name(),
-            Poseidon2PeripheryChip::Register1(chip) => chip.air_name(),
-        }
-    }
-
-    fn current_trace_height(&self) -> usize {
-        match self {
-            Poseidon2PeripheryChip::Register0(chip) => chip.current_trace_height(),
-            Poseidon2PeripheryChip::Register1(chip) => chip.current_trace_height(),
-        }
-    }
-
-    fn trace_width(&self) -> usize {
-        match self {
-            Poseidon2PeripheryChip::Register0(chip) => chip.trace_width(),
-            Poseidon2PeripheryChip::Register1(chip) => chip.trace_width(),
-        }
     }
 }
 

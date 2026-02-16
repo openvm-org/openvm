@@ -232,7 +232,7 @@ pub mod shift256 {
 }
 
 pub mod mul256 {
-    use openvm_cuda_backend::chip::UInt2;
+    use openvm_circuit_primitives::cuda_abi::UInt2;
 
     use super::*;
 

@@ -14,6 +14,7 @@ compile_error!("Feature \"aot\" is only supported on x86_64 targets");
 extern crate self as openvm_circuit;
 
 pub use openvm_circuit_derive as derive;
+pub use openvm_circuit_primitives as primitives;
 pub use openvm_circuit_primitives_derive as circuit_derive;
 #[cfg(all(feature = "test-utils", feature = "cuda"))]
 pub use openvm_cuda_backend;

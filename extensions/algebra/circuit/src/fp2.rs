@@ -185,12 +185,14 @@ mod tests {
     use openvm_mod_circuit_builder::{test_utils::*, FieldExpr, FieldExprCols};
     use openvm_pairing_guest::bn254::BN254_MODULUS;
     use openvm_stark_backend::{
-        p3_air::BaseAir, p3_field::PrimeCharacteristicRing, p3_matrix::dense::RowMajorMatrix,
+        any_air_arc_vec,
+        p3_air::BaseAir,
+        p3_field::PrimeCharacteristicRing,
+        p3_matrix::dense::RowMajorMatrix,
+        prover::{AirProvingContext, ColMajorMatrix},
+        StarkEngine, SystemParams,
     };
-    use openvm_stark_sdk::{
-        any_rap_arc_vec, config::baby_bear_blake3::BabyBearBlake3Engine, engine::StarkFriEngine,
-        p3_baby_bear::BabyBear,
-    };
+    use openvm_stark_sdk::{config::baby_bear_poseidon2::*, p3_baby_bear::BabyBear};
 
     use super::Fp2;
 
@@ -240,11 +242,15 @@ mod tests {
         assert_eq!(r_c0, expected_c0);
         assert_eq!(r_c1, expected_c1);
 
-        BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-            any_rap_arc_vec![air, range_checker.air],
-            vec![trace, range_trace],
-        )
-        .expect("Verification failed");
+        let engine: BabyBearPoseidon2CpuEngine =
+            BabyBearPoseidon2CpuEngine::new(SystemParams::new_for_testing(20));
+        let ctxs = vec![
+            AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace)),
+            AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&range_trace)),
+        ];
+        engine
+            .run_test(any_air_arc_vec![air, range_checker.air], ctxs)
+            .expect("Verification failed");
     }
 
     #[test]
@@ -308,10 +314,14 @@ mod tests {
         assert_eq!(r_c0, expected_c0);
         assert_eq!(r_c1, expected_c1);
 
-        BabyBearBlake3Engine::run_simple_test_no_pis_fast(
-            any_rap_arc_vec![air, range_checker.air],
-            vec![trace, range_trace],
-        )
-        .expect("Verification failed");
+        let engine: BabyBearPoseidon2CpuEngine =
+            BabyBearPoseidon2CpuEngine::new(SystemParams::new_for_testing(20));
+        let ctxs = vec![
+            AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace)),
+            AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&range_trace)),
+        ];
+        engine
+            .run_test(any_air_arc_vec![air, range_checker.air], ctxs)
+            .expect("Verification failed");
     }
 }

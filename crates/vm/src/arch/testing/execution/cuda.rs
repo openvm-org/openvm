@@ -1,15 +1,16 @@
-use std::slice::from_raw_parts;
+use std::{mem::size_of, slice::from_raw_parts};
 
 use openvm_circuit::{
     arch::{
         testing::{execution::air::DummyExecutionInteractionCols, ExecutionTester},
         ExecutionBus, ExecutionState,
     },
+    primitives::Chip,
     utils::next_power_of_two_or_zero,
 };
-use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types::F};
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_stark_backend::{prover::types::AirProvingContext, Chip, ChipUsageGetter};
+use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::cuda_abi::execution_testing;
 
@@ -33,24 +34,10 @@ impl DeviceExecutionTester {
     }
 }
 
-impl ChipUsageGetter for DeviceExecutionTester {
-    fn air_name(&self) -> String {
-        self.0.air_name()
-    }
-
-    fn current_trace_height(&self) -> usize {
-        self.0.current_trace_height()
-    }
-
-    fn trace_width(&self) -> usize {
-        self.0.trace_width()
-    }
-}
-
 impl<RA> Chip<RA, GpuBackend> for DeviceExecutionTester {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
-        let height = next_power_of_two_or_zero(self.0.current_trace_height());
-        let width = self.0.trace_width();
+        let height = next_power_of_two_or_zero(self.0.records.len());
+        let width = size_of::<DummyExecutionInteractionCols<u8>>();
 
         if height == 0 {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());

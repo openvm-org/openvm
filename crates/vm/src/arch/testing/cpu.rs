@@ -1,28 +1,27 @@
 use std::sync::Arc;
 
 use itertools::zip_eq;
-use openvm_circuit_primitives::var_range::{
-    SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
+use openvm_circuit_primitives::{
+    var_range::{
+        SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
+    },
+    Chip,
 };
 use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, NATIVE_AS};
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     interaction::PermutationCheckBus,
     p3_matrix::dense::RowMajorMatrix,
     p3_util::log2_strict_usize,
-    prover::{cpu::CpuBackend, types::AirProvingContext},
-    rap::AnyRap,
-    AirRef, Chip,
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend, StridedColMajorMatrixView},
+    verifier::VerifierError,
+    AirRef, AnyAir, StarkEngine, StarkProtocolConfig, SystemParams, Val, VerificationData,
 };
 use openvm_stark_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing_with_log_level},
+    config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
     p3_baby_bear::BabyBear,
+    utils::setup_tracing_with_log_level,
 };
 use rand::{rngs::StdRng, RngCore, SeedableRng};
-use stark_backend_v2::{
-    prover::AirProvingContextV2, verifier::VerifierError, StarkEngineV2,
-    VerificationDataV2 as VerificationData,
-};
 use tracing::Level;
 
 use crate::{
@@ -284,7 +283,7 @@ impl<F: VmField> VmChipTestBuilder<F> {
     }
 }
 
-pub type TestSC = stark_backend_v2::SC;
+pub type TestSC = BabyBearPoseidon2Config;
 
 impl VmChipTestBuilder<BabyBear> {
     pub fn build(self) -> VmChipTester<TestSC> {
@@ -396,7 +395,7 @@ impl<F: VmField> Default for VmChipTestBuilder<F> {
     }
 }
 
-pub struct VmChipTester<SC: StarkGenericConfig>
+pub struct VmChipTester<SC: StarkProtocolConfig>
 where
     Val<SC>: VmField,
 {
@@ -406,7 +405,7 @@ where
 
 impl<SC> Default for VmChipTester<SC>
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     Val<SC>: VmField,
 {
     fn default() -> Self {
@@ -419,7 +418,7 @@ where
 
 impl<SC> VmChipTester<SC>
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     Val<SC>: VmField,
 {
     pub fn load<E, A, C>(
@@ -427,7 +426,7 @@ where
         harness: TestChipHarness<Val<SC>, E, A, C, MatrixRecordArena<Val<SC>>>,
     ) -> Self
     where
-        A: AnyRap<SC> + 'static,
+        A: AnyAir<SC> + 'static,
         C: Chip<MatrixRecordArena<Val<SC>>, CpuBackend<SC>>,
     {
         let arena = harness.arena;
@@ -444,7 +443,7 @@ where
 
     pub fn load_periphery<A, C>(self, (air, chip): (A, C)) -> Self
     where
-        A: AnyRap<SC> + 'static,
+        A: AnyAir<SC> + 'static,
         C: Chip<(), CpuBackend<SC>>,
     {
         let air = Arc::new(air) as AirRef<SC>;
@@ -484,8 +483,8 @@ where
             );
             let ctxs = memory_controller
                 .generate_proving_ctx(memory.access_adapter_records, touched_memory);
-            for (air, ctx) in zip_eq(mem_inventory.into_airs(), ctxs)
-                .filter(|(_, ctx)| ctx.main_trace_height() > 0)
+            for (air, ctx) in
+                zip_eq(mem_inventory.into_airs(), ctxs).filter(|(_, ctx)| ctx.height() > 0)
             {
                 self.air_ctxs.push((air, ctx));
             }
@@ -516,16 +515,16 @@ where
         modify_trace: P,
     ) -> Self
     where
-        A: AnyRap<SC> + 'static,
+        A: AnyAir<SC> + 'static,
         C: Chip<MatrixRecordArena<Val<SC>>, CpuBackend<SC>>,
         P: Fn(&mut RowMajorMatrix<Val<SC>>),
     {
         let arena = harness.arena;
         let mut ctx = harness.chip.generate_proving_ctx(arena);
-        let trace: Arc<RowMajorMatrix<Val<SC>>> = Option::take(&mut ctx.common_main).unwrap();
-        let mut trace = Arc::into_inner(trace).unwrap();
+        let mut trace =
+            StridedColMajorMatrixView::from(ctx.common_main.as_view()).to_row_major_matrix();
         modify_trace(&mut trace);
-        ctx.common_main = Some(Arc::new(trace));
+        ctx.common_main = ColMajorMatrix::from_row_major(&trace);
         self.air_ctxs.push((Arc::new(harness.air), ctx));
         self
     }
@@ -547,17 +546,31 @@ where
 }
 
 impl VmChipTester<BabyBearPoseidon2Config> {
-    pub fn simple_test(self) -> Result<VerificationData, VerifierError> {
+    pub fn simple_test(
+        self,
+    ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerifierError<baby_bear_poseidon2::EF>>
+    {
         assert!(self.memory.is_none(), "Memory must be finalized");
-        let (airs, ctxs): (Vec<_>, Vec<_>) = self
-            .air_ctxs
-            .into_iter()
-            .map(|(air, ctx_v1)| (air, AirProvingContextV2::from_v1_no_cached(ctx_v1)))
-            .unzip();
+        let (airs, ctxs): (Vec<_>, Vec<_>) = self.air_ctxs.into_iter().unzip();
         test_cpu_engine().run_test(airs, ctxs)
     }
 
-    pub fn simple_test_with_expected_error(self, expected_error: VerifierError) {
+    pub fn simple_test_with_params(
+        self,
+        params: SystemParams,
+    ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerifierError<baby_bear_poseidon2::EF>>
+    {
+        assert!(self.memory.is_none(), "Memory must be finalized");
+        let (airs, ctxs): (Vec<_>, Vec<_>) = self.air_ctxs.into_iter().unzip();
+        let engine: baby_bear_poseidon2::BabyBearPoseidon2CpuEngine =
+            baby_bear_poseidon2::BabyBearPoseidon2CpuEngine::new(params);
+        engine.run_test(airs, ctxs)
+    }
+
+    pub fn simple_test_with_expected_error(
+        self,
+        expected_error: VerifierError<baby_bear_poseidon2::EF>,
+    ) {
         let msg = format!(
             "Expected verification to fail with {:?}, but it didn't",
             &expected_error
@@ -566,18 +579,3 @@ impl VmChipTester<BabyBearPoseidon2Config> {
         assert_eq!(result.err(), Some(expected_error), "{msg}");
     }
 }
-
-// impl VmChipTester<BabyBearBlake3Config> {
-//     pub fn simple_test(self) -> Result<VerificationData<BabyBearBlake3Config>, VerificationError>
-// {         self.test(|| BabyBearBlake3Engine::new(FriParameters::new_for_testing(1)))
-//     }
-//
-//     pub fn simple_test_with_expected_error(self, expected_error: VerificationError) {
-//         let msg = format!(
-//             "Expected verification to fail with {:?}, but it didn't",
-//             &expected_error
-//         );
-//         let result = self.simple_test();
-//         assert_eq!(result.err(), Some(expected_error), "{msg}");
-//     }
-// }

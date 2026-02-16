@@ -12,7 +12,7 @@ use openvm_sdk::{
     prover::vm::{new_local_prover, types::VmProvingKey},
     Sdk, StdIn, F, SC,
 };
-use openvm_stark_backend::{config::StarkGenericConfig, p3_field::BasedVectorSpace};
+use openvm_stark_backend::{StarkProtocolConfig, p3_field::BasedVectorSpace};
 use openvm_stark_sdk::bench::run_with_metric_collection;
 
 fn verify_native_max_trace_heights(
@@ -82,7 +82,7 @@ fn main() -> Result<()> {
     let exe = sdk.convert_to_exe(elf)?;
 
     let (_, app_vk) = sdk.app_keygen();
-    let ext_degree = <<SC as StarkGenericConfig>::Challenge as BasedVectorSpace<F>>::DIMENSION;
+    let ext_degree = <<SC as StarkProtocolConfig>::Challenge as BasedVectorSpace<F>>::DIMENSION;
     println!(
         "app_total_width = {}",
         app_vk

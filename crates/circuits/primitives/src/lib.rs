@@ -27,6 +27,8 @@ pub mod assert_less_than;
 pub mod bigint;
 pub mod bitwise_op_lookup;
 pub mod encoder;
+#[cfg(feature = "cuda")]
+pub mod hybrid_chip;
 pub mod is_equal;
 pub mod is_equal_array;
 pub mod is_less_than;
@@ -39,8 +41,11 @@ pub mod utils;
 pub mod var_range;
 pub mod xor;
 
+/// Trait for trace generation from logs
+mod chip;
 mod sub_air;
+pub use chip::*;
 pub use sub_air::*;
 
 #[cfg(feature = "cuda")]
-pub(crate) mod cuda_abi;
+pub mod cuda_abi;

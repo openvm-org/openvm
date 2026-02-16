@@ -5,7 +5,7 @@ use openvm_circuit::{
     system::memory::{merkle::MemoryMerkleCols, TimestampedEquipartition},
     utils::next_power_of_two_or_zero,
 };
-use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, prover_backend::GpuBackend};
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{
     copy::{cuda_memcpy, MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,
@@ -16,7 +16,7 @@ use openvm_cuda_common::{
 use openvm_stark_backend::{
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
     p3_util::log2_ceil_usize,
-    prover::types::AirProvingContext,
+    prover::AirProvingContext,
 };
 use p3_field::PrimeCharacteristicRing;
 
@@ -387,7 +387,7 @@ impl MemoryMerkleTree {
         self.top_roots_host = self.top_roots.to_host().unwrap();
         public_values.extend(self.top_roots_host[0]);
 
-        AirProvingContext::new(Vec::new(), Some(merkle_trace), public_values)
+        AirProvingContext::new(Vec::new(), merkle_trace, public_values)
     }
 
     /// An auxiliary function to calculate the required number of rows for the merkle trace.

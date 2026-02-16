@@ -1,12 +1,12 @@
-use std::{borrow::BorrowMut, mem::size_of, sync::Arc};
+use std::{borrow::BorrowMut, mem::size_of};
 
+use openvm_circuit_primitives::Chip;
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
-    prover::{cpu::CpuBackend, types::AirProvingContext},
-    Chip, ChipUsageGetter,
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    StarkProtocolConfig, Val,
 };
 
 use crate::{
@@ -55,10 +55,10 @@ impl<F: Field> ProgramTester<F> {
     }
 }
 
-impl<SC: StarkGenericConfig, RA> Chip<RA, CpuBackend<SC>> for ProgramTester<Val<SC>> {
+impl<SC: StarkProtocolConfig, RA> Chip<RA, CpuBackend<SC>> for ProgramTester<Val<SC>> {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         let height = self.records.len().next_power_of_two();
-        let width = self.trace_width();
+        let width = Self::width();
         let mut values = Val::<SC>::zero_vec(height * width);
         // This zip only goes through records. The padding rows between records.len()..height
         // are filled with zeros - in particular count = 0 so nothing is added to bus.
@@ -66,18 +66,7 @@ impl<SC: StarkGenericConfig, RA> Chip<RA, CpuBackend<SC>> for ProgramTester<Val<
             *(row[..width - 1]).borrow_mut() = *record;
             row[width - 1] = Val::<SC>::ONE;
         }
-        AirProvingContext::simple_no_pis(Arc::new(RowMajorMatrix::new(values, width)))
-    }
-}
-
-impl<F: Field> ChipUsageGetter for ProgramTester<F> {
-    fn air_name(&self) -> String {
-        "ProgramDummyAir".to_string()
-    }
-    fn current_trace_height(&self) -> usize {
-        self.records.len()
-    }
-    fn trace_width(&self) -> usize {
-        Self::width()
+        let trace = RowMajorMatrix::new(values, width);
+        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace))
     }
 }

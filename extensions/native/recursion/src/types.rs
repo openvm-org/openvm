@@ -4,7 +4,7 @@ use openvm_native_compiler::{
 };
 use openvm_stark_backend::{
     air_builders::symbolic::SymbolicExpressionDag,
-    config::{Com, StarkGenericConfig, Val},
+    config::{Com, StarkProtocolConfig, Val},
     keygen::types::{LinearConstraint, MultiStarkVerifyingKey, StarkVerifyingKey, TraceWidth},
     p3_util::log2_strict_usize,
 };
@@ -37,7 +37,7 @@ pub struct StarkVerificationAdvice<C: Config> {
 }
 
 /// Create StarkVerificationAdvice for an inner config.
-pub(crate) fn new_from_inner_vk<SC: StarkGenericConfig, C: Config<F = Val<SC>>>(
+pub(crate) fn new_from_inner_vk<SC: StarkProtocolConfig, C: Config<F = Val<SC>>>(
     vk: StarkVerifyingKey<Val<SC>, Com<SC>>,
 ) -> StarkVerificationAdvice<C>
 where
@@ -75,7 +75,7 @@ pub struct MultiStarkVerificationAdvice<C: Config> {
 }
 
 /// Create MultiStarkVerificationAdvice for an inner config.
-pub fn new_from_inner_multi_vk<SC: StarkGenericConfig, C: Config<F = Val<SC>>>(
+pub fn new_from_inner_multi_vk<SC: StarkProtocolConfig, C: Config<F = Val<SC>>>(
     vk: &MultiStarkVerifyingKey<SC>,
 ) -> MultiStarkVerificationAdvice<C>
 where

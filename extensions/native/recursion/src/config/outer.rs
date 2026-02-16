@@ -1,10 +1,10 @@
 use openvm_native_compiler::ir::Config;
 use openvm_stark_backend::{
-    config::Com,
     keygen::types::{MultiStarkVerifyingKey, StarkVerifyingKey},
     p3_challenger::MultiField32Challenger,
     p3_commit::{BatchOpening, ExtensionMmcs},
     p3_field::extension::BinomialExtensionField,
+    Com,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig,

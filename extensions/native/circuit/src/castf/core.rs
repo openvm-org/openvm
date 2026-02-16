@@ -16,7 +16,7 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
-    rap::BaseAirWithPublicValues,
+    BaseAirWithPublicValues,
 };
 
 use crate::CASTF_MAX_BITS;

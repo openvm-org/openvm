@@ -5,7 +5,7 @@ use openvm_native_compiler::ir::{Builder, Config, Felt, DIGEST_SIZE};
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     openvm_stark_backend::{
-        config::{Com, StarkGenericConfig, Val},
+        config::{Com, StarkProtocolConfig, Val},
         p3_field::PrimeField32,
         proof::Proof,
     },
@@ -29,7 +29,7 @@ pub struct RootVmVerifierPvs<T> {
 #[derive(Serialize, Deserialize, Derivative)]
 #[serde(bound = "")]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
-pub struct RootVmVerifierInput<SC: StarkGenericConfig> {
+pub struct RootVmVerifierInput<SC: StarkProtocolConfig> {
     /// The proofs of leaf verifier or internal verifier in the execution order.
     pub proofs: Vec<Proof<SC>>,
     /// Public values to expose directly

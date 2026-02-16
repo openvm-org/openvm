@@ -45,15 +45,15 @@ use openvm_native_compiler::{
     NativePhantom, NativeRangeCheckOpcode, Poseidon2Opcode,
 };
 use openvm_rv32im_transpiler::BranchEqualOpcode::*;
-use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, StarkEngine, SystemParams};
 use openvm_stark_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing},
+    config::baby_bear_poseidon2::{
+        BabyBearPoseidon2Config, BabyBearPoseidon2CpuEngine, DuplexSponge,
+    },
     p3_baby_bear::BabyBear,
+    utils::setup_tracing,
 };
 use rand::Rng;
-use stark_backend_v2::{
-    poseidon2::sponge::DuplexSponge, BabyBearPoseidon2CpuEngineV2, SystemParams,
-};
 use test_log::test;
 
 pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize
@@ -110,7 +110,7 @@ fn test_vm_1() {
 // See crates/sdk/src/prover/root.rs for intended usage
 #[test]
 fn test_vm_override_trace_heights() -> eyre::Result<()> {
-    let e = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(SystemParams::new_for_testing(20));
+    let e = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(SystemParams::new_for_testing(20));
     let program = Program::<BabyBear>::from_instructions(&[
         Instruction::large_from_isize(ADD.global_opcode(), 0, 4, 0, 4, 0, 0, 0),
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
@@ -119,7 +119,7 @@ fn test_vm_override_trace_heights() -> eyre::Result<()> {
         program.into(),
         &e,
     ));
-    let e = TestEngine::<DuplexSponge>::new(SystemParams::new_for_testing(20));
+    let e: TestEngine = TestEngine::new(SystemParams::new_for_testing(20));
     // It's hard to define the mapping semantically. Please recompute the following magical AIR
     // heights by hands whenever something changes.
     let fixed_air_heights = vec![
@@ -178,7 +178,7 @@ fn test_vm_1_optional_air() -> eyre::Result<()> {
     // Aggregation VmConfig has Core/Poseidon2/FieldArithmetic/FieldExtension chips. The program
     // only uses Core and FieldArithmetic. All other chips should not have AIR proof inputs.
     let config = NativeConfig::aggregation(4, 3);
-    let engine = TestEngine::<DuplexSponge>::new(SystemParams::new_for_testing(20));
+    let engine: TestEngine = TestEngine::new(SystemParams::new_for_testing(20));
     let (vm, pk) = VirtualMachine::new_with_keygen(engine, NativeBuilder::default(), config)?;
     let num_airs = pk.per_air.len();
 
@@ -201,7 +201,7 @@ fn test_vm_1_optional_air() -> eyre::Result<()> {
     let cached_program_trace = vm.commit_program_on_device(&program);
     let exe = Arc::new(VmExe::new(program));
     let mut prover = VmInstance::new(vm, exe, cached_program_trace)?;
-    let proof: stark_backend_v2::proof::Proof =
+    let proof: openvm_stark_backend::proof::Proof<BabyBearPoseidon2Config> =
         SingleSegmentVmProver::prove(&mut prover, vec![], &vec![256; num_airs])?;
     assert!(
         proof.trace_vdata.iter().filter(|v| v.is_some()).count() < num_airs,
@@ -217,7 +217,7 @@ fn test_vm_public_values() -> eyre::Result<()> {
     let num_public_values = 100;
     let config = test_system_config_without_continuations().with_public_values(num_public_values);
     assert!(!config.continuation_enabled);
-    let engine = TestEngine::<DuplexSponge>::new(SystemParams::new_for_testing(20));
+    let engine: TestEngine = TestEngine::new(SystemParams::new_for_testing(20));
     let (vm, pk) = VirtualMachine::new_with_keygen(engine, SystemBuilder, config)?;
 
     let instructions = vec![
@@ -279,7 +279,7 @@ fn test_vm_initial_memory() {
 
 #[test]
 fn test_vm_1_persistent() -> eyre::Result<()> {
-    let engine = TestEngine::<DuplexSponge>::new(SystemParams::new_for_testing(20));
+    let engine: TestEngine = TestEngine::new(SystemParams::new_for_testing(20));
     let config = test_native_continuations_config();
     let merkle_air_idx = config.system.memory_boundary_air_id() + 1;
     let ptr_max_bits = config.system.memory_config.pointer_max_bits;
@@ -945,7 +945,7 @@ fn test_vm_execute_metered_cost_native_chips() {
     setup_tracing();
     let config = test_native_config();
 
-    let engine = TestEngine::<DuplexSponge>::new(SystemParams::new_for_testing(20));
+    let engine: TestEngine = TestEngine::new(SystemParams::new_for_testing(20));
     let (vm, _) =
         VirtualMachine::new_with_keygen(engine, NativeBuilder::default(), config).unwrap();
 
@@ -982,7 +982,7 @@ fn test_vm_execute_metered_cost_halt() {
     setup_tracing();
     let config = test_native_config();
 
-    let engine = TestEngine::<DuplexSponge>::new(SystemParams::new_for_testing(20));
+    let engine: TestEngine = TestEngine::new(SystemParams::new_for_testing(20));
     let (vm, _) =
         VirtualMachine::new_with_keygen(engine, NativeBuilder::default(), config.clone()).unwrap();
 

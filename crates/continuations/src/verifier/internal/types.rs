@@ -9,7 +9,7 @@ use openvm_native_compiler::{
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     openvm_stark_backend::{
-        config::{Com, StarkGenericConfig, Val},
+        config::{Com, StarkProtocolConfig, Val},
         p3_field::PrimeField32,
         proof::Proof,
     },
@@ -23,7 +23,7 @@ use crate::{verifier::common::types::VmVerifierPvs, SC};
 #[derive(Serialize, Deserialize, Derivative)]
 #[serde(bound = "")]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
-pub struct InternalVmVerifierInput<SC: StarkGenericConfig> {
+pub struct InternalVmVerifierInput<SC: StarkProtocolConfig> {
     pub self_program_commit: [Val<SC>; DIGEST_SIZE],
     /// The proofs of leaf verifier or internal verifier in the execution order.
     pub proofs: Vec<Proof<SC>>,
@@ -40,7 +40,7 @@ assert_impl_all!(InternalVmVerifierInput<BabyBearPoseidon2Config>: Serialize, De
 /// This struct may be serialized using the `Encode` trait in the `openvm_sdk` crate.
 #[derive(Derivative)]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
-pub struct VmStarkProof<SC: StarkGenericConfig> {
+pub struct VmStarkProof<SC: StarkProtocolConfig> {
     /// STARK backend proof
     pub inner: Proof<SC>,
     pub user_public_values: Vec<Val<SC>>,

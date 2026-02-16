@@ -28,8 +28,6 @@ openvm-ecc-circuit = { workspace = true }
 openvm-pairing-transpiler = { workspace = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-stark-sdk = { workspace = true, optional = true }
-stark-backend-v2 = { workspace = true }
-cuda-backend-v2 = { workspace = true, optional = true }
 
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
@@ -66,7 +64,6 @@ aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot", "openvm-ecc-circuit/ao
 cuda = [
     "dep:openvm-cuda-backend",
     "dep:openvm-stark-sdk",
-    "dep:cuda-backend-v2",
     "openvm-circuit-primitives/cuda",
     "openvm-circuit/cuda",
     "openvm-algebra-circuit/cuda",
