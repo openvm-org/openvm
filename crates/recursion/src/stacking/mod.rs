@@ -58,6 +58,8 @@ pub struct StackingModule {
     l_skip: usize,
     n_stack: usize,
     stacking_index_mult: usize,
+    /// Number of PoW bits for μ batching challenge.
+    mu_pow_bits: usize,
 }
 
 impl StackingModule {
@@ -87,6 +89,7 @@ impl StackingModule {
                 .map(|round| round.num_queries)
                 .unwrap_or(0)
                 << child_vk.inner.params.k_whir(),
+            mu_pow_bits: child_vk.inner.params.whir.mu_pow_bits,
         }
     }
 
@@ -136,6 +139,11 @@ impl StackingModule {
             }
         }
 
+        // μ PoW: observe witness and sample before sampling μ
+        let mu_pow_witness = proof.whir_proof.mu_pow_witness;
+        ts.observe(mu_pow_witness);
+        let mu_pow_sample = ts.sample();
+
         let stacking_batching_challenge = ts.sample_ext();
 
         preflight.stacking = StackingPreflight {
@@ -143,6 +151,8 @@ impl StackingModule {
             post_tidx: ts.len(),
             univariate_poly_rand_eval,
             stacking_batching_challenge,
+            mu_pow_witness,
+            mu_pow_sample,
             lambda,
             sumcheck_rnd,
         };
@@ -193,10 +203,12 @@ impl AirModule for StackingModule {
             stacking_indices_bus: self.bus_inventory.stacking_indices_bus,
             whir_module_bus: self.bus_inventory.whir_module_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
+            exp_bits_len_bus: self.bus_inventory.exp_bits_len_bus,
             stacking_tidx_bus: self.stacking_tidx_bus,
             claim_coefficients_bus: self.claim_coefficients_bus,
             sumcheck_claims_bus: self.sumcheck_claims_bus,
             stacking_index_mult: self.stacking_index_mult,
+            mu_pow_bits: self.mu_pow_bits,
         };
         let eq_base_air = EqBaseAir {
             constraint_randomness_bus: self.bus_inventory.constraint_randomness_bus,
