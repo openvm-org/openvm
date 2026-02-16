@@ -1,12 +1,13 @@
-use std::{mem::size_of, sync::Arc};
+use std::mem::size_of;
 
+use openvm_circuit_primitives::Chip;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, BaseAir},
     p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::{AirProvingContext, CpuBackend},
-    BaseAirWithPublicValues, Chip, PartitionedBaseAir, StarkProtocolConfig, Val,
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 
 use crate::system::memory::{offline_checker::MemoryBus, MemoryAddress};
@@ -133,7 +134,8 @@ where
         let mut trace = self.trace.clone();
         trace.resize(height * width, Val::<SC>::ZERO);
 
-        let trace = Arc::new(RowMajorMatrix::new(trace, width));
+        let trace_row_maj = RowMajorMatrix::new(trace, width);
+        let trace = ColMajorMatrix::from_row_major(&trace_row_maj);
         AirProvingContext::simple_no_pis(trace)
     }
 }

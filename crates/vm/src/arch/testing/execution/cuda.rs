@@ -5,11 +5,12 @@ use openvm_circuit::{
         testing::{execution::air::DummyExecutionInteractionCols, ExecutionTester},
         ExecutionBus, ExecutionState,
     },
+    primitives::Chip,
     utils::next_power_of_two_or_zero,
 };
-use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types::F};
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_stark_backend::{prover::AirProvingContext, Chip};
+use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::cuda_abi::execution_testing;
 

@@ -1,17 +1,17 @@
 use std::{borrow::BorrowMut, mem::size_of, sync::Arc};
 
+use openvm_circuit_primitives::Chip;
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
-    config::{StarkProtocolConfig, Val},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     prover::{AirProvingContext, CpuBackend},
+    StarkProtocolConfig, Val,
 };
 
 use crate::{
     arch::ExecutionState,
     system::program::{ProgramBus, ProgramExecutionCols},
-    Chip,
 };
 
 pub mod air;

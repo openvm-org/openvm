@@ -13,7 +13,7 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::{AirProvingContext, CpuBackend},
-    BaseAirWithPublicValues, Chip, PartitionedBaseAir, StarkProtocolConfig, Val,
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 use rustc_hash::FxHashSet;
 use tracing::instrument;
@@ -21,6 +21,7 @@ use tracing::instrument;
 use super::{merkle::SerialReceiver, online::INITIAL_TIMESTAMP, TimestampedValues};
 use crate::{
     arch::{hasher::Hasher, ADDR_SPACE_OFFSET},
+    primitives::Chip,
     system::memory::{
         dimensions::MemoryDimensions, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
         TimestampedEquipartition,

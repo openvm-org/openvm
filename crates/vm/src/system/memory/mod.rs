@@ -3,11 +3,10 @@ use std::sync::Arc;
 use openvm_circuit_primitives::{is_less_than::IsLtSubAir, var_range::VariableRangeCheckerBus};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    config::{StarkProtocolConfig, Val},
     interaction::PermutationCheckBus,
     p3_field::Field,
     p3_util::{log2_ceil_usize, log2_strict_usize},
-    AirRef,
+    AirRef, StarkProtocolConfig, Val,
 };
 
 pub mod adapter;

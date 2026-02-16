@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use cuda_backend_v2::BabyBearPoseidon2GpuEngine;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{
         BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -14,11 +13,12 @@ use openvm_circuit_primitives::{
         SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus,
         VariableRangeCheckerChip, VariableRangeCheckerChipGPU,
     },
+    Chip,
 };
 use openvm_cuda_backend::{
     data_transporter::assert_eq_host_and_device_matrix,
-    prover_backend::GpuBackend,
-    types::{F, SC},
+    prelude::{BabyBearPoseidon2Config, F, SC},
+    BabyBearPoseidon2GpuEngine, GpuBackend,
 };
 use openvm_instructions::{program::PC_BITS, riscv::RV32_REGISTER_AS};
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
@@ -29,9 +29,9 @@ use openvm_stark_backend::{
     prover::{AirProvingContext, CpuBackend, MatrixDimensions},
     utils::disable_debug_builder,
     verifier::VerifierError,
-    AirRef, AnyAir, Chip, StarkEngine, Val, VerificationData,
+    AirRef, AnyAir, StarkEngine, Val, VerificationData,
 };
-use openvm_stark_sdk::config::setup_tracing_with_log_level;
+use openvm_stark_sdk::utils::setup_tracing_with_log_level;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use tracing::Level;
 
@@ -688,7 +688,8 @@ impl GpuChipTester {
     pub fn test<P: Fn() -> BabyBearPoseidon2GpuEngine>(
         self,
         engine_provider: P,
-    ) -> Result<VerificationData, VerifierError> {
+    ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerifierError<BabyBearPoseidon2Config>>
+    {
         engine_provider().run_test(
             self.airs,
             self.ctxs

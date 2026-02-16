@@ -7,17 +7,15 @@ use openvm_circuit_primitives::{
     var_range::{
         SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
     },
-    TraceSubRowGenerator,
+    Chip, TraceSubRowGenerator,
 };
 use openvm_stark_backend::{
-    config::{Domain, StarkProtocolConfig},
     interaction::PermutationCheckBus,
-    p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
     p3_util::{log2_ceil_usize, log2_strict_usize},
     prover::{AirProvingContext, CpuBackend},
-    Chip,
+    StarkProtocolConfig,
 };
 use serde::{Deserialize, Serialize};
 
@@ -266,14 +264,11 @@ impl<F: VmField> MemoryController<F> {
     // there's no need for any memory chip to implement the Chip trait. We do it when convenient,
     // but all that matters is that you can tracegen all the trace matrices for the memory AIRs
     // _somehow_.
-    pub fn generate_proving_ctx<SC: StarkProtocolConfig>(
+    pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
         &mut self,
         access_adapter_records: DenseRecordArena,
         touched_memory: TouchedMemory<F>,
-    ) -> Vec<AirProvingContext<CpuBackend<SC>>>
-    where
-        Domain<SC>: PolynomialSpace<Val = F>,
-    {
+    ) -> Vec<AirProvingContext<CpuBackend<SC>>> {
         match (&mut self.interface_chip, touched_memory) {
             (
                 MemoryInterface::Volatile { boundary_chip },

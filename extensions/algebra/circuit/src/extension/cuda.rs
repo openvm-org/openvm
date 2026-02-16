@@ -1,4 +1,3 @@
-use cuda_backend_v2::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
 use openvm_algebra_transpiler::{Fp2Opcode, Rv32ModularArithmeticOpcode};
 use openvm_circuit::{
     arch::{
@@ -12,6 +11,7 @@ use openvm_circuit::{
         SystemChipInventoryGPU,
     },
 };
+use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
 use openvm_instructions::LocalOpcode;
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_rv32im_circuit::Rv32ImGpuProverExt;

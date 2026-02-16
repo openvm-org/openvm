@@ -1,14 +1,13 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
+use openvm_circuit_primitives::{utils::next_power_of_two_or_zero, Chip};
 use openvm_stark_backend::{
-    config::{StarkProtocolConfig, Val},
     p3_air::BaseAir,
     p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
     prover::{AirProvingContext, CpuBackend},
-    Chip,
+    StarkProtocolConfig, Val,
 };
 
 use super::{columns::*, Poseidon2PeripheryBaseChip, PERIPHERY_POSEIDON2_WIDTH};

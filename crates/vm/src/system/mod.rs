@@ -4,19 +4,21 @@ use derive_more::derive::From;
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
 #[cfg(feature = "aot")]
 use openvm_circuit_derive::{AotExecutor, AotMeteredExecutor};
-use openvm_circuit_primitives::var_range::{
-    SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus,
-    VariableRangeCheckerChip,
+use openvm_circuit_primitives::{
+    var_range::{
+        SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus,
+        VariableRangeCheckerChip,
+    },
+    Chip,
 };
 use openvm_instructions::{
     LocalOpcode, PhantomDiscriminant, PublishOpcode, SysPhantom, SystemOpcode,
 };
 use openvm_stark_backend::{
-    config::{StarkProtocolConfig, Val},
     interaction::{LookupBus, PermutationCheckBus},
     p3_field::{Field, PrimeField32},
     prover::{AirProvingContext, CommittedTraceData, CpuBackend, CpuDevice, ProverBackend},
-    AirRef, StarkEngine,
+    AirRef, StarkEngine, StarkProtocolConfig, Val,
 };
 use rustc_hash::FxHashMap;
 
@@ -540,7 +542,7 @@ impl<SC, E> VmBuilder<E> for SystemCpuBuilder
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<SC>: VmField,
+    Val<E::SC>: VmField,
 {
     type VmConfig = SystemConfig;
     type RecordArena = MatrixRecordArena<Val<SC>>;

@@ -15,12 +15,13 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{AirProvingContext, CpuBackend},
-    BaseAirWithPublicValues, Chip, PartitionedBaseAir, StarkProtocolConfig, Val,
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::{instructions::SystemOpcode::TERMINATE, ExecutionBus, ExecutionState},
+    primitives::Chip,
     system::program::ProgramBus,
 };
 

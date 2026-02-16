@@ -16,14 +16,15 @@ use std::{
 };
 
 use getset::{CopyGetters, Getters};
-use openvm_circuit_primitives::var_range::{
-    SharedVariableRangeCheckerChip, VariableRangeCheckerAir,
+use openvm_circuit_primitives::{
+    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerAir},
+    AnyChip, Chip,
 };
 use openvm_instructions::{PhantomDiscriminant, VmOpcode};
 use openvm_stark_backend::{
     interaction::BusIndex,
     prover::{AirProvingContext, CpuBackend, MatrixDimensions, ProverBackend, ProvingContext},
-    AirRef, AnyAir, AnyChip, Chip, StarkEngine, StarkProtocolConfig, Val,
+    AirRef, AnyAir, StarkEngine, StarkProtocolConfig, Val,
 };
 use rustc_hash::FxHashMap;
 use tracing::info_span;

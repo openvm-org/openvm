@@ -11,7 +11,7 @@ use openvm_circuit_primitives::{
     },
     utils::{compose, implies},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    SubAir, TraceSubRowGenerator,
+    Chip, SubAir, TraceSubRowGenerator,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
@@ -21,7 +21,7 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     prover::{AirProvingContext, CpuBackend},
-    BaseAirWithPublicValues, Chip, PartitionedBaseAir, StarkProtocolConfig, Val,
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 use static_assertions::const_assert;
 use tracing::instrument;

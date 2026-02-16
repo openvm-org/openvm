@@ -1,15 +1,10 @@
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
-    config::{Com, Val},
-    keygen::types::MultiStarkVerifyingKey,
-    p3_field::PrimeField32,
-    proof::Proof,
-    BabyBearPoseidon2CpuEngine, StarkEngine, StarkWhirEngine, SystemParams,
+    keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField32, proof::Proof, Com, StarkEngine,
+    SystemParams, Val,
 };
-use openvm_stark_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing},
-    p3_baby_bear::BabyBear,
-};
+use openvm_stark_sdk::{config::baby_bear_poseidon2::*, utils::setup_tracing};
+use p3_baby_bear::BabyBear;
 
 #[cfg(feature = "aot")]
 use crate::arch::{SystemConfig, VmState};
@@ -32,8 +27,8 @@ pub fn test_cpu_engine() -> BabyBearPoseidon2CpuEngine {
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        pub use openvm_cuda_backend::{chip::cpu_proving_ctx_to_gpu};
-        pub use cuda_backend_v2::BabyBearPoseidon2GpuEngine as TestStarkEngine;
+        pub use openvm_circuit_primitives::{hybrid_chip::cpu_proving_ctx_to_gpu};
+        pub use openvm_cuda_backend::BabyBearPoseidon2GpuEngine as TestStarkEngine;
         use crate::arch::DenseRecordArena;
         pub type TestRecordArena = DenseRecordArena;
 
@@ -42,7 +37,7 @@ cfg_if::cfg_if! {
             TestStarkEngine::new(SystemParams::new_for_testing(20))
         }
     } else {
-        pub use openvm_stark_backend::BabyBearPoseidon2CpuEngine as TestStarkEngine;
+        pub use BabyBearPoseidon2CpuEngine as TestStarkEngine;
         use crate::arch::MatrixRecordArena;
         pub type TestRecordArena = MatrixRecordArena<BabyBear>;
     }
@@ -198,7 +193,7 @@ pub fn air_test_impl<E, VB>(
     Vec<(MultiStarkVerifyingKey<E::SC>, Proof<E::SC>)>,
 )>
 where
-    E: StarkWhirEngine + StarkEngine,
+    E: StarkEngine,
     Val<E::SC>: PrimeField32,
     VB: VmBuilder<E>,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>

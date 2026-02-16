@@ -7,14 +7,13 @@ use openvm_circuit::{
     },
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
-use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, prover_backend::GpuBackend};
+use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_stark_backend::{
     p3_field::PrimeField32,
     p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
-    prover::{hal::MatrixDimensions, AirProvingContext},
-    Chip,
+    prover::{AirProvingContext, MatrixDimensions},
 };
 
 use super::{merkle_tree::TIMESTAMPED_BLOCK_WIDTH, poseidon2::SharedBuffer};

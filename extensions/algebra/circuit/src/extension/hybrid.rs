@@ -1,6 +1,5 @@
 //! Prover extension for the GPU backend which still does trace generation on CPU.
 
-use cuda_backend_v2::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::*,
@@ -19,6 +18,7 @@ use openvm_cuda_backend::{
     base::DeviceMatrix,
     data_transporter::transport_matrix_to_device,
     types::{F, SC},
+    BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
 };
 use openvm_instructions::LocalOpcode;
 use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};

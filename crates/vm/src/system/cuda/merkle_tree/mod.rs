@@ -5,7 +5,7 @@ use openvm_circuit::{
     system::memory::{merkle::MemoryMerkleCols, TimestampedEquipartition},
     utils::next_power_of_two_or_zero,
 };
-use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, prover_backend::GpuBackend};
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{
     copy::{cuda_memcpy, MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,

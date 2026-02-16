@@ -12,10 +12,7 @@ use openvm_instructions::{
 };
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
-    config::{StarkProtocolConfig, Val},
-    p3_field::Field,
-    p3_util::log2_strict_usize,
-    StarkEngine,
+    p3_field::Field, p3_util::log2_strict_usize, StarkEngine, StarkProtocolConfig, Val,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 

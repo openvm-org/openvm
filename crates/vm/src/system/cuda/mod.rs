@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use connector::VmConnectorChipGPU;
-use cuda_backend_v2::GpuBackend;
 use memory::MemoryInventoryGPU;
 use openvm_circuit::{
     arch::{DenseRecordArena, SystemConfig, PUBLIC_VALUES_AIR_ID},
@@ -11,12 +10,9 @@ use openvm_circuit::{
         SystemChipComplex, SystemRecords,
     },
 };
-use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
-use openvm_cuda_backend::types::F;
-use openvm_stark_backend::{
-    prover::{AirProvingContext, CommittedTraceData},
-    Chip,
-};
+use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
+use openvm_cuda_backend::{prelude::F, GpuBackend};
+use openvm_stark_backend::prover::{AirProvingContext, CommittedTraceData};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use poseidon2::Poseidon2PeripheryChipGPU;
 use program::ProgramChipGPU;

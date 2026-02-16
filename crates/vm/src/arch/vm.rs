@@ -22,7 +22,6 @@ use openvm_instructions::{
     program::Program,
 };
 use openvm_stark_backend::{
-    config::{Com, StarkProtocolConfig, Val},
     keygen::{
         types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
         MultiStarkKeygenBuilder,
@@ -36,8 +35,8 @@ use openvm_stark_backend::{
         ColMajorMatrix, CommittedTraceData, DeviceDataTransporter, DeviceMultiStarkProvingKey,
         MatrixDimensions, ProverBackend, ProvingContext, TraceCommitter,
     },
-    verifier::VerifierError as VerificationError,
-    StarkEngine,
+    verifier::VerifierError,
+    Com, StarkEngine, StarkProtocolConfig, Val,
 };
 use p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
@@ -335,7 +334,7 @@ where
 }
 
 #[derive(Error, Debug)]
-pub enum VmVerificationError {
+pub enum VmVerificationError<SC: StarkProtocolConfig> {
     #[error("no proof is provided")]
     ProofNotFound,
 
@@ -370,7 +369,7 @@ pub enum VmVerificationError {
     SystemAirMissing { air_id: usize },
 
     #[error("stark verification error: {0}")]
-    StarkError(#[from] VerificationError),
+    StarkError(#[from] VerifierError<SC::EF>),
 
     #[error("user public values proof error: {0}")]
     UserPublicValuesError(#[from] UserPublicValuesProofError),
@@ -392,8 +391,6 @@ pub enum VirtualMachineError {
     Generation(#[from] GenerationError),
     #[error("program committed trade data not loaded")]
     ProgramIsNotCommitted,
-    #[error("verification error: {0}")]
-    Verification(#[from] VmVerificationError),
 }
 
 /// The [VirtualMachine] struct contains the API to generate proofs for _arbitrary_ programs for a
@@ -865,7 +862,7 @@ where
         &self,
         vk: &MultiStarkVerifyingKey<E::SC>,
         proofs: &[Proof<E::SC>],
-    ) -> Result<(), VmVerificationError>
+    ) -> Result<(), VmVerificationError<E::SC>>
     where
         Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
         Val<E::SC>: PrimeField32,
@@ -955,23 +952,21 @@ where
             Vec<_>,
             Vec<_>,
             Vec<_>,
-        ) =
-            self.pk
-                .per_air
-                .iter()
-                .map(|pk| {
-                    let constant_trace_height = pk.preprocessed_data.as_ref().map(|cd| cd.height());
-                    let air_names = pk.air_name.clone();
-                    // TODO[jpw]: revisit v2 width calculation
-                    let width = pk.vk.params.width.total_width(
-                        <<E::SC as StarkProtocolConfig>::Challenge as BasedVectorSpace<
-                            Val<E::SC>,
-                        >>::DIMENSION,
-                    );
-                    let num_interactions = pk.vk.symbolic_constraints.interactions.len();
-                    (constant_trace_height, air_names, width, num_interactions)
-                })
-                .multiunzip();
+        ) = self
+            .pk
+            .per_air
+            .iter()
+            .map(|pk| {
+                let constant_trace_height = pk.preprocessed_data.as_ref().map(|cd| cd.height());
+                let air_names = pk.air_name.clone();
+                // TODO[jpw]: revisit v2 width calculation
+                let width = pk.vk.params.width.total_width(
+                    <<E::SC as StarkProtocolConfig>::EF as BasedVectorSpace<Val<E::SC>>>::DIMENSION,
+                );
+                let num_interactions = pk.vk.symbolic_constraints.interactions.len();
+                (constant_trace_height, air_names, width, num_interactions)
+            })
+            .multiunzip();
 
         // Program trace is the same for all segments
         constant_trace_heights[PROGRAM_AIR_ID] = Some(program_len);
@@ -996,10 +991,8 @@ where
             .iter()
             .map(|pk| {
                 pk.vk.params.width.total_width(
-                        <<E::SC as StarkProtocolConfig>::Challenge as BasedVectorSpace<
-                            Val<E::SC>,
-                        >>::DIMENSION,
-                    )
+                    <<E::SC as StarkProtocolConfig>::EF as BasedVectorSpace<Val<E::SC>>>::DIMENSION,
+                )
             })
             .collect();
 
@@ -1270,7 +1263,7 @@ pub fn verify_single<E>(
     engine: &E,
     vk: &MultiStarkVerifyingKey<E::SC>,
     proof: &Proof<E::SC>,
-) -> Result<(), VerificationError>
+) -> Result<(), VerifierError<<E::SC as StarkProtocolConfig>::EF>>
 where
     E: StarkEngine,
 {
@@ -1311,7 +1304,7 @@ pub fn verify_segments<E>(
     engine: &E,
     vk: &MultiStarkVerifyingKey<E::SC>,
     proofs: &[Proof<E::SC>],
-) -> Result<VerifiedExecutionPayload<Val<E::SC>>, VmVerificationError>
+) -> Result<VerifiedExecutionPayload<Val<E::SC>>, VmVerificationError<E::SC>>
 where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
@@ -1433,7 +1426,7 @@ where
     }
     let exe_commit = compute_exe_commit(
         &vm_poseidon2_hasher(),
-        &program_commit.unwrap(),
+        program_commit.unwrap().as_ref(),
         initial_memory_root.as_ref().unwrap(),
         start_pc.unwrap(),
     );

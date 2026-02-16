@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
 use itertools::zip_eq;
-use openvm_circuit_primitives::var_range::{
-    SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
+use openvm_circuit_primitives::{
+    var_range::{
+        SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
+    },
+    Chip,
 };
 use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, NATIVE_AS};
 use openvm_stark_backend::{
@@ -11,11 +14,11 @@ use openvm_stark_backend::{
     p3_util::log2_strict_usize,
     prover::{AirProvingContext, CpuBackend},
     verifier::VerifierError,
-    AirRef, AnyAir, Chip, StarkEngine, StarkProtocolConfig, Val, VerificationData,
+    AirRef, AnyAir, StarkEngine, StarkProtocolConfig, Val, VerificationData,
 };
 use openvm_stark_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing_with_log_level},
-    p3_baby_bear::BabyBear,
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
+    utils::setup_tracing_with_log_level,
 };
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;

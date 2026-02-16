@@ -2,14 +2,13 @@ use std::{borrow::BorrowMut, sync::Arc};
 
 use derivative::Derivative;
 use itertools::Itertools;
-use openvm_circuit::arch::hasher::poseidon2::Poseidon2Hasher;
+use openvm_circuit::{arch::hasher::poseidon2::Poseidon2Hasher, primitives::Chip};
 use openvm_instructions::{
     exe::VmExe,
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode,
 };
 use openvm_stark_backend::{
-    config::{Com, PcsProverData, StarkProtocolConfig, Val},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
@@ -17,7 +16,7 @@ use openvm_stark_backend::{
         stacked_pcs::StackedPcsData, AirProvingContext, ColMajorMatrix, CommittedTraceData,
         CpuBackend, TraceCommitter,
     },
-    Chip, StarkEngine,
+    Com, StarkEngine, StarkProtocolConfig, Val,
 };
 use serde::{Deserialize, Serialize};
 
@@ -37,8 +36,8 @@ use crate::{
 /// matrix `trace`.
 #[derive(Serialize, Deserialize, Derivative)]
 #[serde(bound(
-    serialize = "VmExe<Val<SC>>: Serialize, Com<SC>: Serialize, PcsProverData<SC>: Serialize",
-    deserialize = "VmExe<Val<SC>>: Deserialize<'de>, Com<SC>: Deserialize<'de>, PcsProverData<SC>: Deserialize<'de>"
+    serialize = "VmExe<Val<SC>>: Serialize, Com<SC>: Serialize",
+    deserialize = "VmExe<Val<SC>>: Deserialize<'de>, Com<SC>: Deserialize<'de>"
 ))]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
 pub struct VmCommittedExe<SC: StarkProtocolConfig> {
@@ -47,7 +46,7 @@ pub struct VmCommittedExe<SC: StarkProtocolConfig> {
     program_commitment: Com<SC>,
     /// Program ROM as cached trace matrix.
     pub trace: Arc<RowMajorMatrix<Val<SC>>>,
-    pub prover_data: Arc<StackedPcsData<openvm_stark_backend::F, openvm_stark_backend::Digest>>,
+    pub prover_data: Arc<StackedPcsData<SC::F, SC::Digest>>,
 }
 
 impl<SC: StarkProtocolConfig> VmCommittedExe<SC> {

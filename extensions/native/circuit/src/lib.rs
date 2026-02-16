@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        use cuda_backend_v2::{GpuBackend as GpuBackend, BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine};
+        use openvm_cuda_backend::{GpuBackend as GpuBackend, BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine};
         use openvm_circuit::arch::DenseRecordArena;
         use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};
         use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
