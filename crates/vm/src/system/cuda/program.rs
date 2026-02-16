@@ -124,7 +124,7 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
 mod tests {
     use openvm_circuit::system::program::trace::VmCommittedExe;
     use openvm_cuda_backend::{
-        assert_eq_host_and_device_matrix_col_maj,
+        data_transporter::assert_eq_host_and_device_matrix_col_maj,
         prelude::{F, SC},
     };
     use openvm_instructions::{

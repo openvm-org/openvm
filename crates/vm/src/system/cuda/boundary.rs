@@ -184,15 +184,15 @@ mod tests {
         },
     };
     use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
+    use openvm_circuit_primitives::Chip;
     use openvm_cuda_backend::{
-        data_transporter::assert_eq_host_and_device_matrix,
+        data_transporter::assert_eq_host_and_device_matrix_col_maj,
         prelude::{F, SC},
-        prover_backend::GpuBackend,
+        GpuBackend,
     };
     use openvm_stark_backend::{
         p3_util::log2_ceil_usize,
         prover::{AirProvingContext, CpuBackend},
-        Chip,
     };
     use openvm_stark_sdk::utils::create_seeded_rng;
     use p3_field::PrimeCharacteristicRing;
@@ -254,9 +254,6 @@ mod tests {
         cpu_boundary.finalize(final_memory);
         let gpu_ctx: AirProvingContext<GpuBackend> = gpu_boundary.generate_proving_ctx(());
         let cpu_ctx: AirProvingContext<CpuBackend<SC>> = cpu_boundary.generate_proving_ctx(());
-        assert_eq_host_and_device_matrix(
-            cpu_ctx.common_main.unwrap(),
-            &gpu_ctx.common_main.unwrap(),
-        );
+        assert_eq_host_and_device_matrix_col_maj(&cpu_ctx.common_main, &gpu_ctx.common_main);
     }
 }

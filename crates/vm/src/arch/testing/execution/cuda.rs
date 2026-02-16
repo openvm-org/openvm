@@ -37,7 +37,7 @@ impl DeviceExecutionTester {
 impl<RA> Chip<RA, GpuBackend> for DeviceExecutionTester {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
         let height = next_power_of_two_or_zero(self.0.records.len());
-        let width = size_of::<DummyExecutionInteractionCols<F>>();
+        let width = size_of::<DummyExecutionInteractionCols<u8>>();
 
         if height == 0 {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
