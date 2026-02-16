@@ -22,7 +22,7 @@ use crate::{
 /// Supports `trace height <= 2^20`.
 pub fn test_cpu_engine() -> BabyBearPoseidon2CpuEngine {
     setup_tracing();
-    BabyBearPoseidon2CpuEngine::new(SystemParams::new_for_testing(20))
+    BabyBearPoseidon2CpuEngine::new(SystemParams::new_for_testing(21))
 }
 
 cfg_if::cfg_if! {
@@ -34,7 +34,7 @@ cfg_if::cfg_if! {
 
         pub fn test_gpu_engine() -> TestStarkEngine {
             setup_tracing();
-            TestStarkEngine::new(SystemParams::new_for_testing(20))
+            TestStarkEngine::new(SystemParams::new_for_testing(21))
         }
     } else {
         pub use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine as TestStarkEngine;
