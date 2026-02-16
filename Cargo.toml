@@ -48,6 +48,8 @@ members = [
     "extensions/bigint/circuit",
     "extensions/bigint/transpiler",
     "extensions/bigint/guest",
+    "extensions/deferral/circuit",
+    "extensions/deferral/transpiler",
     "extensions/keccak256/circuit",
     "extensions/keccak256/transpiler",
     "extensions/keccak256/guest",
@@ -179,6 +181,8 @@ openvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features
 openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
 openvm-verify-stark = { path = "guest-libs/verify_stark", default-features = false }
+openvm-deferral-circuit = { path = "extensions/deferral/circuit", default-features = false }
+openvm-deferral-transpiler = { path = "extensions/deferral/transpiler", default-features = false }
 
 # Benchmarking
 openvm-benchmarks-utils = { path = "benchmarks/utils", default-features = false }
