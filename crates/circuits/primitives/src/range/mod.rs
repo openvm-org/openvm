@@ -16,7 +16,7 @@ use openvm_stark_backend::{
     p3_air::{Air, BaseAir, PairBuilder},
     p3_field::Field,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    BaseAirWithPublicValues, PartitionedBaseAir,
 };
 
 mod bus;

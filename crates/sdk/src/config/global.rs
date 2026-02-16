@@ -36,10 +36,9 @@ use openvm_rv32im_transpiler::{
 use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha2CpuProverExt};
 use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    engine::StarkEngine,
     p3_field::Field,
-    prover::cpu::{CpuBackend, CpuDevice},
+    prover::{CpuBackend, CpuDevice},
+    StarkEngine, StarkProtocolConfig, Val,
 };
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
@@ -352,7 +351,7 @@ where
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitConfig<SC> for SdkVmConfig
+impl<SC: StarkProtocolConfig> VmCircuitConfig<SC> for SdkVmConfig
 where
     SdkVmConfigInner: VmCircuitConfig<SC>,
 {
@@ -363,7 +362,7 @@ where
 
 impl<E, SC> VmBuilder<E> for SdkVmCpuBuilder
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
 {

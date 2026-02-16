@@ -9,9 +9,9 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
-use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, prover_backend::GpuBackend};
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_stark_backend::prover::types::AirProvingContext;
+use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::cuda_abi::access_adapters::tracegen;
 
@@ -148,7 +148,7 @@ impl AccessAdapterInventoryGPU {
             .into_iter()
             .map(|trace| AirProvingContext {
                 cached_mains: vec![],
-                common_main: trace,
+                common_main: trace.unwrap_or_else(DeviceMatrix::dummy),
                 public_values: vec![],
             })
             .collect()
@@ -167,8 +167,10 @@ mod tests {
         system::memory::{offline_checker::MemoryBus, MemoryController},
     };
     use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
-    use openvm_cuda_backend::{data_transporter::assert_eq_host_and_device_matrix, prelude::SC};
-    use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::hal::MatrixDimensions};
+    use openvm_cuda_backend::{
+        data_transporter::assert_eq_host_and_device_matrix_col_maj, prelude::SC,
+    };
+    use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::MatrixDimensions};
     use rand::{rngs::StdRng, Rng, SeedableRng};
 
     use super::*;
@@ -247,7 +249,7 @@ mod tests {
         let all_memory_traces = controller
             .generate_proving_ctx::<SC>(tester.memory.memory.access_adapter_records, touched)
             .into_iter()
-            .map(|ctx| ctx.common_main.unwrap())
+            .map(|ctx| ctx.common_main)
             .collect::<Vec<_>>();
         let num_memory_traces = all_memory_traces.len();
         let cpu_traces: Vec<_> = all_memory_traces
@@ -262,7 +264,7 @@ mod tests {
                 "Exactly one of CPU and GPU traces is empty"
             );
             if cpu_trace.height() != 0 {
-                assert_eq_host_and_device_matrix(cpu_trace, gpu_trace);
+                assert_eq_host_and_device_matrix_col_maj(&cpu_trace, gpu_trace);
             }
         }
     }

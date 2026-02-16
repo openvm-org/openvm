@@ -17,14 +17,11 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_instructions::*;
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     p3_field::PrimeField32,
+    prover::{CpuBackend, CpuDevice},
+    StarkEngine, StarkProtocolConfig, Val,
 };
 use serde::{Deserialize, Serialize};
-use stark_backend_v2::{
-    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
-    StarkEngineV2 as StarkEngine,
-};
 use strum::IntoEnumIterator;
 
 use crate::*;
@@ -73,7 +70,7 @@ impl<F> VmExecutionExtension<F> for Sha256 {
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Sha256 {
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Sha256 {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
 
@@ -104,17 +101,18 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Sha256 {
 pub struct Sha2CpuProverExt;
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, RA> VmProverExtension<E, RA, Sha256> for Sha2CpuProverExt
+impl<SC, E, RA> VmProverExtension<E, RA, Sha256> for Sha2CpuProverExt
 where
-    E::SC: StarkGenericConfig,
-    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
-    RA: RowMajorMatrixArena<Val<E::SC>>,
-    Val<E::SC>: PrimeField32,
+    SC: StarkProtocolConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    RA: RowMajorMatrixArena<Val<SC>>,
+    Val<SC>: PrimeField32,
+    SC::EF: Ord,
 {
     fn extend_prover(
         &self,
         _: &Sha256,
-        inventory: &mut ChipInventory<E::SC, RA, CpuBackend>,
+        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();

@@ -1,21 +1,20 @@
-use std::{array::from_fn, borrow::Borrow, marker::PhantomData, sync::Arc};
+use std::{array::from_fn, borrow::Borrow, marker::PhantomData};
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::PrimeCharacteristicRing,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::{cpu::CpuBackend, types::AirProvingContext},
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip,
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{
     arch::RowMajorMatrixArena,
+    primitives::Chip,
     system::memory::{online::TracingMemory, MemoryAuxColsFactory, SharedMemoryHelper},
 };
 
@@ -152,7 +151,7 @@ pub struct VmChipWrapper<F, FILLER> {
 
 impl<SC, FILLER, RA> Chip<RA, CpuBackend<SC>> for VmChipWrapper<Val<SC>, FILLER>
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
     FILLER: TraceFiller<Val<SC>>,
     RA: RowMajorMatrixArena<Val<SC>>,
 {
@@ -162,7 +161,10 @@ where
         let mem_helper = self.mem_helper.as_borrowed();
         self.inner.fill_trace(&mem_helper, &mut trace, rows_used);
 
-        AirProvingContext::simple(Arc::new(trace), self.inner.generate_public_values())
+        AirProvingContext::simple(
+            ColMajorMatrix::from_row_major(&trace),
+            self.inner.generate_public_values(),
+        )
     }
 }
 

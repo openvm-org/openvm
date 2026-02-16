@@ -9,18 +9,16 @@ use openvm_circuit_primitives::{
         BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
         SharedBitwiseOperationLookupChip,
     },
-    SubAir,
+    Chip, SubAir,
 };
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     interaction::{BusIndex, InteractionBuilder},
     p3_air::{Air, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::{cpu::CpuBackend, types::AirProvingContext},
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend, MatrixDimensions},
     utils::disable_debug_builder,
-    AirRef, Chip,
+    AirRef, BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
@@ -60,7 +58,7 @@ pub struct Sha256TestChip {
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
 }
 
-impl<SC: StarkGenericConfig> Chip<RecordType, CpuBackend<SC>> for Sha256TestChip
+impl<SC: StarkProtocolConfig> Chip<RecordType, CpuBackend<SC>> for Sha256TestChip
 where
     Val<SC>: PrimeField32,
 {
@@ -71,12 +69,12 @@ where
             SHA256_WIDTH,
             records,
         );
-        AirProvingContext::simple_no_pis(Arc::new(trace))
+        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&trace))
     }
 }
 
 #[allow(clippy::type_complexity)]
-fn create_air_with_air_ctx<SC: StarkGenericConfig>() -> (
+fn create_air_with_air_ctx<SC: StarkProtocolConfig>() -> (
     (AirRef<SC>, AirProvingContext<CpuBackend<SC>>),
     (
         BitwiseOperationLookupAir<RV32_CELL_BITS>,
@@ -126,7 +124,10 @@ fn rand_sha256_test() {
 }
 
 #[test]
+#[should_panic]
 fn negative_sha256_test_bad_final_hash() {
+    use openvm_stark_backend::SystemParams;
+
     let tester = VmChipTestBuilder::default();
     let ((air, mut air_ctx), bitwise) = create_air_with_air_ctx();
 
@@ -146,19 +147,28 @@ fn negative_sha256_test_bad_final_hash() {
         });
     };
 
-    // Modify the air_ctx
-    let trace = Option::take(&mut air_ctx.common_main).unwrap();
-    let mut trace = Arc::into_inner(trace).unwrap();
+    // Modify the air_ctx: convert ColMajorMatrix to RowMajorMatrix, modify, convert back
+    let w = air_ctx.common_main.width();
+    let h = air_ctx.common_main.height();
+    let mut rm_values = F::zero_vec(w * h);
+    for r in 0..h {
+        for c in 0..w {
+            rm_values[r * w + c] = air_ctx.common_main.values[c * h + r];
+        }
+    }
+    let mut trace = RowMajorMatrix::new(rm_values, w);
     modify_trace(&mut trace);
-    air_ctx.common_main = Some(Arc::new(trace));
+    air_ctx.common_main = ColMajorMatrix::from_row_major(&trace);
 
     disable_debug_builder();
+    let mut params = SystemParams::new_for_testing(20);
+    params.max_constraint_degree = 4;
     let tester = tester
         .build()
         .load_air_proving_ctx((air, air_ctx))
         .load_periphery(bitwise)
         .finalize();
     tester
-        .simple_test()
-        .expect_err("Expected verification to fail, but it passed");
+        .simple_test_with_params(params)
+        .expect("Verification failed");
 }

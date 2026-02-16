@@ -1,22 +1,18 @@
 use std::{mem::size_of, sync::Arc};
 
-use cuda_backend_v2::{GpuBackendV2 as GpuBackend, GpuDeviceV2 as GpuDevice};
-use openvm_circuit::{system::program::ProgramExecutionCols, utils::next_power_of_two_or_zero};
-use openvm_cuda_backend::{base::DeviceMatrix, types::F};
+use openvm_circuit::{
+    primitives::Chip, system::program::ProgramExecutionCols, utils::next_power_of_two_or_zero,
+};
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend, GpuDevice};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode,
 };
-use openvm_stark_backend::prover::MatrixDimensions;
-use p3_field::PrimeCharacteristicRing;
-use stark_backend_v2::{
-    prover::{
-        AirProvingContextV2 as AirProvingContext, CommittedTraceDataV2 as CommittedTraceData,
-        TraceCommitterV2,
-    },
-    ChipV2 as Chip,
+use openvm_stark_backend::prover::{
+    AirProvingContext, CommittedTraceData, MatrixDimensions, TraceCommitter,
 };
+use p3_field::PrimeCharacteristicRing;
 
 use crate::cuda_abi::program;
 
@@ -126,9 +122,11 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
 
 #[cfg(test)]
 mod tests {
-    use cuda_backend_v2::assert_eq_host_and_device_matrix_col_maj;
     use openvm_circuit::system::program::trace::VmCommittedExe;
-    use openvm_cuda_backend::prelude::{F, SC};
+    use openvm_cuda_backend::{
+        data_transporter::assert_eq_host_and_device_matrix_col_maj,
+        prelude::{F, SC},
+    };
     use openvm_instructions::{
         exe::VmExe,
         instruction::Instruction,
@@ -141,7 +139,7 @@ mod tests {
         NativeLoadStoreOpcode::*,
     };
     use openvm_rv32im_transpiler::BranchEqualOpcode::*;
-    use stark_backend_v2::StarkEngineV2;
+    use openvm_stark_backend::StarkEngine;
 
     use super::ProgramChipGPU;
     use crate::utils::{test_cpu_engine, test_gpu_engine};

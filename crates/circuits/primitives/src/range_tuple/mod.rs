@@ -10,15 +10,15 @@ use std::{
 };
 
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir, PairBuilder},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::{cpu::CpuBackend, types::AirProvingContext},
-    rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
+
+use crate::Chip;
 
 mod bus;
 pub use bus::*;
@@ -225,27 +225,14 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
     }
 }
 
-impl<R, SC: StarkGenericConfig, const N: usize> Chip<R, CpuBackend<SC>> for RangeTupleCheckerChip<N>
+impl<R, SC: StarkProtocolConfig, const N: usize> Chip<R, CpuBackend<SC>>
+    for RangeTupleCheckerChip<N>
 where
     Val<SC>: PrimeField32,
 {
     fn generate_proving_ctx(&self, _: R) -> AirProvingContext<CpuBackend<SC>> {
-        let trace = self.generate_trace::<Val<SC>>();
-        AirProvingContext::simple_no_pis(Arc::new(trace))
-    }
-}
-
-impl<const N: usize> ChipUsageGetter for RangeTupleCheckerChip<N> {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-    fn constant_trace_height(&self) -> Option<usize> {
-        Some(self.count.len())
-    }
-    fn current_trace_height(&self) -> usize {
-        self.count.len()
-    }
-    fn trace_width(&self) -> usize {
-        N + 1
+        let trace_row_maj = self.generate_trace::<Val<SC>>();
+        let trace = ColMajorMatrix::from_row_major(&trace_row_maj);
+        AirProvingContext::simple_no_pis(trace)
     }
 }

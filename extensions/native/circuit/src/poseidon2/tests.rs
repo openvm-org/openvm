@@ -17,13 +17,16 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
+    StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
+    config::baby_bear_poseidon2::{
+        BabyBearPoseidon2Config, BabyBearPoseidon2CpuEngine as BabyBearPoseidon2Engine,
+    },
+    p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };
 use rand::{rngs::StdRng, Rng};
-use stark_backend_v2::{BabyBearPoseidon2CpuEngineV2 as BabyBearPoseidon2Engine, SystemParams};
 
 use super::air::VerifyBatchBus;
 use crate::poseidon2::{
@@ -33,7 +36,7 @@ use crate::poseidon2::{
 };
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        use openvm_cuda_backend::types::F as CudaF;
+        use openvm_cuda_backend::prelude::F as CudaF;
         use crate::poseidon2::{chip::NativePoseidon2RecordMut, NativePoseidon2ChipGpu};
     } else {
         use openvm_circuit::utils::air_test;

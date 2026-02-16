@@ -202,7 +202,7 @@ pub trait VmConfig<SC>:
     + AsRef<SystemConfig>
     + AsMut<SystemConfig>
 where
-    SC: StarkGenericConfig,
+    SC: StarkProtocolConfig,
 {
 }
 ```
@@ -221,7 +221,7 @@ pub trait VmExecutionConfig<F> {
 Finally, `VmConfig` should also implement the `VmCircuitConfig` trait which provides the AIRs for all chips in the VM. The `AirInventory` contains all AIRs required for constraining the execution trace of each chip.
 
 ```rust
-pub trait VmCircuitConfig<SC: StarkGenericConfig> {
+pub trait VmCircuitConfig<SC: StarkProtocolConfig> {
     fn create_airs(&self) -> Result<AirInventory<SC>, AirInventoryError>;
 }
 ```
@@ -236,7 +236,7 @@ Key generation is computed from the `VmConfig` describing the VM. The `VmConfig`
 which in turn provides the list of AIRs that are used in the proving and verification process.
 
 ```rust
-pub trait VmCircuitConfig<SC: StarkGenericConfig> {
+pub trait VmCircuitConfig<SC: StarkProtocolConfig> {
     fn create_airs(&self) -> Result<AirInventory<SC>, AirInventoryError>;
 }
 ```

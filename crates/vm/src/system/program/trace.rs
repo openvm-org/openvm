@@ -2,26 +2,23 @@ use std::{borrow::BorrowMut, sync::Arc};
 
 use derivative::Derivative;
 use itertools::Itertools;
-use openvm_circuit::arch::hasher::poseidon2::Poseidon2Hasher;
+use openvm_circuit::{arch::hasher::poseidon2::Poseidon2Hasher, primitives::Chip};
 use openvm_instructions::{
     exe::VmExe,
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode,
 };
 use openvm_stark_backend::{
-    config::{Com, PcsProverData, StarkGenericConfig, Val},
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
+    prover::{
+        stacked_pcs::StackedPcsData, AirProvingContext, ColMajorMatrix, CommittedTraceData,
+        CpuBackend, TraceCommitter,
+    },
+    Com, StarkEngine, StarkProtocolConfig, Val,
 };
 use serde::{Deserialize, Serialize};
-use stark_backend_v2::{
-    prover::{
-        stacked_pcs::StackedPcsData, AirProvingContextV2 as AirProvingContext, ColMajorMatrix,
-        CommittedTraceDataV2 as CommittedTraceData, CpuBackendV2 as CpuBackend, TraceCommitterV2,
-    },
-    ChipV2 as Chip, StarkEngineV2 as StarkEngine,
-};
 
 use super::{Instruction, ProgramExecutionCols, EXIT_CODE_FAIL};
 use crate::{
@@ -39,31 +36,33 @@ use crate::{
 /// matrix `trace`.
 #[derive(Serialize, Deserialize, Derivative)]
 #[serde(bound(
-    serialize = "VmExe<Val<SC>>: Serialize, Com<SC>: Serialize, PcsProverData<SC>: Serialize",
-    deserialize = "VmExe<Val<SC>>: Deserialize<'de>, Com<SC>: Deserialize<'de>, PcsProverData<SC>: Deserialize<'de>"
+    serialize = "VmExe<Val<SC>>: Serialize, Com<SC>: Serialize",
+    deserialize = "VmExe<Val<SC>>: Deserialize<'de>, Com<SC>: Deserialize<'de>"
 ))]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
-pub struct VmCommittedExe<SC: StarkGenericConfig> {
+pub struct VmCommittedExe<SC: StarkProtocolConfig> {
     /// Raw executable.
     pub exe: Arc<VmExe<Val<SC>>>,
     program_commitment: Com<SC>,
     /// Program ROM as cached trace matrix.
     pub trace: Arc<RowMajorMatrix<Val<SC>>>,
-    pub prover_data: Arc<StackedPcsData<stark_backend_v2::F, stark_backend_v2::Digest>>,
+    pub prover_data: Arc<StackedPcsData<SC::F, SC::Digest>>,
 }
 
-type SC = stark_backend_v2::SC;
-impl VmCommittedExe<SC> {
+impl<SC: StarkProtocolConfig> VmCommittedExe<SC> {
     /// Creates [VmCommittedExe] from [VmExe] by using `pcs` to commit to the
     /// program code as a _cached trace_ matrix.
-    pub fn commit<E: StarkEngine<PB = CpuBackend>>(exe: VmExe<Val<SC>>, e: &E) -> Self {
+    pub fn commit<E: StarkEngine<SC = SC, PB = CpuBackend<SC>>>(
+        exe: VmExe<Val<SC>>,
+        e: &E,
+    ) -> Self {
         let trace = generate_cached_trace(&exe.program);
         let (commit, prover_data) = e
             .device()
             .commit(&[&ColMajorMatrix::from_row_major(&trace)]);
         Self {
             exe: Arc::new(exe),
-            program_commitment: commit.into(),
+            program_commitment: commit,
             trace: Arc::new(trace),
             prover_data: Arc::new(prover_data),
         }
@@ -72,7 +71,7 @@ impl VmCommittedExe<SC> {
         self.program_commitment
     }
 
-    pub fn get_committed_trace(&self) -> CommittedTraceData<CpuBackend> {
+    pub fn get_committed_trace(&self) -> CommittedTraceData<CpuBackend<SC>> {
         CommittedTraceData {
             commitment: self.prover_data.commit(),
             data: self.prover_data.clone(),
@@ -118,10 +117,10 @@ impl VmCommittedExe<SC> {
     }
 }
 
-impl Chip<(), CpuBackend> for ProgramChip<SC> {
+impl<SC: StarkProtocolConfig> Chip<(), CpuBackend<SC>> for ProgramChip<SC> {
     /// The cached program trace is cloned and left for future use. The clone is cheap because the
     /// cached trace is behind smart pointers. The execution frequencies are left unchanged.
-    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<CpuBackend> {
+    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<CpuBackend<SC>> {
         let cached = self
             .cached
             .clone()

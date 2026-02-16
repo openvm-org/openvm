@@ -5,15 +5,15 @@ use std::{
 
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, PrimeCharacteristicRing},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::{cpu::CpuBackend, types::AirProvingContext},
-    rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
+
+use crate::Chip;
 
 mod bus;
 pub use bus::*;
@@ -231,27 +231,13 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChip<NUM_BITS> {
     }
 }
 
-impl<R, SC: StarkGenericConfig, const NUM_BITS: usize> Chip<R, CpuBackend<SC>>
+impl<R, SC: StarkProtocolConfig, const NUM_BITS: usize> Chip<R, CpuBackend<SC>>
     for BitwiseOperationLookupChip<NUM_BITS>
 {
     /// Generates trace and resets all internal counters to 0.
     fn generate_proving_ctx(&self, _: R) -> AirProvingContext<CpuBackend<SC>> {
-        let trace = self.generate_trace::<Val<SC>>();
-        AirProvingContext::simple_no_pis(Arc::new(trace))
-    }
-}
-
-impl<const NUM_BITS: usize> ChipUsageGetter for BitwiseOperationLookupChip<NUM_BITS> {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-    fn constant_trace_height(&self) -> Option<usize> {
-        Some(1 << (2 * NUM_BITS))
-    }
-    fn current_trace_height(&self) -> usize {
-        1 << (2 * NUM_BITS)
-    }
-    fn trace_width(&self) -> usize {
-        BitwiseOperationLookupCols::<u8, NUM_BITS>::width()
+        let trace_row_maj = self.generate_trace::<Val<SC>>();
+        let trace = ColMajorMatrix::from_row_major(&trace_row_maj);
+        AirProvingContext::simple_no_pis(trace)
     }
 }

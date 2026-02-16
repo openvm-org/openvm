@@ -15,9 +15,7 @@ use openvm_circuit::{
     system::memory::CHUNK,
 };
 use openvm_stark_backend::{
-    config::{Com, Val},
-    keygen::types::MultiStarkVerifyingKey,
-    p3_field::PrimeField32,
+    keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField32, Com, Val,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine,

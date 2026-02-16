@@ -8,13 +8,10 @@ use openvm_circuit::{
     },
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::{encoder::Encoder, var_range::VariableRangeCheckerChipGPU};
-use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, prover_backend::GpuBackend};
+use openvm_circuit_primitives::{encoder::Encoder, var_range::VariableRangeCheckerChipGPU, Chip};
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_stark_backend::{
-    prover::{hal::MatrixDimensions, types::AirProvingContext},
-    Chip,
-};
+use openvm_stark_backend::prover::{AirProvingContext, MatrixDimensions};
 
 use crate::cuda_abi::public_values;
 

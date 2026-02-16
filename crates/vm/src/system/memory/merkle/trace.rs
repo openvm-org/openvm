@@ -1,15 +1,10 @@
-use std::{
-    borrow::BorrowMut,
-    sync::{atomic::AtomicU32, Arc},
-};
+use std::{borrow::BorrowMut, sync::atomic::AtomicU32};
 
 use openvm_stark_backend::{
-    config::{Domain, StarkGenericConfig, Val},
-    p3_commit::PolynomialSpace,
     p3_field::PrimeField32,
     p3_matrix::dense::RowMajorMatrix,
-    prover::{cpu::CpuBackend, types::AirProvingContext},
-    ChipUsageGetter,
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    StarkProtocolConfig, Val,
 };
 use tracing::instrument;
 
@@ -48,8 +43,7 @@ where
 {
     pub fn generate_proving_ctx<SC>(&mut self) -> AirProvingContext<CpuBackend<SC>>
     where
-        SC: StarkGenericConfig,
-        Domain<SC>: PolynomialSpace<Val = F>,
+        SC: StarkProtocolConfig<F = F>,
     {
         assert!(
             self.final_state.is_some(),
@@ -85,25 +79,11 @@ where
             *trace_row.borrow_mut() = row;
         }
 
-        let trace = Arc::new(RowMajorMatrix::new(trace, width));
+        let trace = RowMajorMatrix::new(trace, width);
         let pvs = init_root.into_iter().chain(final_root).collect();
-        AirProvingContext::simple(trace, pvs)
+        AirProvingContext::simple(ColMajorMatrix::from_row_major(&trace), pvs)
     }
 }
-impl<const CHUNK: usize, F: PrimeField32> ChipUsageGetter for MemoryMerkleChip<CHUNK, F> {
-    fn air_name(&self) -> String {
-        "Merkle".to_string()
-    }
-
-    fn current_trace_height(&self) -> usize {
-        self.final_state.as_ref().map(|s| s.rows.len()).unwrap_or(0)
-    }
-
-    fn trace_width(&self) -> usize {
-        MemoryMerkleCols::<F, CHUNK>::width()
-    }
-}
-
 pub trait SerialReceiver<T> {
     fn receive(&self, msg: T);
 }

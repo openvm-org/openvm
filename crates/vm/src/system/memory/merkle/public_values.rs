@@ -1,12 +1,12 @@
 use std::io::{self, Write};
 
 use itertools::Itertools;
-use openvm_stark_backend::{p3_field::PrimeField32, p3_util::log2_strict_usize};
-use serde::{Deserialize, Serialize};
-use stark_backend_v2::{
-    codec::{Decode, Encode},
-    DIGEST_SIZE, F,
+use openvm_stark_backend::{
+    codec::{DecodableConfig, EncodableConfig},
+    p3_util::log2_strict_usize,
 };
+use p3_field::Field;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::instrument;
 
@@ -36,24 +36,6 @@ pub struct UserPublicValuesProof<const CHUNK: usize, F> {
     pub public_values_commit: [F; CHUNK],
 }
 
-impl Encode for UserPublicValuesProof<DIGEST_SIZE, F> {
-    fn encode<W: Write>(&self, writer: &mut W) -> io::Result<()> {
-        self.proof.encode(writer)?;
-        self.public_values.encode(writer)?;
-        self.public_values_commit.encode(writer)
-    }
-}
-
-impl Decode for UserPublicValuesProof<DIGEST_SIZE, F> {
-    fn decode<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-        Ok(Self {
-            proof: Vec::<[F; DIGEST_SIZE]>::decode(reader)?,
-            public_values: Vec::<F>::decode(reader)?,
-            public_values_commit: <[F; DIGEST_SIZE]>::decode(reader)?,
-        })
-    }
-}
-
 #[derive(Error, Debug)]
 pub enum UserPublicValuesProofError {
     #[error("unexpected length: {0}")]
@@ -66,7 +48,7 @@ pub enum UserPublicValuesProofError {
     FinalMemoryRootMismatch,
 }
 
-impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
+impl<const CHUNK: usize, F: Field> UserPublicValuesProof<CHUNK, F> {
     /// Computes the proof of the public values from the final memory state and the Merkle top
     /// sub-tree of address space roots. This function will re-compute the empty merkle roots of
     /// each height `0..=address_height` internally.
@@ -146,9 +128,32 @@ impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
 
         Ok(())
     }
+
+    pub fn encode<SC: EncodableConfig<F = F, Digest = [F; CHUNK]>, W: Write>(
+        &self,
+        writer: &mut W,
+    ) -> io::Result<()> {
+        SC::encode_digest_slice(&self.proof, writer)?;
+        SC::encode_base_field_slice(&self.public_values, writer)?;
+        SC::encode_digest(&self.public_values_commit, writer)?;
+        Ok(())
+    }
+
+    pub fn decode<SC: DecodableConfig<F = F, Digest = [F; CHUNK]>, R: io::Read>(
+        reader: &mut R,
+    ) -> io::Result<Self> {
+        let proof = SC::decode_digest_vec(reader)?;
+        let public_values = SC::decode_base_field_vec(reader)?;
+        let public_values_commit = SC::decode_digest(reader)?;
+        Ok(Self {
+            proof,
+            public_values,
+            public_values_commit,
+        })
+    }
 }
 
-fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: PrimeField32>(
+fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: Field>(
     memory_dimensions: MemoryDimensions,
     num_public_values: usize,
     hasher: &(impl Hasher<CHUNK, F> + Sync),

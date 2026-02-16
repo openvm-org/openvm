@@ -6,7 +6,7 @@ use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config,
     openvm_stark_backend::{
-        config::{Com, StarkGenericConfig, Val},
+        config::{Com, StarkProtocolConfig, Val},
         proof::Proof,
     },
     p3_baby_bear::BabyBear,
@@ -18,7 +18,7 @@ use static_assertions::assert_impl_all;
 #[derive(Serialize, Deserialize, Derivative)]
 #[serde(bound = "")]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
-pub struct LeafVmVerifierInput<SC: StarkGenericConfig> {
+pub struct LeafVmVerifierInput<SC: StarkProtocolConfig> {
     /// The proofs of the VM execution segments in the execution order.
     pub proofs: Vec<Proof<SC>>,
     /// The public values root proof. Leaf VM verifier only needs this when verifying the last
@@ -39,7 +39,7 @@ pub struct UserPublicValuesRootProof<F> {
 }
 assert_impl_all!(UserPublicValuesRootProof<BabyBear>: Serialize, DeserializeOwned);
 
-impl<SC: StarkGenericConfig> LeafVmVerifierInput<SC> {
+impl<SC: StarkProtocolConfig> LeafVmVerifierInput<SC> {
     pub fn chunk_continuation_vm_proof(proof: &ContinuationVmProof<SC>, chunk: usize) -> Vec<Self> {
         let ContinuationVmProof {
             per_segment,

@@ -22,14 +22,11 @@ use openvm_native_compiler::{
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_rv32im_circuit::BranchEqualCoreAir;
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     p3_field::PrimeField32,
+    prover::{CpuBackend, CpuDevice},
+    StarkEngine, StarkProtocolConfig, Val,
 };
 use serde::{Deserialize, Serialize};
-use stark_backend_v2::{
-    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
-    StarkEngineV2 as StarkEngine,
-};
 use strum::IntoEnumIterator;
 
 use crate::{
@@ -206,7 +203,7 @@ impl<F: VmField> VmExecutionExtension<F> for Native {
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Native
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Native
 where
     Val<SC>: VmField,
 {
@@ -277,17 +274,18 @@ where
 pub struct NativeCpuProverExt;
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, RA> VmProverExtension<E, RA, Native> for NativeCpuProverExt
+impl<SC, E, RA> VmProverExtension<E, RA, Native> for NativeCpuProverExt
 where
-    E::SC: StarkGenericConfig,
-    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
-    RA: RowMajorMatrixArena<Val<E::SC>>,
-    Val<E::SC>: VmField,
+    SC: StarkProtocolConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    RA: RowMajorMatrixArena<Val<SC>>,
+    Val<SC>: VmField,
+    SC::EF: Ord,
 {
     fn extend_prover(
         &self,
         _: &Native,
-        inventory: &mut ChipInventory<E::SC, RA, CpuBackend>,
+        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -343,7 +341,7 @@ where
             FriReducedOpeningChip::new(FriReducedOpeningFiller::new(), mem_helper.clone());
         inventory.add_executor_chip(fri_reduced_opening);
 
-        inventory.next_air::<NativePoseidon2Air<Val<E::SC>, 1>>()?;
+        inventory.next_air::<NativePoseidon2Air<Val<SC>, 1>>()?;
         let poseidon2 = NativePoseidon2Chip::<_, 1>::new(
             NativePoseidon2Filler::new(Poseidon2Config::default()),
             mem_helper.clone(),
@@ -529,7 +527,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for CastFExtension {
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for CastFExtension {
+impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for CastFExtension {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
@@ -548,17 +546,18 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for CastFExtension {
     }
 }
 
-impl<E, RA> VmProverExtension<E, RA, CastFExtension> for NativeCpuProverExt
+impl<SC, E, RA> VmProverExtension<E, RA, CastFExtension> for NativeCpuProverExt
 where
-    E::SC: StarkGenericConfig,
-    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
-    RA: RowMajorMatrixArena<Val<E::SC>>,
-    Val<E::SC>: PrimeField32,
+    SC: StarkProtocolConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    RA: RowMajorMatrixArena<Val<SC>>,
+    Val<SC>: PrimeField32,
+    SC::EF: Ord,
 {
     fn extend_prover(
         &self,
         _: &CastFExtension,
-        inventory: &mut ChipInventory<E::SC, RA, CpuBackend>,
+        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
