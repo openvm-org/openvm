@@ -27,6 +27,9 @@ template <typename T> struct StackingClaimsCols {
     T mu[D_EF];
     T mu_pow[D_EF];
 
+    T mu_pow_witness;
+    T mu_pow_sample;
+
     T stacking_claim[D_EF];
     T claim_coefficient[D_EF];
 
@@ -44,6 +47,8 @@ struct StackingClaim {
 struct ClaimsRecordsPerProof {
     uint32_t initial_tidx;
     FpExt mu;
+    Fp mu_pow_witness;
+    Fp mu_pow_sample;
 };
 
 template <size_t NUM_PROOFS>
@@ -88,7 +93,7 @@ __global__ void stacking_claims_tracegen(
     StackingClaim claim = claims[proof_idx][row_idx];
     FpExt coeff = coeffs[proof_idx][row_idx];
     FpExt mu_pow = mu_pows[proof_idx][row_idx];
-    auto [initial_tidx, mu] = records[proof_idx];
+    auto [initial_tidx, mu, mu_pow_witness, mu_pow_sample] = records[proof_idx];
 
     COL_WRITE_VALUE(row, StackingClaimsCols, commit_idx, claim.commit_idx);
     COL_WRITE_VALUE(row, StackingClaimsCols, stacked_col_idx, claim.stacked_col_idx);
@@ -96,6 +101,9 @@ __global__ void stacking_claims_tracegen(
     COL_WRITE_VALUE(row, StackingClaimsCols, tidx, initial_tidx + (row_idx * D_EF));
     COL_WRITE_ARRAY(row, StackingClaimsCols, mu, mu.elems);
     COL_WRITE_ARRAY(row, StackingClaimsCols, mu_pow, mu_pow.elems);
+
+    COL_WRITE_VALUE(row, StackingClaimsCols, mu_pow_witness, mu_pow_witness);
+    COL_WRITE_VALUE(row, StackingClaimsCols, mu_pow_sample, mu_pow_sample);
 
     COL_WRITE_ARRAY(row, StackingClaimsCols, stacking_claim, claim.claim.elems);
     COL_WRITE_ARRAY(row, StackingClaimsCols, claim_coefficient, coeff.elems);
