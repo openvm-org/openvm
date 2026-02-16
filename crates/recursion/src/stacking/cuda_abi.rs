@@ -64,6 +64,8 @@ pub struct StackingClaim {
 pub struct ClaimsRecordsPerProof {
     pub initial_tidx: u32,
     pub mu: EF,
+    pub mu_pow_witness: F,
+    pub mu_pow_sample: F,
 }
 
 extern "C" {

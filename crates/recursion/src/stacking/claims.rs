@@ -11,7 +11,8 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{D_EF, EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    extension::BinomiallyExtendable, BasedVectorSpace, PrimeCharacteristicRing, PrimeField32,
+    extension::BinomiallyExtendable, BasedVectorSpace, Field, PrimeCharacteristicRing,
+    PrimeField32,
 };
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -21,6 +22,7 @@ use crate::{
         StackingIndexMessage, StackingIndicesBus, TranscriptBus, TranscriptBusMessage,
         WhirModuleBus, WhirModuleMessage,
     },
+    primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage},
     stacking::{
         bus::{
             ClaimCoefficientsBus, ClaimCoefficientsMessage, StackingModuleTidxBus,
@@ -54,6 +56,10 @@ pub struct StackingClaimsCols<F> {
     pub mu: [F; D_EF],
     pub mu_pow: [F; D_EF],
 
+    // μ PoW witness and sample for proof-of-work check
+    pub mu_pow_witness: F,
+    pub mu_pow_sample: F,
+
     // Stacking claim and batched coefficient computed in OpeningClaimsCols
     pub stacking_claim: [F; D_EF],
     pub claim_coefficient: [F; D_EF],
@@ -73,6 +79,7 @@ pub struct StackingClaimsAir {
     pub stacking_indices_bus: StackingIndicesBus,
     pub whir_module_bus: WhirModuleBus,
     pub transcript_bus: TranscriptBus,
+    pub exp_bits_len_bus: ExpBitsLenBus,
 
     // Internal buses
     pub stacking_tidx_bus: StackingModuleTidxBus,
@@ -80,6 +87,8 @@ pub struct StackingClaimsAir {
     pub sumcheck_claims_bus: SumcheckClaimsBus,
 
     pub stacking_index_mult: usize,
+    /// Number of PoW bits for μ batching challenge.
+    pub mu_pow_bits: usize,
 }
 
 impl BaseAirWithPublicValues<F> for StackingClaimsAir {}
@@ -221,6 +230,7 @@ where
             .assert_eq(local.tidx + AB::F::from_usize(D_EF), next.tidx);
 
         for i in 0..D_EF {
+            // Observe stacking_claim at tidx + 0..D_EF
             self.transcript_bus.receive(
                 builder,
                 local.proof_idx,
@@ -232,17 +242,54 @@ where
                 local.is_valid,
             );
 
+            // Sample μ at tidx + D_EF + 2 + i (after μ PoW observe/sample)
             self.transcript_bus.receive(
                 builder,
                 local.proof_idx,
                 TranscriptBusMessage {
-                    tidx: AB::Expr::from_usize(i + D_EF) + local.tidx,
+                    tidx: AB::Expr::from_usize(i + D_EF + 2) + local.tidx,
                     value: local.mu[i].into(),
                     is_sample: AB::Expr::ONE,
                 },
                 and(local.is_last, local.is_valid),
             );
         }
+
+        // μ PoW: observe mu_pow_witness at tidx + D_EF (on last row only)
+        self.transcript_bus.receive(
+            builder,
+            local.proof_idx,
+            TranscriptBusMessage {
+                tidx: AB::Expr::from_usize(D_EF) + local.tidx,
+                value: local.mu_pow_witness.into(),
+                is_sample: AB::Expr::ZERO,
+            },
+            and(local.is_last, local.is_valid),
+        );
+
+        // μ PoW: sample mu_pow_sample at tidx + D_EF + 1 (on last row only)
+        self.transcript_bus.receive(
+            builder,
+            local.proof_idx,
+            TranscriptBusMessage {
+                tidx: AB::Expr::from_usize(D_EF + 1) + local.tidx,
+                value: local.mu_pow_sample.into(),
+                is_sample: AB::Expr::ONE,
+            },
+            and(local.is_last, local.is_valid),
+        );
+
+        // μ PoW check: g^{mu_pow_sample[0:mu_pow_bits]} = 1
+        self.exp_bits_len_bus.lookup_key(
+            builder,
+            ExpBitsLenMessage {
+                base: AB::F::GENERATOR.into(),
+                bit_src: local.mu_pow_sample.into(),
+                num_bits: AB::Expr::from_usize(self.mu_pow_bits),
+                result: AB::Expr::ONE,
+            },
+            and(local.is_last, local.is_valid),
+        );
 
         /*
          * Compute the RLC of the stacking claims and send it to the WHIR module.
@@ -270,11 +317,13 @@ where
             next.whir_claim,
         );
 
+        // Send to WHIR module with tidx after all transcript operations
+        // (D_EF observe + 1 μ_pow observe + 1 μ_pow sample + D_EF μ sample = 2*D_EF + 2)
         self.whir_module_bus.send(
             builder,
             local.proof_idx,
             WhirModuleMessage {
-                tidx: AB::Expr::from_usize(2 * D_EF) + local.tidx,
+                tidx: AB::Expr::from_usize(2 * D_EF + 2) + local.tidx,
                 mu: local.mu.map(Into::into),
                 claim: local.whir_claim.map(Into::into),
             },
@@ -362,6 +411,10 @@ impl RowMajorChip<F> for StackingClaimsTraceGenerator {
             let mu = preflight.stacking.stacking_batching_challenge;
             let mu_pows = mu.powers().take(claims.len()).collect_vec();
 
+            // μ PoW witness and sample from preflight
+            let mu_pow_witness = preflight.stacking.mu_pow_witness;
+            let mu_pow_sample = preflight.stacking.mu_pow_sample;
+
             let mut final_s_eval = EF::ZERO;
             let mut whir_claim = EF::ZERO;
 
@@ -386,6 +439,11 @@ impl RowMajorChip<F> for StackingClaimsTraceGenerator {
 
                 cols.stacking_claim
                     .copy_from_slice(claim.as_basis_coefficients_slice());
+
+                // μ PoW columns (only used on last row, but set for all rows for simplicity)
+                cols.mu_pow_witness = mu_pow_witness;
+                cols.mu_pow_sample = mu_pow_sample;
+
                 cols.claim_coefficient
                     .copy_from_slice(coeff.as_basis_coefficients_slice());
                 final_s_eval += claim * coeff;
@@ -504,6 +562,8 @@ pub(crate) mod cuda {
                 .map(|preflight| ClaimsRecordsPerProof {
                     initial_tidx: preflight.cpu.stacking.intermediate_tidx[2] as u32,
                     mu: preflight.cpu.stacking.stacking_batching_challenge,
+                    mu_pow_witness: preflight.cpu.stacking.mu_pow_witness,
+                    mu_pow_sample: preflight.cpu.stacking.mu_pow_sample,
                 })
                 .collect_vec()
                 .to_device()
