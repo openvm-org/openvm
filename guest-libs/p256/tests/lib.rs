@@ -105,9 +105,7 @@ mod guest_tests {
         use {
             openvm_circuit::{
                 arch::DenseRecordArena,
-                openvm_cuda_backend::{
-                    engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend,
-                },
+                openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend},
                 system::cuda::SystemChipInventoryGPU,
             },
             openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config,
@@ -160,6 +158,7 @@ mod guest_tests {
             SC: StarkProtocolConfig,
             E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
             Val<SC>: VmField,
+            SC::EF: Ord,
         {
             type VmConfig = EcdsaConfig;
             type SystemChipInventory = SystemChipInventory<SC>;
@@ -189,7 +188,7 @@ mod guest_tests {
         }
 
         #[cfg(feature = "cuda")]
-        impl VmBuilder<GpuBabyBearPoseidon2Engine> for EcdsaBuilder {
+        impl VmBuilder<BabyBearPoseidon2GpuEngine> for EcdsaBuilder {
             type VmConfig = EcdsaConfig;
             type SystemChipInventory = SystemChipInventoryGPU;
             type RecordArena = DenseRecordArena;
@@ -208,13 +207,13 @@ mod guest_tests {
                 ChipInventoryError,
             > {
                 let mut chip_complex =
-                    VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
+                    VmBuilder::<BabyBearPoseidon2GpuEngine>::create_chip_complex(
                         &Rv32WeierstrassBuilder,
                         &config.weierstrass,
                         circuit,
                     )?;
                 let inventory = &mut chip_complex.inventory;
-                VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+                VmProverExtension::<BabyBearPoseidon2GpuEngine, _, _>::extend_prover(
                     &Sha256ProverExt,
                     &config.sha256,
                     inventory,
