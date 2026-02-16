@@ -1,17 +1,17 @@
 use core::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit_primitives::{SubAir, encoder::Encoder};
+use openvm_circuit_primitives::{encoder::Encoder, SubAir};
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, keygen::types::MultiStarkVerifyingKey, proof::Proof,
+    BaseAirWithPublicValues, PartitionedBaseAir,
+};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{
+    BabyBearPoseidon2Config, DIGEST_SIZE, D_EF, F,
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, extension::BinomiallyExtendable};
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_field::{extension::BinomiallyExtendable, BasedVectorSpace, PrimeCharacteristicRing};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{
-    D_EF, DIGEST_SIZE, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof,
-};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -94,7 +94,7 @@ impl<F> BaseAir<F> for WhirRoundAir {
 
 impl<AB: AirBuilder<F = F> + InteractionBuilder> Air<AB> for WhirRoundAir
 where
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     fn eval(&self, builder: &mut AB) {
         match self.whir_round_encoder.width() {
@@ -111,7 +111,7 @@ impl WhirRoundAir {
         &self,
         builder: &mut AB,
     ) where
-        <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
+        <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
     {
         let main = builder.main();
 
@@ -378,8 +378,8 @@ impl RowMajorChip<F> for WhirRoundTraceGenerator {
 }
 
 fn generate_trace_impl<const ENC_WIDTH: usize>(
-    mvk: &MultiStarkVerifyingKeyV2,
-    proofs: &[&Proof],
+    mvk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+    proofs: &[&Proof<BabyBearPoseidon2Config>],
     preflights: &[&Preflight],
     whir_round_encoder: &Encoder,
     required_height: Option<usize>,

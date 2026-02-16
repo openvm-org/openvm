@@ -1,10 +1,10 @@
 use core::borrow::BorrowMut;
 
-use openvm_circuit_primitives::{TraceSubRowGenerator, is_zero::IsZeroSubAir};
+use openvm_circuit_primitives::{is_zero::IsZeroSubAir, TraceSubRowGenerator};
 use openvm_stark_backend::p3_maybe_rayon::prelude::*;
+use openvm_stark_sdk::config::baby_bear_poseidon2::{EF, F};
 use p3_field::{BasedVectorSpace, PrimeCharacteristicRing};
 use p3_matrix::dense::RowMajorMatrix;
-use stark_backend_v2::{EF, F};
 
 use super::GkrInputCols;
 use crate::tracegen::RowMajorChip;

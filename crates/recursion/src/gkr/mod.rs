@@ -5,15 +5,15 @@
 //! random point. This is done through a layer-by-layer recursive reduction, where each layer uses a
 //! sumcheck protocol.
 //!
-//! The GKR Air Module verifies the [`GkrProof`](stark_backend_v2::proof::GkrProof) struct and
+//! The GKR Air Module verifies the [`GkrProof`](openvm_stark_backend::proof::GkrProof) struct and
 //! consists of four AIRs:
 //!
 //! 1. **GkrInputAir** - Handles initial setup, coordinates other AIRs, and sends final claims to
 //!    batch constraint module
 //! 2. **GkrLayerAir** - Manages layer-by-layer GKR reduction (verifies
-//!    [`verify_gkr`](stark_backend_v2::verifier::fractional_sumcheck_gkr::verify_gkr))
+//!    [`verify_gkr`](openvm_stark_backend::verifier::fractional_sumcheck_gkr::verify_gkr))
 //! 3. **GkrLayerSumcheckAir** - Executes sumcheck protocol for each layer (verifies
-//!    [`verify_gkr_sumcheck`](stark_backend_v2::verifier::fractional_sumcheck_gkr::verify_gkr_sumcheck))
+//!    [`verify_gkr_sumcheck`](openvm_stark_backend::verifier::fractional_sumcheck_gkr::verify_gkr_sumcheck))
 //! 4. **GkrXiSamplerAir** - Samples additional xi randomness challenges if required
 //!
 //! ## Architecture
@@ -62,18 +62,17 @@ use core::iter::zip;
 use std::sync::Arc;
 
 use itertools::Itertools;
-use openvm_stark_backend::{AirRef, p3_maybe_rayon::prelude::*};
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use openvm_stark_backend::{
+    keygen::types::MultiStarkVerifyingKey,
+    p3_maybe_rayon::prelude::*,
+    poly_common::{interpolate_cubic_at_0123, interpolate_linear_at_01},
+    proof::{GkrProof, Proof},
+    prover::{AirProvingContext, CpuBackend},
+    AirRef, FiatShamirTranscript, ReadOnlyTranscript, TranscriptHistory,
+};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, D_EF, EF, F};
 use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::dense::RowMajorMatrix;
-use stark_backend_v2::{
-    D_EF, EF, F,
-    keygen::types::MultiStarkVerifyingKeyV2,
-    poly_common::{interpolate_cubic_at_0123, interpolate_linear_at_01},
-    poseidon2::sponge::{FiatShamirTranscript, ReadOnlyTranscript, TranscriptHistory},
-    proof::{GkrProof, Proof},
-    prover::{AirProvingContextV2, CpuBackendV2},
-};
 use strum::EnumCount;
 
 use crate::{
@@ -131,7 +130,7 @@ struct GkrBlobCpu {
 
 impl GkrModule {
     pub fn new(
-        mvk: &MultiStarkVerifyingKeyV2,
+        mvk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         b: &mut BusIndexManager,
         bus_inventory: BusInventory,
     ) -> Self {
@@ -149,9 +148,13 @@ impl GkrModule {
     }
 
     #[tracing::instrument(level = "trace", skip_all)]
-    pub fn run_preflight<TS>(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS)
-    where
-        TS: FiatShamirTranscript + TranscriptHistory,
+    pub fn run_preflight<TS>(
+        &self,
+        proof: &Proof<BabyBearPoseidon2Config>,
+        preflight: &mut Preflight,
+        ts: &mut TS,
+    ) where
+        TS: FiatShamirTranscript<BabyBearPoseidon2Config> + TranscriptHistory,
     {
         let GkrProof {
             q0_claim,
@@ -308,8 +311,8 @@ impl GkrModule {
     #[tracing::instrument(skip_all)]
     fn generate_blob(
         &self,
-        _child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[&Proof],
+        _child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proofs: &[&Proof<BabyBearPoseidon2Config>],
         preflights: &[&Preflight],
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
     ) -> GkrBlobCpu {
@@ -332,13 +335,19 @@ impl GkrModule {
                     logup_pow_witness,
                 } = gkr_proof;
 
-                ts.observe(*logup_pow_witness);
-                let logup_pow_sample = ts.sample();
+                FiatShamirTranscript::<BabyBearPoseidon2Config>::observe(
+                    &mut ts,
+                    *logup_pow_witness,
+                );
+                let logup_pow_sample =
+                    FiatShamirTranscript::<BabyBearPoseidon2Config>::sample(&mut ts);
 
                 exp_bits_len_gen.add_request(F::GENERATOR, logup_pow_sample, self.logup_pow_bits);
 
-                let alpha_logup = ts.sample_ext();
-                let _beta_logup = ts.sample_ext();
+                let alpha_logup =
+                    FiatShamirTranscript::<BabyBearPoseidon2Config>::sample_ext(&mut ts);
+                let _beta_logup =
+                    FiatShamirTranscript::<BabyBearPoseidon2Config>::sample_ext(&mut ts);
 
                 let xi = &preflight.gkr.xi;
 
@@ -391,13 +400,27 @@ impl GkrModule {
                 let mut denom_claim = EF::ONE;
 
                 if let Some(root_claims) = claims_per_layer.first() {
-                    ts.observe_ext(*q0_claim);
-                    ts.observe_ext(root_claims.p_xi_0);
-                    ts.observe_ext(root_claims.q_xi_0);
-                    ts.observe_ext(root_claims.p_xi_1);
-                    ts.observe_ext(root_claims.q_xi_1);
+                    FiatShamirTranscript::<BabyBearPoseidon2Config>::observe_ext(
+                        &mut ts, *q0_claim,
+                    );
+                    FiatShamirTranscript::<BabyBearPoseidon2Config>::observe_ext(
+                        &mut ts,
+                        root_claims.p_xi_0,
+                    );
+                    FiatShamirTranscript::<BabyBearPoseidon2Config>::observe_ext(
+                        &mut ts,
+                        root_claims.q_xi_0,
+                    );
+                    FiatShamirTranscript::<BabyBearPoseidon2Config>::observe_ext(
+                        &mut ts,
+                        root_claims.p_xi_1,
+                    );
+                    FiatShamirTranscript::<BabyBearPoseidon2Config>::observe_ext(
+                        &mut ts,
+                        root_claims.q_xi_1,
+                    );
 
-                    let mu = ts.sample_ext();
+                    let mu = FiatShamirTranscript::<BabyBearPoseidon2Config>::sample_ext(&mut ts);
                     numer_claim =
                         interpolate_linear_at_01(&[root_claims.p_xi_0, root_claims.p_xi_1], mu);
                     denom_claim =
@@ -415,7 +438,8 @@ impl GkrModule {
                 }
 
                 for (polys, claims) in sumcheck_polys.iter().zip(claims_per_layer.iter().skip(1)) {
-                    let lambda = ts.sample_ext();
+                    let lambda =
+                        FiatShamirTranscript::<BabyBearPoseidon2Config>::sample_ext(&mut ts);
                     layer_record.lambdas.push(lambda);
 
                     let mut claim = numer_claim + lambda * denom_claim;
@@ -426,10 +450,13 @@ impl GkrModule {
 
                     for (round_idx, poly) in polys.iter().enumerate() {
                         for eval in poly {
-                            ts.observe_ext(*eval);
+                            FiatShamirTranscript::<BabyBearPoseidon2Config>::observe_ext(
+                                &mut ts, *eval,
+                            );
                         }
 
-                        let ri = ts.sample_ext();
+                        let ri =
+                            FiatShamirTranscript::<BabyBearPoseidon2Config>::sample_ext(&mut ts);
                         let prev_challenge = gkr_r[round_idx];
 
                         let ev0 = claim - poly[0];
@@ -447,12 +474,24 @@ impl GkrModule {
 
                     layer_record.eq_at_r_primes.push(eq_at_r_prime);
 
-                    ts.observe_ext(claims.p_xi_0);
-                    ts.observe_ext(claims.q_xi_0);
-                    ts.observe_ext(claims.p_xi_1);
-                    ts.observe_ext(claims.q_xi_1);
+                    FiatShamirTranscript::<BabyBearPoseidon2Config>::observe_ext(
+                        &mut ts,
+                        claims.p_xi_0,
+                    );
+                    FiatShamirTranscript::<BabyBearPoseidon2Config>::observe_ext(
+                        &mut ts,
+                        claims.q_xi_0,
+                    );
+                    FiatShamirTranscript::<BabyBearPoseidon2Config>::observe_ext(
+                        &mut ts,
+                        claims.p_xi_1,
+                    );
+                    FiatShamirTranscript::<BabyBearPoseidon2Config>::observe_ext(
+                        &mut ts,
+                        claims.q_xi_1,
+                    );
 
-                    let mu = ts.sample_ext();
+                    let mu = FiatShamirTranscript::<BabyBearPoseidon2Config>::sample_ext(&mut ts);
                     numer_claim = interpolate_linear_at_01(&[claims.p_xi_0, claims.p_xi_1], mu);
                     denom_claim = interpolate_linear_at_01(&[claims.q_xi_0, claims.q_xi_1], mu);
 
@@ -513,18 +552,18 @@ impl GkrModule {
     }
 }
 
-impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for GkrModule {
+impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for GkrModule {
     type ModuleSpecificCtx = ExpBitsLenTraceGenerator;
 
     #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
         &self,
-        child_vk: &MultiStarkVerifyingKeyV2,
-        proofs: &[Proof],
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proofs: &[Proof<BabyBearPoseidon2Config>],
         preflights: &[Preflight],
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
         required_heights: Option<&[usize]>,
-    ) -> Option<Vec<AirProvingContextV2<CpuBackendV2>>> {
+    ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
         let proof_refs = proofs.iter().collect_vec();
         let preflight_refs = preflights.iter().collect_vec();
         let blob = self.generate_blob(child_vk, &proof_refs, &preflight_refs, exp_bits_len_gen);
@@ -604,17 +643,17 @@ impl RowMajorChip<F> for GkrModuleChip {
 
 #[cfg(feature = "cuda")]
 mod cuda_tracegen {
-    use cuda_backend_v2::GpuBackendV2;
     use itertools::Itertools;
+    use openvm_cuda_backend::GpuBackend;
     use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 
     use super::*;
     use crate::{
-        cuda::{GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
+        cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu, GlobalCtxGpu},
         tracegen::cuda::generate_gpu_proving_ctx,
     };
 
-    impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for GkrModule {
+    impl TraceGenModule<GlobalCtxGpu, GpuBackend> for GkrModule {
         type ModuleSpecificCtx = ExpBitsLenTraceGenerator;
 
         #[tracing::instrument(skip_all)]
@@ -625,7 +664,7 @@ mod cuda_tracegen {
             preflights: &[PreflightGpu],
             exp_bits_len_gen: &ExpBitsLenTraceGenerator,
             required_heights: Option<&[usize]>,
-        ) -> Option<Vec<AirProvingContextV2<GpuBackendV2>>> {
+        ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             let proofs_cpu = proofs.iter().map(|proof| &proof.cpu).collect_vec();
             let preflights_cpu = preflights
                 .iter()

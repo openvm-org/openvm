@@ -1,9 +1,10 @@
 use std::iter::once;
 
-use cuda_backend_v2::EF;
 use itertools::Itertools;
+use openvm_cuda_backend::prelude::EF;
 use openvm_cuda_common::d_buffer::DeviceBuffer;
-use stark_backend_v2::{Digest, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
+use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, proof::Proof};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, Digest};
 
 use crate::{
     cuda::{
@@ -76,7 +77,11 @@ pub struct WhirPreflightGpu {
 }
 
 impl PreflightGpu {
-    pub fn new(vk: &MultiStarkVerifyingKeyV2, proof: &Proof, preflight: &Preflight) -> Self {
+    pub fn new(
+        vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proof: &Proof<BabyBearPoseidon2Config>,
+        preflight: &Preflight,
+    ) -> Self {
         PreflightGpu {
             cpu: preflight.clone(),
             transcript: Self::transcript(preflight),
@@ -93,8 +98,8 @@ impl PreflightGpu {
     }
 
     fn proof_shape(
-        vk: &MultiStarkVerifyingKeyV2,
-        proof: &Proof,
+        vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proof: &Proof<BabyBearPoseidon2Config>,
         preflight: &Preflight,
     ) -> ProofShapePreflightGpu {
         let mut sorted_cached_commits: Vec<Digest> = vec![];

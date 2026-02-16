@@ -1,9 +1,10 @@
 use std::borrow::BorrowMut;
 
+use openvm_stark_backend::proof::Proof;
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, D_EF, EF, F};
 use p3_field::{BasedVectorSpace, Field, PrimeCharacteristicRing, PrimeField32};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{D_EF, EF, F, proof::Proof};
 
 use super::ExpressionClaimCols;
 use crate::{
@@ -33,7 +34,7 @@ pub struct ExpressionClaimTraceGenerator;
 
 pub(crate) struct ExpressionClaimCtx<'a> {
     pub blob: &'a ExpressionClaimBlob,
-    pub proofs: &'a [&'a Proof],
+    pub proofs: &'a [&'a Proof<BabyBearPoseidon2Config>],
     pub preflights: &'a [&'a Preflight],
     pub pow_checker: &'a PowerCheckerTraceGenerator<2, 32>,
 }

@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use openvm_cuda_common::d_buffer::DeviceBuffer;
-use stark_backend_v2::{keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
+use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, proof::Proof};
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use crate::cuda::{to_device_or_nullptr, types::PublicValueData};
 
@@ -14,7 +15,7 @@ pub struct ProofGpu {
     // TODO[TEMP]: cpu proof for hybrid usage; remove this when no longer needed
     // If you need something from `cpu` for actual cuda tracegen, move it to a direct field of
     // ProofGpu. Host and/or device types allowed.
-    pub cpu: Proof,
+    pub cpu: Proof<BabyBearPoseidon2Config>,
     pub proof_shape: ProofShapeProofGpu,
     pub gkr: GkrProofGpu,
     pub batch_constraint: BatchConstraintProofGpu,
@@ -48,7 +49,10 @@ pub struct WhirProofGpu {
 }
 
 impl ProofGpu {
-    pub fn new(vk: &MultiStarkVerifyingKeyV2, proof: &Proof) -> Self {
+    pub fn new(
+        vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proof: &Proof<BabyBearPoseidon2Config>,
+    ) -> Self {
         ProofGpu {
             cpu: proof.clone(),
             proof_shape: Self::proof_shape(vk, proof),
@@ -59,7 +63,10 @@ impl ProofGpu {
         }
     }
 
-    fn proof_shape(_vk: &MultiStarkVerifyingKeyV2, proof: &Proof) -> ProofShapeProofGpu {
+    fn proof_shape(
+        _vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        proof: &Proof<BabyBearPoseidon2Config>,
+    ) -> ProofShapeProofGpu {
         let num_airs = proof.public_values.len();
         let public_values = proof
             .public_values
@@ -84,19 +91,19 @@ impl ProofGpu {
         }
     }
 
-    fn gkr(_proof: &Proof) -> GkrProofGpu {
+    fn gkr(_proof: &Proof<BabyBearPoseidon2Config>) -> GkrProofGpu {
         GkrProofGpu { _dummy: 0 }
     }
 
-    fn batch_constraint(_proof: &Proof) -> BatchConstraintProofGpu {
+    fn batch_constraint(_proof: &Proof<BabyBearPoseidon2Config>) -> BatchConstraintProofGpu {
         BatchConstraintProofGpu { _dummy: 0 }
     }
 
-    fn stacking(_proof: &Proof) -> StackingProofGpu {
+    fn stacking(_proof: &Proof<BabyBearPoseidon2Config>) -> StackingProofGpu {
         StackingProofGpu { _dummy: 0 }
     }
 
-    fn whir(_proof: &Proof) -> WhirProofGpu {
+    fn whir(_proof: &Proof<BabyBearPoseidon2Config>) -> WhirProofGpu {
         WhirProofGpu { _dummy: 0 }
     }
 }

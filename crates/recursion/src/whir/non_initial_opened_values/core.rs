@@ -1,19 +1,16 @@
 use core::borrow::{Borrow, BorrowMut};
 use std::array::from_fn;
 
-use openvm_circuit_primitives::{SubAir, utils::assert_array_eq};
+use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
+use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{CHUNK, D_EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, TwoAdicField};
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{
-    D_EF, F,
-    poseidon2::{CHUNK, WIDTH},
-};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -199,7 +196,7 @@ where
             local.is_enabled,
         );
 
-        let pre_state: [AB::Expr; WIDTH] = from_fn(|i| {
+        let pre_state: [AB::Expr; POSEIDON2_WIDTH] = from_fn(|i| {
             if i < D_EF {
                 local.value[i].into()
             } else {

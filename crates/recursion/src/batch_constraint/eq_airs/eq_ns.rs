@@ -1,38 +1,38 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit_primitives::{
-    SubAir,
     utils::{assert_array_eq, not},
+    SubAir,
 };
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, keygen::types::MultiStarkVerifyingKey,
+    BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, D_EF, EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{BasedVectorSpace, PrimeCharacteristicRing, extension::BinomiallyExtendable};
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_field::{extension::BinomiallyExtendable, BasedVectorSpace, PrimeCharacteristicRing};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::{
     IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator, ParallelSliceMut,
 };
-use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     batch_constraint::{
-        SelectorCount,
         bus::{
             BatchConstraintConductorBus, BatchConstraintConductorMessage,
             BatchConstraintInnerMessageType, EqNOuterBus, EqNOuterMessage, EqZeroNBus,
             EqZeroNMessage,
         },
+        SelectorCount,
     },
     bus::{SelHypercubeBus, SelHypercubeBusMessage, XiRandomnessBus, XiRandomnessMessage},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     tracegen::RowMajorChip,
     utils::{
-        MultiVecWithBounds, base_to_ext, ext_field_add, ext_field_multiply,
-        ext_field_multiply_scalar, ext_field_one_minus, ext_field_subtract,
+        base_to_ext, ext_field_add, ext_field_multiply, ext_field_multiply_scalar,
+        ext_field_one_minus, ext_field_subtract, MultiVecWithBounds,
     },
 };
 
@@ -101,7 +101,7 @@ impl<F> BaseAir<F> for EqNsAir {
 
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for EqNsAir
 where
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -331,7 +331,7 @@ pub struct EqNsTraceGenerator;
 
 impl RowMajorChip<F> for EqNsTraceGenerator {
     type Ctx<'a> = (
-        &'a MultiStarkVerifyingKeyV2,
+        &'a MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         &'a [&'a Preflight],
         &'a MultiVecWithBounds<SelectorCount, 1>,
     );

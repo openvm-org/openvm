@@ -1,8 +1,8 @@
 use clap::Args;
 use openvm_sdk_config::SdkVmConfig;
+use openvm_stark_backend::{SystemParams, WhirConfig, WhirParams};
 use openvm_stark_sdk::config::log_up_params::log_up_security_params_baby_bear_100_bits;
 use serde::{Deserialize, Serialize};
-use stark_backend_v2::{SystemParams, WhirConfig, WhirParams};
 
 pub const DEFAULT_APP_L_SKIP: usize = 4;
 pub const DEFAULT_APP_LOG_BLOWUP: usize = 1;
@@ -173,7 +173,7 @@ pub fn generic_system_params(
     }
 }
 
-// TODO: move to stark-backend-v2
+// TODO: move to openvm-stark-backend
 const WHIR_MAX_LOG_FINAL_POLY_LEN: usize = 10;
 const WHIR_POW_BITS: usize = 20;
 const SECURITY_LEVEL: usize = 100;

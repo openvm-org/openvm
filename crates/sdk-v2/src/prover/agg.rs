@@ -3,7 +3,7 @@ use std::sync::Arc;
 use continuations_v2::aggregation::ChildVkKind;
 use eyre::Result;
 use openvm_circuit::arch::ContinuationVmProof;
-use stark_backend_v2::{SC, keygen::types::MultiStarkVerifyingKeyV2};
+use openvm_stark_backend::keygen::types::MultiStarkVerifyingKey;
 use tracing::info_span;
 use verify_stark::NonRootStarkProof;
 
@@ -12,15 +12,16 @@ use crate::{
         AggregationConfig, AggregationTreeConfig, MAX_NUM_CHILDREN_INTERNAL, MAX_NUM_CHILDREN_LEAF,
     },
     keygen::AggProvingKey,
+    SC,
 };
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use continuations_v2::aggregation::NonRootGpuProver as NonRootAggregationProver;
-        type E = cuda_backend_v2::BabyBearPoseidon2GpuEngineV2;
+        type E = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
     } else {
         use continuations_v2::aggregation::NonRootCpuProver as NonRootAggregationProver;
-        type E = stark_backend_v2::BabyBearPoseidon2CpuEngineV2;
+        type E = openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine;
     }
 }
 
@@ -38,7 +39,7 @@ pub struct InternalLayerMetadata {
 
 impl AggProver {
     pub fn new(
-        app_vk: Arc<MultiStarkVerifyingKeyV2>,
+        app_vk: Arc<MultiStarkVerifyingKey<SC>>,
         agg_config: AggregationConfig,
         agg_tree_config: AggregationTreeConfig,
     ) -> Self {
@@ -65,7 +66,7 @@ impl AggProver {
     }
 
     pub fn from_pk(
-        app_vk: Arc<MultiStarkVerifyingKeyV2>,
+        app_vk: Arc<MultiStarkVerifyingKey<SC>>,
         agg_pk: AggProvingKey,
         agg_tree_config: AggregationTreeConfig,
     ) -> Self {

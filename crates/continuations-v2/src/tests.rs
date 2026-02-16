@@ -4,7 +4,7 @@ use eyre::Result;
 use itertools::Itertools;
 use openvm_circuit::{
     arch::{
-        ContinuationVmProver, VirtualMachine, VmCircuitConfig, VmInstance, instructions::exe::VmExe,
+        instructions::exe::VmExe, ContinuationVmProver, VirtualMachine, VmCircuitConfig, VmInstance,
     },
     system::memory::merkle::public_values::UserPublicValuesProof,
     utils::test_utils::test_system_config,
@@ -13,35 +13,38 @@ use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImBuilder, Rv32ImConfig};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_stark_backend::interaction::LogUpSecurityParameters;
-use openvm_stark_sdk::{config::setup_tracing_with_log_level, p3_baby_bear::BabyBear};
+use openvm_stark_backend::{
+    interaction::LogUpSecurityParameters, keygen::types::MultiStarkVerifyingKey, proof::Proof,
+    StarkEngine, SystemParams, WhirConfig, WhirParams,
+};
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::{DIGEST_SIZE, F},
+    p3_baby_bear::BabyBear,
+    utils::setup_tracing_with_log_level,
+};
 use openvm_transpiler::{
-    FromElf, elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler,
+    elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler, FromElf,
 };
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
-use stark_backend_v2::{
-    DIGEST_SIZE, F, StarkEngineV2, SystemParams, WhirConfig, WhirParams,
-    keygen::types::MultiStarkVerifyingKeyV2, proof::Proof,
-};
 #[cfg(feature = "cuda")]
 use test_case::test_case;
 use tracing::Level;
 
-use crate::aggregation::ChildVkKind;
+use crate::{aggregation::ChildVkKind, SC};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use crate::aggregation::NonRootGpuProver as NonRootProver;
         use crate::aggregation::CompressionGpuProver as CompressionProver;
         use crate::aggregation::RootGpuProver as RootProver;
-        use cuda_backend_v2::{BabyBearPoseidon2GpuEngineV2, GpuBackendV2};
-        use stark_backend_v2::prover::CommittedTraceDataV2;
-        type Engine = BabyBearPoseidon2GpuEngineV2;
-        type PB = GpuBackendV2;
+        use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
+        use openvm_stark_backend::prover::CommittedTraceData;
+        type Engine = BabyBearPoseidon2GpuEngine;
+        type PB = GpuBackend;
     } else {
         use crate::aggregation::NonRootCpuProver as NonRootProver;
-        use stark_backend_v2::{BabyBearPoseidon2CpuEngineV2, poseidon2::sponge::DuplexSponge};
-        type Engine = BabyBearPoseidon2CpuEngineV2<DuplexSponge>;
+        use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine, DuplexSponge};
+        type Engine = BabyBearPoseidon2CpuEngine<DuplexSponge>;
     }
 }
 
@@ -103,8 +106,8 @@ fn test_rv32im_config() -> Rv32ImConfig {
 fn run_leaf_aggregation(
     log_fib_input: usize,
 ) -> Result<(
-    Arc<MultiStarkVerifyingKeyV2>,
-    Proof,
+    Arc<MultiStarkVerifyingKey<SC>>,
+    Proof<SC>,
     UserPublicValuesProof<DIGEST_SIZE, F>,
 )> {
     let config = test_rv32im_config();
@@ -150,9 +153,9 @@ fn run_full_aggregation(
     log_fib_input: usize,
     extra_recursive_layers: usize,
 ) -> Result<(
-    Arc<MultiStarkVerifyingKeyV2>,
-    CommittedTraceDataV2<PB>,
-    Proof,
+    Arc<MultiStarkVerifyingKey<SC>>,
+    CommittedTraceData<PB>,
+    Proof<SC>,
     UserPublicValuesProof<DIGEST_SIZE, F>,
 )> {
     let (leaf_vk, leaf_proof, user_pvs_proof) = run_leaf_aggregation(log_fib_input)?;

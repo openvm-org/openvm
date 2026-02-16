@@ -1,9 +1,8 @@
-use cuda_backend_v2::{F, GpuBackendV2};
-use openvm_cuda_backend::base::DeviceMatrix;
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::memory_manager::MemTracker;
-use stark_backend_v2::{SystemParams, prover::AirProvingContextV2};
+use openvm_stark_backend::{prover::AirProvingContext, SystemParams};
 
-use super::{FinalyPolyQueryEvalCols, compute_round_offsets};
+use super::{compute_round_offsets, FinalyPolyQueryEvalCols};
 use crate::{
     cuda::to_device_or_nullptr,
     tracegen::ModuleChip,
@@ -19,7 +18,7 @@ pub(in crate::whir) struct FinalPolyQueryEvalGpuCtx<'a> {
 
 pub(in crate::whir) struct FinalPolyQueryEvalGpuTraceGenerator;
 
-impl ModuleChip<GpuBackendV2> for FinalPolyQueryEvalGpuTraceGenerator {
+impl ModuleChip<GpuBackend> for FinalPolyQueryEvalGpuTraceGenerator {
     type Ctx<'a> = FinalPolyQueryEvalGpuCtx<'a>;
 
     #[tracing::instrument(level = "trace", skip_all)]
@@ -27,7 +26,7 @@ impl ModuleChip<GpuBackendV2> for FinalPolyQueryEvalGpuTraceGenerator {
         &self,
         ctx: &Self::Ctx<'_>,
         required_height: Option<usize>,
-    ) -> Option<AirProvingContextV2<GpuBackendV2>> {
+    ) -> Option<AirProvingContext<GpuBackend>> {
         let blob = ctx.blob;
         let params = ctx.params;
 
@@ -73,6 +72,6 @@ impl ModuleChip<GpuBackendV2> for FinalPolyQueryEvalGpuTraceGenerator {
             .unwrap();
         }
         mem.emit_metrics();
-        Some(AirProvingContextV2::simple_no_pis(trace_d))
+        Some(AirProvingContext::simple_no_pis(trace_d))
     }
 }

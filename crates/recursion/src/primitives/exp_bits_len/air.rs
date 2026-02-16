@@ -1,13 +1,12 @@
 use core::borrow::Borrow;
 
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::Matrix;
-use stark_backend_v2::F;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage};

@@ -4,25 +4,23 @@ use std::{array::from_fn, borrow::BorrowMut, sync::Arc};
 use itertools::Itertools;
 use openvm_circuit_primitives::utils::assert_array_eq;
 use openvm_poseidon2_air::{
-    BABY_BEAR_POSEIDON2_SBOX_DEGREE, POSEIDON2_WIDTH, Poseidon2Config, Poseidon2SubAir,
-    Poseidon2SubChip, Poseidon2SubCols,
+    Poseidon2Config, Poseidon2SubAir, Poseidon2SubChip, Poseidon2SubCols,
+    BABY_BEAR_POSEIDON2_SBOX_DEGREE, POSEIDON2_WIDTH,
 };
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
     interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    prover::{ColMajorMatrix, DeviceDataTransporter, ProverBackend, StridedColMajorMatrixView},
+    BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, DIGEST_SIZE, EF, F};
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{Field, InjectiveMonomial, PrimeCharacteristicRing, PrimeField};
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use recursion_circuit::{
     batch_constraint::expr_eval::cached_symbolic_expr_cols_to_digest,
     bus::{DagCommitBus, DagCommitBusMessage},
     utils::assert_zeros,
-};
-use stark_backend_v2::{
-    DIGEST_SIZE,
-    prover::{ColMajorMatrix, DeviceDataTransporterV2, ProverBackendV2, StridedColMajorMatrixView},
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
 
@@ -125,8 +123,10 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
 }
 
 #[tracing::instrument(name = "generate_cached_trace", skip_all)]
-pub fn generate_dag_commit_proving_ctx<PB: ProverBackendV2>(
-    device: impl DeviceDataTransporterV2<PB>,
+pub fn generate_dag_commit_proving_ctx<
+    PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
+>(
+    device: impl DeviceDataTransporter<crate::SC, PB>,
     cached_trace: PB::Matrix,
 ) -> (PB::Matrix, [PB::Val; DIGEST_SIZE])
 where

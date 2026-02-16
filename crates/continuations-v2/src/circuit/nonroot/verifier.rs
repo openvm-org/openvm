@@ -4,30 +4,28 @@ use std::{
 };
 
 use openvm_circuit::system::{
-    connector::{DEFAULT_SUSPEND_EXIT_CODE, VmConnectorPvs},
+    connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
     memory::merkle::MemoryMerklePvs,
 };
 use openvm_circuit_primitives::utils::{and, assert_array_eq, not, select};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+    proof::Proof,
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    BaseAirWithPublicValues, PartitionedBaseAir,
 };
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing};
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use recursion_circuit::{
     bus::{CachedCommitBus, CachedCommitBusMessage, PublicValuesBus, PublicValuesBusMessage},
     utils::assert_zeros,
 };
-use stark_backend_v2::{
-    DIGEST_SIZE, F,
-    proof::Proof,
-    prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
-};
 use stark_recursion_circuit_derive::AlignedBorrow;
 use verify_stark::pvs::{NonRootVerifierPvs, VERIFIER_PVS_AIR_ID};
 
-use crate::circuit::{CONSTRAINT_EVAL_AIR_ID, CONSTRAINT_EVAL_CACHED_INDEX, nonroot::app::*};
+use crate::circuit::{nonroot::app::*, CONSTRAINT_EVAL_AIR_ID, CONSTRAINT_EVAL_CACHED_INDEX};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -535,10 +533,10 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
 }
 
 pub fn generate_proving_ctx(
-    proofs: &[Proof],
+    proofs: &[Proof<BabyBearPoseidon2Config>],
     child_is_app: bool,
     child_dag_commit: [F; DIGEST_SIZE],
-) -> AirProvingContextV2<CpuBackendV2> {
+) -> AirProvingContext<CpuBackend<BabyBearPoseidon2Config>> {
     let num_proofs = proofs.len();
     let height = num_proofs.next_power_of_two();
     let width = VerifierPvsCols::<u8>::width();
@@ -623,7 +621,7 @@ pub fn generate_proving_ctx(
         }
     }
 
-    AirProvingContextV2 {
+    AirProvingContext {
         cached_mains: vec![],
         common_main: ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width)),
         public_values: pvs.to_vec(),

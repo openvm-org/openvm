@@ -1,7 +1,6 @@
 #![allow(clippy::missing_safety_doc)]
 
-use cuda_backend_v2::Digest;
-use openvm_cuda_backend::prelude::F;
+use openvm_cuda_backend::prelude::{Digest, F};
 use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
 
 use crate::{
