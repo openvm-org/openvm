@@ -29,7 +29,7 @@ members = [
     "crates/toolchain/macros",
     "crates/toolchain/platform",
     "crates/toolchain/tests",
-    "crates/continuations",
+    # "crates/continuations",
     "crates/continuations-v2",
     "crates/recursion",
     "crates/verify-stark",
@@ -68,7 +68,7 @@ members = [
     "guest-libs/pairing/",
     "guest-libs/ruint/",
     "guest-libs/sha2/",
-    "guest-libs/verify_stark/",
+    # "guest-libs/verify_stark/",
     "scripts",
 ]
 exclude = ["crates/sdk/example", "benchmarks/guest/**"]
