@@ -8,7 +8,7 @@ use openvm_instructions::{
     LocalOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
-use rrs_lib::instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType};
+use crate::decoder::{BType, IType, ITypeShamt, JType, RType, SType, UType};
 
 fn i12_to_u24(imm: i32) -> u32 {
     (imm as u32) & 0xffffff
@@ -207,14 +207,10 @@ pub fn from_load_rv64<F: PrimeField32>(opcode: usize, dec_insn: &IType) -> Instr
     )
 }
 
-/// Create a new [`Instruction`] from an I-type instruction with a 6-bit shamt (RV64).
-///
-/// `rrs_lib::ITypeShamt` masks shamt to 5 bits, but RV64 needs 6 bits, so the caller must
-/// provide the full 6-bit `shamt6` value extracted from the raw instruction word.
+/// Create a new [`Instruction`] from an I-type instruction with a shamt (RV64).
 pub fn from_i_type_shamt_rv64<F: PrimeField32>(
     opcode: usize,
     dec_insn: &ITypeShamt,
-    shamt6: u32,
 ) -> Instruction<F> {
     if dec_insn.rd == 0 {
         return nop();
@@ -223,7 +219,7 @@ pub fn from_i_type_shamt_rv64<F: PrimeField32>(
         VmOpcode::from_usize(opcode),
         F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rd),
         F::from_canonical_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rs1),
-        F::from_canonical_u32(shamt6),
+        F::from_canonical_u32(dec_insn.shamt),
         F::ONE,
         F::ZERO,
         F::ZERO,

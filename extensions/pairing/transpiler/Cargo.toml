@@ -11,6 +11,5 @@ repository.workspace = true
 openvm-stark-backend = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-transpiler = { workspace = true }
-rrs-lib = { workspace = true }
 strum = { workspace = true }
 openvm-pairing-guest = { workspace = true }

@@ -4,7 +4,7 @@ use openvm_instructions::{
 use openvm_pairing_guest::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{TranspilerExtension, TranspilerOutput};
-use rrs_lib::instruction_formats::RType;
+use openvm_transpiler::decoder::RType;
 use strum::FromRepr;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, FromRepr)]

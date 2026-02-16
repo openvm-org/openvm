@@ -6,56 +6,21 @@ use openvm_instructions::{
 };
 use openvm_rv64im_guest::{
     PhantomImm, CSRRW_FUNCT3, CSR_OPCODE, HINT_BUFFER_IMM, HINT_FUNCT3, HINT_STORED_IMM,
-    NATIVE_STORED_FUNCT3, NATIVE_STORED_FUNCT7, OPCODE_OP_32, OPCODE_OP_IMM_32, PHANTOM_FUNCT3,
-    REVEAL_FUNCT3, RV64M_FUNCT7, RV64_ALU_OPCODE, SYSTEM_OPCODE, TERMINATE_FUNCT3,
+    NATIVE_STORED_FUNCT3, NATIVE_STORED_FUNCT7, RV64_ALU_OP_32, PHANTOM_FUNCT3, REVEAL_FUNCT3,
+    RV64M_FUNCT7, RV64_ALU_OPCODE, SYSTEM_OPCODE, TERMINATE_FUNCT3,
 };
 pub use openvm_rv64im_guest::{MAX_HINT_BUFFER_DWORDS, MAX_HINT_BUFFER_DWORDS_BITS};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{
-    util::{
-        from_i_type_rv64, from_i_type_shamt_rv64, from_load_rv64, from_r_type_rv64,
-        from_s_type_rv64, nop, unimp,
-    },
+    decoder::{process_instruction, IType, RType},
+    util::{nop, unimp},
     TranspilerExtension, TranspilerOutput,
 };
 use rrs::InstructionTranspiler;
-use rrs_lib::{
-    instruction_formats::{IType, ITypeShamt, RType, SType},
-    process_instruction,
-};
 
 mod instructions;
 pub mod rrs;
 pub use instructions::*;
-
-// RISC-V opcode fields for RV64-specific encodings
-const OPCODE_LOAD: u8 = 0b0000011;
-const OPCODE_STORE: u8 = 0b0100011;
-const OPCODE_OP_IMM: u8 = 0b0010011;
-
-// funct3 values for loads/stores
-const FUNCT3_LD: u8 = 0b011;
-const FUNCT3_LWU: u8 = 0b110;
-const FUNCT3_SD: u8 = 0b011;
-
-// funct3 values for shifts
-const FUNCT3_SLL: u8 = 0b001;
-const FUNCT3_SRL_SRA: u8 = 0b101;
-
-// funct3 values for OP-32 / OP-IMM-32
-const FUNCT3_ADDW_SUBW: u8 = 0b000;
-const FUNCT3_SLLW: u8 = 0b001;
-const FUNCT3_SRLW_SRAW: u8 = 0b101;
-
-// funct7 for sub/sra
-const FUNCT7_SUB_SRA: u8 = 0b0100000;
-
-// funct3 values for M-extension OP-32
-const FUNCT3_MULW: u8 = 0b000;
-const FUNCT3_DIVW: u8 = 0b100;
-const FUNCT3_DIVUW: u8 = 0b101;
-const FUNCT3_REMW: u8 = 0b110;
-const FUNCT3_REMUW: u8 = 0b111;
 
 #[derive(Default)]
 pub struct Rv64ITranspilerExtension;
@@ -134,8 +99,8 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64ITranspilerExtension {
                 _ => None,
             },
 
-            // --- RV64 base ALU (OP) — exclude M-extension (funct7=0x01) ---
-            RV64_ALU_OPCODE => {
+            // --- OP / OP-32: exclude M-extension (funct7=0x01) ---
+            RV64_ALU_OPCODE | RV64_ALU_OP_32 => {
                 let dec_insn = RType::new(instruction_u32);
                 if dec_insn.funct7 as u8 == RV64M_FUNCT7 {
                     return None; // handled by Rv64MTranspilerExtension
@@ -143,171 +108,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64ITranspilerExtension {
                 process_instruction(&mut transpiler, instruction_u32)
             }
 
-            // --- OP-IMM: intercept 6-bit shifts, delegate rest to rrs_lib ---
-            OPCODE_OP_IMM => match funct3 {
-                FUNCT3_SLL => {
-                    // SLLI with 6-bit shamt
-                    let dec_insn = ITypeShamt::new(instruction_u32);
-                    let funct6 = (instruction_u32 >> 26) & 0x3f;
-                    if funct6 != 0b000000 {
-                        return Some(TranspilerOutput::one_to_one(unimp()));
-                    }
-                    let shamt6 = (instruction_u32 >> 20) & 0x3f;
-                    Some(from_i_type_shamt_rv64(
-                        Rv64ShiftOpcode::SLL.global_opcode().as_usize(),
-                        &dec_insn,
-                        shamt6,
-                    ))
-                }
-                FUNCT3_SRL_SRA => {
-                    // SRLI or SRAI with 6-bit shamt
-                    let dec_insn = ITypeShamt::new(instruction_u32);
-                    let shamt6 = (instruction_u32 >> 20) & 0x3f;
-                    let funct6 = (instruction_u32 >> 26) & 0x3f;
-                    let shift_opcode = match funct6 {
-                        0b000000 => Rv64ShiftOpcode::SRL,
-                        0b010000 => Rv64ShiftOpcode::SRA,
-                        _ => return Some(TranspilerOutput::one_to_one(unimp())),
-                    };
-                    Some(from_i_type_shamt_rv64(
-                        shift_opcode.global_opcode().as_usize(),
-                        &dec_insn,
-                        shamt6,
-                    ))
-                }
-                _ => process_instruction(&mut transpiler, instruction_u32),
-            },
-
-            // --- LOAD: intercept LD and LWU, delegate rest to rrs_lib ---
-            OPCODE_LOAD => match funct3 {
-                FUNCT3_LD => {
-                    let dec_insn = IType::new(instruction_u32);
-                    Some(from_load_rv64(
-                        Rv64LoadStoreOpcode::LOADD.global_opcode().as_usize(),
-                        &dec_insn,
-                    ))
-                }
-                FUNCT3_LWU => {
-                    let dec_insn = IType::new(instruction_u32);
-                    Some(from_load_rv64(
-                        Rv64LoadStoreOpcode::LOADWU.global_opcode().as_usize(),
-                        &dec_insn,
-                    ))
-                }
-                _ => process_instruction(&mut transpiler, instruction_u32),
-            },
-
-            // --- STORE: intercept SD, delegate rest to rrs_lib ---
-            OPCODE_STORE => match funct3 {
-                FUNCT3_SD => {
-                    let dec_insn = SType::new(instruction_u32);
-                    Some(from_s_type_rv64(
-                        Rv64LoadStoreOpcode::STORED.global_opcode().as_usize(),
-                        &dec_insn,
-                    ))
-                }
-                _ => process_instruction(&mut transpiler, instruction_u32),
-            },
-
-            // --- OP-32: RV64-only word-width ALU operations (exclude M-extension) ---
-            OPCODE_OP_32 => {
-                let dec_insn = RType::new(instruction_u32);
-                let funct7 = dec_insn.funct7 as u8;
-                if funct7 == RV64M_FUNCT7 {
-                    return None; // handled by Rv64MTranspilerExtension
-                }
-                match funct3 {
-                    FUNCT3_ADDW_SUBW => {
-                        if funct7 != 0b0000000 && funct7 != FUNCT7_SUB_SRA {
-                            return Some(TranspilerOutput::one_to_one(unimp()));
-                        }
-                        let op = if funct7 == FUNCT7_SUB_SRA {
-                            Rv64BaseAluWOpcode::SUBW
-                        } else {
-                            Rv64BaseAluWOpcode::ADDW
-                        };
-                        Some(from_r_type_rv64(
-                            op.global_opcode().as_usize(),
-                            1,
-                            &dec_insn,
-                            false,
-                        ))
-                    }
-                    FUNCT3_SLLW => {
-                        if funct7 != 0b0000000 {
-                            return Some(TranspilerOutput::one_to_one(unimp()));
-                        }
-                        Some(from_r_type_rv64(
-                            Rv64ShiftWOpcode::SLLW.global_opcode().as_usize(),
-                            1,
-                            &dec_insn,
-                            false,
-                        ))
-                    }
-                    FUNCT3_SRLW_SRAW => {
-                        if funct7 != 0b0000000 && funct7 != FUNCT7_SUB_SRA {
-                            return Some(TranspilerOutput::one_to_one(unimp()));
-                        }
-                        let op = if funct7 == FUNCT7_SUB_SRA {
-                            Rv64ShiftWOpcode::SRAW
-                        } else {
-                            Rv64ShiftWOpcode::SRLW
-                        };
-                        Some(from_r_type_rv64(
-                            op.global_opcode().as_usize(),
-                            1,
-                            &dec_insn,
-                            false,
-                        ))
-                    }
-                    _ => None,
-                }
-            }
-
-            // --- OP-IMM-32: ADDIW and shift-W immediates ---
-            OPCODE_OP_IMM_32 => match funct3 {
-                FUNCT3_ADDW_SUBW => {
-                    // ADDIW
-                    let dec_insn = IType::new(instruction_u32);
-                    Some(from_i_type_rv64(
-                        Rv64BaseAluWOpcode::ADDW.global_opcode().as_usize(),
-                        &dec_insn,
-                    ))
-                }
-                FUNCT3_SLLW => {
-                    // SLLIW — 5-bit shamt (bits [24:20])
-                    let dec_insn = ITypeShamt::new(instruction_u32);
-                    let funct7 = ((instruction_u32 >> 25) & 0x7f) as u8;
-                    if funct7 != 0b0000000 {
-                        return Some(TranspilerOutput::one_to_one(unimp()));
-                    }
-                    let shamt5 = (instruction_u32 >> 20) & 0x1f;
-                    Some(from_i_type_shamt_rv64(
-                        Rv64ShiftWOpcode::SLLW.global_opcode().as_usize(),
-                        &dec_insn,
-                        shamt5,
-                    ))
-                }
-                FUNCT3_SRLW_SRAW => {
-                    // SRLIW or SRAIW — 5-bit shamt
-                    let dec_insn = ITypeShamt::new(instruction_u32);
-                    let shamt5 = (instruction_u32 >> 20) & 0x1f;
-                    let funct7 = ((instruction_u32 >> 25) & 0x7f) as u8;
-                    let op = match funct7 {
-                        0b0000000 => Rv64ShiftWOpcode::SRLW,
-                        FUNCT7_SUB_SRA => Rv64ShiftWOpcode::SRAW,
-                        _ => return Some(TranspilerOutput::one_to_one(unimp())),
-                    };
-                    Some(from_i_type_shamt_rv64(
-                        op.global_opcode().as_usize(),
-                        &dec_insn,
-                        shamt5,
-                    ))
-                }
-                _ => None,
-            },
-
-            // --- Everything else: delegate to rrs_lib ---
+            // --- Everything else: delegate to our decoder ---
             _ => process_instruction(&mut transpiler, instruction_u32),
         };
 
@@ -325,52 +126,14 @@ impl<F: PrimeField32> TranspilerExtension<F> for Rv64MTranspilerExtension {
         let opcode = (instruction_u32 & 0x7f) as u8;
         let dec_insn = RType::new(instruction_u32);
         let funct7 = dec_insn.funct7 as u8;
-        let funct3 = ((instruction_u32 >> 12) & 0b111) as u8;
 
         match opcode {
-            // Standard OP with M-extension funct7
-            RV64_ALU_OPCODE if funct7 == RV64M_FUNCT7 => {
+            // OP / OP-32 with M-extension funct7
+            RV64_ALU_OPCODE | RV64_ALU_OP_32 if funct7 == RV64M_FUNCT7 => {
                 let instruction = process_instruction(
                     &mut InstructionTranspiler::<F>(PhantomData),
                     instruction_u32,
                 );
-                instruction.map(TranspilerOutput::one_to_one)
-            }
-            // OP-32 with M-extension funct7 (MULW, DIVW, DIVUW, REMW, REMUW)
-            OPCODE_OP_32 if funct7 == RV64M_FUNCT7 => {
-                let instruction = match funct3 {
-                    FUNCT3_MULW => Some(from_r_type_rv64(
-                        Rv64MulWOpcode::MULW.global_opcode().as_usize(),
-                        0,
-                        &dec_insn,
-                        false,
-                    )),
-                    FUNCT3_DIVW => Some(from_r_type_rv64(
-                        Rv64DivRemWOpcode::DIVW.global_opcode().as_usize(),
-                        0,
-                        &dec_insn,
-                        false,
-                    )),
-                    FUNCT3_DIVUW => Some(from_r_type_rv64(
-                        Rv64DivRemWOpcode::DIVUW.global_opcode().as_usize(),
-                        0,
-                        &dec_insn,
-                        false,
-                    )),
-                    FUNCT3_REMW => Some(from_r_type_rv64(
-                        Rv64DivRemWOpcode::REMW.global_opcode().as_usize(),
-                        0,
-                        &dec_insn,
-                        false,
-                    )),
-                    FUNCT3_REMUW => Some(from_r_type_rv64(
-                        Rv64DivRemWOpcode::REMUW.global_opcode().as_usize(),
-                        0,
-                        &dec_insn,
-                        false,
-                    )),
-                    _ => None,
-                };
                 instruction.map(TranspilerOutput::one_to_one)
             }
             _ => None,
