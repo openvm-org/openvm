@@ -73,6 +73,7 @@ jemalloc = ["openvm-circuit/jemalloc", "openvm-sdk-config/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
 
 cuda = [
+    "dep:openvm-cuda-backend",
     "openvm-circuit/cuda",
     "openvm-sdk-config/cuda",
     "continuations-v2/cuda",
