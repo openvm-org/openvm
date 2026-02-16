@@ -7,10 +7,9 @@ use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode,
 };
-use openvm_native_compiler::{
-    FieldArithmeticOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*, NativeLoadStoreOpcode::*,
+use openvm_rv32im_transpiler::{
+    BaseAluOpcode::*, BranchEqualOpcode::*, Rv32JalLuiOpcode::*, Rv32LoadStoreOpcode::*,
 };
-use openvm_rv32im_transpiler::BranchEqualOpcode::*;
 use openvm_stark_backend::{
     any_air_arc_vec,
     p3_field::PrimeCharacteristicRing,
@@ -112,7 +111,7 @@ fn test_program_1() {
         Instruction::large_from_isize(STOREW.global_opcode(), 1, 1, 0, 0, 1, 0, 1),
         // if word[0]_1 == 0 then pc += 3*DEFAULT_PC_STEP
         Instruction::from_isize(
-            NativeBranchEqualOpcode(BEQ).global_opcode(),
+            BEQ.global_opcode(),
             0,
             0,
             3 * DEFAULT_PC_STEP as isize,
@@ -147,7 +146,7 @@ fn test_program_without_field_arithmetic() {
         Instruction::large_from_isize(STOREW.global_opcode(), 5, 0, 0, 0, 1, 0, 1),
         // if word[0]_1 != 4 then pc += 3*DEFAULT_PC_STEP
         Instruction::from_isize(
-            NativeBranchEqualOpcode(BNE).global_opcode(),
+            BNE.global_opcode(),
             0,
             4,
             3 * DEFAULT_PC_STEP as isize,
@@ -167,7 +166,7 @@ fn test_program_without_field_arithmetic() {
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         // if word[0]_1 == 5 then pc -= DEFAULT_PC_STEP
         Instruction::from_isize(
-            NativeBranchEqualOpcode(BEQ).global_opcode(),
+            BEQ.global_opcode(),
             0,
             5,
             -(DEFAULT_PC_STEP as isize),
@@ -265,7 +264,7 @@ fn test_program_with_undefined_instructions() {
         )),
         // if word[0]_1 == n then pc += 3*DEFAULT_PC_STEP
         Some(Instruction::from_isize(
-            NativeBranchEqualOpcode(BEQ).global_opcode(),
+            BEQ.global_opcode(),
             0,
             n,
             3 * DEFAULT_PC_STEP as isize,
