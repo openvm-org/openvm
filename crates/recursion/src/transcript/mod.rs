@@ -303,7 +303,7 @@ pub(super) struct Poseidon2Count {
 
 impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for TranscriptModule {
     // External Poseidon2 compress inputs
-    type ModuleSpecificCtx = Vec<[F; POSEIDON2_WIDTH]>;
+    type ModuleSpecificCtx<'a> = Vec<[F; POSEIDON2_WIDTH]>;
 
     #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
@@ -496,7 +496,7 @@ mod cuda_tracegen {
     }
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackend> for TranscriptModule {
-        type ModuleSpecificCtx = Vec<[F; POSEIDON2_WIDTH]>;
+        type ModuleSpecificCtx<'a> = Vec<[F; POSEIDON2_WIDTH]>;
 
         #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(

@@ -1,15 +1,15 @@
 use openvm_cuda_backend::prelude::{Digest, F};
+use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::{
     air_builders::symbolic::{
         symbolic_variable::{Entry, SymbolicVariable},
         SymbolicExpressionNode,
     },
-    keygen::types::{MultiStarkVerifyingKey, StarkVerifyingKey},
+    keygen::types::StarkVerifyingKey,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::PrimeCharacteristicRing;
 
-use crate::batch_constraint::expr_eval::{build_cached_records, NodeKind};
+use crate::batch_constraint::expr_eval::{CachedTraceRecord, NodeKind};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -43,26 +43,35 @@ pub struct FlatSymbolicVariable {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct CachedGpuRecord {
-    pub node_idx: u32,
-    pub attrs: [u32; 3],
-    pub fanout: u32,
+    pub poseidon2_start: [F; POSEIDON2_WIDTH],
     pub is_constraint: bool,
-    pub constraint_idx: u32,
 }
 
 pub(crate) fn build_cached_gpu_records(
-    child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-) -> Vec<CachedGpuRecord> {
-    build_cached_records(child_vk)
-        .iter()
-        .map(|r| CachedGpuRecord {
-            node_idx: r.node_idx as u32,
-            attrs: r.attrs.map(|x| x as u32),
-            fanout: r.fanout as u32,
-            is_constraint: r.is_constraint,
-            constraint_idx: r.constraint_idx as u32,
+    cached_trace_record: &CachedTraceRecord,
+) -> Option<Vec<CachedGpuRecord>> {
+    cached_trace_record
+        .dag_commit_info
+        .as_ref()
+        .map(|dag_commit_info| {
+            // We need one Poseidon2 start-state per row of the (power-of-two) trace height,
+            // including padding rows. Padding rows have `is_constraint = false`.
+            let height = dag_commit_info.poseidon2_inputs.len();
+            debug_assert_eq!(
+                height,
+                cached_trace_record.records.len().next_power_of_two()
+            );
+
+            (0..height)
+                .map(|row_idx| CachedGpuRecord {
+                    poseidon2_start: *dag_commit_info.poseidon2_inputs.get(row_idx).unwrap(),
+                    is_constraint: cached_trace_record
+                        .records
+                        .get(row_idx)
+                        .is_some_and(|r| r.is_constraint),
+                })
+                .collect()
         })
-        .collect()
 }
 
 pub(super) fn flatten_constraint_node(

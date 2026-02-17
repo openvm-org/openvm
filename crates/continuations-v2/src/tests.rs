@@ -255,12 +255,13 @@ fn test_internal_recursive_deep_layers() -> Result<()> {
     Ok(())
 }
 
-#[test]
 #[cfg(feature = "cuda")]
-fn test_compression_prover() -> Result<()> {
+#[test_case(0 ; "internal_recursive_dag_commit not set")]
+#[test_case(1 ; "internal_recursive_dag_commit set")]
+fn test_compression_prover(extra_recursive_layers: usize) -> Result<()> {
     setup_tracing_with_log_level(Level::INFO);
     let (internal_recursive_vk, internal_recursive_pcs_data, internal_recursive_proof, _) =
-        run_full_aggregation(10, 0)?;
+        run_full_aggregation(10, extra_recursive_layers)?;
 
     let compression_prover = CompressionProver::new::<Engine>(
         internal_recursive_vk,

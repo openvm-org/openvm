@@ -1,3 +1,4 @@
+#include "dag_commit.cuh"
 #include "fp.h"
 #include "fpext.h"
 #include "launcher.cuh"
@@ -50,25 +51,8 @@ struct FlatSymbolicVariable {
 };
 
 struct CachedRecord {
-    uint32_t node_idx;
-    uint32_t attrs[3];
-    uint32_t fanout;
+    Fp poseidon2_input[WIDTH];
     bool is_constraint;
-    uint32_t constraint_idx;
-};
-
-template <typename T> struct CachedSymbolicExpressionCols {
-    // Additional columns for continuations compression layer
-    T row_idx;
-
-    // Original cached trace columns
-    T flags[4];
-    T air_idx;
-    T node_or_interaction_idx;
-    T attrs[3];
-    T fanout;
-    T is_constraint;
-    T constraint_idx;
 };
 
 template <typename T> struct SymbolicExpressionCols {
@@ -170,15 +154,15 @@ __global__ void symbolic_expression_tracegen(
 
     RowSlice row(trace + row_idx, height);
     constexpr uint32_t SINGLE_WIDTH = sizeof(SymbolicExpressionCols<uint8_t>);
-    constexpr uint32_t CACHED_WIDTH = sizeof(CachedSymbolicExpressionCols<uint8_t>);
+    constexpr uint32_t COMMIT_WIDTH = sizeof(DagCommitCols<uint8_t>);
 
     if (cached_records && proof_idx == 0) {
-        COL_WRITE_VALUE(row, CachedSymbolicExpressionCols, row_idx, row_idx);
-        row.fill_zero(1, CACHED_WIDTH);
+        CachedRecord record = cached_records[row_idx];
+        write_dag_commit_poseidon2(row, record.poseidon2_input, record.is_constraint);
     }
 
     RowSlice proof_row =
-        row.slice_from((cached_records ? CACHED_WIDTH : 0) + proof_idx * SINGLE_WIDTH);
+        row.slice_from((cached_records ? COMMIT_WIDTH : 0) + proof_idx * SINGLE_WIDTH);
     proof_row.fill_zero(0, SINGLE_WIDTH);
 
     if (proof_idx >= num_proofs || row_idx >= num_records_per_proof) {
@@ -210,22 +194,6 @@ __global__ void symbolic_expression_tracegen(
     FpExt rs0 = sumcheck_rnds[sum_start];
     const FpExt *rs_rest = sumcheck_rnds + sum_start + 1;
     uint32_t rs_rest_len = sum_end - sum_start > 0 ? sum_end - sum_start - 1 : 0;
-
-    if (cached_records && proof_idx == 0) {
-        COL_WRITE_VALUE(row, CachedSymbolicExpressionCols, air_idx, air_idx);
-        CachedRecord cached_record = cached_records[row_idx];
-        COL_WRITE_VALUE(
-            row, CachedSymbolicExpressionCols, node_or_interaction_idx, cached_record.node_idx
-        );
-        COL_WRITE_ARRAY(row, CachedSymbolicExpressionCols, attrs, cached_record.attrs);
-        COL_WRITE_VALUE(row, CachedSymbolicExpressionCols, fanout, cached_record.fanout);
-        COL_WRITE_VALUE(
-            row, CachedSymbolicExpressionCols, is_constraint, cached_record.is_constraint
-        );
-        COL_WRITE_VALUE(
-            row, CachedSymbolicExpressionCols, constraint_idx, cached_record.constraint_idx
-        );
-    }
 
     uint32_t nodes_start = constraint_nodes_bounds[air_idx];
     uint32_t nodes_len = constraint_nodes_bounds[air_idx + 1] - nodes_start;
@@ -305,11 +273,7 @@ __global__ void symbolic_expression_tracegen(
             break;
         }
         if (cached_records && proof_idx == 0) {
-            // Flags live inside `CachedSymbolicExpressionCols.flags`. Do NOT write at column 0,
-            // because column 0 is `row_idx` when `cached_records` is present.
-            encoder.write_flag_pt(
-                row.slice_from(COL_INDEX(CachedSymbolicExpressionCols, flags)), node.kind
-            );
+            write_dag_commit_flags(row, encoder, node.kind);
         }
         return;
     }
@@ -328,8 +292,9 @@ __global__ void symbolic_expression_tracegen(
                 write_arg_first(proof_row, expr_per_air[node_idx]);
             }
             if (cached_records && proof_idx == 0) {
-                encoder.write_flag_pt(
-                    row.slice_from(COL_INDEX(CachedSymbolicExpressionCols, flags)),
+                write_dag_commit_flags(
+                    row,
+                    encoder,
                     local_idx == 0 ? NODE_KIND_INTERACTION_MULT : NODE_KIND_INTERACTION_MSG_COMP
                 );
             }
@@ -345,10 +310,7 @@ __global__ void symbolic_expression_tracegen(
             write_arg_first(proof_row, expr_per_air[eval_idx]);
             if (cached_records && proof_idx == 0) {
                 FlatSymbolicVariable unused = unused_variables_per_air[local_idx];
-                encoder.write_flag_pt(
-                    row.slice_from(COL_INDEX(CachedSymbolicExpressionCols, flags)),
-                    unused.entry_kind
-                );
+                write_dag_commit_flags(row, encoder, unused.entry_kind);
             }
         }
     }
