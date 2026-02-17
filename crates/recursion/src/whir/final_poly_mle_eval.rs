@@ -22,7 +22,7 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 use crate::{
     bus::{TranscriptBus, WhirOpeningPointBus, WhirOpeningPointMessage},
     tracegen::{RowMajorChip, StandardTracegenCtx},
-    utils::{ext_field_add, ext_field_multiply, ext_field_subtract},
+    utils::{ext_field_add, ext_field_multiply, ext_field_subtract, pow_tidx_count},
     whir::bus::{
         FinalPolyFoldingBus, FinalPolyFoldingMessage, FinalPolyMleEvalBus, FinalPolyMleEvalMessage,
         WhirEqAlphaUBus, WhirEqAlphaUMessage, WhirFinalPolyBus, WhirFinalPolyBusMessage,
@@ -270,7 +270,8 @@ impl RowMajorChip<F> for FinalPolyMleEvalTraceGenerator {
 
         let mut trace = vec![F::ZERO; height * width];
 
-        let tidx_base_offset = params.k_whir() * (D_EF * 3 + 2);
+        let folding_pow_offset = pow_tidx_count(params.whir.folding_pow_bits);
+        let tidx_base_offset = params.k_whir() * (D_EF * 3 + folding_pow_offset);
         let mut global_row = 0usize;
 
         for (proof_idx, proof) in proofs.iter().enumerate() {

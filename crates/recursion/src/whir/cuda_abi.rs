@@ -121,6 +121,7 @@ pub unsafe fn initial_opened_values_tracegen(
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub unsafe fn final_poly_query_eval_tracegen(
     trace_d: &DeviceBuffer<F>,
     num_valid_rows: usize,
@@ -145,6 +146,7 @@ pub unsafe fn final_poly_query_eval_tracegen(
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub unsafe fn non_initial_opened_values_tracegen(
     trace_d: &DeviceBuffer<F>,
     num_valid_rows: usize,

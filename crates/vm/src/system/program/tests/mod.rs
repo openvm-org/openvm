@@ -165,14 +165,7 @@ fn test_program_without_field_arithmetic() {
         // terminate
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         // if word[0]_1 == 5 then pc -= DEFAULT_PC_STEP
-        Instruction::from_isize(
-            BEQ.global_opcode(),
-            0,
-            5,
-            -(DEFAULT_PC_STEP as isize),
-            1,
-            0,
-        ),
+        Instruction::from_isize(BEQ.global_opcode(), 0, 5, -(DEFAULT_PC_STEP as isize), 1, 0),
     ];
 
     let program = Program::from_instructions(&instructions);

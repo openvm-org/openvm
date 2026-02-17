@@ -11,8 +11,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{D_EF, EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    extension::BinomiallyExtendable, BasedVectorSpace, Field, PrimeCharacteristicRing,
-    PrimeField32,
+    extension::BinomiallyExtendable, BasedVectorSpace, Field, PrimeCharacteristicRing, PrimeField32,
 };
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -32,7 +31,7 @@ use crate::{
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     tracegen::{RowMajorChip, StandardTracegenCtx},
-    utils::{assert_one_ext, ext_field_add, ext_field_multiply},
+    utils::{assert_one_ext, ext_field_add, ext_field_multiply, pow_tidx_count},
 };
 
 ///////////////////////////////////////////////////////////////////////////
@@ -229,6 +228,8 @@ where
             .when(not(local.is_last) * local.is_valid)
             .assert_eq(local.tidx + AB::F::from_usize(D_EF), next.tidx);
 
+        let mu_pow_offset = pow_tidx_count(self.mu_pow_bits);
+
         for i in 0..D_EF {
             // Observe stacking_claim at tidx + 0..D_EF
             self.transcript_bus.receive(
@@ -242,12 +243,12 @@ where
                 local.is_valid,
             );
 
-            // Sample μ at tidx + D_EF + 2 + i (after μ PoW observe/sample)
+            // Sample μ at tidx + D_EF + mu_pow_offset + i (after μ PoW observe/sample if any)
             self.transcript_bus.receive(
                 builder,
                 local.proof_idx,
                 TranscriptBusMessage {
-                    tidx: AB::Expr::from_usize(i + D_EF + 2) + local.tidx,
+                    tidx: AB::Expr::from_usize(i + D_EF + mu_pow_offset) + local.tidx,
                     value: local.mu[i].into(),
                     is_sample: AB::Expr::ONE,
                 },
@@ -255,41 +256,43 @@ where
             );
         }
 
-        // μ PoW: observe mu_pow_witness at tidx + D_EF (on last row only)
-        self.transcript_bus.receive(
-            builder,
-            local.proof_idx,
-            TranscriptBusMessage {
-                tidx: AB::Expr::from_usize(D_EF) + local.tidx,
-                value: local.mu_pow_witness.into(),
-                is_sample: AB::Expr::ZERO,
-            },
-            and(local.is_last, local.is_valid),
-        );
+        if self.mu_pow_bits > 0 {
+            // μ PoW: observe mu_pow_witness at tidx + D_EF (on last row only)
+            self.transcript_bus.receive(
+                builder,
+                local.proof_idx,
+                TranscriptBusMessage {
+                    tidx: AB::Expr::from_usize(D_EF) + local.tidx,
+                    value: local.mu_pow_witness.into(),
+                    is_sample: AB::Expr::ZERO,
+                },
+                and(local.is_last, local.is_valid),
+            );
 
-        // μ PoW: sample mu_pow_sample at tidx + D_EF + 1 (on last row only)
-        self.transcript_bus.receive(
-            builder,
-            local.proof_idx,
-            TranscriptBusMessage {
-                tidx: AB::Expr::from_usize(D_EF + 1) + local.tidx,
-                value: local.mu_pow_sample.into(),
-                is_sample: AB::Expr::ONE,
-            },
-            and(local.is_last, local.is_valid),
-        );
+            // μ PoW: sample mu_pow_sample at tidx + D_EF + 1 (on last row only)
+            self.transcript_bus.receive(
+                builder,
+                local.proof_idx,
+                TranscriptBusMessage {
+                    tidx: AB::Expr::from_usize(D_EF + 1) + local.tidx,
+                    value: local.mu_pow_sample.into(),
+                    is_sample: AB::Expr::ONE,
+                },
+                and(local.is_last, local.is_valid),
+            );
 
-        // μ PoW check: g^{mu_pow_sample[0:mu_pow_bits]} = 1
-        self.exp_bits_len_bus.lookup_key(
-            builder,
-            ExpBitsLenMessage {
-                base: AB::F::GENERATOR.into(),
-                bit_src: local.mu_pow_sample.into(),
-                num_bits: AB::Expr::from_usize(self.mu_pow_bits),
-                result: AB::Expr::ONE,
-            },
-            and(local.is_last, local.is_valid),
-        );
+            // μ PoW check: g^{mu_pow_sample[0:mu_pow_bits]} = 1
+            self.exp_bits_len_bus.lookup_key(
+                builder,
+                ExpBitsLenMessage {
+                    base: AB::F::GENERATOR.into(),
+                    bit_src: local.mu_pow_sample.into(),
+                    num_bits: AB::Expr::from_usize(self.mu_pow_bits),
+                    result: AB::Expr::ONE,
+                },
+                and(local.is_last, local.is_valid),
+            );
+        }
 
         /*
          * Compute the RLC of the stacking claims and send it to the WHIR module.
@@ -318,12 +321,11 @@ where
         );
 
         // Send to WHIR module with tidx after all transcript operations
-        // (D_EF observe + 1 μ_pow observe + 1 μ_pow sample + D_EF μ sample = 2*D_EF + 2)
         self.whir_module_bus.send(
             builder,
             local.proof_idx,
             WhirModuleMessage {
-                tidx: AB::Expr::from_usize(2 * D_EF + 2) + local.tidx,
+                tidx: AB::Expr::from_usize(2 * D_EF + mu_pow_offset) + local.tidx,
                 mu: local.mu.map(Into::into),
                 claim: local.whir_claim.map(Into::into),
             },

@@ -31,7 +31,8 @@ use crate::{
     system::Preflight,
     tracegen::RowMajorChip,
     utils::{
-        assert_zeros, ext_field_add, ext_field_multiply, MultiProofVecVec, MultiVecWithBounds,
+        assert_zeros, ext_field_add, ext_field_multiply, pow_tidx_count, MultiProofVecVec,
+        MultiVecWithBounds,
     },
 };
 
@@ -375,10 +376,11 @@ impl InteractionsFoldingBlob {
             .map(|vk| vk.symbolic_constraints.interactions.clone())
             .collect_vec();
 
+        let logup_pow_offset = pow_tidx_count(vk.params.logup.pow_bits);
         let mut records = MultiProofVecVec::new();
         let mut folded = MultiProofVecVec::new();
         for (pidx, preflight) in preflights.iter().enumerate() {
-            let beta_tidx = preflight.proof_shape.post_tidx + 2 + D_EF;
+            let beta_tidx = preflight.proof_shape.post_tidx + logup_pow_offset + D_EF;
             let beta = EF::from_basis_coefficients_slice(
                 &preflight.transcript.values()[beta_tidx..beta_tidx + D_EF],
             )
@@ -519,9 +521,10 @@ impl RowMajorChip<F> for InteractionsFoldingTraceGenerator {
         };
         let mut trace = vec![F::ZERO; padding_height * width];
 
+        let logup_pow_offset = pow_tidx_count(vk.inner.params.logup.pow_bits);
         let mut cur_height = 0;
         for (pidx, preflight) in preflights.iter().enumerate() {
-            let beta_tidx = preflight.proof_shape.post_tidx + 2 + D_EF;
+            let beta_tidx = preflight.proof_shape.post_tidx + logup_pow_offset + D_EF;
             let beta_slice = &preflight.transcript.values()[beta_tidx..beta_tidx + D_EF];
             let records = &if_blob.records[pidx];
             let eq_3bs = &eq_3b_blob.all_stacked_ids[pidx];
@@ -716,9 +719,10 @@ pub(in crate::batch_constraint) mod cuda {
             let mut interaction_records = Vec::with_capacity(preflights.len());
             let mut interactions_folding_per_proof = Vec::with_capacity(preflights.len());
             let mut folded_claims = MultiProofVecVec::new();
+            let logup_pow_offset = pow_tidx_count(vk.cpu.inner.params.logup.pow_bits);
 
             for (pidx, preflight) in preflights.iter().enumerate() {
-                let beta_tidx = preflight.proof_shape.post_tidx + 2 + D_EF;
+                let beta_tidx = preflight.proof_shape.post_tidx + logup_pow_offset + D_EF;
                 let beta = EF::from_basis_coefficients_slice(
                     &preflight.cpu.transcript.values()[beta_tidx..beta_tidx + D_EF],
                 )
@@ -933,7 +937,7 @@ pub(in crate::batch_constraint) mod cuda {
                     height,
                     &d_idx_keys,
                     &d_cur_sum_evals,
-                    num_valid_rows as u32,
+                    num_valid_rows,
                 )
                 .unwrap();
                 let d_temp_buffer = DeviceBuffer::<u8>::with_capacity(temp_bytes);
@@ -955,7 +959,7 @@ pub(in crate::batch_constraint) mod cuda {
                     &num_airs,
                     &n_logups,
                     preflights_gpu.len() as u32,
-                    num_valid_rows as u32,
+                    num_valid_rows,
                     child_vk.system_params.l_skip as u32,
                     &d_temp_buffer,
                     temp_bytes,

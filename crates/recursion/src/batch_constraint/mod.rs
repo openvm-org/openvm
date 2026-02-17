@@ -937,9 +937,9 @@ pub mod cuda_tracegen {
             let cpu_preflights = preflights.iter().map(|p| &p.cpu).collect_vec();
             let common_blob = BatchConstraintBlob::new(&child_vk.cpu, &cpu_proofs, &cpu_preflights);
             let cf_blob =
-                ConstraintsFoldingBlobGpu::new(&child_vk, &common_blob.expr_evals, preflights);
+                ConstraintsFoldingBlobGpu::new(child_vk, &common_blob.expr_evals, preflights);
             let if_blob = InteractionsFoldingBlobGpu::new(
-                &child_vk,
+                child_vk,
                 &common_blob.expr_evals,
                 &common_blob.eq_3b_blob,
                 preflights,
@@ -967,7 +967,7 @@ pub mod cuda_tracegen {
             _module_ctx: &(),
             required_heights: Option<&[usize]>,
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
-            let blob = BatchConstraintBlobGpu::new(&child_vk, &proofs, &preflights);
+            let blob = BatchConstraintBlobGpu::new(child_vk, proofs, preflights);
             let ctx = (
                 StandardTracegenGpuCtx {
                     vk: child_vk,
@@ -1058,7 +1058,6 @@ pub mod cuda_tracegen {
                 .chain(indexed_cpu_traces)
                 .sorted_by(|a, b| a.0.cmp(&b.0))
                 .map(|(_index, ctx)| ctx)
-                .into_iter()
                 .collect()
         }
     }

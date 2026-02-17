@@ -46,7 +46,7 @@ impl ModuleChip<GpuBackend> for InitialOpenedValuesGpuTraceGenerator {
         let width = InitialOpenedValuesCols::<F>::width();
         let trace_d = DeviceMatrix::with_capacity(height, width);
 
-        let num_queries_per_round = num_queries_per_round(&params);
+        let num_queries_per_round = num_queries_per_round(params);
         let num_initial_queries = num_queries_per_round.first().copied().unwrap_or(0);
         let total_queries = total_num_queries(&num_queries_per_round);
         unsafe {

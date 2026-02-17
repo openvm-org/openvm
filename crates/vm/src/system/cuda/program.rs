@@ -207,14 +207,7 @@ mod tests {
                 0,
             ),
             Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
-            Instruction::from_isize(
-                BEQ.global_opcode(),
-                0,
-                5,
-                -(DEFAULT_PC_STEP as isize),
-                1,
-                0,
-            ),
+            Instruction::from_isize(BEQ.global_opcode(), 0, 5, -(DEFAULT_PC_STEP as isize), 1, 0),
         ];
         let program = Program::from_instructions(&instructions);
         test_cached_committed_trace_data(program);

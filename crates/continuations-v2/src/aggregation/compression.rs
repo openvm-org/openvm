@@ -83,7 +83,7 @@ where
         let verifier_pvs_ctx = self.agg_node_tracegen.generate_verifier_pvs_ctx(
             proof_slice,
             false,
-            self.child_vk_pcs_data.commitment.clone(),
+            self.child_vk_pcs_data.commitment,
         );
         let subcircuit_ctxs = self.circuit.verifier_circuit.generate_proving_ctxs_base(
             &self.child_vk,
@@ -214,6 +214,6 @@ impl<
     }
 
     pub fn get_cached_commit(&self) -> <PB as ProverBackend>::Commitment {
-        self.child_vk_pcs_data.commitment.clone()
+        self.child_vk_pcs_data.commitment
     }
 }

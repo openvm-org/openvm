@@ -26,6 +26,15 @@ use crate::{
     utils::MAX_CONSTRAINT_DEGREE,
 };
 
+/// Creates test system params with all PoW bits set to zero.
+fn test_system_params_zero_pow(l_skip: usize, n_stack: usize, k_whir: usize) -> SystemParams {
+    let mut params = test_system_params_small(l_skip, n_stack, k_whir);
+    params.whir.mu_pow_bits = 0;
+    params.whir.folding_pow_bits = 0;
+    params.whir.query_phase_pow_bits = 0;
+    params
+}
+
 pub fn test_engine_small() -> BabyBearPoseidon2CpuEngine<DuplexSponge> {
     let mut params = test_system_params_small(2, 10, 3);
     params.max_constraint_degree = MAX_CONSTRAINT_DEGREE;
@@ -452,6 +461,34 @@ fn test_neg_hypercube_mixture(num_proofs: usize) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// ZERO POW BITS TESTS
+///////////////////////////////////////////////////////////////////////////////
+
+#[test_case(2, 8, 3, 5)]
+#[test_case(3, 5, 3, 5)]
+fn test_recursion_circuit_zero_pow_bits(
+    l_skip: usize,
+    n_stack: usize,
+    k_whir: usize,
+    log_trace_degree: usize,
+) {
+    let child_params = test_system_params_zero_pow(l_skip, n_stack, k_whir);
+    let child_engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(child_params);
+    let parent_engine = test_engine_small();
+    let fib = FibFixture::new(0, 1, 1 << log_trace_degree);
+    run_test::<2, _>(fib, &child_engine, &parent_engine, 1);
+}
+
+#[test_case(5)]
+fn test_recursion_circuit_zero_pow_bits_two_proofs(log_trace_degree: usize) {
+    let child_params = test_system_params_zero_pow(2, 8, 3);
+    let child_engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(child_params);
+    let parent_engine = test_engine_small();
+    let fib = FibFixture::new(0, 1, 1 << log_trace_degree);
+    run_test::<2, _>(fib, &child_engine, &parent_engine, 2);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // CUDA TRACEGEN TESTS
 ///////////////////////////////////////////////////////////////////////////////
 #[cfg(feature = "cuda")]
@@ -460,6 +497,8 @@ mod cuda {
     use openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
     use openvm_cuda_common::copy::MemCopyD2H;
     use openvm_stark_backend::prover::{MatrixDimensions, MatrixView};
+    #[cfg(feature = "touchemall")]
+    use openvm_stark_sdk::config::baby_bear_poseidon2::F;
     use openvm_stark_sdk::utils::setup_tracing_with_log_level;
     use test_case::test_matrix;
     use tracing::Level;

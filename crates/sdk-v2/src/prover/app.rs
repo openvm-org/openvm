@@ -90,11 +90,10 @@ where
     pub fn app_exe_commit(&self) -> Digest {
         *self.app_exe_commit.get_or_init(|| {
             VmCommittedExe::<SC>::compute_exe_commit(
-                &self.app_program_commit().into(),
+                &self.app_program_commit(),
                 self.instance.exe(),
                 &self.instance.vm.config().as_ref().memory_config,
             )
-            .into()
         })
     }
 

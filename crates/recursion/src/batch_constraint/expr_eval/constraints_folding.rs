@@ -511,13 +511,13 @@ pub(in crate::batch_constraint) mod cuda {
                         let num_constraints = air_values.len();
                         num_constraints_in_proof += num_constraints as u32;
                         proof_constraint_bounds.push(num_constraints_in_proof);
-                        proof_and_sort_idxs.extend(
-                            std::iter::repeat(UInt2 {
+                        proof_and_sort_idxs.extend(std::iter::repeat_n(
+                            UInt2 {
                                 x: proof_idx as u32,
                                 y: sort_idx as u32,
-                            })
-                            .take(num_constraints),
-                        );
+                            },
+                            num_constraints,
+                        ));
                     }
                     num_valid_rows += num_constraints_in_proof;
                     row_bounds.push(num_valid_rows);
@@ -565,7 +565,7 @@ pub(in crate::batch_constraint) mod cuda {
                 let temp_bytes = constraints_folding_tracegen_temp_bytes(
                     &d_proof_and_sort_idxs,
                     &d_cur_sum_evals,
-                    num_valid_rows as u32,
+                    num_valid_rows,
                 )
                 .unwrap();
                 let d_temp_buffer = DeviceBuffer::<u8>::with_capacity(temp_bytes);
@@ -583,7 +583,7 @@ pub(in crate::batch_constraint) mod cuda {
                     &d_per_proof,
                     preflights_gpu.len() as u32,
                     child_vk.per_air.len() as u32,
-                    num_valid_rows as u32,
+                    num_valid_rows,
                     child_vk.system_params.l_skip as u32,
                     &d_temp_buffer,
                     temp_bytes,

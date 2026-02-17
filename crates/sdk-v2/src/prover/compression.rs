@@ -32,7 +32,7 @@ impl CompressionProver {
             internal_recursive_vk_pcs_data,
             system_params,
         );
-        Self { 0: inner }
+        Self(inner)
     }
 
     pub fn from_pk(
@@ -45,7 +45,7 @@ impl CompressionProver {
             internal_recursive_vk_pcs_data,
             pk,
         );
-        Self { 0: inner }
+        Self(inner)
     }
 
     pub fn prove(&self, mut proof: NonRootStarkProof) -> Result<NonRootStarkProof> {

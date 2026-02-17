@@ -75,7 +75,7 @@ impl UserPvsCommitAir {
         // Each leaf consumes `DIGEST_SIZE` public values, which are compressed with zeros
         // to compute the leaf hash. We require at least one leaf, and a full binary tree.
         debug_assert!(num_user_pvs >= DIGEST_SIZE);
-        debug_assert!(num_user_pvs % DIGEST_SIZE == 0);
+        debug_assert!(num_user_pvs.is_multiple_of(DIGEST_SIZE));
         debug_assert!((num_user_pvs / DIGEST_SIZE).is_power_of_two());
 
         // One selector per leaf PV chunk (each leaf consumes 1 digest).
@@ -302,7 +302,7 @@ pub fn generate_proving_ctx(
     // being inserted into the Merkle tree. We require at least one leaf (so at least one
     // Poseidon2 hash), and a full binary tree.
     debug_assert!(num_user_pvs >= DIGEST_SIZE);
-    debug_assert!(num_user_pvs % DIGEST_SIZE == 0);
+    debug_assert!(num_user_pvs.is_multiple_of(DIGEST_SIZE));
     debug_assert!((num_user_pvs / DIGEST_SIZE).is_power_of_two());
 
     // One selector per leaf PV chunk (each leaf consumes 1 digest).

@@ -30,7 +30,7 @@ jobs:
     strategy:
       matrix:
         crates: # group crates on the same runner based on test time
-          - { names: "sha2 keccak256 verify_stark" }
+          - { names: "sha2 keccak256" }
           - { names: "ruint k256 p256" }
           - { names: "ff_derive pairing" }
     runs-on:
@@ -76,9 +76,6 @@ jobs:
               - "extensions/ecc/**"
               - "extensions/pairing/**"
               - "guest-libs/pairing/**"
-            verify_stark:
-              - "extensions/native/**"
-              - "guest-libs/verify_stark/**"
 
       - name: Skip if no changes
         env:
