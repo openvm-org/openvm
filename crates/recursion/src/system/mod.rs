@@ -17,7 +17,9 @@ use p3_field::BasedVectorSpace;
 use p3_maybe_rayon::prelude::*;
 
 use crate::{
-    batch_constraint::{BatchConstraintModule, LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX},
+    batch_constraint::{
+        expr_eval::CachedTraceRecord, BatchConstraintModule, LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX,
+    },
     bus::{
         AirShapeBus, BatchConstraintModuleBus, CachedCommitBus, ColumnClaimsBus, CommitmentsBus,
         ConstraintSumcheckRandomnessBus, DagCommitBus, EqNegBaseRandBus, EqNegResultBus,
@@ -45,6 +47,11 @@ pub(crate) mod frame;
 const BATCH_CONSTRAINT_MOD_IDX: usize = 0;
 const POW_CHECKER_HEIGHT: usize = 32;
 
+pub enum CachedTraceCtx<PB: ProverBackend> {
+    PcsData(CommittedTraceData<PB>),
+    Records(CachedTraceRecord),
+}
+
 // Trait to make tracegen functions generic on ProverBackend
 pub trait VerifierTraceGen<PB: ProverBackend> {
     fn new(
@@ -59,6 +66,11 @@ pub trait VerifierTraceGen<PB: ProverBackend> {
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
     ) -> CommittedTraceData<PB>;
 
+    fn cached_trace_record(
+        &self,
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+    ) -> CachedTraceRecord;
+
     /// The generic `TS` allows using different transcript implementations for debugging purposes.
     /// The default type to use is `DuplexSpongeRecorder`.
     #[allow(clippy::ptr_arg)]
@@ -68,7 +80,7 @@ pub trait VerifierTraceGen<PB: ProverBackend> {
     >(
         &self,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-        child_vk_pcs_data: CommittedTraceData<PB>,
+        cached_trace_ctx: CachedTraceCtx<PB>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         external_poseidon2_compress_inputs: &Vec<[PB::Val; POSEIDON2_WIDTH]>,
         required_heights: Option<&[usize]>,
@@ -81,13 +93,13 @@ pub trait VerifierTraceGen<PB: ProverBackend> {
     >(
         &self,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-        child_vk_pcs_data: CommittedTraceData<PB>,
+        cached_trace_ctx: CachedTraceCtx<PB>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         initial_transcript: TS,
     ) -> Vec<AirProvingContext<PB>> {
         self.generate_proving_ctxs::<TS>(
             child_vk,
-            child_vk_pcs_data,
+            cached_trace_ctx,
             proofs,
             &vec![],
             None,
@@ -129,14 +141,14 @@ pub trait GlobalTraceGenCtx {
 ///
 /// This function should be expected to be called in parallel, one logical thread per module.
 pub trait TraceGenModule<GC: GlobalTraceGenCtx, PB: ProverBackend>: Send + Sync {
-    type ModuleSpecificCtx;
+    type ModuleSpecificCtx<'a>;
 
     fn generate_proving_ctxs(
         &self,
         child_vk: &GC::ChildVerifyingKey,
         proofs: &GC::MultiProof,
         preflights: &GC::PreflightRecords,
-        ctx: &Self::ModuleSpecificCtx,
+        ctx: &Self::ModuleSpecificCtx<'_>,
         required_heights: Option<&[usize]>,
     ) -> Option<Vec<AirProvingContext<PB>>>;
 }
@@ -416,6 +428,7 @@ impl<'a> TraceModuleRef<'a> {
         proofs: &[Proof<BabyBearPoseidon2Config>],
         preflights: &[Preflight],
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+        cached_trace_record: &Option<&CachedTraceRecord>,
         external_poseidon2_compress_inputs: &Vec<[F; POSEIDON2_WIDTH]>,
         required_heights: Option<&[usize]>,
     ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
@@ -437,9 +450,13 @@ impl<'a> TraceModuleRef<'a> {
                 exp_bits_len_gen,
                 required_heights,
             ),
-            TraceModuleRef::BatchConstraint(module) => {
-                module.generate_proving_ctxs(child_vk, proofs, preflights, &(), required_heights)
-            }
+            TraceModuleRef::BatchConstraint(module) => module.generate_proving_ctxs(
+                child_vk,
+                proofs,
+                preflights,
+                cached_trace_record,
+                required_heights,
+            ),
             TraceModuleRef::Stacking(module) => {
                 module.generate_proving_ctxs(child_vk, proofs, preflights, &(), required_heights)
             }
@@ -918,6 +935,13 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackend<BabyBearPoseidon2C
         self.batch_constraint.commit_child_vk(engine, child_vk)
     }
 
+    fn cached_trace_record(
+        &self,
+        child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+    ) -> CachedTraceRecord {
+        self.batch_constraint.cached_trace_record(child_vk)
+    }
+
     #[tracing::instrument(name = "subcircuit_generate_proving_ctxs", skip_all)]
     fn generate_proving_ctxs<
         TS: FiatShamirTranscript<BabyBearPoseidon2Config>
@@ -925,7 +949,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackend<BabyBearPoseidon2C
     >(
         &self,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-        child_vk_pcs_data: CommittedTraceData<CpuBackend<BabyBearPoseidon2Config>>,
+        cached_trace_ctx: CachedTraceCtx<CpuBackend<BabyBearPoseidon2Config>>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         external_poseidon2_compress_inputs: &Vec<[F; POSEIDON2_WIDTH]>,
         required_heights: Option<&[usize]>,
@@ -969,6 +993,12 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackend<BabyBearPoseidon2C
             TraceModuleRef::Stacking(&self.stacking),
             TraceModuleRef::Whir(&self.whir),
         ];
+
+        let cached_trace_record = match &cached_trace_ctx {
+            CachedTraceCtx::Records(cached_trace_record) => Some(cached_trace_record),
+            _ => None,
+        };
+
         let span = tracing::Span::current();
         let ctxs_by_module = modules
             .into_par_iter()
@@ -980,6 +1010,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackend<BabyBearPoseidon2C
                     proofs,
                     &preflights,
                     &exp_bits_len_gen,
+                    &cached_trace_record,
                     external_poseidon2_compress_inputs,
                     required_heights,
                 )
@@ -988,10 +1019,18 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackend<BabyBearPoseidon2C
 
         let mut ctxs_by_module: Vec<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> =
             ctxs_by_module.into_iter().collect::<Option<Vec<_>>>()?;
-        if self.batch_constraint.has_cached {
-            ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
-                .cached_mains = vec![child_vk_pcs_data];
-        }
+        match cached_trace_ctx {
+            CachedTraceCtx::PcsData(child_vk_pcs_data) => {
+                assert!(self.batch_constraint.has_cached);
+                ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
+                    .cached_mains = vec![child_vk_pcs_data];
+            }
+            CachedTraceCtx::Records(cached_trace_record) => {
+                assert!(!self.batch_constraint.has_cached);
+                ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
+                    .public_values = cached_trace_record.dag_commit_info.unwrap().commit.to_vec();
+            }
+        };
         let mut ctx_per_trace = ctxs_by_module.into_iter().flatten().collect::<Vec<_>>();
         if power_checker_required.is_some_and(|h| h != POW_CHECKER_HEIGHT) {
             return None;
@@ -1041,6 +1080,7 @@ pub mod cuda_tracegen {
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
             exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+            cached_trace_record: &Option<&CachedTraceRecord>,
             external_poseidon2_compress_inputs: &Vec<[F; POSEIDON2_WIDTH]>,
             required_heights: Option<&[usize]>,
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
@@ -1070,7 +1110,7 @@ pub mod cuda_tracegen {
                     child_vk,
                     proofs,
                     preflights,
-                    &(),
+                    cached_trace_record,
                     required_heights,
                 ),
                 TraceModuleRef::Stacking(module) => module.generate_proving_ctxs(
@@ -1110,6 +1150,13 @@ pub mod cuda_tracegen {
             self.batch_constraint.commit_child_vk_gpu(engine, child_vk)
         }
 
+        fn cached_trace_record(
+            &self,
+            child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+        ) -> CachedTraceRecord {
+            self.batch_constraint.cached_trace_record(child_vk)
+        }
+
         #[tracing::instrument(name = "subcircuit_generate_proving_ctxs", skip_all)]
         fn generate_proving_ctxs<
             TS: FiatShamirTranscript<BabyBearPoseidon2Config>
@@ -1117,7 +1164,7 @@ pub mod cuda_tracegen {
         >(
             &self,
             child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-            child_vk_pcs_data: CommittedTraceData<GpuBackend>,
+            cached_trace_ctx: CachedTraceCtx<GpuBackend>,
             proofs: &[Proof<BabyBearPoseidon2Config>],
             external_poseidon2_compress_inputs: &Vec<[F; POSEIDON2_WIDTH]>,
             required_heights: Option<&[usize]>,
@@ -1169,6 +1216,12 @@ pub mod cuda_tracegen {
                 TraceModuleRef::Stacking(&self.stacking),
                 TraceModuleRef::Whir(&self.whir),
             ];
+
+            let cached_trace_record = match &cached_trace_ctx {
+                CachedTraceCtx::Records(cached_trace_record) => Some(cached_trace_record),
+                _ => None,
+            };
+
             // PERF[jpw]: we avoid par_iter so that kernel launches occur on the same stream.
             // This can be parallelized to separate streams for more CUDA stream parallelism, but it
             // will require recording events so streams properly sync for cudaMemcpyAsync and kernel
@@ -1180,14 +1233,24 @@ pub mod cuda_tracegen {
                     &proofs_gpu,
                     &preflights_gpu,
                     &exp_bits_len_gen,
+                    &cached_trace_record,
                     external_poseidon2_compress_inputs,
                     required_heights,
                 )?);
             }
-            if self.batch_constraint.has_cached {
-                ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
-                    .cached_mains = vec![child_vk_pcs_data];
-            }
+            match cached_trace_ctx {
+                CachedTraceCtx::PcsData(child_vk_pcs_data) => {
+                    assert!(self.batch_constraint.has_cached);
+                    ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
+                        .cached_mains = vec![child_vk_pcs_data];
+                }
+                CachedTraceCtx::Records(cached_trace_record) => {
+                    assert!(!self.batch_constraint.has_cached);
+                    ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
+                        .public_values =
+                        cached_trace_record.dag_commit_info.unwrap().commit.to_vec();
+                }
+            };
             let mut ctx_per_trace = ctxs_by_module.into_iter().flatten().collect::<Vec<_>>();
             if power_checker_required.is_some_and(|h| h != POW_CHECKER_HEIGHT) {
                 return None;

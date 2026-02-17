@@ -15,7 +15,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
     default_duplex_sponge_recorder, Digest, DIGEST_SIZE, EF, F,
 };
 use p3_field::{Field, PrimeField32};
-use recursion_circuit::system::{AggregationSubCircuit, VerifierTraceGen};
+use recursion_circuit::system::{AggregationSubCircuit, CachedTraceCtx, VerifierTraceGen};
 use tracing::instrument;
 
 use crate::{
@@ -126,9 +126,10 @@ where
             &v[1..(num_airs - agg_other_ctxs.len())]
         });
 
+        let cached_trace_ctx = CachedTraceCtx::PcsData(self.child_vk_pcs_data.clone());
         let subcircuit_ctxs = self.circuit.verifier_circuit.generate_proving_ctxs(
             &self.child_vk,
-            self.child_vk_pcs_data.clone(),
+            cached_trace_ctx,
             &[proof],
             &poseidon2_inputs,
             verifier_trace_heights,

@@ -19,7 +19,7 @@ use p3_field::{PrimeCharacteristicRing, PrimeField32};
 
 use crate::{
     error::VerifyStarkError,
-    pvs::{NonRootVerifierPvs, VERIFIER_PVS_AIR_ID},
+    pvs::{NonRootVerifierPvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID},
     vk::NonRootStarkVerifyingKey,
 };
 
@@ -159,7 +159,7 @@ pub fn verify_vm_stark_proof_decoded(
     // Check that the public values of the last AIR matches up with the expected
     // compression_commit if compression is enabled, else ensure the last AIR has
     // no public values.
-    let compression_commit_pvs = proof.inner.public_values.last().unwrap().clone();
+    let compression_commit_pvs = proof.inner.public_values[CONSTRAINT_EVAL_AIR_ID].clone();
     if let Some(expected_compression_commit) = vk.baseline.compression_commit.as_ref() {
         let expected_expression_commit = expected_compression_commit.to_vec();
         if compression_commit_pvs != expected_expression_commit {

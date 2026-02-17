@@ -23,9 +23,9 @@ use recursion_circuit::{
     utils::assert_zeros,
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
-use verify_stark::pvs::{NonRootVerifierPvs, VERIFIER_PVS_AIR_ID};
+use verify_stark::pvs::{NonRootVerifierPvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID};
 
-use crate::circuit::{nonroot::app::*, CONSTRAINT_EVAL_AIR_ID, CONSTRAINT_EVAL_CACHED_INDEX};
+use crate::circuit::{nonroot::app::*, CONSTRAINT_EVAL_CACHED_INDEX};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
