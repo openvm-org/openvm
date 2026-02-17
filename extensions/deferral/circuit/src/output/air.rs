@@ -37,15 +37,15 @@ pub struct DeferralOutputCols<T> {
 
     // Initial execution state + instruction operands
     pub from_state: ExecutionState<T>,
-    pub rd: T,
-    pub rs: T,
+    pub rd_ptr: T,
+    pub rs_ptr: T,
     pub deferral_idx: T,
 
     // Heap pointers + auxiliary read columns
-    pub rd_ptr: [T; RV32_REGISTER_NUM_LIMBS],
-    pub rs_ptr: [T; RV32_REGISTER_NUM_LIMBS],
-    pub rd_ptr_aux: MemoryReadAuxCols<T>,
-    pub rs_ptr_aux: MemoryReadAuxCols<T>,
+    pub rd_val: [T; RV32_REGISTER_NUM_LIMBS],
+    pub rs_val: [T; RV32_REGISTER_NUM_LIMBS],
+    pub rd_aux: MemoryReadAuxCols<T>,
+    pub rs_aux: MemoryReadAuxCols<T>,
 
     // Read data and auxiliary columns. output_commit and output_len are read
     // contiguously from heap with layout [output_commit || output_len].
@@ -130,12 +130,12 @@ where
 
         when_section_transition.assert_eq(local.from_state.pc, next.from_state.pc);
         when_section_transition.assert_eq(local.from_state.timestamp, next.from_state.timestamp);
-        when_section_transition.assert_eq(local.rd, next.rd);
-        when_section_transition.assert_eq(local.rs, next.rs);
+        when_section_transition.assert_eq(local.rd_ptr, next.rd_ptr);
+        when_section_transition.assert_eq(local.rs_ptr, next.rs_ptr);
         when_section_transition.assert_eq(local.deferral_idx, next.deferral_idx);
 
-        assert_array_eq(&mut when_section_transition, local.rd_ptr, next.rd_ptr);
-        assert_array_eq(&mut when_section_transition, local.rs_ptr, next.rs_ptr);
+        assert_array_eq(&mut when_section_transition, local.rd_val, next.rd_val);
+        assert_array_eq(&mut when_section_transition, local.rs_val, next.rs_val);
 
         assert_array_eq(
             &mut when_section_transition,
@@ -173,32 +173,32 @@ where
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(d.clone(), local.rd),
-                local.rd_ptr,
+                MemoryAddress::new(d.clone(), local.rd_ptr),
+                local.rd_val,
                 local.from_state.timestamp,
-                &local.rd_ptr_aux,
+                &local.rd_aux,
             )
             .eval(builder, local.is_first);
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(d.clone(), local.rs),
-                local.rs_ptr,
+                MemoryAddress::new(d.clone(), local.rs_ptr),
+                local.rs_val,
                 local.from_state.timestamp + AB::Expr::ONE,
-                &local.rs_ptr_aux,
+                &local.rs_aux,
             )
             .eval(builder, local.is_first);
 
         // Constrain memory reads and writes using the MemoryBridge. a and b are
         // register pointers whose values are read first, then used as heap
         // pointers. c carries deferral_idx.
-        let rd_ptr = bytes_to_f(&local.rd_ptr);
-        let rs_ptr = bytes_to_f(&local.rs_ptr);
+        let input_ptr = bytes_to_f(&local.rs_val);
+        let output_ptr = bytes_to_f(&local.rd_val);
         let output_commit_and_len = combine_output(local.output_commit, local.output_len);
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(e.clone(), rs_ptr),
+                MemoryAddress::new(e.clone(), input_ptr),
                 output_commit_and_len,
                 local.from_state.timestamp + AB::Expr::TWO,
                 &local.output_commit_and_len_aux,
@@ -209,7 +209,7 @@ where
             .write(
                 MemoryAddress::new(
                     e.clone(),
-                    rd_ptr + (local.section_idx * AB::Expr::from_usize(DIGEST_SIZE)),
+                    output_ptr + (local.section_idx * AB::Expr::from_usize(DIGEST_SIZE)),
                 ),
                 local.write_bytes,
                 local.from_state.timestamp + AB::Expr::from_u8(3) + local.section_idx,
@@ -223,12 +223,11 @@ where
             .execute_and_increment_or_set_pc(
                 AB::Expr::from_usize(DeferralOpcode::OUTPUT.global_opcode_usize()),
                 [
-                    local.rd.into(),
-                    local.rs.into(),
+                    local.rd_ptr.into(),
+                    local.rs_ptr.into(),
                     local.deferral_idx.into(),
                     d,
                     e,
-                    AB::Expr::ZERO,
                 ],
                 local.from_state,
                 local.section_idx + AB::Expr::from_u8(4),

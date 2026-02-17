@@ -54,14 +54,14 @@ impl<T> VmAdapterInterface<T> for DeferralCallAdapterInterface {
 #[derive(AlignedBorrow)]
 pub struct DeferralCallAdapterCols<T> {
     pub from_state: ExecutionState<T>,
-    pub rd: T,
-    pub rs: T,
+    pub rd_ptr: T,
+    pub rs_ptr: T,
 
     // Heap pointers and aux columns
-    pub rd_ptr: [T; RV32_REGISTER_NUM_LIMBS],
-    pub rs_ptr: [T; RV32_REGISTER_NUM_LIMBS],
-    pub rd_ptr_aux: MemoryReadAuxCols<T>,
-    pub rs_ptr_aux: MemoryReadAuxCols<T>,
+    pub rd_val: [T; RV32_REGISTER_NUM_LIMBS],
+    pub rs_val: [T; RV32_REGISTER_NUM_LIMBS],
+    pub rd_aux: MemoryReadAuxCols<T>,
+    pub rs_aux: MemoryReadAuxCols<T>,
 
     // Read auxiliary columns
     pub input_commit_aux: MemoryReadAuxCols<T>,
@@ -112,27 +112,27 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         // Heap pointers are first read from their respective registers.
         self.memory_bridge
             .read(
-                MemoryAddress::new(d.clone(), cols.rd),
-                cols.rd_ptr,
+                MemoryAddress::new(d.clone(), cols.rd_ptr),
+                cols.rd_val,
                 timestamp_pp(),
-                &cols.rd_ptr_aux,
+                &cols.rd_aux,
             )
             .eval(builder, ctx.instruction.is_valid.clone());
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(d.clone(), cols.rs),
-                cols.rs_ptr,
+                MemoryAddress::new(d.clone(), cols.rs_ptr),
+                cols.rs_val,
                 timestamp_pp(),
-                &cols.rs_ptr_aux,
+                &cols.rs_aux,
             )
             .eval(builder, ctx.instruction.is_valid.clone());
 
         // Accumulators are read then updated in the native address space, using
         // deferral_idx (instruction immediate / operand c) to determine the
         // accumulator memory address.
-        let rd_ptr = bytes_to_f(&cols.rd_ptr);
-        let rs_ptr = bytes_to_f(&cols.rs_ptr);
+        let input_ptr = bytes_to_f(&cols.rs_val);
+        let output_ptr = bytes_to_f(&cols.rd_val);
 
         let deferral_idx = ctx.instruction.immediate;
         let native_as = AB::Expr::from_u32(NATIVE_AS);
@@ -144,7 +144,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(e.clone(), rs_ptr),
+                MemoryAddress::new(e.clone(), input_ptr),
                 ctx.reads.input_commit.clone(),
                 timestamp_pp(),
                 &cols.input_commit_aux,
@@ -175,7 +175,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         );
         self.memory_bridge
             .write(
-                MemoryAddress::new(e.clone(), rd_ptr),
+                MemoryAddress::new(e.clone(), output_ptr),
                 output_commit_and_len,
                 timestamp_pp(),
                 &cols.output_commit_and_len_aux,
@@ -204,8 +204,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             .execute_and_increment_or_set_pc(
                 ctx.instruction.opcode,
                 [
-                    cols.rd.into(),
-                    cols.rs.into(),
+                    cols.rd_ptr.into(),
+                    cols.rs_ptr.into(),
                     deferral_idx,
                     d.clone(),
                     e.clone(),
@@ -232,14 +232,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
 pub struct DeferralCallAdapterRecord<F> {
     pub from_pc: u32,
     pub from_timestamp: u32,
-    pub rd: F,
-    pub rs: F,
+    pub rd_ptr: F,
+    pub rs_ptr: F,
 
     // Heap pointers and auxiliary records
-    pub rd_ptr: [u8; RV32_REGISTER_NUM_LIMBS],
-    pub rs_ptr: [u8; RV32_REGISTER_NUM_LIMBS],
-    pub rd_ptr_aux: MemoryReadAuxRecord,
-    pub rs_ptr_aux: MemoryReadAuxRecord,
+    pub rd_val: [u8; RV32_REGISTER_NUM_LIMBS],
+    pub rs_val: [u8; RV32_REGISTER_NUM_LIMBS],
+    pub rd_aux: MemoryReadAuxRecord,
+    pub rs_aux: MemoryReadAuxRecord,
 
     // Read auxiliary records
     pub input_commit_aux: MemoryReadAuxRecord,
@@ -280,26 +280,26 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
         let &Instruction { a, b, c, d, e, .. } = instruction;
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
         debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
-        record.rd = a;
-        record.rs = b;
+        record.rd_ptr = a;
+        record.rs_ptr = b;
 
-        record.rd_ptr = tracing_read(
+        record.rd_val = tracing_read(
             memory,
             d.as_canonical_u32(),
             a.as_canonical_u32(),
-            &mut record.rd_ptr_aux.prev_timestamp,
+            &mut record.rd_aux.prev_timestamp,
         );
-        record.rs_ptr = tracing_read(
+        record.rs_val = tracing_read(
             memory,
             d.as_canonical_u32(),
             b.as_canonical_u32(),
-            &mut record.rs_ptr_aux.prev_timestamp,
+            &mut record.rs_aux.prev_timestamp,
         );
 
         let input_commit = tracing_read(
             memory,
             e.as_canonical_u32(),
-            u32::from_le_bytes(record.rs_ptr),
+            u32::from_le_bytes(record.rs_val),
             &mut record.input_commit_aux.prev_timestamp,
         );
 
@@ -339,7 +339,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
         tracing_write(
             memory,
             e.as_canonical_u32(),
-            u32::from_le_bytes(record.rd_ptr),
+            u32::from_le_bytes(record.rd_val),
             output_commit_and_len,
             &mut record.output_commit_and_len_aux.prev_timestamp,
             &mut record.output_commit_and_len_aux.prev_data,
@@ -412,20 +412,20 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
         );
 
         mem_helper.fill(
-            record.rs_ptr_aux.prev_timestamp,
-            record.rs_ptr_aux.prev_timestamp + 1,
-            adapter_row.rs_ptr_aux.as_mut(),
+            record.rs_aux.prev_timestamp,
+            record.rs_aux.prev_timestamp + 1,
+            adapter_row.rs_aux.as_mut(),
         );
         mem_helper.fill(
-            record.rd_ptr_aux.prev_timestamp,
-            record.rd_ptr_aux.prev_timestamp + 1,
-            adapter_row.rd_ptr_aux.as_mut(),
+            record.rd_aux.prev_timestamp,
+            record.rd_aux.prev_timestamp + 1,
+            adapter_row.rd_aux.as_mut(),
         );
-        adapter_row.rs_ptr = record.rs_ptr.map(F::from_u8);
-        adapter_row.rd_ptr = record.rd_ptr.map(F::from_u8);
+        adapter_row.rs_val = record.rs_val.map(F::from_u8);
+        adapter_row.rd_val = record.rd_val.map(F::from_u8);
 
-        adapter_row.rs = record.rs;
-        adapter_row.rd = record.rd;
+        adapter_row.rs_ptr = record.rs_ptr;
+        adapter_row.rd_ptr = record.rd_ptr;
         adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
         adapter_row.from_state.pc = F::from_u32(record.from_pc);
     }
