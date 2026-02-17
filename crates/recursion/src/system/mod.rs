@@ -61,6 +61,7 @@ pub trait VerifierTraceGen<PB: ProverBackend> {
 
     /// The generic `TS` allows using different transcript implementations for debugging purposes.
     /// The default type to use is `DuplexSpongeRecorder`.
+    #[allow(clippy::ptr_arg)]
     fn generate_proving_ctxs<
         TS: FiatShamirTranscript<BabyBearPoseidon2Config>
             + TranscriptHistory<F = F, State = [F; POSEIDON2_WIDTH]>,

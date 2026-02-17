@@ -96,7 +96,7 @@ where
         let verifier_pvs_ctx = self.agg_node_tracegen.generate_verifier_pvs_ctx(
             proofs,
             child_is_app,
-            child_dag_commit.commitment.clone(),
+            child_dag_commit.commitment,
         );
         let subcircuit_ctxs = self.circuit.verifier_circuit.generate_proving_ctxs_base(
             child_vk,
@@ -214,9 +214,9 @@ impl<
 
     pub fn get_cached_commit(&self, is_self_recursive: bool) -> PB::Commitment {
         if is_self_recursive {
-            self.self_vk_pcs_data.as_ref().unwrap().commitment.clone()
+            self.self_vk_pcs_data.as_ref().unwrap().commitment
         } else {
-            self.child_vk_pcs_data.commitment.clone()
+            self.child_vk_pcs_data.commitment
         }
     }
 

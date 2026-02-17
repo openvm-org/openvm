@@ -108,6 +108,7 @@ pub unsafe fn poseidon2_deduplicate_records_get_temp_bytes(
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub unsafe fn poseidon2_deduplicate_records(
     d_records: &DeviceBuffer<F>,
     d_counts: &DeviceBuffer<Poseidon2Count>,

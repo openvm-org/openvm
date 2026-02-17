@@ -35,7 +35,7 @@ impl ModuleChip<GpuBackend> for FoldingGpuTraceGenerator {
 
         let mem = MemTracker::start("tracegen.whir_folding");
         let num_rounds = params.num_whir_rounds();
-        let num_queries_per_round = num_queries_per_round(&params);
+        let num_queries_per_round = num_queries_per_round(params);
         let total_queries = total_num_queries(&num_queries_per_round);
         let k_whir = params.k_whir();
         let internal_nodes = (1 << k_whir) - 1;

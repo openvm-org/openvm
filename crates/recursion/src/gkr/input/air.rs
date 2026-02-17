@@ -25,7 +25,7 @@ use crate::{
     },
     primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage},
     subairs::proof_idx::{ProofIdxIoCols, ProofIdxSubAir},
-    utils::assert_zeros,
+    utils::{assert_zeros, pow_tidx_count},
 };
 
 #[repr(C)]
@@ -162,9 +162,10 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
         let num_challenges = local.n_max + AB::Expr::from_usize(self.l_skip)
             - has_interactions.clone() * num_layers.clone();
 
-        // Add PoW and alpha, beta
+        // Add PoW (if any) and alpha, beta
+        let logup_pow_offset = pow_tidx_count(self.logup_pow_bits);
         let tidx_after_pow_and_alpha_beta =
-            local.tidx + AB::Expr::TWO + AB::Expr::from_usize(2 * D_EF);
+            local.tidx + AB::Expr::from_usize(logup_pow_offset + 2 * D_EF);
         // Add GKR layers + Sumcheck
         let tidx_after_gkr_layers = tidx_after_pow_and_alpha_beta.clone()
             + has_interactions.clone()
@@ -241,27 +242,29 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
         );
 
         // 2. TranscriptBus
-        // 2a. Observe pow witness
-        self.transcript_bus.observe(
-            builder,
-            local.proof_idx,
-            local.tidx.into(),
-            local.logup_pow_witness.into(),
-            local.is_enabled,
-        );
-        // 2b. Sample pow challenge
-        self.transcript_bus.sample(
-            builder,
-            local.proof_idx,
-            local.tidx.into() + AB::Expr::ONE,
-            local.logup_pow_sample.into(),
-            local.is_enabled,
-        );
+        if self.logup_pow_bits > 0 {
+            // 2a. Observe pow witness
+            self.transcript_bus.observe(
+                builder,
+                local.proof_idx,
+                local.tidx.into(),
+                local.logup_pow_witness.into(),
+                local.is_enabled,
+            );
+            // 2b. Sample pow challenge
+            self.transcript_bus.sample(
+                builder,
+                local.proof_idx,
+                local.tidx.into() + AB::Expr::ONE,
+                local.logup_pow_sample.into(),
+                local.is_enabled,
+            );
+        }
         // 2c. Sample alpha_logup challenge
         self.transcript_bus.sample_ext(
             builder,
             local.proof_idx,
-            local.tidx.into() + AB::Expr::TWO,
+            local.tidx.into() + AB::Expr::from_usize(logup_pow_offset),
             local.alpha_logup.map(Into::into),
             local.is_enabled,
         );
@@ -269,7 +272,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
         self.transcript_bus.observe_ext(
             builder,
             local.proof_idx,
-            local.tidx + AB::Expr::TWO + AB::Expr::from_usize(2 * D_EF),
+            local.tidx + AB::Expr::from_usize(logup_pow_offset + 2 * D_EF),
             local.q0_claim,
             local.is_enabled * has_interactions,
         );
@@ -288,17 +291,19 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
 
         // 4. ExpBitsLenBus
         // 4a. Check proof-of-work using `ExpBitsLenBus`.
-        self.exp_bits_len_bus.lookup_key(
-            builder,
-            ExpBitsLenMessage {
-                base: AB::Expr::from_prime_subfield(
-                    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield::GENERATOR,
-                ),
-                bit_src: local.logup_pow_sample.into(),
-                num_bits: AB::Expr::from_usize(self.logup_pow_bits),
-                result: AB::Expr::ONE,
-            },
-            local.is_enabled,
-        );
+        if self.logup_pow_bits > 0 {
+            self.exp_bits_len_bus.lookup_key(
+                builder,
+                ExpBitsLenMessage {
+                    base: AB::Expr::from_prime_subfield(
+                        <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield::GENERATOR,
+                    ),
+                    bit_src: local.logup_pow_sample.into(),
+                    num_bits: AB::Expr::from_usize(self.logup_pow_bits),
+                    result: AB::Expr::ONE,
+                },
+                local.is_enabled,
+            );
+        }
     }
 }

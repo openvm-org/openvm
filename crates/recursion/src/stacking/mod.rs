@@ -28,6 +28,7 @@ use crate::{
         TraceGenModule,
     },
     tracegen::{ModuleChip, RowMajorChip, StandardTracegenCtx},
+    utils::pow_observe_sample,
 };
 
 mod bus;
@@ -141,8 +142,7 @@ impl StackingModule {
 
         // μ PoW: observe witness and sample before sampling μ
         let mu_pow_witness = proof.whir_proof.mu_pow_witness;
-        ts.observe(mu_pow_witness);
-        let mu_pow_sample = ts.sample();
+        let mu_pow_sample = pow_observe_sample(ts, self.mu_pow_bits, mu_pow_witness);
 
         let stacking_batching_challenge = ts.sample_ext();
 

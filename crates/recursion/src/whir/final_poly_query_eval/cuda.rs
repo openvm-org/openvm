@@ -43,7 +43,7 @@ impl ModuleChip<GpuBackend> for FinalPolyQueryEvalGpuTraceGenerator {
         let width = FinalyPolyQueryEvalCols::<F>::width();
         let trace_d = DeviceMatrix::with_capacity(height, width);
 
-        let num_queries_per_round = num_queries_per_round(&params);
+        let num_queries_per_round = num_queries_per_round(params);
         let final_poly_len = 1usize << params.log_final_poly_len();
         let round_offsets = compute_round_offsets(
             params.num_whir_rounds(),
