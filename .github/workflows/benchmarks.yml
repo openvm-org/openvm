@@ -18,17 +18,17 @@ on:
       - ".github/workflows/benchmark-call.yml"
       - ".github/workflows/benchmarks.yml"
       - "Cargo.toml"
-  pull_request:
-    types: [opened, synchronize, reopened, labeled]
-    branches: ["**"]
-    paths:
-      - "benchmarks/prove/**"
-      - "benchmarks/guest/**"
-      - "crates/**"
-      - "extensions/**"
-      - ".github/workflows/benchmark-call.yml"
-      - ".github/workflows/benchmarks.yml"
-      - "Cargo.toml"
+  # pull_request:
+  #   types: [opened, synchronize, reopened, labeled]
+  #   branches: ["**"]
+  #   paths:
+  #     - "benchmarks/prove/**"
+  #     - "benchmarks/guest/**"
+  #     - "crates/**"
+  #     - "extensions/**"
+  #     - ".github/workflows/benchmark-call.yml"
+  #     - ".github/workflows/benchmarks.yml"
+  #     - "Cargo.toml"
   workflow_dispatch:
     inputs:
       flamegraphs:
