@@ -283,7 +283,7 @@ pub mod cuda {
                     .cpu
                     .transcript
                     .perm_results()
-                    .into_iter()
+                    .iter()
                     .flatten()
                     .copied()
                     .collect_vec()

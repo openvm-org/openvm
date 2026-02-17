@@ -60,7 +60,7 @@ impl RootProver {
             num_user_pvs,
             trace_heights,
         );
-        Self { 0: inner }
+        Self(inner)
     }
 
     pub fn from_pk(
@@ -79,7 +79,7 @@ impl RootProver {
             num_user_pvs,
             trace_heights,
         );
-        Self { 0: inner }
+        Self(inner)
     }
 
     pub fn generate_proving_ctx(

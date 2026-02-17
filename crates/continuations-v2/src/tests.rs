@@ -103,6 +103,7 @@ fn test_rv32im_config() -> Rv32ImConfig {
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn run_leaf_aggregation(
     log_fib_input: usize,
 ) -> Result<(
@@ -149,6 +150,7 @@ fn run_leaf_aggregation(
 // Feature-gated because full aggregation is too slow without CUDA. Many tests below
 // (including all that use run_full_aggregation) are similarly gated.
 #[cfg(feature = "cuda")]
+#[allow(clippy::type_complexity)]
 fn run_full_aggregation(
     log_fib_input: usize,
     extra_recursive_layers: usize,

@@ -937,7 +937,7 @@ pub(in crate::batch_constraint) mod cuda {
                     height,
                     &d_idx_keys,
                     &d_cur_sum_evals,
-                    num_valid_rows as u32,
+                    num_valid_rows,
                 )
                 .unwrap();
                 let d_temp_buffer = DeviceBuffer::<u8>::with_capacity(temp_bytes);
@@ -959,7 +959,7 @@ pub(in crate::batch_constraint) mod cuda {
                     &num_airs,
                     &n_logups,
                     preflights_gpu.len() as u32,
-                    num_valid_rows as u32,
+                    num_valid_rows,
                     child_vk.system_params.l_skip as u32,
                     &d_temp_buffer,
                     temp_bytes,

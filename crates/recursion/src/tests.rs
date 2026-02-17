@@ -497,6 +497,8 @@ mod cuda {
     use openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
     use openvm_cuda_common::copy::MemCopyD2H;
     use openvm_stark_backend::prover::{MatrixDimensions, MatrixView};
+    #[cfg(feature = "touchemall")]
+    use openvm_stark_sdk::config::baby_bear_poseidon2::F;
     use openvm_stark_sdk::utils::setup_tracing_with_log_level;
     use test_case::test_matrix;
     use tracing::Level;

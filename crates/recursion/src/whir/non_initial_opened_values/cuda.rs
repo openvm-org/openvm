@@ -46,7 +46,7 @@ impl ModuleChip<GpuBackend> for NonInitialOpenedValuesGpuTraceGenerator {
         let trace_d = DeviceMatrix::with_capacity(height, width);
 
         let num_rounds = params.num_whir_rounds();
-        let num_queries_per_round = num_queries_per_round(&params);
+        let num_queries_per_round = num_queries_per_round(params);
         let total_queries = total_num_queries(&num_queries_per_round);
         let query_offsets = query_offsets(&num_queries_per_round);
         let k_whir = params.k_whir();
@@ -55,8 +55,8 @@ impl ModuleChip<GpuBackend> for NonInitialOpenedValuesGpuTraceGenerator {
         // Compute round_row_offsets for rounds 1..num_rounds (non-initial rounds)
         let mut round_row_offsets = Vec::with_capacity(num_rounds);
         round_row_offsets.push(0usize);
-        for whir_round in 1..num_rounds {
-            let rows_this_round = num_queries_per_round[whir_round] * rows_per_query;
+        for num_queries in &num_queries_per_round[1..num_rounds] {
+            let rows_this_round = num_queries * rows_per_query;
             round_row_offsets.push(round_row_offsets.last().unwrap() + rows_this_round);
         }
         let rows_per_proof = *round_row_offsets.last().unwrap();
