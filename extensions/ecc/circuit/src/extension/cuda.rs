@@ -60,6 +60,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     bitwise_lu.clone(),
                     config.clone(),
                     start_offset,
+                    curve.a.clone(),
+                    curve.b.clone(),
                     pointer_max_bits as u32,
                     timestamp_max_bits as u32,
                 );
@@ -72,6 +74,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     config,
                     start_offset,
                     curve.a.clone(),
+                    curve.b.clone(),
                     pointer_max_bits as u32,
                     timestamp_max_bits as u32,
                 );
@@ -89,6 +92,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     bitwise_lu.clone(),
                     config.clone(),
                     start_offset,
+                    curve.a.clone(),
+                    curve.b.clone(),
                     pointer_max_bits as u32,
                     timestamp_max_bits as u32,
                 );
@@ -101,6 +106,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     config,
                     start_offset,
                     curve.a.clone(),
+                    curve.b.clone(),
                     pointer_max_bits as u32,
                     timestamp_max_bits as u32,
                 );

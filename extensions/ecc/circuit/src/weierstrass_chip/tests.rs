@@ -601,15 +601,72 @@ mod ec_add_tests {
         );
     }
 
-    // /////////////////////////////////////////////////////////////////////////////////////
-    // SANITY TESTS
-    //
-    // Ensure that execute functions produce the correct results.
-    // /////////////////////////////////////////////////////////////////////////////////////
-    // Note: The sanity test needs to be updated for projective coordinates.
-    // Projective add has 6 inputs (X1,Y1,Z1,X2,Y2,Z2) and 3 outputs (X3,Y3,Z3).
-    // The old affine test checked lambda, x3, y3 - no longer applicable.
-    // TODO: Update this test after projective integration is complete.
+    ///////////////////////////////////////////////////////////////////////////////////////
+    /// SANITY TESTS
+    ///
+    /// Ensure that execute functions produce the correct results.
+    ///////////////////////////////////////////////////////////////////////////////////////
+
+    /// Helper to convert projective (X, Y, Z) to affine (x, y) via x = X/Z, y = Y/Z
+    fn proj_to_affine(
+        x_proj: &BigUint,
+        y_proj: &BigUint,
+        z_proj: &BigUint,
+        p: &BigUint,
+    ) -> (BigUint, BigUint) {
+        let z_inv = z_proj.modpow(&(p - BigUint::from(2u32)), p);
+        let x_affine = (x_proj * &z_inv) % p;
+        let y_affine = (y_proj * &z_inv) % p;
+        (x_affine, y_affine)
+    }
+
+    #[test]
+    fn ec_add_sanity_test() {
+        let tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
+        let p = secp256k1_coord_prime();
+        let config = ExprBuilderConfig {
+            modulus: p.clone(),
+            num_limbs: 32,
+            limb_bits: LIMB_BITS,
+        };
+
+        // secp256k1: a=0, b=7
+        let executor = get_ec_add_step::<3, 32>(
+            config,
+            tester.range_checker().bus(),
+            tester.address_bits(),
+            Rv32WeierstrassOpcode::CLASS_OFFSET,
+            BigUint::zero(),
+            BigUint::from(7u32),
+        );
+
+        let (p1_x, p1_y) = SampleEcPoints[0].clone();
+        let (p2_x, p2_y) = SampleEcPoints[1].clone();
+
+        // Projective input: (X1, Y1, Z1, X2, Y2, Z2) where Z=1 for affine points
+        let z = BigUint::one();
+        let r = executor.expr.execute_with_output(
+            vec![p1_x, p1_y, z.clone(), p2_x, p2_y, z.clone()],
+            vec![true],
+        );
+
+        assert_eq!(r.len(), 3); // X3, Y3, Z3
+        let (x3_affine, y3_affine) = proj_to_affine(&r[0], &r[1], &r[2], &p);
+        assert_eq!(x3_affine, SampleEcPoints[2].0);
+        assert_eq!(y3_affine, SampleEcPoints[2].1);
+
+        let (p1_x, p1_y) = SampleEcPoints[2].clone();
+        let (p2_x, p2_y) = SampleEcPoints[3].clone();
+        let r = executor.expr.execute_with_output(
+            vec![p1_x, p1_y, z.clone(), p2_x, p2_y, z],
+            vec![true],
+        );
+
+        assert_eq!(r.len(), 3); // X3, Y3, Z3
+        let (x3_affine, y3_affine) = proj_to_affine(&r[0], &r[1], &r[2], &p);
+        assert_eq!(x3_affine, SampleEcPoints[4].0);
+        assert_eq!(y3_affine, SampleEcPoints[4].1);
+    }
 }
 
 mod ec_double_tests {

@@ -1,13 +1,11 @@
 use std::{cell::RefCell, rc::Rc};
 
-use derive_more::derive::{Deref, DerefMut};
 use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_circuit::{
     arch::*,
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_derive::PreflightExecutor;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
@@ -139,14 +137,7 @@ fn ec_add_proj_general_expr(
     FieldExpr::new_with_setup_values(builder, range_bus, true, vec![a_val, b])
 }
 
-/// BLOCK_SIZE: how many cells do we read at a time, must be a power of 2.
-/// BLOCKS: how many blocks do we need to represent one input or output
-/// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with three elements
-/// per input ProjectivePoint, BLOCKS = 9. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 3.
-#[derive(Clone, PreflightExecutor, Deref, DerefMut)]
-pub struct EcAddExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    FieldExpressionExecutor<Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
-);
+pub use execution::EcAddExecutor;
 
 fn gen_base_expr(
     config: ExprBuilderConfig,
