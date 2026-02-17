@@ -27,7 +27,7 @@ pub struct TranscriptCols<T> {
     /// are sent with multiplicity 0 or 1, this also functions as the lookup count.
     pub mask: [T; CHUNK],
 
-    /// inidicator, whether the state is permutation from previous row's state
+    /// indicator, whether the state is permutation from previous row's state
     pub permuted: T,
     /// The poseidon2 state.
     pub prev_state: [T; POSEIDON2_WIDTH],

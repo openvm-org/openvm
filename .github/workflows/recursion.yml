@@ -9,8 +9,8 @@ on:
     paths:
       - "crates/circuits/primitives/**"
       - "crates/vm/**"
-      - "extensions/native/compiler/**"
-      - "extensions/native/recursion/**"
+      - "crates/recursion/**"
+      - "crates/continuations-v2/**"
       - "Cargo.toml"
       - ".github/workflows/recursion.yml"
 
@@ -38,12 +38,12 @@ jobs:
       - name: Install solc # svm should support arm64 linux
         run: (hash svm 2>/dev/null || cargo install --locked --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
 
-      - name: Run recursion crate tests
-        working-directory: extensions/native/recursion
+      - name: Run recursion-circuit crate tests
+        working-directory: crates/recursion
         run: |
-          cargo nextest run --features parallel,static-verifier
+          cargo nextest run --features parallel
 
-      - name: Run continuations verifier crate tests
-        working-directory: crates/continuations
+      - name: Run continuations-v2 crate tests
+        working-directory: crates/continuations-v2
         run: |
           cargo nextest run --no-tests=pass

@@ -1128,7 +1128,7 @@ where
 
         // Constrain that n_logup is correct, i.e. that there are CELLS_LIMBS * LIMB_BITS - n_logup
         // leading zeroes in total_interactions_limbs. Because we only do this on the is_last row,
-        // we can re-use several of our columns to save space.
+        // we can reuse several of our columns to save space.
         //
         // We mark the most significant non-zero limb of local.total_interactions_limbs using the
         // non_zero_marker column array defined below, and the remaining number of leading 0 bits
