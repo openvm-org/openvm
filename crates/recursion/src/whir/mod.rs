@@ -673,7 +673,7 @@ impl WhirModule {
 }
 
 impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for WhirModule {
-    type ModuleSpecificCtx = ExpBitsLenTraceGenerator;
+    type ModuleSpecificCtx<'a> = ExpBitsLenTraceGenerator;
 
     #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
@@ -1134,7 +1134,7 @@ mod cuda_tracegen {
     }
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackend> for WhirModule {
-        type ModuleSpecificCtx = ExpBitsLenTraceGenerator;
+        type ModuleSpecificCtx<'a> = ExpBitsLenTraceGenerator;
 
         #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(
