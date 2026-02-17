@@ -19,8 +19,8 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use strum::EnumCount;
 
 use super::{
-    add_ne::EcAddNeExecutor,
-    curves::{ec_add_ne, ec_double, CurveType},
+    add::EcAddExecutor,
+    curves::{ec_add_proj, ec_double_proj},
     double::EcDoubleExecutor,
 };
 
@@ -41,9 +41,9 @@ macro_rules! dispatch_enum {
     };
 }
 
-/// Compute EC point addition using fast native field arithmetic.
+/// Compute complete projective EC point addition using fast native field arithmetic.
 #[inline]
-fn compute_ec_add_ne_fast<const BLOCKS: usize>(
+fn compute_ec_add_fast<const BLOCKS: usize>(
     field_type: Option<FieldType>,
     read_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2],
 ) -> Option<[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]> {
@@ -55,7 +55,7 @@ fn compute_ec_add_ne_fast<const BLOCKS: usize>(
         | FieldType::BN254Coordinate
         | FieldType::BLS12_381Coordinate => {
             dispatch_enum!(
-                ec_add_ne,
+                ec_add_proj,
                 field_type,
                 read_data,
                 [
@@ -71,33 +71,42 @@ fn compute_ec_add_ne_fast<const BLOCKS: usize>(
     })
 }
 
-/// Compute EC point doubling using fast native field arithmetic.
+/// Compute complete projective EC point doubling using fast native field arithmetic.
 #[inline]
 fn compute_ec_double_fast<const BLOCKS: usize>(
-    curve_type: Option<CurveType>,
+    field_type: Option<FieldType>,
     read_data: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS],
 ) -> Option<[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]> {
-    let curve_type = curve_type?;
+    let field_type = field_type?;
 
-    Some(dispatch_enum!(
-        ec_double,
-        curve_type,
-        read_data,
-        [
-            (CurveType::K256),
-            (CurveType::P256),
-            (CurveType::BN254),
-            (CurveType::BLS12_381),
-        ]
-    ))
+    Some(match field_type {
+        FieldType::K256Coordinate
+        | FieldType::P256Coordinate
+        | FieldType::BN254Coordinate
+        | FieldType::BLS12_381Coordinate => {
+            dispatch_enum!(
+                ec_double_proj,
+                field_type,
+                read_data,
+                [
+                    (FieldType::K256Coordinate),
+                    (FieldType::P256Coordinate),
+                    (FieldType::BN254Coordinate),
+                    (FieldType::BLS12_381Coordinate),
+                ]
+            )
+        }
+        // Scalar fields are not used for ECC point coordinates
+        _ => return None,
+    })
 }
 
 /// Check if this is a SETUP opcode (not a regular EC operation)
 #[inline]
 fn is_setup_opcode(local_opcode: usize) -> bool {
     let base_opcode = local_opcode % Rv64WeierstrassOpcode::COUNT;
-    base_opcode == Rv64WeierstrassOpcode::SETUP_EC_ADD_NE as usize
-        || base_opcode == Rv64WeierstrassOpcode::SETUP_EC_DOUBLE as usize
+    base_opcode == Rv64WeierstrassOpcode::SETUP_SW_EC_ADD_PROJ as usize
+        || base_opcode == Rv64WeierstrassOpcode::SETUP_SW_EC_DOUBLE_PROJ as usize
 }
 
 /// Slow-path fallback for EC operations (used for SETUP opcodes and unknown field types).
@@ -117,8 +126,8 @@ fn compute_ec_slow<const BLOCKS: usize>(
     run_field_expression_precomputed::<true>(program, flag_idx, read_bytes).into()
 }
 
-// Implementation for EcAddNeExecutor
-impl<F, RA, const BLOCKS: usize> PreflightExecutor<F, RA> for EcAddNeExecutor<BLOCKS>
+// Implementation for EcAddExecutor
+impl<F, RA, const BLOCKS: usize> PreflightExecutor<F, RA> for EcAddExecutor<BLOCKS>
 where
     F: PrimeField32,
     for<'buf> RA: RecordArena<
@@ -157,7 +166,7 @@ where
 
         // Try fast path for non-SETUP operations with known field types
         let output: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] = if !is_setup_opcode(local_opcode) {
-            compute_ec_add_ne_fast::<BLOCKS>(self.cached_field_type, read_data).unwrap_or_else(
+            compute_ec_add_fast::<BLOCKS>(self.cached_field_type, read_data).unwrap_or_else(
                 || {
                     compute_ec_slow::<BLOCKS>(
                         self.inner.program(),
@@ -227,7 +236,7 @@ where
 
         // Try fast path for non-SETUP operations with known curve types
         let output: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] = if !is_setup_opcode(local_opcode) {
-            compute_ec_double_fast::<BLOCKS>(self.cached_curve_type, read_data).unwrap_or_else(
+            compute_ec_double_fast::<BLOCKS>(self.cached_field_type, read_data).unwrap_or_else(
                 || {
                     compute_ec_slow::<BLOCKS>(
                         self.inner.program(),

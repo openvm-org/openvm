@@ -21,7 +21,7 @@ use openvm_riscv_adapters::{Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor};
 use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
 
 use crate::{
-    get_ec_addne_chip, get_ec_double_chip, EccRecord, Rv64WeierstrassConfig, WeierstrassAir,
+    get_ec_add_chip, get_ec_double_chip, EccRecord, Rv64WeierstrassConfig, WeierstrassAir,
     WeierstrassChip, WeierstrassExtension, ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32,
     NUM_LIMBS_48,
 };
@@ -101,13 +101,15 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 };
 
                 inventory.next_air::<WeierstrassAir<2, ECC_BLOCKS_32>>()?;
-                let addne = get_ec_addne_chip::<F, ECC_BLOCKS_32>(
+                let ec_add = get_ec_add_chip::<F, ECC_BLOCKS_32>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
                     byte_ptr_max_bits,
+                    curve.a.clone(),
+                    curve.b.clone(),
                 );
-                inventory.add_executor_chip(HybridWeierstrassChip::new(addne, device_ctx.clone()));
+                inventory.add_executor_chip(HybridWeierstrassChip::new(ec_add, device_ctx.clone()));
 
                 inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_32>>()?;
                 let double = get_ec_double_chip::<F, ECC_BLOCKS_32>(
@@ -116,6 +118,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     range_checker.clone(),
                     byte_ptr_max_bits,
                     curve.a.clone(),
+                    curve.b.clone(),
                 );
                 inventory.add_executor_chip(HybridWeierstrassChip::new(double, device_ctx.clone()));
             } else if bytes <= NUM_LIMBS_48 {
@@ -126,13 +129,15 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                 };
 
                 inventory.next_air::<WeierstrassAir<2, ECC_BLOCKS_48>>()?;
-                let addne = get_ec_addne_chip::<F, ECC_BLOCKS_48>(
+                let ec_add = get_ec_add_chip::<F, ECC_BLOCKS_48>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
                     byte_ptr_max_bits,
+                    curve.a.clone(),
+                    curve.b.clone(),
                 );
-                inventory.add_executor_chip(HybridWeierstrassChip::new(addne, device_ctx.clone()));
+                inventory.add_executor_chip(HybridWeierstrassChip::new(ec_add, device_ctx.clone()));
 
                 inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_48>>()?;
                 let double = get_ec_double_chip::<F, ECC_BLOCKS_48>(
@@ -141,6 +146,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     range_checker.clone(),
                     byte_ptr_max_bits,
                     curve.a.clone(),
+                    curve.b.clone(),
                 );
                 inventory.add_executor_chip(HybridWeierstrassChip::new(double, device_ctx.clone()));
             } else {
