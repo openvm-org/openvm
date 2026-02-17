@@ -7,7 +7,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::DeferralOutputExecutor;
 
-impl<F: PrimeField32> InterpreterExecutor<F> for DeferralOutputExecutor<F> {
+impl<F: PrimeField32> InterpreterExecutor<F> for DeferralOutputExecutor {
     fn pre_compute_size(&self) -> usize {
         0
     }
@@ -39,7 +39,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for DeferralOutputExecutor<F> {
     }
 }
 
-impl<F: PrimeField32> InterpreterMeteredExecutor<F> for DeferralOutputExecutor<F> {
+impl<F: PrimeField32> InterpreterMeteredExecutor<F> for DeferralOutputExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         0
     }

@@ -161,6 +161,8 @@ where
             local.current_commit_state,
         );
 
+        // TODO: constrain validity of deferral_idx via interaction with NumDeferralCircuitsAir
+
         // TODO: constrain that on the first row local.current_commit_state is the
         // poseidon2 compress of local.write_bytes and [deferral_idx, 0, ..., 0]
 

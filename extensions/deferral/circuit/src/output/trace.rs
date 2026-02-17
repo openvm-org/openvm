@@ -1,6 +1,6 @@
 use std::{
+    array::from_fn,
     borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
     mem::{align_of, size_of},
 };
 
@@ -9,12 +9,26 @@ use openvm_circuit::{
         get_record_from_slice, CustomBorrow, ExecutionError, MultiRowLayout, MultiRowMetadata,
         PreflightExecutor, RecordArena, SizedRecord, TraceFiller, VmStateMut,
     },
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
+    system::memory::{
+        offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
+        online::TracingMemory,
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+};
+use openvm_rv32im_circuit::adapters::{
+    memory_read, read_rv32_register, tracing_read, tracing_write,
+};
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
+use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
+
+use crate::utils::{f_commit_to_bytes, split_output, OUTPUT_TOTAL_BYTES};
 
 use super::DeferralOutputCols;
 
@@ -30,40 +44,66 @@ impl MultiRowMetadata for DeferralOutputMetadata {
     }
 }
 
-pub(crate) type DeferralOutputRecordLayout = MultiRowLayout<DeferralOutputMetadata>;
+pub(crate) type DeferralOutputLayout = MultiRowLayout<DeferralOutputMetadata>;
 
 #[repr(C)]
-#[derive(AlignedBytesBorrow, Debug, Clone, Copy)]
-pub struct DeferralOutputRecord {
+#[derive(AlignedBytesBorrow, Debug, Clone)]
+pub struct DeferralOutputRecordHeader {
     pub from_pc: u32,
     pub from_timestamp: u32,
+    pub rd_ptr: u32,
+    pub rs_ptr: u32,
+    pub deferral_idx: u32,
     pub num_rows: u32,
+
+    // Heap pointers and auxiliary records
+    pub rd_val: [u8; RV32_REGISTER_NUM_LIMBS],
+    pub rs_val: [u8; RV32_REGISTER_NUM_LIMBS],
+    pub rd_aux: MemoryReadAuxRecord,
+    pub rs_aux: MemoryReadAuxRecord,
+
+    // Output commit and length read auxiliary record
+    pub output_commit_and_len_aux: MemoryReadAuxRecord,
 }
 
-pub struct DeferralOutputRecordMut<'a, F> {
-    pub record: &'a mut DeferralOutputRecord,
-    _phantom: PhantomData<F>,
+pub struct DeferralOutputRecordMut<'a> {
+    pub header: &'a mut DeferralOutputRecordHeader,
+    pub write_bytes: &'a mut [u8],
+    pub write_aux: &'a mut [MemoryWriteBytesAuxRecord<DIGEST_SIZE>],
 }
 
-impl<'a, F> CustomBorrow<'a, DeferralOutputRecordMut<'a, F>, DeferralOutputRecordLayout> for [u8]
-where
-    F: PrimeField32,
-{
-    fn custom_borrow(
-        &'a mut self,
-        _layout: DeferralOutputRecordLayout,
-    ) -> DeferralOutputRecordMut<'a, F> {
-        let record: &mut DeferralOutputRecord =
-            <[u8] as CustomBorrow<'a, &mut DeferralOutputRecord, ()>>::custom_borrow(self, ());
+impl<'a> CustomBorrow<'a, DeferralOutputRecordMut<'a>, DeferralOutputLayout> for [u8] {
+    fn custom_borrow(&'a mut self, layout: DeferralOutputLayout) -> DeferralOutputRecordMut<'a> {
+        // SAFETY:
+        // - Caller guarantees through the layout that self has sufficient length for all splits
+        let (header_buf, rest) =
+            unsafe { self.split_at_mut_unchecked(size_of::<DeferralOutputRecordHeader>()) };
+
+        // SAFETY:
+        // - The layout guarantees rest has sufficient length for write data
+        // - There are DIGEST_SIZE bytes written per row
+        let (write_bytes, rest) = unsafe {
+            rest.split_at_mut_unchecked((layout.metadata.num_rows as usize) * DIGEST_SIZE)
+        };
+
+        // SAFETY:
+        // - Valid mutable slice from the previous split
+        // - Middle slice is properly aligned for MemoryWriteBytesAuxRecord via align_to_mut
+        // - Subslice operation [..layout.metadata.num_rows] validates sufficient capacity
+        // - Layout calculation ensures space for alignment padding plus required aux records
+        let (_, write_aux_buf, _) =
+            unsafe { rest.align_to_mut::<MemoryWriteBytesAuxRecord<DIGEST_SIZE>>() };
+
         DeferralOutputRecordMut {
-            record,
-            _phantom: PhantomData,
+            header: header_buf.borrow_mut(),
+            write_bytes,
+            write_aux: &mut write_aux_buf[..layout.metadata.num_rows],
         }
     }
 
-    unsafe fn extract_layout(&self) -> DeferralOutputRecordLayout {
-        let record: &DeferralOutputRecord = self.borrow();
-        DeferralOutputRecordLayout {
+    unsafe fn extract_layout(&self) -> DeferralOutputLayout {
+        let record: &DeferralOutputRecordHeader = self.borrow();
+        DeferralOutputLayout {
             metadata: DeferralOutputMetadata {
                 num_rows: record.num_rows as usize,
             },
@@ -71,34 +111,32 @@ where
     }
 }
 
-impl<'a, F> SizedRecord<DeferralOutputRecordLayout> for DeferralOutputRecordMut<'a, F>
-where
-    F: PrimeField32,
-{
-    fn size(layout: &DeferralOutputRecordLayout) -> usize {
-        let row_width = DeferralOutputCols::<F>::width();
-        layout.metadata.num_rows * row_width * size_of::<F>()
+impl<'a> SizedRecord<DeferralOutputLayout> for DeferralOutputRecordMut<'a> {
+    fn size(layout: &DeferralOutputLayout) -> usize {
+        let num_rows = layout.metadata.num_rows as usize;
+        let mut total_len = size_of::<DeferralOutputRecordHeader>();
+        total_len += num_rows * DIGEST_SIZE;
+        total_len =
+            total_len.next_multiple_of(align_of::<MemoryWriteBytesAuxRecord<DIGEST_SIZE>>());
+        total_len += num_rows * size_of::<MemoryWriteBytesAuxRecord<DIGEST_SIZE>>();
+        total_len
     }
 
-    fn alignment(_layout: &DeferralOutputRecordLayout) -> usize {
-        align_of::<DeferralOutputRecord>()
+    fn alignment(_layout: &DeferralOutputLayout) -> usize {
+        align_of::<DeferralOutputRecordHeader>()
     }
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct DeferralOutputExecutor<F> {
-    /// Determines the number of trace rows to allocate for this opcode.
-    /// The bound is enforced implicitly by the segment height.
-    pub row_count_fn: fn(&Instruction<F>, &TracingMemory) -> usize,
-}
+pub struct DeferralOutputExecutor;
 
 #[derive(Clone, Debug, Default)]
 pub struct DeferralOutputFiller;
 
-impl<F, RA> PreflightExecutor<F, RA> for DeferralOutputExecutor<F>
+impl<F, RA> PreflightExecutor<F, RA> for DeferralOutputExecutor
 where
     F: PrimeField32,
-    for<'buf> RA: RecordArena<'buf, DeferralOutputRecordLayout, DeferralOutputRecordMut<'buf, F>>,
+    for<'buf> RA: RecordArena<'buf, DeferralOutputLayout, DeferralOutputRecordMut<'buf>>,
 {
     fn get_opcode_name(&self, _opcode: usize) -> String {
         format!("{:?}", DeferralOpcode::OUTPUT)
@@ -109,17 +147,76 @@ where
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
-        let num_rows = (self.row_count_fn)(instruction, state.memory);
-        debug_assert!(num_rows > 0);
+        let Instruction { a, b, c, d, e, .. } = instruction;
+        debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
+        let rd_ptr = a.as_canonical_u32();
+        let rs_ptr = b.as_canonical_u32();
+        let deferral_idx = c.as_canonical_u32();
+
+        // Do a non-tracing read to get the output_len and compute num_rows
+        let read_ptr = read_rv32_register(state.memory.data(), rs_ptr);
+        let output_key = memory_read(state.memory.data(), RV32_MEMORY_AS, read_ptr);
+        let (_output_commit, output_len) = split_output(output_key);
+
+        let output_len_val = u32::from_le_bytes(output_len) as usize;
+        let num_rows = output_len_val / DIGEST_SIZE;
+        debug_assert_eq!(output_len_val % DIGEST_SIZE, 0);
+
+        // We now have the layout and can write the record
         let record = state
             .ctx
-            .alloc(DeferralOutputRecordLayout::new(DeferralOutputMetadata {
+            .alloc(DeferralOutputLayout::new(DeferralOutputMetadata {
                 num_rows,
             }));
-        record.record.from_pc = *state.pc;
-        record.record.from_timestamp = state.memory.timestamp();
-        record.record.num_rows = num_rows as u32;
+
+        record.header.from_pc = *state.pc;
+        record.header.from_timestamp = state.memory.timestamp();
+        record.header.rd_ptr = rd_ptr;
+        record.header.rs_ptr = rs_ptr;
+        record.header.deferral_idx = deferral_idx;
+        record.header.num_rows = num_rows as u32;
+
+        record.header.rd_val = tracing_read(
+            state.memory,
+            RV32_REGISTER_AS,
+            rd_ptr,
+            &mut record.header.rd_aux.prev_timestamp,
+        );
+        record.header.rs_val = tracing_read(
+            state.memory,
+            RV32_REGISTER_AS,
+            rs_ptr,
+            &mut record.header.rs_aux.prev_timestamp,
+        );
+
+        let input_ptr = u32::from_le_bytes(record.header.rs_val);
+        let output_ptr = u32::from_le_bytes(record.header.rd_val);
+        tracing_read::<OUTPUT_TOTAL_BYTES>(
+            state.memory,
+            RV32_MEMORY_AS,
+            input_ptr,
+            &mut record.header.output_commit_and_len_aux.prev_timestamp,
+        );
+
+        // TODO: we need some mechanism to get output_raw from output_commit
+        let output_raw = vec![0u8; output_len_val];
+        debug_assert_eq!(output_raw.len(), output_len_val);
+
+        for (row_idx, output_chunk) in output_raw.chunks_exact(DIGEST_SIZE).enumerate() {
+            let row_output_ptr = output_ptr + (row_idx * DIGEST_SIZE) as u32;
+            tracing_write(
+                state.memory,
+                RV32_MEMORY_AS,
+                row_output_ptr,
+                from_fn(|i| output_chunk[i]),
+                &mut record.write_aux[row_idx].prev_timestamp,
+                &mut record.write_aux[row_idx].prev_data,
+            );
+            record.write_bytes[row_idx * DIGEST_SIZE..(row_idx + 1) * DIGEST_SIZE]
+                .copy_from_slice(output_chunk);
+        }
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
         Ok(())
@@ -132,7 +229,7 @@ where
 {
     fn fill_trace(
         &self,
-        _mem_helper: &MemoryAuxColsFactory<F>,
+        mem_helper: &MemoryAuxColsFactory<F>,
         trace_matrix: &mut RowMajorMatrix<F>,
         rows_used: usize,
     ) {
@@ -140,79 +237,106 @@ where
             return;
         }
 
-        let row_width = trace_matrix.width;
-        let mut trace = &mut trace_matrix.values[..];
-        let mut rows_so_far = 0;
+        let width = trace_matrix.width;
+        debug_assert_eq!(width, DeferralOutputCols::<u8>::width());
 
-        let mut chunks = Vec::new();
-        let mut sizes = Vec::new();
+        let mut trace = &mut trace_matrix.values[..width * rows_used];
 
-        loop {
-            if rows_so_far >= rows_used {
-                chunks.push(trace);
-                sizes.push(0);
-                break;
+        while !trace.is_empty() {
+            // SAFETY:
+            // - Executor writes a valid record to the start of trace
+            // - Header is at the start of the record
+            let header: &DeferralOutputRecordHeader =
+                unsafe { get_record_from_slice(&mut trace, ()) };
+            let num_rows = header.num_rows as usize;
+            let (mut section_chunk, rest) = trace.split_at_mut(width * num_rows);
+
+            // Copy write data out first; row filling overwrites the record bytes in-place.
+            let (header, write_bytes, write_aux) = {
+                // SAFETY:
+                // - The section contains exactly one DeferralOutputRecord
+                // - Layout is reconstructed from the record header
+                let record: DeferralOutputRecordMut = unsafe {
+                    get_record_from_slice(
+                        &mut section_chunk,
+                        DeferralOutputLayout::new(DeferralOutputMetadata { num_rows }),
+                    )
+                };
+                (
+                    record.header.clone(),
+                    record.write_bytes.to_vec(),
+                    record.write_aux.to_vec(),
+                )
+            };
+
+            // Starting commit state should be [deferral_idx, 0, ..., 0]
+            let mut current_commit_state = [F::ZERO; DIGEST_SIZE];
+            current_commit_state[0] = F::from_u32(header.deferral_idx);
+
+            let output_len_bytes = ((num_rows * DIGEST_SIZE) as u32)
+                .to_le_bytes()
+                .map(F::from_u8);
+
+            for (row_idx, row) in section_chunk.chunks_exact_mut(width).enumerate() {
+                let cols: &mut DeferralOutputCols<F> = row.borrow_mut();
+
+                cols.is_valid = F::ONE;
+                cols.is_first = F::from_bool(row_idx == 0);
+                cols.section_idx = F::from_usize(row_idx);
+
+                cols.from_state.pc = F::from_u32(header.from_pc);
+                cols.from_state.timestamp = F::from_u32(header.from_timestamp);
+                cols.rd_ptr = F::from_u32(header.rd_ptr);
+                cols.rs_ptr = F::from_u32(header.rs_ptr);
+                cols.deferral_idx = F::from_u32(header.deferral_idx);
+
+                cols.rd_val = header.rd_val.map(F::from_u8);
+                cols.rs_val = header.rs_val.map(F::from_u8);
+
+                if row_idx == 0 {
+                    mem_helper.fill(
+                        header.rd_aux.prev_timestamp,
+                        header.from_timestamp,
+                        cols.rd_aux.as_mut(),
+                    );
+                    mem_helper.fill(
+                        header.rs_aux.prev_timestamp,
+                        header.from_timestamp + 1,
+                        cols.rs_aux.as_mut(),
+                    );
+                    mem_helper.fill(
+                        header.output_commit_and_len_aux.prev_timestamp,
+                        header.from_timestamp + 2,
+                        cols.output_commit_and_len_aux.as_mut(),
+                    );
+                } else {
+                    mem_helper.fill_zero(cols.rd_aux.as_mut());
+                    mem_helper.fill_zero(cols.rs_aux.as_mut());
+                    mem_helper.fill_zero(cols.output_commit_and_len_aux.as_mut());
+                }
+
+                cols.output_len.copy_from_slice(&output_len_bytes);
+                cols.write_bytes = from_fn(|i| F::from_u8(write_bytes[row_idx * DIGEST_SIZE + i]));
+
+                // TODO: compress current_commit_state with write_bytes
+                cols.current_commit_state = current_commit_state;
+
+                mem_helper.fill(
+                    write_aux[row_idx].prev_timestamp,
+                    header.from_timestamp + 3 + row_idx as u32,
+                    cols.write_bytes_aux.as_mut(),
+                );
             }
 
-            let (row0, _) = trace.split_at_mut(row_width);
-            // SAFETY: row0 contains a valid record representation written by the executor.
-            let mut row0 = row0;
-            let record: &DeferralOutputRecord = unsafe { get_record_from_slice(&mut row0, ()) };
-            let num_rows = record.num_rows as usize;
-            debug_assert!(num_rows > 0);
+            let output_commit = f_commit_to_bytes(&current_commit_state).map(F::from_u8);
+            for row in section_chunk.chunks_exact_mut(width) {
+                let cols: &mut DeferralOutputCols<F> = row.borrow_mut();
+                cols.output_commit = output_commit;
+            }
 
-            let (chunk, rest) = trace.split_at_mut(row_width * num_rows);
-            chunks.push(chunk);
-            sizes.push(num_rows);
-            rows_so_far += num_rows;
             trace = rest;
         }
 
-        for (chunk, num_rows) in chunks.into_iter().zip(sizes.into_iter()) {
-            if num_rows == 0 {
-                // padding rows
-                for row in chunk.chunks_mut(row_width) {
-                    unsafe {
-                        std::ptr::write_bytes(
-                            row.as_mut_ptr() as *mut u8,
-                            0,
-                            row_width * size_of::<F>(),
-                        );
-                    }
-                }
-                continue;
-            }
-
-            let mut record_from_pc = 0u32;
-            let mut record_from_timestamp = 0u32;
-
-            for (row_idx, mut row) in chunk.chunks_exact_mut(row_width).enumerate() {
-                if row_idx == 0 {
-                    // SAFETY: row contains a valid record representation written by the executor.
-                    let record: &DeferralOutputRecord =
-                        unsafe { get_record_from_slice(&mut row, ()) };
-                    record_from_pc = record.from_pc;
-                    record_from_timestamp = record.from_timestamp;
-                }
-
-                unsafe {
-                    std::ptr::write_bytes(
-                        row.as_mut_ptr() as *mut u8,
-                        0,
-                        row_width * size_of::<F>(),
-                    );
-                }
-
-                let cols: &mut DeferralOutputCols<F> = row.borrow_mut();
-                cols.is_active = F::ONE;
-                cols.is_first_row = F::from_bool(row_idx == 0);
-                cols.is_last_row = F::from_bool(row_idx + 1 == num_rows);
-
-                if row_idx == 0 {
-                    cols.from_state.pc = F::from_u32(record_from_pc);
-                    cols.from_state.timestamp = F::from_u32(record_from_timestamp);
-                }
-            }
-        }
+        trace_matrix.values[width * rows_used..].fill(F::ZERO);
     }
 }

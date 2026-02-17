@@ -1,3 +1,5 @@
+use std::array::from_fn;
+
 use itertools::Itertools;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
@@ -41,4 +43,13 @@ pub fn combine_output<T>(
         .chain(output_len)
         .collect_array()
         .unwrap()
+}
+
+pub fn split_output<T>(
+    output: [T; OUTPUT_TOTAL_BYTES],
+) -> ([T; COMMIT_NUM_BYTES], [T; F_NUM_BYTES]) {
+    let mut it = output.into_iter();
+    let commit = from_fn(|_| it.next().unwrap());
+    let len = from_fn(|_| it.next().unwrap());
+    (commit, len)
 }
