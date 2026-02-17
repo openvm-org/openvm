@@ -1,9 +1,9 @@
-mod add_ne;
-mod curves;
+mod add;
+pub mod curves;
 mod double;
 mod preflight;
 
-pub use add_ne::*;
+pub use add::*;
 #[cfg(feature = "rvr")]
 pub(crate) use curves::get_curve_type;
 pub use curves::CurveType;
@@ -11,6 +11,7 @@ pub use double::*;
 
 #[cfg(test)]
 mod tests;
+
 
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionFiller};
