@@ -1,8 +1,11 @@
 use core::{array, cmp::min, iter::zip};
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    sync::Arc,
+};
 
-use itertools::{fold, Itertools};
-use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq};
+use itertools::Itertools;
+use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq, SubAir};
 use openvm_stark_backend::{
     air_builders::{
         symbolic::{symbolic_variable::Entry, SymbolicExpressionNode},
@@ -14,13 +17,11 @@ use openvm_stark_backend::{
     proof::Proof,
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    BabyBearPoseidon2Config, DIGEST_SIZE, D_EF, EF, F,
-};
-use p3_air::{Air, AirBuilder, BaseAir};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, D_EF, EF, F};
+use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
 use p3_field::{
-    extension::BinomiallyExtendable, BasedVectorSpace, PrimeCharacteristicRing, PrimeField32,
-    TwoAdicField,
+    extension::BinomiallyExtendable, BasedVectorSpace, Field, PrimeCharacteristicRing,
+    PrimeField32, TwoAdicField,
 };
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
@@ -29,16 +30,21 @@ use strum::{EnumCount, IntoEnumIterator};
 use strum_macros::EnumIter;
 
 use crate::{
-    batch_constraint::bus::{
-        ConstraintsFoldingBus, ConstraintsFoldingMessage, EqNegInternalBus, ExpressionClaimBus,
-        InteractionsFoldingBus, InteractionsFoldingMessage, SymbolicExpressionBus,
-        SymbolicExpressionMessage,
+    batch_constraint::{
+        bus::{
+            ConstraintsFoldingBus, ConstraintsFoldingMessage, EqNegInternalBus, ExpressionClaimBus,
+            InteractionsFoldingBus, InteractionsFoldingMessage, SymbolicExpressionBus,
+            SymbolicExpressionMessage,
+        },
+        expr_eval::{
+            dag_commit_cols_to_cached_cols, default_poseidon2_sub_chip, generate_dag_commit_info,
+            DagCommitCols, DagCommitInfo, DagCommitPvs, DagCommitSubAir,
+        },
     },
     bus::{
-        AirShapeBus, AirShapeBusMessage, ColumnClaimsBus, ColumnClaimsMessage, DagCommitBus,
-        DagCommitBusMessage, HyperdimBus, HyperdimBusMessage, PublicValuesBus,
-        PublicValuesBusMessage, SelHypercubeBus, SelHypercubeBusMessage, SelUniBus,
-        SelUniBusMessage,
+        AirShapeBus, AirShapeBusMessage, ColumnClaimsBus, ColumnClaimsMessage, HyperdimBus,
+        HyperdimBusMessage, PublicValuesBus, PublicValuesBusMessage, SelHypercubeBus,
+        SelHypercubeBusMessage, SelUniBus, SelUniBusMessage,
     },
     system::Preflight,
     tracegen::RowMajorChip,
@@ -47,25 +53,26 @@ use crate::{
         ext_field_subtract, scalar_subtract_ext_field, MultiVecWithBounds,
     },
 };
-const NUM_FLAGS: usize = 4;
-const ENCODER_MAX_DEGREE: u32 = 2;
-const FLAG_MODULUS: u32 = ENCODER_MAX_DEGREE + 1;
+
+pub(in crate::batch_constraint) const NUM_FLAGS: usize = 4;
+pub(in crate::batch_constraint) const ENCODER_MAX_DEGREE: u32 = 2;
+pub(in crate::batch_constraint) const FLAG_MODULUS: u32 = ENCODER_MAX_DEGREE + 1;
 
 #[derive(AlignedBorrow, Copy, Clone)]
 #[repr(C)]
 pub struct CachedSymbolicExpressionColumns<T> {
-    flags: [T; NUM_FLAGS],
+    pub(in crate::batch_constraint) flags: [T; NUM_FLAGS],
 
-    air_idx: T,
-    node_or_interaction_idx: T,
+    pub(in crate::batch_constraint) air_idx: T,
+    pub(in crate::batch_constraint) node_or_interaction_idx: T,
     /// Attributes that define this gate. For binary gates such as Add, Mul, etc.,
     /// this contains the node_idx's. For InteractionMsgComp, it gives (node_idx, idx_in_message).
     /// See [[NodeKind]].
-    attrs: [T; 3],
-    fanout: T,
+    pub(in crate::batch_constraint) attrs: [T; 3],
+    pub(in crate::batch_constraint) fanout: T,
 
-    is_constraint: T,
-    constraint_idx: T,
+    pub(in crate::batch_constraint) is_constraint: T,
+    pub(in crate::batch_constraint) constraint_idx: T,
 }
 
 #[derive(AlignedBorrow, Copy, Clone)]
@@ -82,7 +89,7 @@ pub struct SingleMainSymbolicExpressionColumns<T> {
     is_n_neg: T,
 }
 
-pub struct SymbolicExpressionAir {
+pub struct SymbolicExpressionAir<F: Field> {
     pub expr_bus: SymbolicExpressionBus,
     pub claim_bus: ExpressionClaimBus,
     pub hyperdim_bus: HyperdimBus,
@@ -94,16 +101,30 @@ pub struct SymbolicExpressionAir {
     pub sel_hypercube_bus: SelHypercubeBus,
     pub sel_uni_bus: SelUniBus,
     pub eq_neg_internal_bus: EqNegInternalBus,
-    pub dag_commit_bus: DagCommitBus,
 
     pub cnt_proofs: usize,
-    pub has_cached: bool,
+    pub dag_commit_subair: Option<Arc<DagCommitSubAir<F>>>,
 }
 
-impl<F> BaseAirWithPublicValues<F> for SymbolicExpressionAir {}
-impl<F> PartitionedBaseAir<F> for SymbolicExpressionAir {
+impl<F: Field> SymbolicExpressionAir<F> {
+    fn has_cached(&self) -> bool {
+        self.dag_commit_subair.is_none()
+    }
+}
+
+impl<F: Field> BaseAirWithPublicValues<F> for SymbolicExpressionAir<F> {
+    fn num_public_values(&self) -> usize {
+        if self.has_cached() {
+            0
+        } else {
+            DagCommitPvs::<F>::width()
+        }
+    }
+}
+
+impl<F: Field> PartitionedBaseAir<F> for SymbolicExpressionAir<F> {
     fn cached_main_widths(&self) -> Vec<usize> {
-        if self.has_cached {
+        if self.has_cached() {
             vec![CachedSymbolicExpressionColumns::<F>::width()]
         } else {
             vec![]
@@ -112,23 +133,27 @@ impl<F> PartitionedBaseAir<F> for SymbolicExpressionAir {
 
     fn common_main_width(&self) -> usize {
         SingleMainSymbolicExpressionColumns::<F>::width() * self.cnt_proofs
-            + if self.has_cached {
+            + if self.has_cached() {
                 0
             } else {
-                1 + CachedSymbolicExpressionColumns::<F>::width()
+                DagCommitCols::<F>::width()
             }
     }
 }
 
-impl<F> BaseAir<F> for SymbolicExpressionAir {
+impl<F: Field> BaseAir<F> for SymbolicExpressionAir<F> {
     fn width(&self) -> usize {
-        CachedSymbolicExpressionColumns::<F>::width()
-            + SingleMainSymbolicExpressionColumns::<F>::width() * self.cnt_proofs
-            + if self.has_cached { 0 } else { 1 }
+        let single_main_width = SingleMainSymbolicExpressionColumns::<F>::width();
+        if self.has_cached() {
+            CachedSymbolicExpressionColumns::<F>::width() + single_main_width * self.cnt_proofs
+        } else {
+            DagCommitCols::<F>::width() + single_main_width * self.cnt_proofs
+        }
     }
 }
 
-impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for SymbolicExpressionAir
+impl<AB: PartitionedAirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
+    for SymbolicExpressionAir<AB::F>
 where
     <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
 {
@@ -139,65 +164,36 @@ where
             .expect("window should have at least one row")
             .to_vec();
 
-        let single_main_width = SingleMainSymbolicExpressionColumns::<AB::Var>::width();
-        let cached_width = CachedSymbolicExpressionColumns::<AB::Var>::width();
-
-        let cached_local_vec = self.has_cached.then(|| {
-            builder.cached_mains()[0]
-                .row_slice(0)
-                .expect("window should have at least one row")
-                .to_vec()
-        });
-
-        let (cached_cols, main_slice) = if self.has_cached {
-            let cached_slice = cached_local_vec.as_ref().unwrap().as_slice();
-            let main_slice = main_local.as_slice();
-            let cached_cols: &CachedSymbolicExpressionColumns<AB::Var> = cached_slice.borrow();
-            (cached_cols, main_slice)
-        } else {
-            // No cached trace: common main is prefixed by `row_idx` and then cached columns
+        let (cached_local_vec, main_slice) = if let Some(subair) = self.dag_commit_subair.as_ref() {
+            // No cached trace: DagCommitCols come before the regular columns
+            debug_assert!(!self.has_cached());
             let main_next = builder
                 .common_main()
                 .row_slice(1)
                 .expect("window should have at least two rows")
                 .to_vec();
 
-            let (prefix_local, rest_local) = main_local.as_slice().split_at(1);
-            let (prefix_next, _rest_next) = main_next.as_slice().split_at(1);
-            let (cached_slice, main_slice) = rest_local.split_at(cached_width);
-            let cached_cols: &CachedSymbolicExpressionColumns<AB::Var> = cached_slice.borrow();
+            let commit_width = DagCommitCols::<AB::Var>::width();
+            let (commit_local, rest_local) = main_local.as_slice().split_at(commit_width);
+            let (commit_next, _rest_next) = main_next.as_slice().split_at(commit_width);
+            subair.eval(builder, (commit_local, commit_next));
 
-            let row_idx_local = prefix_local[0];
-            let row_idx_next = prefix_next[0];
-
-            builder.when_first_row().assert_zero(row_idx_local);
-            builder
-                .when_transition()
-                .assert_eq(row_idx_next, row_idx_local + AB::Expr::ONE);
-
-            debug_assert_eq!(FLAG_MODULUS, 3);
-            builder.assert_bool(cached_cols.is_constraint);
-            for flag in cached_cols.flags {
-                builder.assert_tern(flag);
-            }
-
-            let cached_slice_expr = cached_slice.iter().copied().map(Into::into).collect_vec();
-
-            self.dag_commit_bus.send(
-                builder,
-                AB::Expr::ZERO,
-                DagCommitBusMessage {
-                    idx: row_idx_local.into(),
-                    values: cached_symbolic_expr_cols_to_digest(&cached_slice_expr),
-                },
-                AB::Expr::ONE,
-            );
-
-            (cached_cols, main_slice)
+            let cached_local_vec = dag_commit_cols_to_cached_cols(commit_local).to_vec();
+            (cached_local_vec, rest_local)
+        } else {
+            debug_assert!(self.has_cached());
+            let cached_local_vec = builder.cached_mains()[0]
+                .row_slice(0)
+                .expect("window should have at least one row")
+                .to_vec();
+            let main_slice = main_local.as_slice();
+            (cached_local_vec, main_slice)
         };
 
+        let cached_cols: &CachedSymbolicExpressionColumns<AB::Var> =
+            cached_local_vec.as_slice().borrow();
         let main_cols: Vec<&SingleMainSymbolicExpressionColumns<AB::Var>> = main_slice
-            .chunks(single_main_width)
+            .chunks(SingleMainSymbolicExpressionColumns::<AB::Var>::width())
             .map(|chunk| chunk.borrow())
             .collect();
 
@@ -423,6 +419,7 @@ pub(crate) struct SymbolicExpressionCtx<'a> {
     pub proofs: &'a [&'a Proof<BabyBearPoseidon2Config>],
     pub preflights: &'a [&'a Preflight],
     pub expr_evals: &'a MultiVecWithBounds<EF, 2>,
+    pub cached_trace_record: &'a Option<&'a CachedTraceRecord>,
 }
 
 impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
@@ -444,9 +441,9 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
         let l_skip = child_vk.inner.params.l_skip;
 
         let single_main_width = SingleMainSymbolicExpressionColumns::<F>::width();
-        let cached_width = CachedSymbolicExpressionColumns::<F>::width();
+        let dag_commit_width = DagCommitCols::<F>::width();
         let main_width =
-            single_main_width * max_num_proofs + if has_cached { 0 } else { 1 + cached_width };
+            single_main_width * max_num_proofs + if has_cached { 0 } else { dag_commit_width };
 
         struct Record {
             args: [F; 2 * D_EF],
@@ -686,58 +683,68 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
         };
         let mut main_trace = F::zero_vec(main_width * height);
 
-        let (encoder, cached_records) = if has_cached {
-            (None, None)
+        let (encoder, cached_records, poseidon2_rows) = if has_cached {
+            (None, None, None)
         } else {
             let encoder = Encoder::new(NodeKind::COUNT, ENCODER_MAX_DEGREE, true);
             assert_eq!(encoder.width(), NUM_FLAGS);
-            let cached_records = build_cached_records(child_vk);
-            debug_assert_eq!(cached_records.len(), num_valid_rows);
-            (Some(encoder), Some(cached_records))
+
+            let cached_trace_record = ctx.cached_trace_record.unwrap();
+            debug_assert_eq!(cached_trace_record.records.len(), num_valid_rows);
+
+            let poseidon2_subchip = default_poseidon2_sub_chip();
+            let poseidon2_trace = poseidon2_subchip.generate_trace(
+                cached_trace_record
+                    .dag_commit_info
+                    .as_ref()
+                    .unwrap()
+                    .poseidon2_inputs
+                    .clone(),
+            );
+            let poseidon2_rows = poseidon2_trace
+                .rows()
+                .map(|row| row.collect_vec())
+                .collect_vec();
+
+            (
+                Some(encoder),
+                Some(&cached_trace_record.records),
+                Some(poseidon2_rows),
+            )
         };
 
         main_trace
             .par_chunks_exact_mut(main_width)
             .enumerate()
             .for_each(|(row_idx, row)| {
-                // When has_cached == false we prepend row_idx for all rows
-                let row_offset = if has_cached {
+                let main_offset = if has_cached {
                     0
                 } else {
-                    row[0] = F::from_usize(row_idx);
-                    1
+                    // Poseidon2 data must be written for ALL rows (including padding) to
+                    // keep the onion hash chain valid.
+                    let poseidon2_row = &poseidon2_rows.as_ref().unwrap()[row_idx];
+                    row[..poseidon2_row.len()].copy_from_slice(poseidon2_row);
+
+                    if row_idx < num_valid_rows {
+                        let record = &cached_records.as_ref().unwrap()[row_idx];
+                        let encoder = encoder.as_ref().unwrap();
+                        let cols: &mut DagCommitCols<_> = row[..dag_commit_width].borrow_mut();
+                        for (i, x) in encoder
+                            .get_flag_pt(record.kind as usize)
+                            .into_iter()
+                            .enumerate()
+                        {
+                            cols.flags[i] = F::from_u32(x);
+                        }
+                        cols.is_constraint = F::from_bool(record.is_constraint);
+                    }
+
+                    dag_commit_width
                 };
 
                 if row_idx >= num_valid_rows {
                     return;
                 }
-
-                let row = &mut row[row_offset..];
-
-                let main_offset = if has_cached {
-                    0
-                } else {
-                    let record = &cached_records.as_ref().unwrap()[row_idx];
-                    let encoder = encoder.as_ref().unwrap();
-                    let cols: &mut CachedSymbolicExpressionColumns<_> =
-                        row[..cached_width].borrow_mut();
-
-                    for (i, x) in encoder
-                        .get_flag_pt(record.kind as usize)
-                        .into_iter()
-                        .enumerate()
-                    {
-                        cols.flags[i] = F::from_u32(x);
-                    }
-                    cols.air_idx = F::from_usize(record.air_idx);
-                    cols.node_or_interaction_idx = F::from_usize(record.node_idx);
-                    cols.attrs = record.attrs.map(F::from_usize);
-                    cols.is_constraint = F::from_bool(record.is_constraint);
-                    cols.constraint_idx = F::from_usize(record.constraint_idx);
-                    cols.fanout = F::from_usize(record.fanout);
-
-                    cached_width
-                };
 
                 for proof_idx in 0..max_num_proofs {
                     if proof_idx >= proofs.len() {
@@ -797,8 +804,8 @@ pub(crate) enum NodeKind {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CachedRecord {
-    kind: NodeKind,
-    air_idx: usize,
+    pub(crate) kind: NodeKind,
+    pub(crate) air_idx: usize,
     pub(crate) node_idx: usize,
     pub(crate) attrs: [usize; 3],
     pub(crate) is_constraint: bool,
@@ -806,9 +813,16 @@ pub(crate) struct CachedRecord {
     pub(crate) fanout: usize,
 }
 
-pub(crate) fn build_cached_records(
+#[derive(Debug, Clone)]
+pub struct CachedTraceRecord {
+    pub(crate) records: Vec<CachedRecord>,
+    pub dag_commit_info: Option<DagCommitInfo<F>>,
+}
+
+pub(crate) fn build_cached_trace_record(
     child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-) -> Vec<CachedRecord> {
+    has_cached: bool,
+) -> CachedTraceRecord {
     let mut fanout_per_air = Vec::with_capacity(child_vk.inner.per_air.len());
     for vk in &child_vk.inner.per_air {
         let nodes = &vk.symbolic_constraints.constraints.nodes;
@@ -1011,7 +1025,16 @@ pub(crate) fn build_cached_records(
             records.push(record);
         }
     }
-    records
+
+    let dag_commit_info = (!has_cached).then(|| {
+        let encoder = Encoder::new(NodeKind::COUNT, ENCODER_MAX_DEGREE, true);
+        generate_dag_commit_info(&records, encoder)
+    });
+
+    CachedTraceRecord {
+        records,
+        dag_commit_info,
+    }
 }
 
 /// Returns the cached trace
@@ -1021,7 +1044,7 @@ pub(crate) fn build_cached_records(
     fields(air = "SymbolicExpressionAir")
 )]
 pub(crate) fn generate_symbolic_expr_cached_trace(
-    child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
+    cached_trace_record: &CachedTraceRecord,
 ) -> RowMajorMatrix<F> {
     // 3 var types: main, preprocessed, public value
     // 3 selectors: is_first, is_last, is_transition
@@ -1031,7 +1054,7 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
     assert_eq!(encoder.width(), NUM_FLAGS);
 
     let cached_width = CachedSymbolicExpressionColumns::<F>::width();
-    let records = build_cached_records(child_vk);
+    let records = &cached_trace_record.records;
 
     let height = records.len().next_power_of_two();
     let mut cached_trace = F::zero_vec(cached_width * height);
@@ -1059,35 +1082,6 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
     RowMajorMatrix::new(cached_trace, cached_width)
 }
 
-/// Compress a CachedSymbolicExpressionColumns row into a digest. The 0-index element
-/// is a composition of the ternary (i.e. in [0, FLAG_MODULUS)) Encoder flags and the
-/// boolean flag is_constraint, all of which should fit into any 13-bit (or higher)
-/// Field. Each of the remaining cached columns is its own digest element.
-///
-/// WARNING: To use this in an AIR you MUST constrain that is_constraint is boolean
-/// and that each flag is in [0, FLAG_MODULUS)
-pub fn cached_symbolic_expr_cols_to_digest<F: PrimeCharacteristicRing>(
-    cached_cols: &[F],
-) -> [F; DIGEST_SIZE] {
-    let cached_cols: &CachedSymbolicExpressionColumns<_> = cached_cols.borrow();
-    let mut ret = [F::ZERO; DIGEST_SIZE];
-    ret[0] = fold(
-        cached_cols.flags.iter().enumerate(),
-        cached_cols.is_constraint.clone(),
-        |acc, (pow_exp, flag)| {
-            acc + (flag.clone() * F::from_u32(FLAG_MODULUS.pow(pow_exp as u32) << 1))
-        },
-    );
-    ret[1] = cached_cols.air_idx.clone();
-    ret[2] = cached_cols.node_or_interaction_idx.clone();
-    ret[3] = cached_cols.attrs[0].clone();
-    ret[4] = cached_cols.attrs[1].clone();
-    ret[5] = cached_cols.attrs[2].clone();
-    ret[6] = cached_cols.fanout.clone();
-    ret[7] = cached_cols.constraint_idx.clone();
-    ret
-}
-
 #[cfg(feature = "cuda")]
 pub(in crate::batch_constraint) mod cuda {
 
@@ -1107,6 +1101,7 @@ pub(in crate::batch_constraint) mod cuda {
         pub proofs: &'a [ProofGpu],
         pub preflights: &'a [PreflightGpu],
         pub expr_evals: &'a MultiVecWithBounds<openvm_cuda_backend::prelude::EF, 2>,
+        pub cached_trace_record: &'a Option<&'a CachedTraceRecord>,
     }
 
     impl ModuleChip<GpuBackend> for SymbolicExpressionTraceGenerator {
@@ -1195,9 +1190,9 @@ pub(in crate::batch_constraint) mod cuda {
             } else {
                 total_rows.max(1).next_power_of_two()
             };
-            let cached_width = CachedSymbolicExpressionColumns::<F>::width();
+            let commit_width = DagCommitCols::<F>::width();
             let width = SingleMainSymbolicExpressionColumns::<F>::width() * max_num_proofs
-                + if has_cached { 0 } else { cached_width + 1 };
+                + if has_cached { 0 } else { commit_width };
             let trace = DeviceMatrix::with_capacity(height, width);
 
             let d_log_heights = proofs
@@ -1258,10 +1253,9 @@ pub(in crate::batch_constraint) mod cuda {
             };
             let d_sumcheck_bounds = sumcheck_bounds.to_device().unwrap();
 
-            let d_cached_records = (!has_cached)
-                .then(|| build_cached_gpu_records(child_vk).to_device())
-                .transpose()
-                .unwrap();
+            let d_cached_records = ctx
+                .cached_trace_record
+                .map(|data| build_cached_gpu_records(data).unwrap().to_device().unwrap());
 
             unsafe {
                 sym_expr_common_tracegen(
@@ -1292,6 +1286,7 @@ pub(in crate::batch_constraint) mod cuda {
                 )
                 .unwrap();
             }
+
             Some(AirProvingContext::simple_no_pis(trace))
         }
     }

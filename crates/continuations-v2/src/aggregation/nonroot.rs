@@ -14,7 +14,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     default_duplex_sponge_recorder, Digest, EF, F,
 };
-use recursion_circuit::system::{AggregationSubCircuit, VerifierTraceGen};
+use recursion_circuit::system::{AggregationSubCircuit, CachedTraceCtx, VerifierTraceGen};
 use tracing::instrument;
 
 use crate::{
@@ -98,9 +98,10 @@ where
             child_is_app,
             child_dag_commit.commitment,
         );
+        let cached_trace_ctx = CachedTraceCtx::PcsData(child_dag_commit);
         let subcircuit_ctxs = self.circuit.verifier_circuit.generate_proving_ctxs_base(
             child_vk,
-            child_dag_commit.clone(),
+            cached_trace_ctx,
             proofs,
             default_duplex_sponge_recorder(),
         );
@@ -178,8 +179,7 @@ impl<
     ) -> Self {
         let verifier_circuit = S::new(child_vk.clone(), true, true);
         let engine = E::new(pk.params.clone());
-        let child_vk_pcs_data: CommittedTraceData<PB> =
-            verifier_circuit.commit_child_vk(&engine, &child_vk);
+        let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         let circuit = Arc::new(NonRootCircuit::new(Arc::new(verifier_circuit)));
         let vk = Arc::new(pk.get_vk());
         let d_pk = engine.device().transport_pk_to_device(&pk);

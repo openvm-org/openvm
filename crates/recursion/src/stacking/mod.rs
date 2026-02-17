@@ -290,7 +290,7 @@ impl RowMajorChip<F> for StackingModuleChip {
 }
 
 impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for StackingModule {
-    type ModuleSpecificCtx = ();
+    type ModuleSpecificCtx<'a> = ();
 
     #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
@@ -558,7 +558,7 @@ mod cuda_tracegen {
     }
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackend> for StackingModule {
-        type ModuleSpecificCtx = ();
+        type ModuleSpecificCtx<'a> = ();
 
         #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(

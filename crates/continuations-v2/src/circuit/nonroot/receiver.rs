@@ -12,9 +12,9 @@ use p3_field::PrimeCharacteristicRing;
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use recursion_circuit::bus::{PublicValuesBus, PublicValuesBusMessage};
 use stark_recursion_circuit_derive::AlignedBorrow;
-use verify_stark::pvs::VERIFIER_PVS_AIR_ID;
+use verify_stark::pvs::{CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID};
 
-use crate::circuit::{nonroot::app::*, CONSTRAINT_EVAL_AIR_ID};
+use crate::circuit::nonroot::app::*;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
