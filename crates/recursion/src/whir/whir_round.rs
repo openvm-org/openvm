@@ -20,7 +20,7 @@ use crate::{
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     tracegen::{RowMajorChip, StandardTracegenCtx},
-    utils::{ext_field_add, ext_field_multiply, ext_field_subtract},
+    utils::{ext_field_add, ext_field_multiply, ext_field_subtract, pow_tidx_count},
     whir::bus::{
         FinalPolyMleEvalBus, FinalPolyMleEvalMessage, FinalPolyQueryEvalBus,
         FinalPolyQueryEvalMessage, VerifyQueriesBus, VerifyQueriesBusMessage, WhirGammaBus,
@@ -72,6 +72,7 @@ pub struct WhirRoundAir {
     pub num_rounds: usize,
     pub final_poly_len: usize,
     pub pow_bits: usize,
+    pub folding_pow_bits: usize,
     pub generator: F,
 
     pub whir_round_encoder: Encoder,
@@ -217,7 +218,9 @@ impl WhirRoundAir {
             is_enabled,
         );
 
-        let post_sumcheck_offset = (3 * D_EF + 2) * self.k;
+        let folding_pow_offset = pow_tidx_count(self.folding_pow_bits);
+        let query_pow_offset = pow_tidx_count(self.pow_bits);
+        let post_sumcheck_offset = (3 * D_EF + folding_pow_offset) * self.k;
         let mut non_final_round_offset = post_sumcheck_offset;
 
         self.transcript_bus.observe_commit(
@@ -281,34 +284,36 @@ impl WhirRoundAir {
             + (local.is_enabled - is_same_proof.clone()) * AB::Expr::from_usize(final_round_offset)
             + is_same_proof.clone() * AB::Expr::from_usize(non_final_round_offset);
 
-        self.transcript_bus.observe(
-            builder,
-            proof_idx,
-            pow_tidx.clone(),
-            local.query_pow_witness,
-            is_enabled,
-        );
-        self.transcript_bus.sample(
-            builder,
-            proof_idx,
-            pow_tidx.clone() + AB::Expr::ONE,
-            local.query_pow_sample,
-            is_enabled,
-        );
+        if self.pow_bits > 0 {
+            self.transcript_bus.observe(
+                builder,
+                proof_idx,
+                pow_tidx.clone(),
+                local.query_pow_witness,
+                is_enabled,
+            );
+            self.transcript_bus.sample(
+                builder,
+                proof_idx,
+                pow_tidx.clone() + AB::Expr::ONE,
+                local.query_pow_sample,
+                is_enabled,
+            );
 
-        // Check proof-of-work using `ExpBitsLenBus`.
-        self.exp_bits_len_bus.lookup_key(
-            builder,
-            ExpBitsLenMessage {
-                base: self.generator.into(),
-                bit_src: local.query_pow_sample.into(),
-                num_bits: AB::Expr::from_usize(self.pow_bits),
-                result: AB::Expr::ONE,
-            },
-            is_enabled,
-        );
+            // Check proof-of-work using `ExpBitsLenBus`.
+            self.exp_bits_len_bus.lookup_key(
+                builder,
+                ExpBitsLenMessage {
+                    base: self.generator.into(),
+                    bit_src: local.query_pow_sample.into(),
+                    num_bits: AB::Expr::from_usize(self.pow_bits),
+                    result: AB::Expr::ONE,
+                },
+                is_enabled,
+            );
+        }
 
-        let verify_query_tidx = pow_tidx.clone() + AB::Expr::TWO;
+        let verify_query_tidx = pow_tidx.clone() + AB::Expr::from_usize(query_pow_offset);
 
         self.verify_queries_bus.send(
             builder,
@@ -330,13 +335,13 @@ impl WhirRoundAir {
         self.transcript_bus.sample_ext(
             builder,
             proof_idx,
-            pow_tidx.clone() + AB::Expr::TWO + local.num_queries,
+            pow_tidx.clone() + AB::Expr::from_usize(query_pow_offset) + local.num_queries,
             local.gamma,
             is_enabled,
         );
         builder.when(is_same_proof).assert_eq(
             next.tidx,
-            pow_tidx.clone() + AB::Expr::from_usize(2 + D_EF) + local.num_queries,
+            pow_tidx.clone() + AB::Expr::from_usize(query_pow_offset + D_EF) + local.num_queries,
         );
         self.gamma_bus.send(
             builder,

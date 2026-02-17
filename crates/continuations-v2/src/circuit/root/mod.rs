@@ -86,10 +86,7 @@ impl RootTraceGen<CpuBackend<BabyBearPoseidon2Config>> for RootTraceGenImpl {
         );
         (
             vec![commit_ctx, memory_ctx],
-            commit_inputs
-                .into_iter()
-                .chain(memory_inputs.into_iter())
-                .collect_vec(),
+            commit_inputs.into_iter().chain(memory_inputs).collect_vec(),
         )
     }
 }
@@ -129,10 +126,7 @@ impl RootTraceGen<GpuBackend> for RootTraceGenImpl {
                 transport_air_proving_ctx_to_device(commit_cpu_ctx),
                 transport_air_proving_ctx_to_device(memory_cpu_ctx),
             ],
-            commit_inputs
-                .into_iter()
-                .chain(memory_inputs.into_iter())
-                .collect_vec(),
+            commit_inputs.into_iter().chain(memory_inputs).collect_vec(),
         )
     }
 }

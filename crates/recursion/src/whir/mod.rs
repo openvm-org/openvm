@@ -23,6 +23,7 @@ use crate::{
         WhirPreflight,
     },
     tracegen::{ModuleChip, RowMajorChip, StandardTracegenCtx},
+    utils::pow_observe_sample,
     whir::{
         bus::{
             FinalPolyFoldingBus, FinalPolyMleEvalBus, FinalPolyQueryEvalBus, VerifyQueriesBus,
@@ -224,8 +225,11 @@ impl WhirModule {
                 ts.observe_ext(ev1);
                 ts.observe_ext(ev2);
 
-                ts.observe(folding_pow_witnesses[i * k_whir + j]);
-                folding_pow_samples.push(ts.sample());
+                folding_pow_samples.push(pow_observe_sample(
+                    ts,
+                    self.params.whir.folding_pow_bits,
+                    folding_pow_witnesses[i * k_whir + j],
+                ));
 
                 let ev0 = claim - ev1;
                 let alpha = ts.sample_ext();
@@ -250,8 +254,11 @@ impl WhirModule {
                 }
             };
 
-            ts.observe(query_phase_pow_witnesses[i]);
-            query_pow_samples.push(ts.sample());
+            query_pow_samples.push(pow_observe_sample(
+                ts,
+                self.params.whir.query_phase_pow_bits,
+                query_phase_pow_witnesses[i],
+            ));
 
             query_tidx_per_round.push(ts.len());
             let mut round_queries = vec![];
@@ -406,6 +413,7 @@ impl AirModule for WhirModule {
             num_rounds,
             final_poly_len: 1 << params.log_final_poly_len(),
             pow_bits: params.whir.query_phase_pow_bits,
+            folding_pow_bits: params.whir.folding_pow_bits,
             generator: F::GENERATOR,
             whir_round_encoder,
             num_queries_per_round: num_queries_per_round.clone(),
@@ -554,26 +562,32 @@ impl WhirModule {
 
         for (proof, preflight) in zip(proofs, preflights) {
             // μ PoW lookup (from stacking module)
-            exp_bits_len_gen.add_requests(std::iter::once((
-                F::GENERATOR,
-                preflight.stacking.mu_pow_sample,
-                *mu_pow_bits,
-            )));
+            if *mu_pow_bits > 0 {
+                exp_bits_len_gen.add_requests(std::iter::once((
+                    F::GENERATOR,
+                    preflight.stacking.mu_pow_sample,
+                    *mu_pow_bits,
+                )));
+            }
 
-            exp_bits_len_gen.add_requests(
-                preflight
-                    .whir
-                    .folding_pow_samples
-                    .iter()
-                    .map(|pow_sample| (F::GENERATOR, *pow_sample, *folding_pow_bits)),
-            );
-            exp_bits_len_gen.add_requests(
-                preflight
-                    .whir
-                    .query_pow_samples
-                    .iter()
-                    .map(|pow_sample| (F::GENERATOR, *pow_sample, *query_phase_pow_bits)),
-            );
+            if *folding_pow_bits > 0 {
+                exp_bits_len_gen.add_requests(
+                    preflight
+                        .whir
+                        .folding_pow_samples
+                        .iter()
+                        .map(|pow_sample| (F::GENERATOR, *pow_sample, *folding_pow_bits)),
+                );
+            }
+            if *query_phase_pow_bits > 0 {
+                exp_bits_len_gen.add_requests(
+                    preflight
+                        .whir
+                        .query_pow_samples
+                        .iter()
+                        .map(|pow_sample| (F::GENERATOR, *pow_sample, *query_phase_pow_bits)),
+                );
+            }
 
             let mut log_rs_domain_size = l_skip + n_stack + log_blowup;
             for window in preflight.whir.query_offsets.windows(2) {
