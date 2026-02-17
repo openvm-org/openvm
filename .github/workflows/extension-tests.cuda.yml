@@ -4,15 +4,15 @@ on:
   workflow_call:
   push:
     branches: ["main"]
-  pull_request:
-    branches: ["**"]
-    paths:
-      - "crates/circuits/**"
-      - "crates/vm/**"
-      - "crates/toolchain/**"
-      - "extensions/**"
-      - "Cargo.toml"
-      - ".github/workflows/extension-tests.cuda.yml"
+  # pull_request:
+  #   branches: ["**"]
+  #   paths:
+  #     - "crates/circuits/**"
+  #     - "crates/vm/**"
+  #     - "crates/toolchain/**"
+  #     - "extensions/**"
+  #     - "Cargo.toml"
+  #     - ".github/workflows/extension-tests.cuda.yml"
   workflow_dispatch:
     inputs:
       machine_type:

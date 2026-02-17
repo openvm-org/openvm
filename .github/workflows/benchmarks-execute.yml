@@ -4,19 +4,19 @@ on:
   workflow_call:
   push:
     branches: ["main"]
-  pull_request:
-    types: [opened, synchronize, reopened, labeled]
-    branches: ["**"]
-    paths:
-      - "benchmarks/execute/**"
-      - "crates/circuits/**"
-      - "crates/toolchain/**"
-      - "crates/prof/**"
-      - "crates/sdk/**"
-      - "crates/vm/**"
-      - "extensions/**"
-      - "Cargo.toml"
-      - ".github/workflows/benchmarks-execute.yml"
+  # pull_request:
+  #   types: [opened, synchronize, reopened, labeled]
+  #   branches: ["**"]
+  #   paths:
+  #     - "benchmarks/execute/**"
+  #     - "crates/circuits/**"
+  #     - "crates/toolchain/**"
+  #     - "crates/prof/**"
+  #     - "crates/sdk/**"
+  #     - "crates/vm/**"
+  #     - "extensions/**"
+  #     - "Cargo.toml"
+  #     - ".github/workflows/benchmarks-execute.yml"
   workflow_dispatch:
 
 concurrency:

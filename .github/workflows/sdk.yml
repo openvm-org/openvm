@@ -4,15 +4,15 @@ on:
   workflow_call:
   push:
     branches: ["main"]
-  pull_request:
-    branches: ["**"]
-    paths:
-      - "crates/circuits/primitives/**"
-      - "crates/vm/**"
-      - "crates/toolchain/**"
-      - "crates/sdk/**"
-      - "Cargo.toml"
-      - ".github/workflows/sdk.yml"
+  # pull_request:
+  #   branches: ["**"]
+  #   paths:
+  #     - "crates/circuits/primitives/**"
+  #     - "crates/vm/**"
+  #     - "crates/toolchain/**"
+  #     - "crates/sdk/**"
+  #     - "Cargo.toml"
+  #     - ".github/workflows/sdk.yml"
 
 concurrency:
   group: ${{ github.workflow_ref }}-sdk-${{ github.event.pull_request.number || github.sha }}

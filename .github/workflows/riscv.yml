@@ -4,17 +4,17 @@ on:
   workflow_call:
   push:
     branches: ["main"]
-  pull_request:
-    branches: ["**"]
-    paths:
-      - "crates/circuits/primitives/**"
-      - "crates/vm/**"
-      - "crates/toolchain/**"
-      - "extensions/rv32im/circuit/**"
-      - "extensions/rv32im/transpiler/**"
-      - "extensions/rv32im/guest/**"
-      - "Cargo.toml"
-      - ".github/workflows/riscv.yml"
+  # pull_request:
+  #   branches: ["**"]
+  #   paths:
+  #     - "crates/circuits/primitives/**"
+  #     - "crates/vm/**"
+  #     - "crates/toolchain/**"
+  #     - "extensions/rv32im/circuit/**"
+  #     - "extensions/rv32im/transpiler/**"
+  #     - "extensions/rv32im/guest/**"
+  #     - "Cargo.toml"
+  #     - ".github/workflows/riscv.yml"
 
 concurrency:
   group: ${{ github.workflow_ref }}-riscv-${{ github.event.pull_request.number || github.sha }}
@@ -30,8 +30,16 @@ jobs:
     strategy:
       matrix:
         platform:
-          - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64", features: "aot" }
-          - { runner: "test-gpu-nvidia", image: "ubuntu24-gpu-x64", features: "cuda,touchemall" }
+          - {
+              runner: "64cpu-linux-x64",
+              image: "ubuntu24-full-x64",
+              features: "aot",
+            }
+          - {
+              runner: "test-gpu-nvidia",
+              image: "ubuntu24-gpu-x64",
+              features: "cuda,touchemall",
+            }
 
     runs-on:
       - runs-on=${{ github.run_id }}-riscv-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ matrix.platform.runner }}/image=${{ matrix.platform.image }}/extras=s3-cache

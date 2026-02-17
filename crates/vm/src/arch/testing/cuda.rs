@@ -547,7 +547,7 @@ impl GpuChipTester {
     ) -> Self {
         #[cfg(feature = "touchemall")]
         {
-            use openvm_cuda_backend::engine::check_trace_validity;
+            use crate::primitives::utils::check_trace_validity;
 
             check_trace_validity(&proving_ctx, &air.name());
         }
@@ -573,7 +573,7 @@ impl GpuChipTester {
         let expected_trace = cpu_chip.generate_proving_ctx(cpu_arena).common_main;
         #[cfg(feature = "touchemall")]
         {
-            use openvm_cuda_backend::engine::check_trace_validity;
+            use crate::primitives::utils::check_trace_validity;
 
             check_trace_validity(&proving_ctx, &air.name());
         }
