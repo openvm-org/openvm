@@ -1,42 +1,56 @@
 use std::{
     array::from_fn,
     borrow::{Borrow, BorrowMut},
+    mem::size_of,
 };
 
 use num_bigint::BigUint;
-use openvm_algebra_circuit::fields::{get_field_type, FieldType};
 use openvm_circuit::{
     arch::*,
     system::memory::{online::GuestMemory, POINTER_MAX_BITS},
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
-use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
-use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpr};
+use derive_more::derive::{Deref, DerefMut};
+use openvm_circuit_derive::PreflightExecutor;
+use openvm_mod_circuit_builder::{
+    run_field_expression_precomputed, FieldExpr, FieldExpressionExecutor,
+};
+use openvm_rv32_adapters::Rv32VecHeapAdapterExecutor;
 use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 
-use super::EcAddNeExecutor;
-use crate::weierstrass_chip::curves::ec_add_ne;
+/// BLOCK_SIZE: how many cells do we read at a time, must be a power of 2.
+/// BLOCKS: how many blocks do we need to represent one input or output
+/// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with three elements
+/// per input ProjectivePoint, BLOCKS = 9. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 3.
+#[derive(Clone, PreflightExecutor, Deref, DerefMut)]
+pub struct EcAddExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    pub(crate) FieldExpressionExecutor<
+        Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+    >,
+);
+use crate::weierstrass_chip::curves::{ec_add_proj, get_curve_type, CurveType};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
-struct EcAddNePreCompute<'a> {
+struct EcAddPreCompute<'a> {
     expr: &'a FieldExpr,
     rs_addrs: [u8; 2],
     a: u8,
     flag_idx: u8,
 }
 
-impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeExecutor<BLOCKS, BLOCK_SIZE> {
+impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddExecutor<BLOCKS, BLOCK_SIZE> {
     fn pre_compute_impl<F: PrimeField32>(
         &'a self,
         pc: u32,
         inst: &Instruction<F>,
-        data: &mut EcAddNePreCompute<'a>,
+        data: &mut EcAddPreCompute<'a>,
     ) -> Result<bool, StaticProgramError> {
         let Instruction {
             opcode,
@@ -78,7 +92,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeExecutor<BLOCKS, B
         }
 
         let rs_addrs = from_fn(|i| if i == 0 { b } else { c } as u8);
-        *data = EcAddNePreCompute {
+        *data = EcAddPreCompute {
             expr: &self.expr,
             rs_addrs,
             a: a as u8,
@@ -86,84 +100,54 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeExecutor<BLOCKS, B
         };
 
         let local_opcode = opcode.local_opcode_idx(self.offset);
-        let is_setup = local_opcode == Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize;
+        let is_setup = local_opcode == Rv32WeierstrassOpcode::SETUP_SW_EC_ADD_PROJ as usize;
 
         Ok(is_setup)
     }
 }
 
 macro_rules! dispatch {
-    ($execute_impl:ident, $pre_compute:ident, $is_setup:ident) => {
-        if let Some(field_type) = {
+    ($execute_impl:ident,$pre_compute:ident,$is_setup:ident) => {
+        if let Some(curve_type) = {
             let modulus = &$pre_compute.expr.builder.prime;
-            get_field_type(modulus)
+            let a_coeff = &$pre_compute.expr.setup_values[0];
+            get_curve_type(modulus, a_coeff)
         } {
-            match ($is_setup, field_type) {
-                (true, FieldType::K256Coordinate) => Ok($execute_impl::<
+            match ($is_setup, curve_type) {
+                (true, CurveType::K256) => {
+                    Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }, true>)
+                }
+                (true, CurveType::P256) => {
+                    Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }, true>)
+                }
+                (true, CurveType::BN254) => {
+                    Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BN254 as u8 }, true>)
+                }
+                (true, CurveType::BLS12_381) => Ok($execute_impl::<
                     _,
                     _,
                     BLOCKS,
                     BLOCK_SIZE,
-                    { FieldType::K256Coordinate as u8 },
+                    { CurveType::BLS12_381 as u8 },
                     true,
                 >),
-                (true, FieldType::P256Coordinate) => Ok($execute_impl::<
+                (false, CurveType::K256) => {
+                    Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }, false>)
+                }
+                (false, CurveType::P256) => {
+                    Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }, false>)
+                }
+                (false, CurveType::BN254) => {
+                    Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BN254 as u8 }, false>)
+                }
+                (false, CurveType::BLS12_381) => Ok($execute_impl::<
                     _,
                     _,
                     BLOCKS,
                     BLOCK_SIZE,
-                    { FieldType::P256Coordinate as u8 },
-                    true,
-                >),
-                (true, FieldType::BN254Coordinate) => Ok($execute_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::BN254Coordinate as u8 },
-                    true,
-                >),
-                (true, FieldType::BLS12_381Coordinate) => Ok($execute_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::BLS12_381Coordinate as u8 },
-                    true,
-                >),
-                (false, FieldType::K256Coordinate) => Ok($execute_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::K256Coordinate as u8 },
+                    { CurveType::BLS12_381 as u8 },
                     false,
                 >),
-                (false, FieldType::P256Coordinate) => Ok($execute_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::P256Coordinate as u8 },
-                    false,
-                >),
-                (false, FieldType::BN254Coordinate) => Ok($execute_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::BN254Coordinate as u8 },
-                    false,
-                >),
-                (false, FieldType::BLS12_381Coordinate) => Ok($execute_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::BLS12_381Coordinate as u8 },
-                    false,
-                >),
-                _ => panic!("Unsupported field type"),
             }
         } else if $is_setup {
             Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, true>)
@@ -173,11 +157,11 @@ macro_rules! dispatch {
     };
 }
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterExecutor<F>
-    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
+    for EcAddExecutor<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
-        std::mem::size_of::<EcAddNePreCompute>()
+        size_of::<EcAddPreCompute>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -190,7 +174,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterE
     where
         Ctx: ExecutionCtxTrait,
     {
-        let pre_compute: &mut EcAddNePreCompute = data.borrow_mut();
+        let pre_compute: &mut EcAddPreCompute = data.borrow_mut();
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
 
         dispatch!(execute_e1_handler, pre_compute, is_setup)
@@ -206,7 +190,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterE
     where
         Ctx: ExecutionCtxTrait,
     {
-        let pre_compute: &mut EcAddNePreCompute = data.borrow_mut();
+        let pre_compute: &mut EcAddPreCompute = data.borrow_mut();
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
 
         dispatch!(execute_e1_handler, pre_compute, is_setup)
@@ -215,16 +199,16 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterE
 
 #[cfg(feature = "aot")]
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> AotExecutor<F>
-    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
+    for EcAddExecutor<BLOCKS, BLOCK_SIZE>
 {
 }
 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterMeteredExecutor<F>
-    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
+    for EcAddExecutor<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
-        std::mem::size_of::<E2PreCompute<EcAddNePreCompute>>()
+        size_of::<E2PreCompute<EcAddPreCompute>>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -238,7 +222,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterM
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let pre_compute: &mut E2PreCompute<EcAddNePreCompute> = data.borrow_mut();
+        let pre_compute: &mut E2PreCompute<EcAddPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 
         let pre_compute_pure = &mut pre_compute.data;
@@ -257,7 +241,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterM
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let pre_compute: &mut E2PreCompute<EcAddNePreCompute> = data.borrow_mut();
+        let pre_compute: &mut E2PreCompute<EcAddPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 
         let pre_compute_pure = &mut pre_compute.data;
@@ -267,7 +251,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterM
 }
 #[cfg(feature = "aot")]
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> AotMeteredExecutor<F>
-    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
+    for EcAddExecutor<BLOCKS, BLOCK_SIZE>
 {
 }
 
@@ -277,10 +261,10 @@ unsafe fn execute_e12_impl<
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
-    const FIELD_TYPE: u8,
+    const CURVE_TYPE: u8,
     const IS_SETUP: bool,
 >(
-    pre_compute: &EcAddNePreCompute,
+    pre_compute: &EcAddPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pc = exec_state.pc();
@@ -296,17 +280,46 @@ unsafe fn execute_e12_impl<
     });
 
     if IS_SETUP {
-        let input_prime = BigUint::from_bytes_le(read_data[0][..BLOCKS / 2].as_flattened());
+        // For projective coordinates, BLOCKS = 3 * blocks_per_coord
+        // Setup input (first point) contains: X=modulus, Y=a, Z=b
+        let blocks_per_coord = BLOCKS / 3;
+
+        // Validate X coordinate = modulus
+        let input_prime = BigUint::from_bytes_le(read_data[0][..blocks_per_coord].as_flattened());
         if input_prime != pre_compute.expr.prime {
             let err = ExecutionError::Fail {
                 pc,
-                msg: "EcAddNe: mismatched prime",
+                msg: "EcAdd: mismatched prime",
+            };
+            return Err(err);
+        }
+
+        // Validate Y coordinate = a coefficient
+        let input_a = BigUint::from_bytes_le(
+            read_data[0][blocks_per_coord..2 * blocks_per_coord].as_flattened(),
+        );
+        let coeff_a = &pre_compute.expr.setup_values[0];
+        if input_a != *coeff_a {
+            let err = ExecutionError::Fail {
+                pc,
+                msg: "EcAdd: mismatched coeff_a",
+            };
+            return Err(err);
+        }
+
+        // Validate Z coordinate = b coefficient
+        let input_b = BigUint::from_bytes_le(read_data[0][2 * blocks_per_coord..].as_flattened());
+        let coeff_b = &pre_compute.expr.setup_values[1];
+        if input_b != *coeff_b {
+            let err = ExecutionError::Fail {
+                pc,
+                msg: "EcAdd: mismatched coeff_b",
             };
             return Err(err);
         }
     }
 
-    let output_data = if FIELD_TYPE == u8::MAX || IS_SETUP {
+    let output_data = if CURVE_TYPE == u8::MAX || IS_SETUP {
         let read_data: DynArray<u8> = read_data.into();
         run_field_expression_precomputed::<true>(
             pre_compute.expr,
@@ -315,7 +328,7 @@ unsafe fn execute_e12_impl<
         )
         .into()
     } else {
-        ec_add_ne::<FIELD_TYPE, BLOCKS, BLOCK_SIZE>(read_data)
+        ec_add_proj::<CURVE_TYPE, BLOCKS, BLOCK_SIZE>(read_data)
     };
 
     let rd_val = u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));
@@ -338,15 +351,15 @@ unsafe fn execute_e1_impl<
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
-    const FIELD_TYPE: u8,
+    const CURVE_TYPE: u8,
     const IS_SETUP: bool,
 >(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &EcAddNePreCompute =
-        std::slice::from_raw_parts(pre_compute, size_of::<EcAddNePreCompute>()).borrow();
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE, IS_SETUP>(pre_compute, exec_state)
+    let pre_compute: &EcAddPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<EcAddPreCompute>()).borrow();
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, IS_SETUP>(pre_compute, exec_state)
 }
 
 #[create_handler]
@@ -356,19 +369,19 @@ unsafe fn execute_e2_impl<
     CTX: MeteredExecutionCtxTrait,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
-    const FIELD_TYPE: u8,
+    const CURVE_TYPE: u8,
     const IS_SETUP: bool,
 >(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let e2_pre_compute: &E2PreCompute<EcAddNePreCompute> =
-        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<EcAddNePreCompute>>())
+    let e2_pre_compute: &E2PreCompute<EcAddPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<EcAddPreCompute>>())
             .borrow();
     exec_state
         .ctx
         .on_height_change(e2_pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE, IS_SETUP>(
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, IS_SETUP>(
         &e2_pre_compute.data,
         exec_state,
     )

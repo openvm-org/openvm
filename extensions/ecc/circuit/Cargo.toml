@@ -36,6 +36,7 @@ cfg-if = { workspace = true }
 
 halo2curves-axiom = { workspace = true }
 blstrs = { workspace = true }
+k256 = { workspace = true, features = ["arithmetic", "expose-field"] }
 
 [dev-dependencies]
 openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
