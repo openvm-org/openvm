@@ -1,6 +1,5 @@
 use std::borrow::Borrow;
 
-use itertools::fold;
 use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionState},
     system::memory::{
@@ -11,7 +10,11 @@ use openvm_circuit::{
 use openvm_circuit_primitives::utils::{and, assert_array_eq, not, or};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
-use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::RV32_CELL_BITS, LocalOpcode};
+use openvm_instructions::{
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
@@ -21,7 +24,7 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
-use crate::utils::{byte_commit_to_f, COMMIT_NUM_BYTES};
+use crate::utils::{byte_commit_to_f, bytes_to_f, combine_output, COMMIT_NUM_BYTES};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -34,17 +37,23 @@ pub struct DeferralOutputCols<T> {
 
     // Initial execution state + instruction operands
     pub from_state: ExecutionState<T>,
-    pub a: T,
-    pub b: T,
-    pub c: T,
+    pub rd: T,
+    pub rs: T,
     pub deferral_idx: T,
 
-    // Read data and auxiliary columns, the onion hash of all bytes written by this
-    // opcode invocation will be constrained to output_commit
+    // Heap pointers + auxiliary read columns
+    pub rd_ptr: [T; RV32_REGISTER_NUM_LIMBS],
+    pub rs_ptr: [T; RV32_REGISTER_NUM_LIMBS],
+    pub rd_ptr_aux: MemoryReadAuxCols<T>,
+    pub rs_ptr_aux: MemoryReadAuxCols<T>,
+
+    // Read data and auxiliary columns. output_commit and output_len are read
+    // contiguously from heap with layout [output_commit || output_len].
+    // The onion hash of all bytes written by this opcode invocation is
+    // constrained to output_commit.
     pub output_commit: [T; COMMIT_NUM_BYTES],
-    pub output_len: [T; RV32_CELL_BITS],
-    pub output_commit_aux: MemoryReadAuxCols<T>,
-    pub output_len_aux: MemoryReadAuxCols<T>,
+    pub output_len: [T; RV32_REGISTER_NUM_LIMBS],
+    pub output_commit_and_len_aux: MemoryReadAuxCols<T>,
 
     // Bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
     // written to memory and auxiliary columns
@@ -121,10 +130,12 @@ where
 
         when_section_transition.assert_eq(local.from_state.pc, next.from_state.pc);
         when_section_transition.assert_eq(local.from_state.timestamp, next.from_state.timestamp);
-        when_section_transition.assert_eq(local.a, next.a);
-        when_section_transition.assert_eq(local.b, next.b);
-        when_section_transition.assert_eq(local.c, next.c);
+        when_section_transition.assert_eq(local.rd, next.rd);
+        when_section_transition.assert_eq(local.rs, next.rs);
         when_section_transition.assert_eq(local.deferral_idx, next.deferral_idx);
+
+        assert_array_eq(&mut when_section_transition, local.rd_ptr, next.rd_ptr);
+        assert_array_eq(&mut when_section_transition, local.rs_ptr, next.rs_ptr);
 
         assert_array_eq(
             &mut when_section_transition,
@@ -143,15 +154,7 @@ where
         // be divisible by DIGEST_SIZE.
         let mut when_last_or_invalid = builder.when(or(next.is_first, not(next.is_valid)));
 
-        when_last_or_invalid.assert_eq(
-            fold(
-                local.output_len.iter().enumerate(),
-                AB::Expr::ZERO,
-                |acc, (i, &b)| acc + (b * AB::Expr::from_usize(1 << i)),
-            ),
-            local.section_idx,
-        );
-
+        when_last_or_invalid.assert_eq(bytes_to_f(&local.output_len), local.section_idx);
         assert_array_eq(
             &mut when_last_or_invalid,
             byte_commit_to_f(&local.output_commit),
@@ -164,39 +167,52 @@ where
         // TODO: constrain that next.current_commit_state is the poseidon2 compress
         // of next.write_bytes and local.current_commit_state
 
-        // Constrain memory reads and writes using the MemoryBridge. There are two
-        // reads per opcode that are processed on the first row, and one write per
-        // valid row. Address spaces d and e must be the RV32 memory and register
-        // address spaces respectively.
-        let d = AB::Expr::TWO;
-        let e = AB::Expr::ONE;
+        // Constrain the heap pointer memory reads first.
+        let d = AB::Expr::from_u32(RV32_REGISTER_AS);
+        let e = AB::Expr::from_u32(RV32_MEMORY_AS);
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(d.clone(), local.b),
-                local.output_commit,
+                MemoryAddress::new(d.clone(), local.rd),
+                local.rd_ptr,
                 local.from_state.timestamp,
-                &local.output_commit_aux,
+                &local.rd_ptr_aux,
             )
             .eval(builder, local.is_first);
 
         self.memory_bridge
             .read(
-                MemoryAddress::new(e.clone(), local.c),
-                local.output_len,
+                MemoryAddress::new(d.clone(), local.rs),
+                local.rs_ptr,
                 local.from_state.timestamp + AB::Expr::ONE,
-                &local.output_len_aux,
+                &local.rs_ptr_aux,
+            )
+            .eval(builder, local.is_first);
+
+        // Constrain memory reads and writes using the MemoryBridge. a and b are
+        // register pointers whose values are read first, then used as heap
+        // pointers. c carries deferral_idx.
+        let rd_ptr = bytes_to_f(&local.rd_ptr);
+        let rs_ptr = bytes_to_f(&local.rs_ptr);
+        let output_commit_and_len = combine_output(local.output_commit, local.output_len);
+
+        self.memory_bridge
+            .read(
+                MemoryAddress::new(e.clone(), rs_ptr),
+                output_commit_and_len,
+                local.from_state.timestamp + AB::Expr::TWO,
+                &local.output_commit_and_len_aux,
             )
             .eval(builder, local.is_first);
 
         self.memory_bridge
             .write(
                 MemoryAddress::new(
-                    d.clone(),
-                    local.a + (local.section_idx * AB::Expr::from_usize(DIGEST_SIZE)),
+                    e.clone(),
+                    rd_ptr + (local.section_idx * AB::Expr::from_usize(DIGEST_SIZE)),
                 ),
                 local.write_bytes,
-                local.from_state.timestamp + AB::Expr::TWO + local.section_idx,
+                local.from_state.timestamp + AB::Expr::from_u8(3) + local.section_idx,
                 &local.write_bytes_aux,
             )
             .eval(builder, local.is_valid);
@@ -207,15 +223,15 @@ where
             .execute_and_increment_or_set_pc(
                 AB::Expr::from_usize(DeferralOpcode::OUTPUT.global_opcode_usize()),
                 [
-                    local.a.into(),
-                    local.b.into(),
-                    local.c.into(),
+                    local.rd.into(),
+                    local.rs.into(),
+                    local.deferral_idx.into(),
                     d,
                     e,
-                    local.deferral_idx.into(),
+                    AB::Expr::ZERO,
                 ],
                 local.from_state,
-                local.section_idx + AB::Expr::from_u8(3),
+                local.section_idx + AB::Expr::from_u8(4),
                 (DEFAULT_PC_STEP, None),
             )
             .eval(

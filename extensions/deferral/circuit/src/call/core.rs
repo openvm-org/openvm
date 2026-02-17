@@ -11,9 +11,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
-use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode,
-};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -22,7 +20,7 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
-use crate::utils::{byte_commit_to_f, f_commit_to_bytes, COMMIT_NUM_BYTES};
+use crate::utils::{byte_commit_to_f, f_commit_to_bytes, COMMIT_NUM_BYTES, F_NUM_BYTES};
 
 ///////////////////////////////////////////////////////////////////////////////////////
 /// AIR
@@ -42,11 +40,11 @@ pub struct DeferralCallReads<B, F> {
 #[repr(C)]
 #[derive(AlignedBorrow, Clone, Copy, Debug)]
 pub struct DeferralCallWrites<B, F> {
-    // Output key for raw output + its length in bytes; output_commit will be written to
-    // heap memory, and output_len will be written to a register. Note that output_len
+    // Output key for raw output + its length in bytes. These bytes are written as one
+    // contiguous heap write, with layout [output_commit || output_len_le]. Note output_len
     // **must** be divisible by DIGEST_SIZE.
     pub output_commit: [B; COMMIT_NUM_BYTES],
-    pub output_len: [B; RV32_REGISTER_NUM_LIMBS],
+    pub output_len: [B; F_NUM_BYTES],
 
     // Native address space accumulators after incorporating the current deferral call
     pub new_input_acc: [F; DIGEST_SIZE],
@@ -172,7 +170,7 @@ where
     ) -> Result<(), ExecutionError> {
         let (mut adapter_record, mut core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
         A::start(*state.pc, state.memory, &mut adapter_record);
-        core_record.deferral_idx = instruction.f;
+        core_record.deferral_idx = instruction.c;
 
         let read_data = self
             .adapter
