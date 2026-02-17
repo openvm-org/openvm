@@ -269,7 +269,7 @@ impl AirModule for ProofShapeModule {
 }
 
 impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for ProofShapeModule {
-    type ModuleSpecificCtx = ();
+    type ModuleSpecificCtx<'a> = ();
 
     #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
@@ -371,7 +371,7 @@ mod cuda_tracegen {
     };
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackend> for ProofShapeModule {
-        type ModuleSpecificCtx = ();
+        type ModuleSpecificCtx<'a> = ();
 
         #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(

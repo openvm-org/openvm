@@ -26,7 +26,7 @@ use recursion_circuit::{
     utils::assert_zeros,
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
-use verify_stark::pvs::{NonRootVerifierPvs, VERIFIER_PVS_AIR_ID};
+use verify_stark::pvs::{NonRootVerifierPvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID};
 
 use crate::{
     bn254::CommitBytes,
@@ -35,7 +35,7 @@ use crate::{
             bus::{MemoryMerkleCommitBus, MemoryMerkleCommitMessage},
             digests_to_poseidon2_input, pad_slice_to_poseidon2_input, RootVerifierPvs,
         },
-        CONSTRAINT_EVAL_AIR_ID, CONSTRAINT_EVAL_CACHED_INDEX,
+        CONSTRAINT_EVAL_CACHED_INDEX,
     },
 };
 
