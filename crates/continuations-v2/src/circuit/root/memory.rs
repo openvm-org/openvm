@@ -223,7 +223,7 @@ pub fn generate_proving_input(
 
     let mut poseidon2_compress_inputs = Vec::with_capacity(merkle_proof_len);
 
-    for (i, &sibling) in merkle_proof.into_iter().enumerate() {
+    for (i, &sibling) in merkle_proof.iter().enumerate() {
         let chunk = chunks.next().unwrap();
         let cols: &mut UserPvsInMemoryCols<F> = chunk.borrow_mut();
         let is_right_child = merkle_path_branch_bits & (1 << i) != 0;
