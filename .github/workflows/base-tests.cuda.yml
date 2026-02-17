@@ -5,15 +5,15 @@ on:
   workflow_call:
   push:
     branches: ["main"]
-  pull_request:
-    branches: ["**"]
-    paths:
-      - "crates/circuits/**"
-      - "crates/vm/**"
-      - "extensions/native/compiler/**"
-      - "extensions/native/recursion/**"
-      - "Cargo.toml"
-      - ".github/workflows/base-tests.cuda.yml"
+  # pull_request:
+  #   branches: ["**"]
+  #   paths:
+  #     - "crates/circuits/**"
+  #     - "crates/vm/**"
+  #     - "extensions/native/compiler/**"
+  #     - "extensions/native/recursion/**"
+  #     - "Cargo.toml"
+  #     - ".github/workflows/base-tests.cuda.yml"
 
 concurrency:
   group: ${{ github.workflow_ref }}-base-tests-cuda-${{ github.event.pull_request.number || github.sha }}
