@@ -54,8 +54,8 @@ pub(crate) fn build_cached_gpu_records(
         .dag_commit_info
         .as_ref()
         .map(|dag_commit_info| {
-            // We need one Poseidon2 start-state per row of the (power-of-two) trace height, including
-            // padding rows. Padding rows have `is_constraint = false`.
+            // We need one Poseidon2 start-state per row of the (power-of-two) trace height,
+            // including padding rows. Padding rows have `is_constraint = false`.
             let height = dag_commit_info.poseidon2_inputs.len();
             debug_assert_eq!(
                 height,

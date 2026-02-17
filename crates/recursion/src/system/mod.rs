@@ -416,6 +416,7 @@ impl<'a> TraceModuleRef<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     #[tracing::instrument(
         name = "wrapper.generate_proving_ctxs",
         level = "trace",
@@ -1068,6 +1069,7 @@ pub mod cuda_tracegen {
     use crate::cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu};
 
     impl<'a> TraceModuleRef<'a> {
+        #[allow(clippy::too_many_arguments)]
         #[tracing::instrument(
             name = "wrapper.generate_proving_ctxs",
             level = "trace",

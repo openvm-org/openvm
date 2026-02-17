@@ -50,6 +50,14 @@ pub struct DagCommitSubAir<F: Field> {
 
 impl<F: PrimeField + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>> DagCommitSubAir<F> {
     pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl<F: PrimeField + InjectiveMonomial<BABY_BEAR_POSEIDON2_SBOX_DEGREE>> Default
+    for DagCommitSubAir<F>
+{
+    fn default() -> Self {
         Self {
             subair: default_poseidon2_sub_chip().air,
         }
