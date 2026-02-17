@@ -23,8 +23,8 @@ use crate::{
         ConstraintSumcheckRandomnessBus, DagCommitBus, EqNegBaseRandBus, EqNegResultBus,
         ExpressionClaimNMaxBus, FractionFolderInputBus, GkrModuleBus, HyperdimBus,
         LiftedHeightsBus, MerkleVerifyBus, Poseidon2CompressBus, Poseidon2PermuteBus,
-        PublicValuesBus, SelUniBus, StackingIndicesBus, StackingModuleBus, TranscriptBus,
-        WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
+        PublicValuesBus, SelUniBus, SelUniZBus, StackingIndicesBus, StackingModuleBus,
+        TranscriptBus, WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::{
@@ -199,6 +199,7 @@ pub struct BusInventory {
     // Compute buses
     pub exp_bits_len_bus: ExpBitsLenBus,
     pub sel_uni_bus: SelUniBus,
+    pub sel_uni_z_bus: SelUniZBus,
     pub eq_neg_result_bus: EqNegResultBus,
     pub eq_neg_base_rand_bus: EqNegBaseRandBus,
 
@@ -323,6 +324,7 @@ impl BusInventory {
             commitments_bus: CommitmentsBus::new(b.new_bus_idx()),
             public_values_bus: PublicValuesBus::new(b.new_bus_idx()),
             sel_uni_bus: SelUniBus::new(b.new_bus_idx()),
+            sel_uni_z_bus: SelUniZBus::new(b.new_bus_idx()),
             range_checker_bus: RangeCheckerBus::new(b.new_bus_idx()),
             power_checker_bus: PowerCheckerBus::new(b.new_bus_idx()),
             expression_claim_n_max_bus: ExpressionClaimNMaxBus::new(b.new_bus_idx()),

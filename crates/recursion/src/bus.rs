@@ -531,6 +531,15 @@ define_typed_per_proof_permutation_bus!(SelUniBus, SelUniBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
+pub struct SelUniZBusMessage<T> {
+    pub n: T,
+    pub value: [T; D_EF],
+}
+
+define_typed_per_proof_permutation_bus!(SelUniZBus, SelUniZBusMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct ConstraintSumcheckRandomness<T> {
     pub idx: T,
     pub challenge: [T; D_EF],

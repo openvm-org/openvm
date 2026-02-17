@@ -274,8 +274,7 @@ __global__ void symbolic_expression_tracegen(
             write_arg_second(proof_row, eq_mle);
             break;
         }
-        case NODE_KIND_IS_LAST_ROW:
-        case NODE_KIND_IS_TRANSITION: {
+        case NODE_KIND_IS_LAST_ROW: {
             uint32_t clamped = log_height < l_skip ? log_height : l_skip;
             uint32_t exponent = clamped <= l_skip ? l_skip - clamped : 0;
             FpExt r_pow = pow_two_power(rs0, exponent);
@@ -287,6 +286,23 @@ __global__ void symbolic_expression_tracegen(
             }
             FpExt eq_mle = product_last_mle(rs_rest, mle_idx);
             write_arg_first(proof_row, eq_uni);
+            write_arg_second(proof_row, eq_mle);
+            break;
+        }
+        case NODE_KIND_IS_TRANSITION: {
+            uint32_t clamped = log_height < l_skip ? log_height : l_skip;
+            uint32_t exponent = clamped <= l_skip ? l_skip - clamped : 0;
+            Fp omega_skip = two_adic_generator_at(l_skip);
+            FpExt omega_z = pow_two_power(rs0 * FpExt(omega_skip), exponent);
+            if (clamped == 0 && l_skip > 0) {
+                omega_z = FpExt(Fp::one());
+            }
+            uint32_t mle_idx = log_height > l_skip ? log_height - l_skip : 0;
+            if (mle_idx > rs_rest_len) {
+                mle_idx = rs_rest_len;
+            }
+            FpExt eq_mle = product_last_mle(rs_rest, mle_idx);
+            write_arg_first(proof_row, omega_z);
             write_arg_second(proof_row, eq_mle);
             break;
         }

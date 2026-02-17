@@ -5,8 +5,10 @@ use openvm_circuit_primitives::{
     SubAir,
 };
 use openvm_stark_backend::{
-    interaction::InteractionBuilder, keygen::types::MultiStarkVerifyingKey,
-    poly_common::eval_eq_uni_at_one, BaseAirWithPublicValues, PartitionedBaseAir,
+    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
+};
+use openvm_stark_backend::{
+    keygen::types::MultiStarkVerifyingKey, poly_common::eval_eq_uni_at_one,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, D_EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -24,7 +26,7 @@ use crate::{
     },
     bus::{
         EqNegBaseRandBus, EqNegBaseRandMessage, EqNegResultBus, EqNegResultMessage, SelUniBus,
-        SelUniBusMessage,
+        SelUniBusMessage, SelUniZBus, SelUniZBusMessage,
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
@@ -66,7 +68,8 @@ pub struct EqNegCols<F> {
     pub prod_1_r: [F; D_EF],
     pub prod_1_r_omega: [F; D_EF],
     pub sel_first_count: F,
-    pub sel_last_trans_count: F,
+    pub sel_last_count: F,
+    pub sel_trans_count: F,
     pub one_half_pow: F,
 }
 
@@ -185,13 +188,24 @@ impl RowMajorChip<F> for EqNegTraceGenerator {
                     prod_1_r_omega *= r_omega + F::ONE;
                     one_half_pow *= one_half;
 
+                    cols.sel_first_count = F::ZERO;
+                    cols.sel_last_count = F::ZERO;
+                    cols.sel_trans_count = F::ZERO;
+
                     // We only use the count for the last row of `hypercube` or the very first row.
                     // We use the very first row to hard-code the lookup for log_height = 0 since
                     // it's disjoint from the other condition.
                     if neg_hypercube == 0 && row_idx == 0 {
                         let counts = selector_counts[[proof_idx]][0];
                         cols.sel_first_count = F::from_usize(counts.first);
-                        cols.sel_last_trans_count = F::from_usize(counts.last + counts.transition);
+                        cols.sel_last_count = F::from_usize(counts.last);
+
+                        // Transitions for all log_height >= l_skip map to n = 0.
+                        let mut trans_counts = selector_counts[[proof_idx]][l_skip].transition;
+                        for count in &selector_counts[[proof_idx]][l_skip + 1..] {
+                            trans_counts += count.transition;
+                        }
+                        cols.sel_trans_count = F::from_usize(trans_counts);
                     } else if row_idx == l_skip - neg_hypercube {
                         let mut counts = selector_counts[[proof_idx]][row_idx];
                         // On `neg_hypercube`, we collect counts for all heights >= l_skip.
@@ -200,11 +214,16 @@ impl RowMajorChip<F> for EqNegTraceGenerator {
                             {
                                 counts.first += count.first;
                                 counts.last += count.last;
-                                counts.transition += count.transition;
                             }
                         }
                         cols.sel_first_count = F::from_usize(counts.first);
-                        cols.sel_last_trans_count = F::from_usize(counts.last + counts.transition);
+                        cols.sel_last_count = F::from_usize(counts.last);
+                    }
+
+                    if neg_hypercube == 0 && row_idx > 0 {
+                        let log_height = l_skip - row_idx;
+                        let trans = selector_counts[[proof_idx]][log_height].transition;
+                        cols.sel_trans_count = F::from_usize(trans);
                     }
                 }
 
@@ -230,6 +249,7 @@ pub struct EqNegAir {
     pub base_rand_bus: EqNegBaseRandBus,
     pub internal_bus: EqNegInternalBus,
     pub sel_uni_bus: SelUniBus,
+    pub sel_uni_z_bus: SelUniZBus,
     pub l_skip: usize,
 }
 
@@ -244,7 +264,7 @@ impl<F> BaseAir<F> for EqNegAir {
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for EqNegAir
 where
     AB::F: PrimeField32 + TwoAdicField,
-    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<{ D_EF }>,
+    <AB::Expr as PrimeCharacteristicRing>::PrimeSubfield: BinomiallyExtendable<D_EF>,
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
@@ -464,7 +484,30 @@ where
                 is_first: AB::Expr::ZERO,
                 value: local.prod_1_r_omega.map(|x| x * local.one_half_pow),
             },
-            next.is_last_hypercube * next.sel_last_trans_count,
+            next.is_last_hypercube * next.sel_last_count,
+        );
+        let is_base_hypercube = AB::Expr::ONE - local.neg_hypercube * local.neg_hypercube_nz_inv;
+        let one_ext = base_to_ext::<AB::Expr>(AB::Expr::ONE);
+        let override_last: AB::Expr = if self.l_skip > 0 {
+            local.is_last_hypercube.into()
+        } else {
+            AB::Expr::ZERO
+        };
+        let omega_z = ext_field_add::<AB::Expr>(
+            ext_field_multiply_scalar::<AB::Expr>(
+                local.r_omega_pow.map(Into::into),
+                AB::Expr::ONE - override_last.clone(),
+            ),
+            ext_field_multiply_scalar::<AB::Expr>(one_ext, override_last),
+        );
+        self.sel_uni_z_bus.send(
+            builder,
+            local.proof_idx,
+            SelUniZBusMessage {
+                n: -local.row_index.into(),
+                value: omega_z,
+            },
+            local.is_valid * is_base_hypercube * local.sel_trans_count,
         );
 
         // This is kind of ugly. But we use the first row as the lookup table for
@@ -497,7 +540,7 @@ where
                     AB::Expr::ZERO,
                 ],
             },
-            local.is_first * local.sel_last_trans_count,
+            local.is_first * local.sel_last_count,
         );
 
         /*

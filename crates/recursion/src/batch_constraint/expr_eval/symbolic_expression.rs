@@ -38,7 +38,7 @@ use crate::{
         AirShapeBus, AirShapeBusMessage, ColumnClaimsBus, ColumnClaimsMessage, DagCommitBus,
         DagCommitBusMessage, HyperdimBus, HyperdimBusMessage, PublicValuesBus,
         PublicValuesBusMessage, SelHypercubeBus, SelHypercubeBusMessage, SelUniBus,
-        SelUniBusMessage,
+        SelUniBusMessage, SelUniZBus, SelUniZBusMessage,
     },
     system::Preflight,
     tracegen::RowMajorChip,
@@ -74,7 +74,8 @@ pub struct SingleMainSymbolicExpressionColumns<T> {
     is_present: T,
     // Dynamic arguments. For Add/Mul/Sub, this splits into two extension-field elements.
     // For selectors:
-    //   args[0..D_EF)   = sel_uni witness (base or rotated depending on selector type).
+    //   args[0..D_EF)   = sel_uni witness (base or rotated depending on selector type),
+    //                    except for IsTransition where it is omega * z (lifted as needed).
     //   args[D_EF..2*D_EF) = eq-prefix witness (prod r_i or prod (1-r_i)).
     args: [T; 2 * D_EF],
     sort_idx: T,
@@ -93,6 +94,7 @@ pub struct SymbolicExpressionAir {
     pub public_values_bus: PublicValuesBus,
     pub sel_hypercube_bus: SelHypercubeBus,
     pub sel_uni_bus: SelUniBus,
+    pub sel_uni_z_bus: SelUniZBus,
     pub eq_neg_internal_bus: EqNegInternalBus,
     pub dag_commit_bus: DagCommitBus,
 
@@ -244,10 +246,7 @@ where
                     NodeKind::VarPublicValue => base_to_ext(cols.args[0]),
                     NodeKind::SelIsFirst => ext_field_multiply(arg_ef0, arg_ef1),
                     NodeKind::SelIsLast => ext_field_multiply(arg_ef0, arg_ef1),
-                    NodeKind::SelIsTransition => scalar_subtract_ext_field(
-                        AB::Expr::ONE,
-                        ext_field_multiply(arg_ef0, arg_ef1),
-                    ),
+                    NodeKind::SelIsTransition => ext_field_subtract(arg_ef0, arg_ef1),
                     NodeKind::VarPreprocessed
                     | NodeKind::VarMain
                     | NodeKind::InteractionMult
@@ -351,6 +350,10 @@ where
                 );
 
                 let is_first = enc.get_flag_expr::<AB>(NodeKind::SelIsFirst as usize, &flags);
+                let is_last = enc.get_flag_expr::<AB>(NodeKind::SelIsLast as usize, &flags);
+                let is_transition =
+                    enc.get_flag_expr::<AB>(NodeKind::SelIsTransition as usize, &flags);
+                let is_sel_uni = is_first.clone() + is_last.clone();
                 self.sel_uni_bus.receive(
                     builder,
                     proof_idx,
@@ -359,7 +362,16 @@ where
                         is_first: is_first.clone(),
                         value: arg_ef0.map(Into::into),
                     },
-                    cols.is_present * is_sel.clone(),
+                    cols.is_present * is_sel_uni,
+                );
+                self.sel_uni_z_bus.receive(
+                    builder,
+                    proof_idx,
+                    SelUniZBusMessage {
+                        n: AB::Expr::NEG_ONE * cols.n_abs * cols.is_n_neg,
+                        value: arg_ef0.map(Into::into),
+                    },
+                    cols.is_present * is_transition,
                 );
                 self.sel_hypercube_bus.receive(
                     builder,
@@ -461,6 +473,7 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
             let (&rs_0, rs_rest) = rs.split_first().unwrap();
             let mut is_first_uni_by_log_height = vec![];
             let mut is_last_uni_by_log_height = vec![];
+            let mut omega_z_by_log_height = vec![];
 
             for (log_height, &r_pow) in rs_0
                 .exp_powers_of_2()
@@ -475,6 +488,19 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
                     log_height,
                     r_pow * F::two_adic_generator(log_height),
                 ));
+            }
+            let omega_skip = F::two_adic_generator(l_skip);
+            for &r_pow in (rs_0 * omega_skip)
+                .exp_powers_of_2()
+                .take(l_skip + 1)
+                .collect::<Vec<_>>()
+                .iter()
+                .rev()
+            {
+                omega_z_by_log_height.push(r_pow);
+            }
+            if l_skip > 0 {
+                omega_z_by_log_height[0] = EF::ONE;
             }
             let mut is_first_mle_by_n = vec![EF::ONE];
             let mut is_last_mle_by_n = vec![EF::ONE];
@@ -552,10 +578,28 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
                                     .as_basis_coefficients_slice(),
                             );
                         }
-                        SymbolicExpressionNode::IsLastRow
-                        | SymbolicExpressionNode::IsTransition => {
+                        SymbolicExpressionNode::IsLastRow => {
                             record.args[..D_EF].copy_from_slice(
                                 is_last_uni_by_log_height[min(log_height, l_skip)]
+                                    .as_basis_coefficients_slice(),
+                            );
+                            record.args[D_EF..2 * D_EF].copy_from_slice(
+                                is_last_mle_by_n[log_height.saturating_sub(l_skip)]
+                                    .as_basis_coefficients_slice(),
+                            );
+                        }
+                        SymbolicExpressionNode::IsTransition => {
+                            #[cfg(debug_assertions)]
+                            {
+                                let expected = omega_z_by_log_height[min(log_height, l_skip)]
+                                    - is_last_mle_by_n[log_height.saturating_sub(l_skip)];
+                                assert_eq!(
+                                    expected, expr_evals[node_idx],
+                                    "IsTransition eval mismatch: log_height={log_height}, l_skip={l_skip}"
+                                );
+                            }
+                            record.args[..D_EF].copy_from_slice(
+                                omega_z_by_log_height[min(log_height, l_skip)]
                                     .as_basis_coefficients_slice(),
                             );
                             record.args[D_EF..2 * D_EF].copy_from_slice(

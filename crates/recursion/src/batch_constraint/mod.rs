@@ -47,7 +47,7 @@ use crate::{
         AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus, ConstraintSumcheckRandomnessBus,
         DagCommitBus, EqNegBaseRandBus, EqNegResultBus, ExpressionClaimNMaxBus,
         FractionFolderInputBus, HyperdimBus, PublicValuesBus, SelHypercubeBus, SelUniBus,
-        StackingModuleBus, TranscriptBus, XiRandomnessBus,
+        SelUniZBus, StackingModuleBus, TranscriptBus, XiRandomnessBus,
     },
     primitives::{bus::PowerCheckerBus, pow::PowerCheckerTraceGenerator},
     system::{
@@ -86,6 +86,7 @@ pub struct BatchConstraintModule {
     hyperdim_bus: HyperdimBus,
     public_values_bus: PublicValuesBus,
     sel_uni_bus: SelUniBus,
+    sel_uni_z_bus: SelUniZBus,
     eq_n_outer_bus: EqNOuterBus,
 
     batch_constraint_conductor_bus: BatchConstraintConductorBus,
@@ -138,6 +139,7 @@ impl BatchConstraintModule {
             hyperdim_bus: bus_inventory.hyperdim_bus,
             public_values_bus: bus_inventory.public_values_bus,
             sel_uni_bus: bus_inventory.sel_uni_bus,
+            sel_uni_z_bus: bus_inventory.sel_uni_z_bus,
             eq_neg_base_rand_bus: bus_inventory.eq_neg_base_rand_bus,
             eq_neg_result_bus: bus_inventory.eq_neg_result_bus,
             expression_claim_n_max_bus: bus_inventory.expression_claim_n_max_bus,
@@ -315,6 +317,7 @@ impl AirModule for BatchConstraintModule {
             public_values_bus: self.public_values_bus,
             sel_hypercube_bus: self.sel_hypercube_bus,
             sel_uni_bus: self.sel_uni_bus,
+            sel_uni_z_bus: self.sel_uni_z_bus,
             eq_neg_internal_bus: self.eq_neg_internal_bus,
             dag_commit_bus: self.dag_commit_bus,
             cnt_proofs: self.max_num_proofs,
@@ -382,6 +385,7 @@ impl AirModule for BatchConstraintModule {
             base_rand_bus: self.eq_neg_base_rand_bus,
             internal_bus: self.eq_neg_internal_bus,
             sel_uni_bus: self.sel_uni_bus,
+            sel_uni_z_bus: self.sel_uni_z_bus,
             l_skip: self.l_skip,
         };
         let expression_claim_air = ExpressionClaimAir {
