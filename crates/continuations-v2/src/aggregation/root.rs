@@ -53,10 +53,7 @@ impl<S: AggregationSubCircuit> Circuit for RootCircuit<S> {
             cached_commit_bus: bus_inventory.cached_commit_bus,
             poseidon2_compress_bus: bus_inventory.poseidon2_compress_bus,
             memory_merkle_commit_bus,
-            expected_internal_recursive_dag_commit: self
-                .internal_recursive_dag_commit
-                .clone()
-                .into(),
+            expected_internal_recursive_dag_commit: self.internal_recursive_dag_commit,
         };
         let user_pvs_commit_air = UserPvsCommitAir::new(
             bus_inventory.poseidon2_compress_bus,
@@ -188,7 +185,7 @@ impl<
     {
         let verifier_circuit = S::new(child_vk.clone(), true, true);
         let engine = E::new(system_params);
-        let internal_recursive_dag_commit = child_vk_pcs_data.commitment.clone().into();
+        let internal_recursive_dag_commit = child_vk_pcs_data.commitment.into();
         let circuit = Arc::new(RootCircuit::new(
             Arc::new(verifier_circuit),
             internal_recursive_dag_commit,
@@ -221,7 +218,7 @@ impl<
         PB::Commitment: Into<CommitBytes>,
     {
         let verifier_circuit = S::new(child_vk.clone(), true, true);
-        let internal_recursive_dag_commit = child_vk_pcs_data.commitment.clone().into();
+        let internal_recursive_dag_commit = child_vk_pcs_data.commitment.into();
         let circuit = Arc::new(RootCircuit::new(
             Arc::new(verifier_circuit),
             internal_recursive_dag_commit,
@@ -253,7 +250,7 @@ impl<
     }
 
     pub fn get_cached_commit(&self) -> <PB as ProverBackend>::Commitment {
-        self.child_vk_pcs_data.commitment.clone()
+        self.child_vk_pcs_data.commitment
     }
 
     pub fn get_trace_heights(&self) -> Option<Vec<usize>> {

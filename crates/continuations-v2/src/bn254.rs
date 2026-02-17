@@ -45,15 +45,15 @@ impl From<Bn254> for CommitBytes {
     }
 }
 
-impl Into<[u32; DIGEST_SIZE]> for CommitBytes {
-    fn into(self) -> [u32; DIGEST_SIZE] {
-        bytes_to_u32_digest(&self.0)
+impl From<CommitBytes> for [u32; DIGEST_SIZE] {
+    fn from(value: CommitBytes) -> Self {
+        bytes_to_u32_digest(&value.0)
     }
 }
 
-impl Into<Bn254> for CommitBytes {
-    fn into(self) -> Bn254 {
-        bytes_to_bn254(&self.0)
+impl From<CommitBytes> for Bn254 {
+    fn from(value: CommitBytes) -> Self {
+        bytes_to_bn254(&value.0)
     }
 }
 

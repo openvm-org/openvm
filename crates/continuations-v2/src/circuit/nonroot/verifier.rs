@@ -372,7 +372,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
          * Finally, we need to constrain that the public values this AIR produces are consistent
          * with the child's. Note that we only impose constraints for layers below the current
          * one - it is impossible for the current layer to know its own commit, and future layers
-         * will catch if we pre-emptively define a current or future verifier commit.
+         * will catch if we preemptively define a current or future verifier commit.
          */
         let &NonRootVerifierPvs::<_> {
             initial_pc,
