@@ -22,7 +22,7 @@ use test_case::{test_case, test_matrix};
 use tracing::Level;
 
 use crate::{
-    system::{AggregationSubCircuit, VerifierSubCircuit, VerifierTraceGen},
+    system::{AggregationSubCircuit, CachedTraceCtx, VerifierSubCircuit, VerifierTraceGen},
     utils::MAX_CONSTRAINT_DEGREE,
 };
 
@@ -74,7 +74,7 @@ fn run_test<const MAX_NUM_PROOFS: usize, Fx: TestFixture<BabyBearPoseidon2Config
     assert!(num_proofs <= MAX_NUM_PROOFS);
     let (vk, proof) = fx.keygen_and_prove(child_engine);
     let (circuit, _pk) = verifier_circuit_keygen::<MAX_NUM_PROOFS>(parent_engine, &vk);
-    let vk_commit_data = circuit.commit_child_vk(parent_engine, &vk);
+    let vk_commit_data = CachedTraceCtx::PcsData(circuit.commit_child_vk(parent_engine, &vk));
     let proofs: Vec<_> = (0..num_proofs).map(|_| proof.clone()).collect();
     let ctxs = circuit.generate_proving_ctxs_base(
         &vk,
@@ -149,7 +149,7 @@ fn test_recursion_circuit_many_fib_airs_some_missing() {
 
     let parent_engine = test_engine_small();
     let (circuit, _pk) = verifier_circuit_keygen::<2>(&parent_engine, &vk);
-    let vk_commit_data = circuit.commit_child_vk(&parent_engine, &vk);
+    let vk_commit_data = CachedTraceCtx::PcsData(circuit.commit_child_vk(&parent_engine, &vk));
     let ctxs = circuit.generate_proving_ctxs_base(
         &vk,
         vk_commit_data,
@@ -526,8 +526,8 @@ mod cuda {
             tracing::debug!(%air_idx, air_name = %air.name());
         }
 
-        let vk_commit_data_cpu = circuit.commit_child_vk(&cpu_engine, &vk);
-        let vk_commit_data_gpu = circuit.commit_child_vk(&gpu_engine, &vk);
+        let vk_commit_data_cpu = CachedTraceCtx::PcsData(circuit.commit_child_vk(&cpu_engine, &vk));
+        let vk_commit_data_gpu = CachedTraceCtx::PcsData(circuit.commit_child_vk(&gpu_engine, &vk));
         let cpu_ctx = circuit.generate_proving_ctxs_base(
             &vk,
             vk_commit_data_cpu,
