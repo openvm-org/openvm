@@ -17,7 +17,9 @@ use eyre::{self, bail, ContextCompat};
 #[cfg(feature = "function-span")]
 use openvm_instructions::exe::FnBound;
 use openvm_instructions::{exe::FnBounds, program::MAX_ALLOWED_PC};
-use openvm_platform::WORD_SIZE;
+/// The memory image stores u32 words, and RISC-V instructions are always 32 bits,
+/// so the ELF loader always steps in 4-byte increments regardless of the machine word size.
+const ELF_WORD_SIZE: usize = 4;
 
 /// RISC-V ELF (Executable and Linkable Format) File.
 ///
@@ -122,7 +124,7 @@ impl Elf {
                             symbol.st_value as u32,
                             FnBound {
                                 start: symbol.st_value as u32,
-                                end: (symbol.st_value + symbol.st_size - (WORD_SIZE as u64)) as u32,
+                                end: (symbol.st_value + symbol.st_size - (ELF_WORD_SIZE as u64)) as u32,
                                 name: offsets[&symbol.st_name].to_string(),
                             },
                         );
@@ -151,7 +153,7 @@ impl Elf {
             .map_err(|err| eyre::eyre!("e_entry was larger than 32 bits. {err}"))?;
 
         // Make sure the entrypoint is valid.
-        if entry >= max_mem || !entry.is_multiple_of(WORD_SIZE as u32) {
+        if entry >= max_mem || !entry.is_multiple_of(ELF_WORD_SIZE as u32) {
             bail!("Invalid entrypoint");
         }
 
@@ -182,7 +184,7 @@ impl Elf {
 
             // Get the virtual address of the segment as an u32.
             let vaddr: u32 = segment.p_vaddr.try_into()?;
-            if !vaddr.is_multiple_of(WORD_SIZE as u32) {
+            if !vaddr.is_multiple_of(ELF_WORD_SIZE as u32) {
                 bail!("vaddr {vaddr:08x} is unaligned");
             }
 
@@ -196,7 +198,7 @@ impl Elf {
             let offset: u32 = segment.p_offset.try_into()?;
 
             // Read the segment and decode each word as an instruction.
-            for i in (0..mem_size).step_by(WORD_SIZE) {
+            for i in (0..mem_size).step_by(ELF_WORD_SIZE) {
                 let addr = vaddr
                     .checked_add(i)
                     .ok_or_else(|| eyre::eyre!("vaddr overflow"))?;
@@ -216,7 +218,7 @@ impl Elf {
 
                 // Get the word as an u32 but make sure we don't read pass the end of the file.
                 let mut word = 0;
-                let len = min(file_size - i, WORD_SIZE as u32);
+                let len = min(file_size - i, ELF_WORD_SIZE as u32);
                 for j in 0..len {
                     let offset = (offset + i + j) as usize;
                     let byte = input.get(offset).context("Invalid segment offset")?;
