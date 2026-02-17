@@ -28,7 +28,7 @@ impl WordWrite for Vec<u32> {
         if !last_word.is_empty() {
             let mut last_word_bytes = [0u8; WORD_SIZE];
             last_word_bytes[..last_word.len()].clone_from_slice(last_word);
-            self.push(u32::from_le_bytes(last_word_bytes));
+            // self.push(u32::from_le_bytes(last_word_bytes)); TODO
         }
         Ok(())
     }

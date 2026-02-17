@@ -6024,7 +6024,6 @@ dependencies = [
  "num-bigint 0.4.6",
  "openvm-custom-insn",
  "openvm-platform",
- "openvm-rv32im-guest",
  "serde",
 ]
 
@@ -6894,7 +6893,6 @@ dependencies = [
  "embedded-alloc",
  "libm",
  "openvm-custom-insn",
- "openvm-rv32im-guest",
 ]
 
 [[package]]

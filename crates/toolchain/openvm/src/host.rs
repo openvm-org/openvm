@@ -98,7 +98,7 @@ pub fn read_u32() -> u32 {
     u32::from_le_bytes(bytes.try_into().unwrap())
 }
 
-#[cfg(all(feature = "std", test, not(target_os = "zkvm")))]
+#[cfg(all(feature = "std", test, not(openvm_intrinsics)))]
 mod tests {
     use alloc::vec;
 

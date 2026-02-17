@@ -1,16 +1,16 @@
 //! User IO functions
 
 use alloc::vec::Vec;
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_intrinsics)]
 use core::alloc::Layout;
 use core::fmt::Write;
 
-#[cfg(target_os = "zkvm")]
-use openvm_rv32im_guest::{hint_buffer_chunked, hint_input, hint_store_u32};
+// #[cfg(openvm_intrinsics)]
+// use openvm_rv32im_guest::{hint_buffer_chunked, hint_input, hint_store_u32};
 use serde::de::DeserializeOwned;
 
-#[cfg(not(target_os = "zkvm"))]
-use crate::host::{hint_input, read_n_bytes, read_u32};
+// #[cfg(not(openvm_intrinsics))]
+// use crate::host::{hint_input, read_n_bytes, read_u32};
 use crate::serde::Deserializer;
 
 mod read;
@@ -19,8 +19,9 @@ pub use openvm_platform::print::{print, println};
 
 /// Read `size: u32` and then `size` bytes from the hint stream into a vector.
 pub fn read_vec() -> Vec<u8> {
-    hint_input();
-    read_vec_by_len(read_u32() as usize)
+    // hint_input();
+    // read_vec_by_len(read_u32() as usize)
+    panic!()
 }
 
 /// Deserialize the next item from the next input stream into a type `T`.
@@ -33,13 +34,13 @@ pub fn read<T: DeserializeOwned>() -> T {
 /// Read the next 4 bytes from the hint stream into a register.
 /// Because [hint_store_u32] stores a word to memory, this function first reads to memory and then
 /// loads from memory to register.
-#[cfg(target_os = "zkvm")]
+#[cfg(openvm_intrinsics)]
 #[inline(always)]
 #[allow(asm_sub_register)]
 pub fn read_u32() -> u32 {
     let ptr = unsafe { alloc::alloc::alloc(Layout::from_size_align(4, 4).unwrap()) };
     let addr = ptr as u32;
-    hint_store_u32!(addr);
+    // hint_store_u32!(addr);
     let result: u32;
     unsafe {
         core::arch::asm!("lw {rd}, ({rs1})", rd = out(reg) result, rs1 = in(reg) addr);
@@ -48,9 +49,9 @@ pub fn read_u32() -> u32 {
 }
 
 fn hint_store_word(ptr: *mut u32) {
-    #[cfg(target_os = "zkvm")]
-    hint_store_u32!(ptr);
-    #[cfg(not(target_os = "zkvm"))]
+    // #[cfg(openvm_intrinsics)]
+    // hint_store_u32!(ptr);
+    #[cfg(not(openvm_intrinsics))]
     unsafe {
         *ptr = crate::host::read_u32();
     }
@@ -60,9 +61,9 @@ fn hint_store_word(ptr: *mut u32) {
 #[allow(unused_variables)]
 #[inline(always)]
 pub fn hint_load_by_key(key: &[u8]) {
-    #[cfg(target_os = "zkvm")]
-    openvm_rv32im_guest::hint_load_by_key(key.as_ptr(), key.len() as u32);
-    #[cfg(not(target_os = "zkvm"))]
+    // #[cfg(openvm_intrinsics)]
+    // openvm_rv32im_guest::hint_load_by_key(key.as_ptr(), key.len() as u32);
+    #[cfg(not(openvm_intrinsics))]
     panic!("hint_load_by_key cannot run on non-zkVM platforms");
 }
 
@@ -71,7 +72,7 @@ pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
     let num_words = len.div_ceil(4);
     let capacity = num_words * 4;
 
-    #[cfg(target_os = "zkvm")]
+    #[cfg(openvm_intrinsics)]
     {
         // Allocate a buffer of the required length
         // We prefer that the allocator should allocate this buffer to a 4-byte boundary,
@@ -83,7 +84,7 @@ pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
         // The heap-embedded-alloc uses linked list allocator, which has a minimum alignment of
         // `sizeof(usize) * 2 = 8` on 32-bit architectures: https://github.com/rust-osdev/linked-list-allocator/blob/b5caf3271259ddda60927752fa26527e0ccd2d56/src/hole.rs#L429
         let mut bytes = Vec::with_capacity(capacity);
-        hint_buffer_chunked(bytes.as_mut_ptr(), num_words as usize);
+        // hint_buffer_chunked(bytes.as_mut_ptr(), num_words as usize);
         // SAFETY: We populate a `Vec<u8>` by hintstore-ing `num_words` 4 byte words. We set the
         // length to `len` and don't care about the extra `capacity - len` bytes stored.
         unsafe {
@@ -91,10 +92,10 @@ pub(crate) fn read_vec_by_len(len: usize) -> Vec<u8> {
         }
         bytes
     }
-    #[cfg(not(target_os = "zkvm"))]
+    #[cfg(not(openvm_intrinsics))]
     {
         let mut buffer = Vec::with_capacity(capacity);
-        buffer.append(&mut read_n_bytes(len));
+        // buffer.append(&mut read_n_bytes(len));
         buffer
     }
 }
@@ -120,9 +121,9 @@ pub fn reveal_bytes32(bytes: [u8; 32]) {
 #[inline(always)]
 pub fn reveal_u32(x: u32, index: usize) {
     let byte_index = (index * 4) as u32;
-    #[cfg(target_os = "zkvm")]
-    openvm_rv32im_guest::reveal!(byte_index, x, 0);
-    #[cfg(all(not(target_os = "zkvm"), feature = "std"))]
+    // #[cfg(openvm_intrinsics)]
+    // openvm_rv32im_guest::reveal!(byte_index, x, 0);
+    #[cfg(all(not(openvm_intrinsics), feature = "std"))]
     println!("reveal {} at byte location {}", x, index * 4);
 }
 
@@ -130,9 +131,9 @@ pub fn reveal_u32(x: u32, index: usize) {
 #[allow(unused_variables)]
 #[inline(always)]
 pub fn store_u32_to_native(native_addr: u32, x: u32) {
-    #[cfg(target_os = "zkvm")]
-    openvm_rv32im_guest::store_to_native!(native_addr, x);
-    #[cfg(not(target_os = "zkvm"))]
+    // #[cfg(openvm_intrinsics)]
+    // openvm_rv32im_guest::store_to_native!(native_addr, x);
+    #[cfg(not(openvm_intrinsics))]
     panic!("store_to_native_u32 cannot run on non-zkVM platforms");
 }
 

@@ -1,10 +1,10 @@
 /// Print a UTF-8 string to stdout on host machine for debugging purposes.
 #[allow(unused_variables)]
 pub fn print<S: AsRef<str>>(s: S) {
-    #[cfg(all(not(target_os = "zkvm"), feature = "std"))]
+    #[cfg(all(not(openvm_intrinsics), feature = "std"))]
     print!("{}", s.as_ref());
-    #[cfg(target_os = "zkvm")]
-    openvm_rv32im_guest::print_str_from_bytes(s.as_ref().as_bytes());
+    // #[cfg(target_os = "zkvm")]
+    // openvm_rv32im_guest::print_str_from_bytes(s.as_ref().as_bytes()); // TODO
 }
 
 pub fn println<S: AsRef<str>>(s: S) {

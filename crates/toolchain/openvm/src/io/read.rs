@@ -1,8 +1,8 @@
 use core::mem::MaybeUninit;
 
 use openvm_platform::WORD_SIZE;
-#[cfg(target_os = "zkvm")]
-use openvm_rv32im_guest::hint_buffer_chunked;
+// #[cfg(target_os = "zkvm")]
+// use openvm_rv32im_guest::hint_buffer_chunked;
 
 use super::hint_store_word;
 use crate::serde::WordRead;
@@ -20,8 +20,9 @@ impl Reader {
     /// stream. The program will fail if there is no next
     /// stream in the input stream.
     pub fn new() -> Self {
-        super::hint_input();
-        let bytes_remaining = super::read_u32() as usize;
+        // super::hint_input();
+        // let bytes_remaining = super::read_u32() as usize;
+        let bytes_remaining = 0usize;
         Self { bytes_remaining }
     }
 }
@@ -30,9 +31,9 @@ impl WordRead for Reader {
     fn read_words(&mut self, words: &mut [u32]) -> crate::serde::Result<()> {
         let num_words = words.len();
         if let Some(new_remaining) = self.bytes_remaining.checked_sub(num_words * WORD_SIZE) {
-            #[cfg(target_os = "zkvm")]
-            hint_buffer_chunked(words.as_mut_ptr() as *mut u8, words.len());
-            #[cfg(not(target_os = "zkvm"))]
+            // #[cfg(openvm_intrinsics)]
+            // hint_buffer_chunked(words.as_mut_ptr() as *mut u8, words.len());
+            #[cfg(not(openvm_intrinsics))]
             {
                 for w in words.iter_mut() {
                     hint_store_word(w as *mut u32);
@@ -50,9 +51,9 @@ impl WordRead for Reader {
             return Err(crate::serde::Error::DeserializeUnexpectedEnd);
         }
         let mut num_padded_bytes = bytes.len();
-        #[cfg(target_os = "zkvm")]
-        hint_buffer_chunked(bytes.as_mut_ptr(), num_padded_bytes / WORD_SIZE);
-        #[cfg(not(target_os = "zkvm"))]
+        // #[cfg(openvm_intrinsics)]
+        // hint_buffer_chunked(bytes.as_mut_ptr(), num_padded_bytes / WORD_SIZE);
+        #[cfg(not(openvm_intrinsics))]
         {
             let mut words = bytes.chunks_exact_mut(WORD_SIZE);
             for word in &mut words {
