@@ -4,15 +4,15 @@ on:
   workflow_call:
   push:
     branches: ["main"]
-  pull_request:
-    branches: ["**"]
-    paths:
-      - "crates/circuits/**"
-      - "crates/vm/**"
-      - "crates/toolchain/**"
-      - "extensions/**"
-      - "Cargo.toml"
-      - ".github/workflows/extension-tests.yml"
+  # pull_request:
+  #   branches: ["**"]
+  #   paths:
+  #     - "crates/circuits/**"
+  #     - "crates/vm/**"
+  #     - "crates/toolchain/**"
+  #     - "extensions/**"
+  #     - "Cargo.toml"
+  #     - ".github/workflows/extension-tests.yml"
 
 concurrency:
   group: ${{ github.workflow_ref }}-extension-tests-${{ github.event.pull_request.number || github.sha }}
