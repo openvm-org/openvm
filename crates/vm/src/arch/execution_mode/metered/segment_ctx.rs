@@ -16,12 +16,18 @@ pub const DEFAULT_MAX_MEMORY: usize = 15 << 30; // 15GiB
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 const DEFAULT_MAIN_CELL_WEIGHT: usize = 3; // 1 + 2^{log_blowup=1}
 const DEFAULT_MAIN_CELL_SECONDARY_WEIGHT: f64 = 0.5;
-/// Each interaction contributes 2 * D_EF base field elements to the GKR segment
-/// tree leaves. We then use additional buffer whose size is a quarter of that.
-/// We need another `2 * sqrt(N) * D_EF` base field elements for eq buffers and `N / 512 * D_EF`
-/// field elements for temporary buffers -- we add a `+1` which accounts for these terms unless `N`
-/// is very small, in which case it will accounted for by a general safety buffer.
-const DEFAULT_INTERACTION_CELL_WEIGHT: usize = 2 * D_EF + 2 * D_EF / 4 + 1;
+/// Each interaction contributes 2 * D_EF base field elements to the GKR fractional
+/// sumcheck leaves (Frac<EF> = (p, q) pairs). Workspace overhead (work_buffer at
+/// ~1/32 of leaves, tmp_block_sums at ~1/256) totals ~4% of the leaf memory.
+const DEFAULT_INTERACTION_CELL_WEIGHT: f64 = (2 * D_EF) as f64 * 1.04;
+/// Constant overhead for interaction memory: sqrt-decomposed eq buffers, M matrix,
+/// and misc small buffers. Bounded by ~2 MB assuming fewer than 2^32 leaves.
+const DEFAULT_INTERACTION_CONSTANT_OVERHEAD: usize = 2 << 20; // 2 MiB
+
+/// Returns `ceil(cell_count * base_field_size * weight)`.
+fn ceil_weighted_bytes(cell_count: usize, base_field_size: usize, weight: f64) -> usize {
+    ((cell_count * base_field_size) as f64 * weight).ceil() as usize
+}
 
 #[derive(derive_new::new, Clone, Debug, Serialize, Deserialize)]
 pub struct Segment {
@@ -42,7 +48,7 @@ pub struct SegmentationConfig {
     pub main_cell_secondary_weight: f64,
     /// Weight multiplier for interaction cells in memory calculation.
     #[getset(set_with = "pub")]
-    pub interaction_cell_weight: usize,
+    pub interaction_cell_weight: f64,
     /// Size of the base field in bytes. Used to convert cell count to memory bytes.
     #[getset(set_with = "pub")]
     pub base_field_size: usize,
@@ -171,7 +177,7 @@ impl SegmentationCtx {
         self.config.main_cell_secondary_weight = weight;
     }
 
-    pub fn set_interaction_cell_weight(&mut self, weight: usize) {
+    pub fn set_interaction_cell_weight(&mut self, weight: f64) {
         self.config.interaction_cell_weight = weight;
     }
 
@@ -224,9 +230,12 @@ impl SegmentationCtx {
 
         let main_memory = main_cnt * main_weight * base_field_size;
         let main_secondary_memory =
-            (((main_cnt * base_field_size) as f64) * main_secondary_weight).round() as usize;
-        let interaction_memory =
-            (interaction_cnt + 1).next_power_of_two() * interaction_weight * base_field_size;
+            ceil_weighted_bytes(main_cnt, base_field_size, main_secondary_weight);
+        let interaction_memory = ceil_weighted_bytes(
+            (interaction_cnt + 1).next_power_of_two(),
+            base_field_size,
+            interaction_weight,
+        ) + DEFAULT_INTERACTION_CONSTANT_OVERHEAD;
         (
             main_memory + max(main_secondary_memory, interaction_memory),
             main_memory,
@@ -304,10 +313,13 @@ impl SegmentationCtx {
         }
         let main_memory = main_cnt * main_weight * base_field_size;
         let main_secondary_memory =
-            (((main_cnt * base_field_size) as f64) * main_secondary_weight).round() as usize;
+            ceil_weighted_bytes(main_cnt, base_field_size, main_secondary_weight);
         // interaction rounding to match n_logup calculation
-        let interaction_memory =
-            (interaction_cnt + 1).next_power_of_two() * interaction_weight * base_field_size;
+        let interaction_memory = ceil_weighted_bytes(
+            (interaction_cnt + 1).next_power_of_two(),
+            base_field_size,
+            interaction_weight,
+        ) + DEFAULT_INTERACTION_CONSTANT_OVERHEAD;
         let total_memory = main_memory + max(main_secondary_memory, interaction_memory);
 
         if total_memory > self.config.limits.max_memory {
