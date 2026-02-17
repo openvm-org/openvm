@@ -4,17 +4,17 @@ on:
   workflow_call:
   push:
     branches: ["main"]
-  pull_request:
-    branches: ["**"]
-    paths:
-      - "crates/circuits/**"
-      - "crates/vm/**"
-      - "crates/toolchain/**"
-      - "extensions/**"
-      - "guest-libs/**"
-      - "Cargo.toml"
-      - ".github/workflows/guest-lib-tests.cuda.yml"
-      - "crates/sdk/guest/fib/**"
+  # pull_request:
+  #   branches: ["**"]
+  #   paths:
+  #     - "crates/circuits/**"
+  #     - "crates/vm/**"
+  #     - "crates/toolchain/**"
+  #     - "extensions/**"
+  #     - "guest-libs/**"
+  #     - "Cargo.toml"
+  #     - ".github/workflows/guest-lib-tests.cuda.yml"
+  #     - "crates/sdk/guest/fib/**"
 
 concurrency:
   group: ${{ github.workflow_ref }}-guest-lib-tests-cuda-${{ github.event.pull_request.number || github.sha }}
