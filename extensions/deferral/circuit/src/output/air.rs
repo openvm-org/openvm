@@ -170,7 +170,7 @@ where
 
         self.count_bus
             .send(local.deferral_idx)
-            .eval(builder, local.is_valid);
+            .eval(builder, local.is_first);
 
         let mut initial_state = [AB::Expr::ZERO; DIGEST_SIZE];
         initial_state[0] = local.deferral_idx.into();

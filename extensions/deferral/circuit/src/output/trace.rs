@@ -31,6 +31,7 @@ use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMat
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use crate::{
+    count::DeferralCircuitCountChip,
     poseidon2::DeferralPoseidon2Chip,
     utils::{f_commit_to_bytes, split_output, OUTPUT_TOTAL_BYTES},
 };
@@ -137,6 +138,7 @@ pub struct DeferralOutputExecutor;
 
 #[derive(Clone, Debug)]
 pub struct DeferralOutputFiller<F: VmField> {
+    count_chip: Arc<DeferralCircuitCountChip>,
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
 }
 
@@ -279,6 +281,7 @@ where
             // Starting commit state should be [deferral_idx, 0, ..., 0]
             let mut current_commit_state = [F::ZERO; DIGEST_SIZE];
             current_commit_state[0] = F::from_u32(header.deferral_idx);
+            self.count_chip.add_count(header.deferral_idx);
 
             let output_len_bytes = ((num_rows * DIGEST_SIZE) as u32)
                 .to_le_bytes()

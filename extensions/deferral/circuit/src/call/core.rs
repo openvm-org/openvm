@@ -25,7 +25,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use crate::{
-    count::bus::DeferralCircuitCountBus,
+    count::{bus::DeferralCircuitCountBus, DeferralCircuitCountChip},
     poseidon2::{bus::DeferralPoseidon2Bus, DeferralPoseidon2Chip},
     utils::{byte_commit_to_f, f_commit_to_bytes, COMMIT_NUM_BYTES, F_NUM_BYTES},
 };
@@ -171,6 +171,7 @@ pub struct DeferralCallCoreExecutor<A, F: VmField> {
 #[derive(Clone, Debug, derive_new::new)]
 pub struct DeferralCallCoreFiller<A> {
     adapter: A,
+    count_chip: Arc<DeferralCircuitCountChip>,
 }
 
 impl<F, A, RA> PreflightExecutor<F, RA> for DeferralCallCoreExecutor<A, F>
@@ -251,6 +252,8 @@ where
         let record: &DeferralCallCoreRecord<F> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
         let cols: &mut DeferralCallCoreCols<F> = core_row.borrow_mut();
+        self.count_chip
+            .add_count(record.deferral_idx.as_canonical_u32());
 
         // Write columns in reverse order to avoid clobbering the record.
         cols.writes.new_output_acc = record.write_data.new_output_acc;

@@ -84,13 +84,29 @@ where
         // Provide the lookup for valid deferral indices.
         self.lookup_bus
             .receive(local.row_idx)
-            .eval(builder, local.is_valid);
+            .eval(builder, local.mult);
     }
 }
 
 #[derive(Debug)]
 pub struct DeferralCircuitCountChip {
     pub count: Vec<AtomicU32>,
+}
+
+impl DeferralCircuitCountChip {
+    pub fn new(num_deferral_circuit: usize) -> Self {
+        let count = (0..num_deferral_circuit)
+            .map(|_| AtomicU32::new(0))
+            .collect();
+        Self { count }
+    }
+
+    pub fn add_count(&self, idx: u32) {
+        let idx = idx as usize;
+        assert!(idx < self.count.len());
+        let val_atomic = &self.count[idx];
+        val_atomic.fetch_add(1, Ordering::Relaxed);
+    }
 }
 
 impl<SC: StarkProtocolConfig, RA> Chip<RA, CpuBackend<SC>> for DeferralCircuitCountChip
