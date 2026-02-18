@@ -34,7 +34,7 @@ use crate::{
     count::DeferralCircuitCountChip,
     output::DeferralOutputCols,
     poseidon2::DeferralPoseidon2Chip,
-    utils::{byte_commit_to_f, f_commit_to_bytes, split_output, OUTPUT_TOTAL_BYTES},
+    utils::{f_commit_to_bytes, split_output, OUTPUT_TOTAL_BYTES},
 };
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -208,8 +208,8 @@ where
             &mut record.header.output_commit_and_len_aux.prev_timestamp,
         );
 
-        let output_commit = byte_commit_to_f(&output_commit.map(F::from_u8));
-        let output_raw = state.streams.deferrals[deferral_idx as usize].get_output(&output_commit);
+        let output_raw =
+            state.streams.deferrals[deferral_idx as usize].get_output(&output_commit.to_vec());
         debug_assert_eq!(output_raw.len(), output_len_val);
 
         for (row_idx, output_chunk) in output_raw.chunks_exact(DIGEST_SIZE).enumerate() {

@@ -125,7 +125,7 @@ pub struct Streams<F> {
     /// read `kv_store` need to encode the key and decode the value.
     pub kv_store: Arc<dyn KvStore>,
     /// Stores cached deferred operation inputs and outputs.
-    pub deferrals: Vec<DeferralState<F>>,
+    pub deferrals: Vec<DeferralState>,
 }
 
 impl<F> Streams<F> {

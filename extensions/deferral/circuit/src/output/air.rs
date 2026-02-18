@@ -161,7 +161,10 @@ where
         let is_last_or_invalid = or(next.is_first, not(next.is_valid));
         let mut when_last_or_invalid = builder.when(is_last_or_invalid.clone());
 
-        when_last_or_invalid.assert_eq(bytes_to_f(&local.output_len), local.section_idx);
+        when_last_or_invalid.assert_eq(
+            bytes_to_f(&local.output_len),
+            local.section_idx * AB::Expr::from_usize(DIGEST_SIZE),
+        );
         assert_array_eq(
             &mut when_last_or_invalid,
             byte_commit_to_f(&local.output_commit),

@@ -10,8 +10,9 @@ pub const COMMIT_NUM_BYTES: usize = DIGEST_SIZE * F_NUM_BYTES;
 pub const OUTPUT_TOTAL_BYTES: usize = F_NUM_BYTES + COMMIT_NUM_BYTES;
 
 pub fn byte_commit_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(
-    byte_commit: &[T; COMMIT_NUM_BYTES],
+    byte_commit: &[T],
 ) -> [F; DIGEST_SIZE] {
+    assert_eq!(byte_commit.len(), COMMIT_NUM_BYTES);
     byte_commit
         .chunks_exact(F_NUM_BYTES)
         .map(|chunk| bytes_to_f(chunk))
@@ -35,7 +36,7 @@ pub fn bytes_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(register: &[T]
 }
 
 pub fn combine_output<T>(
-    output_commit: [T; COMMIT_NUM_BYTES],
+    output_commit: impl IntoIterator<Item = T>,
     output_len: [T; F_NUM_BYTES],
 ) -> [T; OUTPUT_TOTAL_BYTES] {
     output_commit

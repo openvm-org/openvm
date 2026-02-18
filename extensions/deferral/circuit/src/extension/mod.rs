@@ -49,6 +49,11 @@ cfg_if::cfg_if! {
     }
 }
 
+// SAFETY: These deferral AIRs must be at these indices within the extension
+pub(crate) const CALL_AIR_IDX: usize = 1;
+pub(crate) const OUTPUT_AIR_IDX: usize = 2;
+pub(crate) const POSEIDON2_AIR_IDX: usize = 4;
+
 // =================================== VM Extension Implementation =================================
 #[derive(Clone)]
 pub struct DeferralExtension {
@@ -83,7 +88,7 @@ impl DeferralExtension {
 )]
 pub enum DeferralExecutor<F: VmField> {
     Setup(DeferralSetupExecutor<F>),
-    Call(DeferralCallExecutor<F>),
+    Call(DeferralCallExecutor),
     Output(DeferralOutputExecutor),
 }
 
@@ -103,7 +108,6 @@ impl<F: VmField> VmExecutionExtension<F> for DeferralExtension {
         let call = DeferralCallExecutor::new(
             DeferralCallAdapterExecutor::new(self.native_start_ptr),
             self.fns.clone(),
-            Arc::new(deferral_poseidon2_chip()),
         );
         inventory.add_executor(call, [DeferralOpcode::CALL.global_opcode()])?;
 
@@ -129,6 +133,7 @@ where
 
         let count_bus = DeferralCircuitCountBus::new(inventory.new_bus_idx());
         let poseidon2_bus = DeferralPoseidon2Bus::new(inventory.new_bus_idx());
+        let base_num_airs = inventory.num_airs();
 
         inventory.add_air(DeferralSetupAir::new(
             DeferralSetupAdapterAir::new(execution_bridge, memory_bridge, self.native_start_ptr),
@@ -136,10 +141,12 @@ where
                 &self.expected_def_vks_commit.map(Val::<SC>::from_u8),
             )),
         ));
+        assert_eq!(inventory.num_airs() - base_num_airs, CALL_AIR_IDX);
         inventory.add_air(DeferralCallAir::new(
             DeferralCallAdapterAir::new(execution_bridge, memory_bridge, self.native_start_ptr),
             DeferralCallCoreAir::new(count_bus, poseidon2_bus),
         ));
+        assert_eq!(inventory.num_airs() - base_num_airs, OUTPUT_AIR_IDX);
         inventory.add_air(DeferralOutputAir::new(
             execution_bridge,
             memory_bridge,
@@ -148,6 +155,7 @@ where
         ));
 
         inventory.add_air(DeferralCircuitCountAir::new(count_bus, self.fns.len()));
+        assert_eq!(inventory.num_airs() - base_num_airs, POSEIDON2_AIR_IDX);
         inventory.add_air_ref(Arc::new(deferral_poseidon2_air(poseidon2_bus.0)));
 
         Ok(())

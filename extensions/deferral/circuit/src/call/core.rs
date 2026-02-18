@@ -3,6 +3,7 @@ use std::{
     sync::Arc,
 };
 
+use itertools::Itertools;
 use openvm_circuit::{
     arch::{
         get_record_from_slice,
@@ -27,8 +28,8 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use crate::{
     count::{bus::DeferralCircuitCountBus, DeferralCircuitCountChip},
-    poseidon2::{bus::DeferralPoseidon2Bus, DeferralPoseidon2Chip},
-    utils::{byte_commit_to_f, f_commit_to_bytes, COMMIT_NUM_BYTES, F_NUM_BYTES},
+    poseidon2::{bus::DeferralPoseidon2Bus, deferral_poseidon2_chip, DeferralPoseidon2Chip},
+    utils::{byte_commit_to_f, COMMIT_NUM_BYTES, F_NUM_BYTES},
     DeferralFn,
 };
 
@@ -165,10 +166,9 @@ pub struct DeferralCallCoreRecord<F> {
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct DeferralCallCoreExecutor<A, F: VmField> {
-    adapter: A,
-    deferral_fns: Vec<Arc<DeferralFn>>,
-    poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
+pub struct DeferralCallCoreExecutor<A> {
+    pub(in crate::call) adapter: A,
+    pub(in crate::call) deferral_fns: Vec<Arc<DeferralFn>>,
 }
 
 #[derive(Clone, Debug, derive_new::new)]
@@ -178,7 +178,7 @@ pub struct DeferralCallCoreFiller<A, F: VmField> {
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
 }
 
-impl<F, A, RA> PreflightExecutor<F, RA> for DeferralCallCoreExecutor<A, F>
+impl<F, A, RA> PreflightExecutor<F, RA> for DeferralCallCoreExecutor<A>
 where
     F: VmField,
     A: 'static
@@ -212,24 +212,23 @@ where
         core_record.read_data = read_data;
 
         let input_commit = byte_commit_to_f(&read_data.input_commit.map(F::from_u8));
-
         let def_idx = core_record.deferral_idx.to_unique_u32();
+        let poseidon2_chip = deferral_poseidon2_chip();
+
         let (output_commit, output_len) = self.deferral_fns[def_idx as usize].execute(
-            &input_commit,
+            &read_data.input_commit.to_vec(),
             &mut state.streams.deferrals[def_idx as usize],
             def_idx,
-            &self.poseidon2_chip,
+            &poseidon2_chip,
         );
 
-        let new_input_acc = self
-            .poseidon2_chip
-            .compress(&read_data.old_input_acc, &input_commit);
-        let new_output_acc = self
-            .poseidon2_chip
-            .compress(&read_data.old_output_acc, &output_commit);
+        let output_f_commit =
+            byte_commit_to_f(&output_commit.iter().map(|v| F::from_u8(*v)).collect_vec());
+        let new_input_acc = poseidon2_chip.compress(&read_data.old_input_acc, &input_commit);
+        let new_output_acc = poseidon2_chip.compress(&read_data.old_output_acc, &output_f_commit);
 
         let write_data = DeferralCallWrites {
-            output_commit: f_commit_to_bytes(&output_commit),
+            output_commit: output_commit.try_into().unwrap(),
             output_len: output_len.to_le_bytes(),
             new_input_acc,
             new_output_acc,
