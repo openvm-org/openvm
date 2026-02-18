@@ -26,7 +26,7 @@ where
             0
         };
         let height = next_power_of_two_or_zero(current_height);
-        let width = self.air.width();
+        let width = Poseidon2PeripheryCols::<Val<SC>, SBOX_REGISTERS>::width();
 
         let mut inputs = Vec::with_capacity(height);
         let mut multiplicities = Vec::with_capacity(height);
@@ -47,7 +47,7 @@ where
 
         // TODO: this would be more optimal if plonky3 made the generate_trace_row function public
         let inner_trace = self.subchip.generate_trace(inputs);
-        let inner_width = self.air.subair.width();
+        let inner_width = self.subchip.air.width();
 
         let mut values = Val::<SC>::zero_vec(height * width);
         values
