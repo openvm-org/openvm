@@ -146,6 +146,7 @@ where
         builder.assert_bool(local.has_interactions);
         builder.assert_bool(local.is_first_in_air);
         builder.assert_bool(local.is_first_in_message);
+        builder.assert_bool(local.is_bus_index);
         builder
             .when(local.has_interactions)
             .assert_one(local.is_valid);
