@@ -3,9 +3,9 @@ use std::sync::Arc;
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
-        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
-        VmExecutionExtension, VmField, VmProverExtension,
+        hasher::Hasher, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
+        ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena,
+        VmCircuitExtension, VmExecutionExtension, VmField, VmProverExtension,
     },
     system::memory::SharedMemoryHelper,
 };
@@ -18,7 +18,6 @@ use openvm_stark_backend::{
     StarkEngine, StarkProtocolConfig, Val,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
-use serde::{Deserialize, Serialize};
 
 use crate::{
     call::{
@@ -37,6 +36,8 @@ use crate::{
         DeferralSetupAir, DeferralSetupChip, DeferralSetupCoreAir, DeferralSetupCoreFiller,
         DeferralSetupExecutor,
     },
+    utils::{byte_commit_to_f, f_commit_to_bytes, COMMIT_NUM_BYTES},
+    DeferralFn,
 };
 
 cfg_if::cfg_if! {
@@ -49,19 +50,25 @@ cfg_if::cfg_if! {
 }
 
 // =================================== VM Extension Implementation =================================
-#[derive(Clone, Copy, Debug, derive_new::new, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct DeferralExtension {
+    pub fns: Vec<Arc<DeferralFn>>,
+    pub expected_def_vks_commit: [u8; COMMIT_NUM_BYTES],
     pub native_start_ptr: u32,
-    pub expected_def_vks_commit: [u32; DIGEST_SIZE],
-    pub num_deferral_circuits: usize,
 }
 
-impl Default for DeferralExtension {
-    fn default() -> Self {
+impl DeferralExtension {
+    pub fn new<F: VmField>(fns: Vec<Arc<DeferralFn>>, commits: &[[F; DIGEST_SIZE]]) -> Self {
+        assert_eq!(fns.len(), commits.len());
+        let mut expected_commit = [F::ZERO; DIGEST_SIZE];
+        let hasher = deferral_poseidon2_chip();
+        for commit in commits {
+            expected_commit = hasher.compress(&expected_commit, commit);
+        }
         Self {
+            fns,
+            expected_def_vks_commit: f_commit_to_bytes(&expected_commit),
             native_start_ptr: 0,
-            expected_def_vks_commit: [0; DIGEST_SIZE],
-            num_deferral_circuits: 0,
         }
     }
 }
@@ -87,15 +94,15 @@ impl<F: VmField> VmExecutionExtension<F> for DeferralExtension {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, DeferralExecutor<F>>,
     ) -> Result<(), ExecutorInventoryError> {
-        let expected_def_vks_commit = self.expected_def_vks_commit.map(F::from_u32);
         let setup = DeferralSetupExecutor::new(
             DeferralSetupAdapterExecutor::new(self.native_start_ptr),
-            expected_def_vks_commit,
+            byte_commit_to_f(&self.expected_def_vks_commit.map(F::from_u8)),
         );
         inventory.add_executor(setup, [DeferralOpcode::SETUP.global_opcode()])?;
 
         let call = DeferralCallExecutor::new(
             DeferralCallAdapterExecutor::new(self.native_start_ptr),
+            self.fns.clone(),
             Arc::new(deferral_poseidon2_chip()),
         );
         inventory.add_executor(call, [DeferralOpcode::CALL.global_opcode()])?;
@@ -121,20 +128,18 @@ where
         );
 
         let count_bus = DeferralCircuitCountBus::new(inventory.new_bus_idx());
-        let poseidon2_bus_idx = inventory.new_bus_idx();
-        let poseidon2_bus = DeferralPoseidon2Bus::new(poseidon2_bus_idx);
+        let poseidon2_bus = DeferralPoseidon2Bus::new(inventory.new_bus_idx());
 
-        let expected_def_vks_commit = self.expected_def_vks_commit.map(Val::<SC>::from_u32);
         inventory.add_air(DeferralSetupAir::new(
             DeferralSetupAdapterAir::new(execution_bridge, memory_bridge, self.native_start_ptr),
-            DeferralSetupCoreAir::new(expected_def_vks_commit),
+            DeferralSetupCoreAir::new(byte_commit_to_f(
+                &self.expected_def_vks_commit.map(Val::<SC>::from_u8),
+            )),
         ));
-
         inventory.add_air(DeferralCallAir::new(
             DeferralCallAdapterAir::new(execution_bridge, memory_bridge, self.native_start_ptr),
             DeferralCallCoreAir::new(count_bus, poseidon2_bus),
         ));
-
         inventory.add_air(DeferralOutputAir::new(
             execution_bridge,
             memory_bridge,
@@ -142,10 +147,7 @@ where
             poseidon2_bus,
         ));
 
-        inventory.add_air(DeferralCircuitCountAir::new(
-            count_bus,
-            self.num_deferral_circuits,
-        ));
+        inventory.add_air(DeferralCircuitCountAir::new(count_bus, self.fns.len()));
         inventory.add_air_ref(Arc::new(deferral_poseidon2_air(poseidon2_bus.0)));
 
         Ok(())
@@ -171,9 +173,7 @@ where
         let timestamp_max_bits = inventory.timestamp_max_bits();
         let mem_helper = SharedMemoryHelper::new(range_checker, timestamp_max_bits);
 
-        let count_chip = Arc::new(DeferralCircuitCountChip::new(
-            extension.num_deferral_circuits,
-        ));
+        let count_chip = Arc::new(DeferralCircuitCountChip::new(extension.fns.len()));
         let poseidon2_chip = Arc::new(deferral_poseidon2_chip());
 
         inventory.next_air::<DeferralSetupAir<Val<SC>>>()?;

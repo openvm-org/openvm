@@ -29,6 +29,7 @@ use crate::{
     count::{bus::DeferralCircuitCountBus, DeferralCircuitCountChip},
     poseidon2::{bus::DeferralPoseidon2Bus, DeferralPoseidon2Chip},
     utils::{byte_commit_to_f, f_commit_to_bytes, COMMIT_NUM_BYTES, F_NUM_BYTES},
+    DeferralFn,
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -163,9 +164,10 @@ pub struct DeferralCallCoreRecord<F> {
     pub write_data: DeferralCallWrites<u8, F>,
 }
 
-#[derive(Clone, Debug, derive_new::new)]
+#[derive(Clone, derive_new::new)]
 pub struct DeferralCallCoreExecutor<A, F: VmField> {
     adapter: A,
+    deferral_fns: Vec<Arc<DeferralFn>>,
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
 }
 
@@ -209,11 +211,15 @@ where
             .read(state.memory, instruction, &mut adapter_record);
         core_record.read_data = read_data;
 
-        let input_commit: [F; _] = byte_commit_to_f(&read_data.input_commit.map(F::from_u8));
+        let input_commit = byte_commit_to_f(&read_data.input_commit.map(F::from_u8));
 
-        // TODO: run external deferral function
-        let output_commit = [F::ZERO; DIGEST_SIZE];
-        let output_len = 0u32;
+        let def_idx = core_record.deferral_idx.to_unique_u32();
+        let (output_commit, output_len) = self.deferral_fns[def_idx as usize].execute(
+            &input_commit,
+            &mut state.streams.deferrals[def_idx as usize],
+            def_idx,
+            &self.poseidon2_chip,
+        );
 
         let new_input_acc = self
             .poseidon2_chip

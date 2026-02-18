@@ -10,5 +10,7 @@ pub mod poseidon2;
 pub mod setup;
 pub(crate) mod utils;
 
+mod def_fn;
+pub use def_fn::*;
 mod extension;
 pub use extension::*;
