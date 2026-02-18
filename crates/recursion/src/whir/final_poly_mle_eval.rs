@@ -20,7 +20,7 @@ use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::{TranscriptBus, WhirOpeningPointBus, WhirOpeningPointMessage},
+    bus::{TranscriptBus, WhirOpeningPointBus, WhirOpeningPointLookupBus, WhirOpeningPointMessage},
     tracegen::{RowMajorChip, StandardTracegenCtx},
     utils::{ext_field_add, ext_field_multiply, ext_field_subtract, pow_tidx_count},
     whir::bus::{
@@ -52,6 +52,7 @@ struct FinalyPolyMleEvalCols<T> {
 
 pub struct FinalPolyMleEvalAir {
     pub whir_opening_point_bus: WhirOpeningPointBus,
+    pub whir_opening_point_lookup_bus: WhirOpeningPointLookupBus,
     pub final_poly_mle_eval_bus: FinalPolyMleEvalBus,
     pub transcript_bus: TranscriptBus,
     pub eq_alpha_u_bus: WhirEqAlphaUBus,
@@ -107,6 +108,18 @@ where
 
         let var_idx = AB::Expr::from_usize(self.num_sumcheck_rounds + self.num_vars) - local.layer;
 
+        builder.assert_eq(
+            local.is_nonleaf_and_first_in_layer,
+            is_nonleaf.clone() * (local.is_enabled - is_node_idx_nonzero.clone()),
+        );
+        let is_nonleaf_and_not_first_in_layer = is_nonleaf.clone() * is_node_idx_nonzero;
+
+        // Each non-leaf node needs the opening point for its layer. The first
+        // node (node_idx=0) receives it from the permutation bus and registers
+        // it on a lookup bus for the remaining nodes in this layer. The fact
+        // that we receive on the permutation bus receive ensures each key is
+        // registered exactly once on the lookup bus (since the producers send
+        // each key once).
         self.whir_opening_point_bus.receive(
             builder,
             local.proof_idx,
@@ -114,25 +127,25 @@ where
                 idx: var_idx.clone(),
                 value: local.point.map(Into::into),
             },
-            is_nonleaf.clone(),
-        );
-        builder.assert_eq(
             local.is_nonleaf_and_first_in_layer,
-            is_nonleaf.clone() * (local.is_enabled - is_node_idx_nonzero),
         );
-        builder
-            .when(local.is_nonleaf_and_first_in_layer)
-            .assert_one(local.is_enabled);
-        // copy it a bunch of times if we are node_idx 0
-        // FIXME: technically we are violating the |multiplicity| <= 1 rule
-        self.whir_opening_point_bus.send(
+        self.whir_opening_point_lookup_bus.add_key_with_lookups(
+            builder,
+            local.proof_idx,
+            WhirOpeningPointMessage {
+                idx: var_idx.clone(),
+                value: local.point.map(Into::into),
+            },
+            local.is_nonleaf_and_first_in_layer * (local.num_nodes_in_layer - AB::Expr::ONE),
+        );
+        self.whir_opening_point_lookup_bus.lookup_key(
             builder,
             local.proof_idx,
             WhirOpeningPointMessage {
                 idx: var_idx,
                 value: local.point.map(Into::into),
             },
-            local.is_nonleaf_and_first_in_layer * (local.num_nodes_in_layer - AB::Expr::ONE),
+            is_nonleaf_and_not_first_in_layer,
         );
 
         let left_idx = local.node_idx;

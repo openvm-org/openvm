@@ -26,7 +26,7 @@ use crate::{
         ExpressionClaimNMaxBus, FractionFolderInputBus, GkrModuleBus, HyperdimBus,
         LiftedHeightsBus, MerkleVerifyBus, NLiftBus, Poseidon2CompressBus, Poseidon2PermuteBus,
         PublicValuesBus, SelUniBus, StackingIndicesBus, StackingModuleBus, TranscriptBus,
-        WhirModuleBus, WhirMuBus, WhirOpeningPointBus, XiRandomnessBus,
+        WhirModuleBus, WhirMuBus, WhirOpeningPointBus, WhirOpeningPointLookupBus, XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::{
@@ -210,6 +210,7 @@ pub struct BusInventory {
     pub xi_randomness_bus: XiRandomnessBus,
     pub constraint_randomness_bus: ConstraintSumcheckRandomnessBus,
     pub whir_opening_point_bus: WhirOpeningPointBus,
+    pub whir_opening_point_lookup_bus: WhirOpeningPointLookupBus,
 
     // Compute buses
     pub exp_bits_len_bus: ExpBitsLenBus,
@@ -349,6 +350,7 @@ impl BusInventory {
             xi_randomness_bus: XiRandomnessBus::new(b.new_bus_idx()),
             constraint_randomness_bus: ConstraintSumcheckRandomnessBus::new(b.new_bus_idx()),
             whir_opening_point_bus: WhirOpeningPointBus::new(b.new_bus_idx()),
+            whir_opening_point_lookup_bus: WhirOpeningPointLookupBus::new(b.new_bus_idx()),
 
             // Claims buses
             column_claims_bus: ColumnClaimsBus::new(b.new_bus_idx()),
