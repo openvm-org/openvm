@@ -155,7 +155,6 @@ where
             .when(next.iter_idx - local.iter_idx - AB::Expr::ONE)
             .when(next.is_valid)
             .assert_one(next.is_first_iter);
-        // TODO(AG): get rid of iter_idx, use root_pow * root instead (if possible)
 
         // =========================== Root consistency =============================
         // If iter_idx doesn't become zero (increases by one), then:
