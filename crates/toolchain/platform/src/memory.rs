@@ -20,7 +20,7 @@ pub fn is_guest_memory(addr: u64) -> bool {
 #[cfg(feature = "rust-runtime")]
 #[no_mangle]
 pub unsafe extern "C" fn sys_alloc_aligned(bytes: usize, align: usize) -> *mut u8 {
-    // use crate::print::println; TODO: uncomment
+    use crate::print::println;
 
     #[cfg(openvm_intrinsics)]
     extern "C" {
@@ -60,7 +60,7 @@ pub unsafe extern "C" fn sys_alloc_aligned(bytes: usize, align: usize) -> *mut u
             unsafe { HEAP_POS = new_heap_pos };
         }
         _ => {
-            // println("ERROR: Maximum memory exceeded, program terminating."); // TODO: uncomment
+            println("ERROR: Maximum memory exceeded, program terminating.");
             super::rust_rt::terminate::<1>();
         }
     }

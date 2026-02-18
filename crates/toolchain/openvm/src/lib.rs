@@ -21,8 +21,6 @@ use openvm_platform::rust_rt;
 #[cfg(openvm_intrinsics)]
 mod getrandom;
 pub mod io;
-// #[cfg(all(feature = "std", openvm_intrinsics))]
-// pub mod pal_abi;
 pub mod process;
 pub mod serde;
 

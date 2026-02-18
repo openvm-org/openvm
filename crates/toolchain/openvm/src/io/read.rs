@@ -1,7 +1,7 @@
 use core::mem::MaybeUninit;
 
 use openvm_platform::WORD_SIZE;
-// #[cfg(target_os = "zkvm")]
+// #[cfg(openvm_intrinsics)]
 // use openvm_rv32im_guest::hint_buffer_chunked;
 
 use super::hint_store_word;
