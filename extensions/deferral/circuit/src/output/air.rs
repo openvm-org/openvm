@@ -26,6 +26,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use crate::{
     count::bus::DeferralCircuitCountBus,
+    poseidon2::bus::DeferralPoseidon2Bus,
     utils::{byte_commit_to_f, bytes_to_f, combine_output, COMMIT_NUM_BYTES},
 };
 
@@ -75,6 +76,7 @@ pub struct DeferralOutputAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
     pub count_bus: DeferralCircuitCountBus,
+    pub poseidon2_bus: DeferralPoseidon2Bus,
 }
 
 impl<F> BaseAir<F> for DeferralOutputAir {
@@ -156,7 +158,8 @@ where
         // section's rows. The initial state should be [deferral_idx, 0, ..., 0]
         // and the final state should be output_commit. Note that output_len must
         // be divisible by DIGEST_SIZE.
-        let mut when_last_or_invalid = builder.when(or(next.is_first, not(next.is_valid)));
+        let is_last_or_invalid = or(next.is_first, not(next.is_valid));
+        let mut when_last_or_invalid = builder.when(is_last_or_invalid.clone());
 
         when_last_or_invalid.assert_eq(bytes_to_f(&local.output_len), local.section_idx);
         assert_array_eq(
@@ -169,11 +172,23 @@ where
             .send(local.deferral_idx)
             .eval(builder, local.is_valid);
 
-        // TODO: constrain that on the first row local.current_commit_state is the
-        // poseidon2 compress of local.write_bytes and [deferral_idx, 0, ..., 0]
+        let mut initial_state = [AB::Expr::ZERO; DIGEST_SIZE];
+        initial_state[0] = local.deferral_idx.into();
 
-        // TODO: constrain that next.current_commit_state is the poseidon2 compress
-        // of next.write_bytes and local.current_commit_state
+        self.poseidon2_bus
+            .compress(initial_state, local.write_bytes, local.current_commit_state)
+            .eval(builder, local.is_first);
+
+        self.poseidon2_bus
+            .compress(
+                local.current_commit_state,
+                next.write_bytes,
+                next.current_commit_state,
+            )
+            .eval(
+                builder,
+                local.is_valid * and(next.is_valid, not(next.is_first)),
+            );
 
         // Constrain the heap pointer memory reads first.
         let d = AB::Expr::from_u32(RV32_REGISTER_AS);
@@ -241,9 +256,6 @@ where
                 local.section_idx + AB::Expr::from_u8(4),
                 (DEFAULT_PC_STEP, None),
             )
-            .eval(
-                builder,
-                local.is_valid * or(next.is_first, not(next.is_valid)),
-            );
+            .eval(builder, local.is_valid * is_last_or_invalid);
     }
 }

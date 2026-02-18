@@ -7,4 +7,4 @@ mod trace;
 pub use air::*;
 pub use trace::*;
 
-pub type DeferralOutputChip<F> = VmChipWrapper<F, DeferralOutputFiller>;
+pub type DeferralOutputChip<F> = VmChipWrapper<F, DeferralOutputFiller<F>>;

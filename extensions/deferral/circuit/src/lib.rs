@@ -6,6 +6,7 @@
 pub mod call;
 pub mod count;
 pub mod output;
+pub mod poseidon2;
 pub mod setup;
 pub(crate) mod utils;
 

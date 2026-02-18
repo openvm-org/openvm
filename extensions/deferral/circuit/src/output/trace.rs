@@ -2,12 +2,14 @@ use std::{
     array::from_fn,
     borrow::{Borrow, BorrowMut},
     mem::{align_of, size_of},
+    sync::Arc,
 };
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, CustomBorrow, ExecutionError, MultiRowLayout, MultiRowMetadata,
-        PreflightExecutor, RecordArena, SizedRecord, TraceFiller, VmStateMut,
+        get_record_from_slice, hasher::HasherChip, CustomBorrow, ExecutionError, MultiRowLayout,
+        MultiRowMetadata, PreflightExecutor, RecordArena, SizedRecord, TraceFiller, VmField,
+        VmStateMut,
     },
     system::memory::{
         offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
@@ -28,7 +30,10 @@ use openvm_rv32im_circuit::adapters::{
 use openvm_stark_backend::{p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
-use crate::utils::{f_commit_to_bytes, split_output, OUTPUT_TOTAL_BYTES};
+use crate::{
+    poseidon2::DeferralPoseidon2Chip,
+    utils::{f_commit_to_bytes, split_output, OUTPUT_TOTAL_BYTES},
+};
 
 use super::DeferralOutputCols;
 
@@ -130,8 +135,10 @@ impl<'a> SizedRecord<DeferralOutputLayout> for DeferralOutputRecordMut<'a> {
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct DeferralOutputExecutor;
 
-#[derive(Clone, Debug, Default)]
-pub struct DeferralOutputFiller;
+#[derive(Clone, Debug)]
+pub struct DeferralOutputFiller<F: VmField> {
+    poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
+}
 
 impl<F, RA> PreflightExecutor<F, RA> for DeferralOutputExecutor
 where
@@ -223,9 +230,9 @@ where
     }
 }
 
-impl<F> TraceFiller<F> for DeferralOutputFiller
+impl<F> TraceFiller<F> for DeferralOutputFiller<F>
 where
-    F: PrimeField32,
+    F: VmField,
 {
     fn fill_trace(
         &self,
@@ -318,7 +325,9 @@ where
                 cols.output_len.copy_from_slice(&output_len_bytes);
                 cols.write_bytes = from_fn(|i| F::from_u8(write_bytes[row_idx * DIGEST_SIZE + i]));
 
-                // TODO: compress current_commit_state with write_bytes
+                current_commit_state = self
+                    .poseidon2_chip
+                    .compress_and_record(&current_commit_state, &cols.write_bytes);
                 cols.current_commit_state = current_commit_state;
 
                 mem_helper.fill(

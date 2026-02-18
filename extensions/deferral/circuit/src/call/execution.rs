@@ -1,13 +1,12 @@
 use openvm_circuit::arch::{
     ExecuteFunc, ExecutionCtxTrait, InterpreterExecutor, InterpreterMeteredExecutor,
-    MeteredExecutionCtxTrait, StaticProgramError,
+    MeteredExecutionCtxTrait, StaticProgramError, VmField,
 };
 use openvm_instructions::instruction::Instruction;
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::DeferralCallExecutor;
 
-impl<F: PrimeField32> InterpreterExecutor<F> for DeferralCallExecutor {
+impl<F: VmField> InterpreterExecutor<F> for DeferralCallExecutor<F> {
     fn pre_compute_size(&self) -> usize {
         0
     }
@@ -39,7 +38,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for DeferralCallExecutor {
     }
 }
 
-impl<F: PrimeField32> InterpreterMeteredExecutor<F> for DeferralCallExecutor {
+impl<F: VmField> InterpreterMeteredExecutor<F> for DeferralCallExecutor<F> {
     fn metered_pre_compute_size(&self) -> usize {
         0
     }
