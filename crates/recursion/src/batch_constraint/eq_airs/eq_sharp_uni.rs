@@ -40,7 +40,6 @@ use crate::{
 pub struct EqSharpUniCols<T> {
     is_valid: T,
     is_first: T,
-    is_last: T,
     proof_idx: T,
 
     root: T,
@@ -126,8 +125,9 @@ where
 
         builder.assert_bool(local.is_valid);
         builder.assert_bool(local.is_first);
-        builder.assert_bool(local.is_last);
         builder.assert_bool(local.is_first_iter);
+        let local_is_last = next.is_first + not(next.is_valid);
+        builder.assert_bool(local_is_last.clone());
 
         // =========================== idx consistency =============================
         // TODO: just increase the dimension of nested loop subair?
@@ -194,7 +194,7 @@ where
             .assert_eq(local.root_pow, AB::Expr::ONE);
         // Finally, the final root must equal some specific generator
         builder
-            .when(local.is_valid * local.is_last)
+            .when(local.is_valid * local_is_last.clone())
             .assert_eq::<AB::Var, AB::Expr>(local.root, self.canonical_inverse_generator.into());
 
         // =========================== Xi and product consistency =============================
@@ -214,7 +214,7 @@ where
             .assert_one(local.xi_idx - next.xi_idx);
         // The last one must be 0
         builder
-            .when(local.is_last)
+            .when(local_is_last.clone())
             .assert_eq(local.xi_idx, AB::Expr::ZERO);
 
         self.xi_bus.receive(
@@ -234,7 +234,7 @@ where
                 idx: local.xi_idx.into(),
                 value: local.xi.map(|x| x.into()),
             },
-            local.is_valid * local.is_last,
+            local.is_valid * local_is_last,
         );
 
         self.eq_bus.receive(
@@ -522,7 +522,6 @@ impl RowMajorChip<F> for EqSharpUniTraceGenerator {
                     let cols: &mut EqSharpUniCols<_> = chunk.borrow_mut();
                     cols.is_valid = F::ONE;
                     cols.is_first = F::from_bool(i == 0);
-                    cols.is_last = F::from_bool(i + 1 == one_height);
                     cols.proof_idx = F::from_usize(pidx);
                     cols.is_first_iter = F::ONE;
                     cols.xi_idx = F::from_u32(record.xi_idx);
@@ -544,8 +543,6 @@ impl RowMajorChip<F> for EqSharpUniTraceGenerator {
             .for_each(|(i, chunk)| {
                 let cols: &mut EqSharpUniCols<F> = chunk.borrow_mut();
                 cols.proof_idx = F::from_usize(preflights.len() + i);
-                cols.is_first = F::ONE;
-                cols.is_last = F::ONE;
             });
 
         Some(RowMajorMatrix::new(trace, width))

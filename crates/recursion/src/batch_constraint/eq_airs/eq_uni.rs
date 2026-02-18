@@ -28,7 +28,6 @@ use crate::{
 pub struct EqUniCols<T> {
     is_valid: T,
     is_first: T,
-    is_last: T,
     proof_idx: T,
 
     x: [T; D_EF],
@@ -68,13 +67,13 @@ where
 
         // Summary:
         // - Proof loop: rely on the nested for-loop sub-AIR to enforce the standard
-        //   `is_valid`/`is_first`/`is_last`/`proof_idx` sequencing across proofs.
+        //   `is_valid`/`is_first`/`proof_idx` sequencing across proofs.
         // - idx handling: start `idx` at zero, increment it on each transition within the proof,
         //   keep it zero on invalid rows, and ensure the last valid row reaches `l_skip`.
         // - Values recalculation: during transitions, square both `x` and `y`, and update `res` via
         //   `(x + y) * res + (1 - x) * (1 - y)`.
 
-        // Enforce the standard proof loop flags (is_valid/is_first/is_last/proof_idx).
+        // Enforce the standard proof loop flags (is_valid/is_first/proof_idx).
         type LoopSubAir = NestedForLoopSubAir<1, 0>;
         LoopSubAir {}.eval(
             builder,
@@ -99,7 +98,8 @@ where
 
         builder.assert_bool(local.is_valid);
         builder.assert_bool(local.is_first);
-        builder.assert_bool(local.is_last);
+        let local_is_last = next.is_first + not(next.is_valid);
+        builder.assert_bool(local_is_last.clone());
 
         self.r_xi_bus.receive(
             builder,
@@ -130,7 +130,7 @@ where
                 is_sharp: AB::Expr::ZERO,
                 value: local.res.map(|x| x * inv_p2),
             },
-            local.is_valid * local.is_last,
+            local.is_valid * local_is_last.clone(),
         );
 
         let is_transition = next.is_valid * (AB::Expr::ONE - next.is_first);
@@ -142,7 +142,7 @@ where
             .assert_eq(next.idx, local.idx + AB::Expr::ONE);
         builder.when(not(local.is_valid)).assert_zero(local.idx);
         builder
-            .when(local.is_last)
+            .when(local_is_last)
             .when(local.is_valid)
             .assert_eq(local.idx, AB::Expr::from_usize(self.l_skip));
 
@@ -213,7 +213,6 @@ impl RowMajorChip<F> for EqUniTraceGenerator {
                     cols.is_valid = F::ONE;
                     cols.proof_idx = F::from_usize(pidx);
                     cols.is_first = F::from_bool(i == 0);
-                    cols.is_last = F::from_bool(i + 1 == one_height);
 
                     cols.idx = F::from_usize(i);
                     cols.x.copy_from_slice(x.as_basis_coefficients_slice());

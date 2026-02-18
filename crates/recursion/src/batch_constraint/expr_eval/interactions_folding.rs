@@ -41,7 +41,6 @@ use crate::{
 struct InteractionsFoldingCols<T> {
     is_valid: T,
     is_first: T,
-    is_last: T,
     proof_idx: T,
 
     beta_tidx: T,
@@ -141,7 +140,6 @@ where
 
         builder.assert_bool(local.is_valid);
         builder.assert_bool(local.is_first);
-        builder.assert_bool(local.is_last);
 
         builder.assert_bool(local.has_interactions);
         builder.assert_bool(local.is_first_in_air);
@@ -647,7 +645,6 @@ impl RowMajorChip<F> for InteractionsFoldingTraceGenerator {
             {
                 let cols: &mut InteractionsFoldingCols<_> =
                     trace[(cur_height - 1) * width..cur_height * width].borrow_mut();
-                cols.is_last = F::ONE;
                 cols.loop_aux.is_transition[0] = F::ZERO;
             }
         }
@@ -658,7 +655,6 @@ impl RowMajorChip<F> for InteractionsFoldingTraceGenerator {
                 let cols: &mut InteractionsFoldingCols<F> = chunk.borrow_mut();
                 cols.proof_idx = F::from_usize(preflights.len() + i);
                 cols.is_first = F::ONE;
-                cols.is_last = F::ONE;
                 cols.is_first_in_air = F::ONE;
                 cols.is_first_in_message = F::ONE;
             });

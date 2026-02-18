@@ -36,7 +36,6 @@ use crate::{
 struct ConstraintsFoldingCols<T> {
     is_valid: T,
     is_first: T,
-    is_last: T,
     proof_idx: T,
 
     air_idx: T,
@@ -109,7 +108,6 @@ where
 
         builder.assert_bool(local.is_valid);
         builder.assert_bool(local.is_first);
-        builder.assert_bool(local.is_last);
 
         builder.assert_bool(local.is_first_in_air);
 
@@ -369,7 +367,6 @@ impl RowMajorChip<F> for ConstraintsFoldingTraceGenerator {
             {
                 let cols: &mut ConstraintsFoldingCols<_> =
                     trace[(cur_height - 1) * width..cur_height * width].borrow_mut();
-                cols.is_last = F::ONE;
                 cols.loop_aux.is_transition[0] = F::ZERO;
             }
         }
@@ -380,7 +377,6 @@ impl RowMajorChip<F> for ConstraintsFoldingTraceGenerator {
                 let cols: &mut ConstraintsFoldingCols<F> = chunk.borrow_mut();
                 cols.proof_idx = F::from_usize(preflights.len() + i);
                 cols.is_first = F::ONE;
-                cols.is_last = F::ONE;
                 cols.is_first_in_air = F::ONE;
             });
 
