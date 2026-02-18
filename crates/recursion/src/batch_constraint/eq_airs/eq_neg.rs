@@ -446,7 +446,7 @@ where
             next.prod_u_r_omega,
         );
 
-        self.sel_uni_bus.send(
+        self.sel_uni_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             SelUniBusMessage {
@@ -456,7 +456,7 @@ where
             },
             next.is_last_hypercube * next.sel_first_count,
         );
-        self.sel_uni_bus.send(
+        self.sel_uni_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             SelUniBusMessage {
@@ -469,7 +469,7 @@ where
 
         // This is kind of ugly. But we use the first row as the lookup table for
         // selector for log_height=0.
-        self.sel_uni_bus.send(
+        self.sel_uni_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             SelUniBusMessage {
@@ -484,7 +484,7 @@ where
             },
             local.is_first * local.sel_first_count,
         );
-        self.sel_uni_bus.send(
+        self.sel_uni_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             SelUniBusMessage {

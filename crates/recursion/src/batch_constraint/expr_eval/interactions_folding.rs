@@ -316,7 +316,7 @@ where
             local.is_valid * local.is_first,
         );
 
-        self.air_shape_bus.receive(
+        self.air_shape_bus.lookup_key(
             builder,
             local.proof_idx,
             AirShapeBusMessage {

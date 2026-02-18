@@ -425,7 +425,7 @@ where
          * from ProofShapeAir, while eq(u, r), k_rot(u, r), and eq_>(u, b) values are
          * computed and provided via lookup by other stacking module AIRs.
          */
-        self.lifted_heights_bus.receive(
+        self.lifted_heights_bus.lookup_key(
             builder,
             local.proof_idx,
             LiftedHeightsBusMessage {
@@ -439,7 +439,7 @@ where
             local.is_valid,
         );
 
-        self.eq_kernel_lookup_bus.receive(
+        self.eq_kernel_lookup_bus.lookup_key(
             builder,
             local.proof_idx,
             EqKernelLookupMessage {
@@ -468,7 +468,7 @@ where
             local.is_valid,
         );
 
-        self.air_shape_bus.receive(
+        self.air_shape_bus.lookup_key(
             builder,
             local.proof_idx,
             AirShapeBusMessage {
