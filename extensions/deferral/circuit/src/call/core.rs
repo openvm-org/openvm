@@ -20,7 +20,10 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
-use crate::utils::{byte_commit_to_f, f_commit_to_bytes, COMMIT_NUM_BYTES, F_NUM_BYTES};
+use crate::{
+    count::bus::DeferralCircuitCountBus,
+    utils::{byte_commit_to_f, f_commit_to_bytes, COMMIT_NUM_BYTES, F_NUM_BYTES},
+};
 
 ///////////////////////////////////////////////////////////////////////////////////////
 /// AIR
@@ -61,7 +64,9 @@ pub struct DeferralCallCoreCols<T> {
 }
 
 #[derive(Copy, Clone, Debug, derive_new::new)]
-pub struct DeferralCallCoreAir;
+pub struct DeferralCallCoreAir {
+    pub count_bus: DeferralCircuitCountBus,
+}
 
 impl<F: Field> BaseAir<F> for DeferralCallCoreAir {
     fn width(&self) -> usize {
@@ -91,7 +96,9 @@ where
         let _input_f_commit = byte_commit_to_f(&cols.reads.input_commit);
         let _output_f_commit = byte_commit_to_f(&cols.writes.output_commit);
 
-        // TODO: constrain validity of deferral_idx via interaction with NumDeferralCircuitsAir
+        self.count_bus
+            .send(cols.deferral_idx)
+            .eval(builder, cols.is_valid);
 
         AdapterAirContext {
             to_pc: None,

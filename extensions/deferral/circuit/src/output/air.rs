@@ -24,7 +24,10 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
-use crate::utils::{byte_commit_to_f, bytes_to_f, combine_output, COMMIT_NUM_BYTES};
+use crate::{
+    count::bus::DeferralCircuitCountBus,
+    utils::{byte_commit_to_f, bytes_to_f, combine_output, COMMIT_NUM_BYTES},
+};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -71,6 +74,7 @@ pub struct DeferralOutputCols<T> {
 pub struct DeferralOutputAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
+    pub count_bus: DeferralCircuitCountBus,
 }
 
 impl<F> BaseAir<F> for DeferralOutputAir {
@@ -161,7 +165,9 @@ where
             local.current_commit_state,
         );
 
-        // TODO: constrain validity of deferral_idx via interaction with NumDeferralCircuitsAir
+        self.count_bus
+            .send(local.deferral_idx)
+            .eval(builder, local.is_valid);
 
         // TODO: constrain that on the first row local.current_commit_state is the
         // poseidon2 compress of local.write_bytes and [deferral_idx, 0, ..., 0]

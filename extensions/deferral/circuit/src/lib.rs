@@ -4,6 +4,7 @@
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
 
 pub mod call;
+pub mod count;
 pub mod output;
 pub mod setup;
 pub(crate) mod utils;
