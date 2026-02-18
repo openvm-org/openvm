@@ -166,7 +166,7 @@ impl Sha256VmAir {
         local: &Sha256VmRoundCols<AB::Var>,
         next: &Sha256VmRoundCols<AB::Var>,
     ) {
-        let next_is_last_row = next.inner.flags.is_digest_row * next.inner.flags.is_last_block;
+        let next_is_last_row = next.inner.flags.is_last_block_and_digest_row;
 
         // Constrain that `padding_occured` is 1 on a suffix of rows in each message, excluding the
         // last digest row, and 0 everywhere else. Furthermore, the suffix starts in the
@@ -176,24 +176,24 @@ impl Sha256VmAir {
         // Last round row in the last block has padding_occurred = 1
         // This is the end of the suffix
         builder
-            .when(next_is_last_row.clone())
+            .when(next_is_last_row)
             .assert_one(local.control.padding_occurred);
 
         // Digest row in the last block has padding_occurred = 0
         builder
-            .when(next_is_last_row.clone())
+            .when(next_is_last_row)
             .assert_zero(next.control.padding_occurred);
 
         // If padding_occurred = 1 in the current row, then padding_occurred = 1 in the next row,
         // unless next is the last digest row
         builder
-            .when(local.control.padding_occurred - next_is_last_row.clone())
+            .when(local.control.padding_occurred - next_is_last_row)
             .assert_one(next.control.padding_occurred);
 
         // If next row is not first 4 rows of a block, then next.padding_occurred =
         // local.padding_occurred. So padding_occurred only changes in the first 4 rows of a
         // block.
-        builder
+        builder //
             .when_transition()
             .when(not(next.inner.flags.is_first_4_rows) - next_is_last_row)
             .assert_eq(
@@ -296,7 +296,7 @@ impl Sha256VmAir {
 
         // `pad_flags` is `*LastRow` on the row that contains the last four words of the message
         builder
-            .when(next.inner.flags.is_last_block)
+            .when(next.inner.flags.is_last_block_and_digest_row)
             .assert_eq(is_next_4th_row, is_next_last_padding);
     }
 
@@ -446,13 +446,12 @@ impl Sha256VmAir {
         let local_cols: &Sha256VmRoundCols<AB::Var> = local[..SHA256VM_ROUND_WIDTH].borrow();
         let next_cols: &Sha256VmRoundCols<AB::Var> = next[..SHA256VM_ROUND_WIDTH].borrow();
 
-        let is_last_row =
-            local_cols.inner.flags.is_last_block * local_cols.inner.flags.is_digest_row;
+        let is_last_row = local_cols.inner.flags.is_last_block_and_digest_row;
 
         // Len should be the same for the entire message
         builder
             .when_transition()
-            .when(not::<AB::Expr>(is_last_row.clone()))
+            .when(not::<AB::Expr>(is_last_row))
             .assert_eq(next_cols.control.len, local_cols.control.len);
 
         // Read ptr should increment by [SHA256_READ_SIZE] for the first 4 rows and stay the same
@@ -461,7 +460,7 @@ impl Sha256VmAir {
             local_cols.inner.flags.is_first_4_rows * AB::Expr::from_usize(SHA256_READ_SIZE);
         builder
             .when_transition()
-            .when(not::<AB::Expr>(is_last_row.clone()))
+            .when(not::<AB::Expr>(is_last_row))
             .assert_eq(
                 next_cols.control.read_ptr,
                 local_cols.control.read_ptr + read_ptr_delta,
@@ -471,7 +470,7 @@ impl Sha256VmAir {
         let timestamp_delta = local_cols.inner.flags.is_first_4_rows * AB::Expr::ONE;
         builder
             .when_transition()
-            .when(not::<AB::Expr>(is_last_row.clone()))
+            .when(not::<AB::Expr>(is_last_row))
             .assert_eq(
                 next_cols.control.cur_timestamp,
                 local_cols.control.cur_timestamp + timestamp_delta,
@@ -514,8 +513,7 @@ impl Sha256VmAir {
             timestamp + AB::Expr::from_usize(timestamp_delta - 1)
         };
 
-        let is_last_row =
-            local_cols.inner.flags.is_last_block * local_cols.inner.flags.is_digest_row;
+        let is_last_row = local_cols.inner.flags.is_last_block_and_digest_row;
 
         self.memory_bridge
             .read(
@@ -524,7 +522,7 @@ impl Sha256VmAir {
                 timestamp_pp(),
                 &local_cols.register_reads_aux[0],
             )
-            .eval(builder, is_last_row.clone());
+            .eval(builder, is_last_row);
 
         self.memory_bridge
             .read(
@@ -533,7 +531,7 @@ impl Sha256VmAir {
                 timestamp_pp(),
                 &local_cols.register_reads_aux[1],
             )
-            .eval(builder, is_last_row.clone());
+            .eval(builder, is_last_row);
 
         self.memory_bridge
             .read(
@@ -542,7 +540,7 @@ impl Sha256VmAir {
                 timestamp_pp(),
                 &local_cols.register_reads_aux[2],
             )
-            .eval(builder, is_last_row.clone());
+            .eval(builder, is_last_row);
 
         // range check that the memory pointers don't overflow
         // Note: no need to range check the length since we read from memory step by step and
@@ -558,7 +556,7 @@ impl Sha256VmAir {
                 local_cols.dst_ptr[RV32_REGISTER_NUM_LIMBS - 1] * shift.clone(),
                 local_cols.src_ptr[RV32_REGISTER_NUM_LIMBS - 1] * shift.clone(),
             )
-            .eval(builder, is_last_row.clone());
+            .eval(builder, is_last_row);
 
         // the number of reads that happened to read the entire message: we do 4 reads per block
         let time_delta =
@@ -585,7 +583,7 @@ impl Sha256VmAir {
                 timestamp_pp() + time_delta.clone(),
                 &local_cols.writes_aux,
             )
-            .eval(builder, is_last_row.clone());
+            .eval(builder, is_last_row);
 
         self.execution_bridge
             .execute_and_increment_pc(
@@ -600,20 +598,20 @@ impl Sha256VmAir {
                 local_cols.from_state,
                 AB::Expr::from_usize(timestamp_delta) + time_delta.clone(),
             )
-            .eval(builder, is_last_row.clone());
+            .eval(builder, is_last_row);
 
         // Assert that we read the correct length of the message
         let len_val = compose::<AB::Expr>(&local_cols.len_data.map(|x| x.into()), RV32_CELL_BITS);
         builder
-            .when(is_last_row.clone())
+            .when(is_last_row)
             .assert_eq(local_cols.control.len, len_val);
         // Assert that we started reading from the correct pointer initially
         let src_val = compose::<AB::Expr>(&local_cols.src_ptr.map(|x| x.into()), RV32_CELL_BITS);
         builder
-            .when(is_last_row.clone())
+            .when(is_last_row)
             .assert_eq(local_cols.control.read_ptr, src_val + read_ptr_delta);
         // Assert that we started reading from the correct timestamp
-        builder.when(is_last_row.clone()).assert_eq(
+        builder.when(is_last_row).assert_eq(
             local_cols.control.cur_timestamp,
             local_cols.from_state.timestamp + AB::Expr::from_u32(3) + time_delta,
         );
