@@ -32,11 +32,10 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use crate::{
     count::DeferralCircuitCountChip,
+    output::DeferralOutputCols,
     poseidon2::DeferralPoseidon2Chip,
     utils::{f_commit_to_bytes, split_output, OUTPUT_TOTAL_BYTES},
 };
-
-use super::DeferralOutputCols;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DeferralOutputMetadata {
@@ -136,7 +135,7 @@ impl<'a> SizedRecord<DeferralOutputLayout> for DeferralOutputRecordMut<'a> {
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct DeferralOutputExecutor;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, derive_new::new)]
 pub struct DeferralOutputFiller<F: VmField> {
     count_chip: Arc<DeferralCircuitCountChip>,
     poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,

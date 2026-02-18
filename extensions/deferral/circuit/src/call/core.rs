@@ -5,10 +5,11 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, hasher::HasherChip, AdapterAirContext, AdapterTraceExecutor,
-        AdapterTraceFiller, EmptyAdapterCoreLayout, ExecutionError, ImmInstruction,
-        PreflightExecutor, RecordArena, TraceFiller, VmAdapterInterface, VmCoreAir, VmField,
-        VmStateMut,
+        get_record_from_slice,
+        hasher::{Hasher, HasherChip},
+        AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller, EmptyAdapterCoreLayout,
+        ExecutionError, ImmInstruction, PreflightExecutor, RecordArena, TraceFiller,
+        VmAdapterInterface, VmCoreAir, VmField, VmStateMut,
     },
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
@@ -19,7 +20,7 @@ use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, Lo
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
-    p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
+    p3_field::{Field, PrimeCharacteristicRing},
     BaseAirWithPublicValues,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
@@ -169,9 +170,10 @@ pub struct DeferralCallCoreExecutor<A, F: VmField> {
 }
 
 #[derive(Clone, Debug, derive_new::new)]
-pub struct DeferralCallCoreFiller<A> {
+pub struct DeferralCallCoreFiller<A, F: VmField> {
     adapter: A,
     count_chip: Arc<DeferralCircuitCountChip>,
+    poseidon2_chip: Arc<DeferralPoseidon2Chip<F>>,
 }
 
 impl<F, A, RA> PreflightExecutor<F, RA> for DeferralCallCoreExecutor<A, F>
@@ -213,13 +215,12 @@ where
         let output_commit = [F::ZERO; DIGEST_SIZE];
         let output_len = 0u32;
 
-        // WARNING: when CUDA is enabled, compress_and_record does not record anything
         let new_input_acc = self
             .poseidon2_chip
-            .compress_and_record(&read_data.old_input_acc, &input_commit);
+            .compress(&read_data.old_input_acc, &input_commit);
         let new_output_acc = self
             .poseidon2_chip
-            .compress_and_record(&read_data.old_output_acc, &output_commit);
+            .compress(&read_data.old_output_acc, &output_commit);
 
         let write_data = DeferralCallWrites {
             output_commit: f_commit_to_bytes(&output_commit),
@@ -236,9 +237,9 @@ where
     }
 }
 
-impl<F, A> TraceFiller<F> for DeferralCallCoreFiller<A>
+impl<F, A> TraceFiller<F> for DeferralCallCoreFiller<A, F>
 where
-    F: PrimeField32,
+    F: VmField,
     A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
@@ -252,8 +253,18 @@ where
         let record: &DeferralCallCoreRecord<F> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
         let cols: &mut DeferralCallCoreCols<F> = core_row.borrow_mut();
+
         self.count_chip
             .add_count(record.deferral_idx.as_canonical_u32());
+
+        let input_f_commit: [F; _] =
+            byte_commit_to_f(&record.read_data.input_commit.map(F::from_u8));
+        let output_f_commit: [F; _] =
+            byte_commit_to_f(&record.write_data.output_commit.map(F::from_u8));
+        self.poseidon2_chip
+            .compress_and_record(&record.read_data.old_input_acc, &input_f_commit);
+        self.poseidon2_chip
+            .compress_and_record(&record.read_data.old_output_acc, &output_f_commit);
 
         // Write columns in reverse order to avoid clobbering the record.
         cols.writes.new_output_acc = record.write_data.new_output_acc;

@@ -10,15 +10,14 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::Chip;
-use openvm_poseidon2_air::Poseidon2Config;
+use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
-    interaction::BusIndex,
+    interaction::LookupBus,
     prover::{AirProvingContext, CpuBackend},
     StarkProtocolConfig, Val,
 };
 
 pub mod bus;
-use bus::*;
 
 const SBOX_REGISTERS: usize = 1;
 pub type DeferralPoseidon2Air<F> = Poseidon2PeripheryAir<F, SBOX_REGISTERS>;
@@ -27,16 +26,8 @@ pub type DeferralPoseidon2Air<F> = Poseidon2PeripheryAir<F, SBOX_REGISTERS>;
 pub struct DeferralPoseidon2Chip<F: VmField>(Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS>);
 
 impl<F: VmField> DeferralPoseidon2Chip<F> {
-    pub fn new(poseidon2_config: Poseidon2Config<F>, bus_idx: BusIndex) -> Self {
-        Self(Poseidon2PeripheryBaseChip::new(poseidon2_config, bus_idx))
-    }
-
-    pub fn air(&self) -> Arc<DeferralPoseidon2Air<F>> {
-        self.0.air.clone()
-    }
-
-    pub fn bus(&self) -> DeferralPoseidon2Bus {
-        DeferralPoseidon2Bus(self.0.air.bus)
+    pub fn new(poseidon2_config: Poseidon2Config<F>) -> Self {
+        Self(Poseidon2PeripheryBaseChip::new(poseidon2_config))
     }
 }
 
@@ -67,4 +58,15 @@ where
     fn generate_proving_ctx(&self, records: RA) -> AirProvingContext<CpuBackend<SC>> {
         self.0.generate_proving_ctx(records)
     }
+}
+
+pub fn deferral_poseidon2_air<F: VmField>(bus: LookupBus) -> DeferralPoseidon2Air<F> {
+    let constants = Poseidon2Config::default().constants;
+    let subair = Arc::new(Poseidon2SubAir::new(constants.into()));
+    DeferralPoseidon2Air::new(subair, bus)
+}
+
+pub fn deferral_poseidon2_chip<F: VmField>() -> DeferralPoseidon2Chip<F> {
+    let config = Poseidon2Config::default();
+    DeferralPoseidon2Chip::new(config)
 }
