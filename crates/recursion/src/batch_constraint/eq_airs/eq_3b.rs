@@ -53,7 +53,7 @@ pub struct Eq3bColumns<T> {
 
     idx: T,         // stacked_idx >> l_skip, restored bit by bit
     running_idx: T, // the current stacked_idx >> l_skip
-    nth_bit: T,     // TODO: can we derive it from local.idx, next.idx and hypercube volume?
+    nth_bit: T,
 
     loop_aux: NestedForLoopAuxCols<T, 2>,
 
