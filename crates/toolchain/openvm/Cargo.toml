@@ -38,3 +38,6 @@ std = ["serde/std", "openvm-platform/std"]
 
 [package.metadata.cargo-shear]
 ignored = ["openvm-custom-insn", "getrandom"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }

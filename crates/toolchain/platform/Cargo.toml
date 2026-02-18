@@ -37,3 +37,6 @@ panic-handler = []
 # Build a rust runtime
 rust-runtime = ["export-libm"]
 std = []
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }
