@@ -28,6 +28,7 @@ struct ProofShapePerProof {
 struct ProofShapeTracegenInputs {
     size_t num_airs;
     size_t l_skip;
+    uint32_t max_interaction_count;
     size_t max_cached;
     size_t min_cached_idx;
     Digest pre_hash;
@@ -235,6 +236,7 @@ template <size_t MAX_CACHED>
 __device__ __forceinline__ void fill_summary_row(
     RowSlice row,
     size_t final_total_interactions,
+    uint32_t max_interaction_count,
     size_t cached_commits_idx,
     size_t n_max,
     size_t n_logup,
@@ -255,7 +257,7 @@ __device__ __forceinline__ void fill_summary_row(
 
     Decomp interaction_decomp, max_interaction_decomp;
     decompose(interaction_decomp, final_total_interactions);
-    decompose(max_interaction_decomp, Fp::P);
+    decompose(max_interaction_decomp, max_interaction_count);
 
     size_t nonzero_idx = 0;
     size_t diff_idx = 0;
@@ -359,6 +361,7 @@ __global__ void proof_shape_tracegen(
             fill_summary_row<MAX_CACHED>(
                 row,
                 proof_data.final_total_interactions,
+                inputs.max_interaction_count,
                 cached_commits_idx,
                 proof_data.n_max,
                 proof_data.n_logup,

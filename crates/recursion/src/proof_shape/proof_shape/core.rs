@@ -411,8 +411,9 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
                 // msb_limb_zero_bits_exp
                 cols.log_height = F::from_usize(1 << msb_limb_zero_bits);
 
-                let max_interactions =
-                    decompose_f::<F, NUM_LIMBS, LIMB_BITS>(F::ORDER_U32 as usize);
+                let max_interactions = decompose_f::<F, NUM_LIMBS, LIMB_BITS>(
+                    child_vk.inner.params.logup.max_interaction_count as usize,
+                );
                 let diff_idx = (0..NUM_LIMBS)
                     .rev()
                     .find(|&i| total_interactions_f[i] != max_interactions[i])
@@ -466,6 +467,7 @@ pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub min_cached_idx: usize,
     pub max_cached: usize,
     pub commit_mult: usize,
+    pub max_interaction_count: u32,
 
     // Primitives
     pub idx_encoder: Arc<Encoder>,
@@ -1246,7 +1248,7 @@ where
         let diff_marker = local.num_interactions_limbs;
 
         let max_interactions =
-            decompose_f::<AB::Expr, NUM_LIMBS, LIMB_BITS>(AB::F::ORDER_U32 as usize);
+            decompose_f::<AB::Expr, NUM_LIMBS, LIMB_BITS>(self.max_interaction_count as usize);
         let mut prefix = AB::Expr::ZERO;
         let mut diff_val = AB::Expr::ZERO;
 
