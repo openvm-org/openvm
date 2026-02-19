@@ -160,7 +160,7 @@ where
                 - not(local.is_valid),
         );
 
-        self.stacking_indices_bus.send(
+        self.stacking_indices_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             StackingIndexMessage {

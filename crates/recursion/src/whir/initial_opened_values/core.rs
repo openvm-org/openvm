@@ -224,7 +224,7 @@ where
             let col_idx =
                 local.col_chunk_idx * AB::Expr::from_usize(CHUNK) + AB::Expr::from_usize(i);
 
-            self.stacking_indices_bus.receive(
+            self.stacking_indices_bus.lookup_key(
                 builder,
                 local.proof_idx,
                 StackingIndexMessage {

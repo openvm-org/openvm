@@ -454,7 +454,7 @@ where
             .when(local.is_valid)
             .assert_one(local.lifted_height * local.lifted_height_inv);
 
-        self.eq_bits_lookup_bus.receive(
+        self.eq_bits_lookup_bus.lookup_key(
             builder,
             local.proof_idx,
             EqBitsLookupMessage {
