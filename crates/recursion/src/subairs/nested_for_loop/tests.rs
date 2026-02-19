@@ -18,7 +18,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 
 use super::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir};
-use crate::{tests::test_engine_small, utils::MAX_CONSTRAINT_DEGREE};
+use crate::tests::{test_engine_small, MAX_CONSTRAINT_DEGREE};
 
 const fn width<const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>() -> usize {
     size_of::<NestedForLoopIoCols<u8, DEPTH_MINUS_ONE>>()
