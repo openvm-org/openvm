@@ -508,7 +508,7 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
                         + vk.symbolic_constraints
                             .interactions
                             .iter()
-                            .map(|i| 1 + i.message.len())
+                            .map(|i| 2 + i.message.len())
                             .sum::<usize>()
                         + vk.unused_variables.len();
 
