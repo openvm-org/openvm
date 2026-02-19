@@ -356,7 +356,6 @@ pub(in crate::whir) struct FinalPolyQueryEvalRecord {
     pub horner_acc: EF,
     pub final_poly_coeff: EF,
     pub final_value_acc: EF,
-    pub gamma: EF,
     pub gamma_pow: EF,
 }
 
@@ -420,7 +419,6 @@ pub(in crate::whir) fn build_final_poly_query_eval_records(
                         horner_acc,
                         final_poly_coeff: EF::ZERO,
                         final_value_acc,
-                        gamma,
                         gamma_pow,
                     });
                     gamma_eq_acc *= EF::ONE - query_pow - alpha + query_pow * alpha.double();
@@ -435,7 +433,6 @@ pub(in crate::whir) fn build_final_poly_query_eval_records(
                         horner_acc,
                         final_poly_coeff,
                         final_value_acc,
-                        gamma,
                         gamma_pow,
                     });
                     horner_acc = horner_acc * query_pow + final_poly_coeff;
@@ -522,6 +519,7 @@ fn compute_indices_from_row_idx(
 pub(crate) struct FinalPolyQueryEvalCtx<'a> {
     pub vk: &'a MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
     pub records: &'a [FinalPolyQueryEvalRecord],
+    pub preflights: &'a [&'a Preflight],
 }
 
 pub(crate) struct FinalPolyQueryEvalTraceGenerator;
@@ -537,6 +535,7 @@ impl RowMajorChip<F> for FinalPolyQueryEvalTraceGenerator {
     ) -> Option<RowMajorMatrix<F>> {
         let mvk = ctx.vk;
         let records = ctx.records;
+        let preflights = ctx.preflights;
 
         let params = &mvk.inner.params;
         let k_whir = params.k_whir();
@@ -556,6 +555,7 @@ impl RowMajorChip<F> for FinalPolyQueryEvalTraceGenerator {
             .expect("round offsets vector must include sentinel");
         debug_assert!(rows_per_proof > 0);
         let total_valid_rows = records.len();
+        debug_assert_eq!(preflights.len(), total_valid_rows / rows_per_proof);
         let height = if let Some(h) = required_height {
             if h < total_valid_rows {
                 return None;
@@ -619,8 +619,9 @@ impl RowMajorChip<F> for FinalPolyQueryEvalTraceGenerator {
 
                 cols.alpha
                     .copy_from_slice(record.alpha.as_basis_coefficients_slice());
+                let gamma = preflights[proof_idx].whir.gammas[whir_round];
                 cols.gamma
-                    .copy_from_slice(record.gamma.as_basis_coefficients_slice());
+                    .copy_from_slice(gamma.as_basis_coefficients_slice());
                 cols.gamma_pow
                     .copy_from_slice(record.gamma_pow.as_basis_coefficients_slice());
 

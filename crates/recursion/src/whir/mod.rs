@@ -847,6 +847,7 @@ impl RowMajorChip<F> for WhirModuleChip {
                     &final_poly_query_eval::FinalPolyQueryEvalCtx {
                         vk: child_vk,
                         records: &blob.final_poly_query_eval_records,
+                        preflights,
                     },
                     required_height,
                 ),
@@ -1103,6 +1104,7 @@ mod cuda_tracegen {
                             &final_poly_query_eval::cuda::FinalPolyQueryEvalGpuCtx {
                                 blob: ctx.1,
                                 params: &ctx.0.vk.system_params,
+                                preflights: ctx.0.preflights,
                             },
                             required_height,
                         )
