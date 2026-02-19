@@ -1,4 +1,4 @@
-# V2 Continuations Specification
+# Continuations Specification
 
 ## Introduction
 
@@ -10,7 +10,7 @@ An app execution may require arbitrarily many steps, but each proof covers a bou
 2. Verifying public value consistency between adjacent child proofs
 3. Outputting a proof attesting to 1 and 2
 
-This forms an **aggregation tree** with multiple **layers**, where each layer aggregates child proofs from the layer below. In V2, there are seven **layer types**:
+This forms an **aggregation tree** with multiple **layers**, where each layer aggregates child proofs from the layer below. There are seven **layer types**:
 
 | Layer | Description |
 |-------|-------------|
@@ -28,14 +28,14 @@ The first six types each correspond to a unique STARK-based circuit. The **stati
 
 A **circuit** is a set of AIRs that collectively constrain one or more trace matrices and expose a fixed set of public values. A **subcircuit** is a subset of a circuit's AIRs.
 
-A **prover** is a struct that generates a proof for a specific circuit given appropriate inputs. V2 distinguishes:
+A **prover** is a struct that generates a proof for a specific circuit given appropriate inputs. We distinguish:
 
 - **Basic provers** — generate a single aggregated `Proof` from child `Proof`s. Each basic prover corresponds to a specific aggregation subcircuit (see [Layer Architecture](#layer-architecture) for more information).
 - **SDK provers** — orchestrate basic provers to produce client-facing proof formats (`ContinuationVmProof`, `NonRootStarkProof`, `EvmProof`) or their intermediate forms.
 
 ## Client-Facing Proofs
 
-In V2, there are three **client-facing proof** types:
+There are three **client-facing proof** types:
 
 | Type | Struct | Description |
 |------|--------|-------------|
@@ -84,7 +84,7 @@ For convenience the SDK provides several **SDK provers**, which orchestrate basi
 
 ## Layer Architecture
 
-In V2, every non-app STARK-based layer has a circuit composed of exactly two subcircuits:
+Every non-app STARK-based layer has a circuit composed of exactly two subcircuits:
 
 - A **verifier subcircuit** — verifies child proofs individually
 - An **aggregation subcircuit** — enforces public value consistency across child proofs and exposes public values for the next layer

@@ -1,6 +1,6 @@
-# continuations-v2
+# openvm-continuations
 
-Basic provers for the V2 continuation aggregation pipeline. Each basic prover generates a single aggregated `Proof` from child `Proof`s for a specific aggregation subcircuit (i.e. **nonroot**, **compression**, and **root**).
+Basic provers for the continuation aggregation pipeline. Each basic prover generates a single aggregated `Proof` from child `Proof`s for a specific aggregation subcircuit (i.e. **nonroot**, **compression**, and **root**).
 
 For the full specification (layer architecture, subcircuit constraints, public value layouts), see the [continuations spec](../../docs/vocs/docs/pages/specs/architecture/continuations.mdx).
 
@@ -11,10 +11,10 @@ Used for the **leaf**, **internal-for-leaf**, and **internal-recursive** layers,
 ### Constructor
 
 ```rust
-pub fn new>(
-    child_vk: Arc,
+pub fn new(
+    child_vk: Arc<MultiStarkVerifyingKey<SC>>,
     system_params: SystemParams,
-    self_recursion_enabled: bool,
+    is_self_recursive: bool,
 ) -> Self
 ```
 
@@ -37,9 +37,9 @@ Note that internal-for-leaf and internal-recursive share the same system paramet
 ### Prove API
 
 ```rust
-pub fn agg_prove>(
+pub fn agg_prove(
     &self,
-    proofs: &[Proof],
+    proofs: &[Proof<SC>],
     child_vk_kind: ChildVkKind,
 ) -> Result
 ```
@@ -63,9 +63,9 @@ Used for the **compression** layer, which wraps a single internal-recursive `Pro
 ### Constructor
 
 ```rust
-pub fn new>(
-    child_vk: Arc,
-    child_vk_pcs_data: CommittedTraceDataV2,
+pub fn new(
+    child_vk: Arc<MultiStarkVerifyingKey<SC>>,
+    child_vk_pcs_data: CommittedTraceData<PB>,
     system_params: SystemParams,
 ) -> Self
 ```
@@ -79,9 +79,9 @@ The constructor pre-generates the in-circuit DAG commit metadata and the parent 
 ### Prove API
 
 ```rust
-pub fn compress_prove>(
+pub fn compress_prove(
     &self,
-    proof: &Proof
+    proof: Proof<SC>,
 ) -> Result
 ```
 
@@ -94,12 +94,13 @@ Used for the **root** layer, which wraps a single internal-recursive `Proof` and
 ### Constructor
 
 ```rust
-pub fn new>(
-    child_vk: Arc,
-    child_vk_pcs_data: CommittedTraceDataV2,
+pub fn new(
+    child_vk: Arc<MultiStarkVerifyingKey<SC>>,
+    child_vk_pcs_data: CommittedTraceData<PB>,
     system_params: SystemParams,
-    num_user_pvs: usize,
     memory_dimensions: MemoryDimensions,
+    num_user_pvs: usize,
+    trace_heights: Option<Vec<usize>>,
 ) -> Self
 ```
 
@@ -108,16 +109,17 @@ pub fn new>(
 - `system_params` — parent system parameters
 - `num_user_pvs` — number of user public values
 - `memory_dimensions` — the memory dimensions used for app execution, used to compute whether each sibling hash in the Merkle proof should be the left or right sibling
+- `trace_heights` - constant heights that the traces of the root proof must be
 
 The constructor pre-generates the parent proving and verifying keys, which can be saved.
 
 ### Prove API
 
 ```rust
-pub fn root_prove>(
+pub fn root_prove(
     &self,
-    proof: &Proof,
-    user_pvs_proof: &UserPublicValuesProof,
+    proof: Proof<SC>,
+    user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
 ) -> Result
 ```
 
