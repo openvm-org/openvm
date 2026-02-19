@@ -321,6 +321,9 @@ where
         builder
             .when(local.is_last)
             .assert_eq(local.neg_hypercube, AB::F::from_usize(self.l_skip - 1));
+        builder
+            .when(local.is_first_hypercube)
+            .assert_zero(local.row_index);
 
         builder.when(local.is_last_hypercube).assert_eq(
             local.row_index,
