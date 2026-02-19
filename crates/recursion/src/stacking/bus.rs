@@ -2,6 +2,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{define_typed_per_proof_lookup_bus, define_typed_per_proof_permutation_bus};
+
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
 pub struct StackingModuleTidxMessage<T> {
@@ -37,7 +38,7 @@ pub struct EqRandValuesLookupMessage<T> {
     pub u: [T; D_EF],
 }
 
-define_typed_per_proof_permutation_bus!(EqRandValuesLookupBus, EqRandValuesLookupMessage);
+define_typed_per_proof_lookup_bus!(EqRandValuesLookupBus, EqRandValuesLookupMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -73,7 +74,7 @@ pub struct EqBitsLookupMessage<T> {
     pub eval: [T; D_EF],
 }
 
-define_typed_per_proof_permutation_bus!(EqBitsLookupBus, EqBitsLookupMessage);
+define_typed_per_proof_lookup_bus!(EqBitsLookupBus, EqBitsLookupMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -84,6 +85,8 @@ pub struct EqBitsInternalMessage<T> {
     pub num_bits: T,
     // eq_{n_{stack} - n_j - 1}(u_{> n_j}, b_j)
     pub eval: [T; D_EF],
+    // least significant bit of the b_value of the row that receives this message
+    pub child_lsb: T,
 }
 
 define_typed_per_proof_permutation_bus!(EqBitsInternalBus, EqBitsInternalMessage);
