@@ -8,7 +8,9 @@ use p3_maybe_rayon::prelude::*;
 
 use super::ExpressionClaimCols;
 use crate::{
-    primitives::pow::PowerCheckerTraceGenerator, system::Preflight, tracegen::RowMajorChip,
+    primitives::pow::PowerCheckerCpuTraceGenerator,
+    system::{Preflight, POW_CHECKER_HEIGHT},
+    tracegen::RowMajorChip,
     utils::MultiProofVecVec,
 };
 
@@ -36,7 +38,7 @@ pub(crate) struct ExpressionClaimCtx<'a> {
     pub blob: &'a ExpressionClaimBlob,
     pub proofs: &'a [&'a Proof<BabyBearPoseidon2Config>],
     pub preflights: &'a [&'a Preflight],
-    pub pow_checker: &'a PowerCheckerTraceGenerator<2, 32>,
+    pub pow_checker: &'a PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>,
 }
 
 impl RowMajorChip<F> for ExpressionClaimTraceGenerator {
