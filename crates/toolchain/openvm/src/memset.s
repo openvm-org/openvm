@@ -2,7 +2,7 @@
 //
 // This was compiled into assembly with:
 //
-// clang-14 -target riscv64 -march=rv64im -O3 -S memcpy.c -nostdlib -fno-builtin -funroll-loops
+// clang-14 -target riscv64 -march=rv64im -O3 -S memset.c -nostdlib -fno-builtin -funroll-loops
 //
 // and labels manually updated to not conflict.
 	.text

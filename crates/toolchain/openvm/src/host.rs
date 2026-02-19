@@ -67,7 +67,7 @@ pub fn hint_input() {
                 std::io::stdin()
                     .read_to_end(&mut buf)
                     .expect("Failed to read from stdin");
-                let hint = [&buf.len().to_le_bytes(), &buf[..]].concat();
+                let hint = [&(buf.len() as u64).to_le_bytes(), &buf[..]].concat();
                 HINT_STREAM.replace(hint);
             }
             HostInputStream::Internal(hints) => {

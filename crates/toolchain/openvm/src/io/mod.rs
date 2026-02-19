@@ -118,7 +118,7 @@ pub fn reveal_bytes32(bytes: [u8; 32]) {
 #[allow(unused_variables)]
 #[inline(always)]
 pub fn reveal_u64(x: u64, index: usize) {
-    let byte_index = index * 8;
+    let byte_index = (index * 8) as u64;
     #[cfg(openvm_intrinsics)]
     openvm_rv64im_guest::reveal!(byte_index, x, 0);
     #[cfg(all(not(openvm_intrinsics), feature = "std"))]
