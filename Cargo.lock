@@ -4374,7 +4374,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "openvm-custom-insn",
  "openvm-platform",
- "openvm-rv32im-guest",
+ "openvm-rv64im-guest",
  "serde",
 ]
 
@@ -5289,7 +5289,7 @@ dependencies = [
  "embedded-alloc",
  "libm",
  "openvm-custom-insn",
- "openvm-rv32im-guest",
+ "openvm-rv64im-guest",
 ]
 
 [[package]]
@@ -5447,6 +5447,15 @@ dependencies = [
  "serde",
  "strum",
  "tracing",
+]
+
+[[package]]
+name = "openvm-rv64im-guest"
+version = "2.0.0"
+dependencies = [
+ "openvm-custom-insn",
+ "p3-field",
+ "strum_macros",
 ]
 
 [[package]]
