@@ -25,8 +25,8 @@ use crate::{
         AirShapeBus, AirShapeBusMessage, AirShapeProperty, CachedCommitBus, CachedCommitBusMessage,
         CommitmentsBus, CommitmentsBusMessage, ExpressionClaimNMaxBus, ExpressionClaimNMaxMessage,
         FractionFolderInputBus, FractionFolderInputMessage, GkrModuleBus, GkrModuleMessage,
-        HyperdimBus, HyperdimBusMessage, LiftedHeightsBus, LiftedHeightsBusMessage, TranscriptBus,
-        TranscriptBusMessage,
+        HyperdimBus, HyperdimBusMessage, LiftedHeightsBus, LiftedHeightsBusMessage, NLiftBus,
+        NLiftMessage, TranscriptBus, TranscriptBusMessage,
     },
     primitives::{
         bus::{PowerCheckerBus, PowerCheckerBusMessage, RangeCheckerBus, RangeCheckerBusMessage},
@@ -515,6 +515,7 @@ pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub lifted_heights_bus: LiftedHeightsBus,
     pub commitments_bus: CommitmentsBus,
     pub transcript_bus: TranscriptBus,
+    pub n_lift_bus: NLiftBus,
 
     // For continuations
     pub cached_commit_bus: CachedCommitBus,
@@ -1253,6 +1254,18 @@ where
                 n_max: local.n_max.into(),
             },
             local.is_last,
+        );
+
+        // Send n_lift to constraint folding air
+        self.n_lift_bus.send(
+            builder,
+            local.proof_idx,
+            NLiftMessage {
+                air_idx: local.idx.into(),
+                n_lift: (local.log_height - AB::Expr::from_usize(self.l_skip))
+                    * (AB::Expr::ONE - local.n_sign_bit),
+            },
+            local.is_present,
         );
 
         // Send count of present airs to fraction folder air

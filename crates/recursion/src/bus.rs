@@ -209,6 +209,15 @@ define_typed_per_proof_permutation_bus!(ExpressionClaimNMaxBus, ExpressionClaimN
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
+pub struct NLiftMessage<T> {
+    pub air_idx: T,
+    pub n_lift: T,
+}
+
+define_typed_per_proof_permutation_bus!(NLiftBus, NLiftMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct BatchConstraintModuleMessage<T> {
     pub tidx: T,
     pub gkr_input_layer_claim: [[T; D_EF]; 2],

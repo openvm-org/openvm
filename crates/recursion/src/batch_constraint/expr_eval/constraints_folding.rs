@@ -21,7 +21,7 @@ use crate::{
         ConstraintsFoldingBus, ConstraintsFoldingMessage, EqNOuterBus, EqNOuterMessage,
         ExpressionClaimBus, ExpressionClaimMessage,
     },
-    bus::TranscriptBus,
+    bus::{NLiftBus, NLiftMessage, TranscriptBus},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     tracegen::RowMajorChip,
@@ -60,6 +60,7 @@ pub struct ConstraintsFoldingAir {
     pub constraint_bus: ConstraintsFoldingBus,
     pub expression_claim_bus: ExpressionClaimBus,
     pub eq_n_outer_bus: EqNOuterBus,
+    pub n_lift_bus: NLiftBus,
 }
 
 impl<F> BaseAirWithPublicValues<F> for ConstraintsFoldingAir {}
@@ -125,7 +126,6 @@ where
         builder
             .when(not(next.is_first_in_air))
             .assert_eq(local.n_lift, next.n_lift);
-        // TODO receive n_lift by sort_idx or air_idx
 
         // ======================== lambda and cur sum consistency ============================
         assert_array_eq(
@@ -153,6 +153,15 @@ where
             local.value,
         );
 
+        self.n_lift_bus.receive(
+            builder,
+            local.proof_idx,
+            NLiftMessage {
+                air_idx: local.air_idx,
+                n_lift: local.n_lift,
+            },
+            local.is_first_in_air * local.is_valid,
+        );
         self.constraint_bus.receive(
             builder,
             local.proof_idx,
