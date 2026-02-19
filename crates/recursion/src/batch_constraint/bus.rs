@@ -2,7 +2,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::D_EF;
 use p3_field::PrimeCharacteristicRing;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use crate::define_typed_per_proof_permutation_bus;
+use crate::{define_typed_per_proof_lookup_bus, define_typed_per_proof_permutation_bus};
 
 #[repr(u8)]
 #[derive(Debug, Copy, Clone)]
@@ -26,10 +26,7 @@ pub struct BatchConstraintConductorMessage<T> {
     pub value: [T; D_EF],
 }
 
-define_typed_per_proof_permutation_bus!(
-    BatchConstraintConductorBus,
-    BatchConstraintConductorMessage
-);
+define_typed_per_proof_lookup_bus!(BatchConstraintConductorBus, BatchConstraintConductorMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]

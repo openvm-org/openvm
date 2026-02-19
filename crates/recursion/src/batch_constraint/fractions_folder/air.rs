@@ -245,7 +245,7 @@ where
             local.is_first,
         );
 
-        self.mu_bus.send(
+        self.mu_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             BatchConstraintConductorMessage {

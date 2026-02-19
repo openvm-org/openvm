@@ -226,7 +226,8 @@ where
             },
             local.is_first_iter,
         );
-        self.batch_constraint_conductor_bus.send(
+        // Here idx < l_skip and all idx are different within one proof_idx
+        self.batch_constraint_conductor_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             BatchConstraintConductorMessage {
@@ -369,7 +370,7 @@ where
             ext_field_add(local.coeff, ext_field_multiply(local.r, next.cur_sum)),
         );
 
-        self.r_bus.receive(
+        self.r_bus.lookup_key(
             builder,
             local.proof_idx,
             BatchConstraintConductorMessage {
