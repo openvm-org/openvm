@@ -335,7 +335,7 @@ where
         );
 
         let coeff_idx = final_poly_phase_len - local.eval_idx;
-        self.final_poly_bus.receive(
+        self.final_poly_bus.lookup_key(
             builder,
             proof_idx,
             WhirFinalPolyBusMessage {
