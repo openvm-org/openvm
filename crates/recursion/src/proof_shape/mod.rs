@@ -17,8 +17,8 @@ use p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use crate::{
     primitives::{
         bus::{PowerCheckerBus, RangeCheckerBus},
-        pow::PowerCheckerTraceGenerator,
-        range::{RangeCheckerAir, RangeCheckerTraceGenerator},
+        pow::PowerCheckerCpuTraceGenerator,
+        range::{RangeCheckerAir, RangeCheckerCpuTraceGenerator},
     },
     proof_shape::{
         bus::{NumPublicValuesBus, ProofShapePermutationBus, StartingTidxBus},
@@ -27,7 +27,7 @@ use crate::{
     },
     system::{
         frame::MultiStarkVkeyFrame, AirModule, BusIndexManager, BusInventory, GlobalCtxCpu,
-        Preflight, ProofShapePreflight, TraceGenModule,
+        Preflight, ProofShapePreflight, TraceGenModule, POW_CHECKER_HEIGHT,
     },
     tracegen::{ModuleChip, RowMajorChip},
 };
@@ -69,8 +69,6 @@ pub struct ProofShapeModule {
     min_cached_idx: usize,
     max_cached: usize,
     commit_mult: usize,
-    range_checker: Arc<RangeCheckerTraceGenerator<8>>,
-    pow_checker: Arc<PowerCheckerTraceGenerator<2, 32>>,
 
     // Module sends extra public values message for use outside of verifier
     // sub-circuit if true
@@ -82,11 +80,9 @@ impl ProofShapeModule {
         mvk: &MultiStarkVkeyFrame,
         b: &mut BusIndexManager,
         bus_inventory: BusInventory,
-        pow_checker: Arc<PowerCheckerTraceGenerator<2, 32>>,
         continuations_enabled: bool,
     ) -> Self {
         let idx_encoder = Arc::new(Encoder::new(mvk.per_air.len(), 2, true));
-        let range_checker = Arc::new(RangeCheckerTraceGenerator::<8>::default());
 
         let (min_cached_idx, min_cached) = mvk
             .per_air
@@ -134,8 +130,6 @@ impl ProofShapeModule {
             min_cached_idx,
             max_cached,
             commit_mult: mvk.params.whir.rounds.first().unwrap().num_queries,
-            range_checker,
-            pow_checker,
             continuations_enabled,
         }
     }
@@ -269,7 +263,7 @@ impl AirModule for ProofShapeModule {
 }
 
 impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for ProofShapeModule {
-    type ModuleSpecificCtx<'a> = ();
+    type ModuleSpecificCtx<'a> = Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>;
 
     #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
@@ -277,15 +271,16 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for Proof
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         preflights: &[Preflight],
-        _ctx: &(),
+        pow_checker: &Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
         required_heights: Option<&[usize]>,
     ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
+        let range_checker = Arc::new(RangeCheckerCpuTraceGenerator::<8>::default());
         let proof_shape = proof_shape::ProofShapeChip::<4, 8>::new(
             self.idx_encoder.clone(),
             self.min_cached_idx,
             self.max_cached,
-            self.range_checker.clone(),
-            self.pow_checker.clone(),
+            range_checker.clone(),
+            pow_checker.clone(),
         );
         let ctx = (child_vk, proofs, preflights);
         let chips = [
@@ -306,7 +301,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for Proof
 
         tracing::trace_span!("wrapper.generate_trace", air = "RangeChecker").in_scope(|| {
             ctxs.push(AirProvingContext::simple_no_pis(
-                ColMajorMatrix::from_row_major(&self.range_checker.generate_trace_row_major()),
+                ColMajorMatrix::from_row_major(&range_checker.generate_trace_row_major()),
             ));
         });
         Some(ctxs)
@@ -356,22 +351,18 @@ impl RowMajorChip<F> for ProofShapeModuleChip {
 
 #[cfg(feature = "cuda")]
 mod cuda_tracegen {
-    use openvm_cuda_backend::{base::DeviceMatrix, GpuBackend};
-    use openvm_cuda_common::copy::MemCopyD2H;
-    use openvm_stark_backend::prover::MatrixDimensions;
-    use p3_field::PrimeField32;
+    use openvm_cuda_backend::GpuBackend;
 
     use super::*;
     use crate::{
         cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu, GlobalCtxGpu},
         primitives::{
-            pow::{cuda::PowerCheckerGpuTraceGenerator, PowerCheckerTraceGenerator},
-            range::cuda::RangeCheckerGpuTraceGenerator,
+            pow::cuda::PowerCheckerGpuTraceGenerator, range::cuda::RangeCheckerGpuTraceGenerator,
         },
     };
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackend> for ProofShapeModule {
-        type ModuleSpecificCtx<'a> = ();
+        type ModuleSpecificCtx<'a> = Arc<PowerCheckerGpuTraceGenerator<2, POW_CHECKER_HEIGHT>>;
 
         #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(
@@ -379,13 +370,12 @@ mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            _ctx: &(),
+            pow_checker_gpu: &Arc<PowerCheckerGpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
             required_heights: Option<&[usize]>,
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             use crate::tracegen::ModuleChip;
 
             let range_checker_gpu = Arc::new(RangeCheckerGpuTraceGenerator::<8>::default());
-            let pow_checker_gpu = Arc::new(PowerCheckerGpuTraceGenerator::<2, 32>::default());
             let proof_shape_chip = proof_shape::cuda::ProofShapeChipGpu::<4, 8>::new(
                 self.idx_encoder.width(),
                 self.min_cached_idx,
@@ -419,42 +409,18 @@ mod cuda_tracegen {
                     },
                 )?;
             ctxs.push(public_values_ctx);
-            // Drop the proof_shape chip so we can finalize auxiliary traces (it holds Arc clones).
+            // Drop the proof_shape chip so we can finalize auxiliary trace state (it holds Arc
+            // clones).
             drop(proof_shape_chip);
-            // Caution: proof_shape **must** finish trace gen before range_checker or pow_checker
-            // can start trace gen with the correct multiplicities
+            // Caution: proof_shape **must** finish trace gen before we materialize range checker
+            // trace or sync power checker multiplicities to CPU.
             tracing::trace_span!("wrapper.generate_trace", air = "RangeChecker").in_scope(|| {
                 ctxs.push(AirProvingContext::simple_no_pis(
                     Arc::try_unwrap(range_checker_gpu).unwrap().generate_trace(),
                 ));
             });
-            let pow_trace = Arc::try_unwrap(pow_checker_gpu).unwrap().generate_trace();
-            accumulate_power_checker_counts_from_gpu(&pow_trace, &self.pow_checker);
 
             Some(ctxs)
-        }
-    }
-
-    fn accumulate_power_checker_counts_from_gpu(
-        pow_trace: &DeviceMatrix<F>,
-        cpu_checker: &Arc<PowerCheckerTraceGenerator<2, 32>>,
-    ) {
-        // Each column is stored contiguously: [log | pow | mult_pow | mult_range]
-        let height = pow_trace.height();
-        let host = pow_trace
-            .buffer()
-            .to_host()
-            .expect("failed to copy power checker trace to host");
-        for row in 0..height {
-            let log = host[row].as_canonical_u32() as usize;
-            let mult_pow = host[row + 2 * height].as_canonical_u32();
-            if mult_pow != 0 {
-                cpu_checker.add_pow_count(log, mult_pow);
-            }
-            let mult_range = host[row + 3 * height].as_canonical_u32();
-            if mult_range != 0 {
-                cpu_checker.add_range_count(log, mult_range);
-            }
         }
     }
 }

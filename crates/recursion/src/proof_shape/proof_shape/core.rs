@@ -30,18 +30,17 @@ use crate::{
     },
     primitives::{
         bus::{PowerCheckerBus, PowerCheckerBusMessage, RangeCheckerBus, RangeCheckerBusMessage},
-        pow::PowerCheckerTraceGenerator,
-        range::RangeCheckerTraceGenerator,
+        pow::PowerCheckerCpuTraceGenerator,
+        range::RangeCheckerCpuTraceGenerator,
     },
     proof_shape::{
-        bus::{
+        AirMetadata, bus::{
             NumPublicValuesBus, NumPublicValuesMessage, ProofShapePermutationBus,
             ProofShapePermutationMessage, StartingTidxBus, StartingTidxMessage,
-        },
-        AirMetadata,
+        }
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
-    system::Preflight,
+    system::{POW_CHECKER_HEIGHT, Preflight},
     tracegen::RowMajorChip,
 };
 
@@ -141,8 +140,8 @@ pub(in crate::proof_shape) struct ProofShapeChip<const NUM_LIMBS: usize, const L
     idx_encoder: Arc<Encoder>,
     min_cached_idx: usize,
     max_cached: usize,
-    range_checker: Arc<RangeCheckerTraceGenerator<LIMB_BITS>>,
-    pow_checker: Arc<PowerCheckerTraceGenerator<2, 32>>,
+    range_checker: Arc<RangeCheckerCpuTraceGenerator<LIMB_BITS>>,
+    pow_checker: Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
 }
 
 impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>

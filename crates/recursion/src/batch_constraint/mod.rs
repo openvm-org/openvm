@@ -49,10 +49,10 @@ use crate::{
         HyperdimBus, PublicValuesBus, SelHypercubeBus, SelUniBus, StackingModuleBus, TranscriptBus,
         XiRandomnessBus,
     },
-    primitives::{bus::PowerCheckerBus, pow::PowerCheckerTraceGenerator},
+    primitives::{bus::PowerCheckerBus, pow::PowerCheckerCpuTraceGenerator},
     system::{
         AirModule, BatchConstraintPreflight, BusIndexManager, BusInventory, GlobalCtxCpu,
-        Preflight, TraceGenModule,
+        Preflight, TraceGenModule, POW_CHECKER_HEIGHT,
     },
     tracegen::{ModuleChip, RowMajorChip, StandardTracegenCtx},
     utils::MultiVecWithBounds,
@@ -105,7 +105,6 @@ pub struct BatchConstraintModule {
     interactions_folding_bus: InteractionsFoldingBus,
     constraints_folding_bus: ConstraintsFoldingBus,
     power_checker_bus: PowerCheckerBus,
-    pow_checker: Arc<PowerCheckerTraceGenerator<2, 32>>,
 
     l_skip: usize,
     max_constraint_degree: usize,
@@ -120,7 +119,6 @@ impl BatchConstraintModule {
         b: &mut BusIndexManager,
         bus_inventory: BusInventory,
         max_num_proofs: usize,
-        pow_checker: Arc<PowerCheckerTraceGenerator<2, 32>>,
         has_cached: bool,
     ) -> Self {
         let l_skip = child_vk.inner.params.l_skip;
@@ -156,7 +154,6 @@ impl BatchConstraintModule {
             interactions_folding_bus: InteractionsFoldingBus::new(b.new_bus_idx()),
             constraints_folding_bus: ConstraintsFoldingBus::new(b.new_bus_idx()),
             power_checker_bus: bus_inventory.power_checker_bus,
-            pow_checker,
             l_skip,
             max_constraint_degree,
             max_num_proofs,
@@ -662,7 +659,10 @@ impl BatchConstraintBlobCpu {
 }
 
 impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for BatchConstraintModule {
-    type ModuleSpecificCtx<'a> = Option<&'a CachedTraceRecord>;
+    type ModuleSpecificCtx<'a> = (
+        &'a Option<&'a CachedTraceRecord>,
+        &'a Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
+    );
 
     /// **Note**: This generates all common main traces but leaves the cached trace for
     /// `SymbolicExpressionAir` unset. The cached trace must be loaded **after** calling this
@@ -673,10 +673,11 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for Batch
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         preflights: &[Preflight],
-        ctx: &Option<&CachedTraceRecord>,
+        ctx: &Self::ModuleSpecificCtx<'_>,
         required_heights: Option<&[usize]>,
     ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
         let blob = BatchConstraintBlobCpu::new(child_vk, proofs, preflights);
+        let pow_checker = ctx.1.clone();
         let ctx = (
             StandardTracegenCtx {
                 vk: child_vk,
@@ -684,7 +685,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for Batch
                 preflights: &preflights.iter().collect_vec(),
             },
             blob,
-            ctx,
+            ctx.0,
         );
 
         let chips = [
@@ -700,9 +701,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for Batch
             BatchConstraintModuleChip::EqSharpUni,
             BatchConstraintModuleChip::EqSharpUniReceiver,
             BatchConstraintModuleChip::EqUni,
-            BatchConstraintModuleChip::ExpressionClaim {
-                pow_checker: self.pow_checker.clone(),
-            },
+            BatchConstraintModuleChip::ExpressionClaim { pow_checker },
             BatchConstraintModuleChip::InteractionsFolding,
             BatchConstraintModuleChip::ConstraintsFolding,
             BatchConstraintModuleChip::EqNeg,
@@ -772,7 +771,7 @@ enum BatchConstraintModuleChip {
     EqSharpUniReceiver,
     EqUni,
     ExpressionClaim {
-        pow_checker: Arc<PowerCheckerTraceGenerator<2, 32>>,
+        pow_checker: Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
     },
     InteractionsFolding,
     ConstraintsFolding,
@@ -973,7 +972,10 @@ pub mod cuda_tracegen {
     }
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackend> for BatchConstraintModule {
-        type ModuleSpecificCtx<'a> = Option<&'a CachedTraceRecord>;
+        type ModuleSpecificCtx<'a> = (
+            &'a Option<&'a CachedTraceRecord>,
+            &'a Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
+        );
 
         #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(
@@ -981,10 +983,11 @@ pub mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            module_ctx: &Option<&CachedTraceRecord>,
+            module_ctx: &Self::ModuleSpecificCtx<'_>,
             required_heights: Option<&[usize]>,
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             let blob = BatchConstraintBlobGpu::new(child_vk, proofs, preflights);
+            let pow_checker = module_ctx.1.clone();
             let ctx = (
                 StandardTracegenGpuCtx {
                     vk: child_vk,
@@ -992,7 +995,7 @@ pub mod cuda_tracegen {
                     preflights,
                 },
                 &blob,
-                module_ctx,
+                module_ctx.0,
             );
 
             // Chips with cuda kernels for tracegen
@@ -1014,9 +1017,7 @@ pub mod cuda_tracegen {
                 BatchConstraintModuleChip::EqSharpUni,
                 BatchConstraintModuleChip::EqSharpUniReceiver,
                 BatchConstraintModuleChip::EqUni,
-                BatchConstraintModuleChip::ExpressionClaim {
-                    pow_checker: self.pow_checker.clone(),
-                },
+                BatchConstraintModuleChip::ExpressionClaim { pow_checker },
                 BatchConstraintModuleChip::EqNeg,
             ];
             let span = tracing::Span::current();
@@ -1052,7 +1053,7 @@ pub mod cuda_tracegen {
                     preflights: &cpu_preflights,
                 },
                 blob,
-                module_ctx,
+                module_ctx.0,
             );
 
             // We parallelize the CPU trace generation

@@ -7,12 +7,9 @@ use openvm_stark_backend::prover::AirProvingContext;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use crate::{
-    cuda::{preflight::PreflightGpu, vk::VerifyingKeyGpu},
-    primitives::{
+    cuda::{preflight::PreflightGpu, vk::VerifyingKeyGpu}, primitives::{
         pow::cuda::PowerCheckerGpuTraceGenerator, range::cuda::RangeCheckerGpuTraceGenerator,
-    },
-    proof_shape::{cuda_abi::proof_shape_tracegen, proof_shape::ProofShapeCols},
-    tracegen::ModuleChip,
+    }, proof_shape::{cuda_abi::proof_shape_tracegen, proof_shape::ProofShapeCols}, system::POW_CHECKER_HEIGHT, tracegen::ModuleChip
 };
 
 #[repr(C)]
@@ -44,7 +41,7 @@ pub(in crate::proof_shape) struct ProofShapeChipGpu<const NUM_LIMBS: usize, cons
     min_cached_idx: usize,
     max_cached: usize,
     range_checker: Arc<RangeCheckerGpuTraceGenerator<LIMB_BITS>>,
-    pow_checker: Arc<PowerCheckerGpuTraceGenerator<2, 32>>,
+    pow_checker: Arc<PowerCheckerGpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
 }
 
 const NUM_LIMBS: usize = 4;
