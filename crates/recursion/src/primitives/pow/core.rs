@@ -71,6 +71,20 @@ impl<const BASE: usize, const N: usize> PowerCheckerCpuTraceGenerator<BASE, N> {
         }
     }
 
+    pub fn take_counts(&self) -> (Vec<u32>, Vec<u32>) {
+        let pow = self
+            .count_pow
+            .iter()
+            .map(|counter| counter.swap(0, Ordering::Relaxed))
+            .collect();
+        let range = self
+            .count_range
+            .iter()
+            .map(|counter| counter.swap(0, Ordering::Relaxed))
+            .collect();
+        (pow, range)
+    }
+
     pub fn reset(&self) {
         for counter in &self.count_pow {
             counter.store(0, Ordering::Relaxed);
