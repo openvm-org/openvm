@@ -223,7 +223,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
             (AB::Expr::ONE - local.is_last_merkle) * local.is_valid,
         );
 
-        self.commitments_bus.receive(
+        self.commitments_bus.lookup_key(
             builder,
             local.proof_idx,
             CommitmentsBusMessage {
