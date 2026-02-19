@@ -481,7 +481,7 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
                 let constraints = &vk.symbolic_constraints.constraints;
                 let expr_evals = &expr_evals[[proof_idx, air_idx]];
 
-                // TODO: don't do any pushes at all for absent traces
+                // Absent traces reserve row slots to preserve row alignment
                 if expr_evals.is_empty() {
                     let n = constraints.nodes.len()
                         + vk.symbolic_constraints
