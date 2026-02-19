@@ -125,7 +125,6 @@ impl RowMajorChip<F> for MultilinearSumcheckTraceGenerator {
                     });
 
                 // Serial portion: compute dependent values round-by-round
-                // TODO(ayush): see if some of this can be put into records to make it more parallel
                 let mut row_iter = rows.chunks_exact_mut(width);
                 for (round_idx, poly) in polys.iter().enumerate() {
                     debug_assert_eq!(poly.len(), s_deg);
