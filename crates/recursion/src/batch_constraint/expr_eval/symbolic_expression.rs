@@ -14,7 +14,6 @@ use openvm_stark_backend::{
     interaction::InteractionBuilder,
     keygen::types::MultiStarkVerifyingKey,
     poly_common::{eval_eq_uni_at_one, Squarable},
-    proof::Proof,
     BaseAirWithPublicValues, PartitionedBaseAir,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, D_EF, EF, F};
@@ -416,7 +415,6 @@ pub struct SymbolicExpressionTraceGenerator {
 
 pub(crate) struct SymbolicExpressionCtx<'a> {
     pub vk: &'a MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-    pub proofs: &'a [&'a Proof<BabyBearPoseidon2Config>],
     pub preflights: &'a [&'a Preflight],
     pub expr_evals: &'a MultiVecWithBounds<EF, 2>,
     pub cached_trace_record: &'a Option<&'a CachedTraceRecord>,
@@ -432,7 +430,6 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
         required_height: Option<usize>,
     ) -> Option<RowMajorMatrix<F>> {
         let child_vk = ctx.vk;
-        let proofs = ctx.proofs;
         let preflights = ctx.preflights;
         let max_num_proofs = self.max_num_proofs;
         let has_cached = self.has_cached;
@@ -453,7 +450,7 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
         }
         let mut records = vec![];
 
-        for (proof_idx, (proof, preflight)) in zip(proofs, preflights).enumerate() {
+        for (proof_idx, preflight) in preflights.iter().enumerate() {
             let rs = &preflight.batch_constraint.sumcheck_rnd;
             let (&rs_0, rs_rest) = rs.split_first().unwrap();
             let mut is_first_uni_by_log_height = vec![];
@@ -498,15 +495,17 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
                     continue;
                 }
 
-                let sort_idx = preflight
+                let (sort_idx, trace_vdata) = preflight
                     .proof_shape
                     .sorted_trace_vdata
                     .iter()
-                    .position(|(idx, _)| *idx == air_idx)
+                    .enumerate()
+                    .find_map(|(sort_idx, (idx, vdata))| {
+                        (*idx == air_idx).then_some((sort_idx, vdata))
+                    })
                     .unwrap();
 
-                // TODO sort_idx in trace
-                let log_height = proof.trace_vdata[air_idx].as_ref().unwrap().log_height;
+                let log_height = trace_vdata.log_height;
                 let (n_abs, is_n_neg) = if log_height < l_skip {
                     (l_skip - log_height, 1)
                 } else {
@@ -672,7 +671,7 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
 
         // records are ordered per proof; we now interleave them
 
-        let num_valid_rows = records.len() / proofs.len();
+        let num_valid_rows = records.len() / preflights.len();
         let height = if let Some(height) = trace_height {
             if height < num_valid_rows {
                 return None;
@@ -747,7 +746,7 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
                 }
 
                 for proof_idx in 0..max_num_proofs {
-                    if proof_idx >= proofs.len() {
+                    if proof_idx >= preflights.len() {
                         continue;
                     }
 

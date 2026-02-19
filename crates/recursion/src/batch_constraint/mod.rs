@@ -844,7 +844,6 @@ impl RowMajorChip<F> for BatchConstraintModuleChip {
             .generate_trace(
                 &expr_eval::SymbolicExpressionCtx {
                     vk: child_vk,
-                    proofs,
                     preflights,
                     expr_evals: &blob.common_blob.expr_evals,
                     cached_trace_record,
