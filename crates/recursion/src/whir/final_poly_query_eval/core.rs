@@ -519,7 +519,7 @@ fn compute_indices_from_row_idx(
 pub(crate) struct FinalPolyQueryEvalCtx<'a> {
     pub vk: &'a MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
     pub records: &'a [FinalPolyQueryEvalRecord],
-    pub gammas: &'a [EF],
+    pub preflights: &'a [&'a Preflight],
 }
 
 pub(crate) struct FinalPolyQueryEvalTraceGenerator;
@@ -535,7 +535,7 @@ impl RowMajorChip<F> for FinalPolyQueryEvalTraceGenerator {
     ) -> Option<RowMajorMatrix<F>> {
         let mvk = ctx.vk;
         let records = ctx.records;
-        let gammas = ctx.gammas;
+        let preflights = ctx.preflights;
 
         let params = &mvk.inner.params;
         let k_whir = params.k_whir();
@@ -555,10 +555,7 @@ impl RowMajorChip<F> for FinalPolyQueryEvalTraceGenerator {
             .expect("round offsets vector must include sentinel");
         debug_assert!(rows_per_proof > 0);
         let total_valid_rows = records.len();
-        debug_assert_eq!(
-            gammas.len(),
-            (total_valid_rows / rows_per_proof) * num_whir_rounds
-        );
+        debug_assert_eq!(preflights.len(), total_valid_rows / rows_per_proof);
         let height = if let Some(h) = required_height {
             if h < total_valid_rows {
                 return None;
@@ -622,8 +619,9 @@ impl RowMajorChip<F> for FinalPolyQueryEvalTraceGenerator {
 
                 cols.alpha
                     .copy_from_slice(record.alpha.as_basis_coefficients_slice());
-                let gamma = gammas[proof_idx * num_whir_rounds + whir_round];
-                cols.gamma.copy_from_slice(gamma.as_basis_coefficients_slice());
+                let gamma = preflights[proof_idx].whir.gammas[whir_round];
+                cols.gamma
+                    .copy_from_slice(gamma.as_basis_coefficients_slice());
                 cols.gamma_pow
                     .copy_from_slice(record.gamma_pow.as_basis_coefficients_slice());
 

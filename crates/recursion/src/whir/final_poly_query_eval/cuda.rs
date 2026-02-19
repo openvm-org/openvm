@@ -4,7 +4,7 @@ use openvm_stark_backend::{prover::AirProvingContext, SystemParams};
 
 use super::{compute_round_offsets, FinalyPolyQueryEvalCols};
 use crate::{
-    cuda::to_device_or_nullptr,
+    cuda::{preflight::PreflightGpu, to_device_or_nullptr},
     tracegen::ModuleChip,
     whir::{
         cuda_abi::final_poly_query_eval_tracegen, cuda_tracegen::WhirBlobGpu, num_queries_per_round,
@@ -14,6 +14,7 @@ use crate::{
 pub(in crate::whir) struct FinalPolyQueryEvalGpuCtx<'a> {
     pub blob: &'a WhirBlobGpu,
     pub params: &'a SystemParams,
+    pub preflights: &'a [PreflightGpu],
 }
 
 pub(in crate::whir) struct FinalPolyQueryEvalGpuTraceGenerator;
@@ -29,6 +30,7 @@ impl ModuleChip<GpuBackend> for FinalPolyQueryEvalGpuTraceGenerator {
     ) -> Option<AirProvingContext<GpuBackend>> {
         let blob = ctx.blob;
         let params = ctx.params;
+        let preflights = ctx.preflights;
 
         let mem = MemTracker::start("tracegen.whir_final_poly_query_eval");
         let num_valid_rows = blob.final_poly_query_eval_records.len();
@@ -56,6 +58,11 @@ impl ModuleChip<GpuBackend> for FinalPolyQueryEvalGpuTraceGenerator {
             .expect("round offsets vector must include sentinel");
         let round_offsets_d = to_device_or_nullptr(&round_offsets).unwrap();
         let num_queries_per_round_d = to_device_or_nullptr(&num_queries_per_round).unwrap();
+        let gammas_host = preflights
+            .iter()
+            .flat_map(|preflight| preflight.cpu.whir.gammas.iter().copied())
+            .collect::<Vec<_>>();
+        let gammas_d = to_device_or_nullptr(&gammas_host).unwrap();
 
         unsafe {
             final_poly_query_eval_tracegen(
@@ -63,7 +70,7 @@ impl ModuleChip<GpuBackend> for FinalPolyQueryEvalGpuTraceGenerator {
                 num_valid_rows,
                 height,
                 &blob.final_poly_query_eval_records,
-                &blob.final_poly_query_eval_gammas,
+                &gammas_d,
                 params.num_whir_rounds(),
                 rows_per_proof,
                 &round_offsets_d,

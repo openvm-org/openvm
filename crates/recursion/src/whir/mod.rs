@@ -380,7 +380,6 @@ struct WhirBlobCpu {
     stacking_widths_psums: Vec<usize>,
     mu_pows: Vec<EF>, // flattened over proofs
     final_poly_query_eval_records: Vec<FinalPolyQueryEvalRecord>,
-    final_poly_query_eval_gammas: Vec<EF>,
 }
 
 impl AirModule for WhirModule {
@@ -557,10 +556,6 @@ impl WhirModule {
                 proofs,
                 preflights,
             );
-        let final_poly_query_eval_gammas = preflights
-            .iter()
-            .flat_map(|preflight| preflight.whir.gammas.iter().copied())
-            .collect_vec();
 
         let mut total_iov_rows = 0;
         let mut total_commits = 0;
@@ -673,7 +668,6 @@ impl WhirModule {
             stacking_widths_psums,
             mu_pows,
             final_poly_query_eval_records,
-            final_poly_query_eval_gammas,
         }
     }
 }
@@ -853,7 +847,7 @@ impl RowMajorChip<F> for WhirModuleChip {
                     &final_poly_query_eval::FinalPolyQueryEvalCtx {
                         vk: child_vk,
                         records: &blob.final_poly_query_eval_records,
-                        gammas: &blob.final_poly_query_eval_gammas,
+                        preflights,
                     },
                     required_height,
                 ),
@@ -895,7 +889,6 @@ mod cuda_tracegen {
         pub mus: DeviceBuffer<EF>,
         pub mu_pows: DeviceBuffer<EF>,
         pub final_poly_query_eval_records: DeviceBuffer<FinalPolyQueryEvalRecord>,
-        pub final_poly_query_eval_gammas: DeviceBuffer<EF>,
         pub codeword_opened_values: DeviceBuffer<EF>,
         pub codeword_states: DeviceBuffer<F>,
         pub folding_records: DeviceBuffer<FoldRecord>,
@@ -1018,8 +1011,6 @@ mod cuda_tracegen {
             let folding_records = to_device_or_nullptr(&folding_records_host).unwrap();
             let final_poly_query_eval_records =
                 to_device_or_nullptr(&blob.final_poly_query_eval_records).unwrap();
-            let final_poly_query_eval_gammas =
-                to_device_or_nullptr(&blob.final_poly_query_eval_gammas).unwrap();
 
             let codeword_opened_values_cap: usize = proofs
                 .iter()
@@ -1070,7 +1061,6 @@ mod cuda_tracegen {
                 mus,
                 mu_pows,
                 final_poly_query_eval_records,
-                final_poly_query_eval_gammas,
                 folding_records,
                 codeword_opened_values,
                 codeword_states,
@@ -1114,6 +1104,7 @@ mod cuda_tracegen {
                             &final_poly_query_eval::cuda::FinalPolyQueryEvalGpuCtx {
                                 blob: ctx.1,
                                 params: &ctx.0.vk.system_params,
+                                preflights: ctx.0.preflights,
                             },
                             required_height,
                         )
