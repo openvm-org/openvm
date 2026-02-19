@@ -1,0 +1,292 @@
+use openvm_circuit::{
+    arch::{execution_mode::ExecutionCtx, VmExecState},
+    system::memory::online::GuestMemory,
+};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
+    VmOpcode,
+};
+use openvm_rv64im_transpiler::Rv64BranchLessThanOpcode;
+use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use strum::IntoEnumIterator;
+
+use crate::{
+    test_utils::{create_exec_state, execute_instruction, write_reg},
+    Rv64BranchLessThanExecutor,
+};
+
+type F = BabyBear;
+
+const REG_A: u32 = 0;
+const REG_B: u32 = 8;
+const START_PC: u32 = 0x1000;
+
+fn make_instruction(
+    opcode: Rv64BranchLessThanOpcode,
+    rs1: u32,
+    rs2: u32,
+    imm: u32,
+) -> Instruction<F> {
+    Instruction::from_usize::<7>(
+        VmOpcode::from_usize(opcode.global_opcode_usize()),
+        [
+            rs1 as usize,
+            rs2 as usize,
+            imm as usize,
+            RV32_REGISTER_AS as usize,
+            0,
+            0,
+            0,
+        ],
+    )
+}
+
+fn execute(
+    executor: &Rv64BranchLessThanExecutor,
+    state: &mut VmExecState<F, GuestMemory, ExecutionCtx>,
+    inst: &Instruction<F>,
+) -> u32 {
+    execute_instruction(
+        executor,
+        Rv64BranchLessThanOpcode::iter().map(|x| x.global_opcode()),
+        state,
+        inst,
+        START_PC,
+    )
+}
+
+#[test]
+fn test_blt_less_branches() {
+    let executor = Rv64BranchLessThanExecutor::new(Rv64BranchLessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, 1);
+    write_reg(&mut state, REG_B, 2);
+    let inst = make_instruction(Rv64BranchLessThanOpcode::BLT, REG_A, REG_B, 100);
+    let pc = execute(&executor, &mut state, &inst);
+
+    assert_eq!(pc, START_PC + 100);
+}
+
+#[test]
+fn test_blt_not_less_falls_through() {
+    let executor = Rv64BranchLessThanExecutor::new(Rv64BranchLessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, 5);
+    write_reg(&mut state, REG_B, 3);
+    let inst = make_instruction(Rv64BranchLessThanOpcode::BLT, REG_A, REG_B, 100);
+    let pc = execute(&executor, &mut state, &inst);
+
+    assert_eq!(pc, START_PC + DEFAULT_PC_STEP);
+}
+
+#[test]
+fn test_blt_negative_less_than_positive() {
+    let executor = Rv64BranchLessThanExecutor::new(Rv64BranchLessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, u64::MAX); // -1 signed
+    write_reg(&mut state, REG_B, 0);
+    let inst = make_instruction(Rv64BranchLessThanOpcode::BLT, REG_A, REG_B, 100);
+    let pc = execute(&executor, &mut state, &inst);
+
+    assert_eq!(pc, START_PC + 100);
+}
+
+#[test]
+fn test_bltu_unsigned() {
+    let executor = Rv64BranchLessThanExecutor::new(Rv64BranchLessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, 0);
+    write_reg(&mut state, REG_B, u64::MAX);
+    let inst = make_instruction(Rv64BranchLessThanOpcode::BLTU, REG_A, REG_B, 100);
+    let pc = execute(&executor, &mut state, &inst);
+
+    assert_eq!(pc, START_PC + 100);
+}
+
+#[test]
+fn test_bge_greater_branches() {
+    let executor = Rv64BranchLessThanExecutor::new(Rv64BranchLessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, 5);
+    write_reg(&mut state, REG_B, 3);
+    let inst = make_instruction(Rv64BranchLessThanOpcode::BGE, REG_A, REG_B, 100);
+    let pc = execute(&executor, &mut state, &inst);
+
+    assert_eq!(pc, START_PC + 100);
+}
+
+#[test]
+fn test_bge_equal_branches() {
+    let executor = Rv64BranchLessThanExecutor::new(Rv64BranchLessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, 42);
+    write_reg(&mut state, REG_B, 42);
+    let inst = make_instruction(Rv64BranchLessThanOpcode::BGE, REG_A, REG_B, 100);
+    let pc = execute(&executor, &mut state, &inst);
+
+    assert_eq!(pc, START_PC + 100);
+}
+
+#[test]
+fn test_bgeu_unsigned() {
+    let executor = Rv64BranchLessThanExecutor::new(Rv64BranchLessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, u64::MAX);
+    write_reg(&mut state, REG_B, 0);
+    let inst = make_instruction(Rv64BranchLessThanOpcode::BGEU, REG_A, REG_B, 100);
+    let pc = execute(&executor, &mut state, &inst);
+
+    assert_eq!(pc, START_PC + 100);
+}
+
+#[test]
+fn test_bltu_not_less_falls_through() {
+    let executor = Rv64BranchLessThanExecutor::new(Rv64BranchLessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // u64::MAX >= 0 unsigned, so BLTU should fall through
+    write_reg(&mut state, REG_A, u64::MAX);
+    write_reg(&mut state, REG_B, 0);
+    let inst = make_instruction(Rv64BranchLessThanOpcode::BLTU, REG_A, REG_B, 100);
+    let pc = execute(&executor, &mut state, &inst);
+
+    assert_eq!(pc, START_PC + DEFAULT_PC_STEP);
+}
+
+#[test]
+fn test_bgeu_less_falls_through() {
+    let executor = Rv64BranchLessThanExecutor::new(Rv64BranchLessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // 0 < u64::MAX unsigned, so BGEU should fall through
+    write_reg(&mut state, REG_A, 0);
+    write_reg(&mut state, REG_B, u64::MAX);
+    let inst = make_instruction(Rv64BranchLessThanOpcode::BGEU, REG_A, REG_B, 100);
+    let pc = execute(&executor, &mut state, &inst);
+
+    assert_eq!(pc, START_PC + DEFAULT_PC_STEP);
+}
+
+#[test]
+fn test_bge_negative_less_than_positive_falls_through() {
+    let executor = Rv64BranchLessThanExecutor::new(Rv64BranchLessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // -1 < 0 signed, so BGE should fall through
+    write_reg(&mut state, REG_A, u64::MAX); // -1
+    write_reg(&mut state, REG_B, 0);
+    let inst = make_instruction(Rv64BranchLessThanOpcode::BGE, REG_A, REG_B, 100);
+    let pc = execute(&executor, &mut state, &inst);
+
+    assert_eq!(pc, START_PC + DEFAULT_PC_STEP);
+}
+
+#[test]
+fn test_blt_equal_falls_through() {
+    let executor = Rv64BranchLessThanExecutor::new(Rv64BranchLessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, 42);
+    write_reg(&mut state, REG_B, 42);
+    let inst = make_instruction(Rv64BranchLessThanOpcode::BLT, REG_A, REG_B, 100);
+    let pc = execute(&executor, &mut state, &inst);
+
+    assert_eq!(pc, START_PC + DEFAULT_PC_STEP);
+}
+
+#[test]
+fn test_bltu_equal_falls_through() {
+    let executor = Rv64BranchLessThanExecutor::new(Rv64BranchLessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, u64::MAX);
+    write_reg(&mut state, REG_B, u64::MAX);
+    let inst = make_instruction(Rv64BranchLessThanOpcode::BLTU, REG_A, REG_B, 100);
+    let pc = execute(&executor, &mut state, &inst);
+
+    assert_eq!(pc, START_PC + DEFAULT_PC_STEP);
+}
+
+#[test]
+fn test_blt_negative_offset() {
+    let executor = Rv64BranchLessThanExecutor::new(Rv64BranchLessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, 1);
+    write_reg(&mut state, REG_B, 2);
+    let neg_100 = openvm_stark_sdk::p3_baby_bear::BabyBear::ORDER_U32 - 100;
+    let inst = make_instruction(Rv64BranchLessThanOpcode::BLT, REG_A, REG_B, neg_100);
+    let pc = execute(&executor, &mut state, &inst);
+
+    assert_eq!(pc, START_PC.wrapping_sub(100));
+}
+
+#[test]
+fn test_blt_signed_boundary_i64_min_vs_i64_max() {
+    let executor = Rv64BranchLessThanExecutor::new(Rv64BranchLessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, i64::MIN as u64);
+    write_reg(&mut state, REG_B, i64::MAX as u64);
+    let inst = make_instruction(Rv64BranchLessThanOpcode::BLT, REG_A, REG_B, 100);
+    let pc = execute(&executor, &mut state, &inst);
+
+    assert_eq!(pc, START_PC + 100);
+}
+
+#[test]
+fn test_bltu_unsigned_boundary() {
+    let executor = Rv64BranchLessThanExecutor::new(Rv64BranchLessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    // In unsigned, i64::MIN (0x8000...0) < i64::MAX (0x7FFF...F) is FALSE
+    write_reg(&mut state, REG_A, i64::MIN as u64);
+    write_reg(&mut state, REG_B, i64::MAX as u64);
+    let inst = make_instruction(Rv64BranchLessThanOpcode::BLTU, REG_A, REG_B, 100);
+    let pc = execute(&executor, &mut state, &inst);
+
+    // 0x8000...0 > 0x7FFF...F unsigned, so BLTU falls through
+    assert_eq!(pc, START_PC + DEFAULT_PC_STEP);
+}
+
+#[test]
+fn test_bgeu_equal_branches() {
+    let executor = Rv64BranchLessThanExecutor::new(Rv64BranchLessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    write_reg(&mut state, REG_A, 100);
+    write_reg(&mut state, REG_B, 100);
+    let inst = make_instruction(Rv64BranchLessThanOpcode::BGEU, REG_A, REG_B, 100);
+    let pc = execute(&executor, &mut state, &inst);
+
+    assert_eq!(pc, START_PC + 100);
+}
+
+#[test]
+#[should_panic]
+fn test_branch_lt_invalid_instruction_rejected() {
+    let executor = Rv64BranchLessThanExecutor::new(Rv64BranchLessThanOpcode::CLASS_OFFSET);
+    let mut state = create_exec_state(START_PC);
+
+    let inst = Instruction::from_usize::<7>(
+        VmOpcode::from_usize(Rv64BranchLessThanOpcode::BLT.global_opcode_usize()),
+        [
+            REG_A as usize,
+            REG_B as usize,
+            4,
+            0, // invalid d
+            0,
+            0,
+            0,
+        ],
+    );
+    let _ = execute(&executor, &mut state, &inst);
+}
