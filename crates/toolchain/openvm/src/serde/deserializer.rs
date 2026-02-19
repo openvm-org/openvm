@@ -10,7 +10,7 @@ use super::err::{Error, Result};
 pub trait WordRead {
     /// Fill the given buffer with words from input.  Returns an error if EOF
     /// was encountered.
-    fn read_words(&mut self, words: &mut [u32]) -> Result<()>;
+    fn read_words(&mut self, words: &mut [u64]) -> Result<()>;
 
     /// Fill the given buffer with bytes from input, and discard the
     /// padding up to the next word boundary.  Returns an error if EOF was
@@ -20,7 +20,7 @@ pub trait WordRead {
 
 // Allow borrowed WordReads to work transparently
 impl<R: WordRead + ?Sized> WordRead for &mut R {
-    fn read_words(&mut self, words: &mut [u32]) -> Result<()> {
+    fn read_words(&mut self, words: &mut [u64]) -> Result<()> {
         (**self).read_words(words)
     }
 
@@ -29,8 +29,8 @@ impl<R: WordRead + ?Sized> WordRead for &mut R {
     }
 }
 
-impl WordRead for &[u32] {
-    fn read_words(&mut self, out: &mut [u32]) -> Result<()> {
+impl WordRead for &[u64] {
+    fn read_words(&mut self, out: &mut [u64]) -> Result<()> {
         if out.len() > self.len() {
             Err(Error::DeserializeUnexpectedEnd)
         } else {
@@ -65,11 +65,11 @@ pub fn from_slice<T: DeserializeOwned, P: Pod>(slice: &[P]) -> Result<T> {
         }
         // P is u8 or another value without word-alignment. Data must be copied.
         Err(bytemuck::PodCastError::TargetAlignmentGreaterAndInputNotAligned) => {
-            let vec = bytemuck::allocation::pod_collect_to_vec::<P, u32>(slice);
+            let vec = bytemuck::allocation::pod_collect_to_vec::<P, u64>(slice);
             let mut deserializer = Deserializer::new(vec.as_slice());
             T::deserialize(&mut deserializer)
         }
-        Err(ref e) => panic!("failed to cast or read slice as [u32]: {e}"),
+        Err(ref e) => panic!("failed to cast or read slice as [u64]: {e}"),
     }
 }
 
@@ -136,7 +136,7 @@ impl<'de, R: WordRead + 'de> serde::de::EnumAccess<'de> for &'_ mut Deserializer
     type Variant = Self;
 
     fn variant_seed<V: DeserializeSeed<'de>>(self, seed: V) -> Result<(V::Value, Self)> {
-        let tag = self.try_take_word()?;
+        let tag = self.try_take_dword()?;
         let val = DeserializeSeed::deserialize(seed, tag.into_deserializer())?;
         Ok((val, self))
     }
@@ -182,16 +182,10 @@ impl<'de, R: WordRead + 'de> Deserializer<'de, R> {
         }
     }
 
-    fn try_take_word(&mut self) -> Result<u32> {
-        let mut val = 0u32;
+    fn try_take_dword(&mut self) -> Result<u64> {
+        let mut val = 0u64;
         self.reader.read_words(core::slice::from_mut(&mut val))?;
         Ok(val)
-    }
-
-    fn try_take_dword(&mut self) -> Result<u64> {
-        let low = self.try_take_word()? as u64;
-        let high = self.try_take_word()? as u64;
-        Ok(low | (high << 32))
     }
 }
 
@@ -213,7 +207,7 @@ impl<'de, R: WordRead + 'de> serde::Deserializer<'de> for &'_ mut Deserializer<'
     where
         V: Visitor<'de>,
     {
-        let val = match self.try_take_word()? {
+        let val = match self.try_take_dword()? {
             0 => false,
             1 => true,
             _ => return Err(Error::DeserializeBadBool),
@@ -225,21 +219,21 @@ impl<'de, R: WordRead + 'de> serde::Deserializer<'de> for &'_ mut Deserializer<'
     where
         V: Visitor<'de>,
     {
-        visitor.visit_i32(self.try_take_word()? as i32)
+        visitor.visit_i32(self.try_take_dword()? as i32)
     }
 
     fn deserialize_i16<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        visitor.visit_i32(self.try_take_word()? as i32)
+        visitor.visit_i32(self.try_take_dword()? as i32)
     }
 
     fn deserialize_i32<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        visitor.visit_i32(self.try_take_word()? as i32)
+        visitor.visit_i32(self.try_take_dword()? as i32)
     }
 
     fn deserialize_i64<V>(self, visitor: V) -> Result<V::Value>
@@ -262,21 +256,21 @@ impl<'de, R: WordRead + 'de> serde::Deserializer<'de> for &'_ mut Deserializer<'
     where
         V: Visitor<'de>,
     {
-        visitor.visit_u32(self.try_take_word()?)
+        visitor.visit_u64(self.try_take_dword()?)
     }
 
     fn deserialize_u16<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        visitor.visit_u32(self.try_take_word()?)
+        visitor.visit_u64(self.try_take_dword()?)
     }
 
     fn deserialize_u32<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        visitor.visit_u32(self.try_take_word()?)
+        visitor.visit_u64(self.try_take_dword()?)
     }
 
     fn deserialize_u64<V>(self, visitor: V) -> Result<V::Value>
@@ -299,7 +293,7 @@ impl<'de, R: WordRead + 'de> serde::Deserializer<'de> for &'_ mut Deserializer<'
     where
         V: Visitor<'de>,
     {
-        visitor.visit_f32(f32::from_bits(self.try_take_word()?))
+        visitor.visit_f32(f32::from_bits(self.try_take_dword()? as u32))
     }
 
     fn deserialize_f64<V>(self, visitor: V) -> Result<V::Value>
@@ -313,7 +307,7 @@ impl<'de, R: WordRead + 'de> serde::Deserializer<'de> for &'_ mut Deserializer<'
     where
         V: Visitor<'de>,
     {
-        let c = char::from_u32(self.try_take_word()?).ok_or(Error::DeserializeBadChar)?;
+        let c = char::from_u32(self.try_take_dword()? as u32).ok_or(Error::DeserializeBadChar)?;
         visitor.visit_char(c)
     }
 
@@ -321,7 +315,7 @@ impl<'de, R: WordRead + 'de> serde::Deserializer<'de> for &'_ mut Deserializer<'
     where
         V: Visitor<'de>,
     {
-        let len_bytes = self.try_take_word()? as usize;
+        let len_bytes = self.try_take_dword()? as usize;
         // Optimization opportunity: consider using MaybeUninit
         let mut bytes = vec![0u8; len_bytes];
         self.reader.read_padded_bytes(&mut bytes)?;
@@ -339,7 +333,7 @@ impl<'de, R: WordRead + 'de> serde::Deserializer<'de> for &'_ mut Deserializer<'
     where
         V: Visitor<'de>,
     {
-        let len_bytes = self.try_take_word()? as usize;
+        let len_bytes = self.try_take_dword()? as usize;
         // We always allocate vec to be word-aligned
         let capacity = len_bytes.div_ceil(WORD_SIZE) * WORD_SIZE;
         // SAFETY: read_padded_bytes **must** error if the
@@ -364,7 +358,7 @@ impl<'de, R: WordRead + 'de> serde::Deserializer<'de> for &'_ mut Deserializer<'
     where
         V: Visitor<'de>,
     {
-        match self.try_take_word()? {
+        match self.try_take_dword()? {
             0 => visitor.visit_none(),
             1 => visitor.visit_some(self),
             _ => Err(Error::DeserializeBadOption),
@@ -396,7 +390,7 @@ impl<'de, R: WordRead + 'de> serde::Deserializer<'de> for &'_ mut Deserializer<'
     where
         V: Visitor<'de>,
     {
-        let len = self.try_take_word()? as usize;
+        let len = self.try_take_dword()? as usize;
         visitor.visit_seq(SeqAccess {
             deserializer: self,
             len,
@@ -429,7 +423,7 @@ impl<'de, R: WordRead + 'de> serde::Deserializer<'de> for &'_ mut Deserializer<'
     where
         V: Visitor<'de>,
     {
-        let len = self.try_take_word()? as usize;
+        let len = self.try_take_dword()? as usize;
         visitor.visit_map(MapAccess {
             deserializer: self,
             len,
@@ -528,21 +522,18 @@ mod tests {
             f64: f64,
         }
 
-        let words = [
-            1,
-            -4_i32 as u32,
-            4,
-            -5_i32 as u32,
-            5,
-            -6_i32 as u32,
-            6,
-            f32::to_bits(f32::consts::PI),
-            -7_i32 as u32,
-            0xffffffff,
-            7,
-            0x00000000,
-            f64::to_bits(2.71).checked_rem(0x100000000).unwrap() as u32,
-            f64::to_bits(2.71).checked_shr(32).unwrap() as u32,
+        let words: [u64; 11] = [
+            1,                              // bool: true
+            -4_i64 as u64,                  // i8: -4
+            4,                              // u8: 4
+            -5_i64 as u64,                  // i16: -5
+            5,                              // u16: 5
+            -6_i64 as u64,                  // i32: -6
+            6,                              // u32: 6
+            f32::to_bits(f32::consts::PI) as u64, // f32: PI
+            -7_i64 as u64,                  // i64: -7
+            7,                              // u64: 7
+            f64::to_bits(2.71),             // f64: 2.71
         ];
         let expected = Test {
             bool: true,
@@ -570,7 +561,12 @@ mod tests {
             second: String,
         }
 
-        let words = [1, 0x00000061, 3, 0x00636261];
+        let words: [u64; 4] = [
+            1,                      // first len = 1
+            0x0000000000000061,     // "a" padded to 8 bytes
+            3,                      // second len = 3
+            0x0000000000636261,     // "abc" padded to 8 bytes
+        ];
         let expected = Test {
             first: "a".into(),
             second: "abc".into(),
