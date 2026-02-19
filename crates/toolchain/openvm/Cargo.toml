@@ -11,17 +11,17 @@ license.workspace = true
 [dependencies]
 openvm-platform = { workspace = true, features = ["rust-runtime"] }
 openvm-custom-insn = { workspace = true }
-openvm-rv32im-guest = { workspace = true }
+openvm-rv64im-guest = { workspace = true }
 serde = { workspace = true, features = ["alloc"] }
 bytemuck = { workspace = true, features = ["extern_crate_alloc"] }
 
-[target.'cfg(target_os = "zkvm")'.dependencies]
+[target.'cfg(target_arch = "riscv64")'.dependencies]
 getrandom = { version = "0.3", default-features = false, optional = true }
 getrandom-v02 = { version = "0.2", package = "getrandom", default-features = false, features = [
     "custom",
 ], optional = true }
 
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
+[target.'cfg(not(target_arch = "riscv64"))'.dependencies]
 num-bigint.workspace = true
 
 [dev-dependencies]
@@ -38,3 +38,6 @@ std = ["serde/std", "openvm-platform/std"]
 
 [package.metadata.cargo-shear]
 ignored = ["openvm-custom-insn", "getrandom"]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }

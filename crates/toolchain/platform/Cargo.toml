@@ -9,11 +9,11 @@ repository.workspace = true
 
 [dependencies]
 openvm-custom-insn.workspace = true
-openvm-rv32im-guest.workspace = true
+openvm-rv64im-guest.workspace = true
 
 # This crate should have as few dependencies as possible so it can be
 # used as many places as possible to share the platform definitions.
-[target.'cfg(target_os = "zkvm")'.dependencies]
+[target.'cfg(target_arch = "riscv64")'.dependencies]
 critical-section = { version = "1.1.2", optional = true }
 embedded-alloc = { version = "0.6.0", features = [
     "allocator_api",
@@ -37,3 +37,6 @@ panic-handler = []
 # Build a rust runtime
 rust-runtime = ["export-libm"]
 std = []
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)'] }
