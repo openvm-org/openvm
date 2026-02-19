@@ -1,8 +1,7 @@
 use openvm_stark_sdk::config::baby_bear_poseidon2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use crate::define_typed_per_proof_permutation_bus;
-
+use crate::{define_typed_per_proof_lookup_bus, define_typed_per_proof_permutation_bus};
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
 pub struct StackingModuleTidxMessage<T> {
@@ -61,7 +60,7 @@ pub struct EqKernelLookupMessage<T> {
     pub k_rot_in: [T; D_EF],
 }
 
-define_typed_per_proof_permutation_bus!(EqKernelLookupBus, EqKernelLookupMessage);
+define_typed_per_proof_lookup_bus!(EqKernelLookupBus, EqKernelLookupMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]

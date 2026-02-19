@@ -304,7 +304,7 @@ where
             local.n_less_than_n_max,
         );
 
-        self.eq_n_outer_bus.send(
+        self.eq_n_outer_bus.add_key_with_lookups(
             builder,
             next.proof_idx,
             EqNOuterMessage {
@@ -314,7 +314,7 @@ where
             },
             next.is_valid * next.num_traces,
         );
-        self.eq_n_outer_bus.send(
+        self.eq_n_outer_bus.add_key_with_lookups(
             builder,
             next.proof_idx,
             EqNOuterMessage {

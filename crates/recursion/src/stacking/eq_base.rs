@@ -330,7 +330,7 @@ where
 
         builder.when(next.mult).assert_one(next.is_last);
 
-        self.eq_kernel_lookup_bus.send(
+        self.eq_kernel_lookup_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             EqKernelLookupMessage {
@@ -409,7 +409,7 @@ where
         builder.when(local.is_first).assert_zero(local.mult_neg);
 
         let in_n = ext_field_multiply_scalar::<AB::Expr>(local.in_prod, omega_pow_inv);
-        self.eq_kernel_lookup_bus.send(
+        self.eq_kernel_lookup_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             EqKernelLookupMessage {

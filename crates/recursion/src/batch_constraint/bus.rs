@@ -2,7 +2,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::D_EF;
 use p3_field::PrimeCharacteristicRing;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use crate::define_typed_per_proof_permutation_bus;
+use crate::{define_typed_per_proof_lookup_bus, define_typed_per_proof_permutation_bus};
 
 #[repr(u8)]
 #[derive(Debug, Copy, Clone)]
@@ -67,7 +67,7 @@ pub struct EqNOuterMessage<T> {
     pub value: [T; D_EF],
 }
 
-define_typed_per_proof_permutation_bus!(EqNOuterBus, EqNOuterMessage);
+define_typed_per_proof_lookup_bus!(EqNOuterBus, EqNOuterMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -87,7 +87,7 @@ pub struct SymbolicExpressionMessage<T> {
     pub value: [T; D_EF],
 }
 
-define_typed_per_proof_permutation_bus!(SymbolicExpressionBus, SymbolicExpressionMessage);
+define_typed_per_proof_lookup_bus!(SymbolicExpressionBus, SymbolicExpressionMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]

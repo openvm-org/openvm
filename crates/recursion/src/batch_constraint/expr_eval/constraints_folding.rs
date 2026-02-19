@@ -188,7 +188,7 @@ where
             local.is_valid * local.is_first,
         );
 
-        self.eq_n_outer_bus.receive(
+        self.eq_n_outer_bus.lookup_key(
             builder,
             local.proof_idx,
             EqNOuterMessage {
