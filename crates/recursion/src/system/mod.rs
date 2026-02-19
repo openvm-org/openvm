@@ -500,9 +500,14 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         continuations_enabled: bool,
         has_cached: bool,
     ) -> Self {
-        // ProofShapeAir constrains sum(num_interactions[i] * lifted_height[i]) <
-        // max_interaction_count. Assert that every trace height constraint in the child VK
-        // is implied by this.
+        // The verifier must enforce the child VK's linear `trace_height_constraints`.
+        //
+        // This recursion verifier circuit enforces one summary-row in-circuit bound:
+        //   sum_i(num_interactions[i] * lifted_height[i]) < max_interaction_count
+        // with `lifted_height[i] = max(trace_height[i], 2^l_skip)`.
+        //
+        // At verifier-circuit construction time, each child `trace_height_constraint` must be
+        // implied by this bound. If not, we panic and refuse to construct the circuit.
         let proof_shape_constraint = LinearConstraint {
             coefficients: child_mvk
                 .inner

@@ -460,6 +460,31 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> RowMajorChip<F>
     }
 }
 
+/// AIR for verifying the proof shape (trace heights, widths, commitments) of a child proof
+/// within the recursion circuit.
+///
+/// ## Trace-height Constraint Enforcement
+///
+/// The verifier must enforce the child VK's linear trace-height constraints.
+///
+/// ```text
+/// total_interactions = sum_i(num_interactions[i] * lifted_height[i])
+/// ```
+///
+/// where `lifted_height[i] = max(trace_height[i], 2^l_skip)`.
+///
+/// This AIR accumulates `total_interactions` across rows and, on the summary (`is_last`) row,
+/// constrains:
+///
+/// ```text
+/// total_interactions < max_interaction_count
+/// ```
+///
+/// The bound is enforced via a limb-decomposed comparison (see `eval` on `is_last`).
+///
+/// [`VerifierSubCircuit::new_with_options`] also asserts at verifier-circuit construction time
+/// that every `LinearConstraint` in the child VK's `trace_height_constraints` is implied by this
+/// bound. Otherwise, construction fails.
 pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     // Parameters derived from vk
     pub per_air: Vec<AirMetadata>,
@@ -467,6 +492,8 @@ pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub min_cached_idx: usize,
     pub max_cached: usize,
     pub commit_mult: usize,
+    /// Threshold for the in-circuit summary-row check:
+    /// `sum_i(num_interactions[i] * lifted_height[i]) < max_interaction_count`.
     pub max_interaction_count: u32,
 
     // Primitives
@@ -1238,13 +1265,17 @@ where
             local.is_last,
         );
 
-        // Constrain that the total number of interactions is less than the vk-specified amount.
-        // Once again we only do this on the is_last row. Column array diff_marker marks the most
-        // significant non-zero limb where local.total_interactions_limbs and the decomposed
-        // max_interactions_limbs (denoted p) differ. To constrain that total_interaction_limbs[i]
-        // < p[i], we range check p[i] - total_interaction_limbs[i] - 1. Note that both p[i] and
-        // total_interaction_limbs[i] are guaranteed to be in [0, 256), so it's impossible to have
-        // p[i] - total_interaction_limbs[i] == 256.
+        // Summary-row trace-height bound:
+        //   total_interactions < max_interaction_count
+        // where `total_interactions` is already accumulated in `total_interactions_limbs`.
+        //
+        // `max_interaction_count` is decomposed into limbs. Trace generation sets `diff_marker`
+        // to the most-significant differing limb (one-hot). We range-check:
+        //   selected_delta - 1
+        // where
+        //   selected_delta =
+        //     sum_i(diff_marker[i] * (max_interactions[i] - total_interactions_limbs[i])).
+        // This forces `selected_delta` into [1, 2^LIMB_BITS), proving strict inequality.
         let diff_marker = local.num_interactions_limbs;
 
         let max_interactions =

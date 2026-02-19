@@ -55,6 +55,9 @@ pub struct ProofShapeModule {
     // Verifying key fields
     per_air: Vec<AirMetadata>,
     l_skip: usize,
+    /// Threshold from the child VK used by [`ProofShapeAir`] on the summary row:
+    /// `sum_i(num_interactions[i] * lifted_height[i]) < max_interaction_count`,
+    /// with `lifted_height[i] = max(trace_height[i], 2^l_skip)`.
     max_interaction_count: u32,
 
     // Buses (inventory for external, others are internal)
