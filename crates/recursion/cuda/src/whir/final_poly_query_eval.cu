@@ -37,11 +37,8 @@ typedef struct {
     FpExt query_pow;
     FpExt gamma_eq_acc;
     FpExt horner_acc;
-    // TODO: Read this from proof.
     FpExt final_poly_coeff;
     FpExt final_value_acc;
-    // TODO: Pass a buffer of these; num distinct is << num_rows;
-    FpExt gamma;
     FpExt gamma_pow;
 } FinalPolyQueryEvalRecord;
 
@@ -50,6 +47,7 @@ __global__ void final_poly_query_eval_tracegen(
     size_t num_valid_rows,
     size_t height,
     const FinalPolyQueryEvalRecord *records,
+    const FpExt *gammas,
     size_t num_whir_rounds,
     size_t rows_per_proof,
     const size_t *round_offsets,
@@ -76,6 +74,7 @@ __global__ void final_poly_query_eval_tracegen(
 
     const size_t whir_round_idx =
         partition_point_leq(round_offsets + 1, num_whir_rounds, row_in_proof);
+    const FpExt gamma = gammas[proof_idx * num_whir_rounds + whir_round_idx];
     const size_t num_in_domain_queries = num_queries_per_round[whir_round_idx];
     const size_t query_count = num_in_domain_queries + 1;
     const size_t round_start = round_offsets[whir_round_idx];
@@ -126,7 +125,7 @@ __global__ void final_poly_query_eval_tracegen(
 
     COL_WRITE_ARRAY(row, FinalPolyQueryEvalCols, query_pow, record.query_pow.elems);
     COL_WRITE_ARRAY(row, FinalPolyQueryEvalCols, alpha, record.alpha.elems);
-    COL_WRITE_ARRAY(row, FinalPolyQueryEvalCols, gamma, record.gamma.elems);
+    COL_WRITE_ARRAY(row, FinalPolyQueryEvalCols, gamma, gamma.elems);
     COL_WRITE_ARRAY(row, FinalPolyQueryEvalCols, gamma_pow, record.gamma_pow.elems);
     COL_WRITE_ARRAY(
         row,
@@ -153,7 +152,8 @@ extern "C" int _final_poly_query_eval_tracegen(
     Fp *trace_d,
     size_t num_valid_rows,
     size_t height,
-    FinalPolyQueryEvalRecord *records_d,
+    const FinalPolyQueryEvalRecord *records_d,
+    const FpExt *gammas_d,
     size_t num_whir_rounds,
     size_t rows_per_proof,
     const size_t *round_offsets_d,
@@ -168,6 +168,7 @@ extern "C" int _final_poly_query_eval_tracegen(
         num_valid_rows,
         height,
         records_d,
+        gammas_d,
         num_whir_rounds,
         rows_per_proof,
         round_offsets_d,
