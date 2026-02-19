@@ -256,7 +256,7 @@ where
                 );
             }
 
-            self.expr_bus.send(
+            self.expr_bus.add_key_with_lookups(
                 builder,
                 proof_idx,
                 SymbolicExpressionMessage {
@@ -266,7 +266,7 @@ where
                 },
                 cols.is_present * cached_cols.fanout,
             );
-            self.expr_bus.receive(
+            self.expr_bus.lookup_key(
                 builder,
                 proof_idx,
                 SymbolicExpressionMessage {
@@ -276,7 +276,7 @@ where
                 },
                 cols.is_present * is_arg0_node_idx.clone(),
             );
-            self.expr_bus.receive(
+            self.expr_bus.lookup_key(
                 builder,
                 proof_idx,
                 SymbolicExpressionMessage {
@@ -314,7 +314,7 @@ where
                 enc.get_flag_expr::<AB>(NodeKind::VarPublicValue as usize, &flags)
                     * cols.is_present,
             );
-            self.air_shape_bus.receive(
+            self.air_shape_bus.lookup_key(
                 builder,
                 proof_idx,
                 AirShapeBusMessage {
@@ -347,7 +347,7 @@ where
                 );
 
                 let is_first = enc.get_flag_expr::<AB>(NodeKind::SelIsFirst as usize, &flags);
-                self.sel_uni_bus.receive(
+                self.sel_uni_bus.lookup_key(
                     builder,
                     proof_idx,
                     SelUniBusMessage {
