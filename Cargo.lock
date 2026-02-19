@@ -7016,6 +7016,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-rv64im-guest"
+version = "1.4.3"
+dependencies = [
+ "openvm-custom-insn",
+ "p3-field",
+ "strum_macros 0.26.4",
+]
+
+[[package]]
 name = "openvm-scripts"
 version = "1.4.3"
 dependencies = [

@@ -111,7 +111,7 @@ mod tests {
         hint_input();
         assert_eq!(read_u64(), 4);
         hint_input();
-        assert_eq!(read_n_bytes(8), vec![4, 0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(read_n_bytes(12), vec![4, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4]);
         assert_eq!(read_vec(), vec![1, 2, 3, 4]);
     }
 }
