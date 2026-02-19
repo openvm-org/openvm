@@ -251,7 +251,7 @@ where
             .when(local.has_no_interactions)
             .assert_zero(within_one_air);
 
-        self.batch_constraint_conductor_bus.receive(
+        self.batch_constraint_conductor_bus.lookup_key(
             builder,
             local.proof_idx,
             BatchConstraintConductorMessage {

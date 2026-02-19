@@ -26,10 +26,7 @@ pub struct BatchConstraintConductorMessage<T> {
     pub value: [T; D_EF],
 }
 
-define_typed_per_proof_permutation_bus!(
-    BatchConstraintConductorBus,
-    BatchConstraintConductorMessage
-);
+define_typed_per_proof_lookup_bus!(BatchConstraintConductorBus, BatchConstraintConductorMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]

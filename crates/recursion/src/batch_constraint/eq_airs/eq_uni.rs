@@ -101,7 +101,7 @@ where
         builder.assert_bool(local.is_first);
         builder.assert_bool(local.is_last);
 
-        self.r_xi_bus.receive(
+        self.r_xi_bus.lookup_key(
             builder,
             local.proof_idx,
             BatchConstraintConductorMessage {
@@ -111,7 +111,7 @@ where
             },
             local.is_valid * local.is_first,
         );
-        self.r_xi_bus.receive(
+        self.r_xi_bus.lookup_key(
             builder,
             local.proof_idx,
             BatchConstraintConductorMessage {

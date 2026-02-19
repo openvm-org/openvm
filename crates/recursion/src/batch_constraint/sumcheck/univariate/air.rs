@@ -290,7 +290,8 @@ where
             local.is_first,
         );
 
-        self.batch_constraint_conductor_bus.send(
+        // Here idx = 0 and is called once per proof_idx
+        self.batch_constraint_conductor_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             BatchConstraintConductorMessage {
