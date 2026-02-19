@@ -185,7 +185,6 @@ impl AirModule for StackingModule {
             sumcheck_claims_bus: self.sumcheck_claims_bus,
             eq_rand_values_bus: self.eq_rand_values_bus,
             eq_kernel_lookup_bus: self.eq_kernel_lookup_bus,
-            eq_bits_lookup_bus: self.eq_bits_lookup_bus,
             l_skip: self.l_skip,
         };
         let sumcheck_rounds_air = SumcheckRoundsAir {
