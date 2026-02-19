@@ -35,7 +35,6 @@ pub struct MultilinearSumcheckCols<T> {
     pub is_proof_start: T,
     pub is_first_eval: T,
 
-    // TODO(ayush): remove
     pub nested_for_loop_aux_cols: NestedForLoopAuxCols<T, 1>,
 
     /// A valid row which is not involved in any interactions
@@ -49,7 +48,6 @@ pub struct MultilinearSumcheckCols<T> {
 
     pub prefix_product: [T; D_EF],
     pub suffix_product: [T; D_EF],
-    // perf(ayush): can be preprocessed cols
     // 1 / i!(d - i)!
     pub denom_inv: T,
 

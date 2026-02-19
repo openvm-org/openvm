@@ -9,9 +9,6 @@ use p3_air::AirBuilder;
 use p3_field::{extension::BinomiallyExtendable, Field, PrimeCharacteristicRing};
 use p3_symmetric::Permutation;
 
-// TODO(ayush): move somewhere else
-pub const MAX_CONSTRAINT_DEGREE: usize = 4;
-
 /// Returns the number of transcript slots consumed by a proof-of-work check.
 ///
 /// When `pow_bits > 0`, PoW uses 2 transcript slots (1 observe + 1 sample).
