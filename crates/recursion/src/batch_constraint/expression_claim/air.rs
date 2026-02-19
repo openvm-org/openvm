@@ -154,7 +154,7 @@ where
             local.is_valid,
         );
 
-        self.mu_bus.receive(
+        self.mu_bus.lookup_key(
             builder,
             local.proof_idx,
             BatchConstraintConductorMessage {

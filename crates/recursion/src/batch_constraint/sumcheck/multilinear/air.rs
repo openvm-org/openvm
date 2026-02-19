@@ -320,7 +320,8 @@ where
             },
             local.is_first_eval * is_not_dummy.clone(),
         );
-        self.batch_constraint_conductor_bus.send(
+        // Here idx > 0 and all idx are distinct within one proof_idx
+        self.batch_constraint_conductor_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             BatchConstraintConductorMessage {

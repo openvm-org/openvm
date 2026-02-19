@@ -263,7 +263,8 @@ where
             },
             is_transition.clone(),
         );
-        self.r_xi_bus.send(
+        // Here idx >= l_skip and all idx are different within one proof_idx
+        self.r_xi_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             BatchConstraintConductorMessage {
@@ -293,7 +294,7 @@ where
             local.is_first,
         );
 
-        self.r_xi_bus.receive(
+        self.r_xi_bus.lookup_key(
             builder,
             local.proof_idx,
             BatchConstraintConductorMessage {
