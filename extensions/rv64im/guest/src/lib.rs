@@ -1,0 +1,66 @@
+#![no_std]
+extern crate alloc;
+
+/// Library functions for user input/output.
+#[cfg(openvm_intrinsics)]
+mod io;
+
+#[cfg(openvm_intrinsics)]
+pub use io::*;
+use strum_macros::FromRepr;
+
+/// This is custom-0 defined in RISC-V spec document
+pub const SYSTEM_OPCODE: u8 = 0x0b;
+pub const CSR_OPCODE: u8 = 0b1110011;
+pub const RV64_ALU_OPCODE: u8 = 0b0110011;
+pub const RV64_ALU_OP_32: u8 = 0b0111011;
+pub const RV64_ALU_OP_IMM_32: u8 = 0b0011011;
+pub const RV64M_FUNCT7: u8 = 0x01;
+pub const NATIVE_STORED_FUNCT3: u8 = 0b111;
+pub const NATIVE_STORED_FUNCT7: u32 = 2;
+
+pub const TERMINATE_FUNCT3: u8 = 0b000;
+pub const HINT_FUNCT3: u8 = 0b001;
+pub const HINT_STORED_IMM: u32 = 0;
+pub const HINT_BUFFER_IMM: u32 = 1;
+pub const REVEAL_FUNCT3: u8 = 0b010;
+pub const PHANTOM_FUNCT3: u8 = 0b011;
+pub const CSRRW_FUNCT3: u8 = 0b001;
+
+/// Maximum number of bits for hint buffer size (in dwords for RV64).
+/// IMPORTANT: Must be synced with MAX_HINT_BUFFER_WORDS_BITS constant for cuda
+/// `crates/circuits/primitives/cuda/include/primitives/constants.h`
+// For the constraints, they are configured for a range of MAX_HINT_BUFFER_DWORDS_BITS between
+// [8,16)
+pub const MAX_HINT_BUFFER_DWORDS_BITS: usize = 10;
+/// Maximum number of dwords that can be read in a single HINT_BUFFER instruction.
+/// AIR constraint requires rem_dwords < 2^MAX_HINT_BUFFER_DWORDS_BITS, so max is one less
+pub const MAX_HINT_BUFFER_DWORDS: usize = (1 << MAX_HINT_BUFFER_DWORDS_BITS) - 1;
+
+/// imm options for system phantom instructions
+#[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
+#[repr(u16)]
+pub enum PhantomImm {
+    HintInput = 0,
+    PrintStr,
+    HintRandom,
+    HintLoadByKey,
+}
+
+/// Encode a 2d-array of field elements into bytes for `hint_load_by_key`.
+/// Each field element is zero-extended to a u64 (dword) to match the RV64 hint stream unit.
+#[cfg(not(openvm_intrinsics))]
+pub fn hint_load_by_key_encode<F: p3_field::PrimeField32>(
+    value: &[alloc::vec::Vec<F>],
+) -> alloc::vec::Vec<u8> {
+    let len = value.len();
+    let mut ret = (len as u64).to_le_bytes().to_vec();
+    for v in value {
+        ret.extend((v.len() as u64).to_le_bytes());
+        ret.extend(
+            v.iter()
+                .flat_map(|x| (x.as_canonical_u32() as u64).to_le_bytes()),
+        );
+    }
+    ret
+}

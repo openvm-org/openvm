@@ -144,6 +144,7 @@ cargo-openvm = { path = "crates/cli", default-features = false }
 openvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
 openvm-rv32im-transpiler = { path = "extensions/rv32im/transpiler", default-features = false }
 openvm-rv32im-guest = { path = "extensions/rv32im/guest", default-features = false }
+openvm-rv64im-guest = { path = "extensions/rv64im/guest", default-features = false }
 openvm-rv32-adapters = { path = "extensions/rv32-adapters", default-features = false }
 openvm-native-circuit = { path = "extensions/native/circuit", default-features = false }
 openvm-native-compiler = { path = "extensions/native/compiler", default-features = false }
