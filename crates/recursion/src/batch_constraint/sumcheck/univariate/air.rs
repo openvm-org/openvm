@@ -37,7 +37,6 @@ pub struct UnivariateSumcheckCols<T> {
 
     pub coeff_idx: T,
 
-    // perf(ayush): can these be preprocessed cols?
     /// Powers of generator of order 2^{l_skip} to get periodic selector columns
     pub omega_skip_power: T,
     pub is_omega_skip_power_equal_to_one: T,
