@@ -196,7 +196,7 @@ where
             local.is_first,
         );
 
-        self.eq_rand_values_bus.receive(
+        self.eq_rand_values_bus.lookup_key(
             builder,
             local.proof_idx,
             EqRandValuesLookupMessage {

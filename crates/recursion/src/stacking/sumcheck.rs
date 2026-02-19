@@ -370,7 +370,7 @@ where
             local.is_valid,
         );
 
-        self.eq_rand_values_bus.send(
+        self.eq_rand_values_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             EqRandValuesLookupMessage {

@@ -473,7 +473,7 @@ pub struct StackingIndexMessage<T> {
     pub col_idx: T,
 }
 
-define_typed_per_proof_permutation_bus!(StackingIndicesBus, StackingIndexMessage);
+define_typed_per_proof_lookup_bus!(StackingIndicesBus, StackingIndexMessage);
 
 /// Carries all commitments in the proof.
 ///
