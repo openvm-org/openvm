@@ -7,7 +7,7 @@ use std::{iter, sync::Arc};
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::{
     interaction::BusIndex,
-    keygen::types::MultiStarkVerifyingKey,
+    keygen::types::{LinearConstraint, MultiStarkVerifyingKey},
     proof::{Proof, TraceVData},
     prover::{AirProvingContext, ColMajorMatrix, CommittedTraceData, CpuBackend, ProverBackend},
     AirRef, FiatShamirTranscript, StarkEngine, TranscriptHistory, TranscriptLog,
@@ -500,6 +500,34 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         continuations_enabled: bool,
         has_cached: bool,
     ) -> Self {
+        // The verifier must enforce the child VK's linear `trace_height_constraints`.
+        //
+        // This recursion verifier circuit enforces one summary-row in-circuit bound:
+        //   sum_i(num_interactions[i] * lifted_height[i]) < max_interaction_count
+        // with `lifted_height[i] = max(trace_height[i], 2^l_skip)`.
+        //
+        // At verifier-circuit construction time, each child `trace_height_constraint` must be
+        // implied by this bound. If not, we panic and refuse to construct the circuit.
+        let proof_shape_constraint = LinearConstraint {
+            coefficients: child_mvk
+                .inner
+                .per_air
+                .iter()
+                .map(|avk| avk.num_interactions() as u32)
+                .collect(),
+            threshold: child_mvk.inner.params.logup.max_interaction_count,
+        };
+        for (i, constraint) in child_mvk.inner.trace_height_constraints.iter().enumerate() {
+            assert!(
+                constraint.is_implied_by(&proof_shape_constraint),
+                "child_vk trace_height_constraint[{i}] is not implied by ProofShapeAir's check. \
+                 The recursion circuit cannot enforce this constraint. \
+                 Constraint: coefficients={:?}, threshold={}",
+                constraint.coefficients,
+                constraint.threshold,
+            );
+        }
+
         let mut bus_idx_manager = BusIndexManager::new();
         let bus_inventory = BusInventory::new(&mut bus_idx_manager);
         let power_checker_trace =

@@ -55,6 +55,10 @@ pub struct ProofShapeModule {
     // Verifying key fields
     per_air: Vec<AirMetadata>,
     l_skip: usize,
+    /// Threshold from the child VK used by [`ProofShapeAir`] on the summary row:
+    /// `sum_i(num_interactions[i] * lifted_height[i]) < max_interaction_count`,
+    /// with `lifted_height[i] = max(trace_height[i], 2^l_skip)`.
+    max_interaction_count: u32,
 
     // Buses (inventory for external, others are internal)
     bus_inventory: BusInventory,
@@ -124,6 +128,7 @@ impl ProofShapeModule {
         Self {
             per_air,
             l_skip: mvk.params.l_skip,
+            max_interaction_count: mvk.params.logup.max_interaction_count,
             bus_inventory,
             range_bus,
             pow_bus,
@@ -234,6 +239,7 @@ impl AirModule for ProofShapeModule {
             min_cached_idx: self.min_cached_idx,
             max_cached: self.max_cached,
             commit_mult: self.commit_mult,
+            max_interaction_count: self.max_interaction_count,
             idx_encoder: self.idx_encoder.clone(),
             range_bus: self.range_bus,
             pow_bus: self.pow_bus,
