@@ -9,6 +9,8 @@ extern "C" {
     fn _pow_checker_tracegen(
         d_pow_count: *const u32,
         d_range_count: *const u32,
+        d_cpu_pow_count: *const u32,
+        d_cpu_range_count: *const u32,
         d_trace: *mut F,
         n: usize,
     ) -> i32;
@@ -31,12 +33,22 @@ extern "C" {
 pub unsafe fn pow_checker_tracegen(
     d_pow_count: *const u32,
     d_range_count: *const u32,
+    d_cpu_pow_count: Option<&DeviceBuffer<u32>>,
+    d_cpu_range_count: Option<&DeviceBuffer<u32>>,
     d_trace: &DeviceBuffer<F>,
     n: usize,
 ) -> Result<(), CudaError> {
     CudaError::from_result(_pow_checker_tracegen(
         d_pow_count,
         d_range_count,
+        d_cpu_pow_count
+            .as_ref()
+            .map(|b| b.as_ptr())
+            .unwrap_or(std::ptr::null()),
+        d_cpu_range_count
+            .as_ref()
+            .map(|b| b.as_ptr())
+            .unwrap_or(std::ptr::null()),
         d_trace.as_mut_ptr(),
         n,
     ))

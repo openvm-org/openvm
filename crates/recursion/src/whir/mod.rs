@@ -1211,7 +1211,6 @@ mod cuda_tracegen {
                 })
                 .collect::<Vec<_>>();
 
-            // TODO[INT-6027]: Use required_height properly
             indexed_gpu_ctxs
                 .into_iter()
                 .chain(indexed_cpu_ctxs)
