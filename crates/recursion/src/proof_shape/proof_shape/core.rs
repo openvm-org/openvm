@@ -899,7 +899,7 @@ where
             local.is_present,
         );
 
-        self.hyperdim_bus.send(
+        self.hyperdim_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             HyperdimBusMessage {
@@ -963,7 +963,7 @@ where
             local.is_present * preprocessed_stacked_width,
         );
 
-        self.commitments_bus.send(
+        self.commitments_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             CommitmentsBusMessage {
@@ -971,7 +971,7 @@ where
                 minor_idx: cidx_offset.clone() + local.starting_cidx,
                 commitment: preprocessed_commit,
             },
-            has_preprocessed.clone() * local.is_valid * AB::Expr::from_usize(self.commit_mult),
+            has_preprocessed.clone() * local.is_present * AB::Expr::from_usize(self.commit_mult),
         );
         cidx_offset += has_preprocessed.clone();
 
@@ -990,7 +990,7 @@ where
                 local.is_present * cached_widths[cached_idx].clone(),
             );
 
-            self.commitments_bus.send(
+            self.commitments_bus.add_key_with_lookups(
                 builder,
                 local.proof_idx,
                 CommitmentsBusMessage {
@@ -999,7 +999,7 @@ where
                     commitment: localv.cached_commits[cached_idx].map(Into::into),
                 },
                 cached_present[cached_idx].clone()
-                    * local.is_valid
+                    * local.is_present
                     * AB::Expr::from_usize(self.commit_mult),
             );
             cidx_offset += cached_present[cached_idx].clone();
@@ -1022,7 +1022,7 @@ where
             .when(and(local.is_valid, not(next.is_last)))
             .assert_eq(local.starting_cidx + cidx_offset, next.starting_cidx);
 
-        self.commitments_bus.send(
+        self.commitments_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             CommitmentsBusMessage {

@@ -195,7 +195,7 @@ impl WhirRoundAir {
             },
             is_proof_start,
         );
-        self.commitments_bus.send(
+        self.commitments_bus.add_key_with_lookups(
             builder,
             proof_idx,
             CommitmentsBusMessage {

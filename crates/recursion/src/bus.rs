@@ -440,7 +440,7 @@ pub struct HyperdimBusMessage<T> {
     pub n_sign_bit: T,
 }
 
-define_typed_per_proof_permutation_bus!(HyperdimBus, HyperdimBusMessage);
+define_typed_per_proof_lookup_bus!(HyperdimBus, HyperdimBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -479,7 +479,7 @@ pub struct CommitmentsBusMessage<T> {
     pub commitment: [T; DIGEST_SIZE],
 }
 
-define_typed_per_proof_permutation_bus!(CommitmentsBus, CommitmentsBusMessage);
+define_typed_per_proof_lookup_bus!(CommitmentsBus, CommitmentsBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -517,7 +517,7 @@ pub struct SelHypercubeBusMessage<T> {
     pub value: [T; D_EF],
 }
 
-define_typed_per_proof_permutation_bus!(SelHypercubeBus, SelHypercubeBusMessage);
+define_typed_per_proof_lookup_bus!(SelHypercubeBus, SelHypercubeBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
