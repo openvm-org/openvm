@@ -344,7 +344,6 @@ impl RowMajorChip<F> for EqNsTraceGenerator {
     ) -> Option<RowMajorMatrix<F>> {
         let (vk, preflights, selector_counts) = ctx;
         let l_skip = vk.inner.params.l_skip;
-        // TODO: blob, MultiProofVecVec etc
         let records = preflights
             .iter()
             .enumerate()
