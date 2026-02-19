@@ -1,8 +1,8 @@
 use core::mem::MaybeUninit;
 
 use openvm_platform::WORD_SIZE;
-// #[cfg(openvm_intrinsics)]
-// use openvm_rv32im_guest::hint_buffer_chunked;
+#[cfg(openvm_intrinsics)]
+use openvm_rv64im_guest::hint_buffer_chunked;
 
 use super::hint_store_word;
 use crate::serde::WordRead;
@@ -20,23 +20,22 @@ impl Reader {
     /// stream. The program will fail if there is no next
     /// stream in the input stream.
     pub fn new() -> Self {
-        // super::hint_input();
-        // let bytes_remaining = super::read_u32() as usize;
-        let bytes_remaining = 0usize;
+        super::hint_input();
+        let bytes_remaining = super::read_u64() as usize;
         Self { bytes_remaining }
     }
 }
 
 impl WordRead for Reader {
-    fn read_words(&mut self, words: &mut [u32]) -> crate::serde::Result<()> {
+    fn read_words(&mut self, words: &mut [u64]) -> crate::serde::Result<()> {
         let num_words = words.len();
         if let Some(new_remaining) = self.bytes_remaining.checked_sub(num_words * WORD_SIZE) {
-            // #[cfg(openvm_intrinsics)]
-            // hint_buffer_chunked(words.as_mut_ptr() as *mut u8, words.len());
+            #[cfg(openvm_intrinsics)]
+            hint_buffer_chunked(words.as_mut_ptr() as *mut u8, words.len());
             #[cfg(not(openvm_intrinsics))]
             {
                 for w in words.iter_mut() {
-                    hint_store_word(w as *mut u32);
+                    hint_store_word(w);
                 }
             }
             self.bytes_remaining = new_remaining;
@@ -51,23 +50,23 @@ impl WordRead for Reader {
             return Err(crate::serde::Error::DeserializeUnexpectedEnd);
         }
         let mut num_padded_bytes = bytes.len();
-        // #[cfg(openvm_intrinsics)]
-        // hint_buffer_chunked(bytes.as_mut_ptr(), num_padded_bytes / WORD_SIZE);
+        #[cfg(openvm_intrinsics)]
+        hint_buffer_chunked(bytes.as_mut_ptr(), num_padded_bytes / WORD_SIZE);
         #[cfg(not(openvm_intrinsics))]
         {
             let mut words = bytes.chunks_exact_mut(WORD_SIZE);
             for word in &mut words {
-                hint_store_word(word as *mut [u8] as *mut u32);
+                hint_store_word(word as *mut [u8] as *mut u64);
             }
         }
 
         let remainder = bytes.chunks_exact_mut(WORD_SIZE).into_remainder();
         if !remainder.is_empty() {
             num_padded_bytes += WORD_SIZE - remainder.len();
-            let mut padded = MaybeUninit::<u32>::uninit();
+            let mut padded = MaybeUninit::<u64>::uninit();
             hint_store_word(padded.as_mut_ptr());
             let padded = unsafe { padded.assume_init() };
-            // We use native endian so its equivalent to transmuting u32 to [u8; 4]
+            // We use native endian so its equivalent to transmuting u64 to [u8; 8]
             remainder.copy_from_slice(&padded.to_ne_bytes()[..remainder.len()]);
         }
         // If we reached EOF, then we set to 0.
