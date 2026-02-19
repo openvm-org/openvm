@@ -319,7 +319,7 @@ where
             next.rot_cube_minus_prod,
         );
 
-        self.eq_kernel_lookup_bus.send(
+        self.eq_kernel_lookup_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             EqKernelLookupMessage {

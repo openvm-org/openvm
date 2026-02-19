@@ -810,7 +810,7 @@ where
         ///////////////////////////////////////////////////////////////////////////////////////////
         // AIR SHAPE LOOKUP
         ///////////////////////////////////////////////////////////////////////////////////////////
-        self.air_shape_bus.send(
+        self.air_shape_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             AirShapeBusMessage {
@@ -821,7 +821,7 @@ where
             local.is_present * local.num_air_id_lookups,
         );
 
-        self.air_shape_bus.send(
+        self.air_shape_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             AirShapeBusMessage {
@@ -832,7 +832,7 @@ where
             local.is_present,
         );
 
-        self.air_shape_bus.send(
+        self.air_shape_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             AirShapeBusMessage {
@@ -901,7 +901,7 @@ where
             local.is_present,
         );
 
-        self.lifted_heights_bus.send(
+        self.lifted_heights_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             LiftedHeightsBusMessage {
@@ -920,7 +920,7 @@ where
             .assert_one(local.starting_cidx);
         let mut cidx_offset = AB::Expr::ZERO;
 
-        self.lifted_heights_bus.send(
+        self.lifted_heights_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             LiftedHeightsBusMessage {
@@ -947,7 +947,7 @@ where
         cidx_offset += has_preprocessed.clone();
 
         (0..self.max_cached).for_each(|cached_idx| {
-            self.lifted_heights_bus.send(
+            self.lifted_heights_bus.add_key_with_lookups(
                 builder,
                 local.proof_idx,
                 LiftedHeightsBusMessage {

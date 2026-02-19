@@ -196,7 +196,7 @@ where
             local.is_valid * (local.is_interaction - local.idx_parity),
         );
 
-        self.eq_n_outer_bus.receive(
+        self.eq_n_outer_bus.lookup_key(
             builder,
             local.proof_idx,
             EqNOuterMessage {
