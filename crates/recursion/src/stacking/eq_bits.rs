@@ -15,8 +15,8 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{D_EF, EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
-    extension::BinomiallyExtendable, BasedVectorSpace, PrimeCharacteristicRing, PrimeField32,
-    TwoAdicField,
+    extension::BinomiallyExtendable, BasedVectorSpace, Field, PrimeCharacteristicRing,
+    PrimeField32, TwoAdicField,
 };
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
 use p3_maybe_rayon::prelude::*;
@@ -50,7 +50,7 @@ pub struct EqBitsCols<F> {
     pub is_first: F,
 
     // Multiplicities of internal and external lookups
-    pub internal_mult: F,
+    pub internal_child_flag: F,
     pub external_mult: F,
 
     // Parent row's b_value and evaluation
@@ -140,7 +140,7 @@ where
          * Receive the parent b_value and eq_bits(u[0..k - 1], b[0..k - 1]) eval, as
          * well as the value of u_{n_stack - num_bits + 1}.
          */
-        self.eq_rand_values_bus.receive(
+        self.eq_rand_values_bus.lookup_key(
             builder,
             local.proof_idx,
             EqRandValuesLookupMessage {
@@ -157,6 +157,7 @@ where
                 b_value: local.sub_b_value.into(),
                 num_bits: local.num_bits.into() - AB::Expr::ONE,
                 eval: local.sub_eval.map(Into::into),
+                child_lsb: local.b_lsb.into(),
             },
             and(not(local.is_first), local.is_valid),
         );
@@ -166,7 +167,10 @@ where
 
         /*
          * Compute eq_bits(u, b) and send it to the appropriate internal and external
-         * buses.
+         * buses. Field internal_child_flag is odd iff it has a child with lsb 0, and
+         * is >= 2 iff it has a child with new bit 1. Because internal message field
+         * num_bits must be strictly increasing, each (b_value, num_bits) pair must be
+         * unique by induction.
          */
         let eval = ext_field_multiply(
             local.sub_eval,
@@ -182,6 +186,17 @@ where
             ),
         );
 
+        let three = AB::F::from_u8(3);
+        builder
+            .when(not(local.is_valid))
+            .assert_zero(local.internal_child_flag);
+        builder
+            .when_ne(local.internal_child_flag, three)
+            .when_ne(local.internal_child_flag, AB::Expr::TWO)
+            .assert_bool(local.internal_child_flag);
+
+        // Multiplicity is f(x) = 1/3 * x * (x - 2) * (2x - 5), which is such that
+        // f(0), f(2) = 0 and f(1), f(3) = 1.
         self.eq_bits_internal_bus.send(
             builder,
             local.proof_idx,
@@ -189,11 +204,32 @@ where
                 b_value: b_value.clone(),
                 num_bits: local.num_bits.into(),
                 eval: eval.clone(),
+                child_lsb: AB::Expr::ZERO,
             },
-            local.is_valid * local.internal_mult,
+            local.internal_child_flag
+                * (local.internal_child_flag - AB::Expr::TWO)
+                * (local.internal_child_flag * AB::Expr::TWO - AB::Expr::from_u8(5))
+                * three.inverse(),
         );
 
-        self.eq_bits_lookup_bus.send(
+        // Multiplicity is f(x) = -1/6 * x * (x - 1) * (2x - 7), which is such that
+        // f(0), f(1) = 0 and f(2), f(3) = 1.
+        self.eq_bits_internal_bus.send(
+            builder,
+            local.proof_idx,
+            EqBitsInternalMessage {
+                b_value: b_value.clone(),
+                num_bits: local.num_bits.into(),
+                eval: eval.clone(),
+                child_lsb: AB::Expr::ONE,
+            },
+            local.internal_child_flag
+                * (AB::Expr::ONE - local.internal_child_flag)
+                * (local.internal_child_flag * AB::Expr::TWO - AB::Expr::from_u8(7))
+                * AB::F::from_u8(6).inverse(),
+        );
+
+        self.eq_bits_lookup_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             EqBitsLookupMessage {
@@ -264,7 +300,8 @@ impl RowMajorChip<F> for EqBitsTraceGenerator {
                                 b_value_map.get_mut(&(shifted_b_value, num_bits))
                             {
                                 if num_bits < total_num_bits {
-                                    *internal_mult += 1;
+                                    let child_b_value = b_value >> (total_num_bits - num_bits - 1);
+                                    *internal_mult += 1 + (child_b_value & 1);
                                 } else {
                                     *external_mult += 1;
                                 }
@@ -278,7 +315,8 @@ impl RowMajorChip<F> for EqBitsTraceGenerator {
                     if latest_num_bits == total_num_bits {
                         continue;
                     } else if latest_num_bits == 0 {
-                        base_internal_mult += 1;
+                        let b_value_msb = b_value >> (total_num_bits - 1);
+                        base_internal_mult += 1 + b_value_msb;
                     }
 
                     for num_bits in latest_num_bits + 1..=total_num_bits {
@@ -309,7 +347,7 @@ impl RowMajorChip<F> for EqBitsTraceGenerator {
 
                     first_cols.sub_eval[0] = F::ONE;
 
-                    first_cols.internal_mult = F::from_usize(base_internal_mult);
+                    first_cols.internal_child_flag = F::from_usize(base_internal_mult);
                     first_cols.external_mult = F::from_usize(base_external_mult);
                 }
 
@@ -325,7 +363,7 @@ impl RowMajorChip<F> for EqBitsTraceGenerator {
                     cols.proof_idx = proof_idx_value;
                     cols.is_valid = F::ONE;
 
-                    cols.internal_mult = F::from_usize(internal_mult);
+                    cols.internal_child_flag = F::from_usize(internal_mult);
                     cols.external_mult = F::from_usize(external_mult);
 
                     cols.sub_b_value = F::from_usize(b_value >> 1);
