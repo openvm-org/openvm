@@ -45,8 +45,6 @@ struct WhirRoundCols<T, const ENC_WIDTH: usize> {
     query_pow_witness: T,
     query_pow_sample: T,
     gamma: [T; D_EF],
-    // TODO: This doesn't really belong here; it should be sent directly to InitialOpenedValuesAir.
-    mu: [T; D_EF],
     claim: [T; D_EF],
     next_claim: [T; D_EF],
     post_sumcheck_claim: [T; D_EF],
@@ -190,7 +188,6 @@ impl WhirRoundAir {
             proof_idx,
             WhirModuleMessage {
                 tidx: local.tidx,
-                mu: local.mu,
                 claim: local.claim,
             },
             is_proof_start,
@@ -433,12 +430,6 @@ fn generate_trace_impl<const ENC_WIDTH: usize>(
             cols.is_first_in_proof = F::from_bool(i == 0);
             cols.tidx = F::from_usize(whir.tidx_per_round[i]);
             cols.num_queries = F::from_usize(num_queries_per_round[i]);
-            cols.mu.copy_from_slice(
-                preflight
-                    .stacking
-                    .stacking_batching_challenge
-                    .as_basis_coefficients_slice(),
-            );
             cols.claim
                 .copy_from_slice(whir.initial_claim_per_round[i].as_basis_coefficients_slice());
             cols.final_poly_mle_eval
