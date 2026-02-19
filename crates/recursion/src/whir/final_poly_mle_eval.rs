@@ -206,7 +206,7 @@ where
         );
 
         let total_whir_queries = AB::Expr::from_usize(self.total_whir_queries);
-        self.final_poly_bus.send(
+        self.final_poly_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             WhirFinalPolyBusMessage {

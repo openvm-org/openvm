@@ -141,6 +141,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
             );
         }
 
+        builder.assert_bool(local.permuted);
         self.poseidon2_permute_bus.lookup_key(
             builder,
             Poseidon2PermuteMessage {

@@ -211,7 +211,7 @@ where
                 ext_field_subtract(base_to_ext::<AB::Expr>(AB::F::ONE), local.r_n),
             ),
         );
-        self.sel_hypercube_bus.send(
+        self.sel_hypercube_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             SelHypercubeBusMessage {
@@ -221,7 +221,7 @@ where
             },
             local.is_valid * local.sel_last_and_trans_count,
         );
-        self.sel_hypercube_bus.send(
+        self.sel_hypercube_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             SelHypercubeBusMessage {

@@ -200,8 +200,20 @@ where
                 pv_idx: local.pv_idx,
                 value: local.value,
             },
-            local.is_valid * (AB::F::ONE + AB::F::from_bool(self.continuations_enabled)),
+            local.is_valid,
         );
+        if self.continuations_enabled {
+            self.public_values_bus.send(
+                builder,
+                local.proof_idx,
+                PublicValuesBusMessage {
+                    air_idx: local.air_idx,
+                    pv_idx: local.pv_idx,
+                    value: local.value,
+                },
+                local.is_valid,
+            );
+        }
 
         // Receive transcript read of public values
         self.transcript_bus.receive(

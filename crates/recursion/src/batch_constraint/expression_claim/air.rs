@@ -185,7 +185,7 @@ where
             local.is_first * local.is_valid,
         );
 
-        self.hyperdim_bus.receive(
+        self.hyperdim_bus.lookup_key(
             builder,
             local.proof_idx,
             HyperdimBusMessage {
