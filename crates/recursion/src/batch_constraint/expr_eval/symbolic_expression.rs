@@ -248,6 +248,9 @@ where
                     | NodeKind::VarMain
                     | NodeKind::InteractionMult
                     | NodeKind::InteractionMsgComp => arg_ef0.map(Into::into),
+                    NodeKind::InteractionBusIndex => {
+                        base_to_ext(cached_cols.attrs[0] + AB::Expr::ONE)
+                    }
                 };
                 // deg <= 4
                 value = ext_field_add::<AB::Expr>(
@@ -379,6 +382,9 @@ where
                 );
             }
             let is_mult = enc.get_flag_expr::<AB>(NodeKind::InteractionMult as usize, &flags);
+            let is_bus_index =
+                enc.get_flag_expr::<AB>(NodeKind::InteractionBusIndex as usize, &flags);
+            // is_interaction doesn't include bus index
             let is_interaction = enc.contains_flag::<AB>(
                 &flags,
                 &[NodeKind::InteractionMult, NodeKind::InteractionMsgComp].map(|x| x as usize),
@@ -394,6 +400,18 @@ where
                     value: value.clone(),
                 },
                 is_interaction * cols.is_present,
+            );
+            self.interactions_folding_bus.send(
+                builder,
+                proof_idx,
+                InteractionsFoldingMessage {
+                    air_idx: cached_cols.air_idx.into(),
+                    interaction_idx: cached_cols.node_or_interaction_idx.into(),
+                    is_mult: AB::Expr::ZERO,
+                    idx_in_message: AB::Expr::NEG_ONE,
+                    value: value.clone(),
+                },
+                is_bus_index * cols.is_present,
             );
             self.constraints_folding_bus.send(
                 builder,
@@ -630,6 +648,15 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
                             is_n_neg,
                         }));
                     }
+
+                    args.fill(F::ZERO);
+                    args[0] = F::from_u16(interaction.bus_index + 1);
+                    records.push(Some(Record {
+                        args,
+                        sort_idx,
+                        n_abs,
+                        is_n_neg,
+                    }));
                 }
                 let mut node_idx = constraints.nodes.len();
                 for unused_var in &vk.unused_variables {
@@ -800,6 +827,8 @@ pub(crate) enum NodeKind {
     InteractionMult = 11,
     // Args: (node_idx, idx_in_message)
     InteractionMsgComp = 12,
+    // Args: (node_idx,)
+    InteractionBusIndex = 13,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -992,6 +1021,15 @@ pub(crate) fn build_cached_trace_record(
                     fanout: 0,
                 });
             }
+            records.push(CachedRecord {
+                kind: NodeKind::InteractionBusIndex,
+                air_idx,
+                node_idx: interaction_idx,
+                attrs: [interaction.bus_index as usize, 0, 0],
+                is_constraint: false,
+                constraint_idx: 0,
+                fanout: 0,
+            });
         }
         let mut node_idx = constraints.nodes.len();
         for unused_var in &vk.unused_variables {
@@ -1070,13 +1108,13 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
                 .enumerate()
             {
                 cols.flags[i] = F::from_u32(x);
-                cols.air_idx = F::from_usize(record.air_idx);
-                cols.node_or_interaction_idx = F::from_usize(record.node_idx);
-                cols.attrs = record.attrs.map(F::from_usize);
-                cols.is_constraint = F::from_bool(record.is_constraint);
-                cols.constraint_idx = F::from_usize(record.constraint_idx);
-                cols.fanout = F::from_usize(record.fanout);
             }
+            cols.air_idx = F::from_usize(record.air_idx);
+            cols.node_or_interaction_idx = F::from_usize(record.node_idx);
+            cols.attrs = record.attrs.map(F::from_usize);
+            cols.is_constraint = F::from_bool(record.is_constraint);
+            cols.constraint_idx = F::from_usize(record.constraint_idx);
+            cols.fanout = F::from_usize(record.fanout);
         });
 
     RowMajorMatrix::new(cached_trace, cached_width)

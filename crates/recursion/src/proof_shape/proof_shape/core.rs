@@ -131,7 +131,7 @@ pub(crate) fn compute_air_shape_lookup_counts(
                 + dag
                     .interactions
                     .iter()
-                    .fold(0, |acc, interaction| acc + interaction.message.len() + 1)
+                    .fold(0, |acc, interaction| acc + interaction.message.len() + 2)
         })
         .collect::<Vec<_>>()
 }

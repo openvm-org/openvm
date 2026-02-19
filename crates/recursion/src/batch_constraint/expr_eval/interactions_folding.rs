@@ -187,14 +187,11 @@ where
             .when(not(local.has_interactions))
             .when(local.is_valid)
             .assert_one(next.is_first_in_air);
-        // // If it's last in the interaction and the row is valid, then its value is just bus_idx +
-        // 1 assert_array_eq(
-        //     &mut builder.when(next.is_first_in_message).when(local.is_valid),
-        //     local.value,
-        //     base_to_ext::<AB::Expr>(local.node_idx + AB::Expr::ONE),
-        // );
-        // TODO: receive something from the symbolic expr air to check that it's indeed the bus
-        // index TODO: otherwise receive the value by node_idx
+        // If it's last in the interaction and the row is valid, then it's the bus index
+        builder
+            .when(next.is_first_in_message)
+            .when(local.has_interactions)
+            .assert_one(local.is_bus_index);
 
         // final_acc_num only changes when it's first in message
         assert_array_eq(
@@ -307,6 +304,18 @@ where
                 value: local.value.map(Into::into),
             },
             local.is_first_in_message * local.has_interactions,
+        );
+        self.interaction_bus.receive(
+            builder,
+            local.proof_idx,
+            InteractionsFoldingMessage {
+                air_idx: local.air_idx.into(),
+                interaction_idx: local.interaction_idx.into(),
+                is_mult: AB::Expr::ZERO,
+                idx_in_message: AB::Expr::NEG_ONE,
+                value: local.value.map(Into::into),
+            },
+            local.is_bus_index,
         );
 
         self.transcript_bus.sample_ext(
