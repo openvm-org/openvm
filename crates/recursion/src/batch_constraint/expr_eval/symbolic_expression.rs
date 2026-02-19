@@ -323,7 +323,7 @@ where
                 },
                 cols.is_present,
             );
-            self.hyperdim_bus.receive(
+            self.hyperdim_bus.lookup_key(
                 builder,
                 proof_idx,
                 HyperdimBusMessage {
@@ -356,7 +356,7 @@ where
                     },
                     cols.is_present * is_sel.clone(),
                 );
-                self.sel_hypercube_bus.receive(
+                self.sel_hypercube_bus.lookup_key(
                     builder,
                     proof_idx,
                     SelHypercubeBusMessage {
@@ -364,6 +364,7 @@ where
                         is_first: is_first.clone(),
                         value: arg_ef1.map(Into::into),
                     },
+                    // OK: cols.is_n_neg => cols.is_present
                     is_sel.clone() * (cols.is_present - cols.is_n_neg),
                 );
                 assert_array_eq(
