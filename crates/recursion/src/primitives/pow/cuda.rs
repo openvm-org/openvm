@@ -15,8 +15,8 @@ pub struct PowerCheckerGpuTraceGenerator<const BASE: usize, const N: usize> {
     cpu_checker: Option<Arc<PowerCheckerCpuTraceGenerator<BASE, N>>>,
 }
 
-impl<const BASE: usize, const N: usize> Default for PowerCheckerGpuTraceGenerator<BASE, N> {
-    fn default() -> Self {
+impl<const BASE: usize, const N: usize> PowerCheckerGpuTraceGenerator<BASE, N> {
+    pub fn new(cpu_checker: Option<Arc<PowerCheckerCpuTraceGenerator<BASE, N>>>) -> Self {
         let pow_count = DeviceBuffer::with_capacity(N);
         pow_count.fill_zero().unwrap();
         let range_count = DeviceBuffer::with_capacity(N);
@@ -24,16 +24,13 @@ impl<const BASE: usize, const N: usize> Default for PowerCheckerGpuTraceGenerato
         Self {
             pow_count,
             range_count,
-            cpu_checker: None,
+            cpu_checker,
         }
     }
-}
 
-impl<const BASE: usize, const N: usize> PowerCheckerGpuTraceGenerator<BASE, N> {
     pub fn hybrid() -> Self {
-        let mut s = Self::default();
-        s.cpu_checker = Some(Arc::new(PowerCheckerCpuTraceGenerator::default()));
-        s
+        let cpu_checker = Some(Arc::new(PowerCheckerCpuTraceGenerator::default()));
+        Self::new(cpu_checker)
     }
 
     pub fn pow_count_mut_ptr(&self) -> *mut u32 {

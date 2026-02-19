@@ -34,13 +34,14 @@ use crate::{
         range::RangeCheckerCpuTraceGenerator,
     },
     proof_shape::{
-        AirMetadata, bus::{
+        bus::{
             NumPublicValuesBus, NumPublicValuesMessage, ProofShapePermutationBus,
             ProofShapePermutationMessage, StartingTidxBus, StartingTidxMessage,
-        }
+        },
+        AirMetadata,
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
-    system::{POW_CHECKER_HEIGHT, Preflight},
+    system::{Preflight, POW_CHECKER_HEIGHT},
     tracegen::RowMajorChip,
 };
 
