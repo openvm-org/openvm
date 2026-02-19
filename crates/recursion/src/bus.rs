@@ -428,7 +428,7 @@ pub struct AirShapeBusMessage<T> {
     pub value: T,
 }
 
-define_typed_per_proof_permutation_bus!(AirShapeBus, AirShapeBusMessage);
+define_typed_per_proof_lookup_bus!(AirShapeBus, AirShapeBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -455,7 +455,7 @@ pub struct LiftedHeightsBusMessage<T> {
     pub log_lifted_height: T,
 }
 
-define_typed_per_proof_permutation_bus!(LiftedHeightsBus, LiftedHeightsBusMessage);
+define_typed_per_proof_lookup_bus!(LiftedHeightsBus, LiftedHeightsBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -527,7 +527,7 @@ pub struct SelUniBusMessage<T> {
     pub value: [T; D_EF],
 }
 
-define_typed_per_proof_permutation_bus!(SelUniBus, SelUniBusMessage);
+define_typed_per_proof_lookup_bus!(SelUniBus, SelUniBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
