@@ -122,7 +122,7 @@ pub struct WhirFinalPolyBusMessage<T> {
     pub coeff: [T; D_EF],
 }
 
-define_typed_per_proof_permutation_bus!(WhirFinalPolyBus, WhirFinalPolyBusMessage);
+define_typed_per_proof_lookup_bus!(WhirFinalPolyBus, WhirFinalPolyBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
