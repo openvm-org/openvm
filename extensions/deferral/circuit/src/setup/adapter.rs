@@ -23,9 +23,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_field::PrimeField32;
 
-///////////////////////////////////////////////////////////////////////////////////////
-/// AIR
-///////////////////////////////////////////////////////////////////////////////////////
+// ========================= AIR ==============================
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -96,9 +94,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralSetupAdapterAir {
     }
 }
 
-///////////////////////////////////////////////////////////////////////////////////////
-/// EXECUTION + TRACEGEN
-///////////////////////////////////////////////////////////////////////////////////////
+// ========================= EXECUTION + TRACEGEN ==============================
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
@@ -133,7 +129,6 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralSetupAdapterExecutor {
         _instruction: &Instruction<F>,
         _record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
-        ()
     }
 
     fn write(

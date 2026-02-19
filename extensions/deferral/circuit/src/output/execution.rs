@@ -157,6 +157,9 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     let (output_commit, output_len) = split_output(output_key);
 
     let output_len_val = u32::from_le_bytes(output_len) as usize;
+
+    // Bytes are sponge-hashed and constrained against output_commit. Thhe
+    // sponge rate is DIGEST_SIZE.
     let num_rows = output_len_val / DIGEST_SIZE;
     debug_assert_eq!(output_len_val % DIGEST_SIZE, 0);
 
@@ -207,7 +210,8 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
         .on_height_change(pre_compute.chip_idx as usize, height);
 
     // The Poseidon2 peripheral chip's height also increases as a result of
-    // this opcode's execution
+    // this opcode's execution. Computing an output commit from the raw output
+    // takes height Poseidon2 compressions.
     exec_state.ctx.on_height_change(
         pre_compute.chip_idx as usize + (POSEIDON2_AIR_IDX - OUTPUT_AIR_IDX),
         height,

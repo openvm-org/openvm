@@ -130,7 +130,7 @@ where
             row_idx += 1;
         }
 
-        while let Some(row) = rows.next() {
+        for row in rows {
             let cols: &mut DeferralCircuitCountCols<Val<SC>> = (*row).borrow_mut();
             cols.row_idx = Val::<SC>::from_u32(row_idx);
             row_idx += 1;

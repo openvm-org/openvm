@@ -87,9 +87,8 @@ impl<'a> CustomBorrow<'a, DeferralOutputRecordMut<'a>, DeferralOutputLayout> for
         // SAFETY:
         // - The layout guarantees rest has sufficient length for write data
         // - There are DIGEST_SIZE bytes written per row
-        let (write_bytes, rest) = unsafe {
-            rest.split_at_mut_unchecked((layout.metadata.num_rows as usize) * DIGEST_SIZE)
-        };
+        let (write_bytes, rest) =
+            unsafe { rest.split_at_mut_unchecked(layout.metadata.num_rows * DIGEST_SIZE) };
 
         // SAFETY:
         // - Valid mutable slice from the previous split
@@ -118,12 +117,11 @@ impl<'a> CustomBorrow<'a, DeferralOutputRecordMut<'a>, DeferralOutputLayout> for
 
 impl<'a> SizedRecord<DeferralOutputLayout> for DeferralOutputRecordMut<'a> {
     fn size(layout: &DeferralOutputLayout) -> usize {
-        let num_rows = layout.metadata.num_rows as usize;
         let mut total_len = size_of::<DeferralOutputRecordHeader>();
-        total_len += num_rows * DIGEST_SIZE;
+        total_len += layout.metadata.num_rows * DIGEST_SIZE;
         total_len =
             total_len.next_multiple_of(align_of::<MemoryWriteBytesAuxRecord<DIGEST_SIZE>>());
-        total_len += num_rows * size_of::<MemoryWriteBytesAuxRecord<DIGEST_SIZE>>();
+        total_len += layout.metadata.num_rows * size_of::<MemoryWriteBytesAuxRecord<DIGEST_SIZE>>();
         total_len
     }
 

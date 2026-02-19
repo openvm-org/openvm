@@ -31,11 +31,10 @@ impl<F: PrimeField32> DeferralSetupExecutor<F> {
     ) -> Result<(), StaticProgramError> {
         let Instruction { a, d, opcode, .. } = inst;
 
-        if opcode.local_opcode_idx(DeferralOpcode::CLASS_OFFSET) != DeferralOpcode::SETUP as usize {
-            return Err(StaticProgramError::InvalidInstruction(pc));
-        } else if a.as_canonical_u32() != self.adapter.native_start_ptr {
-            return Err(StaticProgramError::InvalidInstruction(pc));
-        } else if d.as_canonical_u32() != NATIVE_AS {
+        if opcode.local_opcode_idx(DeferralOpcode::CLASS_OFFSET) != DeferralOpcode::SETUP as usize
+            || a.as_canonical_u32() != self.adapter.native_start_ptr
+            || d.as_canonical_u32() != NATIVE_AS
+        {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 

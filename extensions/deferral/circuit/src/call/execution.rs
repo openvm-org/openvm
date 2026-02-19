@@ -228,7 +228,8 @@ unsafe fn execute_e2_impl<F: VmField, CTX: MeteredExecutionCtxTrait>(
         .on_height_change(pre_compute.chip_idx as usize, 1);
 
     // The Poseidon2 peripheral chip's height also increases as a result of
-    // this opcode's execution
+    // this opcode's execution. In DEFER_CALL, both the input and output
+    // hash accumulator for some deferral circuit are updated.
     exec_state.ctx.on_height_change(
         pre_compute.chip_idx as usize + (POSEIDON2_AIR_IDX - CALL_AIR_IDX),
         2,
