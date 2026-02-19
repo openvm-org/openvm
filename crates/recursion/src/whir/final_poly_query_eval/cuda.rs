@@ -63,6 +63,7 @@ impl ModuleChip<GpuBackend> for FinalPolyQueryEvalGpuTraceGenerator {
                 num_valid_rows,
                 height,
                 &blob.final_poly_query_eval_records,
+                &blob.final_poly_query_eval_gammas,
                 params.num_whir_rounds(),
                 rows_per_proof,
                 &round_offsets_d,
