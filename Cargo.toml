@@ -178,6 +178,7 @@ cargo-openvm = { version = "2.0.0", path = "crates/cli", default-features = fals
 openvm-rv32im-circuit = { version = "2.0.0", path = "extensions/rv32im/circuit", default-features = false }
 openvm-rv32im-transpiler = { version = "2.0.0", path = "extensions/rv32im/transpiler", default-features = false }
 openvm-rv32im-guest = { version = "2.0.0", path = "extensions/rv32im/guest", default-features = false }
+openvm-rv64im-guest = { version = "2.0.0", path = "extensions/rv64im/guest", default-features = false }
 openvm-rv32-adapters = { version = "2.0.0", path = "extensions/rv32-adapters", default-features = false }
 openvm-keccak256-circuit = { version = "2.0.0", path = "extensions/keccak256/circuit", default-features = false }
 openvm-keccak256-transpiler = { version = "2.0.0", path = "extensions/keccak256/transpiler", default-features = false }
