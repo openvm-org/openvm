@@ -29,6 +29,7 @@ pub(crate) struct ProofShapePerProof {
 pub(crate) struct ProofShapeTracegenInputs {
     num_airs: usize,
     l_skip: usize,
+    max_interaction_count: u32,
     max_cached: usize,
     min_cached_idx: usize,
     pre_hash: Digest,
@@ -111,6 +112,7 @@ impl ModuleChip<GpuBackend> for ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
         let inputs = ProofShapeTracegenInputs {
             num_airs,
             l_skip: vk_gpu.system_params.l_skip,
+            max_interaction_count: vk_gpu.system_params.logup.max_interaction_count,
             max_cached,
             min_cached_idx,
             pre_hash: vk_gpu.pre_hash,
