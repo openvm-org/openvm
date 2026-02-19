@@ -1207,7 +1207,7 @@ pub(in crate::batch_constraint) mod cuda {
                     .map(|interaction| interaction.message.len())
                     .sum();
                 let rows_for_air = constraints.nodes.len()
-                    + vk.symbolic_constraints.interactions.len()
+                    + 2 * vk.symbolic_constraints.interactions.len()
                     + interaction_message_rows
                     + vk.unused_variables.len();
                 total_rows += rows_for_air;
