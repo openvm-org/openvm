@@ -27,7 +27,10 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use crate::{
     count::bus::DeferralCircuitCountBus,
     poseidon2::bus::DeferralPoseidon2Bus,
-    utils::{byte_commit_to_f, bytes_to_f, combine_output, COMMIT_NUM_BYTES},
+    utils::{
+        byte_commit_to_f, bytes_to_f, combine_output, split_memory_ops, COMMIT_NUM_BYTES,
+        DIGEST_MEMORY_OPS, MEMORY_OP_SIZE, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+    },
 };
 
 #[repr(C)]
@@ -57,12 +60,12 @@ pub struct DeferralOutputCols<T> {
     // constrained to output_commit.
     pub output_commit: [T; COMMIT_NUM_BYTES],
     pub output_len: [T; RV32_REGISTER_NUM_LIMBS],
-    pub output_commit_and_len_aux: MemoryReadAuxCols<T>,
+    pub output_commit_and_len_aux: [MemoryReadAuxCols<T>; OUTPUT_TOTAL_MEMORY_OPS],
 
     // Bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
     // written to memory and auxiliary columns
     pub write_bytes: [T; DIGEST_SIZE],
-    pub write_bytes_aux: MemoryWriteAuxCols<T, DIGEST_SIZE>,
+    pub write_bytes_aux: [MemoryWriteAuxCols<T, MEMORY_OP_SIZE>; DIGEST_MEMORY_OPS],
 
     // Running hash of this section's write_bytes, constrained to be output_commit;
     // note the initial state should be [deferral_idx, 0, ..., 0]
@@ -221,27 +224,53 @@ where
         let input_ptr = bytes_to_f(&local.rs_val);
         let output_ptr = bytes_to_f(&local.rd_val);
         let output_commit_and_len = combine_output(local.output_commit, local.output_len);
-
-        self.memory_bridge
-            .read(
-                MemoryAddress::new(e.clone(), input_ptr),
+        let output_commit_and_len_chunks =
+            split_memory_ops::<_, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS>(
                 output_commit_and_len,
-                local.from_state.timestamp + AB::Expr::TWO,
-                &local.output_commit_and_len_aux,
-            )
-            .eval(builder, local.is_first);
+            );
 
-        self.memory_bridge
-            .write(
-                MemoryAddress::new(
-                    e.clone(),
-                    output_ptr + (local.section_idx * AB::Expr::from_usize(DIGEST_SIZE)),
-                ),
-                local.write_bytes,
-                local.from_state.timestamp + AB::Expr::from_u8(3) + local.section_idx,
-                &local.write_bytes_aux,
-            )
-            .eval(builder, local.is_valid);
+        for (chunk_idx, (data, aux)) in output_commit_and_len_chunks
+            .into_iter()
+            .zip(&local.output_commit_and_len_aux)
+            .enumerate()
+        {
+            self.memory_bridge
+                .read(
+                    MemoryAddress::new(
+                        e.clone(),
+                        input_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_OP_SIZE),
+                    ),
+                    data,
+                    local.from_state.timestamp + AB::Expr::from_usize(2 + chunk_idx),
+                    aux,
+                )
+                .eval(builder, local.is_first);
+        }
+
+        let write_bytes_chunks =
+            split_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(local.write_bytes);
+
+        for (chunk_idx, (data, aux)) in write_bytes_chunks
+            .into_iter()
+            .zip(&local.write_bytes_aux)
+            .enumerate()
+        {
+            self.memory_bridge
+                .write(
+                    MemoryAddress::new(
+                        e.clone(),
+                        output_ptr.clone()
+                            + (local.section_idx.into() * AB::Expr::from_usize(DIGEST_SIZE))
+                            + AB::Expr::from_usize(chunk_idx * MEMORY_OP_SIZE),
+                    ),
+                    data,
+                    local.from_state.timestamp
+                        + AB::Expr::from_usize(2 + OUTPUT_TOTAL_MEMORY_OPS + chunk_idx)
+                        + (local.section_idx.into() * AB::Expr::from_usize(DIGEST_MEMORY_OPS)),
+                    aux,
+                )
+                .eval(builder, local.is_valid);
+        }
 
         // Evaluate the execution interaction. Because a single opcode spans many
         // rows, we only execute this on the last one.
@@ -256,7 +285,8 @@ where
                     e,
                 ],
                 local.from_state,
-                local.section_idx + AB::Expr::from_u8(4),
+                (local.section_idx.into() * AB::Expr::from_usize(DIGEST_MEMORY_OPS))
+                    + AB::Expr::from_usize(OUTPUT_TOTAL_MEMORY_OPS + DIGEST_MEMORY_OPS + 2),
                 (DEFAULT_PC_STEP, None),
             )
             .eval(builder, local.is_valid * is_last_or_invalid);

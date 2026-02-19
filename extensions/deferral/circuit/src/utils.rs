@@ -9,6 +9,39 @@ pub const F_NUM_BYTES: usize = 4;
 pub const COMMIT_NUM_BYTES: usize = DIGEST_SIZE * F_NUM_BYTES;
 pub const OUTPUT_TOTAL_BYTES: usize = F_NUM_BYTES + COMMIT_NUM_BYTES;
 
+pub const MEMORY_OP_SIZE: usize = 4;
+pub const DIGEST_MEMORY_OPS: usize = num_memory_ops(DIGEST_SIZE);
+pub const COMMIT_MEMORY_OPS: usize = num_memory_ops(COMMIT_NUM_BYTES);
+pub const OUTPUT_TOTAL_MEMORY_OPS: usize = num_memory_ops(OUTPUT_TOTAL_BYTES);
+
+#[inline(always)]
+pub const fn num_memory_ops(total_cells: usize) -> usize {
+    assert!(total_cells.is_multiple_of(MEMORY_OP_SIZE));
+    total_cells / MEMORY_OP_SIZE
+}
+
+pub fn split_memory_ops<T, const TOTAL_CELLS: usize, const NUM_OPS: usize>(
+    data: [T; TOTAL_CELLS],
+) -> [[T; MEMORY_OP_SIZE]; NUM_OPS] {
+    assert_eq!(TOTAL_CELLS, NUM_OPS * MEMORY_OP_SIZE);
+    let mut it = data.into_iter();
+    from_fn(|_| from_fn(|_| it.next().unwrap()))
+}
+
+pub fn join_memory_ops<T, const TOTAL_CELLS: usize, const NUM_OPS: usize>(
+    chunks: [[T; MEMORY_OP_SIZE]; NUM_OPS],
+) -> [T; TOTAL_CELLS] {
+    assert_eq!(TOTAL_CELLS, NUM_OPS * MEMORY_OP_SIZE);
+    chunks.into_iter().flatten().collect_array().unwrap()
+}
+
+pub fn memory_op_chunk<T: Clone>(data: &[T], chunk_idx: usize) -> [T; MEMORY_OP_SIZE] {
+    debug_assert!(data.len().is_multiple_of(MEMORY_OP_SIZE));
+    let start = chunk_idx * MEMORY_OP_SIZE;
+    debug_assert!(start + MEMORY_OP_SIZE <= data.len());
+    from_fn(|i| data[start + i].clone())
+}
+
 pub fn byte_commit_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(
     byte_commit: &[T],
 ) -> [F; DIGEST_SIZE] {

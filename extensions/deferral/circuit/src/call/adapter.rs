@@ -1,4 +1,7 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    array::from_fn,
+    borrow::{Borrow, BorrowMut},
+};
 
 use openvm_circuit::{
     arch::{
@@ -35,7 +38,11 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use crate::{
     call::{DeferralCallReads, DeferralCallWrites},
-    utils::{bytes_to_f, combine_output, OUTPUT_TOTAL_BYTES},
+    utils::{
+        bytes_to_f, combine_output, join_memory_ops, memory_op_chunk, split_memory_ops,
+        COMMIT_MEMORY_OPS, COMMIT_NUM_BYTES, DIGEST_MEMORY_OPS, MEMORY_OP_SIZE, OUTPUT_TOTAL_BYTES,
+        OUTPUT_TOTAL_MEMORY_OPS,
+    },
 };
 
 // ========================= AIR ==============================
@@ -62,14 +69,14 @@ pub struct DeferralCallAdapterCols<T> {
     pub rs_aux: MemoryReadAuxCols<T>,
 
     // Read auxiliary columns
-    pub input_commit_aux: MemoryReadAuxCols<T>,
-    pub old_input_acc_aux: MemoryReadAuxCols<T>,
-    pub old_output_acc_aux: MemoryReadAuxCols<T>,
+    pub input_commit_aux: [MemoryReadAuxCols<T>; COMMIT_MEMORY_OPS],
+    pub old_input_acc_aux: [MemoryReadAuxCols<T>; DIGEST_MEMORY_OPS],
+    pub old_output_acc_aux: [MemoryReadAuxCols<T>; DIGEST_MEMORY_OPS],
 
     // Write auxiliary columns
-    pub output_commit_and_len_aux: MemoryWriteAuxCols<T, OUTPUT_TOTAL_BYTES>,
-    pub new_input_acc_aux: MemoryWriteAuxCols<T, DIGEST_SIZE>,
-    pub new_output_acc_aux: MemoryWriteAuxCols<T, DIGEST_SIZE>,
+    pub output_commit_and_len_aux: [MemoryWriteAuxCols<T, MEMORY_OP_SIZE>; OUTPUT_TOTAL_MEMORY_OPS],
+    pub new_input_acc_aux: [MemoryWriteAuxCols<T, MEMORY_OP_SIZE>; DIGEST_MEMORY_OPS],
+    pub new_output_acc_aux: [MemoryWriteAuxCols<T, MEMORY_OP_SIZE>; DIGEST_MEMORY_OPS],
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
@@ -140,63 +147,140 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             + (deferral_idx.clone() * AB::Expr::TWO + AB::Expr::ONE) * digest_size;
         let output_acc_ptr = input_acc_ptr.clone() + digest_size;
 
-        self.memory_bridge
-            .read(
-                MemoryAddress::new(e.clone(), input_ptr),
-                ctx.reads.input_commit.clone(),
-                timestamp_pp(),
-                &cols.input_commit_aux,
-            )
-            .eval(builder, ctx.instruction.is_valid.clone());
+        let DeferralCallReads {
+            input_commit,
+            old_input_acc,
+            old_output_acc,
+        } = ctx.reads;
+        let DeferralCallWrites {
+            output_commit,
+            output_len,
+            new_input_acc,
+            new_output_acc,
+        } = ctx.writes;
 
-        self.memory_bridge
-            .read(
-                MemoryAddress::new(native_as.clone(), input_acc_ptr.clone()),
-                ctx.reads.old_input_acc.clone(),
-                timestamp_pp(),
-                &cols.old_input_acc_aux,
-            )
-            .eval(builder, ctx.instruction.is_valid.clone());
+        let input_commit_chunks =
+            split_memory_ops::<_, COMMIT_NUM_BYTES, COMMIT_MEMORY_OPS>(input_commit);
+        for (chunk_idx, (data, aux)) in input_commit_chunks
+            .into_iter()
+            .zip(&cols.input_commit_aux)
+            .enumerate()
+        {
+            self.memory_bridge
+                .read(
+                    MemoryAddress::new(
+                        e.clone(),
+                        input_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_OP_SIZE),
+                    ),
+                    data,
+                    timestamp_pp(),
+                    aux,
+                )
+                .eval(builder, ctx.instruction.is_valid.clone());
+        }
 
-        self.memory_bridge
-            .read(
-                MemoryAddress::new(native_as.clone(), output_acc_ptr.clone()),
-                ctx.reads.old_output_acc.clone(),
-                timestamp_pp(),
-                &cols.old_output_acc_aux,
-            )
-            .eval(builder, ctx.instruction.is_valid.clone());
+        let old_input_acc_chunks =
+            split_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(old_input_acc);
+        for (chunk_idx, (data, aux)) in old_input_acc_chunks
+            .into_iter()
+            .zip(&cols.old_input_acc_aux)
+            .enumerate()
+        {
+            self.memory_bridge
+                .read(
+                    MemoryAddress::new(
+                        native_as.clone(),
+                        input_acc_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_OP_SIZE),
+                    ),
+                    data,
+                    timestamp_pp(),
+                    aux,
+                )
+                .eval(builder, ctx.instruction.is_valid.clone());
+        }
 
-        let output_commit_and_len = combine_output(
-            ctx.writes.output_commit.clone(),
-            ctx.writes.output_len.clone(),
-        );
-        self.memory_bridge
-            .write(
-                MemoryAddress::new(e.clone(), output_ptr),
+        let old_output_acc_chunks =
+            split_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(old_output_acc);
+        for (chunk_idx, (data, aux)) in old_output_acc_chunks
+            .into_iter()
+            .zip(&cols.old_output_acc_aux)
+            .enumerate()
+        {
+            self.memory_bridge
+                .read(
+                    MemoryAddress::new(
+                        native_as.clone(),
+                        output_acc_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_OP_SIZE),
+                    ),
+                    data,
+                    timestamp_pp(),
+                    aux,
+                )
+                .eval(builder, ctx.instruction.is_valid.clone());
+        }
+
+        let output_commit_and_len = combine_output(output_commit, output_len);
+        let output_commit_and_len_chunks =
+            split_memory_ops::<_, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS>(
                 output_commit_and_len,
-                timestamp_pp(),
-                &cols.output_commit_and_len_aux,
-            )
-            .eval(builder, ctx.instruction.is_valid.clone());
+            );
+        for (chunk_idx, (data, aux)) in output_commit_and_len_chunks
+            .into_iter()
+            .zip(&cols.output_commit_and_len_aux)
+            .enumerate()
+        {
+            self.memory_bridge
+                .write(
+                    MemoryAddress::new(
+                        e.clone(),
+                        output_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_OP_SIZE),
+                    ),
+                    data,
+                    timestamp_pp(),
+                    aux,
+                )
+                .eval(builder, ctx.instruction.is_valid.clone());
+        }
 
-        self.memory_bridge
-            .write(
-                MemoryAddress::new(native_as.clone(), input_acc_ptr),
-                ctx.writes.new_input_acc.clone(),
-                timestamp_pp(),
-                &cols.new_input_acc_aux,
-            )
-            .eval(builder, ctx.instruction.is_valid.clone());
+        let new_input_acc_chunks =
+            split_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(new_input_acc);
+        for (chunk_idx, (data, aux)) in new_input_acc_chunks
+            .into_iter()
+            .zip(&cols.new_input_acc_aux)
+            .enumerate()
+        {
+            self.memory_bridge
+                .write(
+                    MemoryAddress::new(
+                        native_as.clone(),
+                        input_acc_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_OP_SIZE),
+                    ),
+                    data,
+                    timestamp_pp(),
+                    aux,
+                )
+                .eval(builder, ctx.instruction.is_valid.clone());
+        }
 
-        self.memory_bridge
-            .write(
-                MemoryAddress::new(native_as.clone(), output_acc_ptr),
-                ctx.writes.new_output_acc.clone(),
-                timestamp_pp(),
-                &cols.new_output_acc_aux,
-            )
-            .eval(builder, ctx.instruction.is_valid.clone());
+        let new_output_acc_chunks =
+            split_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(new_output_acc);
+        for (chunk_idx, (data, aux)) in new_output_acc_chunks
+            .into_iter()
+            .zip(&cols.new_output_acc_aux)
+            .enumerate()
+        {
+            self.memory_bridge
+                .write(
+                    MemoryAddress::new(
+                        native_as.clone(),
+                        output_acc_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_OP_SIZE),
+                    ),
+                    data,
+                    timestamp_pp(),
+                    aux,
+                )
+                .eval(builder, ctx.instruction.is_valid.clone());
+        }
 
         self.execution_bridge
             .execute_and_increment_or_set_pc(
@@ -238,14 +322,15 @@ pub struct DeferralCallAdapterRecord<F> {
     pub rs_aux: MemoryReadAuxRecord,
 
     // Read auxiliary records
-    pub input_commit_aux: MemoryReadAuxRecord,
-    pub old_input_acc_aux: MemoryReadAuxRecord,
-    pub old_output_acc_aux: MemoryReadAuxRecord,
+    pub input_commit_aux: [MemoryReadAuxRecord; COMMIT_MEMORY_OPS],
+    pub old_input_acc_aux: [MemoryReadAuxRecord; DIGEST_MEMORY_OPS],
+    pub old_output_acc_aux: [MemoryReadAuxRecord; DIGEST_MEMORY_OPS],
 
     // Write auxiliary records
-    pub output_commit_and_len_aux: MemoryWriteBytesAuxRecord<OUTPUT_TOTAL_BYTES>,
-    pub new_input_acc_aux: MemoryWriteAuxRecord<F, DIGEST_SIZE>,
-    pub new_output_acc_aux: MemoryWriteAuxRecord<F, DIGEST_SIZE>,
+    pub output_commit_and_len_aux:
+        [MemoryWriteBytesAuxRecord<MEMORY_OP_SIZE>; OUTPUT_TOTAL_MEMORY_OPS],
+    pub new_input_acc_aux: [MemoryWriteAuxRecord<F, MEMORY_OP_SIZE>; DIGEST_MEMORY_OPS],
+    pub new_output_acc_aux: [MemoryWriteAuxRecord<F, MEMORY_OP_SIZE>; DIGEST_MEMORY_OPS],
 }
 
 #[derive(derive_new::new, Clone, Copy)]
@@ -292,27 +377,36 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
             &mut record.rs_aux.prev_timestamp,
         );
 
-        let input_commit = tracing_read(
-            memory,
-            e.as_canonical_u32(),
-            u32::from_le_bytes(record.rs_val),
-            &mut record.input_commit_aux.prev_timestamp,
-        );
+        let input_commit_chunks: [[u8; MEMORY_OP_SIZE]; COMMIT_MEMORY_OPS] = from_fn(|i| {
+            tracing_read(
+                memory,
+                e.as_canonical_u32(),
+                u32::from_le_bytes(record.rs_val) + (i * MEMORY_OP_SIZE) as u32,
+                &mut record.input_commit_aux[i].prev_timestamp,
+            )
+        });
+        let input_commit = join_memory_ops(input_commit_chunks);
 
         let deferral_idx = c.as_canonical_u32();
         let input_acc_ptr = self.native_start_ptr + (2 * deferral_idx + 1) * (DIGEST_SIZE as u32);
         let output_acc_ptr = input_acc_ptr + (DIGEST_SIZE as u32);
 
-        let old_input_acc = tracing_read_native(
-            memory,
-            input_acc_ptr,
-            &mut record.old_input_acc_aux.prev_timestamp,
-        );
-        let old_output_acc = tracing_read_native(
-            memory,
-            output_acc_ptr,
-            &mut record.old_output_acc_aux.prev_timestamp,
-        );
+        let old_input_acc_chunks: [[F; MEMORY_OP_SIZE]; DIGEST_MEMORY_OPS] = from_fn(|i| {
+            tracing_read_native(
+                memory,
+                input_acc_ptr + (i * MEMORY_OP_SIZE) as u32,
+                &mut record.old_input_acc_aux[i].prev_timestamp,
+            )
+        });
+        let old_output_acc_chunks: [[F; MEMORY_OP_SIZE]; DIGEST_MEMORY_OPS] = from_fn(|i| {
+            tracing_read_native(
+                memory,
+                output_acc_ptr + (i * MEMORY_OP_SIZE) as u32,
+                &mut record.old_output_acc_aux[i].prev_timestamp,
+            )
+        });
+        let old_input_acc = join_memory_ops(old_input_acc_chunks);
+        let old_output_acc = join_memory_ops(old_output_acc_chunks);
 
         DeferralCallReads {
             input_commit,
@@ -332,34 +426,40 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
         debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
         let output_commit_and_len = combine_output(data.output_commit, data.output_len);
-        tracing_write(
-            memory,
-            e.as_canonical_u32(),
-            u32::from_le_bytes(record.rd_val),
-            output_commit_and_len,
-            &mut record.output_commit_and_len_aux.prev_timestamp,
-            &mut record.output_commit_and_len_aux.prev_data,
-        );
+        for chunk_idx in 0..OUTPUT_TOTAL_MEMORY_OPS {
+            tracing_write(
+                memory,
+                e.as_canonical_u32(),
+                u32::from_le_bytes(record.rd_val) + (chunk_idx * MEMORY_OP_SIZE) as u32,
+                memory_op_chunk(&output_commit_and_len, chunk_idx),
+                &mut record.output_commit_and_len_aux[chunk_idx].prev_timestamp,
+                &mut record.output_commit_and_len_aux[chunk_idx].prev_data,
+            );
+        }
 
         let deferral_idx = c.as_canonical_u32();
         let input_acc_ptr = self.native_start_ptr + (2 * deferral_idx + 1) * (DIGEST_SIZE as u32);
         let output_acc_ptr = input_acc_ptr + (DIGEST_SIZE as u32);
 
-        tracing_write_native(
-            memory,
-            input_acc_ptr,
-            data.new_input_acc,
-            &mut record.new_input_acc_aux.prev_timestamp,
-            &mut record.new_input_acc_aux.prev_data,
-        );
+        for chunk_idx in 0..DIGEST_MEMORY_OPS {
+            tracing_write_native(
+                memory,
+                input_acc_ptr + (chunk_idx * MEMORY_OP_SIZE) as u32,
+                memory_op_chunk(&data.new_input_acc, chunk_idx),
+                &mut record.new_input_acc_aux[chunk_idx].prev_timestamp,
+                &mut record.new_input_acc_aux[chunk_idx].prev_data,
+            );
+        }
 
-        tracing_write_native(
-            memory,
-            output_acc_ptr,
-            data.new_output_acc,
-            &mut record.new_output_acc_aux.prev_timestamp,
-            &mut record.new_output_acc_aux.prev_data,
-        );
+        for chunk_idx in 0..DIGEST_MEMORY_OPS {
+            tracing_write_native(
+                memory,
+                output_acc_ptr + (chunk_idx * MEMORY_OP_SIZE) as u32,
+                memory_op_chunk(&data.new_output_acc, chunk_idx),
+                &mut record.new_output_acc_aux[chunk_idx].prev_timestamp,
+                &mut record.new_output_acc_aux[chunk_idx].prev_data,
+            );
+        }
     }
 }
 
@@ -375,37 +475,49 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
         let adapter_row: &mut DeferralCallAdapterCols<F> = adapter_row.borrow_mut();
 
         // Writing in reverse order to avoid overwriting the record
-        mem_helper.fill(
-            record.new_output_acc_aux.prev_timestamp,
-            record.new_output_acc_aux.prev_timestamp + 1,
-            adapter_row.new_output_acc_aux.as_mut(),
-        );
-        mem_helper.fill(
-            record.new_input_acc_aux.prev_timestamp,
-            record.new_input_acc_aux.prev_timestamp + 1,
-            adapter_row.new_input_acc_aux.as_mut(),
-        );
-        mem_helper.fill(
-            record.output_commit_and_len_aux.prev_timestamp,
-            record.output_commit_and_len_aux.prev_timestamp + 1,
-            adapter_row.output_commit_and_len_aux.as_mut(),
-        );
+        for chunk_idx in (0..DIGEST_MEMORY_OPS).rev() {
+            mem_helper.fill(
+                record.new_output_acc_aux[chunk_idx].prev_timestamp,
+                record.new_output_acc_aux[chunk_idx].prev_timestamp + 1,
+                adapter_row.new_output_acc_aux[chunk_idx].as_mut(),
+            );
+        }
+        for chunk_idx in (0..DIGEST_MEMORY_OPS).rev() {
+            mem_helper.fill(
+                record.new_input_acc_aux[chunk_idx].prev_timestamp,
+                record.new_input_acc_aux[chunk_idx].prev_timestamp + 1,
+                adapter_row.new_input_acc_aux[chunk_idx].as_mut(),
+            );
+        }
+        for chunk_idx in (0..OUTPUT_TOTAL_MEMORY_OPS).rev() {
+            mem_helper.fill(
+                record.output_commit_and_len_aux[chunk_idx].prev_timestamp,
+                record.output_commit_and_len_aux[chunk_idx].prev_timestamp + 1,
+                adapter_row.output_commit_and_len_aux[chunk_idx].as_mut(),
+            );
+        }
 
-        mem_helper.fill(
-            record.old_output_acc_aux.prev_timestamp,
-            record.old_output_acc_aux.prev_timestamp + 1,
-            adapter_row.old_output_acc_aux.as_mut(),
-        );
-        mem_helper.fill(
-            record.old_input_acc_aux.prev_timestamp,
-            record.old_input_acc_aux.prev_timestamp + 1,
-            adapter_row.old_input_acc_aux.as_mut(),
-        );
-        mem_helper.fill(
-            record.input_commit_aux.prev_timestamp,
-            record.input_commit_aux.prev_timestamp + 1,
-            adapter_row.input_commit_aux.as_mut(),
-        );
+        for chunk_idx in (0..DIGEST_MEMORY_OPS).rev() {
+            mem_helper.fill(
+                record.old_output_acc_aux[chunk_idx].prev_timestamp,
+                record.old_output_acc_aux[chunk_idx].prev_timestamp + 1,
+                adapter_row.old_output_acc_aux[chunk_idx].as_mut(),
+            );
+        }
+        for chunk_idx in (0..DIGEST_MEMORY_OPS).rev() {
+            mem_helper.fill(
+                record.old_input_acc_aux[chunk_idx].prev_timestamp,
+                record.old_input_acc_aux[chunk_idx].prev_timestamp + 1,
+                adapter_row.old_input_acc_aux[chunk_idx].as_mut(),
+            );
+        }
+        for chunk_idx in (0..COMMIT_MEMORY_OPS).rev() {
+            mem_helper.fill(
+                record.input_commit_aux[chunk_idx].prev_timestamp,
+                record.input_commit_aux[chunk_idx].prev_timestamp + 1,
+                adapter_row.input_commit_aux[chunk_idx].as_mut(),
+            );
+        }
 
         mem_helper.fill(
             record.rs_aux.prev_timestamp,

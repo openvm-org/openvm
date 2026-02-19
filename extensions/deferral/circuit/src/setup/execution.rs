@@ -13,6 +13,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use super::DeferralSetupExecutor;
+use crate::utils::{memory_op_chunk, DIGEST_MEMORY_OPS, MEMORY_OP_SIZE};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -164,11 +165,13 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &DeferralSetupPrecompute<F>,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    exec_state.vm_write::<F, DIGEST_SIZE>(
-        NATIVE_AS,
-        pre_compute.native_start_ptr,
-        &pre_compute.expected_vks_commit,
-    );
+    for chunk_idx in 0..DIGEST_MEMORY_OPS {
+        exec_state.vm_write::<F, MEMORY_OP_SIZE>(
+            NATIVE_AS,
+            pre_compute.native_start_ptr + (chunk_idx * MEMORY_OP_SIZE) as u32,
+            &memory_op_chunk(&pre_compute.expected_vks_commit, chunk_idx),
+        );
+    }
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }

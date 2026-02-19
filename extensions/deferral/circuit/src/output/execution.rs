@@ -18,7 +18,10 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use super::DeferralOutputExecutor;
 use crate::{
-    utils::{split_output, OUTPUT_TOTAL_BYTES},
+    utils::{
+        join_memory_ops, memory_op_chunk, split_output, DIGEST_MEMORY_OPS, MEMORY_OP_SIZE,
+        OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+    },
     OUTPUT_AIR_IDX, POSEIDON2_AIR_IDX,
 };
 
@@ -153,7 +156,9 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 ) -> u32 {
     let output_ptr = u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, pre_compute.rd_ptr));
     let input_ptr = u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, pre_compute.rs_ptr));
-    let output_key = exec_state.vm_read::<u8, OUTPUT_TOTAL_BYTES>(RV32_MEMORY_AS, input_ptr);
+    let output_key_chunks: [[u8; MEMORY_OP_SIZE]; OUTPUT_TOTAL_MEMORY_OPS] =
+        from_fn(|i| exec_state.vm_read(RV32_MEMORY_AS, input_ptr + (i * MEMORY_OP_SIZE) as u32));
+    let output_key: [u8; OUTPUT_TOTAL_BYTES] = join_memory_ops(output_key_chunks);
     let (output_commit, output_len) = split_output(output_key);
 
     let output_len_val = u32::from_le_bytes(output_len) as usize;
@@ -161,7 +166,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     // Bytes are sponge-hashed and constrained against output_commit. Thhe
     // sponge rate is DIGEST_SIZE.
     let num_rows = output_len_val / DIGEST_SIZE;
-    debug_assert_eq!(output_len_val % DIGEST_SIZE, 0);
+    debug_assert!(output_len_val.is_multiple_of(DIGEST_SIZE));
 
     let output_raw = exec_state.streams.deferrals[pre_compute.deferral_idx as usize]
         .get_output(&output_commit.to_vec())
@@ -170,11 +175,13 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 
     for (row_idx, output_chunk) in output_raw.chunks_exact(DIGEST_SIZE).enumerate() {
         let row_output_ptr = output_ptr + (row_idx * DIGEST_SIZE) as u32;
-        exec_state.vm_write::<u8, DIGEST_SIZE>(
-            RV32_MEMORY_AS,
-            row_output_ptr,
-            &from_fn(|i| output_chunk[i]),
-        );
+        for chunk_idx in 0..DIGEST_MEMORY_OPS {
+            exec_state.vm_write::<u8, MEMORY_OP_SIZE>(
+                RV32_MEMORY_AS,
+                row_output_ptr + (chunk_idx * MEMORY_OP_SIZE) as u32,
+                &memory_op_chunk(output_chunk, chunk_idx),
+            );
+        }
     }
 
     let pc = exec_state.pc();

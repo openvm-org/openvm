@@ -23,13 +23,15 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_field::PrimeField32;
 
+use crate::utils::{memory_op_chunk, split_memory_ops, DIGEST_MEMORY_OPS, MEMORY_OP_SIZE};
+
 // ========================= AIR ==============================
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct DeferralSetupAdapterCols<T> {
     pub from_state: ExecutionState<T>,
-    pub write_aux: MemoryWriteAuxCols<T, DIGEST_SIZE>,
+    pub write_aux: [MemoryWriteAuxCols<T, MEMORY_OP_SIZE>; DIGEST_MEMORY_OPS],
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
@@ -61,15 +63,22 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralSetupAdapterAir {
         // address space. Field native_start_ptr is a config value.
         let address_space = AB::Expr::from_u32(NATIVE_AS);
         let pointer = AB::Expr::from_u32(self.native_start_ptr);
+        let [write_data] = ctx.writes;
+        let write_chunks = split_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(write_data);
 
-        self.memory_bridge
-            .write(
-                MemoryAddress::new(address_space.clone(), pointer.clone()),
-                ctx.writes[0].clone(),
-                cols.from_state.timestamp,
-                &cols.write_aux,
-            )
-            .eval(builder, ctx.instruction.is_valid.clone());
+        for (chunk_idx, (data, aux)) in write_chunks.into_iter().zip(&cols.write_aux).enumerate() {
+            self.memory_bridge
+                .write(
+                    MemoryAddress::new(
+                        address_space.clone(),
+                        pointer.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_OP_SIZE),
+                    ),
+                    data,
+                    cols.from_state.timestamp + AB::Expr::from_usize(chunk_idx),
+                    aux,
+                )
+                .eval(builder, ctx.instruction.is_valid.clone());
+        }
 
         self.execution_bridge
             .execute_and_increment_or_set_pc(
@@ -82,7 +91,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralSetupAdapterAir {
                     AB::Expr::ZERO,
                 ],
                 cols.from_state,
-                AB::Expr::ONE,
+                AB::Expr::from_usize(DIGEST_MEMORY_OPS),
                 (DEFAULT_PC_STEP, ctx.to_pc),
             )
             .eval(builder, ctx.instruction.is_valid);
@@ -101,7 +110,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralSetupAdapterAir {
 pub struct DeferralSetupAdapterRecord<F> {
     pub from_pc: u32,
     pub from_timestamp: u32,
-    pub write_aux: MemoryWriteAuxRecord<F, DIGEST_SIZE>,
+    pub write_aux: [MemoryWriteAuxRecord<F, MEMORY_OP_SIZE>; DIGEST_MEMORY_OPS],
 }
 
 #[derive(derive_new::new, Clone, Copy)]
@@ -141,13 +150,15 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralSetupAdapterExecutor {
         let &Instruction { a, d, .. } = instruction;
         debug_assert_eq!(a.as_canonical_u32(), self.native_start_ptr);
         debug_assert_eq!(d.as_canonical_u32(), NATIVE_AS);
-        tracing_write_native(
-            memory,
-            self.native_start_ptr,
-            data,
-            &mut record.write_aux.prev_timestamp,
-            &mut record.write_aux.prev_data,
-        );
+        for chunk_idx in 0..DIGEST_MEMORY_OPS {
+            tracing_write_native(
+                memory,
+                self.native_start_ptr + (chunk_idx * MEMORY_OP_SIZE) as u32,
+                memory_op_chunk(&data, chunk_idx),
+                &mut record.write_aux[chunk_idx].prev_timestamp,
+                &mut record.write_aux[chunk_idx].prev_data,
+            );
+        }
     }
 }
 
@@ -163,11 +174,13 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralSetupAdapterFiller {
         let adapter_row: &mut DeferralSetupAdapterCols<F> = adapter_row.borrow_mut();
 
         // Writing in reverse order to avoid overwriting the record
-        mem_helper.fill(
-            record.write_aux.prev_timestamp,
-            record.write_aux.prev_timestamp + 1,
-            adapter_row.write_aux.as_mut(),
-        );
+        for chunk_idx in (0..DIGEST_MEMORY_OPS).rev() {
+            mem_helper.fill(
+                record.write_aux[chunk_idx].prev_timestamp,
+                record.write_aux[chunk_idx].prev_timestamp + 1,
+                adapter_row.write_aux[chunk_idx].as_mut(),
+            );
+        }
         adapter_row.from_state.timestamp = F::from_u32(record.from_timestamp);
         adapter_row.from_state.pc = F::from_u32(record.from_pc);
     }

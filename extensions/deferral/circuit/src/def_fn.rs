@@ -73,7 +73,7 @@ fn hash_output_raw<F: VmField>(
     deferral_idx: u32,
     output_ref: &[u8],
 ) -> OutputCommit {
-    assert_eq!(output_ref.len() % DIGEST_SIZE, 0);
+    assert!(output_ref.len().is_multiple_of(DIGEST_SIZE));
     let mut state = [F::ZERO; DIGEST_SIZE];
     state[0] = F::from_u32(deferral_idx);
     for chunk in output_ref.chunks_exact(DIGEST_SIZE) {

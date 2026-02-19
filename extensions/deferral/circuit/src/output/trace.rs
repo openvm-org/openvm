@@ -34,7 +34,10 @@ use crate::{
     count::DeferralCircuitCountChip,
     output::DeferralOutputCols,
     poseidon2::DeferralPoseidon2Chip,
-    utils::{f_commit_to_bytes, split_output, OUTPUT_TOTAL_BYTES},
+    utils::{
+        f_commit_to_bytes, join_memory_ops, memory_op_chunk, split_output, DIGEST_MEMORY_OPS,
+        MEMORY_OP_SIZE, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+    },
 };
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -68,13 +71,13 @@ pub struct DeferralOutputRecordHeader {
     pub rs_aux: MemoryReadAuxRecord,
 
     // Output commit and length read auxiliary record
-    pub output_commit_and_len_aux: MemoryReadAuxRecord,
+    pub output_commit_and_len_aux: [MemoryReadAuxRecord; OUTPUT_TOTAL_MEMORY_OPS],
 }
 
 pub struct DeferralOutputRecordMut<'a> {
     pub header: &'a mut DeferralOutputRecordHeader,
     pub write_bytes: &'a mut [u8],
-    pub write_aux: &'a mut [MemoryWriteBytesAuxRecord<DIGEST_SIZE>],
+    pub write_aux: &'a mut [MemoryWriteBytesAuxRecord<MEMORY_OP_SIZE>],
 }
 
 impl<'a> CustomBorrow<'a, DeferralOutputRecordMut<'a>, DeferralOutputLayout> for [u8] {
@@ -96,12 +99,12 @@ impl<'a> CustomBorrow<'a, DeferralOutputRecordMut<'a>, DeferralOutputLayout> for
         // - Subslice operation [..layout.metadata.num_rows] validates sufficient capacity
         // - Layout calculation ensures space for alignment padding plus required aux records
         let (_, write_aux_buf, _) =
-            unsafe { rest.align_to_mut::<MemoryWriteBytesAuxRecord<DIGEST_SIZE>>() };
+            unsafe { rest.align_to_mut::<MemoryWriteBytesAuxRecord<MEMORY_OP_SIZE>>() };
 
         DeferralOutputRecordMut {
             header: header_buf.borrow_mut(),
             write_bytes,
-            write_aux: &mut write_aux_buf[..layout.metadata.num_rows],
+            write_aux: &mut write_aux_buf[..layout.metadata.num_rows * DIGEST_MEMORY_OPS],
         }
     }
 
@@ -120,8 +123,10 @@ impl<'a> SizedRecord<DeferralOutputLayout> for DeferralOutputRecordMut<'a> {
         let mut total_len = size_of::<DeferralOutputRecordHeader>();
         total_len += layout.metadata.num_rows * DIGEST_SIZE;
         total_len =
-            total_len.next_multiple_of(align_of::<MemoryWriteBytesAuxRecord<DIGEST_SIZE>>());
-        total_len += layout.metadata.num_rows * size_of::<MemoryWriteBytesAuxRecord<DIGEST_SIZE>>();
+            total_len.next_multiple_of(align_of::<MemoryWriteBytesAuxRecord<MEMORY_OP_SIZE>>());
+        total_len += layout.metadata.num_rows
+            * DIGEST_MEMORY_OPS
+            * size_of::<MemoryWriteBytesAuxRecord<MEMORY_OP_SIZE>>();
         total_len
     }
 
@@ -163,12 +168,19 @@ where
 
         // Do a non-tracing read to get the output_len and compute num_rows
         let read_ptr = read_rv32_register(state.memory.data(), rs_ptr);
-        let output_key = memory_read(state.memory.data(), RV32_MEMORY_AS, read_ptr);
+        let output_key_chunks: [[u8; MEMORY_OP_SIZE]; OUTPUT_TOTAL_MEMORY_OPS] = from_fn(|i| {
+            memory_read(
+                state.memory.data(),
+                RV32_MEMORY_AS,
+                read_ptr + (i * MEMORY_OP_SIZE) as u32,
+            )
+        });
+        let output_key: [u8; OUTPUT_TOTAL_BYTES] = join_memory_ops(output_key_chunks);
         let (output_commit, output_len) = split_output(output_key);
 
         let output_len_val = u32::from_le_bytes(output_len) as usize;
         let num_rows = output_len_val / DIGEST_SIZE;
-        debug_assert_eq!(output_len_val % DIGEST_SIZE, 0);
+        debug_assert!(output_len_val.is_multiple_of(DIGEST_SIZE));
 
         // We now have the layout and can write the record
         let record = state
@@ -199,12 +211,14 @@ where
 
         let input_ptr = u32::from_le_bytes(record.header.rs_val);
         let output_ptr = u32::from_le_bytes(record.header.rd_val);
-        tracing_read::<OUTPUT_TOTAL_BYTES>(
-            state.memory,
-            RV32_MEMORY_AS,
-            input_ptr,
-            &mut record.header.output_commit_and_len_aux.prev_timestamp,
-        );
+        for chunk_idx in 0..OUTPUT_TOTAL_MEMORY_OPS {
+            tracing_read::<MEMORY_OP_SIZE>(
+                state.memory,
+                RV32_MEMORY_AS,
+                input_ptr + (chunk_idx * MEMORY_OP_SIZE) as u32,
+                &mut record.header.output_commit_and_len_aux[chunk_idx].prev_timestamp,
+            );
+        }
 
         let output_raw =
             state.streams.deferrals[deferral_idx as usize].get_output(&output_commit.to_vec());
@@ -212,14 +226,17 @@ where
 
         for (row_idx, output_chunk) in output_raw.chunks_exact(DIGEST_SIZE).enumerate() {
             let row_output_ptr = output_ptr + (row_idx * DIGEST_SIZE) as u32;
-            tracing_write(
-                state.memory,
-                RV32_MEMORY_AS,
-                row_output_ptr,
-                from_fn(|i| output_chunk[i]),
-                &mut record.write_aux[row_idx].prev_timestamp,
-                &mut record.write_aux[row_idx].prev_data,
-            );
+            for chunk_idx in 0..DIGEST_MEMORY_OPS {
+                let aux_idx = row_idx * DIGEST_MEMORY_OPS + chunk_idx;
+                tracing_write(
+                    state.memory,
+                    RV32_MEMORY_AS,
+                    row_output_ptr + (chunk_idx * MEMORY_OP_SIZE) as u32,
+                    memory_op_chunk(output_chunk, chunk_idx),
+                    &mut record.write_aux[aux_idx].prev_timestamp,
+                    &mut record.write_aux[aux_idx].prev_data,
+                );
+            }
             record.write_bytes[row_idx * DIGEST_SIZE..(row_idx + 1) * DIGEST_SIZE]
                 .copy_from_slice(output_chunk);
         }
@@ -311,15 +328,19 @@ where
                         header.from_timestamp + 1,
                         cols.rs_aux.as_mut(),
                     );
-                    mem_helper.fill(
-                        header.output_commit_and_len_aux.prev_timestamp,
-                        header.from_timestamp + 2,
-                        cols.output_commit_and_len_aux.as_mut(),
-                    );
+                    for chunk_idx in 0..OUTPUT_TOTAL_MEMORY_OPS {
+                        mem_helper.fill(
+                            header.output_commit_and_len_aux[chunk_idx].prev_timestamp,
+                            header.from_timestamp + 2 + chunk_idx as u32,
+                            cols.output_commit_and_len_aux[chunk_idx].as_mut(),
+                        );
+                    }
                 } else {
                     mem_helper.fill_zero(cols.rd_aux.as_mut());
                     mem_helper.fill_zero(cols.rs_aux.as_mut());
-                    mem_helper.fill_zero(cols.output_commit_and_len_aux.as_mut());
+                    for chunk_aux in &mut cols.output_commit_and_len_aux {
+                        mem_helper.fill_zero(chunk_aux.as_mut());
+                    }
                 }
 
                 cols.output_len.copy_from_slice(&output_len_bytes);
@@ -330,11 +351,14 @@ where
                     .compress_and_record(&current_commit_state, &cols.write_bytes);
                 cols.current_commit_state = current_commit_state;
 
-                mem_helper.fill(
-                    write_aux[row_idx].prev_timestamp,
-                    header.from_timestamp + 3 + row_idx as u32,
-                    cols.write_bytes_aux.as_mut(),
-                );
+                for chunk_idx in 0..DIGEST_MEMORY_OPS {
+                    let aux_idx = row_idx * DIGEST_MEMORY_OPS + chunk_idx;
+                    mem_helper.fill(
+                        write_aux[aux_idx].prev_timestamp,
+                        header.from_timestamp + 2 + OUTPUT_TOTAL_MEMORY_OPS as u32 + aux_idx as u32,
+                        cols.write_bytes_aux[chunk_idx].as_mut(),
+                    );
+                }
             }
 
             let output_commit = f_commit_to_bytes(&current_commit_state).map(F::from_u8);
