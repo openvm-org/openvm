@@ -20,8 +20,8 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 use crate::{
     bus::{TranscriptBus, TranscriptBusMessage},
     stacking::bus::{
-        EqBitsLookupBus, EqKernelLookupBus, EqRandValuesLookupBus, EqRandValuesLookupMessage,
-        StackingModuleTidxBus, StackingModuleTidxMessage, SumcheckClaimsBus, SumcheckClaimsMessage,
+        EqKernelLookupBus, EqRandValuesLookupBus, EqRandValuesLookupMessage, StackingModuleTidxBus,
+        StackingModuleTidxMessage, SumcheckClaimsBus, SumcheckClaimsMessage,
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     tracegen::{RowMajorChip, StandardTracegenCtx},
@@ -69,7 +69,6 @@ pub struct UnivariateRoundAir {
     pub sumcheck_claims_bus: SumcheckClaimsBus,
     pub eq_rand_values_bus: EqRandValuesLookupBus,
     pub eq_kernel_lookup_bus: EqKernelLookupBus,
-    pub eq_bits_lookup_bus: EqBitsLookupBus,
 
     // Other fields
     pub l_skip: usize,
@@ -219,7 +218,7 @@ where
          * Because we sample u_0 from the transcript here, we send u_0 to other AIRs that
          * need to use it.
          */
-        self.eq_rand_values_bus.send(
+        self.eq_rand_values_bus.add_key_with_lookups(
             builder,
             local.proof_idx,
             EqRandValuesLookupMessage {
