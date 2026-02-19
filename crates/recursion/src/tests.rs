@@ -21,10 +21,9 @@ use openvm_stark_sdk::{
 use test_case::{test_case, test_matrix};
 use tracing::Level;
 
-use crate::{
-    system::{AggregationSubCircuit, CachedTraceCtx, VerifierSubCircuit, VerifierTraceGen},
-    utils::MAX_CONSTRAINT_DEGREE,
-};
+use crate::system::{AggregationSubCircuit, CachedTraceCtx, VerifierSubCircuit, VerifierTraceGen};
+
+pub const MAX_CONSTRAINT_DEGREE: usize = 4;
 
 /// Creates test system params with all PoW bits set to zero.
 fn test_system_params_zero_pow(l_skip: usize, n_stack: usize, k_whir: usize) -> SystemParams {
