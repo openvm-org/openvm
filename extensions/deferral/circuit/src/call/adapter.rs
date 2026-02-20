@@ -474,25 +474,44 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut DeferralCallAdapterCols<F> = adapter_row.borrow_mut();
 
+        // Timestamps in AIR are assigned in strict sequence starting from
+        // `from_state.timestamp`; mirror that exact sequence in reverse here.
+        let timestamp_delta =
+            2 + COMMIT_MEMORY_OPS + OUTPUT_TOTAL_MEMORY_OPS + 4 * DIGEST_MEMORY_OPS;
+        let mut timestamp = record.from_timestamp + timestamp_delta as u32;
+        let mut timestamp_mm = || {
+            timestamp -= 1;
+            timestamp
+        };
+
         // Writing in reverse order to avoid overwriting the record
         for chunk_idx in (0..DIGEST_MEMORY_OPS).rev() {
+            adapter_row.new_output_acc_aux[chunk_idx]
+                .set_prev_data(record.new_output_acc_aux[chunk_idx].prev_data);
             mem_helper.fill(
                 record.new_output_acc_aux[chunk_idx].prev_timestamp,
-                record.new_output_acc_aux[chunk_idx].prev_timestamp + 1,
+                timestamp_mm(),
                 adapter_row.new_output_acc_aux[chunk_idx].as_mut(),
             );
         }
         for chunk_idx in (0..DIGEST_MEMORY_OPS).rev() {
+            adapter_row.new_input_acc_aux[chunk_idx]
+                .set_prev_data(record.new_input_acc_aux[chunk_idx].prev_data);
             mem_helper.fill(
                 record.new_input_acc_aux[chunk_idx].prev_timestamp,
-                record.new_input_acc_aux[chunk_idx].prev_timestamp + 1,
+                timestamp_mm(),
                 adapter_row.new_input_acc_aux[chunk_idx].as_mut(),
             );
         }
         for chunk_idx in (0..OUTPUT_TOTAL_MEMORY_OPS).rev() {
+            adapter_row.output_commit_and_len_aux[chunk_idx].set_prev_data(
+                record.output_commit_and_len_aux[chunk_idx]
+                    .prev_data
+                    .map(F::from_u8),
+            );
             mem_helper.fill(
                 record.output_commit_and_len_aux[chunk_idx].prev_timestamp,
-                record.output_commit_and_len_aux[chunk_idx].prev_timestamp + 1,
+                timestamp_mm(),
                 adapter_row.output_commit_and_len_aux[chunk_idx].as_mut(),
             );
         }
@@ -500,33 +519,33 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralCallAdapterFiller {
         for chunk_idx in (0..DIGEST_MEMORY_OPS).rev() {
             mem_helper.fill(
                 record.old_output_acc_aux[chunk_idx].prev_timestamp,
-                record.old_output_acc_aux[chunk_idx].prev_timestamp + 1,
+                timestamp_mm(),
                 adapter_row.old_output_acc_aux[chunk_idx].as_mut(),
             );
         }
         for chunk_idx in (0..DIGEST_MEMORY_OPS).rev() {
             mem_helper.fill(
                 record.old_input_acc_aux[chunk_idx].prev_timestamp,
-                record.old_input_acc_aux[chunk_idx].prev_timestamp + 1,
+                timestamp_mm(),
                 adapter_row.old_input_acc_aux[chunk_idx].as_mut(),
             );
         }
         for chunk_idx in (0..COMMIT_MEMORY_OPS).rev() {
             mem_helper.fill(
                 record.input_commit_aux[chunk_idx].prev_timestamp,
-                record.input_commit_aux[chunk_idx].prev_timestamp + 1,
+                timestamp_mm(),
                 adapter_row.input_commit_aux[chunk_idx].as_mut(),
             );
         }
 
         mem_helper.fill(
             record.rs_aux.prev_timestamp,
-            record.rs_aux.prev_timestamp + 1,
+            timestamp_mm(),
             adapter_row.rs_aux.as_mut(),
         );
         mem_helper.fill(
             record.rd_aux.prev_timestamp,
-            record.rd_aux.prev_timestamp + 1,
+            timestamp_mm(),
             adapter_row.rd_aux.as_mut(),
         );
         adapter_row.rs_val = record.rs_val.map(F::from_u8);

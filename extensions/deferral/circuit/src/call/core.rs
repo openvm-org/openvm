@@ -186,7 +186,7 @@ where
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
-        (A::RecordMut<'buf>, DeferralCallCoreRecord<F>),
+        (A::RecordMut<'buf>, &'buf mut DeferralCallCoreRecord<F>),
     >,
 {
     fn get_opcode_name(&self, _opcode: usize) -> String {
@@ -198,7 +198,7 @@ where
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
-        let (mut adapter_record, mut core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
         A::start(*state.pc, state.memory, &mut adapter_record);
         core_record.deferral_idx = instruction.c;
 

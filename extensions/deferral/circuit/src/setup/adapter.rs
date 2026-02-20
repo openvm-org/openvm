@@ -23,7 +23,10 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_field::PrimeField32;
 
-use crate::utils::{memory_op_chunk, split_memory_ops, DIGEST_MEMORY_OPS, MEMORY_OP_SIZE};
+use crate::{
+    setup::EmptyRecord,
+    utils::{memory_op_chunk, split_memory_ops, DIGEST_MEMORY_OPS, MEMORY_OP_SIZE},
+};
 
 // ========================= AIR ==============================
 
@@ -123,7 +126,7 @@ pub struct DeferralSetupAdapterFiller;
 
 impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralSetupAdapterExecutor {
     const WIDTH: usize = DeferralSetupAdapterCols::<u8>::width();
-    type ReadData = ();
+    type ReadData = EmptyRecord;
     type WriteData = [F; DIGEST_SIZE];
     type RecordMut<'a> = &'a mut DeferralSetupAdapterRecord<F>;
 
@@ -138,6 +141,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralSetupAdapterExecutor {
         _instruction: &Instruction<F>,
         _record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
+        EmptyRecord
     }
 
     fn write(
@@ -175,9 +179,10 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for DeferralSetupAdapterFiller {
 
         // Writing in reverse order to avoid overwriting the record
         for chunk_idx in (0..DIGEST_MEMORY_OPS).rev() {
+            adapter_row.write_aux[chunk_idx].set_prev_data(record.write_aux[chunk_idx].prev_data);
             mem_helper.fill(
                 record.write_aux[chunk_idx].prev_timestamp,
-                record.write_aux[chunk_idx].prev_timestamp + 1,
+                record.from_timestamp + (chunk_idx as u32),
                 adapter_row.write_aux[chunk_idx].as_mut(),
             );
         }

@@ -4,20 +4,25 @@ use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
         hasher::Hasher, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
-        ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena,
+        ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator,
+        MatrixRecordArena, RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex,
         VmCircuitExtension, VmExecutionExtension, VmField, VmProverExtension,
     },
-    system::memory::SharedMemoryHelper,
+    system::{memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
-use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor, VmConfig};
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::LocalOpcode;
+use openvm_rv32im_circuit::{
+    Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
+};
 use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing,
     prover::{CpuBackend, CpuDevice},
     StarkEngine, StarkProtocolConfig, Val,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     call::{
@@ -50,12 +55,13 @@ cfg_if::cfg_if! {
 }
 
 // SAFETY: These deferral AIRs must be at these indices within the extension
-pub(crate) const CALL_AIR_IDX: usize = 1;
-pub(crate) const OUTPUT_AIR_IDX: usize = 2;
-pub(crate) const POSEIDON2_AIR_IDX: usize = 4;
+pub(crate) const POSEIDON2_AIR_IDX: usize = 1;
+pub(crate) const CALL_AIR_IDX: usize = 3;
+pub(crate) const OUTPUT_AIR_IDX: usize = 4;
 
 // =================================== VM Extension Implementation =================================
-#[derive(Clone)]
+
+#[derive(Clone, Default)]
 pub struct DeferralExtension {
     pub fns: Vec<Arc<DeferralFn>>,
     pub expected_def_vks_commit: [u8; COMMIT_NUM_BYTES],
@@ -135,6 +141,10 @@ where
         let poseidon2_bus = DeferralPoseidon2Bus::new(inventory.new_bus_idx());
         let base_num_airs = inventory.num_airs();
 
+        inventory.add_air(DeferralCircuitCountAir::new(count_bus, self.fns.len()));
+        assert_eq!(inventory.num_airs() - base_num_airs, POSEIDON2_AIR_IDX);
+        inventory.add_air_ref(Arc::new(deferral_poseidon2_air(poseidon2_bus.0)));
+
         inventory.add_air(DeferralSetupAir::new(
             DeferralSetupAdapterAir::new(execution_bridge, memory_bridge, self.native_start_ptr),
             DeferralSetupCoreAir::new(byte_commit_to_f(
@@ -153,10 +163,6 @@ where
             count_bus,
             poseidon2_bus,
         ));
-
-        inventory.add_air(DeferralCircuitCountAir::new(count_bus, self.fns.len()));
-        assert_eq!(inventory.num_airs() - base_num_airs, POSEIDON2_AIR_IDX);
-        inventory.add_air_ref(Arc::new(deferral_poseidon2_air(poseidon2_bus.0)));
 
         Ok(())
     }
@@ -184,6 +190,12 @@ where
         let count_chip = Arc::new(DeferralCircuitCountChip::new(extension.fns.len()));
         let poseidon2_chip = Arc::new(deferral_poseidon2_chip());
 
+        inventory.next_air::<DeferralCircuitCountAir>()?;
+        inventory.add_periphery_chip(count_chip.clone());
+
+        inventory.next_air::<DeferralPoseidon2Air<Val<SC>>>()?;
+        inventory.add_periphery_chip(poseidon2_chip.clone());
+
         inventory.next_air::<DeferralSetupAir<Val<SC>>>()?;
         inventory.add_executor_chip(DeferralSetupChip::new(
             DeferralSetupCoreFiller::new(DeferralSetupAdapterFiller::new()),
@@ -206,12 +218,62 @@ where
             mem_helper,
         ));
 
-        inventory.next_air::<DeferralCircuitCountAir>()?;
-        inventory.add_periphery_chip(count_chip);
-
-        inventory.next_air::<DeferralPoseidon2Air<Val<SC>>>()?;
-        inventory.add_periphery_chip(poseidon2_chip);
-
         Ok(())
+    }
+}
+
+// =================================== VM Rv32 Config and Builder =================================
+
+#[derive(Clone, VmConfig, Serialize, Deserialize)]
+pub struct Rv32DeferralConfig {
+    #[config(executor = "SystemExecutor<F>")]
+    pub system: SystemConfig,
+    #[extension]
+    pub rv32i: Rv32I,
+    #[extension]
+    pub rv32m: Rv32M,
+    #[extension]
+    pub io: Rv32Io,
+    #[serde(skip)]
+    #[extension(executor = "DeferralExecutor<F>")]
+    pub deferral: DeferralExtension,
+}
+
+impl InitFileGenerator for Rv32DeferralConfig {}
+
+#[derive(Clone)]
+pub struct DeferralCpuBuilder;
+
+impl<SC, E> VmBuilder<E> for DeferralCpuBuilder
+where
+    SC: StarkProtocolConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    Val<SC>: VmField,
+    SC::EF: Ord,
+{
+    type VmConfig = Rv32DeferralConfig;
+    type SystemChipInventory = SystemChipInventory<SC>;
+    type RecordArena = MatrixRecordArena<Val<SC>>;
+
+    fn create_chip_complex(
+        &self,
+        config: &Self::VmConfig,
+        circuit: AirInventory<SC>,
+    ) -> Result<
+        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
+        ChipInventoryError,
+    > {
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
+        let inventory = &mut chip_complex.inventory;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32i, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &DeferralCpuProverExt,
+            &config.deferral,
+            inventory,
+        )?;
+        Ok(chip_complex)
     }
 }

@@ -267,7 +267,7 @@ unsafe fn execute_e2_impl<F: VmField, CTX: MeteredExecutionCtxTrait>(
     // this opcode's execution. In DEFER_CALL, both the input and output
     // hash accumulator for some deferral circuit are updated.
     exec_state.ctx.on_height_change(
-        pre_compute.chip_idx as usize + (POSEIDON2_AIR_IDX - CALL_AIR_IDX),
+        pre_compute.chip_idx as usize + (CALL_AIR_IDX - POSEIDON2_AIR_IDX),
         2,
     );
 }

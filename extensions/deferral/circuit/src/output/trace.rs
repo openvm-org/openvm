@@ -353,6 +353,8 @@ where
 
                 for chunk_idx in 0..DIGEST_MEMORY_OPS {
                     let aux_idx = row_idx * DIGEST_MEMORY_OPS + chunk_idx;
+                    cols.write_bytes_aux[chunk_idx]
+                        .set_prev_data(write_aux[aux_idx].prev_data.map(F::from_u8));
                     mem_helper.fill(
                         write_aux[aux_idx].prev_timestamp,
                         header.from_timestamp + 2 + OUTPUT_TOTAL_MEMORY_OPS as u32 + aux_idx as u32,

@@ -128,7 +128,7 @@ where
             .when(next.section_idx)
             .assert_eq(next.section_idx, local.section_idx + AB::Expr::ONE);
         builder
-            .when(and(local.is_valid, next.is_valid))
+            .when(and(next.is_valid, not(next.is_first)))
             .assert_eq(next.section_idx, local.section_idx + AB::Expr::ONE);
 
         // Constrain that the read columns and other operands stay the same within a
@@ -166,7 +166,7 @@ where
 
         when_last_or_invalid.assert_eq(
             bytes_to_f(&local.output_len),
-            local.section_idx * AB::Expr::from_usize(DIGEST_SIZE),
+            (local.section_idx + local.is_valid) * AB::Expr::from_usize(DIGEST_SIZE),
         );
         assert_array_eq(
             &mut when_last_or_invalid,

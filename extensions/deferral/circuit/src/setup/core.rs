@@ -8,6 +8,7 @@ use openvm_circuit::{
     },
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
@@ -76,6 +77,9 @@ where
 
 // ========================= EXECUTION + TRACEGEN ==============================
 
+#[derive(AlignedBytesBorrow)]
+pub struct EmptyRecord;
+
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct DeferralSetupCoreExecutor<F, A> {
     pub(in crate::setup) adapter: A,
@@ -90,8 +94,12 @@ pub struct DeferralSetupCoreFiller<A> {
 impl<F, A, RA> PreflightExecutor<F, RA> for DeferralSetupCoreExecutor<F, A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceExecutor<F, ReadData = (), WriteData = [F; DIGEST_SIZE]>,
-    for<'buf> RA: RecordArena<'buf, EmptyAdapterCoreLayout<F, A>, (A::RecordMut<'buf>, ())>,
+    A: 'static + AdapterTraceExecutor<F, ReadData = EmptyRecord, WriteData = [F; DIGEST_SIZE]>,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut EmptyRecord),
+    >,
 {
     fn get_opcode_name(&self, _opcode: usize) -> String {
         format!("{:?}", DeferralOpcode::SETUP)
