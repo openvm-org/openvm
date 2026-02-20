@@ -1,4 +1,5 @@
 #[cfg(test)]
+#[cfg(not(feature = "cuda"))]
 mod tests {
     use std::sync::Arc;
 
@@ -91,8 +92,10 @@ mod tests {
         state.store_input(INPUT_COMMIT_1.to_vec(), INPUT_RAW_1.to_vec());
         state.store_input(INPUT_COMMIT_2.to_vec(), INPUT_RAW_2.to_vec());
 
-        let mut streams = Streams::default();
-        streams.deferrals = vec![state];
+        let streams = Streams {
+            deferrals: vec![state],
+            ..Default::default()
+        };
         run_test(make_config(1), "single", streams)
     }
 
@@ -106,8 +109,10 @@ mod tests {
         let mut state1 = DeferralState::new(Vec::<DeferralResult>::new());
         state1.store_input(INPUT_COMMIT_0.to_vec(), INPUT_RAW_0.to_vec());
 
-        let mut streams = Streams::default();
-        streams.deferrals = vec![state0, state1];
+        let streams = Streams {
+            deferrals: vec![state0, state1],
+            ..Default::default()
+        };
         run_test(make_config(2), "multiple", streams)
     }
 }
