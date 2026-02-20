@@ -1,10 +1,7 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use itertools::Itertools;
-use openvm_circuit_primitives::{
-    utils::{assert_array_eq, not},
-    SubAir,
-};
+use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
 use openvm_stark_backend::{
     interaction::InteractionBuilder, keygen::types::MultiStarkVerifyingKey0,
     BaseAirWithPublicValues, PartitionedBaseAir,
@@ -111,28 +108,26 @@ where
         builder.assert_bool(local.is_first);
 
         builder.assert_bool(local.is_first_in_air);
+        let is_same_proof = next.is_valid - next.is_first;
+        let is_same_air = next.is_valid - next.is_first_in_air;
 
         // =========================== indices consistency ===============================
         // When we are within one air, constraint_idx increases by 0/1
         builder
-            .when(not(next.is_first_in_air))
+            .when(is_same_air.clone())
             .assert_bool(next.constraint_idx - local.constraint_idx);
         // First constraint_idx within an air is zero
         builder
             .when(local.is_first_in_air)
             .assert_zero(local.constraint_idx);
         builder
-            .when(not(next.is_first_in_air))
+            .when(is_same_air.clone())
             .assert_eq(local.n_lift, next.n_lift);
 
         // ======================== lambda and cur sum consistency ============================
+        assert_array_eq(&mut builder.when(is_same_proof), local.lambda, next.lambda);
         assert_array_eq(
-            &mut builder.when(not(next.is_first)),
-            local.lambda,
-            next.lambda,
-        );
-        assert_array_eq(
-            &mut builder.when(not(next.is_first_in_air)),
+            &mut builder.when(is_same_air.clone()),
             local.cur_sum,
             ext_field_add(
                 local.value,
@@ -140,13 +135,13 @@ where
             ),
         );
         assert_array_eq(
-            &mut builder.when(not(next.is_first_in_air)),
+            &mut builder.when(is_same_air.clone()),
             local.eq_n,
             next.eq_n,
         );
         // numerator and the last element of the message are just the corresponding values
         assert_array_eq(
-            &mut builder.when(next.is_first_in_air),
+            &mut builder.when(AB::Expr::ONE - is_same_air.clone()),
             local.cur_sum,
             local.value,
         );
@@ -171,11 +166,8 @@ where
             local.is_valid * (AB::Expr::ONE - local.is_first_in_air),
         );
         let folded_sum: [AB::Expr; D_EF] = ext_field_add(
-            ext_field_multiply_scalar::<AB::Expr>(
-                next.cur_sum,
-                AB::Expr::ONE - next.is_first_in_air,
-            ),
-            ext_field_multiply_scalar::<AB::Expr>(local.cur_sum, next.is_first_in_air),
+            ext_field_multiply_scalar::<AB::Expr>(next.cur_sum, is_same_air.clone()),
+            ext_field_multiply_scalar::<AB::Expr>(local.cur_sum, AB::Expr::ONE - is_same_air),
         );
         self.expression_claim_bus.send(
             builder,
@@ -379,16 +371,6 @@ impl RowMajorChip<F> for ConstraintsFoldingTraceGenerator {
                 cols.loop_aux.is_transition[0] = F::ZERO;
             }
         }
-        trace[total_height * width..]
-            .par_chunks_mut(width)
-            .enumerate()
-            .for_each(|(i, chunk)| {
-                let cols: &mut ConstraintsFoldingCols<F> = chunk.borrow_mut();
-                cols.proof_idx = F::from_usize(preflights.len() + i);
-                cols.is_first = F::ONE;
-                cols.is_first_in_air = F::ONE;
-            });
-
         Some(RowMajorMatrix::new(trace, width))
     }
 }

@@ -138,10 +138,8 @@ where
             ),
         );
 
-        // TODO(ayush): move to NestedForLoopSubAir
-        builder.when(local.is_first).assert_one(local.is_enabled);
-        let is_transition = next.is_enabled - next.is_first;
-        let is_last = local.is_enabled - is_transition.clone();
+        let is_transition = LoopSubAir::local_is_transition(next.is_enabled, next.is_first);
+        let is_last = LoopSubAir::local_is_last(local.is_enabled, next.is_enabled, next.is_first);
 
         // Layer index starts from 0
         builder.when(local.is_first).assert_zero(local.layer_idx);

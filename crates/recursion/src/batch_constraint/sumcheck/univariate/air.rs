@@ -114,10 +114,8 @@ where
             ),
         );
 
-        // TODO(ayush): move to NestedForLoopSubAir
-        builder.when(local.is_first).assert_one(local.is_valid);
-        let is_transition = next.is_valid - next.is_first;
-        let is_last = local.is_valid - is_transition.clone();
+        let is_transition = LoopSubAir::local_is_transition(next.is_valid, next.is_first);
+        let is_last = LoopSubAir::local_is_last(local.is_valid, next.is_valid, next.is_first);
 
         // Coeff index starts at univariate degree
         builder

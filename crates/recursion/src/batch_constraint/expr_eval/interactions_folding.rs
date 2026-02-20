@@ -14,7 +14,6 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, D_E
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{extension::BinomiallyExtendable, BasedVectorSpace, PrimeCharacteristicRing};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_maybe_rayon::prelude::*;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -148,28 +147,34 @@ where
         builder
             .when(local.has_interactions + local.is_bus_index)
             .assert_one(local.is_valid);
+        let is_same_proof = next.is_valid - next.is_first;
+        let is_same_air = next.is_valid - next.is_first_in_air;
+        let is_same_message = next.is_valid - next.is_first_in_message;
+        let next_is_first_in_air_or_invalid =
+            next.is_first_in_air + (AB::Expr::ONE - next.is_valid);
+        let next_is_first_in_message_or_invalid =
+            next.is_first_in_message + (AB::Expr::ONE - next.is_valid);
 
         // =========================== indices consistency ===============================
         // When we are within one proof, sort_idx increases by 0/1
         builder
-            .when(not(next.is_first))
+            .when(is_same_proof.clone())
             .assert_bool(next.sort_idx - local.sort_idx);
         // When we are within one AIR, interaction_idx increases by 0/1 as well
-        let within_one_air = not(next.is_first) * (AB::Expr::ONE - next.sort_idx + local.sort_idx);
         builder
-            .when(within_one_air.clone())
+            .when(is_same_air.clone())
             .assert_bool(next.interaction_idx - local.interaction_idx);
         // First AIR within a proof is zero, and first interaction within an AIR is also zero
         builder.when(local.is_first).assert_zero(local.sort_idx);
         builder
-            .when(not::<AB::Expr>(within_one_air))
+            .when(not::<AB::Expr>(is_same_air.clone()))
             .assert_zero(next.interaction_idx);
 
         // // =========================== general consistency ================================
         // The row describes an AIR without interactions iff it's first and last in the message,
         // unless the row is invalid
         builder.when(local.is_valid).assert_eq(
-            local.is_first_in_message * next.is_first_in_message,
+            local.is_first_in_message * next_is_first_in_message_or_invalid.clone(),
             not(local.has_interactions),
         );
         // If we have interactions, then the row is valid
@@ -184,12 +189,12 @@ where
         builder
             .when(not(local.has_interactions))
             .when(local.is_valid)
-            .assert_one(next.is_first_in_air);
+            .assert_one(next_is_first_in_air_or_invalid.clone());
         // If the row is valid, then this is the bus index iff the next one is first in message
         // or invalid
         builder
             .when(local.has_interactions)
-            .assert_eq(local.is_bus_index, next.is_first_in_message);
+            .assert_eq(local.is_bus_index, next_is_first_in_message_or_invalid.clone());
         // An interaction has at least two fields (mult and bus index)
         builder
             .when(local.has_interactions)
@@ -197,7 +202,7 @@ where
         // final_acc_num only changes when it's first in message
         assert_array_eq(
             &mut builder
-                .when(not(local.is_first_in_message) * local.is_valid * not(next.is_first_in_air)),
+                .when(not(local.is_first_in_message) * local.is_valid * is_same_air.clone()),
             local.final_acc_num,
             next.final_acc_num,
         );
@@ -219,7 +224,7 @@ where
             &mut builder.when(
                 (not(local.is_second_in_message) + not(local.has_interactions))
                     * local.is_valid
-                    * not(next.is_first_in_air),
+                    * is_same_air.clone(),
             ),
             local.final_acc_denom,
             next.final_acc_denom,
@@ -242,9 +247,9 @@ where
             .assert_one(local.is_first_in_message);
 
         // ======================== beta and cur sum consistency ============================
-        assert_array_eq(&mut builder.when(not(next.is_first)), local.beta, next.beta);
+        assert_array_eq(&mut builder.when(is_same_proof), local.beta, next.beta);
         assert_array_eq(
-            &mut builder.when(not(next.is_first_in_message) * not(local.is_first_in_message)),
+            &mut builder.when(is_same_message * not(local.is_first_in_message)),
             local.cur_sum,
             ext_field_add(
                 local.value,
@@ -253,7 +258,7 @@ where
         );
         // numerator and the last element of the message are just the corresponding values
         assert_array_eq(
-            &mut builder.when(next.is_first_in_message + local.is_first_in_message),
+            &mut builder.when(next_is_first_in_message_or_invalid + local.is_first_in_message),
             local.cur_sum,
             local.value,
         );
@@ -334,7 +339,7 @@ where
                 property_idx: AirShapeProperty::NumInteractions.to_field(),
                 value: (local.interaction_idx + AB::Expr::ONE) * local.has_interactions,
             },
-            next.is_first_in_air * local.is_valid,
+            next_is_first_in_air_or_invalid * local.is_valid,
         );
 
         self.eq_3b_bus.receive(
@@ -659,17 +664,6 @@ impl RowMajorChip<F> for InteractionsFoldingTraceGenerator {
                 cols.loop_aux.is_transition[0] = F::ZERO;
             }
         }
-        trace[total_height * width..]
-            .par_chunks_mut(width)
-            .enumerate()
-            .for_each(|(i, chunk)| {
-                let cols: &mut InteractionsFoldingCols<F> = chunk.borrow_mut();
-                cols.proof_idx = F::from_usize(preflights.len() + i);
-                cols.is_first = F::ONE;
-                cols.is_first_in_air = F::ONE;
-                cols.is_first_in_message = F::ONE;
-            });
-
         Some(RowMajorMatrix::new(trace, width))
     }
 }

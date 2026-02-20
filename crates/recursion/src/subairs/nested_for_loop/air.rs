@@ -104,6 +104,12 @@ impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
             let local_is_first = local_io.is_first[level].clone();
             let next_is_first = next_io.is_first[level].clone();
 
+            builder.assert_bool(local_is_first.clone());
+            builder.assert_bool(next_is_first.clone());
+            builder
+                .when(local_io.is_first[level].clone())
+                .assert_one(local_io.is_enabled.clone());
+
             // First row constraint
             let mut builder_when_first_row = if level == 0 {
                 builder.when_first_row()
@@ -132,6 +138,7 @@ impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
 
                 builder.when(local_aux.is_transition[parent_level].clone())
             };
+
             self.eval_transition(
                 &mut builder_when_transition,
                 &local_io,
@@ -203,7 +210,7 @@ impl<const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
     where
         FA: PrimeCharacteristicRing,
     {
-        next_is_enabled.into() * (FA::ONE - next_is_first.into())
+        next_is_enabled.into() - next_is_first.into()
     }
 
     /// Returns an expression for `is_last` on enabled rows.
@@ -212,10 +219,14 @@ impl<const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
     /// True when either:
     /// - The next row is disabled, OR
     /// - The next row is enabled and has `is_first` set (boundary between loop iterations)
-    pub fn local_is_last<FA>(next_is_enabled: impl Into<FA>, next_is_first: impl Into<FA>) -> FA
+    pub fn local_is_last<FA>(
+        local_is_enabled: impl Into<FA>,
+        next_is_enabled: impl Into<FA>,
+        next_is_first: impl Into<FA>,
+    ) -> FA
     where
         FA: PrimeCharacteristicRing,
     {
-        FA::ONE - Self::local_is_transition(next_is_enabled, next_is_first)
+        local_is_enabled.into() - next_is_enabled.into() + next_is_first.into()
     }
 }
