@@ -19,7 +19,6 @@
 template <typename T> struct InteractionsFoldingCols {
     T is_valid;
     T is_first;
-    T is_last;
     T proof_idx;
 
     T beta_tidx;
@@ -78,7 +77,6 @@ __global__ void interactions_folding_tracegen(
     if (global_row_idx >= num_valid_rows) {
         row.fill_zero(0, sizeof(InteractionsFoldingCols<uint8_t>));
         COL_WRITE_VALUE(row, InteractionsFoldingCols, is_first, Fp::one());
-        COL_WRITE_VALUE(row, InteractionsFoldingCols, is_last, Fp::one());
         COL_WRITE_VALUE(
             row, InteractionsFoldingCols, proof_idx, NUM_PROOFS + global_row_idx - num_valid_rows
         );
@@ -118,7 +116,6 @@ __global__ void interactions_folding_tracegen(
 
     COL_WRITE_VALUE(row, InteractionsFoldingCols, is_valid, Fp::one());
     COL_WRITE_VALUE(row, InteractionsFoldingCols, is_first, is_first_in_air && sort_idx == 0);
-    COL_WRITE_VALUE(row, InteractionsFoldingCols, is_last, is_last_in_proof);
     COL_WRITE_VALUE(row, InteractionsFoldingCols, proof_idx, proof_idx);
 
     auto [air_idx, log_height] = sorted_trace_vdata[proof_idx][sort_idx];
