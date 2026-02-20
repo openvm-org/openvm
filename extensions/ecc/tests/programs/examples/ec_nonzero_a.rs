@@ -24,24 +24,26 @@ pub fn main() {
     let p2 = P256Point::from_xy(x2.clone(), y2.clone()).unwrap();
 
     // Generic add can handle equal or unequal points.
-    let p3 = &p1 + &p2;
-    let p4 = &p2 + &p2;
+    let p3 = (&p1 + &p2).normalize();
+    let p4 = (&p2 + &p2).normalize();
 
     // Add assign and double assign
     let mut sum = P256Point::from_xy(x1, y1).unwrap();
     sum += &p2;
-    if sum.x() != p3.x() || sum.y() != p3.y() {
+    let sumn = sum.normalize();
+    if sumn.x() != p3.x() || sumn.y() != p3.y() {
         panic!();
     }
     let mut double = P256Point::from_xy(x2, y2).unwrap();
     double.double_assign();
-    if double.x() != p4.x() || double.y() != p4.y() {
+    let doublen = double.normalize();
+    if doublen.x() != p4.x() || doublen.y() != p4.y() {
         panic!();
     }
 
-    // Test generator
-    let (gen_x, gen_y) = P256Point::GENERATOR.into_coords();
+    // Test generator — no normalize() needed since constants are constructed with z=1
+    let (gen_x, gen_y, _) = P256Point::GENERATOR.into_coords();
     let _generator = P256Point::from_xy(gen_x, gen_y).unwrap();
-    let (neg_x, neg_y) = P256Point::NEG_GENERATOR.into_coords();
+    let (neg_x, neg_y, _) = P256Point::NEG_GENERATOR.into_coords();
     let _neg_generator = P256Point::from_xy(neg_x, neg_y).unwrap();
 }

@@ -97,7 +97,7 @@ where
     pub fn from_affine(point: AffinePoint<C>) -> Result<Self> {
         // Internally this calls `is_eq` on `x` and `y` coordinates, which will assert `x, y` are
         // reduced.
-        if point.is_identity() {
+        if Group::is_identity(&point) {
             Err(Error::new())
         } else {
             Ok(Self { point })
@@ -148,11 +148,11 @@ where
     }
 
     pub fn to_sec1_bytes(&self, compress: bool) -> Vec<u8> {
-        if self.point.is_identity() {
+        if Group::is_identity(&self.point) {
             return vec![0x00];
         }
 
-        let (x, y) = self.point.clone().into_coords();
+        let (x, y, _) = self.point.normalize().into_coords();
 
         if compress {
             let mut bytes = Vec::<u8>::with_capacity(1 + Coordinate::<C>::NUM_LIMBS);
@@ -534,12 +534,12 @@ where
     // public key
     let Q = pubkey;
     let R = <C as IntrinsicCurve>::msm(&[u1, u2], &[G, Q]);
-    // For Coordinate<C>: IntMod, the internal implementation of is_identity will assert x, y
-    // coordinates of R are both reduced.
-    if R.is_identity() {
+    // For Coordinate<C>: IntMod, the internal implementation of is_identity will assert z
+    // coordinate of R is reduced.
+    if Group::is_identity(&R) {
         return Err(Error::new());
     }
-    let (x_1, _) = R.into_coords();
+    let (x_1, _, _) = R.normalize().into_coords();
     // Scalar and Coordinate may be different byte lengths, so we use an inefficient reduction
     let x_mod_n = Scalar::<C>::reduce_le_bytes(x_1.as_le_bytes());
     if x_mod_n == r {

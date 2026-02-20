@@ -17,8 +17,8 @@ use syn::{
 /// }
 /// ```
 ///
-/// For this macro to work, you must import the `elliptic_curve` crate and the `openvm_ecc_guest`
-/// crate.
+/// For this macro to work, you must import the `elliptic_curve` crate and the
+/// `openvm_ecc_guest::weierstrass` crate.
 #[proc_macro]
 pub fn sw_declare(input: TokenStream) -> TokenStream {
     let MacroArgs { items } = parse_macro_input!(input as MacroArgs);
@@ -75,24 +75,25 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 );
             };
         }
-        create_extern_func!(sw_add_ne_extern_func);
-        create_extern_func!(sw_double_extern_func);
+        create_extern_func!(sw_add_proj_extern_func);
+        create_extern_func!(sw_double_proj_extern_func);
         create_extern_func!(sw_setup_extern_func);
 
         let group_ops_mod_name = format_ident!("{}_ops", struct_name_str.to_lowercase());
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
             extern "C" {
-                fn #sw_add_ne_extern_func(rd: usize, rs1: usize, rs2: usize);
-                fn #sw_double_extern_func(rd: usize, rs1: usize);
+                fn #sw_add_proj_extern_func(rd: usize, rs1: usize, rs2: usize);
+                fn #sw_double_proj_extern_func(rd: usize, rs1: usize);
                 fn #sw_setup_extern_func(uninit: *mut core::ffi::c_void, p1: *const u8, p2: *const u8);
             }
 
-            #[derive(Eq, PartialEq, Clone, Debug, serde::Serialize, serde::Deserialize)]
+            #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
             #[repr(C)]
             pub struct #struct_name {
                 x: #intmod_type,
                 y: #intmod_type,
+                z: #intmod_type,
             }
             #[allow(non_upper_case_globals)]
 
@@ -100,72 +101,62 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 const fn identity() -> Self {
                     Self {
                         x: <#intmod_type as openvm_algebra_guest::IntMod>::ZERO,
-                        y: <#intmod_type as openvm_algebra_guest::IntMod>::ZERO,
+                        y: <#intmod_type as openvm_algebra_guest::IntMod>::ONE,
+                        z: <#intmod_type as openvm_algebra_guest::IntMod>::ZERO,
                     }
                 }
                 // Below are wrapper functions for the intrinsic instructions.
                 // Should not be called directly.
                 #[inline(always)]
-                unsafe fn add_ne<const CHECK_SETUP: bool>(p1: &#struct_name, p2: &#struct_name) -> #struct_name {
+                fn add_proj<const CHECK_SETUP: bool>(p1: &#struct_name, p2: &#struct_name) -> #struct_name {
                     #[cfg(not(target_os = "zkvm"))]
                     {
-                        use openvm_algebra_guest::DivUnsafe;
-                        let lambda = (&p2.y - &p1.y).div_unsafe(&p2.x - &p1.x);
-                        let x3 = &lambda * &lambda - &p1.x - &p2.x;
-                        let y3 = &lambda * &(&p1.x - &x3) - &p1.y;
-                        #struct_name { x: x3, y: y3 }
-                    }
-                    #[cfg(target_os = "zkvm")]
-                    {
-                        if CHECK_SETUP {
-                            Self::set_up_once();
-                        }
-                        let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
-                        #sw_add_ne_extern_func(
-                            uninit.as_mut_ptr() as usize,
-                            p1 as *const #struct_name as usize,
-                            p2 as *const #struct_name as usize
-                        );
-                        uninit.assume_init()
-                    }
-                }
-
-                #[inline(always)]
-                unsafe fn add_ne_assign<const CHECK_SETUP: bool>(&mut self, p2: &#struct_name) {
-                    #[cfg(not(target_os = "zkvm"))]
-                    {
-                        use openvm_algebra_guest::DivUnsafe;
-                        let lambda = (&p2.y - &self.y).div_unsafe(&p2.x - &self.x);
-                        let x3 = &lambda * &lambda - &self.x - &p2.x;
-                        let y3 = &lambda * &(&self.x - &x3) - &self.y;
-                        self.x = x3;
-                        self.y = y3;
-                    }
-                    #[cfg(target_os = "zkvm")]
-                    {
-                        if CHECK_SETUP {
-                            Self::set_up_once();
-                        }
-                        #sw_add_ne_extern_func(
-                            self as *mut #struct_name as usize,
-                            self as *const #struct_name as usize,
-                            p2 as *const #struct_name as usize
-                        );
-                    }
-                }
-
-                /// Assumes that `p` is not identity.
-                #[inline(always)]
-                unsafe fn double_impl<const CHECK_SETUP: bool>(p: &#struct_name) -> #struct_name {
-                    #[cfg(not(target_os = "zkvm"))]
-                    {
-                        use openvm_algebra_guest::DivUnsafe;
                         let curve_a: #intmod_type = #const_a;
-                        let two = #intmod_type::from_u8(2);
-                        let lambda = (&p.x * &p.x * #intmod_type::from_u8(3) + &curve_a).div_unsafe(&p.y * &two);
-                        let x3 = &lambda * &lambda - &p.x * &two;
-                        let y3 = &lambda * &(&p.x - &x3) - &p.y;
-                        #struct_name { x: x3, y: y3 }
+                        let curve_b: #intmod_type = #const_b;
+                        let b3 = &(&curve_b + &curve_b) + &curve_b;
+                        if curve_a == <#intmod_type as openvm_algebra_guest::IntMod>::ZERO {
+                            // a=0: Algorithm 7 from ePrint 2015/1060
+                            let t0 = &p1.x * &p2.x;
+                            let t1 = &p1.y * &p2.y;
+                            let t2 = &p1.z * &p2.z;
+                            let t3 = &(&(&p1.x + &p1.y) * &(&p2.x + &p2.y)) - &t0 - &t1;
+                            let t4 = &(&(&p1.y + &p1.z) * &(&p2.y + &p2.z)) - &t1 - &t2;
+                            let y3_temp = &(&(&p1.x + &p1.z) * &(&p2.x + &p2.z)) - &t0 - &t2;
+                            let x3_coeff = &(&t0 + &t0) + &t0; // 3*t0
+                            let t2_b3 = &b3 * &t2;
+                            let z3_temp = &t1 + &t2_b3;
+                            let t1_sub = &t1 - &t2_b3;
+                            let y3_b3 = &b3 * &y3_temp;
+                            let x3_out = &(&t3 * &t1_sub) - &(&t4 * &y3_b3);
+                            let y3_out = &(&t1_sub * &z3_temp) + &(&y3_b3 * &x3_coeff);
+                            let z3_out = &(&z3_temp * &t4) + &(&x3_coeff * &t3);
+                            #struct_name { x: x3_out, y: y3_out, z: z3_out }
+                        } else {
+                            // General a: Algorithm 1 from ePrint 2015/1060
+                            let a = &curve_a;
+                            let t0 = &p1.x * &p2.x;
+                            let t1 = &p1.y * &p2.y;
+                            let t2 = &p1.z * &p2.z;
+                            let t3 = &(&(&p1.x + &p1.y) * &(&p2.x + &p2.y)) - &t0 - &t1;
+                            let t4 = &(&(&p1.x + &p1.z) * &(&p2.x + &p2.z)) - &t0 - &t2;
+                            let t5 = &(&(&p1.y + &p1.z) * &(&p2.y + &p2.z)) - &t1 - &t2;
+                            let z3_temp = &(&b3 * &t2) + &(a * &t4);
+                            let x3_temp = &t1 - &z3_temp;
+                            let z3_temp2 = &t1 + &z3_temp;
+                            let y3 = &x3_temp * &z3_temp2;
+                            let t1_3t0 = &(&t0 + &t0) + &t0;
+                            let t2_a = a * &t2;
+                            let t4_b3 = &b3 * &t4;
+                            let t1_val = &t1_3t0 + &t2_a;
+                            let t2_val = &(a * &(&t0 - &t2_a)) + &t4_b3;
+                            let t0_res = &t1_val * &t2_val;
+                            let y3 = &y3 + &t0_res;
+                            let t0_res = &t5 * &t2_val;
+                            let x3 = &(&t3 * &x3_temp) - &t0_res;
+                            let t0_res = &t3 * &t1_val;
+                            let z3 = &(&t5 * &z3_temp2) + &t0_res;
+                            #struct_name { x: x3, y: y3, z: z3 }
+                        }
                     }
                     #[cfg(target_os = "zkvm")]
                     {
@@ -173,11 +164,82 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                             Self::set_up_once();
                         }
                         let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
-                        #sw_double_extern_func(
-                            uninit.as_mut_ptr() as usize,
-                            p as *const #struct_name as usize,
-                        );
-                        uninit.assume_init()
+                        unsafe {
+                            #sw_add_proj_extern_func(
+                                uninit.as_mut_ptr() as usize,
+                                p1 as *const #struct_name as usize,
+                                p2 as *const #struct_name as usize
+                            );
+                            uninit.assume_init()
+                        }
+                    }
+                }
+
+                /// Projective doubling.
+                #[inline(always)]
+                fn double_proj<const CHECK_SETUP: bool>(p: &#struct_name) -> #struct_name {
+                    #[cfg(not(target_os = "zkvm"))]
+                    {
+                        let curve_a: #intmod_type = #const_a;
+                        let curve_b: #intmod_type = #const_b;
+                        let b3 = &(&curve_b + &curve_b) + &curve_b;
+                        if curve_a == <#intmod_type as openvm_algebra_guest::IntMod>::ZERO {
+                            // a=0: Algorithm 9 from ePrint 2015/1060
+                            let t0 = &p.y * &p.y;
+                            let z3 = &(&(&(&t0 + &t0) + &t0 + &t0) + &t0 + &t0 + &t0) + &t0; // 8*t0
+                            let t1 = &p.y * &p.z;
+                            let t2_sq = &p.z * &p.z;
+                            let t2 = &b3 * &t2_sq;
+                            let x3_temp = &t2 * &z3;
+                            let y3 = &t0 + &t2;
+                            let z3 = &t1 * &z3;
+                            let t1_d = &t2 + &t2;
+                            let t2 = &t1_d + &t2;
+                            let t0 = &t0 - &t2;
+                            let y3 = &(&t0 * &y3) + &x3_temp;
+                            let t1 = &p.x * &p.y;
+                            let x3 = &(&t0 * &t1) + &(&t0 * &t1); // 2 * t0 * t1
+                            #struct_name { x: x3, y: y3, z: z3 }
+                        } else {
+                            // General a: Algorithm 3 from ePrint 2015/1060
+                            let a = &curve_a;
+                            let t0 = &p.x * &p.x;
+                            let t1 = &p.y * &p.y;
+                            let t2 = &p.z * &p.z;
+                            let t3 = &(&p.x * &p.y) + &(&p.x * &p.y); // 2*x*y
+                            let z3_2xz = &(&p.x * &p.z) + &(&p.x * &p.z); // 2*x*z
+                            let x3_temp = a * &z3_2xz;
+                            let y3_temp = &(&b3 * &t2) + &x3_temp;
+                            let x3_val = &t1 - &y3_temp;
+                            let y3_val = &t1 + &y3_temp;
+                            let y3 = &x3_val * &y3_val;
+                            let x3 = &t3 * &x3_val;
+                            let z3_b3 = &b3 * &z3_2xz;
+                            let t2_a = a * &t2;
+                            let t3_val = &(a * &(&t0 - &t2_a)) + &z3_b3;
+                            let z3_3t0 = &(&t0 + &t0) + &t0;
+                            let t0_val = &(&z3_3t0 + &t2_a) * &t3_val;
+                            let y3 = &y3 + &t0_val;
+                            let t2_yz = &(&p.y * &p.z) + &(&p.y * &p.z); // 2*y*z
+                            let t0_val = &t2_yz * &t3_val;
+                            let x3 = &x3 - &t0_val;
+                            let z3 = &(&(&t2_yz * &t1) + &(&t2_yz * &t1) + &(&t2_yz * &t1)) + &(&t2_yz * &t1); // 4*t2_yz*t1
+                            #struct_name { x: x3, y: y3, z: z3 }
+                        }
+                    }
+                    #[cfg(target_os = "zkvm")]
+                    {
+                        if CHECK_SETUP {
+                            Self::set_up_once();
+                        }
+                        let mut uninit: core::mem::MaybeUninit<#struct_name> = core::mem::MaybeUninit::uninit();
+                        unsafe {
+                            #sw_double_proj_extern_func(
+                                uninit.as_mut_ptr() as usize,
+                                p as *const #struct_name as usize,
+                            );
+                            uninit.assume_init()
+                        }
                     }
                 }
 
@@ -188,16 +250,16 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     static is_setup: ::openvm_ecc_guest::once_cell::race::OnceBool = ::openvm_ecc_guest::once_cell::race::OnceBool::new();
 
                     is_setup.get_or_init(|| {
-                        // p1 is (x1, y1), and x1 must be the modulus.
-                        // y1 can be anything for SetupEcAdd, but must equal `a` for SetupEcDouble
+                        // p1 is (modulus, a, b).
                         let modulus_bytes = <<Self as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
                         let mut one = [0u8; <<Self as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS];
                         one[0] = 1;
                         let curve_a_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<#struct_name as openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A);
-                        // p1 should be (p, a)
-                        let p1 = [modulus_bytes.as_ref(), curve_a_bytes.as_ref()].concat();
-                        // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.
-                        let p2 = [one.as_ref(), one.as_ref()].concat();
+                        let curve_b_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<#struct_name as openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_B);
+                        // p1 should be (modulus, a, b)
+                        let p1 = [modulus_bytes.as_ref(), curve_a_bytes.as_ref(), curve_b_bytes.as_ref()].concat();
+                        // p2 is (1, 1, 1) placeholder
+                        let p2 = [one.as_ref(), one.as_ref(), one.as_ref()].concat();
                         let mut uninit: core::mem::MaybeUninit<[Self; 2]> = core::mem::MaybeUninit::uninit();
 
                         unsafe { #sw_setup_extern_func(uninit.as_mut_ptr() as *mut core::ffi::c_void, p1.as_ptr(), p2.as_ptr()); }
@@ -215,12 +277,21 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 #[inline(always)]
                 fn is_identity_impl<const CHECK_SETUP: bool>(&self) -> bool {
                     use openvm_algebra_guest::IntMod;
-                    // Safety: Self::set_up_once() ensures IntMod::set_up_once() has been called.
+                    // Check z == 0
                     unsafe {
-                        self.x.eq_impl::<CHECK_SETUP>(&#intmod_type::ZERO) && self.y.eq_impl::<CHECK_SETUP>(&#intmod_type::ZERO)
+                        self.z.eq_impl::<CHECK_SETUP>(&<#intmod_type as IntMod>::ZERO)
                     }
                 }
             }
+
+            impl core::cmp::PartialEq for #struct_name {
+                fn eq(&self, other: &Self) -> bool {
+                    (&self.x * &other.z) == (&other.x * &self.z)
+                        && (&self.y * &other.z) == (&other.y * &self.z)
+                }
+            }
+
+            impl core::cmp::Eq for #struct_name {}
 
             impl ::openvm_ecc_guest::weierstrass::WeierstrassPoint for #struct_name {
                 const CURVE_A: #intmod_type = #const_a;
@@ -229,15 +300,20 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 type Coordinate = #intmod_type;
 
                 /// SAFETY: assumes that #intmod_type has a memory representation
-                /// such that with repr(C), two coordinates are packed contiguously.
+                /// such that with repr(C), three coordinates are packed contiguously.
                 #[inline(always)]
                 fn as_le_bytes(&self) -> &[u8] {
-                    unsafe { &*core::ptr::slice_from_raw_parts(self as *const Self as *const u8, <#intmod_type as openvm_algebra_guest::IntMod>::NUM_LIMBS * 2) }
+                    unsafe { &*core::ptr::slice_from_raw_parts(self as *const Self as *const u8, <#intmod_type as openvm_algebra_guest::IntMod>::NUM_LIMBS * 3) }
                 }
 
                 #[inline(always)]
                 fn from_xy_unchecked(x: Self::Coordinate, y: Self::Coordinate) -> Self {
-                    Self { x, y }
+                    Self { x, y, z: <#intmod_type as openvm_algebra_guest::IntMod>::ONE }
+                }
+
+                #[inline(always)]
+                fn from_xyz_unchecked(x: Self::Coordinate, y: Self::Coordinate, z: Self::Coordinate) -> Self {
+                    Self { x, y, z }
                 }
 
                 #[inline(always)]
@@ -251,6 +327,11 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 }
 
                 #[inline(always)]
+                fn z(&self) -> &Self::Coordinate {
+                    &self.z
+                }
+
+                #[inline(always)]
                 fn x_mut(&mut self) -> &mut Self::Coordinate {
                     &mut self.x
                 }
@@ -261,8 +342,13 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 }
 
                 #[inline(always)]
-                fn into_coords(self) -> (Self::Coordinate, Self::Coordinate) {
-                    (self.x, self.y)
+                fn z_mut(&mut self) -> &mut Self::Coordinate {
+                    &mut self.z
+                }
+
+                #[inline(always)]
+                fn into_coords(self) -> (Self::Coordinate, Self::Coordinate, Self::Coordinate) {
+                    (self.x, self.y, self.z)
                 }
 
                 #[inline(always)]
@@ -271,85 +357,28 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 }
 
                 #[inline]
-                fn add_assign_impl<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
-                    use openvm_algebra_guest::IntMod;
+                fn add_impl<const CHECK_SETUP: bool>(&self, p2: &Self) -> Self {
+                    Self::add_proj::<CHECK_SETUP>(self, p2)
+                }
 
-                    if CHECK_SETUP {
-                        // Call setup here so we skip it below
-                        #intmod_type::set_up_once();
-                    }
+                #[inline]
+                fn double_impl<const CHECK_SETUP: bool>(&self) -> Self {
+                    Self::double_proj::<CHECK_SETUP>(self)
+                }
 
-                    if self.is_identity_impl::<CHECK_SETUP>() {
-                        *self = p2.clone();
-                    } else if p2.is_identity_impl::<CHECK_SETUP>() {
-                        // do nothing
-                    } else if unsafe { self.x.eq_impl::<false>(&p2.x) } { // Safety: we called IntMod setup above
-                        let sum_ys = unsafe { self.y.add_ref::<false>(&p2.y) };
-                        // Safety: we called IntMod setup above
-                        if unsafe { IntMod::eq_impl::<false>(&sum_ys, &<#intmod_type as IntMod>::ZERO) } {
-                            *self = Self::identity();
-                        } else {
-                            unsafe {
-                                self.double_assign_nonidentity::<CHECK_SETUP>();
-                            }
-                        }
+                fn normalize(&self) -> Self {
+                    use openvm_algebra_guest::DivUnsafe;
+                    if self.is_identity_impl::<true>() {
+                        Self::identity()
                     } else {
-                        unsafe {
-                            self.add_ne_assign_nonidentity::<CHECK_SETUP>(p2);
-                        }
+                        let x = (&self.x).div_unsafe(&self.z);
+                        let y = (&self.y).div_unsafe(&self.z);
+                        Self { x, y, z: <#intmod_type as openvm_algebra_guest::IntMod>::ONE }
                     }
                 }
 
-                #[inline(always)]
-                fn double_assign_impl<const CHECK_SETUP: bool>(&mut self) {
-                    if !self.is_identity_impl::<CHECK_SETUP>() {
-                        unsafe {
-                            self.double_assign_nonidentity::<CHECK_SETUP>();
-                        }
-                    }
-                }
-
-                #[inline(always)]
-                unsafe fn add_ne_nonidentity<const CHECK_SETUP: bool>(&self, p2: &Self) -> Self {
-                    Self::add_ne::<CHECK_SETUP>(self, p2)
-                }
-
-                #[inline(always)]
-                unsafe fn add_ne_assign_nonidentity<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
-                    Self::add_ne_assign::<CHECK_SETUP>(self, p2);
-                }
-
-                #[inline(always)]
-                unsafe fn sub_ne_nonidentity<const CHECK_SETUP: bool>(&self, p2: &Self) -> Self {
-                    Self::add_ne::<CHECK_SETUP>(self, &p2.clone().neg())
-                }
-
-                #[inline(always)]
-                unsafe fn sub_ne_assign_nonidentity<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
-                    Self::add_ne_assign::<CHECK_SETUP>(self, &p2.clone().neg());
-                }
-
-                #[inline(always)]
-                unsafe fn double_nonidentity<const CHECK_SETUP: bool>(&self) -> Self {
-                    Self::double_impl::<CHECK_SETUP>(self)
-                }
-
-                #[inline(always)]
-                unsafe fn double_assign_nonidentity<const CHECK_SETUP: bool>(&mut self) {
-                    #[cfg(not(target_os = "zkvm"))]
-                    {
-                        *self = Self::double_impl::<CHECK_SETUP>(self);
-                    }
-                    #[cfg(target_os = "zkvm")]
-                    {
-                        if CHECK_SETUP {
-                            Self::set_up_once();
-                        }
-                        #sw_double_extern_func(
-                            self as *mut #struct_name as usize,
-                            self as *const #struct_name as usize
-                        );
-                    }
+                fn is_identity(&self) -> bool {
+                    self.is_identity_impl::<true>()
                 }
             }
 
@@ -360,6 +389,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     #struct_name {
                         x: self.x,
                         y: -self.y,
+                        z: self.z,
                     }
                 }
             }
@@ -371,6 +401,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     #struct_name {
                         x: self.x.clone(),
                         y: core::ops::Neg::neg(&self.y),
+                        z: self.z.clone(),
                     }
                 }
             }
@@ -436,20 +467,22 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
     for (ec_idx, struct_id) in items.into_iter().enumerate() {
         // Unique identifier shared by sw_define! and sw_init! used for naming the extern funcs.
         // Currently it's just the struct type name.
-        let add_ne_extern_func =
-            syn::Ident::new(&format!("sw_add_ne_extern_func_{struct_id}"), span.into());
-        let double_extern_func =
-            syn::Ident::new(&format!("sw_double_extern_func_{struct_id}"), span.into());
+        let add_proj_extern_func =
+            syn::Ident::new(&format!("sw_add_proj_extern_func_{struct_id}"), span.into());
+        let double_proj_extern_func = syn::Ident::new(
+            &format!("sw_double_proj_extern_func_{struct_id}"),
+            span.into(),
+        );
         let setup_extern_func =
             syn::Ident::new(&format!("sw_setup_extern_func_{struct_id}"), span.into());
 
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
-            extern "C" fn #add_ne_extern_func(rd: usize, rs1: usize, rs2: usize) {
+            extern "C" fn #add_proj_extern_func(rd: usize, rs1: usize, rs2: usize) {
                 openvm::platform::custom_insn_r!(
                     opcode = OPCODE,
                     funct3 = SW_FUNCT3 as usize,
-                    funct7 = SwBaseFunct7::SwAddNe as usize + #ec_idx
+                    funct7 = SwBaseFunct7::SwAddProj as usize + #ec_idx
                         * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                     rd = In rd,
                     rs1 = In rs1,
@@ -458,11 +491,11 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             }
 
             #[no_mangle]
-            extern "C" fn #double_extern_func(rd: usize, rs1: usize) {
+            extern "C" fn #double_proj_extern_func(rd: usize, rs1: usize) {
                 openvm::platform::custom_insn_r!(
                     opcode = OPCODE,
                     funct3 = SW_FUNCT3 as usize,
-                    funct7 = SwBaseFunct7::SwDouble as usize + #ec_idx
+                    funct7 = SwBaseFunct7::SwDoubleProj as usize + #ec_idx
                         * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                     rd = In rd,
                     rs1 = In rs1,
@@ -492,7 +525,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                                 * (::openvm_ecc_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
                         rd = In uninit,
                         rs1 = In p1,
-                        rs2 = Const "x0" // will be parsed as 0 and therefore transpiled to SETUP_EC_DOUBLE
+                        rs2 = Const "x0" // will be parsed as 0 and therefore transpiled to SETUP_SW_EC_DOUBLE
                     );
 
 
