@@ -1,4 +1,4 @@
-use core::ops::{Add, Neg};
+use core::ops::Add;
 
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
@@ -42,6 +42,7 @@ impl CyclicGroup for P256Point {
         y: P256Coord::from_const_bytes(hex!(
             "f551bf376840b6cbce5e316b5733ce2b169e0f7c4aebe78e9b7f1afee242e34f"
         )),
+        z: P256Coord::from_const_u8(1),
     };
     const NEG_GENERATOR: Self = P256Point {
         x: P256Coord::from_const_bytes(hex!(
@@ -50,6 +51,7 @@ impl CyclicGroup for P256Point {
         y: P256Coord::from_const_bytes(hex!(
             "0aae40c897bf493431a1ce94a9cc31d4e961f083b51418716580e5011cbd1cb0"
         )),
+        z: P256Coord::from_const_u8(1),
     };
 }
 
@@ -74,10 +76,12 @@ impl IntrinsicCurve for NistP256 {
 
 impl P256Point {
     pub fn x_be_bytes(&self) -> [u8; 32] {
-        <Self as WeierstrassPoint>::x(self).to_be_bytes()
+        let n = self.normalize();
+        <Self as WeierstrassPoint>::x(&n).to_be_bytes()
     }
 
     pub fn y_be_bytes(&self) -> [u8; 32] {
-        <Self as WeierstrassPoint>::y(self).to_be_bytes()
+        let n = self.normalize();
+        <Self as WeierstrassPoint>::y(&n).to_be_bytes()
     }
 }

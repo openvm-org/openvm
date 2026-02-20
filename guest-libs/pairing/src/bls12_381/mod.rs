@@ -1,7 +1,5 @@
 extern crate alloc;
 
-use core::ops::Neg;
-
 use openvm_algebra_guest::IntMod;
 use openvm_algebra_moduli_macros::moduli_declare;
 use openvm_ecc_guest::{weierstrass::IntrinsicCurve, CyclicGroup, Group};
@@ -53,6 +51,7 @@ impl CyclicGroup for G1Affine {
         y: Bls12_381Fp::from_const_bytes(hex!(
             "E1E7C5462923AA0CE48A88A244C73CD0EDB3042CCB18DB00F60AD0D595E0F5FCE48A1D74ED309EA0F1A0AAE381F4B308"
         )),
+        z: Bls12_381Fp::from_const_u8(1),
     };
     const NEG_GENERATOR: Self = G1Affine {
         x: Bls12_381Fp::from_const_bytes(hex!(
@@ -61,6 +60,7 @@ impl CyclicGroup for G1Affine {
         y: Bls12_381Fp::from_const_bytes(hex!(
             "CAC239B9D6DC54AD1B75CB0EBA386F4E3642ACCAD5B95566C907B51DEF6A8167F2212ECFC8767DAAA845D555681D4D11"
         )),
+        z: Bls12_381Fp::from_const_u8(1),
     };
 }
 
@@ -80,14 +80,13 @@ impl IntrinsicCurve for Bls12_381 {
 mod g2 {
     use openvm_algebra_guest::Field;
     use openvm_ecc_guest::{
-        impl_sw_affine, impl_sw_group_ops, weierstrass::WeierstrassPoint, AffinePoint, Group,
+        impl_sw_group_ops, impl_sw_proj, weierstrass::WeierstrassPoint, Group,
     };
 
     use super::{Fp, Fp2};
 
-    const THREE: Fp2 = Fp2::new(Fp::from_const_u8(3), Fp::ZERO);
     const B: Fp2 = Fp2::new(Fp::from_const_u8(4), Fp::from_const_u8(4));
-    impl_sw_affine!(G2Affine, Fp2, THREE, B);
+    impl_sw_proj!(G2Affine, Fp2, B);
     impl_sw_group_ops!(G2Affine, Fp2);
 }
 

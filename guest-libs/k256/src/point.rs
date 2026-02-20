@@ -45,11 +45,13 @@ impl AffineCoordinates for Secp256k1Point {
     type FieldRepr = FieldBytes;
 
     fn x(&self) -> FieldBytes {
-        *FieldBytes::from_slice(&<Self as WeierstrassPoint>::x(self).to_be_bytes())
+        let n = self.normalize();
+        *FieldBytes::from_slice(&<Self as WeierstrassPoint>::x(&n).to_be_bytes())
     }
 
     fn y_is_odd(&self) -> Choice {
-        (self.y().as_le_bytes()[0] & 1).into()
+        let n = self.normalize();
+        (n.y().as_le_bytes()[0] & 1).into()
     }
 }
 
@@ -61,21 +63,26 @@ impl ConditionallySelectable for Secp256k1Point {
         b: &Secp256k1Point,
         choice: Choice,
     ) -> Secp256k1Point {
-        Secp256k1Point::from_xy_unchecked(
+        Secp256k1Point::from_xyz_unchecked(
             Secp256k1Coord::conditional_select(
                 <Self as WeierstrassPoint>::x(a),
                 <Self as WeierstrassPoint>::x(b),
                 choice,
             ),
             Secp256k1Coord::conditional_select(a.y(), b.y(), choice),
+            Secp256k1Coord::conditional_select(a.z(), b.z(), choice),
         )
     }
 }
 
 impl ConstantTimeEq for Secp256k1Point {
     fn ct_eq(&self, other: &Secp256k1Point) -> Choice {
-        <Self as WeierstrassPoint>::x(self).ct_eq(<Self as WeierstrassPoint>::x(other))
-            & self.y().ct_eq(other.y())
+        // Projective equivalence: (X1*Z2 == X2*Z1) && (Y1*Z2 == Y2*Z1)
+        let x1z2 = <Self as WeierstrassPoint>::x(self) * other.z();
+        let x2z1 = <Self as WeierstrassPoint>::x(other) * self.z();
+        let y1z2 = self.y() * other.z();
+        let y2z1 = other.y() * self.z();
+        x1z2.ct_eq(&x2z1) & y1z2.ct_eq(&y2z1)
     }
 }
 
@@ -164,7 +171,7 @@ impl elliptic_curve::group::Curve for Secp256k1Point {
     type AffineRepr = Secp256k1Point;
 
     fn to_affine(&self) -> Secp256k1Point {
-        *self
+        self.normalize()
     }
 }
 
@@ -219,10 +226,11 @@ impl FromEncodedPoint<Secp256k1> for Secp256k1Point {
 
 impl ToEncodedPoint<Secp256k1> for Secp256k1Point {
     fn to_encoded_point(&self, compress: bool) -> EncodedPoint {
+        let n = self.normalize();
         EncodedPoint::conditional_select(
             &EncodedPoint::from_affine_coordinates(
-                &<Self as WeierstrassPoint>::x(self).to_be_bytes().into(),
-                &<Self as WeierstrassPoint>::y(self).to_be_bytes().into(),
+                &<Self as WeierstrassPoint>::x(&n).to_be_bytes().into(),
+                &<Self as WeierstrassPoint>::y(&n).to_be_bytes().into(),
                 compress,
             ),
             &EncodedPoint::identity(),
