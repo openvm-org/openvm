@@ -240,8 +240,12 @@ pub fn process_instruction<T: InstructionProcessor>(
         instruction_formats::OPCODE_JALR => {
             Some(processor.process_jalr(instruction_formats::IType::new(insn_bits)))
         }
-        instruction_formats::OPCODE_FENCE => {
-            Some(processor.process_fence(instruction_formats::IType::new(insn_bits)))
+        instruction_formats::OPCODE_MISC_MEM => {
+            let dec_insn = instruction_formats::IType::new(insn_bits);
+            match dec_insn.funct3 {
+                0b000 => Some(processor.process_fence(dec_insn)),
+                _ => None,
+            }
         }
         instruction_formats::OPCODE_OP_IMM_32 => {
             process_opcode_op_imm_32(processor, insn_bits)
