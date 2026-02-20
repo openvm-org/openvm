@@ -187,7 +187,8 @@ where
             .when(not(local.has_interactions))
             .when(local.is_valid)
             .assert_one(next.is_first_in_air);
-        // If the row is valid, then this is the bus index iff the next one is first in message or invalid
+        // If the row is valid, then this is the bus index iff the next one is first in message
+        // or invalid
         builder
             .when(local.has_interactions)
             .assert_eq(local.is_bus_index, next.is_first_in_message);
