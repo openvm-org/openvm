@@ -8,7 +8,6 @@ pub use double::*;
 #[cfg(test)]
 mod tests;
 
-
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionFiller};
 use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller};
