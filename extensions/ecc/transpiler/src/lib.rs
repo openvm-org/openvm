@@ -67,11 +67,11 @@ impl<F: PrimeField32> TranspilerExtension<F> for EccTranspilerExtension {
                 ))
             } else {
                 let global_opcode = match SwBaseFunct7::from_repr(base_funct7) {
-                    Some(SwBaseFunct7::SwAddNe) => {
+                    Some(SwBaseFunct7::SwAddProj) => {
                         Rv64WeierstrassOpcode::SW_EC_ADD_PROJ as usize
                             + Rv64WeierstrassOpcode::CLASS_OFFSET
                     }
-                    Some(SwBaseFunct7::SwDouble) => {
+                    Some(SwBaseFunct7::SwDoubleProj) => {
                         assert!(dec_insn.rs2 == 0);
                         Rv64WeierstrassOpcode::SW_EC_DOUBLE_PROJ as usize
                             + Rv64WeierstrassOpcode::CLASS_OFFSET
