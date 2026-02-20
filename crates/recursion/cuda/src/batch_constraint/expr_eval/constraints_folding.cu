@@ -16,7 +16,6 @@
 template <typename T> struct ConstraintsFoldingCols {
     T is_valid;
     T is_first;
-    T is_last;
     T proof_idx;
 
     T air_idx;
@@ -57,7 +56,6 @@ __global__ void constraints_folding_tracegen(
     if (global_row_idx >= num_valid_rows) {
         row.fill_zero(0, sizeof(ConstraintsFoldingCols<uint8_t>));
         COL_WRITE_VALUE(row, ConstraintsFoldingCols, is_first, Fp::one());
-        COL_WRITE_VALUE(row, ConstraintsFoldingCols, is_last, Fp::one());
         COL_WRITE_VALUE(
             row, ConstraintsFoldingCols, proof_idx, NUM_PROOFS + global_row_idx - num_valid_rows
         );
@@ -72,7 +70,6 @@ __global__ void constraints_folding_tracegen(
 
     COL_WRITE_VALUE(row, ConstraintsFoldingCols, is_valid, Fp::one());
     COL_WRITE_VALUE(row, ConstraintsFoldingCols, is_first, row_idx == 0);
-    COL_WRITE_VALUE(row, ConstraintsFoldingCols, is_last, is_last ? Fp::one() : Fp::zero());
     COL_WRITE_VALUE(row, ConstraintsFoldingCols, proof_idx, proof_idx);
 
     uint32_t start_constraint_idx =
