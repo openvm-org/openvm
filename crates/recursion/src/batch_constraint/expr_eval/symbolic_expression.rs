@@ -50,7 +50,7 @@ use crate::{
     tracegen::RowMajorChip,
     utils::{
         base_to_ext, ext_field_add, ext_field_multiply, ext_field_multiply_scalar,
-        ext_field_subtract, scalar_subtract_ext_field, MultiVecWithBounds,
+        ext_field_subtract, interaction_length, scalar_subtract_ext_field, MultiVecWithBounds,
     },
 };
 
@@ -508,7 +508,7 @@ impl RowMajorChip<F> for SymbolicExpressionTraceGenerator {
                         + vk.symbolic_constraints
                             .interactions
                             .iter()
-                            .map(|i| 2 + i.message.len())
+                            .map(interaction_length)
                             .sum::<usize>()
                         + vk.unused_variables.len();
 
@@ -1206,10 +1206,10 @@ pub(in crate::batch_constraint) mod cuda {
                     .iter()
                     .map(|interaction| interaction.message.len())
                     .sum();
-                let rows_for_air = constraints.nodes.len()
-                    + 2 * vk.symbolic_constraints.interactions.len()
-                    + interaction_message_rows
-                    + vk.unused_variables.len();
+                let rows_for_air = constraints.nodes.len() // constraints
+                    + 2 * vk.symbolic_constraints.interactions.len() // mult and bus index per interaction
+                    + interaction_message_rows // interaction messages
+                    + vk.unused_variables.len(); // unused variables
                 total_rows += rows_for_air;
                 record_bounds.push(total_rows as u32);
             }

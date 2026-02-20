@@ -43,6 +43,7 @@ use crate::{
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     tracegen::RowMajorChip,
+    utils::interaction_length,
 };
 
 #[repr(C)]
@@ -131,7 +132,8 @@ pub(crate) fn compute_air_shape_lookup_counts(
                 + dag
                     .interactions
                     .iter()
-                    .fold(0, |acc, interaction| acc + interaction.message.len() + 2)
+                    .map(interaction_length)
+                    .sum::<usize>()
         })
         .collect::<Vec<_>>()
 }

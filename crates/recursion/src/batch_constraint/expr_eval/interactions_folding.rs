@@ -691,6 +691,7 @@ pub(in crate::batch_constraint) mod cuda {
         },
         cuda::{preflight::PreflightGpu, vk::VerifyingKeyGpu},
         tracegen::ModuleChip,
+        utils::interaction_length,
     };
 
     pub struct InteractionsFoldingBlobGpu {
@@ -776,16 +777,15 @@ pub(in crate::batch_constraint) mod cuda {
                             cur_eq3b_idx += 1;
                             num_sum += expr_evals[[pidx, *air_idx]][inter.count] * eq_3b;
 
-                            let message_len = inter.message.len();
-                            let interaction_num_rows = message_len as u32 + 2;
+                            let interaction_num_rows = interaction_length(&inter);
                             proof_interaction_records.push(InteractionRecord {
-                                interaction_num_rows,
+                                interaction_num_rows: interaction_num_rows as u32,
                                 global_start_row: global_current_row,
                                 stacked_idx: stacked_idx_record.stacked_idx,
                             });
-                            global_current_row += interaction_num_rows;
+                            global_current_row += interaction_num_rows as u32;
 
-                            let mut interaction_values = Vec::with_capacity(message_len + 2);
+                            let mut interaction_values = Vec::with_capacity(interaction_num_rows);
                             interaction_values.push(expr_evals[[pidx, *air_idx]][inter.count]);
                             node_idxs.push(inter.count as u32);
 
