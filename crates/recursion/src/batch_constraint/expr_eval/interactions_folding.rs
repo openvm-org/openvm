@@ -146,7 +146,7 @@ where
         builder.assert_bool(local.is_first_in_message);
         builder.assert_bool(local.is_bus_index);
         builder
-            .when(local.has_interactions)
+            .when(local.has_interactions + local.is_bus_index)
             .assert_one(local.is_valid);
 
         // =========================== indices consistency ===============================
@@ -185,15 +185,15 @@ where
             .when(not(local.has_interactions))
             .when(local.is_valid)
             .assert_one(next.is_first_in_air);
-        // // If it's last in the interaction and the row is valid, then its value is just bus_idx +
-        // 1 assert_array_eq(
-        //     &mut builder.when(next.is_first_in_message).when(local.is_valid),
-        //     local.value,
-        //     base_to_ext::<AB::Expr>(local.node_idx + AB::Expr::ONE),
-        // );
-        // TODO: receive something from the symbolic expr air to check that it's indeed the bus
-        // index TODO: otherwise receive the value by node_idx
-
+        // If the row is valid, then this is the bus index iff the next one is first in message
+        // or invalid
+        builder
+            .when(local.has_interactions)
+            .assert_eq(local.is_bus_index, next.is_first_in_message);
+        // An interaction has at least two fields (mult and bus index)
+        builder
+            .when(local.has_interactions)
+            .assert_bool(local.is_bus_index + local.is_first_in_message);
         // final_acc_num only changes when it's first in message
         assert_array_eq(
             &mut builder
@@ -291,8 +291,7 @@ where
                 value: local.value.map(Into::into),
             },
             local.has_interactions
-                * (AB::Expr::ONE - local.is_first_in_message)
-                * (AB::Expr::ONE - local.is_bus_index),
+                * (AB::Expr::ONE - local.is_first_in_message - local.is_bus_index),
         );
         self.interaction_bus.receive(
             builder,
@@ -305,6 +304,18 @@ where
                 value: local.value.map(Into::into),
             },
             local.is_first_in_message * local.has_interactions,
+        );
+        self.interaction_bus.receive(
+            builder,
+            local.proof_idx,
+            InteractionsFoldingMessage {
+                air_idx: local.air_idx.into(),
+                interaction_idx: local.interaction_idx.into(),
+                is_mult: AB::Expr::ZERO,
+                idx_in_message: AB::Expr::NEG_ONE,
+                value: local.value.map(Into::into),
+            },
+            local.is_bus_index,
         );
 
         self.transcript_bus.sample_ext(
@@ -678,6 +689,7 @@ pub(in crate::batch_constraint) mod cuda {
         },
         cuda::{preflight::PreflightGpu, vk::VerifyingKeyGpu},
         tracegen::ModuleChip,
+        utils::interaction_length,
     };
 
     pub struct InteractionsFoldingBlobGpu {
@@ -763,16 +775,15 @@ pub(in crate::batch_constraint) mod cuda {
                             cur_eq3b_idx += 1;
                             num_sum += expr_evals[[pidx, *air_idx]][inter.count] * eq_3b;
 
-                            let message_len = inter.message.len();
-                            let interaction_num_rows = message_len as u32 + 2;
+                            let interaction_num_rows = interaction_length(inter);
                             proof_interaction_records.push(InteractionRecord {
-                                interaction_num_rows,
+                                interaction_num_rows: interaction_num_rows as u32,
                                 global_start_row: global_current_row,
                                 stacked_idx: stacked_idx_record.stacked_idx,
                             });
-                            global_current_row += interaction_num_rows;
+                            global_current_row += interaction_num_rows as u32;
 
-                            let mut interaction_values = Vec::with_capacity(message_len + 2);
+                            let mut interaction_values = Vec::with_capacity(interaction_num_rows);
                             interaction_values.push(expr_evals[[pidx, *air_idx]][inter.count]);
                             node_idxs.push(inter.count as u32);
 
