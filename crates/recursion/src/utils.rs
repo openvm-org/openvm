@@ -187,6 +187,63 @@ where
     }
 }
 
+pub trait FlattenedLayout {
+    type Index;
+
+    fn len(&self) -> usize;
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+    fn offset(&self, idx: Self::Index) -> usize;
+}
+
+#[derive(Debug, Clone)]
+pub struct FlattenedVec<T, L> {
+    data: Vec<T>,
+    layout: L,
+}
+
+impl<T, L: FlattenedLayout> FlattenedVec<T, L> {
+    pub fn from_parts(layout: L, data: Vec<T>) -> Self {
+        let layout_len = layout.len();
+        assert_eq!(
+            data.len(),
+            layout_len,
+            "flattened vec layout/data length mismatch: data_len={}, layout_len={layout_len}",
+            data.len(),
+        );
+        Self { data, layout }
+    }
+
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
+    }
+
+    pub fn layout(&self) -> &L {
+        &self.layout
+    }
+
+    pub fn as_slice(&self) -> &[T] {
+        &self.data
+    }
+
+    pub fn as_mut_slice(&mut self) -> &mut [T] {
+        &mut self.data
+    }
+}
+
+impl<T, L: FlattenedLayout> Index<L::Index> for FlattenedVec<T, L> {
+    type Output = T;
+
+    fn index(&self, index: L::Index) -> &Self::Output {
+        &self.data[self.layout.offset(index)]
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct MultiProofVecVec<T> {
     data: Vec<T>,

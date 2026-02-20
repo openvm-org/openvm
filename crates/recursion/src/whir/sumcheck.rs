@@ -19,9 +19,12 @@ use crate::{
     subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     tracegen::{RowMajorChip, StandardTracegenCtx},
     utils::{ext_field_multiply, interpolate_quadratic, mobius_eq_1, pow_tidx_count},
-    whir::bus::{
-        WhirAlphaBus, WhirAlphaMessage, WhirEqAlphaUBus, WhirEqAlphaUMessage, WhirSumcheckBus,
-        WhirSumcheckBusMessage,
+    whir::{
+        bus::{
+            WhirAlphaBus, WhirAlphaMessage, WhirEqAlphaUBus, WhirEqAlphaUMessage, WhirSumcheckBus,
+            WhirSumcheckBusMessage,
+        },
+        num_queries_per_round, WhirBlobCpu,
     },
 };
 
@@ -255,7 +258,7 @@ where
 pub(crate) struct WhirSumcheckTraceGenerator;
 
 impl RowMajorChip<F> for WhirSumcheckTraceGenerator {
-    type Ctx<'a> = StandardTracegenCtx<'a>;
+    type Ctx<'a> = (StandardTracegenCtx<'a>, &'a WhirBlobCpu);
 
     #[tracing::instrument(level = "trace", skip_all)]
     fn generate_trace(
@@ -263,12 +266,16 @@ impl RowMajorChip<F> for WhirSumcheckTraceGenerator {
         ctx: &Self::Ctx<'_>,
         required_height: Option<usize>,
     ) -> Option<RowMajorMatrix<F>> {
-        let vk = ctx.vk;
-        let proofs = ctx.proofs;
-        let preflights = ctx.preflights;
+        let proofs = ctx.0.proofs;
+        let preflights = ctx.0.preflights;
+        let blob = ctx.1;
+        let tidx_per_round = &blob.whir_round_tidx_per_round;
+        let initial_claim_per_round = &blob.initial_claim_per_round;
+        let post_sumcheck_claims = &blob.post_sumcheck_claims;
+        let eq_partials = &blob.eq_partials;
         debug_assert_eq!(proofs.len(), preflights.len());
 
-        let params = &vk.inner.params;
+        let params = &ctx.0.vk.inner.params;
         let k_whir = params.k_whir();
         let num_whir_rounds = params.num_whir_rounds();
 
@@ -284,8 +291,7 @@ impl RowMajorChip<F> for WhirSumcheckTraceGenerator {
             })
             .collect_vec();
 
-        let num_queries_per_round: Vec<usize> =
-            params.whir.rounds.iter().map(|r| r.num_queries).collect();
+        let num_queries_per_round = num_queries_per_round(params);
         let mut alpha_lookup_counts = vec![0usize; params.num_whir_sumcheck_rounds()];
         let mut base = 0usize;
         for r in 0..num_whir_rounds {
@@ -330,7 +336,8 @@ impl RowMajorChip<F> for WhirSumcheckTraceGenerator {
                 let is_first_in_group = j == 0;
                 let last_group_row_idx = (whir_round + 1) * k_whir - 1;
                 let folding_pow_offset = pow_tidx_count(params.whir.folding_pow_bits);
-                let tidx = whir.tidx_per_round[whir_round] + (3 * D_EF + folding_pow_offset) * j;
+                let tidx =
+                    tidx_per_round[(proof_idx, whir_round)] + (3 * D_EF + folding_pow_offset) * j;
 
                 let cols: &mut SumcheckCols<F> = row.borrow_mut();
                 cols.is_enabled = F::ONE;
@@ -348,7 +355,7 @@ impl RowMajorChip<F> for WhirSumcheckTraceGenerator {
                 cols.folding_pow_witness = proof.whir_proof.folding_pow_witnesses[i];
                 cols.folding_pow_sample = whir.folding_pow_samples[i];
                 cols.eq_partial
-                    .copy_from_slice(whir.eq_partials[i].as_basis_coefficients_slice());
+                    .copy_from_slice(eq_partials[(proof_idx, i)].as_basis_coefficients_slice());
                 cols.alpha
                     .copy_from_slice(whir.alphas[i].as_basis_coefficients_slice());
                 cols.u.copy_from_slice(
@@ -356,14 +363,15 @@ impl RowMajorChip<F> for WhirSumcheckTraceGenerator {
                 );
                 cols.pre_claim.copy_from_slice(
                     if is_first_in_group {
-                        whir.initial_claim_per_round[whir_round]
+                        initial_claim_per_round[(proof_idx, whir_round)]
                     } else {
-                        whir.post_sumcheck_claims[i - 1]
+                        post_sumcheck_claims[(proof_idx, i - 1)]
                     }
                     .as_basis_coefficients_slice(),
                 );
                 cols.post_group_claim.copy_from_slice(
-                    whir.post_sumcheck_claims[last_group_row_idx].as_basis_coefficients_slice(),
+                    post_sumcheck_claims[(proof_idx, last_group_row_idx)]
+                        .as_basis_coefficients_slice(),
                 );
                 cols.alpha_lookup_count =
                     F::from_usize(alpha_lookup_counts[whir_round * k_whir + j]);
