@@ -431,6 +431,7 @@ impl AirModule for WhirModule {
         };
         let initial_round_opened_values_air = InitialOpenedValuesAir {
             stacking_indices_bus: self.bus_inventory.stacking_indices_bus,
+            whir_mu_bus: self.bus_inventory.whir_mu_bus,
             verify_query_bus: self.verify_query_bus,
             folding_bus: self.folding_bus,
             poseidon_permute_bus: self.bus_inventory.poseidon2_permute_bus,

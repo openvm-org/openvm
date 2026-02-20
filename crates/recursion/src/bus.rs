@@ -238,13 +238,20 @@ define_typed_per_proof_permutation_bus!(StackingModuleBus, StackingModuleMessage
 pub struct WhirModuleMessage<T> {
     /// The `tidx` _after_ batching randomness `mu` is sampled.
     pub tidx: T,
-    /// The batching randomness to combine stacking claims.
-    pub mu: [T; 4],
     /// The reduced opening claim after batching.
     pub claim: [T; 4],
 }
 
 define_typed_per_proof_permutation_bus!(WhirModuleBus, WhirModuleMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct WhirMuMessage<T> {
+    /// The batching randomness to combine stacking claims.
+    pub mu: [T; D_EF],
+}
+
+define_typed_per_proof_permutation_bus!(WhirMuBus, WhirMuMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
