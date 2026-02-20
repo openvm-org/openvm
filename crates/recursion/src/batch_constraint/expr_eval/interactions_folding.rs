@@ -779,7 +779,7 @@ pub(in crate::batch_constraint) mod cuda {
                             cur_eq3b_idx += 1;
                             num_sum += expr_evals[[pidx, *air_idx]][inter.count] * eq_3b;
 
-                            let interaction_num_rows = interaction_length(&inter);
+                            let interaction_num_rows = interaction_length(inter);
                             proof_interaction_records.push(InteractionRecord {
                                 interaction_num_rows: interaction_num_rows as u32,
                                 global_start_row: global_current_row,
