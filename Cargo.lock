@@ -3283,13 +3283,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-deferral-guest"
+version = "2.0.0-alpha"
+dependencies = [
+ "openvm-custom-insn",
+ "strum_macros",
+]
+
+[[package]]
+name = "openvm-deferral-integration-tests"
+version = "2.0.0-alpha"
+dependencies = [
+ "derive_more 1.0.0",
+ "eyre",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-deferral-circuit",
+ "openvm-deferral-transpiler",
+ "openvm-instructions",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-sdk",
+ "openvm-toolchain-tests",
+ "openvm-transpiler",
+ "serde",
+]
+
+[[package]]
 name = "openvm-deferral-transpiler"
 version = "2.0.0-alpha"
 dependencies = [
+ "openvm-deferral-guest",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-transpiler",
  "p3-field",
+ "rrs-lib",
  "serde",
  "strum",
 ]
