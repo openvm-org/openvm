@@ -201,6 +201,7 @@ impl AirModule for StackingModule {
         let stacking_claims_air = StackingClaimsAir {
             stacking_indices_bus: self.bus_inventory.stacking_indices_bus,
             whir_module_bus: self.bus_inventory.whir_module_bus,
+            whir_mu_bus: self.bus_inventory.whir_mu_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
             exp_bits_len_bus: self.bus_inventory.exp_bits_len_bus,
             stacking_tidx_bus: self.stacking_tidx_bus,

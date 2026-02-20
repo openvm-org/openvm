@@ -36,7 +36,6 @@ pub(in crate::whir::non_initial_opened_values) struct NonInitialOpenedValuesCols
     is_first_in_round: T,
     is_first_in_query: T,
     merkle_idx_bit_src: T,
-    // TODO: extract
     zi_root: T,
     zi: T,
     twiddle: T,

@@ -19,7 +19,7 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 use crate::{
     bus::{
         StackingIndexMessage, StackingIndicesBus, TranscriptBus, TranscriptBusMessage,
-        WhirModuleBus, WhirModuleMessage,
+        WhirModuleBus, WhirModuleMessage, WhirMuBus, WhirMuMessage,
     },
     primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage},
     stacking::{
@@ -77,6 +77,7 @@ pub struct StackingClaimsAir {
     // External buses
     pub stacking_indices_bus: StackingIndicesBus,
     pub whir_module_bus: WhirModuleBus,
+    pub whir_mu_bus: WhirMuBus,
     pub transcript_bus: TranscriptBus,
     pub exp_bits_len_bus: ExpBitsLenBus,
 
@@ -326,8 +327,15 @@ where
             local.proof_idx,
             WhirModuleMessage {
                 tidx: AB::Expr::from_usize(2 * D_EF + mu_pow_offset) + local.tidx,
-                mu: local.mu.map(Into::into),
                 claim: local.whir_claim.map(Into::into),
+            },
+            and(local.is_last, local.is_valid),
+        );
+        self.whir_mu_bus.send(
+            builder,
+            local.proof_idx,
+            WhirMuMessage {
+                mu: local.mu.map(Into::into),
             },
             and(local.is_last, local.is_valid),
         );

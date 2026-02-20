@@ -22,7 +22,7 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 use crate::{
     bus::{
         MerkleVerifyBus, MerkleVerifyBusMessage, Poseidon2PermuteBus, Poseidon2PermuteMessage,
-        StackingIndexMessage, StackingIndicesBus,
+        StackingIndexMessage, StackingIndicesBus, WhirMuBus, WhirMuMessage,
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
@@ -51,7 +51,6 @@ pub(in crate::whir::initial_opened_values) struct InitialOpenedValuesCols<T> {
     mu: [T; 4],
     pre_state: [T; POSEIDON2_WIDTH],
     post_state: [T; POSEIDON2_WIDTH],
-    // TODO: consider removing these from this AIR and passing them directly to `WhirFoldingAir`.
     twiddle: T,
     zi_root: T,
     zi: T,
@@ -61,6 +60,7 @@ pub(in crate::whir::initial_opened_values) struct InitialOpenedValuesCols<T> {
 
 pub struct InitialOpenedValuesAir {
     pub stacking_indices_bus: StackingIndicesBus,
+    pub whir_mu_bus: WhirMuBus,
     pub verify_query_bus: VerifyQueryBus,
     pub folding_bus: WhirFoldingBus,
     pub poseidon_permute_bus: Poseidon2PermuteBus,
@@ -166,6 +166,14 @@ where
         let mut chunk_len = AB::Expr::ZERO;
         let mut codeword_value_slice_acc = local.codeword_value_acc.map(Into::into);
 
+        self.whir_mu_bus.receive(
+            builder,
+            local.proof_idx,
+            WhirMuMessage {
+                mu: local.mu.map(Into::into),
+            },
+            local.is_first_in_proof,
+        );
         assert_array_eq(&mut builder.when(is_same_proof.clone()), local.mu, next.mu);
         assert_array_eq(
             &mut builder.when(local.is_first_in_coset),
