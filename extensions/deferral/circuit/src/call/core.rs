@@ -208,7 +208,7 @@ where
         core_record.read_data = read_data;
 
         let input_commit = byte_commit_to_f(&read_data.input_commit.map(F::from_u8));
-        let def_idx = core_record.deferral_idx.to_unique_u32();
+        let def_idx = instruction.c.as_canonical_u32();
         let poseidon2_chip = deferral_poseidon2_chip();
 
         let (output_commit, output_len) = self.deferral_fns[def_idx as usize].execute(
