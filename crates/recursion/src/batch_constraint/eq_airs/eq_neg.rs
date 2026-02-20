@@ -270,7 +270,7 @@ where
                         is_first: [
                             local.is_first.into(),
                             local.is_first_hypercube.into(),
-                            AB::Expr::ONE,
+                            local.is_valid.into(),
                         ],
                     },
                     NestedForLoopIoCols {
@@ -283,7 +283,7 @@ where
                         is_first: [
                             next.is_first.into(),
                             next.is_first_hypercube.into(),
-                            AB::Expr::ONE,
+                            next.is_valid.into(),
                         ],
                     },
                 ),

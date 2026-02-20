@@ -13,7 +13,6 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, D_E
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{extension::BinomiallyExtendable, BasedVectorSpace, PrimeCharacteristicRing};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_maybe_rayon::prelude::*;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -125,8 +124,9 @@ where
         builder.assert_bool(local.nth_bit);
         builder.assert_bool(local.has_no_interactions);
 
-        let within_one_air = not(next.is_first_in_air);
-        let within_one_interaction = not(next.is_first_in_interaction);
+        let within_one_air = next.is_valid - next.is_first_in_air;
+        let within_one_interaction = next.is_valid - next.is_first_in_interaction;
+        let is_last_in_interaction = local.is_valid - within_one_interaction.clone();
 
         // =============================== n consistency ==================================
         builder
@@ -157,7 +157,7 @@ where
         // it's always 1 in the end
         builder
             .when(not(local.has_no_interactions))
-            .when(next.is_first_in_interaction)
+            .when(is_last_in_interaction.clone())
             .when(local.is_valid)
             .assert_one(local.n_at_least_n_lift);
 
@@ -197,10 +197,7 @@ where
             .assert_zero(local.idx);
         builder.when(local.is_first).assert_zero(local.running_idx);
         builder
-            .when(LoopSubAir::local_is_last(
-                next.is_valid,
-                next.is_first_in_interaction,
-            ))
+            .when(is_last_in_interaction.clone())
             .when(not(local.has_no_interactions))
             .assert_eq(local.idx, local.running_idx);
         builder
@@ -275,7 +272,7 @@ where
                 interaction_idx: local.interaction_idx,
                 eq_3b: local.eq,
             },
-            next.is_first_in_interaction * (local.is_valid - local.has_no_interactions),
+            is_last_in_interaction * (local.is_valid - local.has_no_interactions),
         );
     }
 }
@@ -502,17 +499,6 @@ impl RowMajorChip<F> for Eq3bTraceGenerator {
                 cur_height += this_height;
             }
         }
-
-        trace[cur_height * width..]
-            .par_chunks_mut(width)
-            .enumerate()
-            .for_each(|(i, chunk)| {
-                let cols: &mut Eq3bColumns<F> = chunk.borrow_mut();
-                cols.proof_idx = F::from_usize(preflights.len() + i);
-                cols.is_first = F::ONE;
-                cols.is_first_in_air = F::ONE;
-                cols.is_first_in_interaction = F::ONE;
-            });
 
         Some(RowMajorMatrix::new(trace, width))
     }

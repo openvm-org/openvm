@@ -153,12 +153,10 @@ where
             ),
         );
 
-        // TODO(ayush): move to NestedForLoopSubAir
-        builder
-            .when(local.is_first_round)
-            .assert_one(local.is_enabled);
-        let is_transition_round = next.is_enabled - next.is_first_round;
-        let is_last_round = local.is_enabled - is_transition_round.clone();
+        let is_transition_round =
+            LoopSubAir::local_is_transition(next.is_enabled, next.is_first_round);
+        let is_last_round =
+            LoopSubAir::local_is_last(local.is_enabled, next.is_enabled, next.is_first_round);
 
         // Sumcheck round flag starts at 0
         builder.when(local.is_first_round).assert_zero(local.round);

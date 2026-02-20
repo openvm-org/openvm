@@ -76,12 +76,6 @@ __global__ void interactions_folding_tracegen(
 
     if (global_row_idx >= num_valid_rows) {
         row.fill_zero(0, sizeof(InteractionsFoldingCols<uint8_t>));
-        COL_WRITE_VALUE(row, InteractionsFoldingCols, is_first, Fp::one());
-        COL_WRITE_VALUE(
-            row, InteractionsFoldingCols, proof_idx, NUM_PROOFS + global_row_idx - num_valid_rows
-        );
-        COL_WRITE_VALUE(row, InteractionsFoldingCols, is_first_in_air, Fp::one());
-        COL_WRITE_VALUE(row, InteractionsFoldingCols, is_first_in_message, Fp::one());
         return;
     }
 

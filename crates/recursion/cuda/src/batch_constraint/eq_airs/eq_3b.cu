@@ -76,11 +76,6 @@ __global__ void eq_3b_tracegen(
 
     if (row_idx >= num_valid_rows) {
         row.fill_zero(0, sizeof(Eq3bColumns<uint8_t>));
-        uint32_t pad_idx = row_idx - num_valid_rows;
-        COL_WRITE_VALUE(row, Eq3bColumns, proof_idx, num_proofs + pad_idx);
-        COL_WRITE_VALUE(row, Eq3bColumns, is_first, 1);
-        COL_WRITE_VALUE(row, Eq3bColumns, is_first_in_air, 1);
-        COL_WRITE_VALUE(row, Eq3bColumns, is_first_in_interaction, 1);
         return;
     }
 

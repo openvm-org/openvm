@@ -126,17 +126,12 @@ where
             ),
         );
 
-        // TODO(ayush): move to NestedForLoopSubAir
-        builder.when(local.is_first_eval).assert_one(local.is_valid);
-        builder
-            .when(local.is_proof_start)
-            .assert_one(local.is_valid);
+        let is_transition_eval = LoopSubAir::local_is_transition(next.is_valid, next.is_first_eval);
+        let is_last_eval =
+            LoopSubAir::local_is_last(local.is_valid, next.is_valid, next.is_first_eval);
 
-        let is_transition_eval = next.is_valid - next.is_first_eval;
-        let is_last_eval = local.is_valid - is_transition_eval.clone();
-
-        let is_proof_transition = next.is_valid - next.is_proof_start;
-        let is_proof_end = local.is_valid - is_proof_transition.clone();
+        let is_proof_end =
+            LoopSubAir::local_is_last(local.is_valid, next.is_valid, next.is_proof_start);
 
         let is_not_dummy = AB::Expr::ONE - local.is_dummy;
 
