@@ -149,21 +149,15 @@ where
         let table = bases
             .iter()
             .map(|base| {
-                if base.is_identity() {
+                if Group::is_identity(base) {
                     vec![<C::Point as Group>::IDENTITY; window_size - 2]
                 } else {
                     let mut multiples = Vec::with_capacity(window_size - 2);
                     for _ in 0..window_size - 2 {
-                        // Because the order of `base` is prime, we are guaranteed that
-                        // j * base != identity,
-                        // j * base != +- base for j > 1,
-                        // j * base + base != identity
                         let multiple = multiples
                             .last()
-                            .map(|last| unsafe {
-                                WeierstrassPoint::add_ne_nonidentity::<false>(last, base)
-                            })
-                            .unwrap_or_else(|| unsafe { base.double_nonidentity::<false>() });
+                            .map(|last: &C::Point| last.add_impl::<false>(base))
+                            .unwrap_or_else(|| base.double_impl::<false>());
                         multiples.push(multiple);
                     }
                     multiples
@@ -223,17 +217,15 @@ where
 
             if outer != 0 {
                 for _ in 0..self.window_bits {
-                    // Note: this handles identity
                     // setup has been called above
-                    res.double_assign_impl::<false>();
+                    res = res.double_impl::<false>();
                 }
             }
             for (base_idx, scalar) in scalars.iter().enumerate() {
                 let scalar = (scalar.as_le_bytes()[limb_idx] >> bit_idx) & mask;
                 let summand = self.get_multiple(base_idx, scalar as usize);
-                // handles identity
                 // setup has been called above
-                res.add_assign_impl::<false>(summand);
+                res = res.add_impl::<false>(summand);
             }
         }
         res
