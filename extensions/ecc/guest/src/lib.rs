@@ -1,4 +1,6 @@
 #![no_std]
+// elliptic_curve re-exports generic_array 0.x which is deprecated in favor of 1.x
+#![allow(deprecated)]
 extern crate self as openvm_ecc_guest;
 #[macro_use]
 extern crate alloc;
@@ -29,8 +31,8 @@ pub const SW_FUNCT3: u8 = 0b001;
 #[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
 #[repr(u8)]
 pub enum SwBaseFunct7 {
-    SwAddNe = 0,
-    SwDouble,
+    SwAddProj = 0,
+    SwDoubleProj,
     SwSetup,
 }
 

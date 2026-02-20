@@ -41,22 +41,24 @@ pub fn main() {
     let mut p2 = Secp256k1Point::from_xy(x2, y2).unwrap();
 
     // Generic add can handle equal or unequal points.
-    let p3 = &p1 + &p2;
+    let p3 = (&p1 + &p2).normalize();
     if p3.x() != &x3 || p3.y() != &y3 {
         panic!();
     }
-    let p4 = &p2 + &p2;
+    let p4 = (&p2 + &p2).normalize();
     if p4.x() != &x4 || p4.y() != &y4 {
         panic!();
     }
 
     // Add assign and double assign
     p1 += &p2;
-    if p1.x() != &x3 || p1.y() != &y3 {
+    let p1n = p1.normalize();
+    if p1n.x() != &x3 || p1n.y() != &y3 {
         panic!();
     }
     p2.double_assign();
-    if p2.x() != &x4 || p2.y() != &y4 {
+    let p2n = p2.normalize();
+    if p2n.x() != &x4 || p2n.y() != &y4 {
         panic!();
     }
 
@@ -70,7 +72,7 @@ pub fn main() {
     let y5 = Secp256k1Coord::from_le_bytes_unchecked(&hex!(
         "9E272F746DA7BED171E522610212B6AEEAAFDB2AD9F4B530B8E1B27293B19B2C"
     ));
-    let result = msm(&[scalar], &[p1]);
+    let result = msm(&[scalar], &[p1]).normalize();
     if result.x() != &x5 || result.y() != &y5 {
         panic!();
     }
@@ -88,18 +90,20 @@ pub fn main() {
     let p2 = P256Point::from_xy(x2.clone(), y2.clone()).unwrap();
 
     // Generic add can handle equal or unequal points.
-    let p3 = &p1 + &p2;
-    let p4 = &p2 + &p2;
+    let p3 = (&p1 + &p2).normalize();
+    let p4 = (&p2 + &p2).normalize();
 
     // Add assign and double assign
     let mut sum = P256Point::from_xy(x1, y1).unwrap();
     sum += &p2;
-    if sum.x() != p3.x() || sum.y() != p3.y() {
+    let sumn = sum.normalize();
+    if sumn.x() != p3.x() || sumn.y() != p3.y() {
         panic!();
     }
     let mut double = P256Point::from_xy(x2, y2).unwrap();
     double.double_assign();
-    if double.x() != p4.x() || double.y() != p4.y() {
+    let doublen = double.normalize();
+    if doublen.x() != p4.x() || doublen.y() != p4.y() {
         panic!();
     }
 }
