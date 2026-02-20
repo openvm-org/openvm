@@ -34,7 +34,6 @@ impl Preflight {
         }
         WhirModuleMessage {
             tidx: F::from_usize(self.stacking.post_tidx),
-            mu: mu.as_basis_coefficients_slice().try_into().unwrap(),
             claim: claim.as_basis_coefficients_slice().try_into().unwrap(),
         }
     }
