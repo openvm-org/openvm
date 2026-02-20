@@ -34,6 +34,7 @@ members = [
     "extensions/rv32im/transpiler",
     "extensions/rv32im/guest",
     "extensions/rv32im/tests",
+    "extensions/rv64im/transpiler",
     "extensions/rv32-adapters",
     "extensions/native/circuit",
     "extensions/native/compiler",
@@ -146,6 +147,7 @@ cargo-openvm = { path = "crates/cli", default-features = false }
 openvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
 openvm-rv32im-transpiler = { path = "extensions/rv32im/transpiler", default-features = false }
 openvm-rv32im-guest = { path = "extensions/rv32im/guest", default-features = false }
+openvm-rv64im-transpiler = { path = "extensions/rv64im/transpiler", default-features = false }
 openvm-rv64im-guest = { path = "extensions/rv64im/guest", default-features = false }
 openvm-rv32-adapters = { path = "extensions/rv32-adapters", default-features = false }
 openvm-native-circuit = { path = "extensions/native/circuit", default-features = false }

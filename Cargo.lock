@@ -7029,6 +7029,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-rv64im-transpiler"
+version = "1.4.3"
+dependencies = [
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-rv32im-guest",
+ "openvm-stark-backend",
+ "openvm-transpiler",
+ "rrs-lib",
+ "serde",
+ "strum 0.26.3",
+ "tracing",
+]
+
+[[package]]
 name = "openvm-scripts"
 version = "1.4.3"
 dependencies = [
