@@ -11,16 +11,17 @@
 //! further details
 
 pub const OPCODE_LOAD: u32 = 0x03;
-pub const OPCODE_MISC_MEM: u32 = 0x0f;
+pub const OPCODE_FENCE: u32 = 0x0f;
 pub const OPCODE_OP_IMM: u32 = 0x13;
 pub const OPCODE_AUIPC: u32 = 0x17;
+pub const OPCODE_OP_IMM_32: u32 = 0x1b;
 pub const OPCODE_STORE: u32 = 0x23;
 pub const OPCODE_OP: u32 = 0x33;
 pub const OPCODE_LUI: u32 = 0x37;
+pub const OPCODE_OP_32: u32 = 0x3b;
 pub const OPCODE_BRANCH: u32 = 0x63;
 pub const OPCODE_JALR: u32 = 0x67;
 pub const OPCODE_JAL: u32 = 0x6f;
-pub const OPCODE_SYSTEM: u32 = 0x73;
 
 #[derive(Debug, PartialEq)]
 pub struct RType {
@@ -72,7 +73,7 @@ impl IType {
 
 #[derive(Debug, PartialEq)]
 pub struct ITypeShamt {
-    pub funct7: u32,
+    pub funct6: u32,
     pub shamt: u32,
     pub rs1: usize,
     pub funct3: u32,
@@ -82,34 +83,14 @@ pub struct ITypeShamt {
 impl ITypeShamt {
     pub fn new(insn: u32) -> ITypeShamt {
         let itype = IType::new(insn);
-        let shamt = (itype.imm as u32) & 0x1f;
+        let shamt = (itype.imm as u32) & 0x3f;
 
         ITypeShamt {
-            funct7: (insn >> 25) & 0x7f,
+            funct6: (insn >> 26) & 0x3f,
             shamt,
             rs1: itype.rs1,
             funct3: itype.funct3,
             rd: itype.rd,
-        }
-    }
-}
-
-pub struct ITypeCSR {
-    pub csr: u32,
-    pub rs1: usize,
-    pub funct3: u32,
-    pub rd: usize,
-}
-
-impl ITypeCSR {
-    pub fn new(insn: u32) -> ITypeCSR {
-        let csr: u32 = (insn >> 20) & 0xfff;
-
-        ITypeCSR {
-            csr,
-            rs1: ((insn >> 15) & 0x1f) as usize,
-            funct3: (insn >> 12) & 0x7,
-            rd: ((insn >> 7) & 0x1f) as usize,
         }
     }
 }
@@ -279,7 +260,7 @@ mod tests {
         assert_eq!(
             ITypeShamt::new(0x00d29613),
             ITypeShamt {
-                funct7: 0,
+                funct6: 0,
                 shamt: 13,
                 rs1: 5,
                 funct3: 0b001,
@@ -291,7 +272,7 @@ mod tests {
         assert_eq!(
             ITypeShamt::new(0x01f9df13),
             ITypeShamt {
-                funct7: 0,
+                funct6: 0,
                 shamt: 31,
                 rs1: 19,
                 funct3: 0b101,
@@ -303,7 +284,7 @@ mod tests {
         assert_eq!(
             ITypeShamt::new(0x400bd393),
             ITypeShamt {
-                funct7: 0b0100000,
+                funct6: 0b010000,
                 shamt: 0,
                 rs1: 23,
                 funct3: 0b101,
