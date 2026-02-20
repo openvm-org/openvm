@@ -6438,6 +6438,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-decoder"
+version = "1.4.3"
+
+[[package]]
 name = "openvm-ecc-circuit"
 version = "1.4.3"
 dependencies = [
@@ -7022,6 +7026,21 @@ dependencies = [
  "openvm-custom-insn",
  "p3-field",
  "strum_macros 0.26.4",
+]
+
+[[package]]
+name = "openvm-rv64im-transpiler"
+version = "1.4.3"
+dependencies = [
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-rv32im-guest",
+ "openvm-stark-backend",
+ "openvm-transpiler",
+ "rrs-lib",
+ "serde",
+ "strum 0.26.3",
+ "tracing",
 ]
 
 [[package]]
