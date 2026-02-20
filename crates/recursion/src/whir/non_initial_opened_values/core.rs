@@ -17,7 +17,7 @@ use crate::{
     bus::{
         MerkleVerifyBus, MerkleVerifyBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
     },
-    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     tracegen::{RowMajorChip, StandardTracegenCtx},
     whir::bus::{VerifyQueryBus, VerifyQueryBusMessage, WhirFoldingBus, WhirFoldingBusMessage},
 };
@@ -76,19 +76,6 @@ where
         let local: &NonInitialOpenedValuesCols<AB::Var> = (*local).borrow();
         let next: &NonInitialOpenedValuesCols<AB::Var> = (*next).borrow();
 
-        builder.assert_bool(local.is_enabled);
-        builder
-            .when(local.is_first_in_proof)
-            .assert_one(local.is_enabled);
-        builder
-            .when(local.is_first_in_round)
-            .assert_one(local.is_enabled);
-        builder
-            .when(local.is_first_in_query)
-            .assert_one(local.is_enabled);
-
-        let is_same_proof = next.is_enabled - next.is_first_in_proof;
-        let is_same_round = next.is_enabled - next.is_first_in_round;
         let is_same_query = next.is_enabled - next.is_first_in_query;
 
         let max_coset_idx = AB::Expr::from_usize((1 << self.k) - 1);
@@ -99,47 +86,38 @@ where
         NestedForLoopSubAir.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.is_enabled,
-                        counter: [
-                            local.proof_idx,
-                            local.whir_round,
-                            local.query_idx,
-                            local.coset_idx,
-                        ],
-                        is_first: [
-                            local.is_first_in_proof,
-                            local.is_first_in_round,
-                            local.is_first_in_query,
-                            local.is_enabled,
-                        ],
-                    }
-                    .map_into(),
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_enabled,
-                        counter: [
-                            next.proof_idx,
-                            next.whir_round,
-                            next.query_idx,
-                            next.coset_idx,
-                        ],
-                        is_first: [
-                            next.is_first_in_proof,
-                            next.is_first_in_round,
-                            next.is_first_in_query,
-                            next.is_enabled,
-                        ],
-                    }
-                    .map_into(),
-                ),
-                NestedForLoopAuxCols {
-                    is_transition: [
-                        is_same_proof.clone(),
-                        is_same_round.clone(),
-                        is_same_query.clone(),
+                NestedForLoopIoCols {
+                    is_enabled: local.is_enabled,
+                    counter: [
+                        local.proof_idx,
+                        local.whir_round,
+                        local.query_idx,
+                        local.coset_idx,
                     ],
-                },
+                    is_first: [
+                        local.is_first_in_proof,
+                        local.is_first_in_round,
+                        local.is_first_in_query,
+                        local.is_enabled,
+                    ],
+                }
+                .map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: next.is_enabled,
+                    counter: [
+                        next.proof_idx,
+                        next.whir_round,
+                        next.query_idx,
+                        next.coset_idx,
+                    ],
+                    is_first: [
+                        next.is_first_in_proof,
+                        next.is_first_in_round,
+                        next.is_first_in_query,
+                        next.is_enabled,
+                    ],
+                }
+                .map_into(),
             ),
         );
 

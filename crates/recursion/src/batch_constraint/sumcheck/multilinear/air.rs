@@ -19,7 +19,7 @@ use crate::{
         ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus, StackingModuleBus,
         StackingModuleMessage, TranscriptBus,
     },
-    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{
         assert_one_ext, ext_field_add, ext_field_multiply, ext_field_multiply_scalar,
         ext_field_subtract_scalar, scalar_subtract_ext_field,
@@ -34,8 +34,6 @@ pub struct MultilinearSumcheckCols<T> {
     pub round_idx: T,
     pub is_proof_start: T,
     pub is_first_eval: T,
-
-    pub nested_for_loop_aux_cols: NestedForLoopAuxCols<T, 1>,
 
     /// A valid row which is not involved in any interactions
     /// but should satisfy air constraints
@@ -104,25 +102,22 @@ where
         // Loop Constraints
         ///////////////////////////////////////////////////////////////////////
 
-        type LoopSubAir = NestedForLoopSubAir<2, 1>;
+        type LoopSubAir = NestedForLoopSubAir<2>;
         LoopSubAir {}.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.is_valid,
-                        counter: [local.proof_idx, local.round_idx],
-                        is_first: [local.is_proof_start, local.is_first_eval],
-                    }
-                    .map_into(),
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_valid,
-                        counter: [next.proof_idx, next.round_idx],
-                        is_first: [next.is_proof_start, next.is_first_eval],
-                    }
-                    .map_into(),
-                ),
-                local.nested_for_loop_aux_cols.map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: local.is_valid,
+                    counter: [local.proof_idx, local.round_idx],
+                    is_first: [local.is_proof_start, local.is_first_eval],
+                }
+                .map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: next.is_valid,
+                    counter: [next.proof_idx, next.round_idx],
+                    is_first: [next.is_proof_start, next.is_first_eval],
+                }
+                .map_into(),
             ),
         );
 
