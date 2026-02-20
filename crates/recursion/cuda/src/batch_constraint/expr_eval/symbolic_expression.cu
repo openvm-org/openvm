@@ -24,7 +24,8 @@ enum NodeKind : uint8_t {
     NODE_KIND_MUL = 10,
     NODE_KIND_INTERACTION_MULT = 11,
     NODE_KIND_INTERACTION_MSG_COMP = 12,
-    NODE_KIND_COUNT = 13,
+    NODE_KIND_INTERACTION_BUS_INDEX = 13,
+    NODE_KIND_COUNT = 14,
 };
 
 struct FlatSymbolicConstraintNode {
@@ -282,10 +283,12 @@ __global__ void symbolic_expression_tracegen(
     uint32_t interaction_idx = 0;
     while (interactions_start + interaction_idx < interactions_end) {
         const FlatInteraction interaction = interactions_per_air[interaction_idx];
-        uint32_t block = 1 + interaction.message_len;
+        uint32_t block = 2 + interaction.message_len;
         if (local_idx < block) {
             if (local_idx == 0) {
                 write_arg_first(proof_row, expr_per_air[interaction.count]);
+            } else if (local_idx == interaction.message_len + 1) {
+                write_arg_first(proof_row, FpExt(Fp(interaction.bus_index + 1)));
             } else {
                 uint32_t msg_offset = local_idx - 1;
                 uint32_t node_idx = interaction_messages[interaction.message_start + msg_offset];
@@ -295,7 +298,11 @@ __global__ void symbolic_expression_tracegen(
                 write_dag_commit_flags(
                     row,
                     encoder,
-                    local_idx == 0 ? NODE_KIND_INTERACTION_MULT : NODE_KIND_INTERACTION_MSG_COMP
+                    local_idx == 0
+                        ? NODE_KIND_INTERACTION_MULT
+                        : (local_idx == interaction.message_len + 1
+                               ? NODE_KIND_INTERACTION_BUS_INDEX
+                               : NODE_KIND_INTERACTION_MSG_COMP)
                 );
             }
             return;
