@@ -26,7 +26,7 @@ use crate::{
         BatchConstraintBlobCpu,
     },
     bus::{AirShapeBus, AirShapeBusMessage, AirShapeProperty, TranscriptBus},
-    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     tracegen::RowMajorChip,
     utils::{
@@ -57,8 +57,6 @@ struct InteractionsFoldingCols<T> {
     // the second in message is the first denom, and it's cur_sum is the folded denom
     is_second_in_message: T,
     is_bus_index: T,
-
-    loop_aux: NestedForLoopAuxCols<T, 2>,
 
     idx_in_message: T,
     value: [T; D_EF],
@@ -107,42 +105,34 @@ where
         let local: &InteractionsFoldingCols<AB::Var> = (*local).borrow();
         let next: &InteractionsFoldingCols<AB::Var> = (*next).borrow();
 
-        type LoopSubAir = NestedForLoopSubAir<3, 2>;
+        type LoopSubAir = NestedForLoopSubAir<3>;
         LoopSubAir {}.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.is_valid,
-                        counter: [local.proof_idx, local.sort_idx, local.interaction_idx],
-                        is_first: [
-                            local.is_first,
-                            local.is_first_in_air,
-                            local.is_first_in_message,
-                        ],
-                    }
-                    .map_into(),
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_valid,
-                        counter: [next.proof_idx, next.sort_idx, next.interaction_idx],
-                        is_first: [
-                            next.is_first,
-                            next.is_first_in_air,
-                            next.is_first_in_message,
-                        ],
-                    }
-                    .map_into(),
-                ),
-                local.loop_aux.map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: local.is_valid,
+                    counter: [local.proof_idx, local.sort_idx, local.interaction_idx],
+                    is_first: [
+                        local.is_first,
+                        local.is_first_in_air,
+                        local.is_first_in_message,
+                    ],
+                }
+                .map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: next.is_valid,
+                    counter: [next.proof_idx, next.sort_idx, next.interaction_idx],
+                    is_first: [
+                        next.is_first,
+                        next.is_first_in_air,
+                        next.is_first_in_message,
+                    ],
+                }
+                .map_into(),
             ),
         );
 
-        builder.assert_bool(local.is_valid);
-        builder.assert_bool(local.is_first);
-
         builder.assert_bool(local.has_interactions);
-        builder.assert_bool(local.is_first_in_air);
-        builder.assert_bool(local.is_first_in_message);
         builder.assert_bool(local.is_bus_index);
         builder
             .when(local.has_interactions + local.is_bus_index)
@@ -192,9 +182,10 @@ where
             .assert_one(next_is_first_in_air_or_invalid.clone());
         // If the row is valid, then this is the bus index iff the next one is first in message
         // or invalid
-        builder
-            .when(local.has_interactions)
-            .assert_eq(local.is_bus_index, next_is_first_in_message_or_invalid.clone());
+        builder.when(local.has_interactions).assert_eq(
+            local.is_bus_index,
+            next_is_first_in_message_or_invalid.clone(),
+        );
         // An interaction has at least two fields (mult and bus index)
         builder
             .when(local.has_interactions)
@@ -569,8 +560,6 @@ impl RowMajorChip<F> for InteractionsFoldingTraceGenerator {
                     was_first_interaction_in_message = record.is_mult;
                     cols.is_bus_index = F::from_bool(record.is_bus_index);
                     cols.idx_in_message = F::from_usize(record.idx_in_message);
-                    cols.loop_aux.is_transition[0] = F::ONE;
-                    cols.loop_aux.is_transition[1] = F::from_bool(!record.is_last_in_air);
                     if !record.is_bus_index {
                         cols.value.copy_from_slice(
                             blob.common_blob.expr_evals[[pidx, air_idx]][record.node_idx]
@@ -658,11 +647,6 @@ impl RowMajorChip<F> for InteractionsFoldingTraceGenerator {
                 cols.is_first = F::ONE;
             }
             cur_height += records.len();
-            {
-                let cols: &mut InteractionsFoldingCols<_> =
-                    trace[(cur_height - 1) * width..cur_height * width].borrow_mut();
-                cols.loop_aux.is_transition[0] = F::ZERO;
-            }
         }
         Some(RowMajorMatrix::new(trace, width))
     }

@@ -20,7 +20,7 @@ use crate::{
         BatchConstraintConductorBus, BatchConstraintConductorMessage,
         BatchConstraintInnerMessageType, Eq3bBus, Eq3bMessage,
     },
-    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     tracegen::RowMajorChip,
     utils::{
@@ -53,8 +53,6 @@ pub struct Eq3bColumns<T> {
     idx: T,         // stacked_idx >> l_skip, restored bit by bit
     running_idx: T, // the current stacked_idx >> l_skip
     nth_bit: T,
-
-    loop_aux: NestedForLoopAuxCols<T, 2>,
 
     xi: [T; D_EF],
     eq: [T; D_EF],
@@ -90,33 +88,30 @@ where
         let local: &Eq3bColumns<AB::Var> = (*local).borrow();
         let next: &Eq3bColumns<AB::Var> = (*next).borrow();
 
-        type LoopSubAir = NestedForLoopSubAir<3, 2>;
+        type LoopSubAir = NestedForLoopSubAir<3>;
         LoopSubAir {}.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.is_valid,
-                        counter: [local.proof_idx, local.sort_idx, local.interaction_idx],
-                        is_first: [
-                            local.is_first,
-                            local.is_first_in_air,
-                            local.is_first_in_interaction,
-                        ],
-                    }
-                    .map_into(),
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_valid,
-                        counter: [next.proof_idx, next.sort_idx, next.interaction_idx],
-                        is_first: [
-                            next.is_first,
-                            next.is_first_in_air,
-                            next.is_first_in_interaction,
-                        ],
-                    }
-                    .map_into(),
-                ),
-                local.loop_aux.map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: local.is_valid,
+                    counter: [local.proof_idx, local.sort_idx, local.interaction_idx],
+                    is_first: [
+                        local.is_first,
+                        local.is_first_in_air,
+                        local.is_first_in_interaction,
+                    ],
+                }
+                .map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: next.is_valid,
+                    counter: [next.proof_idx, next.sort_idx, next.interaction_idx],
+                    is_first: [
+                        next.is_first,
+                        next.is_first_in_air,
+                        next.is_first_in_interaction,
+                    ],
+                }
+                .map_into(),
             ),
         );
 
@@ -478,12 +473,6 @@ impl RowMajorChip<F> for Eq3bTraceGenerator {
                         cols.running_idx = F::from_u32(shifted_idx);
                         let nth_bit = (shifted_idx & (1 << n)) > 0;
                         cols.nth_bit = F::from_bool(nth_bit);
-                        cols.loop_aux.is_transition[0] = F::from_bool(
-                            j + 1 < stacked_ids.len() || (n < n_logup && !record.no_interactions),
-                        );
-                        cols.loop_aux.is_transition[1] = F::from_bool(
-                            (!record.is_last_in_air || n < n_logup) && !record.no_interactions,
-                        );
                         let xi = if (record.n_lift as usize..n_logup).contains(&n) {
                             xi[l_skip + n]
                         } else if nth_bit {

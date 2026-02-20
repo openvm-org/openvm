@@ -27,7 +27,7 @@ use crate::{
         SelectorCount,
     },
     bus::{SelHypercubeBus, SelHypercubeBusMessage, XiRandomnessBus, XiRandomnessMessage},
-    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     tracegen::RowMajorChip,
     utils::{
@@ -122,31 +122,24 @@ where
         // - eq consistency: update both `eq` and `eq_sharp` by multiplying with the shared factor
         //   `1 - (xi + r - 2 * xi * r)` whenever advancing beyond the first row.
 
-        type LoopSubAir = NestedForLoopSubAir<1, 0>;
+        type LoopSubAir = NestedForLoopSubAir<1>;
         LoopSubAir {}.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.is_valid,
-                        counter: [local.proof_idx],
-                        is_first: [local.is_first],
-                    }
-                    .map_into(),
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_valid,
-                        counter: [next.proof_idx],
-                        is_first: [next.is_first],
-                    }
-                    .map_into(),
-                ),
-                NestedForLoopAuxCols { is_transition: [] },
+                NestedForLoopIoCols {
+                    is_enabled: local.is_valid,
+                    counter: [local.proof_idx],
+                    is_first: [local.is_first],
+                }
+                .map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: next.is_valid,
+                    counter: [next.proof_idx],
+                    is_first: [next.is_first],
+                }
+                .map_into(),
             ),
         );
-
-        builder.assert_bool(local.is_valid);
-        builder.assert_bool(local.is_first);
-        builder.when(local.is_first).assert_one(local.is_valid);
 
         let is_transition = next.is_valid - next.is_first;
         let is_last = local.is_valid - is_transition.clone();

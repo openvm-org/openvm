@@ -24,7 +24,7 @@ use crate::{
         ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus, StackingModuleBus,
         StackingModuleMessage, TranscriptBus,
     },
-    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
 };
 
@@ -92,25 +92,22 @@ where
         // Loop Constraints
         ///////////////////////////////////////////////////////////////////////
 
-        type LoopSubAir = NestedForLoopSubAir<1, 0>;
+        type LoopSubAir = NestedForLoopSubAir<1>;
         LoopSubAir {}.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.is_valid,
-                        counter: [local.proof_idx],
-                        is_first: [local.is_first],
-                    }
-                    .map_into(),
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_valid,
-                        counter: [next.proof_idx],
-                        is_first: [next.is_first],
-                    }
-                    .map_into(),
-                ),
-                NestedForLoopAuxCols::default(),
+                NestedForLoopIoCols {
+                    is_enabled: local.is_valid,
+                    counter: [local.proof_idx],
+                    is_first: [local.is_first],
+                }
+                .map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: next.is_valid,
+                    counter: [next.proof_idx],
+                    is_first: [next.is_first],
+                }
+                .map_into(),
             ),
         );
 

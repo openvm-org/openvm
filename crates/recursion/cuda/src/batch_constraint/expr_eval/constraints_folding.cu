@@ -2,7 +2,6 @@
 #include "fp.h"
 #include "fpext.h"
 #include "launcher.cuh"
-#include "nested_for_loop.h"
 #include "primitives/trace_access.h"
 #include "ptr_array.h"
 #include "switch_macro.h"
@@ -31,7 +30,6 @@ template <typename T> struct ConstraintsFoldingCols {
     T eq_n[D_EF];
 
     T is_first_in_air;
-    NestedForLoopAuxCols<T, 1> loop_aux;
 };
 
 template <size_t NUM_PROOFS>
@@ -72,9 +70,6 @@ __global__ void constraints_folding_tracegen(
     uint32_t constraint_idx = row_idx - start_constraint_idx;
 
     COL_WRITE_VALUE(row, ConstraintsFoldingCols, is_first_in_air, constraint_idx == 0);
-    COL_WRITE_VALUE(
-        row, ConstraintsFoldingCols, loop_aux.is_transition[0], is_last ? Fp::zero() : Fp::one()
-    );
 
     auto [air_idx, log_height] = sorted_trace_vdata[proof_idx][sort_idx];
     uint32_t n_lift = log_height > l_skip ? log_height - l_skip : 0;

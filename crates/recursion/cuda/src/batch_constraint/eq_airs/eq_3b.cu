@@ -32,8 +32,6 @@ template <typename T> struct Eq3bColumns {
     T running_idx;
     T nth_bit;
 
-    T loop_transitions[2];
-
     T xi[D_EF];
     T eq[D_EF];
 };
@@ -159,18 +157,6 @@ __global__ void eq_3b_tracegen(
     COL_WRITE_VALUE(row, Eq3bColumns, idx, shifted_idx & ((1u << local_n) - 1));
     COL_WRITE_VALUE(row, Eq3bColumns, running_idx, shifted_idx);
     COL_WRITE_VALUE(row, Eq3bColumns, nth_bit, nth_bit);
-    COL_WRITE_VALUE(
-        row,
-        Eq3bColumns,
-        loop_transitions[0],
-        (record_idx + 1) < record_count || (local_n < n_logup && !record.no_interactions)
-    );
-    COL_WRITE_VALUE(
-        row,
-        Eq3bColumns,
-        loop_transitions[1],
-        (!record.is_last_in_air || local_n < n_logup) && !record.no_interactions
-    );
     COL_WRITE_ARRAY(row, Eq3bColumns, xi, xi_cur.elems);
     COL_WRITE_ARRAY(row, Eq3bColumns, eq, eq_acc.elems);
 }

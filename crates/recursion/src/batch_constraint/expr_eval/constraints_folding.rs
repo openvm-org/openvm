@@ -19,7 +19,7 @@ use crate::{
         ExpressionClaimBus, ExpressionClaimMessage,
     },
     bus::{NLiftBus, NLiftMessage, TranscriptBus},
-    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     tracegen::RowMajorChip,
     utils::{
@@ -48,7 +48,6 @@ struct ConstraintsFoldingCols<T> {
     eq_n: [T; D_EF],
 
     is_first_in_air: T,
-    loop_aux: NestedForLoopAuxCols<T, 1>,
 }
 
 pub struct ConstraintsFoldingAir {
@@ -82,32 +81,25 @@ where
         let local: &ConstraintsFoldingCols<AB::Var> = (*local).borrow();
         let next: &ConstraintsFoldingCols<AB::Var> = (*next).borrow();
 
-        type LoopSubAir = NestedForLoopSubAir<2, 1>;
+        type LoopSubAir = NestedForLoopSubAir<2>;
         LoopSubAir {}.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.is_valid,
-                        counter: [local.proof_idx, local.sort_idx],
-                        is_first: [local.is_first, local.is_first_in_air],
-                    }
-                    .map_into(),
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_valid,
-                        counter: [next.proof_idx, next.sort_idx],
-                        is_first: [next.is_first, next.is_first_in_air],
-                    }
-                    .map_into(),
-                ),
-                local.loop_aux.map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: local.is_valid,
+                    counter: [local.proof_idx, local.sort_idx],
+                    is_first: [local.is_first, local.is_first_in_air],
+                }
+                .map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: next.is_valid,
+                    counter: [next.proof_idx, next.sort_idx],
+                    is_first: [next.is_first, next.is_first_in_air],
+                }
+                .map_into(),
             ),
         );
 
-        builder.assert_bool(local.is_valid);
-        builder.assert_bool(local.is_first);
-
-        builder.assert_bool(local.is_first_in_air);
         let is_same_proof = next.is_valid - next.is_first;
         let is_same_air = next.is_valid - next.is_first_in_air;
 
@@ -339,7 +331,6 @@ impl RowMajorChip<F> for ConstraintsFoldingTraceGenerator {
                             .as_basis_coefficients_slice(),
                     );
                     cols.is_first_in_air = F::from_bool(record.is_first_in_air);
-                    cols.loop_aux.is_transition[0] = F::ONE;
                 });
 
             // Setting `cur_sum`
@@ -365,11 +356,6 @@ impl RowMajorChip<F> for ConstraintsFoldingTraceGenerator {
                 cols.is_first = F::ONE;
             }
             cur_height += records.len();
-            {
-                let cols: &mut ConstraintsFoldingCols<_> =
-                    trace[(cur_height - 1) * width..cur_height * width].borrow_mut();
-                cols.loop_aux.is_transition[0] = F::ZERO;
-            }
         }
         Some(RowMajorMatrix::new(trace, width))
     }
