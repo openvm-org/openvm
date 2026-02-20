@@ -148,7 +148,7 @@ where
         builder.assert_bool(local.is_first_in_message);
         builder.assert_bool(local.is_bus_index);
         builder
-            .when(local.has_interactions)
+            .when(local.has_interactions + local.is_bus_index)
             .assert_one(local.is_valid);
 
         // =========================== indices consistency ===============================
@@ -187,12 +187,14 @@ where
             .when(not(local.has_interactions))
             .when(local.is_valid)
             .assert_one(next.is_first_in_air);
-        // If it's last in the interaction and the row is valid, then it's the bus index
+        // If the row is valid, then this is the bus index iff the next one is first in message or invalid
         builder
-            .when(next.is_first_in_message)
             .when(local.has_interactions)
-            .assert_one(local.is_bus_index);
-
+            .assert_eq(local.is_bus_index, next.is_first_in_message);
+        // An interaction has at least two fields (mult and bus index)
+        builder
+            .when(local.has_interactions)
+            .assert_bool(local.is_bus_index + local.is_first_in_message);
         // final_acc_num only changes when it's first in message
         assert_array_eq(
             &mut builder
@@ -290,8 +292,7 @@ where
                 value: local.value.map(Into::into),
             },
             local.has_interactions
-                * (AB::Expr::ONE - local.is_first_in_message)
-                * (AB::Expr::ONE - local.is_bus_index),
+                * (AB::Expr::ONE - local.is_first_in_message - local.is_bus_index),
         );
         self.interaction_bus.receive(
             builder,
