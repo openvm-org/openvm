@@ -11,7 +11,7 @@
 //! further details
 
 pub const OPCODE_LOAD: u32 = 0x03;
-pub const OPCODE_FENCE: u32 = 0x0f;
+pub const OPCODE_MISC_MEM: u32 = 0x0f;
 pub const OPCODE_OP_IMM: u32 = 0x13;
 pub const OPCODE_AUIPC: u32 = 0x17;
 pub const OPCODE_OP_IMM_32: u32 = 0x1b;
