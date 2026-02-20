@@ -6438,6 +6438,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-decoder"
+version = "1.4.3"
+
+[[package]]
 name = "openvm-ecc-circuit"
 version = "1.4.3"
 dependencies = [

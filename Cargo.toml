@@ -12,6 +12,7 @@ members = [
     "benchmarks/utils",
     "benchmarks/execute",
     "benchmarks/prove",
+    "crates/toolchain/decoder",
     "crates/prof",
     "crates/sdk",
     "crates/cli",
@@ -120,6 +121,7 @@ openvm-cuda-builder = { git = "https://github.com/openvm-org/stark-backend.git",
 openvm-cuda-common = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.3", default-features = false }
 
 # OpenVM
+openvm-decoder = { path = "crates/toolchain/decoder", default-features = false }
 openvm-sdk = { path = "crates/sdk", default-features = false }
 openvm-mod-circuit-builder = { path = "crates/circuits/mod-builder", default-features = false }
 openvm-poseidon2-air = { path = "crates/circuits/poseidon2-air", default-features = false }
