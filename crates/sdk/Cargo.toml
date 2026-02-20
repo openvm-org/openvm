@@ -58,7 +58,7 @@ snark-verifier-sdk = { workspace = true, optional = true }
 tempfile.workspace = true
 hex.workspace = true
 forge-fmt = { workspace = true, optional = true }
-rrs-lib.workspace = true
+openvm-decoder.workspace = true
 num-bigint.workspace = true
 cfg-if.workspace = true
 tokio = { workspace = true, features = ["rt", "sync"], optional = true }

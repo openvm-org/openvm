@@ -15,11 +15,11 @@ use openvm_transpiler::{
     util::{nop, unimp},
     TranspilerExtension, TranspilerOutput,
 };
-use rrs::InstructionTranspiler;
-use rrs_lib::{
+use openvm_decoder::{
     instruction_formats::{IType, RType},
     process_instruction,
 };
+use rrs::InstructionTranspiler;
 
 mod instructions;
 pub mod rrs;
