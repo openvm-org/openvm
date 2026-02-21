@@ -167,10 +167,22 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, C: Sha
 ) {
     let pre_compute: &E2PreCompute<Sha2PreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<Sha2PreCompute>>()).borrow();
+
+    let main_air_idx = pre_compute.chip_idx as usize;
+
+    // Update Sha2MainChip height (1 row per instruction)
     let height = execute_e12_impl::<F, C, CTX, false>(&pre_compute.data, exec_state);
+    exec_state.ctx.on_height_change(main_air_idx, height);
+
+    // HACK: Sha2BlockHasherVmAir is added right before Sha2MainAir in extend_circuit,
+    // and due to reverse ordering of AIR indices, block_hasher_air_idx = main_air_idx + 1.
+    // See extension/mod.rs extend_circuit for the ordering.
+    let block_hasher_air_idx = main_air_idx + 1;
+
+    // Update Sha2BlockHasherChip height (ROWS_PER_BLOCK rows per block compression)
     exec_state
         .ctx
-        .on_height_change(pre_compute.chip_idx as usize, height);
+        .on_height_change(block_hasher_air_idx, C::ROWS_PER_BLOCK as u32);
 }
 
 #[cfg(feature = "aot")]
