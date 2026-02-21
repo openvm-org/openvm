@@ -63,6 +63,7 @@ pub struct StackingClaim {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ClaimsRecordsPerProof {
     pub initial_tidx: u32,
+    pub num_valid: u32,
     pub mu: EF,
     pub mu_pow_witness: F,
     pub mu_pow_sample: F,

@@ -54,6 +54,7 @@ const DEFAULT_MAX_NUM_PROOFS: usize = 4;
 fn app_system_params() -> SystemParams {
     let l_skip = 4;
     let n_stack = 17;
+    let w_stack = 2048;
     let log_blowup = 1;
     let whir_params = WhirParams {
         k: 4,
@@ -64,6 +65,7 @@ fn app_system_params() -> SystemParams {
     SystemParams {
         l_skip,
         n_stack,
+        w_stack,
         log_blowup,
         whir,
         logup: LogUpSecurityParameters {
