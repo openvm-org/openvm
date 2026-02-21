@@ -4,11 +4,17 @@
 #include <cstddef>
 #include <cstdint>
 
+/// Record representing a memory chunk with BLOCKS sub-blocks of cells.
+/// Matches the Rust-side repr(C) `PersistentBoundaryRecord` layout.
+///
+/// Note on uint32_t encoding: only `values` stores Montgomery-encoded BabyBear
+/// field elements (Fp::asRaw()). All other fields (`address_space`, `ptr`,
+/// `timestamps`) are plain integers.
 template <size_t CHUNK, size_t BLOCKS> struct MemoryInventoryRecord {
-    uint32_t address_space;
-    uint32_t ptr;
-    uint32_t timestamps[BLOCKS];
-    uint32_t values[CHUNK];
+    uint32_t address_space; // plain integer
+    uint32_t ptr;           // plain integer (cell-level pointer)
+    uint32_t timestamps[BLOCKS]; // plain integers
+    uint32_t values[CHUNK];      // Montgomery-encoded Fp values (Fp::asRaw())
 };
 
 const uint32_t IN_BLOCK_SIZE = 4;
@@ -37,8 +43,12 @@ __device__ inline uint32_t addr_space_cell_size(
     return addr_space_offsets[addr_space_idx + 1] - addr_space_offsets[addr_space_idx];
 }
 
+/// Read initial memory values for a chunk and convert them to Montgomery-encoded
+/// field elements. The output values must be in Montgomery form because they are
+/// stored directly into MemoryInventoryRecord.values, which boundary.cu later
+/// reads via FpArray::from_raw_array (a raw copy that assumes Montgomery encoding).
 __device__ inline void read_initial_chunk(
-    uint32_t *out_values,
+    uint32_t *out_values, // Montgomery-encoded Fp values
     uint8_t const *const *initial_mem,
     uint32_t const *addr_space_offsets,
     uint32_t address_space,
@@ -98,8 +108,10 @@ __global__ void cukernel_build_candidates(
     rec.timestamps[0] = 0;
     rec.timestamps[1] = 0;
 
+    // Fill all values with Montgomery-encoded initial memory
     read_initial_chunk(rec.values, initial_mem, addr_space_offsets, rec.address_space, chunk_ptr);
 
+    // Overwrite touched block's values (already Montgomery-encoded in input records)
     uint32_t block_idx = (in[row_idx].ptr % OUT_BLOCK_SIZE) / IN_BLOCK_SIZE;
     #pragma unroll
     for (int i = 0; i < IN_BLOCK_SIZE; ++i) {
@@ -107,6 +119,7 @@ __global__ void cukernel_build_candidates(
     }
     rec.timestamps[block_idx] = in[row_idx].timestamps[0];
 
+    // If two input records fall in the same chunk, overwrite the second block too
     if (row_idx + 1 < in_num_records && same_output_block(in, row_idx, row_idx + 1)) {
         uint32_t block_idx2 = (in[row_idx + 1].ptr % OUT_BLOCK_SIZE) / IN_BLOCK_SIZE;
         #pragma unroll
