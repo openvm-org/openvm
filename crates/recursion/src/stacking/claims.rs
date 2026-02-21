@@ -42,8 +42,13 @@ use crate::{
 pub struct StackingClaimsCols<F> {
     // Proof index columns for continuations
     pub proof_idx: F,
+    /// Row has a real stacking claim (bus interactions fire).
     pub is_valid: F,
+    /// Row is padding within a proof block (no bus interactions).
+    pub is_padding: F,
     pub is_first: F,
+    /// Last row of the proof block (valid + padding). Triggers proof_idx
+    /// transition and the w_stack check.
     pub is_last: F,
 
     // Correspond to stacking_claim
@@ -58,6 +63,10 @@ pub struct StackingClaimsCols<F> {
     // μ PoW witness and sample for proof-of-work check
     pub mu_pow_witness: F,
     pub mu_pow_sample: F,
+
+    // Global column index (0-indexed, increments by 1 per row within a proof
+    // block, covering both valid and padding rows).
+    pub global_col_idx: F,
 
     // Stacking claim and batched coefficient computed in OpeningClaimsCols
     pub stacking_claim: [F; D_EF],
@@ -87,6 +96,8 @@ pub struct StackingClaimsAir {
     pub sumcheck_claims_bus: SumcheckClaimsBus,
 
     pub stacking_index_mult: usize,
+    /// Maximum number of stacking columns per proof.
+    pub w_stack: usize,
     /// Number of PoW bits for μ batching challenge.
     pub mu_pow_bits: usize,
 }
@@ -115,36 +126,60 @@ where
         let local: &StackingClaimsCols<AB::Var> = (*local).borrow();
         let next: &StackingClaimsCols<AB::Var> = (*next).borrow();
 
-        NestedForLoopSubAir::<1, 0> {}.eval(
+        let is_in_block = local.is_valid + local.is_padding;
+        let next_is_in_block = next.is_valid + next.is_padding;
+
+        let is_same_proof = next_is_in_block.clone() - next.is_first;
+
+        NestedForLoopSubAir::<2, 1> {}.eval(
             builder,
             (
                 (
                     NestedForLoopIoCols {
-                        is_enabled: local.is_valid,
-                        counter: [local.proof_idx],
-                        is_first: [local.is_first],
-                    }
-                    .map_into(),
+                        is_enabled: is_in_block.clone(),
+                        counter: [local.proof_idx.into(), local.global_col_idx.into()],
+                        is_first: [local.is_first.into(), AB::Expr::ONE],
+                    },
                     NestedForLoopIoCols {
-                        is_enabled: next.is_valid,
-                        counter: [next.proof_idx],
-                        is_first: [next.is_first],
-                    }
-                    .map_into(),
+                        is_enabled: next_is_in_block.clone(),
+                        counter: [next.proof_idx.into(), next.global_col_idx.into()],
+                        is_first: [next.is_first.into(), AB::Expr::ONE],
+                    },
                 ),
-                NestedForLoopAuxCols { is_transition: [] },
+                NestedForLoopAuxCols {
+                    is_transition: [is_same_proof],
+                },
             ),
         );
 
+        // Last valid row in a proof block:
+        // - valid row before padding starts, OR
+        // - valid row at block end (num_valid == w_stack).
+        // Degree-2 selectors to stay within max AIR degree.
+        let is_last_valid = and(local.is_valid, next.is_padding + local.is_last);
+        // Valid row that continues to another valid row in the same proof block:
+        // excludes the terminal valid row (before padding or block end).
+        let is_continuing_valid = and(
+            local.is_valid,
+            AB::Expr::ONE - next.is_padding - local.is_last,
+        );
+
         builder.assert_bool(local.is_valid);
+        builder.assert_bool(local.is_padding);
         builder.assert_bool(local.is_first);
         builder.assert_bool(local.is_last);
+        // is_valid and is_padding are mutually exclusive
+        builder.assert_bool(is_in_block.clone());
+        // Last row in a proof block is exactly the nested-loop boundary for proof_idx.
+        builder.when(is_in_block.clone()).assert_eq(
+            local.is_last,
+            NestedForLoopSubAir::<2, 1>::local_is_last(next_is_in_block.clone(), next.is_first),
+        );
+        // Once padding starts within a proof block, it stays padding
         builder
-            .when(and(local.is_valid, local.is_last))
-            .assert_zero((local.proof_idx + AB::F::ONE - next.proof_idx) * next.proof_idx);
-        builder
-            .when(and(not(local.is_valid), local.is_last))
-            .assert_zero(next.proof_idx);
+            .when(local.is_padding * not(local.is_last))
+            .assert_one(next.is_padding);
+        builder.when_first_row().assert_zero(local.proof_idx);
         builder.when(local.is_first).assert_one(local.is_valid);
 
         /*
@@ -155,11 +190,21 @@ where
             .when(local.is_first)
             .assert_zero(local.stacked_col_idx);
 
-        builder.when(not(local.is_last)).assert_zero(
+        builder.when(is_continuing_valid.clone()).assert_zero(
             (next.commit_idx - local.commit_idx - AB::Expr::ONE)
-                * (next.stacked_col_idx - local.stacked_col_idx - AB::Expr::ONE)
-                - not(local.is_valid),
+                * (next.stacked_col_idx - local.stacked_col_idx - AB::Expr::ONE),
         );
+
+        /*
+         * Constrain global_col_idx: starts at 0, is forced by NestedForLoopSubAir
+         * to increment by exactly 1 within each proof block, and ends at w_stack - 1.
+         */
+        builder
+            .when(local.is_first)
+            .assert_zero(local.global_col_idx);
+        builder
+            .when(local.is_last * is_in_block)
+            .assert_eq(local.global_col_idx, AB::Expr::from_usize(self.w_stack - 1));
 
         self.stacking_indices_bus.add_key_with_lookups(
             builder,
@@ -194,7 +239,7 @@ where
         );
 
         assert_array_eq(
-            &mut builder.when(not(local.is_last)),
+            &mut builder.when(is_continuing_valid.clone()),
             ext_field_add(
                 ext_field_multiply(next.stacking_claim, next.claim_coefficient),
                 local.final_s_eval,
@@ -209,7 +254,7 @@ where
                 module_idx: AB::Expr::TWO,
                 value: local.final_s_eval.map(Into::into),
             },
-            and(local.is_last, local.is_valid),
+            is_last_valid.clone(),
         );
 
         /*
@@ -226,7 +271,7 @@ where
         );
 
         builder
-            .when(not(local.is_last) * local.is_valid)
+            .when(is_continuing_valid.clone())
             .assert_eq(local.tidx + AB::F::from_usize(D_EF), next.tidx);
 
         let mu_pow_offset = pow_tidx_count(self.mu_pow_bits);
@@ -253,12 +298,12 @@ where
                     value: local.mu[i].into(),
                     is_sample: AB::Expr::ONE,
                 },
-                and(local.is_last, local.is_valid),
+                is_last_valid.clone(),
             );
         }
 
         if self.mu_pow_bits > 0 {
-            // μ PoW: observe mu_pow_witness at tidx + D_EF (on last row only)
+            // μ PoW: observe mu_pow_witness at tidx + D_EF (on last valid row only)
             self.transcript_bus.receive(
                 builder,
                 local.proof_idx,
@@ -267,10 +312,10 @@ where
                     value: local.mu_pow_witness.into(),
                     is_sample: AB::Expr::ZERO,
                 },
-                and(local.is_last, local.is_valid),
+                is_last_valid.clone(),
             );
 
-            // μ PoW: sample mu_pow_sample at tidx + D_EF + 1 (on last row only)
+            // μ PoW: sample mu_pow_sample at tidx + D_EF + 1 (on last valid row only)
             self.transcript_bus.receive(
                 builder,
                 local.proof_idx,
@@ -279,7 +324,7 @@ where
                     value: local.mu_pow_sample.into(),
                     is_sample: AB::Expr::ONE,
                 },
-                and(local.is_last, local.is_valid),
+                is_last_valid.clone(),
             );
 
             // μ PoW check: g^{mu_pow_sample[0:mu_pow_bits]} = 1
@@ -291,17 +336,23 @@ where
                     num_bits: AB::Expr::from_usize(self.mu_pow_bits),
                     result: AB::Expr::ONE,
                 },
-                and(local.is_last, local.is_valid),
+                is_last_valid.clone(),
             );
         }
 
         /*
          * Compute the RLC of the stacking claims and send it to the WHIR module.
+         * Running sums propagate through valid rows only (not(is_last_valid)),
+         * since padding rows have zero claims and don't affect the accumulators.
          */
         assert_one_ext(&mut builder.when(local.is_first), local.mu_pow);
-        assert_array_eq(&mut builder.when(not(local.is_last)), local.mu, next.mu);
         assert_array_eq(
-            &mut builder.when(not(local.is_last)),
+            &mut builder.when(is_continuing_valid.clone()),
+            local.mu,
+            next.mu,
+        );
+        assert_array_eq(
+            &mut builder.when(is_continuing_valid.clone()),
             ext_field_multiply(local.mu, local.mu_pow),
             next.mu_pow,
         );
@@ -313,7 +364,7 @@ where
         );
 
         assert_array_eq(
-            &mut builder.when(not(local.is_last)),
+            &mut builder.when(is_continuing_valid.clone()),
             ext_field_add(
                 ext_field_multiply(next.stacking_claim, next.mu_pow),
                 local.whir_claim,
@@ -329,7 +380,7 @@ where
                 tidx: AB::Expr::from_usize(2 * D_EF + mu_pow_offset) + local.tidx,
                 claim: local.whir_claim.map(Into::into),
             },
-            and(local.is_last, local.is_valid),
+            is_last_valid.clone(),
         );
         self.whir_mu_bus.send(
             builder,
@@ -337,7 +388,7 @@ where
             WhirMuMessage {
                 mu: local.mu.map(Into::into),
             },
-            and(local.is_last, local.is_valid),
+            is_last_valid,
         );
     }
 }
@@ -361,14 +412,10 @@ impl RowMajorChip<F> for StackingClaimsTraceGenerator {
         let preflights = ctx.preflights;
         debug_assert_eq!(proofs.len(), preflights.len());
 
+        let w_stack = vk.inner.params.w_stack;
         let width = StackingClaimsCols::<usize>::width();
-        let minimum_height: usize = proofs.iter().fold(0, |acc, proof| {
-            acc + proof
-                .stacking_proof
-                .stacking_openings
-                .iter()
-                .fold(0, |acc, openings| acc + openings.len())
-        });
+        // Each proof gets exactly w_stack rows (valid + padding).
+        let minimum_height = proofs.len() * w_stack;
         let height = if let Some(height) = required_height {
             if height < minimum_height {
                 return None;
@@ -413,13 +460,17 @@ impl RowMajorChip<F> for StackingClaimsTraceGenerator {
             .flatten()
             .collect_vec();
 
-            let num_rows = claims.len();
+            let num_valid = claims.len();
+            debug_assert!(
+                num_valid <= w_stack,
+                "proof {proof_idx} has {num_valid} stacking claims but w_stack = {w_stack}"
+            );
             let proof_idx_value = F::from_usize(proof_idx);
 
             let initial_tidx = preflight.stacking.intermediate_tidx[2];
 
             let mu = preflight.stacking.stacking_batching_challenge;
-            let mu_pows = mu.powers().take(claims.len()).collect_vec();
+            let mu_pows = mu.powers().take(num_valid).collect_vec();
 
             // μ PoW witness and sample from preflight
             let mu_pow_witness = preflight.stacking.mu_pow_witness;
@@ -437,10 +488,11 @@ impl RowMajorChip<F> for StackingClaimsTraceGenerator {
                 cols.proof_idx = proof_idx_value;
                 cols.is_valid = F::ONE;
                 cols.is_first = F::from_bool(idx == 0);
-                cols.is_last = F::from_bool(idx + 1 == num_rows);
+                cols.is_last = F::from_bool(num_valid == w_stack && idx + 1 == num_valid);
 
                 cols.commit_idx = F::from_usize(commit_idx);
                 cols.stacked_col_idx = F::from_usize(stacked_col_idx);
+                cols.global_col_idx = F::from_usize(idx);
 
                 cols.tidx = F::from_usize(initial_tidx + (D_EF * idx));
                 cols.mu.copy_from_slice(mu.as_basis_coefficients_slice());
@@ -463,6 +515,17 @@ impl RowMajorChip<F> for StackingClaimsTraceGenerator {
                 whir_claim += mu_pows[idx] * claim;
                 cols.whir_claim
                     .copy_from_slice(whir_claim.as_basis_coefficients_slice());
+            }
+
+            // Padding rows (fill up to w_stack)
+            for idx in num_valid..w_stack {
+                let chunk = chunks.next().unwrap();
+                let cols: &mut StackingClaimsCols<F> = chunk.borrow_mut();
+
+                cols.proof_idx = proof_idx_value;
+                cols.is_padding = F::ONE;
+                cols.is_last = F::from_bool(idx + 1 == w_stack);
+                cols.global_col_idx = F::from_usize(idx);
             }
         }
 
@@ -512,13 +575,14 @@ pub(crate) mod cuda {
             let proofs_gpu = ctx.0.proofs;
             let preflights_gpu = ctx.0.preflights;
             let blob = ctx.1;
+            let w_stack = ctx.0.vk.system_params.w_stack;
 
-            let mut num_valid_rows = 0;
             let mut row_bounds = Vec::with_capacity(proofs_gpu.len());
             let claims = proofs_gpu
                 .iter()
-                .map(|proof| {
-                    let ret = proof
+                .enumerate()
+                .map(|(proof_idx, proof)| {
+                    let claims = proof
                         .cpu
                         .stacking_proof
                         .stacking_openings
@@ -535,11 +599,18 @@ pub(crate) mod cuda {
                                 })
                         })
                         .collect_vec();
-                    num_valid_rows += ret.len();
-                    row_bounds.push(num_valid_rows as u32);
-                    ret.to_device().unwrap()
+
+                    let num_valid = claims.len();
+                    assert!(
+                        num_valid <= w_stack,
+                        "proof {proof_idx} has {num_valid} stacking claims but w_stack = {w_stack}"
+                    );
+                    row_bounds.push(((proof_idx + 1) * w_stack) as u32);
+
+                    claims.to_device().unwrap()
                 })
                 .collect_vec();
+
             let mu_pows = preflights_gpu
                 .iter()
                 .enumerate()
@@ -553,13 +624,14 @@ pub(crate) mod cuda {
                 })
                 .collect_vec();
 
+            let minimum_height = proofs_gpu.len() * w_stack;
             let height = if let Some(height) = required_height {
-                if height < num_valid_rows {
+                if height < minimum_height {
                     return None;
                 }
                 height
             } else {
-                num_valid_rows.next_power_of_two()
+                minimum_height.next_power_of_two()
             };
             let width = StackingClaimsCols::<usize>::width();
             let d_trace = DeviceMatrix::with_capacity(height, width);
@@ -569,8 +641,10 @@ pub(crate) mod cuda {
             let d_mu_pows = mu_pows.iter().map(|buf| buf.as_ptr()).collect_vec();
             let d_records = preflights_gpu
                 .iter()
-                .map(|preflight| ClaimsRecordsPerProof {
+                .enumerate()
+                .map(|(proof_idx, preflight)| ClaimsRecordsPerProof {
                     initial_tidx: preflight.cpu.stacking.intermediate_tidx[2] as u32,
+                    num_valid: claims[proof_idx].len() as u32,
                     mu: preflight.cpu.stacking.stacking_batching_challenge,
                     mu_pow_witness: preflight.cpu.stacking.mu_pow_witness,
                     mu_pow_sample: preflight.cpu.stacking.mu_pow_sample,
