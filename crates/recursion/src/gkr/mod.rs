@@ -245,7 +245,7 @@ impl GkrModule {
             }
         }
 
-        for _ in sumcheck_polys.len()..preflight.proof_shape.n_max + self.l_skip {
+        for _ in claims_per_layer.len()..preflight.proof_shape.n_max + self.l_skip {
             xi.push((ts.len(), ts.sample_ext()));
         }
 
