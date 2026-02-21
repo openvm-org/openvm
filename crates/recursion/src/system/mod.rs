@@ -117,7 +117,6 @@ pub trait AggregationSubCircuit {
     fn max_num_proofs(&self) -> usize;
 }
 
-// TODO[jpw]: make this generic in <SC: StarkGenericConfig>
 pub trait AirModule {
     fn num_airs(&self) -> usize;
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>>;
