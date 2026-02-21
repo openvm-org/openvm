@@ -94,7 +94,15 @@ impl Default for AggregationTreeConfig {
 pub fn default_app_params(log_blowup: usize, l_skip: usize, n_stack: usize) -> SystemParams {
     let k_whir = 4;
     let max_constraint_degree = 4;
-    generic_system_params(log_blowup, l_skip, n_stack, k_whir, max_constraint_degree)
+    let w_stack = 2048;
+    generic_system_params(
+        log_blowup,
+        l_skip,
+        n_stack,
+        w_stack,
+        k_whir,
+        max_constraint_degree,
+    )
 }
 
 pub fn default_leaf_params(log_blowup: usize) -> SystemParams {
@@ -102,7 +110,15 @@ pub fn default_leaf_params(log_blowup: usize) -> SystemParams {
     let n_stack = 17;
     let k_whir = 4;
     let max_constraint_degree = 4;
-    generic_system_params(log_blowup, l_skip, n_stack, k_whir, max_constraint_degree)
+    let w_stack = 2048;
+    generic_system_params(
+        log_blowup,
+        l_skip,
+        n_stack,
+        w_stack,
+        k_whir,
+        max_constraint_degree,
+    )
 }
 
 pub fn default_internal_params(log_blowup: usize) -> SystemParams {
@@ -110,7 +126,15 @@ pub fn default_internal_params(log_blowup: usize) -> SystemParams {
     let n_stack = 17;
     let k_whir = 4;
     let max_constraint_degree = 4;
-    generic_system_params(log_blowup, l_skip, n_stack, k_whir, max_constraint_degree)
+    let w_stack = 512;
+    generic_system_params(
+        log_blowup,
+        l_skip,
+        n_stack,
+        w_stack,
+        k_whir,
+        max_constraint_degree,
+    )
 }
 
 /// Compression params are optimized to minimize the size of the WHIR proof given ~50
@@ -131,10 +155,12 @@ pub fn default_compression_params(log_blowup: usize) -> SystemParams {
         log_final_poly_len: 11,
         query_phase_pow_bits: WHIR_POW_BITS,
     };
+    let w_stack = 16;
     let whir_config = WhirConfig::new(log_blowup, l_skip + n_stack, whir_params, SECURITY_LEVEL);
     SystemParams {
         l_skip,
         n_stack,
+        w_stack,
         log_blowup,
         whir: whir_config,
         logup: log_up_security_params_baby_bear_100_bits(),
@@ -147,13 +173,22 @@ pub fn default_root_params(log_blowup: usize) -> SystemParams {
     let n_stack = 17;
     let k_whir = 4;
     let max_constraint_degree = 4;
-    generic_system_params(log_blowup, l_skip, n_stack, k_whir, max_constraint_degree)
+    let w_stack = 32;
+    generic_system_params(
+        log_blowup,
+        l_skip,
+        n_stack,
+        w_stack,
+        k_whir,
+        max_constraint_degree,
+    )
 }
 
 pub fn generic_system_params(
     log_blowup: usize,
     l_skip: usize,
     n_stack: usize,
+    w_stack: usize,
     k_whir: usize,
     max_constraint_degree: usize,
 ) -> SystemParams {
@@ -166,6 +201,7 @@ pub fn generic_system_params(
     SystemParams {
         l_skip,
         n_stack,
+        w_stack,
         log_blowup,
         whir: whir_config,
         logup: log_up_security_params_baby_bear_100_bits(),
