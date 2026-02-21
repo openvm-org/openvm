@@ -488,6 +488,72 @@ fn test_recursion_circuit_zero_pow_bits_two_proofs(log_trace_degree: usize) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// EXACT W_STACK TESTS (no padding rows in StackingClaims)
+///////////////////////////////////////////////////////////////////////////////
+
+#[test]
+fn test_recursion_circuit_exact_w_stack() {
+    let fx = SelfInteractionFixture {
+        widths: vec![4, 7, 8, 8, 10, 100],
+        log_height: 5,
+        bus_index: 4,
+    };
+    let mut params = test_system_params_small(2, 8, 3);
+    // Determine the actual number of stacking claims, then set w_stack to match exactly.
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params.clone());
+    let (_, proof) = fx.keygen_and_prove(&engine);
+    let num_stacking_cols: usize = proof
+        .stacking_proof
+        .stacking_openings
+        .iter()
+        .map(|v| v.len())
+        .sum();
+    params.w_stack = num_stacking_cols;
+
+    let child_engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params);
+    let parent_engine = test_engine_small();
+    run_test::<2, _>(fx, &child_engine, &parent_engine, 1);
+}
+
+#[test]
+#[should_panic(expected = "StackingClaimsAir")]
+fn test_recursion_circuit_w_stack_too_small() {
+    let fx = SelfInteractionFixture {
+        widths: vec![4, 7, 8, 8, 10, 100],
+        log_height: 5,
+        bus_index: 4,
+    };
+    let params = test_system_params_small(2, 8, 3);
+    let child_engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params);
+    let (vk, proof) = fx.keygen_and_prove(&child_engine);
+    let parent_engine = test_engine_small();
+
+    // Generate traces with original (large) w_stack so tracegen succeeds.
+    let circuit = VerifierSubCircuit::<2>::new(Arc::new(vk.clone()));
+    let vk_commit_data = CachedTraceCtx::PcsData(circuit.commit_child_vk(&parent_engine, &vk));
+    let ctxs = circuit.generate_proving_ctxs_base(
+        &vk,
+        vk_commit_data,
+        std::slice::from_ref(&proof),
+        default_duplex_sponge_recorder(),
+    );
+
+    // Shrink w_stack below the actual number of stacking claims.
+    let mut small_vk = vk;
+    let num_stacking_cols: usize = proof
+        .stacking_proof
+        .stacking_openings
+        .iter()
+        .map(|v| v.len())
+        .sum();
+    small_vk.inner.params.w_stack = num_stacking_cols - 1;
+
+    // Re-create circuit with small w_stack: AIR constraints use the smaller bound.
+    let circuit_small = VerifierSubCircuit::<2>::new(Arc::new(small_vk));
+    debug(&parent_engine, &circuit_small.airs(), ctxs);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // CUDA TRACEGEN TESTS
 ///////////////////////////////////////////////////////////////////////////////
 #[cfg(feature = "cuda")]
