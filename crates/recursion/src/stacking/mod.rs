@@ -58,6 +58,7 @@ pub struct StackingModule {
 
     l_skip: usize,
     n_stack: usize,
+    w_stack: usize,
     stacking_index_mult: usize,
     /// Number of PoW bits for μ batching challenge.
     mu_pow_bits: usize,
@@ -81,6 +82,7 @@ impl StackingModule {
             eq_bits_lookup_bus: EqBitsLookupBus::new(b.new_bus_idx()),
             l_skip: child_vk.inner.params.l_skip,
             n_stack: child_vk.inner.params.n_stack,
+            w_stack: child_vk.inner.params.w_stack,
             stacking_index_mult: child_vk
                 .inner
                 .params
@@ -208,6 +210,7 @@ impl AirModule for StackingModule {
             claim_coefficients_bus: self.claim_coefficients_bus,
             sumcheck_claims_bus: self.sumcheck_claims_bus,
             stacking_index_mult: self.stacking_index_mult,
+            w_stack: self.w_stack,
             mu_pow_bits: self.mu_pow_bits,
         };
         let eq_base_air = EqBaseAir {
