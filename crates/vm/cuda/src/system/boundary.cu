@@ -13,7 +13,7 @@ template <size_t CHUNK, size_t BLOCKS> struct BoundaryRecord {
     uint32_t address_space;
     uint32_t ptr;
     uint32_t timestamps[BLOCKS];
-    uint32_t values[CHUNK];
+    uint32_t values[CHUNK]; // Montgomery-encoded Fp values stored as raw u32
 };
 
 template <typename T> struct PersistentBoundaryCols {
@@ -87,6 +87,7 @@ __global__ void cukernel_persistent_boundary_tracegen(
             );
             row.fill_zero(COL_INDEX(PersistentBoundaryCols, timestamps), BLOCKS_PER_CHUNK);
         } else {
+            // record.values are already Montgomery-encoded (see read_initial_chunk in inventory.cu)
             FpArray<8> final_values = FpArray<8>::from_raw_array(record.values);
             FpArray<8> final_hash = poseidon2.hash_and_record(final_values);
             COL_WRITE_VALUE(row, PersistentBoundaryCols, expand_direction, Fp::neg_one());
