@@ -6723,7 +6723,6 @@ name = "openvm-keccak256-guest"
 version = "2.0.0-alpha"
 dependencies = [
  "openvm-platform",
- "spin 0.10.0",
 ]
 
 [[package]]
@@ -7137,10 +7136,12 @@ name = "openvm-sha2"
 version = "2.0.0-alpha"
 dependencies = [
  "eyre",
+ "hex",
  "openvm",
  "openvm-circuit",
  "openvm-instructions",
  "openvm-rv32im-transpiler",
+ "openvm-sdk",
  "openvm-sha2-circuit",
  "openvm-sha2-guest",
  "openvm-sha2-transpiler",
