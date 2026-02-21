@@ -24,7 +24,7 @@ use crate::{cuda_abi::inventory, system::memory::online::LinearMemory};
 
 pub struct MemoryInventoryGPU {
     pub boundary: BoundaryChipGPU,
-    pub access_adapters: AccessAdapterInventoryGPU,
+    pub access_adapters: Option<AccessAdapterInventoryGPU>,
     pub persistent: Option<PersistentMemoryInventoryGPU>,
     #[cfg(feature = "metrics")]
     pub(super) unpadded_merkle_height: usize,
@@ -64,17 +64,22 @@ impl MemoryInventoryGPU {
         let addr_space_max_bits = log2_ceil_usize(
             (ADDR_SPACE_OFFSET + 2u32.pow(config.addr_space_height as u32)) as usize,
         );
+        let access_adapters = if config.access_adapters_enabled() {
+            Some(AccessAdapterInventoryGPU::new(
+                range_checker.clone(),
+                config.max_access_adapter_n,
+                config.timestamp_max_bits,
+            ))
+        } else {
+            None
+        };
         Self {
             boundary: BoundaryChipGPU::volatile(
-                range_checker.clone(),
+                range_checker,
                 addr_space_max_bits,
                 config.pointer_max_bits,
             ),
-            access_adapters: AccessAdapterInventoryGPU::new(
-                range_checker,
-                config.max_access_adapter_n,
-                config.timestamp_max_bits,
-            ),
+            access_adapters,
             persistent: None,
             #[cfg(feature = "metrics")]
             unpadded_merkle_height: 0,
@@ -86,13 +91,18 @@ impl MemoryInventoryGPU {
         range_checker: Arc<VariableRangeCheckerChipGPU>,
         hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
     ) -> Self {
-        Self {
-            boundary: BoundaryChipGPU::persistent(hasher_chip.shared_buffer()),
-            access_adapters: AccessAdapterInventoryGPU::new(
+        let access_adapters = if config.access_adapters_enabled() {
+            Some(AccessAdapterInventoryGPU::new(
                 range_checker,
                 config.max_access_adapter_n,
                 config.timestamp_max_bits,
-            ),
+            ))
+        } else {
+            None
+        };
+        Self {
+            boundary: BoundaryChipGPU::persistent(hasher_chip.shared_buffer()),
+            access_adapters,
             persistent: Some(PersistentMemoryInventoryGPU {
                 merkle_tree: MemoryMerkleTree::new(config.clone(), hasher_chip.clone()),
                 initial_memory: Vec::new(),
@@ -368,10 +378,9 @@ impl MemoryInventoryGPU {
             persistent.merkle_tree.drop_subtrees();
             persistent.initial_memory = Vec::new();
         }
-        ret.extend(
-            self.access_adapters
-                .generate_air_proving_ctxs(access_adapter_arena),
-        );
+        if let Some(access_adapters) = &mut self.access_adapters {
+            ret.extend(access_adapters.generate_air_proving_ctxs(access_adapter_arena));
+        }
         ret
     }
 }
