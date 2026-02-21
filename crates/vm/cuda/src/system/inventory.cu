@@ -1,4 +1,5 @@
 #include "launcher.cuh"
+#include "primitives/trace_access.h"
 #include <cub/device/device_scan.cuh>
 #include <cstddef>
 #include <cstdint>
@@ -58,11 +59,14 @@ __device__ inline void read_initial_chunk(
     for (int i = 0; i < OUT_BLOCK_SIZE; ++i) {
         size_t off = byte_offset + static_cast<size_t>(i) * cell_size;
         if (cell_size == 4) {
+            // Native32 values are already stored as field elements in Montgomery form
             out_values[i] = *reinterpret_cast<uint32_t const *>(mem + off);
         } else if (cell_size == 2) {
-            out_values[i] = *reinterpret_cast<uint16_t const *>(mem + off);
+            // Convert u16 value to field element in Montgomery form
+            out_values[i] = Fp(*reinterpret_cast<uint16_t const *>(mem + off)).asRaw();
         } else if (cell_size == 1) {
-            out_values[i] = mem[off];
+            // Convert u8 value to field element in Montgomery form
+            out_values[i] = Fp(mem[off]).asRaw();
         } else {
             out_values[i] = 0;
         }
