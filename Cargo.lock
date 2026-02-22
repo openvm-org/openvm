@@ -3250,6 +3250,51 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-deferral-circuit"
+version = "2.0.0-alpha"
+dependencies = [
+ "cfg-if",
+ "derive-new 0.6.0",
+ "derive_more 1.0.0",
+ "eyre",
+ "itertools 0.14.0",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
+ "openvm-cuda-backend",
+ "openvm-cuda-builder",
+ "openvm-cuda-common",
+ "openvm-deferral-transpiler",
+ "openvm-instructions",
+ "openvm-poseidon2-air",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "p3-field",
+ "p3-symmetric",
+ "rand 0.9.2",
+ "serde",
+ "static_assertions",
+ "strum",
+ "test-case",
+ "test-log",
+]
+
+[[package]]
+name = "openvm-deferral-transpiler"
+version = "2.0.0-alpha"
+dependencies = [
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-transpiler",
+ "p3-field",
+ "serde",
+ "strum",
+]
+
+[[package]]
 name = "openvm-ecc-circuit"
 version = "2.0.0-alpha"
 dependencies = [

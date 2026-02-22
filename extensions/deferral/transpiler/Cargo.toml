@@ -1,0 +1,18 @@
+[package]
+name = "openvm-deferral-transpiler"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+openvm-instructions = { workspace = true }
+openvm-instructions-derive = { workspace = true }
+openvm-transpiler = { workspace = true }
+
+p3-field = { workspace = true }
+
+serde = { workspace = true }
+strum = { workspace = true }
