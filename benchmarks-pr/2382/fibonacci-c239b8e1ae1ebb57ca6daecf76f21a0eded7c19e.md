@@ -7,21 +7,21 @@
 | fibonacci_program |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` |  513 |  1,026 |  590 |  436 |
+| `total_proof_time_ms ` |  509 |  1,018 |  588 |  430 |
 | `execute_metered_time_ms` |  8 | -          | -          | -          |
-| `execute_metered_insn_mi/s` |  171.11 | -          |  171.11 |  171.11 |
+| `execute_metered_insn_mi/s` |  168.08 | -          |  168.08 |  168.08 |
 | `execute_preflight_insns` |  750,132.50 |  1,500,265 |  873,000 |  627,265 |
 | `execute_preflight_time_ms` |  26 |  52 |  31 |  21 |
-| `execute_preflight_insn_mi/s` |  40.43 | -          |  40.62 |  40.24 |
-| `trace_gen_time_ms   ` |  195.50 |  391 |  199 |  192 |
+| `execute_preflight_insn_mi/s` |  39.34 | -          |  39.66 |  39.02 |
+| `trace_gen_time_ms   ` |  194.50 |  389 |  198 |  191 |
 | `memory_finalize_time_ms` |  0 |  0 |  0 |  0 |
-| `stark_prove_excluding_trace_time_ms` |  185.50 |  371 |  197 |  174 |
+| `stark_prove_excluding_trace_time_ms` |  182.50 |  365 |  196 |  169 |
 | `main_trace_commit_time_ms` |  30.50 |  61 |  33 |  28 |
-| `generate_perm_trace_time_ms` |  27.50 |  55 |  29 |  26 |
-| `perm_trace_commit_time_ms` |  41.27 |  82.55 |  44.17 |  38.38 |
-| `quotient_poly_compute_time_ms` |  32.49 |  64.99 |  34.25 |  30.73 |
-| `quotient_poly_commit_time_ms` |  12.49 |  24.98 |  12.96 |  12.02 |
-| `pcs_opening_time_ms ` |  39.50 |  79 |  42 |  37 |
+| `generate_perm_trace_time_ms` |  21.50 |  43 |  29 |  14 |
+| `perm_trace_commit_time_ms` |  41.43 |  82.87 |  43.66 |  39.21 |
+| `quotient_poly_compute_time_ms` |  31.53 |  63.06 |  34.18 |  28.89 |
+| `quotient_poly_commit_time_ms` |  12.51 |  25.03 |  13.01 |  12.02 |
+| `pcs_opening_time_ms ` |  43 |  86 |  44 |  42 |
 
 
 
@@ -30,11 +30,11 @@
 
 |  | keygen_time_ms | app_prove_time_ms |
 | --- | --- |
-|  | 328 | 1,040 | 
+|  | 328 | 1,032 | 
 
 | group | prove_segment_time_ms | fri.log_blowup | execute_metered_time_ms | execute_metered_insns | execute_metered_insn_mi/s | compute_user_public_values_proof_time_ms |
 | --- | --- | --- | --- | --- | --- | --- |
-| fibonacci_program | 436 | 1 | 8 | 1,500,265 | 171.11 | 0 | 
+| fibonacci_program | 430 | 1 | 8 | 1,500,265 | 168.08 | 0 | 
 
 | group | air_id | air_name | segment | rows | prep_cols | perm_cols | main_cols | cells |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -102,8 +102,8 @@
 
 | group | segment | trace_gen_time_ms | total_proof_time_ms | total_cells | system_trace_gen_time_ms | stark_prove_excluding_trace_time_ms | single_trace_gen_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | query phase_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | partially_prove_time_ms | open_time_ms | memory_finalize_time_ms | main_trace_commit_time_ms | generate_perm_trace_time_ms | execute_preflight_time_ms | execute_preflight_insns | execute_preflight_insn_mi/s | evaluate matrix_time_ms | eval_and_commit_quotient_time_ms | build fri inputs_time_ms | OpeningProverGpu::open_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| fibonacci_program | 0 | 192 | 590 | 84,397,584 | 192 | 197 | 0 | 34.25 | 12.96 | 4 | 44.17 | 42 | 73 | 42 | 0 | 33 | 29 | 31 | 873,000 | 40.62 | 14 | 47 | 0 | 42 | 
-| fibonacci_program | 1 | 199 | 436 | 74,303,722 | 199 | 174 | 1 | 30.73 | 12.02 | 4 | 38.38 | 37 | 65 | 37 | 0 | 28 | 26 | 21 | 627,265 | 40.24 | 11 | 43 | 0 | 37 | 
+| fibonacci_program | 0 | 191 | 588 | 84,397,584 | 191 | 196 | 0 | 34.18 | 13.01 | 4 | 43.66 | 42 | 73 | 41 | 0 | 33 | 29 | 31 | 873,000 | 39.66 | 14 | 47 | 0 | 41 | 
+| fibonacci_program | 1 | 198 | 430 | 74,303,722 | 198 | 169 | 1 | 28.89 | 12.02 | 4 | 39.21 | 44 | 54 | 44 | 0 | 28 | 14 | 21 | 627,265 | 39.02 | 11 | 41 | 0 | 44 | 
 
 | group | segment | trace_height_constraint | weighted_sum | threshold |
 | --- | --- | --- | --- | --- |
@@ -137,4 +137,4 @@ Instance Type: g6.2xlarge
 
 Memory Allocator: jemalloc
 
-[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/22251489387)
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/22270394628)

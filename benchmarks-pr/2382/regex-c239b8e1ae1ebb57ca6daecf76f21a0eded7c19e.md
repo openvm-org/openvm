@@ -1,27 +1,27 @@
 | Summary | Proof Time (s) | Parallel Proof Time (s) | Parallel Proof Time (32 provers) (s) |
 |:---|---:|---:|---:|
-| Total |  2.36 |  0.74 | 0.74 |
-| regex_program |  2.36 |  0.74 |  0.74 |
+| Total |  2.37 |  0.76 | 0.76 |
+| regex_program |  2.37 |  0.76 |  0.76 |
 
 
 | regex_program |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` |  580.75 |  2,323 |  702 |  534 |
-| `execute_metered_time_ms` |  35 | -          | -          | -          |
-| `execute_metered_insn_mi/s` |  115.54 | -          |  115.54 |  115.54 |
+| `total_proof_time_ms ` |  584.50 |  2,338 |  727 |  531 |
+| `execute_metered_time_ms` |  36 | -          | -          | -          |
+| `execute_metered_insn_mi/s` |  113.64 | -          |  113.64 |  113.64 |
 | `execute_preflight_insns` |  1,034,400 |  4,137,600 |  1,104,000 |  826,600 |
-| `execute_preflight_time_ms` |  45.50 |  182 |  56 |  34 |
-| `execute_preflight_insn_mi/s` |  31.50 | -          |  31.86 |  30.43 |
-| `trace_gen_time_ms   ` |  182.50 |  730 |  202 |  175 |
+| `execute_preflight_time_ms` |  45 |  180 |  56 |  34 |
+| `execute_preflight_insn_mi/s` |  31.93 | -          |  32.43 |  30.84 |
+| `trace_gen_time_ms   ` |  180.75 |  723 |  199 |  172 |
 | `memory_finalize_time_ms` |  1 |  4 |  4 |  0 |
-| `stark_prove_excluding_trace_time_ms` |  279.25 |  1,117 |  303 |  256 |
-| `main_trace_commit_time_ms` |  50.50 |  202 |  56 |  48 |
-| `generate_perm_trace_time_ms` |  31.25 |  125 |  40 |  19 |
-| `perm_trace_commit_time_ms` |  63.69 |  254.76 |  68.81 |  53.74 |
-| `quotient_poly_compute_time_ms` |  59.27 |  237.08 |  66.08 |  53.69 |
-| `quotient_poly_commit_time_ms` |  15.62 |  62.47 |  17.80 |  13.81 |
-| `pcs_opening_time_ms ` |  55.75 |  223 |  68 |  50 |
+| `stark_prove_excluding_trace_time_ms` |  284.50 |  1,138 |  328 |  256 |
+| `main_trace_commit_time_ms` |  50.75 |  203 |  54 |  48 |
+| `generate_perm_trace_time_ms` |  32.75 |  131 |  46 |  20 |
+| `perm_trace_commit_time_ms` |  63.13 |  252.50 |  69.30 |  52.89 |
+| `quotient_poly_compute_time_ms` |  58.26 |  233.06 |  67.25 |  53.34 |
+| `quotient_poly_commit_time_ms` |  15.43 |  61.73 |  17.22 |  13.28 |
+| `pcs_opening_time_ms ` |  61 |  244 |  79 |  48 |
 
 
 
@@ -30,11 +30,11 @@
 
 |  | keygen_time_ms | app_prove_time_ms |
 | --- | --- |
-|  | 655 | 2,375 | 
+|  | 650 | 2,390 | 
 
 | group | prove_segment_time_ms | fri.log_blowup | execute_metered_time_ms | execute_metered_insns | execute_metered_insn_mi/s | compute_user_public_values_proof_time_ms |
 | --- | --- | --- | --- | --- | --- | --- |
-| regex_program | 534 | 1 | 35 | 4,137,600 | 115.54 | 0 | 
+| regex_program | 531 | 1 | 36 | 4,137,600 | 113.64 | 0 | 
 
 | group | air_id | air_name | segment | rows | prep_cols | perm_cols | main_cols | cells |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -150,10 +150,10 @@
 
 | group | segment | trace_gen_time_ms | total_proof_time_ms | total_cells | system_trace_gen_time_ms | stark_prove_excluding_trace_time_ms | single_trace_gen_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | query phase_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | partially_prove_time_ms | open_time_ms | memory_finalize_time_ms | main_trace_commit_time_ms | generate_perm_trace_time_ms | execute_preflight_time_ms | execute_preflight_insns | execute_preflight_insn_mi/s | evaluate matrix_time_ms | eval_and_commit_quotient_time_ms | build fri inputs_time_ms | OpeningProverGpu::open_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| regex_program | 0 | 175 | 702 | 146,584,124 | 175 | 303 | 0 | 62.59 | 17.80 | 5 | 68.81 | 55 | 110 | 55 | 4 | 56 | 40 | 56 | 1,103,000 | 30.43 | 21 | 81 | 1 | 55 | 
-| regex_program | 1 | 177 | 535 | 128,480,298 | 177 | 270 | 1 | 53.69 | 14.95 | 4 | 65.34 | 50 | 101 | 49 | 0 | 49 | 35 | 46 | 1,104,000 | 31.85 | 16 | 69 | 0 | 49 | 
-| regex_program | 2 | 176 | 552 | 128,480,298 | 176 | 288 | 1 | 54.71 | 15.90 | 4 | 66.86 | 68 | 98 | 67 | 0 | 49 | 31 | 46 | 1,104,000 | 31.86 | 16 | 71 | 0 | 67 | 
-| regex_program | 3 | 202 | 534 | 103,408,139 | 202 | 256 | 0 | 66.08 | 13.81 | 5 | 53.74 | 50 | 76 | 50 | 0 | 48 | 19 | 34 | 826,600 | 31.84 | 19 | 80 | 1 | 50 | 
+| regex_program | 0 | 172 | 727 | 146,584,124 | 172 | 328 | 0 | 58.92 | 17.22 | 5 | 69.30 | 79 | 116 | 79 | 4 | 54 | 46 | 56 | 1,103,000 | 30.84 | 21 | 76 | 1 | 79 | 
+| regex_program | 1 | 175 | 533 | 128,480,298 | 175 | 271 | 1 | 53.54 | 16.30 | 4 | 65.71 | 48 | 100 | 48 | 0 | 51 | 34 | 45 | 1,104,000 | 32.21 | 17 | 70 | 0 | 48 | 
+| regex_program | 2 | 177 | 547 | 128,480,298 | 177 | 283 | 1 | 53.34 | 14.93 | 4 | 64.60 | 67 | 96 | 67 | 0 | 50 | 31 | 45 | 1,104,000 | 32.43 | 16 | 68 | 0 | 67 | 
+| regex_program | 3 | 199 | 531 | 103,408,139 | 199 | 256 | 0 | 67.25 | 13.28 | 5 | 52.89 | 50 | 76 | 49 | 0 | 48 | 20 | 34 | 826,600 | 32.23 | 18 | 81 | 1 | 49 | 
 
 | group | segment | trace_height_constraint | weighted_sum | threshold |
 | --- | --- | --- | --- | --- |
@@ -209,4 +209,4 @@ Instance Type: g6.2xlarge
 
 Memory Allocator: jemalloc
 
-[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/22251489387)
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/22270394628)

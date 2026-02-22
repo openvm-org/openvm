@@ -7,18 +7,18 @@
 | verify_fibair |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` |  230 |  230 |  230 |  230 |
-| `execute_preflight_insns` |  322,610 |  322,610 |  322,610 |  322,610 |
-| `execute_preflight_time_ms` |  73 |  73 |  73 |  73 |
-| `execute_preflight_insn_mi/s` |  4.69 | -          |  4.69 |  4.69 |
-| `trace_gen_time_ms   ` |  23 |  23 |  23 |  23 |
+| `total_proof_time_ms ` |  229 |  229 |  229 |  229 |
+| `execute_preflight_insns` |  322,658 |  322,658 |  322,658 |  322,658 |
+| `execute_preflight_time_ms` |  76 |  76 |  76 |  76 |
+| `execute_preflight_insn_mi/s` |  4.46 | -          |  4.46 |  4.46 |
+| `trace_gen_time_ms   ` |  25 |  25 |  25 |  25 |
 | `memory_finalize_time_ms` |  2 |  2 |  2 |  2 |
-| `stark_prove_excluding_trace_time_ms` |  133 |  133 |  133 |  133 |
+| `stark_prove_excluding_trace_time_ms` |  127 |  127 |  127 |  127 |
 | `main_trace_commit_time_ms` |  24 |  24 |  24 |  24 |
-| `generate_perm_trace_time_ms` |  15 |  15 |  15 |  15 |
-| `perm_trace_commit_time_ms` |  27.36 |  27.36 |  27.36 |  27.36 |
-| `quotient_poly_compute_time_ms` |  22.81 |  22.81 |  22.81 |  22.81 |
-| `quotient_poly_commit_time_ms` |  8.38 |  8.38 |  8.38 |  8.38 |
+| `generate_perm_trace_time_ms` |  10 |  10 |  10 |  10 |
+| `perm_trace_commit_time_ms` |  27.08 |  27.08 |  27.08 |  27.08 |
+| `quotient_poly_compute_time_ms` |  21.59 |  21.59 |  21.59 |  21.59 |
+| `quotient_poly_commit_time_ms` |  7.94 |  7.94 |  7.94 |  7.94 |
 | `pcs_opening_time_ms ` |  33 |  33 |  33 |  33 |
 
 
@@ -28,7 +28,7 @@
 
 |  | verify_program_compile_ms | verify_fibair_time_ms | total_cells | stark_prove_excluding_trace_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | query phase_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | partially_prove_time_ms | open_time_ms | main_trace_commit_time_ms | generate_perm_trace_time_ms | evaluate matrix_time_ms | eval_and_commit_quotient_time_ms | build fri inputs_time_ms | OpeningProverGpu::open_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-|  | 10 | 230 | 65,536 | 24 | 0.14 | 0.72 | 1 | 0 | 19 | 0 | 19 | 3 | 0 | 1 | 0 | 0 | 19 | 
+|  | 9 | 229 | 65,536 | 16 | 0.15 | 0.73 | 1 | 0 | 12 | 0 | 12 | 3 | 0 | 1 | 0 | 0 | 12 | 
 
 | air_id | air_name | rows | main_cols | cells |
 | --- | --- | --- | --- | --- |
@@ -57,7 +57,7 @@
 
 | group | trace_gen_time_ms | total_proof_time_ms | total_cells | system_trace_gen_time_ms | stark_prove_excluding_trace_time_ms | single_trace_gen_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | query phase_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | partially_prove_time_ms | open_time_ms | memory_finalize_time_ms | main_trace_commit_time_ms | generate_perm_trace_time_ms | fri.log_blowup | execute_preflight_time_ms | execute_preflight_insns | execute_preflight_insn_mi/s | evaluate matrix_time_ms | eval_and_commit_quotient_time_ms | build fri inputs_time_ms | OpeningProverGpu::open_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| verify_fibair | 23 | 230 | 62,474,410 | 23 | 133 | 0 | 22.81 | 8.38 | 4 | 27.36 | 33 | 43 | 33 | 2 | 24 | 15 | 1 | 73 | 322,610 | 4.69 | 11 | 31 | 0 | 33 | 
+| verify_fibair | 25 | 229 | 62,474,410 | 25 | 127 | 0 | 21.59 | 7.94 | 4 | 27.08 | 33 | 38 | 33 | 2 | 24 | 10 | 1 | 76 | 322,658 | 4.46 | 12 | 29 | 0 | 33 | 
 
 | group | air_id | air_name | rows | prep_cols | perm_cols | main_cols | cells |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -102,4 +102,4 @@ Instance Type: g6.2xlarge
 
 Memory Allocator: jemalloc
 
-[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/22251489387)
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/22270394628)

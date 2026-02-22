@@ -1,27 +1,27 @@
 | Summary | Proof Time (s) | Parallel Proof Time (s) | Parallel Proof Time (32 provers) (s) |
 |:---|---:|---:|---:|
-| Total |  0.79 |  0.79 | 0.79 |
-| ecrecover_program |  0.79 |  0.79 |  0.79 |
+| Total |  0.77 |  0.77 | 0.77 |
+| ecrecover_program |  0.77 |  0.77 |  0.77 |
 
 
 | ecrecover_program |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` |  779 |  779 |  779 |  779 |
+| `total_proof_time_ms ` |  764 |  764 |  764 |  764 |
 | `execute_metered_time_ms` |  6 | -          | -          | -          |
-| `execute_metered_insn_mi/s` |  18.67 | -          |  18.67 |  18.67 |
+| `execute_metered_insn_mi/s` |  18.38 | -          |  18.38 |  18.38 |
 | `execute_preflight_insns` |  124,173 |  124,173 |  124,173 |  124,173 |
-| `execute_preflight_time_ms` |  61 |  61 |  61 |  61 |
-| `execute_preflight_insn_mi/s` |  2.19 | -          |  2.19 |  2.19 |
-| `trace_gen_time_ms   ` |  221 |  221 |  221 |  221 |
+| `execute_preflight_time_ms` |  60 |  60 |  60 |  60 |
+| `execute_preflight_insn_mi/s` |  2.23 | -          |  2.23 |  2.23 |
+| `trace_gen_time_ms   ` |  217 |  217 |  217 |  217 |
 | `memory_finalize_time_ms` |  0 |  0 |  0 |  0 |
-| `stark_prove_excluding_trace_time_ms` |  327 |  327 |  327 |  327 |
-| `main_trace_commit_time_ms` |  38 |  38 |  38 |  38 |
-| `generate_perm_trace_time_ms` |  51 |  51 |  51 |  51 |
-| `perm_trace_commit_time_ms` |  39.13 |  39.13 |  39.13 |  39.13 |
-| `quotient_poly_compute_time_ms` |  108.91 |  108.91 |  108.91 |  108.91 |
-| `quotient_poly_commit_time_ms` |  8.84 |  8.84 |  8.84 |  8.84 |
-| `pcs_opening_time_ms ` |  70 |  70 |  70 |  70 |
+| `stark_prove_excluding_trace_time_ms` |  317 |  317 |  317 |  317 |
+| `main_trace_commit_time_ms` |  39 |  39 |  39 |  39 |
+| `generate_perm_trace_time_ms` |  50 |  50 |  50 |  50 |
+| `perm_trace_commit_time_ms` |  39.22 |  39.22 |  39.22 |  39.22 |
+| `quotient_poly_compute_time_ms` |  109.43 |  109.43 |  109.43 |  109.43 |
+| `quotient_poly_commit_time_ms` |  8.83 |  8.83 |  8.83 |  8.83 |
+| `pcs_opening_time_ms ` |  61 |  61 |  61 |  61 |
 
 
 
@@ -30,11 +30,11 @@
 
 |  | keygen_time_ms | app_prove_time_ms |
 | --- | --- |
-|  | 1,114 | 792 | 
+|  | 1,098 | 777 | 
 
 | group | prove_segment_time_ms | fri.log_blowup | execute_metered_time_ms | execute_metered_insns | execute_metered_insn_mi/s | compute_user_public_values_proof_time_ms |
 | --- | --- | --- | --- | --- | --- | --- |
-| ecrecover_program | 779 | 1 | 6 | 124,173 | 18.67 | 0 | 
+| ecrecover_program | 764 | 1 | 6 | 124,173 | 18.38 | 0 | 
 
 | group | air_id | air_name | segment | rows | prep_cols | perm_cols | main_cols | cells |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -106,7 +106,7 @@
 
 | group | segment | trace_gen_time_ms | total_proof_time_ms | total_cells | system_trace_gen_time_ms | stark_prove_excluding_trace_time_ms | single_trace_gen_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | query phase_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | partially_prove_time_ms | open_time_ms | memory_finalize_time_ms | main_trace_commit_time_ms | generate_perm_trace_time_ms | execute_preflight_time_ms | execute_preflight_insns | execute_preflight_insn_mi/s | evaluate matrix_time_ms | eval_and_commit_quotient_time_ms | build fri inputs_time_ms | OpeningProverGpu::open_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| ecrecover_program | 0 | 221 | 779 | 32,533,738 | 221 | 327 | 0 | 108.91 | 8.84 | 7 | 39.13 | 70 | 99 | 70 | 0 | 38 | 51 | 61 | 124,173 | 2.19 | 22 | 118 | 2 | 70 | 
+| ecrecover_program | 0 | 217 | 764 | 32,533,738 | 217 | 317 | 0 | 109.43 | 8.83 | 7 | 39.22 | 61 | 97 | 61 | 0 | 39 | 50 | 60 | 124,173 | 2.23 | 22 | 118 | 2 | 61 | 
 
 | group | segment | trace_height_constraint | weighted_sum | threshold |
 | --- | --- | --- | --- | --- |
@@ -132,4 +132,4 @@ Instance Type: g6.2xlarge
 
 Memory Allocator: jemalloc
 
-[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/22251489387)
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/22270394628)

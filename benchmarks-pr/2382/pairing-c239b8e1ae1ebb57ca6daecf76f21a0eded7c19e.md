@@ -1,27 +1,27 @@
 | Summary | Proof Time (s) | Parallel Proof Time (s) | Parallel Proof Time (32 provers) (s) |
 |:---|---:|---:|---:|
-| Total |  1.49 |  0.89 | 0.89 |
-| pairing |  1.49 |  0.89 |  0.89 |
+| Total |  1.50 |  0.90 | 0.90 |
+| pairing |  1.50 |  0.90 |  0.90 |
 
 
 | pairing |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` |  710 |  1,420 |  824 |  596 |
+| `total_proof_time_ms ` |  715.50 |  1,431 |  829 |  602 |
 | `execute_metered_time_ms` |  69 | -          | -          | -          |
 | `execute_metered_insn_mi/s` |  25.09 | -          |  25.09 |  25.09 |
 | `execute_preflight_insns` |  872,878.50 |  1,745,757 |  1,157,000 |  588,757 |
-| `execute_preflight_time_ms` |  81.50 |  163 |  120 |  43 |
-| `execute_preflight_insn_mi/s` |  14.63 | -          |  18.09 |  11.18 |
-| `trace_gen_time_ms   ` |  185 |  370 |  206 |  164 |
+| `execute_preflight_time_ms` |  81.50 |  163 |  119 |  44 |
+| `execute_preflight_insn_mi/s` |  14.67 | -          |  18.03 |  11.31 |
+| `trace_gen_time_ms   ` |  185 |  370 |  207 |  163 |
 | `memory_finalize_time_ms` |  0.50 |  1 |  1 |  0 |
-| `stark_prove_excluding_trace_time_ms` |  337.50 |  675 |  370 |  305 |
+| `stark_prove_excluding_trace_time_ms` |  343 |  686 |  377 |  309 |
 | `main_trace_commit_time_ms` |  59 |  118 |  68 |  50 |
-| `generate_perm_trace_time_ms` |  42 |  84 |  42 |  42 |
-| `perm_trace_commit_time_ms` |  78.95 |  157.90 |  89.92 |  67.97 |
-| `quotient_poly_compute_time_ms` |  82.48 |  164.97 |  90.36 |  74.61 |
-| `quotient_poly_commit_time_ms` |  14.03 |  28.06 |  15.31 |  12.76 |
-| `pcs_opening_time_ms ` |  56 |  112 |  60 |  52 |
+| `generate_perm_trace_time_ms` |  40.50 |  81 |  41 |  40 |
+| `perm_trace_commit_time_ms` |  79.65 |  159.30 |  90.77 |  68.53 |
+| `quotient_poly_compute_time_ms` |  83.91 |  167.82 |  92.97 |  74.84 |
+| `quotient_poly_commit_time_ms` |  14.85 |  29.71 |  16.82 |  12.89 |
+| `pcs_opening_time_ms ` |  59.50 |  119 |  63 |  56 |
 
 
 
@@ -30,11 +30,11 @@
 
 |  | keygen_time_ms | app_prove_time_ms |
 | --- | --- |
-|  | 969 | 1,497 | 
+|  | 972 | 1,506 | 
 
 | group | prove_segment_time_ms | fri.log_blowup | execute_metered_time_ms | execute_metered_insns | execute_metered_insn_mi/s | compute_user_public_values_proof_time_ms |
 | --- | --- | --- | --- | --- | --- | --- |
-| pairing | 596 | 1 | 69 | 1,745,757 | 25.09 | 0 | 
+| pairing | 602 | 1 | 69 | 1,745,757 | 25.09 | 0 | 
 
 | group | air_id | air_name | segment | rows | prep_cols | perm_cols | main_cols | cells |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -121,8 +121,8 @@
 
 | group | segment | trace_gen_time_ms | total_proof_time_ms | total_cells | system_trace_gen_time_ms | stark_prove_excluding_trace_time_ms | single_trace_gen_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | query phase_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | partially_prove_time_ms | open_time_ms | memory_finalize_time_ms | main_trace_commit_time_ms | generate_perm_trace_time_ms | execute_preflight_time_ms | execute_preflight_insns | execute_preflight_insn_mi/s | evaluate matrix_time_ms | eval_and_commit_quotient_time_ms | build fri inputs_time_ms | OpeningProverGpu::open_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| pairing | 0 | 164 | 824 | 153,867,516 | 164 | 370 | 0 | 90.36 | 15.31 | 6 | 89.92 | 60 | 135 | 60 | 1 | 68 | 42 | 120 | 1,157,000 | 11.18 | 25 | 106 | 1 | 60 | 
-| pairing | 1 | 206 | 596 | 106,061,858 | 206 | 305 | 1 | 74.61 | 12.76 | 5 | 67.97 | 52 | 113 | 52 | 0 | 50 | 42 | 43 | 588,757 | 18.09 | 20 | 88 | 1 | 52 | 
+| pairing | 0 | 163 | 829 | 153,867,516 | 163 | 377 | 0 | 92.97 | 16.82 | 6 | 90.77 | 63 | 134 | 63 | 1 | 68 | 40 | 119 | 1,157,000 | 11.31 | 26 | 110 | 1 | 63 | 
+| pairing | 1 | 207 | 602 | 106,061,858 | 207 | 309 | 1 | 74.84 | 12.89 | 5 | 68.53 | 56 | 113 | 56 | 0 | 50 | 41 | 44 | 588,757 | 18.03 | 20 | 88 | 1 | 56 | 
 
 | group | segment | trace_height_constraint | weighted_sum | threshold |
 | --- | --- | --- | --- | --- |
@@ -156,4 +156,4 @@ Instance Type: g6.2xlarge
 
 Memory Allocator: jemalloc
 
-[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/22251489387)
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/22270394628)
