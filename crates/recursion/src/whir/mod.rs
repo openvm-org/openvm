@@ -463,6 +463,7 @@ impl AirModule for WhirModule {
         };
         let final_poly_mle_eval_air = FinalPolyMleEvalAir {
             whir_opening_point_bus: self.bus_inventory.whir_opening_point_bus,
+            whir_opening_point_lookup_bus: self.bus_inventory.whir_opening_point_lookup_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
             final_poly_mle_eval_bus: self.final_poly_mle_eval_bus,
             eq_alpha_u_bus: self.eq_alpha_u_bus,
