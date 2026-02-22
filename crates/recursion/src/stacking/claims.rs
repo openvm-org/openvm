@@ -29,7 +29,7 @@ use crate::{
         },
         utils::{compute_coefficients, get_stacked_slice_data},
     },
-    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     tracegen::{RowMajorChip, StandardTracegenCtx},
     utils::{assert_one_ext, ext_field_add, ext_field_multiply, pow_tidx_count},
 };
@@ -129,25 +129,18 @@ where
         let is_in_block = local.is_valid + local.is_padding;
         let next_is_in_block = next.is_valid + next.is_padding;
 
-        let is_same_proof = next_is_in_block.clone() - next.is_first;
-
-        NestedForLoopSubAir::<2, 1> {}.eval(
+        NestedForLoopSubAir::<2> {}.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: is_in_block.clone(),
-                        counter: [local.proof_idx.into(), local.global_col_idx.into()],
-                        is_first: [local.is_first.into(), AB::Expr::ONE],
-                    },
-                    NestedForLoopIoCols {
-                        is_enabled: next_is_in_block.clone(),
-                        counter: [next.proof_idx.into(), next.global_col_idx.into()],
-                        is_first: [next.is_first.into(), AB::Expr::ONE],
-                    },
-                ),
-                NestedForLoopAuxCols {
-                    is_transition: [is_same_proof],
+                NestedForLoopIoCols {
+                    is_enabled: is_in_block.clone(),
+                    counter: [local.proof_idx.into(), local.global_col_idx.into()],
+                    is_first: [local.is_first.into(), AB::Expr::ONE],
+                },
+                NestedForLoopIoCols {
+                    is_enabled: next_is_in_block.clone(),
+                    counter: [next.proof_idx.into(), next.global_col_idx.into()],
+                    is_first: [next.is_first.into(), AB::Expr::ONE],
                 },
             ),
         );
@@ -166,14 +159,15 @@ where
 
         builder.assert_bool(local.is_valid);
         builder.assert_bool(local.is_padding);
-        builder.assert_bool(local.is_first);
         builder.assert_bool(local.is_last);
-        // is_valid and is_padding are mutually exclusive
-        builder.assert_bool(is_in_block.clone());
         // Last row in a proof block is exactly the nested-loop boundary for proof_idx.
         builder.when(is_in_block.clone()).assert_eq(
             local.is_last,
-            NestedForLoopSubAir::<2, 1>::local_is_last(next_is_in_block.clone(), next.is_first),
+            NestedForLoopSubAir::<2>::local_is_last(
+                is_in_block.clone(),
+                next_is_in_block.clone(),
+                next.is_first,
+            ),
         );
         // Once padding starts within a proof block, it stays padding
         builder

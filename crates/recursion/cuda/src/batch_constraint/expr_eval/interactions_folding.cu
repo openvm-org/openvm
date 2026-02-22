@@ -2,7 +2,6 @@
 #include "fp.h"
 #include "fpext.h"
 #include "launcher.cuh"
-#include "nested_for_loop.h"
 #include "primitives/trace_access.h"
 #include "ptr_array.h"
 #include "scan.cuh"
@@ -34,8 +33,6 @@ template <typename T> struct InteractionsFoldingCols {
     T is_first_in_message;
     T is_second_in_message;
     T is_bus_index;
-
-    NestedForLoopAuxCols<T, 2> loop_aux;
 
     T idx_in_message;
     T value[D_EF];
@@ -76,12 +73,6 @@ __global__ void interactions_folding_tracegen(
 
     if (global_row_idx >= num_valid_rows) {
         row.fill_zero(0, sizeof(InteractionsFoldingCols<uint8_t>));
-        COL_WRITE_VALUE(row, InteractionsFoldingCols, is_first, Fp::one());
-        COL_WRITE_VALUE(
-            row, InteractionsFoldingCols, proof_idx, NUM_PROOFS + global_row_idx - num_valid_rows
-        );
-        COL_WRITE_VALUE(row, InteractionsFoldingCols, is_first_in_air, Fp::one());
-        COL_WRITE_VALUE(row, InteractionsFoldingCols, is_first_in_message, Fp::one());
         return;
     }
 
@@ -133,9 +124,6 @@ __global__ void interactions_folding_tracegen(
     COL_WRITE_VALUE(row, InteractionsFoldingCols, is_first_in_message, is_first_in_message);
     COL_WRITE_VALUE(row, InteractionsFoldingCols, is_second_in_message, is_second_in_message);
     COL_WRITE_VALUE(row, InteractionsFoldingCols, is_bus_index, is_bus_index);
-
-    COL_WRITE_VALUE(row, InteractionsFoldingCols, loop_aux.is_transition[0], !is_last_in_proof);
-    COL_WRITE_VALUE(row, InteractionsFoldingCols, loop_aux.is_transition[1], !is_last_in_air);
 
     uint32_t idx_in_message = is_first_in_message ? 0
                                                   : (is_bus_index ? (interaction_num_rows - 1)

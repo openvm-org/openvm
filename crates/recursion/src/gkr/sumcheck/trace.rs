@@ -203,9 +203,6 @@ impl RowMajorChip<F> for GkrSumcheckTraceGenerator {
                         cols.is_proof_start =
                             F::from_bool(layer_idx_value == 1 && round_in_layer == 0);
 
-                        cols.nested_for_loop_aux_cols.is_transition[0] =
-                            F::from_bool(global_round_idx + 1 != total_rounds);
-
                         let tidx = record.derive_tidx(layer_idx, round_in_layer);
                         cols.tidx = F::from_usize(tidx);
 

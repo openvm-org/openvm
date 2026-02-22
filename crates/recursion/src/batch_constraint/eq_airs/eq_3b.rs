@@ -13,7 +13,6 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, D_E
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{extension::BinomiallyExtendable, BasedVectorSpace, PrimeCharacteristicRing};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
-use p3_maybe_rayon::prelude::*;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -21,7 +20,7 @@ use crate::{
         BatchConstraintConductorBus, BatchConstraintConductorMessage,
         BatchConstraintInnerMessageType, Eq3bBus, Eq3bMessage,
     },
-    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     tracegen::RowMajorChip,
     utils::{
@@ -54,8 +53,6 @@ pub struct Eq3bColumns<T> {
     idx: T,         // stacked_idx >> l_skip, restored bit by bit
     running_idx: T, // the current stacked_idx >> l_skip
     nth_bit: T,
-
-    loop_aux: NestedForLoopAuxCols<T, 2>,
 
     xi: [T; D_EF],
     eq: [T; D_EF],
@@ -91,33 +88,30 @@ where
         let local: &Eq3bColumns<AB::Var> = (*local).borrow();
         let next: &Eq3bColumns<AB::Var> = (*next).borrow();
 
-        type LoopSubAir = NestedForLoopSubAir<3, 2>;
+        type LoopSubAir = NestedForLoopSubAir<3>;
         LoopSubAir {}.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.is_valid,
-                        counter: [local.proof_idx, local.sort_idx, local.interaction_idx],
-                        is_first: [
-                            local.is_first,
-                            local.is_first_in_air,
-                            local.is_first_in_interaction,
-                        ],
-                    }
-                    .map_into(),
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_valid,
-                        counter: [next.proof_idx, next.sort_idx, next.interaction_idx],
-                        is_first: [
-                            next.is_first,
-                            next.is_first_in_air,
-                            next.is_first_in_interaction,
-                        ],
-                    }
-                    .map_into(),
-                ),
-                local.loop_aux.map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: local.is_valid,
+                    counter: [local.proof_idx, local.sort_idx, local.interaction_idx],
+                    is_first: [
+                        local.is_first,
+                        local.is_first_in_air,
+                        local.is_first_in_interaction,
+                    ],
+                }
+                .map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: next.is_valid,
+                    counter: [next.proof_idx, next.sort_idx, next.interaction_idx],
+                    is_first: [
+                        next.is_first,
+                        next.is_first_in_air,
+                        next.is_first_in_interaction,
+                    ],
+                }
+                .map_into(),
             ),
         );
 
@@ -125,8 +119,9 @@ where
         builder.assert_bool(local.nth_bit);
         builder.assert_bool(local.has_no_interactions);
 
-        let within_one_air = not(next.is_first_in_air);
-        let within_one_interaction = not(next.is_first_in_interaction);
+        let within_one_air = next.is_valid - next.is_first_in_air;
+        let within_one_interaction = next.is_valid - next.is_first_in_interaction;
+        let is_last_in_interaction = local.is_valid - within_one_interaction.clone();
 
         // =============================== n consistency ==================================
         builder
@@ -157,7 +152,7 @@ where
         // it's always 1 in the end
         builder
             .when(not(local.has_no_interactions))
-            .when(next.is_first_in_interaction)
+            .when(is_last_in_interaction.clone())
             .when(local.is_valid)
             .assert_one(local.n_at_least_n_lift);
 
@@ -197,10 +192,7 @@ where
             .assert_zero(local.idx);
         builder.when(local.is_first).assert_zero(local.running_idx);
         builder
-            .when(LoopSubAir::local_is_last(
-                next.is_valid,
-                next.is_first_in_interaction,
-            ))
+            .when(is_last_in_interaction.clone())
             .when(not(local.has_no_interactions))
             .assert_eq(local.idx, local.running_idx);
         builder
@@ -275,7 +267,7 @@ where
                 interaction_idx: local.interaction_idx,
                 eq_3b: local.eq,
             },
-            next.is_first_in_interaction * (local.is_valid - local.has_no_interactions),
+            is_last_in_interaction * (local.is_valid - local.has_no_interactions),
         );
     }
 }
@@ -481,12 +473,6 @@ impl RowMajorChip<F> for Eq3bTraceGenerator {
                         cols.running_idx = F::from_u32(shifted_idx);
                         let nth_bit = (shifted_idx & (1 << n)) > 0;
                         cols.nth_bit = F::from_bool(nth_bit);
-                        cols.loop_aux.is_transition[0] = F::from_bool(
-                            j + 1 < stacked_ids.len() || (n < n_logup && !record.no_interactions),
-                        );
-                        cols.loop_aux.is_transition[1] = F::from_bool(
-                            (!record.is_last_in_air || n < n_logup) && !record.no_interactions,
-                        );
                         let xi = if (record.n_lift as usize..n_logup).contains(&n) {
                             xi[l_skip + n]
                         } else if nth_bit {
@@ -502,17 +488,6 @@ impl RowMajorChip<F> for Eq3bTraceGenerator {
                 cur_height += this_height;
             }
         }
-
-        trace[cur_height * width..]
-            .par_chunks_mut(width)
-            .enumerate()
-            .for_each(|(i, chunk)| {
-                let cols: &mut Eq3bColumns<F> = chunk.borrow_mut();
-                cols.proof_idx = F::from_usize(preflights.len() + i);
-                cols.is_first = F::ONE;
-                cols.is_first_in_air = F::ONE;
-                cols.is_first_in_interaction = F::ONE;
-            });
 
         Some(RowMajorMatrix::new(trace, width))
     }

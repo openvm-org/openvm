@@ -24,7 +24,7 @@ use crate::{
         MerkleVerifyBus, MerkleVerifyBusMessage, Poseidon2PermuteBus, Poseidon2PermuteMessage,
         StackingIndexMessage, StackingIndicesBus, WhirMuBus, WhirMuMessage,
     },
-    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     tracegen::RowMajorChip,
     utils::{ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
@@ -103,55 +103,45 @@ where
         let is_same_coset_idx = next.flags[0] - next.is_first_in_coset;
         let is_same_commit = next.flags[0] - next.is_first_in_commit;
 
-        NestedForLoopSubAir::<5, 4>.eval(
+        NestedForLoopSubAir::<5>.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.flags[0],
-                        counter: [
-                            local.proof_idx,
-                            local.query_idx,
-                            local.coset_idx,
-                            local.commit_idx,
-                            local.col_chunk_idx,
-                        ],
-                        is_first: [
-                            local.is_first_in_proof,
-                            local.is_first_in_query,
-                            local.is_first_in_coset,
-                            local.is_first_in_commit,
-                            local.flags[0],
-                        ],
-                    }
-                    .map_into(),
-                    NestedForLoopIoCols {
-                        is_enabled: next.flags[0],
-                        counter: [
-                            next.proof_idx,
-                            next.query_idx,
-                            next.coset_idx,
-                            next.commit_idx,
-                            next.col_chunk_idx,
-                        ],
-                        is_first: [
-                            next.is_first_in_proof,
-                            next.is_first_in_query,
-                            next.is_first_in_coset,
-                            next.is_first_in_commit,
-                            next.flags[0],
-                        ],
-                    }
-                    .map_into(),
-                ),
-                NestedForLoopAuxCols {
-                    is_transition: [
-                        is_same_proof.clone(),
-                        is_same_query.clone(),
-                        is_same_coset_idx.clone(),
-                        is_same_commit.clone(),
+                NestedForLoopIoCols {
+                    is_enabled: local.flags[0],
+                    counter: [
+                        local.proof_idx,
+                        local.query_idx,
+                        local.coset_idx,
+                        local.commit_idx,
+                        local.col_chunk_idx,
                     ],
-                },
+                    is_first: [
+                        local.is_first_in_proof,
+                        local.is_first_in_query,
+                        local.is_first_in_coset,
+                        local.is_first_in_commit,
+                        local.flags[0],
+                    ],
+                }
+                .map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: next.flags[0],
+                    counter: [
+                        next.proof_idx,
+                        next.query_idx,
+                        next.coset_idx,
+                        next.commit_idx,
+                        next.col_chunk_idx,
+                    ],
+                    is_first: [
+                        next.is_first_in_proof,
+                        next.is_first_in_query,
+                        next.is_first_in_coset,
+                        next.is_first_in_commit,
+                        next.flags[0],
+                    ],
+                }
+                .map_into(),
             ),
         );
 

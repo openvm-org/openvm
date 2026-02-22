@@ -16,7 +16,7 @@ use crate::{
         GkrSumcheckChallengeBus, GkrSumcheckChallengeMessage, GkrSumcheckInputBus,
         GkrSumcheckInputMessage, GkrSumcheckOutputBus, GkrSumcheckOutputMessage,
     },
-    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{
         assert_one_ext, ext_field_add, ext_field_multiply, ext_field_multiply_scalar,
         ext_field_one_minus, ext_field_subtract,
@@ -32,8 +32,6 @@ pub struct GkrLayerSumcheckCols<T> {
     pub layer_idx: T,
     pub is_proof_start: T,
     pub is_first_round: T,
-
-    pub nested_for_loop_aux_cols: NestedForLoopAuxCols<T, 1>,
 
     /// An enabled row which is not involved in any interactions
     /// but should satisfy air constraints
@@ -131,34 +129,29 @@ where
         // Proof Index and Loop Constraints
         ///////////////////////////////////////////////////////////////////////
 
-        type LoopSubAir = NestedForLoopSubAir<2, 1>;
+        type LoopSubAir = NestedForLoopSubAir<2>;
         LoopSubAir {}.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.is_enabled,
-                        counter: [local.proof_idx, local.layer_idx],
-                        is_first: [local.is_proof_start, local.is_first_round],
-                    }
-                    .map_into(),
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_enabled,
-                        counter: [next.proof_idx, next.layer_idx],
-                        is_first: [next.is_proof_start, next.is_first_round],
-                    }
-                    .map_into(),
-                ),
-                local.nested_for_loop_aux_cols.map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: local.is_enabled,
+                    counter: [local.proof_idx, local.layer_idx],
+                    is_first: [local.is_proof_start, local.is_first_round],
+                }
+                .map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: next.is_enabled,
+                    counter: [next.proof_idx, next.layer_idx],
+                    is_first: [next.is_proof_start, next.is_first_round],
+                }
+                .map_into(),
             ),
         );
 
-        // TODO(ayush): move to NestedForLoopSubAir
-        builder
-            .when(local.is_first_round)
-            .assert_one(local.is_enabled);
-        let is_transition_round = next.is_enabled - next.is_first_round;
-        let is_last_round = local.is_enabled - is_transition_round.clone();
+        let is_transition_round =
+            LoopSubAir::local_is_transition(next.is_enabled, next.is_first_round);
+        let is_last_round =
+            LoopSubAir::local_is_last(local.is_enabled, next.is_enabled, next.is_first_round);
 
         // Sumcheck round flag starts at 0
         builder.when(local.is_first_round).assert_zero(local.round);

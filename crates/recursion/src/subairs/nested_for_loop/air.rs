@@ -10,7 +10,7 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 ///
 /// Tracks `DEPTH_MINUS_ONE` loop counters (all loops except the innermost).
 #[derive(Default)]
-pub struct NestedForLoopSubAir<const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>;
+pub struct NestedForLoopSubAir<const DEPTH_MINUS_ONE: usize>;
 
 #[repr(C)]
 #[derive(AlignedBorrow, Copy, Clone, Debug)]
@@ -40,43 +40,13 @@ impl<T, const DEPTH_MINUS_ONE: usize> NestedForLoopIoCols<T, DEPTH_MINUS_ONE> {
     }
 }
 
-#[repr(C)]
-#[derive(AlignedBorrow, Copy, Clone, Debug)]
-pub struct NestedForLoopAuxCols<T, const DEPTH_MINUS_TWO: usize> {
-    /// Array of flags indicating parent loop transitions (excludes outermost loop).
-    /// For DEPTH=3 (i,j,k loops): contains only j_is_transition.
-    /// The outermost loop's transitions are handled by `when_transition()` and have no stored
-    /// column.
-    pub is_transition: [T; DEPTH_MINUS_TWO],
-}
-
-impl<T> Default for NestedForLoopAuxCols<T, 0> {
-    fn default() -> Self {
-        Self { is_transition: [] }
-    }
-}
-
-impl<T, const DEPTH_MINUS_ONE: usize> NestedForLoopAuxCols<T, DEPTH_MINUS_ONE> {
-    pub fn map_into<S>(self) -> NestedForLoopAuxCols<S, DEPTH_MINUS_ONE>
-    where
-        T: Into<S>,
-    {
-        NestedForLoopAuxCols {
-            is_transition: self.is_transition.map(Into::into),
-        }
-    }
-}
-
-impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize> SubAir<AB>
-    for NestedForLoopSubAir<DEPTH_MINUS_ONE, DEPTH_MINUS_TWO>
+impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize> SubAir<AB>
+    for NestedForLoopSubAir<DEPTH_MINUS_ONE>
 {
     type AirContext<'a>
         = (
-        (
-            NestedForLoopIoCols<AB::Expr, DEPTH_MINUS_ONE>,
-            NestedForLoopIoCols<AB::Expr, DEPTH_MINUS_ONE>,
-        ),
-        NestedForLoopAuxCols<AB::Expr, DEPTH_MINUS_TWO>,
+        NestedForLoopIoCols<AB::Expr, DEPTH_MINUS_ONE>,
+        NestedForLoopIoCols<AB::Expr, DEPTH_MINUS_ONE>,
     )
     where
         AB: 'a,
@@ -88,9 +58,7 @@ impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
         AB::Var: 'a,
         AB::Expr: 'a,
     {
-        debug_assert_eq!(DEPTH_MINUS_ONE, DEPTH_MINUS_TWO + 1);
-
-        let ((local_io, next_io), local_aux) = ctx;
+        let (local_io, next_io) = ctx;
 
         // Enforce boolean enabled flag and forbid re-enabling after a disabled row.
         builder.assert_bool(local_io.is_enabled.clone());
@@ -103,6 +71,12 @@ impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
             let counter_diff = next_io.counter[level].clone() - local_io.counter[level].clone();
             let local_is_first = local_io.is_first[level].clone();
             let next_is_first = next_io.is_first[level].clone();
+
+            builder.assert_bool(local_is_first.clone());
+            builder.assert_bool(next_is_first.clone());
+            builder
+                .when(local_io.is_first[level].clone())
+                .assert_one(local_io.is_enabled.clone());
 
             // First row constraint
             let mut builder_when_first_row = if level == 0 {
@@ -123,15 +97,9 @@ impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
                 let parent_is_transition: AB::Expr =
                     Self::local_is_transition(next_io.is_enabled.clone(), parent_next_is_first);
 
-                // Constrain is_transition[parent_level] to equal the calculated
-                // parent_is_transition
-                builder.assert_eq(
-                    local_aux.is_transition[parent_level].clone(),
-                    parent_is_transition.clone(),
-                );
-
-                builder.when(local_aux.is_transition[parent_level].clone())
+                builder.when(parent_is_transition)
             };
+
             self.eval_transition(
                 &mut builder_when_transition,
                 &local_io,
@@ -149,9 +117,7 @@ impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
     }
 }
 
-impl<const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
-    NestedForLoopSubAir<DEPTH_MINUS_ONE, DEPTH_MINUS_TWO>
-{
+impl<const DEPTH_MINUS_ONE: usize> NestedForLoopSubAir<DEPTH_MINUS_ONE> {
     /// Evaluates first row constraint for a loop level.
     ///
     /// Constraint: First row enabled sets `is_first`
@@ -203,7 +169,7 @@ impl<const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
     where
         FA: PrimeCharacteristicRing,
     {
-        next_is_enabled.into() * (FA::ONE - next_is_first.into())
+        next_is_enabled.into() - next_is_first.into()
     }
 
     /// Returns an expression for `is_last` on enabled rows.
@@ -212,10 +178,14 @@ impl<const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
     /// True when either:
     /// - The next row is disabled, OR
     /// - The next row is enabled and has `is_first` set (boundary between loop iterations)
-    pub fn local_is_last<FA>(next_is_enabled: impl Into<FA>, next_is_first: impl Into<FA>) -> FA
+    pub fn local_is_last<FA>(
+        local_is_enabled: impl Into<FA>,
+        next_is_enabled: impl Into<FA>,
+        next_is_first: impl Into<FA>,
+    ) -> FA
     where
         FA: PrimeCharacteristicRing,
     {
-        FA::ONE - Self::local_is_transition(next_is_enabled, next_is_first)
+        local_is_enabled.into() - next_is_enabled.into() + next_is_first.into()
     }
 }
