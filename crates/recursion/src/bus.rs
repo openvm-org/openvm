@@ -577,7 +577,14 @@ pub struct WhirOpeningPointMessage<T> {
     pub value: [T; D_EF],
 }
 
+// Permutation bus for opening points produced by the stacking sumcheck and eq_base AIRs.
+// Each point is sent exactly once by the producer and received exactly once by the consumer
+// (the first node in each layer of the MLE evaluation tree).
 define_typed_per_proof_permutation_bus!(WhirOpeningPointBus, WhirOpeningPointMessage);
+// Lookup bus for distributing opening points within the MLE evaluation tree. The first node
+// in each layer registers the point (received via WhirOpeningPointBus) as a lookup key,
+// and the remaining nodes in the layer look it up.
+define_typed_per_proof_lookup_bus!(WhirOpeningPointLookupBus, WhirOpeningPointMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
