@@ -136,7 +136,8 @@ fn negative_sha256_test_bad_final_hash() {
         trace.row_chunks_exact_mut(1).for_each(|row| {
             let mut row_slice = row.row_slice(0).expect("row exists").to_vec();
             let cols: &mut Sha256DigestCols<F> = row_slice[..SHA256_DIGEST_WIDTH].borrow_mut();
-            if cols.flags.is_last_block.is_one() && cols.flags.is_digest_row.is_one() {
+            if cols.flags.is_last_block_and_digest_row.is_one() && cols.flags.is_digest_row.is_one()
+            {
                 for i in 0..SHA256_HASH_WORDS {
                     for j in 0..SHA256_WORD_U8S {
                         cols.final_hash[i][j] = F::ZERO;

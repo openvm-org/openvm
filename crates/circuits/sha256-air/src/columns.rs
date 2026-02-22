@@ -100,6 +100,8 @@ pub struct Sha256MessageHelperCols<T> {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct Sha256FlagsCols<T> {
+    /// A flag that indicates that this row is the first one in a block
+    pub is_first_row: T,
     /// A flag that indicates if the current row is among the first 16 rows of a block.
     pub is_round_row: T,
     /// A flag that indicates if the current row is among the first 4 rows of a block.
@@ -108,7 +110,7 @@ pub struct Sha256FlagsCols<T> {
     pub is_digest_row: T,
     // A flag that indicates if the current row is the last block of the message.
     // This flag is only used in digest rows.
-    pub is_last_block: T,
+    pub is_last_block_and_digest_row: T,
     /// We will encode the row index [0..17) using 5 cells
     pub row_idx: [T; SHA256_ROW_VAR_CNT],
     /// The index of the current block in the trace starting at 1.
