@@ -7,7 +7,8 @@ use openvm_stark_backend::{
     test_utils::{
         default_test_params_small, test_system_params_small,
         test_system_params_small_with_poly_len, CachedFixture11, FibFixture, InteractionsFixture11,
-        MixtureFixture, PreprocessedFibFixture, SelfInteractionFixture, TestFixture,
+        MixtureFixture, MixtureFixtureEnum, PreprocessedFibFixture, SelfInteractionFixture,
+        TestFixture,
     },
     AirRef, StarkEngine, SystemParams, TranscriptHistory,
 };
@@ -229,6 +230,32 @@ fn test_preflight_preprocessed_trace(
     run_test::<2, _>(fx, &child_engine, &parent_engine, 1);
 }
 
+#[test_matrix(
+    [2, 3, 5],
+    [8],
+    [3],
+    [3, 4, 5]
+)]
+fn test_preflight_preprocessed_and_cached_trace(
+    l_skip: usize,
+    n_stack: usize,
+    k_whir: usize,
+    log_trace_height: usize,
+) {
+    let params = test_system_params_small(l_skip, n_stack, k_whir);
+    let child_engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(params.clone());
+    let parent_engine = test_engine_small();
+    let height = 1 << log_trace_height;
+    let sels = (0..height).map(|i| i % 2 == 0).collect_vec();
+    let fx = MixtureFixture::new(vec![
+        MixtureFixtureEnum::PreprocessedFibFixture(PreprocessedFibFixture::new(0, 1, sels)),
+        MixtureFixtureEnum::CachedFixture11(CachedFixture11::new(
+            BabyBearPoseidon2Config::default_from_params(params),
+        )),
+    ]);
+    run_test::<2, _>(fx, &child_engine, &parent_engine, 1);
+}
+
 #[test_case(2, 8, 3, 5)]
 #[test_case(3, 5, 3, 5)]
 #[test_case(3, 5, 3, 1)]
@@ -266,6 +293,34 @@ fn test_preflight_mixture_trace(
         BabyBearPoseidon2Config::default_from_params(params),
     );
     run_test::<2, _>(fx, &child_engine, &parent_engine, 1);
+}
+
+#[test]
+fn test_preflight_preprocessed_and_cached_transcript() {
+    let l_skip = 2;
+    let n_stack = 8;
+    let k_whir = 3;
+    let log_trace_height = 4;
+    let params = test_system_params_small(l_skip, n_stack, k_whir);
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSpongeRecorder>::new(params.clone());
+    let height = 1 << log_trace_height;
+    let sels = (0..height).map(|i| i % 2 == 0).collect_vec();
+    let fx = MixtureFixture::new(vec![
+        MixtureFixtureEnum::PreprocessedFibFixture(PreprocessedFibFixture::new(0, 1, sels)),
+        MixtureFixtureEnum::CachedFixture11(CachedFixture11::new(
+            BabyBearPoseidon2Config::default_from_params(params),
+        )),
+    ]);
+    let (pk, vk) = fx.keygen(&engine);
+
+    let mut prover_sponge = default_duplex_sponge_recorder();
+    let proof = fx.prove_from_transcript(&engine, &pk, &mut prover_sponge);
+    let prover_sponge_len = prover_sponge.len();
+
+    let preflight_sponge = default_duplex_sponge_validator(prover_sponge.into_log());
+    let circuit = VerifierSubCircuit::<2>::new(Arc::new(vk.clone()));
+    let preflight = circuit.run_preflight(preflight_sponge, &vk, &proof);
+    assert_eq!(preflight.transcript.len(), prover_sponge_len);
 }
 
 #[test]
