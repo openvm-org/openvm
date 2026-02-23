@@ -68,6 +68,7 @@ members = [
     "guest-libs/pairing/",
     "guest-libs/ruint/",
     "guest-libs/sha2/",
+    "guest-libs/aurora-engine-modexp/",
     "guest-libs/verify_stark/",
     "scripts",
 ]

@@ -1304,6 +1304,15 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 [[package]]
 name = "aurora-engine-modexp"
 version = "1.2.0"
+dependencies = [
+ "hex",
+ "ibig",
+ "num",
+]
+
+[[package]]
+name = "aurora-engine-modexp"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "518bc5745a6264b5fd7b09dffb9667e400ee9e2bbe18555fac75e1fe9afa0df9"
 dependencies = [
@@ -4738,6 +4747,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f31827a206f56af32e590ba56d5d2d085f558508192593743f16b2306495269f"
 dependencies = [
  "cc",
+]
+
+[[package]]
+name = "ibig"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1fcc7f316b2c079dde77564a1360639c1a956a23fa96122732e416cb10717bb"
+dependencies = [
+ "cfg-if",
+ "num-traits",
+ "static_assertions",
 ]
 
 [[package]]
@@ -8980,7 +9000,7 @@ dependencies = [
  "ark-ff 0.5.0",
  "ark-serialize 0.5.0",
  "arrayref",
- "aurora-engine-modexp",
+ "aurora-engine-modexp 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "blst",
  "c-kzg",
  "cfg-if",
@@ -9007,7 +9027,7 @@ dependencies = [
  "ark-ff 0.5.0",
  "ark-serialize 0.5.0",
  "arrayref",
- "aurora-engine-modexp",
+ "aurora-engine-modexp 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "blst",
  "c-kzg",
  "cfg-if",

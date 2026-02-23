@@ -20,6 +20,7 @@ openvm-p256 = { path = "../../guest-libs/p256/", package = "p256" }
 # patch for ecrecover
 [patch.crates-io]
 k256 = { path = "../../guest-libs/k256/" }
+aurora-engine-modexp = { path = "../../guest-libs/aurora-engine-modexp/" }
 
 [profile.release]
 panic = "abort"

@@ -394,5 +394,43 @@ impl SegmentationCtx {
             air_name,
             final_marker
         );
+
+        if IS_FINAL {
+            self.log_per_air_type_summary(trace_heights);
+        }
+    }
+
+    fn log_per_air_type_summary(&self, final_trace_heights: &[u32]) {
+        use std::collections::BTreeMap;
+        let mut air_type_cells: BTreeMap<String, usize> = BTreeMap::new();
+
+        for segment in &self.segments {
+            for (i, &height) in segment.trace_heights.iter().enumerate() {
+                let padded = height.next_power_of_two() as usize;
+                let cells = padded * self.widths[i];
+                *air_type_cells.entry(self.air_names[i].clone()).or_insert(0) += cells;
+            }
+        }
+        for (i, &height) in final_trace_heights.iter().enumerate() {
+            let padded = height.next_power_of_two() as usize;
+            let cells = padded * self.widths[i];
+            *air_type_cells.entry(self.air_names[i].clone()).or_insert(0) += cells;
+        }
+
+        let mut mod_builder_total: usize = 0;
+        let mut all_total: usize = 0;
+        for (name, &cells) in &air_type_cells {
+            all_total += cells;
+            if name.contains("FieldExpression") {
+                mod_builder_total += cells;
+                tracing::info!("  AIR cells: {:>12} | {}", cells, name);
+            }
+        }
+        tracing::info!(
+            "Mod-builder cells: {} / {} total ({:.2}%)",
+            mod_builder_total,
+            all_total,
+            mod_builder_total as f64 / all_total as f64 * 100.0
+        );
     }
 }
