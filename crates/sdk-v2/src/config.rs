@@ -173,7 +173,7 @@ pub fn default_root_params(log_blowup: usize) -> SystemParams {
     let n_stack = 17;
     let k_whir = 4;
     let max_constraint_degree = 4;
-    let w_stack = 32;
+    let w_stack = 64;
     generic_system_params(
         log_blowup,
         l_skip,
