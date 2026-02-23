@@ -30,7 +30,7 @@ use crate::{
         },
         utils::get_stacked_slice_data,
     },
-    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     tracegen::{RowMajorChip, StandardTracegenCtx},
     utils::{
         assert_one_ext, assert_zeros, ext_field_add_scalar, ext_field_multiply,
@@ -101,29 +101,23 @@ where
         let local: &EqBitsCols<AB::Var> = (*local).borrow();
         let next: &EqBitsCols<AB::Var> = (*next).borrow();
 
-        NestedForLoopSubAir::<1, 0> {}.eval(
+        NestedForLoopSubAir::<1> {}.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.is_valid,
-                        counter: [local.proof_idx],
-                        is_first: [local.is_first],
-                    }
-                    .map_into(),
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_valid,
-                        counter: [next.proof_idx],
-                        is_first: [next.is_first],
-                    }
-                    .map_into(),
-                ),
-                NestedForLoopAuxCols { is_transition: [] },
+                NestedForLoopIoCols {
+                    is_enabled: local.is_valid,
+                    counter: [local.proof_idx],
+                    is_first: [local.is_first],
+                }
+                .map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: next.is_valid,
+                    counter: [next.proof_idx],
+                    is_first: [next.is_first],
+                }
+                .map_into(),
             ),
         );
-        builder.assert_bool(local.is_valid);
-        builder.assert_bool(local.is_first);
-
         /*
          * Constrain that the root evaluation is correct, i.e. eq_bits([], []) = 1.
          */
