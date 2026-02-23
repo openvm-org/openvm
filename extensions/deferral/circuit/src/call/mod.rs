@@ -1,9 +1,9 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
-mod adapter;
-pub use adapter::*;
-mod core;
-pub use core::*;
+mod air;
+pub use air::*;
+mod trace;
+pub use trace::*;
 mod execution;
 
 pub type DeferralCallAir = VmAirWrapper<DeferralCallAdapterAir, DeferralCallCoreAir>;

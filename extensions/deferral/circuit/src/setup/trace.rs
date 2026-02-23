@@ -1,111 +1,92 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::BorrowMut;
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
+        get_record_from_slice, AdapterTraceExecutor, AdapterTraceFiller, EmptyAdapterCoreLayout,
+        ExecutionError, PreflightExecutor, RecordArena, TraceFiller, VmStateMut,
     },
     system::{
         memory::{
-            offline_checker::{MemoryBridge, MemoryWriteAuxCols, MemoryWriteAuxRecord},
-            online::TracingMemory,
-            MemoryAddress, MemoryAuxColsFactory,
+            offline_checker::MemoryWriteAuxRecord, online::TracingMemory, MemoryAuxColsFactory,
         },
         native_adapter::util::tracing_write_native,
     },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
-use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, NATIVE_AS};
-use openvm_stark_backend::{
-    interaction::InteractionBuilder, p3_air::BaseAir, p3_field::PrimeCharacteristicRing,
-};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_field::PrimeField32;
 
 use crate::{
-    setup::EmptyRecord,
-    utils::{memory_op_chunk, split_memory_ops, DIGEST_MEMORY_OPS, MEMORY_OP_SIZE},
+    setup::{DeferralSetupAdapterCols, DeferralSetupCoreCols},
+    utils::{memory_op_chunk, DIGEST_MEMORY_OPS, MEMORY_OP_SIZE},
 };
 
-// ========================= AIR ==============================
+// ========================= CORE ==============================
 
-#[repr(C)]
-#[derive(AlignedBorrow)]
-pub struct DeferralSetupAdapterCols<T> {
-    pub from_state: ExecutionState<T>,
-    pub write_aux: [MemoryWriteAuxCols<T, MEMORY_OP_SIZE>; DIGEST_MEMORY_OPS],
-}
+#[derive(AlignedBytesBorrow)]
+pub struct EmptyRecord;
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct DeferralSetupAdapterAir {
-    pub execution_bridge: ExecutionBridge,
-    pub memory_bridge: MemoryBridge,
+pub struct DeferralSetupCoreExecutor<F, A> {
+    pub(in crate::setup) adapter: A,
+    pub(in crate::setup) expected_def_vks_commit: [F; DIGEST_SIZE],
 }
 
-impl<F> BaseAir<F> for DeferralSetupAdapterAir {
-    fn width(&self) -> usize {
-        DeferralSetupAdapterCols::<F>::width()
+#[derive(Clone, Debug, derive_new::new)]
+pub struct DeferralSetupCoreFiller<A> {
+    adapter: A,
+}
+
+impl<F, A, RA> PreflightExecutor<F, RA> for DeferralSetupCoreExecutor<F, A>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceExecutor<F, ReadData = EmptyRecord, WriteData = [F; DIGEST_SIZE]>,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut EmptyRecord),
+    >,
+{
+    fn get_opcode_name(&self, _opcode: usize) -> String {
+        format!("{:?}", DeferralOpcode::SETUP)
     }
-}
 
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralSetupAdapterAir {
-    type Interface =
-        BasicAdapterInterface<AB::Expr, MinimalInstruction<AB::Expr>, 0, 1, 0, DIGEST_SIZE>;
-
-    fn eval(
+    fn execute(
         &self,
-        builder: &mut AB,
-        local: &[AB::Var],
-        ctx: AdapterAirContext<AB::Expr, Self::Interface>,
-    ) {
-        let cols: &DeferralSetupAdapterCols<_> = local.borrow();
-
-        // The SETUP opcode should always write to the beginning of the native
-        // address space.
-        let address_space = AB::Expr::from_u32(NATIVE_AS);
-        let pointer = AB::Expr::ZERO;
-        let [write_data] = ctx.writes;
-        let write_chunks = split_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(write_data);
-
-        for (chunk_idx, (data, aux)) in write_chunks.into_iter().zip(&cols.write_aux).enumerate() {
-            self.memory_bridge
-                .write(
-                    MemoryAddress::new(
-                        address_space.clone(),
-                        pointer.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_OP_SIZE),
-                    ),
-                    data,
-                    cols.from_state.timestamp + AB::Expr::from_usize(chunk_idx),
-                    aux,
-                )
-                .eval(builder, ctx.instruction.is_valid.clone());
-        }
-
-        self.execution_bridge
-            .execute_and_increment_or_set_pc(
-                ctx.instruction.opcode,
-                [
-                    pointer,
-                    AB::Expr::ZERO,
-                    AB::Expr::ZERO,
-                    address_space,
-                    AB::Expr::ZERO,
-                ],
-                cols.from_state,
-                AB::Expr::from_usize(DIGEST_MEMORY_OPS),
-                (DEFAULT_PC_STEP, ctx.to_pc),
-            )
-            .eval(builder, ctx.instruction.is_valid);
-    }
-
-    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &DeferralSetupAdapterCols<_> = local.borrow();
-        cols.from_state.pc
+        state: VmStateMut<F, TracingMemory, RA>,
+        instruction: &Instruction<F>,
+    ) -> Result<(), ExecutionError> {
+        let (mut adapter_record, _core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
+        A::start(*state.pc, state.memory, &mut adapter_record);
+        self.adapter.write(
+            state.memory,
+            instruction,
+            self.expected_def_vks_commit,
+            &mut adapter_record,
+        );
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        Ok(())
     }
 }
 
-// ========================= EXECUTION + TRACEGEN ==============================
+impl<F, A> TraceFiller<F> for DeferralSetupCoreFiller<A>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceFiller<F>,
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
+        // DeferralSetupCoreCols::width() elements
+        let (adapter_row, core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        let core_row: &mut DeferralSetupCoreCols<F> = core_row.borrow_mut();
+        core_row.is_valid = F::ONE;
+    }
+}
+
+// ========================= ADAPTER ==============================
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
