@@ -30,7 +30,7 @@ use crate::{
         EqBaseBus, EqBaseMessage, EqKernelLookupBus, EqKernelLookupMessage, EqRandValuesLookupBus,
         EqRandValuesLookupMessage,
     },
-    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     tracegen::{RowMajorChip, StandardTracegenCtx},
     utils::{
         assert_one_ext, ext_field_add, ext_field_add_scalar, ext_field_multiply,
@@ -125,29 +125,24 @@ where
         let local: &EqBaseCols<AB::Var> = (*local).borrow();
         let next: &EqBaseCols<AB::Var> = (*next).borrow();
 
-        NestedForLoopSubAir::<1, 0> {}.eval(
+        NestedForLoopSubAir::<1> {}.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.is_valid,
-                        counter: [local.proof_idx],
-                        is_first: [local.is_first],
-                    }
-                    .map_into(),
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_valid,
-                        counter: [next.proof_idx],
-                        is_first: [next.is_first],
-                    }
-                    .map_into(),
-                ),
-                NestedForLoopAuxCols { is_transition: [] },
+                NestedForLoopIoCols {
+                    is_enabled: local.is_valid,
+                    counter: [local.proof_idx],
+                    is_first: [local.is_first],
+                }
+                .map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: next.is_valid,
+                    counter: [next.proof_idx],
+                    is_first: [next.is_first],
+                }
+                .map_into(),
             ),
         );
 
-        builder.assert_bool(local.is_valid);
-        builder.assert_bool(local.is_first);
         builder.assert_bool(local.is_last);
         builder
             .when(and(local.is_valid, local.is_last))
@@ -156,7 +151,6 @@ where
             .when(and(not(local.is_valid), local.is_last))
             .assert_zero(next.proof_idx);
         builder.assert_zero(local.is_first * local.is_last);
-        builder.when(local.is_first).assert_one(local.is_valid);
 
         /*
          * Constrain value of row_idx and send u^{2^row} to WhirOpeningPointBus when

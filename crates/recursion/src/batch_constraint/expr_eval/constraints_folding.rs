@@ -1,10 +1,7 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use itertools::Itertools;
-use openvm_circuit_primitives::{
-    utils::{assert_array_eq, not},
-    SubAir,
-};
+use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
 use openvm_stark_backend::{
     interaction::InteractionBuilder, keygen::types::MultiStarkVerifyingKey0,
     BaseAirWithPublicValues, PartitionedBaseAir,
@@ -22,7 +19,7 @@ use crate::{
         ExpressionClaimBus, ExpressionClaimMessage,
     },
     bus::{NLiftBus, NLiftMessage, TranscriptBus},
-    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     tracegen::RowMajorChip,
     utils::{
@@ -51,7 +48,6 @@ struct ConstraintsFoldingCols<T> {
     eq_n: [T; D_EF],
 
     is_first_in_air: T,
-    loop_aux: NestedForLoopAuxCols<T, 1>,
 }
 
 pub struct ConstraintsFoldingAir {
@@ -85,54 +81,45 @@ where
         let local: &ConstraintsFoldingCols<AB::Var> = (*local).borrow();
         let next: &ConstraintsFoldingCols<AB::Var> = (*next).borrow();
 
-        type LoopSubAir = NestedForLoopSubAir<2, 1>;
+        type LoopSubAir = NestedForLoopSubAir<2>;
         LoopSubAir {}.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.is_valid,
-                        counter: [local.proof_idx, local.sort_idx],
-                        is_first: [local.is_first, local.is_first_in_air],
-                    }
-                    .map_into(),
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_valid,
-                        counter: [next.proof_idx, next.sort_idx],
-                        is_first: [next.is_first, next.is_first_in_air],
-                    }
-                    .map_into(),
-                ),
-                local.loop_aux.map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: local.is_valid,
+                    counter: [local.proof_idx, local.sort_idx],
+                    is_first: [local.is_first, local.is_first_in_air],
+                }
+                .map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: next.is_valid,
+                    counter: [next.proof_idx, next.sort_idx],
+                    is_first: [next.is_first, next.is_first_in_air],
+                }
+                .map_into(),
             ),
         );
 
-        builder.assert_bool(local.is_valid);
-        builder.assert_bool(local.is_first);
-
-        builder.assert_bool(local.is_first_in_air);
+        let is_same_proof = next.is_valid - next.is_first;
+        let is_same_air = next.is_valid - next.is_first_in_air;
 
         // =========================== indices consistency ===============================
         // When we are within one air, constraint_idx increases by 0/1
         builder
-            .when(not(next.is_first_in_air))
+            .when(is_same_air.clone())
             .assert_bool(next.constraint_idx - local.constraint_idx);
         // First constraint_idx within an air is zero
         builder
             .when(local.is_first_in_air)
             .assert_zero(local.constraint_idx);
         builder
-            .when(not(next.is_first_in_air))
+            .when(is_same_air.clone())
             .assert_eq(local.n_lift, next.n_lift);
 
         // ======================== lambda and cur sum consistency ============================
+        assert_array_eq(&mut builder.when(is_same_proof), local.lambda, next.lambda);
         assert_array_eq(
-            &mut builder.when(not(next.is_first)),
-            local.lambda,
-            next.lambda,
-        );
-        assert_array_eq(
-            &mut builder.when(not(next.is_first_in_air)),
+            &mut builder.when(is_same_air.clone()),
             local.cur_sum,
             ext_field_add(
                 local.value,
@@ -140,13 +127,13 @@ where
             ),
         );
         assert_array_eq(
-            &mut builder.when(not(next.is_first_in_air)),
+            &mut builder.when(is_same_air.clone()),
             local.eq_n,
             next.eq_n,
         );
         // numerator and the last element of the message are just the corresponding values
         assert_array_eq(
-            &mut builder.when(next.is_first_in_air),
+            &mut builder.when(AB::Expr::ONE - is_same_air.clone()),
             local.cur_sum,
             local.value,
         );
@@ -171,11 +158,8 @@ where
             local.is_valid * (AB::Expr::ONE - local.is_first_in_air),
         );
         let folded_sum: [AB::Expr; D_EF] = ext_field_add(
-            ext_field_multiply_scalar::<AB::Expr>(
-                next.cur_sum,
-                AB::Expr::ONE - next.is_first_in_air,
-            ),
-            ext_field_multiply_scalar::<AB::Expr>(local.cur_sum, next.is_first_in_air),
+            ext_field_multiply_scalar::<AB::Expr>(next.cur_sum, is_same_air.clone()),
+            ext_field_multiply_scalar::<AB::Expr>(local.cur_sum, AB::Expr::ONE - is_same_air),
         );
         self.expression_claim_bus.send(
             builder,
@@ -347,7 +331,6 @@ impl RowMajorChip<F> for ConstraintsFoldingTraceGenerator {
                             .as_basis_coefficients_slice(),
                     );
                     cols.is_first_in_air = F::from_bool(record.is_first_in_air);
-                    cols.loop_aux.is_transition[0] = F::ONE;
                 });
 
             // Setting `cur_sum`
@@ -373,22 +356,7 @@ impl RowMajorChip<F> for ConstraintsFoldingTraceGenerator {
                 cols.is_first = F::ONE;
             }
             cur_height += records.len();
-            {
-                let cols: &mut ConstraintsFoldingCols<_> =
-                    trace[(cur_height - 1) * width..cur_height * width].borrow_mut();
-                cols.loop_aux.is_transition[0] = F::ZERO;
-            }
         }
-        trace[total_height * width..]
-            .par_chunks_mut(width)
-            .enumerate()
-            .for_each(|(i, chunk)| {
-                let cols: &mut ConstraintsFoldingCols<F> = chunk.borrow_mut();
-                cols.proof_idx = F::from_usize(preflights.len() + i);
-                cols.is_first = F::ONE;
-                cols.is_first_in_air = F::ONE;
-            });
-
         Some(RowMajorMatrix::new(trace, width))
     }
 }

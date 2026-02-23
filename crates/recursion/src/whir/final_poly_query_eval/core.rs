@@ -13,7 +13,7 @@ use p3_maybe_rayon::prelude::*;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     tracegen::RowMajorChip,
     utils::{eq_1, ext_field_add, ext_field_multiply},
@@ -96,21 +96,7 @@ where
         let proof_idx = local.proof_idx;
         let local_is_eq_phase = local.is_enabled - local.phase_idx;
 
-        builder.assert_bool(local.is_enabled);
         builder.assert_bool(local.phase_idx);
-
-        builder
-            .when(local.is_first_in_proof)
-            .assert_one(local.is_enabled);
-        builder
-            .when(local.is_first_in_round)
-            .assert_one(local.is_enabled);
-        builder
-            .when(local.is_first_in_query)
-            .assert_one(local.is_enabled);
-        builder
-            .when(local.is_first_in_phase)
-            .assert_one(local.is_enabled);
 
         let is_same_proof = next.is_enabled - next.is_first_in_proof;
         let is_same_round = next.is_enabled - next.is_first_in_round;
@@ -130,52 +116,42 @@ where
         NestedForLoopSubAir.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.is_enabled,
-                        counter: [
-                            local.proof_idx,
-                            local.whir_round,
-                            local.query_idx,
-                            local.phase_idx,
-                            local.eval_idx,
-                        ],
-                        is_first: [
-                            local.is_first_in_proof,
-                            local.is_first_in_round,
-                            local.is_first_in_query,
-                            local.is_first_in_phase,
-                            local.is_enabled,
-                        ],
-                    }
-                    .map_into(),
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_enabled,
-                        counter: [
-                            next.proof_idx,
-                            next.whir_round,
-                            next.query_idx,
-                            next.phase_idx,
-                            next.eval_idx,
-                        ],
-                        is_first: [
-                            next.is_first_in_proof,
-                            next.is_first_in_round,
-                            next.is_first_in_query,
-                            next.is_first_in_phase,
-                            next.is_enabled,
-                        ],
-                    }
-                    .map_into(),
-                ),
-                NestedForLoopAuxCols {
-                    is_transition: [
-                        is_same_proof.clone(),
-                        is_same_round.clone(),
-                        is_same_query.clone(),
-                        is_same_phase.clone(),
+                NestedForLoopIoCols {
+                    is_enabled: local.is_enabled,
+                    counter: [
+                        local.proof_idx,
+                        local.whir_round,
+                        local.query_idx,
+                        local.phase_idx,
+                        local.eval_idx,
                     ],
-                },
+                    is_first: [
+                        local.is_first_in_proof,
+                        local.is_first_in_round,
+                        local.is_first_in_query,
+                        local.is_first_in_phase,
+                        local.is_enabled,
+                    ],
+                }
+                .map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: next.is_enabled,
+                    counter: [
+                        next.proof_idx,
+                        next.whir_round,
+                        next.query_idx,
+                        next.phase_idx,
+                        next.eval_idx,
+                    ],
+                    is_first: [
+                        next.is_first_in_proof,
+                        next.is_first_in_round,
+                        next.is_first_in_query,
+                        next.is_first_in_phase,
+                        next.is_enabled,
+                    ],
+                }
+                .map_into(),
             ),
         );
 
