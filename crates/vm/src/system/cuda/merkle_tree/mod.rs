@@ -425,10 +425,7 @@ mod tests {
     use std::sync::Arc;
 
     use openvm_circuit::{
-        arch::{
-            testing::POSEIDON2_DIRECT_BUS, vm_poseidon2_config, AddressSpaceHostLayout,
-            MemoryCellType, MemoryConfig,
-        },
+        arch::{vm_poseidon2_config, AddressSpaceHostLayout, MemoryCellType, MemoryConfig},
         system::{
             memory::{
                 merkle::MerkleTree,
@@ -537,8 +534,7 @@ mod tests {
         }
         gpu_merkle_tree.finalize();
 
-        let cpu_hasher_chip =
-            Poseidon2PeripheryChip::new(vm_poseidon2_config(), POSEIDON2_DIRECT_BUS, 3);
+        let cpu_hasher_chip = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
         let mut cpu_merkle_tree = MerkleTree::<F, DIGEST_WIDTH>::from_memory(
             &initial_memory.memory,
             &mem_config.memory_dimensions(),

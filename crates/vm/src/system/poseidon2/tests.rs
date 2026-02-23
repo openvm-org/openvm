@@ -24,11 +24,7 @@ use crate::{
 };
 
 fn create_test_chip() -> (AirRef<TestSC>, Poseidon2PeripheryChip<BabyBear>) {
-    let chip = Poseidon2PeripheryChip::<BabyBear>::new(
-        Poseidon2Config::default(),
-        POSEIDON2_DIRECT_BUS,
-        3,
-    );
+    let chip = Poseidon2PeripheryChip::<BabyBear>::new(Poseidon2Config::default(), 3);
     let air = new_poseidon2_periphery_air::<TestSC>(
         Poseidon2Config::default(),
         LookupBus::new(POSEIDON2_DIRECT_BUS),

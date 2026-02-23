@@ -8,8 +8,9 @@ use openvm_circuit_primitives::{
     Chip,
 };
 use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, NATIVE_AS};
+use openvm_poseidon2_air::Poseidon2SubAir;
 use openvm_stark_backend::{
-    interaction::PermutationCheckBus,
+    interaction::{LookupBus, PermutationCheckBus},
     p3_matrix::dense::RowMajorMatrix,
     p3_util::log2_strict_usize,
     prover::{AirProvingContext, ColMajorMatrix, CpuBackend, StridedColMajorMatrixView},
@@ -42,7 +43,7 @@ use crate::{
             online::TracingMemory,
             MemoryAirInventory, MemoryController, SharedMemoryHelper, CHUNK,
         },
-        poseidon2::Poseidon2PeripheryChip,
+        poseidon2::{air::Poseidon2PeripheryAir, Poseidon2PeripheryChip},
         program::ProgramBus,
         SystemPort,
     },
@@ -336,11 +337,7 @@ impl<F: VmField> VmChipTestBuilder<F> {
     pub fn persistent(mem_config: MemoryConfig) -> Self {
         setup_tracing_with_log_level(Level::INFO);
         let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CHUNK);
-        let hasher_chip = Arc::new(Poseidon2PeripheryChip::new(
-            vm_poseidon2_config(),
-            POSEIDON2_DIRECT_BUS,
-            3,
-        ));
+        let hasher_chip = Arc::new(Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3));
         let memory_controller = MemoryController::with_persistent_memory(
             MemoryBus::new(MEMORY_BUS),
             mem_config,
@@ -489,9 +486,20 @@ where
                 self.air_ctxs.push((air, ctx));
             }
             if let Some(hasher_chip) = memory_controller.hasher_chip {
+                let lookup_bus = LookupBus::new(POSEIDON2_DIRECT_BUS);
                 let air: AirRef<SC> = match hasher_chip.as_ref() {
-                    Poseidon2PeripheryChip::Register0(chip) => chip.air.clone(),
-                    Poseidon2PeripheryChip::Register1(chip) => chip.air.clone(),
+                    Poseidon2PeripheryChip::Register0(_) => {
+                        let subair = Arc::new(Poseidon2SubAir::<Val<SC>, 0>::new(
+                            vm_poseidon2_config().constants.into(),
+                        ));
+                        Arc::new(Poseidon2PeripheryAir::new(subair, lookup_bus))
+                    }
+                    Poseidon2PeripheryChip::Register1(_) => {
+                        let subair = Arc::new(Poseidon2SubAir::<Val<SC>, 1>::new(
+                            vm_poseidon2_config().constants.into(),
+                        ));
+                        Arc::new(Poseidon2PeripheryAir::new(subair, lookup_bus))
+                    }
                 };
                 self = self.load_periphery_ref((air, hasher_chip));
             }
