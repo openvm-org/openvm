@@ -70,7 +70,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for DeferralTranspilerExtension {
         let instruction = match def_opcode {
             DeferralOpcode::SETUP => Instruction::from_usize(
                 DeferralOpcode::SETUP.global_opcode(),
-                [NATIVE_START_POINTER as usize, 0, 0, NATIVE_AS as usize, 0],
+                [NATIVE_START_POINTER, 0, 0, NATIVE_AS as usize, 0],
             ),
             DeferralOpcode::CALL => Instruction::from_usize(
                 DeferralOpcode::CALL.global_opcode(),

@@ -15,6 +15,7 @@ pub struct RawDeferralResult {
     pub output_raw: OutputRaw,
 }
 
+#[allow(clippy::type_complexity)]
 pub struct DeferralFn {
     f: Box<dyn Fn(&[u8]) -> OutputRaw + Send + Sync + 'static>,
 }
