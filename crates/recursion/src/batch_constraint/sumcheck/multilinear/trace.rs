@@ -118,8 +118,6 @@ impl RowMajorChip<F> for MultilinearSumcheckTraceGenerator {
                         cols.round_idx = F::from_usize(round_idx);
                         cols.is_proof_start = F::from_bool(round_idx == 0 && eval_idx == 0);
                         cols.is_first_eval = F::from_bool(eval_idx == 0);
-                        cols.nested_for_loop_aux_cols.is_transition[0] =
-                            F::from_bool(round_idx + 1 != n_rounds || eval_idx != s_deg);
                         cols.eval_idx = F::from_usize(eval_idx);
                         cols.tidx = F::from_usize(tidx_round + eval_idx * D_EF);
                     });

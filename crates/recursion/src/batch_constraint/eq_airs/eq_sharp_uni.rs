@@ -26,7 +26,7 @@ use crate::{
         EqZeroNMessage,
     },
     bus::{XiRandomnessBus, XiRandomnessMessage},
-    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     tracegen::RowMajorChip,
     utils::{
@@ -87,11 +87,10 @@ where
         let next: &EqSharpUniCols<AB::Var> = (*next).borrow();
 
         // Summary:
-        // - iter_idx consistency: TODO to grow the nested-loop sub-AIR; the first valid row
-        //   initializes `is_first_iter` and `iter_idx`, invalid rows force `iter_idx = 0`, each
-        //   step either increments or wraps `iter_idx`, wrapping signals that `root_half_order` was
-        //   reached, sets `next.is_first_iter`, and is enforced immediately after the header to
-        //   keep layer sizes sound.
+        // - iter_idx consistency: the nested-loop sub-AIR models proof -> round -> iter loops. Here
+        //   round_idx is derived from xi_idx, and iter uses is_first=is_valid so transitions force
+        //   iter_idx += 1 within enabled rounds while allowing wrap at round boundaries. The first
+        //   valid row initializes is_first_iter and iter_idx; invalid rows force iter_idx = 0.
         // - Root consistency: continuing iterations multiply `root_pow` by `root` while preserving
         //   `root` and its half order; when a wrap happens, the root squares and the half order
         //   doubles; the first row fixes `root = -1`, `root_half_order = 1`, and `root_pow = 1`,
@@ -101,43 +100,46 @@ where
         //   communications consume and emit products based on `xi`, `1 - xi`, and `xi * root_pow`
         //   combinations.
 
-        type LoopSubAir = NestedForLoopSubAir<1, 0>;
+        let local_round_idx = AB::Expr::from_usize(self.l_skip - 1) - local.xi_idx;
+        let next_round_idx = AB::Expr::from_usize(self.l_skip - 1) - next.xi_idx;
+
+        type LoopSubAir = NestedForLoopSubAir<3>;
         LoopSubAir {}.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.is_valid,
-                        counter: [local.proof_idx],
-                        is_first: [local.is_first],
-                    }
-                    .map_into(),
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_valid,
-                        counter: [next.proof_idx],
-                        is_first: [next.is_first],
-                    }
-                    .map_into(),
-                ),
-                NestedForLoopAuxCols { is_transition: [] },
+                NestedForLoopIoCols {
+                    is_enabled: local.is_valid.into(),
+                    counter: [
+                        local.proof_idx.into(),
+                        local_round_idx,
+                        local.iter_idx.into(),
+                    ],
+                    is_first: [
+                        local.is_first.into(),
+                        local.is_first_iter.into(),
+                        local.is_valid.into(),
+                    ],
+                },
+                NestedForLoopIoCols {
+                    is_enabled: next.is_valid.into(),
+                    counter: [next.proof_idx.into(), next_round_idx, next.iter_idx.into()],
+                    is_first: [
+                        next.is_first.into(),
+                        next.is_first_iter.into(),
+                        next.is_valid.into(),
+                    ],
+                },
             ),
         );
 
-        builder.assert_bool(local.is_valid);
-        builder.assert_bool(local.is_first);
-        builder.assert_bool(local.is_first_iter);
-        let local_is_last = next.is_first + not(next.is_valid);
-        builder.assert_bool(local_is_last.clone());
+        let local_is_last = LoopSubAir::local_is_last(local.is_valid, next.is_valid, next.is_first);
 
         // =========================== idx consistency =============================
-        // TODO: just increase the dimension of nested loop subair?
-        builder
-            .when(local.is_valid * local.is_first)
-            .assert_one(local.is_first_iter);
+        // NestedForLoopSubAir enforces proof/round/iter nested-loop shape; remaining constraints
+        // pin initialization and wrap semantics specific to this AIR.
         builder
             .when(local.is_first_iter)
             .assert_zero(local.iter_idx);
-        builder.when(local.is_first_iter).assert_one(local.is_valid);
 
         // Either iter_idx becomes zero, or increases by one.
         builder.assert_zero(next.iter_idx * (next.iter_idx - local.iter_idx - AB::Expr::ONE));
@@ -147,15 +149,12 @@ where
             .assert_zero(local.iter_idx);
         // If becomes zero, then it would have become root_half_order
         builder
-            .when(next.iter_idx - local.iter_idx - AB::Expr::ONE)
-            .when(local.is_valid)
+            .when(LoopSubAir::local_is_last(
+                local.is_valid,
+                next.is_valid,
+                next.is_first_iter,
+            ))
             .assert_eq(local.iter_idx + AB::Expr::ONE, local.root_half_order);
-        // and, additionally, would set is_first_iter, if next was even valid
-        builder
-            .when(next.iter_idx - local.iter_idx - AB::Expr::ONE)
-            .when(next.is_valid)
-            .assert_one(next.is_first_iter);
-
         // =========================== Root consistency =============================
         // If iter_idx doesn't become zero (increases by one), then:
         // - root_pow is multiplied by root,
@@ -330,41 +329,37 @@ where
         // - EF values consistency: keep the `r` coefficients constant across transitions and update
         //   `cur_sum` via `coeff + r * next.cur_sum` on every step past the first.
 
-        type LoopSubAir = NestedForLoopSubAir<1, 0>;
+        type LoopSubAir = NestedForLoopSubAir<1>;
         LoopSubAir {}.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.is_valid,
-                        counter: [local.proof_idx],
-                        is_first: [local.is_first],
-                    }
-                    .map_into(),
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_valid,
-                        counter: [next.proof_idx],
-                        is_first: [next.is_first],
-                    }
-                    .map_into(),
-                ),
-                NestedForLoopAuxCols { is_transition: [] },
+                NestedForLoopIoCols {
+                    is_enabled: local.is_valid,
+                    counter: [local.proof_idx],
+                    is_first: [local.is_first],
+                }
+                .map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: next.is_valid,
+                    counter: [next.proof_idx],
+                    is_first: [next.is_first],
+                }
+                .map_into(),
             ),
         );
 
-        builder.assert_bool(local.is_valid);
-        builder.assert_bool(local.is_first);
         builder.assert_bool(local.is_last);
+        let is_same_proof = next.is_valid - next.is_first;
 
         // ============================= idx consistency ============================
         builder.when(local.is_first).assert_zero(local.idx);
         builder
-            .when(not(next.is_first))
+            .when(is_same_proof.clone())
             .assert_one(next.idx - local.idx);
         // ============================= EF values consistency ==========================
-        assert_array_eq(&mut builder.when(not(next.is_first)), next.r, local.r);
+        assert_array_eq(&mut builder.when(is_same_proof.clone()), next.r, local.r);
         assert_array_eq(
-            &mut builder.when(not(next.is_first)),
+            &mut builder.when(is_same_proof),
             local.cur_sum,
             ext_field_add(local.coeff, ext_field_multiply(local.r, next.cur_sum)),
         );
@@ -609,16 +604,6 @@ impl RowMajorChip<F> for EqSharpUniReceiverTraceGenerator {
                         .copy_from_slice(cur_sum.as_basis_coefficients_slice());
                 });
         }
-
-        trace[total_height * width..]
-            .par_chunks_mut(width)
-            .enumerate()
-            .for_each(|(i, chunk)| {
-                let cols: &mut EqSharpUniReceiverCols<F> = chunk.borrow_mut();
-                cols.proof_idx = F::from_usize(preflights.len() + i);
-                cols.is_first = F::ONE;
-                cols.is_last = F::ONE;
-            });
 
         Some(RowMajorMatrix::new(trace, width))
     }
