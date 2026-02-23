@@ -46,8 +46,14 @@ pub(in crate::whir::initial_opened_values) struct InitialOpenedValuesCols<T> {
     is_first_in_coset: T,
     flags: [T; CHUNK],
     codeword_value_acc: [T; 4],
-    // TODO: reduce number of mu pows
-    mu_pows: [[T; 4]; CHUNK],
+    codeword_value_next_acc: [T; 4],
+    /// Stores clamped even powers for the current chunk base exponent `b`:
+    /// mu^(min(b + 2k, opened_row_len - 1)) for k in [0, CHUNK / 2).
+    mu_pows_even_clamped: [[T; 4]; CHUNK / 2],
+    /// Stores mu^(min(b + CHUNK - 1, opened_row_len - 1)) for the current
+    /// chunk base exponent `b`.
+    /// Here opened_row_len is the opened row length for the current commit.
+    mu_pow_last_clamped: [T; 4],
     mu: [T; 4],
     pre_state: [T; POSEIDON2_WIDTH],
     post_state: [T; POSEIDON2_WIDTH],
@@ -163,9 +169,6 @@ where
             builder.when(local.flags[i + 1]).assert_one(local.flags[i]);
         }
 
-        let mut chunk_len = AB::Expr::ZERO;
-        let mut codeword_value_slice_acc = local.codeword_value_acc.map(Into::into);
-
         self.whir_mu_bus.receive(
             builder,
             local.proof_idx,
@@ -174,10 +177,11 @@ where
             },
             local.is_first_in_proof,
         );
+
         assert_array_eq(&mut builder.when(is_same_proof.clone()), local.mu, next.mu);
         assert_array_eq(
             &mut builder.when(local.is_first_in_coset),
-            local.mu_pows[0],
+            local.mu_pows_even_clamped[0],
             [AB::F::ONE, AB::F::ZERO, AB::F::ZERO, AB::F::ZERO],
         );
         assert_array_eq(
@@ -190,37 +194,70 @@ where
             .when(is_enabled - is_same_query.clone())
             .assert_eq(local.coset_idx, AB::Expr::from_usize((1 << self.k) - 1));
 
-        for i in 0..CHUNK {
-            if i < CHUNK - 1 {
-                assert_array_eq(
-                    &mut builder.when(local.flags[i + 1]),
-                    local.mu_pows[i + 1],
-                    ext_field_multiply(local.mu, local.mu_pows[i]),
-                );
-                assert_array_eq(
-                    &mut builder.when(AB::Expr::ONE - local.flags[i + 1]),
-                    local.mu_pows[i + 1],
-                    local.mu_pows[i],
-                );
-            } else {
-                assert_array_eq(
-                    &mut builder.when(is_same_coset_idx.clone()),
-                    next.mu_pows[0],
-                    ext_field_multiply(local.mu, local.mu_pows[CHUNK - 1]),
-                );
-            }
+        let select = |cond: AB::Expr, a: [AB::Expr; D_EF], b: [AB::Expr; D_EF]| {
+            array::from_fn(|j| a[j].clone() + cond.clone() * (b[j].clone() - a[j].clone()))
+        };
 
+        // Even-power recurrence.
+        // Starting from mu^(min(b + 2k, opened_row_len - 1)):
+        // - apply +1 if flags[2k+1] = 1
+        // - apply another +1 if flags[2k+2] = 1
+        for k in 0..CHUNK / 2 - 1 {
+            let p0 = local.mu_pows_even_clamped[k].map(Into::into);
+            let p1 = ext_field_multiply(local.mu, p0.clone());
+            let p2 = ext_field_multiply(local.mu, p1.clone());
+            let p_after_odd = select(local.flags[2 * k + 1].into(), p0, p1);
+            let p_after_even = select(local.flags[2 * k + 2].into(), p_after_odd, p2);
+            assert_array_eq(builder, local.mu_pows_even_clamped[k + 1], p_after_even);
+        }
+
+        // mu_pow_last_clamped stores mu^(min(b + CHUNK - 1, opened_row_len - 1)).
+        // Starting from mu_pows_even_clamped[last] = mu^(min(b + CHUNK - 2, opened_row_len - 1)),
+        // apply one final +1 step iff the last slot is valid.
+        {
+            let last = CHUNK / 2 - 1;
+            let p_last = local.mu_pows_even_clamped[last].map(Into::into);
+            let p_last_next = ext_field_multiply(local.mu, p_last.clone());
+            let expected_last = select(local.flags[CHUNK - 1].into(), p_last, p_last_next);
+            assert_array_eq(builder, local.mu_pow_last_clamped, expected_last);
+        }
+
+        assert_array_eq(
+            &mut builder.when(is_same_coset_idx.clone()),
+            next.mu_pows_even_clamped[0],
+            ext_field_multiply(local.mu, local.mu_pow_last_clamped),
+        );
+
+        // For degree reasons, odd entries intentionally use the raw
+        // mu * mu_pows_even_clamped[i/2] form (unclamped). This is safe
+        // because each contribution is masked by flags[i].
+        // - even i: mu^(min(b + i, opened_row_len - 1))
+        // - odd i: raw mu * mu_pows_even_clamped[i/2]
+        // The clamped tail power mu_pow_last_clamped is still used for cross-row
+        // chaining into next.mu_pows_even_clamped[0].
+        let mu_pows_acc_odd_unclamped: [[AB::Expr; D_EF]; CHUNK] = array::from_fn(|i| {
+            if i % 2 == 0 {
+                local.mu_pows_even_clamped[i / 2].map(Into::into)
+            } else {
+                ext_field_multiply(local.mu, local.mu_pows_even_clamped[i / 2])
+            }
+        });
+
+        let mut codeword_value_slice_acc: [AB::Expr; D_EF] =
+            local.codeword_value_acc.map(Into::into);
+        for (i, mu_pow_acc_odd_unclamped) in mu_pows_acc_odd_unclamped.iter().enumerate() {
             builder
                 .when(is_same_commit.clone())
                 .when(AB::Expr::ONE - next.flags[i])
                 .assert_eq(local.post_state[i], next.pre_state[i]);
 
-            // !local.flags[i] => pre_state[i] == 0, so this leaves the
-            // accumulator unchanged on invalid rows.
-            codeword_value_slice_acc = ext_field_add(
-                codeword_value_slice_acc,
-                ext_field_multiply_scalar(local.mu_pows[i], local.pre_state[i] * local.flags[i]),
+            // flags[i] masks invalid slots, so those contribute zero regardless
+            // of pre_state[i].
+            let contribution: [AB::Expr; D_EF] = ext_field_multiply_scalar(
+                mu_pow_acc_odd_unclamped.clone(),
+                local.pre_state[i] * local.flags[i],
             );
+            codeword_value_slice_acc = ext_field_add(codeword_value_slice_acc, contribution);
 
             builder
                 .when(local.is_first_in_commit)
@@ -241,9 +278,19 @@ where
                 },
                 local.flags[i],
             );
-
-            chunk_len += local.flags[i].into();
         }
+
+        assert_array_eq(
+            builder,
+            local.codeword_value_next_acc,
+            codeword_value_slice_acc,
+        );
+        assert_array_eq(
+            &mut builder.when(is_same_coset_idx.clone()),
+            next.codeword_value_acc,
+            local.codeword_value_next_acc,
+        );
+
         self.verify_query_bus.receive(
             builder,
             local.proof_idx,
@@ -256,11 +303,6 @@ where
                 yi: local.yi.map(Into::into),
             },
             local.is_first_in_query,
-        );
-        assert_array_eq(
-            &mut builder.when(is_same_coset_idx.clone()),
-            codeword_value_slice_acc.clone(),
-            next.codeword_value_acc,
         );
 
         self.poseidon_permute_bus.lookup_key(
@@ -316,7 +358,7 @@ where
                 coset_idx: local.coset_idx.into(),
                 coset_size: AB::Expr::from_usize(1 << self.k),
                 twiddle: local.twiddle.into(),
-                value: codeword_value_slice_acc,
+                value: local.codeword_value_next_acc.map(Into::into),
                 z_final: local.zi.into(),
                 y_final: local.yi.map(Into::into),
             },
@@ -399,9 +441,8 @@ impl RowMajorChip<F> for InitialOpenedValuesTraceGenerator {
 
                 let local_chunk_idx = record_idx % records_per_coset_idx;
                 let absolute_chunk_idx = chunks_before_proof + local_chunk_idx;
-                let rel_commit_idx = stacking_chunks_psums[cp_start + 1..=cp_end]
+                let commit_idx = stacking_chunks_psums[cp_start + 1..=cp_end]
                     .partition_point(|&x| x <= absolute_chunk_idx);
-                let commit_idx = rel_commit_idx;
 
                 let commit_chunks_before = stacking_chunks_psums[cp_start + commit_idx];
                 let chunk_idx = absolute_chunk_idx - commit_chunks_before;
@@ -455,22 +496,29 @@ impl RowMajorChip<F> for InitialOpenedValuesTraceGenerator {
                 cols.merkle_idx_bit_src = preflight.whir.queries[query_idx];
 
                 let width_before_proof = stacking_widths_psums[cp_start];
-                let exponent_base_in_proof =
+                let exponent_base =
                     stacking_widths_psums[cp_start + commit_idx] - width_before_proof;
-                let exponent_base = exponent_base_in_proof;
+                let chunk_base = exponent_base + chunk_idx * CHUNK;
 
-                for offset in 0..CHUNK {
-                    let exponent = exponent_base + chunk_idx * CHUNK + min(offset, chunk_len - 1);
+                // Fill mu_pows_even_clamped[k] = mu^(min(b + 2k, opened_row_len - 1)),
+                // where b = exponent_base + chunk_idx*CHUNK.
+                for k in 0..CHUNK / 2 {
+                    let offset = 2 * k;
+                    let exponent = chunk_base + min(offset, chunk_len - 1);
                     let mu_pow = mu_pows[width_before_proof + exponent];
-                    cols.mu_pows[offset].copy_from_slice(mu_pow.as_basis_coefficients_slice());
+                    cols.mu_pows_even_clamped[k]
+                        .copy_from_slice(mu_pow.as_basis_coefficients_slice());
                 }
+                let exponent = chunk_base + chunk_len - 1;
+                let mu_pow = mu_pows[width_before_proof + exponent];
+                cols.mu_pow_last_clamped
+                    .copy_from_slice(mu_pow.as_basis_coefficients_slice());
 
                 let states = &preflight.initial_row_states[commit_idx][query_idx][coset_idx];
                 let opened_row = &proofs[proof_idx].whir_proof.initial_round_opened_rows
                     [commit_idx][query_idx][coset_idx];
                 let chunk_start = chunk_idx * CHUNK;
 
-                // Reconstruct pre_state: start from previous post_state, overwrite with chunk data
                 cols.pre_state = if chunk_idx > 0 {
                     states[chunk_idx - 1]
                 } else {
@@ -479,6 +527,18 @@ impl RowMajorChip<F> for InitialOpenedValuesTraceGenerator {
                 cols.pre_state[..chunk_len]
                     .copy_from_slice(&opened_row[chunk_start..chunk_start + chunk_len]);
                 cols.post_state = states[chunk_idx];
+
+                let mut next_acc = cols.codeword_value_acc;
+                for i in 0..chunk_len {
+                    let exponent = chunk_base + i;
+                    let mu_pow_coeffs: &[F] =
+                        mu_pows[width_before_proof + exponent].as_basis_coefficients_slice();
+                    let scalar = cols.pre_state[i];
+                    for j in 0..D_EF {
+                        next_acc[j] += mu_pow_coeffs[j] * scalar;
+                    }
+                }
+                cols.codeword_value_next_acc = next_acc;
             });
 
         Some(RowMajorMatrix::new(trace, width))
