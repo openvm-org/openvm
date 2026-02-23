@@ -45,7 +45,7 @@ impl<F: PrimeField32> MemoryTester<F> {
         let t = memory.timestamp();
         // TODO: this could be improved if we added a TracingMemory::get_f function
         let (t_prev, data) = if addr_space <= 3 {
-            let (t_prev, data) = unsafe { memory.read::<u8, N, 4>(addr_space as u32, ptr as u32) };
+            let (t_prev, data) = unsafe { memory.read::<u8, N, 8>(addr_space as u32, ptr as u32) };
             (t_prev, data.map(F::from_canonical_u8))
         } else {
             unsafe { memory.read::<F, N, 1>(addr_space as u32, ptr as u32) }
@@ -70,7 +70,7 @@ impl<F: PrimeField32> MemoryTester<F> {
         // TODO: this could be improved if we added a TracingMemory::write_f function
         let (t_prev, data_prev) = if addr_space <= 3 {
             let (t_prev, data_prev) = unsafe {
-                memory.write::<u8, N, 4>(
+                memory.write::<u8, N, 8>(
                     addr_space as u32,
                     ptr as u32,
                     data.map(|x| x.as_canonical_u32() as u8),
