@@ -27,51 +27,51 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64BranchAdapterRecord, BranchEqualCoreRecord, Rv64BranchEqualChipGpu},
+    crate::{adapters::Rv32BranchAdapterRecord, BranchEqualCoreRecord, Rv32BranchEqualChipGpu},
     openvm_circuit::arch::{
         testing::{GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
     },
 };
 
-use super::{core::run_eq, BranchEqualCoreCols, Rv64BranchEqualChip};
+use super::{core::run_eq, BranchEqualCoreCols, Rv32BranchEqualChip};
 use crate::{
     adapters::{
-        Rv64BranchAdapterAir, Rv64BranchAdapterExecutor, Rv64BranchAdapterFiller,
+        Rv32BranchAdapterAir, Rv32BranchAdapterExecutor, Rv32BranchAdapterFiller,
         RV32_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
     branch_eq::fast_run_eq,
     test_utils::get_verification_error,
-    BranchEqualCoreAir, BranchEqualFiller, Rv64BranchEqualAir, Rv64BranchEqualExecutor,
+    BranchEqualCoreAir, BranchEqualFiller, Rv32BranchEqualAir, Rv32BranchEqualExecutor,
 };
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_IMM: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
 type Harness =
-    TestChipHarness<F, Rv64BranchEqualExecutor, Rv64BranchEqualAir, Rv64BranchEqualChip<F>>;
+    TestChipHarness<F, Rv32BranchEqualExecutor, Rv32BranchEqualAir, Rv32BranchEqualChip<F>>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (
-    Rv64BranchEqualAir,
-    Rv64BranchEqualExecutor,
-    Rv64BranchEqualChip<F>,
+    Rv32BranchEqualAir,
+    Rv32BranchEqualExecutor,
+    Rv32BranchEqualChip<F>,
 ) {
-    let air = Rv64BranchEqualAir::new(
-        Rv64BranchAdapterAir::new(execution_bridge, memory_bridge),
+    let air = Rv32BranchEqualAir::new(
+        Rv32BranchAdapterAir::new(execution_bridge, memory_bridge),
         BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
     );
-    let executor = Rv64BranchEqualExecutor::new(
-        Rv64BranchAdapterExecutor,
+    let executor = Rv32BranchEqualExecutor::new(
+        Rv32BranchAdapterExecutor,
         BranchEqualOpcode::CLASS_OFFSET,
         DEFAULT_PC_STEP,
     );
-    let chip = Rv64BranchEqualChip::new(
+    let chip = Rv32BranchEqualChip::new(
         BranchEqualFiller::new(
-            Rv64BranchAdapterFiller,
+            Rv32BranchAdapterFiller,
             BranchEqualOpcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
         ),
@@ -388,10 +388,10 @@ fn run_ne_sanity_test() {
 #[cfg(feature = "cuda")]
 type GpuHarness = GpuTestChipHarness<
     F,
-    Rv64BranchEqualExecutor,
-    Rv64BranchEqualAir,
-    Rv64BranchEqualChipGpu,
-    Rv64BranchEqualChip<F>,
+    Rv32BranchEqualExecutor,
+    Rv32BranchEqualAir,
+    Rv32BranchEqualChipGpu,
+    Rv32BranchEqualChip<F>,
 >;
 
 #[cfg(feature = "cuda")]
@@ -401,7 +401,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         tester.execution_bridge(),
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64BranchEqualChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+    let gpu_chip = Rv32BranchEqualChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
 }
 
@@ -428,7 +428,7 @@ fn test_cuda_rand_beq_tracegen(opcode: BranchEqualOpcode, num_ops: usize) {
     }
 
     type Record<'a> = (
-        &'a mut Rv64BranchAdapterRecord,
+        &'a mut Rv32BranchAdapterRecord,
         &'a mut BranchEqualCoreRecord<RV32_REGISTER_NUM_LIMBS>,
     );
     harness
@@ -436,7 +436,7 @@ fn test_cuda_rand_beq_tracegen(opcode: BranchEqualOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BranchAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32BranchAdapterExecutor>::new(),
         );
 
     tester

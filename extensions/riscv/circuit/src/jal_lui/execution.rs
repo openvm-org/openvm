@@ -11,7 +11,7 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::Rv64JalLuiOpcode::{self, JAL};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::core::{get_signed_imm, Rv64JalLuiExecutor};
+use super::core::{get_signed_imm, Rv32JalLuiExecutor};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -20,7 +20,7 @@ struct JalLuiPreCompute {
     a: u8,
 }
 
-impl<A> Rv64JalLuiExecutor<A> {
+impl<A> Rv32JalLuiExecutor<A> {
     /// Return (IS_JAL, ENABLED)
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
@@ -54,7 +54,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> InterpreterExecutor<F> for Rv64JalLuiExecutor<A>
+impl<F, A> InterpreterExecutor<F> for Rv32JalLuiExecutor<A>
 where
     F: PrimeField32,
 {
@@ -92,7 +92,7 @@ where
 }
 
 #[cfg(feature = "aot")]
-impl<F, A> AotExecutor<F> for Rv64JalLuiExecutor<A>
+impl<F, A> AotExecutor<F> for Rv32JalLuiExecutor<A>
 where
     F: PrimeField32,
 {
@@ -139,7 +139,7 @@ where
     }
 }
 
-impl<F, A> InterpreterMeteredExecutor<F> for Rv64JalLuiExecutor<A>
+impl<F, A> InterpreterMeteredExecutor<F> for Rv32JalLuiExecutor<A>
 where
     F: PrimeField32,
 {
@@ -183,7 +183,7 @@ where
 }
 
 #[cfg(feature = "aot")]
-impl<F, A> AotMeteredExecutor<F> for Rv64JalLuiExecutor<A>
+impl<F, A> AotMeteredExecutor<F> for Rv32JalLuiExecutor<A>
 where
     F: PrimeField32,
 {

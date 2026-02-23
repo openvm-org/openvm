@@ -92,17 +92,17 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
     )
 )]
 pub enum Rv64IExecutor {
-    // Rv64 (for standard 32-bit integers):
-    BaseAlu(Rv64BaseAluExecutor),
-    LessThan(Rv64LessThanExecutor),
-    Shift(Rv64ShiftExecutor),
-    LoadStore(Rv64LoadStoreExecutor),
-    LoadSignExtend(Rv64LoadSignExtendExecutor),
-    BranchEqual(Rv64BranchEqualExecutor),
-    BranchLessThan(Rv64BranchLessThanExecutor),
-    JalLui(Rv64JalLuiExecutor),
-    Jalr(Rv64JalrExecutor),
-    Auipc(Rv64AuipcExecutor),
+    // Rv32 (for standard 32-bit integers):
+    BaseAlu(Rv32BaseAluExecutor),
+    LessThan(Rv32LessThanExecutor),
+    Shift(Rv32ShiftExecutor),
+    LoadStore(Rv32LoadStoreExecutor),
+    LoadSignExtend(Rv32LoadSignExtendExecutor),
+    BranchEqual(Rv32BranchEqualExecutor),
+    BranchLessThan(Rv32BranchLessThanExecutor),
+    JalLui(Rv32JalLuiExecutor),
+    Jalr(Rv32JalrExecutor),
+    Auipc(Rv32AuipcExecutor),
 }
 
 /// RISC-V 32-bit Multiplication Extension (RV32M) Instruction Executors
@@ -115,9 +115,9 @@ pub enum Rv64IExecutor {
     )
 )]
 pub enum Rv64MExecutor {
-    Multiplication(Rv64MultiplicationExecutor),
-    MultiplicationHigh(Rv64MulHExecutor),
-    DivRem(Rv64DivRemExecutor),
+    Multiplication(Rv32MultiplicationExecutor),
+    MultiplicationHigh(Rv32MulHExecutor),
+    DivRem(Rv32DivRemExecutor),
 }
 
 /// RISC-V 32-bit Io Instruction Executors
@@ -130,7 +130,7 @@ pub enum Rv64MExecutor {
     )
 )]
 pub enum Rv64IoExecutor {
-    HintStore(Rv64HintStoreExecutor),
+    HintStore(Rv32HintStoreExecutor),
 }
 
 // ============ VmExtension Implementations ============
@@ -145,17 +145,17 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         let pointer_max_bits = inventory.pointer_max_bits();
 
         let base_alu =
-            Rv64BaseAluExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
+            Rv32BaseAluExecutor::new(Rv32BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
         inventory.add_executor(base_alu, BaseAluOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let lt = LessThanExecutor::new(Rv64BaseAluAdapterExecutor, LessThanOpcode::CLASS_OFFSET);
+        let lt = LessThanExecutor::new(Rv32BaseAluAdapterExecutor, LessThanOpcode::CLASS_OFFSET);
         inventory.add_executor(lt, LessThanOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let shift = ShiftExecutor::new(Rv64BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
+        let shift = ShiftExecutor::new(Rv32BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
         inventory.add_executor(shift, ShiftOpcode::iter().map(|x| x.global_opcode()))?;
 
         let load_store = LoadStoreExecutor::new(
-            Rv64LoadStoreAdapterExecutor::new(pointer_max_bits),
+            Rv32LoadStoreAdapterExecutor::new(pointer_max_bits),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -166,51 +166,51 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         )?;
 
         let load_sign_extend =
-            LoadSignExtendExecutor::new(Rv64LoadStoreAdapterExecutor::new(pointer_max_bits));
+            LoadSignExtendExecutor::new(Rv32LoadStoreAdapterExecutor::new(pointer_max_bits));
         inventory.add_executor(
             load_sign_extend,
             [Rv64LoadStoreOpcode::LOADB, Rv64LoadStoreOpcode::LOADH].map(|x| x.global_opcode()),
         )?;
 
         let beq = BranchEqualExecutor::new(
-            Rv64BranchAdapterExecutor,
+            Rv32BranchAdapterExecutor,
             BranchEqualOpcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
         );
         inventory.add_executor(beq, BranchEqualOpcode::iter().map(|x| x.global_opcode()))?;
 
         let blt = BranchLessThanExecutor::new(
-            Rv64BranchAdapterExecutor,
+            Rv32BranchAdapterExecutor,
             BranchLessThanOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(blt, BranchLessThanOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let jal_lui = Rv64JalLuiExecutor::new(Rv64CondRdWriteAdapterExecutor::new(
-            Rv64RdWriteAdapterExecutor,
+        let jal_lui = Rv32JalLuiExecutor::new(Rv32CondRdWriteAdapterExecutor::new(
+            Rv32RdWriteAdapterExecutor,
         ));
         inventory.add_executor(jal_lui, Rv64JalLuiOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let jalr = Rv64JalrExecutor::new(Rv64JalrAdapterExecutor);
+        let jalr = Rv32JalrExecutor::new(Rv32JalrAdapterExecutor);
         inventory.add_executor(jalr, Rv64JalrOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let auipc = Rv64AuipcExecutor::new(Rv64RdWriteAdapterExecutor);
+        let auipc = Rv32AuipcExecutor::new(Rv32RdWriteAdapterExecutor);
         inventory.add_executor(auipc, Rv64AuipcOpcode::iter().map(|x| x.global_opcode()))?;
 
         // There is no downside to adding phantom sub-executors, so we do it in the base extension.
         inventory.add_phantom_sub_executor(
-            phantom::Rv64HintInputSubEx,
+            phantom::Rv32HintInputSubEx,
             PhantomDiscriminant(Rv64Phantom::HintInput as u16),
         )?;
         inventory.add_phantom_sub_executor(
-            phantom::Rv64HintRandomSubEx,
+            phantom::Rv32HintRandomSubEx,
             PhantomDiscriminant(Rv64Phantom::HintRandom as u16),
         )?;
         inventory.add_phantom_sub_executor(
-            phantom::Rv64PrintStrSubEx,
+            phantom::Rv32PrintStrSubEx,
             PhantomDiscriminant(Rv64Phantom::PrintStr as u16),
         )?;
         inventory.add_phantom_sub_executor(
-            phantom::Rv64HintLoadByKeySubEx,
+            phantom::Rv32HintLoadByKeySubEx,
             PhantomDiscriminant(Rv64Phantom::HintLoadByKey as u16),
         )?;
 
@@ -243,26 +243,26 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64I {
             }
         };
 
-        let base_alu = Rv64BaseAluAir::new(
-            Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+        let base_alu = Rv32BaseAluAir::new(
+            Rv32BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
             BaseAluCoreAir::new(bitwise_lu, BaseAluOpcode::CLASS_OFFSET),
         );
         inventory.add_air(base_alu);
 
-        let lt = Rv64LessThanAir::new(
-            Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+        let lt = Rv32LessThanAir::new(
+            Rv32BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
             LessThanCoreAir::new(bitwise_lu, LessThanOpcode::CLASS_OFFSET),
         );
         inventory.add_air(lt);
 
-        let shift = Rv64ShiftAir::new(
-            Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+        let shift = Rv32ShiftAir::new(
+            Rv32BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
             ShiftCoreAir::new(bitwise_lu, range_checker, ShiftOpcode::CLASS_OFFSET),
         );
         inventory.add_air(shift);
 
-        let load_store = Rv64LoadStoreAir::new(
-            Rv64LoadStoreAdapterAir::new(
+        let load_store = Rv32LoadStoreAir::new(
+            Rv32LoadStoreAdapterAir::new(
                 memory_bridge,
                 exec_bridge,
                 range_checker,
@@ -272,8 +272,8 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64I {
         );
         inventory.add_air(load_store);
 
-        let load_sign_extend = Rv64LoadSignExtendAir::new(
-            Rv64LoadStoreAdapterAir::new(
+        let load_sign_extend = Rv32LoadSignExtendAir::new(
+            Rv32LoadStoreAdapterAir::new(
                 memory_bridge,
                 exec_bridge,
                 range_checker,
@@ -283,33 +283,33 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64I {
         );
         inventory.add_air(load_sign_extend);
 
-        let beq = Rv64BranchEqualAir::new(
-            Rv64BranchAdapterAir::new(exec_bridge, memory_bridge),
+        let beq = Rv32BranchEqualAir::new(
+            Rv32BranchAdapterAir::new(exec_bridge, memory_bridge),
             BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
         );
         inventory.add_air(beq);
 
-        let blt = Rv64BranchLessThanAir::new(
-            Rv64BranchAdapterAir::new(exec_bridge, memory_bridge),
+        let blt = Rv32BranchLessThanAir::new(
+            Rv32BranchAdapterAir::new(exec_bridge, memory_bridge),
             BranchLessThanCoreAir::new(bitwise_lu, BranchLessThanOpcode::CLASS_OFFSET),
         );
         inventory.add_air(blt);
 
-        let jal_lui = Rv64JalLuiAir::new(
-            Rv64CondRdWriteAdapterAir::new(Rv64RdWriteAdapterAir::new(memory_bridge, exec_bridge)),
-            Rv64JalLuiCoreAir::new(bitwise_lu),
+        let jal_lui = Rv32JalLuiAir::new(
+            Rv32CondRdWriteAdapterAir::new(Rv32RdWriteAdapterAir::new(memory_bridge, exec_bridge)),
+            Rv32JalLuiCoreAir::new(bitwise_lu),
         );
         inventory.add_air(jal_lui);
 
-        let jalr = Rv64JalrAir::new(
-            Rv64JalrAdapterAir::new(memory_bridge, exec_bridge),
-            Rv64JalrCoreAir::new(bitwise_lu, range_checker),
+        let jalr = Rv32JalrAir::new(
+            Rv32JalrAdapterAir::new(memory_bridge, exec_bridge),
+            Rv32JalrCoreAir::new(bitwise_lu, range_checker),
         );
         inventory.add_air(jalr);
 
-        let auipc = Rv64AuipcAir::new(
-            Rv64RdWriteAdapterAir::new(memory_bridge, exec_bridge),
-            Rv64AuipcCoreAir::new(bitwise_lu),
+        let auipc = Rv32AuipcAir::new(
+            Rv32RdWriteAdapterAir::new(memory_bridge, exec_bridge),
+            Rv32AuipcCoreAir::new(bitwise_lu),
         );
         inventory.add_air(auipc);
 
@@ -353,10 +353,10 @@ where
 
         // These calls to next_air are not strictly necessary to construct the chips, but provide a
         // safeguard to ensure that chip construction matches the circuit definition
-        inventory.next_air::<Rv64BaseAluAir>()?;
-        let base_alu = Rv64BaseAluChip::new(
+        inventory.next_air::<Rv32BaseAluAir>()?;
+        let base_alu = Rv32BaseAluChip::new(
             BaseAluFiller::new(
-                Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                Rv32BaseAluAdapterFiller::new(bitwise_lu.clone()),
                 bitwise_lu.clone(),
                 BaseAluOpcode::CLASS_OFFSET,
             ),
@@ -364,10 +364,10 @@ where
         );
         inventory.add_executor_chip(base_alu);
 
-        inventory.next_air::<Rv64LessThanAir>()?;
-        let lt = Rv64LessThanChip::new(
+        inventory.next_air::<Rv32LessThanAir>()?;
+        let lt = Rv32LessThanChip::new(
             LessThanFiller::new(
-                Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                Rv32BaseAluAdapterFiller::new(bitwise_lu.clone()),
                 bitwise_lu.clone(),
                 LessThanOpcode::CLASS_OFFSET,
             ),
@@ -375,10 +375,10 @@ where
         );
         inventory.add_executor_chip(lt);
 
-        inventory.next_air::<Rv64ShiftAir>()?;
-        let shift = Rv64ShiftChip::new(
+        inventory.next_air::<Rv32ShiftAir>()?;
+        let shift = Rv32ShiftChip::new(
             ShiftFiller::new(
-                Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                Rv32BaseAluAdapterFiller::new(bitwise_lu.clone()),
                 bitwise_lu.clone(),
                 range_checker.clone(),
                 ShiftOpcode::CLASS_OFFSET,
@@ -387,30 +387,30 @@ where
         );
         inventory.add_executor_chip(shift);
 
-        inventory.next_air::<Rv64LoadStoreAir>()?;
-        let load_store_chip = Rv64LoadStoreChip::new(
+        inventory.next_air::<Rv32LoadStoreAir>()?;
+        let load_store_chip = Rv32LoadStoreChip::new(
             LoadStoreFiller::new(
-                Rv64LoadStoreAdapterFiller::new(pointer_max_bits, range_checker.clone()),
+                Rv32LoadStoreAdapterFiller::new(pointer_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(load_store_chip);
 
-        inventory.next_air::<Rv64LoadSignExtendAir>()?;
-        let load_sign_extend = Rv64LoadSignExtendChip::new(
+        inventory.next_air::<Rv32LoadSignExtendAir>()?;
+        let load_sign_extend = Rv32LoadSignExtendChip::new(
             LoadSignExtendFiller::new(
-                Rv64LoadStoreAdapterFiller::new(pointer_max_bits, range_checker.clone()),
+                Rv32LoadStoreAdapterFiller::new(pointer_max_bits, range_checker.clone()),
                 range_checker.clone(),
             ),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(load_sign_extend);
 
-        inventory.next_air::<Rv64BranchEqualAir>()?;
-        let beq = Rv64BranchEqualChip::new(
+        inventory.next_air::<Rv32BranchEqualAir>()?;
+        let beq = Rv32BranchEqualChip::new(
             BranchEqualFiller::new(
-                Rv64BranchAdapterFiller,
+                Rv32BranchAdapterFiller,
                 BranchEqualOpcode::CLASS_OFFSET,
                 DEFAULT_PC_STEP,
             ),
@@ -418,10 +418,10 @@ where
         );
         inventory.add_executor_chip(beq);
 
-        inventory.next_air::<Rv64BranchLessThanAir>()?;
-        let blt = Rv64BranchLessThanChip::new(
+        inventory.next_air::<Rv32BranchLessThanAir>()?;
+        let blt = Rv32BranchLessThanChip::new(
             BranchLessThanFiller::new(
-                Rv64BranchAdapterFiller,
+                Rv32BranchAdapterFiller,
                 bitwise_lu.clone(),
                 BranchLessThanOpcode::CLASS_OFFSET,
             ),
@@ -429,20 +429,20 @@ where
         );
         inventory.add_executor_chip(blt);
 
-        inventory.next_air::<Rv64JalLuiAir>()?;
-        let jal_lui = Rv64JalLuiChip::new(
-            Rv64JalLuiFiller::new(
-                Rv64CondRdWriteAdapterFiller::new(Rv64RdWriteAdapterFiller),
+        inventory.next_air::<Rv32JalLuiAir>()?;
+        let jal_lui = Rv32JalLuiChip::new(
+            Rv32JalLuiFiller::new(
+                Rv32CondRdWriteAdapterFiller::new(Rv32RdWriteAdapterFiller),
                 bitwise_lu.clone(),
             ),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(jal_lui);
 
-        inventory.next_air::<Rv64JalrAir>()?;
-        let jalr = Rv64JalrChip::new(
-            Rv64JalrFiller::new(
-                Rv64JalrAdapterFiller,
+        inventory.next_air::<Rv32JalrAir>()?;
+        let jalr = Rv32JalrChip::new(
+            Rv32JalrFiller::new(
+                Rv32JalrAdapterFiller,
                 bitwise_lu.clone(),
                 range_checker.clone(),
             ),
@@ -450,9 +450,9 @@ where
         );
         inventory.add_executor_chip(jalr);
 
-        inventory.next_air::<Rv64AuipcAir>()?;
-        let auipc = Rv64AuipcChip::new(
-            Rv64AuipcFiller::new(Rv64RdWriteAdapterFiller, bitwise_lu.clone()),
+        inventory.next_air::<Rv32AuipcAir>()?;
+        let auipc = Rv32AuipcChip::new(
+            Rv32AuipcFiller::new(Rv32RdWriteAdapterFiller, bitwise_lu.clone()),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(auipc);
@@ -469,13 +469,13 @@ impl<F> VmExecutionExtension<F> for Rv64M {
         inventory: &mut ExecutorInventoryBuilder<F, Rv64MExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         let mult =
-            Rv64MultiplicationExecutor::new(Rv64MultAdapterExecutor, MulOpcode::CLASS_OFFSET);
+            Rv32MultiplicationExecutor::new(Rv32MultAdapterExecutor, MulOpcode::CLASS_OFFSET);
         inventory.add_executor(mult, MulOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let mul_h = Rv64MulHExecutor::new(Rv64MultAdapterExecutor, MulHOpcode::CLASS_OFFSET);
+        let mul_h = Rv32MulHExecutor::new(Rv32MultAdapterExecutor, MulHOpcode::CLASS_OFFSET);
         inventory.add_executor(mul_h, MulHOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let div_rem = Rv64DivRemExecutor::new(Rv64MultAdapterExecutor, DivRemOpcode::CLASS_OFFSET);
+        let div_rem = Rv32DivRemExecutor::new(Rv32MultAdapterExecutor, DivRemOpcode::CLASS_OFFSET);
         inventory.add_executor(div_rem, DivRemOpcode::iter().map(|x| x.global_opcode()))?;
 
         Ok(())
@@ -521,20 +521,20 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64M {
             }
         };
 
-        let mult = Rv64MultiplicationAir::new(
-            Rv64MultAdapterAir::new(exec_bridge, memory_bridge),
+        let mult = Rv32MultiplicationAir::new(
+            Rv32MultAdapterAir::new(exec_bridge, memory_bridge),
             MultiplicationCoreAir::new(range_tuple_checker, MulOpcode::CLASS_OFFSET),
         );
         inventory.add_air(mult);
 
-        let mul_h = Rv64MulHAir::new(
-            Rv64MultAdapterAir::new(exec_bridge, memory_bridge),
+        let mul_h = Rv32MulHAir::new(
+            Rv32MultAdapterAir::new(exec_bridge, memory_bridge),
             MulHCoreAir::new(bitwise_lu, range_tuple_checker),
         );
         inventory.add_air(mul_h);
 
-        let div_rem = Rv64DivRemAir::new(
-            Rv64MultAdapterAir::new(exec_bridge, memory_bridge),
+        let div_rem = Rv32DivRemAir::new(
+            Rv32MultAdapterAir::new(exec_bridge, memory_bridge),
             DivRemCoreAir::new(bitwise_lu, range_tuple_checker, DivRemOpcode::CLASS_OFFSET),
         );
         inventory.add_air(div_rem);
@@ -594,10 +594,10 @@ where
 
         // These calls to next_air are not strictly necessary to construct the chips, but provide a
         // safeguard to ensure that chip construction matches the circuit definition
-        inventory.next_air::<Rv64MultiplicationAir>()?;
-        let mult = Rv64MultiplicationChip::new(
+        inventory.next_air::<Rv32MultiplicationAir>()?;
+        let mult = Rv32MultiplicationChip::new(
             MultiplicationFiller::new(
-                Rv64MultAdapterFiller,
+                Rv32MultAdapterFiller,
                 range_tuple_checker.clone(),
                 MulOpcode::CLASS_OFFSET,
             ),
@@ -605,10 +605,10 @@ where
         );
         inventory.add_executor_chip(mult);
 
-        inventory.next_air::<Rv64MulHAir>()?;
-        let mul_h = Rv64MulHChip::new(
+        inventory.next_air::<Rv32MulHAir>()?;
+        let mul_h = Rv32MulHChip::new(
             MulHFiller::new(
-                Rv64MultAdapterFiller,
+                Rv32MultAdapterFiller,
                 bitwise_lu.clone(),
                 range_tuple_checker.clone(),
             ),
@@ -616,10 +616,10 @@ where
         );
         inventory.add_executor_chip(mul_h);
 
-        inventory.next_air::<Rv64DivRemAir>()?;
-        let div_rem = Rv64DivRemChip::new(
+        inventory.next_air::<Rv32DivRemAir>()?;
+        let div_rem = Rv32DivRemChip::new(
             DivRemFiller::new(
-                Rv64MultAdapterFiller,
+                Rv32MultAdapterFiller,
                 bitwise_lu.clone(),
                 range_tuple_checker.clone(),
                 DivRemOpcode::CLASS_OFFSET,
@@ -641,7 +641,7 @@ impl<F> VmExecutionExtension<F> for Rv64Io {
     ) -> Result<(), ExecutorInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
         let hint_store =
-            Rv64HintStoreExecutor::new(pointer_max_bits, Rv64HintStoreOpcode::CLASS_OFFSET);
+            Rv32HintStoreExecutor::new(pointer_max_bits, Rv64HintStoreOpcode::CLASS_OFFSET);
         inventory.add_executor(
             hint_store,
             Rv64HintStoreOpcode::iter().map(|x| x.global_opcode()),
@@ -674,7 +674,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64Io {
             }
         };
 
-        let hint_store = Rv64HintStoreAir::new(
+        let hint_store = Rv32HintStoreAir::new(
             exec_bridge,
             memory_bridge,
             bitwise_lu,
@@ -720,9 +720,9 @@ where
             }
         };
 
-        inventory.next_air::<Rv64HintStoreAir>()?;
-        let hint_store = Rv64HintStoreChip::new(
-            Rv64HintStoreFiller::new(pointer_max_bits, bitwise_lu.clone()),
+        inventory.next_air::<Rv32HintStoreAir>()?;
+        let hint_store = Rv32HintStoreChip::new(
+            Rv32HintStoreFiller::new(pointer_max_bits, bitwise_lu.clone()),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(hint_store);
@@ -744,12 +744,12 @@ mod phantom {
 
     use crate::adapters::{memory_read, read_rv32_register};
 
-    pub struct Rv64HintInputSubEx;
-    pub struct Rv64HintRandomSubEx;
-    pub struct Rv64PrintStrSubEx;
-    pub struct Rv64HintLoadByKeySubEx;
+    pub struct Rv32HintInputSubEx;
+    pub struct Rv32HintRandomSubEx;
+    pub struct Rv32PrintStrSubEx;
+    pub struct Rv32HintLoadByKeySubEx;
 
-    impl<F: Field> PhantomSubExecutor<F> for Rv64HintInputSubEx {
+    impl<F: Field> PhantomSubExecutor<F> for Rv32HintInputSubEx {
         fn phantom_execute(
             &self,
             _: &GuestMemory,
@@ -781,7 +781,7 @@ mod phantom {
         }
     }
 
-    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv64HintRandomSubEx {
+    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv32HintRandomSubEx {
         fn phantom_execute(
             &self,
             memory: &GuestMemory,
@@ -806,7 +806,7 @@ mod phantom {
         }
     }
 
-    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv64PrintStrSubEx {
+    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv32PrintStrSubEx {
         fn phantom_execute(
             &self,
             memory: &GuestMemory,
@@ -828,7 +828,7 @@ mod phantom {
         }
     }
 
-    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv64HintLoadByKeySubEx {
+    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv32HintLoadByKeySubEx {
         fn phantom_execute(
             &self,
             memory: &GuestMemory,
@@ -850,7 +850,7 @@ mod phantom {
                     streams.input_stream.push_front(input);
                 }
             } else {
-                bail!("Rv64HintLoadByKey: key not found");
+                bail!("Rv32HintLoadByKey: key not found");
             }
             Ok(())
         }

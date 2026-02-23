@@ -26,12 +26,12 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+    Rv32RdWriteAdapterExecutor, Rv32RdWriteAdapterFiller, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
-pub struct Rv64AuipcCoreCols<T> {
+pub struct Rv32AuipcCoreCols<T> {
     pub is_valid: T,
     // The limbs of the immediate except the least significant limb since it is always 0
     pub imm_limbs: [T; RV32_REGISTER_NUM_LIMBS - 1],
@@ -41,19 +41,19 @@ pub struct Rv64AuipcCoreCols<T> {
 }
 
 #[derive(Debug, Clone, Copy, derive_new::new)]
-pub struct Rv64AuipcCoreAir {
+pub struct Rv32AuipcCoreAir {
     pub bus: BitwiseOperationLookupBus,
 }
 
-impl<F: Field> BaseAir<F> for Rv64AuipcCoreAir {
+impl<F: Field> BaseAir<F> for Rv32AuipcCoreAir {
     fn width(&self) -> usize {
-        Rv64AuipcCoreCols::<F>::width()
+        Rv32AuipcCoreCols::<F>::width()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for Rv64AuipcCoreAir {}
+impl<F: Field> BaseAirWithPublicValues<F> for Rv32AuipcCoreAir {}
 
-impl<AB, I> VmCoreAir<AB, I> for Rv64AuipcCoreAir
+impl<AB, I> VmCoreAir<AB, I> for Rv32AuipcCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -67,9 +67,9 @@ where
         local_core: &[AB::Var],
         from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &Rv64AuipcCoreCols<AB::Var> = (*local_core).borrow();
+        let cols: &Rv32AuipcCoreCols<AB::Var> = (*local_core).borrow();
 
-        let Rv64AuipcCoreCols {
+        let Rv32AuipcCoreCols {
             is_valid,
             imm_limbs,
             pc_limbs,
@@ -191,30 +191,30 @@ where
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug, Clone)]
-pub struct Rv64AuipcCoreRecord {
+pub struct Rv32AuipcCoreRecord {
     pub from_pc: u32,
     pub imm: u32,
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64AuipcExecutor<A = Rv64RdWriteAdapterExecutor> {
+pub struct Rv32AuipcExecutor<A = Rv32RdWriteAdapterExecutor> {
     adapter: A,
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct Rv64AuipcFiller<A = Rv64RdWriteAdapterFiller> {
+pub struct Rv32AuipcFiller<A = Rv32RdWriteAdapterFiller> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
-impl<F, A, RA> PreflightExecutor<F, RA> for Rv64AuipcExecutor<A>
+impl<F, A, RA> PreflightExecutor<F, RA> for Rv32AuipcExecutor<A>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceExecutor<F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
-        (A::RecordMut<'buf>, &'buf mut Rv64AuipcCoreRecord),
+        (A::RecordMut<'buf>, &'buf mut Rv32AuipcCoreRecord),
     >,
 {
     fn get_opcode_name(&self, _: usize) -> String {
@@ -244,21 +244,21 @@ where
     }
 }
 
-impl<F, A> TraceFiller<F> for Rv64AuipcFiller<A>
+impl<F, A> TraceFiller<F> for Rv32AuipcFiller<A>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // Rv64AuipcCoreCols::width() elements
+        // Rv32AuipcCoreCols::width() elements
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid Rv64AuipcCoreRecord written by the executor
+        // SAFETY: core_row contains a valid Rv32AuipcCoreRecord written by the executor
         // during trace generation
-        let record: &Rv64AuipcCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
+        let record: &Rv32AuipcCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
 
-        let core_row: &mut Rv64AuipcCoreCols<F> = core_row.borrow_mut();
+        let core_row: &mut Rv32AuipcCoreCols<F> = core_row.borrow_mut();
 
         let imm_limbs = record.imm.to_le_bytes();
         let pc_limbs = record.from_pc.to_le_bytes();

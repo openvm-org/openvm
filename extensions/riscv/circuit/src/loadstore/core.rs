@@ -20,7 +20,7 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 
-use crate::adapters::{LoadStoreInstruction, Rv64LoadStoreAdapterFiller};
+use crate::adapters::{LoadStoreInstruction, Rv32LoadStoreAdapterFiller};
 
 #[derive(Debug, Clone, Copy)]
 enum InstructionOpcode {
@@ -255,7 +255,7 @@ pub struct LoadStoreExecutor<A, const NUM_CELLS: usize> {
 
 #[derive(Clone, derive_new::new)]
 pub struct LoadStoreFiller<
-    A = Rv64LoadStoreAdapterFiller,
+    A = Rv32LoadStoreAdapterFiller,
     const NUM_CELLS: usize = RV32_REGISTER_NUM_LIMBS,
 > {
     adapter: A,

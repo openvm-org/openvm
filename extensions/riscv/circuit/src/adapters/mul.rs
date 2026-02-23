@@ -30,7 +30,7 @@ use crate::adapters::tracing_read;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct Rv64MultAdapterCols<T> {
+pub struct Rv32MultAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rd_ptr: T,
     pub rs1_ptr: T,
@@ -42,18 +42,18 @@ pub struct Rv64MultAdapterCols<T> {
 /// Reads instructions of the form OP a, b, c, d where \[a:4\]_d = \[b:4\]_d op \[c:4\]_d.
 /// Operand d can only be 1, and there is no immediate support.
 #[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct Rv64MultAdapterAir {
+pub struct Rv32MultAdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
 }
 
-impl<F: Field> BaseAir<F> for Rv64MultAdapterAir {
+impl<F: Field> BaseAir<F> for Rv32MultAdapterAir {
     fn width(&self) -> usize {
-        Rv64MultAdapterCols::<F>::width()
+        Rv32MultAdapterCols::<F>::width()
     }
 }
 
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultAdapterAir {
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32MultAdapterAir {
     type Interface = BasicAdapterInterface<
         AB::Expr,
         MinimalInstruction<AB::Expr>,
@@ -69,7 +69,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultAdapterAir {
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let local: &Rv64MultAdapterCols<_> = local.borrow();
+        let local: &Rv32MultAdapterCols<_> = local.borrow();
         let timestamp = local.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
@@ -122,14 +122,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64MultAdapterAir {
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv64MultAdapterCols<_> = local.borrow();
+        let cols: &Rv32MultAdapterCols<_> = local.borrow();
         cols.from_state.pc
     }
 }
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64MultAdapterRecord {
+pub struct Rv32MultAdapterRecord {
     pub from_pc: u32,
     pub from_timestamp: u32,
 
@@ -142,19 +142,19 @@ pub struct Rv64MultAdapterRecord {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64MultAdapterExecutor;
+pub struct Rv32MultAdapterExecutor;
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64MultAdapterFiller;
+pub struct Rv32MultAdapterFiller;
 
-impl<F> AdapterTraceExecutor<F> for Rv64MultAdapterExecutor
+impl<F> AdapterTraceExecutor<F> for Rv32MultAdapterExecutor
 where
     F: PrimeField32,
 {
-    const WIDTH: usize = size_of::<Rv64MultAdapterCols<u8>>();
+    const WIDTH: usize = size_of::<Rv32MultAdapterCols<u8>>();
     type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
     type WriteData = [[u8; RV32_REGISTER_NUM_LIMBS]; 1];
-    type RecordMut<'a> = &'a mut Rv64MultAdapterRecord;
+    type RecordMut<'a> = &'a mut Rv32MultAdapterRecord;
 
     #[inline(always)]
     fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
@@ -215,17 +215,17 @@ where
     }
 }
 
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64MultAdapterFiller {
-    const WIDTH: usize = size_of::<Rv64MultAdapterCols<u8>>();
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32MultAdapterFiller {
+    const WIDTH: usize = size_of::<Rv32MultAdapterCols<u8>>();
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY:
         // - caller ensures `adapter_row` contains a valid record representation that was previously
         //   written by the executor
-        // - get_record_from_slice correctly interprets the bytes as Rv64MultAdapterRecord
-        let record: &Rv64MultAdapterRecord = unsafe { get_record_from_slice(&mut adapter_row, ()) };
-        let adapter_row: &mut Rv64MultAdapterCols<F> = adapter_row.borrow_mut();
+        // - get_record_from_slice correctly interprets the bytes as Rv32MultAdapterRecord
+        let record: &Rv32MultAdapterRecord = unsafe { get_record_from_slice(&mut adapter_row, ()) };
+        let adapter_row: &mut Rv32MultAdapterCols<F> = adapter_row.borrow_mut();
 
         let timestamp = record.from_timestamp;
 

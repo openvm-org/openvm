@@ -3,25 +3,25 @@
 #include "primitives/constants.h" // RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "rv32im/adapters/branch.cuh" // Rv64BranchAdapterCols, Rv64BranchAdapterRecord, Rv64BranchAdapter
+#include "rv32im/adapters/branch.cuh" // Rv32BranchAdapterCols, Rv32BranchAdapterRecord, Rv32BranchAdapter
 #include "rv32im/cores/beq.cuh"
 
 using namespace riscv;
 
 // Concrete type aliases for 32-bit
-using Rv64BranchEqualCore = BranchEqualCore<RV32_REGISTER_NUM_LIMBS>;
+using Rv32BranchEqualCore = BranchEqualCore<RV32_REGISTER_NUM_LIMBS>;
 template <typename T>
-using Rv64BranchEqualCoreCols = BranchEqualCoreCols<T, RV32_REGISTER_NUM_LIMBS>;
-using Rv64BranchEqualCoreRecord = BranchEqualCoreRecord<RV32_REGISTER_NUM_LIMBS>;
+using Rv32BranchEqualCoreCols = BranchEqualCoreCols<T, RV32_REGISTER_NUM_LIMBS>;
+using Rv32BranchEqualCoreRecord = BranchEqualCoreRecord<RV32_REGISTER_NUM_LIMBS>;
 
 template <typename T> struct BranchEqualCols {
-    Rv64BranchAdapterCols<T> adapter;
-    Rv64BranchEqualCoreCols<T> core;
+    Rv32BranchAdapterCols<T> adapter;
+    Rv32BranchEqualCoreCols<T> core;
 };
 
 struct BranchEqualRecord {
-    Rv64BranchAdapterRecord adapter;
-    Rv64BranchEqualCoreRecord core;
+    Rv32BranchAdapterRecord adapter;
+    Rv32BranchEqualCoreRecord core;
 };
 
 __global__ void beq_tracegen(
@@ -38,10 +38,10 @@ __global__ void beq_tracegen(
     if (idx < records.len()) {
         auto const &full = records[idx];
 
-        Rv64BranchAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
+        Rv32BranchAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, full.adapter);
 
-        Rv64BranchEqualCore core;
+        Rv32BranchEqualCore core;
         core.fill_trace_row(row.slice_from(COL_INDEX(BranchEqualCols, core)), full.core);
     } else {
         row.fill_zero(0, sizeof(BranchEqualCols<uint8_t>));

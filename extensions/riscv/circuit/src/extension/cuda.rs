@@ -9,13 +9,13 @@ use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::Gp
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use crate::{
-    Rv64AuipcAir, Rv64AuipcChipGpu, Rv64BaseAluAir, Rv64BaseAluChipGpu, Rv64BranchEqualAir,
-    Rv64BranchEqualChipGpu, Rv64BranchLessThanAir, Rv64BranchLessThanChipGpu, Rv64DivRemAir,
-    Rv64DivRemChipGpu, Rv64HintStoreAir, Rv64HintStoreChipGpu, Rv64I, Rv64Io, Rv64JalLuiAir,
-    Rv64JalLuiChipGpu, Rv64JalrAir, Rv64JalrChipGpu, Rv64LessThanAir, Rv64LessThanChipGpu,
-    Rv64LoadSignExtendAir, Rv64LoadSignExtendChipGpu, Rv64LoadStoreAir, Rv64LoadStoreChipGpu,
-    Rv64M, Rv64MulHAir, Rv64MulHChipGpu, Rv64MultiplicationAir, Rv64MultiplicationChipGpu,
-    Rv64ShiftAir, Rv64ShiftChipGpu,
+    Rv32AuipcAir, Rv32AuipcChipGpu, Rv32BaseAluAir, Rv32BaseAluChipGpu, Rv32BranchEqualAir,
+    Rv32BranchEqualChipGpu, Rv32BranchLessThanAir, Rv32BranchLessThanChipGpu, Rv32DivRemAir,
+    Rv32DivRemChipGpu, Rv32HintStoreAir, Rv32HintStoreChipGpu, Rv64I, Rv64Io, Rv32JalLuiAir,
+    Rv32JalLuiChipGpu, Rv32JalrAir, Rv32JalrChipGpu, Rv32LessThanAir, Rv32LessThanChipGpu,
+    Rv32LoadSignExtendAir, Rv32LoadSignExtendChipGpu, Rv32LoadStoreAir, Rv32LoadStoreChipGpu,
+    Rv64M, Rv32MulHAir, Rv32MulHChipGpu, Rv32MultiplicationAir, Rv32MultiplicationChipGpu,
+    Rv32ShiftAir, Rv32ShiftChipGpu,
 };
 
 pub struct Rv64ImGpuProverExt;
@@ -36,73 +36,73 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
 
         // These calls to next_air are not strictly necessary to construct the chips, but provide a
         // safeguard to ensure that chip construction matches the circuit definition
-        inventory.next_air::<Rv64BaseAluAir>()?;
-        let base_alu = Rv64BaseAluChipGpu::new(
+        inventory.next_air::<Rv32BaseAluAir>()?;
+        let base_alu = Rv32BaseAluChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             timestamp_max_bits,
         );
         inventory.add_executor_chip(base_alu);
 
-        inventory.next_air::<Rv64LessThanAir>()?;
-        let lt = Rv64LessThanChipGpu::new(
+        inventory.next_air::<Rv32LessThanAir>()?;
+        let lt = Rv32LessThanChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             timestamp_max_bits,
         );
         inventory.add_executor_chip(lt);
 
-        inventory.next_air::<Rv64ShiftAir>()?;
-        let shift = Rv64ShiftChipGpu::new(
+        inventory.next_air::<Rv32ShiftAir>()?;
+        let shift = Rv32ShiftChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             timestamp_max_bits,
         );
         inventory.add_executor_chip(shift);
 
-        inventory.next_air::<Rv64LoadStoreAir>()?;
+        inventory.next_air::<Rv32LoadStoreAir>()?;
         let load_store_chip =
-            Rv64LoadStoreChipGpu::new(range_checker.clone(), pointer_max_bits, timestamp_max_bits);
+            Rv32LoadStoreChipGpu::new(range_checker.clone(), pointer_max_bits, timestamp_max_bits);
         inventory.add_executor_chip(load_store_chip);
 
-        inventory.next_air::<Rv64LoadSignExtendAir>()?;
-        let load_sign_extend = Rv64LoadSignExtendChipGpu::new(
+        inventory.next_air::<Rv32LoadSignExtendAir>()?;
+        let load_sign_extend = Rv32LoadSignExtendChipGpu::new(
             range_checker.clone(),
             pointer_max_bits,
             timestamp_max_bits,
         );
         inventory.add_executor_chip(load_sign_extend);
 
-        inventory.next_air::<Rv64BranchEqualAir>()?;
-        let beq = Rv64BranchEqualChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        inventory.next_air::<Rv32BranchEqualAir>()?;
+        let beq = Rv32BranchEqualChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(beq);
 
-        inventory.next_air::<Rv64BranchLessThanAir>()?;
-        let blt = Rv64BranchLessThanChipGpu::new(
+        inventory.next_air::<Rv32BranchLessThanAir>()?;
+        let blt = Rv32BranchLessThanChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             timestamp_max_bits,
         );
         inventory.add_executor_chip(blt);
 
-        inventory.next_air::<Rv64JalLuiAir>()?;
-        let jal_lui = Rv64JalLuiChipGpu::new(
+        inventory.next_air::<Rv32JalLuiAir>()?;
+        let jal_lui = Rv32JalLuiChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             timestamp_max_bits,
         );
         inventory.add_executor_chip(jal_lui);
 
-        inventory.next_air::<Rv64JalrAir>()?;
-        let jalr = Rv64JalrChipGpu::new(
+        inventory.next_air::<Rv32JalrAir>()?;
+        let jalr = Rv32JalrChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             timestamp_max_bits,
         );
         inventory.add_executor_chip(jalr);
 
-        inventory.next_air::<Rv64AuipcAir>()?;
-        let auipc = Rv64AuipcChipGpu::new(
+        inventory.next_air::<Rv32AuipcAir>()?;
+        let auipc = Rv32AuipcChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             timestamp_max_bits,
@@ -148,16 +148,16 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
 
         // These calls to next_air are not strictly necessary to construct the chips, but provide a
         // safeguard to ensure that chip construction matches the circuit definition
-        inventory.next_air::<Rv64MultiplicationAir>()?;
-        let mult = Rv64MultiplicationChipGpu::new(
+        inventory.next_air::<Rv32MultiplicationAir>()?;
+        let mult = Rv32MultiplicationChipGpu::new(
             range_checker.clone(),
             range_tuple_checker.clone(),
             timestamp_max_bits,
         );
         inventory.add_executor_chip(mult);
 
-        inventory.next_air::<Rv64MulHAir>()?;
-        let mul_h = Rv64MulHChipGpu::new(
+        inventory.next_air::<Rv32MulHAir>()?;
+        let mul_h = Rv32MulHChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             range_tuple_checker.clone(),
@@ -165,8 +165,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
         );
         inventory.add_executor_chip(mul_h);
 
-        inventory.next_air::<Rv64DivRemAir>()?;
-        let div_rem = Rv64DivRemChipGpu::new(
+        inventory.next_air::<Rv32DivRemAir>()?;
+        let div_rem = Rv32DivRemChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             range_tuple_checker.clone(),
@@ -195,8 +195,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64Io>
         let range_checker = get_inventory_range_checker(inventory);
         let bitwise_lu = get_or_create_bitwise_op_lookup(inventory)?;
 
-        inventory.next_air::<Rv64HintStoreAir>()?;
-        let hint_store = Rv64HintStoreChipGpu::new(
+        inventory.next_air::<Rv32HintStoreAir>()?;
+        let hint_store = Rv32HintStoreChipGpu::new(
             range_checker.clone(),
             bitwise_lu.clone(),
             pointer_max_bits,

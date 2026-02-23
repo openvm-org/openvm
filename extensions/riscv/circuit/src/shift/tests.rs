@@ -30,7 +30,7 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64BaseAluAdapterRecord, Rv64ShiftChipGpu, ShiftCoreRecord},
+    crate::{adapters::Rv32BaseAluAdapterRecord, Rv32ShiftChipGpu, ShiftCoreRecord},
     openvm_circuit::arch::{
         testing::{
             default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
@@ -40,21 +40,21 @@ use {
     },
 };
 
-use super::{core::run_shift, Rv64ShiftChip, ShiftCoreAir, ShiftCoreCols};
+use super::{core::run_shift, Rv32ShiftChip, ShiftCoreAir, ShiftCoreCols};
 use crate::{
     adapters::{
-        Rv64BaseAluAdapterAir, Rv64BaseAluAdapterExecutor, Rv64BaseAluAdapterFiller,
+        Rv32BaseAluAdapterAir, Rv32BaseAluAdapterExecutor, Rv32BaseAluAdapterFiller,
         RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     test_utils::{
         generate_rv32_is_type_immediate, get_verification_error, rv32_rand_write_register_or_imm,
     },
-    Rv64ShiftAir, Rv64ShiftExecutor, ShiftFiller,
+    Rv32ShiftAir, Rv32ShiftExecutor, ShiftFiller,
 };
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
-type Harness = TestChipHarness<F, Rv64ShiftExecutor, Rv64ShiftAir, Rv64ShiftChip<F>>;
+type Harness = TestChipHarness<F, Rv32ShiftExecutor, Rv32ShiftAir, Rv32ShiftChip<F>>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
@@ -62,19 +62,19 @@ fn create_harness_fields(
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     range_checker: Arc<VariableRangeCheckerChip>,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv64ShiftAir, Rv64ShiftExecutor, Rv64ShiftChip<F>) {
-    let air = Rv64ShiftAir::new(
-        Rv64BaseAluAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
+) -> (Rv32ShiftAir, Rv32ShiftExecutor, Rv32ShiftChip<F>) {
+    let air = Rv32ShiftAir::new(
+        Rv32BaseAluAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
         ShiftCoreAir::new(
             bitwise_chip.bus(),
             range_checker.bus(),
             ShiftOpcode::CLASS_OFFSET,
         ),
     );
-    let executor = Rv64ShiftExecutor::new(Rv64BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
-    let chip = Rv64ShiftChip::<F>::new(
+    let executor = Rv32ShiftExecutor::new(Rv32BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
+    let chip = Rv32ShiftChip::<F>::new(
         ShiftFiller::new(
-            Rv64BaseAluAdapterFiller::new(bitwise_chip.clone()),
+            Rv32BaseAluAdapterFiller::new(bitwise_chip.clone()),
             bitwise_chip,
             range_checker,
             ShiftOpcode::CLASS_OFFSET,
@@ -467,7 +467,7 @@ fn run_sra_sanity_test() {
 
 #[cfg(feature = "cuda")]
 type GpuHarness =
-    GpuTestChipHarness<F, Rv64ShiftExecutor, Rv64ShiftAir, Rv64ShiftChipGpu, Rv64ShiftChip<F>>;
+    GpuTestChipHarness<F, Rv32ShiftExecutor, Rv32ShiftAir, Rv32ShiftChipGpu, Rv32ShiftChip<F>>;
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
@@ -486,7 +486,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_range_checker,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64ShiftChipGpu::new(
+    let gpu_chip = Rv32ShiftChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
@@ -520,7 +520,7 @@ fn test_cuda_rand_shift_tracegen(opcode: ShiftOpcode, num_ops: usize) {
     }
 
     type Record<'a> = (
-        &'a mut Rv64BaseAluAdapterRecord,
+        &'a mut Rv32BaseAluAdapterRecord,
         &'a mut ShiftCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
     );
     harness
@@ -528,7 +528,7 @@ fn test_cuda_rand_shift_tracegen(opcode: ShiftOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluAdapterExecutor<RV32_CELL_BITS>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32BaseAluAdapterExecutor<RV32_CELL_BITS>>::new(),
         );
 
     tester

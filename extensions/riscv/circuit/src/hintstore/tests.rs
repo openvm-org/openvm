@@ -35,19 +35,19 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng, RngCore};
 #[cfg(feature = "cuda")]
 use {
-    crate::{Rv64HintStoreChipGpu, Rv64HintStoreLayout},
+    crate::{Rv32HintStoreChipGpu, Rv32HintStoreLayout},
     openvm_circuit::arch::testing::{
         default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
 };
 
-use super::{Rv64HintStoreAir, Rv64HintStoreChip, Rv64HintStoreCols, Rv64HintStoreExecutor};
-use crate::{test_utils::get_verification_error, Rv64HintStoreFiller};
+use super::{Rv32HintStoreAir, Rv32HintStoreChip, Rv32HintStoreCols, Rv32HintStoreExecutor};
+use crate::{test_utils::get_verification_error, Rv32HintStoreFiller};
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 4096;
 type Harness<RA> =
-    TestChipHarness<F, Rv64HintStoreExecutor, Rv64HintStoreAir, Rv64HintStoreChip<F>, RA>;
+    TestChipHarness<F, Rv32HintStoreExecutor, Rv32HintStoreAir, Rv32HintStoreChip<F>, RA>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
@@ -56,20 +56,20 @@ fn create_harness_fields(
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
-    Rv64HintStoreAir,
-    Rv64HintStoreExecutor,
-    Rv64HintStoreChip<F>,
+    Rv32HintStoreAir,
+    Rv32HintStoreExecutor,
+    Rv32HintStoreChip<F>,
 ) {
-    let air = Rv64HintStoreAir::new(
+    let air = Rv32HintStoreAir::new(
         execution_bridge,
         memory_bridge,
         bitwise_chip.bus(),
         Rv64HintStoreOpcode::CLASS_OFFSET,
         address_bits,
     );
-    let executor = Rv64HintStoreExecutor::new(address_bits, Rv64HintStoreOpcode::CLASS_OFFSET);
-    let chip = Rv64HintStoreChip::<F>::new(
-        Rv64HintStoreFiller::new(address_bits, bitwise_chip),
+    let executor = Rv32HintStoreExecutor::new(address_bits, Rv64HintStoreOpcode::CLASS_OFFSET);
+    let chip = Rv32HintStoreChip::<F>::new(
+        Rv32HintStoreFiller::new(address_bits, bitwise_chip),
         memory_helper,
     );
     (air, executor, chip)
@@ -269,7 +269,7 @@ fn test_hint_buffer_rem_words_range_check() {
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
-        let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
+        let cols: &mut Rv32HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
         // Force `rem_words` to overflow MAX_HINT_BUFFER_WORDS_BITS on the start row.
         cols.rem_words_limbs = [F::ZERO, F::ZERO, F::from_canonical_u8(1), F::ZERO];
         *trace = RowMajorMatrix::new(trace_row, trace.width());
@@ -305,7 +305,7 @@ fn run_negative_hintstore_test(
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
-        let cols: &mut Rv64HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
+        let cols: &mut Rv32HintStoreCols<F> = trace_row.as_mut_slice().borrow_mut();
         if let Some(data) = prank_data {
             cols.data = data.map(F::from_canonical_u32);
         }
@@ -359,10 +359,10 @@ fn execute_roundtrip_sanity_test() {
 #[cfg(feature = "cuda")]
 type GpuHarness = GpuTestChipHarness<
     F,
-    Rv64HintStoreExecutor,
-    Rv64HintStoreAir,
-    Rv64HintStoreChipGpu,
-    Rv64HintStoreChip<F>,
+    Rv32HintStoreExecutor,
+    Rv32HintStoreAir,
+    Rv32HintStoreChipGpu,
+    Rv32HintStoreChip<F>,
 >;
 
 #[cfg(feature = "cuda")]
@@ -381,7 +381,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
-    let gpu_chip = Rv64HintStoreChipGpu::new(
+    let gpu_chip = Rv32HintStoreChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.address_bits(),
@@ -417,7 +417,7 @@ fn test_cuda_rand_hintstore_tracegen() {
 
     harness
         .dense_arena
-        .get_record_seeker::<_, Rv64HintStoreLayout>()
+        .get_record_seeker::<_, Rv32HintStoreLayout>()
         .transfer_to_matrix_arena(&mut harness.matrix_arena);
 
     tester

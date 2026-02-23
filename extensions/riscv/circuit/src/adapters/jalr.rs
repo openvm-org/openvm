@@ -30,7 +30,7 @@ use crate::adapters::{tracing_read, tracing_write};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
-pub struct Rv64JalrAdapterCols<T> {
+pub struct Rv32JalrAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
     pub rs1_aux_cols: MemoryReadAuxCols<T>,
@@ -42,18 +42,18 @@ pub struct Rv64JalrAdapterCols<T> {
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct Rv64JalrAdapterAir {
+pub struct Rv32JalrAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,
 }
 
-impl<F: Field> BaseAir<F> for Rv64JalrAdapterAir {
+impl<F: Field> BaseAir<F> for Rv32JalrAdapterAir {
     fn width(&self) -> usize {
-        Rv64JalrAdapterCols::<F>::width()
+        Rv32JalrAdapterCols::<F>::width()
     }
 }
 
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32JalrAdapterAir {
     type Interface = BasicAdapterInterface<
         AB::Expr,
         SignedImmInstruction<AB::Expr>,
@@ -69,7 +69,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let local_cols: &Rv64JalrAdapterCols<AB::Var> = local.borrow();
+        let local_cols: &Rv32JalrAdapterCols<AB::Var> = local.borrow();
 
         let timestamp: AB::Var = local_cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
@@ -136,14 +136,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64JalrAdapterAir {
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv64JalrAdapterCols<_> = local.borrow();
+        let cols: &Rv32JalrAdapterCols<_> = local.borrow();
         cols.from_state.pc
     }
 }
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64JalrAdapterRecord {
+pub struct Rv32JalrAdapterRecord {
     pub from_pc: u32,
     pub from_timestamp: u32,
 
@@ -157,19 +157,19 @@ pub struct Rv64JalrAdapterRecord {
 
 // This adapter reads from [b:4]_d (rs1) and writes to [a:4]_d (rd)
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64JalrAdapterExecutor;
+pub struct Rv32JalrAdapterExecutor;
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64JalrAdapterFiller;
+pub struct Rv32JalrAdapterFiller;
 
-impl<F> AdapterTraceExecutor<F> for Rv64JalrAdapterExecutor
+impl<F> AdapterTraceExecutor<F> for Rv32JalrAdapterExecutor
 where
     F: PrimeField32,
 {
-    const WIDTH: usize = size_of::<Rv64JalrAdapterCols<u8>>();
+    const WIDTH: usize = size_of::<Rv32JalrAdapterCols<u8>>();
     type ReadData = [u8; RV32_REGISTER_NUM_LIMBS];
     type WriteData = [u8; RV32_REGISTER_NUM_LIMBS];
-    type RecordMut<'a> = &'a mut Rv64JalrAdapterRecord;
+    type RecordMut<'a> = &'a mut Rv32JalrAdapterRecord;
 
     #[inline(always)]
     fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
@@ -229,17 +229,17 @@ where
     }
 }
 
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64JalrAdapterFiller {
-    const WIDTH: usize = size_of::<Rv64JalrAdapterCols<u8>>();
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32JalrAdapterFiller {
+    const WIDTH: usize = size_of::<Rv32JalrAdapterCols<u8>>();
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY:
         // - caller ensures `adapter_row` contains a valid record representation that was previously
         //   written by the executor
-        // - get_record_from_slice correctly interprets the bytes as Rv64JalrAdapterRecord
-        let record: &Rv64JalrAdapterRecord = unsafe { get_record_from_slice(&mut adapter_row, ()) };
-        let adapter_row: &mut Rv64JalrAdapterCols<F> = adapter_row.borrow_mut();
+        // - get_record_from_slice correctly interprets the bytes as Rv32JalrAdapterRecord
+        let record: &Rv32JalrAdapterRecord = unsafe { get_record_from_slice(&mut adapter_row, ()) };
+        let adapter_row: &mut Rv32JalrAdapterCols<F> = adapter_row.borrow_mut();
 
         // We must assign in reverse
         adapter_row.needs_write = F::from_bool(record.rd_ptr != u32::MAX);

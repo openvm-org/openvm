@@ -16,23 +16,23 @@ use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 
 use crate::{
     adapters::{
-        Rv64MultAdapterCols, Rv64MultAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+        Rv32MultAdapterCols, Rv32MultAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     cuda_abi::mul_cuda::tracegen,
     MultiplicationCoreCols, MultiplicationCoreRecord,
 };
 
 #[derive(new)]
-pub struct Rv64MultiplicationChipGpu {
+pub struct Rv32MultiplicationChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub range_tuple_checker: Arc<RangeTupleCheckerChipGPU<2>>,
     pub timestamp_max_bits: usize,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv64MultiplicationChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for Rv32MultiplicationChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
-            Rv64MultAdapterRecord,
+            Rv32MultAdapterRecord,
             MultiplicationCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
         )>();
         let records = arena.allocated();
@@ -43,7 +43,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64MultiplicationChipGpu {
 
         let trace_width =
             MultiplicationCoreCols::<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::width()
-                + Rv64MultAdapterCols::<F>::width();
+                + Rv32MultAdapterCols::<F>::width();
 
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
 

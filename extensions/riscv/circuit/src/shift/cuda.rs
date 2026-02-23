@@ -13,23 +13,23 @@ use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 
 use crate::{
     adapters::{
-        Rv64BaseAluAdapterCols, Rv64BaseAluAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+        Rv32BaseAluAdapterCols, Rv32BaseAluAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     cuda_abi::shift_cuda::tracegen as rv32_shift_tracegen,
     ShiftCoreCols, ShiftCoreRecord,
 };
 
 #[derive(new)]
-pub struct Rv64ShiftChipGpu {
+pub struct Rv32ShiftChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
     pub timestamp_max_bits: usize,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for Rv32ShiftChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
-            Rv64BaseAluAdapterRecord,
+            Rv32BaseAluAdapterRecord,
             ShiftCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
         )>();
         let records = arena.allocated();
@@ -38,7 +38,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = Rv64BaseAluAdapterCols::<F>::width()
+        let trace_width = Rv32BaseAluAdapterCols::<F>::width()
             + ShiftCoreCols::<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
 

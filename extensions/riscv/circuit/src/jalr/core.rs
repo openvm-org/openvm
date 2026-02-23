@@ -27,12 +27,12 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+    Rv32JalrAdapterExecutor, Rv32JalrAdapterFiller, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
-pub struct Rv64JalrCoreCols<T> {
+pub struct Rv32JalrCoreCols<T> {
     pub imm: T,
     pub rs1_data: [T; RV32_REGISTER_NUM_LIMBS],
     // To save a column, we only store the 3 most significant limbs of `rd_data`
@@ -47,20 +47,20 @@ pub struct Rv64JalrCoreCols<T> {
 }
 
 #[derive(Debug, Clone, derive_new::new)]
-pub struct Rv64JalrCoreAir {
+pub struct Rv32JalrCoreAir {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,
 }
 
-impl<F: Field> BaseAir<F> for Rv64JalrCoreAir {
+impl<F: Field> BaseAir<F> for Rv32JalrCoreAir {
     fn width(&self) -> usize {
-        Rv64JalrCoreCols::<F>::width()
+        Rv32JalrCoreCols::<F>::width()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for Rv64JalrCoreAir {}
+impl<F: Field> BaseAirWithPublicValues<F> for Rv32JalrCoreAir {}
 
-impl<AB, I> VmCoreAir<AB, I> for Rv64JalrCoreAir
+impl<AB, I> VmCoreAir<AB, I> for Rv32JalrCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -74,8 +74,8 @@ where
         local_core: &[AB::Var],
         from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &Rv64JalrCoreCols<AB::Var> = (*local_core).borrow();
-        let Rv64JalrCoreCols::<AB::Var> {
+        let cols: &Rv32JalrCoreCols<AB::Var> = (*local_core).borrow();
+        let Rv32JalrCoreCols::<AB::Var> {
             imm,
             rs1_data: rs1,
             rd_data: rd,
@@ -172,7 +172,7 @@ where
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64JalrCoreRecord {
+pub struct Rv32JalrCoreRecord {
     pub imm: u16,
     pub from_pc: u32,
     pub rs1_val: u32,
@@ -180,18 +180,18 @@ pub struct Rv64JalrCoreRecord {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64JalrExecutor<A = Rv64JalrAdapterExecutor> {
+pub struct Rv32JalrExecutor<A = Rv32JalrAdapterExecutor> {
     adapter: A,
 }
 
 #[derive(Clone)]
-pub struct Rv64JalrFiller<A = Rv64JalrAdapterFiller> {
+pub struct Rv32JalrFiller<A = Rv32JalrAdapterFiller> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<A> Rv64JalrFiller<A> {
+impl<A> Rv32JalrFiller<A> {
     pub fn new(
         adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
@@ -206,7 +206,7 @@ impl<A> Rv64JalrFiller<A> {
     }
 }
 
-impl<F, A, RA> PreflightExecutor<F, RA> for Rv64JalrExecutor<A>
+impl<F, A, RA> PreflightExecutor<F, RA> for Rv32JalrExecutor<A>
 where
     F: PrimeField32,
     A: 'static
@@ -218,7 +218,7 @@ where
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
-        (A::RecordMut<'buf>, &'buf mut Rv64JalrCoreRecord),
+        (A::RecordMut<'buf>, &'buf mut Rv32JalrCoreRecord),
     >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -270,21 +270,21 @@ where
         Ok(())
     }
 }
-impl<F, A> TraceFiller<F> for Rv64JalrFiller<A>
+impl<F, A> TraceFiller<F> for Rv32JalrFiller<A>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // Rv64JalrCoreCols::width() elements
+        // Rv32JalrCoreCols::width() elements
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid Rv64JalrCoreRecord written by the executor
+        // SAFETY: core_row contains a valid Rv32JalrCoreRecord written by the executor
         // during trace generation
-        let record: &Rv64JalrCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
+        let record: &Rv32JalrCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
 
-        let core_row: &mut Rv64JalrCoreCols<F> = core_row.borrow_mut();
+        let core_row: &mut Rv32JalrCoreCols<F> = core_row.borrow_mut();
 
         let (to_pc, rd_data) =
             run_jalr(record.from_pc, record.rs1_val, record.imm, record.imm_sign);

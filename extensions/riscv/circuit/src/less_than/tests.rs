@@ -28,45 +28,45 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64BaseAluAdapterRecord, LessThanCoreRecord, Rv64LessThanChipGpu},
+    crate::{adapters::Rv32BaseAluAdapterRecord, LessThanCoreRecord, Rv32LessThanChipGpu},
     openvm_circuit::arch::{
         testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
     },
 };
 
-use super::{core::run_less_than, LessThanCoreAir, Rv64LessThanChip};
+use super::{core::run_less_than, LessThanCoreAir, Rv32LessThanChip};
 use crate::{
     adapters::{
-        Rv64BaseAluAdapterAir, Rv64BaseAluAdapterExecutor, Rv64BaseAluAdapterFiller,
+        Rv32BaseAluAdapterAir, Rv32BaseAluAdapterExecutor, Rv32BaseAluAdapterFiller,
         RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     less_than::LessThanCoreCols,
     test_utils::{
         generate_rv32_is_type_immediate, get_verification_error, rv32_rand_write_register_or_imm,
     },
-    LessThanFiller, Rv64LessThanAir, Rv64LessThanExecutor,
+    LessThanFiller, Rv32LessThanAir, Rv32LessThanExecutor,
 };
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
-type Harness = TestChipHarness<F, Rv64LessThanExecutor, Rv64LessThanAir, Rv64LessThanChip<F>>;
+type Harness = TestChipHarness<F, Rv32LessThanExecutor, Rv32LessThanAir, Rv32LessThanChip<F>>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv64LessThanAir, Rv64LessThanExecutor, Rv64LessThanChip<F>) {
-    let air = Rv64LessThanAir::new(
-        Rv64BaseAluAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
+) -> (Rv32LessThanAir, Rv32LessThanExecutor, Rv32LessThanChip<F>) {
+    let air = Rv32LessThanAir::new(
+        Rv32BaseAluAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
         LessThanCoreAir::new(bitwise_chip.bus(), LessThanOpcode::CLASS_OFFSET),
     );
     let executor =
-        Rv64LessThanExecutor::new(Rv64BaseAluAdapterExecutor, LessThanOpcode::CLASS_OFFSET);
-    let chip = Rv64LessThanChip::<F>::new(
+        Rv32LessThanExecutor::new(Rv32BaseAluAdapterExecutor, LessThanOpcode::CLASS_OFFSET);
+    let chip = Rv32LessThanChip::<F>::new(
         LessThanFiller::new(
-            Rv64BaseAluAdapterFiller::new(bitwise_chip.clone()),
+            Rv32BaseAluAdapterFiller::new(bitwise_chip.clone()),
             bitwise_chip,
             LessThanOpcode::CLASS_OFFSET,
         ),
@@ -517,10 +517,10 @@ fn run_less_than_equal_sanity_test() {
 #[cfg(feature = "cuda")]
 type GpuHarness = GpuTestChipHarness<
     F,
-    Rv64LessThanExecutor,
-    Rv64LessThanAir,
-    Rv64LessThanChipGpu,
-    Rv64LessThanChip<F>,
+    Rv32LessThanExecutor,
+    Rv32LessThanAir,
+    Rv32LessThanChipGpu,
+    Rv32LessThanChip<F>,
 >;
 
 #[cfg(feature = "cuda")]
@@ -536,7 +536,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_bitwise_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64LessThanChipGpu::new(
+    let gpu_chip = Rv32LessThanChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
@@ -568,7 +568,7 @@ fn test_cuda_rand_less_than_tracegen(opcode: LessThanOpcode, num_ops: usize) {
     }
 
     type Record<'a> = (
-        &'a mut Rv64BaseAluAdapterRecord,
+        &'a mut Rv32BaseAluAdapterRecord,
         &'a mut LessThanCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
     );
     harness
@@ -576,7 +576,7 @@ fn test_cuda_rand_less_than_tracegen(opcode: LessThanOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluAdapterExecutor<RV32_CELL_BITS>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32BaseAluAdapterExecutor<RV32_CELL_BITS>>::new(),
         );
 
     tester

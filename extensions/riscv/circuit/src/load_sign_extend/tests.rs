@@ -25,7 +25,7 @@ use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
     crate::{
-        adapters::Rv64LoadStoreAdapterRecord, LoadSignExtendCoreRecord, Rv64LoadSignExtendChipGpu,
+        adapters::Rv32LoadStoreAdapterRecord, LoadSignExtendCoreRecord, Rv32LoadSignExtendChipGpu,
     },
     openvm_circuit::arch::{
         testing::{default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness},
@@ -36,22 +36,22 @@ use {
 use super::{run_write_data_sign_extend, LoadSignExtendCoreAir};
 use crate::{
     adapters::{
-        Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterExecutor, Rv64LoadStoreAdapterFiller,
+        Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterExecutor, Rv32LoadStoreAdapterFiller,
         RV32_REGISTER_NUM_LIMBS,
     },
     load_sign_extend::LoadSignExtendCoreCols,
     test_utils::get_verification_error,
-    LoadSignExtendFiller, Rv64LoadSignExtendAir, Rv64LoadSignExtendChip,
-    Rv64LoadSignExtendExecutor,
+    LoadSignExtendFiller, Rv32LoadSignExtendAir, Rv32LoadSignExtendChip,
+    Rv32LoadSignExtendExecutor,
 };
 
 const IMM_BITS: usize = 16;
 const MAX_INS_CAPACITY: usize = 128;
 type Harness = TestChipHarness<
     F,
-    Rv64LoadSignExtendExecutor,
-    Rv64LoadSignExtendAir,
-    Rv64LoadSignExtendChip<F>,
+    Rv32LoadSignExtendExecutor,
+    Rv32LoadSignExtendAir,
+    Rv32LoadSignExtendChip<F>,
 >;
 type F = BabyBear;
 
@@ -62,12 +62,12 @@ fn create_harness_fields(
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
-    Rv64LoadSignExtendAir,
-    Rv64LoadSignExtendExecutor,
-    Rv64LoadSignExtendChip<F>,
+    Rv32LoadSignExtendAir,
+    Rv32LoadSignExtendExecutor,
+    Rv32LoadSignExtendChip<F>,
 ) {
-    let air = Rv64LoadSignExtendAir::new(
-        Rv64LoadStoreAdapterAir::new(
+    let air = Rv32LoadSignExtendAir::new(
+        Rv32LoadStoreAdapterAir::new(
             memory_bridge,
             execution_bridge,
             range_checker_chip.bus(),
@@ -75,10 +75,10 @@ fn create_harness_fields(
         ),
         LoadSignExtendCoreAir::new(range_checker_chip.bus()),
     );
-    let executor = Rv64LoadSignExtendExecutor::new(Rv64LoadStoreAdapterExecutor::new(address_bits));
-    let chip = Rv64LoadSignExtendChip::<F>::new(
+    let executor = Rv32LoadSignExtendExecutor::new(Rv32LoadStoreAdapterExecutor::new(address_bits));
+    let chip = Rv32LoadSignExtendChip::<F>::new(
         LoadSignExtendFiller::new(
-            Rv64LoadStoreAdapterFiller::new(address_bits, range_checker_chip.clone()),
+            Rv32LoadStoreAdapterFiller::new(address_bits, range_checker_chip.clone()),
             range_checker_chip,
         ),
         memory_helper,
@@ -377,10 +377,10 @@ fn solve_loadb_extend_zero_sanity_test() {
 #[cfg(feature = "cuda")]
 type GpuHarness = GpuTestChipHarness<
     F,
-    Rv64LoadSignExtendExecutor,
-    Rv64LoadSignExtendAir,
-    Rv64LoadSignExtendChipGpu,
-    Rv64LoadSignExtendChip<F>,
+    Rv32LoadSignExtendExecutor,
+    Rv32LoadSignExtendAir,
+    Rv32LoadSignExtendChipGpu,
+    Rv32LoadSignExtendChip<F>,
 >;
 
 #[cfg(feature = "cuda")]
@@ -395,7 +395,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
-    let gpu_chip = Rv64LoadSignExtendChipGpu::new(
+    let gpu_chip = Rv32LoadSignExtendChipGpu::new(
         tester.range_checker(),
         tester.address_bits(),
         tester.timestamp_max_bits(),
@@ -427,7 +427,7 @@ fn test_cuda_rand_load_sign_extend_tracegen(opcode: Rv64LoadStoreOpcode, num_ops
     }
 
     type Record<'a> = (
-        &'a mut Rv64LoadStoreAdapterRecord,
+        &'a mut Rv32LoadStoreAdapterRecord,
         &'a mut LoadSignExtendCoreRecord<RV32_REGISTER_NUM_LIMBS>,
     );
 
@@ -436,7 +436,7 @@ fn test_cuda_rand_load_sign_extend_tracegen(opcode: Rv64LoadStoreOpcode, num_ops
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64LoadStoreAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32LoadStoreAdapterExecutor>::new(),
         );
 
     tester

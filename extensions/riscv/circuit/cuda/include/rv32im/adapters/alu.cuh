@@ -7,7 +7,7 @@
 
 using namespace riscv;
 
-template <typename T> struct Rv64BaseAluAdapterCols {
+template <typename T> struct Rv32BaseAluAdapterCols {
     ExecutionState<T> from_state; // { pub pc: T, pub timestamp: T}
     T rd_ptr;
     T rs1_ptr;
@@ -17,7 +17,7 @@ template <typename T> struct Rv64BaseAluAdapterCols {
     MemoryWriteAuxCols<T, RV32_REGISTER_NUM_LIMBS> writes_aux;
 };
 
-struct Rv64BaseAluAdapterRecord {
+struct Rv32BaseAluAdapterRecord {
     uint32_t from_pc;
     uint32_t from_timestamp;
     uint32_t rd_ptr;
@@ -28,29 +28,29 @@ struct Rv64BaseAluAdapterRecord {
     MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS> writes_aux;
 };
 
-struct Rv64BaseAluAdapter {
+struct Rv32BaseAluAdapter {
     MemoryAuxColsFactory mem_helper;
     BitwiseOperationLookup bitwise_lookup;
 
-    __device__ Rv64BaseAluAdapter(
+    __device__ Rv32BaseAluAdapter(
         VariableRangeChecker range_checker,
         BitwiseOperationLookup lookup,
         uint32_t timestamp_max_bits
     )
         : mem_helper(range_checker, timestamp_max_bits), bitwise_lookup(lookup) {}
 
-    __device__ void fill_trace_row(RowSlice row, Rv64BaseAluAdapterRecord record) {
-        COL_WRITE_VALUE(row, Rv64BaseAluAdapterCols, from_state.pc, record.from_pc);
-        COL_WRITE_VALUE(row, Rv64BaseAluAdapterCols, from_state.timestamp, record.from_timestamp);
+    __device__ void fill_trace_row(RowSlice row, Rv32BaseAluAdapterRecord record) {
+        COL_WRITE_VALUE(row, Rv32BaseAluAdapterCols, from_state.pc, record.from_pc);
+        COL_WRITE_VALUE(row, Rv32BaseAluAdapterCols, from_state.timestamp, record.from_timestamp);
 
-        COL_WRITE_VALUE(row, Rv64BaseAluAdapterCols, rd_ptr, record.rd_ptr);
-        COL_WRITE_VALUE(row, Rv64BaseAluAdapterCols, rs1_ptr, record.rs1_ptr);
-        COL_WRITE_VALUE(row, Rv64BaseAluAdapterCols, rs2, record.rs2);
-        COL_WRITE_VALUE(row, Rv64BaseAluAdapterCols, rs2_as, record.rs2_as);
+        COL_WRITE_VALUE(row, Rv32BaseAluAdapterCols, rd_ptr, record.rd_ptr);
+        COL_WRITE_VALUE(row, Rv32BaseAluAdapterCols, rs1_ptr, record.rs1_ptr);
+        COL_WRITE_VALUE(row, Rv32BaseAluAdapterCols, rs2, record.rs2);
+        COL_WRITE_VALUE(row, Rv32BaseAluAdapterCols, rs2_as, record.rs2_as);
 
         // Read auxiliary for rs1
         mem_helper.fill(
-            row.slice_from(COL_INDEX(Rv64BaseAluAdapterCols, reads_aux[0])),
+            row.slice_from(COL_INDEX(Rv32BaseAluAdapterCols, reads_aux[0])),
             record.reads_aux[0].prev_timestamp,
             record.from_timestamp
         );
@@ -58,12 +58,12 @@ struct Rv64BaseAluAdapter {
         // rs2: register read when rs2_as == RV32_REGISTER_AS (== 1), otherwise immediate.
         if (record.rs2_as != 0) {
             mem_helper.fill(
-                row.slice_from(COL_INDEX(Rv64BaseAluAdapterCols, reads_aux[1])),
+                row.slice_from(COL_INDEX(Rv32BaseAluAdapterCols, reads_aux[1])),
                 record.reads_aux[1].prev_timestamp,
                 record.from_timestamp + 1
             );
         } else {
-            RowSlice rs2_aux = row.slice_from(COL_INDEX(Rv64BaseAluAdapterCols, reads_aux[1]));
+            RowSlice rs2_aux = row.slice_from(COL_INDEX(Rv32BaseAluAdapterCols, reads_aux[1]));
 #pragma unroll
             for (size_t i = 0; i < sizeof(MemoryReadAuxCols<uint8_t>); i++) {
                 rs2_aux.write(i, 0);
@@ -73,10 +73,10 @@ struct Rv64BaseAluAdapter {
         }
 
         COL_WRITE_ARRAY(
-            row, Rv64BaseAluAdapterCols, writes_aux.prev_data, record.writes_aux.prev_data
+            row, Rv32BaseAluAdapterCols, writes_aux.prev_data, record.writes_aux.prev_data
         );
         mem_helper.fill(
-            row.slice_from(COL_INDEX(Rv64BaseAluAdapterCols, writes_aux)),
+            row.slice_from(COL_INDEX(Rv32BaseAluAdapterCols, writes_aux)),
             record.writes_aux.prev_timestamp,
             record.from_timestamp + 2
         );

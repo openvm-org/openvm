@@ -17,13 +17,13 @@ use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 
 use crate::{
-    adapters::{Rv64MultAdapterCols, Rv64MultAdapterRecord},
+    adapters::{Rv32MultAdapterCols, Rv32MultAdapterRecord},
     cuda_abi::divrem_cuda::tracegen,
     DivRemCoreCols, DivRemCoreRecord,
 };
 
 #[derive(new)]
-pub struct Rv64DivRemChipGpu {
+pub struct Rv32DivRemChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
     pub range_tuple_checker: Arc<RangeTupleCheckerChipGPU<2>>,
@@ -31,10 +31,10 @@ pub struct Rv64DivRemChipGpu {
     pub timestamp_max_bits: usize,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv64DivRemChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for Rv32DivRemChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
-            Rv64MultAdapterRecord,
+            Rv32MultAdapterRecord,
             DivRemCoreRecord<RV32_REGISTER_NUM_LIMBS>,
         )>();
         let records = arena.allocated();
@@ -44,7 +44,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64DivRemChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = DivRemCoreCols::<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::width()
-            + Rv64MultAdapterCols::<F>::width();
+            + Rv32MultAdapterCols::<F>::width();
         let height = records.len() / RECORD_SIZE;
         let padded_height = next_power_of_two_or_zero(height);
 

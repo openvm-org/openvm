@@ -10,18 +10,18 @@ using namespace riscv;
 using namespace program;
 
 // Concrete type aliases for 32-bit
-using Rv64ShiftCoreRecord = ShiftCoreRecord<RV32_REGISTER_NUM_LIMBS>;
-using Rv64ShiftCore = ShiftCore<RV32_REGISTER_NUM_LIMBS>;
-template <typename T> using Rv64ShiftCoreCols = ShiftCoreCols<T, RV32_REGISTER_NUM_LIMBS>;
+using Rv32ShiftCoreRecord = ShiftCoreRecord<RV32_REGISTER_NUM_LIMBS>;
+using Rv32ShiftCore = ShiftCore<RV32_REGISTER_NUM_LIMBS>;
+template <typename T> using Rv32ShiftCoreCols = ShiftCoreCols<T, RV32_REGISTER_NUM_LIMBS>;
 
 template <typename T> struct ShiftCols {
-    Rv64BaseAluAdapterCols<T> adapter;
-    Rv64ShiftCoreCols<T> core;
+    Rv32BaseAluAdapterCols<T> adapter;
+    Rv32ShiftCoreCols<T> core;
 };
 
 struct ShiftRecord {
-    Rv64BaseAluAdapterRecord adapter;
-    Rv64ShiftCoreRecord core;
+    Rv32BaseAluAdapterRecord adapter;
+    Rv32ShiftCoreRecord core;
 };
 
 __global__ void rv32_shift_tracegen(
@@ -39,13 +39,13 @@ __global__ void rv32_shift_tracegen(
     RowSlice row(trace + idx, height);
     if (idx < records.len()) {
         auto const &rec = records[idx];
-        auto adapter = Rv64BaseAluAdapter(
+        auto adapter = Rv32BaseAluAdapter(
             VariableRangeChecker(range_ptr, range_bins),
             BitwiseOperationLookup(lookup_ptr, lookup_bits),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
-        auto core = Rv64ShiftCore(
+        auto core = Rv32ShiftCore(
             BitwiseOperationLookup(lookup_ptr, lookup_bits),
             VariableRangeChecker(range_ptr, range_bins)
         );

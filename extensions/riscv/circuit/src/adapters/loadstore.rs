@@ -65,10 +65,10 @@ pub struct LoadStoreInstruction<T> {
     pub store_shift_amount: T,
 }
 
-pub struct Rv64LoadStoreAdapterAirInterface<AB: InteractionBuilder>(PhantomData<AB>);
+pub struct Rv32LoadStoreAdapterAirInterface<AB: InteractionBuilder>(PhantomData<AB>);
 
 /// Using AB::Var for prev_data and AB::Expr for read_data
-impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv64LoadStoreAdapterAirInterface<AB> {
+impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv32LoadStoreAdapterAirInterface<AB> {
     type Reads = (
         [AB::Var; RV32_REGISTER_NUM_LIMBS],
         [AB::Expr; RV32_REGISTER_NUM_LIMBS],
@@ -79,7 +79,7 @@ impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv64LoadStoreAdapt
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
-pub struct Rv64LoadStoreAdapterCols<T> {
+pub struct Rv32LoadStoreAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
     pub rs1_data: [T; RV32_REGISTER_NUM_LIMBS],
@@ -105,21 +105,21 @@ pub struct Rv64LoadStoreAdapterCols<T> {
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new)]
-pub struct Rv64LoadStoreAdapterAir {
+pub struct Rv32LoadStoreAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,
     pub range_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,
 }
 
-impl<F: Field> BaseAir<F> for Rv64LoadStoreAdapterAir {
+impl<F: Field> BaseAir<F> for Rv32LoadStoreAdapterAir {
     fn width(&self) -> usize {
-        Rv64LoadStoreAdapterCols::<F>::width()
+        Rv32LoadStoreAdapterCols::<F>::width()
     }
 }
 
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
-    type Interface = Rv64LoadStoreAdapterAirInterface<AB>;
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
+    type Interface = Rv32LoadStoreAdapterAirInterface<AB>;
 
     fn eval(
         &self,
@@ -127,7 +127,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let local_cols: &Rv64LoadStoreAdapterCols<AB::Var> = local.borrow();
+        let local_cols: &Rv32LoadStoreAdapterCols<AB::Var> = local.borrow();
 
         let timestamp: AB::Var = local_cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
@@ -287,14 +287,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadStoreAdapterAir {
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let local_cols: &Rv64LoadStoreAdapterCols<AB::Var> = local.borrow();
+        let local_cols: &Rv32LoadStoreAdapterCols<AB::Var> = local.borrow();
         local_cols.from_state.pc
     }
 }
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64LoadStoreAdapterRecord {
+pub struct Rv32LoadStoreAdapterRecord {
     pub from_pc: u32,
     pub from_timestamp: u32,
 
@@ -316,21 +316,21 @@ pub struct Rv64LoadStoreAdapterRecord {
 /// In case of Loads, reads from the shifted intermediate pointer and writes to rd.
 /// In case of Stores, reads from rs2 and writes to the shifted intermediate pointer.
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64LoadStoreAdapterExecutor {
+pub struct Rv32LoadStoreAdapterExecutor {
     pointer_max_bits: usize,
 }
 
 #[derive(derive_new::new)]
-pub struct Rv64LoadStoreAdapterFiller {
+pub struct Rv32LoadStoreAdapterFiller {
     pointer_max_bits: usize,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<F> AdapterTraceExecutor<F> for Rv64LoadStoreAdapterExecutor
+impl<F> AdapterTraceExecutor<F> for Rv32LoadStoreAdapterExecutor
 where
     F: PrimeField32,
 {
-    const WIDTH: usize = size_of::<Rv64LoadStoreAdapterCols<u8>>();
+    const WIDTH: usize = size_of::<Rv32LoadStoreAdapterCols<u8>>();
     type ReadData = (
         (
             [u32; RV32_REGISTER_NUM_LIMBS],
@@ -339,7 +339,7 @@ where
         u8,
     );
     type WriteData = [u32; RV32_REGISTER_NUM_LIMBS];
-    type RecordMut<'a> = &'a mut Rv64LoadStoreAdapterRecord;
+    type RecordMut<'a> = &'a mut Rv32LoadStoreAdapterRecord;
 
     #[inline(always)]
     fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
@@ -489,8 +489,8 @@ where
     }
 }
 
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadStoreAdapterFiller {
-    const WIDTH: usize = size_of::<Rv64LoadStoreAdapterCols<u8>>();
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32LoadStoreAdapterFiller {
+    const WIDTH: usize = size_of::<Rv32LoadStoreAdapterCols<u8>>();
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
@@ -499,10 +499,10 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadStoreAdapterFiller {
         // SAFETY:
         // - caller ensures `adapter_row` contains a valid record representation that was previously
         //   written by the executor
-        // - get_record_from_slice correctly interprets the bytes as Rv64LoadStoreAdapterRecord
-        let record: &Rv64LoadStoreAdapterRecord =
+        // - get_record_from_slice correctly interprets the bytes as Rv32LoadStoreAdapterRecord
+        let record: &Rv32LoadStoreAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
-        let adapter_row: &mut Rv64LoadStoreAdapterCols<F> = adapter_row.borrow_mut();
+        let adapter_row: &mut Rv32LoadStoreAdapterCols<F> = adapter_row.borrow_mut();
 
         let needs_write = record.rd_rs2_ptr != u32::MAX;
         // Writing in reverse order

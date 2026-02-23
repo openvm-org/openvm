@@ -10,7 +10,7 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{run_auipc, Rv64AuipcExecutor};
+use super::{run_auipc, Rv32AuipcExecutor};
 #[cfg(feature = "aot")]
 use crate::common::*;
 
@@ -21,7 +21,7 @@ struct AuiPcPreCompute {
     a: u8,
 }
 
-impl<A> Rv64AuipcExecutor<A> {
+impl<A> Rv32AuipcExecutor<A> {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -42,7 +42,7 @@ impl<A> Rv64AuipcExecutor<A> {
     }
 }
 
-impl<F, A> InterpreterExecutor<F> for Rv64AuipcExecutor<A>
+impl<F, A> InterpreterExecutor<F> for Rv32AuipcExecutor<A>
 where
     F: PrimeField32,
 {
@@ -81,7 +81,7 @@ where
 }
 
 #[cfg(feature = "aot")]
-impl<F, A> AotExecutor<F> for Rv64AuipcExecutor<A>
+impl<F, A> AotExecutor<F> for Rv32AuipcExecutor<A>
 where
     F: PrimeField32,
 {
@@ -120,7 +120,7 @@ where
     }
 }
 
-impl<F, A> InterpreterMeteredExecutor<F> for Rv64AuipcExecutor<A>
+impl<F, A> InterpreterMeteredExecutor<F> for Rv32AuipcExecutor<A>
 where
     F: PrimeField32,
 {
@@ -164,7 +164,7 @@ where
 }
 
 #[cfg(feature = "aot")]
-impl<F, A> AotMeteredExecutor<F> for Rv64AuipcExecutor<A>
+impl<F, A> AotMeteredExecutor<F> for Rv32AuipcExecutor<A>
 where
     F: PrimeField32,
 {

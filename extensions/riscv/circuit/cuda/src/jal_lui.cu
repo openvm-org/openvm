@@ -7,25 +7,25 @@ using namespace riscv;
 
 const uint32_t ADDITIONAL_BITS = 0b11000000;
 
-template <typename T> struct Rv64JalLuiCoreCols {
+template <typename T> struct Rv32JalLuiCoreCols {
     T imm;                              // core_row.imm
     T rd_data[RV32_REGISTER_NUM_LIMBS]; // core_row.rd_data
     T is_jal;                           // core_row.is_jal
     T is_lui;                           // core_row.is_lui
 };
 
-struct Rv64JalLuiCoreRecord {
+struct Rv32JalLuiCoreRecord {
     uint32_t imm;
     uint8_t rd_data[RV32_REGISTER_NUM_LIMBS];
     bool is_jal;
 };
 
-struct Rv64JalLuiCore {
+struct Rv32JalLuiCore {
     BitwiseOperationLookup bw;
 
-    __device__ Rv64JalLuiCore(uint32_t *bw_ptr, uint32_t bw_bits) : bw(bw_ptr, bw_bits) {}
+    __device__ Rv32JalLuiCore(uint32_t *bw_ptr, uint32_t bw_bits) : bw(bw_ptr, bw_bits) {}
 
-    __device__ void fill_trace_row(RowSlice row, Rv64JalLuiCoreRecord record) {
+    __device__ void fill_trace_row(RowSlice row, Rv32JalLuiCoreRecord record) {
 #pragma unroll
         for (int i = 0; i < RV32_REGISTER_NUM_LIMBS; i += 2) {
             bw.add_range(record.rd_data[i], record.rd_data[i + 1]);
@@ -34,27 +34,27 @@ struct Rv64JalLuiCore {
             bw.add_xor(record.rd_data[RV32_REGISTER_NUM_LIMBS - 1], ADDITIONAL_BITS);
         }
 
-        COL_WRITE_VALUE(row, Rv64JalLuiCoreCols, is_lui, !record.is_jal);
-        COL_WRITE_VALUE(row, Rv64JalLuiCoreCols, is_jal, record.is_jal);
-        COL_WRITE_ARRAY(row, Rv64JalLuiCoreCols, rd_data, record.rd_data);
-        COL_WRITE_VALUE(row, Rv64JalLuiCoreCols, imm, record.imm);
+        COL_WRITE_VALUE(row, Rv32JalLuiCoreCols, is_lui, !record.is_jal);
+        COL_WRITE_VALUE(row, Rv32JalLuiCoreCols, is_jal, record.is_jal);
+        COL_WRITE_ARRAY(row, Rv32JalLuiCoreCols, rd_data, record.rd_data);
+        COL_WRITE_VALUE(row, Rv32JalLuiCoreCols, imm, record.imm);
     }
 };
 
-template <typename T> struct Rv64JalLuiCols {
-    Rv64CondRdWriteAdapterCols<T> adapter;
-    Rv64JalLuiCoreCols<T> core;
+template <typename T> struct Rv32JalLuiCols {
+    Rv32CondRdWriteAdapterCols<T> adapter;
+    Rv32JalLuiCoreCols<T> core;
 };
 
-struct Rv64JalLuiRecord {
-    Rv64RdWriteAdapterRecord adapter;
-    Rv64JalLuiCoreRecord core;
+struct Rv32JalLuiRecord {
+    Rv32RdWriteAdapterRecord adapter;
+    Rv32JalLuiCoreRecord core;
 };
 
 __global__ void jal_lui_tracegen(
     Fp *trace,
     size_t height,
-    DeviceBufferConstView<Rv64JalLuiRecord> records,
+    DeviceBufferConstView<Rv32JalLuiRecord> records,
     uint32_t *rc_ptr,
     uint32_t rc_bins,
     uint32_t *bw_ptr,
@@ -67,12 +67,12 @@ __global__ void jal_lui_tracegen(
     if (idx < records.len()) {
         auto const &full = records[idx];
 
-        Rv64CondRdWriteAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
+        Rv32CondRdWriteAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, full.adapter);
-        Rv64JalLuiCore core(bw_ptr, bw_bits);
-        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64JalLuiCols, core)), full.core);
+        Rv32JalLuiCore core(bw_ptr, bw_bits);
+        core.fill_trace_row(row.slice_from(COL_INDEX(Rv32JalLuiCols, core)), full.core);
     } else {
-        row.fill_zero(0, sizeof(Rv64JalLuiCols<uint8_t>));
+        row.fill_zero(0, sizeof(Rv32JalLuiCols<uint8_t>));
     }
 }
 
@@ -80,7 +80,7 @@ extern "C" int _jal_lui_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<Rv64JalLuiRecord> d_records,
+    DeviceBufferConstView<Rv32JalLuiRecord> d_records,
     uint32_t *d_rc,
     uint32_t rc_bins,
     uint32_t *d_bw,
@@ -89,7 +89,7 @@ extern "C" int _jal_lui_tracegen(
 ) {
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
-    assert(width == sizeof(Rv64JalLuiCols<uint8_t>));
+    assert(width == sizeof(Rv32JalLuiCols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height);
 

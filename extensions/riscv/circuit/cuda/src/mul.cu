@@ -9,25 +9,25 @@
 using namespace riscv;
 
 // Concrete type aliases for 32-bit
-using Rv64MultiplicationCoreRecord = MultiplicationCoreRecord<RV32_REGISTER_NUM_LIMBS>;
-using Rv64MultiplicationCore = MultiplicationCore<RV32_REGISTER_NUM_LIMBS>;
+using Rv32MultiplicationCoreRecord = MultiplicationCoreRecord<RV32_REGISTER_NUM_LIMBS>;
+using Rv32MultiplicationCore = MultiplicationCore<RV32_REGISTER_NUM_LIMBS>;
 template <typename T>
-using Rv64MultiplicationCoreCols = MultiplicationCoreCols<T, RV32_REGISTER_NUM_LIMBS>;
+using Rv32MultiplicationCoreCols = MultiplicationCoreCols<T, RV32_REGISTER_NUM_LIMBS>;
 
-template <typename T> struct Rv64MultiplicationCols {
-    Rv64MultAdapterCols<T> adapter;
-    Rv64MultiplicationCoreCols<T> core;
+template <typename T> struct Rv32MultiplicationCols {
+    Rv32MultAdapterCols<T> adapter;
+    Rv32MultiplicationCoreCols<T> core;
 };
 
-struct Rv64MultiplicationRecord {
-    Rv64MultAdapterRecord adapter;
-    Rv64MultiplicationCoreRecord core;
+struct Rv32MultiplicationRecord {
+    Rv32MultAdapterRecord adapter;
+    Rv32MultiplicationCoreRecord core;
 };
 
 __global__ void mul_tracegen(
     Fp *d_trace,
     size_t height,
-    DeviceBufferConstView<Rv64MultiplicationRecord> d_records,
+    DeviceBufferConstView<Rv32MultiplicationRecord> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_range_tuple_ptr,
@@ -39,7 +39,7 @@ __global__ void mul_tracegen(
     if (idx < d_records.len()) {
         auto const &rec = d_records[idx];
 
-        Rv64MultAdapter adapter(
+        Rv32MultAdapter adapter(
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins), timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
@@ -47,10 +47,10 @@ __global__ void mul_tracegen(
         RangeTupleChecker<2> range_tuple_checker(
             d_range_tuple_ptr, (uint32_t[2]){range_tuple_sizes.x, range_tuple_sizes.y}
         );
-        Rv64MultiplicationCore core(range_tuple_checker);
-        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64MultiplicationCols, core)), rec.core);
+        Rv32MultiplicationCore core(range_tuple_checker);
+        core.fill_trace_row(row.slice_from(COL_INDEX(Rv32MultiplicationCols, core)), rec.core);
     } else {
-        row.fill_zero(0, sizeof(Rv64MultiplicationCols<uint8_t>));
+        row.fill_zero(0, sizeof(Rv32MultiplicationCols<uint8_t>));
     }
 }
 
@@ -58,7 +58,7 @@ extern "C" int _mul_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<Rv64MultiplicationRecord> d_records,
+    DeviceBufferConstView<Rv32MultiplicationRecord> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_range_tuple_ptr,
@@ -67,7 +67,7 @@ extern "C" int _mul_tracegen(
 ) {
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
-    assert(width == sizeof(Rv64MultiplicationCols<uint8_t>));
+    assert(width == sizeof(Rv32MultiplicationCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
 
     mul_tracegen<<<grid, block>>>(

@@ -7,7 +7,7 @@
 
 using namespace riscv;
 
-template <typename T> struct Rv64BranchAdapterCols {
+template <typename T> struct Rv32BranchAdapterCols {
     ExecutionState<T> from_state; // { pc, timestamp }
     T rs1_ptr;
     T rs2_ptr;
@@ -15,7 +15,7 @@ template <typename T> struct Rv64BranchAdapterCols {
     MemoryReadAuxCols<T> reads_aux_1;
 };
 
-struct Rv64BranchAdapterRecord {
+struct Rv32BranchAdapterRecord {
     uint32_t from_pc;
     uint32_t from_timestamp;
     uint32_t rs1_ptr;
@@ -23,29 +23,29 @@ struct Rv64BranchAdapterRecord {
     MemoryReadAuxRecord reads_aux[2];
 };
 
-struct Rv64BranchAdapter {
+struct Rv32BranchAdapter {
     MemoryAuxColsFactory mem_helper;
 
-    __device__ Rv64BranchAdapter(VariableRangeChecker rc, uint32_t timestamp_max_bits)
+    __device__ Rv32BranchAdapter(VariableRangeChecker rc, uint32_t timestamp_max_bits)
         : mem_helper(rc, timestamp_max_bits) {}
 
-    __device__ void fill_trace_row(RowSlice row, Rv64BranchAdapterRecord rec) {
+    __device__ void fill_trace_row(RowSlice row, Rv32BranchAdapterRecord rec) {
 
         mem_helper.fill(
-            row.slice_from(COL_INDEX(Rv64BranchAdapterCols, reads_aux_1)),
+            row.slice_from(COL_INDEX(Rv32BranchAdapterCols, reads_aux_1)),
             rec.reads_aux[1].prev_timestamp,
             rec.from_timestamp + 1
         );
 
         mem_helper.fill(
-            row.slice_from(COL_INDEX(Rv64BranchAdapterCols, reads_aux_0)),
+            row.slice_from(COL_INDEX(Rv32BranchAdapterCols, reads_aux_0)),
             rec.reads_aux[0].prev_timestamp,
             rec.from_timestamp
         );
 
-        COL_WRITE_VALUE(row, Rv64BranchAdapterCols, from_state.pc, rec.from_pc);
-        COL_WRITE_VALUE(row, Rv64BranchAdapterCols, from_state.timestamp, rec.from_timestamp);
-        COL_WRITE_VALUE(row, Rv64BranchAdapterCols, rs1_ptr, rec.rs1_ptr);
-        COL_WRITE_VALUE(row, Rv64BranchAdapterCols, rs2_ptr, rec.rs2_ptr);
+        COL_WRITE_VALUE(row, Rv32BranchAdapterCols, from_state.pc, rec.from_pc);
+        COL_WRITE_VALUE(row, Rv32BranchAdapterCols, from_state.timestamp, rec.from_timestamp);
+        COL_WRITE_VALUE(row, Rv32BranchAdapterCols, rs1_ptr, rec.rs1_ptr);
+        COL_WRITE_VALUE(row, Rv32BranchAdapterCols, rs2_ptr, rec.rs2_ptr);
     }
 };

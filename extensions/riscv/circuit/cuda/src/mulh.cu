@@ -143,12 +143,12 @@ struct MulHCore {
 };
 
 template <typename T> struct MulHCols {
-    Rv64MultAdapterCols<T> adapter;
+    Rv32MultAdapterCols<T> adapter;
     MulHCoreCols<T> core;
 };
 
 struct MulHRecord {
-    Rv64MultAdapterRecord adapter;
+    Rv32MultAdapterRecord adapter;
     MulHCoreRecord core;
 };
 
@@ -170,7 +170,7 @@ __global__ void mulh_tracegen(
     if (idx < d_records.len()) {
         auto const &rec = d_records[idx];
 
-        Rv64MultAdapter adapter(
+        Rv32MultAdapter adapter(
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins), timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);

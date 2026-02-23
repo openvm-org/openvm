@@ -23,7 +23,7 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    Rv64CondRdWriteAdapterExecutor, Rv64CondRdWriteAdapterFiller, RV32_CELL_BITS,
+    Rv32CondRdWriteAdapterExecutor, Rv32CondRdWriteAdapterFiller, RV32_CELL_BITS,
     RV32_REGISTER_NUM_LIMBS, RV_J_TYPE_IMM_BITS,
 };
 
@@ -31,7 +31,7 @@ pub(super) const ADDITIONAL_BITS: u32 = 0b11000000;
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
-pub struct Rv64JalLuiCoreCols<T> {
+pub struct Rv32JalLuiCoreCols<T> {
     pub imm: T,
     pub rd_data: [T; RV32_REGISTER_NUM_LIMBS],
     pub is_jal: T,
@@ -39,19 +39,19 @@ pub struct Rv64JalLuiCoreCols<T> {
 }
 
 #[derive(Debug, Clone, Copy, derive_new::new)]
-pub struct Rv64JalLuiCoreAir {
+pub struct Rv32JalLuiCoreAir {
     pub bus: BitwiseOperationLookupBus,
 }
 
-impl<F: Field> BaseAir<F> for Rv64JalLuiCoreAir {
+impl<F: Field> BaseAir<F> for Rv32JalLuiCoreAir {
     fn width(&self) -> usize {
-        Rv64JalLuiCoreCols::<F>::width()
+        Rv32JalLuiCoreCols::<F>::width()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for Rv64JalLuiCoreAir {}
+impl<F: Field> BaseAirWithPublicValues<F> for Rv32JalLuiCoreAir {}
 
-impl<AB, I> VmCoreAir<AB, I> for Rv64JalLuiCoreAir
+impl<AB, I> VmCoreAir<AB, I> for Rv32JalLuiCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -65,8 +65,8 @@ where
         local_core: &[AB::Var],
         from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &Rv64JalLuiCoreCols<AB::Var> = (*local_core).borrow();
-        let Rv64JalLuiCoreCols::<AB::Var> {
+        let cols: &Rv32JalLuiCoreCols<AB::Var> = (*local_core).borrow();
+        let Rv32JalLuiCoreCols::<AB::Var> {
             imm,
             rd_data: rd,
             is_jal,
@@ -144,24 +144,24 @@ where
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64JalLuiCoreRecord {
+pub struct Rv32JalLuiCoreRecord {
     pub imm: u32,
     pub rd_data: [u8; RV32_REGISTER_NUM_LIMBS],
     pub is_jal: bool,
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64JalLuiExecutor<A = Rv64CondRdWriteAdapterExecutor> {
+pub struct Rv32JalLuiExecutor<A = Rv32CondRdWriteAdapterExecutor> {
     pub adapter: A,
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct Rv64JalLuiFiller<A = Rv64CondRdWriteAdapterFiller> {
+pub struct Rv32JalLuiFiller<A = Rv32CondRdWriteAdapterFiller> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
-impl<F, A, RA> PreflightExecutor<F, RA> for Rv64JalLuiExecutor<A>
+impl<F, A, RA> PreflightExecutor<F, RA> for Rv32JalLuiExecutor<A>
 where
     F: PrimeField32,
     A: 'static
@@ -169,7 +169,7 @@ where
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
-        (A::RecordMut<'buf>, &'buf mut Rv64JalLuiCoreRecord),
+        (A::RecordMut<'buf>, &'buf mut Rv32JalLuiCoreRecord),
     >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -208,20 +208,20 @@ where
     }
 }
 
-impl<F, A> TraceFiller<F> for Rv64JalLuiFiller<A>
+impl<F, A> TraceFiller<F> for Rv32JalLuiFiller<A>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // Rv64JalLuiCoreCols::width() elements
+        // Rv32JalLuiCoreCols::width() elements
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid Rv64JalLuiCoreRecord written by the executor
+        // SAFETY: core_row contains a valid Rv32JalLuiCoreRecord written by the executor
         // during trace generation
-        let record: &Rv64JalLuiCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
-        let core_row: &mut Rv64JalLuiCoreCols<F> = core_row.borrow_mut();
+        let record: &Rv32JalLuiCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
+        let core_row: &mut Rv32JalLuiCoreCols<F> = core_row.borrow_mut();
 
         for pair in record.rd_data.chunks_exact(2) {
             self.bitwise_lookup_chip

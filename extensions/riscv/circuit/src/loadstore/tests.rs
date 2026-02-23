@@ -26,7 +26,7 @@ use rand::{rngs::StdRng, seq::SliceRandom, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64LoadStoreAdapterRecord, LoadStoreCoreRecord, Rv64LoadStoreChipGpu},
+    crate::{adapters::Rv32LoadStoreAdapterRecord, LoadStoreCoreRecord, Rv32LoadStoreChipGpu},
     openvm_circuit::arch::{
         testing::{
             default_var_range_checker_bus, dummy_range_checker, GpuChipTestBuilder,
@@ -36,22 +36,22 @@ use {
     },
 };
 
-use super::{run_write_data, LoadStoreCoreAir, Rv64LoadStoreChip};
+use super::{run_write_data, LoadStoreCoreAir, Rv32LoadStoreChip};
 use crate::{
     adapters::{
-        Rv64LoadStoreAdapterAir, Rv64LoadStoreAdapterCols, Rv64LoadStoreAdapterExecutor,
-        Rv64LoadStoreAdapterFiller, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+        Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterCols, Rv32LoadStoreAdapterExecutor,
+        Rv32LoadStoreAdapterFiller, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     loadstore::LoadStoreCoreCols,
     test_utils::get_verification_error,
-    LoadStoreFiller, Rv64LoadStoreAir, Rv64LoadStoreExecutor,
+    LoadStoreFiller, Rv32LoadStoreAir, Rv32LoadStoreExecutor,
 };
 
 const IMM_BITS: usize = 16;
 const MAX_INS_CAPACITY: usize = 128;
 
 type F = BabyBear;
-type Harness = TestChipHarness<F, Rv64LoadStoreExecutor, Rv64LoadStoreAir, Rv64LoadStoreChip<F>>;
+type Harness = TestChipHarness<F, Rv32LoadStoreExecutor, Rv32LoadStoreAir, Rv32LoadStoreChip<F>>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
@@ -60,12 +60,12 @@ fn create_harness_fields(
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (
-    Rv64LoadStoreAir,
-    Rv64LoadStoreExecutor,
-    Rv64LoadStoreChip<F>,
+    Rv32LoadStoreAir,
+    Rv32LoadStoreExecutor,
+    Rv32LoadStoreChip<F>,
 ) {
-    let air = Rv64LoadStoreAir::new(
-        Rv64LoadStoreAdapterAir::new(
+    let air = Rv32LoadStoreAir::new(
+        Rv32LoadStoreAdapterAir::new(
             memory_bridge,
             execution_bridge,
             range_checker_chip.bus(),
@@ -73,13 +73,13 @@ fn create_harness_fields(
         ),
         LoadStoreCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64LoadStoreExecutor::new(
-        Rv64LoadStoreAdapterExecutor::new(address_bits),
+    let executor = Rv32LoadStoreExecutor::new(
+        Rv32LoadStoreAdapterExecutor::new(address_bits),
         Rv64LoadStoreOpcode::CLASS_OFFSET,
     );
-    let chip = Rv64LoadStoreChip::<F>::new(
+    let chip = Rv32LoadStoreChip::<F>::new(
         LoadStoreFiller::new(
-            Rv64LoadStoreAdapterFiller::new(address_bits, range_checker_chip),
+            Rv32LoadStoreAdapterFiller::new(address_bits, range_checker_chip),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
         ),
         memory_helper,
@@ -291,7 +291,7 @@ fn run_negative_loadstore_test(
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
         let (adapter_row, core_row) = trace_row.split_at_mut(adapter_width);
-        let adapter_cols: &mut Rv64LoadStoreAdapterCols<F> = adapter_row.borrow_mut();
+        let adapter_cols: &mut Rv32LoadStoreAdapterCols<F> = adapter_row.borrow_mut();
         let core_cols: &mut LoadStoreCoreCols<F, RV32_REGISTER_NUM_LIMBS> = core_row.borrow_mut();
 
         if let Some(read_data) = prank_vals.read_data {
@@ -510,10 +510,10 @@ fn run_loadbu_sanity_test() {
 #[cfg(feature = "cuda")]
 type GpuHarness = GpuTestChipHarness<
     F,
-    Rv64LoadStoreExecutor,
-    Rv64LoadStoreAir,
-    Rv64LoadStoreChipGpu,
-    Rv64LoadStoreChip<F>,
+    Rv32LoadStoreExecutor,
+    Rv32LoadStoreAir,
+    Rv32LoadStoreChipGpu,
+    Rv32LoadStoreChip<F>,
 >;
 
 #[cfg(feature = "cuda")]
@@ -528,7 +528,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
-    let gpu_chip = Rv64LoadStoreChipGpu::new(
+    let gpu_chip = Rv32LoadStoreChipGpu::new(
         tester.range_checker(),
         tester.address_bits(),
         tester.timestamp_max_bits(),
@@ -569,7 +569,7 @@ fn test_cuda_rand_load_store_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usiz
     }
 
     type Record<'a> = (
-        &'a mut Rv64LoadStoreAdapterRecord,
+        &'a mut Rv32LoadStoreAdapterRecord,
         &'a mut LoadStoreCoreRecord<RV32_REGISTER_NUM_LIMBS>,
     );
 
@@ -578,7 +578,7 @@ fn test_cuda_rand_load_store_tracegen(opcode: Rv64LoadStoreOpcode, num_ops: usiz
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64LoadStoreAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32LoadStoreAdapterExecutor>::new(),
         );
 
     tester

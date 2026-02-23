@@ -8,7 +8,7 @@
 using namespace riscv;
 using namespace program;
 
-template <typename T> struct Rv64AuipcCoreCols {
+template <typename T> struct Rv32AuipcCoreCols {
     T is_valid;
     // The limbs of the immediate except the least significant limb since it is always 0
     T imm_limbs[RV32_REGISTER_NUM_LIMBS - 1];
@@ -17,20 +17,20 @@ template <typename T> struct Rv64AuipcCoreCols {
     T rd_data[RV32_REGISTER_NUM_LIMBS];
 };
 
-struct Rv64AuipcCoreRecord {
+struct Rv32AuipcCoreRecord {
     uint32_t from_pc;
     uint32_t imm;
 };
 
 __device__ uint32_t run_auipc(uint32_t pc, uint32_t imm) { return pc + (imm << RV32_CELL_BITS); }
 
-struct Rv64AuipcCore {
+struct Rv32AuipcCore {
     BitwiseOperationLookup bitwise_lookup;
 
-    __device__ Rv64AuipcCore(BitwiseOperationLookup bitwise_lookup)
+    __device__ Rv32AuipcCore(BitwiseOperationLookup bitwise_lookup)
         : bitwise_lookup(bitwise_lookup) {}
 
-    __device__ void fill_trace_row(RowSlice row, Rv64AuipcCoreRecord record) {
+    __device__ void fill_trace_row(RowSlice row, Rv32AuipcCoreRecord record) {
         auto pc_limbs = reinterpret_cast<uint8_t *>(&record.from_pc);
         auto imm_limbs = reinterpret_cast<uint8_t *>(&record.imm);
         auto auipc = run_auipc(record.from_pc, record.imm);
@@ -45,27 +45,27 @@ struct Rv64AuipcCore {
             bitwise_lookup.add_range(rd_data[i], rd_data[i + 1]);
         }
 
-        COL_WRITE_ARRAY(row, Rv64AuipcCoreCols, imm_limbs, imm_limbs);
-        COL_WRITE_ARRAY(row, Rv64AuipcCoreCols, pc_limbs, pc_limbs + 1);
-        COL_WRITE_ARRAY(row, Rv64AuipcCoreCols, rd_data, rd_data);
-        COL_WRITE_VALUE(row, Rv64AuipcCoreCols, is_valid, 1);
+        COL_WRITE_ARRAY(row, Rv32AuipcCoreCols, imm_limbs, imm_limbs);
+        COL_WRITE_ARRAY(row, Rv32AuipcCoreCols, pc_limbs, pc_limbs + 1);
+        COL_WRITE_ARRAY(row, Rv32AuipcCoreCols, rd_data, rd_data);
+        COL_WRITE_VALUE(row, Rv32AuipcCoreCols, is_valid, 1);
     }
 };
 
-template <typename T> struct Rv64AuipcCols {
-    Rv64RdWriteAdapterCols<T> adapter;
-    Rv64AuipcCoreCols<T> core;
+template <typename T> struct Rv32AuipcCols {
+    Rv32RdWriteAdapterCols<T> adapter;
+    Rv32AuipcCoreCols<T> core;
 };
 
-struct Rv64AuipcRecord {
-    Rv64RdWriteAdapterRecord adapter;
-    Rv64AuipcCoreRecord core;
+struct Rv32AuipcRecord {
+    Rv32RdWriteAdapterRecord adapter;
+    Rv32AuipcCoreRecord core;
 };
 
 __global__ void auipc_tracegen(
     Fp *trace,
     size_t height,
-    DeviceBufferConstView<Rv64AuipcRecord> records,
+    DeviceBufferConstView<Rv32AuipcRecord> records,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *bitwise_lookup_ptr,
@@ -77,15 +77,15 @@ __global__ void auipc_tracegen(
     if (idx < records.len()) {
         auto const &record = records[idx];
 
-        auto adapter = Rv64RdWriteAdapter(
+        auto adapter = Rv32RdWriteAdapter(
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
         );
         adapter.fill_trace_row(row, record.adapter);
 
-        auto core = Rv64AuipcCore(BitwiseOperationLookup(bitwise_lookup_ptr, bitwise_num_bits));
-        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64AuipcCols, core)), record.core);
+        auto core = Rv32AuipcCore(BitwiseOperationLookup(bitwise_lookup_ptr, bitwise_num_bits));
+        core.fill_trace_row(row.slice_from(COL_INDEX(Rv32AuipcCols, core)), record.core);
     } else {
-        row.fill_zero(0, sizeof(Rv64AuipcCols<uint8_t>));
+        row.fill_zero(0, sizeof(Rv32AuipcCols<uint8_t>));
     }
 }
 
@@ -93,7 +93,7 @@ extern "C" int _auipc_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<Rv64AuipcRecord> d_records,
+    DeviceBufferConstView<Rv32AuipcRecord> d_records,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup,
@@ -102,7 +102,7 @@ extern "C" int _auipc_tracegen(
 ) {
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
-    assert(width == sizeof(Rv64AuipcCols<uint8_t>));
+    assert(width == sizeof(Rv32AuipcCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
     auipc_tracegen<<<grid, block>>>(
         d_trace,

@@ -27,7 +27,7 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 
-use crate::adapters::{LoadStoreInstruction, Rv64LoadStoreAdapterFiller};
+use crate::adapters::{LoadStoreInstruction, Rv32LoadStoreAdapterFiller};
 
 /// LoadSignExtend Core Chip handles byte/halfword into word conversions through sign extend
 /// This chip uses read_data to construct write_data
@@ -186,7 +186,7 @@ pub struct LoadSignExtendExecutor<A, const NUM_CELLS: usize, const LIMB_BITS: us
 
 #[derive(Clone, derive_new::new)]
 pub struct LoadSignExtendFiller<
-    A = Rv64LoadStoreAdapterFiller,
+    A = Rv32LoadStoreAdapterFiller,
     const NUM_CELLS: usize = RV32_REGISTER_NUM_LIMBS,
     const LIMB_BITS: usize = RV32_CELL_BITS,
 > {

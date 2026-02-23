@@ -64,7 +64,7 @@ use rand::Rng;
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64MultAdapterRecord, MulHCoreRecord, Rv64MulHChipGpu},
+    crate::{adapters::Rv32MultAdapterRecord, MulHCoreRecord, Rv32MulHChipGpu},
     openvm_circuit::arch::{
         testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
@@ -74,12 +74,12 @@ use {
 use super::core::run_mulh;
 use crate::{
     adapters::{
-        Rv64MultAdapterAir, Rv64MultAdapterExecutor, Rv64MultAdapterFiller, RV32_CELL_BITS,
+        Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller, RV32_CELL_BITS,
         RV32_REGISTER_NUM_LIMBS,
     },
-    mulh::{MulHCoreCols, Rv64MulHChip},
+    mulh::{MulHCoreCols, Rv32MulHChip},
     test_utils::get_verification_error,
-    MulHCoreAir, MulHFiller, Rv64MulHAir, Rv64MulHExecutor,
+    MulHCoreAir, MulHFiller, Rv32MulHAir, Rv32MulHExecutor,
 };
 #[cfg(feature = "aot")]
 use crate::{Rv64ImBuilder, Rv64ImConfig};
@@ -92,7 +92,7 @@ const TUPLE_CHECKER_SIZES: [u32; 2] = [
     (MAX_NUM_LIMBS * (1u32 << RV32_CELL_BITS)),
 ];
 type F = BabyBear;
-type Harness = TestChipHarness<F, Rv64MulHExecutor, Rv64MulHAir, Rv64MulHChip<F>>;
+type Harness = TestChipHarness<F, Rv32MulHExecutor, Rv32MulHAir, Rv32MulHChip<F>>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
@@ -100,14 +100,14 @@ fn create_harness_fields(
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv64MulHAir, Rv64MulHExecutor, Rv64MulHChip<F>) {
-    let air = Rv64MulHAir::new(
-        Rv64MultAdapterAir::new(execution_bridge, memory_bridge),
+) -> (Rv32MulHAir, Rv32MulHExecutor, Rv32MulHChip<F>) {
+    let air = Rv32MulHAir::new(
+        Rv32MultAdapterAir::new(execution_bridge, memory_bridge),
         MulHCoreAir::new(bitwise_chip.bus(), *range_tuple_chip.bus()),
     );
-    let executor = Rv64MulHExecutor::new(Rv64MultAdapterExecutor, MulHOpcode::CLASS_OFFSET);
-    let chip = Rv64MulHChip::<F>::new(
-        MulHFiller::new(Rv64MultAdapterFiller, bitwise_chip, range_tuple_chip),
+    let executor = Rv32MulHExecutor::new(Rv32MultAdapterExecutor, MulHOpcode::CLASS_OFFSET);
+    let chip = Rv32MulHChip::<F>::new(
+        MulHFiller::new(Rv32MultAdapterFiller, bitwise_chip, range_tuple_chip),
         memory_helper,
     );
     (air, executor, chip)
@@ -527,7 +527,7 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>
     let exe = VmExe::new(program);
     let config = Rv64ImConfig::default();
     let memory_dimensions = config.rv32i.system.memory_config.memory_dimensions();
-    let executor = VmExecutor::new(config.clone()).expect("failed to create Rv64IM executor");
+    let executor = VmExecutor::new(config.clone()).expect("failed to create Rv32IM executor");
 
     let interpreter = executor
         .interpreter_instance(&exe)
@@ -762,7 +762,7 @@ fn test_aot_mulh_randomized() {
 
 #[cfg(feature = "cuda")]
 type GpuHarness =
-    GpuTestChipHarness<F, Rv64MulHExecutor, Rv64MulHAir, Rv64MulHChipGpu, Rv64MulHChip<F>>;
+    GpuTestChipHarness<F, Rv32MulHExecutor, Rv32MulHAir, Rv32MulHChipGpu, Rv32MulHChip<F>>;
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
@@ -782,7 +782,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_range_tuple_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64MulHChipGpu::new(
+    let gpu_chip = Rv32MulHChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.range_tuple_checker(),
@@ -820,7 +820,7 @@ fn test_cuda_rand_mulh_tracegen(opcode: MulHOpcode, num_ops: usize) {
     }
 
     type Record<'a> = (
-        &'a mut Rv64MultAdapterRecord,
+        &'a mut Rv32MultAdapterRecord,
         &'a mut MulHCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
     );
 
@@ -829,7 +829,7 @@ fn test_cuda_rand_mulh_tracegen(opcode: MulHOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64MultAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32MultAdapterExecutor>::new(),
         );
 
     tester

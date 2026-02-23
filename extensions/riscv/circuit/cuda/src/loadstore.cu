@@ -154,13 +154,13 @@ template <size_t NUM_CELLS> struct LoadStoreCore {
 };
 
 // [Adapter + Core] columns and record
-template <typename T> struct Rv64LoadStoreCols {
-    Rv64LoadStoreAdapterCols<T> adapter;
+template <typename T> struct Rv32LoadStoreCols {
+    Rv32LoadStoreAdapterCols<T> adapter;
     LoadStoreCoreCols<T, RV32_REGISTER_NUM_LIMBS> core;
 };
 
-struct Rv64LoadStoreRecord {
-    Rv64LoadStoreAdapterRecord adapter;
+struct Rv32LoadStoreRecord {
+    Rv32LoadStoreAdapterRecord adapter;
     LoadStoreCoreRecord<RV32_REGISTER_NUM_LIMBS> core;
 };
 
@@ -168,7 +168,7 @@ __global__ void rv32_load_store_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<Rv64LoadStoreRecord> records,
+    DeviceBufferConstView<Rv32LoadStoreRecord> records,
     size_t pointer_max_bits,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
@@ -179,7 +179,7 @@ __global__ void rv32_load_store_tracegen(
     if (idx < records.len()) {
         auto const &record = records[idx];
 
-        auto adapter = Rv64LoadStoreAdapter(
+        auto adapter = Rv32LoadStoreAdapter(
             pointer_max_bits,
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
             timestamp_max_bits
@@ -187,9 +187,9 @@ __global__ void rv32_load_store_tracegen(
         adapter.fill_trace_row(row, record.adapter);
 
         auto core = LoadStoreCore<RV32_REGISTER_NUM_LIMBS>();
-        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64LoadStoreCols, core)), record.core);
+        core.fill_trace_row(row.slice_from(COL_INDEX(Rv32LoadStoreCols, core)), record.core);
     } else {
-        row.fill_zero(0, sizeof(Rv64LoadStoreCols<uint8_t>));
+        row.fill_zero(0, sizeof(Rv32LoadStoreCols<uint8_t>));
     }
 }
 
@@ -197,14 +197,14 @@ extern "C" int _rv32_load_store_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<Rv64LoadStoreRecord> d_records,
+    DeviceBufferConstView<Rv32LoadStoreRecord> d_records,
     size_t pointer_max_bits,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
-    assert(width == sizeof(Rv64LoadStoreCols<uint8_t>));
+    assert(width == sizeof(Rv32LoadStoreCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
 
     rv32_load_store_tracegen<<<grid, block>>>(

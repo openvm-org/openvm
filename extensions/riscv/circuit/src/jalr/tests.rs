@@ -35,7 +35,7 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64JalrAdapterRecord, Rv64JalrChipGpu, Rv64JalrCoreRecord},
+    crate::{adapters::Rv32JalrAdapterRecord, Rv32JalrChipGpu, Rv32JalrCoreRecord},
     openvm_circuit::arch::{
         testing::{
             default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
@@ -45,23 +45,23 @@ use {
     },
 };
 
-use super::Rv64JalrCoreAir;
+use super::Rv32JalrCoreAir;
 #[cfg(feature = "aot")]
 use crate::Rv64ImConfig;
 use crate::{
     adapters::{
-        compose, Rv64JalrAdapterAir, Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller,
+        compose, Rv32JalrAdapterAir, Rv32JalrAdapterExecutor, Rv32JalrAdapterFiller,
         RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
-    jalr::{run_jalr, Rv64JalrChip, Rv64JalrCoreCols, Rv64JalrExecutor},
+    jalr::{run_jalr, Rv32JalrChip, Rv32JalrCoreCols, Rv32JalrExecutor},
     test_utils::get_verification_error,
-    Rv64JalrAir, Rv64JalrFiller,
+    Rv32JalrAir, Rv32JalrFiller,
 };
 
 const IMM_BITS: usize = 16;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
-type Harness = TestChipHarness<F, Rv64JalrExecutor, Rv64JalrAir, Rv64JalrChip<F>>;
+type Harness = TestChipHarness<F, Rv32JalrExecutor, Rv32JalrAir, Rv32JalrChip<F>>;
 
 fn into_limbs(num: u32) -> [u32; 4] {
     array::from_fn(|i| (num >> (8 * i)) & 255)
@@ -73,15 +73,15 @@ fn create_harness_fields(
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     range_checker_chip: Arc<VariableRangeCheckerChip>,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv64JalrAir, Rv64JalrExecutor, Rv64JalrChip<F>) {
-    let air = Rv64JalrAir::new(
-        Rv64JalrAdapterAir::new(memory_bridge, execution_bridge),
-        Rv64JalrCoreAir::new(bitwise_chip.bus(), range_checker_chip.bus()),
+) -> (Rv32JalrAir, Rv32JalrExecutor, Rv32JalrChip<F>) {
+    let air = Rv32JalrAir::new(
+        Rv32JalrAdapterAir::new(memory_bridge, execution_bridge),
+        Rv32JalrCoreAir::new(bitwise_chip.bus(), range_checker_chip.bus()),
     );
-    let executor = Rv64JalrExecutor::new(Rv64JalrAdapterExecutor);
-    let chip = Rv64JalrChip::<F>::new(
-        Rv64JalrFiller::new(
-            Rv64JalrAdapterFiller::new(),
+    let executor = Rv32JalrExecutor::new(Rv32JalrAdapterExecutor);
+    let chip = Rv32JalrChip::<F>::new(
+        Rv32JalrFiller::new(
+            Rv32JalrAdapterFiller::new(),
             bitwise_chip,
             range_checker_chip,
         ),
@@ -252,7 +252,7 @@ fn run_negative_jalr_test(
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
-        let core_cols: &mut Rv64JalrCoreCols<F> = core_row.borrow_mut();
+        let core_cols: &mut Rv32JalrCoreCols<F> = core_row.borrow_mut();
 
         if let Some(data) = prank_vals.rd_data {
             core_cols.rd_data = data.map(F::from_canonical_u32);
@@ -379,7 +379,7 @@ fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F
     let exe = VmExe::new(program);
     let config = Rv64ImConfig::default();
     let memory_dimensions = config.rv32i.system.memory_config.memory_dimensions();
-    let executor = VmExecutor::new(config.clone()).expect("failed to create Rv64IM executor");
+    let executor = VmExecutor::new(config.clone()).expect("failed to create Rv32IM executor");
 
     let interpreter = executor
         .interpreter_instance(&exe)
@@ -478,7 +478,7 @@ fn test_jalr_aot_writes_return_address() {
 
 #[cfg(feature = "cuda")]
 type GpuHarness =
-    GpuTestChipHarness<F, Rv64JalrExecutor, Rv64JalrAir, Rv64JalrChipGpu, Rv64JalrChip<F>>;
+    GpuTestChipHarness<F, Rv32JalrExecutor, Rv32JalrAir, Rv32JalrChipGpu, Rv32JalrChip<F>>;
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
@@ -496,7 +496,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_range_checker_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64JalrChipGpu::new(
+    let gpu_chip = Rv32JalrChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
@@ -528,13 +528,13 @@ fn test_cuda_rand_jalr_tracegen() {
         );
     }
 
-    type Record<'a> = (&'a mut Rv64JalrAdapterRecord, &'a mut Rv64JalrCoreRecord);
+    type Record<'a> = (&'a mut Rv32JalrAdapterRecord, &'a mut Rv32JalrCoreRecord);
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64JalrAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32JalrAdapterExecutor>::new(),
         );
 
     tester

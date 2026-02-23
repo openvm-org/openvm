@@ -17,24 +17,24 @@ use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 
 use crate::{
     adapters::{
-        Rv64MultAdapterCols, Rv64MultAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+        Rv32MultAdapterCols, Rv32MultAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     cuda_abi::mulh_cuda::tracegen,
     MulHCoreCols, MulHCoreRecord,
 };
 
 #[derive(new)]
-pub struct Rv64MulHChipGpu {
+pub struct Rv32MulHChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
     pub range_tuple_checker: Arc<RangeTupleCheckerChipGPU<2>>,
     pub timestamp_max_bits: usize,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv64MulHChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for Rv32MulHChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
-            Rv64MultAdapterRecord,
+            Rv32MultAdapterRecord,
             MulHCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
         )>();
         let records = arena.allocated();
@@ -44,7 +44,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64MulHChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = MulHCoreCols::<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::width()
-            + Rv64MultAdapterCols::<F>::width();
+            + Rv32MultAdapterCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
 
         let tuple_checker_sizes = self.range_tuple_checker.sizes;

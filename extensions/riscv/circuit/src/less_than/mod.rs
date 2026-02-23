@@ -1,7 +1,7 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use super::adapters::{
-    Rv64BaseAluAdapterAir, Rv64BaseAluAdapterExecutor, Rv64BaseAluAdapterFiller, RV32_CELL_BITS,
+    Rv32BaseAluAdapterAir, Rv32BaseAluAdapterExecutor, Rv32BaseAluAdapterFiller, RV32_CELL_BITS,
     RV32_REGISTER_NUM_LIMBS,
 };
 
@@ -17,17 +17,17 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv64LessThanAir =
-    VmAirWrapper<Rv64BaseAluAdapterAir, LessThanCoreAir<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
-pub type Rv64LessThanExecutor = LessThanExecutor<
-    Rv64BaseAluAdapterExecutor<RV32_CELL_BITS>,
+pub type Rv32LessThanAir =
+    VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>>;
+pub type Rv32LessThanExecutor = LessThanExecutor<
+    Rv32BaseAluAdapterExecutor<RV32_CELL_BITS>,
     RV32_REGISTER_NUM_LIMBS,
     RV32_CELL_BITS,
 >;
-pub type Rv64LessThanChip<F> = VmChipWrapper<
+pub type Rv32LessThanChip<F> = VmChipWrapper<
     F,
     LessThanFiller<
-        Rv64BaseAluAdapterFiller<RV32_CELL_BITS>,
+        Rv32BaseAluAdapterFiller<RV32_CELL_BITS>,
         RV32_REGISTER_NUM_LIMBS,
         RV32_CELL_BITS,
     >,

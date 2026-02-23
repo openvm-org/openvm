@@ -222,20 +222,20 @@ template <size_t NUM_LIMBS> struct DivRemCore {
 };
 
 // Below is `rv32` specific code.
-template <typename T> struct Rv64DivRemCols {
-    Rv64MultAdapterCols<T> adapter;
+template <typename T> struct Rv32DivRemCols {
+    Rv32MultAdapterCols<T> adapter;
     DivRemCoreCols<T, RV32_REGISTER_NUM_LIMBS> core;
 };
 
-struct Rv64DivRemRecord {
-    Rv64MultAdapterRecord adapter;
+struct Rv32DivRemRecord {
+    Rv32MultAdapterRecord adapter;
     DivRemCoreRecords<RV32_REGISTER_NUM_LIMBS> core;
 };
 
 __global__ void rv32_div_rem_tracegen(
     Fp *d_trace,
     size_t height,
-    DeviceBufferConstView<Rv64DivRemRecord> d_records,
+    DeviceBufferConstView<Rv32DivRemRecord> d_records,
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_bits,
     uint32_t *d_bitwise_lookup_ptr,
@@ -250,7 +250,7 @@ __global__ void rv32_div_rem_tracegen(
     if (idx < d_records.len()) {
         auto const &record = d_records[idx];
 
-        Rv64MultAdapter adapter(
+        Rv32MultAdapter adapter(
             VariableRangeChecker(d_range_checker_ptr, range_checker_bits), timestamp_max_bits
         );
         adapter.fill_trace_row(row, record.adapter);
@@ -262,9 +262,9 @@ __global__ void rv32_div_rem_tracegen(
                 (uint32_t[2]){range_tuple_checker_sizes.x, range_tuple_checker_sizes.y}
             )
         );
-        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64DivRemCols, core)), record.core);
+        core.fill_trace_row(row.slice_from(COL_INDEX(Rv32DivRemCols, core)), record.core);
     } else {
-        row.fill_zero(0, sizeof(Rv64DivRemCols<uint8_t>));
+        row.fill_zero(0, sizeof(Rv32DivRemCols<uint8_t>));
     }
 }
 
@@ -272,7 +272,7 @@ extern "C" int _rv32_div_rem_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<Rv64DivRemRecord> d_records,
+    DeviceBufferConstView<Rv32DivRemRecord> d_records,
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup_ptr,
@@ -283,7 +283,7 @@ extern "C" int _rv32_div_rem_tracegen(
 ) {
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
-    assert(width == sizeof(Rv64DivRemCols<uint8_t>));
+    assert(width == sizeof(Rv32DivRemCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
 
     rv32_div_rem_tracegen<<<grid, block>>>(

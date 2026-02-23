@@ -1,7 +1,7 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use super::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
-use crate::adapters::{Rv64MultAdapterAir, Rv64MultAdapterExecutor, Rv64MultAdapterFiller};
+use crate::adapters::{Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller};
 
 mod core;
 mod execution;
@@ -15,13 +15,13 @@ pub use cuda::*;
 #[cfg(test)]
 mod tests;
 
-pub type Rv64MultiplicationAir = VmAirWrapper<
-    Rv64MultAdapterAir,
+pub type Rv32MultiplicationAir = VmAirWrapper<
+    Rv32MultAdapterAir,
     MultiplicationCoreAir<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
 >;
-pub type Rv64MultiplicationExecutor =
-    MultiplicationExecutor<Rv64MultAdapterExecutor, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>;
-pub type Rv64MultiplicationChip<F> = VmChipWrapper<
+pub type Rv32MultiplicationExecutor =
+    MultiplicationExecutor<Rv32MultAdapterExecutor, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>;
+pub type Rv32MultiplicationChip<F> = VmChipWrapper<
     F,
-    MultiplicationFiller<Rv64MultAdapterFiller, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
+    MultiplicationFiller<Rv32MultAdapterFiller, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
 >;

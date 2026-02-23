@@ -27,29 +27,29 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64RdWriteAdapterRecord, Rv64JalLuiChipGpu, Rv64JalLuiCoreRecord},
+    crate::{adapters::Rv32RdWriteAdapterRecord, Rv32JalLuiChipGpu, Rv32JalLuiCoreRecord},
     openvm_circuit::arch::{
         testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
     },
 };
 
-use super::{run_jal_lui, Rv64JalLuiChip, Rv64JalLuiCoreAir, Rv64JalLuiExecutor};
+use super::{run_jal_lui, Rv32JalLuiChip, Rv32JalLuiCoreAir, Rv32JalLuiExecutor};
 use crate::{
     adapters::{
-        Rv64CondRdWriteAdapterAir, Rv64CondRdWriteAdapterCols, Rv64CondRdWriteAdapterExecutor,
-        Rv64CondRdWriteAdapterFiller, Rv64RdWriteAdapterAir, Rv64RdWriteAdapterExecutor,
-        Rv64RdWriteAdapterFiller, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS,
+        Rv32CondRdWriteAdapterAir, Rv32CondRdWriteAdapterCols, Rv32CondRdWriteAdapterExecutor,
+        Rv32CondRdWriteAdapterFiller, Rv32RdWriteAdapterAir, Rv32RdWriteAdapterExecutor,
+        Rv32RdWriteAdapterFiller, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS,
     },
-    jal_lui::{Rv64JalLuiCoreCols, ADDITIONAL_BITS},
+    jal_lui::{Rv32JalLuiCoreCols, ADDITIONAL_BITS},
     test_utils::get_verification_error,
-    Rv64JalLuiAir, Rv64JalLuiFiller,
+    Rv32JalLuiAir, Rv32JalLuiFiller,
 };
 
 const IMM_BITS: usize = 20;
 const LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
 const MAX_INS_CAPACITY: usize = 128;
-type Harness = TestChipHarness<F, Rv64JalLuiExecutor, Rv64JalLuiAir, Rv64JalLuiChip<F>>;
+type Harness = TestChipHarness<F, Rv32JalLuiExecutor, Rv32JalLuiAir, Rv32JalLuiChip<F>>;
 
 type F = BabyBear;
 
@@ -58,17 +58,17 @@ fn create_harness_fields(
     execution_bridge: ExecutionBridge,
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv64JalLuiAir, Rv64JalLuiExecutor, Rv64JalLuiChip<F>) {
-    let air = Rv64JalLuiAir::new(
-        Rv64CondRdWriteAdapterAir::new(Rv64RdWriteAdapterAir::new(memory_bridge, execution_bridge)),
-        Rv64JalLuiCoreAir::new(bitwise_chip.bus()),
+) -> (Rv32JalLuiAir, Rv32JalLuiExecutor, Rv32JalLuiChip<F>) {
+    let air = Rv32JalLuiAir::new(
+        Rv32CondRdWriteAdapterAir::new(Rv32RdWriteAdapterAir::new(memory_bridge, execution_bridge)),
+        Rv32JalLuiCoreAir::new(bitwise_chip.bus()),
     );
-    let executor = Rv64JalLuiExecutor::new(Rv64CondRdWriteAdapterExecutor::new(
-        Rv64RdWriteAdapterExecutor,
+    let executor = Rv32JalLuiExecutor::new(Rv32CondRdWriteAdapterExecutor::new(
+        Rv32RdWriteAdapterExecutor,
     ));
-    let chip = Rv64JalLuiChip::<F>::new(
-        Rv64JalLuiFiller::new(
-            Rv64CondRdWriteAdapterFiller::new(Rv64RdWriteAdapterFiller),
+    let chip = Rv32JalLuiChip::<F>::new(
+        Rv32JalLuiFiller::new(
+            Rv32CondRdWriteAdapterFiller::new(Rv32RdWriteAdapterFiller),
             bitwise_chip,
         ),
         memory_helper,
@@ -219,8 +219,8 @@ fn run_negative_jal_lui_test(
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
         let (adapter_row, core_row) = trace_row.split_at_mut(adapter_width);
-        let adapter_cols: &mut Rv64CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
-        let core_cols: &mut Rv64JalLuiCoreCols<F> = core_row.borrow_mut();
+        let adapter_cols: &mut Rv32CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        let core_cols: &mut Rv32JalLuiCoreCols<F> = core_row.borrow_mut();
 
         if let Some(data) = prank_vals.rd_data {
             core_cols.rd_data = data.map(F::from_canonical_u32);
@@ -421,7 +421,7 @@ fn test_additional_bits() {
 
 #[cfg(feature = "cuda")]
 type GpuHarness =
-    GpuTestChipHarness<F, Rv64JalLuiExecutor, Rv64JalLuiAir, Rv64JalLuiChipGpu, Rv64JalLuiChip<F>>;
+    GpuTestChipHarness<F, Rv32JalLuiExecutor, Rv32JalLuiAir, Rv32JalLuiChipGpu, Rv32JalLuiChip<F>>;
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
@@ -436,7 +436,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_bitwise_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64JalLuiChipGpu::new(
+    let gpu_chip = Rv32JalLuiChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
@@ -467,15 +467,15 @@ fn test_cuda_rand_jal_lui_tracegen(opcode: Rv64JalLuiOpcode, num_ops: usize) {
     }
 
     type Record<'a> = (
-        &'a mut Rv64RdWriteAdapterRecord,
-        &'a mut Rv64JalLuiCoreRecord,
+        &'a mut Rv32RdWriteAdapterRecord,
+        &'a mut Rv32JalLuiCoreRecord,
     );
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64CondRdWriteAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32CondRdWriteAdapterExecutor>::new(),
         );
 
     tester

@@ -32,7 +32,7 @@ use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
     crate::{
-        adapters::Rv64BranchAdapterRecord, BranchLessThanCoreRecord, Rv64BranchLessThanChipGpu,
+        adapters::Rv32BranchAdapterRecord, BranchLessThanCoreRecord, Rv32BranchLessThanChipGpu,
     },
     openvm_circuit::arch::{
         testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
@@ -40,15 +40,15 @@ use {
     },
 };
 
-use super::{run_cmp, Rv64BranchLessThanChip};
+use super::{run_cmp, Rv32BranchLessThanChip};
 use crate::{
     adapters::{
-        Rv64BranchAdapterAir, Rv64BranchAdapterExecutor, Rv64BranchAdapterFiller, RV32_CELL_BITS,
+        Rv32BranchAdapterAir, Rv32BranchAdapterExecutor, Rv32BranchAdapterFiller, RV32_CELL_BITS,
         RV32_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
     branch_lt::BranchLessThanCoreCols,
     test_utils::get_verification_error,
-    BranchLessThanCoreAir, BranchLessThanFiller, Rv64BranchLessThanAir, Rv64BranchLessThanExecutor,
+    BranchLessThanCoreAir, BranchLessThanFiller, Rv32BranchLessThanAir, Rv32BranchLessThanExecutor,
 };
 
 type F = BabyBear;
@@ -56,9 +56,9 @@ const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_IMM: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
 type Harness = TestChipHarness<
     F,
-    Rv64BranchLessThanExecutor,
-    Rv64BranchLessThanAir,
-    Rv64BranchLessThanChip<F>,
+    Rv32BranchLessThanExecutor,
+    Rv32BranchLessThanAir,
+    Rv32BranchLessThanChip<F>,
 >;
 
 fn create_harness_fields(
@@ -67,21 +67,21 @@ fn create_harness_fields(
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
 ) -> (
-    Rv64BranchLessThanAir,
-    Rv64BranchLessThanExecutor,
-    Rv64BranchLessThanChip<F>,
+    Rv32BranchLessThanAir,
+    Rv32BranchLessThanExecutor,
+    Rv32BranchLessThanChip<F>,
 ) {
-    let air = Rv64BranchLessThanAir::new(
-        Rv64BranchAdapterAir::new(execution_bridge, memory_bridge),
+    let air = Rv32BranchLessThanAir::new(
+        Rv32BranchAdapterAir::new(execution_bridge, memory_bridge),
         BranchLessThanCoreAir::new(bitwise_chip.bus(), BranchLessThanOpcode::CLASS_OFFSET),
     );
-    let executor = Rv64BranchLessThanExecutor::new(
-        Rv64BranchAdapterExecutor::new(),
+    let executor = Rv32BranchLessThanExecutor::new(
+        Rv32BranchAdapterExecutor::new(),
         BranchLessThanOpcode::CLASS_OFFSET,
     );
-    let chip = Rv64BranchLessThanChip::new(
+    let chip = Rv32BranchLessThanChip::new(
         BranchLessThanFiller::new(
-            Rv64BranchAdapterFiller,
+            Rv32BranchAdapterFiller,
             bitwise_chip,
             BranchLessThanOpcode::CLASS_OFFSET,
         ),
@@ -642,10 +642,10 @@ fn run_cmp_eq_sanity_test() {
 #[cfg(feature = "cuda")]
 type GpuHarness = GpuTestChipHarness<
     F,
-    Rv64BranchLessThanExecutor,
-    Rv64BranchLessThanAir,
-    Rv64BranchLessThanChipGpu,
-    Rv64BranchLessThanChip<F>,
+    Rv32BranchLessThanExecutor,
+    Rv32BranchLessThanAir,
+    Rv32BranchLessThanChipGpu,
+    Rv32BranchLessThanChip<F>,
 >;
 
 #[cfg(feature = "cuda")]
@@ -661,7 +661,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_bitwise_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64BranchLessThanChipGpu::new(
+    let gpu_chip = Rv32BranchLessThanChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
@@ -695,7 +695,7 @@ fn test_cuda_rand_branch_lt_tracegen(opcode: BranchLessThanOpcode, num_ops: usiz
     }
 
     type Record<'a> = (
-        &'a mut Rv64BranchAdapterRecord,
+        &'a mut Rv32BranchAdapterRecord,
         &'a mut BranchLessThanCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
     );
     harness
@@ -703,7 +703,7 @@ fn test_cuda_rand_branch_lt_tracegen(opcode: BranchLessThanOpcode, num_ops: usiz
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BranchAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32BranchAdapterExecutor>::new(),
         );
 
     tester

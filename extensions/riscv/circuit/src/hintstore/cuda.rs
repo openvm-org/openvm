@@ -16,12 +16,12 @@ use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 
 use crate::{
-    cuda_abi::hintstore_cuda::tracegen, Rv64HintStoreCols, Rv64HintStoreLayout,
-    Rv64HintStoreRecordMut,
+    cuda_abi::hintstore_cuda::tracegen, Rv32HintStoreCols, Rv32HintStoreLayout,
+    Rv32HintStoreRecordMut,
 };
 
 #[derive(new)]
-pub struct Rv64HintStoreChipGpu {
+pub struct Rv32HintStoreChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
     pub pointer_max_bits: usize,
@@ -36,9 +36,9 @@ pub struct OffsetInfo {
     pub local_idx: u32,
 }
 
-impl Chip<DenseRecordArena, GpuBackend> for Rv64HintStoreChipGpu {
+impl Chip<DenseRecordArena, GpuBackend> for Rv32HintStoreChipGpu {
     fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        let width = Rv64HintStoreCols::<u8>::width();
+        let width = Rv32HintStoreCols::<u8>::width();
         let records = arena.allocated_mut();
         if records.is_empty() {
             return get_empty_air_proving_ctx::<GpuBackend>();
@@ -51,8 +51,8 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64HintStoreChipGpu {
             let prev_offset = offset;
             let record = RecordSeeker::<
                 DenseRecordArena,
-                Rv64HintStoreRecordMut,
-                Rv64HintStoreLayout,
+                Rv32HintStoreRecordMut,
+                Rv32HintStoreLayout,
             >::get_record_at(&mut offset, records);
             for idx in 0..record.inner.num_words {
                 offsets.push(OffsetInfo::new(prev_offset as u32, idx));

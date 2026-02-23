@@ -37,7 +37,7 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64MultAdapterRecord, DivRemCoreRecord, Rv64DivRemChipGpu},
+    crate::{adapters::Rv32MultAdapterRecord, DivRemCoreRecord, Rv32DivRemChipGpu},
     openvm_circuit::arch::{
         testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
@@ -47,14 +47,14 @@ use {
 use super::core::run_divrem;
 use crate::{
     adapters::{
-        Rv64MultAdapterAir, Rv64MultAdapterExecutor, Rv64MultAdapterFiller, RV32_CELL_BITS,
+        Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller, RV32_CELL_BITS,
         RV32_REGISTER_NUM_LIMBS,
     },
     divrem::{
-        run_mul_carries, run_sltu_diff_idx, DivRemCoreCols, DivRemCoreSpecialCase, Rv64DivRemChip,
+        run_mul_carries, run_sltu_diff_idx, DivRemCoreCols, DivRemCoreSpecialCase, Rv32DivRemChip,
     },
     test_utils::get_verification_error,
-    DivRemCoreAir, DivRemFiller, Rv64DivRemAir, Rv64DivRemExecutor,
+    DivRemCoreAir, DivRemFiller, Rv32DivRemAir, Rv32DivRemExecutor,
 };
 
 type F = BabyBear;
@@ -65,7 +65,7 @@ const TUPLE_CHECKER_SIZES: [u32; 2] = [
     (1 << RV32_CELL_BITS) as u32,
     (MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)),
 ];
-type Harness = TestChipHarness<F, Rv64DivRemExecutor, Rv64DivRemAir, Rv64DivRemChip<F>>;
+type Harness = TestChipHarness<F, Rv32DivRemExecutor, Rv32DivRemAir, Rv32DivRemChip<F>>;
 
 fn limb_sra<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: [u32; NUM_LIMBS],
@@ -82,19 +82,19 @@ fn create_harness_fields(
     bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
     range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv64DivRemAir, Rv64DivRemExecutor, Rv64DivRemChip<F>) {
-    let air = Rv64DivRemAir::new(
-        Rv64MultAdapterAir::new(execution_bridge, memory_bridge),
+) -> (Rv32DivRemAir, Rv32DivRemExecutor, Rv32DivRemChip<F>) {
+    let air = Rv32DivRemAir::new(
+        Rv32MultAdapterAir::new(execution_bridge, memory_bridge),
         DivRemCoreAir::new(
             bitwise_chip.bus(),
             *range_tuple_chip.bus(),
             DivRemOpcode::CLASS_OFFSET,
         ),
     );
-    let executor = Rv64DivRemExecutor::new(Rv64MultAdapterExecutor, DivRemOpcode::CLASS_OFFSET);
-    let chip = Rv64DivRemChip::<F>::new(
+    let executor = Rv32DivRemExecutor::new(Rv32MultAdapterExecutor, DivRemOpcode::CLASS_OFFSET);
+    let chip = Rv32DivRemChip::<F>::new(
         DivRemFiller::new(
-            Rv64MultAdapterFiller,
+            Rv32MultAdapterFiller,
             bitwise_chip,
             range_tuple_chip,
             DivRemOpcode::CLASS_OFFSET,
@@ -772,7 +772,7 @@ fn run_mul_unsigned_sanity_test() {
 
 #[cfg(feature = "cuda")]
 type GpuHarness =
-    GpuTestChipHarness<F, Rv64DivRemExecutor, Rv64DivRemAir, Rv64DivRemChipGpu, Rv64DivRemChip<F>>;
+    GpuTestChipHarness<F, Rv32DivRemExecutor, Rv32DivRemAir, Rv32DivRemChipGpu, Rv32DivRemChip<F>>;
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
@@ -792,7 +792,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         dummy_range_tuple_chip,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64DivRemChipGpu::new(
+    let gpu_chip = Rv32DivRemChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.range_tuple_checker(),
@@ -839,7 +839,7 @@ fn test_cuda_rand_divrem_tracegen(opcode: DivRemOpcode, num_ops: usize) {
     );
 
     type Record<'a> = (
-        &'a mut Rv64MultAdapterRecord,
+        &'a mut Rv32MultAdapterRecord,
         &'a mut DivRemCoreRecord<RV32_REGISTER_NUM_LIMBS>,
     );
 
@@ -848,7 +848,7 @@ fn test_cuda_rand_divrem_tracegen(opcode: DivRemOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64MultAdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32MultAdapterExecutor>::new(),
         );
 
     tester
