@@ -83,7 +83,6 @@ pub struct DeferralCallAdapterCols<T> {
 pub struct DeferralCallAdapterAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
-    native_start_ptr: u32,
 }
 
 impl<F: Field> BaseAir<F> for DeferralCallAdapterAir {
@@ -143,8 +142,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         let native_as = AB::Expr::from_u32(NATIVE_AS);
 
         let digest_size = AB::F::from_usize(DIGEST_SIZE);
-        let input_acc_ptr = AB::Expr::from_u32(self.native_start_ptr)
-            + (deferral_idx.clone() * AB::Expr::TWO + AB::Expr::ONE) * digest_size;
+        let input_acc_ptr = (deferral_idx.clone() * AB::Expr::TWO + AB::Expr::ONE) * digest_size;
         let output_acc_ptr = input_acc_ptr.clone() + digest_size;
 
         let DeferralCallReads {
@@ -333,10 +331,8 @@ pub struct DeferralCallAdapterRecord<F> {
     pub new_output_acc_aux: [MemoryWriteAuxRecord<F, MEMORY_OP_SIZE>; DIGEST_MEMORY_OPS],
 }
 
-#[derive(derive_new::new, Clone, Copy)]
-pub struct DeferralCallAdapterExecutor {
-    pub(crate) native_start_ptr: u32,
-}
+#[derive(Clone, Copy)]
+pub struct DeferralCallAdapterExecutor;
 
 #[derive(derive_new::new)]
 pub struct DeferralCallAdapterFiller;
@@ -388,7 +384,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
         let input_commit = join_memory_ops(input_commit_chunks);
 
         let deferral_idx = c.as_canonical_u32();
-        let input_acc_ptr = self.native_start_ptr + (2 * deferral_idx + 1) * (DIGEST_SIZE as u32);
+        let input_acc_ptr = (2 * deferral_idx + 1) * (DIGEST_SIZE as u32);
         let output_acc_ptr = input_acc_ptr + (DIGEST_SIZE as u32);
 
         let old_input_acc_chunks: [[F; MEMORY_OP_SIZE]; DIGEST_MEMORY_OPS] = from_fn(|i| {
@@ -438,7 +434,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
         }
 
         let deferral_idx = c.as_canonical_u32();
-        let input_acc_ptr = self.native_start_ptr + (2 * deferral_idx + 1) * (DIGEST_SIZE as u32);
+        let input_acc_ptr = (2 * deferral_idx + 1) * (DIGEST_SIZE as u32);
         let output_acc_ptr = input_acc_ptr + (DIGEST_SIZE as u32);
 
         for chunk_idx in 0..DIGEST_MEMORY_OPS {

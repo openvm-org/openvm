@@ -1,9 +1,7 @@
 use std::array::from_fn;
 
 use openvm_circuit::arch::{
-    deferral::{
-        DeferralResult, DeferralState, InputCommit, InputMapVal, InputRaw, OutputCommit, OutputRaw,
-    },
+    deferral::{DeferralResult, DeferralState, InputCommit, InputMapVal, OutputCommit, OutputRaw},
     hasher::Hasher,
     VmField,
 };
@@ -18,11 +16,11 @@ pub struct RawDeferralResult {
 }
 
 pub struct DeferralFn {
-    f: Box<dyn Fn(&InputRaw) -> OutputRaw + Send + Sync + 'static>,
+    f: Box<dyn Fn(&[u8]) -> OutputRaw + Send + Sync + 'static>,
 }
 
 impl DeferralFn {
-    pub fn new<FN: Fn(&InputRaw) -> OutputRaw + Send + Sync + 'static>(f: FN) -> Self {
+    pub fn new<FN: Fn(&[u8]) -> OutputRaw + Send + Sync + 'static>(f: FN) -> Self {
         Self { f: Box::new(f) }
     }
 

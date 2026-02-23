@@ -41,7 +41,6 @@ pub struct DeferralSetupAdapterCols<T> {
 pub struct DeferralSetupAdapterAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
-    native_start_ptr: u32,
 }
 
 impl<F> BaseAir<F> for DeferralSetupAdapterAir {
@@ -62,10 +61,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralSetupAdapterAir {
     ) {
         let cols: &DeferralSetupAdapterCols<_> = local.borrow();
 
-        // The SETUP opcode should always write to the same location in the native
-        // address space. Field native_start_ptr is a config value.
+        // The SETUP opcode should always write to the beginning of the native
+        // address space.
         let address_space = AB::Expr::from_u32(NATIVE_AS);
-        let pointer = AB::Expr::from_u32(self.native_start_ptr);
+        let pointer = AB::Expr::ZERO;
         let [write_data] = ctx.writes;
         let write_chunks = split_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(write_data);
 
@@ -116,10 +115,8 @@ pub struct DeferralSetupAdapterRecord<F> {
     pub write_aux: [MemoryWriteAuxRecord<F, MEMORY_OP_SIZE>; DIGEST_MEMORY_OPS],
 }
 
-#[derive(derive_new::new, Clone, Copy)]
-pub struct DeferralSetupAdapterExecutor {
-    pub(in crate::setup) native_start_ptr: u32,
-}
+#[derive(Clone, Copy)]
+pub struct DeferralSetupAdapterExecutor;
 
 #[derive(derive_new::new)]
 pub struct DeferralSetupAdapterFiller;
@@ -152,12 +149,13 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralSetupAdapterExecutor {
         record: &mut Self::RecordMut<'_>,
     ) {
         let &Instruction { a, d, .. } = instruction;
-        debug_assert_eq!(a.as_canonical_u32(), self.native_start_ptr);
+        // Circuit accumulator is stored at the start of the native address space
+        debug_assert_eq!(a.as_canonical_u32(), 0);
         debug_assert_eq!(d.as_canonical_u32(), NATIVE_AS);
         for chunk_idx in 0..DIGEST_MEMORY_OPS {
             tracing_write_native(
                 memory,
-                self.native_start_ptr + (chunk_idx * MEMORY_OP_SIZE) as u32,
+                (chunk_idx * MEMORY_OP_SIZE) as u32,
                 memory_op_chunk(&data, chunk_idx),
                 &mut record.write_aux[chunk_idx].prev_timestamp,
                 &mut record.write_aux[chunk_idx].prev_data,

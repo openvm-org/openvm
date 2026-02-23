@@ -26,7 +26,7 @@ use crate::{
         byte_commit_to_f, combine_output, join_memory_ops, memory_op_chunk, COMMIT_MEMORY_OPS,
         COMMIT_NUM_BYTES, DIGEST_MEMORY_OPS, MEMORY_OP_SIZE, OUTPUT_TOTAL_MEMORY_OPS,
     },
-    DeferralFn, CALL_AIR_IDX, POSEIDON2_AIR_IDX,
+    DeferralFn, CALL_AIR_REL_IDX, POSEIDON2_AIR_REL_IDX,
 };
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -71,8 +71,7 @@ impl DeferralCallExecutor {
             .get(deferral_idx as usize)
             .ok_or(StaticProgramError::InvalidInstruction(pc))?;
 
-        let input_acc_ptr =
-            self.adapter.native_start_ptr + (2 * deferral_idx + 1) * (DIGEST_SIZE as u32);
+        let input_acc_ptr = (2 * deferral_idx + 1) * (DIGEST_SIZE as u32);
         *data = DeferralCallPrecompute {
             rd_ptr: a.as_canonical_u32(),
             rs_ptr: b.as_canonical_u32(),
@@ -204,6 +203,8 @@ unsafe fn execute_e12_impl<F: VmField, CTX: ExecutionCtxTrait>(
     );
     let output_f_commit =
         byte_commit_to_f(&output_commit.iter().map(|v| F::from_u8(*v)).collect_vec());
+
+    // (output_commit, output_len) pair, corresponds to guest struct OutputKey
     let output_key = combine_output(output_commit, output_len.to_le_bytes());
 
     let new_input_acc = poseidon2_chip.compress(&old_input_acc, &input_commit);
@@ -267,7 +268,7 @@ unsafe fn execute_e2_impl<F: VmField, CTX: MeteredExecutionCtxTrait>(
     // this opcode's execution. In DEFER_CALL, both the input and output
     // hash accumulator for some deferral circuit are updated.
     exec_state.ctx.on_height_change(
-        pre_compute.chip_idx as usize + (CALL_AIR_IDX - POSEIDON2_AIR_IDX),
+        pre_compute.chip_idx as usize + (CALL_AIR_REL_IDX - POSEIDON2_AIR_REL_IDX),
         2,
     );
 }

@@ -124,7 +124,8 @@ pub struct Streams<F> {
     /// The key-value store for hints. Both key and value are byte arrays. Executors which
     /// read `kv_store` need to encode the key and decode the value.
     pub kv_store: Arc<dyn KvStore>,
-    /// Stores cached deferred operation inputs and outputs.
+    /// Stores cached deferred operation inputs and outputs. Each idx corresponds to a
+    /// unique function that is constrained outside the VM in its own deferral circuit.
     pub deferrals: Vec<DeferralState>,
 }
 

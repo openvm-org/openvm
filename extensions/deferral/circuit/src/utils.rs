@@ -9,6 +9,7 @@ pub const F_NUM_BYTES: usize = 4;
 pub const COMMIT_NUM_BYTES: usize = DIGEST_SIZE * F_NUM_BYTES;
 pub const OUTPUT_TOTAL_BYTES: usize = F_NUM_BYTES + COMMIT_NUM_BYTES;
 
+// TODO: replace MEMORY_OP_SIZE with CONST_BLOCK_SIZE
 pub const MEMORY_OP_SIZE: usize = 4;
 pub const DIGEST_MEMORY_OPS: usize = num_memory_ops(DIGEST_SIZE);
 pub const COMMIT_MEMORY_OPS: usize = num_memory_ops(COMMIT_NUM_BYTES);

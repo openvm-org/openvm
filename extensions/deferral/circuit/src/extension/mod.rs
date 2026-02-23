@@ -55,9 +55,9 @@ cfg_if::cfg_if! {
 }
 
 // SAFETY: These deferral AIRs must be at these indices within the extension
-pub(crate) const POSEIDON2_AIR_IDX: usize = 1;
-pub(crate) const CALL_AIR_IDX: usize = 3;
-pub(crate) const OUTPUT_AIR_IDX: usize = 4;
+pub(crate) const POSEIDON2_AIR_REL_IDX: usize = 1;
+pub(crate) const CALL_AIR_REL_IDX: usize = 3;
+pub(crate) const OUTPUT_AIR_REL_IDX: usize = 4;
 
 // =================================== VM Extension Implementation =================================
 
@@ -65,7 +65,6 @@ pub(crate) const OUTPUT_AIR_IDX: usize = 4;
 pub struct DeferralExtension {
     pub fns: Vec<Arc<DeferralFn>>,
     pub expected_def_vks_commit: [u8; COMMIT_NUM_BYTES],
-    pub native_start_ptr: u32,
 }
 
 impl DeferralExtension {
@@ -79,7 +78,6 @@ impl DeferralExtension {
         Self {
             fns,
             expected_def_vks_commit: f_commit_to_bytes(&expected_commit),
-            native_start_ptr: 0,
         }
     }
 }
@@ -106,15 +104,12 @@ impl<F: VmField> VmExecutionExtension<F> for DeferralExtension {
         inventory: &mut ExecutorInventoryBuilder<F, DeferralExecutor<F>>,
     ) -> Result<(), ExecutorInventoryError> {
         let setup = DeferralSetupExecutor::new(
-            DeferralSetupAdapterExecutor::new(self.native_start_ptr),
+            DeferralSetupAdapterExecutor,
             byte_commit_to_f(&self.expected_def_vks_commit.map(F::from_u8)),
         );
         inventory.add_executor(setup, [DeferralOpcode::SETUP.global_opcode()])?;
 
-        let call = DeferralCallExecutor::new(
-            DeferralCallAdapterExecutor::new(self.native_start_ptr),
-            self.fns.clone(),
-        );
+        let call = DeferralCallExecutor::new(DeferralCallAdapterExecutor, self.fns.clone());
         inventory.add_executor(call, [DeferralOpcode::CALL.global_opcode()])?;
 
         inventory.add_executor(
@@ -142,21 +137,21 @@ where
         let base_num_airs = inventory.num_airs();
 
         inventory.add_air(DeferralCircuitCountAir::new(count_bus, self.fns.len()));
-        assert_eq!(inventory.num_airs() - base_num_airs, POSEIDON2_AIR_IDX);
+        assert_eq!(inventory.num_airs() - base_num_airs, POSEIDON2_AIR_REL_IDX);
         inventory.add_air_ref(Arc::new(deferral_poseidon2_air(poseidon2_bus.0)));
 
         inventory.add_air(DeferralSetupAir::new(
-            DeferralSetupAdapterAir::new(execution_bridge, memory_bridge, self.native_start_ptr),
+            DeferralSetupAdapterAir::new(execution_bridge, memory_bridge),
             DeferralSetupCoreAir::new(byte_commit_to_f(
                 &self.expected_def_vks_commit.map(Val::<SC>::from_u8),
             )),
         ));
-        assert_eq!(inventory.num_airs() - base_num_airs, CALL_AIR_IDX);
+        assert_eq!(inventory.num_airs() - base_num_airs, CALL_AIR_REL_IDX);
         inventory.add_air(DeferralCallAir::new(
-            DeferralCallAdapterAir::new(execution_bridge, memory_bridge, self.native_start_ptr),
+            DeferralCallAdapterAir::new(execution_bridge, memory_bridge),
             DeferralCallCoreAir::new(count_bus, poseidon2_bus),
         ));
-        assert_eq!(inventory.num_airs() - base_num_airs, OUTPUT_AIR_IDX);
+        assert_eq!(inventory.num_airs() - base_num_airs, OUTPUT_AIR_REL_IDX);
         inventory.add_air(DeferralOutputAir::new(
             execution_bridge,
             memory_bridge,

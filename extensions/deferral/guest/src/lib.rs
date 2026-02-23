@@ -12,8 +12,6 @@ pub const DEFERRAL_FUNCT3: u8 = 0b111;
 /// Low bits in immediate used to pick deferral sub-opcode
 pub const DEFERRAL_OPCODE_BITS: u32 = 2;
 
-/// Location in native address space to start storing deferral accumulators
-pub const NATIVE_START_POINTER: u32 = 0;
 /// Maximum number of deferral circuits, as each deferral instruction stores its
 /// deferral idx in the most significant 10 bits of the immediate field
 pub const MAX_DEF_CIRCUITS: u16 = 1024;

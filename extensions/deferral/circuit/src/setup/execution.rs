@@ -18,7 +18,6 @@ use crate::utils::{memory_op_chunk, DIGEST_MEMORY_OPS, MEMORY_OP_SIZE};
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct DeferralSetupPrecompute<F> {
-    native_start_ptr: u32,
     expected_vks_commit: [F; DIGEST_SIZE],
 }
 
@@ -33,13 +32,12 @@ impl<F: PrimeField32> DeferralSetupExecutor<F> {
         let Instruction { a, d, opcode, .. } = inst;
 
         if opcode.local_opcode_idx(DeferralOpcode::CLASS_OFFSET) != DeferralOpcode::SETUP as usize
-            || a.as_canonical_u32() != self.adapter.native_start_ptr
+            || a.as_canonical_u32() != 0
             || d.as_canonical_u32() != NATIVE_AS
         {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
-        data.native_start_ptr = self.adapter.native_start_ptr;
         data.expected_vks_commit = self.expected_def_vks_commit;
 
         Ok(())
@@ -168,7 +166,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     for chunk_idx in 0..DIGEST_MEMORY_OPS {
         exec_state.vm_write::<F, MEMORY_OP_SIZE>(
             NATIVE_AS,
-            pre_compute.native_start_ptr + (chunk_idx * MEMORY_OP_SIZE) as u32,
+            (chunk_idx * MEMORY_OP_SIZE) as u32,
             &memory_op_chunk(&pre_compute.expected_vks_commit, chunk_idx),
         );
     }

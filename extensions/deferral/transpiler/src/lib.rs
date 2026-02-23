@@ -1,4 +1,4 @@
-use openvm_deferral_guest::{DEFERRAL_FUNCT3, MAX_DEF_CIRCUITS, NATIVE_START_POINTER, OPCODE};
+use openvm_deferral_guest::{DEFERRAL_FUNCT3, MAX_DEF_CIRCUITS, OPCODE};
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
@@ -63,6 +63,9 @@ impl<F: PrimeField32> TranspilerExtension<F> for DeferralTranspilerExtension {
 
         let dec_insn = IType::new(instruction_u32);
         let def_opcode = DeferralOpcode::from_repr(imm_code)?;
+
+        // Accumulators should be stored at the start of the native address space
+        const NATIVE_START_POINTER: usize = 0;
 
         let instruction = match def_opcode {
             DeferralOpcode::SETUP => Instruction::from_usize(

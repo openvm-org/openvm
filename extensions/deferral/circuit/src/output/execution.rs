@@ -22,7 +22,7 @@ use crate::{
         join_memory_ops, memory_op_chunk, split_output, DIGEST_MEMORY_OPS, MEMORY_OP_SIZE,
         OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
-    OUTPUT_AIR_IDX, POSEIDON2_AIR_IDX,
+    OUTPUT_AIR_REL_IDX, POSEIDON2_AIR_REL_IDX,
 };
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -220,7 +220,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     // this opcode's execution. Computing an output commit from the raw output
     // takes height Poseidon2 compressions.
     exec_state.ctx.on_height_change(
-        pre_compute.chip_idx as usize + (OUTPUT_AIR_IDX - POSEIDON2_AIR_IDX),
+        pre_compute.chip_idx as usize + (OUTPUT_AIR_REL_IDX - POSEIDON2_AIR_REL_IDX),
         height,
     );
 }
