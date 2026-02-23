@@ -12,10 +12,7 @@ use std::sync::Arc;
 
 use openvm_circuit_primitives::Chip;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
-use openvm_stark_backend::{
-    interaction::{BusIndex, LookupBus},
-    AirRef, StarkProtocolConfig, Val,
-};
+use openvm_stark_backend::{interaction::LookupBus, AirRef, StarkProtocolConfig, Val};
 
 #[cfg(test)]
 pub mod tests;
@@ -44,15 +41,11 @@ pub enum Poseidon2PeripheryChip<F: VmField> {
     Register1(Poseidon2PeripheryBaseChip<F, 1>),
 }
 impl<F: VmField> Poseidon2PeripheryChip<F> {
-    pub fn new(
-        poseidon2_config: Poseidon2Config<F>,
-        bus_idx: BusIndex,
-        max_constraint_degree: usize,
-    ) -> Self {
+    pub fn new(poseidon2_config: Poseidon2Config<F>, max_constraint_degree: usize) -> Self {
         if max_constraint_degree >= 7 {
-            Self::Register0(Poseidon2PeripheryBaseChip::new(poseidon2_config, bus_idx))
+            Self::Register0(Poseidon2PeripheryBaseChip::new(poseidon2_config))
         } else {
-            Self::Register1(Poseidon2PeripheryBaseChip::new(poseidon2_config, bus_idx))
+            Self::Register1(Poseidon2PeripheryBaseChip::new(poseidon2_config))
         }
     }
 }
