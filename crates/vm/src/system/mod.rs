@@ -583,18 +583,13 @@ where
         let hasher_chip = if config.continuation_enabled {
             assert_eq!(inventory.chips().len(), POSEIDON2_INSERTION_IDX);
             // ATTENTION: The threshold 7 here must match the one in `new_poseidon2_periphery_air`
-            let direct_bus = if config.max_constraint_degree >= 7 {
-                inventory
-                    .next_air::<Poseidon2PeripheryAir<Val<SC>, 0>>()?
-                    .bus
+            if config.max_constraint_degree >= 7 {
+                inventory.next_air::<Poseidon2PeripheryAir<Val<SC>, 0>>()?;
             } else {
-                inventory
-                    .next_air::<Poseidon2PeripheryAir<Val<SC>, 1>>()?
-                    .bus
+                inventory.next_air::<Poseidon2PeripheryAir<Val<SC>, 1>>()?;
             };
             let chip = Arc::new(Poseidon2PeripheryChip::new(
                 vm_poseidon2_config(),
-                direct_bus.index,
                 config.max_constraint_degree,
             ));
             inventory.add_periphery_chip(chip.clone());

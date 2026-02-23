@@ -1,19 +1,13 @@
 use std::{
     array,
-    sync::{
-        atomic::{AtomicBool, AtomicU32},
-        Arc,
-    },
+    sync::atomic::{AtomicBool, AtomicU32},
 };
 
 use dashmap::DashMap;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
-use openvm_stark_backend::interaction::{BusIndex, LookupBus};
 use rustc_hash::FxBuildHasher;
 
-use super::{
-    air::Poseidon2PeripheryAir, PERIPHERY_POSEIDON2_CHUNK_SIZE, PERIPHERY_POSEIDON2_WIDTH,
-};
+use super::{PERIPHERY_POSEIDON2_CHUNK_SIZE, PERIPHERY_POSEIDON2_WIDTH};
 use crate::arch::{
     hasher::{Hasher, HasherChip},
     VmField,
@@ -21,20 +15,15 @@ use crate::arch::{
 
 #[derive(Debug)]
 pub struct Poseidon2PeripheryBaseChip<F: VmField, const SBOX_REGISTERS: usize> {
-    pub air: Arc<Poseidon2PeripheryAir<F, SBOX_REGISTERS>>,
     pub subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
     pub records: DashMap<[F; PERIPHERY_POSEIDON2_WIDTH], AtomicU32, FxBuildHasher>,
     pub nonempty: AtomicBool,
 }
 
 impl<F: VmField, const SBOX_REGISTERS: usize> Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS> {
-    pub fn new(poseidon2_config: Poseidon2Config<F>, bus_idx: BusIndex) -> Self {
+    pub fn new(poseidon2_config: Poseidon2Config<F>) -> Self {
         let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
         Self {
-            air: Arc::new(Poseidon2PeripheryAir::new(
-                subchip.air.clone(),
-                LookupBus::new(bus_idx),
-            )),
             subchip,
             records: DashMap::default(),
             nonempty: AtomicBool::new(false),
