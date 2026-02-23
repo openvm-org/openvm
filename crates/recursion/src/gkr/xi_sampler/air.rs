@@ -14,7 +14,7 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 use crate::{
     bus::{TranscriptBus, XiRandomnessBus, XiRandomnessMessage},
     gkr::bus::{GkrXiSamplerBus, GkrXiSamplerMessage},
-    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
 };
 
 // perf(ayush): can probably get rid of this whole air if challenges -> transcript
@@ -79,34 +79,29 @@ where
         // Proof Index and Loop Constraints
         ///////////////////////////////////////////////////////////////////////
 
-        type LoopSubAir = NestedForLoopSubAir<1, 0>;
+        type LoopSubAir = NestedForLoopSubAir<1>;
         LoopSubAir {}.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.is_enabled,
-                        counter: [local.proof_idx],
-                        is_first: [local.is_first_challenge],
-                    }
-                    .map_into(),
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_enabled,
-                        counter: [next.proof_idx],
-                        is_first: [next.is_first_challenge],
-                    }
-                    .map_into(),
-                ),
-                NestedForLoopAuxCols::default(),
+                NestedForLoopIoCols {
+                    is_enabled: local.is_enabled,
+                    counter: [local.proof_idx],
+                    is_first: [local.is_first_challenge],
+                }
+                .map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: next.is_enabled,
+                    counter: [next.proof_idx],
+                    is_first: [next.is_first_challenge],
+                }
+                .map_into(),
             ),
         );
 
-        // TODO(ayush): move to NestedForLoopSubAir
-        builder
-            .when(local.is_first_challenge)
-            .assert_one(local.is_enabled);
-        let is_transition_challenge = next.is_enabled - next.is_first_challenge;
-        let is_last_challenge = local.is_enabled - is_transition_challenge.clone();
+        let is_transition_challenge =
+            LoopSubAir::local_is_transition(next.is_enabled, next.is_first_challenge);
+        let is_last_challenge =
+            LoopSubAir::local_is_last(local.is_enabled, next.is_enabled, next.is_first_challenge);
 
         // Challenge index increments by 1
         builder

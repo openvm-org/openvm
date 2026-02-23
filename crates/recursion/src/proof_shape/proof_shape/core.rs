@@ -40,7 +40,7 @@ use crate::{
         },
         AirMetadata,
     },
-    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     system::{Preflight, POW_CHECKER_HEIGHT},
     tracegen::RowMajorChip,
     utils::interaction_length,
@@ -566,22 +566,19 @@ where
 
         self.idx_encoder.eval(builder, localv.idx_flags);
 
-        NestedForLoopSubAir::<1, 0> {}.eval(
+        NestedForLoopSubAir::<1> {}.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.is_valid + local.is_last,
-                        counter: [local.proof_idx.into()],
-                        is_first: [local.is_first.into()],
-                    },
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_valid + next.is_last,
-                        counter: [next.proof_idx.into()],
-                        is_first: [next.is_first.into()],
-                    },
-                ),
-                NestedForLoopAuxCols { is_transition: [] },
+                NestedForLoopIoCols {
+                    is_enabled: local.is_valid + local.is_last,
+                    counter: [local.proof_idx.into()],
+                    is_first: [local.is_first.into()],
+                },
+                NestedForLoopIoCols {
+                    is_enabled: next.is_valid + next.is_last,
+                    counter: [next.proof_idx.into()],
+                    is_first: [next.is_first.into()],
+                },
             ),
         );
         builder

@@ -16,7 +16,7 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 use crate::{
     bus::TranscriptBus,
     primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage},
-    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     tracegen::{RowMajorChip, StandardTracegenCtx},
     utils::{ext_field_add, ext_field_multiply},
     whir::bus::{
@@ -84,37 +84,27 @@ where
 
         let proof_idx = local.proof_idx;
         let is_enabled = local.is_enabled;
-        builder.assert_bool(is_enabled);
-        builder.when(local.is_first_in_proof).assert_one(is_enabled);
-        builder.when(local.is_first_in_round).assert_one(is_enabled);
-
-        let is_same_proof = next.is_enabled - next.is_first_in_proof;
         let is_same_round = next.is_enabled - next.is_first_in_round;
 
         NestedForLoopSubAir.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled,
-                        counter: [local.proof_idx, local.whir_round, local.query_idx],
-                        is_first: [local.is_first_in_proof, local.is_first_in_round, is_enabled],
-                    }
-                    .map_into(),
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_enabled,
-                        counter: [next.proof_idx, next.whir_round, next.query_idx],
-                        is_first: [
-                            next.is_first_in_proof,
-                            next.is_first_in_round,
-                            next.is_enabled,
-                        ],
-                    }
-                    .map_into(),
-                ),
-                NestedForLoopAuxCols {
-                    is_transition: [is_same_proof.clone(), is_same_round.clone()],
-                },
+                NestedForLoopIoCols {
+                    is_enabled,
+                    counter: [local.proof_idx, local.whir_round, local.query_idx],
+                    is_first: [local.is_first_in_proof, local.is_first_in_round, is_enabled],
+                }
+                .map_into(),
+                NestedForLoopIoCols {
+                    is_enabled: next.is_enabled,
+                    counter: [next.proof_idx, next.whir_round, next.query_idx],
+                    is_first: [
+                        next.is_first_in_proof,
+                        next.is_first_in_round,
+                        next.is_enabled,
+                    ],
+                }
+                .map_into(),
             ),
         );
 
