@@ -1,4 +1,6 @@
 mod config;
+/// Streams-like deferral state
+pub mod deferral;
 /// Instruction execution traits and types.
 /// Execution bus and interface.
 pub mod execution;
