@@ -113,7 +113,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let b = b.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
     let (c_imm, c) = if is_imm.unwrap_or(rng.gen_bool(0.5)) {
         let (imm, c) = if let Some(c) = c {
-            ((c[0] as u32 | (c[1] as u32) << 8 | (c[2] as u32) << 16) as usize, c)
+            ((u64::from_le_bytes(c) & 0xFFFFFF) as usize, c)
         } else {
             generate_rv64_is_type_immediate(rng)
         };
@@ -353,11 +353,12 @@ fn rv64_lt_zero_diff_marker_negative_test() {
 
 #[test]
 fn rv64_slt_wrong_b_msb_negative_test() {
-    let b = [145, 34, 25, 205, 255, 255, 255, 255];
-    let c = [73, 35, 25, 205, 255, 255, 255, 255];
+    // b[7]=c[7]=205, actual diff at byte 1. Prank b_msb to 206 → b_diff constraint fails.
+    let b = [145, 34, 25, 0, 0, 0, 0, 205];
+    let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
         b_msb: Some(206),
-        diff_marker: Some([0, 0, 0, 1, 0, 0, 0, 0]),
+        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
         diff_val: Some(1),
         ..Default::default()
     };
@@ -366,24 +367,27 @@ fn rv64_slt_wrong_b_msb_negative_test() {
 
 #[test]
 fn rv64_slt_wrong_b_msb_sign_negative_test() {
-    let b = [145, 34, 25, 205, 255, 255, 255, 255];
-    let c = [73, 35, 25, 205, 255, 255, 255, 255];
+    // b[7]=c[7]=205 (negative). Prank b_msb_f to 205 (raw byte instead of 205-256=-51).
+    // b_diff=0 so constraint passes, but range check sends 205+128=333 → interaction error.
+    let b = [145, 34, 25, 0, 0, 0, 0, 205];
+    let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
         b_msb: Some(205),
-        diff_marker: Some([0, 0, 0, 1, 0, 0, 0, 0]),
+        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
         diff_val: Some(256),
         ..Default::default()
     };
-    run_negative_less_than_test(SLT, b, c, false, prank_vals, false);
+    run_negative_less_than_test(SLT, b, c, false, prank_vals, true);
 }
 
 #[test]
 fn rv64_slt_wrong_c_msb_negative_test() {
-    let b = [145, 36, 25, 205, 255, 255, 255, 255];
-    let c = [73, 35, 25, 205, 255, 255, 255, 255];
+    // b[7]=c[7]=205, actual diff at byte 1. Prank c_msb to 204 → c_diff constraint fails.
+    let b = [145, 36, 25, 0, 0, 0, 0, 205];
+    let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
         c_msb: Some(204),
-        diff_marker: Some([0, 0, 0, 1, 0, 0, 0, 0]),
+        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
         diff_val: Some(1),
         ..Default::default()
     };
@@ -392,24 +396,27 @@ fn rv64_slt_wrong_c_msb_negative_test() {
 
 #[test]
 fn rv64_slt_wrong_c_msb_sign_negative_test() {
-    let b = [145, 36, 25, 205, 255, 255, 255, 255];
-    let c = [73, 35, 25, 205, 255, 255, 255, 255];
+    // c[7]=205 (negative). Prank c_msb_f to 205 (raw byte instead of -51).
+    // c_diff=0 so constraint passes, but range check sends 205+128=333 → interaction error.
+    let b = [145, 36, 25, 0, 0, 0, 0, 205];
+    let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
         c_msb: Some(205),
-        diff_marker: Some([0, 0, 0, 1, 0, 0, 0, 0]),
+        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
         diff_val: Some(256),
         ..Default::default()
     };
-    run_negative_less_than_test(SLT, b, c, true, prank_vals, false);
+    run_negative_less_than_test(SLT, b, c, true, prank_vals, true);
 }
 
 #[test]
 fn rv64_sltu_wrong_b_msb_negative_test() {
-    let b = [145, 36, 25, 205, 255, 255, 255, 255];
-    let c = [73, 35, 25, 205, 255, 255, 255, 255];
+    // b[7]=c[7]=205. Prank b_msb to 204 → b_diff constraint fails.
+    let b = [145, 36, 25, 0, 0, 0, 0, 205];
+    let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
         b_msb: Some(204),
-        diff_marker: Some([0, 0, 0, 1, 0, 0, 0, 0]),
+        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
         diff_val: Some(1),
         ..Default::default()
     };
@@ -418,24 +425,27 @@ fn rv64_sltu_wrong_b_msb_negative_test() {
 
 #[test]
 fn rv64_sltu_wrong_b_msb_sign_negative_test() {
-    let b = [145, 36, 25, 205, 255, 255, 255, 255];
-    let c = [73, 35, 25, 205, 255, 255, 255, 255];
+    // b[7]=205. Prank b_msb_f to -51 (=205-256). b_diff=205-(-51)=256, 256*(256-256)=0
+    // so constraint passes, but range check sends -51 which is out of range → interaction error.
+    let b = [145, 36, 25, 0, 0, 0, 0, 205];
+    let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
         b_msb: Some(-51),
-        diff_marker: Some([0, 0, 0, 1, 0, 0, 0, 0]),
+        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
         diff_val: Some(256),
         ..Default::default()
     };
-    run_negative_less_than_test(SLTU, b, c, true, prank_vals, false);
+    run_negative_less_than_test(SLTU, b, c, true, prank_vals, true);
 }
 
 #[test]
 fn rv64_sltu_wrong_c_msb_negative_test() {
-    let b = [145, 34, 25, 205, 255, 255, 255, 255];
-    let c = [73, 35, 25, 205, 255, 255, 255, 255];
+    // c[7]=205. Prank c_msb to 204 → c_diff constraint fails.
+    let b = [145, 34, 25, 0, 0, 0, 0, 205];
+    let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
         c_msb: Some(204),
-        diff_marker: Some([0, 0, 0, 1, 0, 0, 0, 0]),
+        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
         diff_val: Some(1),
         ..Default::default()
     };
@@ -444,15 +454,17 @@ fn rv64_sltu_wrong_c_msb_negative_test() {
 
 #[test]
 fn rv64_sltu_wrong_c_msb_sign_negative_test() {
-    let b = [145, 34, 25, 205, 255, 255, 255, 255];
-    let c = [73, 35, 25, 205, 255, 255, 255, 255];
+    // c[7]=205. Prank c_msb_f to -51 (=205-256). c_diff=205-(-51)=256, 256*(256-256)=0
+    // so constraint passes, but range check sends -51 which is out of range → interaction error.
+    let b = [145, 34, 25, 0, 0, 0, 0, 205];
+    let c = [73, 35, 25, 0, 0, 0, 0, 205];
     let prank_vals = LessThanPrankValues {
         c_msb: Some(-51),
-        diff_marker: Some([0, 0, 0, 1, 0, 0, 0, 0]),
+        diff_marker: Some([0, 0, 0, 0, 0, 0, 0, 1]),
         diff_val: Some(256),
         ..Default::default()
     };
-    run_negative_less_than_test(SLTU, b, c, false, prank_vals, false);
+    run_negative_less_than_test(SLTU, b, c, false, prank_vals, true);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
