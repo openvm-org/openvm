@@ -22,7 +22,9 @@ template <typename T> struct InitialOpenedValuesCols {
     T is_first_in_coset;
     T flags[CHUNK];
     T codeword_value_acc[D_EF];
-    T mu_pows[CHUNK][D_EF];
+    T codeword_value_next_acc[D_EF];
+    T mu_pows_even_clamped[CHUNK / 2][D_EF];
+    T mu_pow_last_clamped[D_EF];
     T mu[D_EF];
     T pre_state[WIDTH];
     T post_state[WIDTH];
@@ -166,15 +168,35 @@ __global__ void initial_opened_values_tracegen(
     size_t exponent_base =
         stacking_widths_psums[cp_start + commit_idx] - width_before_proof;
 
-    for (int i = 0; i < CHUNK; i++) {
-        size_t exponent = exponent_base + chunk_idx * CHUNK + (i < chunk_len - 1 ? i : chunk_len - 1);
+    const size_t chunk_base = exponent_base + chunk_idx * CHUNK;
+
+    // Fill mu_pows_even_clamped[k] = mu^(min(b + 2k, opened_row_len - 1))
+    for (int k = 0; k < CHUNK / 2; k++) {
+        size_t offset = 2 * k;
+        size_t exponent = chunk_base + (offset < chunk_len - 1 ? offset : chunk_len - 1);
         FpExt mu_pow = mu_pows[width_before_proof + exponent];
-        COL_WRITE_ARRAY(row, InitialOpenedValuesCols, mu_pows[i], mu_pow.elems);
+        COL_WRITE_ARRAY(row, InitialOpenedValuesCols, mu_pows_even_clamped[k], mu_pow.elems);
+    }
+
+    // Fill mu_pow_last_clamped = mu^(b + chunk_len - 1)
+    {
+        size_t exponent = chunk_base + chunk_len - 1;
+        FpExt mu_pow = mu_pows[width_before_proof + exponent];
+        COL_WRITE_ARRAY(row, InitialOpenedValuesCols, mu_pow_last_clamped, mu_pow.elems);
     }
 
     PoseidonStatePair state_pair = poseidon_states[row_idx];
     COL_WRITE_ARRAY(row, InitialOpenedValuesCols, pre_state, state_pair.pre_state);
     COL_WRITE_ARRAY(row, InitialOpenedValuesCols, post_state, state_pair.post_state);
+
+    // Compute codeword_value_next_acc = codeword_value_acc + sum_i(mu_pows[i] * pre_state[i])
+    FpExt next_acc = codeword_value_accs[row_idx];
+    for (size_t i = 0; i < chunk_len; i++) {
+        size_t exponent = chunk_base + i;
+        FpExt mu_pow_i = mu_pows[width_before_proof + exponent];
+        next_acc += mu_pow_i * FpExt(state_pair.pre_state[i]);
+    }
+    COL_WRITE_ARRAY(row, InitialOpenedValuesCols, codeword_value_next_acc, next_acc.elems);
 }
 
 extern "C" int _initial_opened_values_tracegen(
