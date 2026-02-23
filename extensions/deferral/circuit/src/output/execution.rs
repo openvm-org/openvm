@@ -161,7 +161,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     let output_key: [u8; OUTPUT_TOTAL_BYTES] = join_memory_ops(output_key_chunks);
     let (output_commit, output_len) = split_output(output_key);
 
-    let output_len_val = u32::from_le_bytes(output_len) as usize;
+    let output_len_val = u64::from_le_bytes(output_len) as usize;
 
     // Bytes are sponge-hashed and constrained against output_commit. Thhe
     // sponge rate is DIGEST_SIZE.

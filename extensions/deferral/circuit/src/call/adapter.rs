@@ -40,8 +40,8 @@ use crate::{
     call::{DeferralCallReads, DeferralCallWrites},
     utils::{
         bytes_to_f, combine_output, join_memory_ops, memory_op_chunk, split_memory_ops,
-        COMMIT_MEMORY_OPS, COMMIT_NUM_BYTES, DIGEST_MEMORY_OPS, MEMORY_OP_SIZE, OUTPUT_TOTAL_BYTES,
-        OUTPUT_TOTAL_MEMORY_OPS,
+        COMMIT_MEMORY_OPS, COMMIT_NUM_BYTES, DIGEST_MEMORY_OPS, F_NUM_BYTES, MEMORY_OP_SIZE,
+        OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
 };
 
@@ -157,6 +157,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             new_output_acc,
         } = ctx.writes;
 
+        let output_len_full = from_fn(|i| {
+            if i < F_NUM_BYTES {
+                output_len[i].clone()
+            } else {
+                AB::Expr::ZERO
+            }
+        });
+
         let input_commit_chunks =
             split_memory_ops::<_, COMMIT_NUM_BYTES, COMMIT_MEMORY_OPS>(input_commit);
         for (chunk_idx, (data, aux)) in input_commit_chunks
@@ -217,7 +225,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
                 .eval(builder, ctx.instruction.is_valid.clone());
         }
 
-        let output_commit_and_len = combine_output(output_commit, output_len);
+        let output_commit_and_len = combine_output(output_commit, output_len_full);
         let output_commit_and_len_chunks =
             split_memory_ops::<_, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS>(
                 output_commit_and_len,
@@ -421,7 +429,15 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
         let &Instruction { c, e, .. } = instruction;
         debug_assert_eq!(e.as_canonical_u32(), RV32_MEMORY_AS);
 
-        let output_commit_and_len = combine_output(data.output_commit, data.output_len);
+        let output_len_full = from_fn(|i| {
+            if i < F_NUM_BYTES {
+                data.output_len[i]
+            } else {
+                0u8
+            }
+        });
+
+        let output_commit_and_len = combine_output(data.output_commit, output_len_full);
         for chunk_idx in 0..OUTPUT_TOTAL_MEMORY_OPS {
             tracing_write(
                 memory,

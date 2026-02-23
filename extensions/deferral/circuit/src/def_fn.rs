@@ -30,7 +30,7 @@ impl DeferralFn {
         state: &mut DeferralState,
         deferral_idx: u32,
         hasher: &DeferralPoseidon2Chip<F>,
-    ) -> (OutputCommit, u32) {
+    ) -> (OutputCommit, u64) {
         let value = state.get_input(input_commit);
         match value {
             InputMapVal::Raw(input_raw) => {
@@ -38,11 +38,11 @@ impl DeferralFn {
                 let output_commit = hash_output_raw(hasher, deferral_idx, &output_raw);
                 let output_len = output_raw.len();
                 state.store_output(input_commit, output_commit.clone(), output_raw);
-                (output_commit, output_len as u32)
+                (output_commit, output_len as u64)
             }
             InputMapVal::Output(output_commit) => {
                 let output_raw = state.get_output(output_commit);
-                (output_commit.clone(), output_raw.len() as u32)
+                (output_commit.clone(), output_raw.len() as u64)
             }
         }
     }

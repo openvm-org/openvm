@@ -26,12 +26,12 @@ pub type Commit = [u8; COMMIT_NUM_BYTES];
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct OutputKey {
     pub output_commit: Commit,
-    pub output_len: u32,
+    pub output_len: u64,
 }
 
 impl OutputKey {
     #[inline(always)]
-    pub const fn new(output_commit: Commit, output_len: u32) -> Self {
+    pub const fn new(output_commit: Commit, output_len: u64) -> Self {
         Self {
             output_commit,
             output_len,

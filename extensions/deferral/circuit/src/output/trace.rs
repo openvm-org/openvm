@@ -178,7 +178,7 @@ where
         let output_key: [u8; OUTPUT_TOTAL_BYTES] = join_memory_ops(output_key_chunks);
         let (output_commit, output_len) = split_output(output_key);
 
-        let output_len_val = u32::from_le_bytes(output_len) as usize;
+        let output_len_val = u64::from_le_bytes(output_len) as usize;
         let num_rows = output_len_val / DIGEST_SIZE;
         debug_assert!(output_len_val.is_multiple_of(DIGEST_SIZE));
 
@@ -297,7 +297,8 @@ where
             current_commit_state[0] = F::from_u32(header.deferral_idx);
             self.count_chip.add_count(header.deferral_idx);
 
-            let output_len_bytes = ((num_rows * DIGEST_SIZE) as u32)
+            let output_len_bytes = u32::try_from(num_rows * DIGEST_SIZE)
+                .expect("deferral output length should fit a u32")
                 .to_le_bytes()
                 .map(F::from_u8);
 

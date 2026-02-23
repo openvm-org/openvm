@@ -223,9 +223,11 @@ where
         let new_input_acc = poseidon2_chip.compress(&read_data.old_input_acc, &input_commit);
         let new_output_acc = poseidon2_chip.compress(&read_data.old_output_acc, &output_f_commit);
 
+        let output_len_u32 =
+            u32::try_from(output_len).expect("deferral output length should fit in a u32");
         let write_data = DeferralCallWrites {
             output_commit: output_commit.try_into().unwrap(),
-            output_len: output_len.to_le_bytes(),
+            output_len: output_len_u32.to_le_bytes(),
             new_input_acc,
             new_output_acc,
         };

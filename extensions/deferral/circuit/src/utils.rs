@@ -7,7 +7,8 @@ use p3_field::{PrimeCharacteristicRing, PrimeField32};
 
 pub const F_NUM_BYTES: usize = 4;
 pub const COMMIT_NUM_BYTES: usize = DIGEST_SIZE * F_NUM_BYTES;
-pub const OUTPUT_TOTAL_BYTES: usize = F_NUM_BYTES + COMMIT_NUM_BYTES;
+pub const OUTPUT_LEN_NUM_BYTES: usize = 8;
+pub const OUTPUT_TOTAL_BYTES: usize = OUTPUT_LEN_NUM_BYTES + COMMIT_NUM_BYTES;
 
 // TODO: replace MEMORY_OP_SIZE with CONST_BLOCK_SIZE
 pub const MEMORY_OP_SIZE: usize = 4;
@@ -71,7 +72,7 @@ pub fn bytes_to_f<F: PrimeCharacteristicRing, T: Into<F> + Clone>(register: &[T]
 
 pub fn combine_output<T>(
     output_commit: impl IntoIterator<Item = T>,
-    output_len: [T; F_NUM_BYTES],
+    output_len: [T; OUTPUT_LEN_NUM_BYTES],
 ) -> [T; OUTPUT_TOTAL_BYTES] {
     output_commit
         .into_iter()
@@ -82,7 +83,7 @@ pub fn combine_output<T>(
 
 pub fn split_output<T>(
     output: [T; OUTPUT_TOTAL_BYTES],
-) -> ([T; COMMIT_NUM_BYTES], [T; F_NUM_BYTES]) {
+) -> ([T; COMMIT_NUM_BYTES], [T; OUTPUT_LEN_NUM_BYTES]) {
     let mut it = output.into_iter();
     let commit = from_fn(|_| it.next().unwrap());
     let len = from_fn(|_| it.next().unwrap());

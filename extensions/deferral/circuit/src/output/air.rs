@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::{array::from_fn, borrow::Borrow};
 
 use openvm_circuit::{
     arch::{ExecutionBridge, ExecutionState},
@@ -29,7 +29,8 @@ use crate::{
     poseidon2::bus::DeferralPoseidon2Bus,
     utils::{
         byte_commit_to_f, bytes_to_f, combine_output, split_memory_ops, COMMIT_NUM_BYTES,
-        DIGEST_MEMORY_OPS, MEMORY_OP_SIZE, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
+        DIGEST_MEMORY_OPS, F_NUM_BYTES, MEMORY_OP_SIZE, OUTPUT_TOTAL_BYTES,
+        OUTPUT_TOTAL_MEMORY_OPS,
     },
 };
 
@@ -59,7 +60,7 @@ pub struct DeferralOutputCols<T> {
     // The onion hash of all bytes written by this opcode invocation is
     // constrained to output_commit.
     pub output_commit: [T; COMMIT_NUM_BYTES],
-    pub output_len: [T; RV32_REGISTER_NUM_LIMBS],
+    pub output_len: [T; F_NUM_BYTES],
     pub output_commit_and_len_aux: [MemoryReadAuxCols<T>; OUTPUT_TOTAL_MEMORY_OPS],
 
     // Bytes raw_output[local_idx * DIGEST_SIZE..(local_idx + 1) * DIGEST_SIZE]
@@ -223,7 +224,15 @@ where
         // pointers. c carries deferral_idx.
         let input_ptr = bytes_to_f(&local.rs_val);
         let output_ptr = bytes_to_f(&local.rd_val);
-        let output_commit_and_len = combine_output(local.output_commit, local.output_len);
+        let output_len_full = from_fn(|i| {
+            if i < F_NUM_BYTES {
+                local.output_len[i].into()
+            } else {
+                AB::Expr::ZERO
+            }
+        });
+        let output_commit_and_len =
+            combine_output(local.output_commit.map(Into::into), output_len_full);
         let output_commit_and_len_chunks =
             split_memory_ops::<_, OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS>(
                 output_commit_and_len,
