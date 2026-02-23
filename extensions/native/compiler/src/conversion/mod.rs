@@ -4,7 +4,7 @@ use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     LocalOpcode, PhantomDiscriminant, PublishOpcode, SysPhantom, SystemOpcode, VmOpcode,
 };
-use openvm_rv32im_transpiler::BranchEqualOpcode;
+use openvm_riscv_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::{ExtensionField, PrimeField32, PrimeField64};
 use serde::{Deserialize, Serialize};
 

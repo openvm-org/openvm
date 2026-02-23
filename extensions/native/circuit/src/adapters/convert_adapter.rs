@@ -26,7 +26,7 @@ use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_MEMORY_AS,
 };
 use openvm_native_compiler::conversion::AS;
-use openvm_rv32im_circuit::adapters::tracing_write;
+use openvm_riscv_circuit::adapters::tracing_write;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,

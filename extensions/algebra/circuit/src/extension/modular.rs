@@ -500,7 +500,7 @@ pub(crate) mod phantom {
         system::memory::online::GuestMemory,
     };
     use openvm_instructions::{riscv::RV32_MEMORY_AS, PhantomDiscriminant};
-    use openvm_rv32im_circuit::adapters::read_rv32_register;
+    use openvm_riscv_circuit::adapters::read_rv32_register;
     use openvm_stark_backend::p3_field::PrimeField32;
     use rand::{rngs::StdRng, SeedableRng};
 

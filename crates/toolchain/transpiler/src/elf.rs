@@ -121,7 +121,8 @@ impl Elf {
                             symbol.st_value as u32,
                             FnBound {
                                 start: symbol.st_value as u32,
-                                end: (symbol.st_value + symbol.st_size - (ELF_WORD_SIZE as u64)) as u32,
+                                end: (symbol.st_value + symbol.st_size - (ELF_WORD_SIZE as u64))
+                                    as u32,
                                 name: offsets[&symbol.st_name].to_string(),
                             },
                         );

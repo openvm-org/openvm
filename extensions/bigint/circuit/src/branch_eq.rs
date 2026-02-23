@@ -9,9 +9,9 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
+use openvm_riscv_circuit::BranchEqualExecutor;
+use openvm_riscv_transpiler::BranchEqualOpcode;
 use openvm_rv32_adapters::Rv32HeapBranchAdapterExecutor;
-use openvm_rv32im_circuit::BranchEqualExecutor;
-use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{common::bytes_to_u64_array, Rv32BranchEqual256Executor, INT256_NUM_LIMBS};

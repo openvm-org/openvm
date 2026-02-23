@@ -6,7 +6,7 @@ use core::alloc::Layout;
 use core::fmt::Write;
 
 #[cfg(openvm_intrinsics)]
-use openvm_rv64im_guest::{hint_buffer_chunked, hint_input, hint_store_u64};
+use openvm_riscv_guest::{hint_buffer_chunked, hint_input, hint_store_u64};
 use serde::de::DeserializeOwned;
 
 #[cfg(not(openvm_intrinsics))]
@@ -60,7 +60,7 @@ fn hint_store_word(ptr: *mut u64) {
 #[inline(always)]
 pub fn hint_load_by_key(key: &[u8]) {
     #[cfg(openvm_intrinsics)]
-    openvm_rv64im_guest::hint_load_by_key(key.as_ptr(), key.len());
+    openvm_riscv_guest::hint_load_by_key(key.as_ptr(), key.len());
     #[cfg(not(openvm_intrinsics))]
     panic!("hint_load_by_key cannot run on non-zkVM platforms");
 }
@@ -120,7 +120,7 @@ pub fn reveal_bytes32(bytes: [u8; 32]) {
 pub fn reveal_u64(x: u64, index: usize) {
     let byte_index = (index * 8) as u64;
     #[cfg(openvm_intrinsics)]
-    openvm_rv64im_guest::reveal!(byte_index, x, 0);
+    openvm_riscv_guest::reveal!(byte_index, x, 0);
     #[cfg(all(not(openvm_intrinsics), feature = "std"))]
     println!("reveal {} at byte location {}", x, index * 8);
 }
@@ -130,7 +130,7 @@ pub fn reveal_u64(x: u64, index: usize) {
 #[inline(always)]
 pub fn store_u64_to_native(native_addr: u64, x: u64) {
     #[cfg(openvm_intrinsics)]
-    openvm_rv64im_guest::store_to_native!(native_addr, x);
+    openvm_riscv_guest::store_to_native!(native_addr, x);
     #[cfg(not(openvm_intrinsics))]
     panic!("store_to_native_u64 cannot run on non-zkVM platforms");
 }

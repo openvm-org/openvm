@@ -4,9 +4,9 @@ use openvm_circuit::arch::instructions::{
     LocalOpcode,
 };
 use openvm_continuations::F;
+use openvm_decoder::instruction_formats::IType;
 use openvm_native_compiler::{asm::A0, conversion::AS, NativeJalOpcode};
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
-use openvm_decoder::instruction_formats::IType;
 
 const OPCODE: u32 = 0x0b;
 const FUNCT3: u32 = 0b111;

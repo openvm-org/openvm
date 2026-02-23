@@ -16,10 +16,8 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_native_compiler::NativeBranchEqualOpcode;
-use openvm_rv32im_circuit::{
-    adapters::RV_B_TYPE_IMM_BITS, BranchEqualCoreAir, BranchEqualCoreCols,
-};
-use openvm_rv32im_transpiler::BranchEqualOpcode;
+use openvm_riscv_circuit::{adapters::RV_B_TYPE_IMM_BITS, BranchEqualCoreAir, BranchEqualCoreCols};
+use openvm_riscv_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{FieldAlgebra, PrimeField32},

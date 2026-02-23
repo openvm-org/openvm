@@ -130,7 +130,7 @@ pub(crate) mod phantom {
         bn254::BN254_NUM_LIMBS,
         pairing::{FinalExp, MultiMillerLoop},
     };
-    use openvm_rv32im_circuit::adapters::{memory_read, read_rv32_register};
+    use openvm_riscv_circuit::adapters::{memory_read, read_rv32_register};
     use openvm_stark_backend::p3_field::Field;
     use rand::rngs::StdRng;
 

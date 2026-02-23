@@ -1,5 +1,5 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
-use openvm_rv32im_circuit::BranchEqualCoreAir;
+use openvm_riscv_circuit::BranchEqualCoreAir;
 
 mod core;
 mod execution;

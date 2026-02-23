@@ -3,7 +3,7 @@
 
 use openvm_instructions::LocalOpcode;
 use openvm_instructions_derive::LocalOpcode;
-use openvm_rv32im_transpiler::BranchEqualOpcode;
+use openvm_riscv_transpiler::BranchEqualOpcode;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 

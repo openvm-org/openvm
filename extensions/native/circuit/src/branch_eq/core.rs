@@ -7,8 +7,8 @@ use openvm_circuit::{
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::NativeBranchEqualOpcode;
-use openvm_rv32im_circuit::BranchEqualCoreCols;
-use openvm_rv32im_transpiler::BranchEqualOpcode;
+use openvm_riscv_circuit::BranchEqualCoreCols;
+use openvm_riscv_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 #[repr(C)]

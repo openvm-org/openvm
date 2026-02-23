@@ -10,7 +10,7 @@ repository.workspace = true
 [dependencies]
 openvm-algebra-moduli-macros = { workspace = true }
 openvm-algebra-complex-macros = { workspace = true }
-openvm-rv32im-guest = { workspace = true }
+openvm-riscv-guest = { workspace = true }
 openvm-custom-insn = { workspace = true }
 serde-big-array.workspace = true
 strum_macros.workspace = true

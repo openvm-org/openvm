@@ -13,7 +13,7 @@ openvm-stark-sdk = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit = { workspace = true }
-openvm-rv32im-circuit = { workspace = true }
+openvm-riscv-circuit = { workspace = true }
 openvm-instructions = { workspace = true }
 
 itertools.workspace = true

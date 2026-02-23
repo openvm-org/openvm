@@ -44,7 +44,7 @@ use openvm_native_compiler::{
     NativeLoadStoreOpcode::*,
     NativePhantom, NativeRangeCheckOpcode, Poseidon2Opcode,
 };
-use openvm_rv32im_transpiler::BranchEqualOpcode::*;
+use openvm_riscv_transpiler::BranchEqualOpcode::*;
 use openvm_stark_backend::{
     config::StarkGenericConfig, engine::StarkEngine, p3_field::FieldAlgebra,
 };

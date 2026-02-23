@@ -20,9 +20,8 @@ openvm-stark-sdk.workspace = true
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-algebra-transpiler.workspace = true
 openvm-bigint-circuit.workspace = true
-openvm-rv32im-circuit.workspace = true
-openvm-rv32im-transpiler.workspace = true
-openvm-rv64im-transpiler.workspace = true
+openvm-riscv-circuit.workspace = true
+openvm-riscv-transpiler.workspace = true
 openvm-algebra-circuit.workspace = true
 openvm-ecc-circuit = { workspace = true }
 openvm-instructions = { workspace = true }
@@ -38,11 +37,11 @@ num-bigint.workspace = true
 [features]
 default = ["parallel"]
 parallel = ["openvm-circuit/parallel"]
-cuda = ["openvm-rv32im-circuit/cuda"]
+cuda = ["openvm-riscv-circuit/cuda"]
 tco = ["openvm-circuit/tco"]
 aot = [
     "openvm-circuit/aot",
-    "openvm-rv32im-circuit/aot",
+    "openvm-riscv-circuit/aot",
     "openvm-algebra-circuit/aot",
     "openvm-bigint-circuit/aot",
     "openvm-ecc-circuit/aot",

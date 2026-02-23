@@ -21,7 +21,7 @@ use openvm_continuations::verifier::{
 use openvm_native_circuit::{NativeConfig, NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_native_recursion::hints::Hintable;
-use openvm_rv32im_circuit::{Rv32ImConfig, Rv32ImCpuBuilder};
+use openvm_riscv_circuit::{Rv64ImConfig, Rv64ImCpuBuilder};
 use openvm_stark_backend::{
     p3_matrix::dense::RowMajorMatrix,
     prover::{
@@ -131,7 +131,7 @@ pub(super) fn dummy_leaf_proof_riscv_app_vm(
     app_fri_params: FriParameters,
 ) -> Result<Proof<SC>, VirtualMachineError> {
     let app_vm_pk = Arc::new(dummy_riscv_app_vm_pk(num_public_values, app_fri_params)?);
-    let app_proof = dummy_app_proof(Rv32ImCpuBuilder, app_vm_pk.clone())?;
+    let app_proof = dummy_app_proof(Rv64ImCpuBuilder, app_vm_pk.clone())?;
     dummy_leaf_proof(leaf_vm_pk, app_vm_pk, &app_proof)
 }
 
@@ -169,11 +169,11 @@ where
 fn dummy_riscv_app_vm_pk(
     num_public_values: usize,
     fri_params: FriParameters,
-) -> Result<VmProvingKey<SC, Rv32ImConfig>, VirtualMachineError> {
-    let vm_config = Rv32ImConfig::with_public_values(num_public_values);
+) -> Result<VmProvingKey<SC, Rv64ImConfig>, VirtualMachineError> {
+    let vm_config = Rv64ImConfig::with_public_values(num_public_values);
     let (_, vm_pk) = VirtualMachine::new_with_keygen(
         BabyBearPoseidon2Engine::new(fri_params),
-        Rv32ImCpuBuilder,
+        Rv64ImCpuBuilder,
         vm_config.clone(),
     )?;
     Ok(VmProvingKey {
