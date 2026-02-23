@@ -2,7 +2,7 @@
 
 ## Overview
 
-This SubAir ensures that the first row of each loop iteration at each nesting level is properly marked with the `is_first` flag. It is parameterized by const generics `DEPTH_MINUS_ONE` and `DEPTH_MINUS_TWO` (e.g., `NestedForLoopSubAir<1, 0>` for a single nested loop, `NestedForLoopSubAir<2, 1>` for two nested loops). It also enforces that `is_enabled` is boolean and that disabled rows only appear after all enabled rows.
+This SubAir ensures that the first row of each loop iteration at each nesting level is properly marked with the `is_first` flag. It is parameterized by a const generic `DEPTH_MINUS_ONE` (e.g., `NestedForLoopSubAir<1>` for a single nested loop, `NestedForLoopSubAir<2>` for two nested loops). It also enforces that `is_enabled` is boolean and that disabled rows only appear after all enabled rows.
 
 ## Columns
 
@@ -13,10 +13,7 @@ For a nested loop with `DEPTH` levels (numbered 0 to `DEPTH-1`), where level 0 i
 - **counter**: Array of loop counters for all parent loops (excludes innermost loop, levels 0 to `DEPTH-2`)
 - **is_first**: Array of flags indicating the first row of each loop iteration (excludes outermost loop, levels 1 to `DEPTH-1`)
 
-**Auxiliary columns (`NestedForLoopAuxCols`):**
-- **is_transition**: Array of parent loop transition flags (excludes outermost loop, levels 1 to `DEPTH-2`)
-
-**Note:** The current (innermost) level (level `DEPTH-1`) does not have `counter` or auxiliary columns. The caller should add these columns if needed.
+**Note:** The current (innermost) level (level `DEPTH-1`) does not have `counter` columns. The caller should add these columns if needed.
 
 ### Behavior
 
@@ -31,7 +28,6 @@ For a nested loop with `DEPTH` levels (numbered 0 to `DEPTH-1`), where level 0 i
 - `is_enabled` is boolean and once it becomes `0`, it stays `0` for all subsequent rows
 - `counter[level]` increments by 0 or 1 for all parent loops (excludes innermost loop, levels 0 to `DEPTH-2`)
 - `is_first[level]` flags for all loops (excludes outermost loop, levels 1 to `DEPTH-1`) are set correctly at loop iteration boundaries (on enabled rows only)
-- `is_transition[level]` auxiliary flags mark transitions within parent loop iterations (excludes outermost loop, levels 1 to `DEPTH-2`) (on enabled rows only)
 
 **What the caller must constrain:**
 - Initial or final values of `counter[level]` (for all parent loops, excludes innermost loop)
@@ -54,7 +50,6 @@ for i in 0..N {
 Add columns:
 - **counter**: `T` - counter for current (innermost) loop
 - **loop_io**: `NestedForLoopIoCols<T, 2>` - I/O loop columns
-- **loop_aux**: `NestedForLoopAuxCols<T, 1>` - auxiliary loop columns
 
 Example constraint code:
 ```rust
@@ -98,7 +93,7 @@ let counter_diff = next_io.counter[level] - local_io.counter[level];
 #### `counter[level]` increments by 0 or 1 while enabled
 
 $$
-\text{is\\_enabled}\_{\text{next}} \Rightarrow \Delta\text{counter} \in \\\{0, 1\\\}\qquad (1)
+\text{is\_enabled}\_{\text{next}} \Rightarrow \Delta\text{counter} \in \\\{0, 1\\\}\qquad (1)
 $$
 ```rust
 // Level 0
@@ -119,7 +114,7 @@ builder
 Disabled rows can only appear once all enabled rows have finished.
 
 $$
-\neg \text{is\\_enabled}\_{\text{local}} \Rightarrow \neg \text{is\\_enabled}\_{\text{next}} \qquad (2)
+\neg \text{is\_enabled}\_{\text{local}} \Rightarrow \neg \text{is\_enabled}\_{\text{next}} \qquad (2)
 $$
 ```rust
 builder
@@ -133,7 +128,7 @@ builder
 #### First row enabled sets `is_first`
 
 $$
-\text{is\\_enabled} \Rightarrow \text{is\\_first} = 1\quad \text{(first row of level)} \qquad (3)
+\text{is\_enabled} \Rightarrow \text{is\_first} = 1\quad \text{(first row of level)} \qquad (3)
 $$
 ```rust
 // Level 0 (outermost parent loop)
@@ -152,7 +147,7 @@ At transition rows within a level, $\Delta\text{counter} \neq 1 \iff \Delta\text
 ##### `is_first` not set within iteration
 
 $$
-\text{is\\_enabled}\_{\text{local}} \Rightarrow \text{is\\_first}\_{\text{next}} = 0\quad (\Delta\text{counter} \neq 1,\ \text{transition within level}) \qquad (4)
+\text{is\_enabled}\_{\text{local}} \Rightarrow \text{is\_first}\_{\text{next}} = 0\quad (\Delta\text{counter} \neq 1,\ \text{transition within level}) \qquad (4)
 $$
 ```rust
 builder
@@ -169,7 +164,7 @@ When $\Delta\text{counter} \neq 0$, we are at a loop iteration boundary.
 ##### Enabled next row sets `is_first`
 
 $$
-\text{is\\_enabled}\_{\text{next}} \Rightarrow \text{is\\_first}\_{\text{next}} = 1\quad (\Delta\text{counter} \neq 0) \qquad (5)
+\text{is\_enabled}\_{\text{next}} \Rightarrow \text{is\_first}\_{\text{next}} = 1\quad (\Delta\text{counter} \neq 0) \qquad (5)
 $$
 ```rust
 builder
@@ -182,31 +177,31 @@ builder
 
 These cases apply at each loop level independently.
 
-### 1. Single Row ($\text{is\\_enabled} = 1$)
+### 1. Single Row ($\text{is\_enabled} = 1$)
 
-- By (3): $\text{is\\_first} = 1$
+- By (3): $\text{is\_first} = 1$
 
 Single enabled row has `is_first` set.
 
-### 2. Single Loop Iteration ($\Delta\text{counter} \neq 1$ for all transition rows, $\text{is\\_enabled} = 1$)
+### 2. Single Loop Iteration ($\Delta\text{counter} \neq 1$ for all transition rows, $\text{is\_enabled} = 1$)
 
-- By (3): $\text{is\\_first} = 1$ on first row
-- By (4): $\text{is\\_first} = 0$ on all interior rows
+- By (3): $\text{is\_first} = 1$ on first row
+- By (4): $\text{is\_first} = 0$ on all interior rows
 
 Loop iteration has `is_first` set on first row only.
 
 ### 3. Multiple Loop Iterations
 
-#### 3.1. Within Loop Iteration ($\Delta\text{counter} \neq 1$, $\text{is\\_enabled}\_{\text{local}} = 1$)
+#### 3.1. Within Loop Iteration ($\Delta\text{counter} \neq 1$, $\text{is\_enabled}\_{\text{local}} = 1$)
 
-- By (4): $\text{is\\_first}\_{\text{next}} = 0$
+- By (4): $\text{is\_first}\_{\text{next}} = 0$
 - By (2): once a row disables the loop, later rows stay disabled
 
 Interior enabled rows keep `is_first` unset, and once disabled the loop cannot resume.
 
-#### 3.2. At Loop Iteration Boundaries ($\Delta\text{counter} \neq 0$, $\text{is\\_enabled}\_{\text{next}} = 1$)
+#### 3.2. At Loop Iteration Boundaries ($\Delta\text{counter} \neq 0$, $\text{is\_enabled}\_{\text{next}} = 1$)
 
-- By (5): $\text{is\\_first}\_{\text{next}} = 1$
+- By (5): $\text{is\_first}\_{\text{next}} = 1$
 
 Any transition to a new iteration has `is_first` set.
 
@@ -214,11 +209,9 @@ Any transition to a new iteration has `is_first` set.
 
 For loops nested within parent loops (level > 0), constraints use the parent loop's (`level - 1`) `is_first` and `is_transition` values.
 
-The `is_transition[parent_level]` column stores the parent transition value to reduce the constraint degree. This value ensures child loop constraints are only enforced when transitioning within the parent loop iteration.
+The `is_transition` for a parent level is computed inline as `next_is_enabled - parent_next_is_first`, which is a linear expression. This ensures child loop constraints are only enforced when transitioning within the parent loop iteration.
 
 ```rust
-// calculated as: next_io.is_enabled * (1 - next_io.is_first[parent_level])
 let parent_is_transition = Self::local_is_transition(next_io.is_enabled, next_io.is_first[parent_level]);
-
-builder.assert_eq(local_aux.is_transition[parent_level], parent_is_transition.clone());
+builder.when(parent_is_transition)
 ```

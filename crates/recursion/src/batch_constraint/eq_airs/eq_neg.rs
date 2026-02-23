@@ -26,7 +26,7 @@ use crate::{
         EqNegBaseRandBus, EqNegBaseRandMessage, EqNegResultBus, EqNegResultMessage, SelUniBus,
         SelUniBusMessage,
     },
-    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     tracegen::RowMajorChip,
     utils::{
@@ -256,56 +256,51 @@ where
         let local: &EqNegCols<AB::Var> = (*local).borrow();
         let next: &EqNegCols<AB::Var> = (*next).borrow();
 
-        NestedForLoopSubAir::<3, 2> {}.eval(
+        NestedForLoopSubAir::<3> {}.eval(
             builder,
             (
-                (
-                    NestedForLoopIoCols {
-                        is_enabled: local.is_valid.into(),
-                        counter: [
-                            local.proof_idx.into(),
-                            local.neg_hypercube.into(),
-                            local.row_index.into(),
-                        ],
-                        is_first: [
-                            local.is_first.into(),
-                            local.is_first_hypercube.into(),
-                            AB::Expr::ONE,
-                        ],
-                    },
-                    NestedForLoopIoCols {
-                        is_enabled: next.is_valid.into(),
-                        counter: [
-                            next.proof_idx.into(),
-                            next.neg_hypercube.into(),
-                            next.row_index.into(),
-                        ],
-                        is_first: [
-                            next.is_first.into(),
-                            next.is_first_hypercube.into(),
-                            AB::Expr::ONE,
-                        ],
-                    },
-                ),
-                NestedForLoopAuxCols {
-                    is_transition: [
-                        local.is_valid - local.is_last,
-                        local.is_valid - local.is_last_hypercube,
+                NestedForLoopIoCols {
+                    is_enabled: local.is_valid.into(),
+                    counter: [
+                        local.proof_idx.into(),
+                        local.neg_hypercube.into(),
+                        local.row_index.into(),
+                    ],
+                    is_first: [
+                        local.is_first.into(),
+                        local.is_first_hypercube.into(),
+                        local.is_valid.into(),
+                    ],
+                },
+                NestedForLoopIoCols {
+                    is_enabled: next.is_valid.into(),
+                    counter: [
+                        next.proof_idx.into(),
+                        next.neg_hypercube.into(),
+                        next.row_index.into(),
+                    ],
+                    is_first: [
+                        next.is_first.into(),
+                        next.is_first_hypercube.into(),
+                        next.is_valid.into(),
                     ],
                 },
             ),
         );
 
-        builder.assert_bool(local.is_valid);
-        builder.assert_bool(local.is_first);
-        builder.assert_bool(local.is_last);
-        builder.assert_bool(local.is_first_hypercube);
-        builder.assert_bool(local.is_last_hypercube);
-        builder.when(local.is_first).assert_one(local.is_valid);
+        // Constrain is_last and is_last_hypercube: these are kept as columns (not derived
+        // inline) because they appear as next.is_last / next.is_last_hypercube in bus
+        // multiplicities below.
+        type LoopSubAir = NestedForLoopSubAir<3>;
+        builder.assert_eq(
+            local.is_last,
+            LoopSubAir::local_is_last(local.is_valid, next.is_valid, next.is_first),
+        );
+        builder.assert_eq(
+            local.is_last_hypercube,
+            LoopSubAir::local_is_last(local.is_valid, next.is_valid, next.is_first_hypercube),
+        );
         builder.when(local.is_last).assert_one(local.is_valid);
-        builder
-            .when(local.is_first_hypercube)
-            .assert_one(local.is_valid);
         builder
             .when(local.is_last_hypercube)
             .assert_one(local.is_valid);
