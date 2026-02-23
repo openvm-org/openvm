@@ -2,21 +2,20 @@
 
 use strum_macros::FromRepr;
 
-#[cfg(target_os = "zkvm")]
 mod ops;
-#[cfg(target_os = "zkvm")]
 pub use ops::*;
 
 /// This is custom-1 defined in RISC-V spec document
 pub const OPCODE: u8 = 0x2b;
-/// All deferral operations use funct3 0b100
-pub const DEFERRAL_FUNCT3: u8 = 0b100;
+/// All deferral operations use funct3 0b111
+pub const DEFERRAL_FUNCT3: u8 = 0b111;
 /// Low bits in immediate used to pick deferral sub-opcode
 pub const DEFERRAL_OPCODE_BITS: u32 = 2;
 
 /// Location in native address space to start storing deferral accumulators
 pub const NATIVE_START_POINTER: u32 = 0;
-/// Maximum number of deferral circuits
+/// Maximum number of deferral circuits, as each deferral instruction stores its
+/// deferral idx in the most significant 10 bits of the immediate field
 pub const MAX_DEF_CIRCUITS: u16 = 1024;
 
 /// Number of bytes in a commit, used as identifiers for raw deferral inputs/outputs
@@ -25,11 +24,11 @@ pub const COMMIT_NUM_BYTES: usize = 32;
 pub type Commit = [u8; COMMIT_NUM_BYTES];
 
 /// Key for looking up raw output
-#[repr(C)]
+#[repr(C, align(4))]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct OutputKey {
     pub output_commit: Commit,
-    pub output_len_le: [u8; 4],
+    pub output_len: u32,
 }
 
 impl OutputKey {
@@ -37,13 +36,8 @@ impl OutputKey {
     pub const fn new(output_commit: Commit, output_len: u32) -> Self {
         Self {
             output_commit,
-            output_len_le: output_len.to_le_bytes(),
+            output_len,
         }
-    }
-
-    #[inline(always)]
-    pub const fn output_len(self) -> u32 {
-        u32::from_le_bytes(self.output_len_le)
     }
 
     #[inline(always)]
