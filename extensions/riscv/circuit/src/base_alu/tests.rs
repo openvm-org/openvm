@@ -115,7 +115,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let b = b.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
     let (c_imm, c) = if is_imm.unwrap_or(rng.gen_bool(0.5)) {
         let (imm, c) = if let Some(c) = c {
-            ((c[0] as u32 | (c[1] as u32) << 8 | (c[2] as u32) << 16) as usize, c)
+            ((u64::from_le_bytes(c) & 0xFFFFFF) as usize, c)
         } else {
             generate_rv64_is_type_immediate(rng)
         };

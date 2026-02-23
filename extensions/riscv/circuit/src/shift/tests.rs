@@ -125,7 +125,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let b = b.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
     let (c_imm, c) = if is_imm.unwrap_or(rng.gen_bool(0.5)) {
         let (imm, c) = if let Some(c) = c {
-            ((c[0] as u32 | (c[1] as u32) << 8 | (c[2] as u32) << 16) as usize, c)
+            ((u64::from_le_bytes(c) & 0xFFFFFF) as usize, c)
         } else {
             generate_rv64_is_type_immediate(rng)
         };
@@ -281,7 +281,7 @@ fn rv64_shift_wrong_negative_test() {
 
 #[test]
 fn rv64_sll_wrong_bit_shift_negative_test() {
-    let a = [0, 4, 4, 4, 0, 0, 0, 0];
+    let a = [0, 4, 4, 4, 4, 0, 0, 0];
     let b = [1, 1, 1, 1, 0, 0, 0, 0];
     let c = [9, 10, 100, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
@@ -290,31 +290,31 @@ fn rv64_sll_wrong_bit_shift_negative_test() {
         bit_shift_marker: Some([0, 0, 1, 0, 0, 0, 0, 0]),
         ..Default::default()
     };
-    run_negative_shift_test(SLL, a, b, c, prank_vals, false);
+    run_negative_shift_test(SLL, a, b, c, prank_vals, true);
 }
 
 #[test]
 fn rv64_sll_wrong_limb_shift_negative_test() {
-    let a = [0, 0, 2, 2, 0, 0, 0, 0];
+    let a = [0, 0, 2, 2, 2, 2, 0, 0];
     let b = [1, 1, 1, 1, 0, 0, 0, 0];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
         limb_shift_marker: Some([0, 0, 1, 0, 0, 0, 0, 0]),
         ..Default::default()
     };
-    run_negative_shift_test(SLL, a, b, c, prank_vals, false);
+    run_negative_shift_test(SLL, a, b, c, prank_vals, true);
 }
 
 #[test]
 fn rv64_sll_wrong_bit_carry_negative_test() {
-    let a = [0, 510, 510, 510, 0, 0, 0, 0];
+    let a = [0, 510, 510, 510, 510, 510, 510, 510];
     let b = [255, 255, 255, 255, 255, 255, 255, 255];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
         bit_shift_carry: Some([0, 0, 0, 0, 0, 0, 0, 0]),
         ..Default::default()
     };
-    run_negative_shift_test(SLL, a, b, c, prank_vals, false);
+    run_negative_shift_test(SLL, a, b, c, prank_vals, true);
 }
 
 #[test]
@@ -332,8 +332,11 @@ fn rv64_sll_wrong_bit_mult_side_negative_test() {
 
 #[test]
 fn rv64_srl_wrong_bit_shift_negative_test() {
+    // SRL([0,0,0,128,0,...], 9) correct result: [0,0,64,0,...].
+    // Prank bit_shift=2 (shift=10): SRL by 10 gives [0,0,32,0,...].
+    // Constraint on bit_multiplier_right catches mismatch.
     let a = [0, 0, 32, 0, 0, 0, 0, 0];
-    let b = [0, 0, 0, 128, 255, 255, 255, 255];
+    let b = [0, 0, 0, 128, 0, 0, 0, 0];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
         bit_shift: Some(2),
@@ -346,8 +349,10 @@ fn rv64_srl_wrong_bit_shift_negative_test() {
 
 #[test]
 fn rv64_srl_wrong_limb_shift_negative_test() {
+    // SRL([0,0,0,128,0,...], 9) correct: [0,0,64,0,...].
+    // Prank a places the 64 one limb lower, exposing wrong limb alignment.
     let a = [0, 64, 0, 0, 0, 0, 0, 0];
-    let b = [0, 0, 0, 128, 255, 255, 255, 255];
+    let b = [0, 0, 0, 128, 0, 0, 0, 0];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
         limb_shift_marker: Some([0, 1, 0, 0, 0, 0, 0, 0]),
@@ -358,8 +363,10 @@ fn rv64_srl_wrong_limb_shift_negative_test() {
 
 #[test]
 fn rv64_srx_wrong_bit_mult_side_negative_test() {
+    // Prank bit_multiplier_left=1, bit_multiplier_right=0 for right shifts.
+    // a=all zeros is wrong, constraint catches mismatch.
     let a = [0, 0, 0, 0, 0, 0, 0, 0];
-    let b = [0, 0, 0, 128, 255, 255, 255, 255];
+    let b = [0, 0, 0, 0, 0, 0, 0, 128];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
         bit_multiplier_left: Some(1),
@@ -372,8 +379,11 @@ fn rv64_srx_wrong_bit_mult_side_negative_test() {
 
 #[test]
 fn rv64_sra_wrong_bit_shift_negative_test() {
-    let a = [0, 0, 224, 255, 0, 0, 0, 0];
-    let b = [0, 0, 0, 128, 255, 255, 255, 255];
+    // SRA([0,...,0,128], 9) correct: [0,...,192,255] (sign-extended).
+    // Prank bit_shift=2 (shift=10): SRA by 10 gives [0,...,224,255].
+    // Constraint on bit_multiplier_right catches mismatch.
+    let a = [0, 0, 0, 0, 0, 0, 224, 255];
+    let b = [0, 0, 0, 0, 0, 0, 0, 128];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
         bit_shift: Some(2),
@@ -386,8 +396,10 @@ fn rv64_sra_wrong_bit_shift_negative_test() {
 
 #[test]
 fn rv64_sra_wrong_limb_shift_negative_test() {
-    let a = [0, 192, 255, 255, 0, 0, 0, 0];
-    let b = [0, 0, 0, 128, 255, 255, 255, 255];
+    // SRA([0,...,0,128], 9) correct: [0,...,0,192,255] (result at limbs 6-7).
+    // Prank a places the result one limb lower: [0,...,192,255,255] at limbs 5-7.
+    let a = [0, 0, 0, 0, 0, 192, 255, 255];
+    let b = [0, 0, 0, 0, 0, 0, 0, 128];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
         limb_shift_marker: Some([0, 1, 0, 0, 0, 0, 0, 0]),
