@@ -57,7 +57,7 @@ use super::{
     PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
 };
 use crate::{
-    arch::DEFAULT_RNG_SEED,
+    arch::{deferral::DeferralState, DEFAULT_RNG_SEED},
     execute_spanned,
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
@@ -124,6 +124,9 @@ pub struct Streams<F> {
     /// The key-value store for hints. Both key and value are byte arrays. Executors which
     /// read `kv_store` need to encode the key and decode the value.
     pub kv_store: Arc<dyn KvStore>,
+    /// Stores cached deferred operation inputs and outputs. Each idx corresponds to a
+    /// unique function that is constrained outside the VM in its own deferral circuit.
+    pub deferrals: Vec<DeferralState>,
 }
 
 impl<F> Streams<F> {
@@ -133,6 +136,7 @@ impl<F> Streams<F> {
             hint_stream: VecDeque::default(),
             hint_space: Vec::default(),
             kv_store: Arc::new(HashMap::new()),
+            deferrals: Vec::default(),
         }
     }
 }
