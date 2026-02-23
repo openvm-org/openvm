@@ -8,11 +8,13 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
+openvm-deferral-guest = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-instructions-derive = { workspace = true }
 openvm-transpiler = { workspace = true }
 
 p3-field = { workspace = true }
 
+rrs-lib = { workspace = true }
 serde = { workspace = true }
 strum = { workspace = true }

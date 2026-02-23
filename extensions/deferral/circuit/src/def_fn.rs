@@ -18,11 +18,11 @@ pub struct RawDeferralResult {
 }
 
 pub struct DeferralFn {
-    f: Box<dyn Fn(&InputRaw) -> OutputRaw>,
+    f: Box<dyn Fn(&InputRaw) -> OutputRaw + Send + Sync + 'static>,
 }
 
 impl DeferralFn {
-    pub fn new<FN: Fn(&InputRaw) -> OutputRaw + 'static>(f: FN) -> Self {
+    pub fn new<FN: Fn(&InputRaw) -> OutputRaw + Send + Sync + 'static>(f: FN) -> Self {
         Self { f: Box::new(f) }
     }
 
