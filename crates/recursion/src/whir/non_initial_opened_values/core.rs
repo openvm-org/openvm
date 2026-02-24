@@ -19,7 +19,10 @@ use crate::{
     },
     subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     tracegen::{RowMajorChip, StandardTracegenCtx},
-    whir::bus::{VerifyQueryBus, VerifyQueryBusMessage, WhirFoldingBus, WhirFoldingBusMessage},
+    whir::{
+        bus::{VerifyQueryBus, VerifyQueryBusMessage, WhirFoldingBus, WhirFoldingBusMessage},
+        WhirBlobCpu,
+    },
 };
 
 #[repr(C)]
@@ -211,7 +214,7 @@ where
 pub(crate) struct NonInitialOpenedValuesTraceGenerator;
 
 impl RowMajorChip<F> for NonInitialOpenedValuesTraceGenerator {
-    type Ctx<'a> = StandardTracegenCtx<'a>;
+    type Ctx<'a> = (StandardTracegenCtx<'a>, &'a WhirBlobCpu);
 
     #[tracing::instrument(level = "trace", skip_all)]
     fn generate_trace(
@@ -219,22 +222,26 @@ impl RowMajorChip<F> for NonInitialOpenedValuesTraceGenerator {
         ctx: &Self::Ctx<'_>,
         required_height: Option<usize>,
     ) -> Option<RowMajorMatrix<F>> {
-        let mvk = ctx.vk;
-        let proofs = ctx.proofs;
-        let preflights = ctx.preflights;
+        let proofs = ctx.0.proofs;
+        let preflights = ctx.0.preflights;
+        let blob = ctx.1;
+        let zi_roots = &blob.zi_roots;
+        let zis = &blob.zis;
+        let yis = &blob.yis;
+        debug_assert_eq!(proofs.len(), preflights.len());
 
-        let params = &mvk.inner.params;
+        let params = &ctx.0.vk.inner.params;
 
         let num_rounds = params.num_whir_rounds();
-        let num_queries_per_round: Vec<usize> =
-            params.whir.rounds.iter().map(|r| r.num_queries).collect();
+        let query_layout = zi_roots.layout();
         let k_whir = params.k_whir();
         let omega_k = F::two_adic_generator(k_whir);
         let rows_per_query = 1 << k_whir;
 
         let mut round_row_offsets = Vec::with_capacity(num_rounds);
         round_row_offsets.push(0usize);
-        for &num_queries in num_queries_per_round.iter().skip(1) {
+        for whir_round in 1..num_rounds {
+            let num_queries = query_layout.round_num_queries(whir_round);
             let rows_this_round = num_queries * rows_per_query;
             round_row_offsets.push(round_row_offsets.last().unwrap() + rows_this_round);
         }
@@ -286,7 +293,9 @@ impl RowMajorChip<F> for NonInitialOpenedValuesTraceGenerator {
                 cols.is_first_in_proof = F::from_bool(is_first_in_proof);
                 cols.is_first_in_round = F::from_bool(is_first_in_round);
                 cols.is_first_in_query = F::from_bool(is_first_in_query);
-                cols.zi_root = preflight.whir.zj_roots[whir_round][query_idx];
+                let query_offset = query_layout.round_query_range(whir_round).start;
+                let query = (proof_idx, whir_round, query_idx);
+                cols.zi_root = zi_roots[query];
                 cols.value_hash.copy_from_slice(
                     &preflight.codeword_states[whir_round - 1][query_idx][coset_idx][..CHUNK],
                 );
@@ -294,12 +303,10 @@ impl RowMajorChip<F> for NonInitialOpenedValuesTraceGenerator {
                     &proof.whir_proof.codeword_opened_values[whir_round - 1][query_idx][coset_idx];
                 cols.value
                     .copy_from_slice(value.as_basis_coefficients_slice());
-                let query_offset = preflight.whir.query_offsets[whir_round];
                 cols.merkle_idx_bit_src = preflight.whir.queries[query_offset + query_idx];
-                cols.zi = preflight.whir.zjs[whir_round][query_idx];
-                cols.yi.copy_from_slice(
-                    preflight.whir.yjs[whir_round][query_idx].as_basis_coefficients_slice(),
-                );
+                cols.zi = zis[query];
+                cols.yi
+                    .copy_from_slice(yis[query].as_basis_coefficients_slice());
             });
 
         Some(RowMajorMatrix::new(trace, width))

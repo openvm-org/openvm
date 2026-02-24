@@ -7,10 +7,10 @@ use core::{
 use openvm_circuit_primitives::{utils::assert_array_eq, SubAir};
 use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder, proof::Proof, BaseAirWithPublicValues, PartitionedBaseAir,
-    SystemParams,
+    interaction::InteractionBuilder, keygen::types::MultiStarkVerifyingKey, proof::Proof,
+    BaseAirWithPublicValues, PartitionedBaseAir,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, CHUNK, D_EF, EF, F};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, CHUNK, D_EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{
     extension::BinomiallyExtendable, BasedVectorSpace, PrimeCharacteristicRing, TwoAdicField,
@@ -28,7 +28,10 @@ use crate::{
     system::Preflight,
     tracegen::RowMajorChip,
     utils::{ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
-    whir::bus::{VerifyQueryBus, VerifyQueryBusMessage, WhirFoldingBus, WhirFoldingBusMessage},
+    whir::{
+        bus::{VerifyQueryBus, VerifyQueryBusMessage, WhirFoldingBus, WhirFoldingBusMessage},
+        WhirBlobCpu,
+    },
 };
 
 // (proof_idx, query_idx, coset_idx, commit_idx, col_chunk_idx)
@@ -357,19 +360,14 @@ where
     }
 }
 
+pub(crate) struct InitialOpenedValuesTraceGenerator;
+
 pub(crate) struct InitialOpenedValuesCtx<'a> {
-    pub params: &'a SystemParams,
+    pub vk: &'a MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
     pub proofs: &'a [&'a Proof<BabyBearPoseidon2Config>],
     pub preflights: &'a [&'a Preflight],
-    pub codeword_value_accs: &'a [EF],
-    pub rows_per_proof_psums: &'a [usize],
-    pub commits_per_proof_psums: &'a [usize],
-    pub stacking_chunks_psums: &'a [usize],
-    pub stacking_widths_psums: &'a [usize],
-    pub mu_pows: &'a [EF],
+    pub blob: &'a WhirBlobCpu,
 }
-
-pub(crate) struct InitialOpenedValuesTraceGenerator;
 
 impl RowMajorChip<F> for InitialOpenedValuesTraceGenerator {
     type Ctx<'a> = InitialOpenedValuesCtx<'a>;
@@ -380,15 +378,15 @@ impl RowMajorChip<F> for InitialOpenedValuesTraceGenerator {
         ctx: &Self::Ctx<'_>,
         required_height: Option<usize>,
     ) -> Option<RowMajorMatrix<F>> {
-        let params = ctx.params;
+        let params = &ctx.vk.inner.params;
         let proofs = ctx.proofs;
         let preflights = ctx.preflights;
-        let codeword_value_accs = ctx.codeword_value_accs;
-        let rows_per_proof_psums = ctx.rows_per_proof_psums;
-        let commits_per_proof_psums = ctx.commits_per_proof_psums;
-        let stacking_chunks_psums = ctx.stacking_chunks_psums;
-        let stacking_widths_psums = ctx.stacking_widths_psums;
-        let mu_pows = ctx.mu_pows;
+        let blob = ctx.blob;
+        let zi_roots = &blob.zi_roots;
+        let zis = &blob.zis;
+        let yis = &blob.yis;
+        let accs_layout = blob.codeword_value_accs.layout();
+        let codeword_value_accs = blob.codeword_value_accs.as_slice();
         debug_assert_eq!(proofs.len(), preflights.len());
 
         let k_whir = params.k_whir();
@@ -405,40 +403,17 @@ impl RowMajorChip<F> for InitialOpenedValuesTraceGenerator {
         };
         let width = InitialOpenedValuesCols::<F>::width();
         let mut trace = vec![F::ZERO; height * width];
+        let mu_pows = &blob.mu_pows;
         trace
             .par_chunks_exact_mut(width)
             .take(num_valid_rows)
             .zip(codeword_value_accs)
             .enumerate()
             .for_each(|(row_idx, (row, &codeword_value_acc))| {
-                let proof_idx = rows_per_proof_psums[1..].partition_point(|&x| x <= row_idx);
+                let (proof_idx, query_idx, coset_idx, commit_idx, chunk_idx) =
+                    accs_layout.decompose(row_idx);
                 let preflight = &preflights[proof_idx];
-
-                let record_idx = row_idx - rows_per_proof_psums[proof_idx];
-
-                let cp_start = commits_per_proof_psums[proof_idx];
-                let cp_end = commits_per_proof_psums[proof_idx + 1];
-
-                let chunks_before_proof = stacking_chunks_psums[cp_start];
-                let chunks_after_proof = stacking_chunks_psums[cp_end];
-
-                let records_per_coset_idx = chunks_after_proof - chunks_before_proof;
-
-                let coset_idx = (record_idx / records_per_coset_idx) % (1 << k_whir);
-                let num_initial_queries = params.whir.rounds.first().unwrap().num_queries;
-                let query_idx =
-                    (record_idx / (records_per_coset_idx << k_whir)) % num_initial_queries;
-
-                let local_chunk_idx = record_idx % records_per_coset_idx;
-                let absolute_chunk_idx = chunks_before_proof + local_chunk_idx;
-                let commit_idx = stacking_chunks_psums[cp_start + 1..=cp_end]
-                    .partition_point(|&x| x <= absolute_chunk_idx);
-
-                let commit_chunks_before = stacking_chunks_psums[cp_start + commit_idx];
-                let chunk_idx = absolute_chunk_idx - commit_chunks_before;
-
-                let num_chunks = stacking_chunks_psums[cp_start + commit_idx + 1]
-                    - stacking_chunks_psums[cp_start + commit_idx];
+                let chunk_len = accs_layout.chunk_len(commit_idx, chunk_idx);
 
                 let mu = preflight.stacking.stacking_batching_challenge;
 
@@ -448,19 +423,6 @@ impl RowMajorChip<F> for InitialOpenedValuesTraceGenerator {
                 let is_first_in_coset = is_first_in_commit && commit_idx == 0;
                 let is_first_in_query = is_first_in_coset && coset_idx == 0;
                 let is_first_in_proof = is_first_in_query && query_idx == 0;
-
-                let is_same_commit = chunk_idx < num_chunks - 1;
-                let chunk_len = if is_same_commit {
-                    CHUNK
-                } else {
-                    let width = stacking_widths_psums[cp_start + commit_idx + 1]
-                        - stacking_widths_psums[cp_start + commit_idx];
-                    if width % CHUNK == 0 {
-                        CHUNK
-                    } else {
-                        width % CHUNK
-                    }
-                };
 
                 cols.proof_idx = F::from_usize(proof_idx);
                 cols.is_first_in_proof = F::from_bool(is_first_in_proof);
@@ -477,17 +439,15 @@ impl RowMajorChip<F> for InitialOpenedValuesTraceGenerator {
                 cols.twiddle = omega_k.exp_u64(coset_idx as u64);
                 cols.codeword_value_acc
                     .copy_from_slice(codeword_value_acc.as_basis_coefficients_slice());
-                cols.zi_root = preflight.whir.zj_roots[0][query_idx];
-                cols.zi = preflight.whir.zjs[0][query_idx];
-                cols.yi.copy_from_slice(
-                    preflight.whir.yjs[0][query_idx].as_basis_coefficients_slice(),
-                );
+                let query = (proof_idx, 0, query_idx);
+                cols.zi_root = zi_roots[query];
+                cols.zi = zis[query];
+                cols.yi
+                    .copy_from_slice(yis[query].as_basis_coefficients_slice());
                 cols.mu.copy_from_slice(mu.as_basis_coefficients_slice());
                 cols.merkle_idx_bit_src = preflight.whir.queries[query_idx];
 
-                let width_before_proof = stacking_widths_psums[cp_start];
-                let exponent_base =
-                    stacking_widths_psums[cp_start + commit_idx] - width_before_proof;
+                let exponent_base = accs_layout.commit_width_offset(commit_idx);
                 let chunk_base = exponent_base + chunk_idx * CHUNK;
 
                 // Fill mu_pows_even_clamped[k] = mu^(min(b + 2k, opened_row_len - 1)),
@@ -495,12 +455,12 @@ impl RowMajorChip<F> for InitialOpenedValuesTraceGenerator {
                 for k in 0..CHUNK / 2 {
                     let offset = 2 * k;
                     let exponent = chunk_base + min(offset, chunk_len - 1);
-                    let mu_pow = mu_pows[width_before_proof + exponent];
+                    let mu_pow = mu_pows[(proof_idx, exponent)];
                     cols.mu_pows_even_clamped[k]
                         .copy_from_slice(mu_pow.as_basis_coefficients_slice());
                 }
                 let exponent = chunk_base + chunk_len - 1;
-                let mu_pow = mu_pows[width_before_proof + exponent];
+                let mu_pow = mu_pows[(proof_idx, exponent)];
                 cols.mu_pow_last_clamped
                     .copy_from_slice(mu_pow.as_basis_coefficients_slice());
 
@@ -522,7 +482,7 @@ impl RowMajorChip<F> for InitialOpenedValuesTraceGenerator {
                 for i in 0..chunk_len {
                     let exponent = chunk_base + i;
                     let mu_pow_coeffs: &[F] =
-                        mu_pows[width_before_proof + exponent].as_basis_coefficients_slice();
+                        mu_pows[(proof_idx, exponent)].as_basis_coefficients_slice();
                     let scalar = cols.pre_state[i];
                     for j in 0..D_EF {
                         next_acc[j] += mu_pow_coeffs[j] * scalar;
