@@ -173,7 +173,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 #[test_case(BranchLessThanOpcode::BLTU, 100)]
 #[test_case(BranchLessThanOpcode::BGE, 100)]
 #[test_case(BranchLessThanOpcode::BGEU, 100)]
-fn rand_rv64_branch_lt_test(opcode: BranchLessThanOpcode, num_ops: usize) {
+fn rand_branch_lt_test(opcode: BranchLessThanOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut harness, bitwise_chip) = create_harness(&mut tester);

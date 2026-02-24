@@ -306,7 +306,7 @@ fn rv64_bne_invalid_inv_marker_negative_test() {
         [0, 0, 7, 0, 0, 0, 0, 0],
         [0, 0, 7, 0, 0, 0, 0, 0],
         Some(true),
-        Some([0, 0, 1, 0, 0, 1, 0, 0]),
+        Some([0, 0, 1, 0, 0, 0, 0, 0]),
         false,
     );
 }
