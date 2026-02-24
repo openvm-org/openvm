@@ -2,17 +2,15 @@ use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::memory_manager::MemTracker;
 use openvm_stark_backend::{prover::AirProvingContext, SystemParams};
 
-use super::{compute_round_offsets, FinalyPolyQueryEvalCols};
+use super::{compute_round_offsets, FinalPolyQueryEvalCols, FinalPolyQueryEvalRecord};
 use crate::{
     cuda::{preflight::PreflightGpu, to_device_or_nullptr},
     tracegen::ModuleChip,
-    whir::{
-        cuda_abi::final_poly_query_eval_tracegen, cuda_tracegen::WhirBlobGpu, num_queries_per_round,
-    },
+    whir::{cuda_abi::final_poly_query_eval_tracegen, num_queries_per_round},
 };
 
 pub(in crate::whir) struct FinalPolyQueryEvalGpuCtx<'a> {
-    pub blob: &'a WhirBlobGpu,
+    pub records: &'a [FinalPolyQueryEvalRecord],
     pub params: &'a SystemParams,
     pub preflights: &'a [PreflightGpu],
 }
@@ -28,12 +26,12 @@ impl ModuleChip<GpuBackend> for FinalPolyQueryEvalGpuTraceGenerator {
         ctx: &Self::Ctx<'_>,
         required_height: Option<usize>,
     ) -> Option<AirProvingContext<GpuBackend>> {
-        let blob = ctx.blob;
+        let records = ctx.records;
         let params = ctx.params;
         let preflights = ctx.preflights;
 
         let mem = MemTracker::start("tracegen.whir_final_poly_query_eval");
-        let num_valid_rows = blob.final_poly_query_eval_records.len();
+        let num_valid_rows = records.len();
         let height = if let Some(h) = required_height {
             if h < num_valid_rows {
                 return None;
@@ -42,7 +40,7 @@ impl ModuleChip<GpuBackend> for FinalPolyQueryEvalGpuTraceGenerator {
         } else {
             num_valid_rows.next_power_of_two()
         };
-        let width = FinalyPolyQueryEvalCols::<F>::width();
+        let width = FinalPolyQueryEvalCols::<F>::width();
         let trace_d = DeviceMatrix::with_capacity(height, width);
 
         let num_queries_per_round = num_queries_per_round(params);
@@ -63,13 +61,14 @@ impl ModuleChip<GpuBackend> for FinalPolyQueryEvalGpuTraceGenerator {
             .flat_map(|preflight| preflight.cpu.whir.gammas.iter().copied())
             .collect::<Vec<_>>();
         let gammas_d = to_device_or_nullptr(&gammas_host).unwrap();
+        let records_d = to_device_or_nullptr(records).unwrap();
 
         unsafe {
             final_poly_query_eval_tracegen(
                 trace_d.buffer(),
                 num_valid_rows,
                 height,
-                &blob.final_poly_query_eval_records,
+                &records_d,
                 &gammas_d,
                 params.num_whir_rounds(),
                 rows_per_proof,
