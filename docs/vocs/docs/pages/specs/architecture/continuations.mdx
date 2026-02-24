@@ -266,9 +266,9 @@ The root subcircuit exposes a new set of public values for the static verifier. 
   - The app-level `ProgramAir` cached trace commit
   - The Merkle root of the starting app memory state (`initial_root`)
   - The initial app program counter (`initial_pc`)
-- `app_dag_commit: Digest` — cached trace commit of the leaf verifier subcircuit's `SymbolicExpressionAir`, derived from `app_vk`
-- `leaf_dag_commit: Digest` — cached trace commit of the internal-for-leaf verifier subcircuit's `SymbolicExpressionAir`, derived from `leaf_vk`
-- `internal_for_leaf_dag_commit: Digest` — cached trace commit of the first (index 0) internal-recursive layer verifier subcircuit's `SymbolicExpressionAir`, derived from `internal_for_leaf_vk`
+- `app_vk_commit: Digest` — commitment to the app VM verifier key, computed from child proof DAG commits as:
+  - `intermediate_vk_commit = H(app_dag_commit, leaf_dag_commit)`
+  - `app_vk_commit = H(intermediate_vk_commit, internal_for_leaf_dag_commit)`
 
 #### Constraints
 
@@ -285,4 +285,4 @@ The root subcircuit also constrains its own public values:
     - Computing the Merkle root of `user_public_values`, denoted `user_pvs_commit`
     - Constraining that a Merkle proof (where the path to the root depends on the `MemoryDimensions`) exists between `user_pvs_commit` and `final_root`
 - `app_exe_commit` is computed as specified above
-- `app_dag_commit`, `leaf_dag_commit`, and `internal_for_leaf_dag_commit` equal the child proof's values
+- `app_vk_commit` is computed from the child proof's `app_dag_commit`, `leaf_dag_commit`, and `internal_for_leaf_dag_commit` as specified above
