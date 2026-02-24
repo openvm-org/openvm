@@ -258,12 +258,12 @@ where
     ) -> Result<String, AotError> {
         let mut asm_str = self.generate_x86_asm(inst, pc)?;
         asm_str += &update_height_change_asm(chip_idx, 1)?;
-        // read [b:4]_1
+        // read [b:8]_1
         asm_str += &update_adapter_heights_asm(config, RV64_REGISTER_AS)?;
-        // read [c:4]_1
+        // read [c:8]_1
         asm_str += &update_adapter_heights_asm(config, RV64_REGISTER_AS)?;
         if inst.e.as_canonical_u32() != RV64_IMM_AS {
-            // read [a:4]_1
+            // read [a:8]_1
             asm_str += &update_adapter_heights_asm(config, RV64_REGISTER_AS)?;
         }
         Ok(asm_str)

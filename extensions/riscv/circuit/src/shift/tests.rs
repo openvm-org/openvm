@@ -410,21 +410,17 @@ fn rv64_sra_wrong_limb_shift_negative_test() {
 
 #[test]
 fn rv64_sra_wrong_sign_negative_test() {
+    // a is the SRL result for this input (SRA would sign-extend instead).
     // b is negative (byte 7 has sign bit set), so b_sign should be 1.
     // Pranking b_sign to 0 should cause a constraint error.
-    let b: [u8; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 0, 0, 0, 0, 128];
-    let c: [u8; RV64_REGISTER_NUM_LIMBS] = [9, 0, 0, 0, 0, 0, 0, 0];
-    // Compute the correct SRA result, then prank a to be incorrect (unsigned shift instead of signed)
-    let (correct_a, _, _) = run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(SRA, &b, &c);
-    // Prank a: use SRL result (b_sign=0 means unsigned shift, fills with 0 instead of 1)
-    let (wrong_a, _, _) = run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(SRL, &b, &c);
-    assert_ne!(correct_a, wrong_a, "SRA and SRL should differ for negative b");
-    let prank_a = wrong_a.map(|x| x as u32);
+    let a = [0, 0, 0, 0, 0, 0, 64, 0];
+    let b = [0, 0, 0, 0, 0, 0, 0, 128];
+    let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
         b_sign: Some(0),
         ..Default::default()
     };
-    run_negative_shift_test(SRA, prank_a, b, c, prank_vals, true);
+    run_negative_shift_test(SRA, a, b, c, prank_vals, true);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -436,7 +432,7 @@ fn rv64_sra_wrong_sign_negative_test() {
 #[test]
 fn run_sll_sanity_test() {
     let x: [u8; RV64_REGISTER_NUM_LIMBS] = [45, 7, 61, 186, 31, 190, 221, 200];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [91, 123, 100, 88, 49, 190, 190, 113];
+    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [91, 0, 100, 0, 49, 190, 190, 113];
     let z: [u8; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 104, 57, 232, 209, 253];
     let (result, limb_shift, bit_shift) =
         run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(SLL, &x, &y);
