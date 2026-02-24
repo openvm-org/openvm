@@ -23,9 +23,13 @@ use crate::{
     bus::{TranscriptBus, WhirOpeningPointBus, WhirOpeningPointLookupBus, WhirOpeningPointMessage},
     tracegen::{RowMajorChip, StandardTracegenCtx},
     utils::{ext_field_add, ext_field_multiply, ext_field_subtract, pow_tidx_count},
-    whir::bus::{
-        FinalPolyFoldingBus, FinalPolyFoldingMessage, FinalPolyMleEvalBus, FinalPolyMleEvalMessage,
-        WhirEqAlphaUBus, WhirEqAlphaUMessage, WhirFinalPolyBus, WhirFinalPolyBusMessage,
+    whir::{
+        bus::{
+            FinalPolyFoldingBus, FinalPolyFoldingMessage, FinalPolyMleEvalBus,
+            FinalPolyMleEvalMessage, WhirEqAlphaUBus, WhirEqAlphaUMessage, WhirFinalPolyBus,
+            WhirFinalPolyBusMessage,
+        },
+        WhirBlobCpu,
     },
 };
 
@@ -253,7 +257,7 @@ where
 pub(crate) struct FinalPolyMleEvalTraceGenerator;
 
 impl RowMajorChip<F> for FinalPolyMleEvalTraceGenerator {
-    type Ctx<'a> = StandardTracegenCtx<'a>;
+    type Ctx<'a> = (StandardTracegenCtx<'a>, &'a WhirBlobCpu);
 
     #[tracing::instrument(level = "trace", skip_all)]
     fn generate_trace(
@@ -261,13 +265,18 @@ impl RowMajorChip<F> for FinalPolyMleEvalTraceGenerator {
         ctx: &Self::Ctx<'_>,
         required_height: Option<usize>,
     ) -> Option<RowMajorMatrix<F>> {
-        let mvk = ctx.vk;
-        let proofs = ctx.proofs;
-        let preflights = ctx.preflights;
+        let proofs = ctx.0.proofs;
+        let preflights = ctx.0.preflights;
+        let blob = ctx.1;
+        let whir_round_tidx_per_round = &blob.whir_round_tidx_per_round;
+        let final_poly_at_u = &blob.final_poly_at_u;
+        let eq_partials = &blob.eq_partials;
+        let sumcheck_rows_per_proof = eq_partials.layout().items_per_proof();
         debug_assert_eq!(proofs.len(), preflights.len());
 
-        let params = &mvk.inner.params;
+        let params = &ctx.0.vk.inner.params;
         let num_vars = params.log_final_poly_len();
+        let num_whir_rounds = params.num_whir_rounds();
 
         let rows_per_proof = (1 << (num_vars + 1)) - 1;
         let total_valid_rows = rows_per_proof * proofs.len();
@@ -285,6 +294,9 @@ impl RowMajorChip<F> for FinalPolyMleEvalTraceGenerator {
 
         let folding_pow_offset = pow_tidx_count(params.whir.folding_pow_bits);
         let tidx_base_offset = params.k_whir() * (D_EF * 3 + folding_pow_offset);
+        let final_round = num_whir_rounds
+            .checked_sub(1)
+            .expect("WHIR must have at least one round");
         let mut global_row = 0usize;
 
         for (proof_idx, proof) in proofs.iter().enumerate() {
@@ -300,11 +312,11 @@ impl RowMajorChip<F> for FinalPolyMleEvalTraceGenerator {
                 .collect::<Vec<_>>();
             let eval_points = &u_all[num_sumcheck_rounds..num_sumcheck_rounds + num_vars];
 
-            let result = preflight.whir.final_poly_at_u;
-            let eq_alpha_u = preflight.whir.eq_partials.last().unwrap();
+            let result = final_poly_at_u[proof_idx];
+            let eq_alpha_u = eq_partials[(proof_idx, sumcheck_rows_per_proof - 1)];
 
             let mut buf = proof.whir_proof.final_poly.clone();
-            let tidx = preflight.whir.tidx_per_round.last().unwrap() + tidx_base_offset;
+            let tidx = whir_round_tidx_per_round[(proof_idx, final_round)] + tidx_base_offset;
 
             let mut row_in_proof = 0usize;
 

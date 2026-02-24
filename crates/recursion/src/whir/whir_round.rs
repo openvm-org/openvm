@@ -2,12 +2,9 @@ use core::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit_primitives::{encoder::Encoder, SubAir};
 use openvm_stark_backend::{
-    interaction::InteractionBuilder, keygen::types::MultiStarkVerifyingKey, proof::Proof,
-    BaseAirWithPublicValues, PartitionedBaseAir,
+    interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    BabyBearPoseidon2Config, DIGEST_SIZE, D_EF, F,
-};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{DIGEST_SIZE, D_EF, F};
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{extension::BinomiallyExtendable, BasedVectorSpace, PrimeCharacteristicRing};
 use p3_matrix::{dense::RowMajorMatrix, Matrix};
@@ -18,14 +15,16 @@ use crate::{
     bus::{CommitmentsBus, CommitmentsBusMessage, TranscriptBus, WhirModuleBus, WhirModuleMessage},
     primitives::bus::{ExpBitsLenBus, ExpBitsLenMessage},
     subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
-    system::Preflight,
     tracegen::{RowMajorChip, StandardTracegenCtx},
     utils::{ext_field_add, ext_field_multiply, ext_field_subtract, pow_tidx_count},
-    whir::bus::{
-        FinalPolyMleEvalBus, FinalPolyMleEvalMessage, FinalPolyQueryEvalBus,
-        FinalPolyQueryEvalMessage, VerifyQueriesBus, VerifyQueriesBusMessage, WhirGammaBus,
-        WhirGammaMessage, WhirQueryBus, WhirQueryBusMessage, WhirSumcheckBus,
-        WhirSumcheckBusMessage,
+    whir::{
+        bus::{
+            FinalPolyMleEvalBus, FinalPolyMleEvalMessage, FinalPolyQueryEvalBus,
+            FinalPolyQueryEvalMessage, VerifyQueriesBus, VerifyQueriesBusMessage, WhirGammaBus,
+            WhirGammaMessage, WhirQueryBus, WhirQueryBusMessage, WhirSumcheckBus,
+            WhirSumcheckBusMessage,
+        },
+        num_queries_per_round, WhirBlobCpu,
     },
 };
 
@@ -347,7 +346,7 @@ impl WhirRoundAir {
 pub(crate) struct WhirRoundTraceGenerator;
 
 impl RowMajorChip<F> for WhirRoundTraceGenerator {
-    type Ctx<'a> = StandardTracegenCtx<'a>;
+    type Ctx<'a> = (StandardTracegenCtx<'a>, &'a WhirBlobCpu);
 
     #[tracing::instrument(level = "trace", skip_all)]
     fn generate_trace(
@@ -355,37 +354,41 @@ impl RowMajorChip<F> for WhirRoundTraceGenerator {
         ctx: &Self::Ctx<'_>,
         required_height: Option<usize>,
     ) -> Option<RowMajorMatrix<F>> {
-        let mvk = ctx.vk;
-        let proofs = ctx.proofs;
-        let preflights = ctx.preflights;
-        let params = &mvk.inner.params;
+        let params = &ctx.0.vk.inner.params;
         let num_rounds = params.num_whir_rounds();
         // Encoder requires at least 2 flags to work correctly
         let encoder = Encoder::new(num_rounds.max(2), 2, false);
         match encoder.width() {
-            1 => generate_trace_impl::<1>(mvk, proofs, preflights, &encoder, required_height),
-            2 => generate_trace_impl::<2>(mvk, proofs, preflights, &encoder, required_height),
-            3 => generate_trace_impl::<3>(mvk, proofs, preflights, &encoder, required_height),
+            1 => generate_trace_impl::<1>(ctx, &encoder, required_height),
+            2 => generate_trace_impl::<2>(ctx, &encoder, required_height),
+            3 => generate_trace_impl::<3>(ctx, &encoder, required_height),
             w => panic!("unsupported encoder width: {w}"),
         }
     }
 }
 
 fn generate_trace_impl<const ENC_WIDTH: usize>(
-    mvk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-    proofs: &[&Proof<BabyBearPoseidon2Config>],
-    preflights: &[&Preflight],
+    ctx: &(StandardTracegenCtx<'_>, &WhirBlobCpu),
     whir_round_encoder: &Encoder,
     required_height: Option<usize>,
 ) -> Option<RowMajorMatrix<F>> {
+    let proofs = ctx.0.proofs;
+    let preflights = ctx.0.preflights;
+    let blob = ctx.1;
+    let tidx_per_round = &blob.whir_round_tidx_per_round;
+    let initial_claim_per_round = &blob.initial_claim_per_round;
+    let post_sumcheck_claims = &blob.post_sumcheck_claims;
+    let eq_partials = &blob.eq_partials;
+    let final_poly_at_u = &blob.final_poly_at_u;
     debug_assert_eq!(proofs.len(), preflights.len());
+    let sumcheck_rows_per_proof = post_sumcheck_claims.layout().items_per_proof();
 
-    let params = &mvk.inner.params;
+    let params = &ctx.0.vk.inner.params;
     let k_whir = params.k_whir();
-    let num_queries_per_round: Vec<usize> =
-        params.whir.rounds.iter().map(|r| r.num_queries).collect();
+    let num_whir_rounds = params.num_whir_rounds();
+    let num_queries_per_round = num_queries_per_round(params);
 
-    let rows_per_proof = params.num_whir_rounds();
+    let rows_per_proof = num_whir_rounds;
     let total_valid_rows = rows_per_proof * proofs.len();
 
     let height = if let Some(h) = required_height {
@@ -413,29 +416,31 @@ fn generate_trace_impl<const ENC_WIDTH: usize>(
             let whir_proof = &proof.whir_proof;
 
             let final_poly_eval =
-                whir.final_poly_at_u * *whir.eq_partials.last().expect("eq partials non-empty");
+                final_poly_at_u[proof_idx] * eq_partials[(proof_idx, sumcheck_rows_per_proof - 1)];
 
             let cols: &mut WhirRoundCols<F, ENC_WIDTH> = row.borrow_mut();
             cols.is_enabled = F::ONE;
             cols.proof_idx = F::from_usize(proof_idx);
             cols.whir_round = F::from_usize(i);
             cols.is_first_in_proof = F::from_bool(i == 0);
-            cols.tidx = F::from_usize(whir.tidx_per_round[i]);
+            cols.tidx = F::from_usize(tidx_per_round[(proof_idx, i)]);
             cols.num_queries = F::from_usize(num_queries_per_round[i]);
-            cols.claim
-                .copy_from_slice(whir.initial_claim_per_round[i].as_basis_coefficients_slice());
+            cols.claim.copy_from_slice(
+                initial_claim_per_round[(proof_idx, i)].as_basis_coefficients_slice(),
+            );
             cols.final_poly_mle_eval
                 .copy_from_slice(final_poly_eval.as_basis_coefficients_slice());
 
-            cols.next_claim
-                .copy_from_slice(whir.initial_claim_per_round[i + 1].as_basis_coefficients_slice());
-            let post_sumcheck_idx = if k_whir == 0 {
-                whir.post_sumcheck_claims.len() - 1
+            cols.next_claim.copy_from_slice(
+                initial_claim_per_round[(proof_idx, i + 1)].as_basis_coefficients_slice(),
+            );
+            let sumcheck_idx = if k_whir == 0 {
+                sumcheck_rows_per_proof - 1
             } else {
                 (i + 1) * k_whir - 1
             };
             cols.post_sumcheck_claim.copy_from_slice(
-                whir.post_sumcheck_claims[post_sumcheck_idx].as_basis_coefficients_slice(),
+                post_sumcheck_claims[(proof_idx, sumcheck_idx)].as_basis_coefficients_slice(),
             );
             cols.gamma
                 .copy_from_slice(whir.gammas[i].as_basis_coefficients_slice());

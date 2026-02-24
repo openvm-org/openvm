@@ -8,7 +8,7 @@ use crate::{
     tracegen::ModuleChip,
     whir::{
         cuda_abi::whir_folding_tracegen, cuda_tracegen::WhirBlobGpu, num_queries_per_round,
-        total_num_queries,
+        WhirQueryLayout,
     },
 };
 
@@ -36,7 +36,8 @@ impl ModuleChip<GpuBackend> for FoldingGpuTraceGenerator {
         let mem = MemTracker::start("tracegen.whir_folding");
         let num_rounds = params.num_whir_rounds();
         let num_queries_per_round = num_queries_per_round(params);
-        let total_queries = total_num_queries(&num_queries_per_round);
+        let query_layout = WhirQueryLayout::new(1, &num_queries_per_round);
+        let total_queries = query_layout.queries_per_proof();
         let k_whir = params.k_whir();
         let internal_nodes = (1 << k_whir) - 1;
         let num_rows_per_proof = total_queries * internal_nodes;

@@ -7,7 +7,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use super::WhirFoldingCols;
 use crate::{
     tracegen::{RowMajorChip, StandardTracegenCtx},
-    whir::total_num_queries,
+    whir::WhirBlobCpu,
 };
 
 #[repr(C)]
@@ -70,7 +70,7 @@ impl FoldRecord {
 pub(crate) struct FoldingTraceGenerator;
 
 impl RowMajorChip<F> for FoldingTraceGenerator {
-    type Ctx<'a> = StandardTracegenCtx<'a>;
+    type Ctx<'a> = (StandardTracegenCtx<'a>, &'a WhirBlobCpu);
 
     #[tracing::instrument(level = "trace", skip_all)]
     fn generate_trace(
@@ -78,17 +78,9 @@ impl RowMajorChip<F> for FoldingTraceGenerator {
         ctx: &Self::Ctx<'_>,
         required_height: Option<usize>,
     ) -> Option<RowMajorMatrix<F>> {
-        let mvk = ctx.vk;
-        let preflights = ctx.preflights;
-        let params = &mvk.inner.params;
-
-        let num_queries_per_round: Vec<usize> =
-            params.whir.rounds.iter().map(|r| r.num_queries).collect();
-        let k_whir = params.k_whir();
-        let internal_nodes = (1 << k_whir) - 1;
-
-        let num_rows_per_proof = total_num_queries(&num_queries_per_round) * internal_nodes;
-        let num_valid_rows = num_rows_per_proof * preflights.len();
+        let fold_records = &ctx.1.fold_records;
+        let num_rows_per_proof = fold_records.layout().items_per_proof();
+        let num_valid_rows = fold_records.len();
         let height = if let Some(h) = required_height {
             if h < num_valid_rows {
                 return None;
@@ -104,10 +96,7 @@ impl RowMajorChip<F> for FoldingTraceGenerator {
         for (row_idx, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
             let proof_idx = row_idx / num_rows_per_proof;
             let i = row_idx % num_rows_per_proof;
-
-            let preflight = &preflights[proof_idx];
-
-            let record = preflight.whir.fold_records[i];
+            let record = fold_records[(proof_idx, i)];
             let height = record.height as usize;
 
             let cols: &mut WhirFoldingCols<F> = row.borrow_mut();

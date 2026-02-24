@@ -16,17 +16,20 @@ use crate::{
     subairs::nested_for_loop::{NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     tracegen::RowMajorChip,
-    utils::{eq_1, ext_field_add, ext_field_multiply},
-    whir::bus::{
-        FinalPolyQueryEvalBus, FinalPolyQueryEvalMessage, WhirAlphaBus, WhirAlphaMessage,
-        WhirFinalPolyBus, WhirFinalPolyBusMessage, WhirGammaBus, WhirGammaMessage, WhirQueryBus,
-        WhirQueryBusMessage,
+    utils::{eq_1, ext_field_add, ext_field_multiply, FlattenedVec},
+    whir::{
+        bus::{
+            FinalPolyQueryEvalBus, FinalPolyQueryEvalMessage, WhirAlphaBus, WhirAlphaMessage,
+            WhirFinalPolyBus, WhirFinalPolyBusMessage, WhirGammaBus, WhirGammaMessage,
+            WhirQueryBus, WhirQueryBusMessage,
+        },
+        num_queries_per_round, WhirQueryLayout,
     },
 };
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub(in crate::whir::final_poly_query_eval) struct FinalyPolyQueryEvalCols<T> {
+pub(in crate::whir::final_poly_query_eval) struct FinalPolyQueryEvalCols<T> {
     is_enabled: T,
     // loop indices
     proof_idx: T,
@@ -69,7 +72,7 @@ impl PartitionedBaseAir<F> for FinalPolyQueryEvalAir {}
 
 impl<F> BaseAir<F> for FinalPolyQueryEvalAir {
     fn width(&self) -> usize {
-        FinalyPolyQueryEvalCols::<F>::width()
+        FinalPolyQueryEvalCols::<F>::width()
     }
 }
 
@@ -83,8 +86,8 @@ where
             main.row_slice(0).expect("window should have two elements"),
             main.row_slice(1).expect("window should have two elements"),
         );
-        let local: &FinalyPolyQueryEvalCols<AB::Var> = (*local).borrow();
-        let next: &FinalyPolyQueryEvalCols<AB::Var> = (*next).borrow();
+        let local: &FinalPolyQueryEvalCols<AB::Var> = (*local).borrow();
+        let next: &FinalPolyQueryEvalCols<AB::Var> = (*next).borrow();
 
         let k_whir_f = AB::Expr::from_usize(self.k_whir);
         let eq_phase_len =
@@ -325,7 +328,7 @@ where
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
-pub(in crate::whir) struct FinalPolyQueryEvalRecord {
+pub(crate) struct FinalPolyQueryEvalRecord {
     pub alpha: EF,
     pub query_pow: EF,
     pub gamma_eq_acc: EF,
@@ -339,18 +342,18 @@ pub(in crate::whir) fn build_final_poly_query_eval_records(
     params: &SystemParams,
     proofs: &[&Proof<BabyBearPoseidon2Config>],
     preflights: &[&Preflight],
+    zis: &FlattenedVec<F, WhirQueryLayout>,
 ) -> Vec<FinalPolyQueryEvalRecord> {
     debug_assert_eq!(proofs.len(), preflights.len());
     let k_whir = params.k_whir();
-    let num_queries_per_round: Vec<usize> =
-        params.whir.rounds.iter().map(|r| r.num_queries).collect();
+    let query_layout = zis.layout();
     let final_poly_len = 1usize << params.log_final_poly_len();
     let num_whir_rounds = params.num_whir_rounds();
 
     let mut rows_per_proof = 0usize;
-    for (whir_round, &num_queries) in num_queries_per_round.iter().enumerate() {
+    for whir_round in 0..num_whir_rounds {
         let eq_phase_len = k_whir * (num_whir_rounds - (whir_round + 1));
-        let query_count = num_queries + 1;
+        let query_count = query_layout.round_num_queries(whir_round) + 1;
         rows_per_proof += query_count * (eq_phase_len + final_poly_len);
     }
     let mut records = Vec::with_capacity(rows_per_proof * proofs.len());
@@ -363,7 +366,6 @@ pub(in crate::whir) fn build_final_poly_query_eval_records(
 
         let gammas = &preflight.whir.gammas;
         let z0s = &preflight.whir.z0s;
-        let zis = &preflight.whir.zjs;
         let alphas = &preflight.whir.alphas;
 
         let mut final_value_acc = EF::ZERO;
@@ -372,7 +374,7 @@ pub(in crate::whir) fn build_final_poly_query_eval_records(
             let gamma = gammas[whir_round];
             let mut gamma_pow = gamma;
 
-            let query_count = num_queries_per_round[whir_round] + 1;
+            let query_count = query_layout.round_num_queries(whir_round) + 1;
             for query_idx in 0..query_count {
                 let mut gamma_eq_acc = gamma_pow;
                 let mut horner_acc = EF::ZERO;
@@ -383,7 +385,7 @@ pub(in crate::whir) fn build_final_poly_query_eval_records(
                         EF::ZERO
                     }
                 } else {
-                    EF::from(zis[whir_round][query_idx - 1])
+                    EF::from(zis[(proof_idx, whir_round, query_idx - 1)])
                 };
 
                 for eval_idx in 0..eq_phase_len {
@@ -515,8 +517,7 @@ impl RowMajorChip<F> for FinalPolyQueryEvalTraceGenerator {
 
         let params = &mvk.inner.params;
         let k_whir = params.k_whir();
-        let num_queries_per_round: Vec<usize> =
-            params.whir.rounds.iter().map(|r| r.num_queries).collect();
+        let num_queries_per_round = num_queries_per_round(params);
         let final_poly_len = 1usize << params.log_final_poly_len();
         let num_whir_rounds = params.num_whir_rounds();
 
@@ -540,7 +541,7 @@ impl RowMajorChip<F> for FinalPolyQueryEvalTraceGenerator {
         } else {
             total_valid_rows.next_power_of_two()
         };
-        let width = FinalyPolyQueryEvalCols::<F>::width();
+        let width = FinalPolyQueryEvalCols::<F>::width();
         let mut trace = F::zero_vec(width * height);
         trace
             .par_chunks_exact_mut(width)
@@ -572,7 +573,7 @@ impl RowMajorChip<F> for FinalPolyQueryEvalTraceGenerator {
                 let is_same_round = is_same_query || query_idx < num_in_domain_queries;
                 let is_same_proof = is_same_round || whir_round + 1 < num_whir_rounds;
 
-                let cols: &mut FinalyPolyQueryEvalCols<F> = row.borrow_mut();
+                let cols: &mut FinalPolyQueryEvalCols<F> = row.borrow_mut();
                 cols.is_enabled = F::ONE;
                 cols.proof_idx = F::from_usize(proof_idx);
                 cols.whir_round = F::from_usize(whir_round);

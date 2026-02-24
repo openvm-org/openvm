@@ -1,4 +1,4 @@
-use core::{cmp, iter::zip};
+use core::{cmp, iter::zip, ops::Range};
 use std::sync::Arc;
 
 use itertools::{izip, Itertools};
@@ -9,7 +9,7 @@ use openvm_stark_backend::{
     poly_common::{eval_mle_evals_at_point, interpolate_quadratic_at_012, Squarable},
     proof::{Proof, WhirProof},
     prover::{AirProvingContext, CpuBackend},
-    AirRef, FiatShamirTranscript, SystemParams, TranscriptHistory, WhirConfig,
+    AirRef, FiatShamirTranscript, SystemParams, TranscriptHistory,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, CHUNK, EF, F};
 use p3_field::{Field, PrimeCharacteristicRing, PrimeField32, TwoAdicField};
@@ -23,7 +23,7 @@ use crate::{
         WhirPreflight,
     },
     tracegen::{ModuleChip, RowMajorChip, StandardTracegenCtx},
-    utils::pow_observe_sample,
+    utils::{pow_observe_sample, FlattenedLayout, FlattenedVec},
     whir::{
         bus::{
             FinalPolyFoldingBus, FinalPolyMleEvalBus, FinalPolyQueryEvalBus, VerifyQueriesBus,
@@ -31,7 +31,7 @@ use crate::{
             WhirGammaBus, WhirQueryBus, WhirSumcheckBus,
         },
         final_poly_mle_eval::FinalPolyMleEvalAir,
-        final_poly_query_eval::{FinalPolyQueryEvalAir, FinalPolyQueryEvalRecord},
+        final_poly_query_eval::FinalPolyQueryEvalAir,
         folding::{FoldRecord, WhirFoldingAir},
         initial_opened_values::InitialOpenedValuesAir,
         non_initial_opened_values::NonInitialOpenedValuesAir,
@@ -60,17 +60,307 @@ pub(crate) fn num_queries_per_round(params: &SystemParams) -> Vec<usize> {
         .collect()
 }
 
-pub(crate) fn query_offsets(num_queries_per_round: &[usize]) -> Vec<usize> {
-    let mut offsets = Vec::with_capacity(num_queries_per_round.len() + 1);
-    offsets.push(0);
-    for &num_queries in num_queries_per_round {
-        offsets.push(offsets.last().copied().unwrap() + num_queries);
-    }
-    offsets
+#[inline]
+fn eval_final_poly_at_u(final_poly: &[EF], u_tail: &[EF]) -> EF {
+    let mut evals = final_poly.to_vec();
+    eval_mle_evals_at_point(&mut evals, u_tail)
 }
 
-pub(crate) fn total_num_queries(num_queries_per_round: &[usize]) -> usize {
-    num_queries_per_round.iter().sum()
+pub(in crate::whir) type PerProofIdx = (usize, usize);
+pub(in crate::whir) type QueryIdx = (usize, usize, usize);
+
+#[derive(Clone, Debug)]
+pub(in crate::whir) struct PerProofLayout {
+    num_proofs: usize,
+    items_per_proof: usize,
+}
+
+impl PerProofLayout {
+    pub(in crate::whir) fn new(num_proofs: usize, items_per_proof: usize) -> Self {
+        Self {
+            num_proofs,
+            items_per_proof,
+        }
+    }
+
+    #[inline]
+    pub(in crate::whir) fn items_per_proof(&self) -> usize {
+        self.items_per_proof
+    }
+}
+
+impl FlattenedLayout for PerProofLayout {
+    type Index = PerProofIdx;
+
+    #[inline]
+    fn len(&self) -> usize {
+        self.num_proofs * self.items_per_proof
+    }
+
+    #[inline]
+    fn offset(&self, idx: Self::Index) -> usize {
+        let (proof_idx, item_idx) = idx;
+        debug_assert!(
+            proof_idx < self.num_proofs,
+            "proof index out of bounds: {proof_idx} >= {}",
+            self.num_proofs
+        );
+        debug_assert!(
+            item_idx < self.items_per_proof,
+            "index out of bounds: {item_idx} >= {}",
+            self.items_per_proof
+        );
+        proof_idx * self.items_per_proof + item_idx
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(in crate::whir) struct WhirQueryLayout {
+    num_proofs: usize,
+    query_offsets: Vec<usize>,
+}
+
+impl WhirQueryLayout {
+    pub(in crate::whir) fn new(num_proofs: usize, num_queries_per_round: &[usize]) -> Self {
+        let mut query_offsets = Vec::with_capacity(num_queries_per_round.len() + 1);
+        query_offsets.push(0);
+        for &num_queries in num_queries_per_round {
+            query_offsets.push(query_offsets.last().copied().unwrap() + num_queries);
+        }
+        Self {
+            num_proofs,
+            query_offsets,
+        }
+    }
+
+    #[inline]
+    pub(in crate::whir) fn num_rounds(&self) -> usize {
+        debug_assert!(!self.query_offsets.is_empty());
+        self.query_offsets.len() - 1
+    }
+
+    #[inline]
+    pub(in crate::whir) fn round_query_range(&self, whir_round: usize) -> Range<usize> {
+        debug_assert!(
+            whir_round + 1 < self.query_offsets.len(),
+            "WHIR round out of bounds: {whir_round} >= {}",
+            self.query_offsets.len().saturating_sub(1)
+        );
+        self.query_offsets[whir_round]..self.query_offsets[whir_round + 1]
+    }
+
+    #[inline]
+    pub(in crate::whir) fn round_num_queries(&self, whir_round: usize) -> usize {
+        self.round_query_range(whir_round).len()
+    }
+
+    #[inline]
+    pub(in crate::whir) fn iter_round_query_ranges(
+        &self,
+    ) -> impl Iterator<Item = (usize, Range<usize>)> + '_ {
+        (0..self.num_rounds())
+            .map(move |whir_round| (whir_round, self.round_query_range(whir_round)))
+    }
+
+    #[inline]
+    pub(in crate::whir) fn round_and_query_idx(&self, proof_query_idx: usize) -> (usize, usize) {
+        debug_assert!(
+            proof_query_idx < self.queries_per_proof(),
+            "proof query index out of bounds: {proof_query_idx} >= {}",
+            self.queries_per_proof()
+        );
+        let whir_round =
+            self.query_offsets[1..].partition_point(|&offset| offset <= proof_query_idx);
+        let query_idx = proof_query_idx - self.query_offsets[whir_round];
+        (whir_round, query_idx)
+    }
+
+    #[inline]
+    pub(in crate::whir) fn queries_per_proof(&self) -> usize {
+        *self.query_offsets.last().unwrap_or(&0)
+    }
+
+    /// Returns the raw query offset array (length = num_rounds + 1).
+    #[cfg(feature = "cuda")]
+    #[inline]
+    pub(in crate::whir) fn query_offsets(&self) -> &[usize] {
+        &self.query_offsets
+    }
+}
+
+impl FlattenedLayout for WhirQueryLayout {
+    type Index = QueryIdx;
+
+    #[inline]
+    fn len(&self) -> usize {
+        self.num_proofs * self.queries_per_proof()
+    }
+
+    #[inline]
+    fn offset(&self, idx: Self::Index) -> usize {
+        let (proof_idx, whir_round, query_idx) = idx;
+        debug_assert!(
+            proof_idx < self.num_proofs,
+            "proof index out of bounds: {proof_idx} >= {}",
+            self.num_proofs
+        );
+        debug_assert!(
+            whir_round + 1 < self.query_offsets.len(),
+            "WHIR round out of bounds: {whir_round} >= {}",
+            self.query_offsets.len().saturating_sub(1)
+        );
+        let proof_start = proof_idx * self.queries_per_proof();
+        let round_start = proof_start + self.query_offsets[whir_round];
+        let round_end = proof_start + self.query_offsets[whir_round + 1];
+        debug_assert!(
+            query_idx < round_end - round_start,
+            "query index out of bounds: {} >= {} for proof {}, round {}",
+            query_idx,
+            round_end - round_start,
+            proof_idx,
+            whir_round
+        );
+        round_start + query_idx
+    }
+}
+
+pub(in crate::whir) type CodewordAccsIdx = (usize, usize, usize, usize, usize);
+
+/// Layout for the flattened `codeword_value_accs` array in `InitialOpenedValues`.
+/// Data is ordered as `[proof][query][coset][commit][chunk]`.
+#[derive(Clone, Debug)]
+pub(in crate::whir) struct CodewordAccsLayout {
+    num_proofs: usize,
+    num_queries: usize,
+    num_cosets: usize,
+    total_chunks: usize,
+    total_width: usize,
+    commit_chunk_offsets: Vec<usize>,
+    commit_width_offsets: Vec<usize>,
+}
+
+impl CodewordAccsLayout {
+    pub(in crate::whir) fn new(
+        num_proofs: usize,
+        num_queries: usize,
+        num_cosets: usize,
+        per_commit_widths: &[usize],
+    ) -> Self {
+        let mut chunk_offsets = Vec::with_capacity(per_commit_widths.len() + 1);
+        let mut width_offsets = Vec::with_capacity(per_commit_widths.len() + 1);
+        chunk_offsets.push(0);
+        width_offsets.push(0);
+        for &w in per_commit_widths {
+            chunk_offsets.push(*chunk_offsets.last().unwrap() + w.div_ceil(CHUNK));
+            width_offsets.push(*width_offsets.last().unwrap() + w);
+        }
+        let total_chunks = *chunk_offsets.last().unwrap();
+        let total_width = *width_offsets.last().unwrap();
+        Self {
+            num_proofs,
+            num_queries,
+            num_cosets,
+            total_chunks,
+            total_width,
+            commit_chunk_offsets: chunk_offsets,
+            commit_width_offsets: width_offsets,
+        }
+    }
+
+    #[inline]
+    pub(in crate::whir) fn rows_per_proof(&self) -> usize {
+        self.total_chunks * self.num_queries * self.num_cosets
+    }
+
+    #[cfg(feature = "cuda")]
+    #[inline]
+    pub(in crate::whir) fn total_chunks(&self) -> usize {
+        self.total_chunks
+    }
+
+    #[inline]
+    pub(in crate::whir) fn total_width(&self) -> usize {
+        self.total_width
+    }
+
+    #[inline]
+    pub(in crate::whir) fn num_commits(&self) -> usize {
+        self.commit_chunk_offsets.len() - 1
+    }
+
+    #[cfg(feature = "cuda")]
+    #[inline]
+    pub(in crate::whir) fn commit_chunk_offsets(&self) -> &[usize] {
+        &self.commit_chunk_offsets
+    }
+
+    #[cfg(feature = "cuda")]
+    #[inline]
+    pub(in crate::whir) fn commit_width_offsets(&self) -> &[usize] {
+        &self.commit_width_offsets
+    }
+
+    /// Decompose a flat row index into `(proof, query, coset, commit, chunk)`.
+    #[inline]
+    pub(in crate::whir) fn decompose(&self, row_idx: usize) -> CodewordAccsIdx {
+        let rpp = self.rows_per_proof();
+        let proof_idx = row_idx / rpp;
+        let record_idx = row_idx % rpp;
+        let query_idx = record_idx / (self.num_cosets * self.total_chunks);
+        let coset_idx = (record_idx / self.total_chunks) % self.num_cosets;
+        let local_chunk_idx = record_idx % self.total_chunks;
+        let commit_idx = self.commit_chunk_offsets[1..].partition_point(|&x| x <= local_chunk_idx);
+        let chunk_idx = local_chunk_idx - self.commit_chunk_offsets[commit_idx];
+        (proof_idx, query_idx, coset_idx, commit_idx, chunk_idx)
+    }
+
+    /// Number of chunks in the given commit.
+    #[inline]
+    pub(in crate::whir) fn commit_num_chunks(&self, commit_idx: usize) -> usize {
+        self.commit_chunk_offsets[commit_idx + 1] - self.commit_chunk_offsets[commit_idx]
+    }
+
+    /// Width (number of opened values) in the given commit.
+    #[inline]
+    pub(in crate::whir) fn commit_width(&self, commit_idx: usize) -> usize {
+        self.commit_width_offsets[commit_idx + 1] - self.commit_width_offsets[commit_idx]
+    }
+
+    /// Cumulative width offset for the given commit (for `mu_pows` indexing).
+    #[inline]
+    pub(in crate::whir) fn commit_width_offset(&self, commit_idx: usize) -> usize {
+        self.commit_width_offsets[commit_idx]
+    }
+
+    /// Length of the chunk at `(commit_idx, chunk_idx)`.
+    /// The last chunk of a commit may be shorter than `CHUNK`.
+    #[inline]
+    pub(in crate::whir) fn chunk_len(&self, commit_idx: usize, chunk_idx: usize) -> usize {
+        (self.commit_width(commit_idx) - chunk_idx * CHUNK).min(CHUNK)
+    }
+}
+
+impl FlattenedLayout for CodewordAccsLayout {
+    type Index = CodewordAccsIdx;
+
+    #[inline]
+    fn len(&self) -> usize {
+        self.num_proofs * self.rows_per_proof()
+    }
+
+    #[inline]
+    fn offset(&self, (proof, query, coset, commit, chunk): Self::Index) -> usize {
+        debug_assert!(proof < self.num_proofs);
+        debug_assert!(query < self.num_queries);
+        debug_assert!(coset < self.num_cosets);
+        debug_assert!(commit < self.num_commits());
+        debug_assert!(chunk < self.commit_num_chunks(commit));
+        proof * self.rows_per_proof()
+            + query * self.num_cosets * self.total_chunks
+            + coset * self.total_chunks
+            + self.commit_chunk_offsets[commit]
+            + chunk
+    }
 }
 
 #[cfg(feature = "cuda")]
@@ -156,71 +446,32 @@ impl WhirModule {
             final_poly,
         } = &proof.whir_proof;
 
-        let &SystemParams {
-            l_skip,
-            n_stack,
-            whir:
-                WhirConfig {
-                    k: k_whir,
-                    query_phase_pow_bits: _,
-                    ..
-                },
-            log_blowup,
-            ..
-        } = &self.params;
+        let k_whir = self.params.k_whir();
         let num_queries_per_round = num_queries_per_round(&self.params);
-
-        let mut sumcheck_poly_iter = whir_sumcheck_polys.iter();
-        let all_openings = proof
-            .stacking_proof
-            .stacking_openings
-            .iter()
-            .flatten()
-            .collect_vec();
-        let mu = preflight.stacking.stacking_batching_challenge;
-        let mu_pows = mu.powers().take(all_openings.len()).collect_vec();
-        let mut claim = all_openings
-            .into_iter()
-            .zip(mu.powers())
-            .fold(EF::ZERO, |acc, (&opening, mu_pow)| acc + mu_pow * opening);
-
-        let u = preflight.stacking.sumcheck_rnd[0]
-            .exp_powers_of_2()
-            .take(l_skip)
-            .chain(preflight.stacking.sumcheck_rnd[1..].iter().copied())
-            .collect_vec();
-
+        let query_layout = WhirQueryLayout::new(1, &num_queries_per_round);
         let num_whir_rounds = self.params.num_whir_rounds();
-        let mut gammas = vec![];
-        let mut z0s = vec![];
-        let mut alphas = vec![];
-        let mut folding_pow_samples = vec![];
-        let mut query_pow_samples = vec![];
-        let mut queries = vec![];
-        let mut tidx_per_round = vec![];
-        let mut query_tidx_per_round = vec![];
-        let mut initial_claim_per_round = vec![];
-        let mut post_sumcheck_claims = vec![];
-        let mut pre_query_claims = vec![];
-        let mut zj_roots = vec![];
-        let mut zjs = vec![];
-        let mut yjs = vec![];
-        let mut eq_partials = vec![];
-        let mut eq_partial = EF::ONE;
-        let mut fold_records = vec![];
+        let total_queries = query_layout.queries_per_proof();
+        let mut gammas = Vec::with_capacity(num_whir_rounds);
+        let mut z0s = Vec::with_capacity(num_whir_rounds - 1);
+        let mut alphas = Vec::with_capacity(num_whir_rounds * k_whir);
+        let mut folding_pow_samples = Vec::with_capacity(num_whir_rounds * k_whir);
+        let mut query_pow_samples = Vec::with_capacity(num_whir_rounds);
+        let mut queries = Vec::with_capacity(total_queries);
+        let mut whir_round_tidx_per_round = Vec::with_capacity(num_whir_rounds);
+        let mut query_tidx_per_round = Vec::with_capacity(num_whir_rounds);
 
-        let mut log_rs_domain_size = l_skip + n_stack + log_blowup;
-
+        debug_assert_eq!(whir_sumcheck_polys.len(), num_whir_rounds * k_whir);
+        debug_assert_eq!(folding_pow_witnesses.len(), num_whir_rounds * k_whir);
+        debug_assert_eq!(query_phase_pow_witnesses.len(), num_whir_rounds);
         debug_assert_eq!(ood_values.len(), num_whir_rounds - 1);
         debug_assert_eq!(codeword_commits.len(), num_whir_rounds - 1);
 
         for i in 0..num_whir_rounds {
-            initial_claim_per_round.push(claim);
-            tidx_per_round.push(ts.len());
+            whir_round_tidx_per_round.push(ts.len());
 
             let num_round_queries = num_queries_per_round[i];
             for j in 0..k_whir {
-                let evals = sumcheck_poly_iter.next().unwrap();
+                let evals = &whir_sumcheck_polys[i * k_whir + j];
                 let &[ev1, ev2] = evals;
                 ts.observe_ext(ev1);
                 ts.observe_ext(ev2);
@@ -230,20 +481,9 @@ impl WhirModule {
                     self.params.whir.folding_pow_bits,
                     folding_pow_witnesses[i * k_whir + j],
                 ));
-
-                let ev0 = claim - ev1;
-                let alpha = ts.sample_ext();
-                alphas.push(alpha);
-
-                let uj = u[i * k_whir + j];
-                // Möbius eq kernel: mobius_eq_1(u, alpha) = (1 - 2*u)*(1 - alpha) + u*alpha
-                //                              = 1 - alpha - 2*u + 3*u*alpha
-                eq_partial *= EF::ONE - alpha - uj.double() + EF::from_u8(3) * uj * alpha;
-                eq_partials.push(eq_partial);
-
-                claim = interpolate_quadratic_at_012(&[ev0, ev1, ev2], alpha);
-                post_sumcheck_claims.push(claim);
+                alphas.push(ts.sample_ext());
             }
+
             if i != num_whir_rounds - 1 {
                 ts.observe_commit(codeword_commits[i]);
                 z0s.push(ts.sample_ext());
@@ -259,127 +499,139 @@ impl WhirModule {
                 self.params.whir.query_phase_pow_bits,
                 query_phase_pow_witnesses[i],
             ));
-
             query_tidx_per_round.push(ts.len());
-            let mut round_queries = vec![];
+
             for _ in 0..num_round_queries {
-                let sample = ts.sample();
-                round_queries.push(sample);
+                queries.push(ts.sample());
             }
-            queries.extend(&round_queries);
-            let gamma = ts.sample_ext();
-            gammas.push(gamma);
-
-            if let Some(&y0) = ood_values.get(i) {
-                claim += gamma * y0;
-            }
-            let mut gamma_pows = gamma.powers().skip(2);
-
-            let mut zj_roots_round = vec![];
-            let mut zjs_round = vec![];
-            let mut yjs_round = vec![];
-
-            pre_query_claims.push(claim);
-            let omega = F::two_adic_generator(log_rs_domain_size);
-            for (query_idx, sample) in round_queries.into_iter().enumerate() {
-                let index = sample.as_canonical_u32() & ((1 << (log_rs_domain_size - k_whir)) - 1);
-                let zj_root = omega.exp_u64(index as u64);
-
-                let zj = zj_root.exp_power_of_2(k_whir);
-                let record_start = fold_records.len();
-                let yj = if i == 0 {
-                    let mut codeword_vals = vec![EF::ZERO; 1 << k_whir];
-                    let mut mu_pow_iter = mu_pows.iter();
-                    for opened_rows_per_query in proof.whir_proof.initial_round_opened_rows.iter() {
-                        let opened_rows = &opened_rows_per_query[query_idx];
-                        let width = opened_rows[0].len();
-
-                        for c in 0..width {
-                            let mu_pow = mu_pow_iter.next().unwrap(); // ok; mu_pows has total_width length
-                            for j in 0..(1 << k_whir) {
-                                codeword_vals[j] += *mu_pow * opened_rows[j][c];
-                            }
-                        }
-                    }
-                    binary_k_fold(
-                        codeword_vals,
-                        &alphas[alphas.len() - k_whir..],
-                        zj_root,
-                        i,
-                        query_idx,
-                        &mut fold_records,
-                    )
-                } else {
-                    let opened_values =
-                        proof.whir_proof.codeword_opened_values[i - 1][query_idx].clone();
-                    binary_k_fold(
-                        opened_values,
-                        &alphas[alphas.len() - k_whir..],
-                        zj_root,
-                        i,
-                        query_idx,
-                        &mut fold_records,
-                    )
-                };
-                for rec in &mut fold_records[record_start..] {
-                    rec.set_final_values(zj, yj);
-                }
-                zj_roots_round.push(zj_root);
-                zjs_round.push(zj);
-                yjs_round.push(yj);
-
-                claim += gamma_pows.next().unwrap() * yj;
-            }
-            log_rs_domain_size -= 1;
-
-            zj_roots.push(zj_roots_round);
-            zjs.push(zjs_round);
-            yjs.push(yjs_round);
-
-            let _ = gamma_pows.next().unwrap();
+            gammas.push(ts.sample_ext());
         }
-        // push one for the final claim
-        initial_claim_per_round.push(claim);
-        debug_assert!(sumcheck_poly_iter.next().is_none());
-
-        // Evaluate the MLE of the table `final_poly` (interpreted as hypercube evaluations)
-        // at `u[t..]`. This matches the eval-to-coeff RS encoding semantics.
-        let t = k_whir * num_whir_rounds;
-        let final_poly_at_u = eval_mle_evals_at_point(&mut final_poly.clone(), &u[t..]);
-        let query_offsets = query_offsets(&num_queries_per_round);
-
         preflight.whir = WhirPreflight {
-            num_queries_per_round,
-            query_offsets,
+            whir_round_tidx_per_round,
+            query_tidx_per_round,
             alphas,
             z0s,
-            zj_roots,
-            zjs,
-            yjs,
             gammas,
             folding_pow_samples,
             query_pow_samples,
             queries,
-            tidx_per_round,
-            query_tidx_per_round,
-            initial_claim_per_round,
-            pre_query_claims,
-            post_sumcheck_claims,
-            eq_partials,
-            fold_records,
-            final_poly_at_u,
         };
     }
 }
 
-struct WhirBlobCpu {
+pub(crate) struct WhirBlobCpu {
+    // Flattened per-proof WHIR-derived data.
+    whir_round_tidx_per_round: FlattenedVec<usize, PerProofLayout>,
+    query_tidx_per_round: FlattenedVec<usize, PerProofLayout>,
+    initial_claim_per_round: FlattenedVec<EF, PerProofLayout>,
+    post_sumcheck_claims: FlattenedVec<EF, PerProofLayout>,
+    pre_query_claims: FlattenedVec<EF, PerProofLayout>,
+    eq_partials: FlattenedVec<EF, PerProofLayout>,
+    final_poly_at_u: Vec<EF>,
+    zi_roots: FlattenedVec<F, WhirQueryLayout>,
+    zis: FlattenedVec<F, WhirQueryLayout>,
+    yis: FlattenedVec<EF, WhirQueryLayout>,
+    fold_records: FlattenedVec<FoldRecord, PerProofLayout>,
+
+    /// Initial opened values data with layout encoding (proof, query, coset, commit, chunk).
+    codeword_value_accs: FlattenedVec<EF, CodewordAccsLayout>,
+    /// Flattened as `[proof][mu_power_idx]`, where `mu_power_idx` ranges over `total_width`.
+    mu_pows: FlattenedVec<EF, PerProofLayout>,
+}
+
+struct WhirBlobBuilder {
+    whir_round_tidx_per_round: Vec<usize>,
+    query_tidx_per_round: Vec<usize>,
+    initial_claim_per_round: Vec<EF>,
+    post_sumcheck_claims: Vec<EF>,
+    pre_query_claims: Vec<EF>,
+    eq_partials: Vec<EF>,
+    final_poly_at_u: Vec<EF>,
+    zi_roots: Vec<F>,
+    zis: Vec<F>,
+    yis: Vec<EF>,
+    fold_records: Vec<FoldRecord>,
     codeword_value_accs: Vec<EF>,
-    iov_rows_per_proof_psums: Vec<usize>,
-    commits_per_proof_psums: Vec<usize>,
-    stacking_chunks_psums: Vec<usize>,
-    stacking_widths_psums: Vec<usize>,
-    mu_pows: Vec<EF>, // flattened over proofs
-    final_poly_query_eval_records: Vec<FinalPolyQueryEvalRecord>,
+    mu_pows: Vec<EF>,
+}
+
+struct WhirBlobLayouts {
+    tidx_layout: PerProofLayout,
+    initial_claim_layout: PerProofLayout,
+    pre_query_claim_layout: PerProofLayout,
+    sumcheck_layout: PerProofLayout,
+    query_layout: WhirQueryLayout,
+    fold_layout: PerProofLayout,
+    accs_layout: CodewordAccsLayout,
+    mu_pows_layout: PerProofLayout,
+}
+
+impl WhirBlobBuilder {
+    fn with_capacities(
+        num_proofs: usize,
+        num_whir_rounds: usize,
+        sumcheck_rows_per_proof: usize,
+        queries_per_proof: usize,
+        fold_records_per_proof: usize,
+        codeword_value_accs_len: usize,
+        mu_pows_len: usize,
+    ) -> Self {
+        Self {
+            whir_round_tidx_per_round: Vec::with_capacity(num_proofs * num_whir_rounds),
+            query_tidx_per_round: Vec::with_capacity(num_proofs * num_whir_rounds),
+            initial_claim_per_round: Vec::with_capacity(num_proofs * (num_whir_rounds + 1)),
+            post_sumcheck_claims: Vec::with_capacity(num_proofs * sumcheck_rows_per_proof),
+            pre_query_claims: Vec::with_capacity(num_proofs * num_whir_rounds),
+            eq_partials: Vec::with_capacity(num_proofs * sumcheck_rows_per_proof),
+            final_poly_at_u: Vec::with_capacity(num_proofs),
+            zi_roots: Vec::with_capacity(num_proofs * queries_per_proof),
+            zis: Vec::with_capacity(num_proofs * queries_per_proof),
+            yis: Vec::with_capacity(num_proofs * queries_per_proof),
+            fold_records: Vec::with_capacity(num_proofs * fold_records_per_proof),
+            codeword_value_accs: Vec::with_capacity(codeword_value_accs_len),
+            mu_pows: Vec::with_capacity(mu_pows_len),
+        }
+    }
+
+    fn into_blob(self, layouts: WhirBlobLayouts) -> WhirBlobCpu {
+        let WhirBlobLayouts {
+            tidx_layout,
+            initial_claim_layout,
+            pre_query_claim_layout,
+            sumcheck_layout,
+            query_layout,
+            fold_layout,
+            accs_layout,
+            mu_pows_layout,
+        } = layouts;
+        WhirBlobCpu {
+            whir_round_tidx_per_round: FlattenedVec::from_parts(
+                tidx_layout.clone(),
+                self.whir_round_tidx_per_round,
+            ),
+            query_tidx_per_round: FlattenedVec::from_parts(tidx_layout, self.query_tidx_per_round),
+            initial_claim_per_round: FlattenedVec::from_parts(
+                initial_claim_layout,
+                self.initial_claim_per_round,
+            ),
+            post_sumcheck_claims: FlattenedVec::from_parts(
+                sumcheck_layout.clone(),
+                self.post_sumcheck_claims,
+            ),
+            pre_query_claims: FlattenedVec::from_parts(
+                pre_query_claim_layout,
+                self.pre_query_claims,
+            ),
+            eq_partials: FlattenedVec::from_parts(sumcheck_layout, self.eq_partials),
+            final_poly_at_u: self.final_poly_at_u,
+            zi_roots: FlattenedVec::from_parts(query_layout.clone(), self.zi_roots),
+            zis: FlattenedVec::from_parts(query_layout.clone(), self.zis),
+            yis: FlattenedVec::from_parts(query_layout, self.yis),
+            fold_records: FlattenedVec::from_parts(fold_layout, self.fold_records),
+            codeword_value_accs: FlattenedVec::from_parts(accs_layout, self.codeword_value_accs),
+            mu_pows: FlattenedVec::from_parts(mu_pows_layout, self.mu_pows),
+        }
+    }
 }
 
 impl AirModule for WhirModule {
@@ -392,8 +644,7 @@ impl AirModule for WhirModule {
         let initial_log_domain_size = params.n_stack + params.l_skip + params.log_blowup;
 
         let num_rounds = params.num_whir_rounds();
-        let num_queries_per_round: Vec<usize> =
-            params.whir.rounds.iter().map(|r| r.num_queries).collect();
+        let num_queries_per_round = num_queries_per_round(params);
 
         // Encoder requires at least 2 flags to work correctly
         let whir_round_encoder = Encoder::new(num_rounds.max(2), 2, false);
@@ -503,6 +754,231 @@ impl AirModule for WhirModule {
 }
 
 impl WhirModule {
+    fn append_derived_whir_data_for_proof(
+        proof: &Proof<BabyBearPoseidon2Config>,
+        preflight: &Preflight,
+        local_mu_pows: &[EF],
+        params: &SystemParams,
+        query_layout: &WhirQueryLayout,
+        blob: &mut WhirBlobBuilder,
+    ) {
+        let k_whir = params.k_whir();
+        let num_whir_rounds = params.num_whir_rounds();
+        let l_skip = params.l_skip;
+        let initial_log_rs_domain_size = params.l_skip + params.n_stack + params.log_blowup;
+
+        let mut sumcheck_poly_iter = proof.whir_proof.whir_sumcheck_polys.iter();
+        let mut claim = proof
+            .stacking_proof
+            .stacking_openings
+            .iter()
+            .flatten()
+            .zip(local_mu_pows.iter())
+            .fold(EF::ZERO, |acc, (&opening, &mu_pow)| acc + mu_pow * opening);
+
+        let u = preflight.stacking.sumcheck_rnd[0]
+            .exp_powers_of_2()
+            .take(l_skip)
+            .chain(preflight.stacking.sumcheck_rnd[1..].iter().copied())
+            .collect_vec();
+
+        let mut eq_partial = EF::ONE;
+        for (i, query_range) in query_layout.iter_round_query_ranges() {
+            let round_queries = &preflight.whir.queries[query_range];
+            let log_rs_domain_size = initial_log_rs_domain_size - i;
+
+            blob.initial_claim_per_round.push(claim);
+
+            for j in 0..k_whir {
+                let evals = sumcheck_poly_iter.next().unwrap();
+                let &[ev1, ev2] = evals;
+                let ev0 = claim - ev1;
+                let alpha = preflight.whir.alphas[i * k_whir + j];
+                let uj = u[i * k_whir + j];
+                // Möbius eq kernel: mobius_eq_1(u, alpha) = (1 - 2*u)*(1 - alpha) + u*alpha
+                //                              = 1 - alpha - 2*u + 3*u*alpha
+                eq_partial *= EF::ONE - alpha - uj.double() + EF::from_u8(3) * uj * alpha;
+                blob.eq_partials.push(eq_partial);
+
+                claim = interpolate_quadratic_at_012(&[ev0, ev1, ev2], alpha);
+                blob.post_sumcheck_claims.push(claim);
+            }
+
+            let gamma = preflight.whir.gammas[i];
+            if let Some(&y0) = proof.whir_proof.ood_values.get(i) {
+                claim += gamma * y0;
+            }
+            let mut gamma_pows = gamma.powers().skip(2);
+
+            blob.pre_query_claims.push(claim);
+
+            let omega = F::two_adic_generator(log_rs_domain_size);
+            let round_alphas = &preflight.whir.alphas[i * k_whir..(i + 1) * k_whir];
+            for (query_idx, &sample) in round_queries.iter().enumerate() {
+                let index = sample.as_canonical_u32() & ((1 << (log_rs_domain_size - k_whir)) - 1);
+                let zi_root = omega.exp_u64(index as u64);
+                let zi = zi_root.exp_power_of_2(k_whir);
+                let record_start = blob.fold_records.len();
+                let yi = if i == 0 {
+                    let mut codeword_vals = vec![EF::ZERO; 1 << k_whir];
+                    let mut mu_pow_iter = local_mu_pows.iter();
+                    for opened_rows_per_query in proof.whir_proof.initial_round_opened_rows.iter() {
+                        let opened_rows = &opened_rows_per_query[query_idx];
+                        let width = opened_rows[0].len();
+                        for c in 0..width {
+                            let mu_pow = mu_pow_iter.next().unwrap();
+                            for j in 0..(1 << k_whir) {
+                                codeword_vals[j] += *mu_pow * opened_rows[j][c];
+                            }
+                        }
+                    }
+                    binary_k_fold(
+                        codeword_vals,
+                        round_alphas,
+                        zi_root,
+                        i,
+                        query_idx,
+                        &mut blob.fold_records,
+                    )
+                } else {
+                    let opened_values =
+                        proof.whir_proof.codeword_opened_values[i - 1][query_idx].clone();
+                    binary_k_fold(
+                        opened_values,
+                        round_alphas,
+                        zi_root,
+                        i,
+                        query_idx,
+                        &mut blob.fold_records,
+                    )
+                };
+                for rec in &mut blob.fold_records[record_start..] {
+                    rec.set_final_values(zi, yi);
+                }
+                blob.zi_roots.push(zi_root);
+                blob.zis.push(zi);
+                blob.yis.push(yi);
+
+                claim += gamma_pows.next().unwrap() * yi;
+            }
+            let _ = gamma_pows.next().unwrap();
+        }
+
+        // Push one for the final claim.
+        blob.initial_claim_per_round.push(claim);
+        debug_assert!(sumcheck_poly_iter.next().is_none());
+
+        // Evaluate the MLE of the table `final_poly` (interpreted as hypercube evaluations)
+        // at `u[t..]`. This matches the eval-to-coeff RS encoding semantics.
+        let t = k_whir * num_whir_rounds;
+        blob.final_poly_at_u
+            .push(eval_final_poly_at_u(&proof.whir_proof.final_poly, &u[t..]));
+    }
+
+    fn enqueue_pow_requests_for_proof(
+        exp_bits_len_gen: &ExpBitsLenTraceGenerator,
+        preflight: &Preflight,
+        params: &SystemParams,
+        query_layout: &WhirQueryLayout,
+    ) {
+        let mu_pow_bits = params.whir.mu_pow_bits;
+        let folding_pow_bits = params.whir.folding_pow_bits;
+        let query_phase_pow_bits = params.whir.query_phase_pow_bits;
+        let k_whir = params.k_whir();
+        let initial_log_rs_domain_size = params.l_skip + params.n_stack + params.log_blowup;
+
+        // μ PoW lookup (from stacking module)
+        if mu_pow_bits > 0 {
+            exp_bits_len_gen.add_requests(std::iter::once((
+                F::GENERATOR,
+                preflight.stacking.mu_pow_sample,
+                mu_pow_bits,
+            )));
+        }
+
+        if folding_pow_bits > 0 {
+            exp_bits_len_gen.add_requests(
+                preflight
+                    .whir
+                    .folding_pow_samples
+                    .iter()
+                    .map(|pow_sample| (F::GENERATOR, *pow_sample, folding_pow_bits)),
+            );
+        }
+        if query_phase_pow_bits > 0 {
+            exp_bits_len_gen.add_requests(
+                preflight
+                    .whir
+                    .query_pow_samples
+                    .iter()
+                    .map(|pow_sample| (F::GENERATOR, *pow_sample, query_phase_pow_bits)),
+            );
+        }
+
+        for (i, query_range) in query_layout.iter_round_query_ranges() {
+            let round_queries = &preflight.whir.queries[query_range];
+            let log_rs_domain_size = initial_log_rs_domain_size - i;
+            let omega = F::two_adic_generator(log_rs_domain_size);
+            exp_bits_len_gen.add_requests(
+                round_queries
+                    .iter()
+                    .copied()
+                    .map(|sample| (omega, sample, log_rs_domain_size - k_whir)),
+            );
+        }
+    }
+
+    fn append_initial_opened_values_accs_for_proof(
+        blob: &mut WhirBlobBuilder,
+        accs_layout: &CodewordAccsLayout,
+        proof: &Proof<BabyBearPoseidon2Config>,
+        local_mu_pows: &[EF],
+        num_initial_queries: usize,
+        k_whir: usize,
+    ) {
+        // Debug assert that this proof's structure matches the first proof.
+        debug_assert_eq!(
+            proof.whir_proof.initial_round_opened_rows.len(),
+            accs_layout.num_commits()
+        );
+        #[cfg(debug_assertions)]
+        for (i, openings_per_commit) in proof
+            .whir_proof
+            .initial_round_opened_rows
+            .iter()
+            .enumerate()
+        {
+            debug_assert_eq!(openings_per_commit[0][0].len(), accs_layout.commit_width(i));
+        }
+
+        for query_idx in 0..num_initial_queries {
+            let mut codeword_vals = EF::zero_vec(1 << k_whir);
+            for (coset_idx, codeword_val) in codeword_vals.iter_mut().enumerate() {
+                let mut base = 0;
+                for opened_rows_per_query in proof.whir_proof.initial_round_opened_rows.iter() {
+                    let opened_rows = &opened_rows_per_query[query_idx];
+                    let width = opened_rows[0].len();
+                    let num_chunks = width.div_ceil(CHUNK);
+
+                    for chunk_idx in 0..num_chunks {
+                        let chunk_start = chunk_idx * CHUNK;
+                        let chunk_len = cmp::min(CHUNK, width - chunk_start);
+
+                        let opened_chunk =
+                            &opened_rows[coset_idx][chunk_start..chunk_start + chunk_len];
+
+                        blob.codeword_value_accs.push(*codeword_val);
+
+                        for (offset, &val) in opened_chunk.iter().enumerate() {
+                            *codeword_val += local_mu_pows[base + chunk_start + offset] * val;
+                        }
+                    }
+                    base += width;
+                }
+            }
+        }
+    }
+
     #[tracing::instrument(skip_all)]
     fn generate_blob(
         &self,
@@ -511,166 +987,98 @@ impl WhirModule {
         preflights: &[&Preflight],
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
     ) -> WhirBlobCpu {
-        // TODO: Move more stuff here. (Out of preflight and redundant logic in generate_trace
-        // functions.)
-        let SystemParams {
-            l_skip,
-            n_stack,
-            whir,
-            log_blowup,
-            ..
-        } = &child_vk.inner.params;
-        let WhirConfig {
-            k: k_whir,
-            rounds: _,
-            mu_pow_bits,
-            query_phase_pow_bits,
-            folding_pow_bits,
-        } = whir;
-        let num_queries_per_round = num_queries_per_round(&child_vk.inner.params);
+        let params = &child_vk.inner.params;
+        let k_whir = params.k_whir();
+        let num_queries_per_round = num_queries_per_round(params);
         let num_initial_queries = *num_queries_per_round.first().unwrap_or(&0);
-        let num_cosets = 1 << k_whir;
+        let num_whir_rounds = params.num_whir_rounds();
+        let query_layout = WhirQueryLayout::new(proofs.len(), &num_queries_per_round);
+        let queries_per_proof = query_layout.queries_per_proof();
+        let sumcheck_rows_per_proof = params.num_whir_sumcheck_rounds();
+        let fold_records_per_proof = queries_per_proof * ((1 << k_whir) - 1);
+        let tidx_layout = PerProofLayout::new(proofs.len(), num_whir_rounds);
 
-        let codeword_value_accs_capacity: usize = proofs
-            .iter()
-            .map(|proof| {
-                let total_chunks: usize = proof
-                    .whir_proof
+        // Build codeword_value_accs layout from first proof (uniform across all proofs).
+        let per_commit_widths: Vec<usize> = proofs
+            .first()
+            .map(|p| {
+                p.whir_proof
                     .initial_round_opened_rows
                     .iter()
-                    .map(|c| c[0][0].len().div_ceil(CHUNK))
-                    .sum();
-                num_initial_queries * num_cosets * total_chunks
+                    .map(|openings| openings[0][0].len())
+                    .collect()
             })
-            .sum();
-        let mut codeword_value_accs = Vec::with_capacity(codeword_value_accs_capacity);
+            .unwrap_or_default();
+        let accs_layout = CodewordAccsLayout::new(
+            proofs.len(),
+            num_initial_queries,
+            1 << k_whir,
+            &per_commit_widths,
+        );
+        let mu_pows_layout = PerProofLayout::new(proofs.len(), accs_layout.total_width());
 
-        let mut iov_rows_per_proof_psums = vec![0];
-        let mut commits_per_proof_psums = vec![0];
-
-        let mut stacking_chunks_psums = vec![0];
-        let mut stacking_widths_psums = vec![0];
-
-        let mut mu_pows = vec![];
-        let final_poly_query_eval_records =
-            final_poly_query_eval::build_final_poly_query_eval_records(
-                &child_vk.inner.params,
-                proofs,
-                preflights,
-            );
-
-        let mut total_iov_rows = 0;
-        let mut total_commits = 0;
+        let mut blob = WhirBlobBuilder::with_capacities(
+            proofs.len(),
+            num_whir_rounds,
+            sumcheck_rows_per_proof,
+            queries_per_proof,
+            fold_records_per_proof,
+            accs_layout.len(),
+            mu_pows_layout.len(),
+        );
 
         for (proof, preflight) in zip(proofs, preflights) {
-            // μ PoW lookup (from stacking module)
-            if *mu_pow_bits > 0 {
-                exp_bits_len_gen.add_requests(std::iter::once((
-                    F::GENERATOR,
-                    preflight.stacking.mu_pow_sample,
-                    *mu_pow_bits,
-                )));
-            }
-
-            if *folding_pow_bits > 0 {
-                exp_bits_len_gen.add_requests(
-                    preflight
-                        .whir
-                        .folding_pow_samples
-                        .iter()
-                        .map(|pow_sample| (F::GENERATOR, *pow_sample, *folding_pow_bits)),
-                );
-            }
-            if *query_phase_pow_bits > 0 {
-                exp_bits_len_gen.add_requests(
-                    preflight
-                        .whir
-                        .query_pow_samples
-                        .iter()
-                        .map(|pow_sample| (F::GENERATOR, *pow_sample, *query_phase_pow_bits)),
-                );
-            }
-
-            let mut log_rs_domain_size = l_skip + n_stack + log_blowup;
-            for window in preflight.whir.query_offsets.windows(2) {
-                let start = window[0];
-                let end = window[1];
-                let round_queries = &preflight.whir.queries[start..end];
-                let omega = F::two_adic_generator(log_rs_domain_size);
-                exp_bits_len_gen.add_requests(
-                    round_queries
-                        .iter()
-                        .copied()
-                        .map(|sample| (omega, sample, log_rs_domain_size - k_whir)),
-                );
-                log_rs_domain_size -= 1;
-            }
-
-            let mut total_width_for_proof = 0;
-            let mut total_chunks_for_proof = 0;
-
-            let num_commits_for_proof = proof.whir_proof.initial_round_opened_rows.len();
-
-            for openings_per_commit in proof.whir_proof.initial_round_opened_rows.iter() {
-                let width = openings_per_commit[0][0].len();
-                let chunks = width.div_ceil(CHUNK);
-
-                total_width_for_proof += width;
-                total_chunks_for_proof += chunks;
-
-                let last_width = *stacking_widths_psums.last().unwrap();
-                stacking_widths_psums.push(last_width + width);
-
-                let last_chunks = *stacking_chunks_psums.last().unwrap();
-                stacking_chunks_psums.push(last_chunks + chunks);
-            }
-            total_commits += num_commits_for_proof;
-            commits_per_proof_psums.push(total_commits);
-
-            total_iov_rows += (total_chunks_for_proof * num_initial_queries) << k_whir;
-            iov_rows_per_proof_psums.push(total_iov_rows);
-
             let mu = preflight.stacking.stacking_batching_challenge;
-            let mu_pow_offset = mu_pows.len();
-            mu_pows.extend(mu.powers().take(total_width_for_proof));
+            let local_mu_pows = mu.powers().take(accs_layout.total_width()).collect_vec();
 
-            for query_idx in 0..num_initial_queries {
-                let mut codeword_vals = EF::zero_vec(1 << k_whir);
-                for (coset_idx, codeword_val) in codeword_vals.iter_mut().enumerate() {
-                    let mut base = 0;
-                    for opened_rows_per_query in proof.whir_proof.initial_round_opened_rows.iter() {
-                        let opened_rows = &opened_rows_per_query[query_idx];
-                        let width = opened_rows[0].len();
-                        let num_chunks = width.div_ceil(CHUNK);
+            Self::append_derived_whir_data_for_proof(
+                proof,
+                preflight,
+                &local_mu_pows,
+                params,
+                &query_layout,
+                &mut blob,
+            );
 
-                        for chunk_idx in 0..num_chunks {
-                            let chunk_start = chunk_idx * CHUNK;
-                            let chunk_len = cmp::min(CHUNK, width - chunk_start);
+            blob.whir_round_tidx_per_round
+                .extend_from_slice(&preflight.whir.whir_round_tidx_per_round);
+            blob.query_tidx_per_round
+                .extend_from_slice(&preflight.whir.query_tidx_per_round);
 
-                            let opened_chunk =
-                                &opened_rows[coset_idx][chunk_start..chunk_start + chunk_len];
+            Self::enqueue_pow_requests_for_proof(
+                exp_bits_len_gen,
+                preflight,
+                params,
+                &query_layout,
+            );
 
-                            codeword_value_accs.push(*codeword_val);
+            Self::append_initial_opened_values_accs_for_proof(
+                &mut blob,
+                &accs_layout,
+                proof,
+                &local_mu_pows,
+                num_initial_queries,
+                k_whir,
+            );
 
-                            for (offset, &val) in opened_chunk.iter().enumerate() {
-                                *codeword_val +=
-                                    mu_pows[mu_pow_offset + base + chunk_start + offset] * val;
-                            }
-                        }
-                        base += width;
-                    }
-                }
-            }
+            blob.mu_pows.extend(local_mu_pows);
         }
-        WhirBlobCpu {
-            codeword_value_accs,
-            iov_rows_per_proof_psums,
-            commits_per_proof_psums,
-            stacking_chunks_psums,
-            stacking_widths_psums,
-            mu_pows,
-            final_poly_query_eval_records,
-        }
+        let initial_claim_layout = PerProofLayout::new(proofs.len(), num_whir_rounds + 1);
+        let pre_query_claim_layout = PerProofLayout::new(proofs.len(), num_whir_rounds);
+        let sumcheck_layout = PerProofLayout::new(proofs.len(), sumcheck_rows_per_proof);
+        let fold_layout = PerProofLayout::new(proofs.len(), fold_records_per_proof);
+        let layouts = WhirBlobLayouts {
+            tidx_layout,
+            initial_claim_layout,
+            pre_query_claim_layout,
+            sumcheck_layout,
+            query_layout,
+            fold_layout,
+            accs_layout,
+            mu_pows_layout,
+        };
+
+        blob.into_blob(layouts)
     }
 }
 
@@ -753,9 +1161,9 @@ fn binary_k_fold(
         let (lo, hi) = values.split_at_mut(m);
 
         for i in 0..m {
-            let x = tw[i << j] * coset_shift;
-            let x_inv = inv_tw[i << j] * coset_shift_inv;
-            let new_val = lo[i] + (alpha - x) * (lo[i] - hi[i]) * x_inv.halve();
+            let eval_point = tw[i << j] * coset_shift;
+            let eval_point_inv = inv_tw[i << j] * coset_shift_inv;
+            let new_val = lo[i] + (alpha - eval_point) * (lo[i] - hi[i]) * eval_point_inv.halve();
             records.push(FoldRecord::new(
                 whir_round,
                 query_idx,
@@ -810,49 +1218,42 @@ impl RowMajorChip<F> for WhirModuleChip {
         required_height: Option<usize>,
     ) -> Option<RowMajorMatrix<F>> {
         use WhirModuleChip::*;
-        let child_vk = ctx.0.vk;
-        let proofs = ctx.0.proofs;
-        let preflights = ctx.0.preflights;
-        let blob = ctx.1;
         match self {
-            WhirRound => {
-                whir_round::WhirRoundTraceGenerator.generate_trace(&ctx.0, required_height)
+            WhirRound => whir_round::WhirRoundTraceGenerator.generate_trace(ctx, required_height),
+            Sumcheck => sumcheck::WhirSumcheckTraceGenerator.generate_trace(ctx, required_height),
+            Query => query::WhirQueryTraceGenerator.generate_trace(ctx, required_height),
+            InitialOpenedValues => {
+                let initial_opened_values_ctx = initial_opened_values::InitialOpenedValuesCtx {
+                    vk: ctx.0.vk,
+                    proofs: ctx.0.proofs,
+                    preflights: ctx.0.preflights,
+                    blob: ctx.1,
+                };
+                initial_opened_values::InitialOpenedValuesTraceGenerator
+                    .generate_trace(&initial_opened_values_ctx, required_height)
             }
-            Sumcheck => {
-                sumcheck::WhirSumcheckTraceGenerator.generate_trace(&ctx.0, required_height)
-            }
-            Query => query::WhirQueryTraceGenerator.generate_trace(&ctx.0, required_height),
-            InitialOpenedValues => initial_opened_values::InitialOpenedValuesTraceGenerator
-                .generate_trace(
-                    &initial_opened_values::InitialOpenedValuesCtx {
-                        params: &child_vk.inner.params,
-                        proofs,
-                        preflights,
-                        codeword_value_accs: &blob.codeword_value_accs,
-                        rows_per_proof_psums: &blob.iov_rows_per_proof_psums,
-                        commits_per_proof_psums: &blob.commits_per_proof_psums,
-                        stacking_chunks_psums: &blob.stacking_chunks_psums,
-                        stacking_widths_psums: &blob.stacking_widths_psums,
-                        mu_pows: &blob.mu_pows,
-                    },
-                    required_height,
-                ),
             NonInitialOpenedValues => {
                 non_initial_opened_values::NonInitialOpenedValuesTraceGenerator
-                    .generate_trace(&ctx.0, required_height)
+                    .generate_trace(ctx, required_height)
             }
-            Folding => folding::FoldingTraceGenerator.generate_trace(&ctx.0, required_height),
+            Folding => folding::FoldingTraceGenerator.generate_trace(ctx, required_height),
             FinalPolyMleEval => final_poly_mle_eval::FinalPolyMleEvalTraceGenerator
-                .generate_trace(&ctx.0, required_height),
-            FinalPolyQueryEval => final_poly_query_eval::FinalPolyQueryEvalTraceGenerator
-                .generate_trace(
-                    &final_poly_query_eval::FinalPolyQueryEvalCtx {
-                        vk: child_vk,
-                        records: &blob.final_poly_query_eval_records,
-                        preflights,
-                    },
-                    required_height,
-                ),
+                .generate_trace(ctx, required_height),
+            FinalPolyQueryEval => {
+                let records = final_poly_query_eval::build_final_poly_query_eval_records(
+                    &ctx.0.vk.inner.params,
+                    ctx.0.proofs,
+                    ctx.0.preflights,
+                    &ctx.1.zis,
+                );
+                let final_poly_query_eval_ctx = final_poly_query_eval::FinalPolyQueryEvalCtx {
+                    vk: ctx.0.vk,
+                    preflights: ctx.0.preflights,
+                    records: records.as_slice(),
+                };
+                final_poly_query_eval::FinalPolyQueryEvalTraceGenerator
+                    .generate_trace(&final_poly_query_eval_ctx, required_height)
+            }
         }
     }
 }
@@ -884,13 +1285,12 @@ mod cuda_tracegen {
         pub raw_queries: DeviceBuffer<F>,
         pub codeword_value_accs: DeviceBuffer<EF>,
         pub poseidon_states: DeviceBuffer<PoseidonStatePair>,
-        pub iov_rows_per_proof_psums: DeviceBuffer<usize>,
+        pub rows_per_proof_psums: DeviceBuffer<usize>,
         pub commits_per_proof_psums: DeviceBuffer<usize>,
         pub stacking_chunks_psums: DeviceBuffer<usize>,
         pub stacking_widths_psums: DeviceBuffer<usize>,
         pub mus: DeviceBuffer<EF>,
         pub mu_pows: DeviceBuffer<EF>,
-        pub final_poly_query_eval_records: DeviceBuffer<FinalPolyQueryEvalRecord>,
         pub codeword_opened_values: DeviceBuffer<EF>,
         pub codeword_states: DeviceBuffer<F>,
         pub folding_records: DeviceBuffer<FoldRecord>,
@@ -950,7 +1350,6 @@ mod cuda_tracegen {
     }
 
     impl WhirBlobGpu {
-        // TODO: Receive PreflightGPU?
         fn new(
             proofs: &[&Proof<BabyBearPoseidon2Config>],
             preflights: &[&Preflight],
@@ -963,27 +1362,9 @@ mod cuda_tracegen {
                     .collect_vec(),
             )
             .unwrap();
-            let zis = to_device_or_nullptr(
-                &preflights
-                    .iter()
-                    .flat_map(|preflight| preflight.whir.zjs.iter().flatten().copied())
-                    .collect_vec(),
-            )
-            .unwrap();
-            let zi_roots = to_device_or_nullptr(
-                &preflights
-                    .iter()
-                    .flat_map(|preflight| preflight.whir.zj_roots.iter().flatten().copied())
-                    .collect_vec(),
-            )
-            .unwrap();
-            let yis = to_device_or_nullptr(
-                &preflights
-                    .iter()
-                    .flat_map(|preflight| preflight.whir.yjs.iter().flatten().copied())
-                    .collect_vec(),
-            )
-            .unwrap();
+            let zis = to_device_or_nullptr(blob.zis.as_slice()).unwrap();
+            let zi_roots = to_device_or_nullptr(blob.zi_roots.as_slice()).unwrap();
+            let yis = to_device_or_nullptr(blob.yis.as_slice()).unwrap();
             let raw_queries = to_device_or_nullptr(
                 &preflights
                     .iter()
@@ -991,28 +1372,51 @@ mod cuda_tracegen {
                     .collect_vec(),
             )
             .unwrap();
-            let iov_rows_per_proof_psums =
-                to_device_or_nullptr(&blob.iov_rows_per_proof_psums).unwrap();
-            let commits_per_proof_psums =
-                to_device_or_nullptr(&blob.commits_per_proof_psums).unwrap();
-            let stacking_chunks_psums = to_device_or_nullptr(&blob.stacking_chunks_psums).unwrap();
-            let stacking_widths_psums = to_device_or_nullptr(&blob.stacking_widths_psums).unwrap();
-            let mu_pows = to_device_or_nullptr(&blob.mu_pows).unwrap();
-            let codeword_value_accs = to_device_or_nullptr(&blob.codeword_value_accs).unwrap();
+            // Reconstruct global prefix-sum arrays expected by the GPU kernel.
+            let accs_layout = blob.codeword_value_accs.layout();
+            let num_proofs = proofs.len();
+            let num_commits = accs_layout.num_commits();
+            let total_chunks = accs_layout.total_chunks();
+            let total_width = accs_layout.total_width();
+
+            let rows_per_proof_psums: Vec<usize> = (0..=num_proofs)
+                .map(|i| i * accs_layout.rows_per_proof())
+                .collect();
+            let commits_psums: Vec<usize> = (0..=num_proofs).map(|i| i * num_commits).collect();
+
+            let mut chunks_psums = Vec::with_capacity(1 + num_commits * num_proofs);
+            chunks_psums.push(0);
+            for i in 0..num_proofs {
+                chunks_psums.extend(
+                    accs_layout.commit_chunk_offsets()[1..]
+                        .iter()
+                        .map(|&x| i * total_chunks + x),
+                );
+            }
+
+            let mut widths_psums = Vec::with_capacity(1 + num_commits * num_proofs);
+            widths_psums.push(0);
+            for i in 0..num_proofs {
+                widths_psums.extend(
+                    accs_layout.commit_width_offsets()[1..]
+                        .iter()
+                        .map(|&x| i * total_width + x),
+                );
+            }
+
+            let rows_per_proof_psums = to_device_or_nullptr(&rows_per_proof_psums).unwrap();
+            let commits_per_proof_psums = to_device_or_nullptr(&commits_psums).unwrap();
+            let stacking_chunks_psums = to_device_or_nullptr(&chunks_psums).unwrap();
+            let stacking_widths_psums = to_device_or_nullptr(&widths_psums).unwrap();
+            let mu_pows = to_device_or_nullptr(blob.mu_pows.as_slice()).unwrap();
+            let codeword_value_accs =
+                to_device_or_nullptr(blob.codeword_value_accs.as_slice()).unwrap();
 
             // Build poseidon state pairs in kernel order: [query][coset][commit][chunk]
             let poseidon_states_host = build_initial_poseidon_state_pairs(proofs, preflights);
             let poseidon_states = to_device_or_nullptr(&poseidon_states_host).unwrap();
 
-            let folding_records_cap: usize =
-                preflights.iter().map(|p| p.whir.fold_records.len()).sum();
-            let mut folding_records_host = Vec::with_capacity(folding_records_cap);
-            for preflight in preflights.iter() {
-                folding_records_host.extend_from_slice(&preflight.whir.fold_records);
-            }
-            let folding_records = to_device_or_nullptr(&folding_records_host).unwrap();
-            let final_poly_query_eval_records =
-                to_device_or_nullptr(&blob.final_poly_query_eval_records).unwrap();
+            let folding_records = to_device_or_nullptr(blob.fold_records.as_slice()).unwrap();
 
             let codeword_opened_values_cap: usize = proofs
                 .iter()
@@ -1056,13 +1460,12 @@ mod cuda_tracegen {
                 raw_queries,
                 codeword_value_accs,
                 poseidon_states,
-                iov_rows_per_proof_psums,
+                rows_per_proof_psums,
                 commits_per_proof_psums,
                 stacking_chunks_psums,
                 stacking_widths_psums,
                 mus,
                 mu_pows,
-                final_poly_query_eval_records,
                 folding_records,
                 codeword_opened_values,
                 codeword_states,
@@ -1101,10 +1504,23 @@ mod cuda_tracegen {
                         )
                 }
                 WhirModuleChip::FinalPolyQueryEval => {
+                    let proofs_cpu = ctx.0.proofs.iter().map(|proof| &proof.cpu).collect_vec();
+                    let preflights_cpu = ctx
+                        .0
+                        .preflights
+                        .iter()
+                        .map(|preflight| &preflight.cpu)
+                        .collect_vec();
+                    let records = final_poly_query_eval::build_final_poly_query_eval_records(
+                        &ctx.0.vk.system_params,
+                        &proofs_cpu,
+                        &preflights_cpu,
+                        &ctx.2.zis,
+                    );
                     final_poly_query_eval::cuda::FinalPolyQueryEvalGpuTraceGenerator
                         .generate_proving_ctx(
                             &final_poly_query_eval::cuda::FinalPolyQueryEvalGpuCtx {
-                                blob: ctx.1,
+                                records: records.as_slice(),
                                 params: &ctx.0.vk.system_params,
                                 preflights: ctx.0.preflights,
                             },
