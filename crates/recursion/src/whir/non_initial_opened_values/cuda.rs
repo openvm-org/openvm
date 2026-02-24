@@ -9,7 +9,7 @@ use crate::{
     whir::{
         cuda_abi::non_initial_opened_values_tracegen, cuda_tracegen::WhirBlobGpu,
         non_initial_opened_values::NonInitialOpenedValuesCols, num_queries_per_round,
-        query_offsets, total_num_queries,
+        WhirQueryLayout,
     },
 };
 
@@ -47,22 +47,22 @@ impl ModuleChip<GpuBackend> for NonInitialOpenedValuesGpuTraceGenerator {
 
         let num_rounds = params.num_whir_rounds();
         let num_queries_per_round = num_queries_per_round(params);
-        let total_queries = total_num_queries(&num_queries_per_round);
-        let query_offsets = query_offsets(&num_queries_per_round);
+        let query_layout = WhirQueryLayout::new(1, &num_queries_per_round);
+        let total_queries = query_layout.queries_per_proof();
         let k_whir = params.k_whir();
         let rows_per_query = 1 << k_whir;
 
         // Compute round_row_offsets for rounds 1..num_rounds (non-initial rounds)
         let mut round_row_offsets = Vec::with_capacity(num_rounds);
         round_row_offsets.push(0usize);
-        for num_queries in &num_queries_per_round[1..num_rounds] {
-            let rows_this_round = num_queries * rows_per_query;
+        for whir_round in 1..num_rounds {
+            let rows_this_round = query_layout.round_num_queries(whir_round) * rows_per_query;
             round_row_offsets.push(round_row_offsets.last().unwrap() + rows_this_round);
         }
         let rows_per_proof = *round_row_offsets.last().unwrap();
 
         let round_row_offsets_d = to_device_or_nullptr(&round_row_offsets).unwrap();
-        let query_offsets_d = to_device_or_nullptr(&query_offsets).unwrap();
+        let round_query_offsets_d = to_device_or_nullptr(query_layout.query_offsets()).unwrap();
 
         let omega_k = F::two_adic_generator(k_whir);
         unsafe {
@@ -81,7 +81,7 @@ impl ModuleChip<GpuBackend> for NonInitialOpenedValuesGpuTraceGenerator {
                 &blob.raw_queries,
                 &round_row_offsets_d,
                 rows_per_proof,
-                &query_offsets_d,
+                &round_query_offsets_d,
                 total_queries,
             )
             .unwrap();

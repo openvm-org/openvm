@@ -7,7 +7,7 @@ use crate::{
     tracegen::ModuleChip,
     whir::{
         cuda_abi::initial_opened_values_tracegen, cuda_tracegen::WhirBlobGpu,
-        initial_opened_values::InitialOpenedValuesCols, num_queries_per_round, total_num_queries,
+        initial_opened_values::InitialOpenedValuesCols, num_queries_per_round, WhirQueryLayout,
     },
 };
 
@@ -47,8 +47,9 @@ impl ModuleChip<GpuBackend> for InitialOpenedValuesGpuTraceGenerator {
         let trace_d = DeviceMatrix::with_capacity(height, width);
 
         let num_queries_per_round = num_queries_per_round(params);
+        let query_layout = WhirQueryLayout::new(1, &num_queries_per_round);
         let num_initial_queries = num_queries_per_round.first().copied().unwrap_or(0);
-        let total_queries = total_num_queries(&num_queries_per_round);
+        let total_queries = query_layout.queries_per_proof();
         unsafe {
             initial_opened_values_tracegen(
                 trace_d.buffer(),
@@ -65,7 +66,7 @@ impl ModuleChip<GpuBackend> for InitialOpenedValuesGpuTraceGenerator {
                 &blob.zi_roots,
                 &blob.yis,
                 &blob.raw_queries,
-                &blob.iov_rows_per_proof_psums,
+                &blob.rows_per_proof_psums,
                 &blob.commits_per_proof_psums,
                 &blob.stacking_chunks_psums,
                 &blob.stacking_widths_psums,
