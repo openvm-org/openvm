@@ -1,7 +1,7 @@
 ## AIRs
-1. range check AIR
-2. power check AIR
-3. ExpBitsLen AIR
+1. RangeCheckerAir
+2. PowerCheckerAir
+3. ExpBitsLenAir
 
 ## Components relationship
 
