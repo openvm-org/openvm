@@ -22,8 +22,8 @@ pub mod adapters;
 // TEMP: commented out modules not yet ported to RV64
 // mod auipc;
 mod base_alu;
-// mod branch_eq;
-// mod branch_lt;
+mod branch_eq;
+mod branch_lt;
 pub mod common;
 // mod divrem;
 // mod hintstore;
@@ -38,8 +38,8 @@ mod shift;
 
 // pub use auipc::*;
 pub use base_alu::*;
-// pub use branch_eq::*;
-// pub use branch_lt::*;
+pub use branch_eq::*;
+pub use branch_lt::*;
 // pub use divrem::*;
 // pub use hintstore::*;
 // pub use jal_lui::*;

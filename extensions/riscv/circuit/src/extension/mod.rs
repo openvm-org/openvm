@@ -21,13 +21,12 @@ use openvm_circuit_primitives::{
     //     SharedRangeTupleCheckerChip,
     // },
 };
-// TEMP: DEFAULT_PC_STEP only used by disabled BranchEqual
-// use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
-use openvm_instructions::{LocalOpcode, PhantomDiscriminant};
+use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_riscv_transpiler::{
     BaseAluOpcode,
+    BranchEqualOpcode, BranchLessThanOpcode,
     // TEMP: disabled until ported to RV64
-    // BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode,
+    // DivRemOpcode,
     LessThanOpcode,
     // TEMP: disabled until ported to RV64
     // MulHOpcode, MulOpcode, Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode,
@@ -103,11 +102,11 @@ pub enum Rv64IExecutor {
     BaseAlu(Rv64BaseAluExecutor),
     LessThan(Rv64LessThanExecutor),
     Shift(Rv64ShiftExecutor),
+    BranchEqual(Rv64BranchEqualExecutor),
+    BranchLessThan(Rv64BranchLessThanExecutor),
     // TEMP: disabled until ported to RV64
     // LoadStore(Rv32LoadStoreExecutor),
     // LoadSignExtend(Rv32LoadSignExtendExecutor),
-    // BranchEqual(Rv32BranchEqualExecutor),
-    // BranchLessThan(Rv32BranchLessThanExecutor),
     // JalLui(Rv32JalLuiExecutor),
     // Jalr(Rv32JalrExecutor),
     // Auipc(Rv32AuipcExecutor),
@@ -278,18 +277,18 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         //     [Rv64LoadStoreOpcode::LOADB, Rv64LoadStoreOpcode::LOADH].map(|x| x.global_opcode()),
         // )?;
         //
-        // let beq = BranchEqualExecutor::new(
-        //     Rv32BranchAdapterExecutor,
-        //     BranchEqualOpcode::CLASS_OFFSET,
-        //     DEFAULT_PC_STEP,
-        // );
-        // inventory.add_executor(beq, BranchEqualOpcode::iter().map(|x| x.global_opcode()))?;
-        //
-        // let blt = BranchLessThanExecutor::new(
-        //     Rv32BranchAdapterExecutor,
-        //     BranchLessThanOpcode::CLASS_OFFSET,
-        // );
-        // inventory.add_executor(blt, BranchLessThanOpcode::iter().map(|x| x.global_opcode()))?;
+        let beq = BranchEqualExecutor::new(
+            Rv64BranchAdapterExecutor,
+            BranchEqualOpcode::CLASS_OFFSET,
+            DEFAULT_PC_STEP,
+        );
+        inventory.add_executor(beq, BranchEqualOpcode::iter().map(|x| x.global_opcode()))?;
+
+        let blt = BranchLessThanExecutor::new(
+            Rv64BranchAdapterExecutor,
+            BranchLessThanOpcode::CLASS_OFFSET,
+        );
+        inventory.add_executor(blt, BranchLessThanOpcode::iter().map(|x| x.global_opcode()))?;
         //
         // let jal_lui = Rv32JalLuiExecutor::new(Rv32CondRdWriteAdapterExecutor::new(
         //     Rv32RdWriteAdapterExecutor,
@@ -391,17 +390,17 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64I {
         // );
         // inventory.add_air(load_sign_extend);
         //
-        // let beq = Rv32BranchEqualAir::new(
-        //     Rv32BranchAdapterAir::new(exec_bridge, memory_bridge),
-        //     BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
-        // );
-        // inventory.add_air(beq);
-        //
-        // let blt = Rv32BranchLessThanAir::new(
-        //     Rv32BranchAdapterAir::new(exec_bridge, memory_bridge),
-        //     BranchLessThanCoreAir::new(bitwise_lu, BranchLessThanOpcode::CLASS_OFFSET),
-        // );
-        // inventory.add_air(blt);
+        let beq = Rv64BranchEqualAir::new(
+            Rv64BranchAdapterAir::new(exec_bridge, memory_bridge),
+            BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+        );
+        inventory.add_air(beq);
+
+        let blt = Rv64BranchLessThanAir::new(
+            Rv64BranchAdapterAir::new(exec_bridge, memory_bridge),
+            BranchLessThanCoreAir::new(bitwise_lu, BranchLessThanOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(blt);
         //
         // let jal_lui = Rv32JalLuiAir::new(
         //     Rv32CondRdWriteAdapterAir::new(Rv32RdWriteAdapterAir::new(memory_bridge,
@@ -517,27 +516,27 @@ where
         // );
         // inventory.add_executor_chip(load_sign_extend);
         //
-        // inventory.next_air::<Rv32BranchEqualAir>()?;
-        // let beq = Rv32BranchEqualChip::new(
-        //     BranchEqualFiller::new(
-        //         Rv32BranchAdapterFiller,
-        //         BranchEqualOpcode::CLASS_OFFSET,
-        //         DEFAULT_PC_STEP,
-        //     ),
-        //     mem_helper.clone(),
-        // );
-        // inventory.add_executor_chip(beq);
-        //
-        // inventory.next_air::<Rv32BranchLessThanAir>()?;
-        // let blt = Rv32BranchLessThanChip::new(
-        //     BranchLessThanFiller::new(
-        //         Rv32BranchAdapterFiller,
-        //         bitwise_lu.clone(),
-        //         BranchLessThanOpcode::CLASS_OFFSET,
-        //     ),
-        //     mem_helper.clone(),
-        // );
-        // inventory.add_executor_chip(blt);
+        inventory.next_air::<Rv64BranchEqualAir>()?;
+        let beq = Rv64BranchEqualChip::new(
+            BranchEqualFiller::new(
+                Rv64BranchAdapterFiller,
+                BranchEqualOpcode::CLASS_OFFSET,
+                DEFAULT_PC_STEP,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(beq);
+
+        inventory.next_air::<Rv64BranchLessThanAir>()?;
+        let blt = Rv64BranchLessThanChip::new(
+            BranchLessThanFiller::new(
+                Rv64BranchAdapterFiller,
+                bitwise_lu.clone(),
+                BranchLessThanOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(blt);
         //
         // inventory.next_air::<Rv32JalLuiAir>()?;
         // let jal_lui = Rv32JalLuiChip::new(
