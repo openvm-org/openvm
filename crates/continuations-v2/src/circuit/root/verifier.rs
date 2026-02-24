@@ -48,6 +48,8 @@ pub struct RootVerifierPvsCols<F> {
     pub initial_root_hash: [F; DIGEST_SIZE],
     pub initial_pc_hash: [F; DIGEST_SIZE],
     pub intermediate_exe_commit: [F; DIGEST_SIZE],
+
+    pub intermediate_vk_commit: [F; DIGEST_SIZE],
 }
 
 pub struct RootVerifierPvsAir {
@@ -80,9 +82,9 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         let local: &RootVerifierPvsCols<AB::Var> = (*local).borrow();
 
         /*
-         * Since RootVerifierPvs is a true subset of NonRootVerifierPvs, we must constrain
-         * the child public values not in RootVerifierPvs here. We start with is_terminate
-         * exit code.
+         * RootVerifierPvs only exposes a reduced/derived subset of NonRootVerifierPvs,
+         * so we must constrain required child public values here. We start with is_terminate
+         * and exit code.
          */
         let success = AB::F::from_u32(ExitCode::Success as u32);
         builder.assert_eq(local.child_pvs.exit_code, success);
@@ -309,23 +311,36 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
 
         /*
          * Finally, we need to constrain that the public values this AIR produces are consistent
-         * with the child's. The app_dag_commit, leaf_dag_commit, and
-         * internal_for_leaf_dag_commit are simply constrained to be equal to the
-         * child's.
+         * with the child's. The app_vk_commit is constrained to be the hashed combination of the
+         * child's app, leaf, and internal-for-leaf DAG commits.
          */
         let &RootVerifierPvs::<_> {
             app_exe_commit,
-            app_dag_commit,
-            leaf_dag_commit,
-            internal_for_leaf_dag_commit,
+            app_vk_commit,
         } = builder.public_values().borrow();
 
-        assert_array_eq(builder, local.child_pvs.app_dag_commit, app_dag_commit);
-        assert_array_eq(builder, local.child_pvs.leaf_dag_commit, leaf_dag_commit);
-        assert_array_eq(
+        self.poseidon2_compress_bus.lookup_key(
             builder,
-            local.child_pvs.internal_for_leaf_dag_commit,
-            internal_for_leaf_dag_commit,
+            Poseidon2CompressMessage {
+                input: digests_to_poseidon2_input(
+                    local.child_pvs.app_dag_commit,
+                    local.child_pvs.leaf_dag_commit,
+                ),
+                output: local.intermediate_vk_commit,
+            },
+            AB::F::ONE,
+        );
+
+        self.poseidon2_compress_bus.lookup_key(
+            builder,
+            Poseidon2CompressMessage {
+                input: digests_to_poseidon2_input(
+                    local.intermediate_vk_commit.map(Into::into),
+                    local.child_pvs.internal_for_leaf_dag_commit.map(Into::into),
+                ),
+                output: app_vk_commit.map(Into::into),
+            },
+            AB::F::ONE,
         );
 
         /*
@@ -439,6 +454,13 @@ pub fn generate_proving_ctx(
         cols.initial_root_hash,
     ));
 
+    cols.intermediate_vk_commit =
+        poseidon2_compress_with_capacity(child_pvs.app_dag_commit, child_pvs.leaf_dag_commit).0;
+    poseidon2_compress_inputs.push(digests_to_poseidon2_input(
+        child_pvs.app_dag_commit,
+        child_pvs.leaf_dag_commit,
+    ));
+
     let mut public_values = vec![F::ZERO; RootVerifierPvs::<u8>::width()];
     let root_pvs: &mut RootVerifierPvs<F> = public_values.as_mut_slice().borrow_mut();
 
@@ -449,9 +471,15 @@ pub fn generate_proving_ctx(
         cols.initial_pc_hash,
     ));
 
-    root_pvs.app_dag_commit = child_pvs.app_dag_commit;
-    root_pvs.leaf_dag_commit = child_pvs.leaf_dag_commit;
-    root_pvs.internal_for_leaf_dag_commit = child_pvs.internal_for_leaf_dag_commit;
+    root_pvs.app_vk_commit = poseidon2_compress_with_capacity(
+        cols.intermediate_vk_commit,
+        child_pvs.internal_for_leaf_dag_commit,
+    )
+    .0;
+    poseidon2_compress_inputs.push(digests_to_poseidon2_input(
+        cols.intermediate_vk_commit,
+        child_pvs.internal_for_leaf_dag_commit,
+    ));
 
     (
         AirProvingContext {
