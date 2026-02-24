@@ -420,9 +420,9 @@ fn rv64_alu_adapter_unconstrained_rs2_read_test() {
 
 #[test]
 fn run_add_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 0, 0, 0, 0];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 0, 0, 0, 0];
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [23, 205, 73, 49, 1, 0, 0, 0];
+    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
+    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
+    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [23, 205, 73, 49, 219, 69, 50, 155];
     let result = run_alu::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(ADD, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
@@ -431,9 +431,9 @@ fn run_add_sanity_test() {
 
 #[test]
 fn run_sub_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 0, 0, 0, 0];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 0, 0, 0, 0];
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [179, 118, 240, 172, 255, 255, 255, 255];
+    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
+    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
+    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [179, 118, 240, 172, 71, 255, 255, 254];
     let result = run_alu::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(SUB, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
@@ -442,9 +442,9 @@ fn run_sub_sanity_test() {
 
 #[test]
 fn run_xor_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 0, 0, 0, 0];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 0, 0, 0, 0];
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [215, 138, 49, 173, 0, 0, 0, 0];
+    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
+    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
+    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [215, 138, 49, 173, 216, 1, 0, 3];
     let result = run_alu::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(XOR, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
@@ -453,9 +453,9 @@ fn run_xor_sanity_test() {
 
 #[test]
 fn run_or_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 0, 0, 0, 0];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 0, 0, 0, 0];
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [247, 171, 61, 239, 0, 0, 0, 0];
+    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
+    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
+    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [247, 171, 61, 239, 217, 35, 25, 207];
     let result = run_alu::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(OR, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
@@ -464,9 +464,9 @@ fn run_or_sanity_test() {
 
 #[test]
 fn run_and_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 0, 0, 0, 0];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 0, 0, 0, 0];
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [32, 33, 12, 66, 0, 0, 0, 0];
+    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
+    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
+    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [32, 33, 12, 66, 1, 34, 25, 204];
     let result = run_alu::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(AND, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])

@@ -435,10 +435,9 @@ fn rv64_sra_wrong_sign_negative_test() {
 
 #[test]
 fn run_sll_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [0xAB, 0xCD, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-    // 0xCDAB << 4 = 0xCDAB0
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [0xB0, 0xDA, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00];
+    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [45, 7, 61, 186, 31, 190, 221, 200];
+    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [91, 123, 100, 88, 49, 190, 190, 113];
+    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 104, 57, 232, 209, 253];
     let (result, limb_shift, bit_shift) =
         run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(SLL, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
@@ -451,10 +450,9 @@ fn run_sll_sanity_test() {
 
 #[test]
 fn run_srl_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [0xAB, 0xCD, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-    // 0xCDAB >> 4 = 0xCDA
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [0xDA, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [31, 190, 221, 200, 45, 7, 61, 186];
+    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [81, 190, 190, 190, 113, 20, 50, 80];
+    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [110, 228, 150, 131, 30, 93, 0, 0];
     let (result, limb_shift, bit_shift) =
         run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(SRL, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
@@ -467,10 +465,9 @@ fn run_srl_sanity_test() {
 
 #[test]
 fn run_sra_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-    // 0x8000000000000000 (arithmetic) >> 4 = 0xF800000000000000
-    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8];
+    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [31, 190, 221, 200, 45, 7, 61, 186];
+    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [81, 20, 50, 80, 49, 190, 190, 113];
+    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [110, 228, 150, 131, 30, 221, 255, 255];
     let (result, limb_shift, bit_shift) =
         run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(SRA, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {

@@ -475,8 +475,8 @@ fn rv64_sltu_wrong_c_msb_sign_negative_test() {
 
 #[test]
 fn run_sltu_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [145, 34, 25, 205, 255, 255, 255, 255];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [73, 35, 25, 205, 255, 255, 255, 255];
+    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [145, 34, 25, 205, 91, 77, 88, 120];
+    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [73, 35, 25, 205, 91, 77, 88, 120];
     let (cmp_result, diff_idx, x_sign, y_sign) =
         run_less_than::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(false, &x, &y);
     assert!(cmp_result);
@@ -487,8 +487,8 @@ fn run_sltu_sanity_test() {
 
 #[test]
 fn run_slt_same_sign_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [145, 34, 25, 205, 255, 255, 255, 255];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [73, 35, 25, 205, 255, 255, 255, 255];
+    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [145, 34, 25, 205, 91, 77, 88, 205];
+    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [73, 35, 25, 205, 91, 77, 88, 205];
     let (cmp_result, diff_idx, x_sign, y_sign) =
         run_less_than::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &y);
     assert!(cmp_result);
@@ -499,8 +499,8 @@ fn run_slt_same_sign_sanity_test() {
 
 #[test]
 fn run_slt_diff_sign_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [45, 35, 25, 55, 0, 0, 0, 0];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [173, 34, 25, 205, 255, 255, 255, 255];
+    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [45, 35, 25, 55, 61, 90, 77, 74];
+    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [173, 34, 25, 205, 61, 90, 77, 182];
     let (cmp_result, diff_idx, x_sign, y_sign) =
         run_less_than::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &y);
     assert!(!cmp_result);
@@ -511,7 +511,7 @@ fn run_slt_diff_sign_sanity_test() {
 
 #[test]
 fn run_less_than_equal_sanity_test() {
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [45, 35, 25, 55, 0, 0, 0, 0];
+    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [45, 35, 25, 55, 61, 90, 77, 74];
     let (cmp_result, diff_idx, x_sign, y_sign) =
         run_less_than::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &x);
     assert!(!cmp_result);
