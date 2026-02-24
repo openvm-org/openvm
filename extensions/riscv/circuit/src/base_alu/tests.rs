@@ -402,9 +402,9 @@ fn rv64_alu_adapter_unconstrained_imm_limb_test() {
 fn rv64_alu_adapter_unconstrained_rs2_read_test() {
     run_negative_alu_test(
         ADD,
-        [2, 2, 2, 2, 0, 0, 0, 0],
-        [1, 1, 1, 1, 0, 0, 0, 0],
-        [1, 1, 1, 1, 0, 0, 0, 0],
+        [2, 2, 2, 2, 2, 2, 2, 2],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
         None,
         Some([false, false, false, false, false]),
         Some(false),
