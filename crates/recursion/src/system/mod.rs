@@ -38,7 +38,7 @@ use crate::{
     stacking::StackingModule,
     transcript::TranscriptModule,
     utils::poseidon2_hash_slice_with_states,
-    whir::{folding::FoldRecord, WhirModule},
+    whir::WhirModule,
 };
 
 mod dummy;
@@ -295,25 +295,14 @@ pub struct StackingPreflight {
 
 #[derive(Clone, Debug, Default)]
 pub struct WhirPreflight {
-    pub num_queries_per_round: Vec<usize>,
-    pub query_offsets: Vec<usize>,
+    pub whir_round_tidx_per_round: Vec<usize>,
+    pub query_tidx_per_round: Vec<usize>,
     pub alphas: Vec<EF>,
     pub z0s: Vec<EF>,
-    pub zj_roots: Vec<Vec<F>>,
-    pub zjs: Vec<Vec<F>>,
-    pub yjs: Vec<Vec<EF>>,
     pub gammas: Vec<EF>,
     pub folding_pow_samples: Vec<F>,
     pub query_pow_samples: Vec<F>,
     pub queries: Vec<F>,
-    pub tidx_per_round: Vec<usize>,
-    pub query_tidx_per_round: Vec<usize>,
-    pub initial_claim_per_round: Vec<EF>,
-    pub post_sumcheck_claims: Vec<EF>,
-    pub pre_query_claims: Vec<EF>,
-    pub eq_partials: Vec<EF>,
-    pub fold_records: Vec<FoldRecord>,
-    pub final_poly_at_u: EF,
 }
 
 impl BusInventory {
