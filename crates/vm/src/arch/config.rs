@@ -119,8 +119,8 @@ where
 pub const OPENVM_DEFAULT_INIT_FILE_BASENAME: &str = "openvm_init";
 pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
 /// The minimum block size is 8 for RV64 (register width). RISC-V `lb` only requires alignment of 1
-/// and `lh` only requires alignment of 2 because the instructions are implemented by doing an access
-/// of block size 8.
+/// and `lh` only requires alignment of 2 because the instructions are implemented by doing an
+/// access of block size 8.
 const DEFAULT_U8_BLOCK_SIZE: usize = 8;
 const DEFAULT_NATIVE_BLOCK_SIZE: usize = 1;
 

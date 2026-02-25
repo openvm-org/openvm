@@ -43,7 +43,7 @@ pub const RV_J_TYPE_IMM_BITS: usize = 21;
 pub fn compose<F: PrimeField32>(ptr_data: [F; RV64_REGISTER_NUM_LIMBS]) -> u64 {
     let mut val: u64 = 0;
     for (i, limb) in ptr_data.map(|x| x.as_canonical_u32()).iter().enumerate() {
-        val += (*limb as u64) << (i * 8);
+        val += (*limb as u64) << (i * RV64_CELL_BITS);
     }
     val
 }
@@ -51,7 +51,9 @@ pub fn compose<F: PrimeField32>(ptr_data: [F; RV64_REGISTER_NUM_LIMBS]) -> u64 {
 /// inverse of `compose`
 pub fn decompose<F: PrimeField32>(value: u64) -> [F; RV64_REGISTER_NUM_LIMBS] {
     std::array::from_fn(|i| {
-        F::from_canonical_u32(((value >> (RV64_CELL_BITS * i)) & ((1 << RV64_CELL_BITS) - 1)) as u32)
+        F::from_canonical_u32(
+            ((value >> (RV64_CELL_BITS * i)) & ((1 << RV64_CELL_BITS) - 1)) as u32,
+        )
     })
 }
 
@@ -195,19 +197,8 @@ pub fn tracing_read_imm(
     imm_mut: &mut u32,
 ) -> [u8; RV64_REGISTER_NUM_LIMBS] {
     *imm_mut = imm;
-    debug_assert_eq!(imm >> 24, 0); // highest byte should be zero to prevent overflow
-
     memory.increment_timestamp();
-
-    let mut imm_le = (imm as u64).to_le_bytes();
-    // Important: we set the 5 highest bytes equal to the 3rd byte (sign byte), using the assumption
-    // that imm is at most 24 bits
-    imm_le[3] = imm_le[2];
-    imm_le[4] = imm_le[2];
-    imm_le[5] = imm_le[2];
-    imm_le[6] = imm_le[2];
-    imm_le[7] = imm_le[2];
-    imm_le
+    imm_to_bytes(imm)
 }
 
 /// Writes `reg_ptr, reg_val` into memory and records the memory access in mutable buffer.

@@ -30,9 +30,10 @@ use openvm_riscv_transpiler::{
     // BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode,
     LessThanOpcode,
     // TEMP: disabled until ported to RV64
-    // MulHOpcode, MulOpcode, Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode,
-    // Rv64LoadStoreOpcode,
-    Rv64Phantom, ShiftOpcode,
+    // MulHOpcode, MulOpcode, Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode,
+    // Rv64JalrOpcode, Rv64LoadStoreOpcode,
+    Rv64Phantom,
+    ShiftOpcode,
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -133,65 +134,100 @@ pub enum Rv64IoExecutor {
 mod _empty_executor_impls {
     use std::any::Any;
 
-    use openvm_circuit::arch::{
-        execution::{ExecutionError, InterpreterExecutor, InterpreterMeteredExecutor},
-        AnyEnum, ExecutionCtxTrait, MatrixRecordArena, MeteredExecutionCtxTrait,
-        PreflightExecutor, StaticProgramError, VmStateMut,
+    #[cfg(not(feature = "tco"))]
+    use openvm_circuit::arch::execution::ExecuteFunc;
+    #[cfg(feature = "tco")]
+    use openvm_circuit::arch::execution::Handler;
+    use openvm_circuit::{
+        arch::{
+            execution::{ExecutionError, InterpreterExecutor, InterpreterMeteredExecutor},
+            AnyEnum, ExecutionCtxTrait, MatrixRecordArena, MeteredExecutionCtxTrait,
+            PreflightExecutor, StaticProgramError, VmStateMut,
+        },
+        system::memory::online::TracingMemory,
     };
     use openvm_instructions::instruction::Instruction;
     use openvm_stark_backend::p3_field::Field;
 
     use super::{Rv64IoExecutor, Rv64MExecutor};
 
-    #[cfg(not(feature = "tco"))]
-    use openvm_circuit::arch::execution::ExecuteFunc;
-    #[cfg(feature = "tco")]
-    use openvm_circuit::arch::execution::Handler;
-
-    use openvm_circuit::system::memory::online::TracingMemory;
-
     macro_rules! impl_empty_executor {
         ($ty:ty) => {
             impl AnyEnum for $ty {
-                fn as_any_kind(&self) -> &dyn Any { match *self {} }
-                fn as_any_kind_mut(&mut self) -> &mut dyn Any { match *self {} }
+                fn as_any_kind(&self) -> &dyn Any {
+                    match *self {}
+                }
+                fn as_any_kind_mut(&mut self) -> &mut dyn Any {
+                    match *self {}
+                }
             }
 
             impl<F: Field> InterpreterExecutor<F> for $ty {
-                fn pre_compute_size(&self) -> usize { match *self {} }
+                fn pre_compute_size(&self) -> usize {
+                    match *self {}
+                }
 
                 #[cfg(not(feature = "tco"))]
                 fn pre_compute<Ctx: ExecutionCtxTrait>(
-                    &self, _pc: u32, _inst: &Instruction<F>, _data: &mut [u8],
-                ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> { match *self {} }
+                    &self,
+                    _pc: u32,
+                    _inst: &Instruction<F>,
+                    _data: &mut [u8],
+                ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+                    match *self {}
+                }
 
                 #[cfg(feature = "tco")]
                 fn handler<Ctx: ExecutionCtxTrait>(
-                    &self, _pc: u32, _inst: &Instruction<F>, _data: &mut [u8],
-                ) -> Result<Handler<F, Ctx>, StaticProgramError> { match *self {} }
+                    &self,
+                    _pc: u32,
+                    _inst: &Instruction<F>,
+                    _data: &mut [u8],
+                ) -> Result<Handler<F, Ctx>, StaticProgramError> {
+                    match *self {}
+                }
             }
 
             impl<F: Field> InterpreterMeteredExecutor<F> for $ty {
-                fn metered_pre_compute_size(&self) -> usize { match *self {} }
+                fn metered_pre_compute_size(&self) -> usize {
+                    match *self {}
+                }
 
                 #[cfg(not(feature = "tco"))]
                 fn metered_pre_compute<Ctx: MeteredExecutionCtxTrait>(
-                    &self, _air_idx: usize, _pc: u32, _inst: &Instruction<F>, _data: &mut [u8],
-                ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> { match *self {} }
+                    &self,
+                    _air_idx: usize,
+                    _pc: u32,
+                    _inst: &Instruction<F>,
+                    _data: &mut [u8],
+                ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+                    match *self {}
+                }
 
                 #[cfg(feature = "tco")]
                 fn metered_handler<Ctx: MeteredExecutionCtxTrait>(
-                    &self, _air_idx: usize, _pc: u32, _inst: &Instruction<F>, _data: &mut [u8],
-                ) -> Result<Handler<F, Ctx>, StaticProgramError> { match *self {} }
+                    &self,
+                    _air_idx: usize,
+                    _pc: u32,
+                    _inst: &Instruction<F>,
+                    _data: &mut [u8],
+                ) -> Result<Handler<F, Ctx>, StaticProgramError> {
+                    match *self {}
+                }
             }
 
             impl<F: Field> PreflightExecutor<F> for $ty {
                 fn execute(
-                    &self, _state: VmStateMut<F, TracingMemory, MatrixRecordArena<F>>,
+                    &self,
+                    _state: VmStateMut<F, TracingMemory, MatrixRecordArena<F>>,
                     _instruction: &Instruction<F>,
-                ) -> Result<(), ExecutionError> { match *self {} }
+                ) -> Result<(), ExecutionError> {
+                    match *self {}
+                }
 
-                fn get_opcode_name(&self, _opcode: usize) -> String { match *self {} }
+                fn get_opcode_name(&self, _opcode: usize) -> String {
+                    match *self {}
+                }
             }
         };
     }
@@ -216,7 +252,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
             Rv64BaseAluExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
         inventory.add_executor(base_alu, BaseAluOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let lt = Rv64LessThanExecutor::new(Rv64BaseAluAdapterExecutor, LessThanOpcode::CLASS_OFFSET);
+        let lt =
+            Rv64LessThanExecutor::new(Rv64BaseAluAdapterExecutor, LessThanOpcode::CLASS_OFFSET);
         inventory.add_executor(lt, LessThanOpcode::iter().map(|x| x.global_opcode()))?;
 
         let shift = Rv64ShiftExecutor::new(Rv64BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
@@ -367,8 +404,8 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64I {
         // inventory.add_air(blt);
         //
         // let jal_lui = Rv32JalLuiAir::new(
-        //     Rv32CondRdWriteAdapterAir::new(Rv32RdWriteAdapterAir::new(memory_bridge, exec_bridge)),
-        //     Rv32JalLuiCoreAir::new(bitwise_lu),
+        //     Rv32CondRdWriteAdapterAir::new(Rv32RdWriteAdapterAir::new(memory_bridge,
+        // exec_bridge)),     Rv32JalLuiCoreAir::new(bitwise_lu),
         // );
         // inventory.add_air(jal_lui);
         //
@@ -550,8 +587,9 @@ impl<F> VmExecutionExtension<F> for Rv64M {
         // let mul_h = Rv32MulHExecutor::new(Rv32MultAdapterExecutor, MulHOpcode::CLASS_OFFSET);
         // inventory.add_executor(mul_h, MulHOpcode::iter().map(|x| x.global_opcode()))?;
         //
-        // let div_rem = Rv32DivRemExecutor::new(Rv32MultAdapterExecutor, DivRemOpcode::CLASS_OFFSET);
-        // inventory.add_executor(div_rem, DivRemOpcode::iter().map(|x| x.global_opcode()))?;
+        // let div_rem = Rv32DivRemExecutor::new(Rv32MultAdapterExecutor,
+        // DivRemOpcode::CLASS_OFFSET); inventory.add_executor(div_rem,
+        // DivRemOpcode::iter().map(|x| x.global_opcode()))?;
 
         Ok(())
     }
@@ -667,8 +705,8 @@ where
         //     }
         // };
         //
-        // // These calls to next_air are not strictly necessary to construct the chips, but provide a
-        // // safeguard to ensure that chip construction matches the circuit definition
+        // // These calls to next_air are not strictly necessary to construct the chips, but provide
+        // a // safeguard to ensure that chip construction matches the circuit definition
         // inventory.next_air::<Rv32MultiplicationAir>()?;
         // let mult = Rv32MultiplicationChip::new(
         //     MultiplicationFiller::new(

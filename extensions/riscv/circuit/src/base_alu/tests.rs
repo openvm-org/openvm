@@ -412,6 +412,23 @@ fn rv64_alu_adapter_unconstrained_rs2_read_test() {
     );
 }
 
+#[test]
+fn rv64_alu_adapter_imm_sign_extension_negative_test() {
+    // Prank c[4] = 1 while sign byte (c[2]) = 0. The adapter must catch that
+    // limbs 4-7 don't match the sign byte. Also prank a[4] = 1 so the ADD core
+    // constraint (a = b + c) still holds.
+    run_negative_alu_test(
+        ADD,
+        [5, 0, 0, 0, 1, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [5, 0, 0, 0, 0, 0, 0, 0],
+        Some([5, 0, 0, 0, 1, 0, 0, 0]),
+        None,
+        Some(true),
+        false,
+    );
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////
 /// SANITY TESTS
 ///
