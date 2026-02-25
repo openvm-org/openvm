@@ -1,6 +1,6 @@
 use std::{array::from_fn, borrow::Borrow};
 
-use openvm_circuit::arch::ExitCode;
+use openvm_circuit::arch::{ExitCode, POSEIDON2_WIDTH};
 use openvm_circuit_primitives::utils::assert_array_eq;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
@@ -11,7 +11,8 @@ use p3_field::PrimeCharacteristicRing;
 use p3_matrix::Matrix;
 use recursion_circuit::{
     bus::{
-        CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
+        CachedCommitBus, CachedCommitBusMessage, FinalTranscriptStateBus,
+        FinalTranscriptStateMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
         PublicValuesBus, PublicValuesBusMessage,
     },
     utils::assert_zeros,
@@ -51,6 +52,7 @@ pub struct DeferredVerifyPvsCols<F> {
 
     pub app_exe_commit: [F; DIGEST_SIZE],
     pub app_vk_commit: [F; DIGEST_SIZE],
+    pub final_transcript_state: [F; POSEIDON2_WIDTH],
 }
 
 pub struct DeferredVerifyPvsAir {
@@ -60,6 +62,7 @@ pub struct DeferredVerifyPvsAir {
     pub memory_merkle_commit_bus: MemoryMerkleCommitBus,
     pub output_val_bus: OutputValBus,
     pub output_commit_bus: OutputCommitBus,
+    pub final_state_bus: FinalTranscriptStateBus,
 
     pub expected_internal_recursive_dag_commit: CommitBytes,
 }
@@ -273,11 +276,27 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
          * DeferralOutputCommitAir, to which we need to send the app commits.
          */
         let &DeferralCircuitPvs::<_> {
-            input_commit: _,
+            input_commit,
             output_commit,
         } = builder.public_values().borrow();
 
-        // TODO: receive final transcript state and constrain input_commit
+        self.final_state_bus.receive(
+            builder,
+            AB::Expr::ZERO,
+            FinalTranscriptStateMessage {
+                state: local.final_transcript_state,
+            },
+            AB::F::ONE,
+        );
+
+        self.poseidon2_compress_bus.lookup_key(
+            builder,
+            Poseidon2CompressMessage {
+                input: local.final_transcript_state.map(Into::into),
+                output: input_commit.map(Into::into),
+            },
+            AB::F::ONE,
+        );
 
         let mut output_idx = 0;
         for exe_val in local.app_exe_commit.chunks_exact(VALS_IN_DIGEST) {
@@ -292,11 +311,11 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             output_idx += 1;
         }
 
-        for exe_val in local.app_exe_commit.chunks_exact(VALS_IN_DIGEST) {
+        for vk_val in local.app_vk_commit.chunks_exact(VALS_IN_DIGEST) {
             self.output_val_bus.send(
                 builder,
                 OutputValMessage {
-                    values: from_fn(|i| exe_val[i].into()),
+                    values: from_fn(|i| vk_val[i].into()),
                     idx: AB::Expr::from_u8(output_idx),
                 },
                 AB::F::ONE,

@@ -23,10 +23,11 @@ use crate::{
     bus::{
         AirShapeBus, BatchConstraintModuleBus, CachedCommitBus, ColumnClaimsBus, CommitmentsBus,
         ConstraintSumcheckRandomnessBus, DagCommitBus, EqNegBaseRandBus, EqNegResultBus,
-        ExpressionClaimNMaxBus, FractionFolderInputBus, GkrModuleBus, HyperdimBus,
-        LiftedHeightsBus, MerkleVerifyBus, NLiftBus, Poseidon2CompressBus, Poseidon2PermuteBus,
-        PublicValuesBus, SelUniBus, StackingIndicesBus, StackingModuleBus, TranscriptBus,
-        WhirModuleBus, WhirMuBus, WhirOpeningPointBus, WhirOpeningPointLookupBus, XiRandomnessBus,
+        ExpressionClaimNMaxBus, FinalTranscriptStateBus, FractionFolderInputBus, GkrModuleBus,
+        HyperdimBus, LiftedHeightsBus, MerkleVerifyBus, NLiftBus, Poseidon2CompressBus,
+        Poseidon2PermuteBus, PublicValuesBus, SelUniBus, StackingIndicesBus, StackingModuleBus,
+        TranscriptBus, WhirModuleBus, WhirMuBus, WhirOpeningPointBus, WhirOpeningPointLookupBus,
+        XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::{
@@ -52,12 +53,36 @@ pub enum CachedTraceCtx<PB: ProverBackend> {
     Records(CachedTraceRecord),
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct VerifierConfig {
+    pub continuations_enabled: bool,
+    pub final_state_bus_enabled: bool,
+    pub has_cached: bool,
+}
+
+impl Default for VerifierConfig {
+    fn default() -> Self {
+        Self {
+            continuations_enabled: false,
+            final_state_bus_enabled: false,
+            has_cached: true,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct VerifierExternalData<'a, PB: ProverBackend> {
+    pub poseidon2_compress_inputs: &'a Vec<[PB::Val; POSEIDON2_WIDTH]>,
+    pub range_check_inputs: &'a Vec<usize>,
+    pub required_heights: Option<&'a [usize]>,
+    pub final_transcript_state: Option<&'a mut [PB::Val; POSEIDON2_WIDTH]>,
+}
+
 // Trait to make tracegen functions generic on ProverBackend
 pub trait VerifierTraceGen<PB: ProverBackend> {
     fn new(
         child_mvk: Arc<MultiStarkVerifyingKey<BabyBearPoseidon2Config>>,
-        continuations_enabled: bool,
-        has_cached: bool,
+        config: VerifierConfig,
     ) -> Self;
 
     fn commit_child_vk<E: StarkEngine<SC = BabyBearPoseidon2Config, PB = PB>>(
@@ -82,8 +107,7 @@ pub trait VerifierTraceGen<PB: ProverBackend> {
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         cached_trace_ctx: CachedTraceCtx<PB>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
-        external_poseidon2_compress_inputs: &Vec<[PB::Val; POSEIDON2_WIDTH]>,
-        required_heights: Option<&[usize]>,
+        external_data: &mut VerifierExternalData<PB>,
         initial_transcript: TS,
     ) -> Option<Vec<AirProvingContext<PB>>>;
 
@@ -97,12 +121,21 @@ pub trait VerifierTraceGen<PB: ProverBackend> {
         proofs: &[Proof<BabyBearPoseidon2Config>],
         initial_transcript: TS,
     ) -> Vec<AirProvingContext<PB>> {
+        let poseidon2_compress_inputs = vec![];
+        let range_check_inputs = vec![];
+
+        let mut external_data = VerifierExternalData {
+            poseidon2_compress_inputs: &poseidon2_compress_inputs,
+            range_check_inputs: &range_check_inputs,
+            required_heights: None,
+            final_transcript_state: None,
+        };
+
         self.generate_proving_ctxs::<TS>(
             child_vk,
             cached_trace_ctx,
             proofs,
-            &vec![],
-            None,
+            &mut external_data,
             initial_transcript,
         )
         .unwrap()
@@ -220,6 +253,7 @@ pub struct BusInventory {
     // Continuations buses
     pub cached_commit_bus: CachedCommitBus,
     pub dag_commit_bus: DagCommitBus,
+    pub final_state_bus: FinalTranscriptStateBus,
 }
 
 /// The records from global recursion preflight on CPU for verifying a single proof.
@@ -350,6 +384,7 @@ impl BusInventory {
             // Continuation buses
             cached_commit_bus: CachedCommitBus::new(b.new_bus_idx()),
             dag_commit_bus: DagCommitBus::new(b.new_bus_idx()),
+            final_state_bus: FinalTranscriptStateBus::new(b.new_bus_idx()),
         }
     }
 }
@@ -425,7 +460,7 @@ impl<'a> TraceModuleRef<'a> {
         pow_checker_gen: &Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
         cached_trace_record: &Option<&CachedTraceRecord>,
-        external_poseidon2_compress_inputs: &Vec<[F; POSEIDON2_WIDTH]>,
+        external_data: &VerifierExternalData<CpuBackend<BabyBearPoseidon2Config>>,
         required_heights: Option<&[usize]>,
     ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
         match self {
@@ -433,14 +468,17 @@ impl<'a> TraceModuleRef<'a> {
                 child_vk,
                 proofs,
                 preflights,
-                external_poseidon2_compress_inputs,
+                external_data.poseidon2_compress_inputs,
                 required_heights,
             ),
             TraceModuleRef::ProofShape(module) => module.generate_proving_ctxs(
                 child_vk,
                 proofs,
                 preflights,
-                pow_checker_gen,
+                &(
+                    pow_checker_gen.clone(),
+                    external_data.range_check_inputs.as_slice(),
+                ),
                 required_heights,
             ),
             TraceModuleRef::Gkr(module) => module.generate_proving_ctxs(
@@ -488,13 +526,12 @@ pub struct VerifierSubCircuit<const MAX_NUM_PROOFS: usize> {
 
 impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
     pub fn new(child_mvk: Arc<MultiStarkVerifyingKey<BabyBearPoseidon2Config>>) -> Self {
-        Self::new_with_options(child_mvk, false, true)
+        Self::new_with_options(child_mvk, VerifierConfig::default())
     }
 
     pub fn new_with_options(
         child_mvk: Arc<MultiStarkVerifyingKey<BabyBearPoseidon2Config>>,
-        continuations_enabled: bool,
-        has_cached: bool,
+        config: VerifierConfig,
     ) -> Self {
         // The verifier must enforce the child VK's linear `trace_height_constraints`.
         //
@@ -527,14 +564,17 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         let mut bus_idx_manager = BusIndexManager::new();
         let bus_inventory = BusInventory::new(&mut bus_idx_manager);
 
-        let transcript =
-            TranscriptModule::new(bus_inventory.clone(), child_mvk.inner.params.clone());
+        let transcript = TranscriptModule::new(
+            bus_inventory.clone(),
+            child_mvk.inner.params.clone(),
+            config.final_state_bus_enabled,
+        );
         let child_mvk_frame = child_mvk.as_ref().into();
         let proof_shape = ProofShapeModule::new(
             &child_mvk_frame,
             &mut bus_idx_manager,
             bus_inventory.clone(),
-            continuations_enabled,
+            config.continuations_enabled,
         );
         let gkr = GkrModule::new(&child_mvk, &mut bus_idx_manager, bus_inventory.clone());
         let batch_constraint = BatchConstraintModule::new(
@@ -542,7 +582,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             &mut bus_idx_manager,
             bus_inventory.clone(),
             MAX_NUM_PROOFS,
-            has_cached,
+            config.has_cached,
         );
         let stacking = StackingModule::new(&child_mvk, &mut bus_idx_manager, bus_inventory.clone());
         let whir = WhirModule::new(&child_mvk, &mut bus_idx_manager, bus_inventory.clone());
@@ -938,10 +978,9 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackend<BabyBearPoseidon2C
 {
     fn new(
         child_mvk: Arc<MultiStarkVerifyingKey<BabyBearPoseidon2Config>>,
-        continuations_enabled: bool,
-        has_cached: bool,
+        config: VerifierConfig,
     ) -> Self {
-        Self::new_with_options(child_mvk, continuations_enabled, has_cached)
+        Self::new_with_options(child_mvk, config)
     }
 
     fn commit_child_vk<
@@ -970,8 +1009,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackend<BabyBearPoseidon2C
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         cached_trace_ctx: CachedTraceCtx<CpuBackend<BabyBearPoseidon2Config>>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
-        external_poseidon2_compress_inputs: &Vec<[F; POSEIDON2_WIDTH]>,
-        required_heights: Option<&[usize]>,
+        external_data: &mut VerifierExternalData<CpuBackend<BabyBearPoseidon2Config>>,
         initial_transcript: TS,
     ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
         debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
@@ -979,7 +1017,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackend<BabyBearPoseidon2C
         // Rayon's thread pool overhead (wake-up, work stealing, synchronization) while still
         // getting parallelism with minimal overhead.
         let span = tracing::Span::current();
-        let preflights = std::thread::scope(|s| {
+        let mut preflights = std::thread::scope(|s| {
             let handles: Vec<_> = proofs
                 .iter()
                 .map(|proof| {
@@ -997,12 +1035,23 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackend<BabyBearPoseidon2C
                 .collect::<Vec<_>>()
         });
 
+        if let Some(final_transcript_state) = &mut external_data.final_transcript_state {
+            // WARNING: For convenience we use the fact that the last transcript operation should be
+            // a sample. If this is not the case, we will have to reconstruct final_transcript_state
+            // from the last perm state and observe values.
+            debug_assert_eq!(preflights.len(), 1);
+            debug_assert!(preflights[0].transcript.samples().last().unwrap());
+            let state = *preflights[0].transcript.perm_results().last().unwrap();
+            *(*final_transcript_state) = state;
+            preflights[0].poseidon2_compress_inputs.push(state);
+        }
+
         let power_checker_gen =
             Arc::new(PowerCheckerCpuTraceGenerator::<2, POW_CHECKER_HEIGHT>::default());
         let exp_bits_len_gen = ExpBitsLenTraceGenerator::default();
 
         let (module_required, power_checker_required, exp_bits_len_required) =
-            self.split_required_heights(required_heights);
+            self.split_required_heights(external_data.required_heights);
 
         // WARNING: SymbolicExpressionAir MUST be the first AIR in verifier circuit
         let modules = vec![
@@ -1032,7 +1081,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackend<BabyBearPoseidon2C
                     &power_checker_gen,
                     &exp_bits_len_gen,
                     &cached_trace_record,
-                    external_poseidon2_compress_inputs,
+                    external_data,
                     required_heights,
                 )
             })
@@ -1107,7 +1156,7 @@ pub mod cuda_tracegen {
             pow_checker_gen: &Arc<PowerCheckerGpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
             exp_bits_len_gen: &ExpBitsLenTraceGenerator,
             cached_trace_record: &Option<&CachedTraceRecord>,
-            external_poseidon2_compress_inputs: &Vec<[F; POSEIDON2_WIDTH]>,
+            external_data: &VerifierExternalData<GpuBackend>,
             required_heights: Option<&[usize]>,
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             match self {
@@ -1115,14 +1164,17 @@ pub mod cuda_tracegen {
                     child_vk,
                     proofs,
                     preflights,
-                    external_poseidon2_compress_inputs,
+                    external_data.poseidon2_compress_inputs,
                     required_heights,
                 ),
                 TraceModuleRef::ProofShape(module) => module.generate_proving_ctxs(
                     child_vk,
                     proofs,
                     preflights,
-                    pow_checker_gen,
+                    &(
+                        pow_checker_gen.clone(),
+                        external_data.range_check_inputs.as_slice(),
+                    ),
                     required_heights,
                 ),
                 TraceModuleRef::Gkr(module) => module.generate_proving_ctxs(
@@ -1162,10 +1214,9 @@ pub mod cuda_tracegen {
     {
         fn new(
             child_mvk: Arc<MultiStarkVerifyingKey<BabyBearPoseidon2Config>>,
-            continuations_enabled: bool,
-            has_cached: bool,
+            config: VerifierConfig,
         ) -> Self {
-            Self::new_with_options(child_mvk, continuations_enabled, has_cached)
+            Self::new_with_options(child_mvk, config)
         }
 
         fn commit_child_vk<E: StarkEngine<SC = BabyBearPoseidon2Config, PB = GpuBackend>>(
@@ -1192,8 +1243,7 @@ pub mod cuda_tracegen {
             child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
             cached_trace_ctx: CachedTraceCtx<GpuBackend>,
             proofs: &[Proof<BabyBearPoseidon2Config>],
-            external_poseidon2_compress_inputs: &Vec<[F; POSEIDON2_WIDTH]>,
-            required_heights: Option<&[usize]>,
+            external_data: &mut VerifierExternalData<GpuBackend>,
             initial_transcript: TS,
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
@@ -1205,7 +1255,7 @@ pub mod cuda_tracegen {
             // Use std::thread::scope for preflight parallelism. With only 3-4 proofs max, this
             // avoids Rayon's thread pool overhead while still getting parallelism.
             let span = tracing::Span::current();
-            let preflights_cpu = std::thread::scope(|s| {
+            let mut preflights_cpu = std::thread::scope(|s| {
                 let handles: Vec<_> = proofs
                     .iter()
                     .map(|proof| {
@@ -1223,12 +1273,23 @@ pub mod cuda_tracegen {
                     .collect::<Vec<_>>()
             });
 
+            if let Some(final_transcript_state) = &mut external_data.final_transcript_state {
+                // WARNING: For convenience we use the fact that the last transcript operation should be
+                // a sample. If this is not the case, we will have to reconstruct final_transcript_state
+                // from the last perm state and observe values.
+                debug_assert_eq!(preflights_cpu.len(), 1);
+                debug_assert!(preflights_cpu[0].transcript.samples().last().unwrap());
+                let state = *preflights_cpu[0].transcript.perm_results().last().unwrap();
+                *(*final_transcript_state) = state;
+                preflights_cpu[0].poseidon2_compress_inputs.push(state);
+            }
+
             let power_checker_gen =
                 Arc::new(PowerCheckerGpuTraceGenerator::<2, POW_CHECKER_HEIGHT>::hybrid());
             let exp_bits_len_gen = ExpBitsLenTraceGenerator::default();
 
             let (module_required, power_checker_required, exp_bits_len_required) =
-                self.split_required_heights(required_heights);
+                self.split_required_heights(external_data.required_heights);
 
             // NOTE: avoid par_iter for now so H2D transfer all happens on same stream to avoid sync
             // issues
@@ -1262,7 +1323,7 @@ pub mod cuda_tracegen {
                     &power_checker_gen,
                     &exp_bits_len_gen,
                     &cached_trace_record,
-                    external_poseidon2_compress_inputs,
+                    external_data,
                     required_heights,
                 )?);
             }

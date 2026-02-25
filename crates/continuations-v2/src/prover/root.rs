@@ -15,7 +15,9 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
     default_duplex_sponge_recorder, Digest, DIGEST_SIZE, EF, F,
 };
 use p3_field::{Field, PrimeField32};
-use recursion_circuit::system::{AggregationSubCircuit, CachedTraceCtx, VerifierTraceGen};
+use recursion_circuit::system::{
+    AggregationSubCircuit, CachedTraceCtx, VerifierConfig, VerifierExternalData, VerifierTraceGen,
+};
 use tracing::instrument;
 
 use crate::{
@@ -128,13 +130,20 @@ where
             &v[1..(num_airs - agg_other_ctxs.len())]
         });
 
+        let range_check_inputs = vec![];
+        let mut external_data = VerifierExternalData {
+            poseidon2_compress_inputs: &poseidon2_inputs,
+            range_check_inputs: &range_check_inputs,
+            required_heights: verifier_trace_heights,
+            final_transcript_state: None,
+        };
+
         let cached_trace_ctx = CachedTraceCtx::PcsData(self.child_vk_pcs_data.clone());
         let subcircuit_ctxs = self.circuit.verifier_circuit.generate_proving_ctxs(
             &self.child_vk,
             cached_trace_ctx,
             &[proof],
-            &poseidon2_inputs,
-            verifier_trace_heights,
+            &mut external_data,
             default_duplex_sponge_recorder(),
         );
 
@@ -186,7 +195,14 @@ impl<
         PB::Matrix: Clone,
         PB::Commitment: Into<CommitBytes>,
     {
-        let verifier_circuit = S::new(child_vk.clone(), true, true);
+        let verifier_circuit = S::new(
+            child_vk.clone(),
+            VerifierConfig {
+                continuations_enabled: true,
+                has_cached: true,
+                ..Default::default()
+            },
+        );
         let engine = E::new(system_params);
         let internal_recursive_dag_commit = child_vk_pcs_data.commitment.into();
         let circuit = Arc::new(RootCircuit::new(
@@ -220,7 +236,14 @@ impl<
         PB::Matrix: Clone,
         PB::Commitment: Into<CommitBytes>,
     {
-        let verifier_circuit = S::new(child_vk.clone(), true, true);
+        let verifier_circuit = S::new(
+            child_vk.clone(),
+            VerifierConfig {
+                continuations_enabled: true,
+                has_cached: true,
+                ..Default::default()
+            },
+        );
         let internal_recursive_dag_commit = child_vk_pcs_data.commitment.into();
         let circuit = Arc::new(RootCircuit::new(
             Arc::new(verifier_circuit),

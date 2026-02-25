@@ -1,5 +1,5 @@
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
-use openvm_cuda_common::memory_manager::MemTracker;
+use openvm_cuda_common::{copy::cuda_memcpy, memory_manager::MemTracker};
 
 use crate::primitives::{cuda_abi::range_checker_tracegen, range::RangeCheckerCols};
 
@@ -17,6 +17,28 @@ impl<const NUM_BITS: usize> Default for RangeCheckerGpuTraceGenerator<NUM_BITS> 
 }
 
 impl<const NUM_BITS: usize> RangeCheckerGpuTraceGenerator<NUM_BITS> {
+    pub fn from_vals(vals: &[usize]) -> Self {
+        let res = Self::default();
+        if vals.len() == 0 {
+            return res;
+        }
+
+        let mut count = vec![0u32; 1 << NUM_BITS];
+        for &v in vals {
+            count[v] += 1;
+        }
+
+        unsafe {
+            cuda_memcpy::<false, true>(
+                res.count_mut_ptr().cast(),
+                count.as_ptr().cast(),
+                std::mem::size_of_val(count.as_slice()),
+            )
+            .unwrap();
+        }
+        res
+    }
+
     pub fn count_ptr(&self) -> *const u32 {
         self.trace.buffer().as_ptr().wrapping_add(1 << NUM_BITS) as *const u32
     }

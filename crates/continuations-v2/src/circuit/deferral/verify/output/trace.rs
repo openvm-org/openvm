@@ -20,6 +20,8 @@ pub fn generate_proving_ctx(
 ) -> (
     AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>,
     Vec<[F; POSEIDON2_WIDTH]>,
+    Vec<usize>,
+    [F; DIGEST_SIZE],
 ) {
     debug_assert!(DIGEST_SIZE.is_multiple_of(F_NUM_BYTES));
     debug_assert!(DIGEST_SIZE.is_multiple_of(VALS_IN_DIGEST));
@@ -37,6 +39,10 @@ pub fn generate_proving_ctx(
     let mut trace = vec![F::ZERO; height * width];
     let mut chunks = trace.chunks_exact_mut(width);
 
+    let mut poseidon2_compress_inputs = Vec::with_capacity(next_f_rows.len().saturating_sub(1));
+    let mut range_inputs = Vec::with_capacity(next_f_rows.len() * DIGEST_SIZE);
+    let mut state = [F::ZERO; DIGEST_SIZE];
+
     for (row_idx, next_f) in next_f_rows.iter().copied().enumerate() {
         let row = chunks.next().unwrap();
         let cols: &mut DeferralOutputCommitCols<F> = row.borrow_mut();
@@ -45,32 +51,24 @@ pub fn generate_proving_ctx(
         cols.next_f = next_f;
         cols.next_f_idx = F::from_usize(row_idx);
         cols.next_bytes = next_f_to_digest(next_f);
+        range_inputs.extend_from_slice(&cols.next_bytes.map(|b| b.as_canonical_u32() as usize));
+
+        if row_idx == 0 {
+            state = cols.next_bytes;
+        } else {
+            cols.state = state;
+            poseidon2_compress_inputs.push(digests_to_poseidon2_input(state, cols.next_bytes));
+            state = poseidon2_compress_with_capacity(state, cols.next_bytes).0;
+        }
     }
 
     for row_idx in next_f_rows.len()..height {
         let row = chunks.next().unwrap();
         let cols: &mut DeferralOutputCommitCols<F> = row.borrow_mut();
         cols.next_f_idx = F::from_usize(row_idx);
-    }
-
-    let mut poseidon2_compress_inputs = Vec::with_capacity(next_f_rows.len().saturating_sub(1));
-    let mut state = next_f_to_digest(next_f_rows[0]);
-
-    if height > 1 {
-        let row_1: &mut DeferralOutputCommitCols<F> = trace[width..2 * width].borrow_mut();
-        row_1.state = state;
-    }
-
-    for &next_f in next_f_rows.iter().skip(1) {
-        let next_bytes = next_f_to_digest(next_f);
-        poseidon2_compress_inputs.push(digests_to_poseidon2_input(state, next_bytes));
-        state = poseidon2_compress_with_capacity(state, next_bytes).0;
-    }
-
-    if next_f_rows.len() < height {
-        let first_invalid_row: &mut DeferralOutputCommitCols<F> =
-            trace[next_f_rows.len() * width..(next_f_rows.len() + 1) * width].borrow_mut();
-        first_invalid_row.state = state;
+        if row_idx == next_f_rows.len() {
+            cols.state = state;
+        }
     }
 
     (
@@ -78,6 +76,8 @@ pub fn generate_proving_ctx(
             trace, width,
         ))),
         poseidon2_compress_inputs,
+        range_inputs,
+        state,
     )
 }
 

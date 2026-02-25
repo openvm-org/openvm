@@ -14,7 +14,9 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     default_duplex_sponge_recorder, Digest, EF, F,
 };
-use recursion_circuit::system::{AggregationSubCircuit, CachedTraceCtx, VerifierTraceGen};
+use recursion_circuit::system::{
+    AggregationSubCircuit, CachedTraceCtx, VerifierConfig, VerifierTraceGen,
+};
 use tracing::instrument;
 
 use crate::{
@@ -149,7 +151,14 @@ impl<
         system_params: SystemParams,
         is_self_recursive: bool,
     ) -> Self {
-        let verifier_circuit = S::new(child_vk.clone(), true, true);
+        let verifier_circuit = S::new(
+            child_vk.clone(),
+            VerifierConfig {
+                continuations_enabled: true,
+                has_cached: true,
+                ..Default::default()
+            },
+        );
         let engine = E::new(system_params);
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         let circuit = Arc::new(NonRootCircuit::new(Arc::new(verifier_circuit)));
@@ -177,7 +186,14 @@ impl<
         pk: Arc<MultiStarkProvingKey<SC>>,
         is_self_recursive: bool,
     ) -> Self {
-        let verifier_circuit = S::new(child_vk.clone(), true, true);
+        let verifier_circuit = S::new(
+            child_vk.clone(),
+            VerifierConfig {
+                continuations_enabled: true,
+                has_cached: true,
+                ..Default::default()
+            },
+        );
         let engine = E::new(pk.params.clone());
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         let circuit = Arc::new(NonRootCircuit::new(Arc::new(verifier_circuit)));

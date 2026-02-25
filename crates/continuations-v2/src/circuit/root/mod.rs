@@ -139,6 +139,15 @@ pub(crate) fn digests_to_poseidon2_input<T: Clone>(
     })
 }
 
+pub fn poseidon2_input_to_digests<T>(
+    x: [T; POSEIDON2_WIDTH],
+) -> ([T; DIGEST_SIZE], [T; DIGEST_SIZE]) {
+    let mut it = x.into_iter();
+    let commit = from_fn(|_| it.next().unwrap());
+    let len = from_fn(|_| it.next().unwrap());
+    (commit, len)
+}
+
 pub(crate) fn pad_slice_to_poseidon2_input<T: Clone>(x: &[T], fill: T) -> [T; POSEIDON2_WIDTH] {
     from_fn(|i| {
         if i < x.len() {

@@ -40,17 +40,23 @@ const SBOX_REGISTERS: usize = 1;
 pub struct TranscriptModule {
     pub bus_inventory: BusInventory,
     params: SystemParams,
+    final_state_bus_enabled: bool,
 
     sub_chip: Poseidon2SubChip<F, SBOX_REGISTERS>,
     perm: Poseidon2BabyBear<POSEIDON2_WIDTH>,
 }
 
 impl TranscriptModule {
-    pub fn new(bus_inventory: BusInventory, params: SystemParams) -> Self {
+    pub fn new(
+        bus_inventory: BusInventory,
+        params: SystemParams,
+        final_state_bus_enabled: bool,
+    ) -> Self {
         let sub_chip = Poseidon2SubChip::<F, 1>::new(Poseidon2Config::default().constants);
         Self {
             bus_inventory,
             params,
+            final_state_bus_enabled,
             sub_chip,
             perm: poseidon2_perm().clone(),
         }
@@ -269,6 +275,9 @@ impl AirModule for TranscriptModule {
         let transcript_air = TranscriptAir {
             transcript_bus: self.bus_inventory.transcript_bus,
             poseidon2_permute_bus: self.bus_inventory.poseidon2_permute_bus,
+            final_state_bus: self
+                .final_state_bus_enabled
+                .then_some(self.bus_inventory.final_state_bus),
         };
         let poseidon2_air = Poseidon2Air::<F, SBOX_REGISTERS> {
             subair: self.sub_chip.air.clone(),

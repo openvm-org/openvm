@@ -13,7 +13,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
 };
 use recursion_circuit::{
     batch_constraint::expr_eval::CachedTraceRecord,
-    system::{AggregationSubCircuit, CachedTraceCtx, VerifierTraceGen},
+    system::{AggregationSubCircuit, CachedTraceCtx, VerifierConfig, VerifierTraceGen},
 };
 use tracing::instrument;
 
@@ -113,7 +113,14 @@ impl<
         E::PD: DeviceDataTransporter<SC, PB> + Clone,
         PB::Matrix: Clone,
     {
-        let verifier_circuit = S::new(child_vk.clone(), true, false);
+        let verifier_circuit = S::new(
+            child_vk.clone(),
+            VerifierConfig {
+                continuations_enabled: true,
+                has_cached: false,
+                ..Default::default()
+            },
+        );
         let cached_trace_record = verifier_circuit.cached_trace_record(&child_vk);
         let engine = E::new(system_params);
         let circuit = Arc::new(NonRootCircuit::new(Arc::new(verifier_circuit)));
@@ -138,7 +145,14 @@ impl<
         E::PD: DeviceDataTransporter<SC, PB> + Clone,
         PB::Matrix: Clone,
     {
-        let verifier_circuit = S::new(child_vk.clone(), true, false);
+        let verifier_circuit = S::new(
+            child_vk.clone(),
+            VerifierConfig {
+                continuations_enabled: true,
+                has_cached: false,
+                ..Default::default()
+            },
+        );
         let cached_trace_record = verifier_circuit.cached_trace_record(&child_vk);
         let circuit = Arc::new(NonRootCircuit::new(Arc::new(verifier_circuit)));
         let vk = Arc::new(pk.get_vk());
