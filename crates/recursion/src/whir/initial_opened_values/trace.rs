@@ -66,7 +66,7 @@ impl RowMajorChip<F> for InitialOpenedValuesTraceGenerator {
                 let (proof_idx, query_idx, coset_idx, commit_idx, chunk_idx) =
                     accs_layout.decompose(row_idx);
                 let preflight = &preflights[proof_idx];
-                let chunk_len = accs_layout.chunk_len(commit_idx, chunk_idx);
+                let chunk_len = accs_layout.chunk_len(proof_idx, commit_idx, chunk_idx);
 
                 let mu = preflight.stacking.stacking_batching_challenge;
 
@@ -100,7 +100,7 @@ impl RowMajorChip<F> for InitialOpenedValuesTraceGenerator {
                 cols.mu.copy_from_slice(mu.as_basis_coefficients_slice());
                 cols.merkle_idx_bit_src = preflight.whir.queries[query_idx];
 
-                let exponent_base = accs_layout.commit_width_offset(commit_idx);
+                let exponent_base = accs_layout.commit_width_offset(proof_idx, commit_idx);
                 let chunk_base = exponent_base + chunk_idx * CHUNK;
 
                 // Fill mu_pows_even_clamped[k] = mu^(min(b + 2k, opened_row_len - 1)),
