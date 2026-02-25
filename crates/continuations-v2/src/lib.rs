@@ -1,6 +1,6 @@
-pub mod aggregation;
 pub mod bn254;
 pub mod circuit;
+pub mod prover;
 
 #[cfg(test)]
 mod tests;

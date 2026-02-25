@@ -1,4 +1,4 @@
-use std::borrow::Borrow;
+use std::{array::from_fn, borrow::Borrow};
 
 use itertools::Itertools;
 use openvm_circuit::arch::POSEIDON2_WIDTH;
@@ -20,8 +20,14 @@ use recursion_circuit::{
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use crate::circuit::root::bus::{
-    UserPvsCommitBus, UserPvsCommitMessage, UserPvsCommitTreeBus, UserPvsCommitTreeMessage,
+use crate::circuit::{
+    deferral::verify::{
+        bus::{OutputValBus, OutputValMessage},
+        output::VALS_IN_DIGEST,
+    },
+    root::bus::{
+        UserPvsCommitBus, UserPvsCommitMessage, UserPvsCommitTreeBus, UserPvsCommitTreeMessage,
+    },
 };
 
 pub(super) const MAX_ENCODER_DEGREE: u32 = 3;
@@ -43,21 +49,41 @@ pub struct UserPvsCommitCols<F> {
     pub right_child: [F; DIGEST_SIZE],
 }
 
+#[derive(Clone, Debug)]
+pub enum UserPvsCommitMode {
+    ExposePublicValues { encoder: Encoder },
+    SendToOutputValBus { output_val_bus: OutputValBus },
+}
+
+impl UserPvsCommitMode {
+    pub fn width(&self) -> usize {
+        match self {
+            UserPvsCommitMode::ExposePublicValues { encoder } => encoder.width(),
+            UserPvsCommitMode::SendToOutputValBus { .. } => 0,
+        }
+    }
+
+    pub const fn exposes_public_values(&self) -> bool {
+        matches!(self, Self::ExposePublicValues { .. })
+    }
+}
+
 /**
- * Builds a binary Merkle tree to decommit and expose the raw user public values. Constrains
- * that:
- * - leaf nodes read single digests from exposed PVs, compress with zeros, and compute leaf
- *   hashes
+ * Builds a binary Merkle tree to decommit and expose or emit the raw user public values.
+ * Constrains that:
+ * - leaf nodes read single digests, compress with zeros, and compute leaf hashes
  * - internal nodes receive children from an internal permutation bus
  * - root commitment is sent to `UserPvsCommitBus`
+ * - leaf payload is either read from exposed public values (encoder-selected) or sent on
+ *   `OutputValBus` starting at OUTPUT_USER_PVS_START_IDX
  */
 pub struct UserPvsCommitAir {
     pub poseidon2_compress_bus: Poseidon2CompressBus,
     pub user_pvs_commit_bus: UserPvsCommitBus,
     pub user_pvs_commit_tree_bus: UserPvsCommitTreeBus,
 
+    pub mode: UserPvsCommitMode,
     num_user_pvs: usize,
-    encoder: Encoder,
 }
 
 impl UserPvsCommitAir {
@@ -65,6 +91,7 @@ impl UserPvsCommitAir {
         poseidon2_compress_bus: Poseidon2CompressBus,
         user_pvs_commit_bus: UserPvsCommitBus,
         user_pvs_commit_tree_bus: UserPvsCommitTreeBus,
+        output_val_bus: Option<OutputValBus>,
         num_user_pvs: usize,
     ) -> Self {
         // Each leaf consumes `DIGEST_SIZE` public values, which are compressed with zeros
@@ -73,26 +100,36 @@ impl UserPvsCommitAir {
         debug_assert!(num_user_pvs.is_multiple_of(DIGEST_SIZE));
         debug_assert!((num_user_pvs / DIGEST_SIZE).is_power_of_two());
 
-        // One selector per leaf PV chunk (each leaf consumes 1 digest).
-        let encoder = Encoder::new(num_user_pvs / DIGEST_SIZE, MAX_ENCODER_DEGREE, true);
+        let mode = if let Some(output_val_bus) = output_val_bus {
+            UserPvsCommitMode::SendToOutputValBus { output_val_bus }
+        } else {
+            // One selector per leaf PV chunk (each leaf consumes 1 digest).
+            let encoder = Encoder::new(num_user_pvs / DIGEST_SIZE, MAX_ENCODER_DEGREE, true);
+            UserPvsCommitMode::ExposePublicValues { encoder }
+        };
+
         UserPvsCommitAir {
             poseidon2_compress_bus,
             user_pvs_commit_bus,
             user_pvs_commit_tree_bus,
+            mode,
             num_user_pvs,
-            encoder,
         }
     }
 }
 
 impl<F> BaseAir<F> for UserPvsCommitAir {
     fn width(&self) -> usize {
-        UserPvsCommitCols::<u8>::width() + self.encoder.width()
+        UserPvsCommitCols::<u8>::width() + self.mode.width()
     }
 }
 impl<F> BaseAirWithPublicValues<F> for UserPvsCommitAir {
     fn num_public_values(&self) -> usize {
-        self.num_user_pvs
+        if self.mode.exposes_public_values() {
+            self.num_user_pvs
+        } else {
+            0
+        }
     }
 }
 impl<F> PartitionedBaseAir<F> for UserPvsCommitAir {}
@@ -109,7 +146,6 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
 
         let const_width = UserPvsCommitCols::<u8>::width();
         let row_idx_flags = &(*local)[const_width..];
-        self.encoder.eval(builder, row_idx_flags);
 
         let local: &UserPvsCommitCols<AB::Var> = (*local)[..const_width].borrow();
         let next: &UserPvsCommitCols<AB::Var> = (*next)[..const_width].borrow();
@@ -256,31 +292,62 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         );
 
         /*
-         * Constrain that the left_child of each leaf node at row_idx corresponds to
-         * this AIR's public values, and that right_child is all zero on these rows.
-         * Leaf nodes rows should be in order of their position in the public values
-         * vector. A row is a leaf node if its receive_type == 1.
+         * Constrain that the left_child of each leaf node depending on this AIR's mode.
+         * Leaf nodes correspond to the raw user public values, and leaf rows should be
+         * in order of their position in the public values vector. A row is a leaf node
+         * if its receive_type == 1.
          */
-        let pvs = builder.public_values();
         let is_leaf = local.receive_type * (AB::Expr::TWO - local.receive_type);
+        assert_zeros(&mut builder.when(is_leaf.clone()), local.right_child);
 
-        let mut pvs_digest = [AB::Expr::ZERO; DIGEST_SIZE];
+        match &self.mode {
+            UserPvsCommitMode::ExposePublicValues { encoder } => {
+                /*
+                 * Constrain that the left_child of each leaf node at row_idx corresponds
+                 * to this AIR's public values.
+                 */
+                debug_assert_eq!(encoder.width(), row_idx_flags.len());
+                encoder.eval(builder, row_idx_flags);
+                builder.assert_eq(encoder.is_valid::<AB>(row_idx_flags), is_leaf.clone());
 
-        for (pv_chunk_idx, pvs_chunk) in pvs.chunks(DIGEST_SIZE).enumerate() {
-            let selected = self
-                .encoder
-                .get_flag_expr::<AB>(pv_chunk_idx, row_idx_flags);
-            for digest_idx in 0..DIGEST_SIZE {
-                pvs_digest[digest_idx] += selected.clone() * pvs_chunk[digest_idx].into();
+                let pvs = builder.public_values();
+                let mut pvs_digest = [AB::Expr::ZERO; DIGEST_SIZE];
+                for (pv_chunk_idx, pvs_chunk) in pvs.chunks(DIGEST_SIZE).enumerate() {
+                    let selected = encoder.get_flag_expr::<AB>(pv_chunk_idx, row_idx_flags);
+                    for digest_idx in 0..DIGEST_SIZE {
+                        pvs_digest[digest_idx] += selected.clone() * pvs_chunk[digest_idx].into();
+                    }
+                }
+
+                assert_array_eq(
+                    builder,
+                    pvs_digest,
+                    local.left_child.map(|x| x * is_leaf.clone()),
+                );
+            }
+            UserPvsCommitMode::SendToOutputValBus { output_val_bus } => {
+                /*
+                 * Send the left_child of each leaf node to output_values to be processed
+                 * elsewhere. Note that in this case, this AIR has no public values.
+                 */
+                const OUTPUT_USER_PVS_START_IDX: usize = (2 * DIGEST_SIZE) / VALS_IN_DIGEST;
+                const OUTPUT_VAL_MSGS_PER_ROW: usize = DIGEST_SIZE / VALS_IN_DIGEST;
+
+                debug_assert_eq!(row_idx_flags.len(), 0);
+
+                for (i, output_values) in local.left_child.chunks_exact(VALS_IN_DIGEST).enumerate()
+                {
+                    output_val_bus.send(
+                        builder,
+                        OutputValMessage {
+                            values: from_fn(|i| output_values[i].into()),
+                            idx: AB::Expr::from_usize(OUTPUT_USER_PVS_START_IDX + i)
+                                + local.row_idx * AB::Expr::from_usize(OUTPUT_VAL_MSGS_PER_ROW),
+                        },
+                        is_leaf.clone(),
+                    );
+                }
             }
         }
-
-        builder.assert_eq(self.encoder.is_valid::<AB>(row_idx_flags), is_leaf.clone());
-        assert_array_eq(
-            builder,
-            pvs_digest,
-            local.left_child.map(|x| x * is_leaf.clone()),
-        );
-        assert_zeros(&mut builder.when(is_leaf), local.right_child);
     }
 }

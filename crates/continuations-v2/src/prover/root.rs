@@ -19,15 +19,16 @@ use recursion_circuit::system::{AggregationSubCircuit, CachedTraceCtx, VerifierT
 use tracing::instrument;
 
 use crate::{
-    aggregation::{trace_heights_tracing_info, Circuit},
     bn254::CommitBytes,
-    circuit::root::{
-        bus::{MemoryMerkleCommitBus, UserPvsCommitBus, UserPvsCommitTreeBus},
-        commit::UserPvsCommitAir,
-        memory::UserPvsInMemoryAir,
-        verifier::RootVerifierPvsAir,
-        RootTraceGen,
+    circuit::{
+        root::{
+            bus::{MemoryMerkleCommitBus, UserPvsCommitBus, UserPvsCommitTreeBus},
+            verifier::RootVerifierPvsAir,
+            RootTraceGen,
+        },
+        user_pvs::{commit::UserPvsCommitAir, memory::UserPvsInMemoryAir},
     },
+    prover::{trace_heights_tracing_info, Circuit},
     SC,
 };
 
@@ -59,6 +60,7 @@ impl<S: AggregationSubCircuit> Circuit for RootCircuit<S> {
             bus_inventory.poseidon2_compress_bus,
             user_pvs_commit_bus,
             user_pvs_commit_tree_bus,
+            None,
             self.num_user_pvs,
         );
         let user_pvs_memory_air = UserPvsInMemoryAir::new(
@@ -155,7 +157,7 @@ where
         }
         let engine = E::new(self.pk.params.clone());
         #[cfg(debug_assertions)]
-        crate::aggregation::debug_constraints(&self.circuit, &ctx, &engine);
+        crate::prover::debug_constraints(&self.circuit, &ctx, &engine);
         let d_pk = engine.device().transport_pk_to_device(self.pk.as_ref());
         let proof = engine.prove(&d_pk, ctx);
         #[cfg(debug_assertions)]

@@ -18,8 +18,8 @@ use recursion_circuit::system::{AggregationSubCircuit, CachedTraceCtx, VerifierT
 use tracing::instrument;
 
 use crate::{
-    aggregation::{trace_heights_tracing_info, Circuit},
     circuit::nonroot::{receiver::UserPvsReceiverAir, verifier::VerifierPvsAir, NonRootTraceGen},
+    prover::{trace_heights_tracing_info, Circuit},
     SC,
 };
 
@@ -130,7 +130,7 @@ where
         }
         let engine = E::new(self.pk.params.clone());
         #[cfg(debug_assertions)]
-        crate::aggregation::debug_constraints(&self.circuit, &ctx, &engine);
+        crate::prover::debug_constraints(&self.circuit, &ctx, &engine);
         let proof = engine.prove(&self.d_pk, ctx);
         #[cfg(debug_assertions)]
         engine.verify(&self.vk, &proof)?;

@@ -30,19 +30,19 @@ use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use test_case::test_case;
 use tracing::Level;
 
-use crate::{aggregation::ChildVkKind, SC};
+use crate::{prover::ChildVkKind, SC};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        use crate::aggregation::NonRootGpuProver as NonRootProver;
-        use crate::aggregation::CompressionGpuProver as CompressionProver;
-        use crate::aggregation::RootGpuProver as RootProver;
+        use crate::prover::NonRootGpuProver as NonRootProver;
+        use crate::prover::CompressionGpuProver as CompressionProver;
+        use crate::prover::RootGpuProver as RootProver;
         use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
         use openvm_stark_backend::prover::CommittedTraceData;
         type Engine = BabyBearPoseidon2GpuEngine;
         type PB = GpuBackend;
     } else {
-        use crate::aggregation::NonRootCpuProver as NonRootProver;
+        use crate::prover::NonRootCpuProver as NonRootProver;
         use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine, DuplexSponge};
         type Engine = BabyBearPoseidon2CpuEngine<DuplexSponge>;
     }
