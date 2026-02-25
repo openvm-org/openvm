@@ -30,7 +30,7 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64BaseAluAdapterRecord, Rv64ShiftChipGpu, ShiftCoreRecord},
+    crate::{adapters::Rv32BaseAluAdapterRecord, Rv32ShiftChipGpu, ShiftCoreRecord},
     openvm_circuit::arch::{
         testing::{
             default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
