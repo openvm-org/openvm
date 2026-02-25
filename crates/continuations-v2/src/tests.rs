@@ -34,11 +34,19 @@ use crate::{prover::ChildVkKind, SC};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
+        use std::borrow::Borrow;
         use crate::prover::NonRootGpuProver as NonRootProver;
         use crate::prover::CompressionGpuProver as CompressionProver;
         use crate::prover::RootGpuProver as RootProver;
+        use crate::prover::DeferralVerifyGpuProver as DeferredVerifyProver;
+        use crate::circuit::{
+            deferral::{verify::output::expected_output_commit, DeferralCircuitPvs},
+            root::{poseidon2_input_to_digests, RootVerifierPvs},
+        };
         use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
-        use openvm_stark_backend::prover::CommittedTraceData;
+        use openvm_stark_backend::{prover::CommittedTraceData, verifier::verify, TranscriptHistory};
+        use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_compress_with_capacity, default_duplex_sponge_recorder};
+        use verify_stark::pvs::VERIFIER_PVS_AIR_ID;
         type Engine = BabyBearPoseidon2GpuEngine;
         type PB = GpuBackend;
     } else {
@@ -361,5 +369,79 @@ fn test_root_prover_trace_heights() -> Result<()> {
     let vk = root_prover.get_vk();
     let engine = Engine::new(vk.inner.params.clone());
     engine.verify(&vk, &root_proof)?;
+    Ok(())
+}
+
+#[cfg(feature = "cuda")]
+#[test_case(0 ; "internal_recursive_dag_commit not set")]
+#[test_case(1 ; "internal_recursive_dag_commit set")]
+fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()> {
+    setup_tracing_with_log_level(Level::INFO);
+    let (
+        internal_recursive_vk,
+        internal_recursive_pcs_data,
+        internal_recursive_proof,
+        user_pvs_proof,
+    ) = run_full_aggregation(10, child_extra_recursive_layers)?;
+
+    let system_config = test_rv32im_config().rv32i.system;
+
+    // Compute def_proof
+    let deferred_verify_prover = DeferredVerifyProver::new::<Engine>(
+        internal_recursive_vk.clone(),
+        internal_recursive_pcs_data.clone(),
+        root_system_params(),
+        system_config.memory_config.memory_dimensions(),
+        system_config.num_public_values,
+    );
+    let def_proof = deferred_verify_prover
+        .prove::<Engine>(internal_recursive_proof.clone(), &user_pvs_proof)?;
+
+    // Verify that def_proof is valid
+    let vk = deferred_verify_prover.get_vk();
+    let engine = Engine::new(vk.inner.params.clone());
+    engine.verify(&vk, &def_proof)?;
+
+    // Get the final transcript state of internal_recursive_proof
+    let mut ts = default_duplex_sponge_recorder();
+    let config = SC::default_from_params(internal_recursive_vk.inner.params.clone());
+    verify(
+        &config,
+        internal_recursive_vk.as_ref(),
+        &internal_recursive_proof,
+        &mut ts,
+    )?;
+    let ts_log = ts.into_log();
+    let expected_final_ts_state = ts_log.perm_results().last().unwrap();
+
+    // Generate a root_proof to compare the pvs of def_proof against
+    let root_prover = RootProver::new::<Engine>(
+        internal_recursive_vk,
+        internal_recursive_pcs_data,
+        root_system_params(),
+        system_config.memory_config.memory_dimensions(),
+        system_config.num_public_values,
+        None,
+    );
+    let ctx = root_prover.generate_proving_ctx(internal_recursive_proof, &user_pvs_proof);
+    let root_proof = root_prover.root_prove_from_ctx::<Engine>(ctx.unwrap())?;
+
+    // Assert the correctness of the def_proof public values
+    let root_pvs: &RootVerifierPvs<F> = root_proof.public_values[VERIFIER_PVS_AIR_ID]
+        .as_slice()
+        .borrow();
+    let user_pvs = root_proof.public_values[root_proof.public_values.len() - 2].clone();
+
+    let (left, right) = poseidon2_input_to_digests(*expected_final_ts_state);
+    let expected_input_commit = poseidon2_compress_with_capacity(left, right).0;
+    let expected_output_commit =
+        expected_output_commit(root_pvs.app_exe_commit, root_pvs.app_vk_commit, user_pvs);
+
+    let def_pvs: &DeferralCircuitPvs<F> = def_proof.public_values[VERIFIER_PVS_AIR_ID]
+        .as_slice()
+        .borrow();
+    assert_eq!(expected_input_commit, def_pvs.input_commit);
+    assert_eq!(expected_output_commit, def_pvs.output_commit);
+
     Ok(())
 }

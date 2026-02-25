@@ -72,7 +72,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralOutputCommitAir {
          * important because we send the output commit on the first invalid row.
          */
         builder.assert_bool(local.is_valid);
-        builder.when_first_row().assert_zero(local.is_valid);
+        builder.when_first_row().assert_one(local.is_valid);
         builder
             .when_transition()
             .assert_bool(local.is_valid - next.is_valid);

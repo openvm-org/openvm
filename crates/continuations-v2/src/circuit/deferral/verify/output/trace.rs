@@ -96,3 +96,26 @@ fn next_f_to_digest(next_f: [F; VALS_IN_DIGEST]) -> [F; DIGEST_SIZE] {
         F::from_u8(f_u32.to_le_bytes()[byte_in_f])
     })
 }
+
+pub fn expected_output_commit(
+    app_exe_commit: [F; DIGEST_SIZE],
+    app_vk_commit: [F; DIGEST_SIZE],
+    user_pvs: Vec<F>,
+) -> [F; DIGEST_SIZE] {
+    let mut next_f_rows = values_to_rows(&app_exe_commit);
+    next_f_rows.extend(values_to_rows(&app_vk_commit));
+    next_f_rows.extend(values_to_rows(&user_pvs));
+
+    let mut state = [F::ZERO; DIGEST_SIZE];
+
+    for (row_idx, next_f) in next_f_rows.iter().copied().enumerate() {
+        let next_bytes = next_f_to_digest(next_f);
+        if row_idx == 0 {
+            state = next_bytes;
+        } else {
+            state = poseidon2_compress_with_capacity(state, next_bytes).0;
+        }
+    }
+
+    state
+}
