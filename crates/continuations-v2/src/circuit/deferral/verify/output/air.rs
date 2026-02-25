@@ -20,8 +20,8 @@ use crate::circuit::{
     root::digests_to_poseidon2_input,
 };
 
-const F_NUM_BYTES: usize = 4;
-pub const VALS_IN_DIGEST: usize = exact_div_or_panic(DIGEST_SIZE, F_NUM_BYTES);
+pub(crate) const F_NUM_BYTES: usize = 4;
+pub(crate) const VALS_IN_DIGEST: usize = exact_div_or_panic(DIGEST_SIZE, F_NUM_BYTES);
 
 const fn exact_div_or_panic(a: usize, b: usize) -> usize {
     assert!(b != 0 && a % b == 0, "non-exact division");
