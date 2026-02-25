@@ -467,6 +467,53 @@ fn rv64_sltu_wrong_c_msb_sign_negative_test() {
     run_negative_less_than_test(SLTU, b, c, false, prank_vals, true);
 }
 
+#[test]
+fn rv64_lt_adapter_imm_sign_extension_negative_test() {
+    // Execute SLTU with an immediate, then prank c[4] to violate sign extension.
+    // b[4] is set to match the pranked c[4] so the core's diff constraints still hold.
+    // Original execution: b=[10,0,0,0,1,0,0,0], c(imm=5)=[5,0,0,0,0,0,0,0]
+    //   Most significant diff at limb 4 (b[4]=1, c[4]=0), cmp_result=0, diff_val=1
+    // After prank: c[4]=1, so b[4]==c[4], diff moves to limb 0 (b[0]=10, c[0]=5)
+    //   Need to also prank diff_marker and diff_val to keep core happy.
+    let mut rng = create_seeded_rng();
+    let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_test_chip(&tester);
+
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        SLTU,
+        Some([10, 0, 0, 0, 1, 0, 0, 0]),
+        Some(true),
+        Some([5, 0, 0, 0, 0, 0, 0, 0]),
+    );
+
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut values = trace.row_slice(0).to_vec();
+        let cols: &mut LessThanCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
+            values.split_at_mut(adapter_width).1.borrow_mut();
+        // Prank c[4] = 1 (matches b[4], so no diff at limb 4)
+        cols.c[4] = F::ONE;
+        // Move diff_marker from limb 4 to limb 0 and update diff_val
+        cols.diff_marker = [0, 0, 0, 0, 0, 0, 0, 0].map(F::from_canonical_u32);
+        cols.diff_marker[0] = F::ONE;
+        // diff = (c[0] - b[0]) * (2*cmp_result - 1) = (5 - 10) * (-1) = 5
+        cols.diff_val = F::from_canonical_u32(5);
+        *trace = RowMajorMatrix::new(values, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test_with_expected_error(get_verification_error(false));
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////
 /// SANITY TESTS
 ///

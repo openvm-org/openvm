@@ -23,7 +23,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS, RV64_IMM_AS, RV64_REGISTER_AS},
+    riscv::{RV64_CELL_BITS, RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -31,9 +31,7 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
-use super::{
-    tracing_read, tracing_read_imm, tracing_write,
-};
+use super::{tracing_read, tracing_read_imm, tracing_write};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -90,8 +88,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluAdapterAir {
         };
 
         // If rs2 is an immediate value, constrain that:
-        // 1. It's a 16-bit two's complement integer (stored in rs2_limbs[0] and rs2_limbs[1])
-        // 2. It's properly sign-extended to 32-bits (the upper limbs must match the sign bit)
+        // 1. rs2_limbs[0] and rs2_limbs[1] are valid bytes encoding the low 16 bits
+        // 2. rs2_limbs[2] is the sign byte (0x00 or 0xFF)
+        // 3. The 24-bit value limbs[0..3] reconstructs to local.rs2
+        // 4. Limbs[3..8] are sign-extended (equal to the sign byte)
         let rs2_limbs = ctx.reads[1].clone();
         let rs2_sign = rs2_limbs[2].clone();
         let rs2_imm = rs2_limbs[0].clone()
@@ -100,7 +100,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluAdapterAir {
         builder.assert_bool(local.rs2_as);
         let mut rs2_imm_when = builder.when(not(local.rs2_as));
         rs2_imm_when.assert_eq(local.rs2, rs2_imm);
-        rs2_imm_when.assert_eq(rs2_sign.clone(), rs2_limbs[3].clone());
+        for i in 3..RV64_REGISTER_NUM_LIMBS {
+            rs2_imm_when.assert_eq(rs2_sign.clone(), rs2_limbs[i].clone());
+        }
         rs2_imm_when.assert_zero(
             rs2_sign.clone()
                 * (AB::Expr::from_canonical_usize((1 << RV64_CELL_BITS) - 1) - rs2_sign),
@@ -282,8 +284,8 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceFiller<F>
         // - Do not overwrite any reference in `record` before it has already been used or moved
         // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic
         //   otherwise)
-        // - adapter_row contains a valid Rv32BaseAluAdapterRecord representation
-        // - get_record_from_slice correctly interprets the bytes as Rv32BaseAluAdapterRecord
+        // - adapter_row contains a valid Rv64BaseAluAdapterRecord representation
+        // - get_record_from_slice correctly interprets the bytes as Rv64BaseAluAdapterRecord
         let record: &Rv64BaseAluAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut Rv64BaseAluAdapterCols<F> = adapter_row.borrow_mut();
@@ -313,7 +315,7 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceFiller<F>
             let rs2_imm = record.rs2;
             let mask = (1 << RV64_CELL_BITS) - 1;
             self.bitwise_lookup_chip
-                .request_range(rs2_imm & mask, (rs2_imm >> 8) & mask);
+                .request_range(rs2_imm & mask, (rs2_imm >> RV64_CELL_BITS) & mask);
         }
         timestamp -= 1;
 

@@ -423,6 +423,44 @@ fn rv64_sra_wrong_sign_negative_test() {
     run_negative_shift_test(SRA, a, b, c, prank_vals, true);
 }
 
+#[test]
+fn rv64_shift_adapter_imm_sign_extension_negative_test() {
+    // Execute SLL with an immediate (shift by 1), then prank c[4] = 1 while sign byte
+    // (c[2]) = 0. The shift core only uses c[0] so core constraints still hold, but
+    // the adapter must catch that limbs 4-7 don't match the sign byte.
+    let mut rng = create_seeded_rng();
+    let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&tester);
+
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        SLL,
+        Some([1, 0, 0, 0, 0, 0, 0, 0]),
+        Some(true),
+        Some([1, 0, 0, 0, 0, 0, 0, 0]),
+    );
+
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut values = trace.row_slice(0).to_vec();
+        let cols: &mut ShiftCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
+            values.split_at_mut(adapter_width).1.borrow_mut();
+        cols.c[4] = F::ONE;
+        *trace = RowMajorMatrix::new(values, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test_with_expected_error(get_verification_error(false));
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////
 /// SANITY TESTS
 ///
