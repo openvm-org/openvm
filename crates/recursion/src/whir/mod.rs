@@ -115,6 +115,52 @@ impl FlattenedLayout for PerProofLayout {
 }
 
 #[derive(Clone, Debug)]
+pub(in crate::whir) struct VariablePerProofLayout {
+    proof_offsets: Vec<usize>,
+}
+
+impl VariablePerProofLayout {
+    pub(in crate::whir) fn new(per_proof_items: impl IntoIterator<Item = usize>) -> Self {
+        let mut proof_offsets = vec![0];
+        let mut total = 0usize;
+        for items in per_proof_items {
+            total += items;
+            proof_offsets.push(total);
+        }
+        Self { proof_offsets }
+    }
+}
+
+impl FlattenedLayout for VariablePerProofLayout {
+    type Index = PerProofIdx;
+
+    #[inline]
+    fn len(&self) -> usize {
+        *self.proof_offsets.last().unwrap_or(&0)
+    }
+
+    #[inline]
+    fn offset(&self, idx: Self::Index) -> usize {
+        let (proof_idx, item_idx) = idx;
+        debug_assert!(
+            proof_idx + 1 < self.proof_offsets.len(),
+            "proof index out of bounds: {proof_idx} >= {}",
+            self.proof_offsets.len().saturating_sub(1)
+        );
+        let proof_start = self.proof_offsets[proof_idx];
+        let proof_end = self.proof_offsets[proof_idx + 1];
+        debug_assert!(
+            item_idx < proof_end - proof_start,
+            "index out of bounds: {} >= {} for proof {}",
+            item_idx,
+            proof_end - proof_start,
+            proof_idx
+        );
+        proof_start + item_idx
+    }
+}
+
+#[derive(Clone, Debug)]
 pub(in crate::whir) struct WhirQueryLayout {
     num_proofs: usize,
     query_offsets: Vec<usize>,
@@ -230,113 +276,165 @@ pub(in crate::whir) type CodewordAccsIdx = (usize, usize, usize, usize, usize);
 /// Data is ordered as `[proof][query][coset][commit][chunk]`.
 #[derive(Clone, Debug)]
 pub(in crate::whir) struct CodewordAccsLayout {
-    num_proofs: usize,
     num_queries: usize,
     num_cosets: usize,
-    total_chunks: usize,
-    total_width: usize,
-    commit_chunk_offsets: Vec<usize>,
-    commit_width_offsets: Vec<usize>,
+    rows_per_proof_offsets: Vec<usize>,
+    commits_per_proof_offsets: Vec<usize>,
+    stacking_chunks_offsets: Vec<usize>,
+    stacking_widths_offsets: Vec<usize>,
 }
 
 impl CodewordAccsLayout {
     pub(in crate::whir) fn new(
-        num_proofs: usize,
         num_queries: usize,
         num_cosets: usize,
-        per_commit_widths: &[usize],
+        per_proof_commit_widths: &[Vec<usize>],
     ) -> Self {
-        let mut chunk_offsets = Vec::with_capacity(per_commit_widths.len() + 1);
-        let mut width_offsets = Vec::with_capacity(per_commit_widths.len() + 1);
-        chunk_offsets.push(0);
-        width_offsets.push(0);
-        for &w in per_commit_widths {
-            chunk_offsets.push(*chunk_offsets.last().unwrap() + w.div_ceil(CHUNK));
-            width_offsets.push(*width_offsets.last().unwrap() + w);
+        let num_proofs = per_proof_commit_widths.len();
+        let mut rows_per_proof_offsets = Vec::with_capacity(num_proofs + 1);
+        let mut commits_per_proof_offsets = Vec::with_capacity(num_proofs + 1);
+        let total_commits: usize = per_proof_commit_widths.iter().map(Vec::len).sum();
+        let mut stacking_chunks_offsets = Vec::with_capacity(total_commits + 1);
+        let mut stacking_widths_offsets = Vec::with_capacity(total_commits + 1);
+
+        rows_per_proof_offsets.push(0);
+        commits_per_proof_offsets.push(0);
+        stacking_chunks_offsets.push(0);
+        stacking_widths_offsets.push(0);
+
+        for per_commit_widths in per_proof_commit_widths {
+            let mut total_chunks_for_proof = 0usize;
+            for &width in per_commit_widths {
+                let chunks = width.div_ceil(CHUNK);
+                total_chunks_for_proof += chunks;
+                stacking_chunks_offsets.push(*stacking_chunks_offsets.last().unwrap() + chunks);
+                stacking_widths_offsets.push(*stacking_widths_offsets.last().unwrap() + width);
+            }
+            rows_per_proof_offsets.push(
+                *rows_per_proof_offsets.last().unwrap()
+                    + num_queries * num_cosets * total_chunks_for_proof,
+            );
+            commits_per_proof_offsets
+                .push(*commits_per_proof_offsets.last().unwrap() + per_commit_widths.len());
         }
-        let total_chunks = *chunk_offsets.last().unwrap();
-        let total_width = *width_offsets.last().unwrap();
         Self {
-            num_proofs,
             num_queries,
             num_cosets,
-            total_chunks,
-            total_width,
-            commit_chunk_offsets: chunk_offsets,
-            commit_width_offsets: width_offsets,
+            rows_per_proof_offsets,
+            commits_per_proof_offsets,
+            stacking_chunks_offsets,
+            stacking_widths_offsets,
         }
     }
 
     #[inline]
-    pub(in crate::whir) fn rows_per_proof(&self) -> usize {
-        self.total_chunks * self.num_queries * self.num_cosets
+    pub(in crate::whir) fn num_proofs(&self) -> usize {
+        self.rows_per_proof_offsets.len().saturating_sub(1)
+    }
+
+    #[inline]
+    pub(in crate::whir) fn total_chunks(&self, proof_idx: usize) -> usize {
+        let commit_start = self.commits_per_proof_offsets[proof_idx];
+        let commit_end = self.commits_per_proof_offsets[proof_idx + 1];
+        self.stacking_chunks_offsets[commit_end] - self.stacking_chunks_offsets[commit_start]
     }
 
     #[cfg(feature = "cuda")]
     #[inline]
-    pub(in crate::whir) fn total_chunks(&self) -> usize {
-        self.total_chunks
-    }
-
-    #[inline]
-    pub(in crate::whir) fn total_width(&self) -> usize {
-        self.total_width
-    }
-
-    #[inline]
-    pub(in crate::whir) fn num_commits(&self) -> usize {
-        self.commit_chunk_offsets.len() - 1
+    pub(in crate::whir) fn rows_per_proof_offsets(&self) -> &[usize] {
+        &self.rows_per_proof_offsets
     }
 
     #[cfg(feature = "cuda")]
     #[inline]
-    pub(in crate::whir) fn commit_chunk_offsets(&self) -> &[usize] {
-        &self.commit_chunk_offsets
+    pub(in crate::whir) fn commits_per_proof_offsets(&self) -> &[usize] {
+        &self.commits_per_proof_offsets
     }
 
     #[cfg(feature = "cuda")]
     #[inline]
-    pub(in crate::whir) fn commit_width_offsets(&self) -> &[usize] {
-        &self.commit_width_offsets
+    pub(in crate::whir) fn stacking_chunks_offsets(&self) -> &[usize] {
+        &self.stacking_chunks_offsets
+    }
+
+    #[cfg(feature = "cuda")]
+    #[inline]
+    pub(in crate::whir) fn stacking_widths_offsets(&self) -> &[usize] {
+        &self.stacking_widths_offsets
+    }
+
+    #[inline]
+    pub(in crate::whir) fn total_width(&self, proof_idx: usize) -> usize {
+        let commit_start = self.commits_per_proof_offsets[proof_idx];
+        let commit_end = self.commits_per_proof_offsets[proof_idx + 1];
+        self.stacking_widths_offsets[commit_end] - self.stacking_widths_offsets[commit_start]
+    }
+
+    #[inline]
+    pub(in crate::whir) fn num_commits(&self, proof_idx: usize) -> usize {
+        self.commits_per_proof_offsets[proof_idx + 1] - self.commits_per_proof_offsets[proof_idx]
     }
 
     /// Decompose a flat row index into `(proof, query, coset, commit, chunk)`.
     #[inline]
     pub(in crate::whir) fn decompose(&self, row_idx: usize) -> CodewordAccsIdx {
-        let rpp = self.rows_per_proof();
-        let proof_idx = row_idx / rpp;
-        let record_idx = row_idx % rpp;
-        let query_idx = record_idx / (self.num_cosets * self.total_chunks);
-        let coset_idx = (record_idx / self.total_chunks) % self.num_cosets;
-        let local_chunk_idx = record_idx % self.total_chunks;
-        let commit_idx = self.commit_chunk_offsets[1..].partition_point(|&x| x <= local_chunk_idx);
-        let chunk_idx = local_chunk_idx - self.commit_chunk_offsets[commit_idx];
+        let proof_idx = self.rows_per_proof_offsets[1..].partition_point(|&x| x <= row_idx);
+        let record_idx = row_idx - self.rows_per_proof_offsets[proof_idx];
+        let commit_start = self.commits_per_proof_offsets[proof_idx];
+        let commit_end = self.commits_per_proof_offsets[proof_idx + 1];
+
+        let chunks_before_proof = self.stacking_chunks_offsets[commit_start];
+        let chunks_after_proof = self.stacking_chunks_offsets[commit_end];
+        let total_chunks_for_proof = chunks_after_proof - chunks_before_proof;
+
+        let query_idx = record_idx / (self.num_cosets * total_chunks_for_proof);
+        let coset_idx = (record_idx / total_chunks_for_proof) % self.num_cosets;
+        let local_chunk_idx = record_idx % total_chunks_for_proof;
+        let absolute_chunk_idx = chunks_before_proof + local_chunk_idx;
+        let commit_idx = self.stacking_chunks_offsets[commit_start + 1..=commit_end]
+            .partition_point(|&x| x <= absolute_chunk_idx);
+        let chunk_idx =
+            absolute_chunk_idx - self.stacking_chunks_offsets[commit_start + commit_idx];
+
         (proof_idx, query_idx, coset_idx, commit_idx, chunk_idx)
     }
 
     /// Number of chunks in the given commit.
     #[inline]
-    pub(in crate::whir) fn commit_num_chunks(&self, commit_idx: usize) -> usize {
-        self.commit_chunk_offsets[commit_idx + 1] - self.commit_chunk_offsets[commit_idx]
+    pub(in crate::whir) fn commit_num_chunks(&self, proof_idx: usize, commit_idx: usize) -> usize {
+        let global_idx = self.commits_per_proof_offsets[proof_idx] + commit_idx;
+        self.stacking_chunks_offsets[global_idx + 1] - self.stacking_chunks_offsets[global_idx]
     }
 
     /// Width (number of opened values) in the given commit.
     #[inline]
-    pub(in crate::whir) fn commit_width(&self, commit_idx: usize) -> usize {
-        self.commit_width_offsets[commit_idx + 1] - self.commit_width_offsets[commit_idx]
+    pub(in crate::whir) fn commit_width(&self, proof_idx: usize, commit_idx: usize) -> usize {
+        let global_idx = self.commits_per_proof_offsets[proof_idx] + commit_idx;
+        self.stacking_widths_offsets[global_idx + 1] - self.stacking_widths_offsets[global_idx]
     }
 
     /// Cumulative width offset for the given commit (for `mu_pows` indexing).
     #[inline]
-    pub(in crate::whir) fn commit_width_offset(&self, commit_idx: usize) -> usize {
-        self.commit_width_offsets[commit_idx]
+    pub(in crate::whir) fn commit_width_offset(
+        &self,
+        proof_idx: usize,
+        commit_idx: usize,
+    ) -> usize {
+        let commit_start = self.commits_per_proof_offsets[proof_idx];
+        self.stacking_widths_offsets[commit_start + commit_idx]
+            - self.stacking_widths_offsets[commit_start]
     }
 
     /// Length of the chunk at `(commit_idx, chunk_idx)`.
     /// The last chunk of a commit may be shorter than `CHUNK`.
     #[inline]
-    pub(in crate::whir) fn chunk_len(&self, commit_idx: usize, chunk_idx: usize) -> usize {
-        (self.commit_width(commit_idx) - chunk_idx * CHUNK).min(CHUNK)
+    pub(in crate::whir) fn chunk_len(
+        &self,
+        proof_idx: usize,
+        commit_idx: usize,
+        chunk_idx: usize,
+    ) -> usize {
+        (self.commit_width(proof_idx, commit_idx) - chunk_idx * CHUNK).min(CHUNK)
     }
 }
 
@@ -345,20 +443,27 @@ impl FlattenedLayout for CodewordAccsLayout {
 
     #[inline]
     fn len(&self) -> usize {
-        self.num_proofs * self.rows_per_proof()
+        *self.rows_per_proof_offsets.last().unwrap_or(&0)
     }
 
     #[inline]
     fn offset(&self, (proof, query, coset, commit, chunk): Self::Index) -> usize {
-        debug_assert!(proof < self.num_proofs);
+        debug_assert!(proof < self.num_proofs());
         debug_assert!(query < self.num_queries);
         debug_assert!(coset < self.num_cosets);
-        debug_assert!(commit < self.num_commits());
-        debug_assert!(chunk < self.commit_num_chunks(commit));
-        proof * self.rows_per_proof()
-            + query * self.num_cosets * self.total_chunks
-            + coset * self.total_chunks
-            + self.commit_chunk_offsets[commit]
+        debug_assert!(commit < self.num_commits(proof));
+        debug_assert!(chunk < self.commit_num_chunks(proof, commit));
+
+        let commit_start = self.commits_per_proof_offsets[proof];
+        let chunks_before_proof = self.stacking_chunks_offsets[commit_start];
+        let total_chunks_for_proof = self.total_chunks(proof);
+        let local_commit_chunk_offset =
+            self.stacking_chunks_offsets[commit_start + commit] - chunks_before_proof;
+
+        self.rows_per_proof_offsets[proof]
+            + query * self.num_cosets * total_chunks_for_proof
+            + coset * total_chunks_for_proof
+            + local_commit_chunk_offset
             + chunk
     }
 }
@@ -535,8 +640,8 @@ pub(crate) struct WhirBlobCpu {
 
     /// Initial opened values data with layout encoding (proof, query, coset, commit, chunk).
     codeword_value_accs: FlattenedVec<EF, CodewordAccsLayout>,
-    /// Flattened as `[proof][mu_power_idx]`, where `mu_power_idx` ranges over `total_width`.
-    mu_pows: FlattenedVec<EF, PerProofLayout>,
+    /// Flattened as `[proof][mu_power_idx]` with per-proof variable widths.
+    mu_pows: FlattenedVec<EF, VariablePerProofLayout>,
 }
 
 struct WhirBlobBuilder {
@@ -563,7 +668,7 @@ struct WhirBlobLayouts {
     query_layout: WhirQueryLayout,
     fold_layout: PerProofLayout,
     accs_layout: CodewordAccsLayout,
-    mu_pows_layout: PerProofLayout,
+    mu_pows_layout: VariablePerProofLayout,
 }
 
 impl WhirBlobBuilder {
@@ -931,15 +1036,15 @@ impl WhirModule {
     fn append_initial_opened_values_accs_for_proof(
         blob: &mut WhirBlobBuilder,
         accs_layout: &CodewordAccsLayout,
+        proof_idx: usize,
         proof: &Proof<BabyBearPoseidon2Config>,
         local_mu_pows: &[EF],
         num_initial_queries: usize,
         k_whir: usize,
     ) {
-        // Debug assert that this proof's structure matches the first proof.
         debug_assert_eq!(
             proof.whir_proof.initial_round_opened_rows.len(),
-            accs_layout.num_commits()
+            accs_layout.num_commits(proof_idx)
         );
         #[cfg(debug_assertions)]
         for (i, openings_per_commit) in proof
@@ -948,7 +1053,10 @@ impl WhirModule {
             .iter()
             .enumerate()
         {
-            debug_assert_eq!(openings_per_commit[0][0].len(), accs_layout.commit_width(i));
+            debug_assert_eq!(
+                openings_per_commit[0][0].len(),
+                accs_layout.commit_width(proof_idx, i)
+            );
         }
 
         for query_idx in 0..num_initial_queries {
@@ -998,24 +1106,21 @@ impl WhirModule {
         let fold_records_per_proof = queries_per_proof * ((1 << k_whir) - 1);
         let tidx_layout = PerProofLayout::new(proofs.len(), num_whir_rounds);
 
-        // Build codeword_value_accs layout from first proof (uniform across all proofs).
-        let per_commit_widths: Vec<usize> = proofs
-            .first()
-            .map(|p| {
-                p.whir_proof
+        let per_proof_commit_widths: Vec<Vec<usize>> = proofs
+            .iter()
+            .map(|proof| {
+                proof
+                    .whir_proof
                     .initial_round_opened_rows
                     .iter()
                     .map(|openings| openings[0][0].len())
                     .collect()
             })
-            .unwrap_or_default();
-        let accs_layout = CodewordAccsLayout::new(
-            proofs.len(),
-            num_initial_queries,
-            1 << k_whir,
-            &per_commit_widths,
-        );
-        let mu_pows_layout = PerProofLayout::new(proofs.len(), accs_layout.total_width());
+            .collect();
+        let accs_layout =
+            CodewordAccsLayout::new(num_initial_queries, 1 << k_whir, &per_proof_commit_widths);
+        let mu_pows_layout =
+            VariablePerProofLayout::new((0..proofs.len()).map(|i| accs_layout.total_width(i)));
 
         let mut blob = WhirBlobBuilder::with_capacities(
             proofs.len(),
@@ -1027,9 +1132,12 @@ impl WhirModule {
             mu_pows_layout.len(),
         );
 
-        for (proof, preflight) in zip(proofs, preflights) {
+        for (proof_idx, (proof, preflight)) in zip(proofs, preflights).enumerate() {
             let mu = preflight.stacking.stacking_batching_challenge;
-            let local_mu_pows = mu.powers().take(accs_layout.total_width()).collect_vec();
+            let local_mu_pows = mu
+                .powers()
+                .take(accs_layout.total_width(proof_idx))
+                .collect_vec();
 
             Self::append_derived_whir_data_for_proof(
                 proof,
@@ -1055,6 +1163,7 @@ impl WhirModule {
             Self::append_initial_opened_values_accs_for_proof(
                 &mut blob,
                 &accs_layout,
+                proof_idx,
                 proof,
                 &local_mu_pows,
                 num_initial_queries,
@@ -1285,10 +1394,10 @@ mod cuda_tracegen {
         pub raw_queries: DeviceBuffer<F>,
         pub codeword_value_accs: DeviceBuffer<EF>,
         pub poseidon_states: DeviceBuffer<PoseidonStatePair>,
-        pub rows_per_proof_psums: DeviceBuffer<usize>,
-        pub commits_per_proof_psums: DeviceBuffer<usize>,
-        pub stacking_chunks_psums: DeviceBuffer<usize>,
-        pub stacking_widths_psums: DeviceBuffer<usize>,
+        pub rows_per_proof_offsets: DeviceBuffer<usize>,
+        pub commits_per_proof_offsets: DeviceBuffer<usize>,
+        pub stacking_chunks_offsets: DeviceBuffer<usize>,
+        pub stacking_widths_offsets: DeviceBuffer<usize>,
         pub mus: DeviceBuffer<EF>,
         pub mu_pows: DeviceBuffer<EF>,
         pub codeword_opened_values: DeviceBuffer<EF>,
@@ -1372,42 +1481,15 @@ mod cuda_tracegen {
                     .collect_vec(),
             )
             .unwrap();
-            // Reconstruct global prefix-sum arrays expected by the GPU kernel.
             let accs_layout = blob.codeword_value_accs.layout();
-            let num_proofs = proofs.len();
-            let num_commits = accs_layout.num_commits();
-            let total_chunks = accs_layout.total_chunks();
-            let total_width = accs_layout.total_width();
-
-            let rows_per_proof_psums: Vec<usize> = (0..=num_proofs)
-                .map(|i| i * accs_layout.rows_per_proof())
-                .collect();
-            let commits_psums: Vec<usize> = (0..=num_proofs).map(|i| i * num_commits).collect();
-
-            let mut chunks_psums = Vec::with_capacity(1 + num_commits * num_proofs);
-            chunks_psums.push(0);
-            for i in 0..num_proofs {
-                chunks_psums.extend(
-                    accs_layout.commit_chunk_offsets()[1..]
-                        .iter()
-                        .map(|&x| i * total_chunks + x),
-                );
-            }
-
-            let mut widths_psums = Vec::with_capacity(1 + num_commits * num_proofs);
-            widths_psums.push(0);
-            for i in 0..num_proofs {
-                widths_psums.extend(
-                    accs_layout.commit_width_offsets()[1..]
-                        .iter()
-                        .map(|&x| i * total_width + x),
-                );
-            }
-
-            let rows_per_proof_psums = to_device_or_nullptr(&rows_per_proof_psums).unwrap();
-            let commits_per_proof_psums = to_device_or_nullptr(&commits_psums).unwrap();
-            let stacking_chunks_psums = to_device_or_nullptr(&chunks_psums).unwrap();
-            let stacking_widths_psums = to_device_or_nullptr(&widths_psums).unwrap();
+            let rows_per_proof_offsets =
+                to_device_or_nullptr(accs_layout.rows_per_proof_offsets()).unwrap();
+            let commits_per_proof_offsets =
+                to_device_or_nullptr(accs_layout.commits_per_proof_offsets()).unwrap();
+            let stacking_chunks_offsets =
+                to_device_or_nullptr(accs_layout.stacking_chunks_offsets()).unwrap();
+            let stacking_widths_offsets =
+                to_device_or_nullptr(accs_layout.stacking_widths_offsets()).unwrap();
             let mu_pows = to_device_or_nullptr(blob.mu_pows.as_slice()).unwrap();
             let codeword_value_accs =
                 to_device_or_nullptr(blob.codeword_value_accs.as_slice()).unwrap();
@@ -1460,10 +1542,10 @@ mod cuda_tracegen {
                 raw_queries,
                 codeword_value_accs,
                 poseidon_states,
-                rows_per_proof_psums,
-                commits_per_proof_psums,
-                stacking_chunks_psums,
-                stacking_widths_psums,
+                rows_per_proof_offsets,
+                commits_per_proof_offsets,
+                stacking_chunks_offsets,
+                stacking_widths_offsets,
                 mus,
                 mu_pows,
                 folding_records,
