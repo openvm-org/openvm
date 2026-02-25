@@ -201,9 +201,7 @@ fn test_single_segment_leaf_aggregation() -> Result<()> {
 }
 
 #[test]
-#[cfg(feature = "cuda")]
 fn test_two_segments_leaf_aggregation() -> Result<()> {
-    // This test is too slow to run on CPU
     setup_tracing_with_log_level(Level::INFO);
     run_leaf_aggregation(17)?;
     Ok(())
