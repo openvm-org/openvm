@@ -328,7 +328,9 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             UserPvsCommitMode::SendToOutputValBus { output_val_bus } => {
                 /*
                  * Send the left_child of each leaf node to output_values to be processed
-                 * elsewhere. Note that in this case, this AIR has no public values.
+                 * elsewhere. Note that in this case, this AIR has no public values. Also,
+                 * output_val_bus expects to receive the app_exe_commit and app_vk_commit
+                 * at indices 0..OUTPUT_USER_PVS_START_IDX.
                  */
                 const OUTPUT_USER_PVS_START_IDX: usize = (2 * DIGEST_SIZE) / VALS_IN_DIGEST;
                 const OUTPUT_VAL_MSGS_PER_ROW: usize = DIGEST_SIZE / VALS_IN_DIGEST;
