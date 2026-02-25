@@ -264,6 +264,7 @@ pub fn read_rv64_register(memory: &GuestMemory, ptr: u32) -> u64 {
 pub fn abstract_compose<T: FieldAlgebra, V: Mul<T, Output = T>>(
     data: [V; RV64_REGISTER_NUM_LIMBS],
 ) -> T {
+    panic!("broken for rv64");
     data.into_iter()
         .enumerate()
         .fold(T::ZERO, |acc, (i, limb)| {
