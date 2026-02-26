@@ -323,8 +323,8 @@ fn execute_roundtrip_sanity_test() {
     let mut tester = VmChipTestBuilder::default();
     let mut harness = create_harness(&mut tester);
 
-    let x = [19, 4, 179, 60, 0, 0, 0, 0];
-    let y = [19, 32, 180, 60, 0, 0, 0, 0];
+    let x = [19, 4, 179, 60, 201, 77, 1, 240];
+    let y = [19, 32, 180, 60, 201, 77, 1, 240];
     set_and_execute(
         &mut tester,
         &mut harness.executor,
@@ -388,10 +388,10 @@ fn run_ne_sanity_test() {
 #[cfg(feature = "cuda")]
 type GpuHarness = GpuTestChipHarness<
     F,
-    Rv64BranchEqualExecutor,
-    Rv64BranchEqualAir,
+    Rv32BranchEqualExecutor,
+    Rv32BranchEqualAir,
     Rv32BranchEqualChipGpu,
-    Rv64BranchEqualChip<F>,
+    Rv32BranchEqualChip<F>,
 >;
 
 #[cfg(feature = "cuda")]
@@ -429,7 +429,7 @@ fn test_cuda_rand_beq_tracegen(opcode: BranchEqualOpcode, num_ops: usize) {
 
     type Record<'a> = (
         &'a mut Rv32BranchAdapterRecord,
-        &'a mut BranchEqualCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+        &'a mut BranchEqualCoreRecord<RV32_REGISTER_NUM_LIMBS>,
     );
     harness
         .dense_arena
