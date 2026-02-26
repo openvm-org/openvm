@@ -27,7 +27,8 @@ impl<F: PrimeField32> FromElf for VmExe<F> {
     fn from_elf(elf: Elf, transpiler: Self::ElfContext) -> Result<Self, TranspilerError> {
         let instructions = transpiler.transpile(&elf.instructions)?;
         let program = Program::new_without_debug_infos_with_option(&instructions, elf.pc_base);
-        let init_memory = elf_memory_image_to_openvm_memory_image(elf.memory_image);
+        let mut init_memory = elf_memory_image_to_openvm_memory_image(elf.memory_image);
+        transpiler.modify_initial_memory(&mut init_memory)?;
 
         Ok(VmExe {
             program,
