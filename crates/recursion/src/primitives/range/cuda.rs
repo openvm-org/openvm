@@ -19,7 +19,7 @@ impl<const NUM_BITS: usize> Default for RangeCheckerGpuTraceGenerator<NUM_BITS> 
 impl<const NUM_BITS: usize> RangeCheckerGpuTraceGenerator<NUM_BITS> {
     pub fn from_vals(vals: &[usize]) -> Self {
         let res = Self::default();
-        if vals.len() == 0 {
+        if vals.is_empty() {
             return res;
         }
 

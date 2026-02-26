@@ -24,7 +24,7 @@ pub(crate) const F_NUM_BYTES: usize = 4;
 pub(crate) const VALS_IN_DIGEST: usize = exact_div_or_panic(DIGEST_SIZE, F_NUM_BYTES);
 
 const fn exact_div_or_panic(a: usize, b: usize) -> usize {
-    assert!(b != 0 && a % b == 0, "non-exact division");
+    assert!(b != 0 && a.is_multiple_of(b), "non-exact division");
     a / b
 }
 
@@ -90,7 +90,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralOutputCommitAir {
             let composed_f = fold(
                 byte_decomp.iter().enumerate(),
                 AB::Expr::ZERO,
-                |acc, (i, byte)| acc + (AB::Expr::from_usize(1 << (i * 8)) * byte.clone().into()),
+                |acc, (i, byte)| acc + (AB::Expr::from_usize(1 << (i * 8)) * (*byte).into()),
             );
             builder.when(local.is_valid).assert_eq(composed_f, next_f);
         }

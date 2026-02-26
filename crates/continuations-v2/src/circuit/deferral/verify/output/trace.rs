@@ -1,7 +1,7 @@
 use std::{array::from_fn, borrow::BorrowMut};
 
 use openvm_circuit::arch::POSEIDON2_WIDTH;
-use openvm_stark_backend::prover::{AirProvingContext, ColMajorMatrix, CpuBackend};
+use openvm_stark_backend::prover::{AirProvingContext, ColMajorMatrix, CpuBackend, ProverBackend};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     poseidon2_compress_with_capacity, BabyBearPoseidon2Config, DIGEST_SIZE, F,
 };
@@ -13,16 +13,18 @@ use crate::circuit::{
     root::digests_to_poseidon2_input,
 };
 
+pub struct DeferralOutputCtx<PB: ProverBackend> {
+    pub proving_ctx: AirProvingContext<PB>,
+    pub poseidon2_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
+    pub range_inputs: Vec<usize>,
+    pub output_commit: [PB::Val; DIGEST_SIZE],
+}
+
 pub fn generate_proving_ctx(
     app_exe_commit: [F; DIGEST_SIZE],
     app_vk_commit: [F; DIGEST_SIZE],
     user_pvs: Vec<F>,
-) -> (
-    AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>,
-    Vec<[F; POSEIDON2_WIDTH]>,
-    Vec<usize>,
-    [F; DIGEST_SIZE],
-) {
+) -> DeferralOutputCtx<CpuBackend<BabyBearPoseidon2Config>> {
     debug_assert!(DIGEST_SIZE.is_multiple_of(F_NUM_BYTES));
     debug_assert!(DIGEST_SIZE.is_multiple_of(VALS_IN_DIGEST));
     debug_assert!(user_pvs.len().is_multiple_of(VALS_IN_DIGEST));
@@ -71,14 +73,14 @@ pub fn generate_proving_ctx(
         }
     }
 
-    (
-        AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&RowMajorMatrix::new(
-            trace, width,
-        ))),
-        poseidon2_compress_inputs,
+    DeferralOutputCtx {
+        proving_ctx: AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(
+            &RowMajorMatrix::new(trace, width),
+        )),
+        poseidon2_inputs: poseidon2_compress_inputs,
         range_inputs,
-        state,
-    )
+        output_commit: state,
+    }
 }
 
 fn values_to_rows(values: &[F]) -> Vec<[F; VALS_IN_DIGEST]> {

@@ -12,7 +12,10 @@ use openvm_stark_backend::{
 use recursion_circuit::prelude::{DIGEST_SIZE, F, SC};
 
 use crate::circuit::{
-    deferral::verify::verifier::{generate_record, DeferredVerifyPvsRecord},
+    deferral::verify::{
+        output::DeferralOutputCtx,
+        verifier::{generate_record, DeferredVerifyPvsRecord},
+    },
     user_pvs::{commit, memory},
 };
 
@@ -72,12 +75,16 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>> for DeferredVerifyTraceGenImpl {
             memory_dimensions,
             user_pvs_proof.public_values.len(),
         );
-        let (output_ctx, output_p2_inputs, range_inputs, output_commit) =
-            output::generate_proving_ctx(
-                verifier_pvs_record.app_exe_commit,
-                verifier_pvs_record.app_vk_commit,
-                user_pvs_proof.public_values.clone(),
-            );
+        let DeferralOutputCtx {
+            proving_ctx: output_ctx,
+            poseidon2_inputs: output_p2_inputs,
+            range_inputs,
+            output_commit,
+        } = output::generate_proving_ctx(
+            verifier_pvs_record.app_exe_commit,
+            verifier_pvs_record.app_vk_commit,
+            user_pvs_proof.public_values.clone(),
+        );
 
         PreVerifierData {
             proving_ctxs: vec![commit_ctx, memory_ctx, output_ctx],

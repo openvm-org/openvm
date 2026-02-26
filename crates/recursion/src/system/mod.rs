@@ -1274,9 +1274,9 @@ pub mod cuda_tracegen {
             });
 
             if let Some(final_transcript_state) = &mut external_data.final_transcript_state {
-                // WARNING: For convenience we use the fact that the last transcript operation should be
-                // a sample. If this is not the case, we will have to reconstruct final_transcript_state
-                // from the last perm state and observe values.
+                // WARNING: For convenience we use the fact that the last transcript operation
+                // should be a sample. If this is not the case, we will have to reconstruct
+                // final_transcript_state from the last perm state and observe values.
                 debug_assert_eq!(preflights_cpu.len(), 1);
                 debug_assert!(preflights_cpu[0].transcript.samples().last().unwrap());
                 let state = *preflights_cpu[0].transcript.perm_results().last().unwrap();

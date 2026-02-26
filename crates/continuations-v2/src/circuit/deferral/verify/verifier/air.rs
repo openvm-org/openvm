@@ -176,8 +176,9 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         );
 
         /*
-         * We need to verify the commits to the app executable and vk. The app_vk_commit is constrained
-         * to be the hashed combination of the child's app, leaf, and internal-for-leaf DAG commits.
+         * We need to verify the commits to the app executable and vk. The app_vk_commit is
+         * constrained to be the hashed combination of the child's app, leaf, and internal-
+         * for-leaf DAG commits.
          */
         self.poseidon2_compress_bus.lookup_key(
             builder,
