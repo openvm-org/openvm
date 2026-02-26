@@ -240,7 +240,7 @@ fn run_negative_mul_test(
 fn rv64_mul_wrong_negative_test() {
     run_negative_mul_test(
         MUL,
-        [63, 247, 125, 234, 252, 163, 203, 216],
+        [63, 247, 125, 232, 252, 163, 203, 218],
         [51, 109, 78, 142, 73, 35, 25, 206],
         [197, 85, 150, 32, 88, 77, 201, 19],
         true,
@@ -252,7 +252,7 @@ fn rv64_mul_wrong_negative_test() {
 fn rv64_mul_is_valid_false_negative_test() {
     run_negative_mul_test(
         MUL,
-        [63, 247, 125, 234, 252, 163, 203, 216],
+        [63, 247, 125, 232, 252, 163, 203, 218],
         [51, 109, 78, 142, 73, 35, 25, 206],
         [197, 85, 150, 32, 88, 77, 201, 19],
         false,

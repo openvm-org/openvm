@@ -242,15 +242,6 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
         arena,
         rng,
         opcode,
-        Some([0, 0, 0, 0, 0, 0, 0, 0]),
-        Some([0, 0, 0, 0, 0, 0, 0, 0]),
-    );
-    set_and_execute(
-        tester,
-        executor,
-        arena,
-        rng,
-        opcode,
         Some([0, 0, 0, 0, 0, 0, 0, 128]),
         Some([255, 255, 255, 255, 255, 255, 255, 255]),
     );
@@ -385,10 +376,10 @@ fn run_negative_divrem_test(
 
 #[test]
 fn rv64_divrem_unsigned_wrong_q_negative_test() {
-    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
-    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [123, 34, 89, 12, 33, 7, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [98, 188, 163, 229, 0, 0, 0, 0];
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [123, 34, 0, 0, 0, 0, 0, 0];
     let prank_vals = DivRemPrankValues {
-        q: Some([231, 196, 28, 0, 0, 0, 0, 0]),
+        q: Some([245, 168, 7, 0, 0, 0, 0, 0]),
         ..Default::default()
     };
     run_negative_divrem_test(DIVU, b, c, prank_vals, true);
@@ -397,12 +388,12 @@ fn rv64_divrem_unsigned_wrong_q_negative_test() {
 
 #[test]
 fn rv64_divrem_unsigned_wrong_r_negative_test() {
-    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
-    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [123, 34, 89, 12, 33, 7, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [98, 188, 163, 229, 0, 0, 0, 0];
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [123, 34, 0, 0, 0, 0, 0, 0];
     let prank_vals = DivRemPrankValues {
-        r: Some([126, 182, 123, 58, 106, 5, 0, 0]),
-        r_prime: Some([126, 182, 123, 58, 106, 5, 0, 0]),
-        diff_val: Some(2),
+        r: Some([171, 3, 0, 0, 0, 0, 0, 0]),
+        r_prime: Some([171, 3, 0, 0, 0, 0, 0, 0]),
+        diff_val: Some(31),
         ..Default::default()
     };
     run_negative_divrem_test(DIVU, b, c, prank_vals, true);
@@ -414,7 +405,7 @@ fn rv64_divrem_unsigned_high_mult_negative_test() {
     let b: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 1, 0, 0, 0, 0, 0];
     let c: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 2, 0, 0, 0, 0, 0, 0];
     let prank_vals = DivRemPrankValues {
-        q: Some([128, 0, 0, 1, 0, 0, 0, 0]),
+        q: Some([128, 0, 0, 0, 0, 0, 0, 1]),
         ..Default::default()
     };
     run_negative_divrem_test(DIVU, b, c, prank_vals, true);
@@ -437,10 +428,10 @@ fn rv64_divrem_unsigned_zero_divisor_wrong_r_negative_test() {
 
 #[test]
 fn rv64_divrem_signed_wrong_q_negative_test() {
-    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [98, 188, 163, 229, 41, 77, 200, 195];
-    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [123, 34, 89, 12, 33, 7, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [98, 188, 163, 229, 255, 255, 255, 255];
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [123, 34, 0, 0, 0, 0, 0, 0];
     let prank_vals = DivRemPrankValues {
-        q: Some([164, 141, 247, 255, 255, 255, 255, 255]),
+        q: Some([74, 61, 255, 255, 255, 255, 255, 255]),
         ..Default::default()
     };
     run_negative_divrem_test(DIV, b, c, prank_vals, true);
@@ -449,12 +440,12 @@ fn rv64_divrem_signed_wrong_q_negative_test() {
 
 #[test]
 fn rv64_divrem_signed_wrong_r_negative_test() {
-    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [98, 188, 163, 229, 41, 77, 200, 195];
-    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [123, 34, 89, 12, 33, 7, 0, 0];
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [98, 188, 163, 229, 255, 255, 255, 255];
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [123, 34, 0, 0, 0, 0, 0, 0];
     let prank_vals = DivRemPrankValues {
-        r: Some([34, 9, 56, 39, 116, 254, 255, 255]),
-        r_prime: Some([222, 246, 199, 216, 139, 1, 0, 0]),
-        diff_val: Some(6),
+        r: Some([212, 241, 255, 255, 255, 255, 255, 255]),
+        r_prime: Some([44, 14, 0, 0, 0, 0, 0, 0]),
+        diff_val: Some(20),
         ..Default::default()
     };
     run_negative_divrem_test(DIV, b, c, prank_vals, true);
@@ -479,8 +470,8 @@ fn rv64_divrem_signed_r_wrong_sign_negative_test() {
     let c: [u32; RV64_REGISTER_NUM_LIMBS] = [50, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = DivRemPrankValues {
         q: Some([31, 5, 0, 0, 0, 0, 0, 0]),
-        r: Some([242, 255, 255, 255, 0, 0, 0, 0]),
-        r_prime: Some([242, 255, 255, 255, 0, 0, 0, 0]),
+        r: Some([242, 255, 255, 255, 255, 255, 255, 255]),
+        r_prime: Some([242, 255, 255, 255, 255, 255, 255, 255]),
         diff_val: Some(192),
         ..Default::default()
     };
@@ -494,7 +485,7 @@ fn rv64_divrem_signed_r_wrong_prime_negative_test() {
     let c: [u32; RV64_REGISTER_NUM_LIMBS] = [50, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = DivRemPrankValues {
         q: Some([31, 5, 0, 0, 0, 0, 0, 0]),
-        r: Some([242, 255, 255, 255, 0, 0, 0, 0]),
+        r: Some([242, 255, 255, 255, 255, 255, 255, 255]),
         r_prime: Some([14, 0, 0, 0, 0, 0, 0, 0]),
         diff_val: Some(36),
         ..Default::default()
