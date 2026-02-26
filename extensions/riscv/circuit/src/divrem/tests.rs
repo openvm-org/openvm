@@ -47,14 +47,14 @@ use {
 use super::core::run_divrem;
 use crate::{
     adapters::{
-        Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller, RV32_CELL_BITS,
-        RV32_REGISTER_NUM_LIMBS,
+        Rv64MultAdapterAir, Rv64MultAdapterExecutor, Rv64MultAdapterFiller, RV64_CELL_BITS,
+        RV64_REGISTER_NUM_LIMBS,
     },
     divrem::{
-        run_mul_carries, run_sltu_diff_idx, DivRemCoreCols, DivRemCoreSpecialCase, Rv32DivRemChip,
+        run_mul_carries, run_sltu_diff_idx, DivRemCoreCols, DivRemCoreSpecialCase, Rv64DivRemChip,
     },
     test_utils::get_verification_error,
-    DivRemCoreAir, DivRemFiller, Rv32DivRemAir, Rv32DivRemExecutor,
+    DivRemCoreAir, DivRemFiller, Rv64DivRemAir, Rv64DivRemExecutor,
 };
 
 type F = BabyBear;
@@ -62,10 +62,10 @@ const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
 const MAX_NUM_LIMBS: u32 = 32;
 const TUPLE_CHECKER_SIZES: [u32; 2] = [
-    (1 << RV32_CELL_BITS) as u32,
-    (MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)),
+    (1 << RV64_CELL_BITS) as u32,
+    (MAX_NUM_LIMBS * (1 << RV64_CELL_BITS)),
 ];
-type Harness = TestChipHarness<F, Rv32DivRemExecutor, Rv32DivRemAir, Rv32DivRemChip<F>>;
+type Harness = TestChipHarness<F, Rv64DivRemExecutor, Rv64DivRemAir, Rv64DivRemChip<F>>;
 
 fn limb_sra<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: [u32; NUM_LIMBS],
@@ -79,22 +79,22 @@ fn limb_sra<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
     range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv32DivRemAir, Rv32DivRemExecutor, Rv32DivRemChip<F>) {
-    let air = Rv32DivRemAir::new(
-        Rv32MultAdapterAir::new(execution_bridge, memory_bridge),
+) -> (Rv64DivRemAir, Rv64DivRemExecutor, Rv64DivRemChip<F>) {
+    let air = Rv64DivRemAir::new(
+        Rv64MultAdapterAir::new(execution_bridge, memory_bridge),
         DivRemCoreAir::new(
             bitwise_chip.bus(),
             *range_tuple_chip.bus(),
             DivRemOpcode::CLASS_OFFSET,
         ),
     );
-    let executor = Rv32DivRemExecutor::new(Rv32MultAdapterExecutor, DivRemOpcode::CLASS_OFFSET);
-    let chip = Rv32DivRemChip::<F>::new(
+    let executor = Rv64DivRemExecutor::new(Rv64MultAdapterExecutor, DivRemOpcode::CLASS_OFFSET);
+    let chip = Rv64DivRemChip::<F>::new(
         DivRemFiller::new(
-            Rv32MultAdapterFiller,
+            Rv64MultAdapterFiller,
             bitwise_chip,
             range_tuple_chip,
             DivRemOpcode::CLASS_OFFSET,
@@ -109,15 +109,15 @@ fn create_harness(
 ) -> (
     Harness,
     (
-        BitwiseOperationLookupAir<RV32_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_CELL_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     ),
     (RangeTupleCheckerAir<2>, SharedRangeTupleCheckerChip<2>),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
 
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
     let range_tuple_chip =
@@ -146,30 +146,30 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     arena: &mut RA,
     rng: &mut StdRng,
     opcode: DivRemOpcode,
-    b: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
-    c: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
+    b: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    c: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
 ) {
     let b = b.unwrap_or(generate_long_number::<
-        RV32_REGISTER_NUM_LIMBS,
-        RV32_CELL_BITS,
+        RV64_REGISTER_NUM_LIMBS,
+        RV64_CELL_BITS,
     >(rng));
-    let c = c.unwrap_or(limb_sra::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(
-        generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(rng),
-        rng.gen_range(0..(RV32_REGISTER_NUM_LIMBS - 1)),
+    let c = c.unwrap_or(limb_sra::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(
+        generate_long_number::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(rng),
+        rng.gen_range(0..(RV64_REGISTER_NUM_LIMBS - 1)),
     ));
 
-    let rs1 = gen_pointer(rng, 4);
-    let rs2 = gen_pointer(rng, 4);
-    let rd = gen_pointer(rng, 4);
+    let rs1 = gen_pointer(rng, 8);
+    let rs2 = gen_pointer(rng, 8);
+    let rd = gen_pointer(rng, 8);
 
-    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
-    tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));
+    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
+    tester.write::<RV64_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));
 
     let is_div = opcode == DIV || opcode == DIVU;
     let is_signed = opcode == DIV || opcode == REM;
 
     let (q, r, _, _, _, _) =
-        run_divrem::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(is_signed, &b, &c);
+        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(is_signed, &b, &c);
     tester.execute(
         executor,
         arena,
@@ -178,7 +178,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     assert_eq!(
         (if is_div { q } else { r }).map(F::from_canonical_u32),
-        tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd)
+        tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd)
     );
 }
 
@@ -197,8 +197,8 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
         arena,
         rng,
         opcode,
-        Some([98, 188, 163, 127]),
-        Some([0, 0, 0, 0]),
+        Some([98, 188, 163, 127, 41, 77, 200, 67]),
+        Some([0, 0, 0, 0, 0, 0, 0, 0]),
     );
     set_and_execute(
         tester,
@@ -206,8 +206,8 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
         arena,
         rng,
         opcode,
-        Some([98, 188, 163, 229]),
-        Some([0, 0, 0, 0]),
+        Some([98, 188, 163, 229, 41, 77, 200, 195]),
+        Some([0, 0, 0, 0, 0, 0, 0, 0]),
     );
     set_and_execute(
         tester,
@@ -215,8 +215,8 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
         arena,
         rng,
         opcode,
-        Some([0, 0, 0, 128]),
-        Some([0, 1, 0, 0]),
+        Some([0, 0, 0, 0, 0, 0, 0, 128]),
+        Some([0, 1, 0, 0, 0, 0, 0, 0]),
     );
     set_and_execute(
         tester,
@@ -224,8 +224,8 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
         arena,
         rng,
         opcode,
-        Some([0, 0, 0, 127]),
-        Some([0, 1, 0, 0]),
+        Some([0, 0, 0, 0, 0, 0, 0, 127]),
+        Some([0, 1, 0, 0, 0, 0, 0, 0]),
     );
     set_and_execute(
         tester,
@@ -233,8 +233,8 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
         arena,
         rng,
         opcode,
-        Some([0, 0, 0, 0]),
-        Some([0, 0, 0, 0]),
+        Some([0, 0, 0, 0, 0, 0, 0, 0]),
+        Some([0, 0, 0, 0, 0, 0, 0, 0]),
     );
     set_and_execute(
         tester,
@@ -242,8 +242,8 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
         arena,
         rng,
         opcode,
-        Some([0, 0, 0, 0]),
-        Some([0, 0, 0, 0]),
+        Some([0, 0, 0, 0, 0, 0, 0, 0]),
+        Some([0, 0, 0, 0, 0, 0, 0, 0]),
     );
     set_and_execute(
         tester,
@@ -251,8 +251,8 @@ fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
         arena,
         rng,
         opcode,
-        Some([0, 0, 0, 128]),
-        Some([255, 255, 255, 255]),
+        Some([0, 0, 0, 0, 0, 0, 0, 128]),
+        Some([255, 255, 255, 255, 255, 255, 255, 255]),
     );
 }
 
@@ -319,9 +319,9 @@ struct DivRemPrankValues<const NUM_LIMBS: usize> {
 
 fn run_negative_divrem_test(
     opcode: DivRemOpcode,
-    b: [u32; RV32_REGISTER_NUM_LIMBS],
-    c: [u32; RV32_REGISTER_NUM_LIMBS],
-    prank_vals: DivRemPrankValues<RV32_REGISTER_NUM_LIMBS>,
+    b: [u32; RV64_REGISTER_NUM_LIMBS],
+    c: [u32; RV64_REGISTER_NUM_LIMBS],
+    prank_vals: DivRemPrankValues<RV64_REGISTER_NUM_LIMBS>,
     interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
@@ -341,7 +341,7 @@ fn run_negative_divrem_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
-        let cols: &mut DivRemCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
+        let cols: &mut DivRemCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
 
         if let Some(q) = prank_vals.q {
@@ -384,11 +384,11 @@ fn run_negative_divrem_test(
 }
 
 #[test]
-fn rv32_divrem_unsigned_wrong_q_negative_test() {
-    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [98, 188, 163, 229];
-    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [123, 34, 0, 0];
+fn rv64_divrem_unsigned_wrong_q_negative_test() {
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [123, 34, 89, 12, 33, 7, 0, 0];
     let prank_vals = DivRemPrankValues {
-        q: Some([245, 168, 7, 0]),
+        q: Some([231, 196, 28, 0, 0, 0, 0, 0]),
         ..Default::default()
     };
     run_negative_divrem_test(DIVU, b, c, prank_vals, true);
@@ -396,13 +396,13 @@ fn rv32_divrem_unsigned_wrong_q_negative_test() {
 }
 
 #[test]
-fn rv32_divrem_unsigned_wrong_r_negative_test() {
-    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [98, 188, 163, 229];
-    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [123, 34, 0, 0];
+fn rv64_divrem_unsigned_wrong_r_negative_test() {
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [123, 34, 89, 12, 33, 7, 0, 0];
     let prank_vals = DivRemPrankValues {
-        r: Some([171, 3, 0, 0]),
-        r_prime: Some([171, 3, 0, 0]),
-        diff_val: Some(31),
+        r: Some([126, 182, 123, 58, 106, 5, 0, 0]),
+        r_prime: Some([126, 182, 123, 58, 106, 5, 0, 0]),
+        diff_val: Some(2),
         ..Default::default()
     };
     run_negative_divrem_test(DIVU, b, c, prank_vals, true);
@@ -410,11 +410,11 @@ fn rv32_divrem_unsigned_wrong_r_negative_test() {
 }
 
 #[test]
-fn rv32_divrem_unsigned_high_mult_negative_test() {
-    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
-    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 2, 0, 0];
+fn rv64_divrem_unsigned_high_mult_negative_test() {
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 1, 0, 0, 0, 0, 0];
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 2, 0, 0, 0, 0, 0, 0];
     let prank_vals = DivRemPrankValues {
-        q: Some([128, 0, 0, 1]),
+        q: Some([128, 0, 0, 1, 0, 0, 0, 0]),
         ..Default::default()
     };
     run_negative_divrem_test(DIVU, b, c, prank_vals, true);
@@ -422,12 +422,12 @@ fn rv32_divrem_unsigned_high_mult_negative_test() {
 }
 
 #[test]
-fn rv32_divrem_unsigned_zero_divisor_wrong_r_negative_test() {
-    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [254, 255, 255, 255];
-    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
+fn rv64_divrem_unsigned_zero_divisor_wrong_r_negative_test() {
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [254, 255, 255, 255, 41, 77, 200, 195];
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = DivRemPrankValues {
-        r: Some([255, 255, 255, 255]),
-        r_prime: Some([255, 255, 255, 255]),
+        r: Some([255, 255, 255, 255, 41, 77, 200, 195]),
+        r_prime: Some([255, 255, 255, 255, 41, 77, 200, 195]),
         diff_val: Some(255),
         ..Default::default()
     };
@@ -436,11 +436,11 @@ fn rv32_divrem_unsigned_zero_divisor_wrong_r_negative_test() {
 }
 
 #[test]
-fn rv32_divrem_signed_wrong_q_negative_test() {
-    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [98, 188, 163, 229];
-    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [123, 34, 0, 0];
+fn rv64_divrem_signed_wrong_q_negative_test() {
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [98, 188, 163, 229, 41, 77, 200, 195];
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [123, 34, 89, 12, 33, 7, 0, 0];
     let prank_vals = DivRemPrankValues {
-        q: Some([74, 61, 255, 255]),
+        q: Some([164, 141, 247, 255, 255, 255, 255, 255]),
         ..Default::default()
     };
     run_negative_divrem_test(DIV, b, c, prank_vals, true);
@@ -448,13 +448,13 @@ fn rv32_divrem_signed_wrong_q_negative_test() {
 }
 
 #[test]
-fn rv32_divrem_signed_wrong_r_negative_test() {
-    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [98, 188, 163, 229];
-    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [123, 34, 0, 0];
+fn rv64_divrem_signed_wrong_r_negative_test() {
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [98, 188, 163, 229, 41, 77, 200, 195];
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [123, 34, 89, 12, 33, 7, 0, 0];
     let prank_vals = DivRemPrankValues {
-        r: Some([212, 241, 255, 255]),
-        r_prime: Some([44, 14, 0, 0]),
-        diff_val: Some(20),
+        r: Some([34, 9, 56, 39, 116, 254, 255, 255]),
+        r_prime: Some([222, 246, 199, 216, 139, 1, 0, 0]),
+        diff_val: Some(6),
         ..Default::default()
     };
     run_negative_divrem_test(DIV, b, c, prank_vals, true);
@@ -462,11 +462,11 @@ fn rv32_divrem_signed_wrong_r_negative_test() {
 }
 
 #[test]
-fn rv32_divrem_signed_high_mult_negative_test() {
-    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 255];
-    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 255];
+fn rv64_divrem_signed_high_mult_negative_test() {
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 0, 0, 0, 0, 255];
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 0, 0, 0, 0, 255];
     let prank_vals = DivRemPrankValues {
-        q: Some([1, 0, 0, 1]),
+        q: Some([1, 0, 0, 0, 0, 0, 0, 1]),
         ..Default::default()
     };
     run_negative_divrem_test(DIV, b, c, prank_vals, true);
@@ -474,13 +474,13 @@ fn rv32_divrem_signed_high_mult_negative_test() {
 }
 
 #[test]
-fn rv32_divrem_signed_r_wrong_sign_negative_test() {
-    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
-    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [50, 0, 0, 0];
+fn rv64_divrem_signed_r_wrong_sign_negative_test() {
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 1, 0, 0, 0, 0, 0];
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [50, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = DivRemPrankValues {
-        q: Some([31, 5, 0, 0]),
-        r: Some([242, 255, 255, 255]),
-        r_prime: Some([242, 255, 255, 255]),
+        q: Some([31, 5, 0, 0, 0, 0, 0, 0]),
+        r: Some([242, 255, 255, 255, 0, 0, 0, 0]),
+        r_prime: Some([242, 255, 255, 255, 0, 0, 0, 0]),
         diff_val: Some(192),
         ..Default::default()
     };
@@ -489,13 +489,13 @@ fn rv32_divrem_signed_r_wrong_sign_negative_test() {
 }
 
 #[test]
-fn rv32_divrem_signed_r_wrong_prime_negative_test() {
-    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
-    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [50, 0, 0, 0];
+fn rv64_divrem_signed_r_wrong_prime_negative_test() {
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 1, 0, 0, 0, 0, 0];
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [50, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = DivRemPrankValues {
-        q: Some([31, 5, 0, 0]),
-        r: Some([242, 255, 255, 255]),
-        r_prime: Some([14, 0, 0, 0]),
+        q: Some([31, 5, 0, 0, 0, 0, 0, 0]),
+        r: Some([242, 255, 255, 255, 0, 0, 0, 0]),
+        r_prime: Some([14, 0, 0, 0, 0, 0, 0, 0]),
         diff_val: Some(36),
         ..Default::default()
     };
@@ -504,12 +504,12 @@ fn rv32_divrem_signed_r_wrong_prime_negative_test() {
 }
 
 #[test]
-fn rv32_divrem_signed_zero_divisor_wrong_r_negative_test() {
-    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [254, 255, 255, 255];
-    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
+fn rv64_divrem_signed_zero_divisor_wrong_r_negative_test() {
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [254, 255, 255, 255, 41, 77, 200, 195];
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = DivRemPrankValues {
-        r: Some([255, 255, 255, 255]),
-        r_prime: Some([1, 0, 0, 0]),
+        r: Some([255, 255, 255, 255, 41, 77, 200, 195]),
+        r_prime: Some([1, 0, 0, 0, 214, 178, 55, 60]),
         diff_val: Some(1),
         ..Default::default()
     };
@@ -518,13 +518,13 @@ fn rv32_divrem_signed_zero_divisor_wrong_r_negative_test() {
 }
 
 #[test]
-fn rv32_divrem_false_zero_divisor_flag_negative_test() {
-    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
-    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [50, 0, 0, 0];
+fn rv64_divrem_false_zero_divisor_flag_negative_test() {
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 1, 0, 0, 0, 0, 0];
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [50, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = DivRemPrankValues {
-        q: Some([29, 5, 0, 0]),
-        r: Some([86, 0, 0, 0]),
-        r_prime: Some([86, 0, 0, 0]),
+        q: Some([29, 5, 0, 0, 0, 0, 0, 0]),
+        r: Some([86, 0, 0, 0, 0, 0, 0, 0]),
+        r_prime: Some([86, 0, 0, 0, 0, 0, 0, 0]),
         diff_val: Some(36),
         zero_divisor: Some(true),
         ..Default::default()
@@ -536,13 +536,13 @@ fn rv32_divrem_false_zero_divisor_flag_negative_test() {
 }
 
 #[test]
-fn rv32_divrem_false_r_zero_flag_negative_test() {
-    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
-    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [50, 0, 0, 0];
+fn rv64_divrem_false_r_zero_flag_negative_test() {
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 1, 0, 0, 0, 0, 0];
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [50, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = DivRemPrankValues {
-        q: Some([29, 5, 0, 0]),
-        r: Some([86, 0, 0, 0]),
-        r_prime: Some([86, 0, 0, 0]),
+        q: Some([29, 5, 0, 0, 0, 0, 0, 0]),
+        r: Some([86, 0, 0, 0, 0, 0, 0, 0]),
+        r_prime: Some([86, 0, 0, 0, 0, 0, 0, 0]),
         diff_val: Some(36),
         r_zero: Some(true),
         ..Default::default()
@@ -554,9 +554,9 @@ fn rv32_divrem_false_r_zero_flag_negative_test() {
 }
 
 #[test]
-fn rv32_divrem_unset_zero_divisor_flag_negative_test() {
-    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
-    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
+fn rv64_divrem_unset_zero_divisor_flag_negative_test() {
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 1, 0, 0, 0, 0, 0];
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = DivRemPrankValues {
         zero_divisor: Some(false),
         ..Default::default()
@@ -568,9 +568,9 @@ fn rv32_divrem_unset_zero_divisor_flag_negative_test() {
 }
 
 #[test]
-fn rv32_divrem_wrong_r_zero_flag_negative_test() {
-    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
-    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
+fn rv64_divrem_wrong_r_zero_flag_negative_test() {
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 0, 0, 0, 0, 0];
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = DivRemPrankValues {
         zero_divisor: Some(false),
         r_zero: Some(true),
@@ -583,9 +583,9 @@ fn rv32_divrem_wrong_r_zero_flag_negative_test() {
 }
 
 #[test]
-fn rv32_divrem_unset_r_zero_flag_negative_test() {
-    let b: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
-    let c: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 1, 0];
+fn rv64_divrem_unset_r_zero_flag_negative_test() {
+    let b: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 1, 0, 0, 0, 0, 0];
+    let c: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 1, 0, 0, 0, 0, 0];
     let prank_vals = DivRemPrankValues {
         r_zero: Some(false),
         ..Default::default()
@@ -604,14 +604,14 @@ fn rv32_divrem_unset_r_zero_flag_negative_test() {
 
 #[test]
 fn run_divrem_unsigned_sanity_test() {
-    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [98, 188, 163, 229];
-    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [123, 34, 0, 0];
-    let q: [u32; RV32_REGISTER_NUM_LIMBS] = [245, 168, 6, 0];
-    let r: [u32; RV32_REGISTER_NUM_LIMBS] = [171, 4, 0, 0];
+    let x: [u32; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
+    let y: [u32; RV64_REGISTER_NUM_LIMBS] = [51, 109, 78, 142, 73, 35, 25, 3];
+    let q: [u32; RV64_REGISTER_NUM_LIMBS] = [66, 0, 0, 0, 0, 0, 0, 0];
+    let r: [u32; RV64_REGISTER_NUM_LIMBS] = [191, 250, 228, 190, 154, 9, 158, 0];
 
     let (res_q, res_r, x_sign, y_sign, q_sign, case) =
-        run_divrem::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(false, &x, &y);
-    for i in 0..RV32_REGISTER_NUM_LIMBS {
+        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(false, &x, &y);
+    for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(q[i], res_q[i]);
         assert_eq!(r[i], res_r[i]);
     }
@@ -623,13 +623,13 @@ fn run_divrem_unsigned_sanity_test() {
 
 #[test]
 fn run_divrem_unsigned_zero_divisor_test() {
-    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [98, 188, 163, 229];
-    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
-    let q: [u32; RV32_REGISTER_NUM_LIMBS] = [255, 255, 255, 255];
+    let x: [u32; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
+    let y: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 0, 0, 0, 0, 0];
+    let q: [u32; RV64_REGISTER_NUM_LIMBS] = [255, 255, 255, 255, 255, 255, 255, 255];
 
     let (res_q, res_r, x_sign, y_sign, q_sign, case) =
-        run_divrem::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(false, &x, &y);
-    for i in 0..RV32_REGISTER_NUM_LIMBS {
+        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(false, &x, &y);
+    for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(q[i], res_q[i]);
         assert_eq!(x[i], res_r[i]);
     }
@@ -641,14 +641,14 @@ fn run_divrem_unsigned_zero_divisor_test() {
 
 #[test]
 fn run_divrem_signed_sanity_test() {
-    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [98, 188, 163, 229];
-    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [123, 34, 0, 0];
-    let q: [u32; RV32_REGISTER_NUM_LIMBS] = [74, 60, 255, 255];
-    let r: [u32; RV32_REGISTER_NUM_LIMBS] = [212, 240, 255, 255];
+    let x: [u32; RV64_REGISTER_NUM_LIMBS] = [98, 188, 163, 229, 41, 77, 200, 195];
+    let y: [u32; RV64_REGISTER_NUM_LIMBS] = [123, 34, 89, 12, 33, 7, 0, 0];
+    let q: [u32; RV64_REGISTER_NUM_LIMBS] = [163, 141, 247, 255, 255, 255, 255, 255];
+    let r: [u32; RV64_REGISTER_NUM_LIMBS] = [17, 9, 56, 39, 116, 254, 255, 255];
 
     let (res_q, res_r, x_sign, y_sign, q_sign, case) =
-        run_divrem::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(true, &x, &y);
-    for i in 0..RV32_REGISTER_NUM_LIMBS {
+        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &y);
+    for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(q[i], res_q[i]);
         assert_eq!(r[i], res_r[i]);
     }
@@ -660,13 +660,13 @@ fn run_divrem_signed_sanity_test() {
 
 #[test]
 fn run_divrem_signed_zero_divisor_test() {
-    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [98, 188, 163, 229];
-    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
-    let q: [u32; RV32_REGISTER_NUM_LIMBS] = [255, 255, 255, 255];
+    let x: [u32; RV64_REGISTER_NUM_LIMBS] = [98, 188, 163, 229, 41, 77, 200, 195];
+    let y: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 0, 0, 0, 0, 0];
+    let q: [u32; RV64_REGISTER_NUM_LIMBS] = [255, 255, 255, 255, 255, 255, 255, 255];
 
     let (res_q, res_r, x_sign, y_sign, q_sign, case) =
-        run_divrem::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(true, &x, &y);
-    for i in 0..RV32_REGISTER_NUM_LIMBS {
+        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &y);
+    for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(q[i], res_q[i]);
         assert_eq!(x[i], res_r[i]);
     }
@@ -678,13 +678,13 @@ fn run_divrem_signed_zero_divisor_test() {
 
 #[test]
 fn run_divrem_signed_overflow_test() {
-    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 128];
-    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [255, 255, 255, 255];
-    let r: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
+    let x: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 0, 0, 0, 0, 128];
+    let y: [u32; RV64_REGISTER_NUM_LIMBS] = [255, 255, 255, 255, 255, 255, 255, 255];
+    let r: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 0, 0, 0, 0, 0];
 
     let (res_q, res_r, x_sign, y_sign, q_sign, case) =
-        run_divrem::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(true, &x, &y);
-    for i in 0..RV32_REGISTER_NUM_LIMBS {
+        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &y);
+    for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(x[i], res_q[i]);
         assert_eq!(r[i], res_r[i]);
     }
@@ -696,14 +696,14 @@ fn run_divrem_signed_overflow_test() {
 
 #[test]
 fn run_divrem_signed_min_dividend_test() {
-    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 128];
-    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [123, 34, 255, 255];
-    let q: [u32; RV32_REGISTER_NUM_LIMBS] = [236, 147, 0, 0];
-    let r: [u32; RV32_REGISTER_NUM_LIMBS] = [156, 149, 255, 255];
+    let x: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 0, 0, 0, 0, 128];
+    let y: [u32; RV64_REGISTER_NUM_LIMBS] = [133, 221, 167, 243, 222, 248, 255, 255];
+    let q: [u32; RV64_REGISTER_NUM_LIMBS] = [96, 244, 17, 0, 0, 0, 0, 0];
+    let r: [u32; RV64_REGISTER_NUM_LIMBS] = [32, 42, 21, 236, 2, 254, 255, 255];
 
     let (res_q, res_r, x_sign, y_sign, q_sign, case) =
-        run_divrem::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(true, &x, &y);
-    for i in 0..RV32_REGISTER_NUM_LIMBS {
+        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &y);
+    for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(q[i], res_q[i]);
         assert_eq!(r[i], res_r[i]);
     }
@@ -715,13 +715,13 @@ fn run_divrem_signed_min_dividend_test() {
 
 #[test]
 fn run_divrem_zero_quotient_test() {
-    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [255, 255, 255, 255];
-    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 1];
-    let q: [u32; RV32_REGISTER_NUM_LIMBS] = [0, 0, 0, 0];
+    let x: [u32; RV64_REGISTER_NUM_LIMBS] = [255, 255, 255, 255, 255, 255, 255, 255];
+    let y: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 0, 0, 0, 0, 1];
+    let q: [u32; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 0, 0, 0, 0, 0];
 
     let (res_q, res_r, x_sign, y_sign, q_sign, case) =
-        run_divrem::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(true, &x, &y);
-    for i in 0..RV32_REGISTER_NUM_LIMBS {
+        run_divrem::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &x, &y);
+    for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(q[i], res_q[i]);
         assert_eq!(x[i], res_r[i]);
     }
@@ -733,20 +733,22 @@ fn run_divrem_zero_quotient_test() {
 
 #[test]
 fn run_sltu_diff_idx_test() {
-    let x: [u32; RV32_REGISTER_NUM_LIMBS] = [123, 34, 254, 67];
-    let y: [u32; RV32_REGISTER_NUM_LIMBS] = [123, 34, 255, 67];
+    let x: [u32; RV64_REGISTER_NUM_LIMBS] = [123, 34, 254, 67, 188, 33, 12, 45];
+    let y: [u32; RV64_REGISTER_NUM_LIMBS] = [123, 34, 255, 67, 188, 33, 12, 45];
     assert_eq!(run_sltu_diff_idx(&x, &y, true), 2);
     assert_eq!(run_sltu_diff_idx(&y, &x, false), 2);
-    assert_eq!(run_sltu_diff_idx(&x, &x, false), RV32_REGISTER_NUM_LIMBS);
+    assert_eq!(run_sltu_diff_idx(&x, &x, false), RV64_REGISTER_NUM_LIMBS);
 }
 
 #[test]
 fn run_mul_carries_signed_sanity_test() {
-    let d: [u32; RV32_REGISTER_NUM_LIMBS] = [197, 85, 150, 32];
-    let q: [u32; RV32_REGISTER_NUM_LIMBS] = [51, 109, 78, 142];
-    let r: [u32; RV32_REGISTER_NUM_LIMBS] = [200, 8, 68, 255];
-    let c = [40, 101, 126, 206, 304, 376, 450, 464];
-    let carry = run_mul_carries::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(true, &d, &q, &r, true);
+    let d: [u32; RV64_REGISTER_NUM_LIMBS] = [197, 85, 150, 32, 88, 77, 201, 19];
+    let q: [u32; RV64_REGISTER_NUM_LIMBS] = [51, 109, 78, 142, 73, 35, 25, 206];
+    let r: [u32; RV64_REGISTER_NUM_LIMBS] = [200, 8, 68, 255, 41, 77, 33, 140];
+    let c = [
+        40, 101, 126, 206, 181, 197, 191, 359, 423, 558, 546, 576, 637, 793, 846, 849,
+    ];
+    let carry = run_mul_carries::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(true, &d, &q, &r, true);
     for (expected_c, actual_c) in c.iter().zip(carry.iter()) {
         assert_eq!(*expected_c, *actual_c)
     }
@@ -754,11 +756,13 @@ fn run_mul_carries_signed_sanity_test() {
 
 #[test]
 fn run_mul_unsigned_sanity_test() {
-    let d: [u32; RV32_REGISTER_NUM_LIMBS] = [197, 85, 150, 32];
-    let q: [u32; RV32_REGISTER_NUM_LIMBS] = [51, 109, 78, 142];
-    let r: [u32; RV32_REGISTER_NUM_LIMBS] = [200, 8, 68, 255];
-    let c = [40, 101, 126, 206, 107, 93, 18, 0];
-    let carry = run_mul_carries::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(false, &d, &q, &r, true);
+    let d: [u32; RV64_REGISTER_NUM_LIMBS] = [197, 85, 150, 32, 88, 77, 201, 19];
+    let q: [u32; RV64_REGISTER_NUM_LIMBS] = [51, 109, 78, 142, 73, 35, 25, 206];
+    let r: [u32; RV64_REGISTER_NUM_LIMBS] = [200, 8, 68, 255, 41, 77, 33, 140];
+    let c = [
+        40, 101, 126, 206, 181, 197, 191, 359, 225, 275, 113, 111, 84, 163, 15, 0,
+    ];
+    let carry = run_mul_carries::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(false, &d, &q, &r, true);
     for (expected_c, actual_c) in c.iter().zip(carry.iter()) {
         assert_eq!(*expected_c, *actual_c)
     }
