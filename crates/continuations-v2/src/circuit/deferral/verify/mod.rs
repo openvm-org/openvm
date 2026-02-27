@@ -1,165 +1,87 @@
-use itertools::Itertools;
-use openvm_circuit::system::memory::{
-    dimensions::MemoryDimensions, merkle::public_values::UserPublicValuesProof,
-};
-#[cfg(feature = "cuda")]
-use openvm_cuda_backend::{data_transporter::transport_air_proving_ctx_to_device, GpuBackend};
-use openvm_poseidon2_air::POSEIDON2_WIDTH;
-use openvm_stark_backend::{
-    proof::Proof,
-    prover::{AirProvingContext, CpuBackend, ProverBackend},
-};
-use recursion_circuit::prelude::{DIGEST_SIZE, F, SC};
+use std::sync::Arc;
 
-use crate::circuit::{
-    deferral::verify::{
-        output::DeferralOutputCtx,
-        verifier::{generate_record, DeferredVerifyPvsRecord},
+use openvm_circuit::system::memory::dimensions::MemoryDimensions;
+use openvm_stark_backend::AirRef;
+use recursion_circuit::system::AggregationSubCircuit;
+
+use crate::{
+    bn254::CommitBytes,
+    circuit::{
+        deferral::verify::{
+            bus::{OutputCommitBus, OutputValBus},
+            output::DeferralOutputCommitAir,
+            verifier::DeferredVerifyPvsAir,
+        },
+        root::bus::{MemoryMerkleCommitBus, UserPvsCommitBus, UserPvsCommitTreeBus},
+        user_pvs::{commit::UserPvsCommitAir, memory::UserPvsInMemoryAir},
     },
-    user_pvs::{commit, memory},
+    prover::Circuit,
+    SC,
 };
 
 pub mod bus;
 pub mod output;
 pub mod verifier;
 
-pub struct PreVerifierData<PB: ProverBackend> {
-    pub proving_ctxs: Vec<AirProvingContext<PB>>,
-    pub poseidon2_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
-    pub range_inputs: Vec<usize>,
-    pub verifier_pvs_record: DeferredVerifyPvsRecord<PB::Val>,
-    pub output_commit: [PB::Val; DIGEST_SIZE],
+mod trace;
+pub use trace::*;
+
+#[derive(derive_new::new, Clone)]
+pub struct DeferredVerifyCircuit<S: AggregationSubCircuit> {
+    pub verifier_circuit: Arc<S>,
+    internal_recursive_dag_commit: CommitBytes,
+    pub(crate) memory_dimensions: MemoryDimensions,
+    pub(crate) num_user_pvs: usize,
 }
 
-// Trait used to remain generic in PB
-pub trait DeferredVerifyTraceGen<PB: ProverBackend> {
-    fn new() -> Self;
+impl<S: AggregationSubCircuit> Circuit for DeferredVerifyCircuit<S> {
+    fn airs(&self) -> Vec<AirRef<SC>> {
+        let bus_inventory = self.verifier_circuit.bus_inventory();
+        let next_bus_idx = self.verifier_circuit.next_bus_idx();
 
-    // Returns the AIR proving contexts, Poseidon2 and range inputs, and the data
-    // needed to compute the DeferredVerifyPvsAir trace later
-    fn pre_verifier_subcircuit_tracegen(
-        &self,
-        proof: &Proof<SC>,
-        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
-        memory_dimensions: MemoryDimensions,
-    ) -> PreVerifierData<PB>;
+        let user_pvs_commit_bus = UserPvsCommitBus::new(next_bus_idx);
+        let user_pvs_commit_tree_bus = UserPvsCommitTreeBus::new(next_bus_idx + 1);
+        let memory_merkle_commit_bus = MemoryMerkleCommitBus::new(next_bus_idx + 2);
+        let output_val_bus = OutputValBus::new(next_bus_idx + 3);
+        let output_commit_bus = OutputCommitBus::new(next_bus_idx + 4);
 
-    fn generate_verifier_pvs_ctx(
-        &self,
-        proof: &Proof<SC>,
-        record: DeferredVerifyPvsRecord<PB::Val>,
-        final_transcript_state: [PB::Val; POSEIDON2_WIDTH],
-        output_commit: [PB::Val; DIGEST_SIZE],
-    ) -> AirProvingContext<PB>;
-}
-
-pub struct DeferredVerifyTraceGenImpl;
-
-impl DeferredVerifyTraceGen<CpuBackend<SC>> for DeferredVerifyTraceGenImpl {
-    fn new() -> Self {
-        Self
-    }
-
-    fn pre_verifier_subcircuit_tracegen(
-        &self,
-        proof: &Proof<SC>,
-        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, F>,
-        memory_dimensions: MemoryDimensions,
-    ) -> PreVerifierData<CpuBackend<SC>> {
-        let (verifier_pvs_record, verifier_p2_inputs) = generate_record(proof);
-        let (commit_ctx, commit_p2_inputs) =
-            commit::generate_proving_ctx(user_pvs_proof.public_values.clone(), false);
-        let (memory_ctx, memory_p2_inputs) = memory::generate_proving_input(
-            user_pvs_proof.public_values_commit,
-            &user_pvs_proof.proof,
-            memory_dimensions,
-            user_pvs_proof.public_values.len(),
+        let verifier_pvs_air = DeferredVerifyPvsAir {
+            public_values_bus: bus_inventory.public_values_bus,
+            cached_commit_bus: bus_inventory.cached_commit_bus,
+            poseidon2_compress_bus: bus_inventory.poseidon2_compress_bus,
+            memory_merkle_commit_bus,
+            output_val_bus,
+            output_commit_bus,
+            final_state_bus: bus_inventory.final_state_bus,
+            expected_internal_recursive_dag_commit: self.internal_recursive_dag_commit,
+        };
+        let user_pvs_commit_air = UserPvsCommitAir::new(
+            bus_inventory.poseidon2_compress_bus,
+            user_pvs_commit_bus,
+            user_pvs_commit_tree_bus,
+            Some(output_val_bus),
+            self.num_user_pvs,
         );
-        let DeferralOutputCtx {
-            proving_ctx: output_ctx,
-            poseidon2_inputs: output_p2_inputs,
-            range_inputs,
-            output_commit,
-        } = output::generate_proving_ctx(
-            verifier_pvs_record.app_exe_commit,
-            verifier_pvs_record.app_vk_commit,
-            user_pvs_proof.public_values.clone(),
+        let user_pvs_memory_air = UserPvsInMemoryAir::new(
+            bus_inventory.poseidon2_compress_bus,
+            user_pvs_commit_bus,
+            memory_merkle_commit_bus,
+            self.memory_dimensions,
+            self.num_user_pvs,
         );
+        let output_commit_air = DeferralOutputCommitAir {
+            poseidon2_bus: bus_inventory.poseidon2_compress_bus,
+            range_bus: bus_inventory.range_checker_bus,
+            output_val_bus,
+            output_commit_bus,
+        };
 
-        PreVerifierData {
-            proving_ctxs: vec![commit_ctx, memory_ctx, output_ctx],
-            poseidon2_inputs: verifier_p2_inputs
-                .into_iter()
-                .chain(commit_p2_inputs)
-                .chain(memory_p2_inputs)
-                .chain(output_p2_inputs)
-                .collect_vec(),
-            range_inputs,
-            verifier_pvs_record,
-            output_commit,
-        }
-    }
-
-    fn generate_verifier_pvs_ctx(
-        &self,
-        proof: &Proof<SC>,
-        record: DeferredVerifyPvsRecord<F>,
-        final_transcript_state: [F; POSEIDON2_WIDTH],
-        output_commit: [F; DIGEST_SIZE],
-    ) -> AirProvingContext<CpuBackend<SC>> {
-        verifier::generate_proving_ctx(proof, record, final_transcript_state, output_commit)
-    }
-}
-
-#[cfg(feature = "cuda")]
-impl DeferredVerifyTraceGen<GpuBackend> for DeferredVerifyTraceGenImpl {
-    fn new() -> Self {
-        Self
-    }
-
-    fn pre_verifier_subcircuit_tracegen(
-        &self,
-        proof: &Proof<SC>,
-        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, F>,
-        memory_dimensions: MemoryDimensions,
-    ) -> PreVerifierData<GpuBackend> {
-        let PreVerifierData {
-            proving_ctxs,
-            poseidon2_inputs,
-            range_inputs,
-            verifier_pvs_record,
-            output_commit,
-        } = <Self as DeferredVerifyTraceGen<CpuBackend<SC>>>::pre_verifier_subcircuit_tracegen(
-            self,
-            proof,
-            user_pvs_proof,
-            memory_dimensions,
-        );
-
-        PreVerifierData {
-            proving_ctxs: proving_ctxs
-                .into_iter()
-                .map(transport_air_proving_ctx_to_device)
-                .collect(),
-            poseidon2_inputs,
-            range_inputs,
-            verifier_pvs_record,
-            output_commit,
-        }
-    }
-
-    fn generate_verifier_pvs_ctx(
-        &self,
-        proof: &Proof<SC>,
-        record: DeferredVerifyPvsRecord<F>,
-        final_transcript_state: [F; POSEIDON2_WIDTH],
-        output_commit: [F; DIGEST_SIZE],
-    ) -> AirProvingContext<GpuBackend> {
-        transport_air_proving_ctx_to_device(verifier::generate_proving_ctx(
-            proof,
-            record,
-            final_transcript_state,
-            output_commit,
-        ))
+        [Arc::new(verifier_pvs_air) as AirRef<SC>]
+            .into_iter()
+            .chain(self.verifier_circuit.airs())
+            .chain([Arc::new(user_pvs_commit_air) as AirRef<SC>])
+            .chain([Arc::new(user_pvs_memory_air) as AirRef<SC>])
+            .chain([Arc::new(output_commit_air) as AirRef<SC>])
+            .collect()
     }
 }
