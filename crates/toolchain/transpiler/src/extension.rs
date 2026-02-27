@@ -1,4 +1,5 @@
-use openvm_instructions::instruction::Instruction;
+use eyre::Result;
+use openvm_instructions::{exe::SparseMemoryImage, instruction::Instruction};
 
 /// Trait to add custom RISC-V instruction transpilation to OpenVM instruction format.
 /// RISC-V instructions always come in 32-bit chunks.
@@ -12,6 +13,12 @@ pub trait TranspilerExtension<F> {
     /// Otherwise it returns `TranspilerOutput { instructions, used_u32s }` to indicate that
     /// `instruction_stream[..used_u32s]` should be transpiled into `instructions`.
     fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>>;
+
+    /// Each transpiler extension is given the opportunity to modify the initial memory state.
+    /// By default, nothing is done.
+    fn modify_initial_memory(&self, _init_memory: &mut SparseMemoryImage) -> Result<()> {
+        Ok(())
+    }
 }
 
 pub struct TranspilerOutput<F> {

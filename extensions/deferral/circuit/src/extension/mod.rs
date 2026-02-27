@@ -3,10 +3,10 @@ use std::sync::Arc;
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        hasher::Hasher, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
-        ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator,
-        MatrixRecordArena, RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex,
-        VmCircuitExtension, VmExecutionExtension, VmField, VmProverExtension,
+        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
+        ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator, MatrixRecordArena,
+        RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex, VmCircuitExtension,
+        VmExecutionExtension, VmField, VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
@@ -17,11 +17,9 @@ use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
 use openvm_stark_backend::{
-    p3_field::PrimeCharacteristicRing,
     prover::{CpuBackend, CpuDevice},
     StarkEngine, StarkProtocolConfig, Val,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -36,12 +34,6 @@ use crate::{
         bus::DeferralPoseidon2Bus, deferral_poseidon2_air, deferral_poseidon2_chip,
         DeferralPoseidon2Air,
     },
-    setup::{
-        DeferralSetupAdapterAir, DeferralSetupAdapterExecutor, DeferralSetupAdapterFiller,
-        DeferralSetupAir, DeferralSetupChip, DeferralSetupCoreAir, DeferralSetupCoreFiller,
-        DeferralSetupExecutor,
-    },
-    utils::{byte_commit_to_f, f_commit_to_bytes, COMMIT_NUM_BYTES},
     DeferralFn,
 };
 
@@ -56,30 +48,14 @@ cfg_if::cfg_if! {
 
 // SAFETY: These deferral AIRs must be at these indices within the extension
 pub(crate) const POSEIDON2_AIR_REL_IDX: usize = 1;
-pub(crate) const CALL_AIR_REL_IDX: usize = 3;
-pub(crate) const OUTPUT_AIR_REL_IDX: usize = 4;
+pub(crate) const CALL_AIR_REL_IDX: usize = 2;
+pub(crate) const OUTPUT_AIR_REL_IDX: usize = 3;
 
 // =================================== VM Extension Implementation =================================
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, derive_new::new)]
 pub struct DeferralExtension {
     pub fns: Vec<Arc<DeferralFn>>,
-    pub expected_def_vks_commit: [u8; COMMIT_NUM_BYTES],
-}
-
-impl DeferralExtension {
-    pub fn new<F: VmField>(fns: Vec<Arc<DeferralFn>>, commits: &[[F; DIGEST_SIZE]]) -> Self {
-        assert_eq!(fns.len(), commits.len());
-        let mut expected_commit = [F::ZERO; DIGEST_SIZE];
-        let hasher = deferral_poseidon2_chip();
-        for commit in commits {
-            expected_commit = hasher.compress(&expected_commit, commit);
-        }
-        Self {
-            fns,
-            expected_def_vks_commit: f_commit_to_bytes(&expected_commit),
-        }
-    }
 }
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
@@ -90,25 +66,18 @@ impl DeferralExtension {
         openvm_circuit_derive::AotMeteredExecutor
     )
 )]
-pub enum DeferralExecutor<F: VmField> {
-    Setup(DeferralSetupExecutor<F>),
+pub enum DeferralExecutor {
     Call(DeferralCallExecutor),
     Output(DeferralOutputExecutor),
 }
 
 impl<F: VmField> VmExecutionExtension<F> for DeferralExtension {
-    type Executor = DeferralExecutor<F>;
+    type Executor = DeferralExecutor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, DeferralExecutor<F>>,
+        inventory: &mut ExecutorInventoryBuilder<F, DeferralExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let setup = DeferralSetupExecutor::new(
-            DeferralSetupAdapterExecutor,
-            byte_commit_to_f(&self.expected_def_vks_commit.map(F::from_u8)),
-        );
-        inventory.add_executor(setup, [DeferralOpcode::SETUP.global_opcode()])?;
-
         let call = DeferralCallExecutor::new(DeferralCallAdapterExecutor, self.fns.clone());
         inventory.add_executor(call, [DeferralOpcode::CALL.global_opcode()])?;
 
@@ -137,20 +106,16 @@ where
         let base_num_airs = inventory.num_airs();
 
         inventory.add_air(DeferralCircuitCountAir::new(count_bus, self.fns.len()));
+
         assert_eq!(inventory.num_airs() - base_num_airs, POSEIDON2_AIR_REL_IDX);
         inventory.add_air_ref(Arc::new(deferral_poseidon2_air(poseidon2_bus.0)));
 
-        inventory.add_air(DeferralSetupAir::new(
-            DeferralSetupAdapterAir::new(execution_bridge, memory_bridge),
-            DeferralSetupCoreAir::new(byte_commit_to_f(
-                &self.expected_def_vks_commit.map(Val::<SC>::from_u8),
-            )),
-        ));
         assert_eq!(inventory.num_airs() - base_num_airs, CALL_AIR_REL_IDX);
         inventory.add_air(DeferralCallAir::new(
             DeferralCallAdapterAir::new(execution_bridge, memory_bridge),
             DeferralCallCoreAir::new(count_bus, poseidon2_bus),
         ));
+
         assert_eq!(inventory.num_airs() - base_num_airs, OUTPUT_AIR_REL_IDX);
         inventory.add_air(DeferralOutputAir::new(
             execution_bridge,
@@ -191,12 +156,6 @@ where
         inventory.next_air::<DeferralPoseidon2Air<Val<SC>>>()?;
         inventory.add_periphery_chip(poseidon2_chip.clone());
 
-        inventory.next_air::<DeferralSetupAir<Val<SC>>>()?;
-        inventory.add_executor_chip(DeferralSetupChip::new(
-            DeferralSetupCoreFiller::new(DeferralSetupAdapterFiller::new()),
-            mem_helper.clone(),
-        ));
-
         inventory.next_air::<DeferralCallAir>()?;
         inventory.add_executor_chip(DeferralCallChip::new(
             DeferralCallCoreFiller::new(
@@ -230,7 +189,7 @@ pub struct Rv32DeferralConfig {
     #[extension]
     pub io: Rv32Io,
     #[serde(skip)]
-    #[extension(executor = "DeferralExecutor<F>")]
+    #[extension(executor = "DeferralExecutor")]
     pub deferral: DeferralExtension,
 }
 

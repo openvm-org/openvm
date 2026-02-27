@@ -4,21 +4,6 @@ use crate::{
     MAX_DEF_CIRCUITS, OPCODE,
 };
 
-/// Macro to generate SETUP opcode
-#[cfg(target_os = "zkvm")]
-#[macro_export]
-macro_rules! deferral_setup {
-    () => {
-        openvm_custom_insn::custom_insn_i!(
-            opcode = OPCODE,
-            funct3 = DEFERRAL_FUNCT3,
-            rd = Const "x0",
-            rs1 = Const "x0",
-            imm = Const DeferralImmOpcode::Setup as u16,
-        )
-    };
-}
-
 /// Macro to generate CALL opcode
 #[cfg(target_os = "zkvm")]
 #[macro_export]
@@ -47,16 +32,6 @@ macro_rules! deferral_output {
             imm = Const encode_deferral_imm($deferral_idx, DeferralImmOpcode::Output),
         )
     }};
-}
-
-/// Execute deferral setup
-#[inline(always)]
-pub fn setup_deferrals() {
-    #[cfg(target_os = "zkvm")]
-    deferral_setup!();
-
-    #[cfg(not(target_os = "zkvm"))]
-    unimplemented!("Deferral framework is only available with zkvm")
 }
 
 /// Execute a deferral call for a compile-time deferral index using raw pointers
