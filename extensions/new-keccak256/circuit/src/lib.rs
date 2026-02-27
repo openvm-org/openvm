@@ -6,5 +6,10 @@
 mod keccakf;
 mod xorin;
 
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+
 mod extension;
 pub use extension::*;
