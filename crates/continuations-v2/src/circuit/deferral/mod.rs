@@ -51,8 +51,8 @@ pub struct DeferralVerifierPvs<F> {
 #[repr(C)]
 #[derive(AlignedBorrow, Clone, Copy)]
 pub struct DeferralRootPvs<F> {
-    /// Merkle root of [def_vk_commit, 0], the initial accumulator state for thie deferral
-    /// circuit. This will be contrained to be in the initial memory state Merkle tree.
+    /// Merkle root of [def_vk_commit, 0], the initial accumulator state for this deferral
+    /// circuit. This will be constrained to be in the initial memory state Merkle tree.
     pub initial_acc_hash: [F; DIGEST_SIZE],
     /// Merkle root of the final [input_acc, output_acc] state for this deferral circuit.
     /// This will be constrained to be in the final memory state Merkle tree.
