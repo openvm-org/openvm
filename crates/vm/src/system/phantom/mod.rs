@@ -80,6 +80,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
             is_valid,
         } = (*local).borrow();
 
+        builder.assert_bool(is_valid);
         self.execution_bridge
             .execute_and_increment_or_set_pc(
                 self.phantom_opcode.to_field::<AB::F>(),
