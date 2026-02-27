@@ -10,6 +10,7 @@
 
 using namespace keccakf;
 using namespace riscv;
+using namespace new_keccak;
 
 #define KECCAKF_WRITE(FIELD, VALUE) COL_WRITE_VALUE(row, KeccakfVmCols, FIELD, VALUE)
 #define KECCAKF_WRITE_ARRAY(FIELD, VALUES) COL_WRITE_ARRAY(row, KeccakfVmCols, FIELD, VALUES)
