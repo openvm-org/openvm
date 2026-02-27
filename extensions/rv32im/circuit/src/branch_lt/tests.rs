@@ -291,7 +291,7 @@ fn run_negative_branch_lt_test(
         .load_periphery(bitwise)
         .finalize();
     tester
-        .simple_test()
+        .simple_test_catching_prover_errors()
         .expect_err("Expected verification to fail, but it passed");
 }
 

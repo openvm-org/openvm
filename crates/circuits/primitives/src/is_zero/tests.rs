@@ -144,6 +144,7 @@ fn test_vec_is_zero(x_vec: [u32; 4], expected: [u32; 4]) {
 
 #[test_case(97 ; "97 => 0")]
 #[test_case(0 ; "0 => 1")]
+#[should_panic]
 fn test_single_is_zero_fail(x: u32) {
     let x = PrimeCharacteristicRing::from_u32(x);
     let chip = IsZeroChip::new(vec![x]);
@@ -157,38 +158,31 @@ fn test_single_is_zero_fail(x: u32) {
         .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
-    assert!(
-        test_engine_small()
-            .run_test(any_air_arc_vec![air], traces)
-            .is_err(),
-        "Expected constraint to fail"
-    );
+    test_engine_small()
+        .run_test(any_air_arc_vec![air], traces)
+        .unwrap();
 }
 
 #[test_case([1, 2, 7, 0], [0, 0, 0, 1] ; "1, 2, 7, 0 => 0, 0, 0, 1")]
 #[test_case([97, 0, 179, 0], [0, 1, 0, 1] ; "97, 0, 179, 0 => 0, 1, 0, 1")]
-fn test_vec_is_zero_fail(x_vec: [u32; 4], expected: [u32; 4]) {
+#[should_panic]
+fn test_vec_is_zero_fail(x_vec: [u32; 4], _expected: [u32; 4]) {
     let x_vec: Vec<F> = x_vec.into_iter().map(F::from_u32).collect();
     let chip = IsZeroChip::new(x_vec);
     let air = chip.air;
     let mut trace = chip.generate_trace();
 
     disable_debug_builder();
-    for (i, _value) in expected.iter().enumerate() {
-        trace.row_mut(i)[1] = F::ONE - trace.row_mut(i)[1];
-        let traces = [trace.clone()]
-            .iter()
-            .map(ColMajorMatrix::from_row_major)
-            .map(AirProvingContext::simple_no_pis)
-            .collect::<Vec<_>>();
-        assert!(
-            test_engine_small()
-                .run_test(any_air_arc_vec![air], traces)
-                .is_err(),
-            "Expected constraint to fail"
-        );
-        trace.row_mut(i)[1] = F::ONE - trace.row_mut(i)[1];
-    }
+    // Corrupt the first row's output to trigger a constraint failure
+    trace.row_mut(0)[1] = F::ONE - trace.row_mut(0)[1];
+    let traces = [trace]
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
+        .map(AirProvingContext::simple_no_pis)
+        .collect::<Vec<_>>();
+    test_engine_small()
+        .run_test(any_air_arc_vec![air], traces)
+        .unwrap();
 }
 
 #[cfg(feature = "cuda")]

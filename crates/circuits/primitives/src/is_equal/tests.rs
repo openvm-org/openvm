@@ -119,6 +119,7 @@ fn test_single_is_equal(x: u32, y: u32) {
     [0,97,127],
     [0,23,97]
 )]
+#[should_panic]
 fn test_single_is_zero_fail(x: u32, y: u32) {
     let x = PrimeCharacteristicRing::from_u32(x);
     let y = PrimeCharacteristicRing::from_u32(y);
@@ -140,12 +141,9 @@ fn test_single_is_zero_fail(x: u32, y: u32) {
         .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
-    assert!(
-        test_engine_small()
-            .run_test(any_air_arc_vec![IsEqTestAir(IsEqSubAir)], traces)
-            .is_err(),
-        "Expected constraint to fail"
-    );
+    test_engine_small()
+        .run_test(any_air_arc_vec![IsEqTestAir(IsEqSubAir)], traces)
+        .unwrap();
 }
 
 #[cfg(feature = "cuda")]

@@ -244,7 +244,7 @@ fn run_negative_castf_test(prank_vals: CastFPrankValues, b: Option<F>) {
         .load_and_prank_trace(harness, modify_trace)
         .finalize();
     tester
-        .simple_test()
+        .simple_test_catching_prover_errors()
         .expect_err("Expected verification to fail, but it passed");
 }
 

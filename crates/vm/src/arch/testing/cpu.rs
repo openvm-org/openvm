@@ -13,7 +13,10 @@ use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
     p3_matrix::dense::RowMajorMatrix,
     p3_util::log2_strict_usize,
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend, StridedColMajorMatrixView},
+    prover::{
+        AirProvingContext, ColMajorMatrix, CpuBackend, CpuProverError, DeviceDataTransporter,
+        Prover, ProvingContext, StridedColMajorMatrixView,
+    },
     verifier::VerifierError,
     AirRef, AnyAir, StarkEngine, StarkProtocolConfig, SystemParams, Val, VerificationData,
 };
@@ -553,6 +556,46 @@ where
     // }
 }
 
+/// Error type for tests that can fail in either the prover or verifier.
+///
+/// With Result-based prover error handling, negative tests may fail during
+/// proving (e.g., non-zero logup sum) rather than during verification.
+#[derive(Debug)]
+pub enum TestProveVerifyError {
+    Prover(CpuProverError),
+    Verifier(VerifierError<baby_bear_poseidon2::EF>),
+}
+
+impl From<CpuProverError> for TestProveVerifyError {
+    fn from(e: CpuProverError) -> Self {
+        Self::Prover(e)
+    }
+}
+
+impl From<VerifierError<baby_bear_poseidon2::EF>> for TestProveVerifyError {
+    fn from(e: VerifierError<baby_bear_poseidon2::EF>) -> Self {
+        Self::Verifier(e)
+    }
+}
+
+/// Like [`StarkEngine::run_test`], but returns prover errors as `Result::Err`
+/// instead of panicking. Uses the `Coordinator` (which implements `Prover`)
+/// directly to bypass the engine's `.unwrap()`.
+pub fn run_test_catching_prover_errors(
+    engine: &baby_bear_poseidon2::BabyBearPoseidon2CpuEngine,
+    airs: Vec<AirRef<BabyBearPoseidon2Config>>,
+    ctxs: Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>,
+) -> Result<VerificationData<BabyBearPoseidon2Config>, TestProveVerifyError> {
+    let (pk, vk) = engine.keygen(&airs);
+    let device = engine.prover().device;
+    let d_pk = device.transport_pk_to_device(&pk);
+    let ctx = ProvingContext::new(ctxs.into_iter().enumerate().collect());
+    let mut prover = engine.prover();
+    let proof = prover.prove(&d_pk, ctx)?;
+    engine.verify(&vk, &proof)?;
+    Ok(VerificationData { vk, proof })
+}
+
 impl VmChipTester<BabyBearPoseidon2Config> {
     pub fn simple_test(
         self,
@@ -561,6 +604,16 @@ impl VmChipTester<BabyBearPoseidon2Config> {
         assert!(self.memory.is_none(), "Memory must be finalized");
         let (airs, ctxs): (Vec<_>, Vec<_>) = self.air_ctxs.into_iter().unzip();
         test_cpu_engine().run_test(airs, ctxs)
+    }
+
+    /// Like [`simple_test`](Self::simple_test), but catches prover errors as
+    /// `Result::Err` instead of panicking.
+    pub fn simple_test_catching_prover_errors(
+        self,
+    ) -> Result<VerificationData<BabyBearPoseidon2Config>, TestProveVerifyError> {
+        assert!(self.memory.is_none(), "Memory must be finalized");
+        let (airs, ctxs): (Vec<_>, Vec<_>) = self.air_ctxs.into_iter().unzip();
+        run_test_catching_prover_errors(&test_cpu_engine(), airs, ctxs)
     }
 
     pub fn simple_test_with_params(

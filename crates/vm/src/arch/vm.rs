@@ -894,7 +894,11 @@ where
             .engine
             .device()
             .transport_matrix_to_device(&Arc::new(trace));
-        let (commitment, pcs) = self.engine.device().commit(std::slice::from_ref(&&d_trace));
+        let (commitment, pcs) = self
+            .engine
+            .device()
+            .commit(std::slice::from_ref(&&d_trace))
+            .unwrap();
         CommittedTraceData {
             commitment,
             trace: d_trace,
@@ -915,7 +919,7 @@ where
         let trace = data.mat_view(0).to_matrix();
         let d_trace = self.engine.device().transport_matrix_to_device(&trace);
         let d_data = self.engine.device().transport_pcs_data_to_device(data);
-        let commitment = data.commit();
+        let commitment = data.commit().unwrap();
         CommittedTraceData {
             commitment,
             data: Arc::new(d_data),
