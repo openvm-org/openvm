@@ -1,11 +1,11 @@
-use openvm_circuit_primitives::AlignedBorrow;
 use recursion_circuit::prelude::DIGEST_SIZE;
+use stark_recursion_circuit_derive::AlignedBorrow;
 
 pub mod aggregation;
 pub mod verify;
 
 #[repr(C)]
-#[derive(AlignedBorrow, Debug)]
+#[derive(AlignedBorrow, Clone, Copy)]
 pub struct DeferralCircuitPvs<F> {
     /// Commit to the input to the deferral circuit
     pub input_commit: [F; DIGEST_SIZE],
@@ -14,38 +14,29 @@ pub struct DeferralCircuitPvs<F> {
 }
 
 #[repr(C)]
-#[derive(AlignedBorrow, Debug)]
+#[derive(AlignedBorrow, Clone, Copy)]
+pub struct DeferralAggregationPvs<F> {
+    /// Compression of input_commit and output_commit at the leaf layer, and
+    /// the Merkle root of the aggregation subtree this proof is the root of
+    /// at internal layers
+    pub merkle_commit: [F; DIGEST_SIZE],
+}
+
+#[repr(C)]
+#[derive(AlignedBorrow, Clone, Copy)]
 pub struct DeferralVerifierPvs<F> {
-    /// Boolean that indicates if all intra-circuit Proofs have been aggregated.
-    pub intra_flag: F,
-    /// Boolean that indicates if all inter-circuit Proofs have been aggregated. Should only
-    /// be 1 at the root.
-    pub inter_flag: F,
-    /// Depth of the inter-circuit subtree with this node as root.
-    pub inter_depth: F,
-
-    /// Merkle root of circuit input commits in this subtree if deferral_flag is 0, else is
-    /// the Merkle root of the input/output accumulator memory subtree rooted at this node.
-    pub input_commit: [F; DIGEST_SIZE],
-    /// Merkle root of circuit output commits in this subtree if deferral_flag is 0, else is
-    /// unset.
-    pub output_commit: [F; DIGEST_SIZE],
-
     /// Ternary flag to indicate which continuations layer this Proof is for. Should be 0 for
     /// the leaf verifier, 1 for the internal-for-leaf verifier, and 2 for the internal-
     /// recursive verifier.
     pub internal_flag: F,
-    /// When deferral_flag is 0 this is the cached trace commit of the leaf verifier circuit's
-    /// SymbolicExpressionAir, which is derived from the def_vk. Else this is the def_vk_commit,
-    /// computed by compressing together the def, leaf, and internal-for-leaf DAG commits.
-    pub def_commit: [F; DIGEST_SIZE],
-    /// When deferral_flag is 0 this is the cached trace commit of the internal-for-leaf
-    /// verifier circuit's SymbolicExpressionAir, which is derived from the leaf_vk. Should be
-    /// unset otherwise.
+    /// Cached trace commit of the leaf verifier circuit's SymbolicExpressionAir, which is
+    /// derived from the def_vk
+    pub def_dag_commit: [F; DIGEST_SIZE],
+    /// Cached trace commit of the internal-for-leaf verifier circuit's SymbolicExpressionAir,
+    /// which is derived from the leaf_vk
     pub leaf_dag_commit: [F; DIGEST_SIZE],
-    /// When deferral_flag is 0 this is the cached trace commit of the first (i.e. index 0)
-    /// internal-recursive layer verifier circuit's SymbolicExpressionAir, which is derived
-    /// from the internal_for_leaf_vk. Should be unset otherwise.
+    /// Cached trace commit of the first (i.e. index 0) internal-recursive layer verifier
+    /// circuit's SymbolicExpressionAir, which is derived from the internal_for_leaf_vk
     pub internal_for_leaf_dag_commit: [F; DIGEST_SIZE],
 
     /// Ternary flag to indicate which internal-recursive layer this Proof is for. Should be
@@ -55,4 +46,15 @@ pub struct DeferralVerifierPvs<F> {
     /// Cached trace commit of each subsequent (i.e. index > 0) internal-recursive layer
     /// verifier's SymbolicExpressionAir, which is derived from the internal_recursive_vk
     pub internal_recursive_dag_commit: [F; DIGEST_SIZE],
+}
+
+#[repr(C)]
+#[derive(AlignedBorrow, Clone, Copy)]
+pub struct DeferralRootPvs<F> {
+    /// Merkle root of [def_vk_commit, 0], the initial accumulator state for thie deferral
+    /// circuit. This will be contrained to be in the initial memory state Merkle tree.
+    pub initial_acc_hash: [F; DIGEST_SIZE],
+    /// Merkle root of the final [input_acc, output_acc] state for this deferral circuit.
+    /// This will be constrained to be in the final memory state Merkle tree.
+    pub final_acc_hash: [F; DIGEST_SIZE],
 }
