@@ -24,6 +24,7 @@ pub use loadstore::*;
 pub use mul::*;
 pub use openvm_instructions::riscv::{
     RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
+    WORD_NUM_LIMBS,
 };
 pub use rdwrite::*;
 

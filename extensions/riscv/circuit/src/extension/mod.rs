@@ -29,8 +29,11 @@ use openvm_riscv_transpiler::{
     LessThanOpcode,
     MulHOpcode,
     MulOpcode,
+    Rv64AuipcOpcode,
     // TEMP: disabled until ported to RV64
-    // Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode,
+    // Rv64HintStoreOpcode,
+    Rv64JalLuiOpcode,
+    Rv64JalrOpcode,
     // Rv64LoadStoreOpcode,
     Rv64Phantom,
     ShiftOpcode,
@@ -105,12 +108,12 @@ pub enum Rv64IExecutor {
     Shift(Rv64ShiftExecutor),
     BranchEqual(Rv64BranchEqualExecutor),
     BranchLessThan(Rv64BranchLessThanExecutor),
+    JalLui(Rv64JalLuiExecutor),
+    Jalr(Rv64JalrExecutor),
+    Auipc(Rv64AuipcExecutor),
     // TEMP: disabled until ported to RV64
     // LoadStore(Rv32LoadStoreExecutor),
     // LoadSignExtend(Rv32LoadSignExtendExecutor),
-    // JalLui(Rv32JalLuiExecutor),
-    // Jalr(Rv32JalrExecutor),
-    // Auipc(Rv32AuipcExecutor),
 }
 
 /// RISC-V 64-bit Multiplication Extension (RV64M) Instruction Executors
@@ -295,17 +298,17 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
             BranchLessThanOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(blt, BranchLessThanOpcode::iter().map(|x| x.global_opcode()))?;
-        //
-        // let jal_lui = Rv32JalLuiExecutor::new(Rv32CondRdWriteAdapterExecutor::new(
-        //     Rv32RdWriteAdapterExecutor,
-        // ));
-        // inventory.add_executor(jal_lui, Rv64JalLuiOpcode::iter().map(|x| x.global_opcode()))?;
-        //
-        // let jalr = Rv32JalrExecutor::new(Rv32JalrAdapterExecutor);
-        // inventory.add_executor(jalr, Rv64JalrOpcode::iter().map(|x| x.global_opcode()))?;
-        //
-        // let auipc = Rv32AuipcExecutor::new(Rv32RdWriteAdapterExecutor);
-        // inventory.add_executor(auipc, Rv64AuipcOpcode::iter().map(|x| x.global_opcode()))?;
+
+        let jal_lui = Rv64JalLuiExecutor::new(Rv64CondRdWriteAdapterExecutor::new(
+            Rv64RdWriteAdapterExecutor,
+        ));
+        inventory.add_executor(jal_lui, Rv64JalLuiOpcode::iter().map(|x| x.global_opcode()))?;
+
+        let jalr = Rv64JalrExecutor::new(Rv64JalrAdapterExecutor);
+        inventory.add_executor(jalr, Rv64JalrOpcode::iter().map(|x| x.global_opcode()))?;
+
+        let auipc = Rv64AuipcExecutor::new(Rv64RdWriteAdapterExecutor);
+        inventory.add_executor(auipc, Rv64AuipcOpcode::iter().map(|x| x.global_opcode()))?;
 
         // There is no downside to adding phantom sub-executors, so we do it in the base extension.
         inventory.add_phantom_sub_executor(
@@ -407,24 +410,24 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64I {
             BranchLessThanCoreAir::new(bitwise_lu, BranchLessThanOpcode::CLASS_OFFSET),
         );
         inventory.add_air(blt);
-        //
-        // let jal_lui = Rv32JalLuiAir::new(
-        //     Rv32CondRdWriteAdapterAir::new(Rv32RdWriteAdapterAir::new(memory_bridge,
-        // exec_bridge)),     Rv32JalLuiCoreAir::new(bitwise_lu),
-        // );
-        // inventory.add_air(jal_lui);
-        //
-        // let jalr = Rv32JalrAir::new(
-        //     Rv32JalrAdapterAir::new(memory_bridge, exec_bridge),
-        //     Rv32JalrCoreAir::new(bitwise_lu, range_checker),
-        // );
-        // inventory.add_air(jalr);
-        //
-        // let auipc = Rv32AuipcAir::new(
-        //     Rv32RdWriteAdapterAir::new(memory_bridge, exec_bridge),
-        //     Rv32AuipcCoreAir::new(bitwise_lu),
-        // );
-        // inventory.add_air(auipc);
+
+        let jal_lui = Rv64JalLuiAir::new(
+            Rv64CondRdWriteAdapterAir::new(Rv64RdWriteAdapterAir::new(memory_bridge, exec_bridge)),
+            Rv64JalLuiCoreAir::new(bitwise_lu),
+        );
+        inventory.add_air(jal_lui);
+
+        let jalr = Rv64JalrAir::new(
+            Rv64JalrAdapterAir::new(memory_bridge, exec_bridge),
+            Rv64JalrCoreAir::new(bitwise_lu, range_checker),
+        );
+        inventory.add_air(jalr);
+
+        let auipc = Rv64AuipcAir::new(
+            Rv64RdWriteAdapterAir::new(memory_bridge, exec_bridge),
+            Rv64AuipcCoreAir::new(bitwise_lu),
+        );
+        inventory.add_air(auipc);
 
         Ok(())
     }
@@ -543,34 +546,34 @@ where
             mem_helper.clone(),
         );
         inventory.add_executor_chip(blt);
-        //
-        // inventory.next_air::<Rv32JalLuiAir>()?;
-        // let jal_lui = Rv32JalLuiChip::new(
-        //     Rv32JalLuiFiller::new(
-        //         Rv32CondRdWriteAdapterFiller::new(Rv32RdWriteAdapterFiller),
-        //         bitwise_lu.clone(),
-        //     ),
-        //     mem_helper.clone(),
-        // );
-        // inventory.add_executor_chip(jal_lui);
-        //
-        // inventory.next_air::<Rv32JalrAir>()?;
-        // let jalr = Rv32JalrChip::new(
-        //     Rv32JalrFiller::new(
-        //         Rv32JalrAdapterFiller,
-        //         bitwise_lu.clone(),
-        //         range_checker.clone(),
-        //     ),
-        //     mem_helper.clone(),
-        // );
-        // inventory.add_executor_chip(jalr);
-        //
-        // inventory.next_air::<Rv32AuipcAir>()?;
-        // let auipc = Rv32AuipcChip::new(
-        //     Rv32AuipcFiller::new(Rv32RdWriteAdapterFiller, bitwise_lu.clone()),
-        //     mem_helper.clone(),
-        // );
-        // inventory.add_executor_chip(auipc);
+
+        inventory.next_air::<Rv64JalLuiAir>()?;
+        let jal_lui = Rv64JalLuiChip::new(
+            Rv64JalLuiFiller::new(
+                Rv64CondRdWriteAdapterFiller::new(Rv64RdWriteAdapterFiller),
+                bitwise_lu.clone(),
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(jal_lui);
+
+        inventory.next_air::<Rv64JalrAir>()?;
+        let jalr = Rv64JalrChip::new(
+            Rv64JalrFiller::new(
+                Rv64JalrAdapterFiller,
+                bitwise_lu.clone(),
+                range_checker.clone(),
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(jalr);
+
+        inventory.next_air::<Rv64AuipcAir>()?;
+        let auipc = Rv64AuipcChip::new(
+            Rv64AuipcFiller::new(Rv64RdWriteAdapterFiller, bitwise_lu.clone()),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(auipc);
 
         Ok(())
     }
