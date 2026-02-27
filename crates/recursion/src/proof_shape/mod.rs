@@ -270,7 +270,11 @@ impl AirModule for ProofShapeModule {
 }
 
 impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for ProofShapeModule {
-    type ModuleSpecificCtx<'a> = Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>;
+    // (pow_checker, external_range_checks)
+    type ModuleSpecificCtx<'a> = (
+        Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
+        &'a [usize],
+    );
 
     #[tracing::instrument(skip_all)]
     fn generate_proving_ctxs(
@@ -278,9 +282,12 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for Proof
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
         preflights: &[Preflight],
-        pow_checker: &Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
+        ctx: &Self::ModuleSpecificCtx<'_>,
         required_heights: Option<&[usize]>,
     ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
+        let pow_checker = &ctx.0;
+        let external_range_checks = ctx.1;
+
         let range_checker = Arc::new(RangeCheckerCpuTraceGenerator::<8>::default());
         let proof_shape = proof_shape::ProofShapeChip::<4, 8>::new(
             self.idx_encoder.clone(),
@@ -306,6 +313,9 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for Proof
             .into_iter()
             .collect::<Option<Vec<_>>>()?;
 
+        for &val in external_range_checks {
+            range_checker.add_count(val);
+        }
         tracing::trace_span!("wrapper.generate_trace", air = "RangeChecker").in_scope(|| {
             ctxs.push(AirProvingContext::simple_no_pis(
                 ColMajorMatrix::from_row_major(&range_checker.generate_trace_row_major()),
@@ -369,7 +379,10 @@ mod cuda_tracegen {
     };
 
     impl TraceGenModule<GlobalCtxGpu, GpuBackend> for ProofShapeModule {
-        type ModuleSpecificCtx<'a> = Arc<PowerCheckerGpuTraceGenerator<2, POW_CHECKER_HEIGHT>>;
+        type ModuleSpecificCtx<'a> = (
+            Arc<PowerCheckerGpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
+            &'a [usize],
+        );
 
         #[tracing::instrument(skip_all)]
         fn generate_proving_ctxs(
@@ -377,12 +390,17 @@ mod cuda_tracegen {
             child_vk: &VerifyingKeyGpu,
             proofs: &[ProofGpu],
             preflights: &[PreflightGpu],
-            pow_checker_gpu: &Arc<PowerCheckerGpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
+            ctx: &Self::ModuleSpecificCtx<'_>,
             required_heights: Option<&[usize]>,
         ) -> Option<Vec<AirProvingContext<GpuBackend>>> {
             use crate::tracegen::ModuleChip;
 
-            let range_checker_gpu = Arc::new(RangeCheckerGpuTraceGenerator::<8>::default());
+            let pow_checker_gpu = &ctx.0;
+            let external_range_checks = ctx.1;
+
+            let range_checker_gpu = Arc::new(RangeCheckerGpuTraceGenerator::<8>::from_vals(
+                external_range_checks,
+            ));
             let proof_shape_chip = proof_shape::cuda::ProofShapeChipGpu::<4, 8>::new(
                 self.idx_encoder.width(),
                 self.min_cached_idx,
