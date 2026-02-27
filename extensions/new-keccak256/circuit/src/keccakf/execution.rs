@@ -194,11 +194,23 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
 
     let mut result: [u8; KECCAK_WIDTH_BYTES] = [0; KECCAK_WIDTH_BYTES];
     for (i, message) in message_u64.into_iter().enumerate() {
-        let message_bytes = message.to_be_bytes();
+        let message_bytes = message.to_le_bytes();
         result[8 * i..8 * i + 8].copy_from_slice(&message_bytes);
     }
 
-    exec_state.vm_write(RV32_MEMORY_AS, buffer, &result);
+    if IS_E1 {
+        exec_state.vm_write(RV32_MEMORY_AS, buffer, &result);
+    } else {
+        for i in 0..KECCAK_WIDTH_U32_LIMBS {
+            let mut write_chunk: [u8; 4] = [0; 4];
+            write_chunk.copy_from_slice(&result[4 * i..4 * i + 4]);
+            exec_state.vm_write::<u8, KECCAK_WORD_SIZE>(
+                RV32_MEMORY_AS,
+                buffer + (i * KECCAK_WORD_SIZE) as u32,
+                &write_chunk,
+            );
+        }
+    }
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
