@@ -183,6 +183,9 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
         builder
             .when_transition()
             .assert_eq(end.is_terminate, is_terminate);
+        // Assert is_terminate is boolean on every row to ensure lookup multiplicity is boolean
+        // below
+        builder.assert_bool(begin.is_terminate);
 
         builder.when_transition().assert_one(begin.timestamp);
 
