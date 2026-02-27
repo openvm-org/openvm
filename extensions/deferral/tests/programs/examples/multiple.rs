@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use openvm_deferral_guest::{deferred_compute, get_deferred_output, setup_deferrals, Commit};
+use openvm_deferral_guest::{deferred_compute, get_deferred_output, Commit};
 
 openvm::entry!(main);
 
@@ -14,8 +14,6 @@ const EXPECTED_OUTPUT_2_IDX0: [u8; 8] = [9, 18, 27, 36, 45, 54, 63, 72];
 const EXPECTED_OUTPUT_0_IDX1: [u8; 8] = [2, 4, 7, 11, 16, 22, 29, 37];
 
 pub fn main() {
-    setup_deferrals();
-
     let output_key_0 = deferred_compute::<0>(&INPUT_COMMIT_0);
     let mut output_0 = [0u8; EXPECTED_OUTPUT_0_IDX0.len()];
     get_deferred_output::<0>(&mut output_0, &output_key_0);

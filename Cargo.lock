@@ -3296,6 +3296,7 @@ version = "2.0.0-alpha"
 dependencies = [
  "derive_more 1.0.0",
  "eyre",
+ "itertools 0.14.0",
  "openvm-circuit",
  "openvm-circuit-derive",
  "openvm-deferral-circuit",
@@ -3313,6 +3314,7 @@ dependencies = [
 name = "openvm-deferral-transpiler"
 version = "2.0.0-alpha"
 dependencies = [
+ "eyre",
  "openvm-deferral-guest",
  "openvm-instructions",
  "openvm-instructions-derive",
