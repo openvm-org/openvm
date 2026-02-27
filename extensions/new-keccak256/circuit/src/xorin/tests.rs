@@ -22,6 +22,7 @@ use crate::xorin::{air::XorinVmAir, XorinVmChip, XorinVmExecutor, XorinVmFiller}
 
 type F = BabyBear;
 type Harness = TestChipHarness<F, XorinVmExecutor, XorinVmAir, XorinVmChip<F>>;
+const MAX_TRACE_ROWS: usize = 4096;
 
 fn create_harness_fields(
     execution_bridge: ExecutionBridge,
@@ -67,8 +68,6 @@ fn create_test_harness(
         tester.memory_helper(),
         tester.address_bits(),
     );
-
-    const MAX_TRACE_ROWS: usize = 4096;
 
     let harness = Harness::with_capacity(executor, air, chip, MAX_TRACE_ROWS);
 
@@ -249,3 +248,182 @@ fn run_xorin_chip_negative_tests(
     }
 }
 */
+
+// ////////////////////////////////////////////////////////////////////////////////////
+// CUDA TESTS
+// ////////////////////////////////////////////////////////////////////////////////////
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::{
+    testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
+    DenseRecordArena,
+};
+
+#[cfg(feature = "cuda")]
+use crate::{cuda::XorinVmChipGpu, xorin::trace::XorinVmRecordMut};
+
+#[cfg(feature = "cuda")]
+type GpuHarness =
+    GpuTestChipHarness<F, XorinVmExecutor, XorinVmAir, XorinVmChipGpu, XorinVmChip<F>>;
+
+#[cfg(feature = "cuda")]
+fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    let bitwise_bus = default_bitwise_lookup_bus();
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
+    let (air, executor, cpu_chip) = create_harness_fields(
+        tester.execution_bridge(),
+        tester.memory_bridge(),
+        dummy_bitwise_chip,
+        tester.dummy_memory_helper(),
+        tester.address_bits(),
+    );
+
+    let gpu_chip = XorinVmChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.address_bits(),
+        tester.timestamp_max_bits() as u32,
+    );
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_TRACE_ROWS)
+}
+
+#[cfg(feature = "cuda")]
+fn cuda_set_and_execute(
+    tester: &mut GpuChipTestBuilder,
+    executor: &mut XorinVmExecutor,
+    arena: &mut DenseRecordArena,
+    rng: &mut StdRng,
+    len: Option<usize>,
+) {
+    use openvm_circuit::arch::testing::memory::gen_pointer;
+
+    let len = len.unwrap_or_else(|| rng.gen_range(4..=136));
+    let len = (len / 4) * 4;
+    if len == 0 {
+        return;
+    }
+
+    let buffer_reg = gen_pointer(rng, 4);
+    let input_reg = gen_pointer(rng, 4);
+    let len_reg = gen_pointer(rng, 4);
+
+    let buffer_ptr = gen_pointer(rng, len);
+    let input_ptr = gen_pointer(rng, len);
+
+    tester.write(
+        1,
+        buffer_reg,
+        buffer_ptr.to_le_bytes().map(F::from_canonical_u8),
+    );
+    tester.write(
+        1,
+        input_reg,
+        input_ptr.to_le_bytes().map(F::from_canonical_u8),
+    );
+    tester.write(
+        1,
+        len_reg,
+        (len as u32).to_le_bytes().map(F::from_canonical_u8),
+    );
+
+    let buffer_data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
+    for (i, chunk) in buffer_data.chunks(4).enumerate() {
+        let mut word = [F::ZERO; 4];
+        for (j, &byte) in chunk.iter().enumerate() {
+            word[j] = F::from_canonical_u8(byte);
+        }
+        tester.write(2, buffer_ptr + i * 4, word);
+    }
+
+    let input_data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
+    for (i, chunk) in input_data.chunks(4).enumerate() {
+        let mut word = [F::ZERO; 4];
+        for (j, &byte) in chunk.iter().enumerate() {
+            word[j] = F::from_canonical_u8(byte);
+        }
+        tester.write(2, input_ptr + i * 4, word);
+    }
+
+    let instruction = Instruction::from_usize(
+        XorinOpcode::XORIN.global_opcode(),
+        [buffer_reg, input_reg, len_reg, 1, 2],
+    );
+
+    tester.execute(executor, arena, &instruction);
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_xorin_cuda_tracegen() {
+    let mut rng = create_seeded_rng();
+    let mut tester =
+        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+
+    let mut harness = create_cuda_harness(&tester);
+
+    let num_ops: usize = 5;
+    for _ in 0..num_ops {
+        cuda_set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            None,
+        );
+    }
+
+    for len in [4, 8, 16, 32, 64, 128, 136] {
+        cuda_set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            Some(len),
+        );
+    }
+
+    harness
+        .dense_arena
+        .get_record_seeker::<XorinVmRecordMut, _>()
+        .transfer_to_matrix_arena(&mut harness.matrix_arena);
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_xorin_cuda_tracegen_single() {
+    let mut rng = create_seeded_rng();
+    let mut tester =
+        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+
+    let mut harness = create_cuda_harness(&tester);
+
+    cuda_set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.dense_arena,
+        &mut rng,
+        Some(16),
+    );
+
+    harness
+        .dense_arena
+        .get_record_seeker::<XorinVmRecordMut, _>()
+        .transfer_to_matrix_arena(&mut harness.matrix_arena);
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
