@@ -52,7 +52,7 @@ use crate::{
     adapters::{
         compose, Rv64JalrAdapterAir, Rv64JalrAdapterCols, Rv64JalrAdapterExecutor,
         Rv64JalrAdapterFiller,
-        RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
+        RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, WORD_NUM_LIMBS,
     },
     jalr::{run_jalr, Rv64JalrChip, Rv64JalrCoreCols, Rv64JalrExecutor},
     test_utils::get_verification_error,
@@ -60,7 +60,7 @@ use crate::{
 };
 
 const IMM_BITS: usize = 16;
-const RD_LOW_LIMBS: usize = RV64_REGISTER_NUM_LIMBS / 2;
+const RD_LOW_LIMBS: usize = WORD_NUM_LIMBS;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 type Harness = TestChipHarness<F, Rv64JalrExecutor, Rv64JalrAir, Rv64JalrChip<F>>;

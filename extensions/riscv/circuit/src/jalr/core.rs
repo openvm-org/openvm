@@ -28,9 +28,10 @@ use openvm_stark_backend::{
 
 use crate::adapters::{
     Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
+    WORD_NUM_LIMBS,
 };
 
-const RD_LOW_LIMBS: usize = RV64_REGISTER_NUM_LIMBS / 2;
+const RD_LOW_LIMBS: usize = WORD_NUM_LIMBS;
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]

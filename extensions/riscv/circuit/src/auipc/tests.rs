@@ -39,14 +39,14 @@ use super::{run_auipc, Rv64AuipcChip, Rv64AuipcCoreAir, Rv64AuipcCoreCols, Rv64A
 use crate::{
     adapters::{
         Rv64RdWriteAdapterAir, Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller,
-        RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
+        RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, WORD_NUM_LIMBS,
     },
     test_utils::get_verification_error,
     Rv64AuipcAir, Rv64AuipcFiller,
 };
 
 const IMM_BITS: usize = 24;
-const RD_LOW_LIMBS: usize = RV64_REGISTER_NUM_LIMBS / 2;
+const RD_LOW_LIMBS: usize = WORD_NUM_LIMBS;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 type Harness<RA> = TestChipHarness<F, Rv64AuipcExecutor, Rv64AuipcAir, Rv64AuipcChip<F>, RA>;
