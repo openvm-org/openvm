@@ -4,6 +4,7 @@
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
 
+namespace new_keccak {
 using namespace keccakf;
 
 __device__ __constant__ uint8_t R[5][5] = {
@@ -90,3 +91,5 @@ __device__ void generate_trace_row_for_round(
     state_limbs = reinterpret_cast<uint16_t *>(&current_state[0][0]);
     COL_WRITE_ARRAY(row, KeccakfVmCols, inner.a_prime_prime_prime_0_0_limbs, state_limbs);
 }
+
+} // namespace new_keccak
