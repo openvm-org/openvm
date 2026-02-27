@@ -19,6 +19,7 @@ openvm-deferral-circuit.workspace = true
 openvm-deferral-transpiler.workspace = true
 openvm-toolchain-tests = { path = "../../../crates/toolchain/tests" }
 eyre.workspace = true
+itertools.workspace = true
 derive_more.workspace = true
 serde.workspace = true
 

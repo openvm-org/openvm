@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
-use openvm_instructions::instruction::Instruction;
+use eyre::Report;
+use openvm_instructions::{exe::SparseMemoryImage, instruction::Instruction};
 use openvm_stark_backend::p3_field::PrimeField32;
 use thiserror::Error;
 
@@ -25,6 +26,12 @@ pub enum TranspilerError {
     AmbiguousNextInstruction,
     #[error("couldn't parse the next instruction: {0:032b}")]
     ParseError(u32),
+    #[error("processor {processor_index} failed to modify initial memory")]
+    ModifyInitialMemoryFailed {
+        processor_index: usize,
+        #[source]
+        source: Report,
+    },
 }
 
 impl<F: PrimeField32> Transpiler<F> {
@@ -72,5 +79,21 @@ impl<F: PrimeField32> Transpiler<F> {
             ptr += transpiler_output.used_u32s;
         }
         Ok(instructions)
+    }
+
+    /// Allows each processor to modify the initial memory state as needed.
+    pub fn modify_initial_memory(
+        &self,
+        init_memory: &mut SparseMemoryImage,
+    ) -> Result<(), TranspilerError> {
+        for (i, processor) in self.processors.iter().enumerate() {
+            processor
+                .modify_initial_memory(init_memory)
+                .map_err(|source| TranspilerError::ModifyInitialMemoryFailed {
+                    processor_index: i,
+                    source,
+                })?;
+        }
+        Ok(())
     }
 }

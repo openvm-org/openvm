@@ -71,13 +71,14 @@ impl DeferralCallExecutor {
             .get(deferral_idx as usize)
             .ok_or(StaticProgramError::InvalidInstruction(pc))?;
 
-        let input_acc_ptr = (2 * deferral_idx + 1) * (DIGEST_SIZE as u32);
+        const DIGEST_SIZE_U32: u32 = DIGEST_SIZE as u32;
+        let input_acc_ptr = 2 * deferral_idx * DIGEST_SIZE_U32;
         *data = DeferralCallPrecompute {
             rd_ptr: a.as_canonical_u32(),
             rs_ptr: b.as_canonical_u32(),
             deferral_idx,
             input_acc_ptr,
-            output_acc_ptr: input_acc_ptr + (DIGEST_SIZE as u32),
+            output_acc_ptr: input_acc_ptr + DIGEST_SIZE_U32,
             deferral_fn: deferral_fn.as_ref(),
         };
 
