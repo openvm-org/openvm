@@ -253,8 +253,10 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
         let input_commit = join_memory_ops(input_commit_chunks);
 
         let deferral_idx = c.as_canonical_u32();
-        let input_acc_ptr = (2 * deferral_idx + 1) * (DIGEST_SIZE as u32);
-        let output_acc_ptr = input_acc_ptr + (DIGEST_SIZE as u32);
+
+        const DIGEST_SIZE_U32: u32 = DIGEST_SIZE as u32;
+        let input_acc_ptr = 2 * deferral_idx * DIGEST_SIZE_U32;
+        let output_acc_ptr = input_acc_ptr + DIGEST_SIZE_U32;
 
         let old_input_acc_chunks: [[F; MEMORY_OP_SIZE]; DIGEST_MEMORY_OPS] = from_fn(|i| {
             tracing_read_native(
@@ -311,8 +313,10 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
         }
 
         let deferral_idx = c.as_canonical_u32();
-        let input_acc_ptr = (2 * deferral_idx + 1) * (DIGEST_SIZE as u32);
-        let output_acc_ptr = input_acc_ptr + (DIGEST_SIZE as u32);
+
+        const DIGEST_SIZE_U32: u32 = DIGEST_SIZE as u32;
+        let input_acc_ptr = 2 * deferral_idx * DIGEST_SIZE_U32;
+        let output_acc_ptr = input_acc_ptr + DIGEST_SIZE_U32;
 
         for chunk_idx in 0..DIGEST_MEMORY_OPS {
             tracing_write_native(

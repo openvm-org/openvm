@@ -4,6 +4,7 @@ mod tests {
     use std::sync::Arc;
 
     use eyre::Result;
+    use itertools::Itertools;
     use openvm_circuit::{
         arch::{
             deferral::{DeferralResult, DeferralState},
@@ -22,7 +23,8 @@ mod tests {
     };
     use openvm_stark_sdk::{
         config::baby_bear_poseidon2::DIGEST_SIZE,
-        openvm_stark_backend::p3_field::PrimeCharacteristicRing, p3_baby_bear::BabyBear,
+        openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32},
+        p3_baby_bear::BabyBear,
     };
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
@@ -37,16 +39,26 @@ mod tests {
     const INPUT_RAW_1: [u8; 8] = [8, 7, 6, 5, 4, 3, 2, 1];
     const INPUT_RAW_2: [u8; 8] = [9, 9, 9, 9, 9, 9, 9, 9];
 
-    fn make_config(num_deferrals: usize) -> Rv32DeferralConfig {
+    fn make_config(num_deferrals: usize) -> (Rv32DeferralConfig, Vec<[F; DIGEST_SIZE]>) {
         let mut system = test_system_config();
         system.memory_config.addr_spaces[NATIVE_AS as usize].num_cells = 1 << 25;
-        Rv32DeferralConfig {
-            system,
-            rv32i: Rv32I,
-            rv32m: Rv32M::default(),
-            io: Rv32Io,
-            deferral: make_deferral_extension(num_deferrals),
-        }
+        let commits = make_commits(num_deferrals);
+        (
+            Rv32DeferralConfig {
+                system,
+                rv32i: Rv32I,
+                rv32m: Rv32M::default(),
+                io: Rv32Io,
+                deferral: make_deferral_extension(num_deferrals),
+            },
+            commits,
+        )
+    }
+
+    fn make_commits(num_deferrals: usize) -> Vec<[F; DIGEST_SIZE]> {
+        (0..num_deferrals)
+            .map(|_| [F::ONE; DIGEST_SIZE])
+            .collect::<Vec<_>>()
     }
 
     fn make_deferral_extension(num_deferrals: usize) -> DeferralExtension {
@@ -64,22 +76,32 @@ mod tests {
                 }))
             })
             .collect();
-
-        let commits = (0..num_deferrals)
-            .map(|_| [F::ZERO; DIGEST_SIZE])
-            .collect::<Vec<_>>();
-        DeferralExtension::new::<F>(fns, &commits)
+        DeferralExtension::new(fns)
     }
 
-    fn run_test(config: Rv32DeferralConfig, example_name: &str, streams: Streams<F>) -> Result<()> {
+    fn run_test(
+        config: Rv32DeferralConfig,
+        commits: Vec<[F; DIGEST_SIZE]>,
+        example_name: &str,
+        streams: Streams<F>,
+    ) -> Result<()> {
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
+        let commits = commits
+            .iter()
+            .map(|c| {
+                c.iter()
+                    .flat_map(|f| f.as_canonical_u32().to_le_bytes())
+                    .collect_array()
+                    .unwrap()
+            })
+            .collect_vec();
         let exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(DeferralTranspilerExtension),
+                .with_extension(DeferralTranspilerExtension::new(commits)),
         )?;
         air_test_with_min_segments(DeferralCpuBuilder, config, exe, streams, 1).unwrap();
         Ok(())
@@ -96,7 +118,8 @@ mod tests {
             deferrals: vec![state],
             ..Default::default()
         };
-        run_test(make_config(1), "single", streams)
+        let (config, commits) = make_config(1);
+        run_test(config, commits, "single", streams)
     }
 
     #[test]
@@ -113,6 +136,7 @@ mod tests {
             deferrals: vec![state0, state1],
             ..Default::default()
         };
-        run_test(make_config(2), "multiple", streams)
+        let (config, commits) = make_config(2);
+        run_test(config, commits, "multiple", streams)
     }
 }
