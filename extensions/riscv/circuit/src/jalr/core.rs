@@ -31,17 +31,15 @@ use crate::adapters::{
     WORD_NUM_LIMBS,
 };
 
-const RD_LOW_LIMBS: usize = WORD_NUM_LIMBS;
-
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
 pub struct Rv64JalrCoreCols<T> {
     pub imm: T,
     // Keep the same 32-bit decomposition columns and zero-extend to RV64 at the adapter boundary.
-    pub rs1_data: [T; RD_LOW_LIMBS],
+    pub rs1_data: [T; WORD_NUM_LIMBS],
     // To save a column, we only store the 3 most significant limbs of low-32 rd_data.
     // The least significant limb can be derived from from_pc and these limbs.
-    pub rd_data: [T; RD_LOW_LIMBS - 1],
+    pub rd_data: [T; WORD_NUM_LIMBS - 1],
     pub is_valid: T,
 
     pub to_pc_least_sig_bit: T,
@@ -102,7 +100,7 @@ where
         let least_sig_limb = from_pc + AB::F::from_canonical_u32(DEFAULT_PC_STEP) - composed;
 
         // low-32 rd_data decomposition.
-        let rd_data_low: [AB::Expr; RD_LOW_LIMBS] = array::from_fn(|i| {
+        let rd_data_low: [AB::Expr; WORD_NUM_LIMBS] = array::from_fn(|i| {
             if i == 0 {
                 least_sig_limb.clone()
             } else {
@@ -150,14 +148,14 @@ where
 
         // Zero-extend low-32 rs1/rd at the adapter interface.
         let rs1_data = array::from_fn(|i| {
-            if i < RD_LOW_LIMBS {
+            if i < WORD_NUM_LIMBS {
                 rs1[i].into()
             } else {
                 AB::Expr::ZERO
             }
         });
         let rd_data = array::from_fn(|i| {
-            if i < RD_LOW_LIMBS {
+            if i < WORD_NUM_LIMBS {
                 rd_data_low[i].clone()
             } else {
                 AB::Expr::ZERO
@@ -327,7 +325,7 @@ where
             .rd_data
             .iter_mut()
             .rev()
-            .zip(rd_data[..RD_LOW_LIMBS].iter().skip(1).rev())
+            .zip(rd_data[..WORD_NUM_LIMBS].iter().skip(1).rev())
             .for_each(|(dst, src)| {
                 *dst = F::from_canonical_u8(*src);
             });
@@ -347,6 +345,6 @@ pub(super) fn run_jalr(
     assert!(to_pc < (1 << PC_BITS));
 
     let mut rd_data = [0u8; RV64_REGISTER_NUM_LIMBS];
-    rd_data[..RD_LOW_LIMBS].copy_from_slice(&pc.wrapping_add(DEFAULT_PC_STEP).to_le_bytes());
+    rd_data[..WORD_NUM_LIMBS].copy_from_slice(&pc.wrapping_add(DEFAULT_PC_STEP).to_le_bytes());
     (to_pc, rd_data)
 }

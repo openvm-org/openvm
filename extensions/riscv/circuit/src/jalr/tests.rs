@@ -60,7 +60,6 @@ use crate::{
 };
 
 const IMM_BITS: usize = 16;
-const RD_LOW_LIMBS: usize = WORD_NUM_LIMBS;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 type Harness = TestChipHarness<F, Rv64JalrExecutor, Rv64JalrAir, Rv64JalrChip<F>>;
@@ -222,8 +221,8 @@ fn rand_jalr_test() {
 
 #[derive(Clone, Copy, Default, PartialEq)]
 struct JalrPrankValues {
-    pub rd_data: Option<[u32; RD_LOW_LIMBS - 1]>,
-    pub rs1_data: Option<[u32; RD_LOW_LIMBS]>,
+    pub rd_data: Option<[u32; WORD_NUM_LIMBS - 1]>,
+    pub rs1_data: Option<[u32; WORD_NUM_LIMBS]>,
     pub to_pc_least_sig_bit: Option<u32>,
     pub to_pc_limbs: Option<[u32; 2]>,
     pub imm_sign: Option<u32>,

@@ -46,7 +46,6 @@ use crate::{
 };
 
 const IMM_BITS: usize = 24;
-const RD_LOW_LIMBS: usize = WORD_NUM_LIMBS;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 type Harness<RA> = TestChipHarness<F, Rv64AuipcExecutor, Rv64AuipcAir, Rv64AuipcChip<F>, RA>;
@@ -161,9 +160,9 @@ fn rand_auipc_test() {
 
 #[derive(Clone, Copy, Default, PartialEq)]
 struct AuipcPrankValues {
-    pub rd_data: Option<[u32; RD_LOW_LIMBS]>,
-    pub imm_limbs: Option<[u32; RD_LOW_LIMBS - 1]>,
-    pub pc_limbs: Option<[u32; RD_LOW_LIMBS - 2]>,
+    pub rd_data: Option<[u32; WORD_NUM_LIMBS]>,
+    pub imm_limbs: Option<[u32; WORD_NUM_LIMBS - 1]>,
+    pub pc_limbs: Option<[u32; WORD_NUM_LIMBS - 2]>,
 }
 
 fn run_negative_auipc_test(
