@@ -11,10 +11,10 @@ use verify_stark::NonRootStarkProof;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        use continuations_v2::aggregation::CompressionGpuProver as CompressionInnerProver;
+        use continuations_v2::prover::CompressionGpuProver as CompressionInnerProver;
         type E = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
     } else {
-        use continuations_v2::aggregation::CompressionCpuProver as CompressionInnerProver;
+        use continuations_v2::prover::CompressionCpuProver as CompressionInnerProver;
         type E = openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine;
     }
 }
