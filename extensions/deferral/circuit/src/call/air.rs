@@ -250,7 +250,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         let native_as = AB::Expr::from_u32(NATIVE_AS);
 
         let digest_size = AB::F::from_usize(DIGEST_SIZE);
-        let input_acc_ptr = (deferral_idx.clone() * AB::Expr::TWO + AB::Expr::ONE) * digest_size;
+        let input_acc_ptr = deferral_idx.clone() * AB::Expr::TWO * digest_size;
         let output_acc_ptr = input_acc_ptr.clone() + digest_size;
 
         let DeferralCallReads {

@@ -53,9 +53,8 @@ impl OutputKey {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, FromRepr)]
 #[repr(u16)]
 pub enum DeferralImmOpcode {
-    Setup = 0,
-    Call = 1,
-    Output = 2,
+    Call = 0,
+    Output = 1,
 }
 
 /// Encode deferral immediate as [def_idx(10 bits) | opcode(2 bits)]
