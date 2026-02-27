@@ -6,16 +6,21 @@ use openvm_stark_backend::{prover::CpuBackend, AirRef};
 use recursion_circuit::system::VerifierSubCircuit;
 
 use crate::{
-    circuit::{nonroot::NonRootTraceGenImpl, root::RootTraceGenImpl},
+    circuit::{
+        deferral::verify::DeferredVerifyTraceGenImpl, nonroot::NonRootTraceGenImpl,
+        root::RootTraceGenImpl,
+    },
     SC,
 };
 
 mod compression;
+mod deferral;
 mod nonroot;
 mod root;
 mod utils;
 
 pub use compression::*;
+pub use deferral::*;
 pub use nonroot::*;
 pub use root::*;
 pub use utils::*;
@@ -39,6 +44,8 @@ pub type NonRootCpuProver<const MAX_NUM_PROOFS: usize> = NonRootAggregationProve
 pub type CompressionCpuProver =
     CompressionProver<CpuBackend<SC>, VerifierSubCircuit<1>, NonRootTraceGenImpl>;
 pub type RootCpuProver = RootProver<CpuBackend<SC>, VerifierSubCircuit<1>, RootTraceGenImpl>;
+pub type DeferralVerifyCpuProver =
+    DeferredVerifyProver<CpuBackend<SC>, VerifierSubCircuit<1>, DeferredVerifyTraceGenImpl>;
 
 #[cfg(feature = "cuda")]
 pub type NonRootGpuProver<const MAX_NUM_PROOFS: usize> =
@@ -48,3 +55,6 @@ pub type CompressionGpuProver =
     CompressionProver<GpuBackend, VerifierSubCircuit<1>, NonRootTraceGenImpl>;
 #[cfg(feature = "cuda")]
 pub type RootGpuProver = RootProver<GpuBackend, VerifierSubCircuit<1>, RootTraceGenImpl>;
+#[cfg(feature = "cuda")]
+pub type DeferralVerifyGpuProver =
+    DeferredVerifyProver<GpuBackend, VerifierSubCircuit<1>, DeferredVerifyTraceGenImpl>;

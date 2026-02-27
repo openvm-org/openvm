@@ -1,17 +1,18 @@
 use std::{array::from_fn, borrow::Borrow};
 
-use openvm_circuit::arch::ExitCode;
+use openvm_circuit::arch::{ExitCode, POSEIDON2_WIDTH};
 use openvm_circuit_primitives::utils::assert_array_eq;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir};
-use p3_field::{Field, PrimeCharacteristicRing};
+use p3_field::PrimeCharacteristicRing;
 use p3_matrix::Matrix;
 use recursion_circuit::{
     bus::{
-        CachedCommitBus, CachedCommitBusMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
+        CachedCommitBus, CachedCommitBusMessage, FinalTranscriptStateBus,
+        FinalTranscriptStateMessage, Poseidon2CompressBus, Poseidon2CompressMessage,
         PublicValuesBus, PublicValuesBusMessage,
     },
     utils::assert_zeros,
@@ -22,9 +23,16 @@ use verify_stark::pvs::{NonRootVerifierPvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS
 use crate::{
     bn254::CommitBytes,
     circuit::{
+        deferral::{
+            verify::{
+                bus::{OutputCommitBus, OutputCommitMessage, OutputValBus, OutputValMessage},
+                output::VALS_IN_DIGEST,
+            },
+            DeferralCircuitPvs,
+        },
         root::{
             bus::{MemoryMerkleCommitBus, MemoryMerkleCommitMessage},
-            digests_to_poseidon2_input, pad_slice_to_poseidon2_input, RootVerifierPvs,
+            digests_to_poseidon2_input, pad_slice_to_poseidon2_input,
         },
         CONSTRAINT_EVAL_CACHED_INDEX,
     },
@@ -32,48 +40,55 @@ use crate::{
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct RootVerifierPvsCols<F> {
+pub struct DeferredVerifyPvsCols<F> {
     pub child_pvs: NonRootVerifierPvs<F>,
 
     pub program_commit_hash: [F; DIGEST_SIZE],
     pub initial_root_hash: [F; DIGEST_SIZE],
     pub initial_pc_hash: [F; DIGEST_SIZE],
-    pub intermediate_exe_commit: [F; DIGEST_SIZE],
 
+    pub intermediate_exe_commit: [F; DIGEST_SIZE],
     pub intermediate_vk_commit: [F; DIGEST_SIZE],
+
+    pub app_exe_commit: [F; DIGEST_SIZE],
+    pub app_vk_commit: [F; DIGEST_SIZE],
+    pub final_transcript_state: [F; POSEIDON2_WIDTH],
 }
 
-pub struct RootVerifierPvsAir {
+pub struct DeferredVerifyPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,
     pub poseidon2_compress_bus: Poseidon2CompressBus,
     pub memory_merkle_commit_bus: MemoryMerkleCommitBus,
+    pub output_val_bus: OutputValBus,
+    pub output_commit_bus: OutputCommitBus,
+    pub final_state_bus: FinalTranscriptStateBus,
 
     pub expected_internal_recursive_dag_commit: CommitBytes,
 }
 
-impl<F: Field> BaseAir<F> for RootVerifierPvsAir {
+impl<F> BaseAir<F> for DeferredVerifyPvsAir {
     fn width(&self) -> usize {
-        RootVerifierPvsCols::<u8>::width()
+        DeferredVerifyPvsCols::<u8>::width()
     }
 }
-impl<F: Field> BaseAirWithPublicValues<F> for RootVerifierPvsAir {
+impl<F> BaseAirWithPublicValues<F> for DeferredVerifyPvsAir {
     fn num_public_values(&self) -> usize {
-        RootVerifierPvs::<u8>::width()
+        DeferralCircuitPvs::<u8>::width()
     }
 }
-impl<F: Field> PartitionedBaseAir<F> for RootVerifierPvsAir {}
+impl<F> PartitionedBaseAir<F> for DeferredVerifyPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
-    for RootVerifierPvsAir
+    for DeferredVerifyPvsAir
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let local = main.row_slice(0).expect("window should have two elements");
-        let local: &RootVerifierPvsCols<AB::Var> = (*local).borrow();
+        let local = main.row_slice(0).expect("window should have one elements");
+        let local: &DeferredVerifyPvsCols<AB::Var> = (*local).borrow();
 
         /*
-         * RootVerifierPvs only exposes a reduced/derived subset of NonRootVerifierPvs,
+         * DeferralCircuitPvs only exposes a reduced/derived subset of NonRootVerifierPvs,
          * so we must constrain required child public values here. We start with is_terminate
          * and exit code.
          */
@@ -161,15 +176,10 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         );
 
         /*
-         * Finally, we need to constrain that the public values this AIR produces are consistent
-         * with the child's. The app_vk_commit is constrained to be the hashed combination of the
-         * child's app, leaf, and internal-for-leaf DAG commits.
+         * We need to verify the commits to the app executable and vk. The app_vk_commit is
+         * constrained to be the hashed combination of the child's app, leaf, and internal-
+         * for-leaf DAG commits.
          */
-        let &RootVerifierPvs::<_> {
-            app_exe_commit,
-            app_vk_commit,
-        } = builder.public_values().borrow();
-
         self.poseidon2_compress_bus.lookup_key(
             builder,
             Poseidon2CompressMessage {
@@ -186,10 +196,10 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             builder,
             Poseidon2CompressMessage {
                 input: digests_to_poseidon2_input(
-                    local.intermediate_vk_commit.map(Into::into),
-                    local.child_pvs.internal_for_leaf_dag_commit.map(Into::into),
+                    local.intermediate_vk_commit,
+                    local.child_pvs.internal_for_leaf_dag_commit,
                 ),
-                output: app_vk_commit.map(Into::into),
+                output: local.app_vk_commit,
             },
             AB::F::ONE,
         );
@@ -253,9 +263,71 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                 input: digests_to_poseidon2_input(
                     local.intermediate_exe_commit,
                     local.initial_pc_hash,
-                )
-                .map(Into::into),
-                output: app_exe_commit.map(Into::into),
+                ),
+                output: local.app_exe_commit,
+            },
+            AB::F::ONE,
+        );
+
+        /*
+         * Finally, we constrain the public values of this AIR - input_commit should be the
+         * compression of the final verifier sub-circuit transcript state, and output_commit
+         * should be the Poseidon2 sponge hash of the byte representations of app_exe_commit,
+         * app_vk_commit, and the user public values. The latter is constrained by the
+         * DeferralOutputCommitAir, to which we need to send the app commits.
+         */
+        let &DeferralCircuitPvs::<_> {
+            input_commit,
+            output_commit,
+        } = builder.public_values().borrow();
+
+        self.final_state_bus.receive(
+            builder,
+            AB::Expr::ZERO,
+            FinalTranscriptStateMessage {
+                state: local.final_transcript_state,
+            },
+            AB::F::ONE,
+        );
+
+        self.poseidon2_compress_bus.lookup_key(
+            builder,
+            Poseidon2CompressMessage {
+                input: local.final_transcript_state.map(Into::into),
+                output: input_commit.map(Into::into),
+            },
+            AB::F::ONE,
+        );
+
+        let mut output_idx = 0;
+        for exe_val in local.app_exe_commit.chunks_exact(VALS_IN_DIGEST) {
+            self.output_val_bus.send(
+                builder,
+                OutputValMessage {
+                    values: from_fn(|i| exe_val[i].into()),
+                    idx: AB::Expr::from_u8(output_idx),
+                },
+                AB::F::ONE,
+            );
+            output_idx += 1;
+        }
+
+        for vk_val in local.app_vk_commit.chunks_exact(VALS_IN_DIGEST) {
+            self.output_val_bus.send(
+                builder,
+                OutputValMessage {
+                    values: from_fn(|i| vk_val[i].into()),
+                    idx: AB::Expr::from_u8(output_idx),
+                },
+                AB::F::ONE,
+            );
+            output_idx += 1;
+        }
+
+        self.output_commit_bus.receive(
+            builder,
+            OutputCommitMessage {
+                commit: output_commit,
             },
             AB::F::ONE,
         );
