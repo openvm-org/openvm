@@ -1,5 +1,4 @@
 mod air;
-mod trace;
-
 pub use air::*;
+mod trace;
 pub use trace::*;

@@ -14,9 +14,9 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
+use super::user_pvs::{commit, memory};
+
 pub mod bus;
-pub mod commit;
-pub mod memory;
 pub mod verifier;
 
 #[repr(C)]
@@ -72,7 +72,7 @@ impl RootTraceGen<CpuBackend<BabyBearPoseidon2Config>> for RootTraceGenImpl {
         Vec<[F; POSEIDON2_WIDTH]>,
     ) {
         let (commit_ctx, commit_inputs) =
-            commit::generate_proving_ctx(user_pvs_proof.public_values.clone());
+            commit::generate_proving_ctx(user_pvs_proof.public_values.clone(), true);
         let (memory_ctx, memory_inputs) = memory::generate_proving_input(
             user_pvs_proof.public_values_commit,
             &user_pvs_proof.proof,
@@ -109,7 +109,7 @@ impl RootTraceGen<GpuBackend> for RootTraceGenImpl {
         Vec<[F; POSEIDON2_WIDTH]>,
     ) {
         let (commit_cpu_ctx, commit_inputs) =
-            commit::generate_proving_ctx(user_pvs_proof.public_values.clone());
+            commit::generate_proving_ctx(user_pvs_proof.public_values.clone(), true);
         let (memory_cpu_ctx, memory_inputs) = memory::generate_proving_input(
             user_pvs_proof.public_values_commit,
             &user_pvs_proof.proof,
@@ -126,7 +126,7 @@ impl RootTraceGen<GpuBackend> for RootTraceGenImpl {
     }
 }
 
-pub(in crate::circuit::root) fn digests_to_poseidon2_input<T: Clone>(
+pub(crate) fn digests_to_poseidon2_input<T: Clone>(
     x: [T; DIGEST_SIZE],
     y: [T; DIGEST_SIZE],
 ) -> [T; POSEIDON2_WIDTH] {
@@ -139,10 +139,16 @@ pub(in crate::circuit::root) fn digests_to_poseidon2_input<T: Clone>(
     })
 }
 
-pub(in crate::circuit::root) fn pad_slice_to_poseidon2_input<T: Clone>(
-    x: &[T],
-    fill: T,
-) -> [T; POSEIDON2_WIDTH] {
+pub fn poseidon2_input_to_digests<T>(
+    x: [T; POSEIDON2_WIDTH],
+) -> ([T; DIGEST_SIZE], [T; DIGEST_SIZE]) {
+    let mut it = x.into_iter();
+    let commit = from_fn(|_| it.next().unwrap());
+    let len = from_fn(|_| it.next().unwrap());
+    (commit, len)
+}
+
+pub(crate) fn pad_slice_to_poseidon2_input<T: Clone>(x: &[T], fill: T) -> [T; POSEIDON2_WIDTH] {
     from_fn(|i| {
         if i < x.len() {
             x[i].clone()

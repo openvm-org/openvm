@@ -9,13 +9,14 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::circuit::root::{
-    commit::air::{UserPvsCommitCols, MAX_ENCODER_DEGREE},
-    digests_to_poseidon2_input,
+use crate::circuit::{
+    root::digests_to_poseidon2_input,
+    user_pvs::commit::{UserPvsCommitCols, MAX_ENCODER_DEGREE},
 };
 
 pub fn generate_proving_ctx(
     user_pvs: Vec<F>,
+    expose_public_values: bool,
 ) -> (
     AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>,
     Vec<[F; POSEIDON2_WIDTH]>,
@@ -30,11 +31,15 @@ pub fn generate_proving_ctx(
     debug_assert!((num_user_pvs / DIGEST_SIZE).is_power_of_two());
 
     // One selector per leaf PV chunk (each leaf consumes 1 digest).
-    let encoder = Encoder::new(num_user_pvs / DIGEST_SIZE, MAX_ENCODER_DEGREE, true);
+    let encoder = expose_public_values.then_some(Encoder::new(
+        num_user_pvs / DIGEST_SIZE,
+        MAX_ENCODER_DEGREE,
+        true,
+    ));
 
     let num_pv_digests = num_user_pvs / DIGEST_SIZE;
     let const_width = UserPvsCommitCols::<u8>::width();
-    let width = const_width + encoder.width();
+    let width = const_width + encoder.as_ref().map_or(0, |e| e.width());
     let mut trace = vec![F::ZERO; 2 * num_pv_digests * width];
     let mut chunks = trace.chunks_mut(width);
 
@@ -60,14 +65,16 @@ pub fn generate_proving_ctx(
         cols.left_child = left;
         cols.right_child = right;
 
-        chunk[const_width..].copy_from_slice(
-            encoder
-                .get_flag_pt(row_idx)
-                .into_iter()
-                .map(F::from_u32)
-                .collect::<Vec<_>>()
-                .as_slice(),
-        );
+        if let Some(encoder) = &encoder {
+            chunk[const_width..].copy_from_slice(
+                encoder
+                    .get_flag_pt(row_idx)
+                    .into_iter()
+                    .map(F::from_u32)
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+            );
+        }
         next_layer.push(parent);
     }
 
@@ -105,11 +112,11 @@ pub fn generate_proving_ctx(
     last_cols.row_idx = F::from_usize(row_idx);
     last_cols.is_right_child = F::ONE;
 
-    (
-        AirProvingContext::simple(
-            ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width)),
-            user_pvs,
-        ),
-        poseidon2_compress_inputs,
-    )
+    let common_main = ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width));
+    let ctx = if expose_public_values {
+        AirProvingContext::simple(common_main, user_pvs)
+    } else {
+        AirProvingContext::simple_no_pis(common_main)
+    };
+    (ctx, poseidon2_compress_inputs)
 }

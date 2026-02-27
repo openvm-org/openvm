@@ -518,6 +518,14 @@ define_typed_per_proof_permutation_bus!(DagCommitBus, DagCommitBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
+pub struct FinalTranscriptStateMessage<T> {
+    pub state: [T; POSEIDON2_WIDTH],
+}
+
+define_typed_per_proof_permutation_bus!(FinalTranscriptStateBus, FinalTranscriptStateMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct XiRandomnessMessage<T> {
     pub idx: T,
     pub xi: [T; D_EF],

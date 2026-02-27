@@ -1,5 +1,6 @@
 use core::borrow::Borrow;
 
+use openvm_circuit_primitives::utils::{and, not, or};
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -9,7 +10,10 @@ use p3_matrix::Matrix;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::{Poseidon2PermuteBus, Poseidon2PermuteMessage, TranscriptBus, TranscriptBusMessage},
+    bus::{
+        FinalTranscriptStateBus, FinalTranscriptStateMessage, Poseidon2PermuteBus,
+        Poseidon2PermuteMessage, TranscriptBus, TranscriptBusMessage,
+    },
     transcript::poseidon2::{CHUNK, POSEIDON2_WIDTH},
 };
 
@@ -37,6 +41,7 @@ pub struct TranscriptCols<T> {
 pub struct TranscriptAir {
     pub transcript_bus: TranscriptBus,
     pub poseidon2_permute_bus: Poseidon2PermuteBus,
+    pub final_state_bus: Option<FinalTranscriptStateBus>,
 }
 
 impl<F: Field> BaseAir<F> for TranscriptAir {
@@ -149,6 +154,18 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
                 output: local.post_state,
             },
             local.permuted,
-        )
+        );
+
+        if let Some(final_state_bus) = self.final_state_bus {
+            let next_valid = next.mask[0];
+            final_state_bus.send(
+                builder,
+                local.proof_idx,
+                FinalTranscriptStateMessage {
+                    state: local.post_state,
+                },
+                and(is_valid, or(not(next_valid), next.is_proof_start)),
+            );
+        }
     }
 }
