@@ -54,6 +54,7 @@ cfg_if::cfg_if! {
         };
         use openvm_ecc_circuit::EccProverExt;
         use openvm_keccak256_circuit::Keccak256GpuProverExt;
+        use openvm_new_keccak256_circuit::NewKeccak256GpuProverExt;
         use openvm_native_circuit::NativeGpuProverExt;
         use openvm_rv32im_circuit::Rv32ImGpuProverExt;
         use openvm_sha256_circuit::Sha256GpuProverExt;
@@ -471,6 +472,13 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for SdkVmGpuBuilder {
         }
         if let Some(keccak) = &config.keccak {
             VmProverExtension::<E, _, _>::extend_prover(&Keccak256GpuProverExt, keccak, inventory)?;
+        }
+        if let Some(new_keccak) = &config.new_keccak {
+            VmProverExtension::<E, _, _>::extend_prover(
+                &NewKeccak256GpuProverExt,
+                new_keccak,
+                inventory,
+            )?;
         }
         if let Some(sha256) = &config.sha256 {
             VmProverExtension::<E, _, _>::extend_prover(&Sha256GpuProverExt, sha256, inventory)?;

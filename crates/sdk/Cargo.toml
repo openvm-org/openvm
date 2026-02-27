@@ -133,6 +133,7 @@ cuda = [
     "openvm-bigint-circuit/cuda",
     "openvm-ecc-circuit/cuda",
     "openvm-keccak256-circuit/cuda",
+    "openvm-new-keccak256-circuit/cuda",
     "openvm-sha256-circuit/cuda",
     "openvm-pairing-circuit/cuda",
     "openvm-native-circuit/cuda",
