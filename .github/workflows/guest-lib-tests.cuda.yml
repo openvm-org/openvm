@@ -52,7 +52,7 @@ jobs:
               - ".github/workflows/guest-lib-tests.cuda.yml"
               - "crates/sdk/guest/fib/**"
             sha2:
-              - "extensions/sha256/**"
+              - "extensions/sha2/**"
               - "guest-libs/sha2/**"
             keccak256:
               - "extensions/keccak256/**"
