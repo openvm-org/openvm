@@ -9,7 +9,7 @@ mod tests {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use openvm_sdk::StdIn;
+    use sdk_v2::StdIn;
     use openvm_sha2_circuit::{Sha2Rv32Builder, Sha2Rv32Config};
     use openvm_sha2_transpiler::Sha2TranspilerExtension;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;

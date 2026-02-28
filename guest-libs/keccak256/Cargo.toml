@@ -19,7 +19,7 @@ spin = { workspace = true, features = ["mutex", "spin_mutex"] }
 [dev-dependencies]
 hex = { workspace = true }
 openvm-instructions = { workspace = true }
-openvm-sdk = { workspace = true }
+sdk-v2 = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils", "parallel"] }
 openvm-transpiler = { workspace = true }
@@ -31,7 +31,7 @@ eyre = { workspace = true }
 
 [features]
 default = ["tiny_keccak"]
-aot = ["openvm-sdk/aot"]
+aot = ["sdk-v2/aot"]
 # Internal feature for testing only.
 cuda = ["openvm-keccak256-circuit/cuda"]
 # Enable tiny_keccak::Hasher trait implementation
