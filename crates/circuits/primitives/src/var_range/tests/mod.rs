@@ -7,7 +7,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     prover::{AirProvingContext, ColMajorMatrix},
     utils::disable_debug_builder,
-    AirRef, StarkEngine,
+    AirRef, StarkEngine, StarkTestError,
 };
 #[cfg(not(feature = "cuda"))]
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
@@ -114,7 +114,6 @@ fn test_variable_range_checker_chip_send() {
 }
 
 #[test]
-#[should_panic]
 fn negative_test_variable_range_checker_chip_send() {
     // test that the constraint fails when some val >= 2^max_bits
     let mut rng = create_seeded_rng();
@@ -160,7 +159,8 @@ fn negative_test_variable_range_checker_chip_send() {
         .collect::<Vec<_>>();
 
     disable_debug_builder();
-    test_engine_small().run_test(all_chips, all_traces).unwrap();
+    let result = test_engine_small().run_test(all_chips, all_traces);
+    assert!(matches!(result, Err(StarkTestError::Prover(_))));
 }
 
 #[test]
@@ -232,7 +232,6 @@ fn test_variable_range_checker_chip_range_check() {
 }
 
 #[test]
-#[should_panic]
 fn negative_test_variable_range_checker_chip_range_check() {
     // test that the constraint fails when some val >= 2^max_bits
     let mut rng = create_seeded_rng();
@@ -276,7 +275,8 @@ fn negative_test_variable_range_checker_chip_range_check() {
         .collect::<Vec<_>>();
 
     disable_debug_builder();
-    test_engine_small().run_test(all_chips, all_traces).unwrap();
+    let result = test_engine_small().run_test(all_chips, all_traces);
+    assert!(matches!(result, Err(StarkTestError::Prover(_))));
 }
 
 #[cfg(feature = "cuda")]

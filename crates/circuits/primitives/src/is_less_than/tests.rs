@@ -10,7 +10,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     prover::{AirProvingContext, ColMajorMatrix},
     utils::disable_debug_builder,
-    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine,
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine, StarkTestError,
 };
 #[cfg(feature = "cuda")]
 use {
@@ -175,7 +175,6 @@ fn test_lt_chip_decomp_does_not_divide() {
 }
 
 #[test]
-#[should_panic]
 fn test_is_less_than_negative() {
     let (mut chip, range_checker) = setup();
     let airs = any_air_arc_vec![chip.air, range_checker.air];
@@ -192,7 +191,8 @@ fn test_is_less_than_negative() {
         .collect::<Vec<_>>();
 
     disable_debug_builder();
-    test_engine_small().run_test(airs, traces).unwrap();
+    let result = test_engine_small().run_test(airs, traces);
+    assert!(matches!(result, Err(StarkTestError::Verifier(_))));
 }
 
 #[cfg(feature = "cuda")]

@@ -24,7 +24,7 @@ mod aot {
 
     pub(crate) fn gpr_to_rv32_register(gpr: &str, rv32_reg: u8) -> String {
         let xmm_map_reg = rv32_reg / 2;
-        if rv32_reg % 2 == 0 {
+        if rv32_reg.is_multiple_of(2) {
             format!("   pinsrd xmm{xmm_map_reg}, {gpr}, 0\n")
         } else {
             format!("   pinsrd xmm{xmm_map_reg}, {gpr}, 1\n")
@@ -71,7 +71,7 @@ mod aot {
             return (override_reg.to_string(), "".to_string());
         }
         let xmm_map_reg = rv32_reg / 2;
-        if rv32_reg % 2 == 0 {
+        if rv32_reg.is_multiple_of(2) {
             (
                 gpr.to_string(),
                 format!("   pextrd {gpr}, xmm{xmm_map_reg}, 0\n"),
@@ -93,7 +93,7 @@ mod aot {
             return format!("   mov {override_reg}, {gpr}\n");
         }
         let xmm_map_reg = rv32_reg / 2;
-        if rv32_reg % 2 == 0 {
+        if rv32_reg.is_multiple_of(2) {
             format!("   pinsrd xmm{xmm_map_reg}, {gpr}, 0\n")
         } else {
             format!("   pinsrd xmm{xmm_map_reg}, {gpr}, 1\n")

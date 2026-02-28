@@ -52,11 +52,9 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
 };
 #[cfg(feature = "aot")]
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine;
+use openvm_stark_backend::{StarkEngine, SystemParams};
 #[cfg(feature = "aot")]
-use openvm_stark_sdk::config::FriParameters;
-#[cfg(feature = "aot")]
-use openvm_stark_sdk::engine::StarkFriEngine;
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine, DuplexSponge};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::rngs::StdRng;
 #[cfg(feature = "aot")]
@@ -537,7 +535,7 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>
     assert_eq!(tree1.root(), tree2.root(), "Memory states differ");
 
     // Also test metered execution (interpreter and AOT) produce identical final state
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(3));
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(SystemParams::new_for_testing(20));
     let (vm, _) =
         VirtualMachine::new_with_keygen(engine, Rv32ImBuilder, config.clone()).expect("vm init");
     let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();

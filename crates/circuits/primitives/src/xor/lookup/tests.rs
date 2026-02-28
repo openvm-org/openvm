@@ -9,7 +9,7 @@ use openvm_stark_backend::{
     prover::{AirProvingContext, ColMajorMatrix},
     test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     utils::disable_debug_builder,
-    AirRef, StarkEngine,
+    AirRef, StarkEngine, StarkTestError,
 };
 use openvm_stark_sdk::{config::baby_bear_poseidon2::*, utils::create_seeded_rng};
 use rand::Rng;
@@ -92,7 +92,6 @@ fn test_xor_limbs_chip() {
 }
 
 #[test]
-#[should_panic]
 fn negative_test_xor_limbs_chip() {
     let mut rng = create_seeded_rng();
 
@@ -146,7 +145,6 @@ fn negative_test_xor_limbs_chip() {
         .collect::<Vec<_>>();
 
     disable_debug_builder();
-    test_engine_small()
-        .run_test(any_air_arc_vec![requester, xor_chip.air], traces)
-        .unwrap();
+    let result = test_engine_small().run_test(any_air_arc_vec![requester, xor_chip.air], traces);
+    assert!(matches!(result, Err(StarkTestError::Prover(_))));
 }
