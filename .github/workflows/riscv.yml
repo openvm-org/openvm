@@ -4,17 +4,17 @@ on:
   workflow_call:
   push:
     branches: ["main"]
-    pull_request:
-      branches: ["**"]
-      paths:
-  #     - "crates/circuits/primitives/**"
-  #     - "crates/vm/**"
-  #     - "crates/toolchain/**"
-        - "extensions/rv32im/circuit/**"
-        - "extensions/rv32im/transpiler/**"
-        - "extensions/rv32im/guest/**"
-  #     - "Cargo.toml"
-        - ".github/workflows/riscv.yml"
+  pull_request:
+    branches: ["**"]
+    paths:
+#     - "crates/circuits/primitives/**"
+#     - "crates/vm/**"
+#     - "crates/toolchain/**"
+      - "extensions/rv32im/circuit/**"
+      - "extensions/rv32im/transpiler/**"
+      - "extensions/rv32im/guest/**"
+#     - "Cargo.toml"
+      - ".github/workflows/riscv.yml"
 
 concurrency:
   group: ${{ github.workflow_ref }}-riscv-${{ github.event.pull_request.number || github.sha }}
