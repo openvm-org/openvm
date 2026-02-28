@@ -13,12 +13,12 @@ use tracing::instrument;
 use crate::{
     arch::{
         AddressSpaceHostConfig, AddressSpaceHostLayout, DenseRecordArena, MemoryConfig,
-        RecordArena, MAX_CELL_BYTE_SIZE,
+        RecordArena, CONST_BLOCK_SIZE, MAX_CELL_BYTE_SIZE,
     },
     system::{
         memory::{
             adapter::records::{AccessLayout, AccessRecordHeader, MERGE_AND_NOT_SPLIT_FLAG},
-            MemoryAddress, TimestampedEquipartition, TimestampedValues, CHUNK,
+            MemoryAddress, TimestampedEquipartition, TimestampedValues,
         },
         TouchedMemory,
     },
@@ -944,7 +944,7 @@ impl TracingMemory {
                 self.touched_blocks_to_equipartition::<F, 1>(touched_blocks),
             ),
             true => TouchedMemory::Persistent(
-                self.touched_blocks_to_equipartition::<F, CHUNK>(touched_blocks),
+                self.touched_blocks_to_equipartition::<F, CONST_BLOCK_SIZE>(touched_blocks),
             ),
         }
     }
