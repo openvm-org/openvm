@@ -20,7 +20,8 @@ use crate::circuit::{
 };
 
 pub struct PreVerifierData<PB: ProverBackend> {
-    pub proving_ctxs: Vec<AirProvingContext<PB>>,
+    pub pre_verifier_ctxs: [AirProvingContext<PB>; 2],
+    pub post_verifier_ctx: AirProvingContext<PB>,
     pub poseidon2_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
     pub range_inputs: Vec<usize>,
     pub verifier_pvs_record: DeferredVerifyPvsRecord<PB::Val>,
@@ -83,7 +84,8 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>> for DeferredVerifyTraceGenImpl {
         );
 
         PreVerifierData {
-            proving_ctxs: vec![commit_ctx, memory_ctx, output_ctx],
+            pre_verifier_ctxs: [commit_ctx, memory_ctx],
+            post_verifier_ctx: output_ctx,
             poseidon2_inputs: verifier_p2_inputs
                 .into_iter()
                 .chain(commit_p2_inputs)
@@ -120,7 +122,8 @@ impl DeferredVerifyTraceGen<GpuBackend> for DeferredVerifyTraceGenImpl {
         memory_dimensions: MemoryDimensions,
     ) -> PreVerifierData<GpuBackend> {
         let PreVerifierData {
-            proving_ctxs,
+            pre_verifier_ctxs,
+            post_verifier_ctx,
             poseidon2_inputs,
             range_inputs,
             verifier_pvs_record,
@@ -133,10 +136,8 @@ impl DeferredVerifyTraceGen<GpuBackend> for DeferredVerifyTraceGenImpl {
         );
 
         PreVerifierData {
-            proving_ctxs: proving_ctxs
-                .into_iter()
-                .map(transport_air_proving_ctx_to_device)
-                .collect(),
+            pre_verifier_ctxs: pre_verifier_ctxs.map(transport_air_proving_ctx_to_device),
+            post_verifier_ctx: transport_air_proving_ctx_to_device(post_verifier_ctx),
             poseidon2_inputs,
             range_inputs,
             verifier_pvs_record,

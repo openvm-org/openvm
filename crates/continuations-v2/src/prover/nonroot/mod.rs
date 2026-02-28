@@ -1,46 +1,28 @@
 use std::sync::Arc;
 
 use eyre::Result;
-use itertools::Itertools;
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     proof::Proof,
     prover::{
         CommittedTraceData, DeviceDataTransporter, DeviceMultiStarkProvingKey, ProverBackend,
     },
-    AirRef, StarkEngine, SystemParams,
+    StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
 use recursion_circuit::system::{AggregationSubCircuit, VerifierConfig, VerifierTraceGen};
 use tracing::instrument;
 
 use crate::{
-    circuit::nonroot::{receiver::UserPvsReceiverAir, verifier::VerifierPvsAir, NonRootTraceGen},
-    prover::{trace_heights_tracing_info, Circuit},
+    circuit::{
+        nonroot::{NonRootCircuit, NonRootTraceGen},
+        Circuit,
+    },
+    prover::trace_heights_tracing_info,
     SC,
 };
 
 mod trace;
-
-#[derive(derive_new::new, Clone)]
-pub struct NonRootCircuit<S: AggregationSubCircuit> {
-    pub verifier_circuit: Arc<S>,
-}
-
-impl<S: AggregationSubCircuit> Circuit for NonRootCircuit<S> {
-    fn airs(&self) -> Vec<AirRef<SC>> {
-        let bus_inventory = self.verifier_circuit.bus_inventory();
-        let public_values_bus = bus_inventory.public_values_bus;
-        [Arc::new(VerifierPvsAir {
-            public_values_bus,
-            cached_commit_bus: bus_inventory.cached_commit_bus,
-        }) as AirRef<SC>]
-        .into_iter()
-        .chain(self.verifier_circuit.airs())
-        .chain([Arc::new(UserPvsReceiverAir { public_values_bus }) as AirRef<SC>])
-        .collect_vec()
-    }
-}
 
 /// Generates an aggregation proof for non-root layers (leaf and internal).
 pub struct NonRootAggregationProver<

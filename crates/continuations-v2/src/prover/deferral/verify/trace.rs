@@ -43,7 +43,8 @@ where
         );
 
         let PreVerifierData {
-            proving_ctxs: agg_other_ctxs,
+            pre_verifier_ctxs,
+            post_verifier_ctx,
             poseidon2_inputs,
             range_inputs,
             verifier_pvs_record,
@@ -85,8 +86,9 @@ where
 
         ProvingContext {
             per_trace: once(verifier_pvs_ctx)
+                .chain(pre_verifier_ctxs)
                 .chain(subcircuit_ctxs)
-                .chain(agg_other_ctxs)
+                .chain(once(post_verifier_ctx))
                 .enumerate()
                 .collect_vec(),
         }

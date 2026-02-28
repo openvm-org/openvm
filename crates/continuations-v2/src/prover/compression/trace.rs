@@ -42,8 +42,8 @@ where
 
         ProvingContext {
             per_trace: once(verifier_pvs_ctx)
-                .chain(subcircuit_ctxs)
                 .chain(agg_other_ctxs)
+                .chain(subcircuit_ctxs)
                 .enumerate()
                 .collect_vec(),
         }
