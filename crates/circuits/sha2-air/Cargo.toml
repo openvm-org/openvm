@@ -1,0 +1,19 @@
+[package]
+name = "openvm-sha2-air"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+openvm-circuit-primitives = { workspace = true }
+openvm-stark-backend = { workspace = true }
+openvm-circuit-primitives-derive = { workspace = true }
+
+sha2 = { workspace = true, features = ["compress"] }
+rand.workspace = true
+ndarray.workspace = true
+num_enum = { workspace = true }
+
+[features]
+default = ["parallel"]
+parallel = ["openvm-stark-backend/parallel"]
