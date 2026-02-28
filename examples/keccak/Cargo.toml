@@ -7,11 +7,13 @@ edition = "2021"
 members = []
 
 [dependencies]
+tiny-keccak = { git = "https://github.com/openvm-org/tiny-keccak", branch = "perf/custom-xorin-keccak", features = ["keccak"] }
+hex-literal = "1.1.0"
+
+[target.'cfg(target_os = "zkvm")'.dependencies]
 openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
     "std",
 ] }
-openvm-keccak256 = { git = "https://github.com/openvm-org/openvm.git" }
-hex = { version = "0.4.3" }
 
 [features]
 default = []
@@ -19,4 +21,4 @@ default = []
 # remove this if copying example outside of monorepo
 [patch."https://github.com/openvm-org/openvm.git"]
 openvm = { path = "../../crates/toolchain/openvm" }
-openvm-keccak256 = { path = "../../guest-libs/keccak256" }
+openvm-keccak256-guest = { path = "../../extensions/keccak256/guest" }
