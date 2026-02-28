@@ -179,3 +179,7 @@ OpenVM uses semver naming but with ZK-specific semantics: patch versions preserv
 ## CUDA/GPU Support
 
 CUDA is behind the `cuda` feature flag, disabled by default. Feature-gate non-CUDA-compatible code with `#[cfg(not(feature = "cuda"))]`. GPU prover extensions implement `VmProverExtension` separately (e.g., `Rv32ImGpuProverExt`).
+
+## File Structure
+
+AIR constraints should always be in a separate file (`air.rs`) from execution or trace generation logic. Trace generation and CUDA prover code should be kept in files named `trace.rs`, `cuda_abi.rs` or folders named `tracegen`, `cuda`. Execution logic should be in files named `execution.rs` or `preflight.rs`.
