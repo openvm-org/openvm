@@ -17,7 +17,7 @@ sha2 = { workspace = true, default-features = false, optional = true }
 [dev-dependencies]
 hex = { workspace = true }
 openvm-instructions = { workspace = true }
-openvm-sdk = { workspace = true }
+sdk-v2 = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils", "parallel"] }
 openvm-transpiler = { workspace = true }
@@ -31,6 +31,6 @@ eyre = { workspace = true }
 default = ["import_sha2"]
 # Enable sha2::Digest trait implementation
 import_sha2 = ["dep:sha2"]
-aot = ["openvm-sdk/aot"]
+aot = ["sdk-v2/aot"]
 # Internal feature for testing only.
 cuda = ["openvm-sha2-circuit/cuda"]
