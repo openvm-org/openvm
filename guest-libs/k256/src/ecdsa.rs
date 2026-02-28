@@ -3,7 +3,7 @@
 // Use these types instead of unpatched k256::ecdsa::{Signature, VerifyingKey}
 // because those are type aliases that use non-zkvm implementations
 
-#[cfg(any(feature = "ecdsa", feature = "sha256"))]
+#[cfg(any(feature = "ecdsa", feature = "sha2"))]
 pub use ecdsa_core::hazmat;
 pub use ecdsa_core::{
     signature::{self, Error},
