@@ -13,7 +13,7 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip, AlignedBytesBorrow,
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip, AlignedBytesBorrow, Chip,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -22,7 +22,6 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_rv32im_circuit::adapters::{timed_write, tracing_read};
-use openvm_circuit_primitives::Chip;
 use openvm_stark_backend::{
     p3_field::PrimeField32,
     p3_matrix::{dense::RowMajorMatrix, Matrix},

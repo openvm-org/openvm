@@ -8,14 +8,12 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_sha2_air::{Sha256Config, Sha2Variant, Sha512Config};
 use openvm_stark_backend::prover::AirProvingContext;
-
-use openvm_circuit_primitives::Chip;
 
 use crate::{Sha2Config, Sha2RecordLayout, Sha2RecordMut};
 
