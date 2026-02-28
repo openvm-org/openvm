@@ -564,7 +564,7 @@ where
     pub fn test<E, P: Fn() -> E>(
         self, // do no take ownership so it's easier to prank
         engine_provider: P,
-    ) -> Result<VerificationData<SC>, VerifierError<SC::EF>>
+    ) -> Result<VerificationData<SC>, StarkTestError<CpuProverError, SC::EF>>
     where
         E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
         SC::EF: Ord,
