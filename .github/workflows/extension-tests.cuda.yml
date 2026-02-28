@@ -34,7 +34,7 @@ jobs:
       matrix:
         extensions: # group extensions on the same runner based on test time
           - "rv32im"
-          - "keccak256 sha256 bigint algebra ecc pairing deferral"
+          - "keccak256 sha2 bigint algebra ecc pairing deferral"
     runs-on:
       - runs-on=${{ github.run_id }}-extension-tests-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.machine_type || 'test-gpu-nvidia/family=g6.*+g6e' }}
 
@@ -54,8 +54,8 @@ jobs:
               - "extensions/rv32im/**"
             keccak256:
               - "extensions/keccak256/**"
-            sha256:
-              - "extensions/sha256/**"
+            sha2:
+              - "extensions/sha2/**"
             bigint:
               - "extensions/bigint/**"
             algebra:
