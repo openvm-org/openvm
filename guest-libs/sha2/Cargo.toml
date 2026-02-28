@@ -15,8 +15,10 @@ openvm-sha2-guest = { workspace = true }
 sha2 = { workspace = true, default-features = false }
 
 [dev-dependencies]
+hex = { workspace = true }
 openvm-instructions = { workspace = true }
-openvm-stark-sdk = { workspace = true } 
+openvm-sdk = { workspace = true }
+openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils", "parallel"] }
 openvm-transpiler = { workspace = true }
 openvm-sha2-transpiler = { workspace = true }
@@ -26,5 +28,9 @@ openvm-toolchain-tests = { workspace = true }
 eyre = { workspace = true }
 
 [features]
+default = []
+aot = ["openvm-sdk/aot"]
 # Internal feature for testing only.
 cuda = ["openvm-sha2-circuit/cuda"]
+# Enables rust integration tests that take a long time.
+long_proving_tests = []
