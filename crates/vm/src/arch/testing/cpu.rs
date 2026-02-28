@@ -21,8 +21,8 @@ use openvm_stark_backend::{
         AirProvingContext, ColMajorMatrix, CpuBackend, CpuDevice, CpuProverError,
         StridedColMajorMatrixView,
     },
-    verifier::VerifierError,
-    AirRef, AnyAir, StarkEngine, StarkProtocolConfig, SystemParams, Val, VerificationData,
+    AirRef, AnyAir, StarkEngine, StarkProtocolConfig, StarkTestError, SystemParams, Val,
+    VerificationData,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::{self, BabyBearPoseidon2Config},
@@ -586,7 +586,7 @@ where
     pub fn test<E, P: Fn() -> E>(
         self, // do no take ownership so it's easier to prank
         engine_provider: P,
-    ) -> Result<VerificationData<SC>, VerifierError<SC::EF>>
+    ) -> Result<VerificationData<SC>, StarkTestError<CpuProverError, SC::EF>>
     where
         E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
         SC::EF: Ord,

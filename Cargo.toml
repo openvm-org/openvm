@@ -124,7 +124,6 @@ openvm-cuda-builder = { git = "https://github.com/openvm-org/stark-backend.git",
 openvm-cuda-common = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2", default-features = false }
 
 # OpenVM
-openvm-sdk = { path = "crates/sdk", default-features = false }
 openvm-mod-circuit-builder = { path = "crates/circuits/mod-builder", default-features = false }
 openvm-poseidon2-air = { path = "crates/circuits/poseidon2-air", default-features = false }
 openvm-sha2-air = { path = "crates/circuits/sha2-air", default-features = false }

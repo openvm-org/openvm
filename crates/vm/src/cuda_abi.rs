@@ -225,6 +225,7 @@ pub mod inventory {
         ) -> i32;
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn merge_records(
         d_in_records: &DeviceBuffer<u32>,
         in_num_records: usize,
