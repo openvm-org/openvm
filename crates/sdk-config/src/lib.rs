@@ -16,8 +16,8 @@ use openvm_pairing_circuit::*;
 use openvm_pairing_transpiler::*;
 use openvm_rv32im_circuit::*;
 use openvm_rv32im_transpiler::*;
-use openvm_sha256_circuit::*;
-use openvm_sha256_transpiler::*;
+use openvm_sha2_circuit::*;
+use openvm_sha2_transpiler::*;
 use openvm_stark_backend::{
     p3_field::Field,
     prover::{CpuBackend, CpuDevice},
@@ -37,7 +37,7 @@ cfg_if::cfg_if! {
         use openvm_ecc_circuit::EccProverExt;
         use openvm_keccak256_circuit::Keccak256GpuProverExt;
         use openvm_rv32im_circuit::Rv32ImGpuProverExt;
-        use openvm_sha256_circuit::Sha256GpuProverExt;
+        use openvm_sha2_circuit::Sha2GpuProverExt;
         pub use SdkVmGpuBuilder as SdkVmBuilder;
     } else {
         pub use SdkVmCpuBuilder as SdkVmBuilder;
@@ -174,7 +174,7 @@ impl TranspilerConfig<F> for SdkVmConfig {
             transpiler = transpiler.with_extension(Keccak256TranspilerExtension);
         }
         if self.sha256.is_some() {
-            transpiler = transpiler.with_extension(Sha256TranspilerExtension);
+            transpiler = transpiler.with_extension(Sha2TranspilerExtension);
         }
         if self.rv32m.is_some() {
             transpiler = transpiler.with_extension(Rv32MTranspilerExtension);
@@ -235,7 +235,7 @@ impl SdkVmConfig {
         let rv32i = config.rv32i.map(|_| Rv32I);
         let io = config.io.map(|_| Rv32Io);
         let keccak = config.keccak.map(|_| Keccak256);
-        let sha256 = config.sha256.map(|_| Sha256);
+        let sha256 = config.sha256.map(|_| Sha2);
         let rv32m = config.rv32m;
         let bigint = config.bigint;
         let modular = config.modular.clone();
@@ -277,8 +277,8 @@ pub struct SdkVmConfigInner {
     pub io: Option<Rv32Io>,
     #[extension(executor = "Keccak256Executor")]
     pub keccak: Option<Keccak256>,
-    #[extension(executor = "Sha256Executor")]
-    pub sha256: Option<Sha256>,
+    #[extension(executor = "Sha2Executor")]
+    pub sha256: Option<Sha2>,
 
     #[extension(executor = "Rv32MExecutor")]
     pub rv32m: Option<Rv32M>,
@@ -409,7 +409,7 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
             VmProverExtension::<E, _, _>::extend_prover(&Keccak256GpuProverExt, keccak, inventory)?;
         }
         if let Some(sha256) = &config.sha256 {
-            VmProverExtension::<E, _, _>::extend_prover(&Sha256GpuProverExt, sha256, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(&Sha2GpuProverExt, sha256, inventory)?;
         }
         if let Some(rv32m) = &config.rv32m {
             VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, rv32m, inventory)?;
@@ -512,8 +512,8 @@ impl From<Keccak256> for UnitStruct {
     }
 }
 
-impl From<Sha256> for UnitStruct {
-    fn from(_: Sha256) -> Self {
+impl From<Sha2> for UnitStruct {
+    fn from(_: Sha2) -> Self {
         UnitStruct {}
     }
 }

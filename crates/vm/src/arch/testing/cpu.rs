@@ -14,8 +14,10 @@ use openvm_stark_backend::{
     p3_matrix::dense::RowMajorMatrix,
     p3_util::log2_strict_usize,
     prover::{
-        AirProvingContext, ColMajorMatrix, CpuBackend, CpuProverError, StridedColMajorMatrixView,
+        AirProvingContext, ColMajorMatrix, CpuBackend, CpuDevice, CpuProverError,
+        StridedColMajorMatrixView,
     },
+    verifier::VerifierError,
     AirRef, AnyAir, StarkEngine, StarkProtocolConfig, SystemParams, Val, VerificationData,
 };
 use openvm_stark_sdk::{
@@ -527,20 +529,39 @@ where
         self
     }
 
-    // TODO[jpw]: put back once we can make it generic in SC
-    // /// Given a function to produce an engine from the max trace height,
-    // /// runs a simple test on that engine
-    // pub fn test<E, P: Fn() -> E>(
-    //     self, // do no take ownership so it's easier to prank
-    //     engine_provider: P,
-    // ) -> Result<VerificationData<SC>, VerificationError>
-    // where
-    //     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    // {
-    //     assert!(self.memory.is_none(), "Memory must be finalized");
-    //     let (airs, ctxs): (Vec<_>, Vec<_>) = self.air_ctxs.into_iter().unzip();
-    //     engine_provider().run_test_impl(airs, ctxs)
-    // }
+    pub fn load_periphery_and_prank_trace<A, C, P>(
+        mut self,
+        (air, chip): (A, C),
+        modify_trace: P,
+    ) -> Self
+    where
+        A: AnyAir<SC> + 'static,
+        C: Chip<(), CpuBackend<SC>>,
+        P: Fn(&mut RowMajorMatrix<Val<SC>>),
+    {
+        let mut ctx = chip.generate_proving_ctx(());
+        let mut trace =
+            StridedColMajorMatrixView::from(ctx.common_main.as_view()).to_row_major_matrix();
+        modify_trace(&mut trace);
+        ctx.common_main = ColMajorMatrix::from_row_major(&trace);
+        self.air_ctxs.push((Arc::new(air), ctx));
+        self
+    }
+
+    /// Given a function to produce an engine from the max trace height,
+    /// runs a simple test on that engine
+    pub fn test<E, P: Fn() -> E>(
+        self, // do no take ownership so it's easier to prank
+        engine_provider: P,
+    ) -> Result<VerificationData<SC>, VerifierError<SC::EF>>
+    where
+        E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+        SC::EF: Ord,
+    {
+        assert!(self.memory.is_none(), "Memory must be finalized");
+        let (airs, ctxs): (Vec<_>, Vec<_>) = self.air_ctxs.into_iter().unzip();
+        engine_provider().run_test(airs, ctxs)
+    }
 }
 
 /// Concrete `StarkTestError` type alias for BabyBear Poseidon2 CPU tests.
