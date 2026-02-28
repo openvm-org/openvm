@@ -16,7 +16,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     prover::{AirProvingContext, ColMajorMatrix},
     utils::disable_debug_builder,
-    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine,
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine, StarkTestError,
 };
 #[cfg(not(feature = "cuda"))]
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
@@ -180,7 +180,6 @@ fn test_lt_chip_decomp_does_not_divide() {
 }
 
 #[test]
-#[should_panic]
 fn test_assert_less_than_negative_1() {
     let max_bits: usize = 16;
     let decomp: usize = 8;
@@ -204,11 +203,11 @@ fn test_assert_less_than_negative_1() {
         .collect::<Vec<_>>();
 
     disable_debug_builder();
-    test_engine_small().run_test(airs, traces).unwrap();
+    let result = test_engine_small().run_test(airs, traces);
+    assert!(matches!(result, Err(StarkTestError::Verifier(_))));
 }
 
 #[test]
-#[should_panic]
 fn test_assert_less_than_negative_2() {
     let max_bits: usize = 29;
     let decomp: usize = 8;
@@ -232,7 +231,8 @@ fn test_assert_less_than_negative_2() {
         .collect::<Vec<_>>();
 
     disable_debug_builder();
-    test_engine_small().run_test(airs, traces).unwrap();
+    let result = test_engine_small().run_test(airs, traces);
+    assert!(matches!(result, Err(StarkTestError::Prover(_))));
 }
 
 #[test]

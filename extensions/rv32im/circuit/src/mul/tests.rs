@@ -232,7 +232,7 @@ fn run_negative_mul_test(
         .load_periphery(range_tuple)
         .finalize();
     tester
-        .simple_test_catching_prover_errors()
+        .simple_test()
         .expect_err("Expected verification to fail, but it passed");
 }
 

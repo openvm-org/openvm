@@ -351,7 +351,7 @@ fn run_negative_native_loadstore_test<const NUM_CELLS: usize>(
         .load_and_prank_trace(harness, modify_trace)
         .finalize();
     tester
-        .simple_test_catching_prover_errors()
+        .simple_test()
         .expect_err("Expected verification to fail, but it passed");
 }
 

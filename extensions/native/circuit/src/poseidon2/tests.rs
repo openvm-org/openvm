@@ -312,7 +312,7 @@ fn test<const N: usize>(cases: [Case; N]) {
 
     // Run a test after pranking the poseidon2 stuff
     prank_tester
-        .simple_test_catching_prover_errors()
+        .simple_test()
         .expect_err("Expected verification to fail, but it passed");
 }
 

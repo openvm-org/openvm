@@ -6,12 +6,12 @@ use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing,
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
-    prover::{AirProvingContext, ColMajorMatrix},
+    prover::{AirProvingContext, ColMajorMatrix, CpuProverError},
     utils::disable_debug_builder,
-    AirRef, StarkEngine,
+    AirRef, StarkEngine, StarkTestError, VerificationData,
 };
 #[cfg(not(feature = "cuda"))]
-use openvm_stark_sdk::config::baby_bear_poseidon2::F;
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, EF, F};
 use openvm_stark_sdk::utils::create_seeded_rng;
 use rand::Rng;
 #[cfg(feature = "cuda")]
@@ -128,7 +128,9 @@ fn test_bitwise_operation_lookup() {
         .expect("Verification failed");
 }
 
-fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperation)) {
+fn run_negative_test(
+    bad_row: (u32, u32, u32, BitwiseOperation),
+) -> Result<VerificationData<BabyBearPoseidon2Config>, StarkTestError<CpuProverError, EF>> {
     let bus = BitwiseOperationLookupBus::new(0);
     let lookup = BitwiseOperationLookupChip::<NUM_BITS>::new(bus);
 
@@ -164,46 +166,90 @@ fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperation)) {
         .collect::<Vec<_>>();
 
     disable_debug_builder();
-    test_engine_small().run_test(chips, traces).unwrap();
+    test_engine_small().run_test(chips, traces)
 }
 
 #[test]
-#[should_panic]
 fn negative_test_bitwise_operation_lookup_range_wrong_z() {
-    run_negative_test((2, 1, 1, BitwiseOperation::Range));
+    let result = run_negative_test((2, 1, 1, BitwiseOperation::Range));
+    assert!(matches!(result, Err(StarkTestError::Prover(_))));
 }
 
 #[test]
-#[should_panic]
 fn negative_test_bitwise_operation_lookup_range_x_out_of_range() {
-    run_negative_test((16, 1, 0, BitwiseOperation::Range));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run_negative_test((16, 1, 0, BitwiseOperation::Range))
+    }));
+    match result {
+        Err(_) => {
+            // debug_assert! fired (debug mode) — expected
+            assert!(cfg!(debug_assertions), "Unexpected panic in release mode");
+        }
+        Ok(test_result) => {
+            // No panic (release mode) — verification should fail
+            assert!(matches!(test_result, Err(StarkTestError::Verifier(_))));
+        }
+    }
 }
 
 #[test]
-#[should_panic]
 fn negative_test_bitwise_operation_lookup_range_y_out_of_range() {
-    run_negative_test((1, 16, 0, BitwiseOperation::Range));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run_negative_test((1, 16, 0, BitwiseOperation::Range))
+    }));
+    match result {
+        Err(_) => {
+            // debug_assert! fired (debug mode) — expected
+            assert!(cfg!(debug_assertions), "Unexpected panic in release mode");
+        }
+        Ok(test_result) => {
+            // No panic (release mode) — verification should fail
+            assert!(matches!(test_result, Err(StarkTestError::Verifier(_))));
+        }
+    }
 }
 
 #[test]
-#[should_panic]
 fn negative_test_bitwise_operation_lookup_xor_wrong_z() {
     // 1011(11) ^ 0101(5) = 1110(14)
-    run_negative_test((11, 5, 15, BitwiseOperation::Xor));
+    let result = run_negative_test((11, 5, 15, BitwiseOperation::Xor));
+    assert!(matches!(result, Err(StarkTestError::Prover(_))));
 }
 
 #[test]
-#[should_panic]
 fn negative_test_bitwise_operation_lookup_xor_x_out_of_range() {
     // 10000(16) ^ 0001(1) = 0001(1) in 4 bits, but need x < 2^NUM_BITS
-    run_negative_test((16, 1, 1, BitwiseOperation::Xor));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run_negative_test((16, 1, 1, BitwiseOperation::Xor))
+    }));
+    match result {
+        Err(_) => {
+            // debug_assert! fired (debug mode) — expected
+            assert!(cfg!(debug_assertions), "Unexpected panic in release mode");
+        }
+        Ok(test_result) => {
+            // No panic (release mode) — verification should fail
+            assert!(matches!(test_result, Err(StarkTestError::Verifier(_))));
+        }
+    }
 }
 
 #[test]
-#[should_panic]
 fn negative_test_bitwise_operation_lookup_xor_y_out_of_range() {
     // 0001(1) ^ 10000(16) = 0001(1) in 4 bits, but need y < 2^NUM_BITS
-    run_negative_test((1, 16, 1, BitwiseOperation::Xor));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run_negative_test((1, 16, 1, BitwiseOperation::Xor))
+    }));
+    match result {
+        Err(_) => {
+            // debug_assert! fired (debug mode) — expected
+            assert!(cfg!(debug_assertions), "Unexpected panic in release mode");
+        }
+        Ok(test_result) => {
+            // No panic (release mode) — verification should fail
+            assert!(matches!(test_result, Err(StarkTestError::Verifier(_))));
+        }
+    }
 }
 
 #[cfg(feature = "cuda")]

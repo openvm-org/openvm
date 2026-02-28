@@ -283,7 +283,7 @@ fn test_hint_buffer_rem_words_range_check() {
         .finalize();
 
     tester
-        .simple_test_catching_prover_errors()
+        .simple_test()
         .expect_err("Expected verification to fail, but it passed");
 }
 
@@ -320,7 +320,7 @@ fn run_negative_hintstore_test(
         .load_periphery(bitwise)
         .finalize();
     tester
-        .simple_test_catching_prover_errors()
+        .simple_test()
         .expect_err("Expected verification to fail, but it passed");
 }
 

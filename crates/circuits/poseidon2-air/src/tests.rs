@@ -6,7 +6,7 @@ use openvm_stark_backend::{
     p3_matrix::dense::RowMajorMatrix,
     prover::{AirProvingContext, ColMajorMatrix},
     utils::disable_debug_builder,
-    StarkEngine, SystemParams,
+    StarkEngine, StarkTestError, SystemParams,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::*, p3_baby_bear::BabyBear, utils::create_seeded_rng,
@@ -76,14 +76,13 @@ fn run_poseidon2_subchip_negative_test(
     let rand_idx = rng.random_range(0..subchip.air.width());
     let rand_inc = BabyBear::from_u32(rng.random_range(1..=1 << 27));
     poseidon2_trace.row_mut((1 << 4) - 1)[rand_idx] += rand_inc;
-    engine
-        .run_test(
-            vec![subchip.air.clone()],
-            vec![AirProvingContext::simple_no_pis(
-                ColMajorMatrix::from_row_major(&poseidon2_trace),
-            )],
-        )
-        .unwrap();
+    let result = engine.run_test(
+        vec![subchip.air.clone()],
+        vec![AirProvingContext::simple_no_pis(
+            ColMajorMatrix::from_row_major(&poseidon2_trace),
+        )],
+    );
+    assert!(matches!(result, Err(StarkTestError::Verifier(_))));
 }
 
 #[test]
@@ -97,7 +96,6 @@ fn test_poseidon2_default() {
 }
 
 #[test]
-#[should_panic]
 fn test_poseidon2_default_negative() {
     let mut rng = create_seeded_rng();
     let poseidon2_config = Poseidon2Config::default();
@@ -127,7 +125,6 @@ fn test_poseidon2_random_constants() {
 }
 
 #[test]
-#[should_panic]
 fn test_poseidon2_random_constants_negative() {
     let mut rng = create_seeded_rng();
     let external_constants =

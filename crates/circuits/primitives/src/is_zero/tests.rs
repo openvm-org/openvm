@@ -9,7 +9,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     prover::{AirProvingContext, ColMajorMatrix},
     utils::disable_debug_builder,
-    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine,
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine, StarkTestError,
 };
 #[cfg(not(feature = "cuda"))]
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
@@ -144,7 +144,6 @@ fn test_vec_is_zero(x_vec: [u32; 4], expected: [u32; 4]) {
 
 #[test_case(97 ; "97 => 0")]
 #[test_case(0 ; "0 => 1")]
-#[should_panic]
 fn test_single_is_zero_fail(x: u32) {
     let x = PrimeCharacteristicRing::from_u32(x);
     let chip = IsZeroChip::new(vec![x]);
@@ -158,14 +157,12 @@ fn test_single_is_zero_fail(x: u32) {
         .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
-    test_engine_small()
-        .run_test(any_air_arc_vec![air], traces)
-        .unwrap();
+    let result = test_engine_small().run_test(any_air_arc_vec![air], traces);
+    assert!(matches!(result, Err(StarkTestError::Verifier(_))));
 }
 
 #[test_case([1, 2, 7, 0], [0, 0, 0, 1] ; "1, 2, 7, 0 => 0, 0, 0, 1")]
 #[test_case([97, 0, 179, 0], [0, 1, 0, 1] ; "97, 0, 179, 0 => 0, 1, 0, 1")]
-#[should_panic]
 fn test_vec_is_zero_fail(x_vec: [u32; 4], _expected: [u32; 4]) {
     let x_vec: Vec<F> = x_vec.into_iter().map(F::from_u32).collect();
     let chip = IsZeroChip::new(x_vec);
@@ -180,9 +177,8 @@ fn test_vec_is_zero_fail(x_vec: [u32; 4], _expected: [u32; 4]) {
         .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
-    test_engine_small()
-        .run_test(any_air_arc_vec![air], traces)
-        .unwrap();
+    let result = test_engine_small().run_test(any_air_arc_vec![air], traces);
+    assert!(matches!(result, Err(StarkTestError::Verifier(_))));
 }
 
 #[cfg(feature = "cuda")]

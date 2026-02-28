@@ -8,7 +8,7 @@ use openvm_stark_backend::{
     prover::{AirProvingContext, ColMajorMatrix},
     test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     utils::disable_debug_builder,
-    AirRef, StarkEngine,
+    AirRef, StarkEngine, StarkTestError,
 };
 use openvm_stark_sdk::{config::baby_bear_poseidon2::*, utils::create_seeded_rng};
 use rand::Rng;
@@ -83,7 +83,6 @@ fn test_range_gate_chip() {
 }
 
 #[test]
-#[should_panic]
 fn negative_test_range_gate_chip() {
     const N: usize = 3;
     const MAX: u32 = 1 << N;
@@ -112,7 +111,6 @@ fn negative_test_range_gate_chip() {
         .collect::<Vec<_>>();
 
     disable_debug_builder();
-    test_engine_small()
-        .run_test(any_air_arc_vec![range_checker.air], traces)
-        .unwrap();
+    let result = test_engine_small().run_test(any_air_arc_vec![range_checker.air], traces);
+    assert!(matches!(result, Err(StarkTestError::Verifier(_))));
 }

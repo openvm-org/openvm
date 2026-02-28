@@ -18,7 +18,7 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{AirProvingContext, ColMajorMatrix, CpuBackend, MatrixDimensions},
     utils::disable_debug_builder,
-    AirRef, BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
+    AirRef, BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, StarkTestError, Val,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
@@ -124,7 +124,6 @@ fn rand_sha256_test() {
 }
 
 #[test]
-#[should_panic]
 fn negative_sha256_test_bad_final_hash() {
     use openvm_stark_backend::SystemParams;
 
@@ -168,7 +167,6 @@ fn negative_sha256_test_bad_final_hash() {
         .load_air_proving_ctx((air, air_ctx))
         .load_periphery(bitwise)
         .finalize();
-    tester
-        .simple_test_with_params(params)
-        .expect("Verification failed");
+    let result = tester.simple_test_with_params(params);
+    assert!(matches!(result, Err(StarkTestError::Prover(_))));
 }

@@ -279,7 +279,7 @@ fn run_negative_alu_test(
         .load_periphery(bitwise)
         .finalize();
     tester
-        .simple_test_catching_prover_errors()
+        .simple_test()
         .expect_err("Expected verification to fail, but it passed");
 }
 

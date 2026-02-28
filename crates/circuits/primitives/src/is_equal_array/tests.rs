@@ -12,7 +12,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     prover::{AirProvingContext, ColMajorMatrix},
     utils::disable_debug_builder,
-    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine,
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine, StarkTestError,
 };
 #[cfg(not(feature = "cuda"))]
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
@@ -164,7 +164,6 @@ fn test_is_eq_array_multi_rows() {
 #[test_case([17, 23, 4], [17, 23, 4]; "17, 23, 4 == 17, 23, 4")]
 #[test_case([92, 27, 32], [92, 27, 32]; "92, 27, 32 == 92, 27, 32")]
 #[test_case([1, 27, 4], [1, 2, 43]; "1, 27, 4 != 1, 2, 43")]
-#[should_panic]
 fn test_is_eq_array_single_row_fail(x: [u32; 3], y: [u32; 3]) {
     let x = x.map(PrimeCharacteristicRing::from_u32);
     let y = y.map(PrimeCharacteristicRing::from_u32);
@@ -181,13 +180,11 @@ fn test_is_eq_array_single_row_fail(x: [u32; 3], y: [u32; 3]) {
         .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
-    test_engine_small()
-        .run_test(any_air_arc_vec![air], traces)
-        .unwrap();
+    let result = test_engine_small().run_test(any_air_arc_vec![air], traces);
+    assert!(matches!(result, Err(StarkTestError::Verifier(_))));
 }
 
 #[test]
-#[should_panic]
 fn test_is_eq_array_fail_rand() {
     const N: usize = 4;
     let height = 2;
@@ -210,9 +207,8 @@ fn test_is_eq_array_fail_rand() {
         .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
-    test_engine_small()
-        .run_test(any_air_arc_vec![air], traces)
-        .unwrap();
+    let result = test_engine_small().run_test(any_air_arc_vec![air], traces);
+    assert!(matches!(result, Err(StarkTestError::Verifier(_))));
 }
 
 #[cfg(feature = "cuda")]

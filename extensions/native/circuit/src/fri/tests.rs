@@ -237,6 +237,6 @@ fn run_negative_fri_mat_opening_test() {
         .load_and_prank_trace(harness, modify_trace)
         .finalize();
     tester
-        .simple_test_catching_prover_errors()
+        .simple_test()
         .expect_err("Expected verification to fail, but it passed");
 }

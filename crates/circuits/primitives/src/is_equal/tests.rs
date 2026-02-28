@@ -9,7 +9,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     prover::{AirProvingContext, ColMajorMatrix},
     utils::disable_debug_builder,
-    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine,
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine, StarkTestError,
 };
 use test_case::test_matrix;
 #[cfg(feature = "cuda")]
@@ -119,7 +119,6 @@ fn test_single_is_equal(x: u32, y: u32) {
     [0,97,127],
     [0,23,97]
 )]
-#[should_panic]
 fn test_single_is_zero_fail(x: u32, y: u32) {
     let x = PrimeCharacteristicRing::from_u32(x);
     let y = PrimeCharacteristicRing::from_u32(y);
@@ -141,9 +140,8 @@ fn test_single_is_zero_fail(x: u32, y: u32) {
         .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
-    test_engine_small()
-        .run_test(any_air_arc_vec![IsEqTestAir(IsEqSubAir)], traces)
-        .unwrap();
+    let result = test_engine_small().run_test(any_air_arc_vec![IsEqTestAir(IsEqSubAir)], traces);
+    assert!(matches!(result, Err(StarkTestError::Verifier(_))));
 }
 
 #[cfg(feature = "cuda")]

@@ -853,7 +853,7 @@ where
         let final_memory =
             (system_records.exit_code == Some(ExitCode::Success as u32)).then_some(to_state.memory);
         let ctx = self.generate_proving_ctx(system_records, record_arenas)?;
-        let proof = self.engine.prove(&self.pk, ctx);
+        let proof = self.engine.prove(&self.pk, ctx).unwrap();
 
         Ok((proof, final_memory))
     }
@@ -1205,7 +1205,7 @@ where
 
             let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
             modify_ctx(seg_idx, &mut ctx);
-            let proof = vm.engine.prove(vm.pk(), ctx);
+            let proof = vm.engine.prove(vm.pk(), ctx).unwrap();
             proofs.push(proof);
         }
         let to_state = state.unwrap();
