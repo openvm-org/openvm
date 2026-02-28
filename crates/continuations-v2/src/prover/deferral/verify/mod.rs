@@ -17,8 +17,11 @@ use tracing::instrument;
 
 use crate::{
     bn254::CommitBytes,
-    circuit::deferral::verify::{DeferredVerifyCircuit, DeferredVerifyTraceGen},
-    prover::{trace_heights_tracing_info, Circuit},
+    circuit::{
+        deferral::verify::{DeferredVerifyCircuit, DeferredVerifyTraceGen},
+        Circuit,
+    },
+    prover::trace_heights_tracing_info,
     SC,
 };
 
