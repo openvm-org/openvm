@@ -1,4 +1,4 @@
-use std::{iter::once, sync::Arc};
+use std::sync::Arc;
 
 use eyre::Result;
 use itertools::Itertools;
@@ -7,16 +7,11 @@ use openvm_stark_backend::{
     proof::Proof,
     prover::{
         CommittedTraceData, DeviceDataTransporter, DeviceMultiStarkProvingKey, ProverBackend,
-        ProvingContext,
     },
     AirRef, StarkEngine, SystemParams,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    default_duplex_sponge_recorder, Digest, EF, F,
-};
-use recursion_circuit::system::{
-    AggregationSubCircuit, CachedTraceCtx, VerifierConfig, VerifierTraceGen,
-};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
+use recursion_circuit::system::{AggregationSubCircuit, VerifierConfig, VerifierTraceGen};
 use tracing::instrument;
 
 use crate::{
@@ -24,6 +19,8 @@ use crate::{
     prover::{trace_heights_tracing_info, Circuit},
     SC,
 };
+
+mod trace;
 
 #[derive(derive_new::new, Clone)]
 pub struct NonRootCircuit<S: AggregationSubCircuit> {
@@ -81,45 +78,6 @@ impl<
 where
     PB::Matrix: Clone,
 {
-    #[instrument(name = "trace_gen", skip_all)]
-    pub fn generate_proving_ctx(
-        &self,
-        proofs: &[Proof<SC>],
-        child_vk_kind: ChildVkKind,
-    ) -> ProvingContext<PB> {
-        assert!(proofs.len() <= self.circuit.verifier_circuit.max_num_proofs());
-
-        let (child_vk, child_dag_commit) = match child_vk_kind {
-            ChildVkKind::RecursiveSelf => (&self.vk, self.self_vk_pcs_data.clone().unwrap()),
-            _ => (&self.child_vk, self.child_vk_pcs_data.clone()),
-        };
-        let child_is_app = matches!(child_vk_kind, ChildVkKind::App);
-
-        let verifier_pvs_ctx = self.agg_node_tracegen.generate_verifier_pvs_ctx(
-            proofs,
-            child_is_app,
-            child_dag_commit.commitment,
-        );
-        let cached_trace_ctx = CachedTraceCtx::PcsData(child_dag_commit);
-        let subcircuit_ctxs = self.circuit.verifier_circuit.generate_proving_ctxs_base(
-            child_vk,
-            cached_trace_ctx,
-            proofs,
-            default_duplex_sponge_recorder(),
-        );
-        let agg_other_ctxs = self
-            .agg_node_tracegen
-            .generate_other_proving_ctxs(proofs, child_is_app);
-
-        ProvingContext {
-            per_trace: once(verifier_pvs_ctx)
-                .chain(subcircuit_ctxs)
-                .chain(agg_other_ctxs)
-                .enumerate()
-                .collect_vec(),
-        }
-    }
-
     #[instrument(name = "total_proof", skip_all)]
     pub fn agg_prove<E: StarkEngine<SC = SC, PB = PB>>(
         &self,
