@@ -34,8 +34,13 @@ jobs:
     strategy:
       matrix:
         extensions: # group extensions on the same runner based on test time
+<<<<<<< HEAD
           - "rv32im"
           - "keccak256 sha256 bigint algebra ecc pairing"
+=======
+          - "rv32im native"
+          - "keccak256 sha2 bigint algebra ecc pairing"
+>>>>>>> 95bc1e11a (feat: SHA-2 incremental hasher design (#2182))
     runs-on:
       - runs-on=${{ github.run_id }}-extension-tests-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.machine_type || 'test-gpu-nvidia/family=g6+g6e' }}
 
@@ -60,8 +65,8 @@ jobs:
               - "extensions/rv32im/**"
             keccak256:
               - "extensions/keccak256/**"
-            sha256:
-              - "extensions/sha256/**"
+            sha2:
+              - "extensions/sha2/**"
             bigint:
               - "extensions/bigint/**"
             algebra:

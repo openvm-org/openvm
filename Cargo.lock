@@ -2502,8 +2502,8 @@ dependencies = [
  "openvm-ecc-sw-macros",
  "openvm-ecc-transpiler",
  "openvm-rv32im-transpiler",
- "openvm-sha256-circuit",
- "openvm-sha256-transpiler",
+ "openvm-sha2-circuit",
+ "openvm-sha2-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
@@ -2666,6 +2666,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "matrixmultiply"
+version = "0.3.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a06de3016e9fae57a36fd14dba131fccf49f74b40b7fbdb472f96e361ec71a08"
+dependencies = [
+ "autocfg",
+ "rawpointer",
+]
+
+[[package]]
 name = "md-5"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2781,6 +2791,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ndarray"
+version = "0.16.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "882ed72dce9365842bf196bdeedf5055305f11fc8c03dee7bb0194a6cad34841"
+dependencies = [
+ "matrixmultiply",
+ "num-complex",
+ "num-integer",
+ "num-traits",
+ "portable-atomic",
+ "portable-atomic-util",
+ "rawpointer",
+]
+
+[[package]]
 name = "nibble_vec"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2819,6 +2844,15 @@ dependencies = [
  "num-traits",
  "rand 0.8.5",
  "serde",
+]
+
+[[package]]
+name = "num-complex"
+version = "0.4.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73f88a1307638156682bada9d7604135552957b7818057dcef22705b4d509495"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -2891,6 +2925,27 @@ checksum = "91df4bbde75afed763b708b7eee1e8e7651e02d97f6d5dd763e89367e957b23b"
 dependencies = [
  "hermit-abi",
  "libc",
+]
+
+[[package]]
+name = "num_enum"
+version = "0.7.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1207a7e20ad57b847bbddc6776b968420d38292bbfe2089accff5e19e82454c"
+dependencies = [
+ "num_enum_derive",
+ "rustversion",
+]
+
+[[package]]
+name = "num_enum_derive"
+version = "0.7.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff32365de1b6743cb203b710788263c44a03de03802daf96092f2da4fe6ba4d7"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.116",
 ]
 
 [[package]]
@@ -3179,6 +3234,8 @@ name = "openvm-circuit-primitives-derive"
 version = "2.0.0-alpha"
 dependencies = [
  "itertools 0.14.0",
+ "ndarray",
+ "proc-macro2",
  "quote",
  "syn 2.0.116",
 ]
@@ -3834,8 +3891,8 @@ dependencies = [
  "openvm-pairing-transpiler",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
- "openvm-sha256-circuit",
- "openvm-sha256-transpiler",
+ "openvm-sha2-circuit",
+ "openvm-sha2-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-transpiler",
@@ -3848,12 +3905,13 @@ name = "openvm-sha2"
 version = "2.0.0-alpha"
 dependencies = [
  "eyre",
+ "openvm",
  "openvm-circuit",
  "openvm-instructions",
  "openvm-rv32im-transpiler",
- "openvm-sha256-circuit",
- "openvm-sha256-guest",
- "openvm-sha256-transpiler",
+ "openvm-sha2-circuit",
+ "openvm-sha2-guest",
+ "openvm-sha2-transpiler",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
@@ -3861,57 +3919,60 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-sha256-air"
+name = "openvm-sha2-air"
 version = "2.0.0-alpha"
 dependencies = [
- "openvm-circuit",
+ "ndarray",
+ "num_enum",
  "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
  "openvm-stark-backend",
- "openvm-stark-sdk",
  "rand 0.9.2",
  "sha2",
 ]
 
 [[package]]
-name = "openvm-sha256-circuit"
+name = "openvm-sha2-circuit"
 version = "2.0.0-alpha"
 dependencies = [
  "cfg-if",
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "hex",
+ "itertools 0.14.0",
+ "ndarray",
  "openvm-circuit",
  "openvm-circuit-derive",
  "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
  "openvm-cuda-backend",
  "openvm-cuda-builder",
  "openvm-cuda-common",
  "openvm-instructions",
  "openvm-rv32im-circuit",
- "openvm-sha256-air",
- "openvm-sha256-transpiler",
+ "openvm-sha2-air",
+ "openvm-sha2-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.9.2",
  "serde",
  "sha2",
- "strum",
 ]
 
 [[package]]
-name = "openvm-sha256-guest"
+name = "openvm-sha2-guest"
 version = "2.0.0-alpha"
 dependencies = [
  "openvm-platform",
 ]
 
 [[package]]
-name = "openvm-sha256-transpiler"
+name = "openvm-sha2-transpiler"
 version = "2.0.0-alpha"
 dependencies = [
  "openvm-instructions",
  "openvm-instructions-derive",
- "openvm-sha256-guest",
+ "openvm-sha2-guest",
  "openvm-stark-backend",
  "openvm-transpiler",
  "rrs-lib",
@@ -4047,8 +4108,8 @@ dependencies = [
  "openvm-ecc-sw-macros",
  "openvm-ecc-transpiler",
  "openvm-rv32im-transpiler",
- "openvm-sha256-circuit",
- "openvm-sha256-transpiler",
+ "openvm-sha2-circuit",
+ "openvm-sha2-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
@@ -4498,6 +4559,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f84267b20a16ea918e43c6a88433c2d54fa145c92a811b5b047ccbe153674483"
 
 [[package]]
+name = "portable-atomic-util"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a9db96d7fa8782dd8c15ce32ffe8680bbd1e978a43bf51a34d39483540495f5"
+dependencies = [
+ "portable-atomic",
+]
+
+[[package]]
 name = "postgres"
 version = "0.19.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4846,6 +4916,12 @@ checksum = "c6df7ab838ed27997ba19a4664507e6f82b41fe6e20be42929332156e5e85146"
 dependencies = [
  "bitflags",
 ]
+
+[[package]]
+name = "rawpointer"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "60a357793950651c4ed0f3f52338f53b2f809f32d83a07f72909fa13e4c6c1e3"
 
 [[package]]
 name = "rayon"
