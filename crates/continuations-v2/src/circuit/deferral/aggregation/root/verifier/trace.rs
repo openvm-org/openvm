@@ -10,12 +10,13 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
 };
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
+use verify_stark::pvs::DeferralPvs;
 
 use crate::{
     circuit::{
         deferral::{
             aggregation::root::verifier::air::DeferralRootPvsCols, DeferralAggregationPvs,
-            DeferralRootPvs, DeferralVerifierPvs,
+            DeferralVerifierPvs,
         },
         root::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input},
     },
@@ -70,8 +71,8 @@ pub fn generate_proving_ctx(
         poseidon2_compress_with_capacity(def_vk_commit, [F::ZERO; DIGEST_SIZE]).0;
     let final_acc_hash = poseidon2_compress_with_capacity(input_onion, output_onion).0;
 
-    let mut public_values = vec![F::ZERO; DeferralRootPvs::<u8>::width()];
-    let root_pvs: &mut DeferralRootPvs<F> = public_values.as_mut_slice().borrow_mut();
+    let mut public_values = vec![F::ZERO; DeferralPvs::<u8>::width()];
+    let root_pvs: &mut DeferralPvs<F> = public_values.as_mut_slice().borrow_mut();
     root_pvs.initial_acc_hash = initial_acc_hash;
     root_pvs.final_acc_hash = final_acc_hash;
 

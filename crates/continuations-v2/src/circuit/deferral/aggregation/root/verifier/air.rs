@@ -16,7 +16,7 @@ use recursion_circuit::{
     utils::assert_zeros,
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
-use verify_stark::pvs::VERIFIER_PVS_AIR_ID;
+use verify_stark::pvs::{DeferralPvs, VERIFIER_PVS_AIR_ID};
 
 use crate::{
     bn254::CommitBytes,
@@ -25,7 +25,7 @@ use crate::{
             aggregation::root::bus::{
                 DefVkCommitBus, DefVkCommitMessage, OnionResultBus, OnionResultMessage,
             },
-            DeferralAggregationPvs, DeferralRootPvs, DeferralVerifierPvs,
+            DeferralAggregationPvs, DeferralVerifierPvs,
         },
         root::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input},
         subair::{MerkleRootBus, MerkleRootMessage},
@@ -68,7 +68,7 @@ impl<F: Field> BaseAir<F> for DeferralRootPvsAir {
 }
 impl<F: Field> BaseAirWithPublicValues<F> for DeferralRootPvsAir {
     fn num_public_values(&self) -> usize {
-        DeferralRootPvs::<u8>::width()
+        DeferralPvs::<u8>::width()
     }
 }
 impl<F: Field> PartitionedBaseAir<F> for DeferralRootPvsAir {}
@@ -227,10 +227,13 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
          * def_vk_commit, and final_acc_hash should be the compression of the input and
          * output onions.
          */
-        let &DeferralRootPvs::<_> {
+        let &DeferralPvs::<_> {
             initial_acc_hash,
             final_acc_hash,
+            depth,
         } = builder.public_values().borrow();
+
+        builder.assert_one(depth);
 
         self.poseidon2_compress_bus.lookup_key(
             builder,
