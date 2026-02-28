@@ -78,9 +78,9 @@ impl<S: AggregationSubCircuit> Circuit for DeferredVerifyCircuit<S> {
 
         [Arc::new(verifier_pvs_air) as AirRef<SC>]
             .into_iter()
-            .chain(self.verifier_circuit.airs())
             .chain([Arc::new(user_pvs_commit_air) as AirRef<SC>])
             .chain([Arc::new(user_pvs_memory_air) as AirRef<SC>])
+            .chain(self.verifier_circuit.airs())
             .chain([Arc::new(output_commit_air) as AirRef<SC>])
             .collect()
     }

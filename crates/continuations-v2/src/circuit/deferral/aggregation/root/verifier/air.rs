@@ -16,7 +16,7 @@ use recursion_circuit::{
     utils::assert_zeros,
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
-use verify_stark::pvs::{DeferralPvs, VERIFIER_PVS_AIR_ID};
+use verify_stark::pvs::{DeferralPvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID};
 
 use crate::{
     bn254::CommitBytes,
@@ -34,7 +34,6 @@ use crate::{
 };
 
 const DEF_AGG_PVS_AIR_ID: usize = 1;
-const DEF_AGG_CONSTRAINT_EVAL_AIR_ID: usize = 2;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -140,7 +139,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             builder,
             AB::F::ZERO,
             CachedCommitBusMessage {
-                air_idx: AB::Expr::from_usize(DEF_AGG_CONSTRAINT_EVAL_AIR_ID),
+                air_idx: AB::Expr::from_usize(CONSTRAINT_EVAL_AIR_ID),
                 cached_idx: AB::Expr::from_usize(CONSTRAINT_EVAL_CACHED_INDEX),
                 cached_commit,
             },

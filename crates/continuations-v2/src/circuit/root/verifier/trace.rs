@@ -63,12 +63,11 @@ pub fn generate_proving_ctx(
         cols.initial_root_hash,
     ));
 
-    cols.intermediate_vk_commit =
-        poseidon2_compress_with_capacity(
-            child_verifier_pvs.app_dag_commit,
-            child_verifier_pvs.leaf_dag_commit,
-        )
-        .0;
+    cols.intermediate_vk_commit = poseidon2_compress_with_capacity(
+        child_verifier_pvs.app_dag_commit,
+        child_verifier_pvs.leaf_dag_commit,
+    )
+    .0;
     poseidon2_compress_inputs.push(digests_to_poseidon2_input(
         child_verifier_pvs.app_dag_commit,
         child_verifier_pvs.leaf_dag_commit,

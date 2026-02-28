@@ -1,14 +1,19 @@
-use std::borrow::Borrow;
+use std::{borrow::Borrow, sync::Arc};
 
+use itertools::Itertools;
 #[cfg(feature = "cuda")]
 use openvm_cuda_backend::{data_transporter::transport_air_proving_ctx_to_device, GpuBackend};
 use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, CpuBackend, ProverBackend},
+    AirRef,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
 use p3_field::PrimeCharacteristicRing;
+use recursion_circuit::system::AggregationSubCircuit;
 use verify_stark::pvs::{VerifierBasePvs, VERIFIER_PVS_AIR_ID};
+
+use crate::{prover::Circuit, SC};
 
 pub mod app {
     pub use openvm_circuit::arch::{
@@ -21,6 +26,35 @@ pub mod bus;
 pub mod receiver;
 pub mod verifier;
 pub mod vm_pvs;
+
+#[derive(derive_new::new, Clone)]
+pub struct NonRootCircuit<S: AggregationSubCircuit> {
+    pub verifier_circuit: Arc<S>,
+}
+
+impl<S: AggregationSubCircuit> Circuit for NonRootCircuit<S> {
+    fn airs(&self) -> Vec<AirRef<SC>> {
+        let bus_inventory = self.verifier_circuit.bus_inventory();
+        let pvs_air_consistency_bus_idx = self.verifier_circuit.next_bus_idx();
+        let public_values_bus = bus_inventory.public_values_bus;
+        [Arc::new(verifier::VerifierPvsAir {
+            public_values_bus,
+            cached_commit_bus: bus_inventory.cached_commit_bus,
+            pvs_air_consistency_bus: bus::PvsAirConsistencyBus::new(pvs_air_consistency_bus_idx),
+            deferral_config: verifier::VerifierDeferralConfig::Disabled,
+        }) as AirRef<SC>]
+        .into_iter()
+        .chain([Arc::new(vm_pvs::VmPvsAir {
+            public_values_bus,
+            cached_commit_bus: bus_inventory.cached_commit_bus,
+            pvs_air_consistency_bus: bus::PvsAirConsistencyBus::new(pvs_air_consistency_bus_idx),
+            deferral_enabled: false,
+        }) as AirRef<SC>])
+        .chain([Arc::new(receiver::UserPvsReceiverAir { public_values_bus }) as AirRef<SC>])
+        .chain(self.verifier_circuit.airs())
+        .collect_vec()
+    }
+}
 
 // Trait that non-root and compression provers use to remain generic in PB
 pub trait NonRootTraceGen<PB: ProverBackend> {

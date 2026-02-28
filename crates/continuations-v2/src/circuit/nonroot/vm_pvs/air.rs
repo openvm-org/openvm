@@ -15,8 +15,9 @@ use recursion_circuit::bus::{
 use stark_recursion_circuit_derive::AlignedBorrow;
 use verify_stark::pvs::{VmPvs, VM_PVS_AIR_ID};
 
-use crate::circuit::{
-    nonroot::{app::*, bus::{PvsAirConsistencyBus, PvsAirConsistencyMessage}},
+use crate::circuit::nonroot::{
+    app::*,
+    bus::{PvsAirConsistencyBus, PvsAirConsistencyMessage},
 };
 
 #[repr(C)]
@@ -180,7 +181,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
                     pv_idx: is_leaf.clone() * AB::Expr::from_usize(didx) + internal_pp(),
                     value: (*value).into(),
                 },
-                local.is_valid * is_internal.clone(),
+                local.is_valid * is_internal,
             );
         }
 

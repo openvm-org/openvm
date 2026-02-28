@@ -75,6 +75,7 @@ pub fn generate_proving_ctx(
     let root_pvs: &mut DeferralPvs<F> = public_values.as_mut_slice().borrow_mut();
     root_pvs.initial_acc_hash = initial_acc_hash;
     root_pvs.final_acc_hash = final_acc_hash;
+    root_pvs.depth = F::ONE;
 
     let poseidon2_inputs = vec![
         digests_to_poseidon2_input(verifier_pvs.def_dag_commit, verifier_pvs.leaf_dag_commit),

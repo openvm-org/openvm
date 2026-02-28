@@ -37,8 +37,7 @@ pub fn generate_record(
         proof.public_values[VERIFIER_PVS_AIR_ID].as_slice().borrow();
     let child_vm_pvs: &VmPvs<F> = proof.public_values[VM_PVS_AIR_ID].as_slice().borrow();
 
-    let padded_program_commit =
-        pad_slice_to_poseidon2_input(&child_vm_pvs.program_commit, F::ZERO);
+    let padded_program_commit = pad_slice_to_poseidon2_input(&child_vm_pvs.program_commit, F::ZERO);
     let padded_initial_root = pad_slice_to_poseidon2_input(&child_vm_pvs.initial_root, F::ZERO);
     let padded_initial_pc = pad_slice_to_poseidon2_input(&[child_vm_pvs.initial_pc], F::ZERO);
 
