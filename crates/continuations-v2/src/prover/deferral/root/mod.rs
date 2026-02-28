@@ -16,10 +16,13 @@ use tracing::instrument;
 
 use crate::{
     bn254::CommitBytes,
-    circuit::deferral::aggregation::root::{
-        DeferralIoCommit, DeferralRootCircuit, DeferralRootTraceGen,
+    circuit::{
+        deferral::aggregation::root::{
+            DeferralIoCommit, DeferralRootCircuit, DeferralRootTraceGen,
+        },
+        Circuit,
     },
-    prover::{trace_heights_tracing_info, Circuit},
+    prover::trace_heights_tracing_info,
     SC,
 };
 

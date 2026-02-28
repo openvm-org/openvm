@@ -3,7 +3,7 @@ use openvm_stark_backend::{
     AirRef, StarkEngine,
 };
 
-use crate::{prover::Circuit, SC};
+use crate::{circuit::Circuit, SC};
 
 pub fn debug_constraints<C, E>(circuit: &C, ctx: &ProvingContext<E::PB>, engine: &E)
 where

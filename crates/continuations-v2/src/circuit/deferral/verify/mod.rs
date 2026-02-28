@@ -14,8 +14,8 @@ use crate::{
         },
         root::bus::{MemoryMerkleCommitBus, UserPvsCommitBus, UserPvsCommitTreeBus},
         user_pvs::{commit::UserPvsCommitAir, memory::UserPvsInMemoryAir},
+        Circuit,
     },
-    prover::Circuit,
     SC,
 };
 

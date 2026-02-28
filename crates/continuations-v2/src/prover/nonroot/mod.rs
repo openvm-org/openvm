@@ -14,8 +14,11 @@ use recursion_circuit::system::{AggregationSubCircuit, VerifierConfig, VerifierT
 use tracing::instrument;
 
 use crate::{
-    circuit::nonroot::{NonRootCircuit, NonRootTraceGen},
-    prover::{trace_heights_tracing_info, Circuit},
+    circuit::{
+        nonroot::{NonRootCircuit, NonRootTraceGen},
+        Circuit,
+    },
+    prover::trace_heights_tracing_info,
     SC,
 };
 

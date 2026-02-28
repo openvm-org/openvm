@@ -23,8 +23,8 @@ use crate::{
     circuit::{
         deferral::{DeferralAggregationPvs, DeferralCircuitPvs},
         root::digests_to_poseidon2_input,
+        Circuit,
     },
-    prover::Circuit,
     SC,
 };
 

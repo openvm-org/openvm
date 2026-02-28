@@ -13,7 +13,7 @@ use p3_field::PrimeCharacteristicRing;
 use recursion_circuit::system::AggregationSubCircuit;
 use verify_stark::pvs::{VerifierBasePvs, VERIFIER_PVS_AIR_ID};
 
-use crate::{prover::Circuit, SC};
+use crate::{circuit::Circuit, SC};
 
 pub mod app {
     pub use openvm_circuit::arch::{

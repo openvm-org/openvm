@@ -15,8 +15,11 @@ use tracing::instrument;
 
 use crate::{
     bn254::CommitBytes,
-    circuit::root::{RootCircuit, RootTraceGen},
-    prover::{trace_heights_tracing_info, Circuit},
+    circuit::{
+        root::{RootCircuit, RootTraceGen},
+        Circuit,
+    },
+    prover::trace_heights_tracing_info,
     SC,
 };
 

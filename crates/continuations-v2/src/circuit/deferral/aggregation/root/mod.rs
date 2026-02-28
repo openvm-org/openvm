@@ -19,8 +19,10 @@ use recursion_circuit::system::AggregationSubCircuit;
 
 use crate::{
     bn254::CommitBytes,
-    circuit::subair::{MerkleRootBus, MerkleTreeInternalBus, MerkleTreeSubAir},
-    prover::Circuit,
+    circuit::{
+        subair::{MerkleRootBus, MerkleTreeInternalBus, MerkleTreeSubAir},
+        Circuit,
+    },
     SC,
 };
 

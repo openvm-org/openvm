@@ -17,7 +17,7 @@ use recursion_circuit::system::AggregationSubCircuit;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use super::user_pvs::{commit, memory};
-use crate::{bn254::CommitBytes, prover::Circuit, SC};
+use crate::{bn254::CommitBytes, circuit::Circuit, SC};
 
 pub mod bus;
 pub mod verifier;
