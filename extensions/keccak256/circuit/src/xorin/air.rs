@@ -161,9 +161,8 @@ impl XorinVmAir {
             *instruction.len_limbs.last().unwrap(),
         ];
 
-        let limb_shift = AB::F::from_usize(
-            1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.ptr_max_bits),
-        );
+        let limb_shift =
+            AB::F::from_usize(1 << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - self.ptr_max_bits));
         for pair in need_range_check.chunks_exact(2) {
             self.bitwise_lookup_bus
                 .send_range(pair[0] * limb_shift, pair[1] * limb_shift)

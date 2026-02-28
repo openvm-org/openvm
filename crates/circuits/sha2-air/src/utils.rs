@@ -74,7 +74,10 @@ pub fn limbs_into_u32(limbs: &[u32]) -> u32 {
 
 /// Rotates `bits` right by `n` bits, assumes `bits` is in little-endian
 #[inline]
-pub(crate) fn rotr<F: PrimeCharacteristicRing + Clone>(bits: &[impl Into<F> + Clone], n: usize) -> Vec<F> {
+pub(crate) fn rotr<F: PrimeCharacteristicRing + Clone>(
+    bits: &[impl Into<F> + Clone],
+    n: usize,
+) -> Vec<F> {
     (0..bits.len())
         .map(|i| bits[(i + n) % bits.len()].clone().into())
         .collect()
@@ -82,7 +85,10 @@ pub(crate) fn rotr<F: PrimeCharacteristicRing + Clone>(bits: &[impl Into<F> + Cl
 
 /// Shifts `bits` right by `n` bits, assumes `bits` is in little-endian
 #[inline]
-pub(crate) fn shr<F: PrimeCharacteristicRing + Clone>(bits: &[impl Into<F> + Clone], n: usize) -> Vec<F> {
+pub(crate) fn shr<F: PrimeCharacteristicRing + Clone>(
+    bits: &[impl Into<F> + Clone],
+    n: usize,
+) -> Vec<F> {
     (0..bits.len())
         .map(|i| {
             if i + n < bits.len() {
@@ -216,7 +222,10 @@ pub fn small_sig0<C: Sha2BlockHasherSubairConfig>(x: C::Word) -> C::Word {
 
 /// Computes SmallSigma0(x), where x is a [C::WORD_BITS] bit number in little-endian
 #[inline]
-pub(crate) fn small_sig0_field<F: PrimeCharacteristicRing + Clone, C: Sha2BlockHasherSubairConfig>(
+pub(crate) fn small_sig0_field<
+    F: PrimeCharacteristicRing + Clone,
+    C: Sha2BlockHasherSubairConfig,
+>(
     x: &[impl Into<F> + Clone],
 ) -> Vec<F> {
     if C::WORD_BITS == 32 {
@@ -237,7 +246,10 @@ pub fn small_sig1<C: Sha2BlockHasherSubairConfig>(x: C::Word) -> C::Word {
 
 /// Computes SmallSigma1(x), where x is a [C::WORD_BITS] bit number in little-endian
 #[inline]
-pub(crate) fn small_sig1_field<F: PrimeCharacteristicRing + Clone, C: Sha2BlockHasherSubairConfig>(
+pub(crate) fn small_sig1_field<
+    F: PrimeCharacteristicRing + Clone,
+    C: Sha2BlockHasherSubairConfig,
+>(
     x: &[impl Into<F> + Clone],
 ) -> Vec<F> {
     if C::WORD_BITS == 32 {

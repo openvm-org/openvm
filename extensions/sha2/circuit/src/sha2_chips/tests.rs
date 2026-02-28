@@ -157,11 +157,7 @@ fn set_and_execute_single_block<RA: Arena, C: Sha2Config, E: PreflightExecutor<F
 
     let mut state = prev_state.to_vec();
     C::compress(&mut state, message);
-    let expected_output = state
-        .iter()
-        .cloned()
-        .map(F::from_u8)
-        .collect_vec();
+    let expected_output = state.iter().cloned().map(F::from_u8).collect_vec();
 
     assert_eq!(
         expected_output,
