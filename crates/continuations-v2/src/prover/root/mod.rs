@@ -114,7 +114,7 @@ where
         #[cfg(debug_assertions)]
         crate::prover::debug_constraints(&self.circuit, &ctx, &engine);
         let d_pk = engine.device().transport_pk_to_device(self.pk.as_ref());
-        let proof = engine.prove(&d_pk, ctx).unwrap();
+        let proof = engine.prove(&d_pk, ctx)?;
         #[cfg(debug_assertions)]
         engine.verify(&self.vk, &proof)?;
         Ok(proof)
