@@ -26,8 +26,8 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
 use crate::{
-    count::bus::DeferralCircuitCountBus,
-    poseidon2::bus::DeferralPoseidon2Bus,
+    count::DeferralCircuitCountBus,
+    poseidon2::DeferralPoseidon2Bus,
     utils::{
         byte_commit_to_f, bytes_to_f, combine_output, split_memory_ops, COMMIT_MEMORY_OPS,
         COMMIT_NUM_BYTES, DIGEST_MEMORY_OPS, F_NUM_BYTES, MEMORY_OP_SIZE, OUTPUT_TOTAL_BYTES,
