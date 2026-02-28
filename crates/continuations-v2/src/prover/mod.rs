@@ -7,7 +7,11 @@ use recursion_circuit::system::VerifierSubCircuit;
 
 use crate::{
     circuit::{
-        deferral::verify::DeferredVerifyTraceGenImpl, nonroot::NonRootTraceGenImpl,
+        deferral::{
+            aggregation::{nonroot::DeferralNonRootTraceGenImpl, root::DeferralRootTraceGenImpl},
+            verify::DeferredVerifyTraceGenImpl,
+        },
+        nonroot::NonRootTraceGenImpl,
         root::RootTraceGenImpl,
     },
     SC,
@@ -46,6 +50,13 @@ pub type CompressionCpuProver =
 pub type RootCpuProver = RootProver<CpuBackend<SC>, VerifierSubCircuit<1>, RootTraceGenImpl>;
 pub type DeferralVerifyCpuProver =
     DeferredVerifyProver<CpuBackend<SC>, VerifierSubCircuit<1>, DeferredVerifyTraceGenImpl>;
+pub type DeferralNonRootCpuProver<const MAX_NUM_PROOFS: usize> = DeferralNonRootProver<
+    CpuBackend<SC>,
+    VerifierSubCircuit<MAX_NUM_PROOFS>,
+    DeferralNonRootTraceGenImpl,
+>;
+pub type DeferralRootCpuProver =
+    DeferralRootProver<CpuBackend<SC>, VerifierSubCircuit<1>, DeferralRootTraceGenImpl>;
 
 #[cfg(feature = "cuda")]
 pub type NonRootGpuProver<const MAX_NUM_PROOFS: usize> =
@@ -58,3 +69,12 @@ pub type RootGpuProver = RootProver<GpuBackend, VerifierSubCircuit<1>, RootTrace
 #[cfg(feature = "cuda")]
 pub type DeferralVerifyGpuProver =
     DeferredVerifyProver<GpuBackend, VerifierSubCircuit<1>, DeferredVerifyTraceGenImpl>;
+#[cfg(feature = "cuda")]
+pub type DeferralNonRootGpuProver<const MAX_NUM_PROOFS: usize> = DeferralNonRootProver<
+    GpuBackend,
+    VerifierSubCircuit<MAX_NUM_PROOFS>,
+    DeferralNonRootTraceGenImpl,
+>;
+#[cfg(feature = "cuda")]
+pub type DeferralRootGpuProver =
+    DeferralRootProver<GpuBackend, VerifierSubCircuit<1>, DeferralRootTraceGenImpl>;

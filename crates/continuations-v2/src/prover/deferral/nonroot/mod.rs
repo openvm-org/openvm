@@ -1,4 +1,4 @@
-use std::{iter::once, sync::Arc};
+use std::sync::Arc;
 
 use eyre::Result;
 use itertools::Itertools;
@@ -7,49 +7,82 @@ use openvm_stark_backend::{
     proof::Proof,
     prover::{
         CommittedTraceData, DeviceDataTransporter, DeviceMultiStarkProvingKey, ProverBackend,
-        ProvingContext,
     },
     AirRef, StarkEngine, SystemParams,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    default_duplex_sponge_recorder, Digest, EF, F,
-};
-use recursion_circuit::system::{
-    AggregationSubCircuit, CachedTraceCtx, VerifierConfig, VerifierTraceGen,
-};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
+use recursion_circuit::system::{AggregationSubCircuit, VerifierConfig, VerifierTraceGen};
 use tracing::instrument;
 
 use crate::{
-    circuit::nonroot::{receiver::UserPvsReceiverAir, verifier::VerifierPvsAir, NonRootTraceGen},
+    circuit::deferral::aggregation::nonroot::{
+        bus::{InputOrMerkleCommitBus, PvAirConsistencyBus},
+        def_pvs::DeferralPvsAir,
+        input::InputCommitAir,
+        verifier::NonRootPvsAir,
+        DeferralNonRootTraceGen,
+    },
     prover::{trace_heights_tracing_info, Circuit},
     SC,
 };
 
+mod trace;
+
 #[derive(derive_new::new, Clone)]
-pub struct NonRootCircuit<S: AggregationSubCircuit> {
+pub struct DeferralNonRootCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
 }
 
-impl<S: AggregationSubCircuit> Circuit for NonRootCircuit<S> {
+impl<S: AggregationSubCircuit> Circuit for DeferralNonRootCircuit<S> {
     fn airs(&self) -> Vec<AirRef<SC>> {
         let bus_inventory = self.verifier_circuit.bus_inventory();
-        let public_values_bus = bus_inventory.public_values_bus;
-        [Arc::new(VerifierPvsAir {
-            public_values_bus,
+        let next_bus_idx = self.verifier_circuit.next_bus_idx();
+        let input_or_merkle_commit_bus = InputOrMerkleCommitBus::new(next_bus_idx);
+        let pv_air_consistency_bus = PvAirConsistencyBus::new(next_bus_idx + 1);
+
+        let verifier_pvs_air = NonRootPvsAir {
+            public_values_bus: bus_inventory.public_values_bus,
             cached_commit_bus: bus_inventory.cached_commit_bus,
-        }) as AirRef<SC>]
-        .into_iter()
-        .chain(self.verifier_circuit.airs())
-        .chain([Arc::new(UserPvsReceiverAir { public_values_bus }) as AirRef<SC>])
-        .collect_vec()
+            pv_air_consistency_bus,
+        };
+
+        let def_pvs_air = DeferralPvsAir {
+            public_values_bus: bus_inventory.public_values_bus,
+            poseidon2_bus: bus_inventory.poseidon2_compress_bus,
+            input_or_merkle_commit_bus,
+            pv_air_consistency_bus,
+        };
+
+        let input_commit_air = InputCommitAir {
+            public_values_bus: bus_inventory.public_values_bus,
+            poseidon2_bus: bus_inventory.poseidon2_compress_bus,
+            cached_commit_bus: bus_inventory.cached_commit_bus,
+            input_or_merkle_commit_bus,
+        };
+
+        [Arc::new(verifier_pvs_air) as AirRef<SC>]
+            .into_iter()
+            .chain([Arc::new(def_pvs_air) as AirRef<SC>])
+            .chain(self.verifier_circuit.airs())
+            .chain([Arc::new(input_commit_air) as AirRef<SC>])
+            .collect_vec()
     }
 }
 
-/// Generates an aggregation proof for non-root layers (leaf and internal).
-pub struct NonRootAggregationProver<
+pub enum DeferralChildVkKind {
+    /// Child proofs are deferral verify proofs (consume DeferralCircuitPvs at air 0).
+    DeferralCircuit,
+    /// Child proofs are deferral aggregation nonroot proofs (consume DeferralAggregationPvs at air
+    /// 1).
+    DeferralAggregation,
+    /// Same as DeferralAggregation but uses this prover's own vk as child vk.
+    RecursiveSelf,
+}
+
+pub struct DeferralNonRootProver<
     PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
     S: AggregationSubCircuit,
-    T: NonRootTraceGen<PB>,
+    T: DeferralNonRootTraceGen<PB>,
 > {
     pk: Arc<MultiStarkProvingKey<SC>>,
     d_pk: DeviceMultiStarkProvingKey<PB>,
@@ -57,76 +90,29 @@ pub struct NonRootAggregationProver<
 
     agg_node_tracegen: T,
 
-    // TODO: tracegen currently requires storing these, we should revisit this
     child_vk: Arc<MultiStarkVerifyingKey<SC>>,
     child_vk_pcs_data: CommittedTraceData<PB>,
-    circuit: Arc<NonRootCircuit<S>>,
+    circuit: Arc<DeferralNonRootCircuit<S>>,
 
     self_vk_pcs_data: Option<CommittedTraceData<PB>>,
-}
-
-/// Struct to determine if NonRootAggregationProver is proving a special case,
-/// i.e. if the child_vk is the app_vk or if it should use its own vk as child.
-pub enum ChildVkKind {
-    Standard,
-    App,
-    RecursiveSelf,
 }
 
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
         S: AggregationSubCircuit + VerifierTraceGen<PB>,
-        T: NonRootTraceGen<PB>,
-    > NonRootAggregationProver<PB, S, T>
+        T: DeferralNonRootTraceGen<PB>,
+    > DeferralNonRootProver<PB, S, T>
 where
     PB::Matrix: Clone,
 {
-    #[instrument(name = "trace_gen", skip_all)]
-    pub fn generate_proving_ctx(
-        &self,
-        proofs: &[Proof<SC>],
-        child_vk_kind: ChildVkKind,
-    ) -> ProvingContext<PB> {
-        assert!(proofs.len() <= self.circuit.verifier_circuit.max_num_proofs());
-
-        let (child_vk, child_dag_commit) = match child_vk_kind {
-            ChildVkKind::RecursiveSelf => (&self.vk, self.self_vk_pcs_data.clone().unwrap()),
-            _ => (&self.child_vk, self.child_vk_pcs_data.clone()),
-        };
-        let child_is_app = matches!(child_vk_kind, ChildVkKind::App);
-
-        let verifier_pvs_ctx = self.agg_node_tracegen.generate_verifier_pvs_ctx(
-            proofs,
-            child_is_app,
-            child_dag_commit.commitment,
-        );
-        let cached_trace_ctx = CachedTraceCtx::PcsData(child_dag_commit);
-        let subcircuit_ctxs = self.circuit.verifier_circuit.generate_proving_ctxs_base(
-            child_vk,
-            cached_trace_ctx,
-            proofs,
-            default_duplex_sponge_recorder(),
-        );
-        let agg_other_ctxs = self
-            .agg_node_tracegen
-            .generate_other_proving_ctxs(proofs, child_is_app);
-
-        ProvingContext {
-            per_trace: once(verifier_pvs_ctx)
-                .chain(subcircuit_ctxs)
-                .chain(agg_other_ctxs)
-                .enumerate()
-                .collect_vec(),
-        }
-    }
-
     #[instrument(name = "total_proof", skip_all)]
     pub fn agg_prove<E: StarkEngine<SC = SC, PB = PB>>(
         &self,
         proofs: &[Proof<SC>],
-        child_vk_kind: ChildVkKind,
+        child_vk_kind: DeferralChildVkKind,
+        child_merkle_depth: Option<usize>,
     ) -> Result<Proof<SC>> {
-        let ctx = self.generate_proving_ctx(proofs, child_vk_kind);
+        let ctx = self.generate_proving_ctx(proofs, child_vk_kind, child_merkle_depth);
         if tracing::enabled!(tracing::Level::DEBUG) {
             trace_heights_tracing_info(&ctx.per_trace, &self.circuit.airs());
         }
@@ -143,8 +129,8 @@ where
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
         S: AggregationSubCircuit + VerifierTraceGen<PB>,
-        T: NonRootTraceGen<PB>,
-    > NonRootAggregationProver<PB, S, T>
+        T: DeferralNonRootTraceGen<PB>,
+    > DeferralNonRootProver<PB, S, T>
 {
     pub fn new<E: StarkEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
@@ -161,7 +147,7 @@ impl<
         );
         let engine = E::new(system_params);
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
-        let circuit = Arc::new(NonRootCircuit::new(Arc::new(verifier_circuit)));
+        let circuit = Arc::new(DeferralNonRootCircuit::new(Arc::new(verifier_circuit)));
         let (pk, vk) = engine.keygen(&circuit.airs());
         let d_pk = engine.device().transport_pk_to_device(&pk);
         let self_vk_pcs_data = if is_self_recursive {
@@ -173,7 +159,7 @@ impl<
             pk: Arc::new(pk),
             d_pk,
             vk: Arc::new(vk),
-            agg_node_tracegen: NonRootTraceGen::new(),
+            agg_node_tracegen: DeferralNonRootTraceGen::new(),
             child_vk,
             child_vk_pcs_data,
             circuit,
@@ -196,7 +182,7 @@ impl<
         );
         let engine = E::new(pk.params.clone());
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
-        let circuit = Arc::new(NonRootCircuit::new(Arc::new(verifier_circuit)));
+        let circuit = Arc::new(DeferralNonRootCircuit::new(Arc::new(verifier_circuit)));
         let vk = Arc::new(pk.get_vk());
         let d_pk = engine.device().transport_pk_to_device(&pk);
         let self_vk_pcs_data = if is_self_recursive {
@@ -208,7 +194,7 @@ impl<
             pk,
             d_pk,
             vk,
-            agg_node_tracegen: NonRootTraceGen::new(),
+            agg_node_tracegen: DeferralNonRootTraceGen::new(),
             child_vk,
             child_vk_pcs_data,
             circuit,
@@ -216,7 +202,7 @@ impl<
         }
     }
 
-    pub fn get_circuit(&self) -> Arc<NonRootCircuit<S>> {
+    pub fn get_circuit(&self) -> Arc<DeferralNonRootCircuit<S>> {
         self.circuit.clone()
     }
 
@@ -234,12 +220,5 @@ impl<
         } else {
             self.child_vk_pcs_data.commitment
         }
-    }
-
-    pub fn get_self_vk_pcs_data(&self) -> Option<CommittedTraceData<PB>>
-    where
-        CommittedTraceData<PB>: Clone,
-    {
-        self.self_vk_pcs_data.clone()
     }
 }
