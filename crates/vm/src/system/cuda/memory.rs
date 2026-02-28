@@ -245,7 +245,7 @@ impl MemoryInventoryGPU {
                             address_space: addr_space,
                             ptr,
                             timestamps: [ts_values.timestamp],
-                            values: ts_values.values.map(|x| Self::field_to_raw_u32(x)),
+                            values: ts_values.values.map(Self::field_to_raw_u32),
                         })
                         .collect();
                     let in_num_records = in_records.len();
@@ -317,7 +317,7 @@ impl MemoryInventoryGPU {
                     }
 
                     // Send records to boundary chip
-                    let out_num_records = d_out_num_records.to_host().unwrap()[0] as usize;
+                    let out_num_records = d_out_num_records.to_host().unwrap()[0];
                     self.boundary
                         .finalize_records_persistent_device::<DIGEST_WIDTH>(
                             d_out_records,
@@ -391,12 +391,21 @@ impl MemoryInventoryGPU {
     }
 }
 
+impl Drop for PersistentMemoryInventoryGPU {
+    fn drop(&mut self) {
+        // WARNING: The merkle subtree events must be completed before dropping the initial memory
+        // buffers. This prevents buffers from dropping before build_async completes.
+        self.merkle_tree.drop_subtrees();
+        self.initial_memory.clear();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
     use openvm_circuit::{
-        arch::{testing::POSEIDON2_DIRECT_BUS, vm_poseidon2_config, MemoryConfig},
+        arch::{vm_poseidon2_config, MemoryConfig},
         system::{
             memory::{merkle::MerkleTree, online::GuestMemory, AddressMap, TimestampedValues},
             poseidon2::Poseidon2PeripheryChip,
@@ -410,6 +419,7 @@ mod tests {
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
         NATIVE_AS,
     };
+    use openvm_stark_backend::prover::MatrixDimensions;
 
     use super::*;
     use crate::arch::testing::default_var_range_checker_bus;
@@ -430,28 +440,27 @@ mod tests {
                 NATIVE_AS,
                 0,
                 [
-                    F::from_canonical_u32(21),
-                    F::from_canonical_u32(22),
-                    F::from_canonical_u32(23),
-                    F::from_canonical_u32(24),
-                    F::from_canonical_u32(25),
-                    F::from_canonical_u32(26),
-                    F::from_canonical_u32(27),
-                    F::from_canonical_u32(28),
-                    F::from_canonical_u32(21),
-                    F::from_canonical_u32(22),
-                    F::from_canonical_u32(23),
-                    F::from_canonical_u32(24),
-                    F::from_canonical_u32(25),
-                    F::from_canonical_u32(26),
-                    F::from_canonical_u32(27),
-                    F::from_canonical_u32(28),
+                    F::from_u32(21),
+                    F::from_u32(22),
+                    F::from_u32(23),
+                    F::from_u32(24),
+                    F::from_u32(25),
+                    F::from_u32(26),
+                    F::from_u32(27),
+                    F::from_u32(28),
+                    F::from_u32(21),
+                    F::from_u32(22),
+                    F::from_u32(23),
+                    F::from_u32(24),
+                    F::from_u32(25),
+                    F::from_u32(26),
+                    F::from_u32(27),
+                    F::from_u32(28),
                 ],
             );
         }
 
-        let cpu_hasher =
-            Poseidon2PeripheryChip::new(vm_poseidon2_config(), POSEIDON2_DIRECT_BUS, 3);
+        let cpu_hasher = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
         let cpu_merkle_tree = MerkleTree::<F, DIGEST_WIDTH>::from_memory(
             &memory.memory,
             &mem_config.memory_dimensions(),
@@ -481,8 +490,9 @@ mod tests {
             TouchedMemory::Persistent(Vec::new()),
         );
         let boundary_ctx = ctxs.first().expect("missing boundary ctx");
-        assert!(
-            boundary_ctx.common_main.is_none(),
+        assert_eq!(
+            boundary_ctx.common_main.height(),
+            0,
             "boundary trace should be empty for empty touched memory"
         );
         assert!(
@@ -517,22 +527,22 @@ mod tests {
                 NATIVE_AS,
                 0,
                 [
-                    F::from_canonical_u32(21),
-                    F::from_canonical_u32(22),
-                    F::from_canonical_u32(23),
-                    F::from_canonical_u32(24),
-                    F::from_canonical_u32(25),
-                    F::from_canonical_u32(26),
-                    F::from_canonical_u32(27),
-                    F::from_canonical_u32(28),
-                    F::from_canonical_u32(21),
-                    F::from_canonical_u32(22),
-                    F::from_canonical_u32(23),
-                    F::from_canonical_u32(24),
-                    F::from_canonical_u32(25),
-                    F::from_canonical_u32(26),
-                    F::from_canonical_u32(27),
-                    F::from_canonical_u32(28),
+                    F::from_u32(21),
+                    F::from_u32(22),
+                    F::from_u32(23),
+                    F::from_u32(24),
+                    F::from_u32(25),
+                    F::from_u32(26),
+                    F::from_u32(27),
+                    F::from_u32(28),
+                    F::from_u32(21),
+                    F::from_u32(22),
+                    F::from_u32(23),
+                    F::from_u32(24),
+                    F::from_u32(25),
+                    F::from_u32(26),
+                    F::from_u32(27),
+                    F::from_u32(28),
                 ],
             );
         }
@@ -541,10 +551,10 @@ mod tests {
         let touched_bytes = [101u8, 102, 103, 104];
         let touched_bytes_late = [111u8, 112, 113, 114];
         let touched_native_values = [
-            F::from_canonical_u32(201),
-            F::from_canonical_u32(202),
-            F::from_canonical_u32(203),
-            F::from_canonical_u32(204),
+            F::from_u32(201),
+            F::from_u32(202),
+            F::from_u32(203),
+            F::from_u32(204),
         ];
         unsafe {
             final_memory.write::<u8, { crate::arch::CONST_BLOCK_SIZE }>(
@@ -564,8 +574,7 @@ mod tests {
             );
         }
 
-        let cpu_hasher =
-            Poseidon2PeripheryChip::new(vm_poseidon2_config(), POSEIDON2_DIRECT_BUS, 3);
+        let cpu_hasher = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
         let cpu_merkle_tree = MerkleTree::<F, DIGEST_WIDTH>::from_memory(
             &final_memory.memory,
             &mem_config.memory_dimensions(),
@@ -595,14 +604,14 @@ mod tests {
                 (RV32_MEMORY_AS, 0),
                 TimestampedValues {
                     timestamp: 1,
-                    values: touched_bytes.map(F::from_canonical_u8),
+                    values: touched_bytes.map(F::from_u8),
                 },
             ),
             (
                 (RV32_MEMORY_AS, crate::arch::CONST_BLOCK_SIZE as u32),
                 TimestampedValues {
                     timestamp: 3,
-                    values: touched_bytes_late.map(F::from_canonical_u8),
+                    values: touched_bytes_late.map(F::from_u8),
                 },
             ),
             (
@@ -619,7 +628,7 @@ mod tests {
         );
         let boundary_ctx = ctxs.first().expect("missing boundary ctx");
         assert!(
-            boundary_ctx.common_main.is_some(),
+            boundary_ctx.common_main.height() > 0,
             "boundary trace should be present when touched memory is non-empty"
         );
         assert!(
@@ -636,14 +645,5 @@ mod tests {
         let gpu_root: [F; DIGEST_WIDTH] = gpu_root_slice.try_into().unwrap();
 
         assert_eq!(expected_root, gpu_root);
-    }
-}
-
-impl Drop for PersistentMemoryInventoryGPU {
-    fn drop(&mut self) {
-        // WARNING: The merkle subtree events must be completed before dropping the initial memory
-        // buffers. This prevents buffers from dropping before build_async completes.
-        self.merkle_tree.drop_subtrees();
-        self.initial_memory.clear();
     }
 }
