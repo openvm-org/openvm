@@ -5,13 +5,19 @@ use openvm_sha2::sha256;
 
 const ITERATIONS: usize = 150_000;
 
+fn sha256(input: &[u8]) -> [u8; 32] {
+    let mut sha256 = Sha256::new();
+    sha256.update(black_box(input));
+    sha256.finalize()
+}
+
 pub fn main() {
     // Initialize with hash of an empty vector
     let mut hash = black_box(sha256(&[]));
 
     // Iteratively apply sha256
     for _ in 0..ITERATIONS {
-        hash = sha256(&hash);
+        hash = black_box(sha256(&hash));
     }
 
     // Prevent optimizer from optimizing away the computation

@@ -1,0 +1,45 @@
+# SHA-2
+
+The SHA-2 extension guest provides functions that are meant to be linked to other external libraries. The external libraries can use these functions as a hook for SHA-2 intrinsics. This is enabled only when the target is `zkvm`. We support the SHA-256 and SHA-512 hash functions.
+
+We provide the following functions to compute the SHA-2 compression function.
+- `zkvm_shaXXX_impl(state: *const u8, input: *const u8, output: *mut u8)` where `XXX` is `256` or `512`. These functions have `C` ABI. They take in a pointer to the current hasher state (`state`), a pointer to the next block of the message (`input`), and a pointer where the new hasher state will be written (`output`). `state` is expected to be a pointer to 8 little-endian words, even though its type is `*const u8`. For Sha256 that means it is a pointer to `[u32; 8]`, and for Sha512 it's `[u64; 8]`.
+
+In the external library, you can do something like the following:
+
+```rust
+extern "C" {
+    fn zkvm_sha256_impl(input: *const u8, len: usize, output: *mut u8);
+}
+
+fn sha256(input: &[u8]) -> [u8; 32] {
+    #[cfg(target_os = "zkvm")]
+    {
+        let mut state = [0u32; 8];
+        let padded_input = add_padding(input);
+        padded_input
+            .chunks_exact(32)
+            .for_each(|input_block| {
+                unsafe {
+                    zkvm_sha256_impl(state.as_ptr() as *const u8, input_block.as_ptr(), output.as_mut_ptr() as *mut u8);
+                }
+            })
+        state
+            .map(|word| word.to_be_bytes())
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap()
+    }
+    #[cfg(not(target_os = "zkvm"))] {
+        // Regular SHA-256 implementation
+    }
+}
+```
+
+### Config parameters
+
+For the guest program to build successfully add the following to your `.toml` file:
+
+```toml
+[app_vm_config.sha2]
+```
