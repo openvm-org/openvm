@@ -6,9 +6,9 @@ use openvm_circuit::{
     },
     utils::next_power_of_two_or_zero,
 };
+use openvm_circuit_primitives::Chip;
 use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use openvm_sha2_air::set_arrayview_from_u8_slice;
-use openvm_circuit_primitives::Chip;
 use openvm_stark_backend::{
     p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
