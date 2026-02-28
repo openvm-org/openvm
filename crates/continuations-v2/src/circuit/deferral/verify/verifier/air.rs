@@ -18,7 +18,9 @@ use recursion_circuit::{
     utils::assert_zeros,
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
-use verify_stark::pvs::{NonRootVerifierPvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID};
+use verify_stark::pvs::{
+    VerifierBasePvs, VmPvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID,
+};
 
 use crate::{
     bn254::CommitBytes,
@@ -41,7 +43,8 @@ use crate::{
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct DeferredVerifyPvsCols<F> {
-    pub child_pvs: NonRootVerifierPvs<F>,
+    pub child_verifier_pvs: VerifierBasePvs<F>,
+    pub child_vm_pvs: VmPvs<F>,
 
     pub program_commit_hash: [F; DIGEST_SIZE],
     pub initial_root_hash: [F; DIGEST_SIZE],
@@ -93,15 +96,15 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
          * and exit code.
          */
         let success = AB::F::from_u32(ExitCode::Success as u32);
-        builder.assert_eq(local.child_pvs.exit_code, success);
-        builder.assert_one(local.child_pvs.is_terminate);
+        builder.assert_eq(local.child_vm_pvs.exit_code, success);
+        builder.assert_one(local.child_vm_pvs.is_terminate);
 
         /*
          * Check that the final proof is computed by the internal recursive prover, i.e.
          * that internal_flag is 2 and recursion flag is 1 or 2.
          */
-        builder.assert_eq(local.child_pvs.internal_flag, AB::F::TWO);
-        builder.assert_bool(local.child_pvs.recursion_flag - AB::F::ONE);
+        builder.assert_eq(local.child_verifier_pvs.internal_flag, AB::F::TWO);
+        builder.assert_bool(local.child_verifier_pvs.recursion_flag - AB::F::ONE);
 
         /*
          * UserPvsCommitAir constrains that the Merkle root of the original app user public
@@ -112,18 +115,32 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         self.memory_merkle_commit_bus.send(
             builder,
             MemoryMerkleCommitMessage {
-                merkle_root: local.child_pvs.final_root,
+                merkle_root: local.child_vm_pvs.final_root,
             },
             AB::F::ONE,
         );
 
         /*
          * We still need to receive public values from ProofShapeModule to ensure the values
-         * being read here are correct. All public values will be at VERIFIER_PVS_AIR_ID.
+         * being read here are correct. Vm and verifier public values are on separate AIRs.
          */
+        let vm_pvs_id = AB::Expr::from_usize(VM_PVS_AIR_ID);
         let verifier_pvs_id = AB::Expr::from_usize(VERIFIER_PVS_AIR_ID);
 
-        for (pv_idx, value) in local.child_pvs.as_slice().iter().enumerate() {
+        for (pv_idx, value) in local.child_vm_pvs.as_slice().iter().enumerate() {
+            self.public_values_bus.receive(
+                builder,
+                AB::F::ZERO,
+                PublicValuesBusMessage {
+                    air_idx: vm_pvs_id.clone(),
+                    pv_idx: AB::Expr::from_usize(pv_idx),
+                    value: (*value).into(),
+                },
+                AB::F::ONE,
+            );
+        }
+
+        for (pv_idx, value) in local.child_verifier_pvs.as_slice().iter().enumerate() {
             self.public_values_bus.receive(
                 builder,
                 AB::F::ZERO,
@@ -145,10 +162,10 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
          * same).
          */
         let cached_commit = from_fn(|i| {
-            local.child_pvs.internal_for_leaf_dag_commit[i]
-                * (AB::Expr::TWO - local.child_pvs.recursion_flag)
-                + local.child_pvs.internal_recursive_dag_commit[i]
-                    * (local.child_pvs.recursion_flag - AB::F::ONE)
+            local.child_verifier_pvs.internal_for_leaf_dag_commit[i]
+                * (AB::Expr::TWO - local.child_verifier_pvs.recursion_flag)
+                + local.child_verifier_pvs.internal_recursive_dag_commit[i]
+                    * (local.child_verifier_pvs.recursion_flag - AB::F::ONE)
         });
         self.cached_commit_bus.receive(
             builder,
@@ -162,13 +179,13 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         );
 
         assert_zeros(
-            &mut builder.when_ne(local.child_pvs.recursion_flag, AB::F::TWO),
-            local.child_pvs.internal_recursive_dag_commit,
+            &mut builder.when_ne(local.child_verifier_pvs.recursion_flag, AB::F::TWO),
+            local.child_verifier_pvs.internal_recursive_dag_commit,
         );
 
         assert_array_eq(
-            &mut builder.when_ne(local.child_pvs.recursion_flag, AB::F::ONE),
-            local.child_pvs.internal_recursive_dag_commit,
+            &mut builder.when_ne(local.child_verifier_pvs.recursion_flag, AB::F::ONE),
+            local.child_verifier_pvs.internal_recursive_dag_commit,
             <CommitBytes as Into<[u32; DIGEST_SIZE]>>::into(
                 self.expected_internal_recursive_dag_commit,
             )
@@ -184,8 +201,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             builder,
             Poseidon2CompressMessage {
                 input: digests_to_poseidon2_input(
-                    local.child_pvs.app_dag_commit,
-                    local.child_pvs.leaf_dag_commit,
+                    local.child_verifier_pvs.app_dag_commit,
+                    local.child_verifier_pvs.leaf_dag_commit,
                 ),
                 output: local.intermediate_vk_commit,
             },
@@ -197,7 +214,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             Poseidon2CompressMessage {
                 input: digests_to_poseidon2_input(
                     local.intermediate_vk_commit,
-                    local.child_pvs.internal_for_leaf_dag_commit,
+                    local.child_verifier_pvs.internal_for_leaf_dag_commit,
                 ),
                 output: local.app_vk_commit,
             },
@@ -213,7 +230,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             builder,
             Poseidon2CompressMessage {
                 input: pad_slice_to_poseidon2_input(
-                    &local.child_pvs.program_commit.map(Into::into),
+                    &local.child_vm_pvs.program_commit.map(Into::into),
                     AB::Expr::ZERO,
                 ),
                 output: local.program_commit_hash.map(Into::into),
@@ -225,7 +242,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             builder,
             Poseidon2CompressMessage {
                 input: pad_slice_to_poseidon2_input(
-                    &local.child_pvs.initial_root.map(Into::into),
+                    &local.child_vm_pvs.initial_root.map(Into::into),
                     AB::Expr::ZERO,
                 ),
                 output: local.initial_root_hash.map(Into::into),
@@ -237,7 +254,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             builder,
             Poseidon2CompressMessage {
                 input: pad_slice_to_poseidon2_input(
-                    &[local.child_pvs.initial_pc.into()],
+                    &[local.child_vm_pvs.initial_pc.into()],
                     AB::Expr::ZERO,
                 ),
                 output: local.initial_pc_hash.map(Into::into),

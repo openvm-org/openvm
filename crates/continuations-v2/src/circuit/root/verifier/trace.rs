@@ -11,7 +11,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
 };
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
-use verify_stark::pvs::{NonRootVerifierPvs, VERIFIER_PVS_AIR_ID};
+use verify_stark::pvs::{VerifierBasePvs, VmPvs, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID};
 
 use crate::circuit::root::{
     digests_to_poseidon2_input, pad_slice_to_poseidon2_input, verifier::air::RootVerifierPvsCols,
@@ -27,14 +27,16 @@ pub fn generate_proving_ctx(
     let width = RootVerifierPvsCols::<u8>::width();
     let mut trace = vec![F::ZERO; width];
     let cols: &mut RootVerifierPvsCols<F> = trace.as_mut_slice().borrow_mut();
-    let child_pvs: &NonRootVerifierPvs<F> =
+    let child_verifier_pvs: &VerifierBasePvs<F> =
         proof.public_values[VERIFIER_PVS_AIR_ID].as_slice().borrow();
+    let child_vm_pvs: &VmPvs<F> = proof.public_values[VM_PVS_AIR_ID].as_slice().borrow();
 
-    cols.child_pvs = *child_pvs;
+    cols.child_verifier_pvs = *child_verifier_pvs;
+    cols.child_vm_pvs = *child_vm_pvs;
 
-    let padded_program_commit = pad_slice_to_poseidon2_input(&child_pvs.program_commit, F::ZERO);
-    let padded_initial_root = pad_slice_to_poseidon2_input(&child_pvs.initial_root, F::ZERO);
-    let padded_initial_pc = pad_slice_to_poseidon2_input(&[child_pvs.initial_pc], F::ZERO);
+    let padded_program_commit = pad_slice_to_poseidon2_input(&child_vm_pvs.program_commit, F::ZERO);
+    let padded_initial_root = pad_slice_to_poseidon2_input(&child_vm_pvs.initial_root, F::ZERO);
+    let padded_initial_pc = pad_slice_to_poseidon2_input(&[child_vm_pvs.initial_pc], F::ZERO);
 
     let perm = poseidon2_perm();
     cols.program_commit_hash = perm.permute(padded_program_commit)[..DIGEST_SIZE]
@@ -61,11 +63,14 @@ pub fn generate_proving_ctx(
         cols.initial_root_hash,
     ));
 
-    cols.intermediate_vk_commit =
-        poseidon2_compress_with_capacity(child_pvs.app_dag_commit, child_pvs.leaf_dag_commit).0;
+    cols.intermediate_vk_commit = poseidon2_compress_with_capacity(
+        child_verifier_pvs.app_dag_commit,
+        child_verifier_pvs.leaf_dag_commit,
+    )
+    .0;
     poseidon2_compress_inputs.push(digests_to_poseidon2_input(
-        child_pvs.app_dag_commit,
-        child_pvs.leaf_dag_commit,
+        child_verifier_pvs.app_dag_commit,
+        child_verifier_pvs.leaf_dag_commit,
     ));
 
     let mut public_values = vec![F::ZERO; RootVerifierPvs::<u8>::width()];
@@ -80,12 +85,12 @@ pub fn generate_proving_ctx(
 
     root_pvs.app_vk_commit = poseidon2_compress_with_capacity(
         cols.intermediate_vk_commit,
-        child_pvs.internal_for_leaf_dag_commit,
+        child_verifier_pvs.internal_for_leaf_dag_commit,
     )
     .0;
     poseidon2_compress_inputs.push(digests_to_poseidon2_input(
         cols.intermediate_vk_commit,
-        child_pvs.internal_for_leaf_dag_commit,
+        child_verifier_pvs.internal_for_leaf_dag_commit,
     ));
 
     (
