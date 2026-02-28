@@ -3,7 +3,6 @@
 #[cfg(target_os = "zkvm")]
 use core::mem::MaybeUninit;
 
-/// The keccak256 cryptographic hash function.
 #[inline(always)]
 pub fn keccak256(input: &[u8]) -> [u8; 32] {
     #[cfg(not(target_os = "zkvm"))]
