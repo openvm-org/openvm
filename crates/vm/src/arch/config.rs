@@ -20,9 +20,7 @@ use crate::{
         Arena, ChipInventoryError, ExecutorInventory, ExecutorInventoryError,
     },
     system::{
-        memory::{
-            merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, CHUNK, POINTER_MAX_BITS,
-        },
+        memory::{merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, POINTER_MAX_BITS},
         SystemChipComplex,
     },
 };
@@ -116,6 +114,11 @@ pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
 /// alignment of 2 because the instructions are implemented by doing an access of block size 4.
 const DEFAULT_U8_BLOCK_SIZE: usize = 4;
 const DEFAULT_NATIVE_BLOCK_SIZE: usize = 1;
+
+/// The constant block size used for memory accesses when access adapters are disabled.
+/// All memory accesses for address spaces 1-3 must use this block size.
+/// This is also the block size used by the Boundary AIR for memory bus interactions.
+pub const CONST_BLOCK_SIZE: usize = DEFAULT_U8_BLOCK_SIZE;
 
 /// Trait for generating a init.rs file that contains a call to moduli_init!,
 /// complex_init!, sw_init! with the supported moduli and curves.
@@ -237,6 +240,25 @@ impl MemoryConfig {
             .iter()
             .map(|addr_sp| log2_strict_usize(addr_sp.min_block_size) as u8)
             .collect()
+    }
+
+    /// Returns true if the Native address space (AS 4) is used.
+    /// Native AS is considered "used" if the host config allocates cells for it.
+    ///
+    /// When access adapters are disabled, all memory accesses must be of the
+    /// standard block size (i.e., 4 for address spaces 1-3).
+    pub fn access_adapters_enabled(&self) -> bool {
+        self.addr_spaces
+            .get(NATIVE_AS as usize)
+            .is_some_and(|config| config.num_cells > 0)
+    }
+
+    pub fn num_access_adapters(&self) -> usize {
+        if self.access_adapters_enabled() {
+            log2_strict_usize(self.max_access_adapter_n)
+        } else {
+            0
+        }
     }
 }
 
@@ -370,15 +392,20 @@ impl SystemConfig {
         self.memory_boundary_air_id()
             + num_memory_airs(
                 self.continuation_enabled,
-                self.memory_config.max_access_adapter_n,
+                self.memory_config.num_access_adapters(),
             )
     }
 
     pub fn initial_block_size(&self) -> usize {
         match self.continuation_enabled {
-            true => CHUNK,
+            true => CONST_BLOCK_SIZE,
             false => 1,
         }
+    }
+
+    /// Returns true if access adapters are enabled.
+    pub fn access_adapters_enabled(&self) -> bool {
+        self.memory_config.access_adapters_enabled()
     }
 }
 

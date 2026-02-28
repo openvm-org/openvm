@@ -116,7 +116,7 @@ pub struct SystemRecords<F> {
 }
 
 pub enum TouchedMemory<F> {
-    Persistent(TimestampedEquipartition<F, CHUNK>),
+    Persistent(TimestampedEquipartition<F, CONST_BLOCK_SIZE>),
     Volatile(TimestampedEquipartition<F, 1>),
 }
 
