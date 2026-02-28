@@ -15,8 +15,11 @@ use recursion_circuit::{
 use tracing::instrument;
 
 use crate::{
-    circuit::nonroot::NonRootTraceGen,
-    prover::{trace_heights_tracing_info, Circuit, NonRootCircuit},
+    circuit::{
+        nonroot::{NonRootCircuit, NonRootTraceGen},
+        Circuit,
+    },
+    prover::trace_heights_tracing_info,
     SC,
 };
 

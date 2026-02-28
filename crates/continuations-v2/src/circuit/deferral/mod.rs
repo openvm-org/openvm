@@ -47,14 +47,3 @@ pub struct DeferralVerifierPvs<F> {
     /// verifier's SymbolicExpressionAir, which is derived from the internal_recursive_vk
     pub internal_recursive_dag_commit: [F; DIGEST_SIZE],
 }
-
-#[repr(C)]
-#[derive(AlignedBorrow, Clone, Copy)]
-pub struct DeferralRootPvs<F> {
-    /// Merkle root of [def_vk_commit, 0], the initial accumulator state for this deferral
-    /// circuit. This will be constrained to be in the initial memory state Merkle tree.
-    pub initial_acc_hash: [F; DIGEST_SIZE],
-    /// Merkle root of the final [input_acc, output_acc] state for this deferral circuit.
-    /// This will be constrained to be in the final memory state Merkle tree.
-    pub final_acc_hash: [F; DIGEST_SIZE],
-}

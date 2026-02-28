@@ -7,7 +7,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
-use verify_stark::pvs::{CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID};
+use verify_stark::pvs::{CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID};
 
 use crate::circuit::nonroot::{app::*, receiver::air::UserPvsReceiverCols};
 
@@ -16,7 +16,8 @@ pub fn generate_proving_ctx(
     child_is_app: bool,
 ) -> AirProvingContext<CpuBackend<BabyBearPoseidon2Config>> {
     const APP_RESERVED_IDX: [usize; 3] = [PROGRAM_AIR_ID, CONNECTOR_AIR_ID, MERKLE_AIR_ID];
-    const VERIFIER_RESERVED_IDX: [usize; 2] = [VERIFIER_PVS_AIR_ID, CONSTRAINT_EVAL_AIR_ID];
+    const VERIFIER_RESERVED_IDX: [usize; 3] =
+        [VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID, CONSTRAINT_EVAL_AIR_ID];
 
     let reserved_air_idx = if child_is_app {
         APP_RESERVED_IDX.as_slice()
