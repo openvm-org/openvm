@@ -28,11 +28,10 @@ use crate::{
         DeferralCallAir, DeferralCallChip, DeferralCallCoreAir, DeferralCallCoreFiller,
         DeferralCallExecutor,
     },
-    count::{bus::DeferralCircuitCountBus, DeferralCircuitCountAir, DeferralCircuitCountChip},
+    count::{DeferralCircuitCountAir, DeferralCircuitCountBus, DeferralCircuitCountChip},
     output::{DeferralOutputAir, DeferralOutputChip, DeferralOutputExecutor, DeferralOutputFiller},
     poseidon2::{
-        bus::DeferralPoseidon2Bus, deferral_poseidon2_air, deferral_poseidon2_chip,
-        DeferralPoseidon2Air,
+        deferral_poseidon2_air, deferral_poseidon2_chip, DeferralPoseidon2Air, DeferralPoseidon2Bus,
     },
     DeferralFn,
 };
