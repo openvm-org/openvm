@@ -345,7 +345,6 @@ mod bn254 {
         Ok(())
     }
 
-    #[cfg(feature = "cuda")] // slow test
     #[test]
     fn test_bn254_pairing_check_fallback() -> Result<()> {
         let config = get_testing_config();
