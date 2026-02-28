@@ -10,10 +10,12 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
     AirRef, StarkEngine, StarkTestError, VerificationData,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, EF};
 #[cfg(not(feature = "cuda"))]
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
-use openvm_stark_sdk::utils::create_seeded_rng;
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::{BabyBearPoseidon2Config, EF},
+    utils::create_seeded_rng,
+};
 use rand::Rng;
 #[cfg(feature = "cuda")]
 use {
