@@ -12,15 +12,14 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
-use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+};
 use openvm_keccak256_transpiler::XorinOpcode;
 use openvm_rv32im_circuit::adapters::{read_rv32_register, tracing_read, tracing_write};
 use openvm_stark_backend::p3_field::PrimeField32;
-
-use openvm_instructions::{
-    program::DEFAULT_PC_STEP,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
-};
 
 use crate::xorin::{columns::XorinVmCols, XorinVmExecutor, XorinVmFiller};
 
@@ -295,8 +294,7 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
         // safety note: we leave the upper record_len..134 bytes with zeroes
         // because they are just padding bytes and unused by the chip
         for i in 0..record_len {
-            trace_row.sponge.preimage_buffer_bytes[i] =
-                F::from_u8(record.buffer_limbs[i]);
+            trace_row.sponge.preimage_buffer_bytes[i] = F::from_u8(record.buffer_limbs[i]);
             trace_row.sponge.input_bytes[i] = F::from_u8(record.input_limbs[i]);
             trace_row.sponge.postimage_buffer_bytes[i] =
                 F::from_u8(record.buffer_limbs[i] ^ record.input_limbs[i]);
@@ -311,10 +309,8 @@ impl<F: PrimeField32> TraceFiller<F> for XorinVmFiller {
                 timestamp,
                 trace_row.mem_oc.buffer_bytes_write_aux_cols[t].as_mut(),
             );
-            trace_row.mem_oc.buffer_bytes_write_aux_cols[t].prev_data = record
-                .buffer_write_aux_cols[t]
-                .prev_data
-                .map(F::from_u8);
+            trace_row.mem_oc.buffer_bytes_write_aux_cols[t].prev_data =
+                record.buffer_write_aux_cols[t].prev_data.map(F::from_u8);
             timestamp += 1;
         }
 
