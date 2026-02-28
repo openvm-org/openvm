@@ -124,11 +124,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     tester.write(1, rd, buffer_ptr.to_le_bytes().map(F::from_u8));
     tester.write(1, rs1, input_ptr.to_le_bytes().map(F::from_u8));
-    tester.write(
-        1,
-        rs2,
-        buffer_length.to_le_bytes().map(F::from_u8),
-    );
+    tester.write(1, rs2, buffer_length.to_le_bytes().map(F::from_u8));
     tester.execute(
         executor,
         arena,
@@ -313,21 +309,9 @@ fn cuda_set_and_execute(
     let buffer_ptr = gen_pointer(rng, len);
     let input_ptr = gen_pointer(rng, len);
 
-    tester.write(
-        1,
-        buffer_reg,
-        buffer_ptr.to_le_bytes().map(F::from_u8),
-    );
-    tester.write(
-        1,
-        input_reg,
-        input_ptr.to_le_bytes().map(F::from_u8),
-    );
-    tester.write(
-        1,
-        len_reg,
-        (len as u32).to_le_bytes().map(F::from_u8),
-    );
+    tester.write(1, buffer_reg, buffer_ptr.to_le_bytes().map(F::from_u8));
+    tester.write(1, input_reg, input_ptr.to_le_bytes().map(F::from_u8));
+    tester.write(1, len_reg, (len as u32).to_le_bytes().map(F::from_u8));
 
     let buffer_data: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
     for (i, chunk) in buffer_data.chunks(4).enumerate() {
