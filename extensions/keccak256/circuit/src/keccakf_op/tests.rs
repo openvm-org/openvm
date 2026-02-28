@@ -263,7 +263,7 @@ fn cuda_set_and_execute(
 
     tester.write(1, buffer_reg, buffer_ptr.to_le_bytes().map(F::from_u8));
 
-    let state_data: Vec<u8> = (0..KECCAK_STATE_BYTES).map(|_| rng.gen()).collect();
+    let state_data: Vec<u8> = (0..KECCAK_STATE_BYTES).map(|_| rng.random()).collect();
     for (i, chunk) in state_data.chunks(4).enumerate() {
         let mut word = [F::ZERO; 4];
         for (j, &byte) in chunk.iter().enumerate() {
