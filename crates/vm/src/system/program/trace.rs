@@ -59,7 +59,8 @@ impl<SC: StarkProtocolConfig> VmCommittedExe<SC> {
         let trace = generate_cached_trace(&exe.program);
         let (commit, prover_data) = e
             .device()
-            .commit(&[&ColMajorMatrix::from_row_major(&trace)]);
+            .commit(&[&ColMajorMatrix::from_row_major(&trace)])
+            .unwrap();
         Self {
             exe: Arc::new(exe),
             program_commitment: commit,
@@ -73,7 +74,7 @@ impl<SC: StarkProtocolConfig> VmCommittedExe<SC> {
 
     pub fn get_committed_trace(&self) -> CommittedTraceData<CpuBackend<SC>> {
         CommittedTraceData {
-            commitment: self.prover_data.commit(),
+            commitment: self.prover_data.commit().unwrap(),
             data: self.prover_data.clone(),
             trace: ColMajorMatrix::from_row_major(&self.trace),
         }

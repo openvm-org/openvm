@@ -4,15 +4,15 @@ on:
   workflow_call:
   push:
     branches: ["main"]
-  # pull_request:
-  #   branches: ["**"]
-  #   paths:
-  #     - "crates/circuits/**"
-  #     - "crates/vm/**"
-  #     - "crates/toolchain/**"
-  #     - "extensions/**"
-  #     - "Cargo.toml"
-  #     - ".github/workflows/extension-tests.cuda.yml"
+  pull_request:
+    branches: ["**"]
+    paths:
+#     - "crates/circuits/**"
+#     - "crates/vm/**"
+#     - "crates/toolchain/**"
+      - "extensions/**"
+#     - "Cargo.toml"
+      - ".github/workflows/extension-tests.cuda.yml"
   workflow_dispatch:
     inputs:
       machine_type:
@@ -35,7 +35,6 @@ jobs:
       matrix:
         extensions: # group extensions on the same runner based on test time
           - "rv32im"
-          # - "native"
           - "keccak256 sha256 bigint algebra ecc pairing"
     runs-on:
       - runs-on=${{ github.run_id }}-extension-tests-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.machine_type || 'test-gpu-nvidia/family=g6.*+g6e' }}
@@ -59,8 +58,6 @@ jobs:
               - ".github/workflows/extension-tests.cuda.yml"
             rv32im:
               - "extensions/rv32im/**"
-            # native:
-            #   - "extensions/native/**"
             keccak256:
               - "extensions/keccak256/**"
             sha256:

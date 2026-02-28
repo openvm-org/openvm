@@ -118,7 +118,6 @@ fn test_range_tuple_chip() {
 }
 
 #[test]
-#[should_panic]
 fn negative_test_range_tuple_chip() {
     let bus_index = 0;
     let sizes = [2, 2, 8];

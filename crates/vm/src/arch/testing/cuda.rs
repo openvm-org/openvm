@@ -18,7 +18,7 @@ use openvm_circuit_primitives::{
 use openvm_cuda_backend::{
     data_transporter::assert_eq_host_and_device_matrix_col_maj,
     prelude::{EF, F, SC},
-    BabyBearPoseidon2GpuEngine, GpuBackend,
+    BabyBearPoseidon2GpuEngine, GpuBackend, ProverError,
 };
 use openvm_instructions::{program::PC_BITS, riscv::RV32_REGISTER_AS};
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
@@ -27,8 +27,6 @@ use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{PrimeCharacteristicRing, PrimeField32},
     prover::{AirProvingContext, CpuBackend},
-    utils::disable_debug_builder,
-    verifier::VerifierError,
     AirRef, AnyAir, StarkEngine, Val, VerificationData,
 };
 use openvm_stark_sdk::utils::setup_tracing_with_log_level;
@@ -681,21 +679,14 @@ impl GpuChipTester {
     pub fn test<P: Fn() -> BabyBearPoseidon2GpuEngine>(
         self,
         engine_provider: P,
-    ) -> Result<VerificationData<SC>, VerifierError<EF>> {
+    ) -> Result<VerificationData<SC>, TestGpuStarkError> {
         engine_provider().run_test(self.airs, self.ctxs)
     }
 
-    pub fn simple_test(self) -> Result<VerificationData<SC>, VerifierError<EF>> {
+    pub fn simple_test(self) -> Result<VerificationData<SC>, TestGpuStarkError> {
         self.test(test_gpu_engine)
     }
-
-    pub fn simple_test_with_expected_error(self, expected_error: VerifierError<EF>) {
-        disable_debug_builder();
-        let msg = format!(
-            "Expected verification to fail with {:?}, but it didn't",
-            &expected_error
-        );
-        let result = self.simple_test();
-        assert_eq!(result.err(), Some(expected_error), "{msg}");
-    }
 }
+
+/// Concrete `StarkTestError` type alias for BabyBear Poseidon2 GPU tests.
+pub type TestGpuStarkError = openvm_stark_backend::StarkTestError<ProverError, EF>;

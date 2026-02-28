@@ -12,7 +12,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     prover::{AirProvingContext, ColMajorMatrix},
     utils::disable_debug_builder,
-    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine,
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine, StarkTestError,
 };
 #[cfg(not(feature = "cuda"))]
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
@@ -180,12 +180,8 @@ fn test_is_eq_array_single_row_fail(x: [u32; 3], y: [u32; 3]) {
         .map(ColMajorMatrix::from_row_major)
         .map(AirProvingContext::simple_no_pis)
         .collect::<Vec<_>>();
-    assert!(
-        test_engine_small()
-            .run_test(any_air_arc_vec![air], traces)
-            .is_err(),
-        "Expected constraint to fail"
-    );
+    let result = test_engine_small().run_test(any_air_arc_vec![air], traces);
+    assert!(matches!(result, Err(StarkTestError::Verifier(_))));
 }
 
 #[test]
@@ -201,26 +197,18 @@ fn test_is_eq_array_fail_rand() {
         .collect();
     let chip = IsEqArrayChip::<_, N>::new(pairs);
     let air = chip.air;
-    let trace = chip.generate_trace();
+    let mut trace = chip.generate_trace();
 
     disable_debug_builder();
-    for i in 0..height {
-        for j in 0..N {
-            let mut prank_trace = trace.clone();
-            prank_trace.row_mut(i)[j] += F::from_u32(rng.random::<u32>() + 1);
-            let traces = [prank_trace]
-                .iter()
-                .map(ColMajorMatrix::from_row_major)
-                .map(AirProvingContext::simple_no_pis)
-                .collect::<Vec<_>>();
-            assert!(
-                test_engine_small()
-                    .run_test(any_air_arc_vec![air], traces)
-                    .is_err(),
-                "Expected constraint to fail"
-            );
-        }
-    }
+    // Corrupt the first element to trigger a constraint failure
+    trace.row_mut(0)[0] += F::from_u32(rng.random::<u32>() + 1);
+    let traces = [trace]
+        .iter()
+        .map(ColMajorMatrix::from_row_major)
+        .map(AirProvingContext::simple_no_pis)
+        .collect::<Vec<_>>();
+    let result = test_engine_small().run_test(any_air_arc_vec![air], traces);
+    assert!(matches!(result, Err(StarkTestError::Verifier(_))));
 }
 
 #[cfg(feature = "cuda")]

@@ -747,7 +747,7 @@ impl BatchConstraintModule {
         let cached_trace_rm =
             expr_eval::generate_symbolic_expr_cached_trace(&self.cached_trace_record(child_vk));
         let cached_trace = ColMajorMatrix::from_row_major(&cached_trace_rm);
-        let (commitment, data) = engine.device().commit(&[&cached_trace]);
+        let (commitment, data) = engine.device().commit(&[&cached_trace]).unwrap();
         CommittedTraceData {
             commitment,
             data: Arc::new(data),
@@ -1099,7 +1099,7 @@ pub mod cuda_tracegen {
             let cached_trace_record = build_cached_trace_record(child_vk, true);
             let cached_trace = expr_eval::generate_symbolic_expr_cached_trace(&cached_trace_record);
             let d_cached_trace = transport_matrix_h2d_row(&cached_trace).unwrap();
-            let (commitment, data) = engine.device().commit(&[&d_cached_trace]);
+            let (commitment, data) = engine.device().commit(&[&d_cached_trace]).unwrap();
             CommittedTraceData {
                 commitment,
                 trace: d_cached_trace,
