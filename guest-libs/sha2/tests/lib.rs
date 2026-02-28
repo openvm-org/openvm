@@ -6,8 +6,8 @@ mod tests {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use openvm_sha256_circuit::{Sha256Rv32Builder, Sha256Rv32Config};
-    use openvm_sha256_transpiler::Sha256TranspilerExtension;
+    use openvm_sha2_circuit::{Sha2Rv32Builder, Sha2Rv32Config};
+    use openvm_sha2_transpiler::Sha2TranspilerExtension;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
@@ -15,19 +15,19 @@ mod tests {
     type F = BabyBear;
 
     #[test]
-    fn test_sha256() -> Result<()> {
-        let config = Sha256Rv32Config::default();
+    fn test_sha2() -> Result<()> {
+        let config = Sha2Rv32Config::default();
         let elf =
-            build_example_program_at_path(get_programs_dir!("tests/programs"), "sha", &config)?;
+            build_example_program_at_path(get_programs_dir!("tests/programs"), "sha2", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(Sha256TranspilerExtension),
+                .with_extension(Sha2TranspilerExtension),
         )?;
-        air_test(Sha256Rv32Builder, config, openvm_exe);
+        air_test(Sha2Rv32Builder, config, openvm_exe);
         Ok(())
     }
 }
