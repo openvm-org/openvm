@@ -29,19 +29,23 @@ jobs:
     strategy:
       matrix:
         crate:
-          - { name: "sha2", path: "sha2", runner: "64cpu-linux-x64" }
-          - { name: "keccak256", path: "keccak256", runner: "64cpu-linux-x64" }
-          - { name: "ff_derive", path: "ff_derive", runner: "64cpu-linux-x64" }
-          - { name: "k256", path: "k256", runner: "64cpu-linux-x64" }
-          - { name: "p256", path: "p256", runner: "64cpu-linux-x64" }
-          - { name: "ruint", path: "ruint", runner: "64cpu-linux-x64" }
-          - { name: "pairing", path: "pairing", runner: "64cpu-linux-x64" }
-          - { name: "verify-stark", path: "verify-stark/circuit", runner: "64cpu-linux-x64" }
+          - { name: "sha2_256", path: "sha2", filter: "sha256" }
+          - { name: "sha2_384", path: "sha2", filter: "sha384" }
+          - { name: "sha2_512", path: "sha2", filter: "sha512" }
+          - { name: "keccak256", path: "keccak256" }
+          - { name: "ff_derive", path: "ff_derive" }
+          - { name: "k256", path: "k256" }
+          - { name: "p256", path: "p256" }
+          - { name: "ruint", path: "ruint" }
+          - { name: "pairing", path: "pairing" }
+          - { name: "verify-stark", path: "verify-stark/circuit" }
+        platform:
+          - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 
     runs-on:
-      - runs-on=${{ github.run_id }}-guest-lib-tests-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ matrix.crate.runner }}/image=ubuntu24-full-x64/extras=s3-cache
+      - runs-on=${{ github.run_id }}-guest-lib-tests-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ matrix.platform.runner }}/image=${{ matrix.platform.image }}/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
@@ -73,7 +77,16 @@ jobs:
         run: |
           rustup component add rust-src --toolchain nightly-2025-08-02
           EXTRA_ARGS=""
-          if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
+          if [[ "${{ matrix.crate.name }}" == sha2_* ]]; then
+            EXTRA_ARGS="--features=aot"
+          elif [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
             EXTRA_ARGS="--features=bn254,bls12_381,aot -E 'not test(fallback)'"
           fi
-          eval cargo nextest run --cargo-profile=fast $EXTRA_ARGS --no-tests=pass --test-threads=1
+
+          # Build the command
+          CMD="cargo nextest run --cargo-profile=fast $EXTRA_ARGS --no-tests=pass --test-threads=1"
+          # Apply test filter if specified
+          if [[ -n "${{ matrix.crate.filter }}" ]]; then
+            CMD="$CMD -E 'test(/${{ matrix.crate.filter }}/)'"
+          fi
+          eval $CMD
