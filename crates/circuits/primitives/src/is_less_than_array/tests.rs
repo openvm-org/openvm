@@ -12,7 +12,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     prover::{AirProvingContext, ColMajorMatrix},
     utils::disable_debug_builder,
-    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine,
+    BaseAirWithPublicValues, PartitionedBaseAir, StarkEngine, StarkTestError,
 };
 #[cfg(feature = "cuda")]
 use {
@@ -181,7 +181,6 @@ fn test_is_less_than_tuple_chip() {
 }
 
 #[test]
-#[should_panic]
 fn test_is_less_than_tuple_chip_negative() {
     let range_checker = get_tester_range_chip();
     let mut chip = IsLtArrayChip::<N, LIMBS>::new(16, range_checker.clone());
@@ -199,13 +198,11 @@ fn test_is_less_than_tuple_chip_negative() {
         .collect::<Vec<_>>();
 
     disable_debug_builder();
-    test_engine_small()
-        .run_test(any_air_arc_vec![air, range_checker.air], traces)
-        .unwrap();
+    let result = test_engine_small().run_test(any_air_arc_vec![air, range_checker.air], traces);
+    assert!(matches!(result, Err(StarkTestError::Verifier(_))));
 }
 
 #[test]
-#[should_panic]
 fn test_is_less_than_tuple_chip_nonzero_diff() {
     let range_checker = get_tester_range_chip();
     let mut chip = IsLtArrayChip::<N, LIMBS>::new(16, range_checker.clone());
@@ -222,9 +219,8 @@ fn test_is_less_than_tuple_chip_nonzero_diff() {
         .collect::<Vec<_>>();
 
     disable_debug_builder();
-    test_engine_small()
-        .run_test(any_air_arc_vec![air, range_checker.air], traces)
-        .unwrap();
+    let result = test_engine_small().run_test(any_air_arc_vec![air, range_checker.air], traces);
+    assert!(matches!(result, Err(StarkTestError::Verifier(_))));
 }
 
 #[cfg(feature = "cuda")]

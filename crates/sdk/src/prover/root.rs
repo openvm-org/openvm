@@ -189,7 +189,7 @@ impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
         }
         // We also undo the permutation on pk because `prove` needs pk and ctx ordering to match.
         Self::permute_pk(vm, &self.air_id_perm);
-        let proof = vm.engine.prove(vm.pk(), ctx);
+        let proof = vm.engine.prove(vm.pk(), ctx).unwrap();
         *self.inner.state_mut() = Some(to_state);
         Ok(proof)
     }

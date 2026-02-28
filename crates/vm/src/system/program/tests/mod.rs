@@ -16,7 +16,7 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{AirProvingContext, ColMajorMatrix, MatrixDimensions},
     test_utils::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
-    StarkEngine,
+    StarkEngine, StarkTestError,
 };
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
@@ -173,8 +173,7 @@ fn test_program_without_field_arithmetic() {
     interaction_test(program, vec![0, 2, 4, 1]);
 }
 
-#[test] // TODO: add expected reason for panic
-#[should_panic] // LogUp sum is not zero, prover assert fails
+#[test]
 fn test_program_negative() {
     let instructions = vec![
         Instruction::large_from_isize(STOREW.global_opcode(), -1, 0, 0, 0, 1, 0, 1),
@@ -219,12 +218,11 @@ fn test_program_negative() {
     counter_trace.values.resize(height * width, BabyBear::ZERO);
     let counter_trace = ColMajorMatrix::from_row_major(&counter_trace);
 
-    engine
-        .run_test(
-            any_air_arc_vec!(program_air, counter_air),
-            vec![ctx, AirProvingContext::simple_no_pis(counter_trace)],
-        )
-        .expect("Verification failed");
+    let result = engine.run_test(
+        any_air_arc_vec!(program_air, counter_air),
+        vec![ctx, AirProvingContext::simple_no_pis(counter_trace)],
+    );
+    assert!(matches!(result, Err(StarkTestError::Prover(_))));
 }
 
 #[test]
