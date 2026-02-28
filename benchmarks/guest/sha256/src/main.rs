@@ -1,7 +1,7 @@
 use core::hint::black_box;
-use openvm as _;
 
-use openvm_sha2::sha256;
+use openvm as _;
+use openvm_sha2::Sha256;
 
 const INPUT_LENGTH_BYTES: usize = 384 * 1024;
 
@@ -16,5 +16,7 @@ pub fn main() {
     }
 
     // Prevent optimizer from optimizing away the computation
-    black_box(sha256(&black_box(input)));
+    let sha256 = Sha256::new();
+    sha256.update(black_box(&input));
+    black_box(sha256.finalize());
 }
