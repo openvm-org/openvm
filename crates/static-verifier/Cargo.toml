@@ -1,0 +1,18 @@
+[package]
+name = "static-verifier"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+halo2-base = { path = "../../halo2-lib/halo2-base", default-features = false, features = ["halo2-axiom"] }
+openvm-stark-sdk = { workspace = true, features = ["baby-bear-bn254-poseidon2"] }
+num-bigint = { workspace = true }
+zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
+
+[dev-dependencies]
+openvm-stark-backend = { workspace = true, features = ["test-utils"] }
+rand_chacha = "0.3"
