@@ -5,15 +5,13 @@ on:
   workflow_call:
   push:
     branches: ["main"]
-  # pull_request:
-  #   branches: ["**"]
-  #   paths:
-  #     - "crates/circuits/**"
-  #     - "crates/vm/**"
-  #     - "extensions/native/compiler/**"
-  #     - "extensions/native/recursion/**"
-  #     - "Cargo.toml"
-  #     - ".github/workflows/base-tests.cuda.yml"
+    pull_request:
+      branches: ["**"]
+      paths:
+        - "crates/circuits/**"
+        - "crates/vm/**"
+        - "Cargo.toml"
+        - ".github/workflows/base-tests.cuda.yml"
 
 concurrency:
   group: ${{ github.workflow_ref }}-base-tests-cuda-${{ github.event.pull_request.number || github.sha }}
@@ -65,11 +63,6 @@ jobs:
         working-directory: crates/vm
         run: |
           cargo nextest run ${{ env.NEXTEST_ARGS }}
-
-      # - name: Run recursion crate tests
-      #   working-directory: extensions/native/recursion
-      #   run: |
-      #     cargo nextest run --features cuda
 
       # - name: Run async concurrency test
       #   working-directory: benchmarks/prove
