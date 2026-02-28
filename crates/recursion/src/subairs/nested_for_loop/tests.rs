@@ -140,7 +140,7 @@ fn prove_and_verify(
             .collect(),
     );
 
-    let proof = engine.prove(&d_pk, d_ctx);
+    let proof = engine.prove(&d_pk, d_ctx).unwrap();
     engine.verify(&vk, &proof)
 }
 
@@ -148,6 +148,14 @@ fn prove_and_verify_test_air<const DEPTH_MINUS_ONE: usize>(trace: RowMajorMatrix
     disable_debug_builder();
     let airs = any_air_arc_vec![TestAir::<DEPTH_MINUS_ONE>];
     prove_and_verify(airs, vec![trace]).unwrap();
+}
+
+fn try_prove_and_verify_test_air<const DEPTH_MINUS_ONE: usize>(
+    trace: RowMajorMatrix<F>,
+) -> Result<(), VerifierError<<BabyBearPoseidon2Config as StarkProtocolConfig>::EF>> {
+    disable_debug_builder();
+    let airs = any_air_arc_vec![TestAir::<DEPTH_MINUS_ONE>];
+    prove_and_verify(airs, vec![trace])
 }
 
 // ============================================================================
@@ -234,12 +242,15 @@ fn test_three_outer_iterations() {
 }
 
 #[test]
-#[should_panic]
 fn test_fail_outer_iterations_with_padding_between() {
     // for i in 0..3 { for j in 0..M { ... }}
     // Disabled padding between iterations should now fail
     let trace = generate_trace::<_, 1, { width::<1>() }>(vec![[1, 0, 1], [0, 1, 0], [1, 2, 1]]);
-    prove_and_verify_test_air::<1>(trace);
+    let result = try_prove_and_verify_test_air::<1>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 #[test]
@@ -264,14 +275,16 @@ fn test_enabled_then_disabled_iterations() {
 }
 
 #[test]
-#[should_panic] // TODO: catch explicit error
 fn test_fail_disabled_then_enabled() {
     let trace = generate_trace::<_, 1, { width::<1>() }>(vec![[0, 0, 0], [0, 0, 0], [1, 1, 1]]);
-    prove_and_verify_test_air::<1>(trace);
+    let result = try_prove_and_verify_test_air::<1>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 #[test]
-#[should_panic] // TODO: catch explicit error
 fn test_fail_complex_enabled_disabled_mix() {
     let trace = generate_trace::<_, 1, { width::<1>() }>(vec![
         [1, 0, 1],
@@ -283,7 +296,11 @@ fn test_fail_complex_enabled_disabled_mix() {
         [1, 2, 0],
         [0, 3, 0],
     ]);
-    prove_and_verify_test_air::<1>(trace);
+    let result = try_prove_and_verify_test_air::<1>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 #[test]
@@ -319,62 +336,86 @@ fn test_first_row_nonzero_counter() {
 }
 
 #[test]
-#[should_panic] // TODO: catch explicit error
 fn test_fail_is_first_not_boolean() {
     let trace = generate_trace::<_, 1, { width::<1>() }>(vec![[1, 0, 2]]);
-    prove_and_verify_test_air::<1>(trace);
+    let result = try_prove_and_verify_test_air::<1>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 // Boundary constraints
 #[test]
-#[should_panic] // TODO: catch explicit error
 fn test_fail_missing_start() {
     let trace = generate_trace::<_, 1, { width::<1>() }>(vec![[1, 0, 0]]);
-    prove_and_verify_test_air::<1>(trace);
+    let result = try_prove_and_verify_test_air::<1>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 // Disabled row constraints
 #[test]
-#[should_panic] // TODO: catch explicit error
 fn test_fail_disabled_row_has_is_first() {
     let trace = generate_trace::<_, 1, { width::<1>() }>(vec![[1, 0, 1], [0, 0, 1]]);
-    prove_and_verify_test_air::<1>(trace);
+    let result = try_prove_and_verify_test_air::<1>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 // Transition constraints
 #[test]
-#[should_panic] // TODO: catch explicit error
 fn test_fail_counter_jumps_by_more_than_one() {
     let trace = generate_trace::<_, 1, { width::<1>() }>(vec![[1, 0, 1], [1, 2, 1]]);
-    prove_and_verify_test_air::<1>(trace);
+    let result = try_prove_and_verify_test_air::<1>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 #[test]
-#[should_panic] // TODO: catch explicit error
 fn test_fail_counter_decreases() {
     let trace = generate_trace::<_, 1, { width::<1>() }>(vec![[1, 1, 1], [1, 0, 1]]);
-    prove_and_verify_test_air::<1>(trace);
+    let result = try_prove_and_verify_test_air::<1>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 #[test]
-#[should_panic] // TODO: catch explicit error
 fn test_fail_is_enabled_changes_within_iteration() {
     let trace = generate_trace::<_, 1, { width::<1>() }>(vec![[1, 0, 1], [0, 0, 0], [1, 0, 0]]);
-    prove_and_verify_test_air::<1>(trace);
+    let result = try_prove_and_verify_test_air::<1>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 #[test]
-#[should_panic] // TODO: catch explicit error
 fn test_fail_is_first_set_within_iteration() {
     let trace = generate_trace::<_, 1, { width::<1>() }>(vec![[1, 0, 1], [1, 0, 1], [1, 0, 0]]);
-    prove_and_verify_test_air::<1>(trace);
+    let result = try_prove_and_verify_test_air::<1>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 #[test]
-#[should_panic] // TODO: catch explicit error
 fn test_fail_iteration_boundary_missing_is_first() {
     let trace = generate_trace::<_, 1, { width::<1>() }>(vec![[1, 0, 1], [1, 1, 0]]);
-    prove_and_verify_test_air::<1>(trace);
+    let result = try_prove_and_verify_test_air::<1>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 // ============================================================================
@@ -480,68 +521,92 @@ fn test_three_loops_3x2_iterations() {
 }
 
 #[test]
-#[should_panic] // TODO: catch explicit error
 fn test_three_loops_fail_middle_missing_start_on_outer_start() {
     // When i starts, j must also start
     let trace = generate_trace::<_, 2, { width::<2>() }>(vec![[1, 0, 0, 0, 1]]);
-    prove_and_verify_test_air::<2>(trace);
+    let result = try_prove_and_verify_test_air::<2>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 #[test]
-#[should_panic] // TODO: catch explicit error
 fn test_three_loops_fail_middle_missing_start_on_outer_increment() {
     // When i increments, j must start
     let trace = generate_trace::<_, 2, { width::<2>() }>(vec![[1, 0, 0, 1, 1], [1, 1, 0, 0, 1]]);
-    prove_and_verify_test_air::<2>(trace);
+    let result = try_prove_and_verify_test_air::<2>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 #[test]
-#[should_panic] // TODO: catch explicit error
 fn test_three_loops_fail_middle_start_within_iteration() {
     // j start should only happen when j increments or i increments
     let trace = generate_trace::<_, 2, { width::<2>() }>(vec![[1, 0, 0, 1, 1], [1, 0, 0, 1, 0]]);
-    prove_and_verify_test_air::<2>(trace);
+    let result = try_prove_and_verify_test_air::<2>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 #[test]
-#[should_panic] // TODO: catch explicit error
 fn test_three_loops_fail_middle_counter_jumps() {
     // j jumps from 0 to 2
     let trace = generate_trace::<_, 2, { width::<2>() }>(vec![[1, 0, 0, 1, 1], [1, 0, 2, 1, 1]]);
-    prove_and_verify_test_air::<2>(trace);
+    let result = try_prove_and_verify_test_air::<2>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 #[test]
-#[should_panic] // TODO: catch explicit error
 fn test_three_loops_fail_outer_counter_jumps() {
     // i jumps from 0 to 2
     let trace = generate_trace::<_, 2, { width::<2>() }>(vec![[1, 0, 0, 1, 1], [1, 2, 0, 1, 1]]);
-    prove_and_verify_test_air::<2>(trace);
+    let result = try_prove_and_verify_test_air::<2>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 #[test]
-#[should_panic] // TODO: catch explicit error
 fn test_three_loops_fail_middle_counter_decreases() {
     // j decreases from 1 to 0
     let trace = generate_trace::<_, 2, { width::<2>() }>(vec![[1, 0, 1, 1, 1], [1, 0, 0, 1, 1]]);
-    prove_and_verify_test_air::<2>(trace);
+    let result = try_prove_and_verify_test_air::<2>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 #[test]
-#[should_panic] // TODO: catch explicit error
 fn test_three_loops_fail_outer_missing_start_flag() {
     // i missing start flag on first row (j is missing start flag, since there's no i start flag in
     // data)
     let trace = generate_trace::<_, 2, { width::<2>() }>(vec![[1, 0, 0, 1, 0]]);
-    prove_and_verify_test_air::<2>(trace);
+    let result = try_prove_and_verify_test_air::<2>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 #[test]
-#[should_panic] // TODO: catch explicit error
 fn test_three_loops_fail_outer_start_within_iteration() {
     // i start flag set when j increments but i doesn't
     let trace = generate_trace::<_, 2, { width::<2>() }>(vec![[1, 0, 0, 1, 1], [1, 0, 1, 1, 1]]);
-    prove_and_verify_test_air::<2>(trace);
+    let result = try_prove_and_verify_test_air::<2>(trace);
+    assert!(matches!(
+        result,
+        Err(VerifierError::BatchConstraintError(_))
+    ));
 }
 
 #[test]

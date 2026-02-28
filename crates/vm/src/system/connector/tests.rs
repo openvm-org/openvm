@@ -9,6 +9,7 @@ use openvm_instructions::{
 use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing,
     prover::{AirProvingContext, CpuBackend},
+    verifier::VerifierError,
     StarkEngine,
 };
 use openvm_stark_sdk::{
@@ -107,10 +108,14 @@ fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingCo
         .unwrap()
         .1;
     f(connector_air_ctx);
-    let proof = vm.engine.prove(vm.pk(), ctx);
+    let proof = vm.engine.prove(vm.pk(), ctx).unwrap();
     if should_pass {
         vm.engine.verify(&vk, &proof).expect("Verification failed");
     } else {
-        assert!(vm.engine.verify(&vk, &proof).is_err());
+        let result = vm.engine.verify(&vk, &proof);
+        assert!(matches!(
+            result,
+            Err(VerifierError::BatchConstraintError(_))
+        ));
     }
 }

@@ -91,7 +91,7 @@ where
         let engine = E::new(self.pk.params.clone());
         #[cfg(debug_assertions)]
         crate::prover::debug_constraints(&self.circuit, &ctx, &engine);
-        let proof = engine.prove(&self.d_pk, ctx);
+        let proof = engine.prove(&self.d_pk, ctx)?;
         #[cfg(debug_assertions)]
         engine.verify(&self.vk, &proof)?;
         Ok(proof)

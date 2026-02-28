@@ -330,7 +330,6 @@ fn expand_test_no_accesses() {
 }
 
 #[test]
-#[should_panic]
 fn expand_test_negative() {
     let mut hash_test_chip = HashTestChip::new();
     let height = 1;
@@ -384,12 +383,12 @@ fn expand_test_negative() {
         chip_ctx.common_main = ColMajorMatrix::from_row_major(&trace);
     }
 
-    test_cpu_engine()
+    assert!(test_cpu_engine()
         .run_test(
             vec![Arc::new(chip.air), Arc::new(hash_test_chip.air())],
             vec![chip_ctx, hash_test_chip.generate_proving_ctx()],
         )
-        .expect("We tinkered with the trace and now it doesn't pass");
+        .is_err());
 }
 
 const BELOW_LEAF_PATH_LEN: usize = 31;

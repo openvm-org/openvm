@@ -10,7 +10,7 @@ use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::{AirProvingContext, ColMajorMatrix},
     utils::disable_debug_builder,
-    AirRef, PartitionedBaseAir, StarkEngine,
+    AirRef, PartitionedBaseAir, StarkEngine, StarkTestError,
 };
 use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
@@ -243,15 +243,14 @@ fn public_values_neg_pv_not_match() {
     let pvs = to_field_vec(vec![0, 0, 56456]);
 
     disable_debug_builder();
-    assert!(test_cpu_engine()
-        .run_test(
-            vec![air],
-            vec![AirProvingContext::simple(
-                ColMajorMatrix::from_row_major(&trace),
-                pvs,
-            )]
-        )
-        .is_err());
+    let result = test_cpu_engine().run_test(
+        vec![air],
+        vec![AirProvingContext::simple(
+            ColMajorMatrix::from_row_major(&trace),
+            pvs,
+        )],
+    );
+    assert!(matches!(result, Err(StarkTestError::Verifier(_))));
 }
 
 #[test]
@@ -268,15 +267,14 @@ fn public_values_neg_index_out_of_bound() {
     let pvs = to_field_vec(vec![0, 0, 0]);
 
     disable_debug_builder();
-    assert!(test_cpu_engine()
-        .run_test(
-            vec![air],
-            vec![AirProvingContext::simple(
-                ColMajorMatrix::from_row_major(&trace),
-                pvs,
-            )]
-        )
-        .is_err());
+    let result = test_cpu_engine().run_test(
+        vec![air],
+        vec![AirProvingContext::simple(
+            ColMajorMatrix::from_row_major(&trace),
+            pvs,
+        )],
+    );
+    assert!(matches!(result, Err(StarkTestError::Verifier(_))));
 }
 
 #[test]
@@ -310,15 +308,14 @@ fn public_values_neg_double_publish_impl(actual_pv: u32) {
     let pvs = to_field_vec(vec![0, 0, actual_pv]);
 
     disable_debug_builder();
-    assert!(test_cpu_engine()
-        .run_test(
-            vec![air],
-            vec![AirProvingContext::simple(
-                ColMajorMatrix::from_row_major(&trace),
-                pvs,
-            )]
-        )
-        .is_err());
+    let result = test_cpu_engine().run_test(
+        vec![air],
+        vec![AirProvingContext::simple(
+            ColMajorMatrix::from_row_major(&trace),
+            pvs,
+        )],
+    );
+    assert!(matches!(result, Err(StarkTestError::Verifier(_))));
 }
 
 #[cfg(feature = "cuda")]
