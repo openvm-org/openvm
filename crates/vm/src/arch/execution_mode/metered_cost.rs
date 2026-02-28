@@ -64,7 +64,7 @@ impl AccessAdapterCtx {
 #[derive(Clone, Debug, WithSetters)]
 pub struct MeteredCostCtx {
     pub widths: Vec<usize>,
-    pub access_adapter_ctx: AccessAdapterCtx,
+    pub access_adapter_ctx: Option<AccessAdapterCtx>,
     #[getset(set_with = "pub")]
     pub max_execution_cost: u64,
     // Cost is number of trace cells (height * width)
@@ -75,7 +75,9 @@ pub struct MeteredCostCtx {
 
 impl MeteredCostCtx {
     pub fn new(widths: Vec<usize>, config: &SystemConfig) -> Self {
-        let access_adapter_ctx = AccessAdapterCtx::new(config);
+        let access_adapter_ctx = config
+            .access_adapters_enabled()
+            .then(|| AccessAdapterCtx::new(config));
         Self {
             widths,
             access_adapter_ctx,
@@ -115,12 +117,9 @@ impl ExecutionCtxTrait for MeteredCostCtx {
         // Handle access adapter updates
         // SAFETY: size passed is always a non-zero power of 2
         let size_bits = unsafe { NonZero::new_unchecked(size).ilog2() };
-        self.access_adapter_ctx.update_cells(
-            &mut self.cost,
-            address_space,
-            size_bits,
-            &self.widths,
-        );
+        if let Some(ctx) = self.access_adapter_ctx.as_mut() {
+            ctx.update_cells(&mut self.cost, address_space, size_bits, &self.widths);
+        }
     }
 
     #[inline(always)]
