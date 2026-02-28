@@ -11,7 +11,7 @@ mod aot {
             execution_mode::{metered::memory_ctx::MemoryCtx, MeteredCtx},
             AotError, SystemConfig, VmExecState, ADDR_SPACE_OFFSET, CONST_BLOCK_SIZE,
         },
-        system::memory::{merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory, CHUNK},
+        system::memory::{merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory},
     };
     use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
 
