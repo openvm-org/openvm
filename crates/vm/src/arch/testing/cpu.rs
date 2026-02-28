@@ -35,13 +35,14 @@ use crate::{
         },
         vm_poseidon2_config, Arena, ExecutionBridge, ExecutionBus, ExecutionState,
         MatrixRecordArena, MemoryConfig, PreflightExecutor, Streams, VmField, VmStateMut,
+        CONST_BLOCK_SIZE,
     },
     system::{
         memory::{
             adapter::records::arena_size_bound,
             offline_checker::{MemoryBridge, MemoryBus},
             online::TracingMemory,
-            MemoryAirInventory, MemoryController, SharedMemoryHelper, CHUNK,
+            MemoryAirInventory, MemoryController, SharedMemoryHelper,
         },
         poseidon2::{air::Poseidon2PeripheryAir, Poseidon2PeripheryChip},
         program::ProgramBus,
@@ -328,7 +329,7 @@ impl<F: VmField> VmChipTestBuilder<F> {
 
     pub fn persistent(mem_config: MemoryConfig) -> Self {
         setup_tracing_with_log_level(Level::INFO);
-        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CHUNK);
+        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CONST_BLOCK_SIZE);
         let hasher_chip = Arc::new(Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3));
         let memory_controller = MemoryController::with_persistent_memory(
             MemoryBus::new(MEMORY_BUS),
@@ -377,7 +378,7 @@ impl<F: VmField> Default for VmChipTestBuilder<F> {
         // TODO[jpw]: this is because old tests use `gen_pointer` on address space 1; this can be
         // removed when tests are updated.
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-        Self::volatile(mem_config)
+        Self::persistent(mem_config)
     }
 }
 
