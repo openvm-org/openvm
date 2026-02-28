@@ -172,9 +172,10 @@ fn test_optional_air() {
             count: vec![2, 4, 12],
             fields: vec![vec![1], vec![2], vec![3]],
         });
-        let _proof = engine
-            .prove_then_verify(
-                &pk,
+        let d_pk = engine.device().transport_pk_to_device(&pk);
+        let proof = engine
+            .prove(
+                &d_pk,
                 ProvingContext {
                     per_air: vec![
                         (fib_chip_id, fib_chip.generate_proving_ctx(())),
@@ -185,6 +186,7 @@ fn test_optional_air() {
                 },
             )
             .unwrap();
+        engine.verify(&pk.get_vk(), &proof).unwrap();
         // The VM program will panic when the program cannot verify the proof.
         // assert!(execute_program_with_config::<BabyBearPoseidon2Engine, _>(
         //     program.clone(),
@@ -206,9 +208,10 @@ fn test_optional_air() {
             count: vec![1, 2, 4],
             fields: vec![vec![1], vec![2], vec![3]],
         });
-        let _proof = engine
-            .prove_then_verify(
-                &pk,
+        let d_pk = engine.device().transport_pk_to_device(&pk);
+        let proof = engine
+            .prove(
+                &d_pk,
                 ProvingContext {
                     per_air: vec![
                         (send_chip1_id, send_chip1.generate_proving_ctx(())),
@@ -217,6 +220,7 @@ fn test_optional_air() {
                 },
             )
             .unwrap();
+        engine.verify(&pk.get_vk(), &proof).unwrap();
         // The VM program will panic when the program cannot verify the proof.
         // assert!(execute_program_with_config::<BabyBearPoseidon2Engine, _>(
         //     program.clone(),
@@ -235,13 +239,20 @@ fn test_optional_air() {
             fields: vec![vec![1], vec![2], vec![3]],
         });
         let d_pk = engine.device().transport_pk_to_device(&pk);
-        let proof = engine.prove(
+        let prove_result = engine.prove(
             &d_pk,
             ProvingContext {
                 per_air: vec![(recv_chip1_id, recv_chip1.generate_proving_ctx(()))],
             },
         );
-        assert!(engine.verify(&pk.get_vk(), &proof).is_err());
+        // Either the prover should fail (unbalanced interactions detected during sumcheck)
+        // or the verifier should reject the proof.
+        match prove_result {
+            Err(_) => {} // Prover correctly detected the error
+            Ok(proof) => {
+                assert!(engine.verify(&pk.get_vk(), &proof).is_err());
+            }
+        }
         // The VM program should panic when the proof cannot be verified.
         // assert!(execute_program_with_config::<BabyBearPoseidon2Engine, _>(
         //     program.clone(),

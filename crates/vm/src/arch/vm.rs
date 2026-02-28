@@ -853,7 +853,7 @@ where
         let final_memory =
             (system_records.exit_code == Some(ExitCode::Success as u32)).then_some(to_state.memory);
         let ctx = self.generate_proving_ctx(system_records, record_arenas)?;
-        let proof = self.engine.prove(&self.pk, ctx);
+        let proof = self.engine.prove(&self.pk, ctx).unwrap();
 
         Ok((proof, final_memory))
     }
@@ -894,7 +894,11 @@ where
             .engine
             .device()
             .transport_matrix_to_device(&Arc::new(trace));
-        let (commitment, pcs) = self.engine.device().commit(std::slice::from_ref(&&d_trace));
+        let (commitment, pcs) = self
+            .engine
+            .device()
+            .commit(std::slice::from_ref(&&d_trace))
+            .unwrap();
         CommittedTraceData {
             commitment,
             trace: d_trace,
@@ -915,7 +919,7 @@ where
         let trace = data.mat_view(0).to_matrix();
         let d_trace = self.engine.device().transport_matrix_to_device(&trace);
         let d_data = self.engine.device().transport_pcs_data_to_device(data);
-        let commitment = data.commit();
+        let commitment = data.commit().unwrap();
         CommittedTraceData {
             commitment,
             data: Arc::new(d_data),
@@ -1201,7 +1205,7 @@ where
 
             let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
             modify_ctx(seg_idx, &mut ctx);
-            let proof = vm.engine.prove(vm.pk(), ctx);
+            let proof = vm.engine.prove(vm.pk(), ctx).unwrap();
             proofs.push(proof);
         }
         let to_state = state.unwrap();

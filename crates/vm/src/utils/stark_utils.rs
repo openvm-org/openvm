@@ -248,7 +248,7 @@ where
         if debug {
             debug_proving_ctx(&vm, &ctx);
         }
-        let proof = vm.engine.prove(vm.pk(), ctx);
+        let proof = vm.engine.prove(vm.pk(), ctx).unwrap();
         proofs.push(proof);
     }
     assert!(proofs.len() >= min_segments);

@@ -13,8 +13,9 @@ use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
     p3_matrix::dense::RowMajorMatrix,
     p3_util::log2_strict_usize,
-    prover::{AirProvingContext, ColMajorMatrix, CpuBackend, StridedColMajorMatrixView},
-    verifier::VerifierError,
+    prover::{
+        AirProvingContext, ColMajorMatrix, CpuBackend, CpuProverError, StridedColMajorMatrixView,
+    },
     AirRef, AnyAir, StarkEngine, StarkProtocolConfig, SystemParams, Val, VerificationData,
 };
 use openvm_stark_sdk::{
@@ -553,11 +554,12 @@ where
     // }
 }
 
+/// Concrete `StarkTestError` type alias for BabyBear Poseidon2 CPU tests.
+pub type TestStarkError =
+    openvm_stark_backend::StarkTestError<CpuProverError, baby_bear_poseidon2::EF>;
+
 impl VmChipTester<BabyBearPoseidon2Config> {
-    pub fn simple_test(
-        self,
-    ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerifierError<baby_bear_poseidon2::EF>>
-    {
+    pub fn simple_test(self) -> Result<VerificationData<BabyBearPoseidon2Config>, TestStarkError> {
         assert!(self.memory.is_none(), "Memory must be finalized");
         let (airs, ctxs): (Vec<_>, Vec<_>) = self.air_ctxs.into_iter().unzip();
         test_cpu_engine().run_test(airs, ctxs)
@@ -566,24 +568,11 @@ impl VmChipTester<BabyBearPoseidon2Config> {
     pub fn simple_test_with_params(
         self,
         params: SystemParams,
-    ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerifierError<baby_bear_poseidon2::EF>>
-    {
+    ) -> Result<VerificationData<BabyBearPoseidon2Config>, TestStarkError> {
         assert!(self.memory.is_none(), "Memory must be finalized");
         let (airs, ctxs): (Vec<_>, Vec<_>) = self.air_ctxs.into_iter().unzip();
         let engine: baby_bear_poseidon2::BabyBearPoseidon2CpuEngine =
             baby_bear_poseidon2::BabyBearPoseidon2CpuEngine::new(params);
         engine.run_test(airs, ctxs)
-    }
-
-    pub fn simple_test_with_expected_error(
-        self,
-        expected_error: VerifierError<baby_bear_poseidon2::EF>,
-    ) {
-        let msg = format!(
-            "Expected verification to fail with {:?}, but it didn't",
-            &expected_error
-        );
-        let result = self.simple_test();
-        assert_eq!(result.err(), Some(expected_error), "{msg}");
     }
 }
