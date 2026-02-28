@@ -214,7 +214,9 @@ fn rand_loadstore_test(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
     if [STOREW, STOREB, STOREH].contains(&opcode) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     }
-    let mut tester = VmChipTestBuilder::volatile(mem_config);
+    // Use persistent memory so initial block size matches the 4-byte alignment and
+    // avoids access-adapter split/merge paths when adapters are disabled.
+    let mut tester = VmChipTestBuilder::persistent(mem_config);
     let mut harness = create_harness(&mut tester);
 
     for _ in 0..num_ops {
@@ -265,7 +267,8 @@ fn run_negative_loadstore_test(
     if [STOREW, STOREB, STOREH].contains(&opcode) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     }
-    let mut tester = VmChipTestBuilder::volatile(mem_config);
+    // Use persistent memory so the min block size matches alignment without needing adapters.
+    let mut tester = VmChipTestBuilder::persistent(mem_config);
     let mut harness = create_harness(&mut tester);
 
     set_and_execute(
