@@ -1,8 +1,6 @@
-use std::sync::Arc;
-
 #[cfg(feature = "cuda")]
 use openvm_cuda_backend::GpuBackend;
-use openvm_stark_backend::{prover::CpuBackend, AirRef};
+use openvm_stark_backend::prover::CpuBackend;
 use recursion_circuit::system::VerifierSubCircuit;
 
 use crate::{
@@ -28,17 +26,6 @@ pub use deferral::*;
 pub use nonroot::*;
 pub use root::*;
 pub use utils::*;
-
-// TODO: move to stark-backend-v2
-pub trait Circuit {
-    fn airs(&self) -> Vec<AirRef<SC>>;
-}
-
-impl<C: Circuit> Circuit for Arc<C> {
-    fn airs(&self) -> Vec<AirRef<SC>> {
-        self.as_ref().airs()
-    }
-}
 
 pub type NonRootCpuProver<const MAX_NUM_PROOFS: usize> = NonRootAggregationProver<
     CpuBackend<SC>,

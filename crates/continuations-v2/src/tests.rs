@@ -49,7 +49,6 @@ cfg_if::cfg_if! {
                 verify::output::expected_output_commit,
                 DeferralAggregationPvs,
                 DeferralCircuitPvs,
-                DeferralRootPvs,
                 DeferralVerifierPvs,
             },
             root::{poseidon2_input_to_digests, RootVerifierPvs},
@@ -57,7 +56,7 @@ cfg_if::cfg_if! {
         use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
         use openvm_stark_backend::{prover::CommittedTraceData, verifier::verify, TranscriptHistory};
         use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_compress_with_capacity, default_duplex_sponge_recorder};
-        use verify_stark::pvs::VERIFIER_PVS_AIR_ID;
+        use verify_stark::pvs::{VERIFIER_PVS_AIR_ID, DeferralPvs};
         use crate::prover::DeferralChildVkKind;
         type Engine = BabyBearPoseidon2GpuEngine;
         type PB = GpuBackend;
@@ -358,7 +357,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         .map(|(_, air_ctx)| air_ctx.height())
         .collect_vec();
 
-    const AIR_MODIFIED_HEIGHT_IDX: usize = 2;
+    const AIR_MODIFIED_HEIGHT_IDX: usize = 4;
     trace_heights[AIR_MODIFIED_HEIGHT_IDX] *= 2;
 
     let root_prover = RootProver::new::<Engine>(
@@ -606,7 +605,10 @@ fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()
     let root_pvs: &RootVerifierPvs<F> = root_proof.public_values[VERIFIER_PVS_AIR_ID]
         .as_slice()
         .borrow();
-    let user_pvs = root_proof.public_values[root_proof.public_values.len() - 2].clone();
+    // RootCircuit AIR layout is:
+    // 0: RootVerifierPvsAir, 1: UserPvsCommitAir, 2: UserPvsInMemoryAir, 3..: verifier subcircuit.
+    const ROOT_USER_PVS_COMMIT_AIR_ID: usize = 1;
+    let user_pvs = root_proof.public_values[ROOT_USER_PVS_COMMIT_AIR_ID].clone();
 
     let (left, right) = poseidon2_input_to_digests(*expected_final_ts_state);
     let expected_input_commit = poseidon2_compress_with_capacity(left, right).0;
@@ -772,7 +774,7 @@ fn test_deferral_root_prover(num_children: usize) -> Result<()> {
         expected_output_onion =
             poseidon2_compress_with_capacity(expected_output_onion, leaf_output_commit).0;
     }
-    let root_pvs: &DeferralRootPvs<F> = root_proof.public_values[0].as_slice().borrow();
+    let root_pvs: &DeferralPvs<F> = root_proof.public_values[0].as_slice().borrow();
     let expected_initial_acc_hash =
         poseidon2_compress_with_capacity(def_vk, [F::ZERO; DIGEST_SIZE]).0;
     let expected_final_acc_hash =

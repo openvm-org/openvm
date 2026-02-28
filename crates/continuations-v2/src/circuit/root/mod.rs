@@ -1,4 +1,4 @@
-use std::array::from_fn;
+use std::{array::from_fn, sync::Arc};
 
 use itertools::Itertools;
 use openvm_circuit::{
@@ -10,14 +10,65 @@ use openvm_cuda_backend::{data_transporter::transport_air_proving_ctx_to_device,
 use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, CpuBackend, ProverBackend},
+    AirRef,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
+use recursion_circuit::system::AggregationSubCircuit;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use super::user_pvs::{commit, memory};
+use crate::{bn254::CommitBytes, circuit::Circuit, SC};
 
 pub mod bus;
 pub mod verifier;
+
+#[derive(derive_new::new, Clone)]
+pub struct RootCircuit<S: AggregationSubCircuit> {
+    pub verifier_circuit: Arc<S>,
+    pub(crate) internal_recursive_dag_commit: CommitBytes,
+    pub(crate) memory_dimensions: MemoryDimensions,
+    pub(crate) num_user_pvs: usize,
+}
+
+impl<S: AggregationSubCircuit> Circuit for RootCircuit<S> {
+    fn airs(&self) -> Vec<AirRef<SC>> {
+        let bus_inventory = self.verifier_circuit.bus_inventory();
+        let next_bus_idx = self.verifier_circuit.next_bus_idx();
+
+        let user_pvs_commit_bus = bus::UserPvsCommitBus::new(next_bus_idx);
+        let user_pvs_commit_tree_bus = bus::UserPvsCommitTreeBus::new(next_bus_idx + 1);
+        let memory_merkle_commit_bus = bus::MemoryMerkleCommitBus::new(next_bus_idx + 2);
+
+        let verifier_pvs_air = verifier::RootVerifierPvsAir {
+            public_values_bus: bus_inventory.public_values_bus,
+            cached_commit_bus: bus_inventory.cached_commit_bus,
+            poseidon2_compress_bus: bus_inventory.poseidon2_compress_bus,
+            memory_merkle_commit_bus,
+            expected_internal_recursive_dag_commit: self.internal_recursive_dag_commit,
+        };
+        let user_pvs_commit_air = commit::UserPvsCommitAir::new(
+            bus_inventory.poseidon2_compress_bus,
+            user_pvs_commit_bus,
+            user_pvs_commit_tree_bus,
+            None,
+            self.num_user_pvs,
+        );
+        let user_pvs_memory_air = memory::UserPvsInMemoryAir::new(
+            bus_inventory.poseidon2_compress_bus,
+            user_pvs_commit_bus,
+            memory_merkle_commit_bus,
+            self.memory_dimensions,
+            self.num_user_pvs,
+        );
+
+        [Arc::new(verifier_pvs_air) as AirRef<SC>]
+            .into_iter()
+            .chain([Arc::new(user_pvs_commit_air) as AirRef<SC>])
+            .chain([Arc::new(user_pvs_memory_air) as AirRef<SC>])
+            .chain(self.verifier_circuit.airs())
+            .collect_vec()
+    }
+}
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]

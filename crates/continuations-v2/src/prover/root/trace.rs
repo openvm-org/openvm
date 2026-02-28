@@ -46,7 +46,7 @@ where
 
         let verifier_trace_heights = self.trace_heights.as_ref().map(|v| {
             let num_airs = v.len();
-            &v[1..(num_airs - agg_other_ctxs.len())]
+            &v[3..num_airs]
         });
 
         let range_check_inputs = vec![];
@@ -68,8 +68,8 @@ where
 
         subcircuit_ctxs.map(|subcircuit_ctxs| ProvingContext {
             per_trace: once(verifier_pvs_ctx)
-                .chain(subcircuit_ctxs)
                 .chain(agg_other_ctxs)
+                .chain(subcircuit_ctxs)
                 .enumerate()
                 .collect_vec(),
         })

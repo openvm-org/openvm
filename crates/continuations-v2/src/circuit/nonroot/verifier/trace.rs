@@ -1,112 +1,234 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::system::{connector::VmConnectorPvs, memory::merkle::MemoryMerklePvs};
+use openvm_circuit::arch::POSEIDON2_WIDTH;
 use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{
+    poseidon2_compress_with_capacity, BabyBearPoseidon2Config, DIGEST_SIZE, F,
+};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
-use verify_stark::pvs::{NonRootVerifierPvs, VERIFIER_PVS_AIR_ID};
+use verify_stark::pvs::{VerifierBasePvs, VerifierDefPvs, VERIFIER_PVS_AIR_ID};
 
-use crate::circuit::nonroot::{
-    app::*,
-    verifier::air::{VerifierChildLevel, VerifierPvsCols},
+use crate::circuit::{
+    nonroot::verifier::air::{VerifierCombinedPvs, VerifierDeferralCols, VerifierPvsCols},
+    root::digests_to_poseidon2_input,
 };
+
+#[derive(Copy, Clone)]
+pub enum VerifierChildLevel {
+    App,
+    Deferral,
+    Leaf,
+    InternalForLeaf,
+    InternalRecursive,
+}
 
 pub fn generate_proving_ctx(
     proofs: &[Proof<BabyBearPoseidon2Config>],
-    child_is_app: bool,
+    child_level: VerifierChildLevel,
     child_dag_commit: [F; DIGEST_SIZE],
-) -> AirProvingContext<CpuBackend<BabyBearPoseidon2Config>> {
+    deferral_enabled: bool,
+) -> (
+    AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>,
+    Vec<[F; POSEIDON2_WIDTH]>,
+) {
     let num_proofs = proofs.len();
-    let height = num_proofs.next_power_of_two();
-    let width = VerifierPvsCols::<u8>::width();
-
     debug_assert!(num_proofs > 0);
 
-    let mut trace = vec![F::ZERO; height * width];
-    let mut child_level = VerifierChildLevel::App;
+    let child_is_app = matches!(child_level, VerifierChildLevel::App);
+    let child_is_def = matches!(child_level, VerifierChildLevel::Deferral);
+    let child_has_verifier_pvs = !(child_is_app || child_is_def);
 
-    for (proof_idx, (proof, chunk)) in proofs.iter().zip(trace.chunks_exact_mut(width)).enumerate()
-    {
-        let cols: &mut VerifierPvsCols<F> = chunk.borrow_mut();
+    let child_is_internal_rec = matches!(child_level, VerifierChildLevel::InternalRecursive);
+    let child_is_internal =
+        matches!(child_level, VerifierChildLevel::InternalForLeaf) || child_is_internal_rec;
 
-        cols.proof_idx = F::from_usize(proof_idx);
-        cols.is_valid = F::ONE;
-        cols.is_last = F::from_bool(proof_idx + 1 == num_proofs);
+    let mut vm_proofs = Vec::new();
+    let mut deferral_proofs = Vec::new();
+    let mut intermediate_def_vk_commit = None;
 
-        // The child_vk may either be for the app layer or an aggregation layer
-        if child_is_app {
-            cols.child_pvs.program_commit = proof.trace_vdata[PROGRAM_AIR_ID]
-                .as_ref()
-                .unwrap()
-                .cached_commitments[PROGRAM_CACHED_TRACE_INDEX];
-
-            let &VmConnectorPvs {
-                initial_pc,
-                final_pc,
-                exit_code,
-                is_terminate,
-            } = proof.public_values[CONNECTOR_AIR_ID].as_slice().borrow();
-            cols.child_pvs.initial_pc = initial_pc;
-            cols.child_pvs.final_pc = final_pc;
-            cols.child_pvs.exit_code = exit_code;
-            cols.child_pvs.is_terminate = is_terminate;
-
-            let &MemoryMerklePvs::<_, DIGEST_SIZE> {
-                initial_root,
-                final_root,
-            } = proof.public_values[MERKLE_AIR_ID].as_slice().borrow();
-            cols.child_pvs.initial_root = initial_root;
-            cols.child_pvs.final_root = final_root;
+    for proof in proofs {
+        if !deferral_enabled || child_is_app {
+            vm_proofs.push(proof);
+        } else if child_is_def {
+            deferral_proofs.push(proof);
         } else {
-            let child_pvs: &NonRootVerifierPvs<F> =
+            let child_pvs: &VerifierCombinedPvs<F> =
                 proof.public_values[VERIFIER_PVS_AIR_ID].as_slice().borrow();
-            cols.has_verifier_pvs = F::ONE;
-            cols.child_pvs = *child_pvs;
-
-            child_level = match child_pvs.internal_flag {
-                F::ZERO => VerifierChildLevel::Leaf,
-                F::ONE => VerifierChildLevel::InternalForLeaf,
-                F::TWO => VerifierChildLevel::InternalRecursive,
-                _ => unreachable!(),
+            if child_pvs.def.deferral_flag != F::ONE {
+                vm_proofs.push(proof);
+            }
+            if child_pvs.def.deferral_flag != F::ZERO {
+                deferral_proofs.push(proof);
+            }
+            if child_pvs.def.deferral_flag == F::ONE
+                && intermediate_def_vk_commit.is_none()
+                && child_is_internal
+            {
+                intermediate_def_vk_commit = Some(
+                    poseidon2_compress_with_capacity(
+                        child_pvs.base.app_dag_commit,
+                        child_pvs.base.leaf_dag_commit,
+                    )
+                    .0,
+                )
             }
         }
     }
 
-    let last_row: &VerifierPvsCols<F> =
-        trace[(proofs.len() - 1) * width..proofs.len() * width].borrow();
-    let mut pvs = last_row.child_pvs;
+    assert!(
+        vm_proofs.is_empty()
+            || deferral_proofs.is_empty()
+            || (vm_proofs.len() == 1 && deferral_proofs.len() == 1)
+    );
 
-    let first_row: &VerifierPvsCols<F> = trace[..width].borrow();
-    pvs.initial_pc = first_row.child_pvs.initial_pc;
-    pvs.initial_root = first_row.child_pvs.initial_root;
+    let height = num_proofs.next_power_of_two();
+    let base_width = VerifierPvsCols::<u8>::width();
+    let def_width = if deferral_enabled {
+        VerifierDeferralCols::<u8>::width()
+    } else {
+        0
+    };
+    let width = base_width + def_width;
+
+    let mut trace = vec![F::ZERO; height * width];
+    let mut chunks = trace.chunks_exact_mut(width);
+    let mut poseidon2_inputs = vec![];
+    let mut trailing_deferral_flag = F::ZERO;
+
+    let deferral_flag_pv = if !deferral_enabled || deferral_proofs.is_empty() {
+        F::ZERO
+    } else if vm_proofs.is_empty() {
+        F::ONE
+    } else {
+        F::TWO
+    };
+
+    for (proof_idx, proof) in proofs.iter().enumerate() {
+        let chunk = chunks.next().unwrap();
+        let (base_chunk, def_chunk) = chunk.split_at_mut(base_width);
+
+        let cols: &mut VerifierPvsCols<F> = base_chunk.borrow_mut();
+        cols.proof_idx = F::from_usize(proof_idx);
+        cols.is_valid = F::ONE;
+
+        if deferral_enabled {
+            let def_cols: &mut VerifierDeferralCols<_> = def_chunk.borrow_mut();
+            def_cols.is_last = F::from_bool(proof_idx + 1 == proofs.len());
+            if child_is_def {
+                def_cols.child_pvs.deferral_flag = F::ONE;
+                trailing_deferral_flag = def_cols.child_pvs.deferral_flag;
+            }
+        }
+
+        if child_has_verifier_pvs {
+            let pv_chunk = proof.public_values[VERIFIER_PVS_AIR_ID].as_slice();
+            let (base_pv_chunk, def_pv_chunk) = pv_chunk.split_at(VerifierBasePvs::<u8>::width());
+
+            let base_pvs: &VerifierBasePvs<_> = base_pv_chunk.borrow();
+            cols.has_verifier_pvs = F::ONE;
+            cols.child_pvs = *base_pvs;
+
+            if deferral_enabled {
+                let def_cols: &mut VerifierDeferralCols<_> = def_chunk.borrow_mut();
+                let def_pvs: &VerifierDefPvs<_> = def_pv_chunk.borrow();
+                def_cols.child_pvs = *def_pvs;
+                if let Some(commit) = intermediate_def_vk_commit {
+                    def_cols.intermediate_def_vk_commit = commit;
+
+                    if def_pvs.deferral_flag == F::ONE {
+                        let app_dag_commit = base_pvs.app_dag_commit;
+                        let leaf_dag_commit = base_pvs.leaf_dag_commit;
+
+                        let internal_for_leaf_dag_commit = if child_is_internal_rec {
+                            let ret = base_pvs.internal_for_leaf_dag_commit;
+                            poseidon2_inputs
+                                .push(digests_to_poseidon2_input(app_dag_commit, leaf_dag_commit));
+                            poseidon2_inputs.push(digests_to_poseidon2_input(commit, ret));
+                            ret
+                        } else {
+                            child_dag_commit
+                        };
+
+                        if deferral_flag_pv == F::ONE {
+                            poseidon2_inputs
+                                .push(digests_to_poseidon2_input(app_dag_commit, leaf_dag_commit));
+                            poseidon2_inputs.push(digests_to_poseidon2_input(
+                                commit,
+                                internal_for_leaf_dag_commit,
+                            ));
+                        }
+                    }
+                }
+                trailing_deferral_flag = def_pvs.deferral_flag;
+            }
+        }
+    }
+
+    if deferral_enabled {
+        for chunk in chunks {
+            let (_, def_chunk) = chunk.split_at_mut(base_width);
+            let def_cols: &mut VerifierDeferralCols<_> = def_chunk.borrow_mut();
+            def_cols.child_pvs.deferral_flag = trailing_deferral_flag;
+        }
+    }
+
+    let first_row: &VerifierPvsCols<F> = trace[..base_width].borrow();
+    let mut base_pvs = first_row.child_pvs;
 
     match child_level {
-        VerifierChildLevel::App => {
-            pvs.app_dag_commit = child_dag_commit;
+        VerifierChildLevel::App | VerifierChildLevel::Deferral => {
+            base_pvs.app_dag_commit = child_dag_commit;
         }
         VerifierChildLevel::Leaf => {
-            pvs.leaf_dag_commit = child_dag_commit;
-            pvs.internal_flag = F::ONE;
+            base_pvs.leaf_dag_commit = child_dag_commit;
+            base_pvs.internal_flag = F::ONE;
         }
         VerifierChildLevel::InternalForLeaf => {
-            pvs.internal_for_leaf_dag_commit = child_dag_commit;
-            pvs.internal_flag = F::TWO;
-            pvs.recursion_flag = F::ONE;
+            base_pvs.internal_for_leaf_dag_commit = child_dag_commit;
+            base_pvs.internal_flag = F::TWO;
+            base_pvs.recursion_flag = F::ONE;
         }
         VerifierChildLevel::InternalRecursive => {
-            pvs.internal_recursive_dag_commit = child_dag_commit;
-            pvs.internal_flag = F::TWO;
-            pvs.recursion_flag = F::TWO;
+            base_pvs.internal_recursive_dag_commit = child_dag_commit;
+            base_pvs.internal_flag = F::TWO;
+            base_pvs.recursion_flag = F::TWO;
         }
     }
 
-    AirProvingContext {
-        cached_mains: vec![],
-        common_main: ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width)),
-        public_values: pvs.to_vec(),
-    }
+    let public_values = if deferral_enabled {
+        let last_row_def: &VerifierDeferralCols<F> =
+            trace[(num_proofs - 1) * width + base_width..num_proofs * width].borrow();
+        let mut def_pvs = last_row_def.child_pvs;
+        def_pvs.deferral_flag = deferral_flag_pv;
+
+        if deferral_flag_pv == F::ONE && matches!(child_level, VerifierChildLevel::InternalForLeaf)
+        {
+            def_pvs.def_root_vk_commit = poseidon2_compress_with_capacity(
+                intermediate_def_vk_commit.unwrap(),
+                base_pvs.internal_for_leaf_dag_commit,
+            )
+            .0;
+        }
+
+        let mut combined = vec![F::ZERO; VerifierCombinedPvs::<u8>::width()];
+        let combined_pvs: &mut VerifierCombinedPvs<F> = combined.as_mut_slice().borrow_mut();
+        combined_pvs.base = base_pvs;
+        combined_pvs.def = def_pvs;
+        combined
+    } else {
+        base_pvs.to_vec()
+    };
+
+    (
+        AirProvingContext {
+            cached_mains: vec![],
+            common_main: ColMajorMatrix::from_row_major(&RowMajorMatrix::new(trace, width)),
+            public_values,
+        },
+        poseidon2_inputs,
+    )
 }
