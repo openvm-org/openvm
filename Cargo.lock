@@ -3496,10 +3496,8 @@ dependencies = [
 name = "openvm-keccak256-circuit"
 version = "2.0.0-alpha"
 dependencies = [
- "cfg-if",
  "derive-new 0.6.0",
  "derive_more 1.0.0",
- "hex",
  "itertools 0.14.0",
  "openvm-circuit",
  "openvm-circuit-derive",
@@ -3518,7 +3516,6 @@ dependencies = [
  "serde",
  "strum",
  "tiny-keccak",
- "tokio",
 ]
 
 [[package]]
@@ -3526,6 +3523,7 @@ name = "openvm-keccak256-guest"
 version = "2.0.0-alpha"
 dependencies = [
  "openvm-platform",
+ "spin 0.10.0",
 ]
 
 [[package]]
@@ -5465,15 +5463,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
-name = "signal-hook-registry"
-version = "1.4.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2a4719bff48cee6b39d12c020eeb490953ad2443b7055bd0b21fca26bd8c28b"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "signature"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5941,24 +5930,10 @@ dependencies = [
  "io-uring",
  "libc",
  "mio",
- "parking_lot",
  "pin-project-lite",
- "signal-hook-registry",
  "slab",
  "socket2 0.6.0",
- "tokio-macros",
  "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "tokio-macros"
-version = "2.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e06d43f1345a3bcd39f6a56dbb7dcab2ba47e68e8ac134855e7e2bdbaf8cab8"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.116",
 ]
 
 [[package]]
