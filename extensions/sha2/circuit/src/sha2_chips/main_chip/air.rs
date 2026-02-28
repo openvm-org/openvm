@@ -83,8 +83,7 @@ impl<AB: InteractionBuilder, C: Sha2MainChipConfig + Sha2BlockHasherSubairConfig
         let mut timestamp_delta = 0;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
-            local.instruction.from_state.timestamp
-                + AB::F::from_usize(timestamp_delta - 1)
+            local.instruction.from_state.timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
 
         self.eval_block(builder, &local, &next);
