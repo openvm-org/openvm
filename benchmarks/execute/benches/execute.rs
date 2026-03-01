@@ -30,8 +30,6 @@ use openvm_ecc_circuit::{EccCpuProverExt, WeierstrassExtension, WeierstrassExten
 use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
-use openvm_native_circuit::NativeCpuBuilder;
-use openvm_native_recursion::hints::Hintable;
 use openvm_pairing_circuit::{
     PairingCurve, PairingExtension, PairingExtensionExecutor, PairingProverExt,
 };
@@ -54,13 +52,10 @@ use openvm_stark_sdk::{
     engine::{StarkEngine, StarkFriEngine},
     openvm_stark_backend::{
         self,
-        StarkProtocolConfig, Val,
         keygen::types::MultiStarkProvingKey,
         proof::Proof,
-        prover::{
-            CpuBackend, CpuDevice,
-            DeviceDataTransporter,
-        },
+        prover::{CpuBackend, CpuDevice, DeviceDataTransporter},
+        StarkProtocolConfig, Val,
     },
     p3_baby_bear::BabyBear,
 };
@@ -95,9 +90,6 @@ static SUCCESSFUL_EXECUTIONS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new()
 // Cachce for AOT instances, that is only initialized once, across all threads
 // Arc (atomically referenced counted pointer) is used to store the instance, so multiple threads
 // can share the same instance Mutex is used to protect the cache from concurrent access
-// HashMap is used to store the instances, keyed by the program name
-#[allow(dead_code)]
-type NativeVm = VirtualMachine<BabyBearPoseidon2Engine, NativeCpuBuilder>;
 
 fn report_program_success(mode: &str, program: &str) {
     let successes = SUCCESSFUL_EXECUTIONS.get_or_init(|| Mutex::new(HashSet::new()));
