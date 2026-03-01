@@ -274,6 +274,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
          * one - it is impossible for the current layer to know its own commit, and future layers
          * will catch if we preemptively define a current or future verifier commit.
          */
+        let base_pvs_width = VerifierBasePvs::<AB::Var>::width();
         let &VerifierBasePvs::<_> {
             internal_flag,
             app_dag_commit,
@@ -281,7 +282,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             internal_for_leaf_dag_commit,
             recursion_flag,
             internal_recursive_dag_commit,
-        } = builder.public_values().borrow();
+        } = builder.public_values()[0..base_pvs_width].borrow();
 
         // constrain internal_flag is 0 at the leaf level
         builder
@@ -603,10 +604,7 @@ impl VerifierPvsAir {
         let dag_commit_cond =
             and(base_local.is_valid, not(def_local.is_last)) * (AB::Expr::ONE - delta);
         let deferral_flag = def_local.child_pvs.deferral_flag.into();
-        let consistency_mult = (def_local.child_pvs.deferral_flag
-            * (def_local.child_pvs.deferral_flag - AB::Expr::ONE)
-            * half)
-            + AB::Expr::ONE;
+        let consistency_mult = base_local.has_verifier_pvs + AB::Expr::ONE;
 
         (dag_commit_cond, deferral_flag, consistency_mult)
     }

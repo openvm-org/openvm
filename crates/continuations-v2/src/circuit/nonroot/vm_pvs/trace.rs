@@ -8,71 +8,49 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
-use verify_stark::pvs::{VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID};
+use verify_stark::pvs::VM_PVS_AIR_ID;
 
-use crate::circuit::nonroot::{app::*, verifier::VerifierCombinedPvs, vm_pvs::air::VmPvsCols};
+use crate::circuit::nonroot::{app::*, vm_pvs::air::VmPvsCols, ProofsType};
 
 pub fn generate_proving_ctx(
     proofs: &[Proof<BabyBearPoseidon2Config>],
+    proofs_type: ProofsType,
     child_is_app: bool,
     deferral_enabled: bool,
 ) -> AirProvingContext<CpuBackend<BabyBearPoseidon2Config>> {
     debug_assert!(!proofs.is_empty());
 
-    let mut vm_proofs = Vec::new();
-    let mut has_deferral = false;
-
-    for proof in proofs {
-        if !deferral_enabled || child_is_app {
-            vm_proofs.push(proof);
-        } else {
-            let child_pvs: &VerifierCombinedPvs<F> =
-                proof.public_values[VERIFIER_PVS_AIR_ID].as_slice().borrow();
-            if child_pvs.def.deferral_flag != F::ONE {
-                vm_proofs.push(proof);
-            }
-            if child_pvs.def.deferral_flag != F::ZERO {
-                has_deferral = true;
-            }
-        }
-    }
-
-    let deferral_flag = if !deferral_enabled || !has_deferral {
-        F::ZERO
-    } else if vm_proofs.is_empty() {
-        F::ONE
-    } else {
-        F::TWO
+    let num_vm_proofs = match proofs_type {
+        ProofsType::Vm => proofs.len(),
+        ProofsType::Deferral => 0,
+        ProofsType::Mix | ProofsType::Combined => 1,
     };
 
-    let num_valid_rows = if deferral_flag == F::ONE {
-        0
-    } else if deferral_flag == F::TWO {
-        1
-    } else {
-        vm_proofs.len()
-    };
-    let height = num_valid_rows.max(1).next_power_of_two();
+    let height = proofs.len().next_power_of_two();
     let base_width = VmPvsCols::<u8>::width();
     let width = base_width + deferral_enabled as usize;
 
     let mut trace = vec![F::ZERO; height * width];
-    for (proof_idx, chunk) in trace.chunks_exact_mut(width).enumerate() {
+    for (proof_idx, (proof, chunk)) in proofs.iter().zip(trace.chunks_exact_mut(width)).enumerate()
+    {
         let (base_chunk, def_chunk) = chunk.split_at_mut(base_width);
         let cols: &mut VmPvsCols<F> = base_chunk.borrow_mut();
+        cols.proof_idx = F::from_usize(proof_idx);
 
         if deferral_enabled {
-            def_chunk[0] = deferral_flag;
+            def_chunk[0] = match proofs_type {
+                ProofsType::Vm => F::ZERO,
+                ProofsType::Deferral => F::ONE,
+                ProofsType::Mix => F::from_usize(proof_idx),
+                ProofsType::Combined => F::TWO,
+            };
+            if def_chunk[0] == F::ONE {
+                continue;
+            }
         }
 
-        if proof_idx >= num_valid_rows {
-            continue;
-        }
-        let proof = vm_proofs[proof_idx];
-
-        cols.proof_idx = F::from_usize(proof_idx);
         cols.is_valid = F::ONE;
-        cols.is_last = F::from_bool(proof_idx + 1 == num_valid_rows);
+        cols.is_last = F::from_bool(proof_idx + 1 == num_vm_proofs);
 
         if child_is_app {
             cols.child_pvs.program_commit = proof.trace_vdata[PROGRAM_AIR_ID]
@@ -108,10 +86,10 @@ pub fn generate_proving_ctx(
     let mut public_values = vec![F::ZERO; verify_stark::pvs::VmPvs::<u8>::width()];
     let pvs: &mut verify_stark::pvs::VmPvs<F> = public_values.as_mut_slice().borrow_mut();
 
-    if num_valid_rows > 0 {
+    if num_vm_proofs > 0 {
         let first_row: &VmPvsCols<F> = trace[..base_width].borrow();
         let last_row: &VmPvsCols<F> =
-            trace[(num_valid_rows - 1) * width..(num_valid_rows - 1) * width + base_width].borrow();
+            trace[(num_vm_proofs - 1) * width..(num_vm_proofs - 1) * width + base_width].borrow();
 
         pvs.program_commit = first_row.child_pvs.program_commit;
         pvs.initial_pc = first_row.child_pvs.initial_pc;
