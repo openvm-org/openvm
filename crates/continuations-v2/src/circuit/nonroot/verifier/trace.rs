@@ -48,6 +48,12 @@ pub fn generate_proving_ctx(
     let mut child_level = VerifierChildLevel::App;
     let mut intermediate_def_vk_commit = None;
 
+    let def_proof = match proofs_type {
+        ProofsType::Vm => None,
+        ProofsType::Deferral | ProofsType::Combined => Some(&proofs[0]),
+        ProofsType::Mix => Some(&proofs[1]),
+    };
+
     if !child_is_app {
         let proof = &proofs[0];
         let child_pvs: &VerifierBasePvs<F> = proof.public_values[VERIFIER_PVS_AIR_ID].as_slice()
@@ -56,17 +62,23 @@ pub fn generate_proving_ctx(
         child_level = match child_pvs.internal_flag {
             F::ZERO => VerifierChildLevel::Leaf,
             F::ONE => VerifierChildLevel::InternalForLeaf,
-            F::TWO => {
-                intermediate_def_vk_commit = Some(
-                    poseidon2_compress_with_capacity(
-                        child_pvs.app_dag_commit,
-                        child_pvs.leaf_dag_commit,
-                    )
-                    .0,
-                );
-                VerifierChildLevel::InternalRecursive
-            }
+            F::TWO => VerifierChildLevel::InternalRecursive,
             _ => unreachable!(),
+        };
+        if matches!(
+            child_level,
+            VerifierChildLevel::InternalForLeaf | VerifierChildLevel::InternalRecursive
+        ) {
+            intermediate_def_vk_commit = def_proof.map(|p| {
+                let child_pvs: &VerifierBasePvs<F> = p.public_values[VERIFIER_PVS_AIR_ID]
+                    .as_slice()[0..VerifierBasePvs::<F>::width()]
+                    .borrow();
+                poseidon2_compress_with_capacity(
+                    child_pvs.app_dag_commit,
+                    child_pvs.leaf_dag_commit,
+                )
+                .0
+            });
         }
     }
 
@@ -205,6 +217,8 @@ pub fn generate_proving_ctx(
                 base_pvs.internal_for_leaf_dag_commit,
             )
             .0;
+        } else if matches!(child_level, VerifierChildLevel::InternalRecursive) {
+            def_pvs.def_root_vk_commit = def_pvs.def_root_vk_commit;
         }
 
         let mut combined = vec![F::ZERO; VerifierCombinedPvs::<u8>::width()];

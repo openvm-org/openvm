@@ -14,6 +14,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use verify_stark::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 
 use crate::circuit::{
+    deferral::DEF_HOOK_PVS_AIR_ID,
     nonroot::{def_pvs::air::DeferralPvsCols, ProofsType},
     root::digests_to_poseidon2_input,
 };
@@ -70,7 +71,12 @@ pub fn generate_proving_ctx(
         cols.has_verifier_pvs = F::from_bool(!child_is_app);
         cols.single_present_is_right = F::from_bool(single_present_is_right);
 
-        let child_pvs: &DeferralPvs<_> = proof.public_values[DEF_PVS_AIR_ID].as_slice().borrow();
+        let air_id = if child_is_app {
+            DEF_HOOK_PVS_AIR_ID
+        } else {
+            DEF_PVS_AIR_ID
+        };
+        let child_pvs: &DeferralPvs<_> = proof.public_values[air_id].as_slice().borrow();
         cols.child_pvs = *child_pvs;
         child_pvs_vec.push(cols.child_pvs);
     }

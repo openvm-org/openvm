@@ -1,6 +1,6 @@
 use std::{array::from_fn, borrow::Borrow};
 
-use openvm_circuit_primitives::utils::{and, assert_array_eq, not};
+use openvm_circuit_primitives::utils::{assert_array_eq, not};
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -20,6 +20,7 @@ use verify_stark::pvs::{DeferralPvs, CONSTRAINT_EVAL_AIR_ID, DEF_PVS_AIR_ID};
 use crate::{
     bn254::CommitBytes,
     circuit::{
+        deferral::DEF_HOOK_PVS_AIR_ID,
         nonroot::bus::{PvsAirConsistencyBus, PvsAirConsistencyMessage},
         root::digests_to_poseidon2_input,
         CONSTRAINT_EVAL_CACHED_INDEX,
@@ -106,10 +107,11 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             .assert_bool(local.is_present + next.is_present - AB::Expr::ONE);
 
         // basic constraints for consistency columns
-        builder.when_first_row().assert_zero(local.proof_idx);
+        builder.when_first_row().assert_bool(local.proof_idx);
         builder
-            .when(and(local.is_present, next.is_present))
-            .assert_one(next.proof_idx - local.proof_idx);
+            .when_first_row()
+            .when(local.proof_idx)
+            .assert_one(has_one_row.clone());
         builder.assert_bool(local.has_verifier_pvs);
         builder.assert_eq(local.has_verifier_pvs, next.has_verifier_pvs);
 
@@ -154,10 +156,11 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
 
         /*
          * If this row is present then we need to receive the child public values
-         * from ProofShapeModule. Regardless of the level, these will always be at
-         * DEF_PVS_AIR_ID.
+         * from ProofShapeModule. At the hook level this is at DEF_HOOK_PVS_AIR_ID,
+         * at every other level it will be at DEF_PVS_AIR_ID.
          */
-        let def_pvs_air_idx = AB::Expr::from_usize(DEF_PVS_AIR_ID);
+        let def_pvs_air_idx = AB::Expr::from_usize(DEF_PVS_AIR_ID) * local.has_verifier_pvs
+            + AB::Expr::from_usize(DEF_HOOK_PVS_AIR_ID) * not(local.has_verifier_pvs);
         for (pv_idx, value) in local.child_pvs.as_slice().iter().enumerate() {
             self.public_values_bus.receive(
                 builder,

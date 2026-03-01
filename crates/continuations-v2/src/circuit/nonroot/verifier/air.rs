@@ -562,7 +562,9 @@ impl VerifierPvsAir {
 
         // constrain def_root_vk_commit matches if set in child_pvs
         assert_array_eq(
-            &mut builder.when(base_local.child_pvs.recursion_flag),
+            &mut builder
+                .when(base_local.child_pvs.recursion_flag)
+                .when(def_local.child_pvs.deferral_flag),
             def_local.child_pvs.def_root_vk_commit,
             def_root_vk_commit,
         );

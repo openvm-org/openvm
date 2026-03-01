@@ -26,12 +26,15 @@ pub fn generate_proving_ctx(
         ProofsType::Mix | ProofsType::Combined => 1,
     };
 
-    let height = proofs.len().next_power_of_two();
+    let height = num_vm_proofs.next_power_of_two();
     let base_width = VmPvsCols::<u8>::width();
     let width = base_width + deferral_enabled as usize;
 
     let mut trace = vec![F::ZERO; height * width];
-    for (proof_idx, (proof, chunk)) in proofs.iter().zip(trace.chunks_exact_mut(width)).enumerate()
+    for (proof_idx, (proof, chunk)) in proofs[0..num_vm_proofs.max(1)]
+        .iter()
+        .zip(trace.chunks_exact_mut(width))
+        .enumerate()
     {
         let (base_chunk, def_chunk) = chunk.split_at_mut(base_width);
         let cols: &mut VmPvsCols<F> = base_chunk.borrow_mut();
@@ -39,9 +42,8 @@ pub fn generate_proving_ctx(
 
         if deferral_enabled {
             def_chunk[0] = match proofs_type {
-                ProofsType::Vm => F::ZERO,
+                ProofsType::Vm | ProofsType::Mix => F::ZERO,
                 ProofsType::Deferral => F::ONE,
-                ProofsType::Mix => F::from_usize(proof_idx),
                 ProofsType::Combined => F::TWO,
             };
             if def_chunk[0] == F::ONE {
