@@ -406,6 +406,11 @@ impl<F: PrimeField32> TraceFiller<F> for Sha256VmFiller {
                 self.inner
                     .generate_missing_cells(chunk, SHA256VM_WIDTH, SHA256VM_CONTROL_WIDTH);
             });
+        // generate missing cells for wrapping as well in order to avoid `when_transition`
+        self.inner.generate_missing_cells_wrap(
+            trace_matrix.values.split_at_mut(SHA256VM_WIDTH),
+            SHA256VM_CONTROL_WIDTH,
+        );
     }
 }
 
@@ -517,7 +522,8 @@ impl Sha256VmFiller {
                             .set_prev_data([F::ZERO; SHA256_WRITE_SIZE]);
                         mem_helper.fill_zero(digest_cols.writes_aux.as_mut());
                     }
-                    digest_cols.inner.flags.is_last_block = F::from_bool(is_last_block);
+                    digest_cols.inner.flags.is_last_block_and_digest_row =
+                        F::from_bool(is_last_block);
                     digest_cols.inner.flags.is_digest_row = F::from_bool(true);
                 } else {
                     // This is a round row

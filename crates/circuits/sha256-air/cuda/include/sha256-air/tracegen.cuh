@@ -303,9 +303,12 @@ __device__ __noinline__ void generate_block_trace(
             SHA256INNER_WRITE_ROUND(
                 row_slice, flags.is_first_4_rows, (i < 4) ? Fp::one() : Fp::zero()
             );
+            SHA256INNER_WRITE_ROUND(
+                row_slice, flags.is_first_row, (i < 1) ? Fp::one() : Fp::zero()
+            );
             SHA256INNER_WRITE_ROUND(row_slice, flags.is_digest_row, Fp::zero());
             SHA256INNER_WRITE_ROUND(
-                row_slice, flags.is_last_block, is_last_block ? Fp::one() : Fp::zero()
+                row_slice, flags.is_last_block, Fp::zero()
             );
 
             RowSlice row_idx_flags =

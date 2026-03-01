@@ -8,6 +8,7 @@ using namespace riscv;
 using namespace sha256;
 
 template <typename T> struct Sha256FlagsCols {
+    T is_first_row;
     T is_round_row;
     T is_first_4_rows;
     T is_digest_row;

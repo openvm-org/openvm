@@ -81,11 +81,17 @@ impl Sha256Air {
         let local_cols: &Sha256DigestCols<AB::Var> =
             local[start_col..start_col + SHA256_DIGEST_WIDTH].borrow();
         let flags = &local_cols.flags;
+        builder.assert_bool(flags.is_first_row);
         builder.assert_bool(flags.is_round_row);
         builder.assert_bool(flags.is_first_4_rows);
         builder.assert_bool(flags.is_digest_row);
         builder.assert_bool(flags.is_round_row + flags.is_digest_row);
-        builder.assert_bool(flags.is_last_block);
+        builder.assert_bool(flags.is_last_block_and_digest_row);
+
+        // is_last_block is only set on digest rows
+        builder
+            .when(flags.is_last_block_and_digest_row)
+            .assert_one(flags.is_digest_row);
 
         self.row_idx_encoder
             .eval(builder, &local_cols.flags.row_idx);
@@ -97,6 +103,11 @@ impl Sha256Air {
             self.row_idx_encoder
                 .contains_flag_range::<AB>(&local_cols.flags.row_idx, 0..=3),
             flags.is_first_4_rows,
+        );
+        builder.assert_eq(
+            self.row_idx_encoder
+                .contains_flag_range::<AB>(&local_cols.flags.row_idx, 0..=0),
+            flags.is_first_row,
         );
         builder.assert_eq(
             self.row_idx_encoder
@@ -147,10 +158,7 @@ impl Sha256Air {
                 // If it is a padding row or the last row of a message, the `hash` should be the
                 // [SHA256_H]
                 builder
-                    .when(
-                        next.flags.is_padding_row()
-                            + next.flags.is_last_block * next.flags.is_digest_row,
-                    )
+                    .when(next.flags.is_padding_row() + next.flags.is_last_block_and_digest_row)
                     .assert_eq(
                         a_limb,
                         AB::Expr::from_u32(
@@ -159,10 +167,7 @@ impl Sha256Air {
                     );
 
                 builder
-                    .when(
-                        next.flags.is_padding_row()
-                            + next.flags.is_last_block * next.flags.is_digest_row,
-                    )
+                    .when(next.flags.is_padding_row() + next.flags.is_last_block_and_digest_row)
                     .assert_eq(
                         e_limb,
                         AB::Expr::from_u32(
@@ -185,11 +190,11 @@ impl Sha256Air {
                 let prev_e_limb = compose::<AB::Expr>(&prev_e[j * 8..(j + 1) * 8], 1);
 
                 builder
-                    .when(not(next.flags.is_last_block) * next.flags.is_digest_row)
+                    .when(not(next.flags.is_last_block_and_digest_row) * next.flags.is_digest_row)
                     .assert_eq(prev_a_limb, cur_a[j].clone());
 
                 builder
-                    .when(not(next.flags.is_last_block) * next.flags.is_digest_row)
+                    .when(not(next.flags.is_last_block_and_digest_row) * next.flags.is_digest_row)
                     .assert_eq(prev_e_limb, cur_e[j].clone());
             }
         }
@@ -253,7 +258,7 @@ impl Sha256Air {
         builder
             .when(next_is_padding_row.clone())
             .when(local_cols.flags.is_digest_row)
-            .assert_one(local_cols.flags.is_last_block);
+            .assert_one(local_cols.flags.is_last_block_and_digest_row);
         // If we are in a round row, the next row cannot be a padding row
         builder
             .when(local_cols.flags.is_round_row)
@@ -308,6 +313,11 @@ impl Sha256Air {
             .when_first_row()
             .assert_one(local_cols.flags.global_block_idx);
 
+        // The first row is first
+        builder
+            .when_first_row()
+            .assert_one(local_cols.flags.is_first_row);
+
         // Global block index is constant on all rows in a block
         builder.when(local_cols.flags.is_round_row).assert_eq(
             local_cols.flags.global_block_idx,
@@ -316,8 +326,7 @@ impl Sha256Air {
         // Global block index increases by 1 between blocks
         builder
             .when_transition()
-            .when(local_cols.flags.is_digest_row)
-            .when(next_cols.flags.is_round_row)
+            .when(next_cols.flags.is_first_row)
             .assert_eq(
                 local_cols.flags.global_block_idx + AB::Expr::ONE,
                 next_cols.flags.global_block_idx,
@@ -338,8 +347,7 @@ impl Sha256Air {
         );
         // Local block index increases by 1 between blocks in the same message
         builder
-            .when(local_cols.flags.is_digest_row)
-            .when(not(local_cols.flags.is_last_block))
+            .when(local_cols.flags.is_digest_row - local_cols.flags.is_last_block_and_digest_row)
             .assert_eq(
                 local_cols.flags.local_block_idx + AB::Expr::ONE,
                 next_cols.flags.local_block_idx,
@@ -347,8 +355,7 @@ impl Sha256Air {
         // Local block index is 0 on padding rows
         // Combined with the above, this means that the local block index is 0 in the first block
         builder
-            .when(local_cols.flags.is_digest_row)
-            .when(local_cols.flags.is_last_block)
+            .when(local_cols.flags.is_last_block_and_digest_row)
             .assert_zero(next_cols.flags.local_block_idx);
 
         self.eval_message_schedule::<AB>(builder, local_cols, next_cols);
@@ -460,7 +467,7 @@ impl Sha256Air {
                 // check because the degree is already 3. So we must fill in
                 // `intermed_4` with dummy values on rows 0 and 16 to ensure the constraint holds on
                 // these rows.
-                builder.when_transition().assert_eq(
+                builder.assert_eq(
                     next.schedule_helper.intermed_4[i][j],
                     w_idx_limb + sig_w_limb,
                 );
@@ -504,7 +511,7 @@ impl Sha256Air {
             constraint_word_addition(
                 // Note: here we can't do a conditional check because the degree of sum is already
                 // 3
-                &mut builder.when_transition(),
+                builder,
                 &[&small_sig1_field::<AB::Expr>(&w[i + 2])],
                 &[&w_7, &intermed_16],
                 &w[i + 4],

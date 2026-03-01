@@ -93,9 +93,10 @@ impl Sha256FillerHelper {
                 let cols: &mut Sha256RoundCols<F> =
                     row[get_range(trace_start_col, SHA256_ROUND_WIDTH)].borrow_mut();
                 cols.flags.is_round_row = F::ONE;
+                cols.flags.is_first_row = if i == 0 { F::ONE } else { F::ZERO };
                 cols.flags.is_first_4_rows = if i < 4 { F::ONE } else { F::ZERO };
                 cols.flags.is_digest_row = F::ZERO;
-                cols.flags.is_last_block = F::from_bool(is_last_block);
+                cols.flags.is_last_block_and_digest_row = F::ZERO;
                 cols.flags.row_idx = get_flag_pt_array(&self.row_idx_encoder, i).map(F::from_u32);
                 cols.flags.global_block_idx = F::from_u32(global_block_idx);
                 cols.flags.local_block_idx = F::from_u32(local_block_idx);
@@ -222,9 +223,10 @@ impl Sha256FillerHelper {
                     cols.schedule_helper.w_3[j] = u32_into_u16s(w_3).map(F::from_u32);
                 }
                 cols.flags.is_round_row = F::ZERO;
+                cols.flags.is_first_row = F::ZERO;
                 cols.flags.is_first_4_rows = F::ZERO;
                 cols.flags.is_digest_row = F::ONE;
-                cols.flags.is_last_block = F::from_bool(is_last_block);
+                cols.flags.is_last_block_and_digest_row = F::from_bool(is_last_block);
                 cols.flags.row_idx = get_flag_pt_array(&self.row_idx_encoder, 16).map(F::from_u32);
                 cols.flags.global_block_idx = F::from_u32(global_block_idx);
 
@@ -294,6 +296,26 @@ impl Sha256FillerHelper {
         }
     }
 
+    fn generate_missing_cells_from_slices<F: PrimeField32>(
+        &self,
+        row_15: &mut [F],
+        row_16: &mut [F],
+        row_17: &mut [F],
+    ) {
+        let cols_15: &mut Sha256RoundCols<F> = row_15.borrow_mut();
+        let cols_16: &mut Sha256RoundCols<F> = row_16.borrow_mut();
+        let cols_17: &mut Sha256RoundCols<F> = row_17.borrow_mut();
+        // Fill in row 15's `intermed_12` with dummy values so the message schedule constraints
+        // holds on row 16
+        Self::generate_intermed_12(cols_15, cols_16);
+        // Fill in row 16's `intermed_12` with dummy values so the message schedule constraints
+        // holds on the next block's row 0
+        Self::generate_intermed_12(cols_16, cols_17);
+        // Fill in row 0's `intermed_4` with dummy values so the message schedule constraints holds
+        // on that row
+        Self::generate_intermed_4(cols_16, cols_17);
+    }
+
     /// This function will fill in the cells that we couldn't do during the first pass.
     /// This function should be called only after `generate_block_trace` was called for all blocks
     /// And [`Self::generate_default_row`] is called for all invalid rows
@@ -310,21 +332,29 @@ impl Sha256FillerHelper {
         let rows_15_17 = &mut trace[14 * trace_width..17 * trace_width];
         let (row_15, row_16_17) = rows_15_17.split_at_mut(trace_width);
         let (row_16, row_17) = row_16_17.split_at_mut(trace_width);
-        let cols_15: &mut Sha256RoundCols<F> =
-            row_15[trace_start_col..trace_start_col + SHA256_ROUND_WIDTH].borrow_mut();
-        let cols_16: &mut Sha256RoundCols<F> =
-            row_16[trace_start_col..trace_start_col + SHA256_ROUND_WIDTH].borrow_mut();
-        let cols_17: &mut Sha256RoundCols<F> =
-            row_17[trace_start_col..trace_start_col + SHA256_ROUND_WIDTH].borrow_mut();
-        // Fill in row 15's `intermed_12` with dummy values so the message schedule constraints
-        // holds on row 16
-        Self::generate_intermed_12(cols_15, cols_16);
-        // Fill in row 16's `intermed_12` with dummy values so the message schedule constraints
-        // holds on the next block's row 0
-        Self::generate_intermed_12(cols_16, cols_17);
-        // Fill in row 0's `intermed_4` with dummy values so the message schedule constraints holds
-        // on that row
-        Self::generate_intermed_4(cols_16, cols_17);
+        self.generate_missing_cells_from_slices(
+            &mut row_15[trace_start_col..trace_start_col + SHA256_ROUND_WIDTH],
+            &mut row_16[trace_start_col..trace_start_col + SHA256_ROUND_WIDTH],
+            &mut row_17[trace_start_col..trace_start_col + SHA256_ROUND_WIDTH],
+        );
+    }
+
+    pub fn generate_missing_cells_wrap<F: PrimeField32>(
+        &self,
+        (trace_head, trace_rest): (&mut [F], &mut [F]),
+        trace_start_col: usize,
+    ) {
+        let trace_width = trace_head.len();
+        let rest_len = trace_rest.len();
+        let (row_15, row_16) = trace_rest
+            .get_mut(rest_len - 2 * trace_width..)
+            .unwrap()
+            .split_at_mut(trace_width);
+        self.generate_missing_cells_from_slices(
+            &mut row_15[trace_start_col..trace_start_col + SHA256_ROUND_WIDTH],
+            &mut row_16[trace_start_col..trace_start_col + SHA256_ROUND_WIDTH],
+            &mut trace_head[trace_start_col..trace_start_col + SHA256_ROUND_WIDTH],
+        );
     }
 
     /// Fills the `cols` as a padding row
@@ -547,5 +577,7 @@ pub fn generate_trace<F: PrimeField32>(
         .for_each(|chunk| {
             step.generate_missing_cells(chunk, width, 0);
         });
+    // generate missing cells for wrapping as well in order to avoid `when_transition`
+    step.generate_missing_cells_wrap(values.split_at_mut(width), 0);
     RowMajorMatrix::new(values, width)
 }
