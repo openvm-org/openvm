@@ -12,12 +12,12 @@ use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
 use verify_stark::pvs::{VerifierBasePvs, VerifierDefPvs, VERIFIER_PVS_AIR_ID};
 
-use crate::circuit::{
-    nonroot::{
+use crate::{
+    circuit::nonroot::{
         verifier::air::{VerifierCombinedPvs, VerifierDeferralCols, VerifierPvsCols},
         ProofsType,
     },
-    root::digests_to_poseidon2_input,
+    utils::digests_to_poseidon2_input,
 };
 
 #[derive(Copy, Clone)]

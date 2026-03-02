@@ -15,9 +15,11 @@ use recursion_circuit::{
     primitives::bus::{RangeCheckerBus, RangeCheckerBusMessage},
 };
 
-use crate::circuit::{
-    deferral::verify::bus::{OutputCommitBus, OutputCommitMessage, OutputValBus, OutputValMessage},
-    root::digests_to_poseidon2_input,
+use crate::{
+    circuit::deferral::verify::bus::{
+        OutputCommitBus, OutputCommitMessage, OutputValBus, OutputValMessage,
+    },
+    utils::digests_to_poseidon2_input,
 };
 
 pub(crate) const F_NUM_BYTES: usize = 4;

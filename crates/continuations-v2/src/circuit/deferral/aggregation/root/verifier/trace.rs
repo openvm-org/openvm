@@ -13,18 +13,13 @@ use p3_matrix::dense::RowMajorMatrix;
 use verify_stark::pvs::DeferralPvs;
 
 use crate::{
-    circuit::{
-        deferral::{
-            aggregation::root::verifier::air::DeferralRootPvsCols, DeferralAggregationPvs,
-            DeferralVerifierPvs,
-        },
-        root::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input, zero_hash},
+    circuit::deferral::{
+        aggregation::root::verifier::air::DeferralRootPvsCols, DeferralAggregationPvs,
+        DeferralVerifierPvs, DEF_AGG_PVS_AIR_ID, DEF_AGG_VERIFIER_AIR_ID,
     },
+    utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input, zero_hash},
     SC,
 };
-
-const DEF_VERIFIER_PVS_AIR_ID: usize = 0;
-const DEF_AGG_PVS_AIR_ID: usize = 1;
 
 pub fn def_vk_commit_from_verifier_pvs(
     verifier_pvs: &DeferralVerifierPvs<F>,
@@ -49,7 +44,7 @@ pub fn generate_proving_ctx(
     Vec<[F; POSEIDON2_WIDTH]>,
     [F; DIGEST_SIZE],
 ) {
-    let verifier_pvs: &DeferralVerifierPvs<F> = proof.public_values[DEF_VERIFIER_PVS_AIR_ID]
+    let verifier_pvs: &DeferralVerifierPvs<F> = proof.public_values[DEF_AGG_VERIFIER_AIR_ID]
         .as_slice()
         .borrow();
     let def_pvs: &DeferralAggregationPvs<F> =

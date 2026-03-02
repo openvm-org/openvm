@@ -11,8 +11,8 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::circuit::{
-    deferral::verify::paths::air::AccMerklePathsCols, root::digests_to_poseidon2_input,
+use crate::{
+    circuit::deferral::verify::paths::air::AccMerklePathsCols, utils::digests_to_poseidon2_input,
 };
 
 fn bit_at(value: usize, bit: usize) -> bool {

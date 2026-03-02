@@ -30,7 +30,7 @@ use p3_field::{PrimeCharacteristicRing, PrimeField32};
 use test_case::test_case;
 use tracing::Level;
 
-use crate::{prover::ChildVkKind, SC};
+use crate::{circuit::deferral::DEF_AGG_PVS_AIR_ID, prover::ChildVkKind, SC};
 
 #[cfg(feature = "cuda")]
 mod combined;
@@ -48,19 +48,19 @@ cfg_if::cfg_if! {
         };
         use crate::circuit::{
             deferral::{
-                aggregation::nonroot::def_pvs::zero_merkle_commit,
                 verify::output::expected_output_commit,
                 DeferralAggregationPvs,
                 DeferralCircuitPvs,
                 DeferralVerifierPvs,
             },
-            root::{poseidon2_input_to_digests, zero_hash, RootVerifierPvs},
+            root::RootVerifierPvs,
         };
         use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
         use openvm_stark_backend::{prover::CommittedTraceData, verifier::verify, TranscriptHistory};
         use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_compress_with_capacity, default_duplex_sponge_recorder};
         use verify_stark::pvs::{VERIFIER_PVS_AIR_ID, DeferralPvs};
         use crate::prover::DeferralChildVkKind;
+        use crate::utils::{poseidon2_input_to_digests, zero_hash};
         type Engine = BabyBearPoseidon2GpuEngine;
         type PB = GpuBackend;
     } else {
@@ -556,7 +556,7 @@ fn expected_deferral_nonroot_merkle_commit_from_copies(
                 let right = if chunk.len() == 2 {
                     chunk[1]
                 } else {
-                    zero_merkle_commit(child_merkle_depth)
+                    zero_hash(child_merkle_depth + 1)
                 };
                 poseidon2_compress_with_capacity(chunk[0], right).0
             })
@@ -671,7 +671,6 @@ fn test_deferral_leaf_prover(
     engine.verify(&vk, &wrapped_proof)?;
 
     // Assert DeferralAggregationPvs consistency for this aggregation size.
-    const DEF_AGG_PVS_AIR_ID: usize = 1;
     let leaf_merkle_commit = expected_deferral_leaf_merkle_commit(&def_proof);
     let expected_merkle_commit =
         expected_deferral_nonroot_merkle_commit_from_copies(num_children, leaf_merkle_commit);
@@ -700,7 +699,6 @@ fn test_deferral_aggregation(num_children: usize) -> Result<()> {
     let engine = Engine::new(vk.inner.params.clone());
     engine.verify(&vk, &final_proof)?;
 
-    const DEF_AGG_PVS_AIR_ID: usize = 1;
     let leaf_merkle_commit = expected_deferral_leaf_merkle_commit(&def_proof);
     let expected_root_merkle =
         expected_deferral_nonroot_merkle_commit_from_copies(num_children, leaf_merkle_commit);

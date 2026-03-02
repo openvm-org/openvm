@@ -22,9 +22,9 @@ use crate::{
     circuit::{
         deferral::DEF_HOOK_PVS_AIR_ID,
         nonroot::bus::{PvsAirConsistencyBus, PvsAirConsistencyMessage},
-        root::digests_to_poseidon2_input,
         CONSTRAINT_EVAL_CACHED_INDEX,
     },
+    utils::digests_to_poseidon2_input,
 };
 
 #[repr(C)]

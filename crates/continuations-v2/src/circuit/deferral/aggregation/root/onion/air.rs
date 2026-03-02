@@ -13,12 +13,12 @@ use recursion_circuit::{
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use crate::circuit::{
-    deferral::aggregation::root::bus::{
+use crate::{
+    circuit::deferral::aggregation::root::bus::{
         DefVkCommitBus, DefVkCommitMessage, IoCommitBus, IoCommitMessage, OnionResultBus,
         OnionResultMessage,
     },
-    root::digests_to_poseidon2_input,
+    utils::digests_to_poseidon2_input,
 };
 
 #[repr(C)]

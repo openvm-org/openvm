@@ -4,6 +4,11 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 pub mod aggregation;
 pub mod verify;
 
+pub const DEF_CIRCUIT_PVS_AIR_ID: usize = 0;
+
+pub const DEF_AGG_VERIFIER_AIR_ID: usize = 0;
+pub const DEF_AGG_PVS_AIR_ID: usize = 1;
+
 pub const DEF_HOOK_PVS_AIR_ID: usize = 0;
 
 #[repr(C)]

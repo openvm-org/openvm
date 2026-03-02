@@ -13,10 +13,12 @@ use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
 use verify_stark::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 
-use crate::circuit::{
-    deferral::DEF_HOOK_PVS_AIR_ID,
-    nonroot::{def_pvs::air::DeferralPvsCols, ProofsType},
-    root::digests_to_poseidon2_input,
+use crate::{
+    circuit::{
+        deferral::DEF_HOOK_PVS_AIR_ID,
+        nonroot::{def_pvs::air::DeferralPvsCols, ProofsType},
+    },
+    utils::digests_to_poseidon2_input,
 };
 
 pub fn generate_proving_ctx(

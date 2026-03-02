@@ -20,10 +20,12 @@ use verify_stark::pvs::{
     VerifierBasePvs, VerifierDefPvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID,
 };
 
-use crate::circuit::{
-    nonroot::bus::{PvsAirConsistencyBus, PvsAirConsistencyMessage},
-    root::digests_to_poseidon2_input,
-    CONSTRAINT_EVAL_CACHED_INDEX,
+use crate::{
+    circuit::{
+        nonroot::bus::{PvsAirConsistencyBus, PvsAirConsistencyMessage},
+        CONSTRAINT_EVAL_CACHED_INDEX,
+    },
+    utils::digests_to_poseidon2_input,
 };
 
 #[repr(C)]

@@ -31,10 +31,11 @@ use crate::{
         },
         root::{
             bus::{MemoryMerkleCommitBus, MemoryMerkleCommitMessage},
-            digests_to_poseidon2_input, pad_slice_to_poseidon2_input, RootVerifierPvs,
+            RootVerifierPvs,
         },
         CONSTRAINT_EVAL_CACHED_INDEX,
     },
+    utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input},
 };
 
 #[repr(C)]

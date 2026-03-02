@@ -16,12 +16,12 @@ use verify_stark::pvs::{
     VM_PVS_AIR_ID,
 };
 
-use crate::circuit::{
-    deferral::{
+use crate::{
+    circuit::deferral::{
         verify::verifier::{DeferredVerifyPvsCols, RecursiveDeferredVerifyCols},
         DeferralCircuitPvs,
     },
-    root::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input, poseidon2_input_to_digests},
+    utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input, poseidon2_input_to_digests},
 };
 
 #[repr(C)]

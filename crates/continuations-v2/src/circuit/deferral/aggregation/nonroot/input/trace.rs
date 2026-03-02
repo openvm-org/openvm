@@ -12,10 +12,8 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::circuit::deferral::{
     aggregation::nonroot::input::air::InputCommitCols, DeferralAggregationPvs, DeferralCircuitPvs,
+    DEF_AGG_PVS_AIR_ID, DEF_CIRCUIT_PVS_AIR_ID,
 };
-
-const DEF_CIRCUIT_PVS_AIR_ID: usize = 0;
-const DEF_AGG_PVS_AIR_ID: usize = 1;
 
 type CachedCommitRow<F> = (usize, usize, [F; DIGEST_SIZE]);
 

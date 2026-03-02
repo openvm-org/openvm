@@ -25,15 +25,13 @@ use crate::{
             aggregation::root::bus::{
                 DefVkCommitBus, DefVkCommitMessage, OnionResultBus, OnionResultMessage,
             },
-            DeferralAggregationPvs, DeferralVerifierPvs,
+            DeferralAggregationPvs, DeferralVerifierPvs, DEF_AGG_PVS_AIR_ID,
         },
-        root::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input, zero_hash},
         subair::{MerkleRootBus, MerkleRootMessage},
         CONSTRAINT_EVAL_CACHED_INDEX,
     },
+    utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input, zero_hash},
 };
-
-const DEF_AGG_PVS_AIR_ID: usize = 1;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]

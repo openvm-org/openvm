@@ -22,9 +22,9 @@ use crate::{
             DeferralAccPathBus, DeferralAccPathMessage, MemoryMerkleRootsBus,
             MemoryMerkleRootsMessage,
         },
-        root::zero_hash,
         subair::{MerklePathRowView, MerklePathSubAir, MerklePathSubAirContext},
     },
+    utils::zero_hash,
 };
 
 #[repr(C)]

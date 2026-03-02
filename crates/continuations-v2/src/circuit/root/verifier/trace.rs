@@ -16,10 +16,12 @@ use verify_stark::pvs::{
     VM_PVS_AIR_ID,
 };
 
-use crate::circuit::root::{
-    digests_to_poseidon2_input, pad_slice_to_poseidon2_input,
-    verifier::air::{RootDefVerifierCols, RootVerifierPvsCols},
-    RootVerifierPvs,
+use crate::{
+    circuit::root::{
+        verifier::air::{RootDefVerifierCols, RootVerifierPvsCols},
+        RootVerifierPvs,
+    },
+    utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input},
 };
 
 pub fn generate_proving_ctx(
