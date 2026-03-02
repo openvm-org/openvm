@@ -457,6 +457,90 @@ fn rv64_shiftw_wrong_upper_sign_extension_negative_test() {
 }
 
 #[test]
+fn rv64_shiftw_b_sign_only_prank_negative_test() {
+    // SLLW: b_sign is tied to result_sign for W-left shifts.
+    run_negative_shift_test(
+        SLLW,
+        [2, 0, 0, 0, 0, 0, 0, 0],
+        [1, 0, 0, 0, 0, 0, 0, 0],
+        [1, 0, 0, 0, 0, 0, 0, 0],
+        ShiftPrankValues {
+            b_sign: Some(1),
+            ..Default::default()
+        },
+        false,
+    );
+
+    // SRLW: b_sign must be zero.
+    run_negative_shift_test(
+        SRLW,
+        [3, 0, 0, 0, 0, 0, 0, 0],
+        [3, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        ShiftPrankValues {
+            b_sign: Some(1),
+            ..Default::default()
+        },
+        false,
+    );
+
+    // SRAW: b_sign must match input sign bit.
+    run_negative_shift_test(
+        SRAW,
+        [0, 0, 0, 128, 255, 255, 255, 255],
+        [0, 0, 0, 128, 255, 255, 255, 255],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        ShiftPrankValues {
+            b_sign: Some(0),
+            ..Default::default()
+        },
+        true,
+    );
+}
+
+#[test]
+fn rv64_shiftw_result_sign_only_prank_negative_test() {
+    // SLLW: result_sign is tied to b_sign.
+    run_negative_shift_test(
+        SLLW,
+        [2, 0, 0, 0, 0, 0, 0, 0],
+        [1, 0, 0, 0, 0, 0, 0, 0],
+        [1, 0, 0, 0, 0, 0, 0, 0],
+        ShiftPrankValues {
+            result_sign: Some(1),
+            ..Default::default()
+        },
+        false,
+    );
+
+    // SRLW: result_sign must match output sign bit.
+    run_negative_shift_test(
+        SRLW,
+        [1, 0, 0, 0, 0, 0, 0, 0],
+        [2, 0, 0, 0, 0, 0, 0, 0],
+        [1, 0, 0, 0, 0, 0, 0, 0],
+        ShiftPrankValues {
+            result_sign: Some(1),
+            ..Default::default()
+        },
+        true,
+    );
+
+    // SRAW: result_sign must match output sign bit.
+    run_negative_shift_test(
+        SRAW,
+        [0, 0, 0, 192, 255, 255, 255, 255],
+        [0, 0, 0, 128, 255, 255, 255, 255],
+        [1, 0, 0, 0, 0, 0, 0, 0],
+        ShiftPrankValues {
+            result_sign: Some(0),
+            ..Default::default()
+        },
+        true,
+    );
+}
+
+#[test]
 fn rv64_shiftw_wrong_upper_sign_extension_negative_to_zero_test() {
     let a = [0, 0, 0, 128, 255, 255, 255, 255];
     let b = [0, 0, 0, 128, 255, 255, 255, 255];
