@@ -29,7 +29,6 @@ members = [
     "crates/toolchain/macros",
     "crates/toolchain/platform",
     "crates/toolchain/tests",
-    # "crates/continuations",
     "crates/continuations-v2",
     "crates/recursion",
     "crates/verify-stark",
@@ -144,7 +143,6 @@ openvm-circuit = { path = "crates/vm", default-features = false }
 openvm-circuit-derive = { path = "crates/vm/derive", default-features = false }
 recursion-circuit = { path = "crates/recursion", default-features = false }
 stark-recursion-circuit-derive = { path = "crates/recursion/derive", default-features = false }
-openvm-continuations = { path = "crates/continuations", default-features = false }
 continuations-v2 = { path = "crates/continuations-v2", default-features = false }
 verify-stark = { path = "crates/verify-stark", default-features = false }
 sdk-v2 = { path = "crates/sdk-v2", default-features = false }
