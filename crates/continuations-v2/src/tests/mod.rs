@@ -26,11 +26,10 @@ use openvm_transpiler::{
     elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler, FromElf,
 };
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
-#[cfg(feature = "cuda")]
 use test_case::test_case;
 use tracing::Level;
 
-use crate::{circuit::deferral::DEF_AGG_PVS_AIR_ID, prover::ChildVkKind, SC};
+use crate::{prover::ChildVkKind, SC};
 
 #[cfg(feature = "cuda")]
 mod combined;
@@ -52,6 +51,7 @@ cfg_if::cfg_if! {
                 DeferralAggregationPvs,
                 DeferralCircuitPvs,
                 DeferralVerifierPvs,
+                DEF_AGG_PVS_AIR_ID,
             },
             root::RootVerifierPvs,
         };

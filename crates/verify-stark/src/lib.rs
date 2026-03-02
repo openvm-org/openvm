@@ -19,7 +19,7 @@ use p3_field::{PrimeCharacteristicRing, PrimeField32};
 
 use crate::{
     error::VerifyStarkError,
-    pvs::{NonRootVerifierPvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID},
+    pvs::{VerifierBasePvs, VmPvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID},
     vk::NonRootStarkVerifyingKey,
 };
 
@@ -73,23 +73,30 @@ pub fn verify_vm_stark_proof_decoded(
     let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(vk.mvk.inner.params.clone());
     engine.verify(&vk.mvk, &proof.inner)?;
 
-    let &NonRootVerifierPvs::<F> {
-        program_commit,
-        initial_pc,
-        exit_code,
-        is_terminate,
-        initial_root,
-        final_root,
+    let (verifier_base_pvs_slice, verifier_def_pvs_slice) = proof.inner.public_values
+        [VERIFIER_PVS_AIR_ID]
+        .as_slice()
+        .split_at(VerifierBasePvs::<u8>::width());
+
+    let &VerifierBasePvs::<F> {
         internal_flag,
         app_dag_commit,
         leaf_dag_commit,
         internal_for_leaf_dag_commit,
         recursion_flag,
         internal_recursive_dag_commit,
+    } = verifier_base_pvs_slice.borrow();
+
+    let &VmPvs::<F> {
+        program_commit,
+        initial_pc,
+        exit_code,
+        is_terminate,
+        initial_root,
+        final_root,
         ..
-    } = proof.inner.public_values[VERIFIER_PVS_AIR_ID]
-        .as_slice()
-        .borrow();
+    } = proof.inner.public_values[VM_PVS_AIR_ID].as_slice().borrow();
+
     let hasher = vm_poseidon2_hasher();
 
     // Verify the merkle root proof against final_root.
@@ -172,6 +179,11 @@ pub fn verify_vm_stark_proof_decoded(
         return Err(VerifyStarkError::CompressionCommitDefined {
             actual: compression_commit_pvs,
         });
+    }
+
+    // For now, deferral-enabled proofs are **not** verifiable in this crate
+    if !(verifier_def_pvs_slice.is_empty() && proof.inner.public_values[VM_PVS_AIR_ID].is_empty()) {
+        return Err(VerifyStarkError::DeferralNotEnabled);
     }
 
     Ok(())

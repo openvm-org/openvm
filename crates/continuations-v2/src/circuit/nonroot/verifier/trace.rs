@@ -217,8 +217,6 @@ pub fn generate_proving_ctx(
                 base_pvs.internal_for_leaf_dag_commit,
             )
             .0;
-        } else if matches!(child_level, VerifierChildLevel::InternalRecursive) {
-            def_pvs.def_root_vk_commit = def_pvs.def_root_vk_commit;
         }
 
         let mut combined = vec![F::ZERO; VerifierCombinedPvs::<u8>::width()];

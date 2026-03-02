@@ -15,9 +15,9 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIG
 use p3_field::PrimeField32;
 use verify_stark::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 
-use crate::{
-    circuit::deferral::verify::DeferralMerkleProofs,
-    circuit::user_pvs::{commit, memory},
+use crate::circuit::{
+    deferral::verify::DeferralMerkleProofs,
+    user_pvs::{commit, memory},
 };
 
 // Trait that root provers use to remain generic in PB. Tracegen returns both the AIR proving

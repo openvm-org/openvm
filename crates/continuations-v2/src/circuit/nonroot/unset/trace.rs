@@ -22,11 +22,11 @@ pub fn generate_proving_ctx(
     let mut trace = vec![F::ZERO; height * width];
     let mut chunks = trace.chunks_exact_mut(width);
 
-    for i in 0..num_valid {
+    for proof_idx in unset_proof_idxs.iter().take(num_valid) {
         let chunk = chunks.next().unwrap();
         let cols: &mut UnsetPvsCols<F> = chunk.borrow_mut();
         cols.is_valid = F::ONE;
-        cols.proof_idx = F::from_usize(unset_proof_idxs[i]);
+        cols.proof_idx = F::from_usize(*proof_idx);
     }
 
     AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&RowMajorMatrix::new(

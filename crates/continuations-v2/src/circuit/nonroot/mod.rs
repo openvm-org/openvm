@@ -79,7 +79,7 @@ impl<S: AggregationSubCircuit> Circuit for NonRootCircuit<S> {
                 cached_commit_bus,
                 poseidon2_bus,
                 pvs_air_consistency_bus,
-                expected_def_hook_commit: self.def_hook_commit.clone().unwrap(),
+                expected_def_hook_commit: self.def_hook_commit.unwrap(),
             }) as AirRef<SC>;
             let unset_vm_pvs_air = Arc::new(UnsetPvsAir {
                 public_values_bus,

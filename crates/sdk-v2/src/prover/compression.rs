@@ -31,6 +31,7 @@ impl CompressionProver {
             internal_recursive_vk,
             internal_recursive_vk_pcs_data,
             system_params,
+            None,
         );
         Self(inner)
     }
@@ -44,13 +45,14 @@ impl CompressionProver {
             internal_recursive_vk,
             internal_recursive_vk_pcs_data,
             pk,
+            None,
         );
         Self(inner)
     }
 
     pub fn prove(&self, mut proof: NonRootStarkProof) -> Result<NonRootStarkProof> {
         proof.inner = info_span!("agg_layer", group = format!("compression")).in_scope(|| {
-            info_span!("compression").in_scope(|| self.0.compress_prove::<E>(proof.inner))
+            info_span!("compression").in_scope(|| self.0.compress_prove_no_def::<E>(proof.inner))
         })?;
         Ok(proof)
     }

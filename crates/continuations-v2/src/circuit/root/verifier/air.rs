@@ -97,7 +97,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         }
 
         /*
-         * RootVerifierPvs only exposes a reduced/derived subset of NonRootVerifierPvs,
+         * RootVerifierPvs only exposes a reduced/derived subset of the child public values,
          * so we must constrain required child public values here. We start with is_terminate
          * and exit code.
          */

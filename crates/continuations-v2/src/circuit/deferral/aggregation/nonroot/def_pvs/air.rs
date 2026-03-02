@@ -17,10 +17,11 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     circuit::deferral::{
-        DEF_CIRCUIT_PVS_AIR_ID, DeferralAggregationPvs, DeferralCircuitPvs, aggregation::nonroot::bus::{
+        aggregation::nonroot::bus::{
             InputOrMerkleCommitBus, InputOrMerkleCommitMessage, PvAirConsistencyBus,
             PvAirConsistencyMessage,
-        }
+        },
+        DeferralAggregationPvs, DeferralCircuitPvs, DEF_CIRCUIT_PVS_AIR_ID,
     },
     utils::digests_to_poseidon2_input,
 };

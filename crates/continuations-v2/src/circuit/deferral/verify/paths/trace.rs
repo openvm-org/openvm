@@ -141,12 +141,8 @@ pub fn generate_proving_input(
     let mut final_siblings = final_merkle_proof.to_vec();
 
     if is_unset {
-        for row_idx in 0..=untouched_cut {
-            final_nodes[row_idx] = initial_nodes[row_idx];
-        }
-        for row_idx in 0..untouched_cut {
-            final_siblings[row_idx] = initial_merkle_proof[row_idx];
-        }
+        final_nodes[..=untouched_cut].copy_from_slice(&initial_nodes[..=untouched_cut]);
+        final_siblings[..untouched_cut].copy_from_slice(&initial_merkle_proof[..untouched_cut]);
         if untouched_cut < proof_len {
             for row_idx in untouched_cut..proof_len {
                 let sibling = final_siblings[row_idx];

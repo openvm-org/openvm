@@ -111,9 +111,9 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         }
 
         /*
-         * DeferralCircuitPvs only exposes a reduced/derived subset of NonRootVerifierPvs,
-         * so we must constrain required child public values here. We start with is_terminate
-         * and exit code.
+         * DeferralCircuitPvs exposes a reduced/derived subset of the child public values, so
+         * we must constrain required child public values here. We start with is_terminate and
+         * exit code.
          */
         let success = AB::F::from_u32(ExitCode::Success as u32);
         builder.assert_eq(local.child_vm_pvs.exit_code, success);
