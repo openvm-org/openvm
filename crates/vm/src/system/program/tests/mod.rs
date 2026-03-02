@@ -29,12 +29,12 @@ use crate::{
 
 // The tests do not need anything about opcodes besides the global opcode offset, so we use
 // constants to avoid extra dependencies.
-const LOADW: VmOpcode = VmOpcode::from_usize(0x210);
-const STOREW: VmOpcode = VmOpcode::from_usize(0x213);
-const BEQ: VmOpcode = VmOpcode::from_usize(0x220);
-const SUB: VmOpcode = VmOpcode::from_usize(0x201);
-const JAL: VmOpcode = VmOpcode::from_usize(0x230);
-const BNE: VmOpcode = VmOpcode::from_usize(0x221);
+pub(crate) const LOADW: VmOpcode = VmOpcode::from_usize(0x210);
+pub(crate) const STOREW: VmOpcode = VmOpcode::from_usize(0x213);
+pub(crate) const BEQ: VmOpcode = VmOpcode::from_usize(0x220);
+pub(crate) const SUB: VmOpcode = VmOpcode::from_usize(0x201);
+pub(crate) const JAL: VmOpcode = VmOpcode::from_usize(0x230);
+pub(crate) const BNE: VmOpcode = VmOpcode::from_usize(0x221);
 
 assert_impl_all!(VmCommittedExe<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
 
