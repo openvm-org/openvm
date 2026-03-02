@@ -18,7 +18,7 @@ use crate::{
             aggregation::root::verifier::air::DeferralRootPvsCols, DeferralAggregationPvs,
             DeferralVerifierPvs,
         },
-        root::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input},
+        root::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input, zero_hash},
     },
     SC,
 };
@@ -67,9 +67,18 @@ pub fn generate_proving_ctx(
     cols.input_onion = input_onion;
     cols.output_onion = output_onion;
 
-    let initial_acc_hash =
-        poseidon2_compress_with_capacity(def_vk_commit, [F::ZERO; DIGEST_SIZE]).0;
-    let final_acc_hash = poseidon2_compress_with_capacity(input_onion, output_onion).0;
+    const ZERO_DIGEST: [F; DIGEST_SIZE] = [F::ZERO; DIGEST_SIZE];
+    let def_vk_commit_padded = poseidon2_compress_with_capacity(def_vk_commit, ZERO_DIGEST).0;
+    let input_onion_padded = poseidon2_compress_with_capacity(input_onion, ZERO_DIGEST).0;
+    let output_onion_padded = poseidon2_compress_with_capacity(output_onion, ZERO_DIGEST).0;
+    cols.def_vk_commit_padded = def_vk_commit_padded;
+    cols.input_onion_padded = input_onion_padded;
+    cols.output_onion_padded = output_onion_padded;
+
+    let zero_hash = zero_hash(1);
+    let initial_acc_hash = poseidon2_compress_with_capacity(def_vk_commit_padded, zero_hash).0;
+    let final_acc_hash =
+        poseidon2_compress_with_capacity(input_onion_padded, output_onion_padded).0;
 
     let mut public_values = vec![F::ZERO; DeferralPvs::<u8>::width()];
     let root_pvs: &mut DeferralPvs<F> = public_values.as_mut_slice().borrow_mut();
@@ -84,7 +93,10 @@ pub fn generate_proving_ctx(
             verifier_pvs.internal_for_leaf_dag_commit,
         ),
         pad_slice_to_poseidon2_input(&def_vk_commit, F::ZERO),
-        digests_to_poseidon2_input(input_onion, output_onion),
+        pad_slice_to_poseidon2_input(&input_onion, F::ZERO),
+        pad_slice_to_poseidon2_input(&output_onion, F::ZERO),
+        digests_to_poseidon2_input(def_vk_commit_padded, zero_hash),
+        digests_to_poseidon2_input(input_onion_padded, output_onion_padded),
     ];
 
     (

@@ -54,7 +54,7 @@ cfg_if::cfg_if! {
                 DeferralCircuitPvs,
                 DeferralVerifierPvs,
             },
-            root::{poseidon2_input_to_digests, RootVerifierPvs},
+            root::{poseidon2_input_to_digests, zero_hash, RootVerifierPvs},
         };
         use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
         use openvm_stark_backend::{prover::CommittedTraceData, verifier::verify, TranscriptHistory};
@@ -792,10 +792,16 @@ fn test_deferral_root_prover(num_children: usize) -> Result<()> {
             poseidon2_compress_with_capacity(expected_output_onion, leaf_output_commit).0;
     }
     let root_pvs: &DeferralPvs<F> = root_proof.public_values[0].as_slice().borrow();
-    let expected_initial_acc_hash =
-        poseidon2_compress_with_capacity(def_vk, [F::ZERO; DIGEST_SIZE]).0;
-    let expected_final_acc_hash =
-        poseidon2_compress_with_capacity(expected_input_onion, expected_output_onion).0;
+    let expected_initial_acc_hash = poseidon2_compress_with_capacity(
+        poseidon2_compress_with_capacity(def_vk, [F::ZERO; DIGEST_SIZE]).0,
+        zero_hash(1),
+    )
+    .0;
+    let expected_final_acc_hash = poseidon2_compress_with_capacity(
+        poseidon2_compress_with_capacity(expected_input_onion, [F::ZERO; DIGEST_SIZE]).0,
+        poseidon2_compress_with_capacity(expected_output_onion, [F::ZERO; DIGEST_SIZE]).0,
+    )
+    .0;
     assert_eq!(root_pvs.initial_acc_hash, expected_initial_acc_hash);
     assert_eq!(root_pvs.final_acc_hash, expected_final_acc_hash);
 

@@ -44,15 +44,15 @@ impl<S: AggregationSubCircuit> Circuit for DeferralRootCircuit<S> {
         let merkle_root_bus = MerkleRootBus::new(next_bus_idx + 3);
         let merkle_tree_internal_bus = MerkleTreeInternalBus::new(next_bus_idx + 4);
 
-        let verifier_pvs_air = verifier::DeferralRootPvsAir {
-            public_values_bus: bus_inventory.public_values_bus,
-            cached_commit_bus: bus_inventory.cached_commit_bus,
-            poseidon2_compress_bus: bus_inventory.poseidon2_compress_bus,
+        let verifier_pvs_air = verifier::DeferralRootPvsAir::new(
+            bus_inventory.public_values_bus,
+            bus_inventory.cached_commit_bus,
+            bus_inventory.poseidon2_compress_bus,
             def_vk_commit_bus,
             merkle_root_bus,
             onion_res_bus,
-            expected_internal_recursive_dag_commit: self.internal_recursive_dag_commit,
-        };
+            self.internal_recursive_dag_commit,
+        );
 
         let decommit_air = decommit::MerkleDecommitAir {
             subair: MerkleTreeSubAir::new(
