@@ -1,7 +1,6 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
-    iter::zip,
 };
 
 use openvm_circuit::{
@@ -10,12 +9,11 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    utils::not,
     AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_riscv_transpiler::BaseAluOpcode;
+use openvm_riscv_transpiler::BaseAluWOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -24,6 +22,8 @@ use openvm_stark_backend::{
 };
 use strum::IntoEnumIterator;
 
+use crate::adapters::RV64_WORD_NUM_LIMBS;
+
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
 pub struct BaseAluCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
@@ -31,11 +31,11 @@ pub struct BaseAluCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub b: [T; NUM_LIMBS],
     pub c: [T; NUM_LIMBS],
 
-    pub opcode_add_flag: T,
-    pub opcode_sub_flag: T,
-    pub opcode_xor_flag: T,
-    pub opcode_or_flag: T,
-    pub opcode_and_flag: T,
+    pub opcode_addw_flag: T,
+    pub opcode_subw_flag: T,
+
+    // Sign bit of the low 32-bit result. Upper bytes are constrained from this single bit.
+    pub word_sign: T,
 }
 
 #[derive(Copy, Clone, Debug, derive_new::new)]
@@ -72,13 +72,7 @@ where
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &BaseAluCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
-        let flags = [
-            cols.opcode_add_flag,
-            cols.opcode_sub_flag,
-            cols.opcode_xor_flag,
-            cols.opcode_or_flag,
-            cols.opcode_and_flag,
-        ];
+        let flags = [cols.opcode_addw_flag, cols.opcode_subw_flag];
 
         let is_valid = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
             builder.assert_bool(flag);
@@ -90,18 +84,12 @@ where
         let b = &cols.b;
         let c = &cols.c;
 
-        // For ADD, define carry[i] = (b[i] + c[i] + carry[i - 1] - a[i]) / 2^LIMB_BITS. If
-        // each carry[i] is boolean and 0 <= a[i] < 2^LIMB_BITS, it can be proven that
-        // a[i] = (b[i] + c[i]) % 2^LIMB_BITS as necessary. The same holds for SUB when
-        // carry[i] is (a[i] + c[i] - b[i] + carry[i - 1]) / 2^LIMB_BITS.
-        let mut carry_add: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
-        let mut carry_sub: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
+        // ADDW/SUBW are 32-bit operations. We only constrain the low word limbs with carries.
+        let mut carry_add: [AB::Expr; RV64_WORD_NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
+        let mut carry_sub: [AB::Expr; RV64_WORD_NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         let carry_divide = AB::F::from_canonical_usize(1 << LIMB_BITS).inverse();
 
-        for i in 0..NUM_LIMBS {
-            // We explicitly separate the constraints for ADD and SUB in order to keep degree
-            // cubic. Because we constrain that the carry (which is arbitrary) is bool, if
-            // carry has degree larger than 1 the max-degree constrain could be at least 4.
+        for i in 0..RV64_WORD_NUM_LIMBS {
             carry_add[i] = AB::Expr::from(carry_divide)
                 * (b[i] + c[i] - a[i]
                     + if i > 0 {
@@ -110,7 +98,7 @@ where
                         AB::Expr::ZERO
                     });
             builder
-                .when(cols.opcode_add_flag)
+                .when(cols.opcode_addw_flag)
                 .assert_bool(carry_add[i].clone());
             carry_sub[i] = AB::Expr::from(carry_divide)
                 * (a[i] + c[i] - b[i]
@@ -120,27 +108,38 @@ where
                         AB::Expr::ZERO
                     });
             builder
-                .when(cols.opcode_sub_flag)
+                .when(cols.opcode_subw_flag)
                 .assert_bool(carry_sub[i].clone());
         }
 
-        // Interaction with BitwiseOperationLookup to range check a for ADD and SUB, and
-        // constrain a's correctness for XOR, OR, and AND.
-        let bitwise = cols.opcode_xor_flag + cols.opcode_or_flag + cols.opcode_and_flag;
-        for i in 0..NUM_LIMBS {
-            let x = not::<AB::Expr>(bitwise.clone()) * a[i] + bitwise.clone() * b[i];
-            let y = not::<AB::Expr>(bitwise.clone()) * a[i] + bitwise.clone() * c[i];
-            let x_xor_y = cols.opcode_xor_flag * a[i]
-                + cols.opcode_or_flag * ((AB::Expr::from_canonical_u32(2) * a[i]) - b[i] - c[i])
-                + cols.opcode_and_flag * (b[i] + c[i] - (AB::Expr::from_canonical_u32(2) * a[i]));
+        // Range-check low word bytes.
+        for &a_limb in &a[..RV64_WORD_NUM_LIMBS] {
             self.bus
-                .send_xor(x, y, x_xor_y)
+                .send_xor(a_limb, a_limb, AB::Expr::ZERO)
                 .eval(builder, is_valid.clone());
+        }
+
+        // Constrain upper 32 bits to sign extension of low 32-bit result.
+        builder.assert_bool(cols.word_sign);
+        let sign_mask = AB::Expr::from_canonical_u32(1 << (LIMB_BITS - 1));
+        self.bus
+            .send_xor(
+                a[RV64_WORD_NUM_LIMBS - 1],
+                sign_mask.clone(),
+                a[RV64_WORD_NUM_LIMBS - 1] + sign_mask.clone()
+                    - AB::Expr::from_canonical_u32(2) * cols.word_sign * sign_mask,
+            )
+            .eval(builder, is_valid.clone());
+        let sign_extend_limb = AB::Expr::from_canonical_u32((1 << LIMB_BITS) - 1) * cols.word_sign;
+        for &a_limb in &a[RV64_WORD_NUM_LIMBS..] {
+            builder
+                .when(is_valid.clone())
+                .assert_eq(a_limb, sign_extend_limb.clone());
         }
 
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
-            flags.iter().zip(BaseAluOpcode::iter()).fold(
+            flags.iter().zip(BaseAluWOpcode::iter()).fold(
                 AB::Expr::ZERO,
                 |acc, (flag, local_opcode)| {
                     acc + (*flag).into() * AB::Expr::from_canonical_u8(local_opcode as u8)
@@ -204,7 +203,7 @@ where
     >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", BaseAluOpcode::from_usize(opcode - self.offset))
+        format!("{:?}", BaseAluWOpcode::from_usize(opcode - self.offset))
     }
 
     fn execute(
@@ -214,7 +213,7 @@ where
     ) -> Result<(), ExecutionError> {
         let Instruction { opcode, .. } = instruction;
 
-        let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let local_opcode = BaseAluWOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
@@ -262,26 +261,22 @@ where
         // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic
         //   otherwise)
 
-        let local_opcode = BaseAluOpcode::from_usize(record.local_opcode as usize);
+        let local_opcode = BaseAluWOpcode::from_usize(record.local_opcode as usize);
         let a = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &record.b, &record.c);
-        // PERF: needless conversion
-        core_row.opcode_and_flag = F::from_bool(local_opcode == BaseAluOpcode::AND);
-        core_row.opcode_or_flag = F::from_bool(local_opcode == BaseAluOpcode::OR);
-        core_row.opcode_xor_flag = F::from_bool(local_opcode == BaseAluOpcode::XOR);
-        core_row.opcode_sub_flag = F::from_bool(local_opcode == BaseAluOpcode::SUB);
-        core_row.opcode_add_flag = F::from_bool(local_opcode == BaseAluOpcode::ADD);
+        core_row.opcode_addw_flag = F::from_bool(local_opcode == BaseAluWOpcode::ADDW);
+        core_row.opcode_subw_flag = F::from_bool(local_opcode == BaseAluWOpcode::SUBW);
+        core_row.word_sign =
+            F::from_canonical_u8(a[RV64_WORD_NUM_LIMBS - 1] >> (LIMB_BITS as u8 - 1));
 
-        if local_opcode == BaseAluOpcode::ADD || local_opcode == BaseAluOpcode::SUB {
-            for a_val in a {
-                self.bitwise_lookup_chip
-                    .request_xor(a_val as u32, a_val as u32);
-            }
-        } else {
-            for (b_val, c_val) in zip(record.b, record.c) {
-                self.bitwise_lookup_chip
-                    .request_xor(b_val as u32, c_val as u32);
-            }
+        for &a_limb in &a[..RV64_WORD_NUM_LIMBS] {
+            self.bitwise_lookup_chip
+                .request_xor(a_limb as u32, a_limb as u32);
         }
+        self.bitwise_lookup_chip.request_xor(
+            a[RV64_WORD_NUM_LIMBS - 1] as u32,
+            (1u32 << (LIMB_BITS - 1)) as u32,
+        );
+
         core_row.c = record.c.map(F::from_canonical_u8);
         core_row.b = record.b.map(F::from_canonical_u8);
         core_row.a = a.map(F::from_canonical_u8);
@@ -290,17 +285,15 @@ where
 
 #[inline(always)]
 pub(super) fn run_alu<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    opcode: BaseAluOpcode,
+    opcode: BaseAluWOpcode,
     x: &[u8; NUM_LIMBS],
     y: &[u8; NUM_LIMBS],
 ) -> [u8; NUM_LIMBS] {
     debug_assert!(LIMB_BITS <= 8, "specialize for bytes");
+    debug_assert!(NUM_LIMBS >= RV64_WORD_NUM_LIMBS);
     match opcode {
-        BaseAluOpcode::ADD => run_add::<NUM_LIMBS, LIMB_BITS>(x, y),
-        BaseAluOpcode::SUB => run_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
-        BaseAluOpcode::XOR => run_xor::<NUM_LIMBS>(x, y),
-        BaseAluOpcode::OR => run_or::<NUM_LIMBS>(x, y),
-        BaseAluOpcode::AND => run_and::<NUM_LIMBS>(x, y),
+        BaseAluWOpcode::ADDW => run_add::<NUM_LIMBS, LIMB_BITS>(x, y),
+        BaseAluWOpcode::SUBW => run_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
     }
 }
 
@@ -309,16 +302,16 @@ fn run_add<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u8; NUM_LIMBS],
     y: &[u8; NUM_LIMBS],
 ) -> [u8; NUM_LIMBS] {
-    let mut z = [0u8; NUM_LIMBS];
-    let mut carry = [0u8; NUM_LIMBS];
-    for i in 0..NUM_LIMBS {
+    let mut z = [0u8; RV64_WORD_NUM_LIMBS];
+    let mut carry = [0u8; RV64_WORD_NUM_LIMBS];
+    for i in 0..RV64_WORD_NUM_LIMBS {
         let mut overflow =
             (x[i] as u16) + (y[i] as u16) + if i > 0 { carry[i - 1] as u16 } else { 0 };
         carry[i] = (overflow >> LIMB_BITS) as u8;
         overflow &= (1u16 << LIMB_BITS) - 1;
         z[i] = overflow as u8;
     }
-    z
+    sign_extend_word::<NUM_LIMBS, LIMB_BITS>(&z)
 }
 
 #[inline(always)]
@@ -326,9 +319,9 @@ fn run_subtract<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: &[u8; NUM_LIMBS],
     y: &[u8; NUM_LIMBS],
 ) -> [u8; NUM_LIMBS] {
-    let mut z = [0u8; NUM_LIMBS];
-    let mut carry = [0u8; NUM_LIMBS];
-    for i in 0..NUM_LIMBS {
+    let mut z = [0u8; RV64_WORD_NUM_LIMBS];
+    let mut carry = [0u8; RV64_WORD_NUM_LIMBS];
+    for i in 0..RV64_WORD_NUM_LIMBS {
         let rhs = y[i] as u16 + if i > 0 { carry[i - 1] as u16 } else { 0 };
         if x[i] as u16 >= rhs {
             z[i] = x[i] - rhs as u8;
@@ -338,20 +331,17 @@ fn run_subtract<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
             carry[i] = 1;
         }
     }
-    z
+    sign_extend_word::<NUM_LIMBS, LIMB_BITS>(&z)
 }
 
 #[inline(always)]
-fn run_xor<const NUM_LIMBS: usize>(x: &[u8; NUM_LIMBS], y: &[u8; NUM_LIMBS]) -> [u8; NUM_LIMBS] {
-    array::from_fn(|i| x[i] ^ y[i])
-}
-
-#[inline(always)]
-fn run_or<const NUM_LIMBS: usize>(x: &[u8; NUM_LIMBS], y: &[u8; NUM_LIMBS]) -> [u8; NUM_LIMBS] {
-    array::from_fn(|i| x[i] | y[i])
-}
-
-#[inline(always)]
-fn run_and<const NUM_LIMBS: usize>(x: &[u8; NUM_LIMBS], y: &[u8; NUM_LIMBS]) -> [u8; NUM_LIMBS] {
-    array::from_fn(|i| x[i] & y[i])
+fn sign_extend_word<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+    low_word: &[u8; RV64_WORD_NUM_LIMBS],
+) -> [u8; NUM_LIMBS] {
+    debug_assert!(NUM_LIMBS >= RV64_WORD_NUM_LIMBS);
+    let sign_extend_limb = ((1u16 << LIMB_BITS) - 1) as u8
+        * (low_word[RV64_WORD_NUM_LIMBS - 1] >> (LIMB_BITS as u8 - 1));
+    let mut out = [sign_extend_limb; NUM_LIMBS];
+    out[..RV64_WORD_NUM_LIMBS].copy_from_slice(low_word);
+    out
 }

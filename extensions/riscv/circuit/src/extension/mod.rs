@@ -23,6 +23,7 @@ use openvm_circuit_primitives::{
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_riscv_transpiler::{
     BaseAluOpcode,
+    BaseAluWOpcode,
     BranchEqualOpcode,
     BranchLessThanOpcode,
     DivRemOpcode,
@@ -37,6 +38,7 @@ use openvm_riscv_transpiler::{
     // Rv64LoadStoreOpcode,
     Rv64Phantom,
     ShiftOpcode,
+    ShiftWOpcode,
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -104,8 +106,10 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 )]
 pub enum Rv64IExecutor {
     BaseAlu(Rv64BaseAluExecutor),
+    BaseAluW(Rv64BaseAluWExecutor),
     LessThan(Rv64LessThanExecutor),
     Shift(Rv64ShiftExecutor),
+    ShiftW(Rv64ShiftWExecutor),
     BranchEqual(Rv64BranchEqualExecutor),
     BranchLessThan(Rv64BranchLessThanExecutor),
     JalLui(Rv64JalLuiExecutor),
@@ -260,12 +264,23 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
             Rv64BaseAluExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
         inventory.add_executor(base_alu, BaseAluOpcode::iter().map(|x| x.global_opcode()))?;
 
+        let base_alu_w =
+            Rv64BaseAluWExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluWOpcode::CLASS_OFFSET);
+        inventory.add_executor(
+            base_alu_w,
+            BaseAluWOpcode::iter().map(|x| x.global_opcode()),
+        )?;
+
         let lt =
             Rv64LessThanExecutor::new(Rv64BaseAluAdapterExecutor, LessThanOpcode::CLASS_OFFSET);
         inventory.add_executor(lt, LessThanOpcode::iter().map(|x| x.global_opcode()))?;
 
         let shift = Rv64ShiftExecutor::new(Rv64BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
         inventory.add_executor(shift, ShiftOpcode::iter().map(|x| x.global_opcode()))?;
+
+        let shift_w =
+            Rv64ShiftWExecutor::new(Rv64BaseAluAdapterExecutor, ShiftWOpcode::CLASS_OFFSET);
+        inventory.add_executor(shift_w, ShiftWOpcode::iter().map(|x| x.global_opcode()))?;
 
         // TEMP: disabled until ported to RV64
         // let load_store = LoadStoreExecutor::new(
@@ -364,6 +379,12 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64I {
         );
         inventory.add_air(base_alu);
 
+        let base_alu_w = Rv64BaseAluWAir::new(
+            Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+            crate::base_alu_w::BaseAluCoreAir::new(bitwise_lu, BaseAluWOpcode::CLASS_OFFSET),
+        );
+        inventory.add_air(base_alu_w);
+
         let lt = Rv64LessThanAir::new(
             Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
             LessThanCoreAir::new(bitwise_lu, LessThanOpcode::CLASS_OFFSET),
@@ -375,6 +396,16 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64I {
             ShiftCoreAir::new(bitwise_lu, range_checker, ShiftOpcode::CLASS_OFFSET),
         );
         inventory.add_air(shift);
+
+        let shift_w = Rv64ShiftWAir::new(
+            Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+            crate::shift_w::ShiftCoreAir::new(
+                bitwise_lu,
+                range_checker,
+                ShiftWOpcode::CLASS_OFFSET,
+            ),
+        );
+        inventory.add_air(shift_w);
 
         // TEMP: disabled until ported to RV64
         // let load_store = Rv32LoadStoreAir::new(
@@ -481,6 +512,17 @@ where
         );
         inventory.add_executor_chip(base_alu);
 
+        inventory.next_air::<Rv64BaseAluWAir>()?;
+        let base_alu_w = Rv64BaseAluWChip::new(
+            crate::base_alu_w::BaseAluFiller::new(
+                Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                bitwise_lu.clone(),
+                BaseAluWOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(base_alu_w);
+
         inventory.next_air::<Rv64LessThanAir>()?;
         let lt = Rv64LessThanChip::new(
             LessThanFiller::new(
@@ -503,6 +545,18 @@ where
             mem_helper.clone(),
         );
         inventory.add_executor_chip(shift);
+
+        inventory.next_air::<Rv64ShiftWAir>()?;
+        let shift_w = Rv64ShiftWChip::new(
+            crate::shift_w::ShiftFiller::new(
+                Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                bitwise_lu.clone(),
+                range_checker.clone(),
+                ShiftWOpcode::CLASS_OFFSET,
+            ),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(shift_w);
 
         // TEMP: disabled until ported to RV64
         // inventory.next_air::<Rv32LoadStoreAir>()?;

@@ -12,7 +12,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::LocalOpcode;
-use openvm_riscv_transpiler::BaseAluOpcode::{self, *};
+use openvm_riscv_transpiler::BaseAluWOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{FieldAlgebra, PrimeField32},
@@ -34,42 +34,42 @@ use {
     },
 };
 
-use super::{core::run_alu, BaseAluCoreAir, Rv32BaseAluChip, Rv32BaseAluExecutor};
+use super::{core::run_alu, BaseAluCoreAir, BaseAluFiller, Rv64BaseAluWChip, Rv64BaseAluWExecutor};
 use crate::{
     adapters::{
-        Rv32BaseAluAdapterAir, Rv32BaseAluAdapterExecutor, Rv32BaseAluAdapterFiller,
-        RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+        Rv64BaseAluAdapterAir, Rv64BaseAluAdapterExecutor, Rv64BaseAluAdapterFiller,
+        RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
     },
-    base_alu::BaseAluCoreCols,
+    base_alu_w::BaseAluCoreCols,
     test_utils::{
-        generate_rv32_is_type_immediate, get_verification_error, rv32_rand_write_register_or_imm,
+        generate_rv64_is_type_immediate, get_verification_error, rv64_rand_write_register_or_imm,
     },
-    BaseAluFiller, Rv32BaseAluAir,
+    Rv64BaseAluWAir,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
-type Harness = TestChipHarness<F, Rv32BaseAluExecutor, Rv32BaseAluAir, Rv32BaseAluChip<F>>;
+type Harness = TestChipHarness<F, Rv64BaseAluWExecutor, Rv64BaseAluWAir, Rv64BaseAluWChip<F>>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv32BaseAluAir, Rv32BaseAluExecutor, Rv32BaseAluChip<F>) {
-    let air = Rv32BaseAluAir::new(
-        Rv32BaseAluAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
-        BaseAluCoreAir::new(bitwise_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
+) -> (Rv64BaseAluWAir, Rv64BaseAluWExecutor, Rv64BaseAluWChip<F>) {
+    let air = Rv64BaseAluWAir::new(
+        Rv64BaseAluAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
+        BaseAluCoreAir::new(bitwise_chip.bus(), BaseAluWOpcode::CLASS_OFFSET),
     );
-    let executor = Rv32BaseAluExecutor::new(
-        Rv32BaseAluAdapterExecutor::new(),
-        BaseAluOpcode::CLASS_OFFSET,
+    let executor = Rv64BaseAluWExecutor::new(
+        Rv64BaseAluAdapterExecutor::new(),
+        BaseAluWOpcode::CLASS_OFFSET,
     );
-    let chip = Rv32BaseAluChip::new(
+    let chip = Rv64BaseAluWChip::new(
         BaseAluFiller::new(
-            Rv32BaseAluAdapterFiller::new(bitwise_chip.clone()),
+            Rv64BaseAluAdapterFiller::new(bitwise_chip.clone()),
             bitwise_chip,
-            BaseAluOpcode::CLASS_OFFSET,
+            BaseAluWOpcode::CLASS_OFFSET,
         ),
         memory_helper,
     );
@@ -81,12 +81,12 @@ fn create_harness(
 ) -> (
     Harness,
     (
-        BitwiseOperationLookupAir<RV32_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_CELL_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
@@ -107,17 +107,17 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     executor: &mut E,
     arena: &mut RA,
     rng: &mut StdRng,
-    opcode: BaseAluOpcode,
-    b: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
+    opcode: BaseAluWOpcode,
+    b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
     is_imm: Option<bool>,
-    c: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
+    c: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
 ) {
     let b = b.unwrap_or(array::from_fn(|_| rng.gen_range(0..=u8::MAX)));
     let (c_imm, c) = if is_imm.unwrap_or(rng.gen_bool(0.5)) {
         let (imm, c) = if let Some(c) = c {
-            ((u32::from_le_bytes(c) & 0xFFFFFF) as usize, c)
+            ((u64::from_le_bytes(c) & 0xFFFFFF) as usize, c)
         } else {
-            generate_rv32_is_type_immediate(rng)
+            generate_rv64_is_type_immediate(rng)
         };
         (Some(imm), c)
     } else {
@@ -127,7 +127,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         )
     };
 
-    let (instruction, rd) = rv32_rand_write_register_or_imm(
+    let (instruction, rd) = rv64_rand_write_register_or_imm(
         tester,
         b,
         c,
@@ -137,34 +137,28 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     tester.execute(executor, arena, &instruction);
 
-    let a = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c)
+    let a = run_alu::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(opcode, &b, &c)
         .map(F::from_canonical_u8);
-    assert_eq!(a, tester.read::<RV32_REGISTER_NUM_LIMBS>(1, rd))
+    assert_eq!(a, tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd))
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
 // POSITIVE TESTS
-//
-// Randomly generate computations and execute, ensuring that the generated trace
-// passes all constraints.
 //////////////////////////////////////////////////////////////////////////////////////
 
-#[test_case(ADD, 100)]
-#[test_case(SUB, 100)]
-#[test_case(XOR, 100)]
-#[test_case(OR, 100)]
-#[test_case(AND, 100)]
-fn rand_rv32_alu_test(opcode: BaseAluOpcode, num_ops: usize) {
+#[test_case(ADDW, 100)]
+#[test_case(SUBW, 100)]
+fn rand_rv64w_alu_test(opcode: BaseAluWOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
 
     let mut tester = VmChipTestBuilder::default();
     let (mut harness, bitwise) = create_harness(&tester);
 
     // TODO(AG): make a more meaningful test for memory accesses
-    tester.write(2, 1024, [F::ONE; 4]);
-    tester.write(2, 1028, [F::ONE; 4]);
-    let sm = tester.read(2, 1024);
-    assert_eq!(sm, [F::ONE; 8]);
+    tester.write(2, 1024, [F::ONE; 8]);
+    tester.write(2, 1032, [F::ONE; 8]);
+    let sm: [F; 16] = tester.read(2, 1024);
+    assert_eq!(sm, [F::ONE; 16]);
 
     for _ in 0..num_ops {
         set_and_execute(
@@ -187,22 +181,19 @@ fn rand_rv32_alu_test(opcode: BaseAluOpcode, num_ops: usize) {
     tester.simple_test().expect("Verification failed");
 }
 
-#[test_case(ADD, 100)]
-#[test_case(SUB, 100)]
-#[test_case(XOR, 100)]
-#[test_case(OR, 100)]
-#[test_case(AND, 100)]
-fn rand_rv32_alu_test_persistent(opcode: BaseAluOpcode, num_ops: usize) {
+#[test_case(ADDW, 100)]
+#[test_case(SUBW, 100)]
+fn rand_rv64w_alu_test_persistent(opcode: BaseAluWOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
 
     let mut tester = VmChipTestBuilder::default_persistent();
     let (mut harness, bitwise) = create_harness(&tester);
 
     // TODO(AG): make a more meaningful test for memory accesses
-    tester.write(2, 1024, [F::ONE; 4]);
-    tester.write(2, 1028, [F::ONE; 4]);
-    let sm = tester.read(2, 1024);
-    assert_eq!(sm, [F::ONE; 8]);
+    tester.write(2, 1024, [F::ONE; 8]);
+    tester.write(2, 1032, [F::ONE; 8]);
+    let sm: [F; 16] = tester.read(2, 1024);
+    assert_eq!(sm, [F::ONE; 16]);
 
     for _ in 0..num_ops {
         set_and_execute(
@@ -227,19 +218,17 @@ fn rand_rv32_alu_test_persistent(opcode: BaseAluOpcode, num_ops: usize) {
 
 //////////////////////////////////////////////////////////////////////////////////////
 // NEGATIVE TESTS
-//
-// Given a fake trace of a single operation, setup a chip and run the test. We replace
-// part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
 #[allow(clippy::too_many_arguments)]
 fn run_negative_alu_test(
-    opcode: BaseAluOpcode,
-    prank_a: [u32; RV32_REGISTER_NUM_LIMBS],
-    b: [u8; RV32_REGISTER_NUM_LIMBS],
-    c: [u8; RV32_REGISTER_NUM_LIMBS],
-    prank_c: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
-    prank_opcode_flags: Option<[bool; 5]>,
+    opcode: BaseAluWOpcode,
+    prank_a: [u32; RV64_REGISTER_NUM_LIMBS],
+    b: [u8; RV64_REGISTER_NUM_LIMBS],
+    c: [u8; RV64_REGISTER_NUM_LIMBS],
+    prank_c: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    prank_opcode_flags: Option<[bool; 2]>,
+    prank_word_sign: Option<u32>,
     is_imm: Option<bool>,
     interaction_error: bool,
 ) {
@@ -261,18 +250,18 @@ fn run_negative_alu_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
-        let cols: &mut BaseAluCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
+        let cols: &mut BaseAluCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
         cols.a = prank_a.map(F::from_canonical_u32);
         if let Some(prank_c) = prank_c {
             cols.c = prank_c.map(F::from_canonical_u32);
         }
         if let Some(prank_opcode_flags) = prank_opcode_flags {
-            cols.opcode_add_flag = F::from_bool(prank_opcode_flags[0]);
-            cols.opcode_and_flag = F::from_bool(prank_opcode_flags[1]);
-            cols.opcode_or_flag = F::from_bool(prank_opcode_flags[2]);
-            cols.opcode_sub_flag = F::from_bool(prank_opcode_flags[3]);
-            cols.opcode_xor_flag = F::from_bool(prank_opcode_flags[4]);
+            cols.opcode_addw_flag = F::from_bool(prank_opcode_flags[0]);
+            cols.opcode_subw_flag = F::from_bool(prank_opcode_flags[1]);
+        }
+        if let Some(prank_word_sign) = prank_word_sign {
+            cols.word_sign = F::from_canonical_u32(prank_word_sign);
         }
         *trace = RowMajorMatrix::new(values, trace.width());
     };
@@ -287,12 +276,13 @@ fn run_negative_alu_test(
 }
 
 #[test]
-fn rv32_alu_add_wrong_negative_test() {
+fn rv64_alu_addw_wrong_negative_test() {
     run_negative_alu_test(
-        ADD,
-        [246, 0, 0, 0],
-        [250, 0, 0, 0],
-        [250, 0, 0, 0],
+        ADDW,
+        [246, 0, 0, 0, 0, 0, 0, 0],
+        [250, 0, 0, 0, 0, 0, 0, 0],
+        [250, 0, 0, 0, 0, 0, 0, 0],
+        None,
         None,
         None,
         None,
@@ -301,12 +291,13 @@ fn rv32_alu_add_wrong_negative_test() {
 }
 
 #[test]
-fn rv32_alu_add_out_of_range_negative_test() {
+fn rv64_alu_addw_out_of_range_negative_test() {
     run_negative_alu_test(
-        ADD,
-        [500, 0, 0, 0],
-        [250, 0, 0, 0],
-        [250, 0, 0, 0],
+        ADDW,
+        [500, 0, 0, 0, 0, 0, 0, 0],
+        [250, 0, 0, 0, 0, 0, 0, 0],
+        [250, 0, 0, 0, 0, 0, 0, 0],
+        None,
         None,
         None,
         None,
@@ -315,12 +306,13 @@ fn rv32_alu_add_out_of_range_negative_test() {
 }
 
 #[test]
-fn rv32_alu_sub_wrong_negative_test() {
+fn rv64_alu_subw_wrong_negative_test() {
     run_negative_alu_test(
-        SUB,
-        [255, 0, 0, 0],
-        [1, 0, 0, 0],
-        [2, 0, 0, 0],
+        SUBW,
+        [255, 0, 0, 0, 255, 255, 255, 255],
+        [1, 0, 0, 0, 0, 0, 0, 0],
+        [2, 0, 0, 0, 0, 0, 0, 0],
+        None,
         None,
         None,
         None,
@@ -329,12 +321,13 @@ fn rv32_alu_sub_wrong_negative_test() {
 }
 
 #[test]
-fn rv32_alu_sub_out_of_range_negative_test() {
+fn rv64_alu_subw_out_of_range_negative_test() {
     run_negative_alu_test(
-        SUB,
-        [F::NEG_ONE.as_canonical_u32(), 0, 0, 0],
-        [1, 0, 0, 0],
-        [2, 0, 0, 0],
+        SUBW,
+        [F::NEG_ONE.as_canonical_u32(), 0, 0, 0, 255, 255, 255, 255],
+        [1, 0, 0, 0, 0, 0, 0, 0],
+        [2, 0, 0, 0, 0, 0, 0, 0],
+        None,
         None,
         None,
         None,
@@ -343,70 +336,45 @@ fn rv32_alu_sub_out_of_range_negative_test() {
 }
 
 #[test]
-fn rv32_alu_xor_wrong_negative_test() {
+fn rv64_aluw_adapter_unconstrained_imm_limb_test() {
     run_negative_alu_test(
-        XOR,
-        [255, 255, 255, 255],
-        [0, 0, 1, 0],
-        [255, 255, 255, 255],
+        ADDW,
+        [5, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [5, 0, 0, 0, 0, 0, 0, 0],
+        Some([5, 0, 0, 0, 1, 0, 0, 0]),
         None,
-        None,
-        None,
-        true,
-    );
-}
-
-#[test]
-fn rv32_alu_or_wrong_negative_test() {
-    run_negative_alu_test(
-        OR,
-        [255, 255, 255, 255],
-        [255, 255, 255, 254],
-        [0, 0, 0, 0],
-        None,
-        None,
-        None,
-        true,
-    );
-}
-
-#[test]
-fn rv32_alu_and_wrong_negative_test() {
-    run_negative_alu_test(
-        AND,
-        [255, 255, 255, 255],
-        [0, 0, 1, 0],
-        [0, 0, 0, 0],
-        None,
-        None,
-        None,
-        true,
-    );
-}
-
-#[test]
-fn rv32_alu_adapter_unconstrained_imm_limb_test() {
-    run_negative_alu_test(
-        ADD,
-        [255, 7, 0, 0],
-        [0, 0, 0, 0],
-        [255, 7, 0, 0],
-        Some([511, 6, 0, 0]),
         None,
         Some(true),
-        true,
+        false,
     );
 }
 
 #[test]
-fn rv32_alu_adapter_unconstrained_rs2_read_test() {
+fn rv64_aluw_adapter_unconstrained_rs2_read_test() {
     run_negative_alu_test(
-        ADD,
-        [2, 2, 2, 2],
-        [1, 1, 1, 1],
-        [1, 1, 1, 1],
+        ADDW,
+        [2, 2, 2, 2, 2, 2, 2, 2],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
         None,
-        Some([false, false, false, false, false]),
+        Some([false, false]),
+        None,
+        Some(false),
+        false,
+    );
+}
+
+#[test]
+fn rv64_aluw_wrong_upper_sign_extension_negative_test() {
+    run_negative_alu_test(
+        ADDW,
+        [5, 0, 0, 0, 1, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [5, 0, 0, 0, 0, 0, 0, 0],
+        None,
+        None,
+        Some(0),
         Some(false),
         false,
     );
@@ -414,61 +382,28 @@ fn rv32_alu_adapter_unconstrained_rs2_read_test() {
 
 ///////////////////////////////////////////////////////////////////////////////////////
 /// SANITY TESTS
-///
-/// Ensure that solve functions produce the correct results.
 ///////////////////////////////////////////////////////////////////////////////////////
 
 #[test]
-fn run_add_sanity_test() {
-    let x: [u8; RV32_REGISTER_NUM_LIMBS] = [229, 33, 29, 111];
-    let y: [u8; RV32_REGISTER_NUM_LIMBS] = [50, 171, 44, 194];
-    let z: [u8; RV32_REGISTER_NUM_LIMBS] = [23, 205, 73, 49];
-    let result = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(ADD, &x, &y);
-    for i in 0..RV32_REGISTER_NUM_LIMBS {
+fn run_addw_sanity_test() {
+    // Upper bytes are ignored by ADDW. Result upper bytes are sign-extension of byte 3.
+    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
+    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
+    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [23, 205, 73, 49, 0, 0, 0, 0];
+    let result = run_alu::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(ADDW, &x, &y);
+    for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
 }
 
 #[test]
-fn run_sub_sanity_test() {
-    let x: [u8; RV32_REGISTER_NUM_LIMBS] = [229, 33, 29, 111];
-    let y: [u8; RV32_REGISTER_NUM_LIMBS] = [50, 171, 44, 194];
-    let z: [u8; RV32_REGISTER_NUM_LIMBS] = [179, 118, 240, 172];
-    let result = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(SUB, &x, &y);
-    for i in 0..RV32_REGISTER_NUM_LIMBS {
-        assert_eq!(z[i], result[i])
-    }
-}
-
-#[test]
-fn run_xor_sanity_test() {
-    let x: [u8; RV32_REGISTER_NUM_LIMBS] = [229, 33, 29, 111];
-    let y: [u8; RV32_REGISTER_NUM_LIMBS] = [50, 171, 44, 194];
-    let z: [u8; RV32_REGISTER_NUM_LIMBS] = [215, 138, 49, 173];
-    let result = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(XOR, &x, &y);
-    for i in 0..RV32_REGISTER_NUM_LIMBS {
-        assert_eq!(z[i], result[i])
-    }
-}
-
-#[test]
-fn run_or_sanity_test() {
-    let x: [u8; RV32_REGISTER_NUM_LIMBS] = [229, 33, 29, 111];
-    let y: [u8; RV32_REGISTER_NUM_LIMBS] = [50, 171, 44, 194];
-    let z: [u8; RV32_REGISTER_NUM_LIMBS] = [247, 171, 61, 239];
-    let result = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(OR, &x, &y);
-    for i in 0..RV32_REGISTER_NUM_LIMBS {
-        assert_eq!(z[i], result[i])
-    }
-}
-
-#[test]
-fn run_and_sanity_test() {
-    let x: [u8; RV32_REGISTER_NUM_LIMBS] = [229, 33, 29, 111];
-    let y: [u8; RV32_REGISTER_NUM_LIMBS] = [50, 171, 44, 194];
-    let z: [u8; RV32_REGISTER_NUM_LIMBS] = [32, 33, 12, 66];
-    let result = run_alu::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(AND, &x, &y);
-    for i in 0..RV32_REGISTER_NUM_LIMBS {
+fn run_subw_sanity_test() {
+    // Upper bytes are ignored by SUBW. Result upper bytes are sign-extension of byte 3.
+    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
+    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
+    let z: [u8; RV64_REGISTER_NUM_LIMBS] = [179, 118, 240, 172, 255, 255, 255, 255];
+    let result = run_alu::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(SUBW, &x, &y);
+    for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
 }
