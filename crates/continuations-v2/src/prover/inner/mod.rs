@@ -25,7 +25,7 @@ use crate::{
 
 mod trace;
 
-/// Generates an aggregation proof for non-root layers (leaf and internal).
+/// Generates an aggregation proof for inner layers (leaf and internal).
 pub struct InnerAggregationProver<
     PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
     S: AggregationSubCircuit,

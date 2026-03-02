@@ -17,7 +17,7 @@ pub enum ProofsType {
     Combined,
 }
 
-// Trait that non-root and compression provers use to remain generic in PB
+// Trait that inner and compression provers use to remain generic in PB
 pub trait InnerTraceGen<PB: ProverBackend> {
     fn new(deferral_enabled: bool) -> Self;
     fn generate_pre_verifier_subcircuit_ctxs(

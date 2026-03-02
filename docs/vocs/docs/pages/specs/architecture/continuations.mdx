@@ -94,13 +94,13 @@ Different layers may share the same verifier subcircuit or the same aggregation 
 | Layer | Verifier Subcircuit | Aggregation Subcircuit |
 |-------|---------------------|------------------------|
 | app | (VM execution) | (none) |
-| leaf | [leaf](#constraint-dag-and-cached-traces) | [nonroot](#nonroot-aggregation-subcircuit) |
-| internal-for-leaf | [internal-for-leaf](#constraint-dag-and-cached-traces) | [nonroot](#nonroot-aggregation-subcircuit) |
-| internal-recursive | [internal-recursive](#constraint-dag-and-cached-traces) | [nonroot](#nonroot-aggregation-subcircuit) |
+| leaf | [leaf](#constraint-dag-and-cached-traces) | [inner](#inner-aggregation-subcircuit) |
+| internal-for-leaf | [internal-for-leaf](#constraint-dag-and-cached-traces) | [inner](#inner-aggregation-subcircuit) |
+| internal-recursive | [internal-recursive](#constraint-dag-and-cached-traces) | [inner](#inner-aggregation-subcircuit) |
 | compression | [compression](#constraint-dag-and-cached-traces) | [compression](#compression-aggregation-subcircuit) |
 | root | [internal-recursive](#constraint-dag-and-cached-traces) | [root](#root-aggregation-subcircuit) |
 
-Note that leaf, internal-for-leaf, and internal-recursive all share the nonroot aggregation subcircuit and therefore have the same public value layout. Root reuses the internal-recursive verifier subcircuit but pairs it with a different aggregation subcircuit.
+Note that leaf, internal-for-leaf, and internal-recursive all share the inner aggregation subcircuit and therefore have the same public value layout. Root reuses the internal-recursive verifier subcircuit but pairs it with a different aggregation subcircuit.
 
 ### Verifying Key Convergence
 
@@ -168,7 +168,7 @@ Because compression lacks a cached trace, it is only used as the final layer bef
 
 ## Aggregation Subcircuits
 
-There are 3 aggregation subcircuit types: **nonroot**, **compression**, and **root**. Each type has an associated basic prover.
+There are 3 aggregation subcircuit types: **inner**, **compression**, and **root**. Each type has an associated basic prover.
 
 ### App Public Values and Shared Constraints
 
@@ -193,13 +193,13 @@ The aggregation subcircuit also **exposes public values** necessary for either f
 Layers with a single child `Proof` practically only need to constrain 3.
 :::
 
-### Nonroot Aggregation Subcircuit
+### Inner Aggregation Subcircuit
 
-The nonroot subcircuit takes up to $N$ child `Proof`s and does **not** constrain the user public values' presence in memory. Its output `Proof` is meant to either be recursively aggregated or used as the `Proof` component in a `NonRootStarkProof`.
+The inner subcircuit takes up to $N$ child `Proof`s and does **not** constrain the user public values' presence in memory. Its output `Proof` is meant to either be recursively aggregated or used as the `Proof` component in a `NonRootStarkProof`.
 
 #### Public Values
 
-Public values are processed by `VerifierPvsAir`. The nonroot subcircuit re-exposes the app public values (excluding `user_public_values`) and adds the following **verifier-specific public values**, which are common over all nonroot layers:
+Public values are processed by `VerifierPvsAir`. The inner subcircuit re-exposes the app public values (excluding `user_public_values`) and adds the following **verifier-specific public values**, which are common over all inner layers:
 
 - **Program Commit**
     - `program_commit: Digest` — cached trace commit of the app circuit's `ProgramAir`
@@ -231,7 +231,7 @@ The `program_commit` should be set at every layer, but the flags and `*_dag_comm
 
 `VerifierPvsAir` constrains that:
 
-- App segment proofs do not have nonroot subcircuit-specific public values
+- App segment proofs do not have inner subcircuit-specific public values
 - Non-app child proofs within a layer have the **same** verifier-specific public values
 - Child proof verifier-specific public values are set according to the table above
 - Output proof verifier-specific public values match the child proofs':
@@ -243,11 +243,11 @@ The `program_commit` should be set at every layer, but the flags and `*_dag_comm
 
 The compression subcircuit takes a single internal-recursive child `Proof` and does **not** constrain the user public values' presence in memory. Its output `Proof` is meant to be used as the `Proof` component in a `NonRootStarkProof`.
 
-The compression subcircuit has the same AIR set as nonroot, but with `SymbolicExpressionAir` configured without a cached trace and with its DAG commit sub-AIR enabled. This computes and exposes `compression_commit` — an [alternative commitment to the `internal_recursive_vk` constraint DAG](#constraint-dag-and-cached-traces).
+The compression subcircuit has the same AIR set as inner, but with `SymbolicExpressionAir` configured without a cached trace and with its DAG commit sub-AIR enabled. This computes and exposes `compression_commit` — an [alternative commitment to the `internal_recursive_vk` constraint DAG](#constraint-dag-and-cached-traces).
 
 #### Public Values
 
-Same as nonroot, with the addition of:
+Same as inner, with the addition of:
 
 - `compression_commit: Digest` — in-circuit generated commit of the internal-recursive constraint DAG
 

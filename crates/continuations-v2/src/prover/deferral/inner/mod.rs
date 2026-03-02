@@ -27,7 +27,8 @@ mod trace;
 pub enum DeferralChildVkKind {
     /// Child proofs are deferral verify proofs (consume DeferralCircuitPvs at air 0).
     DeferralCircuit,
-    /// Child proofs are deferral aggregation inner proofs (consume DeferralAggregationPvs at air 1).
+    /// Child proofs are deferral aggregation inner proofs (consume DeferralAggregationPvs at air
+    /// 1).
     DeferralAggregation,
     /// Same as DeferralAggregation but uses this prover's own vk as child vk.
     RecursiveSelf,

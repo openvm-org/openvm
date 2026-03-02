@@ -29,15 +29,15 @@ pub fn generate_proving_ctx(
 ) -> MerkleDecommitTraceCtx {
     assert!(
         !leaf_children.is_empty(),
-        "deferral root Merkle decommit requires at least one leaf"
+        "deferral hook Merkle decommit requires at least one leaf"
     );
     assert!(
         leaf_children.len().is_power_of_two(),
-        "deferral root Merkle decommit requires a power-of-two number of leaves"
+        "deferral hook Merkle decommit requires a power-of-two number of leaves"
     );
     assert!(
         (1..=leaf_children.len()).contains(&num_real_leaves),
-        "deferral root Merkle decommit requires 1 <= num_real_leaves <= num_leaves"
+        "deferral hook Merkle decommit requires 1 <= num_real_leaves <= num_leaves"
     );
     let merkle_rows: Vec<MerkleTreeCols<F>> = generate_cols_from_leaf_children(leaf_children);
     let width = MerkleDecommitCols::<u8>::width();

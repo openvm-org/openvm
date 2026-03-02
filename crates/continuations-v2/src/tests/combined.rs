@@ -245,7 +245,7 @@ fn test_vm_deferral_mix_combined_flow() -> Result<()> {
     let engine = Engine::new(root_vk.inner.params.clone());
     engine.verify(&root_vk, &root_proof)?;
 
-    // SECTION 2: Create a deferral root proof of that VM proof.
+    // SECTION 2: Create a deferral hook proof of that VM proof.
     let deferred_verify_prover = DeferralVerifyProver::new::<Engine>(
         vm_internal_recursive_vk.clone(),
         vm_internal_recursive_pcs_data,
@@ -272,7 +272,7 @@ fn test_vm_deferral_mix_combined_flow() -> Result<()> {
 
     let deferral_hook_prover =
         DeferralHookProver::new::<Engine>(deferral_internal_recursive_vk, root_system_params());
-    warn!("proving deferral root proof");
+    warn!("proving deferral hook proof");
     let deferral_hook_proof = deferral_hook_prover.prove::<Engine>(
         deferral_internal_recursive_proof,
         vec![(leaf_input_commit, leaf_output_commit)],

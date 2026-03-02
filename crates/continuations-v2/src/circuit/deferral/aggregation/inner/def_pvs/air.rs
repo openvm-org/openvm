@@ -92,7 +92,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
          *
          * A row may be non-present (is_present = 0). For those rows, child-specific public
          * values are intentionally not constrained here; consistency is enforced by the
-         * final Merkle root checks at the deferral root layer.
+         * final Merkle root checks at the deferral hook layer.
          */
         let is_leaf = not(local.has_verifier_pvs);
         let is_internal = local.has_verifier_pvs;

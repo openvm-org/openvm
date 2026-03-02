@@ -170,7 +170,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         /*
          * If has_verifier_pvs is true (i.e. we are on some internal level) we need to receive
          * public values from ProofShapeModule to ensure the values being read here are correct.
-         * Each non-root public value should have air_idx VERIFIER_PVS_AIR_ID.
+         * Each inner public value should have air_idx VERIFIER_PVS_AIR_ID.
          */
         let verifier_pvs_id = AB::Expr::from_usize(VERIFIER_PVS_AIR_ID);
 

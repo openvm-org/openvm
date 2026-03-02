@@ -40,7 +40,7 @@ fn normalize_leaf_children(
 ) -> (Vec<DeferralIoCommit<F>>, usize) {
     assert!(
         !leaf_children.is_empty(),
-        "deferral root requires at least one leaf commit"
+        "deferral hook requires at least one leaf commit"
     );
     let num_real_leaves = leaf_children.len();
     let target_len = leaf_children.len().next_power_of_two();
