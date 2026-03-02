@@ -55,7 +55,7 @@ jobs:
       - name: Setup halo2
         working-directory: crates/sdk
         run: |
-          bash ../../extensions/native/recursion/trusted_setup_s3.sh
+          bash ../../scripts/trusted_setup_s3.sh
 
       - name: Run openvm-sdk contracts/ tests
         if: ${{ matrix.mode == 'default' }}
