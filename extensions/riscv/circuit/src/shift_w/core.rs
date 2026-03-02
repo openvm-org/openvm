@@ -9,7 +9,6 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    utils::not,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow,
 };
@@ -29,30 +28,30 @@ use crate::adapters::{RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIM
 #[repr(C)]
 #[derive(AlignedBorrow, Clone, Copy, Debug)]
 pub struct ShiftWCoreCols<T> {
-    pub a: [T; RV64_REGISTER_NUM_LIMBS],
-    pub b: [T; RV64_REGISTER_NUM_LIMBS],
-    pub c: [T; RV64_REGISTER_NUM_LIMBS],
+    pub a: [T; RV64_WORD_NUM_LIMBS],
+    pub b: [T; RV64_WORD_NUM_LIMBS],
+    pub c: [T; RV64_WORD_NUM_LIMBS],
 
     pub opcode_sll_flag: T,
     pub opcode_srl_flag: T,
     pub opcode_sra_flag: T,
 
     // Sign bit of the low 32-bit result used to constrain upper-byte sign extension.
-    pub word_sign: T,
+    pub result_sign: T,
 
     // bit_multiplier = 2^bit_shift
     pub bit_multiplier_left: T,
     pub bit_multiplier_right: T,
 
-    // Sign of x for SRA
+    // Sign of rs1 for SRAW fill behavior.
     pub b_sign: T,
 
     // Boolean columns that are 1 exactly at the index of the bit/limb shift amount
     pub bit_shift_marker: [T; RV64_CELL_BITS],
-    pub limb_shift_marker: [T; RV64_REGISTER_NUM_LIMBS],
+    pub limb_shift_marker: [T; RV64_WORD_NUM_LIMBS],
 
     // Part of each x[i] that gets bit shifted to the next limb
-    pub bit_shift_carry: [T; RV64_REGISTER_NUM_LIMBS],
+    pub bit_shift_carry: [T; RV64_WORD_NUM_LIMBS],
 }
 
 /// RV64 W-shift AIR.
@@ -75,7 +74,7 @@ impl<AB, I> VmCoreAir<AB, I> for ShiftWCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<[[AB::Expr; RV64_REGISTER_NUM_LIMBS]; 2]>,
+    I::Reads: From<[[AB::Expr; RV64_WORD_NUM_LIMBS]; 2]>,
     I::Writes: From<[[AB::Expr; RV64_REGISTER_NUM_LIMBS]; 1]>,
     I::ProcessedInstruction: From<MinimalInstruction<AB::Expr>>,
 {
@@ -97,7 +96,7 @@ where
             acc + flag.into()
         });
         builder.assert_bool(is_valid.clone());
-        builder.assert_bool(cols.word_sign);
+        builder.assert_bool(cols.result_sign);
 
         let a = &cols.a;
         let b = &cols.b;
@@ -130,16 +129,10 @@ where
         // Check low-word limbs for W-shift correctness.
         let mut limb_marker_sum = AB::Expr::ZERO;
         let mut limb_shift = AB::Expr::ZERO;
-        for i in 0..RV64_REGISTER_NUM_LIMBS {
+        for i in 0..RV64_WORD_NUM_LIMBS {
             builder.assert_bool(cols.limb_shift_marker[i]);
-            if i < RV64_WORD_NUM_LIMBS {
-                limb_marker_sum += cols.limb_shift_marker[i].into();
-                limb_shift += AB::Expr::from_canonical_usize(i) * cols.limb_shift_marker[i];
-            } else {
-                builder
-                    .when(is_valid.clone())
-                    .assert_zero(cols.limb_shift_marker[i]);
-            }
+            limb_marker_sum += cols.limb_shift_marker[i].into();
+            limb_shift += AB::Expr::from_canonical_usize(i) * cols.limb_shift_marker[i];
 
             let mut when_limb_shift = builder.when(cols.limb_shift_marker[i]);
 
@@ -163,11 +156,13 @@ where
                 if j + i > RV64_WORD_NUM_LIMBS - 1 {
                     when_limb_shift.assert_eq(
                         a[j] * right_shift.clone(),
-                        cols.b_sign * AB::F::from_canonical_usize((1 << RV64_CELL_BITS) - 1),
+                        cols.b_sign
+                            * right_shift.clone()
+                            * AB::F::from_canonical_usize((1 << RV64_CELL_BITS) - 1),
                     );
                 } else {
                     let expected_a_right = if j + i == RV64_WORD_NUM_LIMBS - 1 {
-                        cols.b_sign * (cols.bit_multiplier_right - AB::F::ONE)
+                        cols.b_sign * (cols.bit_multiplier_right - right_shift.clone())
                     } else {
                         cols.bit_shift_carry[j + i + 1].into() * right_shift.clone()
                     } * AB::F::from_canonical_usize(1 << RV64_CELL_BITS)
@@ -190,14 +185,16 @@ where
             )
             .eval(builder, is_valid.clone());
 
-        // Check b_sign & b[word_msl] == b_sign using XOR
+        // Check b_sign & b[word_msl] == b_sign using XOR.
         builder.assert_bool(cols.b_sign);
         builder
-            .when(not(cols.opcode_sra_flag))
-            .assert_zero(cols.b_sign);
+            .when(cols.opcode_sll_flag)
+            .assert_eq(cols.b_sign, cols.result_sign);
+        builder.when(cols.opcode_srl_flag).assert_zero(cols.b_sign);
 
         let mask = AB::F::from_canonical_u32(1 << (RV64_CELL_BITS - 1));
         let b_sign_shifted = cols.b_sign * mask;
+        let result_sign_shifted = cols.result_sign * mask;
         self.bitwise_lookup_bus
             .send_xor(
                 b[RV64_WORD_NUM_LIMBS - 1],
@@ -207,27 +204,27 @@ where
             )
             .eval(builder, cols.opcode_sra_flag);
 
-        // Check word_sign & a[word_msl] == word_sign using XOR.
-        let word_sign_shifted = cols.word_sign * mask;
+        // result_sign must match output sign bit.
         self.bitwise_lookup_bus
             .send_xor(
                 a[RV64_WORD_NUM_LIMBS - 1],
                 mask,
                 a[RV64_WORD_NUM_LIMBS - 1] + mask
-                    - (AB::Expr::from_canonical_u32(2) * word_sign_shifted),
+                    - (AB::Expr::from_canonical_u32(2) * result_sign_shifted),
             )
             .eval(builder, is_valid.clone());
 
-        // Upper 32 bits are sign extension of low 32-bit result.
         let sign_extend_limb =
-            AB::Expr::from_canonical_u32((1 << RV64_CELL_BITS) - 1) * cols.word_sign;
-        for &a_limb in &a[RV64_WORD_NUM_LIMBS..] {
-            builder
-                .when(is_valid.clone())
-                .assert_eq(a_limb, sign_extend_limb.clone());
-        }
+            AB::Expr::from_canonical_u32((1 << RV64_CELL_BITS) - 1) * cols.result_sign;
+        let write_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
+            if i < RV64_WORD_NUM_LIMBS {
+                a[i].into()
+            } else {
+                sign_extend_limb.clone()
+            }
+        });
 
-        for i in 0..(RV64_REGISTER_NUM_LIMBS / 2) {
+        for i in 0..(RV64_WORD_NUM_LIMBS / 2) {
             self.bitwise_lookup_bus
                 .send_range(a[i * 2], a[i * 2 + 1])
                 .eval(builder, is_valid.clone());
@@ -252,7 +249,7 @@ where
         AdapterAirContext {
             to_pc: None,
             reads: [cols.b.map(Into::into), cols.c.map(Into::into)].into(),
-            writes: [cols.a.map(Into::into)].into(),
+            writes: [write_data].into(),
             instruction: MinimalInstruction {
                 is_valid,
                 opcode: expected_opcode,
@@ -269,8 +266,8 @@ where
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct ShiftWCoreRecord {
-    pub b: [u8; RV64_REGISTER_NUM_LIMBS],
-    pub c: [u8; RV64_REGISTER_NUM_LIMBS],
+    pub b: [u8; RV64_WORD_NUM_LIMBS],
+    pub c: [u8; RV64_WORD_NUM_LIMBS],
     pub local_opcode: u8,
 }
 
@@ -291,7 +288,7 @@ pub struct ShiftWFiller<A> {
 impl<A> ShiftWExecutor<A> {
     pub fn new(adapter: A, offset: usize) -> Self {
         assert_eq!(
-            RV64_REGISTER_NUM_LIMBS % 2,
+            RV64_WORD_NUM_LIMBS % 2,
             0,
             "Number of limbs must be divisible by 2"
         );
@@ -307,7 +304,7 @@ impl<A> ShiftWFiller<A> {
         offset: usize,
     ) -> Self {
         assert_eq!(
-            RV64_REGISTER_NUM_LIMBS % 2,
+            RV64_WORD_NUM_LIMBS % 2,
             0,
             "Number of limbs must be divisible by 2"
         );
@@ -326,7 +323,7 @@ where
     A: 'static
         + AdapterTraceExecutor<
             F,
-            ReadData: Into<[[u8; RV64_REGISTER_NUM_LIMBS]; 2]>,
+            ReadData: Into<[[u8; RV64_WORD_NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; RV64_REGISTER_NUM_LIMBS]; 1]>,
         >,
     for<'buf> RA: RecordArena<
@@ -394,7 +391,7 @@ where
         let opcode = ShiftWOpcode::from_usize(record.local_opcode as usize);
         let (a, limb_shift, bit_shift) = run_shift_w(opcode, &record.b, &record.c);
 
-        for pair in a.chunks_exact(2) {
+        for pair in a[..RV64_WORD_NUM_LIMBS].chunks_exact(2) {
             self.bitwise_lookup_chip
                 .request_range(pair[0] as u32, pair[1] as u32);
         }
@@ -407,43 +404,41 @@ where
         );
 
         core_row.bit_shift_carry = if bit_shift == 0 {
-            for _ in 0..RV64_REGISTER_NUM_LIMBS {
+            for _ in 0..RV64_WORD_NUM_LIMBS {
                 self.range_checker_chip.add_count(0, 0);
             }
-            [F::ZERO; RV64_REGISTER_NUM_LIMBS]
+            [F::ZERO; RV64_WORD_NUM_LIMBS]
         } else {
             array::from_fn(|i| {
-                let carry = if i >= RV64_WORD_NUM_LIMBS {
-                    0
-                } else {
-                    match opcode {
-                        ShiftWOpcode::SLLW => record.b[i] >> (RV64_CELL_BITS - bit_shift),
-                        _ => record.b[i] % (1 << bit_shift),
-                    }
+                let carry = match opcode {
+                    ShiftWOpcode::SLLW => record.b[i] >> (RV64_CELL_BITS - bit_shift),
+                    _ => record.b[i] % (1 << bit_shift),
                 };
                 self.range_checker_chip.add_count(carry as u32, bit_shift);
                 F::from_canonical_u8(carry)
             })
         };
 
-        core_row.limb_shift_marker = [F::ZERO; RV64_REGISTER_NUM_LIMBS];
+        core_row.limb_shift_marker = [F::ZERO; RV64_WORD_NUM_LIMBS];
         core_row.limb_shift_marker[limb_shift] = F::ONE;
         core_row.bit_shift_marker = [F::ZERO; RV64_CELL_BITS];
         core_row.bit_shift_marker[bit_shift] = F::ONE;
 
-        core_row.b_sign = F::ZERO;
-        if opcode == ShiftWOpcode::SRAW {
-            core_row.b_sign =
-                F::from_canonical_u8(record.b[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1));
-            self.bitwise_lookup_chip.request_xor(
-                record.b[RV64_WORD_NUM_LIMBS - 1] as u32,
-                1 << (RV64_CELL_BITS - 1),
-            );
-        }
-        core_row.word_sign =
+        core_row.result_sign =
             F::from_canonical_u8(a[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS as u8 - 1));
         self.bitwise_lookup_chip
             .request_xor(a[RV64_WORD_NUM_LIMBS - 1] as u32, 1 << (RV64_CELL_BITS - 1));
+        core_row.b_sign = match opcode {
+            ShiftWOpcode::SLLW => core_row.result_sign,
+            ShiftWOpcode::SRAW => {
+                self.bitwise_lookup_chip.request_xor(
+                    record.b[RV64_WORD_NUM_LIMBS - 1] as u32,
+                    1 << (RV64_CELL_BITS - 1),
+                );
+                F::from_canonical_u8(record.b[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1))
+            }
+            ShiftWOpcode::SRLW => F::ZERO,
+        };
 
         core_row.bit_multiplier_right = match opcode {
             ShiftWOpcode::SLLW => F::ZERO,
@@ -460,7 +455,7 @@ where
 
         core_row.c = record.c.map(F::from_canonical_u8);
         core_row.b = record.b.map(F::from_canonical_u8);
-        core_row.a = a.map(F::from_canonical_u8);
+        core_row.a = array::from_fn(|i| F::from_canonical_u8(a[i]));
     }
 }
 
@@ -468,14 +463,13 @@ where
 #[inline(always)]
 pub(super) fn run_shift_w(
     opcode: ShiftWOpcode,
-    x: &[u8; RV64_REGISTER_NUM_LIMBS],
-    y: &[u8; RV64_REGISTER_NUM_LIMBS],
+    x: &[u8; RV64_WORD_NUM_LIMBS],
+    y: &[u8; RV64_WORD_NUM_LIMBS],
 ) -> ([u8; RV64_REGISTER_NUM_LIMBS], usize, usize) {
-    let x_word = x[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
     let (word_result, limb_shift, bit_shift) = match opcode {
-        ShiftWOpcode::SLLW => run_shift_left_w(&x_word, y[0]),
-        ShiftWOpcode::SRLW => run_shift_right_w(&x_word, y[0], true),
-        ShiftWOpcode::SRAW => run_shift_right_w(&x_word, y[0], false),
+        ShiftWOpcode::SLLW => run_shift_left_w(x, y[0]),
+        ShiftWOpcode::SRLW => run_shift_right_w(x, y[0], true),
+        ShiftWOpcode::SRAW => run_shift_right_w(x, y[0], false),
     };
     let sign_extend_limb = ((1u16 << RV64_CELL_BITS) - 1) as u8
         * (word_result[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS as u8 - 1));

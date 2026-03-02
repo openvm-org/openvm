@@ -40,8 +40,8 @@ use super::{
 };
 use crate::{
     adapters::{
-        Rv64BaseAluAdapterAir, Rv64BaseAluAdapterExecutor, Rv64BaseAluAdapterFiller,
-        RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
+        Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterExecutor, Rv64BaseAluWAdapterFiller,
+        RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     test_utils::{
         generate_rv64_is_type_immediate, get_verification_error, rv64_rand_write_register_or_imm,
@@ -60,16 +60,16 @@ fn create_harness_fields(
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64BaseAluWAir, Rv64BaseAluWExecutor, Rv64BaseAluWChip<F>) {
     let air = Rv64BaseAluWAir::new(
-        Rv64BaseAluAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
+        Rv64BaseAluWAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
         BaseAluWCoreAir::new(bitwise_chip.bus(), BaseAluWOpcode::CLASS_OFFSET),
     );
     let executor = Rv64BaseAluWExecutor::new(
-        Rv64BaseAluAdapterExecutor::new(),
+        Rv64BaseAluWAdapterExecutor::new(),
         BaseAluWOpcode::CLASS_OFFSET,
     );
     let chip = Rv64BaseAluWChip::new(
         BaseAluWFiller::new(
-            Rv64BaseAluAdapterFiller::new(bitwise_chip.clone()),
+            Rv64BaseAluWAdapterFiller::new(bitwise_chip.clone()),
             bitwise_chip,
             BaseAluWOpcode::CLASS_OFFSET,
         ),
@@ -139,7 +139,9 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     tester.execute(executor, arena, &instruction);
 
-    let a = run_alu_w(opcode, &b, &c).map(F::from_canonical_u8);
+    let b_word: [u8; RV64_WORD_NUM_LIMBS] = b[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+    let c_word: [u8; RV64_WORD_NUM_LIMBS] = c[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+    let a = run_alu_w(opcode, &b_word, &c_word).map(F::from_canonical_u8);
     assert_eq!(a, tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd))
 }
 
@@ -224,12 +226,12 @@ fn rand_rv64w_alu_test_persistent(opcode: BaseAluWOpcode, num_ops: usize) {
 #[allow(clippy::too_many_arguments)]
 fn run_negative_alu_test(
     opcode: BaseAluWOpcode,
-    prank_a: [u32; RV64_REGISTER_NUM_LIMBS],
+    prank_a: [u32; RV64_WORD_NUM_LIMBS],
     b: [u8; RV64_REGISTER_NUM_LIMBS],
     c: [u8; RV64_REGISTER_NUM_LIMBS],
-    prank_c: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    prank_c: Option<[u32; RV64_WORD_NUM_LIMBS]>,
     prank_opcode_flags: Option<[bool; 2]>,
-    prank_word_sign: Option<u32>,
+    prank_result_sign: Option<u32>,
     is_imm: Option<bool>,
     interaction_error: bool,
 ) {
@@ -260,8 +262,8 @@ fn run_negative_alu_test(
             cols.opcode_addw_flag = F::from_bool(prank_opcode_flags[0]);
             cols.opcode_subw_flag = F::from_bool(prank_opcode_flags[1]);
         }
-        if let Some(prank_word_sign) = prank_word_sign {
-            cols.word_sign = F::from_canonical_u32(prank_word_sign);
+        if let Some(prank_result_sign) = prank_result_sign {
+            cols.result_sign = F::from_canonical_u32(prank_result_sign);
         }
         *trace = RowMajorMatrix::new(values, trace.width());
     };
@@ -279,7 +281,7 @@ fn run_negative_alu_test(
 fn rv64_alu_addw_wrong_negative_test() {
     run_negative_alu_test(
         ADDW,
-        [246, 0, 0, 0, 0, 0, 0, 0],
+        [246, 0, 0, 0],
         [250, 0, 0, 0, 0, 0, 0, 0],
         [250, 0, 0, 0, 0, 0, 0, 0],
         None,
@@ -294,7 +296,7 @@ fn rv64_alu_addw_wrong_negative_test() {
 fn rv64_alu_addw_out_of_range_negative_test() {
     run_negative_alu_test(
         ADDW,
-        [500, 0, 0, 0, 0, 0, 0, 0],
+        [500, 0, 0, 0],
         [250, 0, 0, 0, 0, 0, 0, 0],
         [250, 0, 0, 0, 0, 0, 0, 0],
         None,
@@ -309,7 +311,7 @@ fn rv64_alu_addw_out_of_range_negative_test() {
 fn rv64_alu_subw_wrong_negative_test() {
     run_negative_alu_test(
         SUBW,
-        [255, 0, 0, 0, 255, 255, 255, 255],
+        [255, 0, 0, 0],
         [1, 0, 0, 0, 0, 0, 0, 0],
         [2, 0, 0, 0, 0, 0, 0, 0],
         None,
@@ -324,7 +326,7 @@ fn rv64_alu_subw_wrong_negative_test() {
 fn rv64_alu_subw_out_of_range_negative_test() {
     run_negative_alu_test(
         SUBW,
-        [F::NEG_ONE.as_canonical_u32(), 0, 0, 0, 255, 255, 255, 255],
+        [F::NEG_ONE.as_canonical_u32(), 0, 0, 0],
         [1, 0, 0, 0, 0, 0, 0, 0],
         [2, 0, 0, 0, 0, 0, 0, 0],
         None,
@@ -339,10 +341,10 @@ fn rv64_alu_subw_out_of_range_negative_test() {
 fn rv64_aluw_adapter_unconstrained_imm_limb_test() {
     run_negative_alu_test(
         ADDW,
-        [5, 0, 0, 0, 0, 0, 0, 0],
+        [5, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0],
         [5, 0, 0, 0, 0, 0, 0, 0],
-        Some([5, 0, 0, 0, 1, 0, 0, 0]),
+        Some([5, 0, 0, 1]),
         None,
         None,
         Some(true),
@@ -354,7 +356,7 @@ fn rv64_aluw_adapter_unconstrained_imm_limb_test() {
 fn rv64_aluw_adapter_unconstrained_rs2_read_test() {
     run_negative_alu_test(
         ADDW,
-        [2, 2, 2, 2, 2, 2, 2, 2],
+        [2, 2, 2, 2],
         [1, 1, 1, 1, 1, 1, 1, 1],
         [1, 1, 1, 1, 1, 1, 1, 1],
         None,
@@ -369,14 +371,14 @@ fn rv64_aluw_adapter_unconstrained_rs2_read_test() {
 fn rv64_aluw_wrong_upper_sign_extension_negative_test() {
     run_negative_alu_test(
         ADDW,
-        [5, 0, 0, 0, 1, 0, 0, 0],
+        [5, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0],
         [5, 0, 0, 0, 0, 0, 0, 0],
         None,
         None,
-        Some(0),
+        Some(1),
         Some(false),
-        false,
+        true,
     );
 }
 
@@ -390,7 +392,11 @@ fn run_addw_sanity_test() {
     let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
     let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
     let z: [u8; RV64_REGISTER_NUM_LIMBS] = [23, 205, 73, 49, 0, 0, 0, 0];
-    let result = run_alu_w(ADDW, &x, &y);
+    let result = run_alu_w(
+        ADDW,
+        x[..RV64_WORD_NUM_LIMBS].try_into().unwrap(),
+        y[..RV64_WORD_NUM_LIMBS].try_into().unwrap(),
+    );
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
@@ -402,7 +408,11 @@ fn run_subw_sanity_test() {
     let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
     let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
     let z: [u8; RV64_REGISTER_NUM_LIMBS] = [179, 118, 240, 172, 255, 255, 255, 255];
-    let result = run_alu_w(SUBW, &x, &y);
+    let result = run_alu_w(
+        SUBW,
+        x[..RV64_WORD_NUM_LIMBS].try_into().unwrap(),
+        y[..RV64_WORD_NUM_LIMBS].try_into().unwrap(),
+    );
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }

@@ -27,15 +27,15 @@ use crate::adapters::{RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIM
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
 pub struct BaseAluWCoreCols<T> {
-    pub a: [T; RV64_REGISTER_NUM_LIMBS],
-    pub b: [T; RV64_REGISTER_NUM_LIMBS],
-    pub c: [T; RV64_REGISTER_NUM_LIMBS],
+    pub a: [T; RV64_WORD_NUM_LIMBS],
+    pub b: [T; RV64_WORD_NUM_LIMBS],
+    pub c: [T; RV64_WORD_NUM_LIMBS],
 
     pub opcode_addw_flag: T,
     pub opcode_subw_flag: T,
 
     // Sign bit of the low 32-bit result. Upper bytes are constrained from this single bit.
-    pub word_sign: T,
+    pub result_sign: T,
 }
 
 #[derive(Copy, Clone, Debug, derive_new::new)]
@@ -55,7 +55,7 @@ impl<AB, I> VmCoreAir<AB, I> for BaseAluWCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<[[AB::Expr; RV64_REGISTER_NUM_LIMBS]; 2]>,
+    I::Reads: From<[[AB::Expr; RV64_WORD_NUM_LIMBS]; 2]>,
     I::Writes: From<[[AB::Expr; RV64_REGISTER_NUM_LIMBS]; 1]>,
     I::ProcessedInstruction: From<MinimalInstruction<AB::Expr>>,
 {
@@ -113,24 +113,26 @@ where
                 .eval(builder, is_valid.clone());
         }
 
-        // Constrain upper 32 bits to sign extension of low 32-bit result.
-        builder.assert_bool(cols.word_sign);
+        // Constrain sign bit of low-word result and build full-width write via sign extension.
+        builder.assert_bool(cols.result_sign);
         let sign_mask = AB::Expr::from_canonical_u32(1 << (RV64_CELL_BITS - 1));
         self.bus
             .send_xor(
                 a[RV64_WORD_NUM_LIMBS - 1],
                 sign_mask.clone(),
                 a[RV64_WORD_NUM_LIMBS - 1] + sign_mask.clone()
-                    - AB::Expr::from_canonical_u32(2) * cols.word_sign * sign_mask,
+                    - AB::Expr::from_canonical_u32(2) * cols.result_sign * sign_mask,
             )
             .eval(builder, is_valid.clone());
         let sign_extend_limb =
-            AB::Expr::from_canonical_u32((1 << RV64_CELL_BITS) - 1) * cols.word_sign;
-        for &a_limb in &a[RV64_WORD_NUM_LIMBS..] {
-            builder
-                .when(is_valid.clone())
-                .assert_eq(a_limb, sign_extend_limb.clone());
-        }
+            AB::Expr::from_canonical_u32((1 << RV64_CELL_BITS) - 1) * cols.result_sign;
+        let write_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
+            if i < RV64_WORD_NUM_LIMBS {
+                a[i].into()
+            } else {
+                sign_extend_limb.clone()
+            }
+        });
 
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
@@ -145,7 +147,7 @@ where
         AdapterAirContext {
             to_pc: None,
             reads: [cols.b.map(Into::into), cols.c.map(Into::into)].into(),
-            writes: [cols.a.map(Into::into)].into(),
+            writes: [write_data].into(),
             instruction: MinimalInstruction {
                 is_valid,
                 opcode: expected_opcode,
@@ -162,8 +164,8 @@ where
 #[repr(C, align(4))]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct BaseAluWCoreRecord {
-    pub b: [u8; RV64_REGISTER_NUM_LIMBS],
-    pub c: [u8; RV64_REGISTER_NUM_LIMBS],
+    pub b: [u8; RV64_WORD_NUM_LIMBS],
+    pub c: [u8; RV64_WORD_NUM_LIMBS],
     // Use u8 instead of usize for better packing
     pub local_opcode: u8,
 }
@@ -187,7 +189,7 @@ where
     A: 'static
         + AdapterTraceExecutor<
             F,
-            ReadData: Into<[[u8; RV64_REGISTER_NUM_LIMBS]; 2]>,
+            ReadData: Into<[[u8; RV64_WORD_NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; RV64_REGISTER_NUM_LIMBS]; 1]>,
         >,
     for<'buf> RA: RecordArena<
@@ -257,7 +259,7 @@ where
         let a = run_alu_w(local_opcode, &record.b, &record.c);
         core_row.opcode_addw_flag = F::from_bool(local_opcode == BaseAluWOpcode::ADDW);
         core_row.opcode_subw_flag = F::from_bool(local_opcode == BaseAluWOpcode::SUBW);
-        core_row.word_sign =
+        core_row.result_sign =
             F::from_canonical_u8(a[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS as u8 - 1));
 
         for pair in a[..RV64_WORD_NUM_LIMBS].chunks_exact(2) {
@@ -271,15 +273,15 @@ where
 
         core_row.c = record.c.map(F::from_canonical_u8);
         core_row.b = record.b.map(F::from_canonical_u8);
-        core_row.a = a.map(F::from_canonical_u8);
+        core_row.a = array::from_fn(|i| F::from_canonical_u8(a[i]));
     }
 }
 
 #[inline(always)]
 pub(super) fn run_alu_w(
     opcode: BaseAluWOpcode,
-    x: &[u8; RV64_REGISTER_NUM_LIMBS],
-    y: &[u8; RV64_REGISTER_NUM_LIMBS],
+    x: &[u8; RV64_WORD_NUM_LIMBS],
+    y: &[u8; RV64_WORD_NUM_LIMBS],
 ) -> [u8; RV64_REGISTER_NUM_LIMBS] {
     match opcode {
         BaseAluWOpcode::ADDW => run_addw(x, y),
@@ -289,8 +291,8 @@ pub(super) fn run_alu_w(
 
 #[inline(always)]
 fn run_addw(
-    x: &[u8; RV64_REGISTER_NUM_LIMBS],
-    y: &[u8; RV64_REGISTER_NUM_LIMBS],
+    x: &[u8; RV64_WORD_NUM_LIMBS],
+    y: &[u8; RV64_WORD_NUM_LIMBS],
 ) -> [u8; RV64_REGISTER_NUM_LIMBS] {
     let mut z = [0u8; RV64_WORD_NUM_LIMBS];
     let mut carry = [0u8; RV64_WORD_NUM_LIMBS];
@@ -306,8 +308,8 @@ fn run_addw(
 
 #[inline(always)]
 fn run_subw(
-    x: &[u8; RV64_REGISTER_NUM_LIMBS],
-    y: &[u8; RV64_REGISTER_NUM_LIMBS],
+    x: &[u8; RV64_WORD_NUM_LIMBS],
+    y: &[u8; RV64_WORD_NUM_LIMBS],
 ) -> [u8; RV64_REGISTER_NUM_LIMBS] {
     let mut z = [0u8; RV64_WORD_NUM_LIMBS];
     let mut carry = [0u8; RV64_WORD_NUM_LIMBS];

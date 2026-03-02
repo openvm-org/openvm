@@ -265,7 +265,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         inventory.add_executor(base_alu, BaseAluOpcode::iter().map(|x| x.global_opcode()))?;
 
         let base_alu_w =
-            Rv64BaseAluWExecutor::new(Rv64BaseAluAdapterExecutor, BaseAluWOpcode::CLASS_OFFSET);
+            Rv64BaseAluWExecutor::new(Rv64BaseAluWAdapterExecutor, BaseAluWOpcode::CLASS_OFFSET);
         inventory.add_executor(
             base_alu_w,
             BaseAluWOpcode::iter().map(|x| x.global_opcode()),
@@ -278,8 +278,10 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         let shift = Rv64ShiftExecutor::new(Rv64BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
         inventory.add_executor(shift, ShiftOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let shift_w =
-            Rv64ShiftWExecutor::new(Rv64BaseAluAdapterExecutor, ShiftWOpcode::CLASS_OFFSET);
+        let shift_w = Rv64ShiftWExecutor::new(
+            Rv64BaseAluWAdapterExecutor::new(),
+            ShiftWOpcode::CLASS_OFFSET,
+        );
         inventory.add_executor(shift_w, ShiftWOpcode::iter().map(|x| x.global_opcode()))?;
 
         // TEMP: disabled until ported to RV64
@@ -380,7 +382,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64I {
         inventory.add_air(base_alu);
 
         let base_alu_w = Rv64BaseAluWAir::new(
-            Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+            Rv64BaseAluWAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
             crate::base_alu_w::BaseAluWCoreAir::new(bitwise_lu, BaseAluWOpcode::CLASS_OFFSET),
         );
         inventory.add_air(base_alu_w);
@@ -398,7 +400,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv64I {
         inventory.add_air(shift);
 
         let shift_w = Rv64ShiftWAir::new(
-            Rv64BaseAluAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
+            Rv64BaseAluWAdapterAir::new(exec_bridge, memory_bridge, bitwise_lu),
             crate::shift_w::ShiftWCoreAir::new(
                 bitwise_lu,
                 range_checker,
@@ -515,7 +517,7 @@ where
         inventory.next_air::<Rv64BaseAluWAir>()?;
         let base_alu_w = Rv64BaseAluWChip::new(
             crate::base_alu_w::BaseAluWFiller::new(
-                Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                Rv64BaseAluWAdapterFiller::new(bitwise_lu.clone()),
                 bitwise_lu.clone(),
                 BaseAluWOpcode::CLASS_OFFSET,
             ),
@@ -549,7 +551,7 @@ where
         inventory.next_air::<Rv64ShiftWAir>()?;
         let shift_w = Rv64ShiftWChip::new(
             crate::shift_w::ShiftWFiller::new(
-                Rv64BaseAluAdapterFiller::new(bitwise_lu.clone()),
+                Rv64BaseAluWAdapterFiller::new(bitwise_lu.clone()),
                 bitwise_lu.clone(),
                 range_checker.clone(),
                 ShiftWOpcode::CLASS_OFFSET,
