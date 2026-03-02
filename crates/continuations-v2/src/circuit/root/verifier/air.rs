@@ -25,12 +25,11 @@ use verify_stark::pvs::{
 use crate::{
     bn254::CommitBytes,
     circuit::{
-        deferral::verify::bus::{
-            DeferralAccPathBus, DeferralAccPathMessage, MemoryMerkleRootsBus,
-            MemoryMerkleRootsMessage,
-        },
         root::{
-            bus::{MemoryMerkleCommitBus, MemoryMerkleCommitMessage},
+            bus::{
+                DeferralAccPathBus, DeferralAccPathMessage, DeferralMerkleRootsBus,
+                DeferralMerkleRootsMessage, MemoryMerkleCommitBus, MemoryMerkleCommitMessage,
+            },
             RootVerifierPvs,
         },
         CONSTRAINT_EVAL_CACHED_INDEX,
@@ -58,7 +57,7 @@ pub struct RootVerifierPvsAir {
     pub poseidon2_compress_bus: Poseidon2CompressBus,
     pub memory_merkle_commit_bus: MemoryMerkleCommitBus,
     pub def_acc_paths_bus: DeferralAccPathBus,
-    pub memory_merkle_roots_bus: MemoryMerkleRootsBus,
+    pub def_merkle_roots_bus: DeferralMerkleRootsBus,
 
     pub expected_internal_recursive_dag_commit: CommitBytes,
     pub expected_def_hook_commit: Option<CommitBytes>,
@@ -371,7 +370,7 @@ impl RootVerifierPvsAir {
             .assert_zero(verifier_pvs.deferral_flag * (verifier_pvs.deferral_flag - AB::Expr::TWO));
         assert_array_eq(
             &mut builder.when(verifier_pvs.deferral_flag),
-            verifier_pvs.def_root_vk_commit,
+            verifier_pvs.def_hook_vk_commit,
             <CommitBytes as Into<[u32; DIGEST_SIZE]>>::into(expected_def_hook_commit)
                 .map(AB::F::from_u32),
         );
@@ -397,9 +396,9 @@ impl RootVerifierPvsAir {
             AB::F::ONE,
         );
 
-        self.memory_merkle_roots_bus.send(
+        self.def_merkle_roots_bus.send(
             builder,
-            MemoryMerkleRootsMessage {
+            DeferralMerkleRootsMessage {
                 initial_root: base.child_vm_pvs.initial_root,
                 final_root: base.child_vm_pvs.final_root,
             },

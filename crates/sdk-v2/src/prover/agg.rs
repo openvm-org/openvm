@@ -17,18 +17,18 @@ use crate::{
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        use continuations_v2::prover::NonRootGpuProver as NonRootAggregationProver;
+        use continuations_v2::prover::InnerGpuProver as InnerAggregationProver;
         type E = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
     } else {
-        use continuations_v2::prover::NonRootCpuProver as NonRootAggregationProver;
+        use continuations_v2::prover::InnerCpuProver as InnerAggregationProver;
         type E = openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine;
     }
 }
 
 pub struct AggProver {
-    pub leaf_prover: NonRootAggregationProver<MAX_NUM_CHILDREN_LEAF>,
-    pub internal_for_leaf_prover: NonRootAggregationProver<MAX_NUM_CHILDREN_INTERNAL>,
-    pub internal_recursive_prover: NonRootAggregationProver<MAX_NUM_CHILDREN_INTERNAL>,
+    pub leaf_prover: InnerAggregationProver<MAX_NUM_CHILDREN_LEAF>,
+    pub internal_for_leaf_prover: InnerAggregationProver<MAX_NUM_CHILDREN_INTERNAL>,
+    pub internal_recursive_prover: InnerAggregationProver<MAX_NUM_CHILDREN_INTERNAL>,
     pub agg_tree_config: AggregationTreeConfig,
 }
 
@@ -46,14 +46,14 @@ impl AggProver {
         assert!(agg_tree_config.num_children_leaf <= MAX_NUM_CHILDREN_LEAF);
         assert!(agg_tree_config.num_children_internal <= MAX_NUM_CHILDREN_INTERNAL);
         let leaf_prover =
-            NonRootAggregationProver::new::<E>(app_vk, agg_config.params.leaf.clone(), false, None);
-        let internal_for_leaf_prover = NonRootAggregationProver::new::<E>(
+            InnerAggregationProver::new::<E>(app_vk, agg_config.params.leaf.clone(), false, None);
+        let internal_for_leaf_prover = InnerAggregationProver::new::<E>(
             leaf_prover.get_vk(),
             agg_config.params.internal.clone(),
             false,
             None,
         );
-        let internal_recursive_prover = NonRootAggregationProver::new::<E>(
+        let internal_recursive_prover = InnerAggregationProver::new::<E>(
             internal_for_leaf_prover.get_vk(),
             agg_config.params.internal.clone(),
             true,
@@ -72,15 +72,14 @@ impl AggProver {
         agg_pk: AggProvingKey,
         agg_tree_config: AggregationTreeConfig,
     ) -> Self {
-        let leaf_prover =
-            NonRootAggregationProver::from_pk::<E>(app_vk, agg_pk.leaf_pk, false, None);
-        let internal_for_leaf_prover = NonRootAggregationProver::from_pk::<E>(
+        let leaf_prover = InnerAggregationProver::from_pk::<E>(app_vk, agg_pk.leaf_pk, false, None);
+        let internal_for_leaf_prover = InnerAggregationProver::from_pk::<E>(
             leaf_prover.get_vk(),
             agg_pk.internal_for_leaf_pk,
             false,
             None,
         );
-        let internal_recursive_prover = NonRootAggregationProver::from_pk::<E>(
+        let internal_recursive_prover = InnerAggregationProver::from_pk::<E>(
             internal_for_leaf_prover.get_vk(),
             agg_pk.internal_recursive_pk,
             true,
