@@ -27,7 +27,7 @@ use openvm_stark_backend::{
 
 use crate::adapters::{
     Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
-    WORD_NUM_LIMBS,
+    RV64_WORD_NUM_LIMBS,
 };
 
 #[repr(C)]
@@ -35,10 +35,10 @@ use crate::adapters::{
 pub struct Rv64AuipcCoreCols<T> {
     pub is_valid: T,
     // The limbs of the immediate except the least significant limb since it is always 0
-    pub imm_limbs: [T; WORD_NUM_LIMBS - 1],
+    pub imm_limbs: [T; RV64_WORD_NUM_LIMBS - 1],
     // The limbs of the PC except the most significant and the least significant limbs
-    pub pc_limbs: [T; WORD_NUM_LIMBS - 2],
-    pub rd_data: [T; WORD_NUM_LIMBS],
+    pub pc_limbs: [T; RV64_WORD_NUM_LIMBS - 2],
+    pub rd_data: [T; RV64_WORD_NUM_LIMBS],
 }
 
 #[derive(Debug, Clone, Copy, derive_new::new)]
@@ -95,7 +95,8 @@ where
 
         // Compute the most significant limb of PC
         let pc_msl = (from_pc - intermed_val)
-            * AB::F::from_canonical_usize(1 << (RV64_CELL_BITS * (WORD_NUM_LIMBS - 1))).inverse();
+            * AB::F::from_canonical_usize(1 << (RV64_CELL_BITS * (RV64_WORD_NUM_LIMBS - 1)))
+                .inverse();
 
         // The vector pc_limbs contains the actual limbs of PC in little endian order
         let pc_limbs = [rd_data[0]]
@@ -105,21 +106,21 @@ where
             .chain([pc_msl])
             .collect::<Vec<AB::Expr>>();
 
-        let mut carry: [AB::Expr; WORD_NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
+        let mut carry: [AB::Expr; RV64_WORD_NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         let carry_divide = AB::F::from_canonical_usize(1 << RV64_CELL_BITS).inverse();
 
         // Don't need to constrain the least significant limb of the addition
         // since we already know that rd_data[0] = pc_limbs[0] and the least significant limb of imm
         // is 0 Note: imm_limbs doesn't include the least significant limb so imm_limbs[i -
         // 1] means the i-th limb of imm
-        for i in 1..WORD_NUM_LIMBS {
+        for i in 1..RV64_WORD_NUM_LIMBS {
             carry[i] = AB::Expr::from(carry_divide)
                 * (pc_limbs[i].clone() + imm_limbs[i - 1] - rd_data[i] + carry[i - 1].clone());
             builder.when(is_valid).assert_bool(carry[i].clone());
         }
 
         // Range checking of rd_data entries to RV64_CELL_BITS bits
-        for i in 0..(WORD_NUM_LIMBS / 2) {
+        for i in 0..(RV64_WORD_NUM_LIMBS / 2) {
             self.bus
                 .send_range(rd_data[i * 2], rd_data[i * 2 + 1])
                 .eval(builder, is_valid);
@@ -135,14 +136,14 @@ where
             need_range_check.push(limb.into());
         }
 
-        assert_eq!(pc_limbs.len(), WORD_NUM_LIMBS);
+        assert_eq!(pc_limbs.len(), RV64_WORD_NUM_LIMBS);
         // use enumerate to match pc_limbs[0] => i = 0, pc_limbs[1] => i = 1, ...
         // pc_limbs[0] is already range checked through rd_data[0], so we skip it
         for (i, limb) in pc_limbs.iter().enumerate().skip(1) {
             // the most significant limb is pc_limbs[3] => i = 3
             if i == pc_limbs.len() - 1 {
                 // Range check the most significant limb of pc to be in [0,
-                // 2^{PC_BITS-(WORD_NUM_LIMBS-1)*RV64_CELL_BITS})
+                // 2^{PC_BITS-(RV64_WORD_NUM_LIMBS-1)*RV64_CELL_BITS})
                 need_range_check.push(
                     (*limb).clone()
                         * AB::Expr::from_canonical_usize(
@@ -154,9 +155,9 @@ where
             }
         }
 
-        // need_range_check contains (WORD_NUM_LIMBS - 1) elements from imm_limbs
-        // and (WORD_NUM_LIMBS - 1) elements from pc_limbs
-        // Hence, is of even length 2*WORD_NUM_LIMBS - 2
+        // need_range_check contains (RV64_WORD_NUM_LIMBS - 1) elements from imm_limbs
+        // and (RV64_WORD_NUM_LIMBS - 1) elements from pc_limbs
+        // Hence, is of even length 2*RV64_WORD_NUM_LIMBS - 2
         assert_eq!(need_range_check.len() % 2, 0);
         for pair in need_range_check.chunks_exact(2) {
             self.bus
@@ -171,8 +172,8 @@ where
                 acc + val * AB::Expr::from_canonical_u32(1 << (i * RV64_CELL_BITS))
             });
 
-        let write_data = array::from_fn(|i| {
-            if i < WORD_NUM_LIMBS {
+        let write_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
+            if i < RV64_WORD_NUM_LIMBS {
                 rd_data[i].into()
             } else {
                 AB::Expr::ZERO
@@ -280,10 +281,10 @@ where
             .request_range(imm_limbs[0] as u32, imm_limbs[1] as u32);
         self.bitwise_lookup_chip
             .request_range(imm_limbs[2] as u32, pc_limbs[1] as u32);
-        let msl_shift = WORD_NUM_LIMBS * RV64_CELL_BITS - PC_BITS;
+        let msl_shift = RV64_WORD_NUM_LIMBS * RV64_CELL_BITS - PC_BITS;
         self.bitwise_lookup_chip
             .request_range(pc_limbs[2] as u32, (pc_limbs[3] as u32) << msl_shift);
-        for pair in rd_data[..WORD_NUM_LIMBS].chunks_exact(2) {
+        for pair in rd_data[..RV64_WORD_NUM_LIMBS].chunks_exact(2) {
             self.bitwise_lookup_chip
                 .request_range(pair[0] as u32, pair[1] as u32);
         }
@@ -302,6 +303,6 @@ where
 pub(super) fn run_auipc(pc: u32, imm: u32) -> [u8; RV64_REGISTER_NUM_LIMBS] {
     let rd = pc.wrapping_add(imm << RV64_CELL_BITS);
     let mut rd_data = [0u8; RV64_REGISTER_NUM_LIMBS];
-    rd_data[..WORD_NUM_LIMBS].copy_from_slice(&rd.to_le_bytes());
+    rd_data[..RV64_WORD_NUM_LIMBS].copy_from_slice(&rd.to_le_bytes());
     rd_data
 }

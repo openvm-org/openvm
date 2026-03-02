@@ -51,8 +51,7 @@ use crate::Rv64ImConfig;
 use crate::{
     adapters::{
         compose, Rv64JalrAdapterAir, Rv64JalrAdapterCols, Rv64JalrAdapterExecutor,
-        Rv64JalrAdapterFiller,
-        RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, WORD_NUM_LIMBS,
+        Rv64JalrAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     jalr::{run_jalr, Rv64JalrChip, Rv64JalrCoreCols, Rv64JalrExecutor},
     test_utils::get_verification_error,
@@ -221,8 +220,8 @@ fn rand_jalr_test() {
 
 #[derive(Clone, Copy, Default, PartialEq)]
 struct JalrPrankValues {
-    pub rd_data: Option<[u32; WORD_NUM_LIMBS - 1]>,
-    pub rs1_data: Option<[u32; WORD_NUM_LIMBS]>,
+    pub rd_data: Option<[u32; RV64_WORD_NUM_LIMBS - 1]>,
+    pub rs1_data: Option<[u32; RV64_WORD_NUM_LIMBS]>,
     pub to_pc_least_sig_bit: Option<u32>,
     pub to_pc_limbs: Option<[u32; 2]>,
     pub imm_sign: Option<u32>,
@@ -372,6 +371,106 @@ fn invalid_cols_negative_tests() {
         JalrPrankValues::default(),
         true,
     );
+}
+
+#[test]
+fn rs1_upper_bytes_trace_tamper_negative_test() {
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    let initial_pc = 0x1234;
+    let imm = 16usize;
+    let imm_sign = 0usize;
+    let rd_ptr = 16usize;
+    let rs1_ptr = 8usize;
+    let rs1_low = 0x20000u32;
+    let mem_helper = tester.memory_helper();
+
+    let mut poisoned_rs1 = into_limbs(rs1_low);
+    poisoned_rs1[4] = 1;
+    let clean_rs1 = into_limbs(rs1_low);
+    let poisoned_write_timestamp = tester.memory.memory.timestamp();
+
+    // Seed the same source register with a poisoned value, then overwrite with a clean one so
+    // the execution is initially valid.
+    tester.write(1, rs1_ptr, poisoned_rs1.map(F::from_canonical_u32));
+    tester.write(1, rs1_ptr, clean_rs1.map(F::from_canonical_u32));
+
+    tester.execute_with_pc(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(
+            JALR.global_opcode(),
+            [rd_ptr, rs1_ptr, imm, 1, 0, 1, imm_sign],
+        ),
+        initial_pc,
+    );
+
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut trace_row = trace.row_slice(0).to_vec();
+        let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64JalrAdapterCols<F> = adapter_row.borrow_mut();
+        let read_timestamp = adapter_cols.from_state.timestamp.as_canonical_u32();
+        let rs1_aux_base = adapter_cols.rs1_aux_cols.as_mut();
+        mem_helper
+            .as_borrowed()
+            .fill(poisoned_write_timestamp, read_timestamp, rs1_aux_base);
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test_with_expected_error(get_verification_error(true));
+}
+
+#[test]
+fn rd_upper_bytes_trace_tamper_negative_test() {
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    let initial_pc = 0x1234;
+    let imm = 16usize;
+    let imm_sign = 0usize;
+    let rd_ptr = 16usize;
+    let rs1_ptr = 8usize;
+    let rs1_low = 0x20000u32;
+    let clean_rd_prev = [9u32, 8, 7, 6, 0, 0, 0, 0];
+
+    // Seed the destination register with a known clean value.
+    tester.write(1, rd_ptr, clean_rd_prev.map(F::from_canonical_u32));
+    tester.write(1, rs1_ptr, into_limbs(rs1_low).map(F::from_canonical_u32));
+
+    tester.execute_with_pc(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(
+            JALR.global_opcode(),
+            [rd_ptr, rs1_ptr, imm, 1, 0, 1, imm_sign],
+        ),
+        initial_pc,
+    );
+
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut trace_row = trace.row_slice(0).to_vec();
+        let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64JalrAdapterCols<F> = adapter_row.borrow_mut();
+        adapter_cols.rd_aux_cols.prev_data[4] = F::from_canonical_u32(1);
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test_with_expected_error(get_verification_error(true));
 }
 
 #[test]

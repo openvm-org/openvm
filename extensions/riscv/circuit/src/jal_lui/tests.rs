@@ -39,8 +39,8 @@ use crate::{
     adapters::{
         Rv64CondRdWriteAdapterAir, Rv64CondRdWriteAdapterCols, Rv64CondRdWriteAdapterExecutor,
         Rv64CondRdWriteAdapterFiller, Rv64RdWriteAdapterAir, Rv64RdWriteAdapterExecutor,
-        Rv64RdWriteAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS,
-        WORD_NUM_LIMBS,
+        Rv64RdWriteAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        RV_IS_TYPE_IMM_BITS,
     },
     jal_lui::Rv64JalLuiCoreCols,
     test_utils::get_verification_error,
@@ -193,7 +193,7 @@ fn rand_jal_lui_test(opcode: Rv64JalLuiOpcode, num_ops: usize) {
 
 #[derive(Clone, Copy, Default, PartialEq)]
 struct JalLuiPrankValues {
-    pub rd_data: Option<[u32; WORD_NUM_LIMBS]>,
+    pub rd_data: Option<[u32; RV64_WORD_NUM_LIMBS]>,
     pub imm: Option<i32>,
     pub is_jal: Option<bool>,
     pub is_lui: Option<bool>,
@@ -351,6 +351,53 @@ fn write_suppression_boundary_negative_test() {
         },
         true,
     );
+}
+
+#[test]
+fn rd_upper_bytes_trace_tamper_negative_test() {
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    let initial_pc = 0x1234;
+    let imm = 16i32;
+    let rd_ptr = 16usize;
+    let clean_rd_prev = [9u32, 8, 7, 6, 0, 0, 0, 0];
+
+    // Seed the destination register with a known clean value.
+    tester.write(1, rd_ptr, clean_rd_prev.map(F::from_canonical_u32));
+
+    tester.execute_with_pc(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::large_from_isize(
+            LUI.global_opcode(),
+            rd_ptr as isize,
+            0,
+            imm as isize,
+            1,
+            0,
+            1,
+            0,
+        ),
+        initial_pc,
+    );
+
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut trace_row = trace.row_slice(0).to_vec();
+        let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        adapter_cols.inner.rd_aux_cols.prev_data[4] = F::from_canonical_u32(1);
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test_with_expected_error(get_verification_error(true));
 }
 
 #[test]

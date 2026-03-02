@@ -43,14 +43,14 @@ pub struct Rv64CondRdWriteAdapterCols<T> {
     pub needs_write: T,
 }
 
-/// This adapter doesn't read anything, and writes to `[a:8]_d`, where d == 1.
+/// This adapter doesn't read anything, and writes to [a:8]_d, where d == 1
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Rv64RdWriteAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,
 }
 
-/// This adapter doesn't read anything, and **maybe** writes to `[a:8]_d`, where d == 1.
+/// This adapter doesn't read anything, and **maybe** writes to [a:8]_d, where d == 1
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Rv64CondRdWriteAdapterAir {
     inner: Rv64RdWriteAdapterAir,
@@ -190,14 +190,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64CondRdWriteAdapterAir {
     }
 }
 
-/// This adapter doesn't read anything, and writes to `[a:8]_d`, where d == 1.
+/// This adapter doesn't read anything, and writes to [a:8]_d, where d == 1
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug, Clone)]
 pub struct Rv64RdWriteAdapterRecord {
     pub from_pc: u32,
     pub from_timestamp: u32,
 
-    // Will use u32::MAX to indicate no write.
+    // Will use u32::MAX to indicate no write
     pub rd_ptr: u32,
     pub rd_aux_record: MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS>,
 }
@@ -230,7 +230,7 @@ where
         _instruction: &Instruction<F>,
         _record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
-        // Rv64RdWriteAdapter doesn't read anything.
+        // Rv64RdWriteAdapter doesn't read anything
     }
 
     #[inline(always)]
@@ -284,7 +284,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64RdWriteAdapterFiller {
     }
 }
 
-/// This adapter doesn't read anything, and **maybe** writes to `[a:8]_d`, where d == 1.
+/// This adapter doesn't read anything, and **maybe** writes to [a:8]_d, where d == 1
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64CondRdWriteAdapterExecutor {
     inner: Rv64RdWriteAdapterExecutor,

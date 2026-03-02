@@ -38,8 +38,8 @@ use {
 use super::{run_auipc, Rv64AuipcChip, Rv64AuipcCoreAir, Rv64AuipcCoreCols, Rv64AuipcExecutor};
 use crate::{
     adapters::{
-        Rv64RdWriteAdapterAir, Rv64RdWriteAdapterExecutor, Rv64RdWriteAdapterFiller,
-        RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, WORD_NUM_LIMBS,
+        Rv64RdWriteAdapterAir, Rv64RdWriteAdapterCols, Rv64RdWriteAdapterExecutor,
+        Rv64RdWriteAdapterFiller, RV64_CELL_BITS, RV64_WORD_NUM_LIMBS,
     },
     test_utils::get_verification_error,
     Rv64AuipcAir, Rv64AuipcFiller,
@@ -160,9 +160,9 @@ fn rand_auipc_test() {
 
 #[derive(Clone, Copy, Default, PartialEq)]
 struct AuipcPrankValues {
-    pub rd_data: Option<[u32; WORD_NUM_LIMBS]>,
-    pub imm_limbs: Option<[u32; WORD_NUM_LIMBS - 1]>,
-    pub pc_limbs: Option<[u32; WORD_NUM_LIMBS - 2]>,
+    pub rd_data: Option<[u32; RV64_WORD_NUM_LIMBS]>,
+    pub imm_limbs: Option<[u32; RV64_WORD_NUM_LIMBS - 1]>,
+    pub pc_limbs: Option<[u32; RV64_WORD_NUM_LIMBS - 2]>,
 }
 
 fn run_negative_auipc_test(
@@ -268,6 +268,45 @@ fn invalid_limb_negative_tests() {
         },
         true,
     );
+}
+
+#[test]
+fn rd_upper_bytes_trace_tamper_negative_test() {
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    let initial_pc = 0x1234;
+    let imm = 16usize;
+    let rd_ptr = 16usize;
+
+    let clean_rd_prev = [9u32, 8, 7, 6, 0, 0, 0, 0];
+
+    // Seed the destination register with a known clean value.
+    tester.write(1, rd_ptr, clean_rd_prev.map(F::from_canonical_u32));
+
+    tester.execute_with_pc(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(AUIPC.global_opcode(), [rd_ptr, 0, imm, 1, 0]),
+        initial_pc,
+    );
+
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut trace_row = trace.row_slice(0).to_vec();
+        let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64RdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        adapter_cols.rd_aux_cols.prev_data[4] = F::from_canonical_u32(1);
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test_with_expected_error(get_verification_error(true));
 }
 
 #[test]

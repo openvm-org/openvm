@@ -28,7 +28,7 @@ use openvm_stark_backend::{
 
 use crate::adapters::{
     Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
-    WORD_NUM_LIMBS,
+    RV64_WORD_NUM_LIMBS,
 };
 
 #[repr(C)]
@@ -36,10 +36,10 @@ use crate::adapters::{
 pub struct Rv64JalrCoreCols<T> {
     pub imm: T,
     // Keep the same 32-bit decomposition columns and zero-extend to RV64 at the adapter boundary.
-    pub rs1_data: [T; WORD_NUM_LIMBS],
+    pub rs1_data: [T; RV64_WORD_NUM_LIMBS],
     // To save a column, we only store the 3 most significant limbs of low-32 rd_data.
     // The least significant limb can be derived from from_pc and these limbs.
-    pub rd_data: [T; WORD_NUM_LIMBS - 1],
+    pub rd_data: [T; RV64_WORD_NUM_LIMBS - 1],
     pub is_valid: T,
 
     pub to_pc_least_sig_bit: T,
@@ -99,8 +99,12 @@ where
 
         let least_sig_limb = from_pc + AB::F::from_canonical_u32(DEFAULT_PC_STEP) - composed;
 
-        // low-32 rd_data decomposition.
-        let rd_data_low: [AB::Expr; WORD_NUM_LIMBS] = array::from_fn(|i| {
+        // rd_data_low is the low-32-bit decomposition of `from_pc + DEFAULT_PC_STEP`.
+        // The range check on `least_sig_limb` also ensures that `rd_data_low` correctly
+        // represents `from_pc + DEFAULT_PC_STEP`. Specifically, if the prover provides
+        // incorrect values for `rd` (the 3 most significant limbs), then `least_sig_limb`
+        // absorbs the error and falls outside [0, 2^RV64_CELL_BITS), failing the range check.
+        let rd_data_low: [AB::Expr; RV64_WORD_NUM_LIMBS] = array::from_fn(|i| {
             if i == 0 {
                 least_sig_limb.clone()
             } else {
@@ -109,7 +113,7 @@ where
         });
 
         // Constrain rd_data_low.
-        // Assumes only from_pc in [0,2^PC_BITS) is allowed by program bus.
+        // Assumes only from_pc in [0,2^PC_BITS) is allowed by program bus
         self.bitwise_lookup_bus
             .send_range(rd_data_low[0].clone(), rd_data_low[1].clone())
             .eval(builder, is_valid);
@@ -136,7 +140,7 @@ where
         let carry = (rs1_limbs_23 + imm_extend_limb + carry - to_pc_limbs[1]) * inv;
         builder.when(is_valid).assert_bool(carry);
 
-        // Preventing to_pc overflow.
+        // preventing to_pc overflow
         self.range_bus
             .range_check(to_pc_limbs[1], PC_BITS - 16)
             .eval(builder, is_valid);
@@ -147,15 +151,15 @@ where
             to_pc_limbs[0] * AB::F::TWO + to_pc_limbs[1] * AB::F::from_canonical_u32(1 << 16);
 
         // Zero-extend low-32 rs1/rd at the adapter interface.
-        let rs1_data = array::from_fn(|i| {
-            if i < WORD_NUM_LIMBS {
+        let rs1_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
+            if i < RV64_WORD_NUM_LIMBS {
                 rs1[i].into()
             } else {
                 AB::Expr::ZERO
             }
         });
-        let rd_data = array::from_fn(|i| {
-            if i < WORD_NUM_LIMBS {
+        let rd_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
+            if i < RV64_WORD_NUM_LIMBS {
                 rd_data_low[i].clone()
             } else {
                 AB::Expr::ZERO
@@ -277,7 +281,7 @@ where
         self.adapter
             .write(state.memory, instruction, rd_data, &mut adapter_record);
 
-        // RISC-V spec explicitly sets the least significant bit of `to_pc` to 0.
+        // RISC-V spec explicitly sets the least significant bit of `to_pc` to 0
         *state.pc = to_pc & !1;
 
         Ok(())
@@ -314,18 +318,18 @@ where
         self.range_checker_chip
             .add_count(rd_data[3] as u32, PC_BITS - RV64_CELL_BITS * 3);
 
-        // Write in reverse order.
+        // Write in reverse order
         core_row.imm_sign = F::from_bool(record.imm_sign);
         core_row.to_pc_limbs = to_pc_limbs.map(F::from_canonical_u32);
         core_row.to_pc_least_sig_bit = F::from_bool(to_pc & 1 == 1);
-        // fill_trace_row is called only on valid rows.
+        // fill_trace_row is called only on valid rows
         core_row.is_valid = F::ONE;
         core_row.rs1_data = record.rs1_val.to_le_bytes().map(F::from_canonical_u8);
         core_row
             .rd_data
             .iter_mut()
             .rev()
-            .zip(rd_data[..WORD_NUM_LIMBS].iter().skip(1).rev())
+            .zip(rd_data[..RV64_WORD_NUM_LIMBS].iter().skip(1).rev())
             .for_each(|(dst, src)| {
                 *dst = F::from_canonical_u8(*src);
             });
@@ -345,6 +349,6 @@ pub(super) fn run_jalr(
     assert!(to_pc < (1 << PC_BITS));
 
     let mut rd_data = [0u8; RV64_REGISTER_NUM_LIMBS];
-    rd_data[..WORD_NUM_LIMBS].copy_from_slice(&pc.wrapping_add(DEFAULT_PC_STEP).to_le_bytes());
+    rd_data[..RV64_WORD_NUM_LIMBS].copy_from_slice(&pc.wrapping_add(DEFAULT_PC_STEP).to_le_bytes());
     (to_pc, rd_data)
 }

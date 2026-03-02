@@ -40,7 +40,7 @@ pub struct Rv64JalrAdapterCols<T> {
     pub rd_ptr: T,
     pub rd_aux_cols: MemoryWriteAuxCols<T, RV64_REGISTER_NUM_LIMBS>,
     /// Only writes if `needs_write`.
-    /// Sets `needs_write` to 0 iff `rd == x0`.
+    /// Sets `needs_write` to 0 iff `rd == x0`
     pub needs_write: T,
 }
 
@@ -151,14 +151,14 @@ pub struct Rv64JalrAdapterRecord {
     pub from_timestamp: u32,
 
     pub rs1_ptr: u32,
-    // Will use u32::MAX to indicate no write.
+    // Will use u32::MAX to indicate no write
     pub rd_ptr: u32,
 
     pub reads_aux: MemoryReadAuxRecord,
     pub writes_aux: MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS>,
 }
 
-// This adapter reads from `[b:8]_d` (rs1) and writes to `[a:8]_d` (rd).
+// This adapter reads from [b:8]_d (rs1) and writes to [a:8]_d (rd)
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64JalrAdapterExecutor;
 
@@ -244,7 +244,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64JalrAdapterFiller {
         let record: &Rv64JalrAdapterRecord = unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut Rv64JalrAdapterCols<F> = adapter_row.borrow_mut();
 
-        // We must assign in reverse.
+        // We must assign in reverse
         adapter_row.needs_write = F::from_bool(record.rd_ptr != u32::MAX);
 
         if record.rd_ptr != u32::MAX {

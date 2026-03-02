@@ -27,7 +27,7 @@ use openvm_stark_backend::{
 
 use crate::adapters::{
     Rv64CondRdWriteAdapterExecutor, Rv64CondRdWriteAdapterFiller, RV64_CELL_BITS,
-    RV64_REGISTER_NUM_LIMBS, RV_J_TYPE_IMM_BITS, WORD_NUM_LIMBS,
+    RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS, RV_J_TYPE_IMM_BITS,
 };
 
 #[repr(C)]
@@ -35,7 +35,7 @@ use crate::adapters::{
 pub struct Rv64JalLuiCoreCols<T> {
     pub imm: T,
     // We store only the low 32-bit limbs. The high limbs are constrained as sign extension.
-    pub rd_data: [T; WORD_NUM_LIMBS],
+    pub rd_data: [T; RV64_WORD_NUM_LIMBS],
     pub is_jal: T,
     pub is_lui: T,
     pub is_sign_extend: T,
@@ -84,7 +84,7 @@ where
         builder.assert_bool(is_sign_extend);
         builder.when(is_lui).assert_zero(rd[0]);
 
-        for i in 0..WORD_NUM_LIMBS / 2 {
+        for i in 0..RV64_WORD_NUM_LIMBS / 2 {
             self.bus
                 .send_range(rd[i * 2], rd[i * 2 + 1])
                 .eval(builder, is_valid.clone());
@@ -124,8 +124,8 @@ where
         );
 
         let sign_extend_limb = is_sign_extend * AB::Expr::from_canonical_u32(u8::MAX as u32);
-        let rd_data = array::from_fn(|i| {
-            if i < WORD_NUM_LIMBS {
+        let rd_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
+            if i < RV64_WORD_NUM_LIMBS {
                 rd[i].into()
             } else {
                 sign_extend_limb.clone()
@@ -239,7 +239,7 @@ where
         let record: &Rv64JalLuiCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
         let core_row: &mut Rv64JalLuiCoreCols<F> = core_row.borrow_mut();
 
-        for pair in record.rd_data[..WORD_NUM_LIMBS].chunks_exact(2) {
+        for pair in record.rd_data[..RV64_WORD_NUM_LIMBS].chunks_exact(2) {
             self.bitwise_lookup_chip
                 .request_range(pair[0] as u32, pair[1] as u32);
         }
@@ -283,16 +283,16 @@ pub(super) fn get_signed_imm<F: PrimeField32>(is_jal: bool, imm: F) -> i32 {
 pub(super) fn run_jal_lui(is_jal: bool, pc: u32, imm: i32) -> (u32, [u8; RV64_REGISTER_NUM_LIMBS]) {
     if is_jal {
         let mut rd_data = [0u8; RV64_REGISTER_NUM_LIMBS];
-        rd_data[..WORD_NUM_LIMBS].copy_from_slice(&(pc + DEFAULT_PC_STEP).to_le_bytes());
+        rd_data[..RV64_WORD_NUM_LIMBS].copy_from_slice(&(pc + DEFAULT_PC_STEP).to_le_bytes());
         let next_pc = pc as i32 + imm;
         debug_assert!(next_pc >= 0);
         (next_pc as u32, rd_data)
     } else {
         let imm = imm as u32;
         let mut rd_data = [0u8; RV64_REGISTER_NUM_LIMBS];
-        rd_data[..WORD_NUM_LIMBS].copy_from_slice(&(imm << 12).to_le_bytes());
+        rd_data[..RV64_WORD_NUM_LIMBS].copy_from_slice(&(imm << 12).to_le_bytes());
         let sign_extend_limb = (rd_data[3] >> (RV64_CELL_BITS - 1)) * u8::MAX;
-        rd_data[WORD_NUM_LIMBS..].fill(sign_extend_limb);
+        rd_data[RV64_WORD_NUM_LIMBS..].fill(sign_extend_limb);
         (pc + DEFAULT_PC_STEP, rd_data)
     }
 }
