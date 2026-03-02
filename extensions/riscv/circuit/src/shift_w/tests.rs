@@ -210,7 +210,7 @@ struct ShiftPrankValues {
 #[allow(clippy::too_many_arguments)]
 fn run_negative_shift_test(
     opcode: ShiftWOpcode,
-    prank_a: [u32; RV64_WORD_NUM_LIMBS],
+    prank_a: [u32; RV64_REGISTER_NUM_LIMBS],
     b: [u8; RV64_REGISTER_NUM_LIMBS],
     c: [u8; RV64_REGISTER_NUM_LIMBS],
     prank_vals: ShiftPrankValues,
@@ -236,7 +236,9 @@ fn run_negative_shift_test(
         let mut values = trace.row_slice(0).to_vec();
         let cols: &mut ShiftWCoreCols<F> = values.split_at_mut(adapter_width).1.borrow_mut();
 
-        cols.a = prank_a.map(F::from_canonical_u32);
+        let prank_a_word: [u32; RV64_WORD_NUM_LIMBS] =
+            prank_a[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+        cols.a = prank_a_word.map(F::from_canonical_u32);
         if let Some(bit_multiplier_left) = prank_vals.bit_multiplier_left {
             cols.bit_multiplier_left = F::from_canonical_u32(bit_multiplier_left);
         }
@@ -273,7 +275,7 @@ fn run_negative_shift_test(
 
 #[test]
 fn rv64_shiftw_wrong_negative_test() {
-    let a = [1, 0, 0, 0];
+    let a = [1, 0, 0, 0, 0, 0, 0, 0];
     let b = [1, 0, 0, 0, 0, 0, 0, 0];
     let c = [1, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = Default::default();
@@ -284,7 +286,7 @@ fn rv64_shiftw_wrong_negative_test() {
 
 #[test]
 fn rv64_sllw_wrong_bit_shift_negative_test() {
-    let a = [0, 4, 4, 4];
+    let a = [0, 4, 4, 4, 0, 0, 0, 0];
     let b = [1, 1, 1, 1, 0, 0, 0, 0];
     let c = [9, 10, 100, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
@@ -298,7 +300,7 @@ fn rv64_sllw_wrong_bit_shift_negative_test() {
 
 #[test]
 fn rv64_sllw_wrong_limb_shift_negative_test() {
-    let a = [0, 0, 2, 2];
+    let a = [0, 0, 2, 2, 0, 0, 0, 0];
     let b = [1, 1, 1, 1, 0, 0, 0, 0];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
@@ -310,8 +312,8 @@ fn rv64_sllw_wrong_limb_shift_negative_test() {
 
 #[test]
 fn rv64_sllw_wrong_bit_carry_negative_test() {
-    let a = [0, 510, 510, 510];
-    let b = [255, 255, 255, 255, 0, 0, 0, 0];
+    let a = [0, 510, 510, 510, 0, 0, 0, 0];
+    let b = [255, 255, 255, 255, 255, 255, 255, 255];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
         bit_shift_carry: Some([0, 0, 0, 0]),
@@ -322,7 +324,7 @@ fn rv64_sllw_wrong_bit_carry_negative_test() {
 
 #[test]
 fn rv64_sllw_wrong_bit_mult_side_negative_test() {
-    let a = [128, 128, 128, 0];
+    let a = [128, 128, 128, 0, 0, 0, 0, 0];
     let b = [1, 1, 1, 1, 0, 0, 0, 0];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
@@ -335,8 +337,8 @@ fn rv64_sllw_wrong_bit_mult_side_negative_test() {
 
 #[test]
 fn rv64_srlw_wrong_bit_shift_negative_test() {
-    let a = [0, 0, 32, 0];
-    let b = [0, 0, 0, 128, 0, 0, 0, 0];
+    let a = [0, 0, 32, 0, 0, 0, 0, 0];
+    let b = [0, 0, 0, 128, 255, 255, 255, 255];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
         bit_shift: Some(2),
@@ -349,8 +351,8 @@ fn rv64_srlw_wrong_bit_shift_negative_test() {
 
 #[test]
 fn rv64_srlw_wrong_limb_shift_negative_test() {
-    let a = [0, 64, 0, 0];
-    let b = [0, 0, 0, 128, 0, 0, 0, 0];
+    let a = [0, 64, 0, 0, 0, 0, 0, 0];
+    let b = [0, 0, 0, 128, 255, 255, 255, 255];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
         limb_shift_marker: Some([0, 1, 0, 0]),
@@ -361,8 +363,8 @@ fn rv64_srlw_wrong_limb_shift_negative_test() {
 
 #[test]
 fn rv64_srxw_wrong_bit_mult_side_negative_test() {
-    let a = [0, 0, 0, 0];
-    let b = [0, 0, 0, 128, 0, 0, 0, 0];
+    let a = [0, 0, 0, 0, 0, 0, 0, 0];
+    let b = [0, 0, 0, 128, 255, 255, 255, 255];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
         bit_multiplier_left: Some(1),
@@ -375,8 +377,8 @@ fn rv64_srxw_wrong_bit_mult_side_negative_test() {
 
 #[test]
 fn rv64_sraw_wrong_bit_shift_negative_test() {
-    let a = [0, 0, 224, 255];
-    let b = [0, 0, 0, 128, 0, 0, 0, 0];
+    let a = [0, 0, 224, 255, 255, 255, 255, 255];
+    let b = [0, 0, 0, 128, 255, 255, 255, 255];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
         bit_shift: Some(2),
@@ -389,8 +391,8 @@ fn rv64_sraw_wrong_bit_shift_negative_test() {
 
 #[test]
 fn rv64_sraw_wrong_limb_shift_negative_test() {
-    let a = [0, 192, 255, 255];
-    let b = [0, 0, 0, 128, 0, 0, 0, 0];
+    let a = [0, 192, 255, 255, 255, 255, 255, 255];
+    let b = [0, 0, 0, 128, 255, 255, 255, 255];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
         limb_shift_marker: Some([0, 1, 0, 0]),
@@ -401,8 +403,8 @@ fn rv64_sraw_wrong_limb_shift_negative_test() {
 
 #[test]
 fn rv64_sraw_wrong_sign_negative_test() {
-    let a = [0, 0, 64, 0];
-    let b = [0, 0, 0, 128, 0, 0, 0, 0];
+    let a = [0, 0, 64, 0, 0, 0, 0, 0];
+    let b = [0, 0, 0, 128, 255, 255, 255, 255];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
         b_sign: Some(0),
@@ -413,14 +415,15 @@ fn rv64_sraw_wrong_sign_negative_test() {
 
 #[test]
 fn rv64_shiftw_wrong_upper_sign_extension_negative_test() {
-    let a = [2, 0, 0, 0];
+    let a = [2, 0, 0, 0, 0, 0, 0, 0];
     let b = [1, 0, 0, 0, 0, 0, 0, 0];
     let c = [1, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
+        b_sign: Some(1),
         result_sign: Some(1),
         ..Default::default()
     };
-    run_negative_shift_test(SLLW, a, b, c, prank_vals, false);
+    run_negative_shift_test(SLLW, a, b, c, prank_vals, true);
 }
 
 #[test]
@@ -466,9 +469,9 @@ fn rv64_shiftw_adapter_imm_sign_extension_negative_test() {
 
 #[test]
 fn run_sllw_sanity_test() {
-    // Upper bytes are ignored for SLLW. Result upper bytes sign-extend low 32-bit result.
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [45, 7, 61, 186, 31, 190, 221, 200];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [91, 0, 100, 0, 49, 190, 190, 113];
+    // Inputs are sign-extended from 32-bit values. Result upper bytes sign-extend low 32-bit result.
+    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [45, 7, 61, 186, 255, 255, 255, 255];
+    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [91, 0, 100, 0, 0, 0, 0, 0];
     let z: [u8; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 104, 0, 0, 0, 0];
     let (result, limb_shift, bit_shift) = run_shift_w(
         SLLW,
@@ -485,9 +488,9 @@ fn run_sllw_sanity_test() {
 
 #[test]
 fn run_srlw_sanity_test() {
-    // Upper bytes are ignored for SRLW. Result upper bytes sign-extend low 32-bit result.
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [31, 190, 221, 200, 45, 7, 61, 186];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [49, 190, 190, 190, 113, 20, 50, 80];
+    // Inputs are sign-extended from 32-bit values. Result upper bytes sign-extend low 32-bit result.
+    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [31, 190, 221, 200, 255, 255, 255, 255];
+    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [49, 190, 190, 190, 255, 255, 255, 255];
     let z: [u8; RV64_REGISTER_NUM_LIMBS] = [110, 100, 0, 0, 0, 0, 0, 0];
     let (result, limb_shift, bit_shift) = run_shift_w(
         SRLW,
@@ -504,9 +507,9 @@ fn run_srlw_sanity_test() {
 
 #[test]
 fn run_sraw_sanity_test() {
-    // Upper bytes are ignored for SRAW. Result upper bytes sign-extend low 32-bit result.
-    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [31, 190, 221, 200, 45, 7, 61, 186];
-    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [113, 20, 50, 80, 49, 190, 190, 113];
+    // Inputs are sign-extended from 32-bit values. Result upper bytes sign-extend low 32-bit result.
+    let x: [u8; RV64_REGISTER_NUM_LIMBS] = [31, 190, 221, 200, 255, 255, 255, 255];
+    let y: [u8; RV64_REGISTER_NUM_LIMBS] = [113, 20, 50, 80, 0, 0, 0, 0];
     let z: [u8; RV64_REGISTER_NUM_LIMBS] = [110, 228, 255, 255, 255, 255, 255, 255];
     let (result, limb_shift, bit_shift) = run_shift_w(
         SRAW,
