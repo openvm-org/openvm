@@ -331,6 +331,7 @@ fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
         None,
+        None,
     );
     let ctx = root_prover.generate_proving_ctx(internal_recursive_proof, &user_pvs_proof);
     let root_proof = root_prover.root_prove_from_ctx::<Engine>(ctx.unwrap())?;
@@ -361,6 +362,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
         None,
+        None,
     );
     let ctx = root_base_prover
         .generate_proving_ctx(internal_recursive_proof.clone(), &user_pvs_proof)
@@ -380,6 +382,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         root_system_params(),
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
+        None,
         Some(trace_heights.clone()),
     );
     let ctx = root_prover
@@ -613,6 +616,7 @@ fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()
         root_system_params(),
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
+        None,
         None,
     );
     let ctx = root_prover.generate_proving_ctx(internal_recursive_proof, &user_pvs_proof);

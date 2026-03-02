@@ -42,6 +42,7 @@ use crate::{
         ChildVkKind, DeferralNonRootGpuProver as DeferralNonRootProver,
         DeferralRootGpuProver as DeferralRootProver,
         DeferralVerifyGpuProver as DeferralVerifyProver, NonRootGpuProver as NonRootProver,
+        RootGpuProver as RootProver,
     },
 };
 
@@ -183,6 +184,11 @@ fn test_vm_deferral_mix_combined_flow() -> Result<()> {
     );
     let final_merkle_proof = generate_unset_merkle_proof(memory_dimensions, &final_merkle_tree);
 
+    let merkle_proofs = DeferralMerkleProofs {
+        initial_merkle_proof,
+        final_merkle_proof,
+    };
+
     let leaf_prover = NonRootProver::<MAX_NUM_PROOFS>::new::<Engine>(
         Arc::new(app_pk.get_vk()),
         leaf_system_params(),
@@ -217,6 +223,28 @@ fn test_vm_deferral_mix_combined_flow() -> Result<()> {
     let vm_internal_recursive_vk = internal_recursive_prover.get_vk();
     let vm_internal_recursive_pcs_data = internal_recursive_prover.get_self_vk_pcs_data().unwrap();
 
+    // SECTION 1.5: Check that root prover with def_hook_commit verifies.
+    let vm_root_prover = RootProver::new::<Engine>(
+        vm_internal_recursive_vk.clone(),
+        vm_internal_recursive_pcs_data.clone(),
+        root_system_params(),
+        system_config.memory_config.memory_dimensions(),
+        system_config.num_public_values,
+        Some(def_hook_commit),
+        None,
+    );
+    let ctx = vm_root_prover.generate_proving_ctx_with_deferrals(
+        internal_recursive_vm_proof.clone(),
+        &user_pvs_proof,
+        &merkle_proofs,
+    );
+    warn!("testing VM root prover on proof with unset deferral pvs (not part of mixed flow)");
+    let root_proof = vm_root_prover.root_prove_from_ctx::<Engine>(ctx.unwrap())?;
+
+    let root_vk = vm_root_prover.get_vk();
+    let engine = Engine::new(root_vk.inner.params.clone());
+    engine.verify(&root_vk, &root_proof)?;
+
     // SECTION 2: Create a deferral root proof of that VM proof.
     let deferred_verify_prover = DeferralVerifyProver::new::<Engine>(
         vm_internal_recursive_vk.clone(),
@@ -227,10 +255,6 @@ fn test_vm_deferral_mix_combined_flow() -> Result<()> {
         Some(def_hook_commit),
     );
     warn!("proving deferral verify proof from VM internal-recursive proof");
-    let merkle_proofs = DeferralMerkleProofs {
-        initial_merkle_proof,
-        final_merkle_proof,
-    };
     let deferral_verify_proof = deferred_verify_prover.prove::<Engine>(
         internal_recursive_vm_proof.clone(),
         &user_pvs_proof,
