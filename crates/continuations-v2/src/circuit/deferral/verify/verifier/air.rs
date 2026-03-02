@@ -28,16 +28,15 @@ use crate::{
     circuit::{
         deferral::{
             verify::{
-                bus::{
-                    DeferralAccPathBus, DeferralAccPathMessage, MemoryMerkleRootsBus,
-                    MemoryMerkleRootsMessage, OutputCommitBus, OutputCommitMessage, OutputValBus,
-                    OutputValMessage,
-                },
+                bus::{OutputCommitBus, OutputCommitMessage, OutputValBus, OutputValMessage},
                 output::VALS_IN_DIGEST,
             },
             DeferralCircuitPvs,
         },
-        root::bus::{MemoryMerkleCommitBus, MemoryMerkleCommitMessage},
+        root::bus::{
+            DeferralAccPathBus, DeferralAccPathMessage, MemoryMerkleCommitBus,
+            MemoryMerkleCommitMessage, MemoryMerkleRootsBus, MemoryMerkleRootsMessage,
+        },
         CONSTRAINT_EVAL_CACHED_INDEX,
     },
     utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input},

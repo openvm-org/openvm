@@ -18,7 +18,7 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 use crate::{
     bn254::CommitBytes,
     circuit::{
-        deferral::verify::bus::{
+        root::bus::{
             DeferralAccPathBus, DeferralAccPathMessage, MemoryMerkleRootsBus,
             MemoryMerkleRootsMessage,
         },

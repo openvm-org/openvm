@@ -7,20 +7,19 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use recursion_circuit::system::AggregationSubCircuit;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use super::user_pvs::{commit, memory};
 use crate::{
     bn254::CommitBytes,
     circuit::{
-        deferral::verify::{
-            bus::{DeferralAccPathBus, MemoryMerkleRootsBus},
-            paths::AccMerklePathsAir,
-        },
+        root::bus::{DeferralAccPathBus, MemoryMerkleRootsBus},
         Circuit,
     },
     SC,
 };
 
 pub mod bus;
+pub mod commit;
+pub mod def_paths;
+pub mod memory;
 pub mod verifier;
 
 mod trace;
@@ -60,7 +59,6 @@ impl<S: AggregationSubCircuit> Circuit for RootCircuit<S> {
             bus_inventory.poseidon2_compress_bus,
             user_pvs_commit_bus,
             user_pvs_commit_tree_bus,
-            None,
             self.num_user_pvs,
         );
         let user_pvs_memory_air = memory::UserPvsInMemoryAir::new(
@@ -71,7 +69,7 @@ impl<S: AggregationSubCircuit> Circuit for RootCircuit<S> {
             self.num_user_pvs,
         );
         let acc_paths_air = self.def_hook_commit.map(|_| {
-            Arc::new(AccMerklePathsAir::new(
+            Arc::new(def_paths::AccMerklePathsAir::new(
                 bus_inventory.poseidon2_compress_bus,
                 def_acc_paths_bus,
                 memory_merkle_roots_bus,

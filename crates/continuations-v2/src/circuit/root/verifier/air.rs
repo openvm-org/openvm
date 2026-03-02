@@ -25,12 +25,11 @@ use verify_stark::pvs::{
 use crate::{
     bn254::CommitBytes,
     circuit::{
-        deferral::verify::bus::{
-            DeferralAccPathBus, DeferralAccPathMessage, MemoryMerkleRootsBus,
-            MemoryMerkleRootsMessage,
-        },
         root::{
-            bus::{MemoryMerkleCommitBus, MemoryMerkleCommitMessage},
+            bus::{
+                DeferralAccPathBus, DeferralAccPathMessage, MemoryMerkleCommitBus,
+                MemoryMerkleCommitMessage, MemoryMerkleRootsBus, MemoryMerkleRootsMessage,
+            },
             RootVerifierPvs,
         },
         CONSTRAINT_EVAL_CACHED_INDEX,

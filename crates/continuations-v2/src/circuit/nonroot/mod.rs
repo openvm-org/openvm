@@ -28,13 +28,15 @@ pub mod app {
 
 pub mod bus;
 pub mod def_pvs;
-pub mod receiver;
 pub mod unset;
 pub mod verifier;
 pub mod vm_pvs;
 
 mod trace;
 pub use trace::*;
+
+#[cfg(test)]
+pub mod receiver;
 
 #[derive(derive_new::new, Clone)]
 pub struct NonRootCircuit<S: AggregationSubCircuit> {

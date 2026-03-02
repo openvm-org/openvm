@@ -20,7 +20,7 @@ use crate::circuit::{
         output::DeferralOutputCtx,
         verifier::{generate_record, DeferredVerifyPvsRecord},
     },
-    user_pvs::{commit, memory},
+    root::{def_paths, memory},
 };
 
 pub struct PreVerifierData<PB: ProverBackend> {
@@ -78,7 +78,7 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>> for DeferredVerifyTraceGenImpl {
     ) -> PreVerifierData<CpuBackend<SC>> {
         let (verifier_pvs_record, verifier_p2_inputs) = generate_record(proof);
         let (commit_ctx, commit_p2_inputs) =
-            commit::generate_proving_ctx(user_pvs_proof.public_values.clone(), false);
+            super::commit::generate_proving_ctx(user_pvs_proof.public_values.clone());
         let (memory_ctx, memory_p2_inputs) = memory::generate_proving_input(
             user_pvs_proof.public_values_commit,
             &user_pvs_proof.proof,
@@ -103,7 +103,7 @@ impl DeferredVerifyTraceGen<CpuBackend<SC>> for DeferredVerifyTraceGenImpl {
             let def_pvs: &DeferralPvs<_> = proof.public_values[DEF_PVS_AIR_ID].as_slice().borrow();
             let depth = def_pvs.depth.as_canonical_u32() as usize;
             let (acc_merkle_paths_ctx, acc_merkle_paths_p2_inputs) =
-                super::paths::generate_proving_input(
+                def_paths::generate_proving_input(
                     def_pvs.initial_acc_hash,
                     def_pvs.final_acc_hash,
                     &deferral_merkle_proofs.initial_merkle_proof,

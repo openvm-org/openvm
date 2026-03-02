@@ -8,21 +8,27 @@ use crate::{
     bn254::CommitBytes,
     circuit::{
         deferral::verify::{
-            bus::{DeferralAccPathBus, MemoryMerkleRootsBus, OutputCommitBus, OutputValBus},
+            bus::{OutputCommitBus, OutputValBus},
+            commit::UserPvsCommitAir,
             output::DeferralOutputCommitAir,
-            paths::AccMerklePathsAir,
             verifier::DeferredVerifyPvsAir,
         },
-        root::bus::{MemoryMerkleCommitBus, UserPvsCommitBus, UserPvsCommitTreeBus},
-        user_pvs::{commit::UserPvsCommitAir, memory::UserPvsInMemoryAir},
+        root::{
+            bus::{
+                DeferralAccPathBus, MemoryMerkleCommitBus, MemoryMerkleRootsBus, UserPvsCommitBus,
+                UserPvsCommitTreeBus,
+            },
+            def_paths::AccMerklePathsAir,
+            memory::UserPvsInMemoryAir,
+        },
         Circuit,
     },
     SC,
 };
 
 pub mod bus;
+pub mod commit;
 pub mod output;
-pub mod paths;
 pub mod verifier;
 
 mod trace;
@@ -67,7 +73,7 @@ impl<S: AggregationSubCircuit> Circuit for DeferredVerifyCircuit<S> {
             bus_inventory.poseidon2_compress_bus,
             user_pvs_commit_bus,
             user_pvs_commit_tree_bus,
-            Some(output_val_bus),
+            output_val_bus,
             self.num_user_pvs,
         );
         let user_pvs_memory_air = UserPvsInMemoryAir::new(

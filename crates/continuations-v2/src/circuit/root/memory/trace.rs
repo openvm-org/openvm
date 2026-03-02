@@ -14,7 +14,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::{circuit::user_pvs::memory::UserPvsInMemoryCols, utils::digests_to_poseidon2_input};
+use crate::{circuit::root::memory::UserPvsInMemoryCols, utils::digests_to_poseidon2_input};
 
 pub fn generate_proving_input(
     user_pv_commit: [F; DIGEST_SIZE],
