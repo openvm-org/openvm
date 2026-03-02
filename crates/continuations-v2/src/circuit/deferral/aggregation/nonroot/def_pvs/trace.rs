@@ -5,26 +5,18 @@ use openvm_stark_backend::{
     prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    poseidon2_compress_with_capacity, BabyBearPoseidon2Config, DIGEST_SIZE, F,
+    poseidon2_compress_with_capacity, BabyBearPoseidon2Config, F,
 };
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::circuit::deferral::{
-    aggregation::nonroot::def_pvs::air::DeferralPvsCols, DeferralAggregationPvs, DeferralCircuitPvs,
+use crate::{
+    circuit::deferral::{
+        aggregation::nonroot::def_pvs::air::DeferralPvsCols, DeferralAggregationPvs,
+        DeferralCircuitPvs, DEF_AGG_PVS_AIR_ID, DEF_CIRCUIT_PVS_AIR_ID,
+    },
+    utils::zero_hash,
 };
-
-const DEF_CIRCUIT_PVS_AIR_ID: usize = 0;
-const DEF_AGG_PVS_AIR_ID: usize = 1;
-
-pub fn zero_merkle_commit(depth: usize) -> [F; DIGEST_SIZE] {
-    let mut root =
-        poseidon2_compress_with_capacity([F::ZERO; DIGEST_SIZE], [F::ZERO; DIGEST_SIZE]).0;
-    for _ in 0..depth {
-        root = poseidon2_compress_with_capacity(root, root).0;
-    }
-    root
-}
 
 pub fn generate_proving_ctx(
     proofs: &[Proof<BabyBearPoseidon2Config>],
@@ -77,7 +69,7 @@ pub fn generate_proving_ctx(
         let cols: &mut DeferralPvsCols<F> = trace[width..2 * width].borrow_mut();
         cols.proof_idx = F::ONE;
         cols.has_verifier_pvs = F::from_bool(child_is_def);
-        cols.merkle_commit = zero_merkle_commit(child_merkle_depth.unwrap());
+        cols.merkle_commit = zero_hash(child_merkle_depth.unwrap() + 1);
     }
 
     let mut public_values = vec![F::ZERO; DeferralAggregationPvs::<u8>::width()];

@@ -19,7 +19,7 @@ use tracing::instrument;
 
 use super::DeferredVerifyProver;
 use crate::{
-    circuit::deferral::verify::{DeferredVerifyTraceGen, PreVerifierData},
+    circuit::deferral::verify::{DeferralMerkleProofs, DeferredVerifyTraceGen, PreVerifierData},
     SC,
 };
 
@@ -36,6 +36,7 @@ where
         &self,
         proof: Proof<SC>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
+        deferral_merkle_proofs: Option<&DeferralMerkleProofs<PB::Val>>,
     ) -> ProvingContext<PB> {
         assert_eq!(
             user_pvs_proof.public_values.len(),
@@ -44,7 +45,7 @@ where
 
         let PreVerifierData {
             pre_verifier_ctxs,
-            post_verifier_ctx,
+            post_verifier_ctxs,
             poseidon2_inputs,
             range_inputs,
             verifier_pvs_record,
@@ -53,6 +54,7 @@ where
             &proof,
             user_pvs_proof,
             self.circuit.memory_dimensions,
+            deferral_merkle_proofs,
         );
 
         let mut final_transcript_state = [F::ZERO; POSEIDON2_WIDTH];
@@ -88,7 +90,7 @@ where
             per_trace: once(verifier_pvs_ctx)
                 .chain(pre_verifier_ctxs)
                 .chain(subcircuit_ctxs)
-                .chain(once(post_verifier_ctx))
+                .chain(post_verifier_ctxs)
                 .enumerate()
                 .collect_vec(),
         }

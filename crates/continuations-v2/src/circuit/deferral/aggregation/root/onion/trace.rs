@@ -8,8 +8,9 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::circuit::{
-    deferral::aggregation::root::onion::air::OnionHashCols, root::digests_to_poseidon2_input,
+use crate::{
+    circuit::deferral::aggregation::root::onion::air::OnionHashCols,
+    utils::digests_to_poseidon2_input,
 };
 
 pub type IoCommit = ([F; DIGEST_SIZE], [F; DIGEST_SIZE]);

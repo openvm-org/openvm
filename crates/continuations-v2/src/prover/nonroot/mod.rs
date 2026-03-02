@@ -12,10 +12,11 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
 use recursion_circuit::system::{AggregationSubCircuit, VerifierConfig, VerifierTraceGen};
 use tracing::instrument;
+use verify_stark::pvs::DeferralPvs;
 
 use crate::{
     circuit::{
-        nonroot::{NonRootCircuit, NonRootTraceGen},
+        nonroot::{NonRootCircuit, NonRootTraceGen, ProofsType},
         Circuit,
     },
     prover::trace_heights_tracing_info,
@@ -65,8 +66,10 @@ where
         &self,
         proofs: &[Proof<SC>],
         child_vk_kind: ChildVkKind,
+        proofs_type: ProofsType,
+        absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
     ) -> Result<Proof<SC>> {
-        let ctx = self.generate_proving_ctx(proofs, child_vk_kind);
+        let ctx = self.generate_proving_ctx(proofs, child_vk_kind, proofs_type, absent_trace_pvs);
         if tracing::enabled!(tracing::Level::DEBUG) {
             trace_heights_tracing_info(&ctx.per_trace, &self.circuit.airs());
         }
@@ -77,6 +80,14 @@ where
         #[cfg(debug_assertions)]
         engine.verify(&self.vk, &proof)?;
         Ok(proof)
+    }
+
+    pub fn agg_prove_no_def<E: StarkEngine<SC = SC, PB = PB>>(
+        &self,
+        proofs: &[Proof<SC>],
+        child_vk_kind: ChildVkKind,
+    ) -> Result<Proof<SC>> {
+        self.agg_prove::<E>(proofs, child_vk_kind, ProofsType::Vm, None)
     }
 }
 
@@ -90,6 +101,7 @@ impl<
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         system_params: SystemParams,
         is_self_recursive: bool,
+        def_hook_commit: Option<Digest>,
     ) -> Self {
         let verifier_circuit = S::new(
             child_vk.clone(),
@@ -101,7 +113,10 @@ impl<
         );
         let engine = E::new(system_params);
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
-        let circuit = Arc::new(NonRootCircuit::new(Arc::new(verifier_circuit)));
+        let circuit = Arc::new(NonRootCircuit::new(
+            Arc::new(verifier_circuit),
+            def_hook_commit.map(|d| d.into()),
+        ));
         let (pk, vk) = engine.keygen(&circuit.airs());
         let d_pk = engine.device().transport_pk_to_device(&pk);
         let self_vk_pcs_data = if is_self_recursive {
@@ -109,11 +124,12 @@ impl<
         } else {
             None
         };
+        let agg_node_tracegen = NonRootTraceGen::new(def_hook_commit.is_some());
         Self {
             pk: Arc::new(pk),
             d_pk,
             vk: Arc::new(vk),
-            agg_node_tracegen: NonRootTraceGen::new(),
+            agg_node_tracegen,
             child_vk,
             child_vk_pcs_data,
             circuit,
@@ -125,6 +141,7 @@ impl<
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         pk: Arc<MultiStarkProvingKey<SC>>,
         is_self_recursive: bool,
+        def_hook_commit: Option<Digest>,
     ) -> Self {
         let verifier_circuit = S::new(
             child_vk.clone(),
@@ -136,7 +153,10 @@ impl<
         );
         let engine = E::new(pk.params.clone());
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
-        let circuit = Arc::new(NonRootCircuit::new(Arc::new(verifier_circuit)));
+        let circuit = Arc::new(NonRootCircuit::new(
+            Arc::new(verifier_circuit),
+            def_hook_commit.map(|d| d.into()),
+        ));
         let vk = Arc::new(pk.get_vk());
         let d_pk = engine.device().transport_pk_to_device(&pk);
         let self_vk_pcs_data = if is_self_recursive {
@@ -144,11 +164,12 @@ impl<
         } else {
             None
         };
+        let agg_node_tracegen = NonRootTraceGen::new(def_hook_commit.is_some());
         Self {
             pk,
             d_pk,
             vk,
-            agg_node_tracegen: NonRootTraceGen::new(),
+            agg_node_tracegen,
             child_vk,
             child_vk_pcs_data,
             circuit,
@@ -166,6 +187,10 @@ impl<
 
     pub fn get_vk(&self) -> Arc<MultiStarkVerifyingKey<SC>> {
         self.vk.clone()
+    }
+
+    pub fn deferral_enabled(&self) -> bool {
+        self.circuit.def_hook_commit.is_some()
     }
 
     pub fn get_cached_commit(&self, is_self_recursive: bool) -> PB::Commitment {

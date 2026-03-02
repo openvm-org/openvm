@@ -1,11 +1,9 @@
-use std::{array::from_fn, borrow::Borrow};
+use std::borrow::Borrow;
 
-use itertools::Itertools;
-use openvm_circuit::{
-    arch::POSEIDON2_WIDTH,
-    system::memory::{dimensions::MemoryDimensions, merkle::public_values::PUBLIC_VALUES_AS},
+use openvm_circuit::system::memory::{
+    dimensions::MemoryDimensions, merkle::public_values::PUBLIC_VALUES_AS,
 };
-use openvm_circuit_primitives::utils::not;
+use openvm_circuit_primitives::SubAir;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, p3_util::log2_strict_usize, BaseAirWithPublicValues,
     PartitionedBaseAir,
@@ -14,11 +12,14 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{Field, PrimeCharacteristicRing};
 use p3_matrix::Matrix;
-use recursion_circuit::bus::{Poseidon2CompressBus, Poseidon2CompressMessage};
+use recursion_circuit::bus::Poseidon2CompressBus;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use crate::circuit::root::bus::{
-    MemoryMerkleCommitBus, MemoryMerkleCommitMessage, UserPvsCommitBus, UserPvsCommitMessage,
+use crate::circuit::{
+    root::bus::{
+        MemoryMerkleCommitBus, MemoryMerkleCommitMessage, UserPvsCommitBus, UserPvsCommitMessage,
+    },
+    subair::{MerklePathRowView, MerklePathSubAir, MerklePathSubAirContext},
 };
 
 #[repr(C)]
@@ -37,13 +38,9 @@ pub struct UserPvsInMemoryCols<F> {
 }
 
 pub struct UserPvsInMemoryAir {
-    pub poseidon2_compress_bus: Poseidon2CompressBus,
+    pub merkle_path_subair: MerklePathSubAir,
     pub user_pvs_commit_bus: UserPvsCommitBus,
     pub memory_merkle_commit_bus: MemoryMerkleCommitBus,
-
-    // Used to constrain that the user public values reside in the correct address space
-    expected_proof_len: usize,
-    merkle_path_branch_bits: u32,
 }
 
 impl UserPvsInMemoryAir {
@@ -61,11 +58,13 @@ impl UserPvsInMemoryAir {
             .expect("merkle_path_branch_bits must fit in u32");
         let expected_proof_len = memory_dimensions.overall_height() - pv_height;
         Self {
-            poseidon2_compress_bus,
+            merkle_path_subair: MerklePathSubAir::new(
+                poseidon2_compress_bus,
+                expected_proof_len,
+                merkle_path_branch_bits,
+            ),
             user_pvs_commit_bus,
             memory_merkle_commit_bus,
-            expected_proof_len,
-            merkle_path_branch_bits,
         }
     }
 }
@@ -88,21 +87,6 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UserPvsInMemoryAir {
         let local: &UserPvsInMemoryCols<AB::Var> = (*local).borrow();
         let next: &UserPvsInMemoryCols<AB::Var> = (*next).borrow();
 
-        builder.assert_tern(local.is_valid);
-        builder.assert_bool(local.is_right_child);
-
-        /*
-         * Constrain that is_valid is 2 on the first row, that the rest of the Merkle
-         * tree immediately follows, and that all invalid rows are at the end.
-         */
-        builder
-            .when_first_row()
-            .assert_eq(local.is_valid, AB::F::TWO);
-        builder
-            .when_transition()
-            .assert_bool(local.is_valid - next.is_valid);
-        builder.when_transition().assert_bool(next.is_valid);
-
         /*
          * Receive the user public values commit on the first row. The first DIGEST_SIZE
          * elements of perm state are this merkle tree node's commit.
@@ -115,59 +99,31 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UserPvsInMemoryAir {
             local.is_valid * (local.is_valid - AB::F::ONE) * AB::F::TWO.inverse(),
         );
 
-        /*
-         * Constrain that the Merkle path is the shape it should be. There should be
-         * addr_space_height + 1 valid rows, and the sum of is_right_child * 2^row_idx
-         * over valid rows should match merkle_path_branch_bits.
-         */
-        builder.when_first_row().assert_one(local.row_idx_exp_2);
-        builder
-            .when_first_row()
-            .assert_eq(local.merkle_path_branch_bits, local.is_right_child);
-
-        let mut when_transition = builder.when_transition();
-        let mut when_both_valid = when_transition.when(next.is_valid);
-        when_both_valid.assert_eq(local.row_idx_exp_2 * AB::F::TWO, next.row_idx_exp_2);
-        when_both_valid.assert_eq(
-            local.merkle_path_branch_bits + next.is_right_child * next.row_idx_exp_2,
-            next.merkle_path_branch_bits,
-        );
-
-        let mut when_last = builder.when(local.is_valid * (next.is_valid - AB::F::ONE));
-        when_last.assert_eq(
-            local.merkle_path_branch_bits,
-            AB::F::from_u32(self.merkle_path_branch_bits),
-        );
-        when_last.assert_eq(
-            local.row_idx_exp_2,
-            AB::F::from_usize(1 << self.expected_proof_len),
-        );
-        when_last.assert_zero(local.is_right_child);
-
-        /*
-         * Constrain that next.perm_state is the Poseidon2 permutation of local_commit
-         * and sibling. Note that perm_state of the first row is unconstrained.
-         */
-        let left: [AB::Expr; DIGEST_SIZE] = from_fn(|i| {
-            not(local.is_right_child) * local.node_commit[i]
-                + local.is_right_child * local.sibling[i]
-        });
-        let right: [AB::Expr; DIGEST_SIZE] = from_fn(|i| {
-            local.is_right_child * local.node_commit[i]
-                + not(local.is_right_child) * local.sibling[i]
-        });
-
-        let poseidon2_input: [AB::Expr; POSEIDON2_WIDTH] =
-            left.into_iter().chain(right).collect_array().unwrap();
-        let should_hash = next.is_valid * (AB::Expr::TWO - next.is_valid);
-
-        self.poseidon2_compress_bus.lookup_key(
+        self.merkle_path_subair.eval(
             builder,
-            Poseidon2CompressMessage {
-                input: poseidon2_input,
-                output: next.node_commit.map(Into::into),
-            },
-            should_hash,
+            (
+                MerklePathSubAirContext {
+                    local: MerklePathRowView {
+                        is_valid: &local.is_valid,
+                        is_right_child: &local.is_right_child,
+                        node_commit: &local.node_commit,
+                        sibling: &local.sibling,
+                        row_idx_exp_2: &local.row_idx_exp_2,
+                        merkle_path_branch_bits: &local.merkle_path_branch_bits,
+                    },
+                    next: MerklePathRowView {
+                        is_valid: &next.is_valid,
+                        is_right_child: &next.is_right_child,
+                        node_commit: &next.node_commit,
+                        sibling: &next.sibling,
+                        row_idx_exp_2: &next.row_idx_exp_2,
+                        merkle_path_branch_bits: &next.merkle_path_branch_bits,
+                    },
+                },
+                AB::Expr::ZERO,
+                AB::Expr::ZERO,
+                AB::Expr::ZERO,
+            ),
         );
 
         /*

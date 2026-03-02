@@ -46,16 +46,18 @@ impl AggProver {
         assert!(agg_tree_config.num_children_leaf <= MAX_NUM_CHILDREN_LEAF);
         assert!(agg_tree_config.num_children_internal <= MAX_NUM_CHILDREN_INTERNAL);
         let leaf_prover =
-            NonRootAggregationProver::new::<E>(app_vk, agg_config.params.leaf.clone(), false);
+            NonRootAggregationProver::new::<E>(app_vk, agg_config.params.leaf.clone(), false, None);
         let internal_for_leaf_prover = NonRootAggregationProver::new::<E>(
             leaf_prover.get_vk(),
             agg_config.params.internal.clone(),
             false,
+            None,
         );
         let internal_recursive_prover = NonRootAggregationProver::new::<E>(
             internal_for_leaf_prover.get_vk(),
             agg_config.params.internal.clone(),
             true,
+            None,
         );
         Self {
             leaf_prover,
@@ -70,16 +72,19 @@ impl AggProver {
         agg_pk: AggProvingKey,
         agg_tree_config: AggregationTreeConfig,
     ) -> Self {
-        let leaf_prover = NonRootAggregationProver::from_pk::<E>(app_vk, agg_pk.leaf_pk, false);
+        let leaf_prover =
+            NonRootAggregationProver::from_pk::<E>(app_vk, agg_pk.leaf_pk, false, None);
         let internal_for_leaf_prover = NonRootAggregationProver::from_pk::<E>(
             leaf_prover.get_vk(),
             agg_pk.internal_for_leaf_pk,
             false,
+            None,
         );
         let internal_recursive_prover = NonRootAggregationProver::from_pk::<E>(
             internal_for_leaf_prover.get_vk(),
             agg_pk.internal_recursive_pk,
             true,
+            None,
         );
         Self {
             leaf_prover,
@@ -100,8 +105,10 @@ impl AggProver {
                 .chunks(self.agg_tree_config.num_children_leaf)
                 .enumerate()
                 .map(|(leaf_node_idx, proofs)| {
-                    info_span!("single_leaf_agg", idx = leaf_node_idx)
-                        .in_scope(|| self.leaf_prover.agg_prove::<E>(proofs, ChildVkKind::App))
+                    info_span!("single_leaf_agg", idx = leaf_node_idx).in_scope(|| {
+                        self.leaf_prover
+                            .agg_prove_no_def::<E>(proofs, ChildVkKind::App)
+                    })
                 })
                 .collect::<Result<Vec<_>>>()
         })?;
@@ -116,7 +123,7 @@ impl AggProver {
                         internal_node_idx += 1;
                         info_span!("single_internal_agg", idx = internal_node_idx).in_scope(|| {
                             self.internal_for_leaf_prover
-                                .agg_prove::<E>(proofs, ChildVkKind::Standard)
+                                .agg_prove_no_def::<E>(proofs, ChildVkKind::Standard)
                         })
                     })
                     .collect::<Result<Vec<_>>>()
@@ -131,7 +138,7 @@ impl AggProver {
                         internal_node_idx += 1;
                         info_span!("single_internal_agg", idx = internal_node_idx).in_scope(|| {
                             self.internal_recursive_prover
-                                .agg_prove::<E>(proofs, ChildVkKind::Standard)
+                                .agg_prove_no_def::<E>(proofs, ChildVkKind::Standard)
                         })
                     })
                     .collect::<Result<Vec<_>>>()
@@ -151,7 +158,7 @@ impl AggProver {
                         internal_node_idx += 1;
                         info_span!("single_internal_agg", idx = internal_node_idx).in_scope(|| {
                             self.internal_recursive_prover
-                                .agg_prove::<E>(proofs, ChildVkKind::RecursiveSelf)
+                                .agg_prove_no_def::<E>(proofs, ChildVkKind::RecursiveSelf)
                         })
                     })
                     .collect::<Result<Vec<_>>>()
@@ -185,7 +192,7 @@ impl AggProver {
             info_span!("single_internal_agg", idx = metadata.internal_node_idx).in_scope(|| {
                 metadata.internal_node_idx += 1;
                 self.internal_recursive_prover
-                    .agg_prove::<E>(&[proof.inner], ChildVkKind::RecursiveSelf)
+                    .agg_prove_no_def::<E>(&[proof.inner], ChildVkKind::RecursiveSelf)
             })
         })?;
         Ok(proof)

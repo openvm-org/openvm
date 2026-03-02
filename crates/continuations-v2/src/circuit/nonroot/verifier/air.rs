@@ -20,10 +20,12 @@ use verify_stark::pvs::{
     VerifierBasePvs, VerifierDefPvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID,
 };
 
-use crate::circuit::{
-    nonroot::bus::{PvsAirConsistencyBus, PvsAirConsistencyMessage},
-    root::digests_to_poseidon2_input,
-    CONSTRAINT_EVAL_CACHED_INDEX,
+use crate::{
+    circuit::{
+        nonroot::bus::{PvsAirConsistencyBus, PvsAirConsistencyMessage},
+        CONSTRAINT_EVAL_CACHED_INDEX,
+    },
+    utils::digests_to_poseidon2_input,
 };
 
 #[repr(C)]
@@ -274,6 +276,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
          * one - it is impossible for the current layer to know its own commit, and future layers
          * will catch if we preemptively define a current or future verifier commit.
          */
+        let base_pvs_width = VerifierBasePvs::<AB::Var>::width();
         let &VerifierBasePvs::<_> {
             internal_flag,
             app_dag_commit,
@@ -281,7 +284,7 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
             internal_for_leaf_dag_commit,
             recursion_flag,
             internal_recursive_dag_commit,
-        } = builder.public_values().borrow();
+        } = builder.public_values()[0..base_pvs_width].borrow();
 
         // constrain internal_flag is 0 at the leaf level
         builder
@@ -561,7 +564,9 @@ impl VerifierPvsAir {
 
         // constrain def_root_vk_commit matches if set in child_pvs
         assert_array_eq(
-            &mut builder.when(base_local.child_pvs.recursion_flag),
+            &mut builder
+                .when(base_local.child_pvs.recursion_flag)
+                .when(def_local.child_pvs.deferral_flag),
             def_local.child_pvs.def_root_vk_commit,
             def_root_vk_commit,
         );
@@ -603,10 +608,7 @@ impl VerifierPvsAir {
         let dag_commit_cond =
             and(base_local.is_valid, not(def_local.is_last)) * (AB::Expr::ONE - delta);
         let deferral_flag = def_local.child_pvs.deferral_flag.into();
-        let consistency_mult = (def_local.child_pvs.deferral_flag
-            * (def_local.child_pvs.deferral_flag - AB::Expr::ONE)
-            * half)
-            + AB::Expr::ONE;
+        let consistency_mult = base_local.has_verifier_pvs + AB::Expr::ONE;
 
         (dag_commit_cond, deferral_flag, consistency_mult)
     }
