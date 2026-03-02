@@ -18,7 +18,7 @@ use tracing::instrument;
 use crate::{
     bn254::CommitBytes,
     circuit::{
-        deferral::verify::{DeferredVerifyCircuit, DeferredVerifyTraceGen},
+        deferral::verify::{DeferralMerkleProofs, DeferredVerifyCircuit, DeferredVerifyTraceGen},
         Circuit,
     },
     prover::trace_heights_tracing_info,
@@ -55,8 +55,9 @@ where
         &self,
         proof: Proof<SC>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
+        deferral_merkle_proofs: Option<&DeferralMerkleProofs<PB::Val>>,
     ) -> Result<Proof<SC>> {
-        let ctx = self.generate_proving_ctx(proof, user_pvs_proof);
+        let ctx = self.generate_proving_ctx(proof, user_pvs_proof, deferral_merkle_proofs);
         if tracing::enabled!(tracing::Level::DEBUG) {
             trace_heights_tracing_info(&ctx.per_trace, &self.circuit.airs());
         }
@@ -68,6 +69,15 @@ where
         #[cfg(debug_assertions)]
         engine.verify(&self.vk, &proof)?;
         Ok(proof)
+    }
+
+    #[instrument(name = "total_proof", skip_all)]
+    pub fn prove_no_def<E: StarkEngine<SC = SC, PB = PB>>(
+        &self,
+        proof: Proof<SC>,
+        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
+    ) -> Result<Proof<SC>> {
+        self.prove::<E>(proof, user_pvs_proof, None)
     }
 }
 
@@ -83,6 +93,7 @@ impl<
         system_params: SystemParams,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
+        def_hook_commit: Option<PB::Commitment>,
     ) -> Self
     where
         E::PD: DeviceDataTransporter<SC, PB> + Clone,
@@ -100,9 +111,11 @@ impl<
         );
         let engine = E::new(system_params);
         let internal_recursive_dag_commit = child_vk_pcs_data.commitment.into();
+        let def_hook_commit = def_hook_commit.map(Into::into);
         let circuit = Arc::new(DeferredVerifyCircuit::new(
             Arc::new(verifier_circuit),
             internal_recursive_dag_commit,
+            def_hook_commit,
             memory_dimensions,
             num_user_pvs,
         ));
@@ -110,7 +123,7 @@ impl<
         Self {
             pk: Arc::new(pk),
             vk: Arc::new(vk),
-            agg_node_tracegen: T::new(),
+            agg_node_tracegen: T::new(def_hook_commit.is_some()),
             child_vk,
             child_vk_pcs_data,
             circuit,
@@ -123,6 +136,7 @@ impl<
         pk: Arc<MultiStarkProvingKey<SC>>,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
+        def_hook_commit: Option<PB::Commitment>,
     ) -> Self
     where
         PB::Val: Field + PrimeField32,
@@ -138,9 +152,11 @@ impl<
             },
         );
         let internal_recursive_dag_commit = child_vk_pcs_data.commitment.into();
+        let def_hook_commit = def_hook_commit.map(Into::into);
         let circuit = Arc::new(DeferredVerifyCircuit::new(
             Arc::new(verifier_circuit),
             internal_recursive_dag_commit,
+            def_hook_commit,
             memory_dimensions,
             num_user_pvs,
         ));
@@ -148,7 +164,7 @@ impl<
         Self {
             pk,
             vk,
-            agg_node_tracegen: T::new(),
+            agg_node_tracegen: T::new(def_hook_commit.is_some()),
             child_vk,
             child_vk_pcs_data,
             circuit,

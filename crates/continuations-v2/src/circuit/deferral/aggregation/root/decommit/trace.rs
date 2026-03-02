@@ -6,10 +6,12 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIG
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::circuit::{
-    deferral::aggregation::root::decommit::air::MerkleDecommitCols,
-    root::digests_to_poseidon2_input,
-    subair::{generate_cols_from_leaf_children, MerkleTreeCols},
+use crate::{
+    circuit::{
+        deferral::aggregation::root::decommit::air::MerkleDecommitCols,
+        subair::{generate_cols_from_leaf_children, MerkleTreeCols},
+    },
+    utils::digests_to_poseidon2_input,
 };
 
 pub type IoCommit = ([F; DIGEST_SIZE], [F; DIGEST_SIZE]);

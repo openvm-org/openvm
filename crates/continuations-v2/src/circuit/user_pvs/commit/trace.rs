@@ -9,9 +9,9 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::circuit::{
-    root::digests_to_poseidon2_input,
-    user_pvs::commit::{UserPvsCommitCols, MAX_ENCODER_DEGREE},
+use crate::{
+    circuit::user_pvs::commit::{UserPvsCommitCols, MAX_ENCODER_DEGREE},
+    utils::digests_to_poseidon2_input,
 };
 
 pub fn generate_proving_ctx(
