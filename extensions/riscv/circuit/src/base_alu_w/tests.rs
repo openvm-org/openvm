@@ -34,13 +34,15 @@ use {
     },
 };
 
-use super::{core::run_alu, BaseAluCoreAir, BaseAluFiller, Rv64BaseAluWChip, Rv64BaseAluWExecutor};
+use super::{
+    core::run_alu_w, BaseAluWCoreAir, BaseAluWCoreCols, BaseAluWFiller, Rv64BaseAluWChip,
+    Rv64BaseAluWExecutor,
+};
 use crate::{
     adapters::{
         Rv64BaseAluAdapterAir, Rv64BaseAluAdapterExecutor, Rv64BaseAluAdapterFiller,
         RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS,
     },
-    base_alu_w::BaseAluCoreCols,
     test_utils::{
         generate_rv64_is_type_immediate, get_verification_error, rv64_rand_write_register_or_imm,
     },
@@ -59,14 +61,14 @@ fn create_harness_fields(
 ) -> (Rv64BaseAluWAir, Rv64BaseAluWExecutor, Rv64BaseAluWChip<F>) {
     let air = Rv64BaseAluWAir::new(
         Rv64BaseAluAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
-        BaseAluCoreAir::new(bitwise_chip.bus(), BaseAluWOpcode::CLASS_OFFSET),
+        BaseAluWCoreAir::new(bitwise_chip.bus(), BaseAluWOpcode::CLASS_OFFSET),
     );
     let executor = Rv64BaseAluWExecutor::new(
         Rv64BaseAluAdapterExecutor::new(),
         BaseAluWOpcode::CLASS_OFFSET,
     );
     let chip = Rv64BaseAluWChip::new(
-        BaseAluFiller::new(
+        BaseAluWFiller::new(
             Rv64BaseAluAdapterFiller::new(bitwise_chip.clone()),
             bitwise_chip,
             BaseAluWOpcode::CLASS_OFFSET,
@@ -137,8 +139,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     tester.execute(executor, arena, &instruction);
 
-    let a = run_alu::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(opcode, &b, &c)
-        .map(F::from_canonical_u8);
+    let a = run_alu_w(opcode, &b, &c).map(F::from_canonical_u8);
     assert_eq!(a, tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd))
 }
 
@@ -250,8 +251,7 @@ fn run_negative_alu_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
-        let cols: &mut BaseAluCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
-            values.split_at_mut(adapter_width).1.borrow_mut();
+        let cols: &mut BaseAluWCoreCols<F> = values.split_at_mut(adapter_width).1.borrow_mut();
         cols.a = prank_a.map(F::from_canonical_u32);
         if let Some(prank_c) = prank_c {
             cols.c = prank_c.map(F::from_canonical_u32);
@@ -390,7 +390,7 @@ fn run_addw_sanity_test() {
     let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
     let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
     let z: [u8; RV64_REGISTER_NUM_LIMBS] = [23, 205, 73, 49, 0, 0, 0, 0];
-    let result = run_alu::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(ADDW, &x, &y);
+    let result = run_alu_w(ADDW, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
@@ -402,7 +402,7 @@ fn run_subw_sanity_test() {
     let x: [u8; RV64_REGISTER_NUM_LIMBS] = [229, 33, 29, 111, 145, 34, 25, 205];
     let y: [u8; RV64_REGISTER_NUM_LIMBS] = [50, 171, 44, 194, 73, 35, 25, 206];
     let z: [u8; RV64_REGISTER_NUM_LIMBS] = [179, 118, 240, 172, 255, 255, 255, 255];
-    let result = run_alu::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(SUBW, &x, &y);
+    let result = run_alu_w(SUBW, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }

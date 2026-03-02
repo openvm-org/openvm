@@ -40,7 +40,7 @@ use {
     },
 };
 
-use super::{core::run_shift, Rv64ShiftWChip, ShiftCoreAir, ShiftCoreCols, ShiftFiller};
+use super::{core::run_shift_w, Rv64ShiftWChip, ShiftWCoreAir, ShiftWCoreCols, ShiftWFiller};
 use crate::{
     adapters::{
         Rv64BaseAluAdapterAir, Rv64BaseAluAdapterExecutor, Rv64BaseAluAdapterFiller,
@@ -65,7 +65,7 @@ fn create_harness_fields(
 ) -> (Rv64ShiftWAir, Rv64ShiftWExecutor, Rv64ShiftWChip<F>) {
     let air = Rv64ShiftWAir::new(
         Rv64BaseAluAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
-        ShiftCoreAir::new(
+        ShiftWCoreAir::new(
             bitwise_chip.bus(),
             range_checker.bus(),
             ShiftWOpcode::CLASS_OFFSET,
@@ -73,7 +73,7 @@ fn create_harness_fields(
     );
     let executor = Rv64ShiftWExecutor::new(Rv64BaseAluAdapterExecutor, ShiftWOpcode::CLASS_OFFSET);
     let chip = Rv64ShiftWChip::<F>::new(
-        ShiftFiller::new(
+        ShiftWFiller::new(
             Rv64BaseAluAdapterFiller::new(bitwise_chip.clone()),
             bitwise_chip,
             range_checker,
@@ -146,7 +146,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     tester.execute(executor, arena, &instruction);
 
-    let (a, _, _) = run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(opcode, &b, &c);
+    let (a, _, _) = run_shift_w(opcode, &b, &c);
     assert_eq!(
         a.map(F::from_canonical_u8),
         tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd)
@@ -191,15 +191,15 @@ fn run_rv64w_shift_rand_test(opcode: ShiftWOpcode, num_ops: usize) {
 //////////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Clone, Copy, Default, PartialEq)]
-struct ShiftPrankValues<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+struct ShiftPrankValues {
     pub bit_shift: Option<u32>,
     pub bit_multiplier_left: Option<u32>,
     pub bit_multiplier_right: Option<u32>,
     pub b_sign: Option<u32>,
     pub word_sign: Option<u32>,
-    pub bit_shift_marker: Option<[u32; LIMB_BITS]>,
-    pub limb_shift_marker: Option<[u32; NUM_LIMBS]>,
-    pub bit_shift_carry: Option<[u32; NUM_LIMBS]>,
+    pub bit_shift_marker: Option<[u32; RV64_CELL_BITS]>,
+    pub limb_shift_marker: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    pub bit_shift_carry: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -208,7 +208,7 @@ fn run_negative_shift_test(
     prank_a: [u32; RV64_REGISTER_NUM_LIMBS],
     b: [u8; RV64_REGISTER_NUM_LIMBS],
     c: [u8; RV64_REGISTER_NUM_LIMBS],
-    prank_vals: ShiftPrankValues<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>,
+    prank_vals: ShiftPrankValues,
     interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
@@ -229,8 +229,7 @@ fn run_negative_shift_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
-        let cols: &mut ShiftCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
-            values.split_at_mut(adapter_width).1.borrow_mut();
+        let cols: &mut ShiftWCoreCols<F> = values.split_at_mut(adapter_width).1.borrow_mut();
 
         cols.a = prank_a.map(F::from_canonical_u32);
         if let Some(bit_multiplier_left) = prank_vals.bit_multiplier_left {
@@ -442,8 +441,7 @@ fn rv64_shiftw_adapter_imm_sign_extension_negative_test() {
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
-        let cols: &mut ShiftCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS> =
-            values.split_at_mut(adapter_width).1.borrow_mut();
+        let cols: &mut ShiftWCoreCols<F> = values.split_at_mut(adapter_width).1.borrow_mut();
         cols.c[4] = F::ONE;
         *trace = RowMajorMatrix::new(values, trace.width());
     };
@@ -467,8 +465,7 @@ fn run_sllw_sanity_test() {
     let x: [u8; RV64_REGISTER_NUM_LIMBS] = [45, 7, 61, 186, 31, 190, 221, 200];
     let y: [u8; RV64_REGISTER_NUM_LIMBS] = [91, 0, 100, 0, 49, 190, 190, 113];
     let z: [u8; RV64_REGISTER_NUM_LIMBS] = [0, 0, 0, 104, 0, 0, 0, 0];
-    let (result, limb_shift, bit_shift) =
-        run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(SLLW, &x, &y);
+    let (result, limb_shift, bit_shift) = run_shift_w(SLLW, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
@@ -483,8 +480,7 @@ fn run_srlw_sanity_test() {
     let x: [u8; RV64_REGISTER_NUM_LIMBS] = [31, 190, 221, 200, 45, 7, 61, 186];
     let y: [u8; RV64_REGISTER_NUM_LIMBS] = [49, 190, 190, 190, 113, 20, 50, 80];
     let z: [u8; RV64_REGISTER_NUM_LIMBS] = [110, 100, 0, 0, 0, 0, 0, 0];
-    let (result, limb_shift, bit_shift) =
-        run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(SRLW, &x, &y);
+    let (result, limb_shift, bit_shift) = run_shift_w(SRLW, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
@@ -499,8 +495,7 @@ fn run_sraw_sanity_test() {
     let x: [u8; RV64_REGISTER_NUM_LIMBS] = [31, 190, 221, 200, 45, 7, 61, 186];
     let y: [u8; RV64_REGISTER_NUM_LIMBS] = [113, 20, 50, 80, 49, 190, 190, 113];
     let z: [u8; RV64_REGISTER_NUM_LIMBS] = [110, 228, 255, 255, 255, 255, 255, 255];
-    let (result, limb_shift, bit_shift) =
-        run_shift::<RV64_REGISTER_NUM_LIMBS, RV64_CELL_BITS>(SRAW, &x, &y);
+    let (result, limb_shift, bit_shift) = run_shift_w(SRAW, &x, &y);
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }

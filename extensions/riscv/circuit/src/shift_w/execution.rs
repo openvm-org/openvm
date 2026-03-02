@@ -18,25 +18,25 @@ use openvm_riscv_transpiler::ShiftOpcode;
 use openvm_riscv_transpiler::ShiftWOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::ShiftExecutor;
+use super::ShiftWExecutor;
 #[allow(unused_imports)]
 use crate::{adapters::imm_to_u64, common::*};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
-struct ShiftPreCompute {
+struct ShiftWPreCompute {
     c: u64,
     a: u8,
     b: u8,
 }
 
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftExecutor<A, NUM_LIMBS, LIMB_BITS> {
+impl<A> ShiftWExecutor<A> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
-        data: &mut ShiftPreCompute,
+        data: &mut ShiftWPreCompute,
     ) -> Result<(bool, ShiftWOpcode), StaticProgramError> {
         let Instruction {
             opcode, a, b, c, e, ..
@@ -50,7 +50,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftExecutor<A, NUM_LIM
         }
         let is_imm = e_u32 == RV64_IMM_AS;
         let c_u32 = c.as_canonical_u32();
-        *data = ShiftPreCompute {
+        *data = ShiftWPreCompute {
             c: if is_imm {
                 imm_to_u64(c_u32)
             } else {
@@ -77,13 +77,12 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for ShiftExecutor<A, NUM_LIMBS, LIMB_BITS>
+impl<F, A> InterpreterExecutor<F> for ShiftWExecutor<A>
 where
     F: PrimeField32,
 {
     fn pre_compute_size(&self) -> usize {
-        size_of::<ShiftPreCompute>()
+        size_of::<ShiftWPreCompute>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -93,7 +92,7 @@ where
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
-        let data: &mut ShiftPreCompute = data.borrow_mut();
+        let data: &mut ShiftWPreCompute = data.borrow_mut();
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, data)?;
         // `d` is always expected to be RV64_REGISTER_AS.
         dispatch!(execute_e1_handler, is_imm, shift_opcode)
@@ -109,7 +108,7 @@ where
     where
         Ctx: ExecutionCtxTrait,
     {
-        let data: &mut ShiftPreCompute = data.borrow_mut();
+        let data: &mut ShiftWPreCompute = data.borrow_mut();
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, data)?;
         // `d` is always expected to be RV64_REGISTER_AS.
         dispatch!(execute_e1_handler, is_imm, shift_opcode)
@@ -193,13 +192,12 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for ShiftExecutor<A, NUM_LIMBS, LIMB_BITS>
+impl<F, A> InterpreterMeteredExecutor<F> for ShiftWExecutor<A>
 where
     F: PrimeField32,
 {
     fn metered_pre_compute_size(&self) -> usize {
-        size_of::<E2PreCompute<ShiftPreCompute>>()
+        size_of::<E2PreCompute<ShiftWPreCompute>>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -210,7 +208,7 @@ where
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
-        let data: &mut E2PreCompute<ShiftPreCompute> = data.borrow_mut();
+        let data: &mut E2PreCompute<ShiftWPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
         // `d` is always expected to be RV64_REGISTER_AS.
@@ -225,7 +223,7 @@ where
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<Handler<F, Ctx>, StaticProgramError> {
-        let data: &mut E2PreCompute<ShiftPreCompute> = data.borrow_mut();
+        let data: &mut E2PreCompute<ShiftWPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
         // `d` is always expected to be RV64_REGISTER_AS.
@@ -270,7 +268,7 @@ unsafe fn execute_e12_impl<
     const IS_IMM: bool,
     OP: ShiftWOp,
 >(
-    pre_compute: &ShiftPreCompute,
+    pre_compute: &ShiftWPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1 =
@@ -302,8 +300,8 @@ unsafe fn execute_e1_impl<
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &ShiftPreCompute =
-        std::slice::from_raw_parts(pre_compute, size_of::<ShiftPreCompute>()).borrow();
+    let pre_compute: &ShiftWPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<ShiftWPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, exec_state);
 }
 
@@ -318,8 +316,8 @@ unsafe fn execute_e2_impl<
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<ShiftPreCompute> =
-        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<ShiftPreCompute>>())
+    let pre_compute: &E2PreCompute<ShiftWPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<ShiftWPreCompute>>())
             .borrow();
     exec_state
         .ctx

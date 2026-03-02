@@ -22,14 +22,14 @@ use openvm_stark_backend::{
 };
 use strum::IntoEnumIterator;
 
-use crate::adapters::RV64_WORD_NUM_LIMBS;
+use crate::adapters::{RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS};
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
-pub struct BaseAluCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub a: [T; NUM_LIMBS],
-    pub b: [T; NUM_LIMBS],
-    pub c: [T; NUM_LIMBS],
+pub struct BaseAluWCoreCols<T> {
+    pub a: [T; RV64_REGISTER_NUM_LIMBS],
+    pub b: [T; RV64_REGISTER_NUM_LIMBS],
+    pub c: [T; RV64_REGISTER_NUM_LIMBS],
 
     pub opcode_addw_flag: T,
     pub opcode_subw_flag: T,
@@ -39,30 +39,24 @@ pub struct BaseAluCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(Copy, Clone, Debug, derive_new::new)]
-pub struct BaseAluCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct BaseAluWCoreAir {
     pub bus: BitwiseOperationLookupBus,
     pub offset: usize,
 }
 
-impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>
-{
+impl<F: Field> BaseAir<F> for BaseAluWCoreAir {
     fn width(&self) -> usize {
-        BaseAluCoreCols::<F, NUM_LIMBS, LIMB_BITS>::width()
+        BaseAluWCoreCols::<F>::width()
     }
 }
-impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>
-{
-}
+impl<F: Field> BaseAirWithPublicValues<F> for BaseAluWCoreAir {}
 
-impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
-    for BaseAluCoreAir<NUM_LIMBS, LIMB_BITS>
+impl<AB, I> VmCoreAir<AB, I> for BaseAluWCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<[[AB::Expr; NUM_LIMBS]; 2]>,
-    I::Writes: From<[[AB::Expr; NUM_LIMBS]; 1]>,
+    I::Reads: From<[[AB::Expr; RV64_REGISTER_NUM_LIMBS]; 2]>,
+    I::Writes: From<[[AB::Expr; RV64_REGISTER_NUM_LIMBS]; 1]>,
     I::ProcessedInstruction: From<MinimalInstruction<AB::Expr>>,
 {
     fn eval(
@@ -71,7 +65,7 @@ where
         local_core: &[AB::Var],
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &BaseAluCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
+        let cols: &BaseAluWCoreCols<_> = local_core.borrow();
         let flags = [cols.opcode_addw_flag, cols.opcode_subw_flag];
 
         let is_valid = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
@@ -87,7 +81,7 @@ where
         // ADDW/SUBW are 32-bit operations. We only constrain the low word limbs with carries.
         let mut carry_add: [AB::Expr; RV64_WORD_NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         let mut carry_sub: [AB::Expr; RV64_WORD_NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
-        let carry_divide = AB::F::from_canonical_usize(1 << LIMB_BITS).inverse();
+        let carry_divide = AB::F::from_canonical_usize(1 << RV64_CELL_BITS).inverse();
 
         for i in 0..RV64_WORD_NUM_LIMBS {
             carry_add[i] = AB::Expr::from(carry_divide)
@@ -112,16 +106,16 @@ where
                 .assert_bool(carry_sub[i].clone());
         }
 
-        // Range-check low word bytes.
-        for &a_limb in &a[..RV64_WORD_NUM_LIMBS] {
+        // Range-check low word bytes (two limbs per lookup row).
+        for i in 0..(RV64_WORD_NUM_LIMBS / 2) {
             self.bus
-                .send_xor(a_limb, a_limb, AB::Expr::ZERO)
+                .send_range(a[i * 2], a[i * 2 + 1])
                 .eval(builder, is_valid.clone());
         }
 
         // Constrain upper 32 bits to sign extension of low 32-bit result.
         builder.assert_bool(cols.word_sign);
-        let sign_mask = AB::Expr::from_canonical_u32(1 << (LIMB_BITS - 1));
+        let sign_mask = AB::Expr::from_canonical_u32(1 << (RV64_CELL_BITS - 1));
         self.bus
             .send_xor(
                 a[RV64_WORD_NUM_LIMBS - 1],
@@ -130,7 +124,8 @@ where
                     - AB::Expr::from_canonical_u32(2) * cols.word_sign * sign_mask,
             )
             .eval(builder, is_valid.clone());
-        let sign_extend_limb = AB::Expr::from_canonical_u32((1 << LIMB_BITS) - 1) * cols.word_sign;
+        let sign_extend_limb =
+            AB::Expr::from_canonical_u32((1 << RV64_CELL_BITS) - 1) * cols.word_sign;
         for &a_limb in &a[RV64_WORD_NUM_LIMBS..] {
             builder
                 .when(is_valid.clone())
@@ -166,40 +161,39 @@ where
 
 #[repr(C, align(4))]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct BaseAluCoreRecord<const NUM_LIMBS: usize> {
-    pub b: [u8; NUM_LIMBS],
-    pub c: [u8; NUM_LIMBS],
+pub struct BaseAluWCoreRecord {
+    pub b: [u8; RV64_REGISTER_NUM_LIMBS],
+    pub c: [u8; RV64_REGISTER_NUM_LIMBS],
     // Use u8 instead of usize for better packing
     pub local_opcode: u8,
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct BaseAluExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct BaseAluWExecutor<A> {
     adapter: A,
     pub offset: usize,
 }
 
 #[derive(derive_new::new)]
-pub struct BaseAluFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct BaseAluWFiller<A> {
     adapter: A,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     pub offset: usize,
 }
 
-impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for BaseAluExecutor<A, NUM_LIMBS, LIMB_BITS>
+impl<F, A, RA> PreflightExecutor<F, RA> for BaseAluWExecutor<A>
 where
     F: PrimeField32,
     A: 'static
         + AdapterTraceExecutor<
             F,
-            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
-            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
+            ReadData: Into<[[u8; RV64_REGISTER_NUM_LIMBS]; 2]>,
+            WriteData: From<[[u8; RV64_REGISTER_NUM_LIMBS]; 1]>,
         >,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
-        (A::RecordMut<'buf>, &'buf mut BaseAluCoreRecord<NUM_LIMBS>),
+        (A::RecordMut<'buf>, &'buf mut BaseAluWCoreRecord),
     >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -223,7 +217,7 @@ where
             .read(state.memory, instruction, &mut adapter_record)
             .into();
 
-        let rd = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &core_record.b, &core_record.c);
+        let rd = run_alu_w(local_opcode, &core_record.b, &core_record.c);
 
         core_record.local_opcode = local_opcode as u8;
 
@@ -236,22 +230,20 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for BaseAluFiller<A, NUM_LIMBS, LIMB_BITS>
+impl<F, A> TraceFiller<F> for BaseAluWFiller<A>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
-        // BaseAluCoreCols::width() elements
+        // BaseAluWCoreCols::width() elements
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
-        // SAFETY: core_row contains a valid BaseAluCoreRecord written by the executor
+        // SAFETY: core_row contains a valid BaseAluWCoreRecord written by the executor
         // during trace generation
-        let record: &BaseAluCoreRecord<NUM_LIMBS> =
-            unsafe { get_record_from_slice(&mut core_row, ()) };
-        let core_row: &mut BaseAluCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
+        let record: &BaseAluWCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
+        let core_row: &mut BaseAluWCoreCols<F> = core_row.borrow_mut();
         // SAFETY: the following is highly unsafe. We are going to cast `core_row` to a record
         // buffer, and then do an _overlapping_ write to the `core_row` as a row of field elements.
         // This requires:
@@ -262,19 +254,19 @@ where
         //   otherwise)
 
         let local_opcode = BaseAluWOpcode::from_usize(record.local_opcode as usize);
-        let a = run_alu::<NUM_LIMBS, LIMB_BITS>(local_opcode, &record.b, &record.c);
+        let a = run_alu_w(local_opcode, &record.b, &record.c);
         core_row.opcode_addw_flag = F::from_bool(local_opcode == BaseAluWOpcode::ADDW);
         core_row.opcode_subw_flag = F::from_bool(local_opcode == BaseAluWOpcode::SUBW);
         core_row.word_sign =
-            F::from_canonical_u8(a[RV64_WORD_NUM_LIMBS - 1] >> (LIMB_BITS as u8 - 1));
+            F::from_canonical_u8(a[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS as u8 - 1));
 
-        for &a_limb in &a[..RV64_WORD_NUM_LIMBS] {
+        for pair in a[..RV64_WORD_NUM_LIMBS].chunks_exact(2) {
             self.bitwise_lookup_chip
-                .request_xor(a_limb as u32, a_limb as u32);
+                .request_range(pair[0] as u32, pair[1] as u32);
         }
         self.bitwise_lookup_chip.request_xor(
             a[RV64_WORD_NUM_LIMBS - 1] as u32,
-            (1u32 << (LIMB_BITS - 1)) as u32,
+            (1u32 << (RV64_CELL_BITS - 1)) as u32,
         );
 
         core_row.c = record.c.map(F::from_canonical_u8);
@@ -284,41 +276,39 @@ where
 }
 
 #[inline(always)]
-pub(super) fn run_alu<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(super) fn run_alu_w(
     opcode: BaseAluWOpcode,
-    x: &[u8; NUM_LIMBS],
-    y: &[u8; NUM_LIMBS],
-) -> [u8; NUM_LIMBS] {
-    debug_assert!(LIMB_BITS <= 8, "specialize for bytes");
-    debug_assert!(NUM_LIMBS >= RV64_WORD_NUM_LIMBS);
+    x: &[u8; RV64_REGISTER_NUM_LIMBS],
+    y: &[u8; RV64_REGISTER_NUM_LIMBS],
+) -> [u8; RV64_REGISTER_NUM_LIMBS] {
     match opcode {
-        BaseAluWOpcode::ADDW => run_add::<NUM_LIMBS, LIMB_BITS>(x, y),
-        BaseAluWOpcode::SUBW => run_subtract::<NUM_LIMBS, LIMB_BITS>(x, y),
+        BaseAluWOpcode::ADDW => run_addw(x, y),
+        BaseAluWOpcode::SUBW => run_subw(x, y),
     }
 }
 
 #[inline(always)]
-fn run_add<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    x: &[u8; NUM_LIMBS],
-    y: &[u8; NUM_LIMBS],
-) -> [u8; NUM_LIMBS] {
+fn run_addw(
+    x: &[u8; RV64_REGISTER_NUM_LIMBS],
+    y: &[u8; RV64_REGISTER_NUM_LIMBS],
+) -> [u8; RV64_REGISTER_NUM_LIMBS] {
     let mut z = [0u8; RV64_WORD_NUM_LIMBS];
     let mut carry = [0u8; RV64_WORD_NUM_LIMBS];
     for i in 0..RV64_WORD_NUM_LIMBS {
         let mut overflow =
             (x[i] as u16) + (y[i] as u16) + if i > 0 { carry[i - 1] as u16 } else { 0 };
-        carry[i] = (overflow >> LIMB_BITS) as u8;
-        overflow &= (1u16 << LIMB_BITS) - 1;
+        carry[i] = (overflow >> RV64_CELL_BITS) as u8;
+        overflow &= (1u16 << RV64_CELL_BITS) - 1;
         z[i] = overflow as u8;
     }
-    sign_extend_word::<NUM_LIMBS, LIMB_BITS>(&z)
+    sign_extend_word_w(&z)
 }
 
 #[inline(always)]
-fn run_subtract<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    x: &[u8; NUM_LIMBS],
-    y: &[u8; NUM_LIMBS],
-) -> [u8; NUM_LIMBS] {
+fn run_subw(
+    x: &[u8; RV64_REGISTER_NUM_LIMBS],
+    y: &[u8; RV64_REGISTER_NUM_LIMBS],
+) -> [u8; RV64_REGISTER_NUM_LIMBS] {
     let mut z = [0u8; RV64_WORD_NUM_LIMBS];
     let mut carry = [0u8; RV64_WORD_NUM_LIMBS];
     for i in 0..RV64_WORD_NUM_LIMBS {
@@ -327,21 +317,18 @@ fn run_subtract<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
             z[i] = x[i] - rhs as u8;
             carry[i] = 0;
         } else {
-            z[i] = (x[i] as u16 + (1u16 << LIMB_BITS) - rhs) as u8;
+            z[i] = (x[i] as u16 + (1u16 << RV64_CELL_BITS) - rhs) as u8;
             carry[i] = 1;
         }
     }
-    sign_extend_word::<NUM_LIMBS, LIMB_BITS>(&z)
+    sign_extend_word_w(&z)
 }
 
 #[inline(always)]
-fn sign_extend_word<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    low_word: &[u8; RV64_WORD_NUM_LIMBS],
-) -> [u8; NUM_LIMBS] {
-    debug_assert!(NUM_LIMBS >= RV64_WORD_NUM_LIMBS);
-    let sign_extend_limb = ((1u16 << LIMB_BITS) - 1) as u8
-        * (low_word[RV64_WORD_NUM_LIMBS - 1] >> (LIMB_BITS as u8 - 1));
-    let mut out = [sign_extend_limb; NUM_LIMBS];
+fn sign_extend_word_w(low_word: &[u8; RV64_WORD_NUM_LIMBS]) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+    let sign_extend_limb = ((1u16 << RV64_CELL_BITS) - 1) as u8
+        * (low_word[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS as u8 - 1));
+    let mut out = [sign_extend_limb; RV64_REGISTER_NUM_LIMBS];
     out[..RV64_WORD_NUM_LIMBS].copy_from_slice(low_word);
     out
 }
