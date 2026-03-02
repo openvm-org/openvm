@@ -418,9 +418,10 @@ fn generate_single_def_proof(
         root_system_params(),
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
+        None,
     );
     let def_proof =
-        deferred_verify_prover.prove::<Engine>(internal_recursive_proof, &user_pvs_proof)?;
+        deferred_verify_prover.prove_no_def::<Engine>(internal_recursive_proof, &user_pvs_proof)?;
     Ok((deferred_verify_prover.get_vk(), def_proof))
 }
 
@@ -583,9 +584,10 @@ fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()
         root_system_params(),
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
+        None,
     );
     let def_proof = deferred_verify_prover
-        .prove::<Engine>(internal_recursive_proof.clone(), &user_pvs_proof)?;
+        .prove_no_def::<Engine>(internal_recursive_proof.clone(), &user_pvs_proof)?;
 
     // Verify that def_proof is valid
     let vk = deferred_verify_prover.get_vk();

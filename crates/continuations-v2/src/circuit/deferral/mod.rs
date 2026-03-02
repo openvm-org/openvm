@@ -4,6 +4,8 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 pub mod aggregation;
 pub mod verify;
 
+pub const DEF_HOOK_PVS_AIR_ID: usize = 0;
+
 #[repr(C)]
 #[derive(AlignedBorrow, Clone, Copy)]
 pub struct DeferralCircuitPvs<F> {

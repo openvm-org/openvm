@@ -12,7 +12,10 @@ use openvm_stark_backend::{
     prover::{AirProvingContext, CpuBackend, ProverBackend},
     AirRef,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{
+    poseidon2_compress_with_capacity, BabyBearPoseidon2Config, DIGEST_SIZE, F,
+};
+use p3_field::PrimeCharacteristicRing;
 use recursion_circuit::system::AggregationSubCircuit;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
@@ -207,4 +210,12 @@ pub(crate) fn pad_slice_to_poseidon2_input<T: Clone>(x: &[T], fill: T) -> [T; PO
             fill.clone()
         }
     })
+}
+
+pub(crate) fn zero_hash(depth: usize) -> [F; DIGEST_SIZE] {
+    let mut ret = [F::ZERO; DIGEST_SIZE];
+    for _ in 0..depth {
+        ret = poseidon2_compress_with_capacity(ret, ret).0;
+    }
+    ret
 }

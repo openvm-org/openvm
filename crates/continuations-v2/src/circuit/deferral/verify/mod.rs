@@ -8,8 +8,9 @@ use crate::{
     bn254::CommitBytes,
     circuit::{
         deferral::verify::{
-            bus::{OutputCommitBus, OutputValBus},
+            bus::{DeferralAccPathBus, MemoryMerkleRootsBus, OutputCommitBus, OutputValBus},
             output::DeferralOutputCommitAir,
+            paths::AccMerklePathsAir,
             verifier::DeferredVerifyPvsAir,
         },
         root::bus::{MemoryMerkleCommitBus, UserPvsCommitBus, UserPvsCommitTreeBus},
@@ -21,6 +22,7 @@ use crate::{
 
 pub mod bus;
 pub mod output;
+pub mod paths;
 pub mod verifier;
 
 mod trace;
@@ -30,6 +32,7 @@ pub use trace::*;
 pub struct DeferredVerifyCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
     internal_recursive_dag_commit: CommitBytes,
+    def_hook_commit: Option<CommitBytes>,
     pub(crate) memory_dimensions: MemoryDimensions,
     pub(crate) num_user_pvs: usize,
 }
@@ -44,6 +47,8 @@ impl<S: AggregationSubCircuit> Circuit for DeferredVerifyCircuit<S> {
         let memory_merkle_commit_bus = MemoryMerkleCommitBus::new(next_bus_idx + 2);
         let output_val_bus = OutputValBus::new(next_bus_idx + 3);
         let output_commit_bus = OutputCommitBus::new(next_bus_idx + 4);
+        let def_acc_paths_bus = DeferralAccPathBus::new(next_bus_idx + 5);
+        let memory_merkle_roots_bus = MemoryMerkleRootsBus::new(next_bus_idx + 6);
 
         let verifier_pvs_air = DeferredVerifyPvsAir {
             public_values_bus: bus_inventory.public_values_bus,
@@ -53,7 +58,10 @@ impl<S: AggregationSubCircuit> Circuit for DeferredVerifyCircuit<S> {
             output_val_bus,
             output_commit_bus,
             final_state_bus: bus_inventory.final_state_bus,
+            def_acc_paths_bus,
+            memory_merkle_roots_bus,
             expected_internal_recursive_dag_commit: self.internal_recursive_dag_commit,
+            expected_def_hook_commit: self.def_hook_commit,
         };
         let user_pvs_commit_air = UserPvsCommitAir::new(
             bus_inventory.poseidon2_compress_bus,
@@ -76,12 +84,22 @@ impl<S: AggregationSubCircuit> Circuit for DeferredVerifyCircuit<S> {
             output_commit_bus,
         };
 
+        let acc_paths_air = self.def_hook_commit.map(|_| {
+            Arc::new(AccMerklePathsAir::new(
+                bus_inventory.poseidon2_compress_bus,
+                def_acc_paths_bus,
+                memory_merkle_roots_bus,
+                self.memory_dimensions,
+            )) as AirRef<SC>
+        });
+
         [Arc::new(verifier_pvs_air) as AirRef<SC>]
             .into_iter()
             .chain([Arc::new(user_pvs_commit_air) as AirRef<SC>])
             .chain([Arc::new(user_pvs_memory_air) as AirRef<SC>])
             .chain(self.verifier_circuit.airs())
             .chain([Arc::new(output_commit_air) as AirRef<SC>])
+            .chain(acc_paths_air)
             .collect()
     }
 }

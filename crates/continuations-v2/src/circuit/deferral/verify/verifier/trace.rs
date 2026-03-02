@@ -11,10 +11,16 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
 };
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
-use verify_stark::pvs::{VerifierBasePvs, VmPvs, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID};
+use verify_stark::pvs::{
+    DeferralPvs, VerifierBasePvs, VerifierDefPvs, VmPvs, DEF_PVS_AIR_ID, VERIFIER_PVS_AIR_ID,
+    VM_PVS_AIR_ID,
+};
 
 use crate::circuit::{
-    deferral::{verify::verifier::DeferredVerifyPvsCols, DeferralCircuitPvs},
+    deferral::{
+        verify::verifier::{DeferredVerifyPvsCols, RecursiveDeferredVerifyCols},
+        DeferralCircuitPvs,
+    },
     root::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input, poseidon2_input_to_digests},
 };
 
@@ -33,8 +39,10 @@ pub struct DeferredVerifyPvsRecord<F> {
 pub fn generate_record(
     proof: &Proof<BabyBearPoseidon2Config>,
 ) -> (DeferredVerifyPvsRecord<F>, Vec<[F; POSEIDON2_WIDTH]>) {
-    let child_verifier_pvs: &VerifierBasePvs<F> =
-        proof.public_values[VERIFIER_PVS_AIR_ID].as_slice().borrow();
+    let (base_pvs_slice, _) = proof.public_values[VERIFIER_PVS_AIR_ID]
+        .as_slice()
+        .split_at(VerifierBasePvs::<u8>::width());
+    let child_verifier_pvs: &VerifierBasePvs<F> = base_pvs_slice.borrow();
     let child_vm_pvs: &VmPvs<F> = proof.public_values[VM_PVS_AIR_ID].as_slice().borrow();
 
     let padded_program_commit = pad_slice_to_poseidon2_input(&child_vm_pvs.program_commit, F::ZERO);
@@ -112,12 +120,20 @@ pub fn generate_proving_ctx(
     record: DeferredVerifyPvsRecord<F>,
     final_transcript_state: [F; POSEIDON2_WIDTH],
     output_commit: [F; DIGEST_SIZE],
+    deferral_enabled: bool,
 ) -> AirProvingContext<CpuBackend<BabyBearPoseidon2Config>> {
-    let width = DeferredVerifyPvsCols::<u8>::width();
+    let base_width = DeferredVerifyPvsCols::<u8>::width();
+    let rec_width = RecursiveDeferredVerifyCols::<u8>::width();
+    let width = base_width + if deferral_enabled { rec_width } else { 0 };
+
     let mut trace = vec![F::ZERO; width];
-    let cols: &mut DeferredVerifyPvsCols<F> = trace.as_mut_slice().borrow_mut();
-    let child_verifier_pvs: &VerifierBasePvs<F> =
-        proof.public_values[VERIFIER_PVS_AIR_ID].as_slice().borrow();
+    let (base_cols_slice, def_cols_slice) = trace.as_mut_slice().split_at_mut(base_width);
+    let cols: &mut DeferredVerifyPvsCols<F> = base_cols_slice.borrow_mut();
+
+    let (base_pvs_slice, def_pvs_slice) = proof.public_values[VERIFIER_PVS_AIR_ID]
+        .as_slice()
+        .split_at(VerifierBasePvs::<u8>::width());
+    let child_verifier_pvs: &VerifierBasePvs<F> = base_pvs_slice.borrow();
     let child_vm_pvs: &VmPvs<F> = proof.public_values[VM_PVS_AIR_ID].as_slice().borrow();
 
     cols.child_verifier_pvs = *child_verifier_pvs;
@@ -130,6 +146,14 @@ pub fn generate_proving_ctx(
     cols.app_exe_commit = record.app_exe_commit;
     cols.app_vk_commit = record.app_vk_commit;
     cols.final_transcript_state = final_transcript_state;
+
+    if deferral_enabled {
+        let rec_cols: &mut RecursiveDeferredVerifyCols<_> = def_cols_slice.borrow_mut();
+        let def_verifier_pvs: &VerifierDefPvs<_> = def_pvs_slice.borrow();
+        let def_pvs: &DeferralPvs<_> = proof.public_values[DEF_PVS_AIR_ID].as_slice().borrow();
+        rec_cols.child_def_verifier_pvs = *def_verifier_pvs;
+        rec_cols.child_def_pvs = *def_pvs;
+    }
 
     let mut public_values = vec![F::ZERO; DeferralCircuitPvs::<u8>::width()];
     let deferral_pvs: &mut DeferralCircuitPvs<F> = public_values.as_mut_slice().borrow_mut();
