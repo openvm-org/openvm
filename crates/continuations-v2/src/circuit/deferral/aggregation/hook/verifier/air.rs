@@ -16,7 +16,9 @@ use recursion_circuit::{
     utils::assert_zeros,
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
-use verify_stark::pvs::{DeferralPvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID};
+use verify_stark::pvs::{
+    DeferralPvs, VerifierBasePvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID,
+};
 
 use crate::{
     bn254::CommitBytes,
@@ -25,7 +27,7 @@ use crate::{
             aggregation::hook::bus::{
                 DefVkCommitBus, DefVkCommitMessage, OnionResultBus, OnionResultMessage,
             },
-            DeferralAggregationPvs, DeferralVerifierPvs, DEF_AGG_PVS_AIR_ID,
+            DeferralAggregationPvs, DEF_AGG_PVS_AIR_ID,
         },
         subair::{MerkleRootBus, MerkleRootMessage},
         CONSTRAINT_EVAL_CACHED_INDEX,
@@ -35,8 +37,8 @@ use crate::{
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct DeferralRootPvsCols<F> {
-    pub verifier_pvs: DeferralVerifierPvs<F>,
+pub struct DeferralHookPvsCols<F> {
+    pub verifier_pvs: VerifierBasePvs<F>,
     pub def_pvs: DeferralAggregationPvs<F>,
 
     pub intermediate_vk_commit: [F; DIGEST_SIZE],
@@ -50,7 +52,7 @@ pub struct DeferralRootPvsCols<F> {
     pub output_onion_padded: [F; DIGEST_SIZE],
 }
 
-pub struct DeferralRootPvsAir {
+pub struct DeferralHookPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub cached_commit_bus: CachedCommitBus,
     pub poseidon2_compress_bus: Poseidon2CompressBus,
@@ -63,7 +65,7 @@ pub struct DeferralRootPvsAir {
     pub zero_hash: CommitBytes,
 }
 
-impl DeferralRootPvsAir {
+impl DeferralHookPvsAir {
     pub fn new(
         public_values_bus: PublicValuesBus,
         cached_commit_bus: CachedCommitBus,
@@ -87,25 +89,25 @@ impl DeferralRootPvsAir {
     }
 }
 
-impl<F: Field> BaseAir<F> for DeferralRootPvsAir {
+impl<F: Field> BaseAir<F> for DeferralHookPvsAir {
     fn width(&self) -> usize {
-        DeferralRootPvsCols::<u8>::width()
+        DeferralHookPvsCols::<u8>::width()
     }
 }
-impl<F: Field> BaseAirWithPublicValues<F> for DeferralRootPvsAir {
+impl<F: Field> BaseAirWithPublicValues<F> for DeferralHookPvsAir {
     fn num_public_values(&self) -> usize {
         DeferralPvs::<u8>::width()
     }
 }
-impl<F: Field> PartitionedBaseAir<F> for DeferralRootPvsAir {}
+impl<F: Field> PartitionedBaseAir<F> for DeferralHookPvsAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
-    for DeferralRootPvsAir
+    for DeferralHookPvsAir
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0).expect("window should have one element");
-        let local: &DeferralRootPvsCols<AB::Var> = (*local).borrow();
+        let local: &DeferralHookPvsCols<AB::Var> = (*local).borrow();
 
         /*
          * Check that the final proof is computed by the internal recursive prover, i.e.
@@ -188,15 +190,15 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         );
 
         /*
-         * Commit def_vk_commit should be the compression of def_dag_commit, leaf_dag_commit, and
-         * internal_for_leaf_dag_commit. We constrain this here and send def_vk_commit to its
-         * bus.
+         * Commit def_vk_commit should be the compression of def_dag_commit (which is called
+         * app_dag_commit in the struct), leaf_dag_commit, and internal_for_leaf_dag_commit.
+         * We constrain this here and send def_vk_commit to its bus.
          */
         self.poseidon2_compress_bus.lookup_key(
             builder,
             Poseidon2CompressMessage {
                 input: digests_to_poseidon2_input(
-                    local.verifier_pvs.def_dag_commit,
+                    local.verifier_pvs.app_dag_commit,
                     local.verifier_pvs.leaf_dag_commit,
                 ),
                 output: local.intermediate_vk_commit,

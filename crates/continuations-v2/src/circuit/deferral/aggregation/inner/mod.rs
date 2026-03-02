@@ -15,28 +15,28 @@ mod trace;
 pub use trace::*;
 
 #[derive(derive_new::new, Clone)]
-pub struct DeferralNonRootCircuit<S: AggregationSubCircuit> {
+pub struct DeferralInnerCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
 }
 
-impl<S: AggregationSubCircuit> Circuit for DeferralNonRootCircuit<S> {
+impl<S: AggregationSubCircuit> Circuit for DeferralInnerCircuit<S> {
     fn airs(&self) -> Vec<AirRef<SC>> {
         let bus_inventory = self.verifier_circuit.bus_inventory();
         let next_bus_idx = self.verifier_circuit.next_bus_idx();
         let input_or_merkle_commit_bus = bus::InputOrMerkleCommitBus::new(next_bus_idx);
-        let pv_air_consistency_bus = bus::PvAirConsistencyBus::new(next_bus_idx + 1);
+        let def_pvs_consistency_bus = bus::DefPvsConsistencyBus::new(next_bus_idx + 1);
 
-        let verifier_pvs_air = verifier::NonRootPvsAir {
+        let verifier_pvs_air = verifier::DeferralVerifierPvsAir {
             public_values_bus: bus_inventory.public_values_bus,
             cached_commit_bus: bus_inventory.cached_commit_bus,
-            pv_air_consistency_bus,
+            def_pvs_consistency_bus,
         };
 
-        let def_pvs_air = def_pvs::DeferralPvsAir {
+        let def_pvs_air = def_pvs::DeferralAggPvsAir {
             public_values_bus: bus_inventory.public_values_bus,
             poseidon2_bus: bus_inventory.poseidon2_compress_bus,
             input_or_merkle_commit_bus,
-            pv_air_consistency_bus,
+            def_pvs_consistency_bus,
         };
 
         let input_commit_air = input::InputCommitAir {

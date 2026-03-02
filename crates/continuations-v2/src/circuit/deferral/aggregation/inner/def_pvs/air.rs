@@ -18,8 +18,8 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 use crate::{
     circuit::deferral::{
         aggregation::inner::bus::{
-            InputOrMerkleCommitBus, InputOrMerkleCommitMessage, PvAirConsistencyBus,
-            PvAirConsistencyMessage,
+            DefPvsConsistencyBus, DefPvsConsistencyMessage, InputOrMerkleCommitBus,
+            InputOrMerkleCommitMessage,
         },
         DeferralAggregationPvs, DeferralCircuitPvs, DEF_CIRCUIT_PVS_AIR_ID,
     },
@@ -28,7 +28,7 @@ use crate::{
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct DeferralPvsCols<F> {
+pub struct DeferralAggPvsCols<F> {
     pub proof_idx: F,
     pub is_present: F,
     pub has_verifier_pvs: F,
@@ -37,34 +37,36 @@ pub struct DeferralPvsCols<F> {
     pub child_pvs: DeferralCircuitPvs<F>,
 }
 
-pub struct DeferralPvsAir {
+pub struct DeferralAggPvsAir {
     pub public_values_bus: PublicValuesBus,
     pub poseidon2_bus: Poseidon2CompressBus,
     pub input_or_merkle_commit_bus: InputOrMerkleCommitBus,
-    pub pv_air_consistency_bus: PvAirConsistencyBus,
+    pub def_pvs_consistency_bus: DefPvsConsistencyBus,
 }
 
-impl<F> BaseAir<F> for DeferralPvsAir {
+impl<F> BaseAir<F> for DeferralAggPvsAir {
     fn width(&self) -> usize {
-        DeferralPvsCols::<u8>::width()
+        DeferralAggPvsCols::<u8>::width()
     }
 }
-impl<F> BaseAirWithPublicValues<F> for DeferralPvsAir {
+impl<F> BaseAirWithPublicValues<F> for DeferralAggPvsAir {
     fn num_public_values(&self) -> usize {
         DeferralAggregationPvs::<u8>::width()
     }
 }
-impl<F> PartitionedBaseAir<F> for DeferralPvsAir {}
+impl<F> PartitionedBaseAir<F> for DeferralAggPvsAir {}
 
-impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> for DeferralPvsAir {
+impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
+    for DeferralAggPvsAir
+{
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let (local, next) = (
             main.row_slice(0).expect("window should have two elements"),
             main.row_slice(1).expect("window should have two elements"),
         );
-        let local: &DeferralPvsCols<AB::Var> = (*local).borrow();
-        let next: &DeferralPvsCols<AB::Var> = (*next).borrow();
+        let local: &DeferralAggPvsCols<AB::Var> = (*local).borrow();
+        let next: &DeferralAggPvsCols<AB::Var> = (*next).borrow();
 
         /*
          * This AIR may have 1 or 2 rows. The first row is always present, while the second row
@@ -140,12 +142,12 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
 
         /*
          * We want to ensure consistency between AIRs that process public values, and we do so
-         * using the pv_air_consistency_bus.
+         * using the def_pvs_consistency_bus.
          */
-        self.pv_air_consistency_bus.receive(
+        self.def_pvs_consistency_bus.receive(
             builder,
             local.proof_idx,
-            PvAirConsistencyMessage {
+            DefPvsConsistencyMessage {
                 has_verifier_pvs: local.has_verifier_pvs,
             },
             local.is_present,

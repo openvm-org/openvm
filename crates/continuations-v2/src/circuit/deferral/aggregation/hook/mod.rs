@@ -22,12 +22,12 @@ mod trace;
 pub use trace::*;
 
 #[derive(derive_new::new, Clone)]
-pub struct DeferralRootCircuit<S: AggregationSubCircuit> {
+pub struct DeferralHookCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
     pub(crate) internal_recursive_dag_commit: CommitBytes,
 }
 
-impl<S: AggregationSubCircuit> Circuit for DeferralRootCircuit<S> {
+impl<S: AggregationSubCircuit> Circuit for DeferralHookCircuit<S> {
     fn airs(&self) -> Vec<AirRef<SC>> {
         let bus_inventory = self.verifier_circuit.bus_inventory();
         let next_bus_idx = self.verifier_circuit.next_bus_idx();
@@ -37,7 +37,7 @@ impl<S: AggregationSubCircuit> Circuit for DeferralRootCircuit<S> {
         let merkle_root_bus = MerkleRootBus::new(next_bus_idx + 3);
         let merkle_tree_internal_bus = MerkleTreeInternalBus::new(next_bus_idx + 4);
 
-        let verifier_pvs_air = verifier::DeferralRootPvsAir::new(
+        let verifier_pvs_air = verifier::DeferralHookPvsAir::new(
             bus_inventory.public_values_bus,
             bus_inventory.cached_commit_bus,
             bus_inventory.poseidon2_compress_bus,

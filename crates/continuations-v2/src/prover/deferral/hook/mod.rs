@@ -18,7 +18,7 @@ use crate::{
     bn254::CommitBytes,
     circuit::{
         deferral::aggregation::hook::{
-            DeferralIoCommit, DeferralRootCircuit, DeferralRootTraceGen,
+            DeferralHookCircuit, DeferralHookTraceGen, DeferralIoCommit,
         },
         Circuit,
     },
@@ -28,10 +28,10 @@ use crate::{
 
 mod trace;
 
-pub struct DeferralRootProver<
+pub struct DeferralHookProver<
     PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
     S: AggregationSubCircuit,
-    T: DeferralRootTraceGen<PB>,
+    T: DeferralHookTraceGen<PB>,
 > {
     pk: Arc<MultiStarkProvingKey<SC>>,
     d_pk: DeviceMultiStarkProvingKey<PB>,
@@ -41,14 +41,14 @@ pub struct DeferralRootProver<
 
     child_vk: Arc<MultiStarkVerifyingKey<SC>>,
     child_vk_pcs_data: CommittedTraceData<PB>,
-    circuit: Arc<DeferralRootCircuit<S>>,
+    circuit: Arc<DeferralHookCircuit<S>>,
 }
 
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
         S: AggregationSubCircuit + VerifierTraceGen<PB>,
-        T: DeferralRootTraceGen<PB>,
-    > DeferralRootProver<PB, S, T>
+        T: DeferralHookTraceGen<PB>,
+    > DeferralHookProver<PB, S, T>
 where
     PB::Matrix: Clone,
 {
@@ -75,8 +75,8 @@ where
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
         S: AggregationSubCircuit + VerifierTraceGen<PB>,
-        T: DeferralRootTraceGen<PB>,
-    > DeferralRootProver<PB, S, T>
+        T: DeferralHookTraceGen<PB>,
+    > DeferralHookProver<PB, S, T>
 {
     pub fn new<E: StarkEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
@@ -98,7 +98,7 @@ impl<
         let engine = E::new(system_params);
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         let internal_recursive_dag_commit = child_vk_pcs_data.commitment.into();
-        let circuit = Arc::new(DeferralRootCircuit::new(
+        let circuit = Arc::new(DeferralHookCircuit::new(
             Arc::new(verifier_circuit),
             internal_recursive_dag_commit,
         ));
@@ -136,7 +136,7 @@ impl<
         let engine = E::new(pk.params.clone());
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         let internal_recursive_dag_commit = child_vk_pcs_data.commitment.into();
-        let circuit = Arc::new(DeferralRootCircuit::new(
+        let circuit = Arc::new(DeferralHookCircuit::new(
             Arc::new(verifier_circuit),
             internal_recursive_dag_commit,
         ));
@@ -153,7 +153,7 @@ impl<
         }
     }
 
-    pub fn get_circuit(&self) -> Arc<DeferralRootCircuit<S>> {
+    pub fn get_circuit(&self) -> Arc<DeferralHookCircuit<S>> {
         self.circuit.clone()
     }
 

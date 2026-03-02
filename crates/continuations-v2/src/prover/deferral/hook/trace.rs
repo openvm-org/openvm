@@ -13,10 +13,10 @@ use recursion_circuit::system::{
 };
 use tracing::instrument;
 
-use super::DeferralRootProver;
+use super::DeferralHookProver;
 use crate::{
     circuit::deferral::aggregation::hook::{
-        DeferralIoCommit, DeferralRootPreCtx, DeferralRootTraceGen,
+        DeferralHookPreCtx, DeferralHookTraceGen, DeferralIoCommit,
     },
     SC,
 };
@@ -24,8 +24,8 @@ use crate::{
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
         S: AggregationSubCircuit + VerifierTraceGen<PB>,
-        T: DeferralRootTraceGen<PB>,
-    > DeferralRootProver<PB, S, T>
+        T: DeferralHookTraceGen<PB>,
+    > DeferralHookProver<PB, S, T>
 where
     PB::Matrix: Clone,
 {
@@ -35,7 +35,7 @@ where
         proof: Proof<SC>,
         leaf_children: Vec<DeferralIoCommit<F>>,
     ) -> ProvingContext<PB> {
-        let DeferralRootPreCtx {
+        let DeferralHookPreCtx {
             verifier_pvs_ctx,
             decommit_ctx,
             onion_ctx,

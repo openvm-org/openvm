@@ -1,6 +1,6 @@
 use std::{array::from_fn, borrow::Borrow};
 
-use openvm_circuit_primitives::{encoder::Encoder, SubAir};
+use openvm_circuit_primitives::SubAir;
 use openvm_stark_backend::{
     interaction::InteractionBuilder, BaseAirWithPublicValues, PartitionedBaseAir,
 };
@@ -20,41 +20,21 @@ use crate::circuit::{
     subair::UserPvsCommitSubAir,
 };
 
-#[derive(Clone, Debug)]
-pub enum UserPvsCommitMode {
-    ExposePublicValues { encoder: Encoder },
-    SendToOutputValBus { output_val_bus: OutputValBus },
-}
-
-impl UserPvsCommitMode {
-    pub fn width(&self) -> usize {
-        match self {
-            UserPvsCommitMode::ExposePublicValues { encoder } => encoder.width(),
-            UserPvsCommitMode::SendToOutputValBus { .. } => 0,
-        }
-    }
-
-    pub const fn exposes_public_values(&self) -> bool {
-        matches!(self, Self::ExposePublicValues { .. })
-    }
-}
-
 /**
  * Builds a binary Merkle tree to decommit and expose or emit the raw user public values.
  * Constrains that:
  * - leaf nodes read single digests, compress with zeros, and compute leaf hashes
  * - internal nodes receive children from an internal permutation bus
  * - root commitment is sent to `UserPvsCommitBus`
- * - leaf payload is either read from exposed public values (encoder-selected) or sent on
- *   `OutputValBus` starting at OUTPUT_USER_PVS_START_IDX
+ * - leaf payload is sent on `OutputValBus` starting at OUTPUT_USER_PVS_START_IDX
  */
-pub struct UserPvsCommitAir {
+pub struct UserPvsCommitValuesAir {
     pub subair: UserPvsCommitSubAir,
     pub output_val_bus: OutputValBus,
     num_user_pvs: usize,
 }
 
-impl UserPvsCommitAir {
+impl UserPvsCommitValuesAir {
     pub fn new(
         poseidon2_compress_bus: Poseidon2CompressBus,
         user_pvs_commit_bus: UserPvsCommitBus,
@@ -68,7 +48,7 @@ impl UserPvsCommitAir {
         debug_assert!(num_user_pvs.is_multiple_of(DIGEST_SIZE));
         debug_assert!((num_user_pvs / DIGEST_SIZE).is_power_of_two());
 
-        UserPvsCommitAir {
+        UserPvsCommitValuesAir {
             subair: UserPvsCommitSubAir::new(
                 poseidon2_compress_bus,
                 user_pvs_commit_bus,
@@ -80,16 +60,16 @@ impl UserPvsCommitAir {
     }
 }
 
-impl<F> BaseAir<F> for UserPvsCommitAir {
+impl<F> BaseAir<F> for UserPvsCommitValuesAir {
     fn width(&self) -> usize {
         UserPvsCommitCols::<u8>::width()
     }
 }
-impl<F> BaseAirWithPublicValues<F> for UserPvsCommitAir {}
-impl<F> PartitionedBaseAir<F> for UserPvsCommitAir {}
+impl<F> BaseAirWithPublicValues<F> for UserPvsCommitValuesAir {}
+impl<F> PartitionedBaseAir<F> for UserPvsCommitValuesAir {}
 
 impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
-    for UserPvsCommitAir
+    for UserPvsCommitValuesAir
 {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();

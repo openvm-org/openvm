@@ -18,7 +18,7 @@ use crate::{
     utils::{digests_to_poseidon2_input, zero_hash},
 };
 
-pub struct DeferralNonRootPreCtx<PB: ProverBackend> {
+pub struct DeferralInnerPreCtx<PB: ProverBackend> {
     pub verifier_pvs_ctx: AirProvingContext<PB>,
     pub def_pvs_ctx: AirProvingContext<PB>,
     pub input_ctx: AirProvingContext<PB>,
@@ -83,14 +83,14 @@ fn generate_poseidon2_inputs(
             current_commit = poseidon2_compress_with_capacity(current_commit, cached_commit).0;
         }
 
-        // DeferralPvsAir (leaf): hash folded input_commit and output_commit into merkle_commit.
+        // DeferralAggPvsAir (leaf): hash folded input_commit and output_commit into merkle_commit.
         poseidon2_inputs.push(digests_to_poseidon2_input(
             current_commit,
             child_pvs.output_commit,
         ));
     }
 
-    // DeferralPvsAir: hash child merkle commits when this is not a wrapper.
+    // DeferralAggPvsAir: hash child merkle commits when this is not a wrapper.
     if let Some(depth) = child_merkle_depth {
         let left_merkle = child_merkle_commit(&proofs[0], child_is_def);
         let right_merkle = if proofs.len() == 2 {
@@ -105,7 +105,7 @@ fn generate_poseidon2_inputs(
 }
 
 // Trait used to remain generic in PB
-pub trait DeferralNonRootTraceGen<PB: ProverBackend> {
+pub trait DeferralInnerTraceGen<PB: ProverBackend> {
     fn new() -> Self;
     fn pre_verifier_subcircuit_tracegen(
         &self,
@@ -113,12 +113,12 @@ pub trait DeferralNonRootTraceGen<PB: ProverBackend> {
         child_is_def: bool,
         child_dag_commit: PB::Commitment,
         child_merkle_depth: Option<usize>,
-    ) -> DeferralNonRootPreCtx<PB>;
+    ) -> DeferralInnerPreCtx<PB>;
 }
 
-pub struct DeferralNonRootTraceGenImpl;
+pub struct DeferralInnerTraceGenImpl;
 
-impl DeferralNonRootTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralNonRootTraceGenImpl {
+impl DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralInnerTraceGenImpl {
     fn new() -> Self {
         Self
     }
@@ -129,8 +129,8 @@ impl DeferralNonRootTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralNo
         child_is_def: bool,
         child_dag_commit: [F; DIGEST_SIZE],
         child_merkle_depth: Option<usize>,
-    ) -> DeferralNonRootPreCtx<CpuBackend<BabyBearPoseidon2Config>> {
-        DeferralNonRootPreCtx {
+    ) -> DeferralInnerPreCtx<CpuBackend<BabyBearPoseidon2Config>> {
+        DeferralInnerPreCtx {
             verifier_pvs_ctx: super::verifier::generate_proving_ctx(
                 proofs,
                 child_is_def,
@@ -148,7 +148,7 @@ impl DeferralNonRootTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralNo
 }
 
 #[cfg(feature = "cuda")]
-impl DeferralNonRootTraceGen<GpuBackend> for DeferralNonRootTraceGenImpl {
+impl DeferralInnerTraceGen<GpuBackend> for DeferralInnerTraceGenImpl {
     fn new() -> Self {
         Self
     }
@@ -159,20 +159,20 @@ impl DeferralNonRootTraceGen<GpuBackend> for DeferralNonRootTraceGenImpl {
         child_is_def: bool,
         child_dag_commit: [F; DIGEST_SIZE],
         child_merkle_depth: Option<usize>,
-    ) -> DeferralNonRootPreCtx<GpuBackend> {
-        let DeferralNonRootPreCtx {
+    ) -> DeferralInnerPreCtx<GpuBackend> {
+        let DeferralInnerPreCtx {
             verifier_pvs_ctx,
             def_pvs_ctx,
             input_ctx,
             poseidon2_inputs,
-        } = <Self as DeferralNonRootTraceGen<CpuBackend<BabyBearPoseidon2Config>>>::pre_verifier_subcircuit_tracegen(
+        } = <Self as DeferralInnerTraceGen<CpuBackend<BabyBearPoseidon2Config>>>::pre_verifier_subcircuit_tracegen(
             self,
             proofs,
             child_is_def,
             child_dag_commit,
             child_merkle_depth,
         );
-        DeferralNonRootPreCtx {
+        DeferralInnerPreCtx {
             verifier_pvs_ctx: transport_air_proving_ctx_to_device(verifier_pvs_ctx),
             def_pvs_ctx: transport_air_proving_ctx_to_device(def_pvs_ctx),
             input_ctx: transport_air_proving_ctx_to_device(input_ctx),

@@ -6,7 +6,7 @@ use recursion_circuit::system::VerifierSubCircuit;
 use crate::{
     circuit::{
         deferral::{
-            aggregation::{hook::DeferralRootTraceGenImpl, inner::DeferralNonRootTraceGenImpl},
+            aggregation::{hook::DeferralHookTraceGenImpl, inner::DeferralInnerTraceGenImpl},
             verify::DeferredVerifyTraceGenImpl,
         },
         inner::NonRootTraceGenImpl,
@@ -37,13 +37,13 @@ pub type CompressionCpuProver =
 pub type RootCpuProver = RootProver<CpuBackend<SC>, VerifierSubCircuit<1>, RootTraceGenImpl>;
 pub type DeferralVerifyCpuProver =
     DeferredVerifyProver<CpuBackend<SC>, VerifierSubCircuit<1>, DeferredVerifyTraceGenImpl>;
-pub type DeferralNonRootCpuProver<const MAX_NUM_PROOFS: usize> = DeferralNonRootProver<
+pub type DeferralInnerCpuProver<const MAX_NUM_PROOFS: usize> = DeferralInnerProver<
     CpuBackend<SC>,
     VerifierSubCircuit<MAX_NUM_PROOFS>,
-    DeferralNonRootTraceGenImpl,
+    DeferralInnerTraceGenImpl,
 >;
-pub type DeferralRootCpuProver =
-    DeferralRootProver<CpuBackend<SC>, VerifierSubCircuit<1>, DeferralRootTraceGenImpl>;
+pub type DeferralHookCpuProver =
+    DeferralHookProver<CpuBackend<SC>, VerifierSubCircuit<1>, DeferralHookTraceGenImpl>;
 
 #[cfg(feature = "cuda")]
 pub type NonRootGpuProver<const MAX_NUM_PROOFS: usize> =
@@ -57,11 +57,8 @@ pub type RootGpuProver = RootProver<GpuBackend, VerifierSubCircuit<1>, RootTrace
 pub type DeferralVerifyGpuProver =
     DeferredVerifyProver<GpuBackend, VerifierSubCircuit<1>, DeferredVerifyTraceGenImpl>;
 #[cfg(feature = "cuda")]
-pub type DeferralNonRootGpuProver<const MAX_NUM_PROOFS: usize> = DeferralNonRootProver<
-    GpuBackend,
-    VerifierSubCircuit<MAX_NUM_PROOFS>,
-    DeferralNonRootTraceGenImpl,
->;
+pub type DeferralInnerGpuProver<const MAX_NUM_PROOFS: usize> =
+    DeferralInnerProver<GpuBackend, VerifierSubCircuit<MAX_NUM_PROOFS>, DeferralInnerTraceGenImpl>;
 #[cfg(feature = "cuda")]
-pub type DeferralRootGpuProver =
-    DeferralRootProver<GpuBackend, VerifierSubCircuit<1>, DeferralRootTraceGenImpl>;
+pub type DeferralHookGpuProver =
+    DeferralHookProver<GpuBackend, VerifierSubCircuit<1>, DeferralHookTraceGenImpl>;

@@ -9,7 +9,7 @@ use crate::{
     circuit::{
         deferral::verify::{
             bus::{OutputCommitBus, OutputValBus},
-            commit::UserPvsCommitAir,
+            commit::UserPvsCommitValuesAir,
             output::DeferralOutputCommitAir,
             verifier::DeferredVerifyPvsAir,
         },
@@ -69,7 +69,7 @@ impl<S: AggregationSubCircuit> Circuit for DeferredVerifyCircuit<S> {
             expected_internal_recursive_dag_commit: self.internal_recursive_dag_commit,
             expected_def_hook_commit: self.def_hook_commit,
         };
-        let user_pvs_commit_air = UserPvsCommitAir::new(
+        let user_pvs_commit_air = UserPvsCommitValuesAir::new(
             bus_inventory.poseidon2_compress_bus,
             user_pvs_commit_bus,
             user_pvs_commit_tree_bus,

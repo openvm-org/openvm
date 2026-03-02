@@ -126,10 +126,11 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         builder.assert_bool(local.child_verifier_pvs.recursion_flag - AB::F::ONE);
 
         /*
-         * UserPvsCommitAir constrains that the Merkle root of the original app user public
-         * values is some user_pvs_commit. We also need to constrain that those values were
-         * part of the final memory state - we do this in UserPvsInMemoryAir, which has to
-         * receive final_root in order to verify a Merkle proof from user_pvs_commit to it.
+         * UserPvsCommitValuesAir constrains that the Merkle root of the original app user
+         * public values is some user_pvs_commit. We also need to constrain that those
+         * values were part of the final memory state - we do this in UserPvsInMemoryAir,
+         * which has to receive final_root in order to verify a Merkle proof from
+         * user_pvs_commit to it.
          */
         self.memory_merkle_commit_bus.send(
             builder,

@@ -13,8 +13,8 @@ define_typed_per_proof_permutation_bus!(InputOrMerkleCommitBus, InputOrMerkleCom
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
-pub struct PvAirConsistencyMessage<T> {
+pub struct DefPvsConsistencyMessage<T> {
     pub has_verifier_pvs: T,
 }
 
-define_typed_per_proof_permutation_bus!(PvAirConsistencyBus, PvAirConsistencyMessage);
+define_typed_per_proof_permutation_bus!(DefPvsConsistencyBus, DefPvsConsistencyMessage);

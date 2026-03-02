@@ -12,7 +12,7 @@ use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{
     circuit::deferral::{
-        aggregation::inner::def_pvs::air::DeferralPvsCols, DeferralAggregationPvs,
+        aggregation::inner::def_pvs::air::DeferralAggPvsCols, DeferralAggregationPvs,
         DeferralCircuitPvs, DEF_AGG_PVS_AIR_ID, DEF_CIRCUIT_PVS_AIR_ID,
     },
     utils::zero_hash,
@@ -28,14 +28,14 @@ pub fn generate_proving_ctx(
     debug_assert!(!is_wrapper || num_proofs == 1);
 
     let num_rows = if is_wrapper { 1usize } else { 2usize };
-    let width = DeferralPvsCols::<u8>::width();
+    let width = DeferralAggPvsCols::<u8>::width();
 
     debug_assert!((1..=2).contains(&num_proofs));
 
     let mut trace = vec![F::ZERO; num_rows * width];
     for (proof_idx, (proof, chunk)) in proofs.iter().zip(trace.chunks_exact_mut(width)).enumerate()
     {
-        let cols: &mut DeferralPvsCols<F> = chunk.borrow_mut();
+        let cols: &mut DeferralAggPvsCols<F> = chunk.borrow_mut();
         cols.proof_idx = F::from_usize(proof_idx);
         cols.is_present = F::ONE;
         cols.has_verifier_pvs = F::from_bool(child_is_def);
@@ -66,7 +66,7 @@ pub fn generate_proving_ctx(
     }
 
     if num_rows == 2 && num_proofs == 1 {
-        let cols: &mut DeferralPvsCols<F> = trace[width..2 * width].borrow_mut();
+        let cols: &mut DeferralAggPvsCols<F> = trace[width..2 * width].borrow_mut();
         cols.proof_idx = F::ONE;
         cols.has_verifier_pvs = F::from_bool(child_is_def);
         cols.merkle_commit = zero_hash(child_merkle_depth.unwrap() + 1);
@@ -75,11 +75,11 @@ pub fn generate_proving_ctx(
     let mut public_values = vec![F::ZERO; DeferralAggregationPvs::<u8>::width()];
     let pvs: &mut DeferralAggregationPvs<F> = public_values.as_mut_slice().borrow_mut();
 
-    let first_row: &DeferralPvsCols<F> = trace[..width].borrow();
+    let first_row: &DeferralAggPvsCols<F> = trace[..width].borrow();
     if is_wrapper {
         pvs.merkle_commit = first_row.merkle_commit;
     } else {
-        let second_row: &DeferralPvsCols<F> = trace[width..2 * width].borrow();
+        let second_row: &DeferralAggPvsCols<F> = trace[width..2 * width].borrow();
         pvs.merkle_commit =
             poseidon2_compress_with_capacity(first_row.merkle_commit, second_row.merkle_commit).0;
     }

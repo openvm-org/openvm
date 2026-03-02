@@ -15,7 +15,7 @@ use tracing::instrument;
 
 use crate::{
     circuit::{
-        deferral::aggregation::inner::{DeferralNonRootCircuit, DeferralNonRootTraceGen},
+        deferral::aggregation::inner::{DeferralInnerCircuit, DeferralInnerTraceGen},
         Circuit,
     },
     prover::trace_heights_tracing_info,
@@ -27,17 +27,16 @@ mod trace;
 pub enum DeferralChildVkKind {
     /// Child proofs are deferral verify proofs (consume DeferralCircuitPvs at air 0).
     DeferralCircuit,
-    /// Child proofs are deferral aggregation nonroot proofs (consume DeferralAggregationPvs at air
-    /// 1).
+    /// Child proofs are deferral aggregation inner proofs (consume DeferralAggregationPvs at air 1).
     DeferralAggregation,
     /// Same as DeferralAggregation but uses this prover's own vk as child vk.
     RecursiveSelf,
 }
 
-pub struct DeferralNonRootProver<
+pub struct DeferralInnerProver<
     PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
     S: AggregationSubCircuit,
-    T: DeferralNonRootTraceGen<PB>,
+    T: DeferralInnerTraceGen<PB>,
 > {
     pk: Arc<MultiStarkProvingKey<SC>>,
     d_pk: DeviceMultiStarkProvingKey<PB>,
@@ -47,7 +46,7 @@ pub struct DeferralNonRootProver<
 
     child_vk: Arc<MultiStarkVerifyingKey<SC>>,
     child_vk_pcs_data: CommittedTraceData<PB>,
-    circuit: Arc<DeferralNonRootCircuit<S>>,
+    circuit: Arc<DeferralInnerCircuit<S>>,
 
     self_vk_pcs_data: Option<CommittedTraceData<PB>>,
 }
@@ -55,8 +54,8 @@ pub struct DeferralNonRootProver<
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
         S: AggregationSubCircuit + VerifierTraceGen<PB>,
-        T: DeferralNonRootTraceGen<PB>,
-    > DeferralNonRootProver<PB, S, T>
+        T: DeferralInnerTraceGen<PB>,
+    > DeferralInnerProver<PB, S, T>
 where
     PB::Matrix: Clone,
 {
@@ -84,8 +83,8 @@ where
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
         S: AggregationSubCircuit + VerifierTraceGen<PB>,
-        T: DeferralNonRootTraceGen<PB>,
-    > DeferralNonRootProver<PB, S, T>
+        T: DeferralInnerTraceGen<PB>,
+    > DeferralInnerProver<PB, S, T>
 {
     pub fn new<E: StarkEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
@@ -102,7 +101,7 @@ impl<
         );
         let engine = E::new(system_params);
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
-        let circuit = Arc::new(DeferralNonRootCircuit::new(Arc::new(verifier_circuit)));
+        let circuit = Arc::new(DeferralInnerCircuit::new(Arc::new(verifier_circuit)));
         let (pk, vk) = engine.keygen(&circuit.airs());
         let d_pk = engine.device().transport_pk_to_device(&pk);
         let self_vk_pcs_data = if is_self_recursive {
@@ -114,7 +113,7 @@ impl<
             pk: Arc::new(pk),
             d_pk,
             vk: Arc::new(vk),
-            agg_node_tracegen: DeferralNonRootTraceGen::new(),
+            agg_node_tracegen: DeferralInnerTraceGen::new(),
             child_vk,
             child_vk_pcs_data,
             circuit,
@@ -137,7 +136,7 @@ impl<
         );
         let engine = E::new(pk.params.clone());
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
-        let circuit = Arc::new(DeferralNonRootCircuit::new(Arc::new(verifier_circuit)));
+        let circuit = Arc::new(DeferralInnerCircuit::new(Arc::new(verifier_circuit)));
         let vk = Arc::new(pk.get_vk());
         let d_pk = engine.device().transport_pk_to_device(&pk);
         let self_vk_pcs_data = if is_self_recursive {
@@ -149,7 +148,7 @@ impl<
             pk,
             d_pk,
             vk,
-            agg_node_tracegen: DeferralNonRootTraceGen::new(),
+            agg_node_tracegen: DeferralInnerTraceGen::new(),
             child_vk,
             child_vk_pcs_data,
             circuit,
@@ -157,7 +156,7 @@ impl<
         }
     }
 
-    pub fn get_circuit(&self) -> Arc<DeferralNonRootCircuit<S>> {
+    pub fn get_circuit(&self) -> Arc<DeferralInnerCircuit<S>> {
         self.circuit.clone()
     }
 

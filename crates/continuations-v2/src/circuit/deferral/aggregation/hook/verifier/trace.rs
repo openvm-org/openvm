@@ -10,22 +10,23 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
 };
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
-use verify_stark::pvs::DeferralPvs;
+use verify_stark::pvs::{DeferralPvs, VerifierBasePvs};
 
 use crate::{
     circuit::deferral::{
-        aggregation::hook::verifier::air::DeferralRootPvsCols, DeferralAggregationPvs,
-        DeferralVerifierPvs, DEF_AGG_PVS_AIR_ID, DEF_AGG_VERIFIER_AIR_ID,
+        aggregation::hook::verifier::air::DeferralHookPvsCols, DeferralAggregationPvs,
+        DEF_AGG_PVS_AIR_ID, DEF_AGG_VERIFIER_AIR_ID,
     },
     utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input, zero_hash},
     SC,
 };
 
 pub fn def_vk_commit_from_verifier_pvs(
-    verifier_pvs: &DeferralVerifierPvs<F>,
+    verifier_pvs: &VerifierBasePvs<F>,
 ) -> ([F; DIGEST_SIZE], [F; DIGEST_SIZE]) {
+    // Here app_dag_commit is the def_dag_commit
     let intermediate_vk_commit =
-        poseidon2_compress_with_capacity(verifier_pvs.def_dag_commit, verifier_pvs.leaf_dag_commit)
+        poseidon2_compress_with_capacity(verifier_pvs.app_dag_commit, verifier_pvs.leaf_dag_commit)
             .0;
     let def_vk_commit = poseidon2_compress_with_capacity(
         intermediate_vk_commit,
@@ -44,7 +45,7 @@ pub fn generate_proving_ctx(
     Vec<[F; POSEIDON2_WIDTH]>,
     [F; DIGEST_SIZE],
 ) {
-    let verifier_pvs: &DeferralVerifierPvs<F> = proof.public_values[DEF_AGG_VERIFIER_AIR_ID]
+    let verifier_pvs: &VerifierBasePvs<F> = proof.public_values[DEF_AGG_VERIFIER_AIR_ID]
         .as_slice()
         .borrow();
     let def_pvs: &DeferralAggregationPvs<F> =
@@ -52,9 +53,9 @@ pub fn generate_proving_ctx(
 
     let (intermediate_vk_commit, def_vk_commit) = def_vk_commit_from_verifier_pvs(verifier_pvs);
 
-    let width = DeferralRootPvsCols::<u8>::width();
+    let width = DeferralHookPvsCols::<u8>::width();
     let mut trace = vec![F::ZERO; width];
-    let cols: &mut DeferralRootPvsCols<F> = trace.as_mut_slice().borrow_mut();
+    let cols: &mut DeferralHookPvsCols<F> = trace.as_mut_slice().borrow_mut();
     cols.verifier_pvs = *verifier_pvs;
     cols.def_pvs = *def_pvs;
     cols.intermediate_vk_commit = intermediate_vk_commit;
@@ -82,7 +83,7 @@ pub fn generate_proving_ctx(
     root_pvs.depth = F::ONE;
 
     let poseidon2_inputs = vec![
-        digests_to_poseidon2_input(verifier_pvs.def_dag_commit, verifier_pvs.leaf_dag_commit),
+        digests_to_poseidon2_input(verifier_pvs.app_dag_commit, verifier_pvs.leaf_dag_commit),
         digests_to_poseidon2_input(
             intermediate_vk_commit,
             verifier_pvs.internal_for_leaf_dag_commit,

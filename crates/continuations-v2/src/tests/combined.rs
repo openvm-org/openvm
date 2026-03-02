@@ -39,8 +39,8 @@ use crate::{
         inner::ProofsType,
     },
     prover::{
-        ChildVkKind, DeferralNonRootGpuProver as DeferralNonRootProver,
-        DeferralRootGpuProver as DeferralRootProver,
+        ChildVkKind, DeferralHookGpuProver as DeferralHookProver,
+        DeferralInnerGpuProver as DeferralInnerProver,
         DeferralVerifyGpuProver as DeferralVerifyProver, NonRootGpuProver as NonRootProver,
         RootGpuProver as RootProver,
     },
@@ -75,19 +75,19 @@ fn def_hook_commit() -> [F; DIGEST_SIZE] {
     let deferral_vk = Arc::new(deferral_vk);
 
     let leaf_prover =
-        DeferralNonRootProver::<2>::new::<Engine>(deferral_vk, leaf_system_params(), false);
-    let internal_0_prover = DeferralNonRootProver::<2>::new::<Engine>(
+        DeferralInnerProver::<2>::new::<Engine>(deferral_vk, leaf_system_params(), false);
+    let internal_0_prover = DeferralInnerProver::<2>::new::<Engine>(
         leaf_prover.get_vk(),
         internal_system_params(),
         false,
     );
-    let internal_1_prover = DeferralNonRootProver::<2>::new::<Engine>(
+    let internal_1_prover = DeferralInnerProver::<2>::new::<Engine>(
         internal_0_prover.get_vk(),
         internal_system_params(),
         true,
     );
     let hook_prover =
-        DeferralRootProver::new::<Engine>(internal_1_prover.get_vk(), root_system_params());
+        DeferralHookProver::new::<Engine>(internal_1_prover.get_vk(), root_system_params());
 
     hook_prover.get_cached_commit()
 }
@@ -97,13 +97,13 @@ fn read_def_pvs(proof: &Proof<SC>) -> DeferralPvs<F> {
 }
 
 fn make_absent_trace_pvs(
-    deferral_root_final_hash: [F; DIGEST_SIZE],
+    deferral_hook_final_hash: [F; DIGEST_SIZE],
     depth: F,
 ) -> (DeferralPvs<F>, bool) {
     (
         DeferralPvs {
-            initial_acc_hash: deferral_root_final_hash,
-            final_acc_hash: deferral_root_final_hash,
+            initial_acc_hash: deferral_hook_final_hash,
+            final_acc_hash: deferral_hook_final_hash,
             depth,
         },
         false,
@@ -270,23 +270,23 @@ fn test_vm_deferral_mix_combined_flow() -> Result<()> {
     let (leaf_input_commit, leaf_output_commit) =
         expected_deferral_leaf_io_commit(&deferral_verify_proof);
 
-    let deferral_root_prover =
-        DeferralRootProver::new::<Engine>(deferral_internal_recursive_vk, root_system_params());
+    let deferral_hook_prover =
+        DeferralHookProver::new::<Engine>(deferral_internal_recursive_vk, root_system_params());
     warn!("proving deferral root proof");
-    let deferral_root_proof = deferral_root_prover.prove::<Engine>(
+    let deferral_hook_proof = deferral_hook_prover.prove::<Engine>(
         deferral_internal_recursive_proof,
         vec![(leaf_input_commit, leaf_output_commit)],
     )?;
 
-    // SECTION 3: Assert the deferral_root_prover cached commit equals def_hook_commit.
-    assert_eq!(deferral_root_prover.get_cached_commit(), def_hook_commit);
+    // SECTION 3: Assert the deferral_hook_prover cached commit equals def_hook_commit.
+    assert_eq!(deferral_hook_prover.get_cached_commit(), def_hook_commit);
 
-    // SECTION 4: Feed deferral_root_proof back into the VM prover via Deferral path and wrap to
+    // SECTION 4: Feed deferral_hook_proof back into the VM prover via Deferral path and wrap to
     // internal-recursive.
-    let def_root_pvs_vec = deferral_root_proof.public_values[0].clone();
-    let deferral_root_pvs: &DeferralPvs<F> = def_root_pvs_vec.as_slice().borrow();
+    let def_root_pvs_vec = deferral_hook_proof.public_values[0].clone();
+    let deferral_hook_pvs: &DeferralPvs<F> = def_root_pvs_vec.as_slice().borrow();
     let deferral_leaf_prover = NonRootProver::<MAX_NUM_PROOFS>::new::<Engine>(
-        deferral_root_prover.get_vk(),
+        deferral_hook_prover.get_vk(),
         leaf_system_params(),
         false,
         Some(def_hook_commit),
@@ -294,12 +294,12 @@ fn test_vm_deferral_mix_combined_flow() -> Result<()> {
 
     warn!("proving VM deferral-path leaf proof");
     let leaf_deferral_proof = deferral_leaf_prover.agg_prove::<Engine>(
-        &[deferral_root_proof],
+        &[deferral_hook_proof],
         ChildVkKind::App,
         ProofsType::Deferral,
         Some(make_absent_trace_pvs(
-            deferral_root_pvs.final_acc_hash,
-            deferral_root_pvs.depth,
+            deferral_hook_pvs.final_acc_hash,
+            deferral_hook_pvs.depth,
         )),
     )?;
 

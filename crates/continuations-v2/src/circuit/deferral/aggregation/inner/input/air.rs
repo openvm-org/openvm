@@ -69,8 +69,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB> f
         /*
          * Constrain that state is correctly set. The first row must be valid (i.e. have state
          * be 1 or 2), and all valid rows should be at the beginning. Note that proof_idx is
-         * implicitly constrained in DeferralPvsAir, which receives one
-         * InputOrMerkleCommitBus message per proof.
+         * implicitly constrained in DeferralAggPvsAir, which receives one InputOrMerkleCommitBus
+         * message per proof.
          */
         builder.assert_tern(local.state);
         builder

@@ -13,17 +13,17 @@ use recursion_circuit::system::{
 };
 use tracing::instrument;
 
-use super::{DeferralChildVkKind, DeferralNonRootProver};
+use super::{DeferralChildVkKind, DeferralInnerProver};
 use crate::{
-    circuit::deferral::aggregation::inner::{DeferralNonRootPreCtx, DeferralNonRootTraceGen},
+    circuit::deferral::aggregation::inner::{DeferralInnerPreCtx, DeferralInnerTraceGen},
     SC,
 };
 
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
         S: AggregationSubCircuit + VerifierTraceGen<PB>,
-        T: DeferralNonRootTraceGen<PB>,
-    > DeferralNonRootProver<PB, S, T>
+        T: DeferralInnerTraceGen<PB>,
+    > DeferralInnerProver<PB, S, T>
 where
     PB::Matrix: Clone,
 {
@@ -53,7 +53,7 @@ where
             }
         };
 
-        let DeferralNonRootPreCtx {
+        let DeferralInnerPreCtx {
             verifier_pvs_ctx,
             def_pvs_ctx,
             input_ctx,

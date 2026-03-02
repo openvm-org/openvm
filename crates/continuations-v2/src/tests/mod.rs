@@ -41,8 +41,8 @@ cfg_if::cfg_if! {
         use crate::prover::CompressionGpuProver as CompressionProver;
         use crate::prover::RootGpuProver as RootProver;
         use crate::prover::{
-            DeferralNonRootGpuProver as DeferralNonRootProver,
-            DeferralRootGpuProver as DeferralRootProver,
+            DeferralInnerGpuProver as DeferralInnerProver,
+            DeferralHookGpuProver as DeferralHookProver,
             DeferralVerifyGpuProver as DeferredVerifyProver,
         };
         use crate::circuit::{
@@ -50,7 +50,6 @@ cfg_if::cfg_if! {
                 verify::output::expected_output_commit,
                 DeferralAggregationPvs,
                 DeferralCircuitPvs,
-                DeferralVerifierPvs,
                 DEF_AGG_PVS_AIR_ID,
             },
             root::RootVerifierPvs,
@@ -58,7 +57,7 @@ cfg_if::cfg_if! {
         use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
         use openvm_stark_backend::{prover::CommittedTraceData, verifier::verify, TranscriptHistory};
         use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_compress_with_capacity, default_duplex_sponge_recorder};
-        use verify_stark::pvs::{VERIFIER_PVS_AIR_ID, DeferralPvs};
+        use verify_stark::pvs::{VERIFIER_PVS_AIR_ID, DeferralPvs, VerifierBasePvs};
         use crate::prover::DeferralChildVkKind;
         use crate::utils::{poseidon2_input_to_digests, zero_hash};
         type Engine = BabyBearPoseidon2GpuEngine;
@@ -430,7 +429,7 @@ fn generate_single_def_proof(
 
 #[cfg(feature = "cuda")]
 fn aggregate_deferral_layer(
-    prover: &DeferralNonRootProver<2>,
+    prover: &DeferralInnerProver<2>,
     proofs: &[Proof<SC>],
     child_is_def: bool,
     child_merkle_depth: usize,
@@ -474,12 +473,12 @@ pub(in crate::tests) fn generate_deferral_internal_recursive_proof_from_copies(
     let mut child_merkle_depth = 0usize;
 
     let leaf_prover =
-        DeferralNonRootProver::<2>::new::<Engine>(deferral_vk, leaf_system_params(), false);
+        DeferralInnerProver::<2>::new::<Engine>(deferral_vk, leaf_system_params(), false);
     current_proofs =
         aggregate_deferral_layer(&leaf_prover, &current_proofs, false, child_merkle_depth)?;
     child_merkle_depth += 1;
 
-    let internal_for_leaf_prover = DeferralNonRootProver::<2>::new::<Engine>(
+    let internal_for_leaf_prover = DeferralInnerProver::<2>::new::<Engine>(
         leaf_prover.get_vk(),
         internal_system_params(),
         false,
@@ -494,7 +493,7 @@ pub(in crate::tests) fn generate_deferral_internal_recursive_proof_from_copies(
 
     let child_vk = internal_for_leaf_prover.get_vk();
     let internal_recursive_prover =
-        DeferralNonRootProver::<2>::new::<Engine>(child_vk, internal_system_params(), true);
+        DeferralInnerProver::<2>::new::<Engine>(child_vk, internal_system_params(), true);
     loop {
         current_proofs = aggregate_deferral_layer(
             &internal_recursive_prover,
@@ -658,7 +657,7 @@ fn test_deferral_leaf_prover(
     let (deferral_vk, def_proof) = generate_single_def_proof(child_extra_recursive_layers)?;
 
     let deferral_nonroot_prover =
-        DeferralNonRootProver::<2>::new::<Engine>(deferral_vk, leaf_system_params(), false);
+        DeferralInnerProver::<2>::new::<Engine>(deferral_vk, leaf_system_params(), false);
     let wrapped_proof = deferral_nonroot_prover.agg_prove::<Engine>(
         &vec![def_proof.clone(); num_children],
         DeferralChildVkKind::DeferralCircuit,
@@ -717,22 +716,22 @@ fn test_deferral_internal_recursive_vk_stabilization() -> Result<()> {
     setup_tracing_with_log_level(Level::INFO);
     let (deferral_vk, _) = generate_single_def_proof(0)?;
 
-    let leaf_prover = DeferralNonRootProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
+    let leaf_prover = DeferralInnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         deferral_vk,
         leaf_system_params(),
         false,
     );
-    let internal_0_prover = DeferralNonRootProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
+    let internal_0_prover = DeferralInnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         leaf_prover.get_vk(),
         internal_system_params(),
         false,
     );
-    let internal_1_prover = DeferralNonRootProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
+    let internal_1_prover = DeferralInnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         internal_0_prover.get_vk(),
         internal_system_params(),
         false,
     );
-    let test_prover = DeferralNonRootProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
+    let test_prover = DeferralInnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         internal_1_prover.get_vk(),
         internal_system_params(),
         true,
@@ -749,7 +748,7 @@ fn test_deferral_internal_recursive_vk_stabilization() -> Result<()> {
 #[test_case(1 ; "single def_circuit proof")]
 #[test_case(4 ; "full aggregation tree")]
 #[test_case(5 ; "partially empty aggregation tree")]
-fn test_deferral_root_prover(num_children: usize) -> Result<()> {
+fn test_deferral_hook_prover(num_children: usize) -> Result<()> {
     setup_tracing_with_log_level(Level::INFO);
     let (deferral_vk, def_proof) = generate_single_def_proof(0)?;
     let (deferral_internal_recursive_vk, final_nonroot_proof) =
@@ -763,19 +762,20 @@ fn test_deferral_root_prover(num_children: usize) -> Result<()> {
     let leaf_commit = (leaf_input_commit, leaf_output_commit);
     let leaf_children = vec![leaf_commit; num_children];
 
-    let deferral_root_prover =
-        DeferralRootProver::new::<Engine>(deferral_internal_recursive_vk, root_system_params());
+    let deferral_hook_prover =
+        DeferralHookProver::new::<Engine>(deferral_internal_recursive_vk, root_system_params());
     let root_proof =
-        deferral_root_prover.prove::<Engine>(final_nonroot_proof.clone(), leaf_children)?;
+        deferral_hook_prover.prove::<Engine>(final_nonroot_proof.clone(), leaf_children)?;
 
-    let root_vk = deferral_root_prover.get_vk();
+    let root_vk = deferral_hook_prover.get_vk();
     let engine = Engine::new(root_vk.inner.params.clone());
     engine.verify(&root_vk, &root_proof)?;
 
-    let child_verifier_pvs: &DeferralVerifierPvs<F> =
+    let child_verifier_pvs: &VerifierBasePvs<F> =
         final_nonroot_proof.public_values[0].as_slice().borrow();
+    // app_dag_commit is def_dag_commit here
     let intermediate_vk = poseidon2_compress_with_capacity(
-        child_verifier_pvs.def_dag_commit,
+        child_verifier_pvs.app_dag_commit,
         child_verifier_pvs.leaf_dag_commit,
     )
     .0;

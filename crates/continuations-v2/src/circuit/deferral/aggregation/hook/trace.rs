@@ -2,36 +2,38 @@ use std::borrow::Borrow;
 
 #[cfg(feature = "cuda")]
 use openvm_cuda_backend::{data_transporter::transport_air_proving_ctx_to_device, GpuBackend};
+use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, CpuBackend, ProverBackend},
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
 use p3_field::PrimeCharacteristicRing;
+use verify_stark::pvs::VerifierBasePvs;
 
 use crate::SC;
 
 pub type DeferralIoCommit<F> = ([F; DIGEST_SIZE], [F; DIGEST_SIZE]);
 
-pub struct DeferralRootPreCtx<PB: ProverBackend> {
+pub struct DeferralHookPreCtx<PB: ProverBackend> {
     pub verifier_pvs_ctx: AirProvingContext<PB>,
     pub decommit_ctx: AirProvingContext<PB>,
     pub onion_ctx: AirProvingContext<PB>,
-    pub poseidon2_inputs: Vec<[PB::Val; openvm_circuit::arch::POSEIDON2_WIDTH]>,
+    pub poseidon2_inputs: Vec<[PB::Val; POSEIDON2_WIDTH]>,
 }
 
 // Trait used to remain generic in PB.
-pub trait DeferralRootTraceGen<PB: ProverBackend> {
+pub trait DeferralHookTraceGen<PB: ProverBackend> {
     fn new() -> Self;
 
     fn pre_verifier_subcircuit_tracegen(
         &self,
         proof: &Proof<SC>,
         leaf_children: Vec<DeferralIoCommit<PB::Val>>,
-    ) -> DeferralRootPreCtx<PB>;
+    ) -> DeferralHookPreCtx<PB>;
 }
 
-pub struct DeferralRootTraceGenImpl;
+pub struct DeferralHookTraceGenImpl;
 
 fn normalize_leaf_children(
     mut leaf_children: Vec<DeferralIoCommit<F>>,
@@ -46,7 +48,7 @@ fn normalize_leaf_children(
     (leaf_children, num_real_leaves)
 }
 
-impl DeferralRootTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralRootTraceGenImpl {
+impl DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralHookTraceGenImpl {
     fn new() -> Self {
         Self
     }
@@ -55,7 +57,7 @@ impl DeferralRootTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralRootT
         &self,
         proof: &Proof<SC>,
         leaf_children: Vec<DeferralIoCommit<F>>,
-    ) -> DeferralRootPreCtx<CpuBackend<BabyBearPoseidon2Config>> {
+    ) -> DeferralHookPreCtx<CpuBackend<BabyBearPoseidon2Config>> {
         let (leaf_children, num_real_leaves) = normalize_leaf_children(leaf_children);
         let super::decommit::MerkleDecommitTraceCtx {
             proving_ctx: decommit_ctx,
@@ -71,8 +73,7 @@ impl DeferralRootTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralRootT
             "leaf_children do not match the child proof merkle_commit"
         );
 
-        let verifier_pvs: &crate::circuit::deferral::DeferralVerifierPvs<F> =
-            proof.public_values[0].as_slice().borrow();
+        let verifier_pvs: &VerifierBasePvs<F> = proof.public_values[0].as_slice().borrow();
         let (_, def_vk_commit) = super::verifier::def_vk_commit_from_verifier_pvs(verifier_pvs);
 
         let super::onion::OnionTraceCtx {
@@ -85,7 +86,7 @@ impl DeferralRootTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralRootT
         let (verifier_pvs_ctx, verifier_p2_inputs, _) =
             super::verifier::generate_proving_ctx(proof, input_onion, output_onion);
 
-        DeferralRootPreCtx {
+        DeferralHookPreCtx {
             verifier_pvs_ctx,
             decommit_ctx,
             onion_ctx,
@@ -99,7 +100,7 @@ impl DeferralRootTraceGen<CpuBackend<BabyBearPoseidon2Config>> for DeferralRootT
 }
 
 #[cfg(feature = "cuda")]
-impl DeferralRootTraceGen<GpuBackend> for DeferralRootTraceGenImpl {
+impl DeferralHookTraceGen<GpuBackend> for DeferralHookTraceGenImpl {
     fn new() -> Self {
         Self
     }
@@ -108,15 +109,15 @@ impl DeferralRootTraceGen<GpuBackend> for DeferralRootTraceGenImpl {
         &self,
         proof: &Proof<SC>,
         leaf_children: Vec<DeferralIoCommit<F>>,
-    ) -> DeferralRootPreCtx<GpuBackend> {
-        let DeferralRootPreCtx {
+    ) -> DeferralHookPreCtx<GpuBackend> {
+        let DeferralHookPreCtx {
             verifier_pvs_ctx,
             decommit_ctx,
             onion_ctx,
             poseidon2_inputs,
-        } = <Self as DeferralRootTraceGen<CpuBackend<BabyBearPoseidon2Config>>>::pre_verifier_subcircuit_tracegen(self, proof, leaf_children);
+        } = <Self as DeferralHookTraceGen<CpuBackend<BabyBearPoseidon2Config>>>::pre_verifier_subcircuit_tracegen(self, proof, leaf_children);
 
-        DeferralRootPreCtx {
+        DeferralHookPreCtx {
             verifier_pvs_ctx: transport_air_proving_ctx_to_device(verifier_pvs_ctx),
             decommit_ctx: transport_air_proving_ctx_to_device(decommit_ctx),
             onion_ctx: transport_air_proving_ctx_to_device(onion_ctx),
