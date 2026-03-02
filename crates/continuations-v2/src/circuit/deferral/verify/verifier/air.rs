@@ -28,16 +28,15 @@ use crate::{
     circuit::{
         deferral::{
             verify::{
-                bus::{
-                    DeferralAccPathBus, DeferralAccPathMessage, MemoryMerkleRootsBus,
-                    MemoryMerkleRootsMessage, OutputCommitBus, OutputCommitMessage, OutputValBus,
-                    OutputValMessage,
-                },
+                bus::{OutputCommitBus, OutputCommitMessage, OutputValBus, OutputValMessage},
                 output::VALS_IN_DIGEST,
             },
             DeferralCircuitPvs,
         },
-        root::bus::{MemoryMerkleCommitBus, MemoryMerkleCommitMessage},
+        root::bus::{
+            DeferralAccPathBus, DeferralAccPathMessage, DeferralMerkleRootsBus,
+            DeferralMerkleRootsMessage, MemoryMerkleCommitBus, MemoryMerkleCommitMessage,
+        },
         CONSTRAINT_EVAL_CACHED_INDEX,
     },
     utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input},
@@ -71,7 +70,7 @@ pub struct DeferredVerifyPvsAir {
     pub final_state_bus: FinalTranscriptStateBus,
 
     pub def_acc_paths_bus: DeferralAccPathBus,
-    pub memory_merkle_roots_bus: MemoryMerkleRootsBus,
+    pub def_merkle_roots_bus: DeferralMerkleRootsBus,
 
     pub expected_internal_recursive_dag_commit: CommitBytes,
     pub expected_def_hook_commit: Option<CommitBytes>,
@@ -127,10 +126,11 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
         builder.assert_bool(local.child_verifier_pvs.recursion_flag - AB::F::ONE);
 
         /*
-         * UserPvsCommitAir constrains that the Merkle root of the original app user public
-         * values is some user_pvs_commit. We also need to constrain that those values were
-         * part of the final memory state - we do this in UserPvsInMemoryAir, which has to
-         * receive final_root in order to verify a Merkle proof from user_pvs_commit to it.
+         * UserPvsCommitValuesAir constrains that the Merkle root of the original app user
+         * public values is some user_pvs_commit. We also need to constrain that those
+         * values were part of the final memory state - we do this in UserPvsInMemoryAir,
+         * which has to receive final_root in order to verify a Merkle proof from
+         * user_pvs_commit to it.
          */
         self.memory_merkle_commit_bus.send(
             builder,
@@ -439,7 +439,7 @@ impl DeferredVerifyPvsAir {
             .assert_zero(verifier_pvs.deferral_flag * (verifier_pvs.deferral_flag - AB::Expr::TWO));
         assert_array_eq(
             &mut builder.when(verifier_pvs.deferral_flag),
-            verifier_pvs.def_root_vk_commit,
+            verifier_pvs.def_hook_vk_commit,
             <CommitBytes as Into<[u32; DIGEST_SIZE]>>::into(expected_def_hook_commit)
                 .map(AB::F::from_u32),
         );
@@ -465,9 +465,9 @@ impl DeferredVerifyPvsAir {
             AB::F::ONE,
         );
 
-        self.memory_merkle_roots_bus.send(
+        self.def_merkle_roots_bus.send(
             builder,
-            MemoryMerkleRootsMessage {
+            DeferralMerkleRootsMessage {
                 initial_root: base.child_vm_pvs.initial_root,
                 final_root: base.child_vm_pvs.final_root,
             },
