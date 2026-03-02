@@ -7,20 +7,19 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 use recursion_circuit::system::AggregationSubCircuit;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use super::user_pvs::{commit, memory};
 use crate::{
     bn254::CommitBytes,
     circuit::{
-        deferral::verify::{
-            bus::{DeferralAccPathBus, MemoryMerkleRootsBus},
-            paths::AccMerklePathsAir,
-        },
+        root::bus::{DeferralAccPathBus, DeferralMerkleRootsBus},
         Circuit,
     },
     SC,
 };
 
 pub mod bus;
+pub mod commit;
+pub mod def_paths;
+pub mod memory;
 pub mod verifier;
 
 mod trace;
@@ -44,7 +43,7 @@ impl<S: AggregationSubCircuit> Circuit for RootCircuit<S> {
         let user_pvs_commit_tree_bus = bus::UserPvsCommitTreeBus::new(next_bus_idx + 1);
         let memory_merkle_commit_bus = bus::MemoryMerkleCommitBus::new(next_bus_idx + 2);
         let def_acc_paths_bus = DeferralAccPathBus::new(next_bus_idx + 3);
-        let memory_merkle_roots_bus = MemoryMerkleRootsBus::new(next_bus_idx + 4);
+        let memory_merkle_roots_bus = DeferralMerkleRootsBus::new(next_bus_idx + 4);
 
         let verifier_pvs_air = verifier::RootVerifierPvsAir {
             public_values_bus: bus_inventory.public_values_bus,
@@ -52,7 +51,7 @@ impl<S: AggregationSubCircuit> Circuit for RootCircuit<S> {
             poseidon2_compress_bus: bus_inventory.poseidon2_compress_bus,
             memory_merkle_commit_bus,
             def_acc_paths_bus,
-            memory_merkle_roots_bus,
+            def_merkle_roots_bus: memory_merkle_roots_bus,
             expected_internal_recursive_dag_commit: self.internal_recursive_dag_commit,
             expected_def_hook_commit: self.def_hook_commit,
         };
@@ -60,7 +59,6 @@ impl<S: AggregationSubCircuit> Circuit for RootCircuit<S> {
             bus_inventory.poseidon2_compress_bus,
             user_pvs_commit_bus,
             user_pvs_commit_tree_bus,
-            None,
             self.num_user_pvs,
         );
         let user_pvs_memory_air = memory::UserPvsInMemoryAir::new(
@@ -71,7 +69,7 @@ impl<S: AggregationSubCircuit> Circuit for RootCircuit<S> {
             self.num_user_pvs,
         );
         let acc_paths_air = self.def_hook_commit.map(|_| {
-            Arc::new(AccMerklePathsAir::new(
+            Arc::new(def_paths::DeferralAccMerklePathsAir::new(
                 bus_inventory.poseidon2_compress_bus,
                 def_acc_paths_bus,
                 memory_merkle_roots_bus,

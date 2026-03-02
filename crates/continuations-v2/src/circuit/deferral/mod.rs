@@ -28,29 +28,3 @@ pub struct DeferralAggregationPvs<F> {
     /// at internal layers
     pub merkle_commit: [F; DIGEST_SIZE],
 }
-
-#[repr(C)]
-#[derive(AlignedBorrow, Clone, Copy)]
-pub struct DeferralVerifierPvs<F> {
-    /// Ternary flag to indicate which continuations layer this Proof is for. Should be 0 for
-    /// the leaf verifier, 1 for the internal-for-leaf verifier, and 2 for the internal-
-    /// recursive verifier.
-    pub internal_flag: F,
-    /// Cached trace commit of the leaf verifier circuit's SymbolicExpressionAir, which is
-    /// derived from the def_vk
-    pub def_dag_commit: [F; DIGEST_SIZE],
-    /// Cached trace commit of the internal-for-leaf verifier circuit's SymbolicExpressionAir,
-    /// which is derived from the leaf_vk
-    pub leaf_dag_commit: [F; DIGEST_SIZE],
-    /// Cached trace commit of the first (i.e. index 0) internal-recursive layer verifier
-    /// circuit's SymbolicExpressionAir, which is derived from the internal_for_leaf_vk
-    pub internal_for_leaf_dag_commit: [F; DIGEST_SIZE],
-
-    /// Ternary flag to indicate which internal-recursive layer this Proof is for. Should be
-    /// 1 for the first (i.e. index 0) internal-recursive layer, 2 for subsequent layers, and
-    /// 0 everywhere else.
-    pub recursion_flag: F,
-    /// Cached trace commit of each subsequent (i.e. index > 0) internal-recursive layer
-    /// verifier's SymbolicExpressionAir, which is derived from the internal_recursive_vk
-    pub internal_recursive_dag_commit: [F; DIGEST_SIZE],
-}
