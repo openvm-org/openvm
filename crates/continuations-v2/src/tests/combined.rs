@@ -121,7 +121,7 @@ fn generate_unset_merkle_proof(
     let mut node_idx = leaf_idx;
     let mut proof = Vec::with_capacity(memory_dimensions.overall_height());
     while node_idx > 1 {
-        let sibling_idx = if node_idx % 2 == 0 {
+        let sibling_idx = if node_idx.is_multiple_of(2) {
             node_idx + 1
         } else {
             node_idx - 1
@@ -208,7 +208,7 @@ fn test_vm_deferral_mix_combined_flow() -> Result<()> {
     );
     warn!("proving VM internal-for-leaf aggregation proof");
     let internal_for_leaf_vm_proof = internal_for_leaf_prover
-        .agg_prove_no_def::<Engine>(&[leaf_vm_proof.clone()], ChildVkKind::Standard)?;
+        .agg_prove_no_def::<Engine>(&[leaf_vm_proof], ChildVkKind::Standard)?;
 
     let internal_recursive_prover = NonRootProver::<MAX_NUM_PROOFS>::new::<Engine>(
         internal_for_leaf_prover.get_vk(),
@@ -218,7 +218,7 @@ fn test_vm_deferral_mix_combined_flow() -> Result<()> {
     );
     warn!("proving VM internal-recursive aggregation proof");
     let internal_recursive_vm_proof = internal_recursive_prover
-        .agg_prove_no_def::<Engine>(&[internal_for_leaf_vm_proof.clone()], ChildVkKind::Standard)?;
+        .agg_prove_no_def::<Engine>(&[internal_for_leaf_vm_proof], ChildVkKind::Standard)?;
 
     let vm_internal_recursive_vk = internal_recursive_prover.get_vk();
     let vm_internal_recursive_pcs_data = internal_recursive_prover.get_self_vk_pcs_data().unwrap();
@@ -356,7 +356,7 @@ fn test_vm_deferral_mix_combined_flow() -> Result<()> {
     // SECTION 6: Wrap once more using Combined pathway.
     warn!("proving combined-path wrapper proof");
     let combined_internal_recursive_proof = internal_recursive_prover.agg_prove::<Engine>(
-        &[mixed_internal_recursive_proof.clone()],
+        &[mixed_internal_recursive_proof],
         ChildVkKind::RecursiveSelf,
         ProofsType::Combined,
         None,
