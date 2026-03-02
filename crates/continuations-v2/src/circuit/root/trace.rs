@@ -17,7 +17,7 @@ use verify_stark::pvs::{DeferralPvs, DEF_PVS_AIR_ID};
 
 use crate::circuit::{
     deferral::verify::DeferralMerkleProofs,
-    user_pvs::{commit, memory},
+    root::{commit, memory},
 };
 
 // Trait that root provers use to remain generic in PB. Tracegen returns both the AIR proving
@@ -59,7 +59,7 @@ impl RootTraceGen<CpuBackend<BabyBearPoseidon2Config>> for RootTraceGenImpl {
         let (verifier_ctx, verifier_p2_inputs) =
             super::verifier::generate_proving_ctx(proof, self.deferral_enabled);
         let (commit_ctx, commit_inputs) =
-            commit::generate_proving_ctx(user_pvs_proof.public_values.clone(), true);
+            commit::generate_proving_ctx(user_pvs_proof.public_values.clone());
         let (memory_ctx, memory_inputs) = memory::generate_proving_input(
             user_pvs_proof.public_values_commit,
             &user_pvs_proof.proof,
@@ -90,7 +90,7 @@ impl RootTraceGen<CpuBackend<BabyBearPoseidon2Config>> for RootTraceGenImpl {
             assert!(self.deferral_enabled);
             let def_pvs: &DeferralPvs<F> = proof.public_values[DEF_PVS_AIR_ID].as_slice().borrow();
             let depth = def_pvs.depth.as_canonical_u32() as usize;
-            let (ctx, inputs) = crate::circuit::deferral::verify::paths::generate_proving_input(
+            let (ctx, inputs) = super::def_paths::generate_proving_input(
                 def_pvs.initial_acc_hash,
                 def_pvs.final_acc_hash,
                 &deferral_merkle_proofs.initial_merkle_proof,
