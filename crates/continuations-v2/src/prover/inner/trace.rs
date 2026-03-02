@@ -10,8 +10,9 @@ use recursion_circuit::system::{
     AggregationSubCircuit, CachedTraceCtx, VerifierExternalData, VerifierTraceGen,
 };
 use tracing::instrument;
+use verify_stark::pvs::DeferralPvs;
 
-use super::CompressionProver;
+use super::{ChildVkKind, NonRootAggregationProver};
 use crate::{
     circuit::inner::{NonRootTraceGen, ProofsType},
     SC,
@@ -21,25 +22,34 @@ impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
         S: AggregationSubCircuit + VerifierTraceGen<PB>,
         T: NonRootTraceGen<PB>,
-    > CompressionProver<PB, S, T>
+    > NonRootAggregationProver<PB, S, T>
 where
     PB::Matrix: Clone,
 {
     #[instrument(name = "trace_gen", skip_all)]
     pub fn generate_proving_ctx(
         &self,
-        proof: Proof<SC>,
+        proofs: &[Proof<SC>],
+        child_vk_kind: ChildVkKind,
         proofs_type: ProofsType,
+        absent_trace_pvs: Option<(DeferralPvs<F>, bool)>,
     ) -> ProvingContext<PB> {
-        let proof_slice = &[proof];
+        assert!(proofs.len() <= self.circuit.verifier_circuit.max_num_proofs());
+
+        let (child_vk, child_dag_commit) = match child_vk_kind {
+            ChildVkKind::RecursiveSelf => (&self.vk, self.self_vk_pcs_data.clone().unwrap()),
+            _ => (&self.child_vk, self.child_vk_pcs_data.clone()),
+        };
+        let child_is_app = matches!(child_vk_kind, ChildVkKind::App);
+
         let (pre_ctxs, poseidon2_inputs) = self
             .agg_node_tracegen
             .generate_pre_verifier_subcircuit_ctxs(
-                proof_slice,
+                proofs,
                 proofs_type,
-                None,
-                false,
-                self.child_vk_pcs_data.commitment,
+                absent_trace_pvs,
+                child_is_app,
+                child_dag_commit.commitment,
             );
 
         let range_check_inputs = vec![];
@@ -50,21 +60,21 @@ where
             final_transcript_state: None,
         };
 
+        let cached_trace_ctx = CachedTraceCtx::PcsData(child_dag_commit);
         let subcircuit_ctxs = self
             .circuit
             .verifier_circuit
             .generate_proving_ctxs(
-                &self.child_vk,
-                CachedTraceCtx::Records(self.cached_trace_record.clone()),
-                proof_slice,
+                child_vk,
+                cached_trace_ctx,
+                proofs,
                 &mut external_data,
                 default_duplex_sponge_recorder(),
             )
             .unwrap();
-
         let post_ctxs = self
             .agg_node_tracegen
-            .generate_post_verifier_subcircuit_ctxs(proof_slice, proofs_type, false);
+            .generate_post_verifier_subcircuit_ctxs(proofs, proofs_type, child_is_app);
 
         ProvingContext {
             per_trace: pre_ctxs

@@ -36,7 +36,7 @@ use super::{
 use crate::{
     circuit::{
         deferral::{verify::DeferralMerkleProofs, DeferralCircuitPvs},
-        nonroot::ProofsType,
+        inner::ProofsType,
     },
     prover::{
         ChildVkKind, DeferralNonRootGpuProver as DeferralNonRootProver,

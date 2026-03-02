@@ -1,3 +1,5 @@
+use std::iter::once;
+
 use itertools::Itertools;
 use openvm_stark_backend::{
     proof::Proof,
@@ -11,17 +13,19 @@ use recursion_circuit::system::{
 };
 use tracing::instrument;
 
-use super::CompressionProver;
+use super::DeferralRootProver;
 use crate::{
-    circuit::inner::{NonRootTraceGen, ProofsType},
+    circuit::deferral::aggregation::hook::{
+        DeferralIoCommit, DeferralRootPreCtx, DeferralRootTraceGen,
+    },
     SC,
 };
 
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
         S: AggregationSubCircuit + VerifierTraceGen<PB>,
-        T: NonRootTraceGen<PB>,
-    > CompressionProver<PB, S, T>
+        T: DeferralRootTraceGen<PB>,
+    > DeferralRootProver<PB, S, T>
 where
     PB::Matrix: Clone,
 {
@@ -29,18 +33,16 @@ where
     pub fn generate_proving_ctx(
         &self,
         proof: Proof<SC>,
-        proofs_type: ProofsType,
+        leaf_children: Vec<DeferralIoCommit<F>>,
     ) -> ProvingContext<PB> {
-        let proof_slice = &[proof];
-        let (pre_ctxs, poseidon2_inputs) = self
+        let DeferralRootPreCtx {
+            verifier_pvs_ctx,
+            decommit_ctx,
+            onion_ctx,
+            poseidon2_inputs,
+        } = self
             .agg_node_tracegen
-            .generate_pre_verifier_subcircuit_ctxs(
-                proof_slice,
-                proofs_type,
-                None,
-                false,
-                self.child_vk_pcs_data.commitment,
-            );
+            .pre_verifier_subcircuit_tracegen(&proof, leaf_children);
 
         let range_check_inputs = vec![];
         let mut external_data = VerifierExternalData {
@@ -50,27 +52,25 @@ where
             final_transcript_state: None,
         };
 
+        let cached_trace_ctx = CachedTraceCtx::PcsData(self.child_vk_pcs_data.clone());
+        let proof_slice = &[proof];
         let subcircuit_ctxs = self
             .circuit
             .verifier_circuit
             .generate_proving_ctxs(
                 &self.child_vk,
-                CachedTraceCtx::Records(self.cached_trace_record.clone()),
+                cached_trace_ctx,
                 proof_slice,
                 &mut external_data,
                 default_duplex_sponge_recorder(),
             )
             .unwrap();
 
-        let post_ctxs = self
-            .agg_node_tracegen
-            .generate_post_verifier_subcircuit_ctxs(proof_slice, proofs_type, false);
-
         ProvingContext {
-            per_trace: pre_ctxs
-                .into_iter()
+            per_trace: once(verifier_pvs_ctx)
+                .chain(once(decommit_ctx))
+                .chain(once(onion_ctx))
                 .chain(subcircuit_ctxs)
-                .chain(post_ctxs)
                 .enumerate()
                 .collect_vec(),
         }

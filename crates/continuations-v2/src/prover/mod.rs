@@ -6,10 +6,10 @@ use recursion_circuit::system::VerifierSubCircuit;
 use crate::{
     circuit::{
         deferral::{
-            aggregation::{nonroot::DeferralNonRootTraceGenImpl, root::DeferralRootTraceGenImpl},
+            aggregation::{hook::DeferralRootTraceGenImpl, inner::DeferralNonRootTraceGenImpl},
             verify::DeferredVerifyTraceGenImpl,
         },
-        nonroot::NonRootTraceGenImpl,
+        inner::NonRootTraceGenImpl,
         root::RootTraceGenImpl,
     },
     SC,
@@ -17,13 +17,13 @@ use crate::{
 
 mod compression;
 mod deferral;
-mod nonroot;
+mod inner;
 mod root;
 mod utils;
 
 pub use compression::*;
 pub use deferral::*;
-pub use nonroot::*;
+pub use inner::*;
 pub use root::*;
 pub use utils::*;
 

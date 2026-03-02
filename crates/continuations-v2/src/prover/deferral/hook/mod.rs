@@ -4,19 +4,22 @@ use eyre::Result;
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     proof::Proof,
-    prover::{CommittedTraceData, DeviceDataTransporter, ProverBackend},
+    prover::{
+        CommittedTraceData, DeviceDataTransporter, DeviceMultiStarkProvingKey, ProverBackend,
+    },
     StarkEngine, SystemParams,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, DIGEST_SIZE, EF, F};
-use recursion_circuit::{
-    batch_constraint::expr_eval::CachedTraceRecord,
-    system::{AggregationSubCircuit, VerifierConfig, VerifierTraceGen},
-};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
+use p3_field::{Field, PrimeField32};
+use recursion_circuit::system::{AggregationSubCircuit, VerifierConfig, VerifierTraceGen};
 use tracing::instrument;
 
 use crate::{
+    bn254::CommitBytes,
     circuit::{
-        inner::{NonRootCircuit, NonRootTraceGen, ProofsType},
+        deferral::aggregation::hook::{
+            DeferralIoCommit, DeferralRootCircuit, DeferralRootTraceGen,
+        },
         Circuit,
     },
     prover::trace_heights_tracing_info,
@@ -25,151 +28,133 @@ use crate::{
 
 mod trace;
 
-/// Wraps and compresses an aggregation Proof by a) producing a specialized
-/// recursion circuit with no cached trace and b) using optimal SystemParams for
-/// proof size. Note that this should NOT be used recursively.
-pub struct CompressionProver<
+pub struct DeferralRootProver<
     PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
     S: AggregationSubCircuit,
-    T: NonRootTraceGen<PB>,
+    T: DeferralRootTraceGen<PB>,
 > {
     pk: Arc<MultiStarkProvingKey<SC>>,
+    d_pk: DeviceMultiStarkProvingKey<PB>,
     vk: Arc<MultiStarkVerifyingKey<SC>>,
 
     agg_node_tracegen: T,
 
     child_vk: Arc<MultiStarkVerifyingKey<SC>>,
     child_vk_pcs_data: CommittedTraceData<PB>,
-    circuit: Arc<NonRootCircuit<S>>,
-
-    cached_trace_record: CachedTraceRecord,
+    circuit: Arc<DeferralRootCircuit<S>>,
 }
 
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
         S: AggregationSubCircuit + VerifierTraceGen<PB>,
-        T: NonRootTraceGen<PB>,
-    > CompressionProver<PB, S, T>
+        T: DeferralRootTraceGen<PB>,
+    > DeferralRootProver<PB, S, T>
 where
     PB::Matrix: Clone,
 {
     #[instrument(name = "total_proof", skip_all)]
-    pub fn compress_prove<E: StarkEngine<SC = SC, PB = PB>>(
+    pub fn prove<E: StarkEngine<SC = SC, PB = PB>>(
         &self,
         proof: Proof<SC>,
-        proofs_type: ProofsType,
+        leaf_children: Vec<DeferralIoCommit<F>>,
     ) -> Result<Proof<SC>> {
-        let ctx = self.generate_proving_ctx(proof, proofs_type);
+        let ctx = self.generate_proving_ctx(proof, leaf_children);
         if tracing::enabled!(tracing::Level::DEBUG) {
             trace_heights_tracing_info(&ctx.per_trace, &self.circuit.airs());
         }
         let engine = E::new(self.pk.params.clone());
         #[cfg(debug_assertions)]
         crate::prover::debug_constraints(&self.circuit, &ctx, &engine);
-        let d_pk = engine.device().transport_pk_to_device(self.pk.as_ref());
-        let proof = engine.prove(&d_pk, ctx).unwrap();
+        let proof = engine.prove(&self.d_pk, ctx)?;
         #[cfg(debug_assertions)]
         engine.verify(&self.vk, &proof)?;
         Ok(proof)
-    }
-
-    pub fn compress_prove_no_def<E: StarkEngine<SC = SC, PB = PB>>(
-        &self,
-        proof: Proof<SC>,
-    ) -> Result<Proof<SC>> {
-        self.compress_prove::<E>(proof, ProofsType::Vm)
     }
 }
 
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
         S: AggregationSubCircuit + VerifierTraceGen<PB>,
-        T: NonRootTraceGen<PB>,
-    > CompressionProver<PB, S, T>
+        T: DeferralRootTraceGen<PB>,
+    > DeferralRootProver<PB, S, T>
 {
     pub fn new<E: StarkEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
-        child_vk_pcs_data: CommittedTraceData<PB>,
         system_params: SystemParams,
-        def_hook_commit: Option<Digest>,
     ) -> Self
     where
-        E::PD: DeviceDataTransporter<SC, PB> + Clone,
+        PB::Val: Field + PrimeField32,
         PB::Matrix: Clone,
+        PB::Commitment: Into<CommitBytes>,
     {
         let verifier_circuit = S::new(
             child_vk.clone(),
             VerifierConfig {
                 continuations_enabled: true,
-                has_cached: false,
+                has_cached: true,
                 ..Default::default()
             },
         );
-        let cached_trace_record = verifier_circuit.cached_trace_record(&child_vk);
         let engine = E::new(system_params);
-        let circuit = Arc::new(NonRootCircuit::new(
+        let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
+        let internal_recursive_dag_commit = child_vk_pcs_data.commitment.into();
+        let circuit = Arc::new(DeferralRootCircuit::new(
             Arc::new(verifier_circuit),
-            def_hook_commit.map(|d| d.into()),
+            internal_recursive_dag_commit,
         ));
         let (pk, vk) = engine.keygen(&circuit.airs());
-        let agg_node_tracegen = T::new(def_hook_commit.is_some());
+        let d_pk = engine.device().transport_pk_to_device(&pk);
+
         Self {
             pk: Arc::new(pk),
+            d_pk,
             vk: Arc::new(vk),
-            agg_node_tracegen,
+            agg_node_tracegen: T::new(),
             child_vk,
             child_vk_pcs_data,
             circuit,
-            cached_trace_record,
         }
     }
 
     pub fn from_pk<E: StarkEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
-        child_vk_pcs_data: CommittedTraceData<PB>,
         pk: Arc<MultiStarkProvingKey<SC>>,
-        def_hook_commit: Option<Digest>,
     ) -> Self
     where
-        E::PD: DeviceDataTransporter<SC, PB> + Clone,
+        PB::Val: Field + PrimeField32,
         PB::Matrix: Clone,
+        PB::Commitment: Into<CommitBytes>,
     {
         let verifier_circuit = S::new(
             child_vk.clone(),
             VerifierConfig {
                 continuations_enabled: true,
-                has_cached: false,
+                has_cached: true,
                 ..Default::default()
             },
         );
-        let cached_trace_record = verifier_circuit.cached_trace_record(&child_vk);
-        let circuit = Arc::new(NonRootCircuit::new(
+        let engine = E::new(pk.params.clone());
+        let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
+        let internal_recursive_dag_commit = child_vk_pcs_data.commitment.into();
+        let circuit = Arc::new(DeferralRootCircuit::new(
             Arc::new(verifier_circuit),
-            def_hook_commit.map(|d| d.into()),
+            internal_recursive_dag_commit,
         ));
         let vk = Arc::new(pk.get_vk());
-        let agg_node_tracegen = T::new(def_hook_commit.is_some());
+        let d_pk = engine.device().transport_pk_to_device(pk.as_ref());
         Self {
             pk,
+            d_pk,
             vk,
-            agg_node_tracegen,
+            agg_node_tracegen: T::new(),
             child_vk,
             child_vk_pcs_data,
             circuit,
-            cached_trace_record,
         }
     }
 
-    pub fn get_circuit(&self) -> Arc<NonRootCircuit<S>> {
+    pub fn get_circuit(&self) -> Arc<DeferralRootCircuit<S>> {
         self.circuit.clone()
-    }
-
-    pub fn get_dag_commit(&self) -> [PB::Val; DIGEST_SIZE] {
-        self.cached_trace_record
-            .dag_commit_info
-            .as_ref()
-            .unwrap()
-            .commit
     }
 
     pub fn get_pk(&self) -> Arc<MultiStarkProvingKey<SC>> {
