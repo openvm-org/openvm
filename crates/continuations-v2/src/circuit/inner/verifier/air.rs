@@ -461,7 +461,7 @@ impl VerifierPvsAir {
 
         /*
          * We also need to constrain the deferral-related public values. In particular, the
-         * def_root_vk_commit should be defined exactly when internal_for_leaf_dag_commit
+         * def_hook_vk_commit should be defined exactly when internal_for_leaf_dag_commit
          * is for deferral_flag == 1.
          */
         // constrain that delta == 1 only at some internal_recursive layer
@@ -473,15 +473,15 @@ impl VerifierPvsAir {
             .when_ne(def_local.child_pvs.deferral_flag, AB::F::ONE)
             .assert_eq(base_local.child_pvs.internal_flag, AB::F::TWO);
 
-        // constrain that def_root_vk_commit is unset when internal_for_leaf_dag_commit is
+        // constrain that def_hook_vk_commit is unset when internal_for_leaf_dag_commit is
         assert_zeros(
             &mut builder.when(base_local.child_pvs.internal_flag - AB::F::TWO),
-            def_local.child_pvs.def_root_vk_commit,
+            def_local.child_pvs.def_hook_vk_commit,
         );
 
-        // constrain def_root_vk_commit when internal_flag is 2 and deferral_flag is 1
+        // constrain def_hook_vk_commit when internal_flag is 2 and deferral_flag is 1
         let half = AB::F::TWO.inverse();
-        let is_def_root_vk_defined = base_local.child_pvs.internal_flag
+        let is_def_hook_vk_defined = base_local.child_pvs.internal_flag
             * (base_local.child_pvs.internal_flag - AB::Expr::ONE)
             * def_local.child_pvs.deferral_flag
             * (AB::Expr::TWO - def_local.child_pvs.deferral_flag)
@@ -496,7 +496,7 @@ impl VerifierPvsAir {
                 ),
                 output: def_local.intermediate_def_vk_commit,
             },
-            is_def_root_vk_defined.clone(),
+            is_def_hook_vk_defined.clone(),
         );
 
         poseidon2_bus.lookup_key(
@@ -506,9 +506,9 @@ impl VerifierPvsAir {
                     def_local.intermediate_def_vk_commit,
                     base_local.child_pvs.internal_for_leaf_dag_commit,
                 ),
-                output: def_local.child_pvs.def_root_vk_commit,
+                output: def_local.child_pvs.def_hook_vk_commit,
             },
-            is_def_root_vk_defined,
+            is_def_hook_vk_defined,
         );
 
         /*
@@ -550,7 +550,7 @@ impl VerifierPvsAir {
 
         let &VerifierDefPvs::<_> {
             deferral_flag,
-            def_root_vk_commit,
+            def_hook_vk_commit,
         } = def_pvs.as_slice().borrow();
 
         // constrain deferral_flag either matches each row, or is 2 when delta is non-zero
@@ -562,17 +562,17 @@ impl VerifierPvsAir {
             .when_ne(delta.clone(), -AB::F::ONE)
             .assert_eq(deferral_flag, def_local.child_pvs.deferral_flag);
 
-        // constrain def_root_vk_commit matches if set in child_pvs
+        // constrain def_hook_vk_commit matches if set in child_pvs
         assert_array_eq(
             &mut builder
                 .when(base_local.child_pvs.recursion_flag)
                 .when(def_local.child_pvs.deferral_flag),
-            def_local.child_pvs.def_root_vk_commit,
-            def_root_vk_commit,
+            def_local.child_pvs.def_hook_vk_commit,
+            def_hook_vk_commit,
         );
 
-        // constrain def_root_vk_commit when internal_flag is 2 and deferral_flag is 1
-        let is_def_root_vk_defined = internal_flag.into()
+        // constrain def_hook_vk_commit when internal_flag is 2 and deferral_flag is 1
+        let is_def_hook_vk_defined = internal_flag.into()
             * (internal_flag.into() - AB::Expr::ONE)
             * deferral_flag.into()
             * (AB::Expr::TWO - deferral_flag.into())
@@ -584,7 +584,7 @@ impl VerifierPvsAir {
                 input: digests_to_poseidon2_input(app_dag_commit, leaf_dag_commit).map(Into::into),
                 output: def_local.intermediate_def_vk_commit.map(Into::into),
             },
-            is_def_root_vk_defined.clone(),
+            is_def_hook_vk_defined.clone(),
         );
 
         poseidon2_bus.lookup_key(
@@ -594,9 +594,9 @@ impl VerifierPvsAir {
                     def_local.intermediate_def_vk_commit.map(Into::into),
                     internal_for_leaf_dag_commit.map(Into::into),
                 ),
-                output: def_root_vk_commit.map(Into::into),
+                output: def_hook_vk_commit.map(Into::into),
             },
-            is_def_root_vk_defined,
+            is_def_hook_vk_defined,
         );
 
         /*

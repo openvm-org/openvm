@@ -212,7 +212,7 @@ pub fn generate_proving_ctx(
 
         if deferral_flag_pv == F::ONE && matches!(child_level, VerifierChildLevel::InternalForLeaf)
         {
-            def_pvs.def_root_vk_commit = poseidon2_compress_with_capacity(
+            def_pvs.def_hook_vk_commit = poseidon2_compress_with_capacity(
                 intermediate_def_vk_commit.unwrap(),
                 base_pvs.internal_for_leaf_dag_commit,
             )

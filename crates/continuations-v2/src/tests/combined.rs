@@ -283,8 +283,8 @@ fn test_vm_deferral_mix_combined_flow() -> Result<()> {
 
     // SECTION 4: Feed deferral_hook_proof back into the VM prover via Deferral path and wrap to
     // internal-recursive.
-    let def_root_pvs_vec = deferral_hook_proof.public_values[0].clone();
-    let deferral_hook_pvs: &DeferralPvs<F> = def_root_pvs_vec.as_slice().borrow();
+    let def_hook_pvs_vec = deferral_hook_proof.public_values[0].clone();
+    let deferral_hook_pvs: &DeferralPvs<F> = def_hook_pvs_vec.as_slice().borrow();
     let deferral_leaf_prover = InnerProver::<MAX_NUM_PROOFS>::new::<Engine>(
         deferral_hook_prover.get_vk(),
         leaf_system_params(),

@@ -370,7 +370,7 @@ impl RootVerifierPvsAir {
             .assert_zero(verifier_pvs.deferral_flag * (verifier_pvs.deferral_flag - AB::Expr::TWO));
         assert_array_eq(
             &mut builder.when(verifier_pvs.deferral_flag),
-            verifier_pvs.def_root_vk_commit,
+            verifier_pvs.def_hook_vk_commit,
             <CommitBytes as Into<[u32; DIGEST_SIZE]>>::into(expected_def_hook_commit)
                 .map(AB::F::from_u32),
         );
