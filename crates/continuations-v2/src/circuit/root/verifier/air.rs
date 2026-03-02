@@ -18,18 +18,24 @@ use recursion_circuit::{
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
 use verify_stark::pvs::{
-    VerifierBasePvs, VmPvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID,
+    DeferralPvs, VerifierBasePvs, VerifierDefPvs, VmPvs, CONSTRAINT_EVAL_AIR_ID, DEF_PVS_AIR_ID,
+    VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID,
 };
 
 use crate::{
     bn254::CommitBytes,
     circuit::{
+        deferral::verify::bus::{
+            DeferralAccPathBus, DeferralAccPathMessage, MemoryMerkleRootsBus,
+            MemoryMerkleRootsMessage,
+        },
         root::{
             bus::{MemoryMerkleCommitBus, MemoryMerkleCommitMessage},
-            digests_to_poseidon2_input, pad_slice_to_poseidon2_input, RootVerifierPvs,
+            RootVerifierPvs,
         },
         CONSTRAINT_EVAL_CACHED_INDEX,
     },
+    utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input},
 };
 
 #[repr(C)]
@@ -51,13 +57,21 @@ pub struct RootVerifierPvsAir {
     pub cached_commit_bus: CachedCommitBus,
     pub poseidon2_compress_bus: Poseidon2CompressBus,
     pub memory_merkle_commit_bus: MemoryMerkleCommitBus,
+    pub def_acc_paths_bus: DeferralAccPathBus,
+    pub memory_merkle_roots_bus: MemoryMerkleRootsBus,
 
     pub expected_internal_recursive_dag_commit: CommitBytes,
+    pub expected_def_hook_commit: Option<CommitBytes>,
 }
 
 impl<F: Field> BaseAir<F> for RootVerifierPvsAir {
     fn width(&self) -> usize {
         RootVerifierPvsCols::<u8>::width()
+            + if self.expected_def_hook_commit.is_some() {
+                RootDefVerifierCols::<u8>::width()
+            } else {
+                0
+            }
     }
 }
 impl<F: Field> BaseAirWithPublicValues<F> for RootVerifierPvsAir {
@@ -73,10 +87,17 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0).expect("window should have two elements");
-        let local: &RootVerifierPvsCols<AB::Var> = (*local).borrow();
+        let base_cols_width = RootVerifierPvsCols::<AB::Var>::width();
+        let (base_local, rec_local) = local.split_at(base_cols_width);
+        let local: &RootVerifierPvsCols<AB::Var> = (*base_local).borrow();
+
+        if let Some(def_hook_commit) = self.expected_def_hook_commit {
+            let def: &RootDefVerifierCols<AB::Var> = (*rec_local).borrow();
+            self.eval_deferrals(builder, local, def, def_hook_commit);
+        }
 
         /*
-         * RootVerifierPvs only exposes a reduced/derived subset of NonRootVerifierPvs,
+         * RootVerifierPvs only exposes a reduced/derived subset of the child public values,
          * so we must constrain required child public values here. We start with is_terminate
          * and exit code.
          */
@@ -276,6 +297,111 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                 )
                 .map(Into::into),
                 output: app_exe_commit.map(Into::into),
+            },
+            AB::F::ONE,
+        );
+    }
+}
+
+#[repr(C)]
+#[derive(AlignedBorrow)]
+pub struct RootDefVerifierCols<F> {
+    pub child_def_verifier_pvs: VerifierDefPvs<F>,
+    pub child_def_pvs: DeferralPvs<F>,
+}
+
+#[repr(C)]
+#[derive(AlignedBorrow)]
+pub struct RootVerifierCombinedPvs<F> {
+    pub base: RootVerifierPvsCols<F>,
+    pub def: RootDefVerifierCols<F>,
+}
+
+impl RootVerifierPvsAir {
+    fn eval_deferrals<AB>(
+        &self,
+        builder: &mut AB,
+        base: &RootVerifierPvsCols<AB::Var>,
+        def: &RootDefVerifierCols<AB::Var>,
+        expected_def_hook_commit: CommitBytes,
+    ) where
+        AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues,
+    {
+        let verifier_pvs = def.child_def_verifier_pvs;
+        let def_pvs = def.child_def_pvs;
+
+        /*
+         * We need to receive the additional public values here.
+         */
+        let def_pvs_idx = AB::Expr::from_usize(DEF_PVS_AIR_ID);
+        let verifier_pvs_id = AB::Expr::from_usize(VERIFIER_PVS_AIR_ID);
+        let base_verifier_pvs_width = VerifierBasePvs::<u8>::width();
+
+        for (pv_idx, value) in verifier_pvs.as_slice().iter().enumerate() {
+            self.public_values_bus.receive(
+                builder,
+                AB::F::ZERO,
+                PublicValuesBusMessage {
+                    air_idx: verifier_pvs_id.clone(),
+                    pv_idx: AB::Expr::from_usize(pv_idx + base_verifier_pvs_width),
+                    value: (*value).into(),
+                },
+                AB::F::ONE,
+            );
+        }
+
+        for (pv_idx, value) in def_pvs.as_slice().iter().enumerate() {
+            self.public_values_bus.receive(
+                builder,
+                AB::F::ZERO,
+                PublicValuesBusMessage {
+                    air_idx: def_pvs_idx.clone(),
+                    pv_idx: AB::Expr::from_usize(pv_idx),
+                    value: (*value).into(),
+                },
+                AB::F::ONE,
+            );
+        }
+
+        /*
+         * The final internal-recursive proof's deferral_flag must be either 0 or 2, and
+         * in the latter case the def_hook_commit must match the expected one.
+         */
+        builder
+            .assert_zero(verifier_pvs.deferral_flag * (verifier_pvs.deferral_flag - AB::Expr::TWO));
+        assert_array_eq(
+            &mut builder.when(verifier_pvs.deferral_flag),
+            verifier_pvs.def_root_vk_commit,
+            <CommitBytes as Into<[u32; DIGEST_SIZE]>>::into(expected_def_hook_commit)
+                .map(AB::F::from_u32),
+        );
+
+        /*
+         * If deferral_flag is 2, there must be a Merkle path from initial_acc_hash to
+         * initial_root and from final_acc_hash to final_root. Else, we constrain that
+         * they are 0 and that the deferral address space remained unchanged.
+         */
+        let mut when_no_deferral = builder.when_ne(verifier_pvs.deferral_flag, AB::Expr::TWO);
+        when_no_deferral.assert_zero(def_pvs.depth);
+        assert_zeros(&mut when_no_deferral, def_pvs.initial_acc_hash);
+        assert_zeros(&mut when_no_deferral, def_pvs.final_acc_hash);
+
+        self.def_acc_paths_bus.send(
+            builder,
+            DeferralAccPathMessage {
+                initial_acc_hash: def_pvs.initial_acc_hash.map(Into::into),
+                final_acc_hash: def_pvs.final_acc_hash.map(Into::into),
+                depth: def_pvs.depth.into(),
+                is_unset: (AB::Expr::TWO - verifier_pvs.deferral_flag) * AB::F::TWO.inverse(),
+            },
+            AB::F::ONE,
+        );
+
+        self.memory_merkle_roots_bus.send(
+            builder,
+            MemoryMerkleRootsMessage {
+                initial_root: base.child_vm_pvs.initial_root,
+                final_root: base.child_vm_pvs.final_root,
             },
             AB::F::ONE,
         );

@@ -25,15 +25,13 @@ use crate::{
             aggregation::root::bus::{
                 DefVkCommitBus, DefVkCommitMessage, OnionResultBus, OnionResultMessage,
             },
-            DeferralAggregationPvs, DeferralVerifierPvs,
+            DeferralAggregationPvs, DeferralVerifierPvs, DEF_AGG_PVS_AIR_ID,
         },
-        root::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input},
         subair::{MerkleRootBus, MerkleRootMessage},
         CONSTRAINT_EVAL_CACHED_INDEX,
     },
+    utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input, zero_hash},
 };
-
-const DEF_AGG_PVS_AIR_ID: usize = 1;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -46,6 +44,10 @@ pub struct DeferralRootPvsCols<F> {
 
     pub input_onion: [F; DIGEST_SIZE],
     pub output_onion: [F; DIGEST_SIZE],
+
+    pub def_vk_commit_padded: [F; DIGEST_SIZE],
+    pub input_onion_padded: [F; DIGEST_SIZE],
+    pub output_onion_padded: [F; DIGEST_SIZE],
 }
 
 pub struct DeferralRootPvsAir {
@@ -58,6 +60,31 @@ pub struct DeferralRootPvsAir {
     pub onion_res_bus: OnionResultBus,
 
     pub expected_internal_recursive_dag_commit: CommitBytes,
+    pub zero_hash: CommitBytes,
+}
+
+impl DeferralRootPvsAir {
+    pub fn new(
+        public_values_bus: PublicValuesBus,
+        cached_commit_bus: CachedCommitBus,
+        poseidon2_compress_bus: Poseidon2CompressBus,
+        def_vk_commit_bus: DefVkCommitBus,
+        merkle_root_bus: MerkleRootBus,
+        onion_res_bus: OnionResultBus,
+        expected_internal_recursive_dag_commit: CommitBytes,
+    ) -> Self {
+        let zero_hash = zero_hash(1).into();
+        Self {
+            public_values_bus,
+            cached_commit_bus,
+            poseidon2_compress_bus,
+            def_vk_commit_bus,
+            merkle_root_bus,
+            onion_res_bus,
+            expected_internal_recursive_dag_commit,
+            zero_hash,
+        }
+    }
 }
 
 impl<F: Field> BaseAir<F> for DeferralRootPvsAir {
@@ -224,7 +251,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
          * Finally, we need to constrain that the public values this AIR produces are consistent
          * with the child's. initial_acc_hash should be the compression of a padded
          * def_vk_commit, and final_acc_hash should be the compression of the input and
-         * output onions.
+         * output onions. Note that the Merkle root computation hashes each leaf with the
+         * zero digest prior.
          */
         let &DeferralPvs::<_> {
             initial_acc_hash,
@@ -241,6 +269,43 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
                     &local.def_vk_commit.map(Into::into),
                     AB::Expr::ZERO,
                 ),
+                output: local.def_vk_commit_padded.map(Into::into),
+            },
+            AB::F::ONE,
+        );
+
+        self.poseidon2_compress_bus.lookup_key(
+            builder,
+            Poseidon2CompressMessage {
+                input: pad_slice_to_poseidon2_input(
+                    &local.input_onion.map(Into::into),
+                    AB::Expr::ZERO,
+                ),
+                output: local.input_onion_padded.map(Into::into),
+            },
+            AB::F::ONE,
+        );
+
+        self.poseidon2_compress_bus.lookup_key(
+            builder,
+            Poseidon2CompressMessage {
+                input: pad_slice_to_poseidon2_input(
+                    &local.output_onion.map(Into::into),
+                    AB::Expr::ZERO,
+                ),
+                output: local.output_onion_padded.map(Into::into),
+            },
+            AB::F::ONE,
+        );
+
+        self.poseidon2_compress_bus.lookup_key(
+            builder,
+            Poseidon2CompressMessage {
+                input: digests_to_poseidon2_input(
+                    local.def_vk_commit_padded.map(Into::into),
+                    <CommitBytes as Into<[u32; DIGEST_SIZE]>>::into(self.zero_hash)
+                        .map(AB::Expr::from_u32),
+                ),
                 output: initial_acc_hash.map(Into::into),
             },
             AB::F::ONE,
@@ -250,8 +315,8 @@ impl<AB: AirBuilder + InteractionBuilder + AirBuilderWithPublicValues> Air<AB>
             builder,
             Poseidon2CompressMessage {
                 input: digests_to_poseidon2_input(
-                    local.input_onion.map(Into::into),
-                    local.output_onion.map(Into::into),
+                    local.input_onion_padded.map(Into::into),
+                    local.output_onion_padded.map(Into::into),
                 ),
                 output: final_acc_hash.map(Into::into),
             },

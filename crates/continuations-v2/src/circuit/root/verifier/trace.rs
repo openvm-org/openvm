@@ -11,24 +11,38 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
 };
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
-use verify_stark::pvs::{VerifierBasePvs, VmPvs, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID};
+use verify_stark::pvs::{
+    DeferralPvs, VerifierBasePvs, VerifierDefPvs, VmPvs, DEF_PVS_AIR_ID, VERIFIER_PVS_AIR_ID,
+    VM_PVS_AIR_ID,
+};
 
-use crate::circuit::root::{
-    digests_to_poseidon2_input, pad_slice_to_poseidon2_input, verifier::air::RootVerifierPvsCols,
-    RootVerifierPvs,
+use crate::{
+    circuit::root::{
+        verifier::air::{RootDefVerifierCols, RootVerifierPvsCols},
+        RootVerifierPvs,
+    },
+    utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input},
 };
 
 pub fn generate_proving_ctx(
     proof: &Proof<BabyBearPoseidon2Config>,
+    deferral_enabled: bool,
 ) -> (
     AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>,
     Vec<[F; POSEIDON2_WIDTH]>,
 ) {
-    let width = RootVerifierPvsCols::<u8>::width();
+    let base_width = RootVerifierPvsCols::<u8>::width();
+    let def_width = RootDefVerifierCols::<u8>::width();
+    let width = base_width + if deferral_enabled { def_width } else { 0 };
     let mut trace = vec![F::ZERO; width];
-    let cols: &mut RootVerifierPvsCols<F> = trace.as_mut_slice().borrow_mut();
-    let child_verifier_pvs: &VerifierBasePvs<F> =
-        proof.public_values[VERIFIER_PVS_AIR_ID].as_slice().borrow();
+
+    let (base_cols_slice, def_cols_slice) = trace.as_mut_slice().split_at_mut(base_width);
+    let cols: &mut RootVerifierPvsCols<F> = base_cols_slice.borrow_mut();
+
+    let (base_pvs_slice, def_pvs_slice) = proof.public_values[VERIFIER_PVS_AIR_ID]
+        .as_slice()
+        .split_at(VerifierBasePvs::<u8>::width());
+    let child_verifier_pvs: &VerifierBasePvs<F> = base_pvs_slice.borrow();
     let child_vm_pvs: &VmPvs<F> = proof.public_values[VM_PVS_AIR_ID].as_slice().borrow();
 
     cols.child_verifier_pvs = *child_verifier_pvs;
@@ -92,6 +106,14 @@ pub fn generate_proving_ctx(
         cols.intermediate_vk_commit,
         child_verifier_pvs.internal_for_leaf_dag_commit,
     ));
+
+    if deferral_enabled {
+        let def_verifier_pvs: &VerifierDefPvs<F> = def_pvs_slice.borrow();
+        let def_pvs: &DeferralPvs<F> = proof.public_values[DEF_PVS_AIR_ID].as_slice().borrow();
+        let def_cols: &mut RootDefVerifierCols<F> = def_cols_slice.borrow_mut();
+        def_cols.child_def_verifier_pvs = *def_verifier_pvs;
+        def_cols.child_def_pvs = *def_pvs;
+    }
 
     (
         AirProvingContext {

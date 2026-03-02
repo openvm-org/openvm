@@ -26,11 +26,13 @@ use openvm_transpiler::{
     elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler, FromElf,
 };
 use p3_field::{PrimeCharacteristicRing, PrimeField32};
-#[cfg(feature = "cuda")]
 use test_case::test_case;
 use tracing::Level;
 
 use crate::{prover::ChildVkKind, SC};
+
+#[cfg(feature = "cuda")]
+mod combined;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
@@ -45,19 +47,20 @@ cfg_if::cfg_if! {
         };
         use crate::circuit::{
             deferral::{
-                aggregation::nonroot::def_pvs::zero_merkle_commit,
                 verify::output::expected_output_commit,
                 DeferralAggregationPvs,
                 DeferralCircuitPvs,
                 DeferralVerifierPvs,
+                DEF_AGG_PVS_AIR_ID,
             },
-            root::{poseidon2_input_to_digests, RootVerifierPvs},
+            root::RootVerifierPvs,
         };
         use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
         use openvm_stark_backend::{prover::CommittedTraceData, verifier::verify, TranscriptHistory};
         use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_compress_with_capacity, default_duplex_sponge_recorder};
         use verify_stark::pvs::{VERIFIER_PVS_AIR_ID, DeferralPvs};
         use crate::prover::DeferralChildVkKind;
+        use crate::utils::{poseidon2_input_to_digests, zero_hash};
         type Engine = BabyBearPoseidon2GpuEngine;
         type PB = GpuBackend;
     } else {
@@ -70,7 +73,7 @@ cfg_if::cfg_if! {
 const LOG_MAX_TRACE_HEIGHT: usize = 20;
 const DEFAULT_MAX_NUM_PROOFS: usize = 4;
 
-fn app_system_params() -> SystemParams {
+pub(in crate::tests) fn app_system_params() -> SystemParams {
     let l_skip = 4;
     let n_stack = 17;
     let w_stack = 2048;
@@ -96,25 +99,25 @@ fn app_system_params() -> SystemParams {
     }
 }
 
-fn leaf_system_params() -> SystemParams {
+pub(in crate::tests) fn leaf_system_params() -> SystemParams {
     app_system_params()
 }
 
-fn internal_system_params() -> SystemParams {
-    app_system_params()
-}
-
-#[cfg(feature = "cuda")]
-fn compression_system_params() -> SystemParams {
+pub(in crate::tests) fn internal_system_params() -> SystemParams {
     app_system_params()
 }
 
 #[cfg(feature = "cuda")]
-fn root_system_params() -> SystemParams {
+pub(in crate::tests) fn compression_system_params() -> SystemParams {
     app_system_params()
 }
 
-fn test_rv32im_config() -> Rv32ImConfig {
+#[cfg(feature = "cuda")]
+pub(in crate::tests) fn root_system_params() -> SystemParams {
+    app_system_params()
+}
+
+pub(in crate::tests) fn test_rv32im_config() -> Rv32ImConfig {
     Rv32ImConfig {
         rv32i: Rv32IConfig {
             system: test_system_config().with_max_segment_len(1 << LOG_MAX_TRACE_HEIGHT),
@@ -125,7 +128,7 @@ fn test_rv32im_config() -> Rv32ImConfig {
 }
 
 #[allow(clippy::type_complexity)]
-fn run_leaf_aggregation(
+pub(in crate::tests) fn run_leaf_aggregation(
     log_fib_input: usize,
 ) -> Result<(
     Arc<MultiStarkVerifyingKey<SC>>,
@@ -134,7 +137,7 @@ fn run_leaf_aggregation(
 )> {
     let config = test_rv32im_config();
     let elf = Elf::decode(
-        include_bytes!("../programs/examples/fibonacci.elf"),
+        include_bytes!("../../programs/examples/fibonacci.elf"),
         MEM_SIZE as u32,
     )?;
     let exe = VmExe::from_elf(
@@ -159,8 +162,10 @@ fn run_leaf_aggregation(
         Arc::new(app_pk.get_vk()),
         leaf_system_params(),
         false,
+        None,
     );
-    let leaf_proof = leaf_prover.agg_prove::<Engine>(&app_proof.per_segment, ChildVkKind::App)?;
+    let leaf_proof =
+        leaf_prover.agg_prove_no_def::<Engine>(&app_proof.per_segment, ChildVkKind::App)?;
 
     let leaf_vk = leaf_prover.get_vk();
     let engine = Engine::new(leaf_vk.inner.params.clone());
@@ -187,21 +192,23 @@ fn run_full_aggregation(
         leaf_vk,
         internal_system_params(),
         false,
+        None,
     );
-    let internal_for_leaf_proof =
-        internal_for_leaf_prover.agg_prove::<Engine>(&[leaf_proof], ChildVkKind::Standard)?;
+    let internal_for_leaf_proof = internal_for_leaf_prover
+        .agg_prove_no_def::<Engine>(&[leaf_proof], ChildVkKind::Standard)?;
 
     let internal_recursive_prover = NonRootProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         internal_for_leaf_prover.get_vk(),
         internal_system_params(),
         true,
+        None,
     );
     let mut internal_recursive_proof = internal_recursive_prover
-        .agg_prove::<Engine>(&[internal_for_leaf_proof], ChildVkKind::Standard)?;
+        .agg_prove_no_def::<Engine>(&[internal_for_leaf_proof], ChildVkKind::Standard)?;
 
     for _internal_recursive_layer in 0..extra_recursive_layers {
         internal_recursive_proof = internal_recursive_prover
-            .agg_prove::<Engine>(&[internal_recursive_proof], ChildVkKind::RecursiveSelf)?;
+            .agg_prove_no_def::<Engine>(&[internal_recursive_proof], ChildVkKind::RecursiveSelf)?;
     }
 
     Ok((
@@ -226,28 +233,33 @@ fn test_two_segments_leaf_aggregation() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn test_internal_recursive_vk_stabilization() -> Result<()> {
+#[test_case(false ; "def_hook_commit not set")]
+#[test_case(true ; "def_hook_commit set")]
+fn test_internal_recursive_vk_stabilization(def_hook_commit_set: bool) -> Result<()> {
     setup_tracing_with_log_level(Level::INFO);
     let config = test_rv32im_config();
 
     let engine = Engine::new(app_system_params());
     let (_, app_vk) = engine.keygen(&config.create_airs()?.into_airs().collect_vec());
+    let def_hook_commit = def_hook_commit_set.then_some([F::ZERO; DIGEST_SIZE]);
 
     let leaf_prover = NonRootProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         Arc::new(app_vk),
         leaf_system_params(),
         false,
+        def_hook_commit,
     );
     let internal_0_prover = NonRootProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         leaf_prover.get_vk(),
         internal_system_params(),
         false,
+        def_hook_commit,
     );
     let internal_1_prover = NonRootProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         internal_0_prover.get_vk(),
         internal_system_params(),
         false,
+        def_hook_commit,
     );
 
     // The internal vk should stabilize at the second internal layer
@@ -255,6 +267,7 @@ fn test_internal_recursive_vk_stabilization() -> Result<()> {
         internal_1_prover.get_vk(),
         internal_system_params(),
         true,
+        def_hook_commit,
     );
     assert_eq!(
         test_prover.get_cached_commit(false),
@@ -286,9 +299,10 @@ fn test_compression_prover(extra_recursive_layers: usize) -> Result<()> {
         internal_recursive_vk,
         internal_recursive_pcs_data,
         compression_system_params(),
+        None,
     );
     let compression_proof =
-        compression_prover.compress_prove::<Engine>(internal_recursive_proof)?;
+        compression_prover.compress_prove_no_def::<Engine>(internal_recursive_proof)?;
 
     let vk = compression_prover.get_vk();
     let engine = Engine::new(vk.inner.params.clone());
@@ -316,6 +330,7 @@ fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
         root_system_params(),
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
+        None,
         None,
     );
     let ctx = root_prover.generate_proving_ctx(internal_recursive_proof, &user_pvs_proof);
@@ -347,6 +362,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
         None,
+        None,
     );
     let ctx = root_base_prover
         .generate_proving_ctx(internal_recursive_proof.clone(), &user_pvs_proof)
@@ -366,6 +382,7 @@ fn test_root_prover_trace_heights() -> Result<()> {
         root_system_params(),
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
+        None,
         Some(trace_heights.clone()),
     );
     let ctx = root_prover
@@ -404,9 +421,10 @@ fn generate_single_def_proof(
         root_system_params(),
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
+        None,
     );
     let def_proof =
-        deferred_verify_prover.prove::<Engine>(internal_recursive_proof, &user_pvs_proof)?;
+        deferred_verify_prover.prove_no_def::<Engine>(internal_recursive_proof, &user_pvs_proof)?;
     Ok((deferred_verify_prover.get_vk(), def_proof))
 }
 
@@ -445,7 +463,7 @@ fn aggregate_deferral_layer(
 }
 
 #[cfg(feature = "cuda")]
-fn generate_deferral_internal_recursive_proof_from_copies(
+pub(in crate::tests) fn generate_deferral_internal_recursive_proof_from_copies(
     deferral_vk: Arc<MultiStarkVerifyingKey<SC>>,
     def_proof: Proof<SC>,
     num_copies: usize,
@@ -474,10 +492,10 @@ fn generate_deferral_internal_recursive_proof_from_copies(
     )?;
     child_merkle_depth += 1;
 
-    let mut child_vk = internal_for_leaf_prover.get_vk();
+    let child_vk = internal_for_leaf_prover.get_vk();
+    let internal_recursive_prover =
+        DeferralNonRootProver::<2>::new::<Engine>(child_vk, internal_system_params(), true);
     loop {
-        let internal_recursive_prover =
-            DeferralNonRootProver::<2>::new::<Engine>(child_vk, internal_system_params(), true);
         current_proofs = aggregate_deferral_layer(
             &internal_recursive_prover,
             &current_proofs,
@@ -494,7 +512,6 @@ fn generate_deferral_internal_recursive_proof_from_copies(
             )?;
             return Ok((internal_recursive_prover.get_vk(), wrapped));
         }
-        child_vk = internal_recursive_prover.get_vk();
     }
 }
 
@@ -505,7 +522,9 @@ fn expected_deferral_leaf_merkle_commit(def_proof: &Proof<SC>) -> [F; DIGEST_SIZ
 }
 
 #[cfg(feature = "cuda")]
-fn expected_deferral_leaf_io_commit(def_proof: &Proof<SC>) -> ([F; DIGEST_SIZE], [F; DIGEST_SIZE]) {
+pub(in crate::tests) fn expected_deferral_leaf_io_commit(
+    def_proof: &Proof<SC>,
+) -> ([F; DIGEST_SIZE], [F; DIGEST_SIZE]) {
     let def_pvs: &DeferralCircuitPvs<F> = def_proof.public_values[VERIFIER_PVS_AIR_ID]
         .as_slice()
         .borrow();
@@ -537,7 +556,7 @@ fn expected_deferral_nonroot_merkle_commit_from_copies(
                 let right = if chunk.len() == 2 {
                     chunk[1]
                 } else {
-                    zero_merkle_commit(child_merkle_depth)
+                    zero_hash(child_merkle_depth + 1)
                 };
                 poseidon2_compress_with_capacity(chunk[0], right).0
             })
@@ -568,9 +587,10 @@ fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()
         root_system_params(),
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
+        None,
     );
     let def_proof = deferred_verify_prover
-        .prove::<Engine>(internal_recursive_proof.clone(), &user_pvs_proof)?;
+        .prove_no_def::<Engine>(internal_recursive_proof.clone(), &user_pvs_proof)?;
 
     // Verify that def_proof is valid
     let vk = deferred_verify_prover.get_vk();
@@ -596,6 +616,7 @@ fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()
         root_system_params(),
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
+        None,
         None,
     );
     let ctx = root_prover.generate_proving_ctx(internal_recursive_proof, &user_pvs_proof);
@@ -650,7 +671,6 @@ fn test_deferral_leaf_prover(
     engine.verify(&vk, &wrapped_proof)?;
 
     // Assert DeferralAggregationPvs consistency for this aggregation size.
-    const DEF_AGG_PVS_AIR_ID: usize = 1;
     let leaf_merkle_commit = expected_deferral_leaf_merkle_commit(&def_proof);
     let expected_merkle_commit =
         expected_deferral_nonroot_merkle_commit_from_copies(num_children, leaf_merkle_commit);
@@ -679,7 +699,6 @@ fn test_deferral_aggregation(num_children: usize) -> Result<()> {
     let engine = Engine::new(vk.inner.params.clone());
     engine.verify(&vk, &final_proof)?;
 
-    const DEF_AGG_PVS_AIR_ID: usize = 1;
     let leaf_merkle_commit = expected_deferral_leaf_merkle_commit(&def_proof);
     let expected_root_merkle =
         expected_deferral_nonroot_merkle_commit_from_copies(num_children, leaf_merkle_commit);
@@ -775,10 +794,16 @@ fn test_deferral_root_prover(num_children: usize) -> Result<()> {
             poseidon2_compress_with_capacity(expected_output_onion, leaf_output_commit).0;
     }
     let root_pvs: &DeferralPvs<F> = root_proof.public_values[0].as_slice().borrow();
-    let expected_initial_acc_hash =
-        poseidon2_compress_with_capacity(def_vk, [F::ZERO; DIGEST_SIZE]).0;
-    let expected_final_acc_hash =
-        poseidon2_compress_with_capacity(expected_input_onion, expected_output_onion).0;
+    let expected_initial_acc_hash = poseidon2_compress_with_capacity(
+        poseidon2_compress_with_capacity(def_vk, [F::ZERO; DIGEST_SIZE]).0,
+        zero_hash(1),
+    )
+    .0;
+    let expected_final_acc_hash = poseidon2_compress_with_capacity(
+        poseidon2_compress_with_capacity(expected_input_onion, [F::ZERO; DIGEST_SIZE]).0,
+        poseidon2_compress_with_capacity(expected_output_onion, [F::ZERO; DIGEST_SIZE]).0,
+    )
+    .0;
     assert_eq!(root_pvs.initial_acc_hash, expected_initial_acc_hash);
     assert_eq!(root_pvs.final_acc_hash, expected_final_acc_hash);
 

@@ -33,4 +33,6 @@ pub enum VerifyStarkError {
     Io(#[from] std::io::Error),
     #[error("Other error: {0}")]
     Other(#[from] eyre::Error),
+    #[error("Deferrals are not enabled in verify-stark yet")]
+    DeferralNotEnabled,
 }

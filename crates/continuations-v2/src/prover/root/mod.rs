@@ -80,6 +80,7 @@ impl<
         system_params: SystemParams,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
+        def_hook_commit: Option<PB::Commitment>,
         trace_heights: Option<Vec<usize>>,
     ) -> Self
     where
@@ -98,9 +99,11 @@ impl<
         );
         let engine = E::new(system_params);
         let internal_recursive_dag_commit = child_vk_pcs_data.commitment.into();
+        let def_hook_commit = def_hook_commit.map(Into::into);
         let circuit = Arc::new(RootCircuit::new(
             Arc::new(verifier_circuit),
             internal_recursive_dag_commit,
+            def_hook_commit,
             memory_dimensions,
             num_user_pvs,
         ));
@@ -108,7 +111,7 @@ impl<
         Self {
             pk: Arc::new(pk),
             vk: Arc::new(vk),
-            agg_node_tracegen: T::new(),
+            agg_node_tracegen: T::new(def_hook_commit.is_some()),
             child_vk,
             child_vk_pcs_data,
             circuit,
@@ -122,6 +125,7 @@ impl<
         pk: Arc<MultiStarkProvingKey<SC>>,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
+        def_hook_commit: Option<PB::Commitment>,
         trace_heights: Option<Vec<usize>>,
     ) -> Self
     where
@@ -138,9 +142,11 @@ impl<
             },
         );
         let internal_recursive_dag_commit = child_vk_pcs_data.commitment.into();
+        let def_hook_commit = def_hook_commit.map(Into::into);
         let circuit = Arc::new(RootCircuit::new(
             Arc::new(verifier_circuit),
             internal_recursive_dag_commit,
+            def_hook_commit,
             memory_dimensions,
             num_user_pvs,
         ));
@@ -148,7 +154,7 @@ impl<
         Self {
             pk,
             vk,
-            agg_node_tracegen: T::new(),
+            agg_node_tracegen: T::new(def_hook_commit.is_some()),
             child_vk,
             child_vk_pcs_data,
             circuit,

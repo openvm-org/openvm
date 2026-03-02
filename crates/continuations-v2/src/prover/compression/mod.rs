@@ -16,7 +16,7 @@ use tracing::instrument;
 
 use crate::{
     circuit::{
-        nonroot::{NonRootCircuit, NonRootTraceGen},
+        nonroot::{NonRootCircuit, NonRootTraceGen, ProofsType},
         Circuit,
     },
     prover::trace_heights_tracing_info,
@@ -57,8 +57,9 @@ where
     pub fn compress_prove<E: StarkEngine<SC = SC, PB = PB>>(
         &self,
         proof: Proof<SC>,
+        proofs_type: ProofsType,
     ) -> Result<Proof<SC>> {
-        let ctx = self.generate_proving_ctx(proof);
+        let ctx = self.generate_proving_ctx(proof, proofs_type);
         if tracing::enabled!(tracing::Level::DEBUG) {
             trace_heights_tracing_info(&ctx.per_trace, &self.circuit.airs());
         }
@@ -70,6 +71,13 @@ where
         #[cfg(debug_assertions)]
         engine.verify(&self.vk, &proof)?;
         Ok(proof)
+    }
+
+    pub fn compress_prove_no_def<E: StarkEngine<SC = SC, PB = PB>>(
+        &self,
+        proof: Proof<SC>,
+    ) -> Result<Proof<SC>> {
+        self.compress_prove::<E>(proof, ProofsType::Vm)
     }
 }
 
@@ -83,6 +91,7 @@ impl<
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         child_vk_pcs_data: CommittedTraceData<PB>,
         system_params: SystemParams,
+        def_hook_commit: Option<Digest>,
     ) -> Self
     where
         E::PD: DeviceDataTransporter<SC, PB> + Clone,
@@ -98,12 +107,16 @@ impl<
         );
         let cached_trace_record = verifier_circuit.cached_trace_record(&child_vk);
         let engine = E::new(system_params);
-        let circuit = Arc::new(NonRootCircuit::new(Arc::new(verifier_circuit)));
+        let circuit = Arc::new(NonRootCircuit::new(
+            Arc::new(verifier_circuit),
+            def_hook_commit.map(|d| d.into()),
+        ));
         let (pk, vk) = engine.keygen(&circuit.airs());
+        let agg_node_tracegen = T::new(def_hook_commit.is_some());
         Self {
             pk: Arc::new(pk),
             vk: Arc::new(vk),
-            agg_node_tracegen: T::new(),
+            agg_node_tracegen,
             child_vk,
             child_vk_pcs_data,
             circuit,
@@ -115,6 +128,7 @@ impl<
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
         child_vk_pcs_data: CommittedTraceData<PB>,
         pk: Arc<MultiStarkProvingKey<SC>>,
+        def_hook_commit: Option<Digest>,
     ) -> Self
     where
         E::PD: DeviceDataTransporter<SC, PB> + Clone,
@@ -129,12 +143,16 @@ impl<
             },
         );
         let cached_trace_record = verifier_circuit.cached_trace_record(&child_vk);
-        let circuit = Arc::new(NonRootCircuit::new(Arc::new(verifier_circuit)));
+        let circuit = Arc::new(NonRootCircuit::new(
+            Arc::new(verifier_circuit),
+            def_hook_commit.map(|d| d.into()),
+        ));
         let vk = Arc::new(pk.get_vk());
+        let agg_node_tracegen = T::new(def_hook_commit.is_some());
         Self {
             pk,
             vk,
-            agg_node_tracegen: T::new(),
+            agg_node_tracegen,
             child_vk,
             child_vk_pcs_data,
             circuit,

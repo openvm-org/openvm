@@ -15,18 +15,16 @@ use recursion_circuit::{
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use crate::circuit::{
-    deferral::{
+use crate::{
+    circuit::deferral::{
         aggregation::nonroot::bus::{
             InputOrMerkleCommitBus, InputOrMerkleCommitMessage, PvAirConsistencyBus,
             PvAirConsistencyMessage,
         },
-        DeferralAggregationPvs, DeferralCircuitPvs,
+        DeferralAggregationPvs, DeferralCircuitPvs, DEF_CIRCUIT_PVS_AIR_ID,
     },
-    root::digests_to_poseidon2_input,
+    utils::digests_to_poseidon2_input,
 };
-
-const DEF_CIRCUIT_PVS_AIR_ID: usize = 0;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
