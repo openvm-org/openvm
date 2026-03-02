@@ -5,10 +5,7 @@ use openvm_instructions::{
     exe::VmExe,
     instruction::Instruction,
     program::{Program, DEFAULT_PC_STEP},
-    LocalOpcode,
-};
-use openvm_rv32im_transpiler::{
-    BaseAluOpcode::*, BranchEqualOpcode::*, Rv32JalLuiOpcode::*, Rv32LoadStoreOpcode::*,
+    LocalOpcode, VmOpcode,
 };
 use openvm_stark_backend::{
     any_air_arc_vec,
@@ -29,6 +26,15 @@ use crate::{
     system::program::{trace::VmCommittedExe, ProgramAir, ProgramBus, ProgramChip},
     utils::test_cpu_engine,
 };
+
+// The tests do not need anything about opcodes besides the global opcode offset, so we use
+// constants to avoid extra dependencies.
+pub(crate) const LOADW: VmOpcode = VmOpcode::from_usize(0x210);
+pub(crate) const STOREW: VmOpcode = VmOpcode::from_usize(0x213);
+pub(crate) const BEQ: VmOpcode = VmOpcode::from_usize(0x220);
+pub(crate) const SUB: VmOpcode = VmOpcode::from_usize(0x201);
+pub(crate) const JAL: VmOpcode = VmOpcode::from_usize(0x230);
+pub(crate) const BNE: VmOpcode = VmOpcode::from_usize(0x221);
 
 assert_impl_all!(VmCommittedExe<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
 
@@ -106,29 +112,15 @@ fn test_program_1() {
     // see core/tests/mod.rs
     let instructions = vec![
         // word[0]_1 <- word[n]_0
-        Instruction::large_from_isize(STOREW.global_opcode(), n, 0, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(STOREW, n, 0, 0, 0, 1, 0, 1),
         // word[1]_1 <- word[1]_1
-        Instruction::large_from_isize(STOREW.global_opcode(), 1, 1, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(STOREW, 1, 1, 0, 0, 1, 0, 1),
         // if word[0]_1 == 0 then pc += 3*DEFAULT_PC_STEP
-        Instruction::from_isize(
-            BEQ.global_opcode(),
-            0,
-            0,
-            3 * DEFAULT_PC_STEP as isize,
-            1,
-            0,
-        ),
+        Instruction::from_isize(BEQ, 0, 0, 3 * DEFAULT_PC_STEP as isize, 1, 0),
         // word[0]_1 <- word[0]_1 - word[1]_1
-        Instruction::from_isize(SUB.global_opcode(), 0, 0, 1, 1, 1),
+        Instruction::from_isize(SUB, 0, 0, 1, 1, 1),
         // word[2]_1 <- pc + DEFAULT_PC_STEP, pc -= 2*DEFAULT_PC_STEP
-        Instruction::from_isize(
-            JAL.global_opcode(),
-            2,
-            -2 * (DEFAULT_PC_STEP as isize),
-            0,
-            1,
-            0,
-        ),
+        Instruction::from_isize(JAL, 2, -2 * (DEFAULT_PC_STEP as isize), 0, 1, 0),
         // terminate
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
@@ -143,29 +135,15 @@ fn test_program_without_field_arithmetic() {
     // see core/tests/mod.rs
     let instructions = vec![
         // word[0]_1 <- word[5]_0
-        Instruction::large_from_isize(STOREW.global_opcode(), 5, 0, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(STOREW, 5, 0, 0, 0, 1, 0, 1),
         // if word[0]_1 != 4 then pc += 3*DEFAULT_PC_STEP
-        Instruction::from_isize(
-            BNE.global_opcode(),
-            0,
-            4,
-            3 * DEFAULT_PC_STEP as isize,
-            1,
-            0,
-        ),
+        Instruction::from_isize(BNE, 0, 4, 3 * DEFAULT_PC_STEP as isize, 1, 0),
         // word[2]_1 <- pc + DEFAULT_PC_STEP, pc -= 2*DEFAULT_PC_STEP
-        Instruction::from_isize(
-            JAL.global_opcode(),
-            2,
-            -2 * DEFAULT_PC_STEP as isize,
-            0,
-            1,
-            0,
-        ),
+        Instruction::from_isize(JAL, 2, -2 * DEFAULT_PC_STEP as isize, 0, 1, 0),
         // terminate
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         // if word[0]_1 == 5 then pc -= DEFAULT_PC_STEP
-        Instruction::from_isize(BEQ.global_opcode(), 0, 5, -(DEFAULT_PC_STEP as isize), 1, 0),
+        Instruction::from_isize(BEQ, 0, 5, -(DEFAULT_PC_STEP as isize), 1, 0),
     ];
 
     let program = Program::from_instructions(&instructions);
@@ -176,8 +154,8 @@ fn test_program_without_field_arithmetic() {
 #[test]
 fn test_program_negative() {
     let instructions = vec![
-        Instruction::large_from_isize(STOREW.global_opcode(), -1, 0, 0, 0, 1, 0, 1),
-        Instruction::large_from_isize(LOADW.global_opcode(), -1, 0, 0, 1, 1, 0, 1),
+        Instruction::large_from_isize(STOREW, -1, 0, 0, 0, 1, 0, 1),
+        Instruction::large_from_isize(LOADW, -1, 0, 0, 1, 1, 0, 1),
         Instruction::large_from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0, 0, 0),
     ];
     let bus = ProgramBus::new(READ_INSTRUCTION_BUS);
@@ -232,30 +210,12 @@ fn test_program_with_undefined_instructions() {
     // see core/tests/mod.rs
     let instructions = vec![
         // word[0]_1 <- word[n]_0
-        Some(Instruction::large_from_isize(
-            STOREW.global_opcode(),
-            n,
-            0,
-            0,
-            0,
-            1,
-            0,
-            1,
-        )),
+        Some(Instruction::large_from_isize(STOREW, n, 0, 0, 0, 1, 0, 1)),
         // word[1]_1 <- word[1]_1
-        Some(Instruction::large_from_isize(
-            STOREW.global_opcode(),
-            1,
-            1,
-            0,
-            0,
-            1,
-            0,
-            1,
-        )),
+        Some(Instruction::large_from_isize(STOREW, 1, 1, 0, 0, 1, 0, 1)),
         // if word[0]_1 == n then pc += 3*DEFAULT_PC_STEP
         Some(Instruction::from_isize(
-            BEQ.global_opcode(),
+            BEQ,
             0,
             n,
             3 * DEFAULT_PC_STEP as isize,

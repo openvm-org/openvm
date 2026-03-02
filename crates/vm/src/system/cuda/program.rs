@@ -134,13 +134,13 @@ mod tests {
         LocalOpcode,
         SystemOpcode::*,
     };
-    use openvm_rv32im_transpiler::{
-        BaseAluOpcode::*, BranchEqualOpcode::*, Rv32JalLuiOpcode::*, Rv32LoadStoreOpcode::*,
-    };
     use openvm_stark_backend::StarkEngine;
 
     use super::ProgramChipGPU;
-    use crate::utils::{test_cpu_engine, test_gpu_engine};
+    use crate::{
+        system::program::tests::{BEQ, BNE, JAL, STOREW, SUB},
+        utils::{test_cpu_engine, test_gpu_engine},
+    };
 
     fn test_cached_committed_trace_data(program: Program<F>) {
         let gpu_engine = test_gpu_engine();
@@ -161,25 +161,11 @@ mod tests {
     #[test]
     fn test_cuda_program_cached_tracegen_1() {
         let instructions = vec![
-            Instruction::large_from_isize(STOREW.global_opcode(), 2, 0, 0, 0, 1, 0, 1),
-            Instruction::large_from_isize(STOREW.global_opcode(), 1, 1, 0, 0, 1, 0, 1),
-            Instruction::from_isize(
-                BEQ.global_opcode(),
-                0,
-                0,
-                3 * DEFAULT_PC_STEP as isize,
-                1,
-                0,
-            ),
-            Instruction::from_isize(SUB.global_opcode(), 0, 0, 1, 1, 1),
-            Instruction::from_isize(
-                JAL.global_opcode(),
-                2,
-                -2 * (DEFAULT_PC_STEP as isize),
-                0,
-                1,
-                0,
-            ),
+            Instruction::large_from_isize(STOREW, 2, 0, 0, 0, 1, 0, 1),
+            Instruction::large_from_isize(STOREW, 1, 1, 0, 0, 1, 0, 1),
+            Instruction::from_isize(BEQ, 0, 0, 3 * DEFAULT_PC_STEP as isize, 1, 0),
+            Instruction::from_isize(SUB, 0, 0, 1, 1, 1),
+            Instruction::from_isize(JAL, 2, -2 * (DEFAULT_PC_STEP as isize), 0, 1, 0),
             Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let program = Program::from_instructions(&instructions);
@@ -189,25 +175,11 @@ mod tests {
     #[test]
     fn test_cuda_program_cached_tracegen_2() {
         let instructions = vec![
-            Instruction::large_from_isize(STOREW.global_opcode(), 5, 0, 0, 0, 1, 0, 1),
-            Instruction::from_isize(
-                BNE.global_opcode(),
-                0,
-                4,
-                3 * DEFAULT_PC_STEP as isize,
-                1,
-                0,
-            ),
-            Instruction::from_isize(
-                JAL.global_opcode(),
-                2,
-                -2 * DEFAULT_PC_STEP as isize,
-                0,
-                1,
-                0,
-            ),
+            Instruction::large_from_isize(STOREW, 5, 0, 0, 0, 1, 0, 1),
+            Instruction::from_isize(BNE, 0, 4, 3 * DEFAULT_PC_STEP as isize, 1, 0),
+            Instruction::from_isize(JAL, 2, -2 * DEFAULT_PC_STEP as isize, 0, 1, 0),
             Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
-            Instruction::from_isize(BEQ.global_opcode(), 0, 5, -(DEFAULT_PC_STEP as isize), 1, 0),
+            Instruction::from_isize(BEQ, 0, 5, -(DEFAULT_PC_STEP as isize), 1, 0),
         ];
         let program = Program::from_instructions(&instructions);
         test_cached_committed_trace_data(program);
@@ -216,28 +188,10 @@ mod tests {
     #[test]
     fn test_cuda_program_cached_tracegen_undefined_instructions() {
         let instructions = vec![
-            Some(Instruction::large_from_isize(
-                STOREW.global_opcode(),
-                2,
-                0,
-                0,
-                0,
-                1,
-                0,
-                1,
-            )),
-            Some(Instruction::large_from_isize(
-                STOREW.global_opcode(),
-                1,
-                1,
-                0,
-                0,
-                1,
-                0,
-                1,
-            )),
+            Some(Instruction::large_from_isize(STOREW, 2, 0, 0, 0, 1, 0, 1)),
+            Some(Instruction::large_from_isize(STOREW, 1, 1, 0, 0, 1, 0, 1)),
             Some(Instruction::from_isize(
-                BEQ.global_opcode(),
+                BEQ,
                 0,
                 2,
                 3 * DEFAULT_PC_STEP as isize,
