@@ -15,10 +15,10 @@ use crate::{
         },
         root::{
             bus::{
-                DeferralAccPathBus, MemoryMerkleCommitBus, MemoryMerkleRootsBus, UserPvsCommitBus,
-                UserPvsCommitTreeBus,
+                DeferralAccPathBus, DeferralMerkleRootsBus, MemoryMerkleCommitBus,
+                UserPvsCommitBus, UserPvsCommitTreeBus,
             },
-            def_paths::AccMerklePathsAir,
+            def_paths::DeferralAccMerklePathsAir,
             memory::UserPvsInMemoryAir,
         },
         Circuit,
@@ -54,7 +54,7 @@ impl<S: AggregationSubCircuit> Circuit for DeferredVerifyCircuit<S> {
         let output_val_bus = OutputValBus::new(next_bus_idx + 3);
         let output_commit_bus = OutputCommitBus::new(next_bus_idx + 4);
         let def_acc_paths_bus = DeferralAccPathBus::new(next_bus_idx + 5);
-        let memory_merkle_roots_bus = MemoryMerkleRootsBus::new(next_bus_idx + 6);
+        let memory_merkle_roots_bus = DeferralMerkleRootsBus::new(next_bus_idx + 6);
 
         let verifier_pvs_air = DeferredVerifyPvsAir {
             public_values_bus: bus_inventory.public_values_bus,
@@ -65,7 +65,7 @@ impl<S: AggregationSubCircuit> Circuit for DeferredVerifyCircuit<S> {
             output_commit_bus,
             final_state_bus: bus_inventory.final_state_bus,
             def_acc_paths_bus,
-            memory_merkle_roots_bus,
+            def_merkle_roots_bus: memory_merkle_roots_bus,
             expected_internal_recursive_dag_commit: self.internal_recursive_dag_commit,
             expected_def_hook_commit: self.def_hook_commit,
         };
@@ -91,7 +91,7 @@ impl<S: AggregationSubCircuit> Circuit for DeferredVerifyCircuit<S> {
         };
 
         let acc_paths_air = self.def_hook_commit.map(|_| {
-            Arc::new(AccMerklePathsAir::new(
+            Arc::new(DeferralAccMerklePathsAir::new(
                 bus_inventory.poseidon2_compress_bus,
                 def_acc_paths_bus,
                 memory_merkle_roots_bus,

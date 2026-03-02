@@ -12,17 +12,17 @@ use recursion_circuit::system::{
 use tracing::instrument;
 use verify_stark::pvs::DeferralPvs;
 
-use super::{ChildVkKind, NonRootAggregationProver};
+use super::{ChildVkKind, InnerAggregationProver};
 use crate::{
-    circuit::inner::{NonRootTraceGen, ProofsType},
+    circuit::inner::{InnerTraceGen, ProofsType},
     SC,
 };
 
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
         S: AggregationSubCircuit + VerifierTraceGen<PB>,
-        T: NonRootTraceGen<PB>,
-    > NonRootAggregationProver<PB, S, T>
+        T: InnerTraceGen<PB>,
+    > InnerAggregationProver<PB, S, T>
 where
     PB::Matrix: Clone,
 {

@@ -18,7 +18,7 @@ pub enum ProofsType {
 }
 
 // Trait that non-root and compression provers use to remain generic in PB
-pub trait NonRootTraceGen<PB: ProverBackend> {
+pub trait InnerTraceGen<PB: ProverBackend> {
     fn new(deferral_enabled: bool) -> Self;
     fn generate_pre_verifier_subcircuit_ctxs(
         &self,
@@ -36,11 +36,11 @@ pub trait NonRootTraceGen<PB: ProverBackend> {
     ) -> Vec<AirProvingContext<PB>>;
 }
 
-pub struct NonRootTraceGenImpl {
+pub struct InnerTraceGenImpl {
     pub deferral_enabled: bool,
 }
 
-impl NonRootTraceGen<CpuBackend<BabyBearPoseidon2Config>> for NonRootTraceGenImpl {
+impl InnerTraceGen<CpuBackend<BabyBearPoseidon2Config>> for InnerTraceGenImpl {
     fn new(deferral_enabled: bool) -> Self {
         Self { deferral_enabled }
     }
@@ -119,7 +119,7 @@ impl NonRootTraceGen<CpuBackend<BabyBearPoseidon2Config>> for NonRootTraceGenImp
 }
 
 #[cfg(feature = "cuda")]
-impl NonRootTraceGen<GpuBackend> for NonRootTraceGenImpl {
+impl InnerTraceGen<GpuBackend> for InnerTraceGenImpl {
     fn new(deferral_enabled: bool) -> Self {
         Self { deferral_enabled }
     }

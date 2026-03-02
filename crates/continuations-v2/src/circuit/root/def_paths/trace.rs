@@ -11,7 +11,9 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::{
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::{circuit::root::def_paths::air::AccMerklePathsCols, utils::digests_to_poseidon2_input};
+use crate::{
+    circuit::root::def_paths::air::DeferralAccMerklePathsCols, utils::digests_to_poseidon2_input,
+};
 
 fn bit_at(value: usize, bit: usize) -> bool {
     (value >> bit) & 1 == 1
@@ -71,7 +73,7 @@ pub fn generate_proving_input(
     let proof_len = initial_merkle_proof.len();
     let num_layers = proof_len + 1;
     let height = num_layers.next_power_of_two();
-    let width = AccMerklePathsCols::<u8>::width();
+    let width = DeferralAccMerklePathsCols::<u8>::width();
 
     // Matches AccMerklePathsAir::new().
     let expected_branch_bits = usize::try_from(memory_dimensions.label_to_index((NATIVE_AS, 0)))
@@ -165,7 +167,7 @@ pub fn generate_proving_input(
 
     for row_idx in 0..num_layers {
         let row = &mut trace[row_idx * width..(row_idx + 1) * width];
-        let cols: &mut AccMerklePathsCols<F> = row.borrow_mut();
+        let cols: &mut DeferralAccMerklePathsCols<F> = row.borrow_mut();
 
         cols.is_valid = if row_idx == 0 { F::TWO } else { F::ONE };
         cols.depth = F::from_usize(row_idx);

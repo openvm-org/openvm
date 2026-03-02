@@ -41,7 +41,7 @@ use crate::{
     prover::{
         ChildVkKind, DeferralHookGpuProver as DeferralHookProver,
         DeferralInnerGpuProver as DeferralInnerProver,
-        DeferralVerifyGpuProver as DeferralVerifyProver, NonRootGpuProver as NonRootProver,
+        DeferralVerifyGpuProver as DeferralVerifyProver, InnerGpuProver as InnerProver,
         RootGpuProver as RootProver,
     },
 };
@@ -189,7 +189,7 @@ fn test_vm_deferral_mix_combined_flow() -> Result<()> {
         final_merkle_proof,
     };
 
-    let leaf_prover = NonRootProver::<MAX_NUM_PROOFS>::new::<Engine>(
+    let leaf_prover = InnerProver::<MAX_NUM_PROOFS>::new::<Engine>(
         Arc::new(app_pk.get_vk()),
         leaf_system_params(),
         false,
@@ -200,7 +200,7 @@ fn test_vm_deferral_mix_combined_flow() -> Result<()> {
         leaf_prover.agg_prove_no_def::<Engine>(&app_proof.per_segment, ChildVkKind::App)?;
     let user_pvs_proof: UserPublicValuesProof<DIGEST_SIZE, F> = app_proof.user_public_values;
 
-    let internal_for_leaf_prover = NonRootProver::<MAX_NUM_PROOFS>::new::<Engine>(
+    let internal_for_leaf_prover = InnerProver::<MAX_NUM_PROOFS>::new::<Engine>(
         leaf_prover.get_vk(),
         internal_system_params(),
         false,
@@ -210,7 +210,7 @@ fn test_vm_deferral_mix_combined_flow() -> Result<()> {
     let internal_for_leaf_vm_proof = internal_for_leaf_prover
         .agg_prove_no_def::<Engine>(&[leaf_vm_proof], ChildVkKind::Standard)?;
 
-    let internal_recursive_prover = NonRootProver::<MAX_NUM_PROOFS>::new::<Engine>(
+    let internal_recursive_prover = InnerProver::<MAX_NUM_PROOFS>::new::<Engine>(
         internal_for_leaf_prover.get_vk(),
         internal_system_params(),
         true,
@@ -285,7 +285,7 @@ fn test_vm_deferral_mix_combined_flow() -> Result<()> {
     // internal-recursive.
     let def_root_pvs_vec = deferral_hook_proof.public_values[0].clone();
     let deferral_hook_pvs: &DeferralPvs<F> = def_root_pvs_vec.as_slice().borrow();
-    let deferral_leaf_prover = NonRootProver::<MAX_NUM_PROOFS>::new::<Engine>(
+    let deferral_leaf_prover = InnerProver::<MAX_NUM_PROOFS>::new::<Engine>(
         deferral_hook_prover.get_vk(),
         leaf_system_params(),
         false,
@@ -303,7 +303,7 @@ fn test_vm_deferral_mix_combined_flow() -> Result<()> {
         )),
     )?;
 
-    let deferral_internal_for_leaf_prover = NonRootProver::<MAX_NUM_PROOFS>::new::<Engine>(
+    let deferral_internal_for_leaf_prover = InnerProver::<MAX_NUM_PROOFS>::new::<Engine>(
         deferral_leaf_prover.get_vk(),
         internal_system_params(),
         false,
@@ -321,7 +321,7 @@ fn test_vm_deferral_mix_combined_flow() -> Result<()> {
         )),
     )?;
 
-    let deferral_internal_recursive_prover = NonRootProver::<MAX_NUM_PROOFS>::new::<Engine>(
+    let deferral_internal_recursive_prover = InnerProver::<MAX_NUM_PROOFS>::new::<Engine>(
         deferral_internal_for_leaf_prover.get_vk(),
         internal_system_params(),
         true,

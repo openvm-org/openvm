@@ -39,12 +39,12 @@ pub use trace::*;
 pub mod receiver;
 
 #[derive(derive_new::new, Clone)]
-pub struct NonRootCircuit<S: AggregationSubCircuit> {
+pub struct InnerCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
     pub def_hook_commit: Option<CommitBytes>,
 }
 
-impl<S: AggregationSubCircuit> Circuit for NonRootCircuit<S> {
+impl<S: AggregationSubCircuit> Circuit for InnerCircuit<S> {
     fn airs(&self) -> Vec<AirRef<SC>> {
         let bus_inventory = self.verifier_circuit.bus_inventory();
         let public_values_bus = bus_inventory.public_values_bus;

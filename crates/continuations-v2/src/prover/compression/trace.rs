@@ -13,14 +13,14 @@ use tracing::instrument;
 
 use super::CompressionProver;
 use crate::{
-    circuit::inner::{NonRootTraceGen, ProofsType},
+    circuit::inner::{InnerTraceGen, ProofsType},
     SC,
 };
 
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
         S: AggregationSubCircuit + VerifierTraceGen<PB>,
-        T: NonRootTraceGen<PB>,
+        T: InnerTraceGen<PB>,
     > CompressionProver<PB, S, T>
 where
     PB::Matrix: Clone,

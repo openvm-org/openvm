@@ -16,7 +16,7 @@ use verify_stark::pvs::DeferralPvs;
 
 use crate::{
     circuit::{
-        inner::{NonRootCircuit, NonRootTraceGen, ProofsType},
+        inner::{InnerCircuit, InnerTraceGen, ProofsType},
         Circuit,
     },
     prover::trace_heights_tracing_info,
@@ -26,10 +26,10 @@ use crate::{
 mod trace;
 
 /// Generates an aggregation proof for non-root layers (leaf and internal).
-pub struct NonRootAggregationProver<
+pub struct InnerAggregationProver<
     PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
     S: AggregationSubCircuit,
-    T: NonRootTraceGen<PB>,
+    T: InnerTraceGen<PB>,
 > {
     pk: Arc<MultiStarkProvingKey<SC>>,
     d_pk: DeviceMultiStarkProvingKey<PB>,
@@ -40,12 +40,12 @@ pub struct NonRootAggregationProver<
     // TODO: tracegen currently requires storing these, we should revisit this
     child_vk: Arc<MultiStarkVerifyingKey<SC>>,
     child_vk_pcs_data: CommittedTraceData<PB>,
-    circuit: Arc<NonRootCircuit<S>>,
+    circuit: Arc<InnerCircuit<S>>,
 
     self_vk_pcs_data: Option<CommittedTraceData<PB>>,
 }
 
-/// Struct to determine if NonRootAggregationProver is proving a special case,
+/// Struct to determine if InnerAggregationProver is proving a special case,
 /// i.e. if the child_vk is the app_vk or if it should use its own vk as child.
 pub enum ChildVkKind {
     Standard,
@@ -56,8 +56,8 @@ pub enum ChildVkKind {
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
         S: AggregationSubCircuit + VerifierTraceGen<PB>,
-        T: NonRootTraceGen<PB>,
-    > NonRootAggregationProver<PB, S, T>
+        T: InnerTraceGen<PB>,
+    > InnerAggregationProver<PB, S, T>
 where
     PB::Matrix: Clone,
 {
@@ -94,8 +94,8 @@ where
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
         S: AggregationSubCircuit + VerifierTraceGen<PB>,
-        T: NonRootTraceGen<PB>,
-    > NonRootAggregationProver<PB, S, T>
+        T: InnerTraceGen<PB>,
+    > InnerAggregationProver<PB, S, T>
 {
     pub fn new<E: StarkEngine<SC = SC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
@@ -113,7 +113,7 @@ impl<
         );
         let engine = E::new(system_params);
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
-        let circuit = Arc::new(NonRootCircuit::new(
+        let circuit = Arc::new(InnerCircuit::new(
             Arc::new(verifier_circuit),
             def_hook_commit.map(|d| d.into()),
         ));
@@ -124,7 +124,7 @@ impl<
         } else {
             None
         };
-        let agg_node_tracegen = NonRootTraceGen::new(def_hook_commit.is_some());
+        let agg_node_tracegen = InnerTraceGen::new(def_hook_commit.is_some());
         Self {
             pk: Arc::new(pk),
             d_pk,
@@ -153,7 +153,7 @@ impl<
         );
         let engine = E::new(pk.params.clone());
         let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
-        let circuit = Arc::new(NonRootCircuit::new(
+        let circuit = Arc::new(InnerCircuit::new(
             Arc::new(verifier_circuit),
             def_hook_commit.map(|d| d.into()),
         ));
@@ -164,7 +164,7 @@ impl<
         } else {
             None
         };
-        let agg_node_tracegen = NonRootTraceGen::new(def_hook_commit.is_some());
+        let agg_node_tracegen = InnerTraceGen::new(def_hook_commit.is_some());
         Self {
             pk,
             d_pk,
@@ -177,7 +177,7 @@ impl<
         }
     }
 
-    pub fn get_circuit(&self) -> Arc<NonRootCircuit<S>> {
+    pub fn get_circuit(&self) -> Arc<InnerCircuit<S>> {
         self.circuit.clone()
     }
 

@@ -41,9 +41,9 @@ define_typed_permutation_bus!(DeferralAccPathBus, DeferralAccPathMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
-pub struct MemoryMerkleRootsMessage<T> {
+pub struct DeferralMerkleRootsMessage<T> {
     pub initial_root: [T; DIGEST_SIZE],
     pub final_root: [T; DIGEST_SIZE],
 }
 
-define_typed_permutation_bus!(MemoryMerkleRootsBus, MemoryMerkleRootsMessage);
+define_typed_permutation_bus!(DeferralMerkleRootsBus, DeferralMerkleRootsMessage);

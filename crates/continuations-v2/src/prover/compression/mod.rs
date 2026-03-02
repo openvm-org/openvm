@@ -16,7 +16,7 @@ use tracing::instrument;
 
 use crate::{
     circuit::{
-        inner::{NonRootCircuit, NonRootTraceGen, ProofsType},
+        inner::{InnerCircuit, InnerTraceGen, ProofsType},
         Circuit,
     },
     prover::trace_heights_tracing_info,
@@ -31,7 +31,7 @@ mod trace;
 pub struct CompressionProver<
     PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
     S: AggregationSubCircuit,
-    T: NonRootTraceGen<PB>,
+    T: InnerTraceGen<PB>,
 > {
     pk: Arc<MultiStarkProvingKey<SC>>,
     vk: Arc<MultiStarkVerifyingKey<SC>>,
@@ -40,7 +40,7 @@ pub struct CompressionProver<
 
     child_vk: Arc<MultiStarkVerifyingKey<SC>>,
     child_vk_pcs_data: CommittedTraceData<PB>,
-    circuit: Arc<NonRootCircuit<S>>,
+    circuit: Arc<InnerCircuit<S>>,
 
     cached_trace_record: CachedTraceRecord,
 }
@@ -48,7 +48,7 @@ pub struct CompressionProver<
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
         S: AggregationSubCircuit + VerifierTraceGen<PB>,
-        T: NonRootTraceGen<PB>,
+        T: InnerTraceGen<PB>,
     > CompressionProver<PB, S, T>
 where
     PB::Matrix: Clone,
@@ -84,7 +84,7 @@ where
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
         S: AggregationSubCircuit + VerifierTraceGen<PB>,
-        T: NonRootTraceGen<PB>,
+        T: InnerTraceGen<PB>,
     > CompressionProver<PB, S, T>
 {
     pub fn new<E: StarkEngine<SC = SC, PB = PB>>(
@@ -107,7 +107,7 @@ impl<
         );
         let cached_trace_record = verifier_circuit.cached_trace_record(&child_vk);
         let engine = E::new(system_params);
-        let circuit = Arc::new(NonRootCircuit::new(
+        let circuit = Arc::new(InnerCircuit::new(
             Arc::new(verifier_circuit),
             def_hook_commit.map(|d| d.into()),
         ));
@@ -143,7 +143,7 @@ impl<
             },
         );
         let cached_trace_record = verifier_circuit.cached_trace_record(&child_vk);
-        let circuit = Arc::new(NonRootCircuit::new(
+        let circuit = Arc::new(InnerCircuit::new(
             Arc::new(verifier_circuit),
             def_hook_commit.map(|d| d.into()),
         ));
@@ -160,7 +160,7 @@ impl<
         }
     }
 
-    pub fn get_circuit(&self) -> Arc<NonRootCircuit<S>> {
+    pub fn get_circuit(&self) -> Arc<InnerCircuit<S>> {
         self.circuit.clone()
     }
 

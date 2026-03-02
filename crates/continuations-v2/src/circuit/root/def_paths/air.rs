@@ -19,8 +19,8 @@ use crate::{
     bn254::CommitBytes,
     circuit::{
         root::bus::{
-            DeferralAccPathBus, DeferralAccPathMessage, MemoryMerkleRootsBus,
-            MemoryMerkleRootsMessage,
+            DeferralAccPathBus, DeferralAccPathMessage, DeferralMerkleRootsBus,
+            DeferralMerkleRootsMessage,
         },
         subair::{MerklePathRowView, MerklePathSubAir, MerklePathSubAirContext},
     },
@@ -29,7 +29,7 @@ use crate::{
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-pub struct AccMerklePathsCols<F> {
+pub struct DeferralAccMerklePathsCols<F> {
     pub is_valid: F,
     pub is_right_child: F,
 
@@ -47,19 +47,19 @@ pub struct AccMerklePathsCols<F> {
     pub expected_branch_bits_offset: F,
 }
 
-pub struct AccMerklePathsAir {
+pub struct DeferralAccMerklePathsAir {
     pub merkle_path_subair: MerklePathSubAir,
     pub def_acc_paths_bus: DeferralAccPathBus,
-    pub memory_merkle_roots_bus: MemoryMerkleRootsBus,
+    pub def_merkle_roots_bus: DeferralMerkleRootsBus,
     pub address_height: usize,
     pub zero_hash: CommitBytes,
 }
 
-impl AccMerklePathsAir {
+impl DeferralAccMerklePathsAir {
     pub fn new(
         poseidon2_compress_bus: Poseidon2CompressBus,
         def_acc_paths_bus: DeferralAccPathBus,
-        memory_merkle_roots_bus: MemoryMerkleRootsBus,
+        memory_merkle_roots_bus: DeferralMerkleRootsBus,
         memory_dimensions: MemoryDimensions,
     ) -> Self {
         assert!(memory_dimensions.addr_space_height > 1);
@@ -75,30 +75,30 @@ impl AccMerklePathsAir {
                 merkle_path_branch_bits,
             ),
             def_acc_paths_bus,
-            memory_merkle_roots_bus,
+            def_merkle_roots_bus: memory_merkle_roots_bus,
             address_height: memory_dimensions.address_height,
             zero_hash,
         }
     }
 }
 
-impl<F> BaseAir<F> for AccMerklePathsAir {
+impl<F> BaseAir<F> for DeferralAccMerklePathsAir {
     fn width(&self) -> usize {
-        AccMerklePathsCols::<u8>::width()
+        DeferralAccMerklePathsCols::<u8>::width()
     }
 }
-impl<F> BaseAirWithPublicValues<F> for AccMerklePathsAir {}
-impl<F> PartitionedBaseAir<F> for AccMerklePathsAir {}
+impl<F> BaseAirWithPublicValues<F> for DeferralAccMerklePathsAir {}
+impl<F> PartitionedBaseAir<F> for DeferralAccMerklePathsAir {}
 
-impl<AB: AirBuilder + InteractionBuilder> Air<AB> for AccMerklePathsAir {
+impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DeferralAccMerklePathsAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let (local, next) = (
             main.row_slice(0).expect("window should have two elements"),
             main.row_slice(1).expect("window should have two elements"),
         );
-        let local: &AccMerklePathsCols<AB::Var> = (*local).borrow();
-        let next: &AccMerklePathsCols<AB::Var> = (*next).borrow();
+        let local: &DeferralAccMerklePathsCols<AB::Var> = (*local).borrow();
+        let next: &DeferralAccMerklePathsCols<AB::Var> = (*next).borrow();
 
         /*
          * Constrain that depth increases by 1 each row, and that all the is_skip flags
@@ -233,9 +233,9 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for AccMerklePathsAir {
         /*
          * Receive the final memory merkle root on the last valid row.
          */
-        self.memory_merkle_roots_bus.receive(
+        self.def_merkle_roots_bus.receive(
             builder,
-            MemoryMerkleRootsMessage {
+            DeferralMerkleRootsMessage {
                 initial_root: local.initial_node_commit,
                 final_root: local.final_node_commit,
             },

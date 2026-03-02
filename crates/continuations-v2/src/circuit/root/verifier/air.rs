@@ -27,8 +27,8 @@ use crate::{
     circuit::{
         root::{
             bus::{
-                DeferralAccPathBus, DeferralAccPathMessage, MemoryMerkleCommitBus,
-                MemoryMerkleCommitMessage, MemoryMerkleRootsBus, MemoryMerkleRootsMessage,
+                DeferralAccPathBus, DeferralAccPathMessage, DeferralMerkleRootsBus,
+                DeferralMerkleRootsMessage, MemoryMerkleCommitBus, MemoryMerkleCommitMessage,
             },
             RootVerifierPvs,
         },
@@ -57,7 +57,7 @@ pub struct RootVerifierPvsAir {
     pub poseidon2_compress_bus: Poseidon2CompressBus,
     pub memory_merkle_commit_bus: MemoryMerkleCommitBus,
     pub def_acc_paths_bus: DeferralAccPathBus,
-    pub memory_merkle_roots_bus: MemoryMerkleRootsBus,
+    pub def_merkle_roots_bus: DeferralMerkleRootsBus,
 
     pub expected_internal_recursive_dag_commit: CommitBytes,
     pub expected_def_hook_commit: Option<CommitBytes>,
@@ -396,9 +396,9 @@ impl RootVerifierPvsAir {
             AB::F::ONE,
         );
 
-        self.memory_merkle_roots_bus.send(
+        self.def_merkle_roots_bus.send(
             builder,
-            MemoryMerkleRootsMessage {
+            DeferralMerkleRootsMessage {
                 initial_root: base.child_vm_pvs.initial_root,
                 final_root: base.child_vm_pvs.final_root,
             },
