@@ -20,3 +20,23 @@ pub struct OutputCommitMessage<T> {
 }
 
 define_typed_permutation_bus!(OutputCommitBus, OutputCommitMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct DeferralAccPathMessage<T> {
+    pub initial_acc_hash: [T; DIGEST_SIZE],
+    pub final_acc_hash: [T; DIGEST_SIZE],
+    pub depth: T,
+    pub is_unset: T,
+}
+
+define_typed_permutation_bus!(DeferralAccPathBus, DeferralAccPathMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct MemoryMerkleRootsMessage<T> {
+    pub initial_root: [T; DIGEST_SIZE],
+    pub final_root: [T; DIGEST_SIZE],
+}
+
+define_typed_permutation_bus!(MemoryMerkleRootsBus, MemoryMerkleRootsMessage);
