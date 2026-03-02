@@ -11,7 +11,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_riscv_transpiler::BaseAluWOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -40,8 +40,8 @@ use super::{
 };
 use crate::{
     adapters::{
-        Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterExecutor, Rv64BaseAluWAdapterFiller,
-        RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterCols, Rv64BaseAluWAdapterExecutor,
+        Rv64BaseAluWAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
     test_utils::{
         generate_rv64_is_type_immediate, get_verification_error, rv64_rand_write_register_or_imm,
@@ -143,6 +143,33 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let c_word: [u8; RV64_WORD_NUM_LIMBS] = c[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
     let a = run_alu_w(opcode, &b_word, &c_word).map(F::from_canonical_u8);
     assert_eq!(a, tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn set_and_execute_with_ptrs<RA: Arena, E: PreflightExecutor<F, RA>>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
+    opcode: BaseAluWOpcode,
+    rd_ptr: usize,
+    rs1_ptr: usize,
+    rs2_ptr: usize,
+    rs1: [u8; RV64_REGISTER_NUM_LIMBS],
+    rs2: [u8; RV64_REGISTER_NUM_LIMBS],
+) {
+    tester.write(1, rs1_ptr, rs1.map(F::from_canonical_u8));
+    tester.write(1, rs2_ptr, rs2.map(F::from_canonical_u8));
+
+    tester.execute(
+        executor,
+        arena,
+        &Instruction::from_usize(opcode.global_opcode(), [rd_ptr, rs1_ptr, rs2_ptr, 1, 1]),
+    );
+
+    let rs1_word: [u8; RV64_WORD_NUM_LIMBS] = rs1[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+    let rs2_word: [u8; RV64_WORD_NUM_LIMBS] = rs2[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+    let expected = run_alu_w(opcode, &rs1_word, &rs2_word).map(F::from_canonical_u8);
+    assert_eq!(expected, tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd_ptr));
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -386,6 +413,157 @@ fn rv64_aluw_wrong_upper_sign_extension_negative_test() {
     );
 }
 
+#[test]
+fn rv64_aluw_wrong_upper_sign_extension_negative_to_zero_test() {
+    run_negative_alu_test(
+        ADDW,
+        [0, 0, 0, 128, 0, 0, 0, 0],
+        [0, 0, 0, 128, 255, 255, 255, 255],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        None,
+        None,
+        Some(0),
+        Some(false),
+        true,
+    );
+}
+
+#[test]
+fn rv64_aluw_rs1_upper_bytes_trace_tamper_negative_test() {
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&tester);
+    let mem_helper = tester.memory_helper();
+
+    let rd_ptr = 32usize;
+    let rs1_ptr = 8usize;
+    let rs2_ptr = 24usize;
+
+    let mut poisoned_rs1 = [1u8, 2, 3, 4, 11, 12, 13, 14];
+    let clean_rs1 = [1u8, 2, 3, 4, 21, 22, 23, 24];
+    poisoned_rs1[..RV64_WORD_NUM_LIMBS].copy_from_slice(&clean_rs1[..RV64_WORD_NUM_LIMBS]);
+
+    let rs2 = [9u8, 8, 7, 6, 31, 32, 33, 34];
+    let poisoned_write_timestamp = tester.memory.memory.timestamp();
+    tester.write(1, rs1_ptr, poisoned_rs1.map(F::from_canonical_u8));
+    tester.write(1, rs1_ptr, clean_rs1.map(F::from_canonical_u8));
+    tester.write(1, rs2_ptr, rs2.map(F::from_canonical_u8));
+
+    tester.execute(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(ADDW.global_opcode(), [rd_ptr, rs1_ptr, rs2_ptr, 1, 1]),
+    );
+
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut trace_row = trace.row_slice(0).to_vec();
+        let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64BaseAluWAdapterCols<F> = adapter_row.borrow_mut();
+        let read_timestamp = adapter_cols.from_state.timestamp.as_canonical_u32();
+        let rs1_aux_base = adapter_cols.reads_aux[0].as_mut();
+        mem_helper
+            .as_borrowed()
+            .fill(poisoned_write_timestamp, read_timestamp, rs1_aux_base);
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test_with_expected_error(get_verification_error(true));
+}
+
+#[test]
+fn rv64_aluw_rs2_upper_bytes_trace_tamper_negative_test() {
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&tester);
+    let mem_helper = tester.memory_helper();
+
+    let rd_ptr = 32usize;
+    let rs1_ptr = 8usize;
+    let rs2_ptr = 24usize;
+
+    let rs1 = [1u8, 2, 3, 4, 41, 42, 43, 44];
+    let mut poisoned_rs2 = [9u8, 8, 7, 6, 11, 12, 13, 14];
+    let clean_rs2 = [9u8, 8, 7, 6, 21, 22, 23, 24];
+    poisoned_rs2[..RV64_WORD_NUM_LIMBS].copy_from_slice(&clean_rs2[..RV64_WORD_NUM_LIMBS]);
+
+    let poisoned_write_timestamp = tester.memory.memory.timestamp();
+    tester.write(1, rs1_ptr, rs1.map(F::from_canonical_u8));
+    tester.write(1, rs2_ptr, poisoned_rs2.map(F::from_canonical_u8));
+    tester.write(1, rs2_ptr, clean_rs2.map(F::from_canonical_u8));
+
+    tester.execute(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(ADDW.global_opcode(), [rd_ptr, rs1_ptr, rs2_ptr, 1, 1]),
+    );
+
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut trace_row = trace.row_slice(0).to_vec();
+        let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64BaseAluWAdapterCols<F> = adapter_row.borrow_mut();
+        let read_timestamp = adapter_cols.from_state.timestamp.as_canonical_u32();
+        let rs2_aux_base = adapter_cols.reads_aux[1].as_mut();
+        mem_helper
+            .as_borrowed()
+            .fill(poisoned_write_timestamp, read_timestamp, rs2_aux_base);
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test_with_expected_error(get_verification_error(false));
+}
+
+#[test]
+fn rv64_aluw_rd_upper_bytes_trace_tamper_negative_test() {
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&tester);
+
+    let rd_ptr = 32usize;
+    let rs1_ptr = 8usize;
+    let rs2_ptr = 24usize;
+
+    let rd_prev = [19u8, 18, 17, 16, 61, 62, 63, 64];
+    let rs1 = [1u8, 2, 3, 4, 41, 42, 43, 44];
+    let rs2 = [9u8, 8, 7, 6, 31, 32, 33, 34];
+    tester.write(1, rd_ptr, rd_prev.map(F::from_canonical_u8));
+    tester.write(1, rs1_ptr, rs1.map(F::from_canonical_u8));
+    tester.write(1, rs2_ptr, rs2.map(F::from_canonical_u8));
+
+    tester.execute(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(ADDW.global_opcode(), [rd_ptr, rs1_ptr, rs2_ptr, 1, 1]),
+    );
+
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut trace_row = trace.row_slice(0).to_vec();
+        let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64BaseAluWAdapterCols<F> = adapter_row.borrow_mut();
+        adapter_cols.writes_aux.prev_data[4] = F::from_canonical_u32(1);
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test_with_expected_error(get_verification_error(true));
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////
 /// SANITY TESTS
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -420,6 +598,105 @@ fn run_subw_sanity_test() {
     for i in 0..RV64_REGISTER_NUM_LIMBS {
         assert_eq!(z[i], result[i])
     }
+}
+
+#[test]
+fn run_addw_noncanonical_upper_bytes_sanity_test() {
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&tester);
+
+    let rd_ptr = 40usize;
+    let rs1_ptr = 8usize;
+    let rs2_ptr = 24usize;
+    let rs1 = [170u8, 16, 32, 48, 13, 14, 15, 16];
+    let rs2 = [1u8, 2, 3, 4, 21, 22, 23, 24];
+    set_and_execute_with_ptrs(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        ADDW,
+        rd_ptr,
+        rs1_ptr,
+        rs2_ptr,
+        rs1,
+        rs2,
+    );
+
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn run_subw_noncanonical_upper_bytes_sanity_test() {
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&tester);
+
+    let rd_ptr = 40usize;
+    let rs1_ptr = 8usize;
+    let rs2_ptr = 24usize;
+    let rs1 = [0u8, 0, 0, 128, 13, 14, 15, 16];
+    let rs2 = [1u8, 0, 0, 0, 21, 22, 23, 24];
+    set_and_execute_with_ptrs(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        SUBW,
+        rd_ptr,
+        rs1_ptr,
+        rs2_ptr,
+        rs1,
+        rs2,
+    );
+
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn rv64_aluw_sources_unchanged_when_rd_is_distinct_test() {
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&tester);
+
+    let rd_ptr = 40usize;
+    let rs1_ptr = 8usize;
+    let rs2_ptr = 24usize;
+    let rs1 = [170u8, 16, 32, 48, 13, 14, 15, 16];
+    let rs2 = [1u8, 2, 3, 4, 21, 22, 23, 24];
+    set_and_execute_with_ptrs(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        ADDW,
+        rd_ptr,
+        rs1_ptr,
+        rs2_ptr,
+        rs1,
+        rs2,
+    );
+
+    assert_eq!(
+        rs1.map(F::from_canonical_u8),
+        tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rs1_ptr)
+    );
+    assert_eq!(
+        rs2.map(F::from_canonical_u8),
+        tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rs2_ptr)
+    );
+
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////
