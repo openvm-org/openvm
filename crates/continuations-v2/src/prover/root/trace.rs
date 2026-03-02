@@ -1,5 +1,3 @@
-use std::iter::once;
-
 use itertools::Itertools;
 use openvm_circuit::system::memory::merkle::public_values::UserPublicValuesProof;
 use openvm_stark_backend::{
@@ -15,7 +13,10 @@ use recursion_circuit::system::{
 use tracing::instrument;
 
 use super::RootProver;
-use crate::{circuit::root::RootTraceGen, SC};
+use crate::{
+    circuit::{deferral::verify::DeferralMerkleProofs, root::RootTraceGen},
+    SC,
+};
 
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
@@ -25,23 +26,30 @@ impl<
 where
     PB::Matrix: Clone,
 {
-    #[instrument(name = "trace_gen", skip_all)]
-    pub fn generate_proving_ctx(
+    fn generate_proving_ctx_internal(
         &self,
         proof: Proof<SC>,
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
+        deferral_merkle_proofs: Option<&DeferralMerkleProofs<PB::Val>>,
     ) -> Option<ProvingContext<PB>> {
         assert_eq!(
             user_pvs_proof.public_values.len(),
             self.circuit.num_user_pvs
         );
 
-        // These AIRs should have the same height regardless of proof or user_pvs_proof
-        let (verifier_pvs_ctx, mut poseidon2_inputs) =
-            self.agg_node_tracegen.generate_verifier_pvs_ctx(&proof);
-        let (agg_other_ctxs, other_inputs) = self
-            .agg_node_tracegen
-            .generate_other_proving_ctxs(user_pvs_proof, self.circuit.memory_dimensions);
+        // These AIRs should have the same height regardless of proof or user_pvs_proof.
+        let (pre_verifier_subcircuit_ctxs, mut poseidon2_inputs) =
+            self.agg_node_tracegen.generate_pre_verifier_subcircuit_ctx(
+                &proof,
+                user_pvs_proof,
+                self.circuit.memory_dimensions,
+            );
+        let (post_verifier_subcircuit_ctxs, other_inputs) =
+            self.agg_node_tracegen.generate_other_proving_ctxs(
+                &proof,
+                self.circuit.memory_dimensions,
+                deferral_merkle_proofs,
+            );
         poseidon2_inputs.extend(other_inputs);
 
         let verifier_trace_heights = self.trace_heights.as_ref().map(|v| {
@@ -67,11 +75,35 @@ where
         );
 
         subcircuit_ctxs.map(|subcircuit_ctxs| ProvingContext {
-            per_trace: once(verifier_pvs_ctx)
-                .chain(agg_other_ctxs)
+            per_trace: pre_verifier_subcircuit_ctxs
+                .into_iter()
                 .chain(subcircuit_ctxs)
+                .chain(post_verifier_subcircuit_ctxs)
                 .enumerate()
                 .collect_vec(),
         })
+    }
+
+    #[instrument(name = "trace_gen", skip_all)]
+    pub fn generate_proving_ctx(
+        &self,
+        proof: Proof<SC>,
+        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
+    ) -> Option<ProvingContext<PB>> {
+        assert!(
+            self.circuit.def_hook_commit.is_none(),
+            "deferral-enabled root prover requires generate_proving_ctx_with_deferrals"
+        );
+        self.generate_proving_ctx_internal(proof, user_pvs_proof, None)
+    }
+
+    #[instrument(name = "trace_gen", skip_all)]
+    pub fn generate_proving_ctx_with_deferrals(
+        &self,
+        proof: Proof<SC>,
+        user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, PB::Val>,
+        deferral_merkle_proofs: &DeferralMerkleProofs<PB::Val>,
+    ) -> Option<ProvingContext<PB>> {
+        self.generate_proving_ctx_internal(proof, user_pvs_proof, Some(deferral_merkle_proofs))
     }
 }

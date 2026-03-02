@@ -58,6 +58,7 @@ impl RootProver {
             system_params,
             memory_dimensions,
             num_user_pvs,
+            None,
             trace_heights,
         );
         Self(inner)
@@ -77,6 +78,7 @@ impl RootProver {
             pk,
             memory_dimensions,
             num_user_pvs,
+            None,
             trace_heights,
         );
         Self(inner)
@@ -150,6 +152,7 @@ pub fn compute_root_proof_heights(
         root_params,
         memory_dimensions,
         num_user_pvs,
+        None,
         None,
     );
     let root_proving_ctx = root_prover

@@ -6,11 +6,11 @@ use p3_field::{Field, PrimeCharacteristicRing};
 use recursion_circuit::bus::{Poseidon2CompressBus, Poseidon2CompressMessage};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use crate::circuit::{
-    root::digests_to_poseidon2_input,
-    subair::merkle_tree::bus::{
+use crate::{
+    circuit::subair::merkle_tree::bus::{
         MerkleRootBus, MerkleRootMessage, MerkleTreeInternalBus, MerkleTreeInternalMessage,
     },
+    utils::digests_to_poseidon2_input,
 };
 
 #[repr(C)]
