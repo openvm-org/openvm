@@ -1,12 +1,15 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use super::adapters::{
-    Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterExecutor, Rv64BaseAluWAdapterFiller,
+    Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterExecutor, Rv64BaseAluWAdapterFiller, RV64_CELL_BITS,
+    RV64_WORD_NUM_LIMBS,
 };
+use super::base_alu::{BaseAluCoreAir, BaseAluExecutor, BaseAluFiller};
 
-mod core;
 mod execution;
-pub use core::*;
+pub type BaseAluWCoreAir = BaseAluCoreAir<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
+pub type BaseAluWExecutor<A> = BaseAluExecutor<A, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
+pub type BaseAluWFiller<A> = BaseAluFiller<A, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
 
 #[cfg(feature = "cuda")]
 mod cuda;

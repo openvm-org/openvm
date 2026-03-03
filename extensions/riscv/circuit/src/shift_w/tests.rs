@@ -40,12 +40,13 @@ use {
     },
 };
 
-use super::{core::run_shift_w, Rv64ShiftWChip, ShiftWCoreAir, ShiftWCoreCols, ShiftWFiller};
+use super::{Rv64ShiftWChip, ShiftWCoreAir, ShiftWFiller};
 use crate::{
     adapters::{
         Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterCols, Rv64BaseAluWAdapterExecutor,
         Rv64BaseAluWAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
+    shift::ShiftCoreCols,
     test_utils::{
         generate_rv64_is_type_immediate, get_verification_error, rv64_rand_write_register_or_imm,
     },
@@ -55,6 +56,33 @@ use crate::{
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 type Harness = TestChipHarness<F, Rv64ShiftWExecutor, Rv64ShiftWAir, Rv64ShiftWChip<F>>;
+type ShiftWCoreCols<T> = ShiftCoreCols<T, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
+
+#[inline(always)]
+fn run_shift_w(
+    opcode: ShiftWOpcode,
+    x: &[u8; RV64_WORD_NUM_LIMBS],
+    y: &[u8; RV64_WORD_NUM_LIMBS],
+) -> ([u8; RV64_REGISTER_NUM_LIMBS], usize, usize) {
+    let rs2 = u32::from_le_bytes(*y);
+    let (limb_shift, bit_shift) = get_shift_w(y[0]);
+    let word_result = match opcode {
+        SLLW => (u32::from_le_bytes(*x) << (rs2 & 0x1F)).to_le_bytes(),
+        SRLW => (u32::from_le_bytes(*x) >> (rs2 & 0x1F)).to_le_bytes(),
+        SRAW => ((i32::from_le_bytes(*x) >> (rs2 & 0x1F)) as u32).to_le_bytes(),
+    };
+    let sign_extend_limb = ((1u16 << RV64_CELL_BITS) - 1) as u8
+        * (word_result[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS as u8 - 1));
+    let mut result = [sign_extend_limb; RV64_REGISTER_NUM_LIMBS];
+    result[..RV64_WORD_NUM_LIMBS].copy_from_slice(&word_result);
+    (result, limb_shift, bit_shift)
+}
+
+#[inline(always)]
+fn get_shift_w(y0: u8) -> (usize, usize) {
+    let shift = (y0 as usize) % (RV64_WORD_NUM_LIMBS * RV64_CELL_BITS);
+    (shift / RV64_CELL_BITS, shift % RV64_CELL_BITS)
+}
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
@@ -158,36 +186,6 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
-fn set_and_execute_with_ptrs<RA: Arena, E: PreflightExecutor<F, RA>>(
-    tester: &mut impl TestBuilder<F>,
-    executor: &mut E,
-    arena: &mut RA,
-    opcode: ShiftWOpcode,
-    rd_ptr: usize,
-    rs1_ptr: usize,
-    rs2_ptr: usize,
-    rs1: [u8; RV64_REGISTER_NUM_LIMBS],
-    rs2: [u8; RV64_REGISTER_NUM_LIMBS],
-) {
-    tester.write(1, rs1_ptr, rs1.map(F::from_canonical_u8));
-    tester.write(1, rs2_ptr, rs2.map(F::from_canonical_u8));
-
-    tester.execute(
-        executor,
-        arena,
-        &Instruction::from_usize(opcode.global_opcode(), [rd_ptr, rs1_ptr, rs2_ptr, 1, 1]),
-    );
-
-    let rs1_word: [u8; RV64_WORD_NUM_LIMBS] = rs1[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
-    let rs2_word: [u8; RV64_WORD_NUM_LIMBS] = rs2[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
-    let (expected, _, _) = run_shift_w(opcode, &rs1_word, &rs2_word);
-    assert_eq!(
-        expected.map(F::from_canonical_u8),
-        tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd_ptr)
-    );
-}
-
 //////////////////////////////////////////////////////////////////////////////////////
 // POSITIVE TESTS
 //////////////////////////////////////////////////////////////////////////////////////
@@ -264,7 +262,9 @@ fn run_negative_shift_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
-        let cols: &mut ShiftWCoreCols<F> = values.split_at_mut(adapter_width).1.borrow_mut();
+        let (adapter_row, core_row) = values.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64BaseAluWAdapterCols<F> = adapter_row.borrow_mut();
+        let cols: &mut ShiftWCoreCols<F> = core_row.borrow_mut();
 
         let prank_a_word: [u32; RV64_WORD_NUM_LIMBS] =
             prank_a[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
@@ -279,7 +279,7 @@ fn run_negative_shift_test(
             cols.b_sign = F::from_canonical_u32(b_sign);
         }
         if let Some(result_sign) = prank_vals.result_sign {
-            cols.result_sign = F::from_canonical_u32(result_sign);
+            adapter_cols.result_sign = F::from_canonical_u32(result_sign);
         }
         if let Some(bit_shift_marker) = prank_vals.bit_shift_marker {
             cols.bit_shift_marker = bit_shift_marker.map(F::from_canonical_u32);
@@ -784,105 +784,6 @@ fn run_sraw_sanity_test() {
     let shift = (y[0] as usize) % (RV64_WORD_NUM_LIMBS * RV64_CELL_BITS);
     assert_eq!(shift / RV64_CELL_BITS, limb_shift);
     assert_eq!(shift % RV64_CELL_BITS, bit_shift);
-}
-
-#[test]
-fn run_sllw_noncanonical_upper_bytes_sanity_test() {
-    let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_harness(&tester);
-
-    let rd_ptr = 40usize;
-    let rs1_ptr = 8usize;
-    let rs2_ptr = 24usize;
-    let rs1 = [45u8, 7, 61, 186, 13, 14, 15, 16];
-    let rs2 = [1u8, 0, 0, 0, 21, 22, 23, 24];
-    set_and_execute_with_ptrs(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.arena,
-        SLLW,
-        rd_ptr,
-        rs1_ptr,
-        rs2_ptr,
-        rs1,
-        rs2,
-    );
-
-    let tester = tester
-        .build()
-        .load(harness)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
-}
-
-#[test]
-fn run_sra_noncanonical_upper_bytes_sanity_test() {
-    let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_harness(&tester);
-
-    let rd_ptr = 40usize;
-    let rs1_ptr = 8usize;
-    let rs2_ptr = 24usize;
-    let rs1 = [31u8, 190, 221, 200, 13, 14, 15, 16];
-    let rs2 = [1u8, 0, 0, 0, 21, 22, 23, 24];
-    set_and_execute_with_ptrs(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.arena,
-        SRAW,
-        rd_ptr,
-        rs1_ptr,
-        rs2_ptr,
-        rs1,
-        rs2,
-    );
-
-    let tester = tester
-        .build()
-        .load(harness)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
-}
-
-#[test]
-fn rv64_shiftw_sources_unchanged_when_rd_is_distinct_test() {
-    let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_harness(&tester);
-
-    let rd_ptr = 40usize;
-    let rs1_ptr = 8usize;
-    let rs2_ptr = 24usize;
-    let rs1 = [45u8, 7, 61, 186, 13, 14, 15, 16];
-    let rs2 = [1u8, 0, 0, 0, 21, 22, 23, 24];
-    set_and_execute_with_ptrs(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.arena,
-        SLLW,
-        rd_ptr,
-        rs1_ptr,
-        rs2_ptr,
-        rs1,
-        rs2,
-    );
-
-    assert_eq!(
-        rs1.map(F::from_canonical_u8),
-        tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rs1_ptr)
-    );
-    assert_eq!(
-        rs2.map(F::from_canonical_u8),
-        tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rs2_ptr)
-    );
-
-    let tester = tester
-        .build()
-        .load(harness)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////

@@ -52,12 +52,15 @@ pub struct Rv64BaseAluWAdapterCols<T> {
     pub rs2_as: T,
     /// Upper 4 bytes of rs2 register read (unused when rs2 is immediate).
     pub rs2_high: [T; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
+    /// Sign bit of the low-word core result used to build full-width sign-extended writes.
+    pub result_sign: T,
     pub reads_aux: [MemoryReadAuxCols<T>; 2],
     pub writes_aux: MemoryWriteAuxCols<T, RV64_REGISTER_NUM_LIMBS>,
 }
 
 /// Same instruction format as `Rv64BaseAluAdapterAir`, but only exposes the low 32-bit limbs
-/// (`RV64_WORD_NUM_LIMBS`) for reads. Writes remain full RV64 register width.
+/// (`RV64_WORD_NUM_LIMBS`) for reads and writes. Full-width RV64 writes are rebuilt in-adapter by
+/// sign-extending the low-word result.
 #[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct Rv64BaseAluWAdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
@@ -78,7 +81,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWAdapterAir {
         2,
         1,
         RV64_WORD_NUM_LIMBS,
-        RV64_REGISTER_NUM_LIMBS,
+        RV64_WORD_NUM_LIMBS,
     >;
 
     fn eval(
@@ -155,10 +158,30 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWAdapterAir {
             )
             .eval(builder, local.rs2_as);
 
+        builder.assert_bool(local.result_sign);
+        let sign_mask = AB::Expr::from_canonical_u32(1 << (RV64_CELL_BITS - 1));
+        let result_word_msl = ctx.writes[0][RV64_WORD_NUM_LIMBS - 1].clone();
+        self.bitwise_lookup_bus
+            .send_xor(
+                result_word_msl.clone(),
+                sign_mask.clone(),
+                result_word_msl + sign_mask.clone()
+                    - AB::Expr::from_canonical_u32(2) * local.result_sign * sign_mask,
+            )
+            .eval(builder, ctx.instruction.is_valid.clone());
+        let sign_extend_limb =
+            AB::Expr::from_canonical_u32((1 << RV64_CELL_BITS) - 1) * local.result_sign;
+        let write_data: [AB::Expr; RV64_REGISTER_NUM_LIMBS] = array::from_fn(|i| {
+            if i < RV64_WORD_NUM_LIMBS {
+                ctx.writes[0][i].clone()
+            } else {
+                sign_extend_limb.clone()
+            }
+        });
         self.memory_bridge
             .write(
                 MemoryAddress::new(AB::F::from_canonical_u32(RV64_REGISTER_AS), local.rd_ptr),
-                ctx.writes[0].clone(),
+                write_data,
                 timestamp_pp(),
                 &local.writes_aux,
             )
@@ -209,6 +232,8 @@ pub struct Rv64BaseAluWAdapterRecord {
     /// 1 if rs2 was a read, 0 if an immediate
     pub rs2_as: u8,
     pub rs2_high: [u8; RV64_REGISTER_NUM_LIMBS - RV64_WORD_NUM_LIMBS],
+    pub result_sign: u8,
+    pub result_word_msl: u8,
 
     pub reads_aux: [MemoryReadAuxRecord; 2],
     pub writes_aux: MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS>,
@@ -217,7 +242,7 @@ pub struct Rv64BaseAluWAdapterRecord {
 impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64BaseAluWAdapterExecutor {
     const WIDTH: usize = size_of::<Rv64BaseAluWAdapterCols<u8>>();
     type ReadData = [[u8; RV64_WORD_NUM_LIMBS]; 2];
-    type WriteData = [[u8; RV64_REGISTER_NUM_LIMBS]; 1];
+    type WriteData = [[u8; RV64_WORD_NUM_LIMBS]; 1];
     type RecordMut<'a> = &'a mut Rv64BaseAluWAdapterRecord;
 
     #[inline(always)]
@@ -291,11 +316,17 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64BaseAluWAdapterExecutor {
         debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
 
         record.rd_ptr = a.as_canonical_u32();
+        let write_low = data[0];
+        record.result_word_msl = write_low[RV64_WORD_NUM_LIMBS - 1];
+        record.result_sign = record.result_word_msl >> (RV64_CELL_BITS as u8 - 1);
+        let sign_extend_limb = ((1u16 << RV64_CELL_BITS) - 1) as u8 * record.result_sign;
+        let mut write_data = [sign_extend_limb; RV64_REGISTER_NUM_LIMBS];
+        write_data[..RV64_WORD_NUM_LIMBS].copy_from_slice(&write_low);
         tracing_write(
             memory,
             RV64_REGISTER_AS,
             record.rd_ptr,
-            data[0],
+            write_data,
             &mut record.writes_aux.prev_timestamp,
             &mut record.writes_aux.prev_data,
         );
@@ -353,7 +384,10 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluWAdapterFiller {
             timestamp,
             adapter_row.reads_aux[0].as_mut(),
         );
+        self.bitwise_lookup_chip
+            .request_xor(record.result_word_msl as u32, 1u32 << (RV64_CELL_BITS - 1));
 
+        adapter_row.result_sign = F::from_canonical_u8(record.result_sign);
         adapter_row.rs2_as = F::from_canonical_u8(record.rs2_as);
         adapter_row.rs2 = F::from_canonical_u32(record.rs2);
         adapter_row.rs2_high = record.rs2_high.map(F::from_canonical_u8);

@@ -34,15 +34,13 @@ use {
     },
 };
 
-use super::{
-    core::run_alu_w, BaseAluWCoreAir, BaseAluWCoreCols, BaseAluWFiller, Rv64BaseAluWChip,
-    Rv64BaseAluWExecutor,
-};
+use super::{BaseAluWCoreAir, BaseAluWFiller, Rv64BaseAluWChip, Rv64BaseAluWExecutor};
 use crate::{
     adapters::{
         Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterCols, Rv64BaseAluWAdapterExecutor,
         Rv64BaseAluWAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
     },
+    base_alu::BaseAluCoreCols,
     test_utils::{
         generate_rv64_is_type_immediate, get_verification_error, rv64_rand_write_register_or_imm,
     },
@@ -52,6 +50,22 @@ use crate::{
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 type Harness = TestChipHarness<F, Rv64BaseAluWExecutor, Rv64BaseAluWAir, Rv64BaseAluWChip<F>>;
+type BaseAluWCoreCols<T> = BaseAluCoreCols<T, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
+
+#[inline(always)]
+fn run_alu_w(
+    opcode: BaseAluWOpcode,
+    x: &[u8; RV64_WORD_NUM_LIMBS],
+    y: &[u8; RV64_WORD_NUM_LIMBS],
+) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+    let x = u32::from_le_bytes(*x);
+    let y = u32::from_le_bytes(*y);
+    let rd_word = match opcode {
+        ADDW => x.wrapping_add(y),
+        SUBW => x.wrapping_sub(y),
+    };
+    (rd_word as i32 as i64 as u64).to_le_bytes()
+}
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
@@ -253,7 +267,9 @@ fn run_negative_alu_test(
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
-        let cols: &mut BaseAluWCoreCols<F> = values.split_at_mut(adapter_width).1.borrow_mut();
+        let (adapter_row, core_row) = values.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64BaseAluWAdapterCols<F> = adapter_row.borrow_mut();
+        let cols: &mut BaseAluWCoreCols<F> = core_row.borrow_mut();
         let prank_a_word: [u32; RV64_WORD_NUM_LIMBS] =
             prank_a[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
         cols.a = prank_a_word.map(F::from_canonical_u32);
@@ -263,11 +279,11 @@ fn run_negative_alu_test(
             cols.c = prank_c_word.map(F::from_canonical_u32);
         }
         if let Some(prank_opcode_flags) = prank_opcode_flags {
-            cols.opcode_addw_flag = F::from_bool(prank_opcode_flags[0]);
-            cols.opcode_subw_flag = F::from_bool(prank_opcode_flags[1]);
+            cols.opcode_add_flag = F::from_bool(prank_opcode_flags[0]);
+            cols.opcode_sub_flag = F::from_bool(prank_opcode_flags[1]);
         }
         if let Some(prank_result_sign) = prank_result_sign {
-            cols.result_sign = F::from_canonical_u32(prank_result_sign);
+            adapter_cols.result_sign = F::from_canonical_u32(prank_result_sign);
         }
         *trace = RowMajorMatrix::new(values, trace.width());
     };

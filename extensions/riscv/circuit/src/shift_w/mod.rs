@@ -1,12 +1,16 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use super::adapters::{
-    Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterExecutor, Rv64BaseAluWAdapterFiller,
+    Rv64BaseAluWAdapterAir, Rv64BaseAluWAdapterExecutor, Rv64BaseAluWAdapterFiller, RV64_CELL_BITS,
+    RV64_WORD_NUM_LIMBS,
 };
+use super::shift::{ShiftCoreAir, ShiftExecutor, ShiftFiller};
 
-mod core;
 mod execution;
-pub use core::*;
+
+pub type ShiftWCoreAir = ShiftCoreAir<RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
+pub type ShiftWExecutor<A> = ShiftExecutor<A, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
+pub type ShiftWFiller<A> = ShiftFiller<A, RV64_WORD_NUM_LIMBS, RV64_CELL_BITS>;
 
 #[cfg(feature = "cuda")]
 mod cuda;

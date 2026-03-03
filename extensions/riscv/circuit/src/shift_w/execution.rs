@@ -330,21 +330,18 @@ struct SrawOp;
 impl ShiftWOp for SllwOp {
     fn compute(rs1: [u8; RV64_WORD_NUM_LIMBS], rs2: u32) -> [u8; RV64_WORD_NUM_LIMBS] {
         let rs1 = u32::from_le_bytes(rs1);
-        // RV64 W-shifts: only the low 5 bits of rs2 are used for the shift amount.
         (rs1 << (rs2 & 0x1F)).to_le_bytes()
     }
 }
 impl ShiftWOp for SrlwOp {
     fn compute(rs1: [u8; RV64_WORD_NUM_LIMBS], rs2: u32) -> [u8; RV64_WORD_NUM_LIMBS] {
         let rs1 = u32::from_le_bytes(rs1);
-        // RV64 W-shifts: only the low 5 bits of rs2 are used for the shift amount.
         (rs1 >> (rs2 & 0x1F)).to_le_bytes()
     }
 }
 impl ShiftWOp for SrawOp {
     fn compute(rs1: [u8; RV64_WORD_NUM_LIMBS], rs2: u32) -> [u8; RV64_WORD_NUM_LIMBS] {
         let rs1 = i32::from_le_bytes(rs1);
-        // RV64 W-shifts: only the low 5 bits of rs2 are used for the shift amount.
         (rs1 >> (rs2 & 0x1F)).to_le_bytes()
     }
 }
