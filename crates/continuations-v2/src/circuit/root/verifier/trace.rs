@@ -5,6 +5,7 @@ use openvm_poseidon2_air::Permutation;
 use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    StarkProtocolConfig,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     poseidon2_compress_with_capacity, poseidon2_perm, BabyBearPoseidon2Config, DIGEST_SIZE, F,
@@ -24,13 +25,10 @@ use crate::{
     utils::{digests_to_poseidon2_input, pad_slice_to_poseidon2_input},
 };
 
-pub fn generate_proving_ctx(
+pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
     proof: &Proof<BabyBearPoseidon2Config>,
     deferral_enabled: bool,
-) -> (
-    AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>,
-    Vec<[F; POSEIDON2_WIDTH]>,
-) {
+) -> (AirProvingContext<CpuBackend<SC>>, Vec<[F; POSEIDON2_WIDTH]>) {
     let base_width = RootVerifierPvsCols::<u8>::width();
     let def_width = RootDefVerifierCols::<u8>::width();
     let width = base_width + if deferral_enabled { def_width } else { 0 };

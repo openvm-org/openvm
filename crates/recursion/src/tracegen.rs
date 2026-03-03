@@ -2,6 +2,7 @@ use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey,
     proof::Proof,
     prover::{AirProvingContext, ColMajorMatrix, CpuBackend, ProverBackend},
+    StarkProtocolConfig,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 use p3_matrix::dense::RowMajorMatrix;
@@ -43,7 +44,7 @@ pub(crate) struct StandardTracegenCtx<'a> {
     pub preflights: &'a [&'a Preflight],
 }
 
-impl<T: RowMajorChip<F>> ModuleChip<CpuBackend<BabyBearPoseidon2Config>> for T {
+impl<SC: StarkProtocolConfig<F = F>, T: RowMajorChip<F>> ModuleChip<CpuBackend<SC>> for T {
     type Ctx<'a> = T::Ctx<'a>;
 
     #[tracing::instrument(level = "trace", skip_all)]
@@ -51,7 +52,7 @@ impl<T: RowMajorChip<F>> ModuleChip<CpuBackend<BabyBearPoseidon2Config>> for T {
         &self,
         ctx: &Self::Ctx<'_>,
         required_height: Option<usize>,
-    ) -> Option<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>> {
+    ) -> Option<AirProvingContext<CpuBackend<SC>>> {
         let common_main_rm = self.generate_trace(ctx, required_height);
         common_main_rm.map(|m| AirProvingContext::simple_no_pis(ColMajorMatrix::from_row_major(&m)))
     }

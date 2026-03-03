@@ -12,7 +12,7 @@ use crate::{
         inner::InnerTraceGenImpl,
         root::RootTraceGenImpl,
     },
-    SC,
+    RootSC, SC,
 };
 
 mod compression;
@@ -31,7 +31,7 @@ pub type InnerCpuProver<const MAX_NUM_PROOFS: usize> =
     InnerAggregationProver<CpuBackend<SC>, VerifierSubCircuit<MAX_NUM_PROOFS>, InnerTraceGenImpl>;
 pub type CompressionCpuProver =
     CompressionProver<CpuBackend<SC>, VerifierSubCircuit<1>, InnerTraceGenImpl>;
-pub type RootCpuProver = RootProver<CpuBackend<SC>, VerifierSubCircuit<1>, RootTraceGenImpl>;
+pub type RootCpuProver = RootProver<CpuBackend<RootSC>, VerifierSubCircuit<1>, RootTraceGenImpl>;
 pub type DeferralVerifyCpuProver =
     DeferredVerifyProver<CpuBackend<SC>, VerifierSubCircuit<1>, DeferredVerifyTraceGenImpl>;
 pub type DeferralInnerCpuProver<const MAX_NUM_PROOFS: usize> = DeferralInnerProver<
@@ -48,8 +48,8 @@ pub type InnerGpuProver<const MAX_NUM_PROOFS: usize> =
 #[cfg(feature = "cuda")]
 pub type CompressionGpuProver =
     CompressionProver<GpuBackend, VerifierSubCircuit<1>, InnerTraceGenImpl>;
-#[cfg(feature = "cuda")]
-pub type RootGpuProver = RootProver<GpuBackend, VerifierSubCircuit<1>, RootTraceGenImpl>;
+// #[cfg(feature = "cuda")]
+// pub type RootGpuProver = RootProver<GpuBackend, VerifierSubCircuit<1>, RootTraceGenImpl>;
 #[cfg(feature = "cuda")]
 pub type DeferralVerifyGpuProver =
     DeferredVerifyProver<GpuBackend, VerifierSubCircuit<1>, DeferredVerifyTraceGenImpl>;

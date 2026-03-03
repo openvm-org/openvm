@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use itertools::Itertools;
-use openvm_stark_backend::AirRef;
-use recursion_circuit::system::AggregationSubCircuit;
+use openvm_stark_backend::{AirRef, StarkProtocolConfig};
+use recursion_circuit::{prelude::F, system::AggregationSubCircuit};
 
-use crate::{circuit::Circuit, SC};
+use crate::circuit::Circuit;
 
 pub mod bus;
 pub mod def_pvs;
@@ -19,7 +19,9 @@ pub struct DeferralInnerCircuit<S: AggregationSubCircuit> {
     pub verifier_circuit: Arc<S>,
 }
 
-impl<S: AggregationSubCircuit> Circuit for DeferralInnerCircuit<S> {
+impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
+    for DeferralInnerCircuit<S>
+{
     fn airs(&self) -> Vec<AirRef<SC>> {
         let bus_inventory = self.verifier_circuit.bus_inventory();
         let next_bus_idx = self.verifier_circuit.next_bus_idx();

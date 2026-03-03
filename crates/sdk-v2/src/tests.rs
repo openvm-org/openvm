@@ -10,13 +10,7 @@ use crate::{
     Sdk, StdIn,
 };
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "cuda")] {
-        type E = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
-    } else {
-        type E = openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine;
-    }
-}
+type E = openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine;
 
 #[test]
 fn test_root_prover_trace_heights() -> Result<()> {

@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use itertools::Itertools;
-use openvm_stark_backend::AirRef;
-use recursion_circuit::system::AggregationSubCircuit;
+use openvm_stark_backend::{AirRef, StarkProtocolConfig};
+use recursion_circuit::{prelude::F, system::AggregationSubCircuit};
 
 use crate::{
     bn254::CommitBytes,
@@ -10,7 +10,6 @@ use crate::{
         subair::{MerkleRootBus, MerkleTreeInternalBus, MerkleTreeSubAir},
         Circuit,
     },
-    SC,
 };
 
 pub mod bus;
@@ -27,7 +26,9 @@ pub struct DeferralHookCircuit<S: AggregationSubCircuit> {
     pub(crate) internal_recursive_dag_commit: CommitBytes,
 }
 
-impl<S: AggregationSubCircuit> Circuit for DeferralHookCircuit<S> {
+impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
+    for DeferralHookCircuit<S>
+{
     fn airs(&self) -> Vec<AirRef<SC>> {
         let bus_inventory = self.verifier_circuit.bus_inventory();
         let next_bus_idx = self.verifier_circuit.next_bus_idx();
