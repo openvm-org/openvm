@@ -14,7 +14,7 @@ strum_macros.workspace = true
 ecdsa-core = { workspace = true, features = ["verifying"] }
 elliptic-curve = { workspace = true, features = ["arithmetic", "sec1"] }
 openvm-custom-insn = { workspace = true }
-openvm-rv32im-guest = { workspace = true }
+openvm-riscv-guest = { workspace = true }
 openvm-algebra-guest = { workspace = true }
 openvm-ecc-sw-macros = { workspace = true }
 once_cell = { workspace = true, features = ["race", "alloc"] }
@@ -33,6 +33,6 @@ alloc = []
 ignored = [
     "openvm",
     "openvm-custom-insn",
-    "openvm-rv32im-guest",
+    "openvm-riscv-guest",
     "halo2curves-axiom",
 ]

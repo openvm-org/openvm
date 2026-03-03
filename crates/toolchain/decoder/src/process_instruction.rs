@@ -4,8 +4,7 @@
 // Licensed under the Apache License Version 2.0, with LLVM Exceptions, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-use super::instruction_formats;
-use super::InstructionProcessor;
+use super::{instruction_formats, InstructionProcessor};
 
 fn process_opcode_op<T: InstructionProcessor>(
     processor: &mut T,
@@ -247,9 +246,7 @@ pub fn process_instruction<T: InstructionProcessor>(
                 _ => None,
             }
         }
-        instruction_formats::OPCODE_OP_IMM_32 => {
-            process_opcode_op_imm_32(processor, insn_bits)
-        }
+        instruction_formats::OPCODE_OP_IMM_32 => process_opcode_op_imm_32(processor, insn_bits),
         instruction_formats::OPCODE_OP_32 => process_opcode_op_32(processor, insn_bits),
         _ => None,
     }

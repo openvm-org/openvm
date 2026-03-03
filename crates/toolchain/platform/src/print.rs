@@ -4,7 +4,7 @@ pub fn print<S: AsRef<str>>(s: S) {
     #[cfg(all(not(openvm_intrinsics), feature = "std"))]
     print!("{}", s.as_ref());
     #[cfg(openvm_intrinsics)]
-    openvm_rv64im_guest::print_str_from_bytes(s.as_ref().as_bytes());
+    openvm_riscv_guest::print_str_from_bytes(s.as_ref().as_bytes());
 }
 
 pub fn println<S: AsRef<str>>(s: S) {
