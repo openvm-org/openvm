@@ -82,7 +82,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "openvm-continautions-test-programs"
+name = "openvm-continuations-test-programs"
 version = "0.0.0"
 dependencies = [
  "openvm",
