@@ -1,6 +1,6 @@
 [workspace]
 [package]
-name = "openvm-continautions-test-programs"
+name = "openvm-sdk-test-programs"
 version = "0.0.0"
 edition = "2021"
 

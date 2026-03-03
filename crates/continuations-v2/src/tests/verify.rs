@@ -138,7 +138,7 @@ fn generate_unset_merkle_proof(
 }
 
 #[test]
-fn test_vm_deferral_mix_combined_flow() -> Result<()> {
+fn test_verify_stark_integration() -> Result<()> {
     setup_tracing_with_log_level(Level::WARN);
 
     // SECTION 0: Generate a def_hook_commit.

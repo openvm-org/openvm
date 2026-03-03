@@ -1,14 +1,18 @@
 [workspace]
 [package]
-name = "openvm-continautions-test-programs"
+name = "openvm-continuations-test-programs"
 version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-openvm = { git = "https://github.com/openvm-org/openvm.git", branch = "develop-v2", default-features = false }
+openvm = { path = "../../toolchain/openvm", default-features = false }
+openvm-platform = { path = "../../toolchain/platform", default-features = false }
+openvm-custom-insn = { path = "../../toolchain/custom_insn", default-features = false }
+openvm-deferral-guest = { path = "../../../extensions/deferral/guest", default-features = false }
 
 [features]
 default = []
+std = ["openvm/std"]
 
 [profile.release]
 panic = "abort"
