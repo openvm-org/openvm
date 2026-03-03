@@ -691,7 +691,7 @@ mod cuda {
         #[cfg(feature = "touchemall")]
         for (i, gpu) in gpu_ctx.iter().enumerate() {
             let gpu = &gpu.common_main;
-            let name = circuit.airs()[i].name();
+            let name = circuit.airs::<SC>()[i].name();
 
             let width = gpu.width();
             let height = gpu.height();
