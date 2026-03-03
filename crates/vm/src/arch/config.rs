@@ -8,7 +8,7 @@ use derive_new::new;
 use getset::{Setters, WithSetters};
 use openvm_instructions::{
     riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS},
-    NATIVE_AS,
+    DEFERRAL_AS,
 };
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
@@ -190,7 +190,7 @@ impl Default for MemoryConfig {
         addr_spaces[RV32_REGISTER_AS as usize].num_cells = 32 * size_of::<u32>();
         addr_spaces[RV32_MEMORY_AS as usize].num_cells = MAX_CELLS;
         addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = DEFAULT_MAX_NUM_PUBLIC_VALUES;
-        addr_spaces[NATIVE_AS as usize].num_cells = MAX_CELLS;
+        addr_spaces[DEFERRAL_AS as usize].num_cells = MAX_CELLS;
         Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17, 32)
     }
 }
@@ -232,7 +232,7 @@ impl MemoryConfig {
     pub fn aggregation() -> Self {
         let mut addr_spaces =
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
-        addr_spaces[NATIVE_AS as usize].num_cells = 1 << 29;
+        addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 29;
         Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17, 8)
     }
 
@@ -340,13 +340,9 @@ impl SystemConfig {
         self
     }
 
-    pub fn has_public_values_chip(&self) -> bool {
-        !self.continuation_enabled && self.num_public_values > 0
-    }
-
     /// Returns the AIR ID of the memory boundary AIR. Panic if the boundary AIR is not enabled.
     pub fn memory_boundary_air_id(&self) -> usize {
-        PUBLIC_VALUES_AIR_ID + usize::from(self.has_public_values_chip())
+        PUBLIC_VALUES_AIR_ID
     }
 
     /// Returns the AIR ID of the memory merkle AIR. Returns None if continuations are not enabled.

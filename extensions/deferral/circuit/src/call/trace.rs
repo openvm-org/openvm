@@ -8,15 +8,10 @@ use openvm_circuit::{
         AdapterTraceExecutor, AdapterTraceFiller, EmptyAdapterCoreLayout, ExecutionError,
         PreflightExecutor, RecordArena, TraceFiller, VmField, VmStateMut,
     },
-    system::{
-        memory::{
-            offline_checker::{
-                MemoryReadAuxRecord, MemoryWriteAuxRecord, MemoryWriteBytesAuxRecord,
-            },
-            online::TracingMemory,
-            MemoryAuxColsFactory,
-        },
-        native_adapter::util::{tracing_read_native, tracing_write_native},
+    system::memory::{
+        offline_checker::{MemoryReadAuxRecord, MemoryWriteAuxRecord, MemoryWriteBytesAuxRecord},
+        online::TracingMemory,
+        MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
@@ -26,7 +21,9 @@ use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
 };
-use openvm_rv32im_circuit::adapters::{tracing_read, tracing_write};
+use openvm_rv32im_circuit::adapters::{
+    tracing_read, tracing_read_deferral, tracing_write, tracing_write_deferral,
+};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
@@ -259,14 +256,14 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
         let output_acc_ptr = input_acc_ptr + DIGEST_SIZE_U32;
 
         let old_input_acc_chunks: [[F; MEMORY_OP_SIZE]; DIGEST_MEMORY_OPS] = from_fn(|i| {
-            tracing_read_native(
+            tracing_read_deferral(
                 memory,
                 input_acc_ptr + (i * MEMORY_OP_SIZE) as u32,
                 &mut record.old_input_acc_aux[i].prev_timestamp,
             )
         });
         let old_output_acc_chunks: [[F; MEMORY_OP_SIZE]; DIGEST_MEMORY_OPS] = from_fn(|i| {
-            tracing_read_native(
+            tracing_read_deferral(
                 memory,
                 output_acc_ptr + (i * MEMORY_OP_SIZE) as u32,
                 &mut record.old_output_acc_aux[i].prev_timestamp,
@@ -319,7 +316,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
         let output_acc_ptr = input_acc_ptr + DIGEST_SIZE_U32;
 
         for chunk_idx in 0..DIGEST_MEMORY_OPS {
-            tracing_write_native(
+            tracing_write_deferral(
                 memory,
                 input_acc_ptr + (chunk_idx * MEMORY_OP_SIZE) as u32,
                 memory_op_chunk(&data.new_input_acc, chunk_idx),
@@ -329,7 +326,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for DeferralCallAdapterExecutor {
         }
 
         for chunk_idx in 0..DIGEST_MEMORY_OPS {
-            tracing_write_native(
+            tracing_write_deferral(
                 memory,
                 output_acc_ptr + (chunk_idx * MEMORY_OP_SIZE) as u32,
                 memory_op_chunk(&data.new_output_acc, chunk_idx),

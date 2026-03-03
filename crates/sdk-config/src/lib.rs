@@ -4,7 +4,7 @@ use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtensi
 use openvm_bigint_circuit::*;
 use openvm_bigint_transpiler::*;
 use openvm_circuit::{
-    arch::{instructions::NATIVE_AS, *},
+    arch::*,
     derive::VmConfig,
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
@@ -218,10 +218,6 @@ impl SdkVmConfig {
 
     /// Apply small optimizations to the configuration.
     pub fn apply_optimizations(&mut self) {
-        // There should be no need to write to native address space since Native extension and
-        // CastF extension are not enabled.
-        self.system.config.memory_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
-
         let rv32m = self.rv32m.as_mut();
         let bigint = self.bigint.as_mut();
         if let (Some(bigint), Some(rv32m)) = (bigint, rv32m) {
