@@ -3065,7 +3065,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e130c806dccc85428c564f2dc5a96e05b6615a27c9a28776bd7761a9af4bb552"
 dependencies = [
  "diesel_derives",
- "downcast-rs 2.0.2",
+ "downcast-rs",
 ]
 
 [[package]]
@@ -3168,12 +3168,6 @@ checksum = "d4b8a88685455ed29a21542a33abd9cb6510b6b129abadabdcef0f4c55bc8f61"
 dependencies = [
  "litrs",
 ]
-
-[[package]]
-name = "downcast-rs"
-version = "1.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 
 [[package]]
 name = "downcast-rs"
@@ -6119,11 +6113,11 @@ name = "openvm-algebra-transpiler"
 version = "1.4.3"
 dependencies = [
  "openvm-algebra-guest",
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "strum 0.26.3",
 ]
 
@@ -6253,12 +6247,12 @@ name = "openvm-bigint-transpiler"
 version = "1.4.3"
 dependencies = [
  "openvm-bigint-guest",
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-rv32im-transpiler",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "strum 0.26.3",
 ]
 
@@ -6527,12 +6521,12 @@ dependencies = [
 name = "openvm-ecc-transpiler"
 version = "1.4.3"
 dependencies = [
+ "openvm-decoder",
  "openvm-ecc-guest",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "strum 0.26.3",
 ]
 
@@ -6645,12 +6639,12 @@ dependencies = [
 name = "openvm-keccak256-transpiler"
 version = "1.4.3"
 dependencies = [
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-keccak256-guest",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "strum 0.26.3",
 ]
 
@@ -6882,11 +6876,11 @@ dependencies = [
 name = "openvm-pairing-transpiler"
 version = "1.4.3"
 dependencies = [
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-pairing-guest",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "strum 0.26.3",
 ]
 
@@ -7008,12 +7002,12 @@ dependencies = [
 name = "openvm-rv32im-transpiler"
 version = "1.4.3"
 dependencies = [
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-rv32im-guest",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "serde",
  "strum 0.26.3",
  "tracing",
@@ -7032,12 +7026,12 @@ dependencies = [
 name = "openvm-rv64im-transpiler"
 version = "1.4.3"
 dependencies = [
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-instructions-derive",
- "openvm-rv32im-guest",
+ "openvm-rv64im-guest",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "serde",
  "strum 0.26.3",
  "tracing",
@@ -7082,6 +7076,7 @@ dependencies = [
  "openvm-circuit",
  "openvm-continuations",
  "openvm-cuda-backend",
+ "openvm-decoder",
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
  "openvm-keccak256-circuit",
@@ -7101,7 +7096,6 @@ dependencies = [
  "openvm-transpiler",
  "p3-fri",
  "rand 0.8.5",
- "rrs-lib",
  "serde",
  "serde_json",
  "serde_with",
@@ -7184,12 +7178,12 @@ dependencies = [
 name = "openvm-sha2-transpiler"
 version = "1.4.3"
 dependencies = [
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-sha2-guest",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "strum 0.26.3",
 ]
 
@@ -7277,6 +7271,7 @@ dependencies = [
  "openvm-platform",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
+ "openvm-rv64im-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-transpiler",
@@ -7292,10 +7287,10 @@ version = "1.4.3"
 dependencies = [
  "elf",
  "eyre",
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-platform",
  "openvm-stark-backend",
- "rrs-lib",
  "rustc-demangle",
  "thiserror 1.0.69",
 ]
@@ -9155,16 +9150,6 @@ dependencies = [
  "const-default",
  "libc",
  "svgbobdoc",
-]
-
-[[package]]
-name = "rrs-lib"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4382d3af3a4ebdae7f64ba6edd9114fff92c89808004c4943b393377a25d001"
-dependencies = [
- "downcast-rs 1.2.1",
- "paste",
 ]
 
 [[package]]
