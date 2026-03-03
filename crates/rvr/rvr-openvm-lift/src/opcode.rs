@@ -9,9 +9,9 @@
 use openvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, SysPhantom, SystemOpcode,
 };
-use openvm_rv32im_transpiler::{
+use openvm_riscv_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, LessThanOpcode,
-    MulHOpcode, MulOpcode, Rv32AuipcOpcode, Rv32JalLuiOpcode, Rv32JalrOpcode, Rv32LoadStoreOpcode,
+    MulHOpcode, MulOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode,
     ShiftOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -94,22 +94,22 @@ pub fn lift_instruction<F: PrimeField32>(
 
     // LoadStore: LOADW=0x210, LOADBU=0x211, LOADHU=0x212, STOREW=0x213,
     //            STOREH=0x214, STOREB=0x215, LOADB=0x216, LOADH=0x217
-    if opcode == Rv32LoadStoreOpcode::LOADW.global_opcode_usize() {
+    if opcode == Rv64LoadStoreOpcode::LOADW.global_opcode_usize() {
         return Some(lift_load(insn, pc, MemWidth::Word, false));
     }
-    if opcode == Rv32LoadStoreOpcode::LOADBU.global_opcode_usize() {
+    if opcode == Rv64LoadStoreOpcode::LOADBU.global_opcode_usize() {
         return Some(lift_load(insn, pc, MemWidth::Byte, false));
     }
-    if opcode == Rv32LoadStoreOpcode::LOADHU.global_opcode_usize() {
+    if opcode == Rv64LoadStoreOpcode::LOADHU.global_opcode_usize() {
         return Some(lift_load(insn, pc, MemWidth::Half, false));
     }
-    if opcode == Rv32LoadStoreOpcode::LOADB.global_opcode_usize() {
+    if opcode == Rv64LoadStoreOpcode::LOADB.global_opcode_usize() {
         return Some(lift_load(insn, pc, MemWidth::Byte, true));
     }
-    if opcode == Rv32LoadStoreOpcode::LOADH.global_opcode_usize() {
+    if opcode == Rv64LoadStoreOpcode::LOADH.global_opcode_usize() {
         return Some(lift_load(insn, pc, MemWidth::Half, true));
     }
-    if opcode == Rv32LoadStoreOpcode::STOREW.global_opcode_usize() {
+    if opcode == Rv64LoadStoreOpcode::STOREW.global_opcode_usize() {
         // e = RV32_MEMORY_AS is a normal store; e = AS_PUBLIC_VALUES is REVEAL,
         // handled by `Rv32IoExtension`.
         let addr_space = field_to_u32(insn.e);
@@ -117,10 +117,10 @@ pub fn lift_instruction<F: PrimeField32>(
             return Some(lift_store(insn, pc, MemWidth::Word));
         }
     }
-    if opcode == Rv32LoadStoreOpcode::STOREH.global_opcode_usize() {
+    if opcode == Rv64LoadStoreOpcode::STOREH.global_opcode_usize() {
         return Some(lift_store(insn, pc, MemWidth::Half));
     }
-    if opcode == Rv32LoadStoreOpcode::STOREB.global_opcode_usize() {
+    if opcode == Rv64LoadStoreOpcode::STOREB.global_opcode_usize() {
         return Some(lift_store(insn, pc, MemWidth::Byte));
     }
 
@@ -147,19 +147,19 @@ pub fn lift_instruction<F: PrimeField32>(
     }
 
     // JAL=0x230
-    if opcode == Rv32JalLuiOpcode::JAL.global_opcode_usize() {
+    if opcode == Rv64JalLuiOpcode::JAL.global_opcode_usize() {
         return Some(lift_jal(insn, pc));
     }
     // LUI=0x231
-    if opcode == Rv32JalLuiOpcode::LUI.global_opcode_usize() {
+    if opcode == Rv64JalLuiOpcode::LUI.global_opcode_usize() {
         return Some(lift_lui(insn, pc));
     }
     // JALR=0x235
-    if opcode == Rv32JalrOpcode::JALR.global_opcode_usize() {
+    if opcode == Rv64JalrOpcode::JALR.global_opcode_usize() {
         return Some(lift_jalr(insn, pc));
     }
     // AUIPC=0x240
-    if opcode == Rv32AuipcOpcode::AUIPC.global_opcode_usize() {
+    if opcode == Rv64AuipcOpcode::AUIPC.global_opcode_usize() {
         return Some(lift_auipc(insn, pc));
     }
 

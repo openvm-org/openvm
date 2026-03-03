@@ -5,7 +5,7 @@
 //! buffer allocations — they must match byte-for-byte.
 
 use openvm_platform::memory::MEM_SIZE;
-use openvm_rv32im_guest::MAX_HINT_BUFFER_WORDS;
+use openvm_riscv_guest::MAX_HINT_BUFFER_DWORDS;
 use rvr_openvm_ext_ffi_common::{
     AS_MEMORY, AS_PUBLIC_VALUES, AS_REGISTER, CHUNK, DEFAULT_PAGE_BITS,
     DEFAULT_SEGMENT_CHECK_INSNS, DEFERRAL_AS, DEFERRAL_DIGEST_SIZE, WORD_SIZE,
@@ -14,12 +14,12 @@ use rvr_openvm_ext_ffi_common::{
 /// Worst-case AS_MEMORY pages a single instruction can touch.
 ///
 /// Bound is set by `HINT_BUFFER`, which writes up to
-/// `MAX_HINT_BUFFER_WORDS * WORD_SIZE` contiguous bytes. One AS_MEMORY page
+/// `MAX_HINT_BUFFER_DWORDS * WORD_SIZE` contiguous bytes. One AS_MEMORY page
 /// covers `CHUNK * 2^PAGE_BITS` bytes. The `+1` covers worst-case
 /// misalignment of the range across page boundaries.
 pub const MAX_MEM_PAGES_PER_INSN: usize = {
     let page_bytes = CHUNK * (1 << DEFAULT_PAGE_BITS);
-    let max_bytes = MAX_HINT_BUFFER_WORDS * WORD_SIZE;
+    let max_bytes = MAX_HINT_BUFFER_DWORDS * WORD_SIZE;
     max_bytes.div_ceil(page_bytes) + 1
 };
 
