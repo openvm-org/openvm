@@ -32,7 +32,9 @@ use tracing::Level;
 use crate::{prover::ChildVkKind, SC};
 
 #[cfg(feature = "cuda")]
-mod combined;
+mod e2e;
+#[cfg(feature = "cuda")]
+mod verify;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
