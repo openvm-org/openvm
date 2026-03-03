@@ -24,8 +24,8 @@ use {
     core::mem::MaybeUninit,
     openvm_pairing_guest::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3},
     openvm_platform::custom_insn_r,
-    openvm_rv32im_guest,
-    openvm_rv32im_guest::hint_buffer_chunked,
+    openvm_riscv_guest,
+    openvm_riscv_guest::hint_buffer_chunked,
 };
 
 use super::{Bls12_381, Fp, Fp12, Fp2};

@@ -1,15 +1,15 @@
 use openvm_bigint_guest::{Int256Funct7, BEQ256_FUNCT3, INT256_FUNCT3, OPCODE};
+use openvm_decoder::instruction_formats::{BType, RType};
 use openvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, utils::isize_to_field, LocalOpcode,
     VmOpcode,
 };
 use openvm_instructions_derive::LocalOpcode;
-use openvm_rv32im_transpiler::{
+use openvm_riscv_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
-use openvm_decoder::instruction_formats::{BType, RType};
 use strum::IntoEnumIterator;
 
 // =================================================================================================

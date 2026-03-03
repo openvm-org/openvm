@@ -33,11 +33,10 @@ members = [
     "crates/recursion",
     "crates/verify",
     "crates/vm",
-    "extensions/rv32im/circuit",
-    "extensions/rv32im/transpiler",
-    "extensions/rv32im/guest",
-    "extensions/rv32im/tests",
-    "extensions/rv64im/transpiler",
+    "extensions/riscv/circuit",
+    "extensions/riscv/transpiler",
+    "extensions/riscv/guest",
+    "extensions/riscv/tests",
     "extensions/rv32-adapters",
     "extensions/algebra/circuit",
     "extensions/algebra/transpiler",
@@ -154,11 +153,9 @@ openvm-sdk-config = { path = "crates/sdk-config", default-features = false }
 cargo-openvm = { path = "crates/cli", default-features = false }
 
 # Extensions
-openvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
-openvm-rv32im-transpiler = { path = "extensions/rv32im/transpiler", default-features = false }
-openvm-rv32im-guest = { path = "extensions/rv32im/guest", default-features = false }
-openvm-rv64im-transpiler = { path = "extensions/rv64im/transpiler", default-features = false }
-openvm-rv64im-guest = { path = "extensions/rv64im/guest", default-features = false }
+openvm-riscv-circuit = { path = "extensions/riscv/circuit", default-features = false }
+openvm-riscv-transpiler = { path = "extensions/riscv/transpiler", default-features = false }
+openvm-riscv-guest = { path = "extensions/riscv/guest", default-features = false }
 openvm-rv32-adapters = { path = "extensions/rv32-adapters", default-features = false }
 openvm-keccak256-circuit = { path = "extensions/keccak256/circuit", default-features = false }
 openvm-keccak256-transpiler = { path = "extensions/keccak256/transpiler", default-features = false }
