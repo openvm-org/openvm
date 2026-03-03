@@ -4,9 +4,12 @@ use openvm_circuit::{
     arch::{instructions::NATIVE_AS, POSEIDON2_WIDTH},
     system::memory::dimensions::MemoryDimensions,
 };
-use openvm_stark_backend::prover::{AirProvingContext, ColMajorMatrix, CpuBackend};
+use openvm_stark_backend::{
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    StarkProtocolConfig,
+};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    poseidon2_compress_with_capacity, BabyBearPoseidon2Config, DIGEST_SIZE, F,
+    poseidon2_compress_with_capacity, DIGEST_SIZE, F,
 };
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
@@ -52,7 +55,7 @@ fn build_path_nodes(
     nodes
 }
 
-pub fn generate_proving_input(
+pub fn generate_proving_input<SC: StarkProtocolConfig<F = F>>(
     initial_acc_hash: [F; DIGEST_SIZE],
     final_acc_hash: [F; DIGEST_SIZE],
     initial_merkle_proof: &[[F; DIGEST_SIZE]],
@@ -60,10 +63,7 @@ pub fn generate_proving_input(
     memory_dimensions: MemoryDimensions,
     depth: usize,
     is_unset: bool,
-) -> (
-    AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>,
-    Vec<[F; POSEIDON2_WIDTH]>,
-) {
+) -> (AirProvingContext<CpuBackend<SC>>, Vec<[F; POSEIDON2_WIDTH]>) {
     assert_eq!(
         initial_merkle_proof.len(),
         final_merkle_proof.len(),

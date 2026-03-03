@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use itertools::Itertools;
-use openvm_stark_backend::AirRef;
-use recursion_circuit::system::AggregationSubCircuit;
+use openvm_stark_backend::{AirRef, StarkProtocolConfig};
+use recursion_circuit::{prelude::F, system::AggregationSubCircuit};
 use verify_stark::pvs::{DeferralPvs, VmPvs, DEF_PVS_AIR_ID, VM_PVS_AIR_ID};
 
 use crate::{
@@ -16,7 +16,6 @@ use crate::{
         },
         Circuit,
     },
-    SC,
 };
 
 pub mod app {
@@ -44,7 +43,7 @@ pub struct InnerCircuit<S: AggregationSubCircuit> {
     pub def_hook_commit: Option<CommitBytes>,
 }
 
-impl<S: AggregationSubCircuit> Circuit for InnerCircuit<S> {
+impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for InnerCircuit<S> {
     fn airs(&self) -> Vec<AirRef<SC>> {
         let bus_inventory = self.verifier_circuit.bus_inventory();
         let public_values_bus = bus_inventory.public_values_bus;

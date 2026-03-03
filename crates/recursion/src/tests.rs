@@ -641,7 +641,7 @@ fn test_recursion_circuit_w_stack_too_small() {
 #[cfg(feature = "cuda")]
 mod cuda {
     use itertools::zip_eq;
-    use openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
+    use openvm_cuda_backend::{prelude::SC, BabyBearPoseidon2GpuEngine};
     use openvm_cuda_common::copy::MemCopyD2H;
     use openvm_stark_backend::prover::{MatrixDimensions, MatrixView};
     #[cfg(feature = "touchemall")]
@@ -669,7 +669,7 @@ mod cuda {
         let vk = Arc::new(vk);
 
         let circuit = VerifierSubCircuit::<5>::new(vk.clone());
-        for (air_idx, air) in circuit.airs().iter().enumerate() {
+        for (air_idx, air) in circuit.airs::<SC>().iter().enumerate() {
             tracing::debug!(%air_idx, air_name = %air.name());
         }
 
@@ -691,7 +691,7 @@ mod cuda {
         #[cfg(feature = "touchemall")]
         for (i, gpu) in gpu_ctx.iter().enumerate() {
             let gpu = &gpu.common_main;
-            let name = circuit.airs()[i].name();
+            let name = circuit.airs::<SC>()[i].name();
 
             let width = gpu.width();
             let height = gpu.height();
@@ -711,7 +711,7 @@ mod cuda {
         }
 
         const POSEIDON2_AIR_ID: usize = 14;
-        assert!(circuit.airs()[POSEIDON2_AIR_ID]
+        assert!(circuit.airs::<SC>()[POSEIDON2_AIR_ID]
             .name()
             .starts_with("Poseidon2Air"));
 
@@ -726,7 +726,7 @@ mod cuda {
             assert_eq!(gpu.width(), cpu.width(), "Width mismatch at AIR {i}");
             assert_eq!(gpu.height(), cpu.height(), "Height mismatch at AIR {i}");
 
-            let name = circuit.airs()[i].name();
+            let name = circuit.airs::<SC>()[i].name();
 
             if non_deterministic_air_idxs.contains(&i) {
                 continue;

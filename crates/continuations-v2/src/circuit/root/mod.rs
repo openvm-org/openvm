@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use openvm_circuit::system::memory::dimensions::MemoryDimensions;
-use openvm_stark_backend::AirRef;
+use openvm_stark_backend::{AirRef, StarkProtocolConfig};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
-use recursion_circuit::system::AggregationSubCircuit;
+use recursion_circuit::{prelude::F, system::AggregationSubCircuit};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -13,7 +13,6 @@ use crate::{
         root::bus::{DeferralAccPathBus, DeferralMerkleRootsBus},
         Circuit,
     },
-    SC,
 };
 
 pub mod bus;
@@ -34,7 +33,7 @@ pub struct RootCircuit<S: AggregationSubCircuit> {
     pub(crate) num_user_pvs: usize,
 }
 
-impl<S: AggregationSubCircuit> Circuit for RootCircuit<S> {
+impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC> for RootCircuit<S> {
     fn airs(&self) -> Vec<AirRef<SC>> {
         let bus_inventory = self.verifier_circuit.bus_inventory();
         let next_bus_idx = self.verifier_circuit.next_bus_idx();
