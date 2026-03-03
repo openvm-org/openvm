@@ -127,7 +127,8 @@ where
         }
         builder.when(is_valid.clone()).assert_one(bit_marker_sum);
 
-        // Check low-word limbs for W-shift correctness.
+        // Check that a[i] = b[i] <</>> c[i] both on the bit and limb shift level if c <
+        // RV64_WORD_NUM_LIMBS * RV64_CELL_BITS.
         let mut limb_marker_sum = AB::Expr::ZERO;
         let mut limb_shift = AB::Expr::ZERO;
         for i in 0..RV64_WORD_NUM_LIMBS {
@@ -463,9 +464,9 @@ pub(super) fn run_shift_w(
     y: &[u8; RV64_WORD_NUM_LIMBS],
 ) -> ([u8; RV64_REGISTER_NUM_LIMBS], usize, usize) {
     let (word_result, limb_shift, bit_shift) = match opcode {
-        ShiftWOpcode::SLLW => run_shift_left_w(x, y[0]),
-        ShiftWOpcode::SRLW => run_shift_right_w(x, y[0], true),
-        ShiftWOpcode::SRAW => run_shift_right_w(x, y[0], false),
+        ShiftWOpcode::SLLW => run_shift_left_w(x, y),
+        ShiftWOpcode::SRLW => run_shift_right_w(x, y, true),
+        ShiftWOpcode::SRAW => run_shift_right_w(x, y, false),
     };
     let sign_extend_limb = ((1u16 << RV64_CELL_BITS) - 1) as u8
         * (word_result[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS as u8 - 1));
@@ -477,10 +478,10 @@ pub(super) fn run_shift_w(
 #[inline(always)]
 fn run_shift_left_w(
     x: &[u8; RV64_WORD_NUM_LIMBS],
-    y0: u8,
+    y: &[u8; RV64_WORD_NUM_LIMBS],
 ) -> ([u8; RV64_WORD_NUM_LIMBS], usize, usize) {
     let mut result = [0u8; RV64_WORD_NUM_LIMBS];
-    let (limb_shift, bit_shift) = get_shift_w(y0);
+    let (limb_shift, bit_shift) = get_shift_w(y);
 
     for i in limb_shift..RV64_WORD_NUM_LIMBS {
         result[i] = if i > limb_shift {
@@ -497,7 +498,7 @@ fn run_shift_left_w(
 #[inline(always)]
 fn run_shift_right_w(
     x: &[u8; RV64_WORD_NUM_LIMBS],
-    y0: u8,
+    y: &[u8; RV64_WORD_NUM_LIMBS],
     logical: bool,
 ) -> ([u8; RV64_WORD_NUM_LIMBS], usize, usize) {
     let fill = if logical {
@@ -507,7 +508,7 @@ fn run_shift_right_w(
             * (x[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS as u8 - 1))
     };
     let mut result = [fill; RV64_WORD_NUM_LIMBS];
-    let (limb_shift, bit_shift) = get_shift_w(y0);
+    let (limb_shift, bit_shift) = get_shift_w(y);
 
     for i in 0..(RV64_WORD_NUM_LIMBS - limb_shift) {
         let res = if i + limb_shift + 1 < RV64_WORD_NUM_LIMBS {
@@ -525,7 +526,9 @@ fn run_shift_right_w(
 }
 
 #[inline(always)]
-fn get_shift_w(y0: u8) -> (usize, usize) {
-    let shift = (y0 as usize) % (RV64_WORD_NUM_LIMBS * RV64_CELL_BITS);
+fn get_shift_w(y: &[u8; RV64_WORD_NUM_LIMBS]) -> (usize, usize) {
+    // For W-shifts, the shift amount is determined by the low 32 bits, and in this byte-limb
+    // representation that is fully determined by y[0].
+    let shift = (y[0] as usize) % (RV64_WORD_NUM_LIMBS * RV64_CELL_BITS);
     (shift / RV64_CELL_BITS, shift % RV64_CELL_BITS)
 }
