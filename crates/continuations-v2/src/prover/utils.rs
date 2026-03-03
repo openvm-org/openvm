@@ -1,13 +1,15 @@
 use openvm_stark_backend::{
     prover::{AirProvingContext, MatrixDimensions, ProverBackend, ProvingContext},
-    AirRef, StarkEngine,
+    AirRef, StarkEngine, StarkProtocolConfig,
 };
+use recursion_circuit::prelude::F;
 
-use crate::{circuit::Circuit, SC};
+use crate::circuit::Circuit;
 
-pub fn debug_constraints<C, E>(circuit: &C, ctx: &ProvingContext<E::PB>, engine: &E)
+pub fn debug_constraints<SC, C, E>(circuit: &C, ctx: &ProvingContext<E::PB>, engine: &E)
 where
-    C: Circuit,
+    SC: StarkProtocolConfig<F = F>,
+    C: Circuit<SC>,
     E: StarkEngine<SC = SC>,
 {
     let airs = circuit.airs();
@@ -15,7 +17,7 @@ where
     engine.debug(&airs, ctx);
 }
 
-pub(crate) fn trace_heights_tracing_info<PB: ProverBackend>(
+pub(crate) fn trace_heights_tracing_info<PB: ProverBackend, SC: StarkProtocolConfig>(
     ctxs: &[(usize, AirProvingContext<PB>)],
     airs: &[AirRef<SC>],
 ) {

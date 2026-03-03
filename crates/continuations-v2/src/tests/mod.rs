@@ -39,7 +39,7 @@ cfg_if::cfg_if! {
         use std::borrow::Borrow;
         use crate::prover::InnerGpuProver as InnerProver;
         use crate::prover::CompressionGpuProver as CompressionProver;
-        use crate::prover::RootGpuProver as RootProver;
+        use crate::prover::RootCpuProver as RootProver;
         use crate::prover::{
             DeferralInnerGpuProver as DeferralInnerProver,
             DeferralHookGpuProver as DeferralHookProver,
@@ -56,10 +56,14 @@ cfg_if::cfg_if! {
         };
         use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine, GpuBackend};
         use openvm_stark_backend::{prover::CommittedTraceData, verifier::verify, TranscriptHistory};
-        use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_compress_with_capacity, default_duplex_sponge_recorder};
+        use openvm_stark_sdk::config::{
+            baby_bear_poseidon2::{poseidon2_compress_with_capacity, default_duplex_sponge_recorder},
+            baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine,
+        };
         use verify_stark::pvs::{VERIFIER_PVS_AIR_ID, DeferralPvs, VerifierBasePvs};
         use crate::prover::DeferralChildVkKind;
         use crate::utils::{poseidon2_input_to_digests, zero_hash};
+        type RootEngine = BabyBearBn254Poseidon2CpuEngine;
         type Engine = BabyBearPoseidon2GpuEngine;
         type PB = GpuBackend;
     } else {
@@ -323,9 +327,9 @@ fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
 
     let system_config = test_rv32im_config().rv32i.system;
 
-    let root_prover = RootProver::new::<Engine>(
+    let root_prover = RootProver::new::<RootEngine>(
         internal_recursive_vk,
-        internal_recursive_pcs_data,
+        internal_recursive_pcs_data.commitment.into(),
         root_system_params(),
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
@@ -333,10 +337,10 @@ fn test_root_prover(extra_recursive_layers: usize) -> Result<()> {
         None,
     );
     let ctx = root_prover.generate_proving_ctx(internal_recursive_proof, &user_pvs_proof);
-    let root_proof = root_prover.root_prove_from_ctx::<Engine>(ctx.unwrap())?;
+    let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap())?;
 
     let vk = root_prover.get_vk();
-    let engine = Engine::new(vk.inner.params.clone());
+    let engine = RootEngine::new(vk.inner.params.clone());
     engine.verify(&vk, &root_proof)?;
     Ok(())
 }
@@ -354,9 +358,9 @@ fn test_root_prover_trace_heights() -> Result<()> {
 
     let system_config = test_rv32im_config().rv32i.system;
 
-    let root_base_prover = RootProver::new::<Engine>(
+    let root_base_prover = RootProver::new::<RootEngine>(
         internal_recursive_vk.clone(),
-        internal_recursive_pcs_data.clone(),
+        internal_recursive_pcs_data.commitment.into(),
         root_system_params(),
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
@@ -375,9 +379,9 @@ fn test_root_prover_trace_heights() -> Result<()> {
     const AIR_MODIFIED_HEIGHT_IDX: usize = 4;
     trace_heights[AIR_MODIFIED_HEIGHT_IDX] *= 2;
 
-    let root_prover = RootProver::new::<Engine>(
+    let root_prover = RootProver::new::<RootEngine>(
         internal_recursive_vk,
-        internal_recursive_pcs_data,
+        internal_recursive_pcs_data.commitment.into(),
         root_system_params(),
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
@@ -391,10 +395,10 @@ fn test_root_prover_trace_heights() -> Result<()> {
     for ((air_idx, air_ctx), expected_height) in ctx.per_trace.iter().zip(trace_heights) {
         assert_eq!(air_ctx.height(), expected_height, "air_idx {air_idx}");
     }
-    let root_proof = root_prover.root_prove_from_ctx::<Engine>(ctx)?;
+    let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx)?;
 
     let vk = root_prover.get_vk();
-    let engine = Engine::new(vk.inner.params.clone());
+    let engine = RootEngine::new(vk.inner.params.clone());
     engine.verify(&vk, &root_proof)?;
     Ok(())
 }
@@ -609,9 +613,9 @@ fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()
     let expected_final_ts_state = ts_log.perm_results().last().unwrap();
 
     // Generate a root_proof to compare the pvs of def_proof against
-    let root_prover = RootProver::new::<Engine>(
+    let root_prover = RootProver::new::<RootEngine>(
         internal_recursive_vk,
-        internal_recursive_pcs_data,
+        internal_recursive_pcs_data.commitment.into(),
         root_system_params(),
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
@@ -619,7 +623,7 @@ fn test_deferral_verify_prover(child_extra_recursive_layers: usize) -> Result<()
         None,
     );
     let ctx = root_prover.generate_proving_ctx(internal_recursive_proof, &user_pvs_proof);
-    let root_proof = root_prover.root_prove_from_ctx::<Engine>(ctx.unwrap())?;
+    let root_proof = root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap())?;
 
     // Assert the correctness of the def_proof public values
     let root_pvs: &RootVerifierPvs<F> = root_proof.public_values[VERIFIER_PVS_AIR_ID]

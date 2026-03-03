@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use continuations_v2::RootSC;
 use eyre::Result;
 use openvm_circuit::arch::{
     instructions::exe::VmExe, Executor, MeteredExecutor, PreflightExecutor, VmBuilder,
@@ -43,7 +44,7 @@ where
     }
 
     // TODO[INT-5581]: should output an EvmProof
-    pub fn prove(&mut self, input: StdIn<Val<SC>>) -> Result<Proof<crate::SC>>
+    pub fn prove(&mut self, input: StdIn<Val<SC>>) -> Result<Proof<RootSC>>
     where
         <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor: Executor<Val<SC>>
             + MeteredExecutor<Val<SC>>

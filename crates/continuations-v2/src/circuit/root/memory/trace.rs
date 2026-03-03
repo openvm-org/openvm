@@ -7,24 +7,22 @@ use openvm_circuit::{
 use openvm_stark_backend::{
     p3_util::log2_strict_usize,
     prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    StarkProtocolConfig,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    poseidon2_compress_with_capacity, BabyBearPoseidon2Config, DIGEST_SIZE, F,
+    poseidon2_compress_with_capacity, DIGEST_SIZE, F,
 };
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
 
 use crate::{circuit::root::memory::UserPvsInMemoryCols, utils::digests_to_poseidon2_input};
 
-pub fn generate_proving_input(
+pub fn generate_proving_input<SC: StarkProtocolConfig<F = F>>(
     user_pv_commit: [F; DIGEST_SIZE],
     merkle_proof: &[[F; DIGEST_SIZE]],
     memory_dimensions: MemoryDimensions,
     num_user_pvs: usize,
-) -> (
-    AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>,
-    Vec<[F; POSEIDON2_WIDTH]>,
-) {
+) -> (AirProvingContext<CpuBackend<SC>>, Vec<[F; POSEIDON2_WIDTH]>) {
     let merkle_proof_len = merkle_proof.len();
     let num_layers = merkle_proof_len + 1;
     let height = num_layers.next_power_of_two();
