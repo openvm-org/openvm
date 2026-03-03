@@ -3,7 +3,7 @@ use std::sync::Arc;
 use connector::VmConnectorChipGPU;
 use memory::MemoryInventoryGPU;
 use openvm_circuit::{
-    arch::{DenseRecordArena, SystemConfig, PUBLIC_VALUES_AIR_ID},
+    arch::{DenseRecordArena, SystemConfig},
     system::{
         connector::VmConnectorChip,
         memory::{interface::MemoryInterfaceAirs, online::GuestMemory, MemoryAirInventory},
@@ -16,7 +16,6 @@ use openvm_stark_backend::prover::{AirProvingContext, CommittedTraceData};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use poseidon2::Poseidon2PeripheryChipGPU;
 use program::ProgramChipGPU;
-use public_values::PublicValuesChipGPU;
 
 use crate::system::memory::CHUNK;
 
@@ -31,13 +30,11 @@ pub mod merkle_tree;
 pub mod phantom;
 pub mod poseidon2;
 pub mod program;
-pub mod public_values;
 
 pub struct SystemChipInventoryGPU {
     pub program: ProgramChipGPU,
     pub connector: VmConnectorChipGPU,
     pub memory_inventory: MemoryInventoryGPU,
-    pub public_values: Option<PublicValuesChipGPU>,
 }
 
 impl SystemChipInventoryGPU {
@@ -72,20 +69,10 @@ impl SystemChipInventoryGPU {
             }
         };
 
-        let public_values_chip = config.has_public_values_chip().then(|| {
-            PublicValuesChipGPU::new(
-                range_checker,
-                config.num_public_values,
-                config.max_constraint_degree as u32 - 1,
-                config.memory_config.timestamp_max_bits as u32,
-            )
-        });
-
         Self {
             program: program_chip,
             connector: connector_chip,
             memory_inventory,
-            public_values: public_values_chip,
         }
     }
 }
@@ -104,7 +91,7 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
     fn generate_proving_ctx(
         &mut self,
         system_records: SystemRecords<F>,
-        mut record_arenas: Vec<DenseRecordArena>,
+        _record_arenas: Vec<DenseRecordArena>,
     ) -> Vec<AirProvingContext<GpuBackend>> {
         let SystemRecords {
             from_state,
@@ -113,7 +100,6 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
             filtered_exec_frequencies,
             access_adapter_records,
             touched_memory,
-            public_values,
         } = system_records;
 
         let program_ctx = self.program.generate_proving_ctx(filtered_exec_frequencies);
@@ -122,19 +108,12 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
         self.connector.cpu_chip.end(to_state, exit_code);
         let connector_ctx = self.connector.generate_proving_ctx(());
 
-        let pv_ctx = self.public_values.as_mut().map(|chip| {
-            chip.public_values = public_values;
-            let arena = record_arenas.remove(PUBLIC_VALUES_AIR_ID);
-            chip.generate_proving_ctx(arena)
-        });
-
         let memory_ctxs = self
             .memory_inventory
             .generate_proving_ctxs(access_adapter_records, touched_memory);
 
         [program_ctx, connector_ctx]
             .into_iter()
-            .chain(pv_ctx)
             .chain(memory_ctxs)
             .collect()
     }
@@ -151,9 +130,9 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
 
     #[cfg(feature = "metrics")]
     fn finalize_trace_heights(&self, heights: &mut [usize]) {
-        use crate::system::cuda::boundary::BoundaryFields;
+        use crate::system::{cuda::boundary::BoundaryFields, PUBLIC_VALUES_AIR_ID};
 
-        let boundary_idx = PUBLIC_VALUES_AIR_ID + usize::from(self.public_values.is_some());
+        let boundary_idx = PUBLIC_VALUES_AIR_ID;
         let mut access_adapter_offset = boundary_idx + 1;
         match self.memory_inventory.boundary.fields {
             BoundaryFields::Volatile(_) => {

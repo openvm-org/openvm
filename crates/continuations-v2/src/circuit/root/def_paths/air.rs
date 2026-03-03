@@ -1,6 +1,8 @@
 use std::borrow::Borrow;
 
-use openvm_circuit::{arch::instructions::NATIVE_AS, system::memory::dimensions::MemoryDimensions};
+use openvm_circuit::{
+    arch::instructions::DEFERRAL_AS, system::memory::dimensions::MemoryDimensions,
+};
 use openvm_circuit_primitives::{
     utils::{and, assert_array_eq, not},
     SubAir,
@@ -63,7 +65,7 @@ impl DeferralAccMerklePathsAir {
         memory_dimensions: MemoryDimensions,
     ) -> Self {
         assert!(memory_dimensions.addr_space_height > 1);
-        let pv_start_idx = memory_dimensions.label_to_index((NATIVE_AS, 0));
+        let pv_start_idx = memory_dimensions.label_to_index((DEFERRAL_AS, 0));
         let merkle_path_branch_bits =
             u32::try_from(pv_start_idx).expect("merkle_path_branch_bits must fit in u32");
         let expected_proof_len = memory_dimensions.overall_height();

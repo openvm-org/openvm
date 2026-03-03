@@ -68,7 +68,6 @@ impl<F: Clone, MEM> VmState<F, MEM> {
             memory: &mut self.memory,
             streams: &mut self.streams,
             rng: &mut self.rng,
-            custom_pvs: &mut self.custom_pvs,
             ctx,
             #[cfg(feature = "metrics")]
             metrics: &mut self.metrics,
@@ -85,18 +84,7 @@ impl<F: Clone> VmState<F, GuestMemory> {
         inputs: impl Into<Streams<F>>,
     ) -> Self {
         let memory = create_memory_image(&system_config.memory_config, init_memory);
-        let num_custom_pvs = if system_config.has_public_values_chip() {
-            system_config.num_public_values
-        } else {
-            0
-        };
-        VmState::new_with_defaults(
-            pc_start,
-            memory,
-            inputs.into(),
-            DEFAULT_RNG_SEED,
-            num_custom_pvs,
-        )
+        VmState::new_with_defaults(pc_start, memory, inputs.into(), DEFAULT_RNG_SEED, 0)
     }
 
     pub fn reset(
