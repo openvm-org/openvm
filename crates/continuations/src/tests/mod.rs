@@ -9,9 +9,9 @@ use openvm_circuit::{
     system::memory::merkle::public_values::UserPublicValuesProof,
     utils::test_utils::test_system_config,
 };
-use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImBuilder, Rv32ImConfig};
-use openvm_rv32im_transpiler::{
-    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+use openvm_riscv_circuit::{Rv64IConfig, Rv64ImBuilder, Rv64ImConfig};
+use openvm_riscv_transpiler::{
+    Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
 };
 use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey, proof::Proof, AirRef, StarkEngine, SystemParams,
@@ -111,9 +111,9 @@ pub(in crate::tests) fn hook_system_params() -> SystemParams {
     hook_params_with_100_bits_security()
 }
 
-pub(in crate::tests) fn test_rv32im_config() -> Rv32ImConfig {
-    Rv32ImConfig {
-        rv32i: Rv32IConfig {
+pub(in crate::tests) fn test_rv32im_config() -> Rv64ImConfig {
+    Rv64ImConfig {
+        rv32i: Rv64IConfig {
             system: test_system_config(),
             ..Default::default()
         },
@@ -137,9 +137,9 @@ pub(in crate::tests) fn run_leaf_aggregation(
     let exe = VmExe::from_elf(
         elf,
         Transpiler::<F>::default()
-            .with_extension(Rv32ITranspilerExtension)
-            .with_extension(Rv32MTranspilerExtension)
-            .with_extension(Rv32IoTranspilerExtension),
+            .with_extension(Rv64ITranspilerExtension)
+            .with_extension(Rv64MTranspilerExtension)
+            .with_extension(Rv64IoTranspilerExtension),
     )?;
     let input = (1u64 << log_fib_input)
         .to_le_bytes()
@@ -147,7 +147,7 @@ pub(in crate::tests) fn run_leaf_aggregation(
         .to_vec();
 
     let engine = Engine::new(app_system_params());
-    let (vm, app_pk) = VirtualMachine::new_with_keygen(engine, Rv32ImBuilder, config)?;
+    let (vm, app_pk) = VirtualMachine::new_with_keygen(engine, Rv64ImBuilder, config)?;
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     let mut instance = VmInstance::new(vm, exe.into(), cached_program_trace)?;
     let app_proof = instance.prove(vec![input])?;
