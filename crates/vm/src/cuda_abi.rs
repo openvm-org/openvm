@@ -237,48 +237,6 @@ pub mod program {
     }
 }
 
-pub mod public_values {
-    use super::*;
-
-    extern "C" {
-        fn _public_values_tracegen(
-            d_trace: *mut F,
-            height: usize,
-            width: usize,
-            d_records: DeviceBufferView,
-            d_range_checker: *mut u32,
-            range_checker_bins: u32,
-            timestamp_max_bits: u32,
-            num_custom_pvs: u32,
-            max_degree: u32,
-        ) -> i32;
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub unsafe fn tracegen(
-        d_trace: &DeviceBuffer<F>,
-        height: usize,
-        width: usize,
-        d_records: &DeviceBuffer<u8>,
-        d_range_checker: &DeviceBuffer<F>,
-        timestamp_max_bits: u32,
-        num_custom_pvs: usize,
-        max_degree: u32,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_public_values_tracegen(
-            d_trace.as_mut_ptr(),
-            height,
-            width,
-            d_records.view(),
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            timestamp_max_bits,
-            num_custom_pvs as u32,
-            max_degree,
-        ))
-    }
-}
-
 pub mod access_adapters {
     use super::*;
 

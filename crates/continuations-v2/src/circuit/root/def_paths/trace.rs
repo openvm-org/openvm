@@ -1,7 +1,7 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::{
-    arch::{instructions::NATIVE_AS, POSEIDON2_WIDTH},
+    arch::{instructions::DEFERRAL_AS, POSEIDON2_WIDTH},
     system::memory::dimensions::MemoryDimensions,
 };
 use openvm_stark_backend::{
@@ -76,7 +76,7 @@ pub fn generate_proving_input<SC: StarkProtocolConfig<F = F>>(
     let width = DeferralAccMerklePathsCols::<u8>::width();
 
     // Matches AccMerklePathsAir::new().
-    let expected_branch_bits = usize::try_from(memory_dimensions.label_to_index((NATIVE_AS, 0)))
+    let expected_branch_bits = usize::try_from(memory_dimensions.label_to_index((DEFERRAL_AS, 0)))
         .expect("label index must fit in usize");
     let address_height = memory_dimensions.address_height;
 

@@ -13,7 +13,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode, NATIVE_AS,
+    LocalOpcode, DEFERRAL_AS,
 };
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -71,7 +71,7 @@ impl<A, const NUM_CELLS: usize> LoadStoreExecutor<A, NUM_CELLS> {
         let imm = c.as_canonical_u32();
         let imm_sign = g.as_canonical_u32();
         let imm_extended = imm + imm_sign * 0xffff0000;
-        let is_native_store = e_u32 == NATIVE_AS;
+        let is_native_store = e_u32 == DEFERRAL_AS;
 
         *data = LoadStorePreCompute {
             imm_extended,

@@ -2,7 +2,7 @@ use std::{array, fmt::Debug};
 
 use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
-    NATIVE_AS,
+    DEFERRAL_AS,
 };
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
@@ -115,7 +115,7 @@ fn test_no_adapter_records() {
     test_no_adapter_records_for_singleton_accesses::<u8, 4>(RV32_REGISTER_AS, |rng| rng.random());
     test_no_adapter_records_for_singleton_accesses::<u8, 4>(RV32_MEMORY_AS, |rng| rng.random());
     test_no_adapter_records_for_singleton_accesses::<u8, 4>(PUBLIC_VALUES_AS, |rng| rng.random());
-    test_no_adapter_records_for_singleton_accesses::<F, 1>(NATIVE_AS, |rng| {
+    test_no_adapter_records_for_singleton_accesses::<F, 1>(DEFERRAL_AS, |rng| {
         F::from_u32(rng.random_range(0..(1 << 30)))
     });
 }
