@@ -3,7 +3,7 @@ use openvm_instructions_derive::LocalOpcode;
 use openvm_sha2_guest::{Sha2BaseFunct7, OPCODE, SHA2_FUNCT3};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
-use rrs_lib::instruction_formats::RType;
+use openvm_decoder::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
 
 // There is no SHA384 opcode because the SHA-384 compression function is
