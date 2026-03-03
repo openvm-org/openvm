@@ -15,7 +15,7 @@ use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode, NATIVE_AS,
+    LocalOpcode, DEFERRAL_AS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -247,7 +247,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
         let output_ptr = bytes_to_f(&cols.rd_val);
 
         let deferral_idx = ctx.instruction.immediate;
-        let native_as = AB::Expr::from_u32(NATIVE_AS);
+        let deferral_as = AB::Expr::from_u32(DEFERRAL_AS);
 
         let digest_size = AB::F::from_usize(DIGEST_SIZE);
         let input_acc_ptr = deferral_idx.clone() * AB::Expr::TWO * digest_size;
@@ -303,7 +303,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
-                        native_as.clone(),
+                        deferral_as.clone(),
                         input_acc_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_OP_SIZE),
                     ),
                     data,
@@ -323,7 +323,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
-                        native_as.clone(),
+                        deferral_as.clone(),
                         output_acc_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_OP_SIZE),
                     ),
                     data,
@@ -366,7 +366,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             self.memory_bridge
                 .write(
                     MemoryAddress::new(
-                        native_as.clone(),
+                        deferral_as.clone(),
                         input_acc_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_OP_SIZE),
                     ),
                     data,
@@ -386,7 +386,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for DeferralCallAdapterAir {
             self.memory_bridge
                 .write(
                     MemoryAddress::new(
-                        native_as.clone(),
+                        deferral_as.clone(),
                         output_acc_ptr.clone() + AB::Expr::from_usize(chunk_idx * MEMORY_OP_SIZE),
                     ),
                     data,

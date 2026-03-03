@@ -3,7 +3,7 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena, SystemConfig, VmBuilder,
-        VmChipComplex, PUBLIC_VALUES_AIR_ID,
+        VmChipComplex,
     },
     system::poseidon2::air::Poseidon2PeripheryAir,
 };
@@ -89,23 +89,6 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SystemGpuBuilder {
         )));
 
         let mut inventory = ChipInventory::new(airs);
-        // PublicValuesChip is required when num_public_values > 0 in single segment mode.
-        if config.has_public_values_chip() {
-            assert_eq!(
-                inventory.executor_idx_to_insertion_idx.len(),
-                PV_EXECUTOR_IDX
-            );
-
-            // We set insertion_idx so that air_idx = num_airs - (insertion_idx + 1) =
-            // PUBLIC_VALUES_AIR_ID in `VmChipComplex::executor_idx_to_air_idx`. We need to do this
-            // because this chip is special and not part of the normal inventory.
-            let insertion_idx = inventory
-                .airs()
-                .num_airs()
-                .checked_sub(1 + PUBLIC_VALUES_AIR_ID)
-                .unwrap();
-            inventory.executor_idx_to_insertion_idx.push(insertion_idx);
-        }
         inventory.next_air::<VariableRangeCheckerAir>()?;
         inventory.add_periphery_chip(range_checker.clone());
 

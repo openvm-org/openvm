@@ -675,12 +675,6 @@ where
         let pc = exec_state.vm_state.pc();
         let memory = exec_state.vm_state.memory;
         let to_state = ExecutionState::new(pc, memory.timestamp());
-        let public_values = exec_state
-            .vm_state
-            .custom_pvs
-            .iter()
-            .map(|&x| x.unwrap_or(Val::<E::SC>::ZERO))
-            .collect();
         let exit_code = exec_state.exit_code?;
         let system_records = SystemRecords {
             from_state,
@@ -689,7 +683,6 @@ where
             filtered_exec_frequencies,
             access_adapter_records: memory.access_adapter_records,
             touched_memory,
-            public_values,
         };
         let record_arenas = exec_state.ctx.arenas;
         let to_state = VmState::new(
@@ -952,7 +945,6 @@ where
 
     /// Convenience method to construct a [MeteredCtx] using data from the stored proving key.
     pub fn build_metered_ctx(&self, exe: &VmExe<Val<E::SC>>) -> MeteredCtx {
-        let config = self.config().as_ref();
         let program_len = exe.program.num_defined_instructions();
 
         let (mut constant_trace_heights, air_names, widths, interactions): (
@@ -978,10 +970,6 @@ where
 
         // Program trace is the same for all segments
         constant_trace_heights[PROGRAM_AIR_ID] = Some(program_len);
-        if config.has_public_values_chip() {
-            // Public values chip is only present when there's a single segment
-            constant_trace_heights[PUBLIC_VALUES_AIR_ID] = Some(config.num_public_values);
-        }
 
         self.executor().build_metered_ctx(
             &constant_trace_heights,

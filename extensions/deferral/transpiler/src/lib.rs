@@ -4,7 +4,7 @@ use openvm_instructions::{
     exe::SparseMemoryImage,
     instruction::Instruction,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode, NATIVE_AS,
+    LocalOpcode, DEFERRAL_AS,
 };
 use openvm_instructions_derive::LocalOpcode;
 use openvm_transpiler::{TranspilerExtension, TranspilerOutput};
@@ -114,7 +114,7 @@ impl<F: PrimeField32> TranspilerExtension<F> for DeferralTranspilerExtension {
             let start_byte = start_cell * F_NUM_BYTES;
 
             for (byte_offset, b) in commit.iter().copied().enumerate() {
-                init_memory.insert((NATIVE_AS, (start_byte + byte_offset) as u32), b);
+                init_memory.insert((DEFERRAL_AS, (start_byte + byte_offset) as u32), b);
             }
         }
 
