@@ -12,6 +12,7 @@ use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 
 mod alu;
 mod branch;
+mod deferral;
 mod jalr;
 mod loadstore;
 mod mul;
@@ -19,6 +20,7 @@ mod rdwrite;
 
 pub use alu::*;
 pub use branch::*;
+pub use deferral::*;
 pub use jalr::*;
 pub use loadstore::*;
 pub use mul::*;

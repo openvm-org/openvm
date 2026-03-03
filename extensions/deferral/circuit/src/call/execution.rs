@@ -15,7 +15,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
-    LocalOpcode, NATIVE_AS,
+    LocalOpcode, DEFERRAL_AS,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
 
@@ -182,13 +182,13 @@ unsafe fn execute_e12_impl<F: VmField, CTX: ExecutionCtxTrait>(
     let input_commit: [F; _] = byte_commit_to_f(&input_commit_bytes.map(F::from_u8));
     let old_input_acc_chunks: [[F; MEMORY_OP_SIZE]; DIGEST_MEMORY_OPS] = from_fn(|i| {
         exec_state.vm_read(
-            NATIVE_AS,
+            DEFERRAL_AS,
             pre_compute.input_acc_ptr + (i * MEMORY_OP_SIZE) as u32,
         )
     });
     let old_output_acc_chunks: [[F; MEMORY_OP_SIZE]; DIGEST_MEMORY_OPS] = from_fn(|i| {
         exec_state.vm_read(
-            NATIVE_AS,
+            DEFERRAL_AS,
             pre_compute.output_acc_ptr + (i * MEMORY_OP_SIZE) as u32,
         )
     });
@@ -220,14 +220,14 @@ unsafe fn execute_e12_impl<F: VmField, CTX: ExecutionCtxTrait>(
     }
     for chunk_idx in 0..DIGEST_MEMORY_OPS {
         exec_state.vm_write::<F, MEMORY_OP_SIZE>(
-            NATIVE_AS,
+            DEFERRAL_AS,
             pre_compute.input_acc_ptr + (chunk_idx * MEMORY_OP_SIZE) as u32,
             &memory_op_chunk(&new_input_acc, chunk_idx),
         );
     }
     for chunk_idx in 0..DIGEST_MEMORY_OPS {
         exec_state.vm_write::<F, MEMORY_OP_SIZE>(
-            NATIVE_AS,
+            DEFERRAL_AS,
             pre_compute.output_acc_ptr + (chunk_idx * MEMORY_OP_SIZE) as u32,
             &memory_op_chunk(&new_output_acc, chunk_idx),
         );

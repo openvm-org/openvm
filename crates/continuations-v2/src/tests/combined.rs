@@ -4,7 +4,7 @@ use eyre::Result;
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::vm_poseidon2_hasher,
-        instructions::{exe::VmExe, NATIVE_AS},
+        instructions::{exe::VmExe, DEFERRAL_AS},
         ContinuationVmProver, VirtualMachine, VmInstance,
     },
     system::memory::{
@@ -118,9 +118,9 @@ fn generate_unset_merkle_proof(
     memory_dimensions: MemoryDimensions,
     merkle_tree: &MerkleTree<F, DIGEST_SIZE>,
 ) -> Vec<[F; DIGEST_SIZE]> {
-    let block_id = 1u32; // second digest in NATIVE_AS
+    let block_id = 1u32; // second digest in DEFERRAL_AS
     let leaf_idx = (1u64 << memory_dimensions.overall_height())
-        + memory_dimensions.label_to_index((NATIVE_AS, block_id));
+        + memory_dimensions.label_to_index((DEFERRAL_AS, block_id));
 
     let mut node_idx = leaf_idx;
     let mut proof = Vec::with_capacity(memory_dimensions.overall_height());
