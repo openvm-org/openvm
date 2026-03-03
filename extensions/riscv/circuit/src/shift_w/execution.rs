@@ -5,16 +5,12 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
-#[cfg(feature = "aot")]
-use openvm_instructions::riscv::{RV32_IMM_AS, RV32_REGISTER_AS};
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS},
     LocalOpcode,
 };
-#[cfg(feature = "aot")]
-use openvm_riscv_transpiler::ShiftOpcode;
 use openvm_riscv_transpiler::ShiftWOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -279,10 +275,9 @@ unsafe fn execute_e12_impl<
     } else {
         exec_state.vm_read::<u8, RV64_WORD_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32)
     };
-    let rs1 = u32::from_le_bytes(rs1);
     let rs2 = u32::from_le_bytes(rs2);
 
-    let rd_word = <OP as ShiftWOp>::compute(rs1, rs2);
+    let rd_word = u32::from_le_bytes(<OP as ShiftWOp>::compute(rs1, rs2));
     let rd = (rd_word as i32 as i64 as u64).to_le_bytes();
     exec_state.vm_write::<u8, RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
 
@@ -327,26 +322,29 @@ unsafe fn execute_e2_impl<
 }
 
 trait ShiftWOp {
-    fn compute(rs1: u32, rs2: u32) -> u32;
+    fn compute(rs1: [u8; RV64_WORD_NUM_LIMBS], rs2: u32) -> [u8; RV64_WORD_NUM_LIMBS];
 }
 struct SllwOp;
 struct SrlwOp;
 struct SrawOp;
 impl ShiftWOp for SllwOp {
-    fn compute(rs1: u32, rs2: u32) -> u32 {
-        // `rs2`'s  other bits are ignored.
-        rs1 << (rs2 & 0x1F)
+    fn compute(rs1: [u8; RV64_WORD_NUM_LIMBS], rs2: u32) -> [u8; RV64_WORD_NUM_LIMBS] {
+        let rs1 = u32::from_le_bytes(rs1);
+        // RV64 W-shifts: only the low 5 bits of rs2 are used for the shift amount.
+        (rs1 << (rs2 & 0x1F)).to_le_bytes()
     }
 }
 impl ShiftWOp for SrlwOp {
-    fn compute(rs1: u32, rs2: u32) -> u32 {
-        // `rs2`'s  other bits are ignored.
-        rs1 >> (rs2 & 0x1F)
+    fn compute(rs1: [u8; RV64_WORD_NUM_LIMBS], rs2: u32) -> [u8; RV64_WORD_NUM_LIMBS] {
+        let rs1 = u32::from_le_bytes(rs1);
+        // RV64 W-shifts: only the low 5 bits of rs2 are used for the shift amount.
+        (rs1 >> (rs2 & 0x1F)).to_le_bytes()
     }
 }
 impl ShiftWOp for SrawOp {
-    fn compute(rs1: u32, rs2: u32) -> u32 {
-        // `rs2`'s  other bits are ignored.
-        (rs1 as i32 >> (rs2 & 0x1F)) as u32
+    fn compute(rs1: [u8; RV64_WORD_NUM_LIMBS], rs2: u32) -> [u8; RV64_WORD_NUM_LIMBS] {
+        let rs1 = i32::from_le_bytes(rs1);
+        // RV64 W-shifts: only the low 5 bits of rs2 are used for the shift amount.
+        (rs1 >> (rs2 & 0x1F)).to_le_bytes()
     }
 }
