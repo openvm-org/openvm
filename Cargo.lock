@@ -4795,6 +4795,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-decoder"
+version = "2.0.0"
+
+[[package]]
 name = "openvm-deferral-circuit"
 version = "2.0.1"
 dependencies = [
@@ -5394,6 +5398,21 @@ dependencies = [
  "openvm-custom-insn",
  "p3-field",
  "strum_macros",
+]
+
+[[package]]
+name = "openvm-rv64im-transpiler"
+version = "2.0.0"
+dependencies = [
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-rv32im-guest",
+ "openvm-stark-backend",
+ "openvm-transpiler",
+ "rrs-lib",
+ "serde",
+ "strum",
+ "tracing",
 ]
 
 [[package]]

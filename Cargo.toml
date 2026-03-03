@@ -12,6 +12,7 @@ members = [
   "benchmarks/utils",
   "benchmarks/execute",
   "benchmarks/prove",
+  "crates/toolchain/decoder",
   "crates/prof",
   "crates/cli",
   "crates/sdk",
@@ -36,6 +37,7 @@ members = [
   "extensions/rv32im/transpiler",
   "extensions/rv32im/guest",
   "extensions/rv32im/tests",
+  "extensions/rv64im/transpiler",
   "extensions/rv32-adapters",
   "extensions/algebra/circuit",
   "extensions/algebra/transpiler",
@@ -149,34 +151,37 @@ openvm-cuda-builder = { version = "2.0.0", git = "https://github.com/openvm-org/
 openvm-cuda-common = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "main", default-features = false }
 
 # OpenVM
-openvm-mod-circuit-builder = { version = "2.0.1", path = "crates/circuits/mod-builder", default-features = false }
-openvm-poseidon2-air = { version = "2.0.1", path = "crates/circuits/poseidon2-air", default-features = false }
-openvm-sha2-air = { version = "2.0.1", path = "crates/circuits/sha2-air", default-features = false }
-openvm-circuit-primitives = { version = "2.0.1", path = "crates/circuits/primitives", default-features = false }
-openvm-circuit-primitives-derive = { version = "2.0.1", path = "crates/circuits/primitives/derive", default-features = false }
-openvm = { version = "2.0.1", path = "crates/toolchain/openvm", default-features = false }
-openvm-build = { version = "2.0.1", path = "crates/toolchain/build", default-features = false }
-openvm-instructions = { version = "2.0.1", path = "crates/toolchain/instructions", default-features = false }
-openvm-instructions-derive = { version = "2.0.1", path = "crates/toolchain/instructions/derive", default-features = false }
-openvm-macros-common = { version = "2.0.1", path = "crates/toolchain/macros", default-features = false }
-openvm-platform = { version = "2.0.1", path = "crates/toolchain/platform", default-features = false }
-openvm-transpiler = { version = "2.0.1", path = "crates/toolchain/transpiler", default-features = false }
-openvm-custom-insn = { version = "2.0.1", path = "crates/toolchain/custom_insn", default-features = false }
-openvm-circuit = { version = "2.0.1", path = "crates/vm", default-features = false }
-openvm-circuit-derive = { version = "2.0.1", path = "crates/vm/derive", default-features = false }
-openvm-recursion-circuit = { version = "2.0.1", path = "crates/recursion", default-features = false }
-openvm-recursion-circuit-derive = { version = "2.0.1", path = "crates/recursion/derive", default-features = false }
-openvm-continuations = { version = "2.0.1", path = "crates/continuations", default-features = false }
-openvm-verify-stark-host = { version = "2.0.1", path = "crates/verify", default-features = false }
-openvm-static-verifier = { version = "2.0.1", path = "crates/static-verifier", default-features = false }
-openvm-sdk = { version = "2.0.1", path = "crates/sdk", default-features = false }
-openvm-sdk-config = { version = "2.0.1", path = "crates/sdk-config", default-features = false }
-cargo-openvm = { version = "2.0.1", path = "crates/cli", default-features = false }
+openvm-decoder = { version = "2.0.0", path = "crates/toolchain/decoder", default-features = false }
+openvm-mod-circuit-builder = { version = "2.0.0", path = "crates/circuits/mod-builder", default-features = false }
+openvm-poseidon2-air = { version = "2.0.0", path = "crates/circuits/poseidon2-air", default-features = false }
+openvm-sha2-air = { version = "2.0.0", path = "crates/circuits/sha2-air", default-features = false }
+openvm-circuit-primitives = { version = "2.0.0", path = "crates/circuits/primitives", default-features = false }
+openvm-circuit-primitives-derive = { version = "2.0.0", path = "crates/circuits/primitives/derive", default-features = false }
+openvm = { version = "2.0.0", path = "crates/toolchain/openvm", default-features = false }
+openvm-build = { version = "2.0.0", path = "crates/toolchain/build", default-features = false }
+openvm-instructions = { version = "2.0.0", path = "crates/toolchain/instructions", default-features = false }
+openvm-instructions-derive = { version = "2.0.0", path = "crates/toolchain/instructions/derive", default-features = false }
+openvm-macros-common = { version = "2.0.0", path = "crates/toolchain/macros", default-features = false }
+openvm-platform = { version = "2.0.0", path = "crates/toolchain/platform", default-features = false }
+openvm-transpiler = { version = "2.0.0", path = "crates/toolchain/transpiler", default-features = false }
+openvm-toolchain-tests = { path = "crates/toolchain/tests", default-features = false }
+openvm-custom-insn = { version = "0.1.0", path = "crates/toolchain/custom_insn", default-features = false }
+openvm-circuit = { version = "2.0.0", path = "crates/vm", default-features = false }
+openvm-circuit-derive = { version = "2.0.0", path = "crates/vm/derive", default-features = false }
+openvm-recursion-circuit = { version = "2.0.0", path = "crates/recursion", default-features = false }
+openvm-recursion-circuit-derive = { version = "2.0.0", path = "crates/recursion/derive", default-features = false }
+openvm-continuations = { version = "2.0.0", path = "crates/continuations", default-features = false }
+openvm-verify-stark-host = { version = "2.0.0", path = "crates/verify", default-features = false }
+openvm-static-verifier = { version = "2.0.0", path = "crates/static-verifier", default-features = false }
+openvm-sdk = { version = "2.0.0", path = "crates/sdk", default-features = false }
+openvm-sdk-config = { version = "2.0.0", path = "crates/sdk-config", default-features = false }
+cargo-openvm = { version = "2.0.0", path = "crates/cli", default-features = false }
 
 # Extensions
 openvm-rv32im-circuit = { version = "2.0.0", path = "extensions/rv32im/circuit", default-features = false }
 openvm-rv32im-transpiler = { version = "2.0.0", path = "extensions/rv32im/transpiler", default-features = false }
 openvm-rv32im-guest = { version = "2.0.0", path = "extensions/rv32im/guest", default-features = false }
+openvm-rv64im-transpiler = { version = "2.0.0", path = "extensions/rv64im/transpiler", default-features = false }
 openvm-rv64im-guest = { version = "2.0.0", path = "extensions/rv64im/guest", default-features = false }
 openvm-rv32-adapters = { version = "2.0.0", path = "extensions/rv32-adapters", default-features = false }
 openvm-keccak256-circuit = { version = "2.0.0", path = "extensions/keccak256/circuit", default-features = false }
