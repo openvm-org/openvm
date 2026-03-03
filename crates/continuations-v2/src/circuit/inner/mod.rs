@@ -21,7 +21,6 @@ use crate::{
 pub mod app {
     pub use openvm_circuit::arch::{
         CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
-        PUBLIC_VALUES_AIR_ID,
     };
 }
 
@@ -33,9 +32,6 @@ pub mod vm_pvs;
 
 mod trace;
 pub use trace::*;
-
-#[cfg(test)]
-pub mod receiver;
 
 #[derive(derive_new::new, Clone)]
 pub struct InnerCircuit<S: AggregationSubCircuit> {
