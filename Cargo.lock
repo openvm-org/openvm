@@ -3967,9 +3967,12 @@ dependencies = [
  "metrics",
  "metrics-tracing-context",
  "metrics-util",
+ "num-bigint 0.4.6",
  "openvm-stark-backend",
  "p3-baby-bear",
+ "p3-bn254",
  "p3-field",
+ "p3-poseidon2",
  "rand 0.9.2",
  "serde",
  "serde_json",
@@ -3977,6 +3980,7 @@ dependencies = [
  "tracing",
  "tracing-forest",
  "tracing-subscriber",
+ "zkhash",
 ]
 
 [[package]]

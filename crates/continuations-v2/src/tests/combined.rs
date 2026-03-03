@@ -18,7 +18,10 @@ use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_stark_backend::{proof::Proof, AirRef, PartitionedBaseAir, StarkEngine};
-use openvm_stark_sdk::{config::baby_bear_poseidon2::F, utils::setup_tracing_with_log_level};
+use openvm_stark_sdk::{
+    config::{baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine, baby_bear_poseidon2::F},
+    utils::setup_tracing_with_log_level,
+};
 use openvm_transpiler::{
     elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler, FromElf,
 };
@@ -42,11 +45,12 @@ use crate::{
         ChildVkKind, DeferralHookGpuProver as DeferralHookProver,
         DeferralInnerGpuProver as DeferralInnerProver,
         DeferralVerifyGpuProver as DeferralVerifyProver, InnerGpuProver as InnerProver,
-        RootGpuProver as RootProver,
+        RootCpuProver as RootProver,
     },
 };
 
 type Engine = BabyBearPoseidon2GpuEngine;
+type RootEngine = BabyBearBn254Poseidon2CpuEngine;
 
 const LOG_FIB_INPUT: usize = 10;
 const MAX_NUM_PROOFS: usize = 4;
@@ -224,13 +228,13 @@ fn test_vm_deferral_mix_combined_flow() -> Result<()> {
     let vm_internal_recursive_pcs_data = internal_recursive_prover.get_self_vk_pcs_data().unwrap();
 
     // SECTION 1.5: Check that root prover with def_hook_commit verifies.
-    let vm_root_prover = RootProver::new::<Engine>(
+    let vm_root_prover = RootProver::new::<RootEngine>(
         vm_internal_recursive_vk.clone(),
-        vm_internal_recursive_pcs_data.clone(),
+        vm_internal_recursive_pcs_data.commitment.into(),
         root_system_params(),
         system_config.memory_config.memory_dimensions(),
         system_config.num_public_values,
-        Some(def_hook_commit),
+        Some(def_hook_commit.into()),
         None,
     );
     let ctx = vm_root_prover.generate_proving_ctx_with_deferrals(
@@ -239,10 +243,10 @@ fn test_vm_deferral_mix_combined_flow() -> Result<()> {
         &merkle_proofs,
     );
     warn!("testing VM root prover on proof with unset deferral pvs (not part of mixed flow)");
-    let root_proof = vm_root_prover.root_prove_from_ctx::<Engine>(ctx.unwrap())?;
+    let root_proof = vm_root_prover.root_prove_from_ctx::<RootEngine>(ctx.unwrap())?;
 
     let root_vk = vm_root_prover.get_vk();
-    let engine = Engine::new(root_vk.inner.params.clone());
+    let engine = RootEngine::new(root_vk.inner.params.clone());
     engine.verify(&root_vk, &root_proof)?;
 
     // SECTION 2: Create a deferral hook proof of that VM proof.

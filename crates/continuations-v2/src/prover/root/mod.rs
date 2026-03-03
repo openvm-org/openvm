@@ -8,7 +8,8 @@ use openvm_stark_backend::{
     prover::{CommittedTraceData, DeviceDataTransporter, ProverBackend, ProvingContext},
     StarkEngine, SystemParams,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, EF, F};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{EF, F};
+use p3_bn254::Bn254;
 use p3_field::{Field, PrimeField32};
 use recursion_circuit::system::{AggregationSubCircuit, VerifierConfig, VerifierTraceGen};
 use tracing::instrument;
@@ -20,18 +21,18 @@ use crate::{
         Circuit,
     },
     prover::trace_heights_tracing_info,
-    SC,
+    RootSC, SC,
 };
 
 mod trace;
 
 pub struct RootProver<
-    PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
+    PB: ProverBackend<Val = F, Challenge = EF>,
     S: AggregationSubCircuit,
     T: RootTraceGen<PB>,
 > {
-    pk: Arc<MultiStarkProvingKey<SC>>,
-    vk: Arc<MultiStarkVerifyingKey<SC>>,
+    pk: Arc<MultiStarkProvingKey<RootSC>>,
+    vk: Arc<MultiStarkVerifyingKey<RootSC>>,
 
     agg_node_tracegen: T,
 
@@ -42,20 +43,20 @@ pub struct RootProver<
 }
 
 impl<
-        PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB>,
+        PB: ProverBackend<Val = F, Challenge = EF, Commitment = [Bn254; 1]>,
+        S: AggregationSubCircuit + VerifierTraceGen<PB, RootSC>,
         T: RootTraceGen<PB>,
     > RootProver<PB, S, T>
 where
     PB::Matrix: Clone,
 {
     #[instrument(name = "total_proof", skip_all)]
-    pub fn root_prove_from_ctx<E: StarkEngine<SC = SC, PB = PB>>(
+    pub fn root_prove_from_ctx<E: StarkEngine<SC = RootSC, PB = PB>>(
         &self,
         ctx: ProvingContext<PB>,
-    ) -> Result<Proof<SC>> {
+    ) -> Result<Proof<RootSC>> {
         if tracing::enabled!(tracing::Level::DEBUG) {
-            trace_heights_tracing_info(&ctx.per_trace, &self.circuit.airs());
+            trace_heights_tracing_info::<_, RootSC>(&ctx.per_trace, &self.circuit.airs());
         }
         let engine = E::new(self.pk.params.clone());
         #[cfg(debug_assertions)]
@@ -69,22 +70,22 @@ where
 }
 
 impl<
-        PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB>,
+        PB: ProverBackend<Val = F, Challenge = EF, Commitment = [Bn254; 1]>,
+        S: AggregationSubCircuit + VerifierTraceGen<PB, RootSC>,
         T: RootTraceGen<PB>,
     > RootProver<PB, S, T>
 {
-    pub fn new<E: StarkEngine<SC = SC, PB = PB>>(
+    pub fn new<E: StarkEngine<SC = RootSC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
-        child_vk_pcs_data: CommittedTraceData<PB>,
+        internal_recursive_dag_commit: CommitBytes,
         system_params: SystemParams,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
-        def_hook_commit: Option<PB::Commitment>,
+        def_hook_commit: Option<CommitBytes>,
         trace_heights: Option<Vec<usize>>,
     ) -> Self
     where
-        E::PD: DeviceDataTransporter<SC, PB> + Clone,
+        E::PD: DeviceDataTransporter<RootSC, PB> + Clone,
         PB::Val: Field + PrimeField32,
         PB::Matrix: Clone,
         PB::Commitment: Into<CommitBytes>,
@@ -98,8 +99,7 @@ impl<
             },
         );
         let engine = E::new(system_params);
-        let internal_recursive_dag_commit = child_vk_pcs_data.commitment.into();
-        let def_hook_commit = def_hook_commit.map(Into::into);
+        let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         let circuit = Arc::new(RootCircuit::new(
             Arc::new(verifier_circuit),
             internal_recursive_dag_commit,
@@ -119,13 +119,13 @@ impl<
         }
     }
 
-    pub fn from_pk(
+    pub fn from_pk<E: StarkEngine<SC = RootSC, PB = PB>>(
         child_vk: Arc<MultiStarkVerifyingKey<SC>>,
-        child_vk_pcs_data: CommittedTraceData<PB>,
-        pk: Arc<MultiStarkProvingKey<SC>>,
+        internal_recursive_dag_commit: CommitBytes,
+        pk: Arc<MultiStarkProvingKey<RootSC>>,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
-        def_hook_commit: Option<PB::Commitment>,
+        def_hook_commit: Option<CommitBytes>,
         trace_heights: Option<Vec<usize>>,
     ) -> Self
     where
@@ -141,8 +141,8 @@ impl<
                 ..Default::default()
             },
         );
-        let internal_recursive_dag_commit = child_vk_pcs_data.commitment.into();
-        let def_hook_commit = def_hook_commit.map(Into::into);
+        let engine = E::new(pk.params.clone());
+        let child_vk_pcs_data = verifier_circuit.commit_child_vk(&engine, &child_vk);
         let circuit = Arc::new(RootCircuit::new(
             Arc::new(verifier_circuit),
             internal_recursive_dag_commit,
@@ -166,11 +166,11 @@ impl<
         self.circuit.clone()
     }
 
-    pub fn get_pk(&self) -> Arc<MultiStarkProvingKey<SC>> {
+    pub fn get_pk(&self) -> Arc<MultiStarkProvingKey<RootSC>> {
         self.pk.clone()
     }
 
-    pub fn get_vk(&self) -> Arc<MultiStarkVerifyingKey<SC>> {
+    pub fn get_vk(&self) -> Arc<MultiStarkVerifyingKey<RootSC>> {
         self.vk.clone()
     }
 

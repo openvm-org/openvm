@@ -6,7 +6,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     proof::{Proof, StackingProof},
     prover::{AirProvingContext, CpuBackend},
-    AirRef, FiatShamirTranscript, TranscriptHistory,
+    AirRef, FiatShamirTranscript, StarkProtocolConfig, TranscriptHistory,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, F};
 use p3_field::PrimeCharacteristicRing;
@@ -166,7 +166,7 @@ impl AirModule for StackingModule {
         StackingModuleChipDiscriminants::COUNT
     }
 
-    fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
+    fn airs<SC: StarkProtocolConfig<F = F>>(&self) -> Vec<AirRef<SC>> {
         let opening_air = OpeningClaimsAir {
             lifted_heights_bus: self.bus_inventory.lifted_heights_bus,
             stacking_module_bus: self.bus_inventory.stacking_module_bus,
@@ -292,7 +292,9 @@ impl RowMajorChip<F> for StackingModuleChip {
     }
 }
 
-impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for StackingModule {
+impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>>
+    for StackingModule
+{
     type ModuleSpecificCtx<'a> = ();
 
     #[tracing::instrument(skip_all)]
@@ -303,7 +305,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for Stack
         preflights: &[Preflight],
         _module_ctx: &(),
         required_heights: Option<&[usize]>,
-    ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
+    ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         let ctx = StandardTracegenCtx {
             vk: child_vk,
             proofs: &proofs.iter().collect_vec(),

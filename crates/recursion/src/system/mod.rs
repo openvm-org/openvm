@@ -10,7 +10,8 @@ use openvm_stark_backend::{
     keygen::types::{LinearConstraint, MultiStarkVerifyingKey},
     proof::{Proof, TraceVData},
     prover::{AirProvingContext, ColMajorMatrix, CommittedTraceData, CpuBackend, ProverBackend},
-    AirRef, FiatShamirTranscript, StarkEngine, TranscriptHistory, TranscriptLog,
+    AirRef, FiatShamirTranscript, StarkEngine, StarkProtocolConfig, TranscriptHistory,
+    TranscriptLog,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, CHUNK, EF, F};
 use p3_field::BasedVectorSpace;
@@ -79,13 +80,13 @@ pub struct VerifierExternalData<'a, PB: ProverBackend> {
 }
 
 // Trait to make tracegen functions generic on ProverBackend
-pub trait VerifierTraceGen<PB: ProverBackend> {
+pub trait VerifierTraceGen<PB: ProverBackend, SC: StarkProtocolConfig<F = F>> {
     fn new(
         child_mvk: Arc<MultiStarkVerifyingKey<BabyBearPoseidon2Config>>,
         config: VerifierConfig,
     ) -> Self;
 
-    fn commit_child_vk<E: StarkEngine<SC = BabyBearPoseidon2Config, PB = PB>>(
+    fn commit_child_vk<E: StarkEngine<SC = SC, PB = PB>>(
         &self,
         engine: &E,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
@@ -144,7 +145,7 @@ pub trait VerifierTraceGen<PB: ProverBackend> {
 
 // Trait to help make AIR generation generic
 pub trait AggregationSubCircuit {
-    fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>>;
+    fn airs<SC: StarkProtocolConfig<F = F>>(&self) -> Vec<AirRef<SC>>;
     fn bus_inventory(&self) -> &BusInventory;
     fn next_bus_idx(&self) -> BusIndex;
     fn max_num_proofs(&self) -> usize;
@@ -152,7 +153,7 @@ pub trait AggregationSubCircuit {
 
 pub trait AirModule {
     fn num_airs(&self) -> usize;
-    fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>>;
+    fn airs<SC: StarkProtocolConfig<F = F>>(&self) -> Vec<AirRef<SC>>;
 }
 
 /// Trait defining the types for the global input shared across modules for trace generation. These
@@ -452,7 +453,7 @@ impl<'a> TraceModuleRef<'a> {
         skip_all,
         fields(air_module = %self)
     )]
-    fn generate_cpu_ctxs(
+    fn generate_cpu_ctxs<SC: StarkProtocolConfig<F = F>>(
         self,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
@@ -460,9 +461,9 @@ impl<'a> TraceModuleRef<'a> {
         pow_checker_gen: &Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
         cached_trace_record: &Option<&CachedTraceRecord>,
-        external_data: &VerifierExternalData<CpuBackend<BabyBearPoseidon2Config>>,
+        external_data: &VerifierExternalData<CpuBackend<SC>>,
         required_heights: Option<&[usize]>,
-    ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
+    ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         match self {
             TraceModuleRef::Transcript(module) => module.generate_proving_ctxs(
                 child_vk,
@@ -938,7 +939,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
 }
 
 impl<const MAX_NUM_PROOFS: usize> AggregationSubCircuit for VerifierSubCircuit<MAX_NUM_PROOFS> {
-    fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
+    fn airs<SC: StarkProtocolConfig<F = F>>(&self) -> Vec<AirRef<SC>> {
         let exp_bits_len_air = ExpBitsLenAir::new(self.bus_inventory.exp_bits_len_bus);
         let power_checker_air = PowerCheckerAir::<2, POW_CHECKER_HEIGHT> {
             pow_bus: self.bus_inventory.power_checker_bus,
@@ -973,8 +974,8 @@ impl<const MAX_NUM_PROOFS: usize> AggregationSubCircuit for VerifierSubCircuit<M
     }
 }
 
-impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackend<BabyBearPoseidon2Config>>
-    for VerifierSubCircuit<MAX_NUM_PROOFS>
+impl<SC: StarkProtocolConfig<F = F>, const MAX_NUM_PROOFS: usize>
+    VerifierTraceGen<CpuBackend<SC>, SC> for VerifierSubCircuit<MAX_NUM_PROOFS>
 {
     fn new(
         child_mvk: Arc<MultiStarkVerifyingKey<BabyBearPoseidon2Config>>,
@@ -983,13 +984,11 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackend<BabyBearPoseidon2C
         Self::new_with_options(child_mvk, config)
     }
 
-    fn commit_child_vk<
-        E: StarkEngine<SC = BabyBearPoseidon2Config, PB = CpuBackend<BabyBearPoseidon2Config>>,
-    >(
+    fn commit_child_vk<E: StarkEngine<SC = SC, PB = CpuBackend<SC>>>(
         &self,
         engine: &E,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-    ) -> CommittedTraceData<CpuBackend<BabyBearPoseidon2Config>> {
+    ) -> CommittedTraceData<CpuBackend<SC>> {
         self.batch_constraint.commit_child_vk(engine, child_vk)
     }
 
@@ -1007,11 +1006,11 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackend<BabyBearPoseidon2C
     >(
         &self,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-        cached_trace_ctx: CachedTraceCtx<CpuBackend<BabyBearPoseidon2Config>>,
+        cached_trace_ctx: CachedTraceCtx<CpuBackend<SC>>,
         proofs: &[Proof<BabyBearPoseidon2Config>],
-        external_data: &mut VerifierExternalData<CpuBackend<BabyBearPoseidon2Config>>,
+        external_data: &mut VerifierExternalData<CpuBackend<SC>>,
         initial_transcript: TS,
-    ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
+    ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
         // Use std::thread::scope for preflight parallelism. With only 3-4 proofs max, this avoids
         // Rayon's thread pool overhead (wake-up, work stealing, synchronization) while still
@@ -1087,7 +1086,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackend<BabyBearPoseidon2C
             })
             .collect::<Vec<_>>();
 
-        let mut ctxs_by_module: Vec<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> =
+        let mut ctxs_by_module: Vec<Vec<AirProvingContext<CpuBackend<SC>>>> =
             ctxs_by_module.into_iter().collect::<Option<Vec<_>>>()?;
         match cached_trace_ctx {
             CachedTraceCtx::PcsData(child_vk_pcs_data) => {
@@ -1132,7 +1131,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<CpuBackend<BabyBearPoseidon2C
 pub mod cuda_tracegen {
     use std::iter::zip;
 
-    use openvm_cuda_backend::GpuBackend;
+    use openvm_cuda_backend::{prelude::SC, GpuBackend};
 
     use super::*;
     use crate::{
@@ -1209,7 +1208,7 @@ pub mod cuda_tracegen {
         }
     }
 
-    impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<GpuBackend>
+    impl<const MAX_NUM_PROOFS: usize> VerifierTraceGen<GpuBackend, SC>
         for VerifierSubCircuit<MAX_NUM_PROOFS>
     {
         fn new(

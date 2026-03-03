@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use continuations_v2::{bn254::CommitBytes, RootSC, SC};
 use eyre::Result;
 use openvm_circuit::{
     arch::{
@@ -14,7 +15,7 @@ use openvm_sdk_config::SdkVmBuilder;
 use openvm_stark_backend::{
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     proof::Proof,
-    prover::{CommittedTraceData, ProvingContext},
+    prover::ProvingContext,
     StarkEngine, SystemParams,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
@@ -33,11 +34,13 @@ use crate::{
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        use continuations_v2::prover::RootGpuProver as RootInnerProver;
-        type E = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
+        use continuations_v2::prover::RootCpuProver as RootInnerProver;
+        type E = openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine;
+        type ChildE = openvm_cuda_backend::BabyBearPoseidon2GpuEngine;
     } else {
         use continuations_v2::prover::RootCpuProver as RootInnerProver;
-        type E = openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine;
+        type E = openvm_stark_sdk::config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2CpuEngine;
+        type ChildE = openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2CpuEngine;
     }
 }
 
@@ -45,8 +48,8 @@ pub struct RootProver(pub RootInnerProver);
 
 impl RootProver {
     pub fn new(
-        internal_recursive_vk: Arc<MultiStarkVerifyingKey<crate::SC>>,
-        internal_recursive_vk_pcs_data: CommittedTraceData<<E as StarkEngine>::PB>,
+        internal_recursive_vk: Arc<MultiStarkVerifyingKey<SC>>,
+        internal_recursive_dag_commit: CommitBytes,
         system_params: SystemParams,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
@@ -54,7 +57,7 @@ impl RootProver {
     ) -> Self {
         let inner = RootInnerProver::new::<E>(
             internal_recursive_vk,
-            internal_recursive_vk_pcs_data,
+            internal_recursive_dag_commit,
             system_params,
             memory_dimensions,
             num_user_pvs,
@@ -65,16 +68,16 @@ impl RootProver {
     }
 
     pub fn from_pk(
-        internal_recursive_vk: Arc<MultiStarkVerifyingKey<crate::SC>>,
-        internal_recursive_vk_pcs_data: CommittedTraceData<<E as StarkEngine>::PB>,
-        pk: Arc<MultiStarkProvingKey<crate::SC>>,
+        internal_recursive_vk: Arc<MultiStarkVerifyingKey<SC>>,
+        internal_recursive_dag_commit: CommitBytes,
+        pk: Arc<MultiStarkProvingKey<RootSC>>,
         memory_dimensions: MemoryDimensions,
         num_user_pvs: usize,
         trace_heights: Option<Vec<usize>>,
     ) -> Self {
-        let inner = RootInnerProver::from_pk(
+        let inner = RootInnerProver::from_pk::<E>(
             internal_recursive_vk,
-            internal_recursive_vk_pcs_data,
+            internal_recursive_dag_commit,
             pk,
             memory_dimensions,
             num_user_pvs,
@@ -98,7 +101,7 @@ impl RootProver {
     pub fn prove_from_ctx(
         &self,
         ctx: ProvingContext<<E as StarkEngine>::PB>,
-    ) -> Result<Proof<crate::SC>> {
+    ) -> Result<Proof<RootSC>> {
         let proof = info_span!("agg_layer", group = format!("root"))
             .in_scope(|| info_span!("root").in_scope(|| self.0.root_prove_from_ctx::<E>(ctx)))?;
         Ok(proof)
@@ -133,7 +136,7 @@ pub fn compute_root_proof_heights(
 
     let app_pk = AppProvingKey::keygen(app_config)?;
     let mut app_prover =
-        AppProver::<E, SdkVmBuilder>::new(Default::default(), &app_pk.app_vm_pk, dummy_exe)?;
+        AppProver::<ChildE, SdkVmBuilder>::new(Default::default(), &app_pk.app_vm_pk, dummy_exe)?;
     let app_proof = app_prover.prove(StdIn::default())?;
 
     let agg_prover = AggProver::new(
@@ -148,7 +151,9 @@ pub fn compute_root_proof_heights(
         agg_prover
             .internal_recursive_prover
             .get_self_vk_pcs_data()
-            .unwrap(),
+            .unwrap()
+            .commitment
+            .into(),
         root_params,
         memory_dimensions,
         num_user_pvs,
