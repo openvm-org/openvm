@@ -12,6 +12,7 @@ members = [
   "benchmarks/utils",
   "benchmarks/execute",
   "benchmarks/prove",
+  "crates/toolchain/decoder",
   "crates/prof",
   "crates/cli",
   "crates/sdk",
@@ -36,6 +37,7 @@ members = [
   "extensions/rv32im/transpiler",
   "extensions/rv32im/guest",
   "extensions/rv32im/tests",
+  "extensions/rv64im/transpiler",
   "extensions/rv32-adapters",
   "extensions/algebra/circuit",
   "extensions/algebra/transpiler",
@@ -149,6 +151,7 @@ openvm-cuda-builder = { version = "2.0.0", git = "https://github.com/openvm-org/
 openvm-cuda-common = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
 
 # OpenVM
+openvm-decoder = { version = "2.0.0", path = "crates/toolchain/decoder", default-features = false }
 openvm-mod-circuit-builder = { version = "2.0.0", path = "crates/circuits/mod-builder", default-features = false }
 openvm-poseidon2-air = { version = "2.0.0", path = "crates/circuits/poseidon2-air", default-features = false }
 openvm-sha2-air = { version = "2.0.0", path = "crates/circuits/sha2-air", default-features = false }
@@ -178,6 +181,7 @@ cargo-openvm = { version = "2.0.0", path = "crates/cli", default-features = fals
 openvm-rv32im-circuit = { version = "2.0.0", path = "extensions/rv32im/circuit", default-features = false }
 openvm-rv32im-transpiler = { version = "2.0.0", path = "extensions/rv32im/transpiler", default-features = false }
 openvm-rv32im-guest = { version = "2.0.0", path = "extensions/rv32im/guest", default-features = false }
+openvm-rv64im-transpiler = { version = "2.0.0", path = "extensions/rv64im/transpiler", default-features = false }
 openvm-rv64im-guest = { version = "2.0.0", path = "extensions/rv64im/guest", default-features = false }
 openvm-rv32-adapters = { version = "2.0.0", path = "extensions/rv32-adapters", default-features = false }
 openvm-keccak256-circuit = { version = "2.0.0", path = "extensions/keccak256/circuit", default-features = false }
