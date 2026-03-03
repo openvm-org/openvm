@@ -15,4 +15,4 @@ openvm-decoder = { workspace = true }
 openvm-bigint-guest = { workspace = true }
 openvm-instructions-derive = { workspace = true }
 strum = { workspace = true }
-openvm-rv32im-transpiler = { workspace = true }
+openvm-riscv-transpiler = { workspace = true }
