@@ -78,12 +78,19 @@ where
         let b = &cols.b;
         let c = &cols.c;
 
+        // For ADDW, define carry[i] = (b[i] + c[i] + carry[i - 1] - a[i]) / 2^LIMB_BITS. If
+        // each carry[i] is boolean and 0 <= a[i] < 2^LIMB_BITS, it can be proven that
+        // a[i] = (b[i] + c[i]) % 2^LIMB_BITS as necessary. The same holds for SUBW when
+        // carry[i] is (a[i] + c[i] - b[i] + carry[i - 1]) / 2^LIMB_BITS.
         // ADDW/SUBW are 32-bit operations. We only constrain the low word limbs with carries.
         let mut carry_add: [AB::Expr; RV64_WORD_NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         let mut carry_sub: [AB::Expr; RV64_WORD_NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
         let carry_divide = AB::F::from_canonical_usize(1 << RV64_CELL_BITS).inverse();
 
         for i in 0..RV64_WORD_NUM_LIMBS {
+            // We explicitly separate the constraints for ADDW and SUBW in order to keep degree
+            // cubic. Because we constrain that the carry (which is arbitrary) is bool, if
+            // carry has degree larger than 1 the max-degree constraint could be at least 4.
             carry_add[i] = AB::Expr::from(carry_divide)
                 * (b[i] + c[i] - a[i]
                     + if i > 0 {

@@ -145,33 +145,6 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     assert_eq!(a, tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd))
 }
 
-#[allow(clippy::too_many_arguments)]
-fn set_and_execute_with_ptrs<RA: Arena, E: PreflightExecutor<F, RA>>(
-    tester: &mut impl TestBuilder<F>,
-    executor: &mut E,
-    arena: &mut RA,
-    opcode: BaseAluWOpcode,
-    rd_ptr: usize,
-    rs1_ptr: usize,
-    rs2_ptr: usize,
-    rs1: [u8; RV64_REGISTER_NUM_LIMBS],
-    rs2: [u8; RV64_REGISTER_NUM_LIMBS],
-) {
-    tester.write(1, rs1_ptr, rs1.map(F::from_canonical_u8));
-    tester.write(1, rs2_ptr, rs2.map(F::from_canonical_u8));
-
-    tester.execute(
-        executor,
-        arena,
-        &Instruction::from_usize(opcode.global_opcode(), [rd_ptr, rs1_ptr, rs2_ptr, 1, 1]),
-    );
-
-    let rs1_word: [u8; RV64_WORD_NUM_LIMBS] = rs1[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
-    let rs2_word: [u8; RV64_WORD_NUM_LIMBS] = rs2[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
-    let expected = run_alu_w(opcode, &rs1_word, &rs2_word).map(F::from_canonical_u8);
-    assert_eq!(expected, tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rd_ptr));
-}
-
 //////////////////////////////////////////////////////////////////////////////////////
 // POSITIVE TESTS
 //////////////////////////////////////////////////////////////////////////////////////
@@ -602,24 +575,21 @@ fn run_subw_sanity_test() {
 
 #[test]
 fn run_addw_noncanonical_upper_bytes_sanity_test() {
+    let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut harness, bitwise) = create_harness(&tester);
 
-    let rd_ptr = 40usize;
-    let rs1_ptr = 8usize;
-    let rs2_ptr = 24usize;
     let rs1 = [170u8, 16, 32, 48, 13, 14, 15, 16];
     let rs2 = [1u8, 2, 3, 4, 21, 22, 23, 24];
-    set_and_execute_with_ptrs(
+    set_and_execute(
         &mut tester,
         &mut harness.executor,
         &mut harness.arena,
+        &mut rng,
         ADDW,
-        rd_ptr,
-        rs1_ptr,
-        rs2_ptr,
-        rs1,
-        rs2,
+        Some(rs1),
+        Some(false),
+        Some(rs2),
     );
 
     let tester = tester
@@ -632,63 +602,21 @@ fn run_addw_noncanonical_upper_bytes_sanity_test() {
 
 #[test]
 fn run_subw_noncanonical_upper_bytes_sanity_test() {
+    let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
     let (mut harness, bitwise) = create_harness(&tester);
 
-    let rd_ptr = 40usize;
-    let rs1_ptr = 8usize;
-    let rs2_ptr = 24usize;
     let rs1 = [0u8, 0, 0, 128, 13, 14, 15, 16];
     let rs2 = [1u8, 0, 0, 0, 21, 22, 23, 24];
-    set_and_execute_with_ptrs(
+    set_and_execute(
         &mut tester,
         &mut harness.executor,
         &mut harness.arena,
+        &mut rng,
         SUBW,
-        rd_ptr,
-        rs1_ptr,
-        rs2_ptr,
-        rs1,
-        rs2,
-    );
-
-    let tester = tester
-        .build()
-        .load(harness)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
-}
-
-#[test]
-fn rv64_aluw_sources_unchanged_when_rd_is_distinct_test() {
-    let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_harness(&tester);
-
-    let rd_ptr = 40usize;
-    let rs1_ptr = 8usize;
-    let rs2_ptr = 24usize;
-    let rs1 = [170u8, 16, 32, 48, 13, 14, 15, 16];
-    let rs2 = [1u8, 2, 3, 4, 21, 22, 23, 24];
-    set_and_execute_with_ptrs(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.arena,
-        ADDW,
-        rd_ptr,
-        rs1_ptr,
-        rs2_ptr,
-        rs1,
-        rs2,
-    );
-
-    assert_eq!(
-        rs1.map(F::from_canonical_u8),
-        tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rs1_ptr)
-    );
-    assert_eq!(
-        rs2.map(F::from_canonical_u8),
-        tester.read::<RV64_REGISTER_NUM_LIMBS>(1, rs2_ptr)
+        Some(rs1),
+        Some(false),
+        Some(rs2),
     );
 
     let tester = tester

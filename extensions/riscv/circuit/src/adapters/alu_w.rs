@@ -95,8 +95,11 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWAdapterAir {
             timestamp + AB::F::from_canonical_usize(timestamp_delta - 1)
         };
 
-        // Immediate encoding is still 24-bit signed. For W-ops, constrain sign extension only
-        // through the low-word limbs.
+        // If rs2 is an immediate value, constrain that:
+        // 1. rs2_limbs[0] and rs2_limbs[1] are valid bytes encoding the low 16 bits
+        // 2. rs2_limbs[2] is the sign byte (0x00 or 0xFF)
+        // 3. The 24-bit value limbs[0..3] reconstructs to local.rs2
+        // 4. Limbs[3..4] are sign-extended (equal to the sign byte)
         let rs2_limbs = ctx.reads[1].clone();
         let rs2_sign = rs2_limbs[2].clone();
         let rs2_imm = rs2_limbs[0].clone()
@@ -303,6 +306,15 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluWAdapterFiller {
     const WIDTH: usize = size_of::<Rv64BaseAluWAdapterCols<u8>>();
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        // SAFETY: the following is highly unsafe. We are going to cast `adapter_row` to a record
+        // buffer, and then do an _overlapping_ write to the `adapter_row` as a row of field
+        // elements. This requires:
+        // - Cols struct should be repr(C) and we write in reverse order (to ensure non-overlapping)
+        // - Do not overwrite any reference in `record` before it has already been used or moved
+        // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic
+        //   otherwise)
+        // - adapter_row contains a valid Rv64BaseAluWAdapterRecord representation
+        // - get_record_from_slice correctly interprets the bytes as Rv64BaseAluWAdapterRecord
         let record: &Rv64BaseAluWAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut Rv64BaseAluWAdapterCols<F> = adapter_row.borrow_mut();
