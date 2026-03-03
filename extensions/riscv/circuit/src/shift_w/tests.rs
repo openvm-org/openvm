@@ -453,12 +453,12 @@ fn rv64_shiftw_wrong_upper_sign_extension_negative_test() {
         result_sign: Some(1),
         ..Default::default()
     };
-    run_negative_shift_test(SLLW, a, b, c, prank_vals, true);
+    run_negative_shift_test(SLLW, a, b, c, prank_vals, false);
 }
 
 #[test]
 fn rv64_shiftw_b_sign_only_prank_negative_test() {
-    // SLLW: b_sign is tied to result_sign for W-left shifts.
+    // SLLW: b_sign must be zero (same semantics as non-W shift core).
     run_negative_shift_test(
         SLLW,
         [2, 0, 0, 0, 0, 0, 0, 0],
@@ -500,7 +500,7 @@ fn rv64_shiftw_b_sign_only_prank_negative_test() {
 
 #[test]
 fn rv64_shiftw_result_sign_only_prank_negative_test() {
-    // SLLW: result_sign is tied to b_sign.
+    // SLLW: result_sign must still match output sign bit/sign-extension.
     run_negative_shift_test(
         SLLW,
         [2, 0, 0, 0, 0, 0, 0, 0],
@@ -510,7 +510,7 @@ fn rv64_shiftw_result_sign_only_prank_negative_test() {
             result_sign: Some(1),
             ..Default::default()
         },
-        false,
+        true,
     );
 
     // SRLW: result_sign must match output sign bit.

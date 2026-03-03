@@ -9,6 +9,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    utils::not,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow,
 };
@@ -156,13 +157,11 @@ where
                 if j + i > RV64_WORD_NUM_LIMBS - 1 {
                     when_limb_shift.assert_eq(
                         a[j] * right_shift.clone(),
-                        cols.b_sign
-                            * right_shift.clone()
-                            * AB::F::from_canonical_usize((1 << RV64_CELL_BITS) - 1),
+                        cols.b_sign * AB::F::from_canonical_usize((1 << RV64_CELL_BITS) - 1),
                     );
                 } else {
                     let expected_a_right = if j + i == RV64_WORD_NUM_LIMBS - 1 {
-                        cols.b_sign * (cols.bit_multiplier_right - right_shift.clone())
+                        cols.b_sign * (cols.bit_multiplier_right - AB::F::ONE)
                     } else {
                         cols.bit_shift_carry[j + i + 1].into() * right_shift.clone()
                     } * AB::F::from_canonical_usize(1 << RV64_CELL_BITS)
@@ -188,9 +187,8 @@ where
         // Check b_sign & b[word_msl] == b_sign using XOR.
         builder.assert_bool(cols.b_sign);
         builder
-            .when(cols.opcode_sll_flag)
-            .assert_eq(cols.b_sign, cols.result_sign);
-        builder.when(cols.opcode_srl_flag).assert_zero(cols.b_sign);
+            .when(not(cols.opcode_sra_flag))
+            .assert_zero(cols.b_sign);
 
         let mask = AB::F::from_canonical_u32(1 << (RV64_CELL_BITS - 1));
         let b_sign_shifted = cols.b_sign * mask;
@@ -428,17 +426,15 @@ where
             F::from_canonical_u8(a[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS as u8 - 1));
         self.bitwise_lookup_chip
             .request_xor(a[RV64_WORD_NUM_LIMBS - 1] as u32, 1 << (RV64_CELL_BITS - 1));
-        core_row.b_sign = match opcode {
-            ShiftWOpcode::SLLW => core_row.result_sign,
-            ShiftWOpcode::SRAW => {
-                self.bitwise_lookup_chip.request_xor(
-                    record.b[RV64_WORD_NUM_LIMBS - 1] as u32,
-                    1 << (RV64_CELL_BITS - 1),
-                );
-                F::from_canonical_u8(record.b[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1))
-            }
-            ShiftWOpcode::SRLW => F::ZERO,
-        };
+        core_row.b_sign = F::ZERO;
+        if opcode == ShiftWOpcode::SRAW {
+            self.bitwise_lookup_chip.request_xor(
+                record.b[RV64_WORD_NUM_LIMBS - 1] as u32,
+                1 << (RV64_CELL_BITS - 1),
+            );
+            core_row.b_sign =
+                F::from_canonical_u8(record.b[RV64_WORD_NUM_LIMBS - 1] >> (RV64_CELL_BITS - 1));
+        }
 
         core_row.bit_multiplier_right = match opcode {
             ShiftWOpcode::SLLW => F::ZERO,
