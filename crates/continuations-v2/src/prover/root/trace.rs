@@ -5,7 +5,7 @@ use openvm_stark_backend::{
     prover::{ProverBackend, ProvingContext},
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
-    default_duplex_sponge_recorder, Digest, DIGEST_SIZE, EF, F,
+    default_duplex_sponge_recorder, DIGEST_SIZE, EF, F,
 };
 use recursion_circuit::system::{
     AggregationSubCircuit, CachedTraceCtx, VerifierExternalData, VerifierTraceGen,
@@ -15,12 +15,12 @@ use tracing::instrument;
 use super::RootProver;
 use crate::{
     circuit::{deferral::verify::DeferralMerkleProofs, root::RootTraceGen},
-    SC,
+    RootSC, SC,
 };
 
 impl<
-        PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB>,
+        PB: ProverBackend<Val = F, Challenge = EF>,
+        S: AggregationSubCircuit + VerifierTraceGen<PB, RootSC>,
         T: RootTraceGen<PB>,
     > RootProver<PB, S, T>
 where

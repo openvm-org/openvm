@@ -7,7 +7,7 @@ use openvm_stark_backend::{
     keygen::types::{MultiStarkVerifyingKey, VerifierSinglePreprocessedData},
     proof::Proof,
     prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
-    AirRef, FiatShamirTranscript, TranscriptHistory,
+    AirRef, FiatShamirTranscript, StarkProtocolConfig, TranscriptHistory,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, Digest, F};
 use p3_field::PrimeCharacteristicRing;
@@ -226,7 +226,7 @@ impl AirModule for ProofShapeModule {
         3
     }
 
-    fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
+    fn airs<SC: StarkProtocolConfig<F = F>>(&self) -> Vec<AirRef<SC>> {
         let proof_shape_air = ProofShapeAir::<4, 8> {
             per_air: self.per_air.clone(),
             l_skip: self.l_skip,
@@ -269,7 +269,9 @@ impl AirModule for ProofShapeModule {
     }
 }
 
-impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for ProofShapeModule {
+impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>>
+    for ProofShapeModule
+{
     // (pow_checker, external_range_checks)
     type ModuleSpecificCtx<'a> = (
         Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
@@ -284,7 +286,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for Proof
         preflights: &[Preflight],
         ctx: &Self::ModuleSpecificCtx<'_>,
         required_heights: Option<&[usize]>,
-    ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
+    ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         let pow_checker = &ctx.0;
         let external_range_checks = ctx.1;
 

@@ -497,7 +497,9 @@ where
                     agg_prover
                         .internal_recursive_prover
                         .get_self_vk_pcs_data()
-                        .unwrap(),
+                        .unwrap()
+                        .commitment
+                        .into(),
                     root_params,
                     memory_dimensions,
                     num_user_pvs,

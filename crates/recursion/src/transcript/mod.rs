@@ -8,7 +8,7 @@ use openvm_stark_backend::{
     p3_maybe_rayon::prelude::*,
     proof::Proof,
     prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
-    AirRef, SystemParams,
+    AirRef, StarkProtocolConfig, SystemParams,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{poseidon2_perm, BabyBearPoseidon2Config, F};
 use p3_air::BaseAir;
@@ -271,7 +271,7 @@ impl AirModule for TranscriptModule {
         3
     }
 
-    fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
+    fn airs<SC: StarkProtocolConfig<F = F>>(&self) -> Vec<AirRef<SC>> {
         let transcript_air = TranscriptAir {
             transcript_bus: self.bus_inventory.transcript_bus,
             poseidon2_permute_bus: self.bus_inventory.poseidon2_permute_bus,
@@ -310,7 +310,9 @@ pub(super) struct Poseidon2Count {
     pub compress: u32,
 }
 
-impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for TranscriptModule {
+impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>>
+    for TranscriptModule
+{
     // External Poseidon2 compress inputs
     type ModuleSpecificCtx<'a> = Vec<[F; POSEIDON2_WIDTH]>;
 
@@ -322,7 +324,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for Trans
         preflights: &[Preflight],
         external_poseidon2_compress_inputs: &Vec<[F; POSEIDON2_WIDTH]>,
         required_heights: Option<&[usize]>,
-    ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
+    ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         let (required_transcript, required_poseidon2, required_merkle_verify) =
             if let Some(heights) = required_heights {
                 if heights.len() != 3 {

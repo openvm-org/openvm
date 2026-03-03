@@ -47,7 +47,7 @@ pub struct CompressionProver<
 
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB>,
+        S: AggregationSubCircuit + VerifierTraceGen<PB, SC>,
         T: InnerTraceGen<PB>,
     > CompressionProver<PB, S, T>
 where
@@ -61,7 +61,7 @@ where
     ) -> Result<Proof<SC>> {
         let ctx = self.generate_proving_ctx(proof, proofs_type);
         if tracing::enabled!(tracing::Level::DEBUG) {
-            trace_heights_tracing_info(&ctx.per_trace, &self.circuit.airs());
+            trace_heights_tracing_info::<_, SC>(&ctx.per_trace, &self.circuit.airs());
         }
         let engine = E::new(self.pk.params.clone());
         #[cfg(debug_assertions)]
@@ -83,7 +83,7 @@ where
 
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB>,
+        S: AggregationSubCircuit + VerifierTraceGen<PB, SC>,
         T: InnerTraceGen<PB>,
     > CompressionProver<PB, S, T>
 {

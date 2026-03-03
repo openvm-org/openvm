@@ -2,8 +2,11 @@ use std::borrow::BorrowMut;
 
 use openvm_circuit::arch::POSEIDON2_WIDTH;
 use openvm_circuit_primitives::encoder::Encoder;
-use openvm_stark_backend::prover::{AirProvingContext, ColMajorMatrix, CpuBackend};
-use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
+use openvm_stark_backend::{
+    prover::{AirProvingContext, ColMajorMatrix, CpuBackend},
+    StarkProtocolConfig,
+};
+use openvm_stark_sdk::config::baby_bear_poseidon2::{DIGEST_SIZE, F};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
 
@@ -12,12 +15,9 @@ use crate::circuit::{
     subair::generate_cols_from_user_pvs,
 };
 
-pub fn generate_proving_ctx(
+pub fn generate_proving_ctx<SC: StarkProtocolConfig<F = F>>(
     user_pvs: Vec<F>,
-) -> (
-    AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>,
-    Vec<[F; POSEIDON2_WIDTH]>,
-) {
+) -> (AirProvingContext<CpuBackend<SC>>, Vec<[F; POSEIDON2_WIDTH]>) {
     let num_user_pvs = user_pvs.len();
 
     // Each leaf consumes `DIGEST_SIZE` public values, which is padded and hashed before

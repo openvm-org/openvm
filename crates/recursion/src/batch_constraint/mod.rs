@@ -8,9 +8,10 @@ use openvm_stark_backend::{
     poly_common::{eval_eq_sharp_uni, eval_eq_uni, eval_eq_uni_at_one},
     proof::{column_openings_by_rot, BatchConstraintProof, Proof},
     prover::{AirProvingContext, ColMajorMatrix, CommittedTraceData, CpuBackend, TraceCommitter},
-    AirRef, FiatShamirTranscript, StarkEngine, TranscriptHistory,
+    AirRef, FiatShamirTranscript, StarkEngine, StarkProtocolConfig, TranscriptHistory,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, EF, F};
+use p3_baby_bear::BabyBear;
 use p3_field::{Field, PrimeCharacteristicRing, TwoAdicField};
 use p3_matrix::dense::RowMajorMatrix;
 use p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
@@ -298,7 +299,7 @@ impl AirModule for BatchConstraintModule {
         BatchConstraintModuleChipDiscriminants::COUNT
     }
 
-    fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
+    fn airs<SC: StarkProtocolConfig<F = BabyBear>>(&self) -> Vec<AirRef<SC>> {
         let l_skip = self.l_skip;
 
         let symbolic_expression_air = SymbolicExpressionAir {
@@ -661,7 +662,9 @@ impl BatchConstraintBlobCpu {
     }
 }
 
-impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for BatchConstraintModule {
+impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>>
+    for BatchConstraintModule
+{
     type ModuleSpecificCtx<'a> = (
         &'a Option<&'a CachedTraceRecord>,
         &'a Arc<PowerCheckerCpuTraceGenerator<2, POW_CHECKER_HEIGHT>>,
@@ -678,7 +681,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for Batch
         preflights: &[Preflight],
         ctx: &Self::ModuleSpecificCtx<'_>,
         required_heights: Option<&[usize]>,
-    ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
+    ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         let blob = BatchConstraintBlobCpu::new(child_vk, proofs, preflights);
         let pow_checker = ctx.1.clone();
         let ctx = (
@@ -736,13 +739,13 @@ impl BatchConstraintModule {
 
     /// Generates and then commits to the cache trace for `SymbolicExpressionAir`. Returns the
     /// committed PCS data.
-    pub fn commit_child_vk<E>(
+    pub fn commit_child_vk<E, SC: StarkProtocolConfig<F = F>>(
         &self,
         engine: &E,
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
-    ) -> CommittedTraceData<CpuBackend<BabyBearPoseidon2Config>>
+    ) -> CommittedTraceData<CpuBackend<SC>>
     where
-        E: StarkEngine<SC = BabyBearPoseidon2Config, PB = CpuBackend<BabyBearPoseidon2Config>>,
+        E: StarkEngine<SC = SC, PB = CpuBackend<SC>>,
     {
         let cached_trace_rm =
             expr_eval::generate_symbolic_expr_cached_trace(&self.cached_trace_record(child_vk));

@@ -68,7 +68,7 @@ use openvm_stark_backend::{
     poly_common::{interpolate_cubic_at_0123, interpolate_linear_at_01},
     proof::{GkrProof, Proof},
     prover::{AirProvingContext, CpuBackend},
-    AirRef, FiatShamirTranscript, ReadOnlyTranscript, TranscriptHistory,
+    AirRef, FiatShamirTranscript, ReadOnlyTranscript, StarkProtocolConfig, TranscriptHistory,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, D_EF, EF, F};
 use p3_field::{Field, PrimeCharacteristicRing};
@@ -261,7 +261,7 @@ impl AirModule for GkrModule {
         GkrModuleChipDiscriminants::COUNT
     }
 
-    fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
+    fn airs<SC: StarkProtocolConfig<F = F>>(&self) -> Vec<AirRef<SC>> {
         let gkr_input_air = GkrInputAir {
             l_skip: self.l_skip,
             logup_pow_bits: self.logup_pow_bits,
@@ -555,7 +555,7 @@ impl GkrModule {
     }
 }
 
-impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for GkrModule {
+impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>> for GkrModule {
     type ModuleSpecificCtx<'a> = ExpBitsLenTraceGenerator;
 
     #[tracing::instrument(skip_all)]
@@ -566,7 +566,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for GkrMo
         preflights: &[Preflight],
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
         required_heights: Option<&[usize]>,
-    ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
+    ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         let proof_refs = proofs.iter().collect_vec();
         let preflight_refs = preflights.iter().collect_vec();
         let blob = self.generate_blob(child_vk, &proof_refs, &preflight_refs, exp_bits_len_gen);
