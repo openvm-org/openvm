@@ -5,7 +5,7 @@ use openvm_instructions_derive::LocalOpcode;
 use openvm_keccak256_guest::{KECCAKF_FUNCT7, OPCODE, XORIN_FUNCT3, XORIN_FUNCT7};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
-use rrs_lib::instruction_formats::RType;
+use openvm_decoder::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
 
 #[derive(
