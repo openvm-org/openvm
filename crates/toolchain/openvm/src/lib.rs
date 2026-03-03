@@ -16,7 +16,7 @@ pub use openvm_platform as platform;
 #[allow(unused_imports)]
 use openvm_platform::rust_rt;
 #[cfg(openvm_intrinsics)]
-pub use openvm_rv64im_guest::*;
+pub use openvm_riscv_guest::*;
 
 #[cfg(openvm_intrinsics)]
 mod getrandom;

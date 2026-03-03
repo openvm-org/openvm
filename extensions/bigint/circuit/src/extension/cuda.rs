@@ -8,8 +8,8 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::range_tuple::RangeTupleCheckerChipGPU;
-use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
-use openvm_rv32im_circuit::Rv32ImGpuProverExt;
+use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
+use openvm_riscv_circuit::Rv64ImGpuProverExt;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use super::*;
@@ -45,7 +45,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
                 inventory.next_air::<RangeTupleCheckerAir<2>>()?;
                 let chip = Arc::new(RangeTupleCheckerChipGPU::new(
                     extension.range_tuple_checker_sizes,
-                    range_checker.device_ctx.clone(),
                 ));
                 inventory.add_periphery_chip(chip.clone());
                 chip
@@ -125,7 +124,6 @@ impl VmBuilder<E> for Int256Rv32GpuBuilder {
         &self,
         config: &Int256Rv32Config,
         circuit: AirInventory<<E as StarkEngine>::SC>,
-        device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<
             <E as StarkEngine>::SC,
@@ -135,16 +133,12 @@ impl VmBuilder<E> for Int256Rv32GpuBuilder {
         >,
         ChipInventoryError,
     > {
-        let mut chip_complex = VmBuilder::<E>::create_chip_complex(
-            &SystemGpuBuilder,
-            &config.system,
-            circuit,
-            device_ctx,
-        )?;
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&SystemGpuBuilder, &config.system, circuit)?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.rv32i, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.rv32m, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv32i, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv32m, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
             &Int256GpuProverExt,
             &config.bigint,

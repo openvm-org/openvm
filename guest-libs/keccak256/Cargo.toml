@@ -21,12 +21,12 @@ hex = { workspace = true }
 openvm-instructions = { path = "../../crates/toolchain/instructions", default-features = false }
 openvm-sdk = { path = "../../crates/sdk", default-features = false }
 openvm-stark-sdk = { workspace = true }
-openvm-circuit = { path = "../../crates/vm", default-features = false, features = ["test-utils", "parallel"] }
-openvm-transpiler = { path = "../../crates/toolchain/transpiler", default-features = false }
-openvm-keccak256-transpiler = { path = "../../extensions/keccak256/transpiler", default-features = false }
-openvm-keccak256-circuit = { path = "../../extensions/keccak256/circuit", default-features = false }
-openvm-rv32im-transpiler = { path = "../../extensions/rv32im/transpiler", default-features = false }
-openvm-toolchain-tests = { path = "../../crates/toolchain/tests", default-features = false }
+openvm-circuit = { workspace = true, features = ["test-utils", "parallel"] }
+openvm-transpiler = { workspace = true }
+openvm-keccak256-transpiler = { workspace = true }
+openvm-keccak256-circuit = { workspace = true }
+openvm-riscv-transpiler = { workspace = true }
+openvm-toolchain-tests = { workspace = true }
 eyre = { workspace = true }
 
 [features]
