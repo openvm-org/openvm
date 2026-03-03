@@ -18,7 +18,7 @@ pub mod utils;
 
 pub use phantom::*;
 
-pub const NATIVE_AS: u32 = 4;
+pub const DEFERRAL_AS: u32 = 4;
 
 pub trait LocalOpcode {
     const CLASS_OFFSET: usize;

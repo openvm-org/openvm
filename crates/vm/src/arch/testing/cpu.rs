@@ -7,7 +7,7 @@ use openvm_circuit_primitives::{
     },
     Chip,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, NATIVE_AS};
+use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, DEFERRAL_AS};
 use openvm_poseidon2_air::Poseidon2SubAir;
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
@@ -58,7 +58,6 @@ pub struct VmChipTestBuilder<F: VmField> {
     pub execution: ExecutionTester<F>,
     pub program: ProgramTester<F>,
     internal_rng: StdRng,
-    custom_pvs: Vec<Option<F>>,
     default_register: usize,
     default_pointer: usize,
 }
@@ -98,7 +97,6 @@ where
             memory: &mut self.memory.memory,
             streams: &mut self.streams,
             rng: &mut self.rng,
-            custom_pvs: &mut self.custom_pvs,
             ctx: arena,
             #[cfg(feature = "metrics")]
             metrics: &mut Default::default(),
@@ -210,7 +208,6 @@ impl<F: VmField> VmChipTestBuilder<F> {
             memory: MemoryTester::new(controller, memory),
             streams,
             rng,
-            custom_pvs: Vec::new(),
             execution: ExecutionTester::new(execution_bus),
             program: ProgramTester::new(program_bus),
             internal_rng,
@@ -221,10 +218,6 @@ impl<F: VmField> VmChipTestBuilder<F> {
 
     fn next_elem_size_u32(&mut self) -> u32 {
         self.internal_rng.next_u32() % (1 << (F::bits() - 2))
-    }
-
-    pub fn set_num_public_values(&mut self, num_public_values: usize) {
-        self.custom_pvs.resize(num_public_values, None);
     }
 
     fn write_heap<const NUM_LIMBS: usize>(
@@ -312,7 +305,7 @@ impl<F: VmField> VmChipTestBuilder<F> {
     pub fn default_persistent() -> Self {
         let mut mem_config = MemoryConfig::default();
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-        mem_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
+        mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 0;
         Self::persistent(mem_config)
     }
 
@@ -351,7 +344,6 @@ impl<F: VmField> VmChipTestBuilder<F> {
             memory: MemoryTester::new(memory_controller, memory),
             streams: Default::default(),
             rng: StdRng::seed_from_u64(0),
-            custom_pvs: Vec::new(),
             execution: ExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
             program: ProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
             internal_rng: StdRng::seed_from_u64(0),
@@ -372,7 +364,6 @@ impl<F: VmField> VmChipTestBuilder<F> {
             memory: MemoryTester::new(memory_controller, memory),
             streams: Default::default(),
             rng: StdRng::seed_from_u64(0),
-            custom_pvs: Vec::new(),
             execution: ExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
             program: ProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
             internal_rng: StdRng::seed_from_u64(0),
@@ -388,7 +379,7 @@ impl<F: VmField> Default for VmChipTestBuilder<F> {
         // TODO[jpw]: this is because old tests use `gen_pointer` on address space 1; this can be
         // removed when tests are updated.
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-        mem_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
+        mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 0;
         Self::volatile(mem_config)
     }
 }

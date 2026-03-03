@@ -442,7 +442,7 @@ mod tests {
     };
     use openvm_instructions::{
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
-        NATIVE_AS,
+        DEFERRAL_AS,
     };
     use openvm_stark_sdk::utils::create_seeded_rng;
     use p3_field::{PrimeCharacteristicRing, PrimeField32};
@@ -459,7 +459,7 @@ mod tests {
             let max_cells = 1 << 16;
             addr_spaces[RV32_REGISTER_AS as usize].num_cells = 32 * size_of::<u32>();
             addr_spaces[RV32_MEMORY_AS as usize].num_cells = max_cells;
-            addr_spaces[NATIVE_AS as usize].num_cells = max_cells;
+            addr_spaces[DEFERRAL_AS as usize].num_cells = max_cells;
             MemoryConfig::new(2, addr_spaces, max_cells.ilog2() as usize, 29, 17, 32)
         };
 
