@@ -45,6 +45,12 @@ impl From<Bn254> for CommitBytes {
     }
 }
 
+impl From<[Bn254; 1]> for CommitBytes {
+    fn from(value: [Bn254; 1]) -> Self {
+        CommitBytes::from(value[0])
+    }
+}
+
 impl From<CommitBytes> for [u32; DIGEST_SIZE] {
     fn from(value: CommitBytes) -> Self {
         bytes_to_u32_digest(&value.0)

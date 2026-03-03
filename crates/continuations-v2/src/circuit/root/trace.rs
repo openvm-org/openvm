@@ -10,6 +10,7 @@ use openvm_cuda_backend::{data_transporter::transport_air_proving_ctx_to_device,
 use openvm_stark_backend::{
     proof::Proof,
     prover::{AirProvingContext, CpuBackend, ProverBackend},
+    StarkProtocolConfig,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, DIGEST_SIZE, F};
 use p3_field::PrimeField32;
@@ -42,7 +43,7 @@ pub struct RootTraceGenImpl {
     pub deferral_enabled: bool,
 }
 
-impl RootTraceGen<CpuBackend<BabyBearPoseidon2Config>> for RootTraceGenImpl {
+impl<SC: StarkProtocolConfig<F = F>> RootTraceGen<CpuBackend<SC>> for RootTraceGenImpl {
     fn new(deferral_enabled: bool) -> Self {
         Self { deferral_enabled }
     }
@@ -53,7 +54,7 @@ impl RootTraceGen<CpuBackend<BabyBearPoseidon2Config>> for RootTraceGenImpl {
         user_pvs_proof: &UserPublicValuesProof<DIGEST_SIZE, F>,
         memory_dimensions: MemoryDimensions,
     ) -> (
-        Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>,
+        Vec<AirProvingContext<CpuBackend<SC>>>,
         Vec<[F; POSEIDON2_WIDTH]>,
     ) {
         let (verifier_ctx, verifier_p2_inputs) =
@@ -82,7 +83,7 @@ impl RootTraceGen<CpuBackend<BabyBearPoseidon2Config>> for RootTraceGenImpl {
         memory_dimensions: MemoryDimensions,
         deferral_merkle_proofs: Option<&DeferralMerkleProofs<F>>,
     ) -> (
-        Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>,
+        Vec<AirProvingContext<CpuBackend<SC>>>,
         Vec<[F; POSEIDON2_WIDTH]>,
     ) {
         let (paths_ctx, paths_inputs) = if let Some(deferral_merkle_proofs) = deferral_merkle_proofs

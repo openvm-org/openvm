@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use openvm_circuit::system::memory::dimensions::MemoryDimensions;
-use openvm_stark_backend::AirRef;
-use recursion_circuit::system::AggregationSubCircuit;
+use openvm_stark_backend::{AirRef, StarkProtocolConfig};
+use recursion_circuit::{prelude::F, system::AggregationSubCircuit};
 
 use crate::{
     bn254::CommitBytes,
@@ -23,7 +23,6 @@ use crate::{
         },
         Circuit,
     },
-    SC,
 };
 
 pub mod bus;
@@ -43,7 +42,9 @@ pub struct DeferredVerifyCircuit<S: AggregationSubCircuit> {
     pub(crate) num_user_pvs: usize,
 }
 
-impl<S: AggregationSubCircuit> Circuit for DeferredVerifyCircuit<S> {
+impl<SC: StarkProtocolConfig<F = F>, S: AggregationSubCircuit> Circuit<SC>
+    for DeferredVerifyCircuit<S>
+{
     fn airs(&self) -> Vec<AirRef<SC>> {
         let bus_inventory = self.verifier_circuit.bus_inventory();
         let next_bus_idx = self.verifier_circuit.next_bus_idx();

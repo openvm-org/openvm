@@ -9,7 +9,7 @@ use openvm_stark_backend::{
     poly_common::{eval_mle_evals_at_point, interpolate_quadratic_at_012, Squarable},
     proof::{Proof, WhirProof},
     prover::{AirProvingContext, CpuBackend},
-    AirRef, FiatShamirTranscript, SystemParams, TranscriptHistory,
+    AirRef, FiatShamirTranscript, StarkProtocolConfig, SystemParams, TranscriptHistory,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config, CHUNK, EF, F};
 use p3_field::{Field, PrimeCharacteristicRing, PrimeField32, TwoAdicField};
@@ -744,7 +744,7 @@ impl AirModule for WhirModule {
         WhirModuleChipDiscriminants::COUNT
     }
 
-    fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
+    fn airs<SC: StarkProtocolConfig<F = F>>(&self) -> Vec<AirRef<SC>> {
         let params = &self.params;
         let initial_log_domain_size = params.n_stack + params.l_skip + params.log_blowup;
 
@@ -754,7 +754,7 @@ impl AirModule for WhirModule {
         // Encoder requires at least 2 flags to work correctly
         let whir_round_encoder = Encoder::new(num_rounds.max(2), 2, false);
 
-        let whir_round_air: AirRef<BabyBearPoseidon2Config> = Arc::new(WhirRoundAir {
+        let whir_round_air: AirRef<SC> = Arc::new(WhirRoundAir {
             whir_module_bus: self.bus_inventory.whir_module_bus,
             commitments_bus: self.bus_inventory.commitments_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
@@ -1191,7 +1191,7 @@ impl WhirModule {
     }
 }
 
-impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for WhirModule {
+impl<SC: StarkProtocolConfig<F = F>> TraceGenModule<GlobalCtxCpu, CpuBackend<SC>> for WhirModule {
     type ModuleSpecificCtx<'a> = ExpBitsLenTraceGenerator;
 
     #[tracing::instrument(skip_all)]
@@ -1202,7 +1202,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackend<BabyBearPoseidon2Config>> for WhirM
         preflights: &[Preflight],
         exp_bits_len_gen: &ExpBitsLenTraceGenerator,
         required_heights: Option<&[usize]>,
-    ) -> Option<Vec<AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>>> {
+    ) -> Option<Vec<AirProvingContext<CpuBackend<SC>>>> {
         let proofs = proofs.iter().collect_vec();
         let preflights = preflights.iter().collect_vec();
         let blob = self.generate_blob(child_vk, &proofs, &preflights, exp_bits_len_gen);

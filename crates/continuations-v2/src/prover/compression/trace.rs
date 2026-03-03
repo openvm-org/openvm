@@ -19,7 +19,7 @@ use crate::{
 
 impl<
         PB: ProverBackend<Val = F, Challenge = EF, Commitment = Digest>,
-        S: AggregationSubCircuit + VerifierTraceGen<PB>,
+        S: AggregationSubCircuit + VerifierTraceGen<PB, SC>,
         T: InnerTraceGen<PB>,
     > CompressionProver<PB, S, T>
 where
