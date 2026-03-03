@@ -4,16 +4,20 @@ use num_bigint::BigUint;
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, SystemConfig,
-        VmBuilder, VmChipComplex, VmField, VmProverExtension,
+        VmBuilder, VmChipComplex, VmProverExtension,
     },
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
 use openvm_circuit_derive::VmConfig;
-use openvm_cpu_backend::{CpuBackend, CpuDevice};
-use openvm_rv32im_circuit::{
-    Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
+use openvm_riscv_circuit::{
+    Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
-use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    p3_field::PrimeField32,
+    prover::cpu::{CpuBackend, CpuDevice},
+};
+use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
 
 mod modular;
@@ -23,7 +27,9 @@ pub use fp2::*;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
+        mod cuda;
         mod hybrid;
+        pub use cuda::*;
         pub use hybrid::*;
         pub use {
             AlgebraHybridProverExt as AlgebraProverExt,
@@ -46,11 +52,11 @@ pub struct Rv32ModularConfig {
     #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
-    pub base: Rv32I,
+    pub base: Rv64I,
     #[extension]
-    pub mul: Rv32M,
+    pub mul: Rv64M,
     #[extension]
-    pub io: Rv32Io,
+    pub io: Rv64Io,
     #[extension]
     pub modular: ModularExtension,
 }
@@ -110,12 +116,11 @@ impl InitFileGenerator for Rv32ModularWithFp2Config {
 #[derive(Clone)]
 pub struct Rv32ModularCpuBuilder;
 
-impl<SC, E> VmBuilder<E> for Rv32ModularCpuBuilder
+impl<E, SC> VmBuilder<E> for Rv32ModularCpuBuilder
 where
-    SC: StarkProtocolConfig,
+    SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<SC>: VmField,
-    SC::EF: Ord,
+    Val<SC>: PrimeField32,
 {
     type VmConfig = Rv32ModularConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
@@ -125,21 +130,16 @@ where
         &self,
         config: &Rv32ModularConfig,
         circuit: AirInventory<SC>,
-        device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
-        let mut chip_complex = VmBuilder::<E>::create_chip_complex(
-            &SystemCpuBuilder,
-            &config.system,
-            circuit,
-            device_ctx,
-        )?;
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.base, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.mul, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.base, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.mul, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
             &AlgebraCpuProverExt,
             &config.modular,
@@ -152,12 +152,11 @@ where
 #[derive(Clone)]
 pub struct Rv32ModularWithFp2CpuBuilder;
 
-impl<SC, E> VmBuilder<E> for Rv32ModularWithFp2CpuBuilder
+impl<E, SC> VmBuilder<E> for Rv32ModularWithFp2CpuBuilder
 where
-    SC: StarkProtocolConfig,
+    SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<SC>: VmField,
-    SC::EF: Ord,
+    Val<SC>: PrimeField32,
 {
     type VmConfig = Rv32ModularWithFp2Config;
     type SystemChipInventory = SystemChipInventory<SC>;
@@ -167,17 +166,12 @@ where
         &self,
         config: &Rv32ModularWithFp2Config,
         circuit: AirInventory<SC>,
-        device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
-        let mut chip_complex = VmBuilder::<E>::create_chip_complex(
-            &Rv32ModularCpuBuilder,
-            &config.modular,
-            circuit,
-            device_ctx,
-        )?;
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&Rv32ModularCpuBuilder, &config.modular, circuit)?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, &config.fp2, inventory)?;
         Ok(chip_complex)

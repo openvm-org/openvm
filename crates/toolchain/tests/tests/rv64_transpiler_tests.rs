@@ -6,12 +6,11 @@ use std::{
 use eyre::Result;
 use openvm_instructions::{LocalOpcode, SystemOpcode};
 use openvm_platform::memory::MEM_SIZE;
-use openvm_rv64im_transpiler::{
+use openvm_riscv_transpiler::{
     Rv64HintStoreOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension,
     Rv64MTranspilerExtension, Rv64Phantom,
 };
-use openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeField32;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::{openvm_stark_backend::p3_field::PrimeField32, p3_baby_bear::BabyBear};
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler};
 use test_case::test_case;
 
@@ -32,12 +31,16 @@ fn rv64_transpiler() -> Transpiler<F> {
 }
 
 // To create ELF directly from .S file, `brew install riscv-gnu-toolchain` and run
-// `riscv64-unknown-elf-gcc -march=rv64im -mabi=lp64 -nostartfiles -e _start -Ttext 0x00200800 -Wl,-N <name>.S -o <name>-from-as`
+// `riscv64-unknown-elf-gcc -march=rv64im -mabi=lp64 -nostartfiles -e _start -Ttext 0x00200800
+// -Wl,-N <name>.S -o <name>-from-as`
 #[test_case("tests/data/rv64im-stress")]
 #[test_case("tests/data/rv64im-intrin")]
 fn test_decode_rv64_elf(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
-    assert!(!elf.instructions.is_empty(), "ELF should contain instructions");
+    assert!(
+        !elf.instructions.is_empty(),
+        "ELF should contain instructions"
+    );
     Ok(())
 }
 
@@ -106,10 +109,22 @@ fn test_transpile_rv64_custom_opcodes() -> Result<()> {
         }
     }
 
-    assert!(found_terminate, "Expected TERMINATE opcode in transpiled program");
-    assert!(found_phantom, "Expected PHANTOM opcode in transpiled program");
-    assert!(found_hint_stored, "Expected HINT_STORED opcode in transpiled program");
-    assert!(found_hint_buffer, "Expected HINT_BUFFER opcode in transpiled program");
+    assert!(
+        found_terminate,
+        "Expected TERMINATE opcode in transpiled program"
+    );
+    assert!(
+        found_phantom,
+        "Expected PHANTOM opcode in transpiled program"
+    );
+    assert!(
+        found_hint_stored,
+        "Expected HINT_STORED opcode in transpiled program"
+    );
+    assert!(
+        found_hint_buffer,
+        "Expected HINT_BUFFER opcode in transpiled program"
+    );
 
     Ok(())
 }

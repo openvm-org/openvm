@@ -2,6 +2,7 @@ use openvm_algebra_guest::{
     ComplexExtFieldBaseFunct7, ModArithBaseFunct7, COMPLEX_EXT_FIELD_FUNCT3,
     MODULAR_ARITHMETIC_FUNCT3, OPCODE,
 };
+use openvm_decoder::instruction_formats::RType;
 use openvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode, PhantomDiscriminant,
     VmOpcode,
@@ -9,7 +10,6 @@ use openvm_instructions::{
 use openvm_instructions_derive::LocalOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
-use openvm_decoder::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
 
 #[derive(
