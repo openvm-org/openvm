@@ -98,7 +98,7 @@ impl<AB: AirBuilder + AirBuilderWithPublicValues> Air<AB> for EmptyAirWithPvs {
         let pvs: Vec<AB::Expr> = builder
             .public_values()
             .iter()
-            .map(|pv| pv.clone().into())
+            .map(|pv| (*pv).into())
             .collect();
         for pv in pvs {
             builder.assert_eq(pv.clone(), pv);
