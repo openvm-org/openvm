@@ -1,14 +1,14 @@
 use std::marker::PhantomData;
 
+use openvm_decoder::{
+    instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType},
+    InstructionProcessor,
+};
 use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, *};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::util::{
     from_b_type, from_i_type, from_i_type_shamt, from_j_type, from_load, from_r_type, from_s_type,
-    from_u_type, nop,
-};
-use rrs_lib::{
-    instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType},
-    InstructionProcessor,
+    from_u_type, nop, unimp,
 };
 
 use crate::{
@@ -359,5 +359,58 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     fn process_fence(&mut self, dec_insn: IType) -> Self::InstructionResult {
         tracing::debug!("Transpiling fence ({:?}) to nop", dec_insn);
         nop()
+    }
+
+    // RV64-specific stubs — these should never be called for RV32 binaries.
+    fn process_lwu(&mut self, _dec_insn: IType) -> Self::InstructionResult {
+        unimp()
+    }
+    fn process_ld(&mut self, _dec_insn: IType) -> Self::InstructionResult {
+        unimp()
+    }
+    fn process_sd(&mut self, _dec_insn: SType) -> Self::InstructionResult {
+        unimp()
+    }
+    fn process_addw(&mut self, _dec_insn: RType) -> Self::InstructionResult {
+        unimp()
+    }
+    fn process_subw(&mut self, _dec_insn: RType) -> Self::InstructionResult {
+        unimp()
+    }
+    fn process_addiw(&mut self, _dec_insn: IType) -> Self::InstructionResult {
+        unimp()
+    }
+    fn process_sllw(&mut self, _dec_insn: RType) -> Self::InstructionResult {
+        unimp()
+    }
+    fn process_srlw(&mut self, _dec_insn: RType) -> Self::InstructionResult {
+        unimp()
+    }
+    fn process_sraw(&mut self, _dec_insn: RType) -> Self::InstructionResult {
+        unimp()
+    }
+    fn process_slliw(&mut self, _dec_insn: ITypeShamt) -> Self::InstructionResult {
+        unimp()
+    }
+    fn process_srliw(&mut self, _dec_insn: ITypeShamt) -> Self::InstructionResult {
+        unimp()
+    }
+    fn process_sraiw(&mut self, _dec_insn: ITypeShamt) -> Self::InstructionResult {
+        unimp()
+    }
+    fn process_mulw(&mut self, _dec_insn: RType) -> Self::InstructionResult {
+        unimp()
+    }
+    fn process_divw(&mut self, _dec_insn: RType) -> Self::InstructionResult {
+        unimp()
+    }
+    fn process_divuw(&mut self, _dec_insn: RType) -> Self::InstructionResult {
+        unimp()
+    }
+    fn process_remw(&mut self, _dec_insn: RType) -> Self::InstructionResult {
+        unimp()
+    }
+    fn process_remuw(&mut self, _dec_insn: RType) -> Self::InstructionResult {
+        unimp()
     }
 }
