@@ -1,7 +1,7 @@
 // =================================================================================================
-// RV32IM support opcodes.
-// Enum types that do not start with Rv32 can be used for generic big integers, but the default
-// offset is reserved for RV32IM.
+// RV64IM support opcodes.
+// Enum types that do not start with Rv64 can be used for generic big integers, but the default
+// offset is reserved for RV64IM.
 //
 // Create a new wrapper struct U256BaseAluOpcode(pub BaseAluOpcode) with the LocalOpcode macro to
 // specify a different offset.
@@ -99,17 +99,22 @@ pub enum LessThanOpcode {
 )]
 #[opcode_offset = 0x210]
 #[repr(usize)]
-pub enum Rv32LoadStoreOpcode {
-    LOADW,
-    /// LOADBU, LOADHU are unsigned extend opcodes, implemented in the same chip with LOADW
+pub enum Rv64LoadStoreOpcode {
+    // Ordering matters: the circuit routes opcodes to chips using .take(STOREB + 1),
+    // so zero-extend loads and stores must come first, sign-extend loads last.
+    LOADD,
     LOADBU,
     LOADHU,
+    LOADWU,
+    STORED,
     STOREW,
     STOREH,
     STOREB,
-    /// The following are signed extend opcodes
+    // Sign-extend loads. Unlike RV32 where LOADW needs no extension (it fills the
+    // full 32-bit register), in RV64 LOADW must sign-extend 32→64.
     LOADB,
     LOADH,
+    LOADW,
 }
 
 #[derive(
@@ -166,7 +171,7 @@ pub enum BranchLessThanOpcode {
 #[opcode_offset = 0x230]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
-pub enum Rv32JalLuiOpcode {
+pub enum Rv64JalLuiOpcode {
     JAL,
     LUI,
 }
@@ -177,7 +182,7 @@ pub enum Rv32JalLuiOpcode {
 #[opcode_offset = 0x235]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
-pub enum Rv32JalrOpcode {
+pub enum Rv64JalrOpcode {
     JALR,
 }
 
@@ -187,7 +192,7 @@ pub enum Rv32JalrOpcode {
 #[opcode_offset = 0x240]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
-pub enum Rv32AuipcOpcode {
+pub enum Rv64AuipcOpcode {
     AUIPC,
 }
 
@@ -251,7 +256,7 @@ pub enum DivRemOpcode {
 }
 
 // =================================================================================================
-// Rv32HintStore Instruction
+// Rv64HintStore Instruction
 // =================================================================================================
 
 #[derive(
@@ -260,9 +265,95 @@ pub enum DivRemOpcode {
 #[opcode_offset = 0x260]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
-pub enum Rv32HintStoreOpcode {
-    HINT_STOREW,
+pub enum Rv64HintStoreOpcode {
+    HINT_STORED,
     HINT_BUFFER,
+}
+
+// =================================================================================================
+// RV64-specific W-suffix opcodes (32-bit operations on 64-bit registers)
+// =================================================================================================
+
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    LocalOpcode,
+    Serialize,
+    Deserialize,
+)]
+#[opcode_offset = 0x270]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum BaseAluWOpcode {
+    ADDW,
+    SUBW,
+}
+
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    LocalOpcode,
+    Serialize,
+    Deserialize,
+)]
+#[opcode_offset = 0x275]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum ShiftWOpcode {
+    SLLW,
+    SRLW,
+    SRAW,
+}
+
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter, FromRepr, LocalOpcode,
+)]
+#[opcode_offset = 0x280]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum MulWOpcode {
+    MULW,
+}
+
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    LocalOpcode,
+    Serialize,
+    Deserialize,
+)]
+#[opcode_offset = 0x284]
+#[repr(usize)]
+#[allow(non_camel_case_types)]
+pub enum DivRemWOpcode {
+    DIVW,
+    DIVUW,
+    REMW,
+    REMUW,
 }
 
 // =================================================================================================
@@ -271,8 +362,8 @@ pub enum Rv32HintStoreOpcode {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, FromRepr)]
 #[repr(u16)]
-pub enum Rv32Phantom {
-    /// Prepare the next input vector for hinting, but prepend it with a 4-byte decomposition of
+pub enum Rv64Phantom {
+    /// Prepare the next input vector for hinting, but prepend it with an 8-byte decomposition of
     /// its length instead of one field element.
     HintInput = 0x20,
     /// Peek string from memory and print it to stdout.
