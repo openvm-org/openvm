@@ -4408,11 +4408,11 @@ name = "openvm-algebra-transpiler"
 version = "2.0.0"
 dependencies = [
  "openvm-algebra-guest",
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "strum",
 ]
 
@@ -4534,12 +4534,12 @@ name = "openvm-bigint-transpiler"
 version = "2.0.0"
 dependencies = [
  "openvm-bigint-guest",
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-rv32im-transpiler",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "strum",
 ]
 
@@ -4941,12 +4941,12 @@ dependencies = [
 name = "openvm-ecc-transpiler"
 version = "2.0.0"
 dependencies = [
+ "openvm-decoder",
  "openvm-ecc-guest",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "strum",
 ]
 
@@ -5064,12 +5064,12 @@ dependencies = [
 name = "openvm-keccak256-transpiler"
 version = "2.0.0"
 dependencies = [
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-keccak256-guest",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "strum",
 ]
 
@@ -5197,11 +5197,11 @@ dependencies = [
 name = "openvm-pairing-transpiler"
 version = "2.0.0"
 dependencies = [
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-pairing-guest",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "strum",
 ]
 
@@ -5362,12 +5362,12 @@ dependencies = [
 name = "openvm-rv32im-transpiler"
 version = "2.0.0"
 dependencies = [
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-rv32im-guest",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "serde",
  "strum",
  "tracing",
@@ -5386,12 +5386,12 @@ dependencies = [
 name = "openvm-rv64im-transpiler"
 version = "2.0.0"
 dependencies = [
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-instructions-derive",
- "openvm-rv32im-guest",
+ "openvm-rv64im-guest",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "serde",
  "strum",
  "tracing",
@@ -5562,12 +5562,12 @@ dependencies = [
 name = "openvm-sha2-transpiler"
 version = "2.0.0"
 dependencies = [
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-instructions-derive",
  "openvm-sha2-guest",
  "openvm-stark-backend",
  "openvm-transpiler",
- "rrs-lib",
  "strum",
 ]
 
@@ -5679,6 +5679,7 @@ dependencies = [
  "openvm-platform",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
+ "openvm-rv64im-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "openvm-transpiler",
@@ -5694,10 +5695,10 @@ version = "2.0.0"
 dependencies = [
  "elf",
  "eyre",
+ "openvm-decoder",
  "openvm-instructions",
  "openvm-platform",
  "openvm-stark-backend",
- "rrs-lib",
  "rustc-demangle",
  "thiserror 1.0.69",
 ]
