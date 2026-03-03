@@ -90,7 +90,7 @@ mod tests {
             .iter()
             .map(|c| {
                 c.iter()
-                    .flat_map(|f| f.as_canonical_u32().to_le_bytes())
+                    .flat_map(|f| f.to_unique_u32().to_le_bytes())
                     .collect_array()
                     .unwrap()
             })

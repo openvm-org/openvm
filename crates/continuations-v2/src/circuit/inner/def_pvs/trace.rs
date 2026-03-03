@@ -30,9 +30,10 @@ pub fn generate_proving_ctx(
     AirProvingContext<CpuBackend<BabyBearPoseidon2Config>>,
     Vec<[F; POSEIDON2_WIDTH]>,
 ) {
-    assert_eq!(
-        absent_trace_pvs.is_some(),
-        matches!(proofs_type, ProofsType::Deferral) && proofs.len() == 1
+    assert!(
+        absent_trace_pvs.is_none()
+            || (matches!(proofs_type, ProofsType::Deferral) && proofs.len() == 1),
+        "absent_trace_pvs is only valid for single-proof deferral aggregation"
     );
     let mut proof_idxs = vec![];
     let (num_rows, def_flag) = match proofs_type {
