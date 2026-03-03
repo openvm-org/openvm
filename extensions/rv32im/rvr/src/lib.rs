@@ -1,7 +1,7 @@
-//! rvr lifter for the rv32im I/O sub-extension (HINT_STOREW, HINT_BUFFER,
+//! rvr lifter for the RISC-V I/O sub-extension (HINT_STORED, HINT_BUFFER,
 //! REVEAL).
 //!
-//! TODO: check if other RV32IM instructions/opcodes can be separated into
+//! TODO: check if other RISC-V instructions/opcodes can be separated into
 //! extensions.
 #![cfg(feature = "rvr")]
 
@@ -9,10 +9,10 @@ use std::{ffi::c_void, io::Write};
 
 use openvm_circuit::arch::rvr::io::{check_mem_bounds_range, OpenVmIoState};
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV32_MEMORY_AS, LocalOpcode, SystemOpcode,
+    instruction::Instruction, riscv::RV64_MEMORY_AS, LocalOpcode, SystemOpcode,
 };
 use openvm_platform::WORD_SIZE;
-use openvm_rv32im_transpiler::{Rv32HintStoreOpcode, Rv32LoadStoreOpcode, Rv32Phantom};
+use openvm_riscv_transpiler::{Rv64HintStoreOpcode, Rv64LoadStoreOpcode, Rv64Phantom};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::Rng;
 use rvr_openvm_ext_ffi_common::AS_PUBLIC_VALUES;
@@ -22,7 +22,7 @@ use rvr_openvm_lift::{
     RvrExtension, RvrExtensionCtx,
 };
 
-/// HINT_STOREW: pop 4 bytes from the hint stream into `mem[reg[ptr_reg]]`.
+/// HINT_STORED: pop one register word from the hint stream into `mem[reg[ptr_reg]]`.
 #[derive(Debug, Clone)]
 pub struct HintStoreWInstr {
     pub ptr_reg: Reg,
@@ -35,7 +35,7 @@ impl ExtInstr for HintStoreWInstr {
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let ptr = ctx.read_reg(self.ptr_reg);
-        ctx.trace_mem_access(&ptr, RV32_MEMORY_AS);
+        ctx.trace_mem_access(&ptr, RV64_MEMORY_AS);
         ctx.extern_call("openvm_hint_storew", &[&ptr]);
     }
 
@@ -44,7 +44,7 @@ impl ExtInstr for HintStoreWInstr {
     }
 }
 
-/// HINT_BUFFER: pop `4 * reg[num_words_reg]` bytes from the hint stream and
+/// HINT_BUFFER: pop `WORD_SIZE * reg[num_words_reg]` bytes from the hint stream and
 /// write them sequentially starting at `mem[reg[ptr_reg]]`.
 #[derive(Debug, Clone)]
 pub struct HintBufferInstr {
@@ -68,7 +68,7 @@ impl ExtInstr for HintBufferInstr {
         ctx.trace_chip(chip_idx, &format!("{n} - 1"));
         ctx.write_line("}");
         ctx.write_line(&format!("if ({n} > 0) {{"));
-        ctx.trace_mem_access_u32_range(&ptr, &n, RV32_MEMORY_AS);
+        ctx.trace_mem_access_u32_range(&ptr, &n, RV64_MEMORY_AS);
         ctx.write_line("}");
         ctx.extern_call("openvm_hint_buffer", &[&ptr, &n]);
     }
@@ -78,7 +78,7 @@ impl ExtInstr for HintBufferInstr {
     }
 }
 
-/// REVEAL: write `reg[src_reg]` (4 bytes, little-endian) to user public-output
+/// REVEAL: write `reg[src_reg]` to user public-output
 /// address space at `reg[ptr_reg] + offset`.
 #[derive(Debug, Clone)]
 pub struct RevealInstr {
@@ -177,26 +177,26 @@ impl ExtInstr for HintRandomInstr {
     }
 }
 
-/// rvr extension for the rv32im I/O instructions HINT_STOREW, HINT_BUFFER, and
+/// rvr extension for the RISC-V I/O instructions HINT_STORED, HINT_BUFFER, and
 /// REVEAL.
-pub struct Rv32IoExtension {
+pub struct Rv64IoExtension {
     hint_store_chip_idx: Option<AirIndex>,
 }
 
-impl Rv32IoExtension {
+impl Rv64IoExtension {
     pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
-        let hint_store_chip_idx = opcode_air_idx(ctx, Rv32HintStoreOpcode::HINT_STOREW)?;
+        let hint_store_chip_idx = opcode_air_idx(ctx, Rv64HintStoreOpcode::HINT_STORED)?;
         Ok(Self {
             hint_store_chip_idx,
         })
     }
 }
 
-impl<F: PrimeField32> RvrExtension<F> for Rv32IoExtension {
+impl<F: PrimeField32> RvrExtension<F> for Rv64IoExtension {
     fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
-        if opcode == Rv32HintStoreOpcode::HINT_STOREW.global_opcode_usize() {
+        if opcode == Rv64HintStoreOpcode::HINT_STORED.global_opcode_usize() {
             let ptr_reg = decode_reg(insn.b);
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
@@ -205,7 +205,7 @@ impl<F: PrimeField32> RvrExtension<F> for Rv32IoExtension {
             }));
         }
 
-        if opcode == Rv32HintStoreOpcode::HINT_BUFFER.global_opcode_usize() {
+        if opcode == Rv64HintStoreOpcode::HINT_BUFFER.global_opcode_usize() {
             let num_words_reg = decode_reg(insn.a);
             let ptr_reg = decode_reg(insn.b);
             return Some(LiftedInstr::Body(InstrAt {
@@ -220,7 +220,7 @@ impl<F: PrimeField32> RvrExtension<F> for Rv32IoExtension {
         }
 
         // REVEAL: STOREW with address-space e = AS_PUBLIC_VALUES.
-        if opcode == Rv32LoadStoreOpcode::STOREW.global_opcode_usize()
+        if opcode == Rv64LoadStoreOpcode::STOREW.global_opcode_usize()
             && insn.e.as_canonical_u32() == AS_PUBLIC_VALUES
         {
             let src_reg = decode_reg(insn.a);
@@ -242,15 +242,15 @@ impl<F: PrimeField32> RvrExtension<F> for Rv32IoExtension {
 
     fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         vec![(
-            "rv32io_callbacks.h",
-            include_str!("../c/rv32io_callbacks.h"),
+            "rv64io_callbacks.h",
+            include_str!("../c/rv64io_callbacks.h"),
         )]
     }
 
     fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
         vec![(
-            "rv32io_callbacks.c",
-            include_str!("../c/rv32io_callbacks.c"),
+            "rv64io_callbacks.c",
+            include_str!("../c/rv64io_callbacks.c"),
         )]
     }
 
@@ -258,13 +258,13 @@ impl<F: PrimeField32> RvrExtension<F> for Rv32IoExtension {
         &self,
         lib: &libloading::Library,
     ) -> Result<(), ExtensionError> {
-        let register_fn: RegisterRv32IoFn = unsafe {
+        let register_fn: RegisterRv64IoFn = unsafe {
             let sym = lib
-                .get::<RegisterRv32IoFn>(b"register_rv32io_callbacks")
+                .get::<RegisterRv64IoFn>(b"register_rv64io_callbacks")
                 .map_err(|e| ExtensionError::HostCallbackRegistration(e.to_string()))?;
             *sym
         };
-        let callbacks = Rv32IoHostCallbacks {
+        let callbacks = Rv64IoHostCallbacks {
             hint_storew: host_hint_storew::<F>,
             hint_buffer: host_hint_buffer::<F>,
             reveal: host_reveal::<F>,
@@ -274,36 +274,36 @@ impl<F: PrimeField32> RvrExtension<F> for Rv32IoExtension {
     }
 }
 
-/// rvr extension for the rv32im base IO phantoms HINT_INPUT, PRINT_STR,
+/// rvr extension for the RISC-V base IO phantoms HINT_INPUT, PRINT_STR,
 /// HINT_RANDOM, and the extension hint-stream setter.
-pub struct Rv32IExtension;
+pub struct Rv64IExtension;
 
-impl Rv32IExtension {
+impl Rv64IExtension {
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Default for Rv32IExtension {
+impl Default for Rv64IExtension {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<F: PrimeField32> RvrExtension<F> for Rv32IExtension {
+impl<F: PrimeField32> RvrExtension<F> for Rv64IExtension {
     fn try_lift(&self, insn: &Instruction<F>, pc: u32) -> Option<LiftedInstr> {
         if insn.opcode.as_usize() != SystemOpcode::PHANTOM.global_opcode_usize() {
             return None;
         }
         let discriminant = (insn.c.as_canonical_u32() & 0xffff) as u16;
-        let phantom = Rv32Phantom::from_repr(discriminant)?;
+        let phantom = Rv64Phantom::from_repr(discriminant)?;
         let instr: Box<dyn ExtInstr> = match phantom {
-            Rv32Phantom::HintInput => Box::new(HintInputInstr),
-            Rv32Phantom::PrintStr => Box::new(PrintStrInstr {
+            Rv64Phantom::HintInput => Box::new(HintInputInstr),
+            Rv64Phantom::PrintStr => Box::new(PrintStrInstr {
                 ptr_reg: decode_reg(insn.a),
                 len_reg: decode_reg(insn.b),
             }),
-            Rv32Phantom::HintRandom => Box::new(HintRandomInstr {
+            Rv64Phantom::HintRandom => Box::new(HintRandomInstr {
                 num_words_reg: decode_reg(insn.a),
             }),
         };
@@ -316,15 +316,15 @@ impl<F: PrimeField32> RvrExtension<F> for Rv32IExtension {
 
     fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         vec![(
-            "rv32i_phantom_callbacks.h",
-            include_str!("../c/rv32i_phantom_callbacks.h"),
+            "rv64i_phantom_callbacks.h",
+            include_str!("../c/rv64i_phantom_callbacks.h"),
         )]
     }
 
     fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
         vec![(
-            "rv32i_phantom_callbacks.c",
-            include_str!("../c/rv32i_phantom_callbacks.c"),
+            "rv64i_phantom_callbacks.c",
+            include_str!("../c/rv64i_phantom_callbacks.c"),
         )]
     }
 
@@ -332,13 +332,13 @@ impl<F: PrimeField32> RvrExtension<F> for Rv32IExtension {
         &self,
         lib: &libloading::Library,
     ) -> Result<(), ExtensionError> {
-        let register_fn: RegisterRv32IPhantomFn = unsafe {
+        let register_fn: RegisterRv64IPhantomFn = unsafe {
             let sym = lib
-                .get::<RegisterRv32IPhantomFn>(b"register_rv32i_phantom_callbacks")
+                .get::<RegisterRv64IPhantomFn>(b"register_rv64i_phantom_callbacks")
                 .map_err(|e| ExtensionError::HostCallbackRegistration(e.to_string()))?;
             *sym
         };
-        let callbacks = Rv32IPhantomCallbacks {
+        let callbacks = Rv64IPhantomCallbacks {
             hint_input: host_hint_input::<F>,
             print_str: host_print_str::<F>,
             hint_random: host_hint_random::<F>,
@@ -349,21 +349,21 @@ impl<F: PrimeField32> RvrExtension<F> for Rv32IExtension {
     }
 }
 
-type RegisterRv32IPhantomFn = unsafe extern "C" fn(*const Rv32IPhantomCallbacks);
-type RegisterRv32IoFn = unsafe extern "C" fn(*const Rv32IoHostCallbacks);
+type RegisterRv64IPhantomFn = unsafe extern "C" fn(*const Rv64IPhantomCallbacks);
+type RegisterRv64IoFn = unsafe extern "C" fn(*const Rv64IoHostCallbacks);
 
-/// Must match the C `Rv32IPhantomCallbacks` layout in `rv32i_phantom_callbacks.c`.
+/// Must match the C `Rv64IPhantomCallbacks` layout in `rv64i_phantom_callbacks.c`.
 #[repr(C)]
-pub struct Rv32IPhantomCallbacks {
+pub struct Rv64IPhantomCallbacks {
     pub hint_input: extern "C" fn(*mut c_void),
     pub print_str: extern "C" fn(*mut c_void, u32, u32),
     pub hint_random: extern "C" fn(*mut c_void, u32),
     pub hint_stream_set: unsafe extern "C" fn(*mut c_void, *const u8, u32),
 }
 
-/// Must match the C `Rv32IoHostCallbacks` layout in `rv32io_callbacks.c`.
+/// Must match the C `Rv64IoHostCallbacks` layout in `rv64io_callbacks.c`.
 #[repr(C)]
-pub struct Rv32IoHostCallbacks {
+pub struct Rv64IoHostCallbacks {
     pub hint_storew: extern "C" fn(*mut c_void, u32),
     pub hint_buffer: extern "C" fn(*mut c_void, u32, u32),
     pub reveal: extern "C" fn(*mut c_void, u32, u32, u32),
@@ -405,7 +405,7 @@ pub extern "C" fn host_print_str<F: PrimeField32>(ctx: *mut c_void, ptr: u32, le
 
 /// HintRandom: refill the hint stream with `num_words * WORD_SIZE` random
 /// bytes drawn from VmState's persistent RNG (matches openvm's
-/// `Rv32HintRandomSubEx`).
+/// `Rv64HintRandomSubEx`).
 pub extern "C" fn host_hint_random<F: PrimeField32>(ctx: *mut c_void, num_words: u32) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
     let nbytes = num_words as usize * WORD_SIZE;
