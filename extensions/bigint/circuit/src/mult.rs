@@ -9,9 +9,9 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
+use openvm_riscv_circuit::MultiplicationExecutor;
+use openvm_riscv_transpiler::MulOpcode;
 use openvm_rv32_adapters::Rv32HeapAdapterExecutor;
-use openvm_rv32im_circuit::MultiplicationExecutor;
-use openvm_rv32im_transpiler::MulOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{

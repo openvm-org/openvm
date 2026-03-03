@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use openvm_decoder::instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType};
 use openvm_instructions::{
     exe::SparseMemoryImage,
     instruction::Instruction,
@@ -8,7 +9,6 @@ use openvm_instructions::{
     LocalOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_decoder::instruction_formats::{BType, IType, ITypeShamt, JType, RType, SType, UType};
 
 fn i12_to_u24(imm: i32) -> u32 {
     (imm as u32) & 0xffffff

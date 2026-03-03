@@ -11,8 +11,8 @@ use openvm_circuit::{
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
 use openvm_circuit_derive::VmConfig;
-use openvm_rv32im_circuit::{
-    Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
+use openvm_riscv_circuit::{
+    Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -150,28 +150,28 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for NativeGpuBuilder {
 }
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
-pub struct Rv32WithKernelsConfig {
+pub struct Rv64WithKernelsConfig {
     #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
-    pub rv32i: Rv32I,
+    pub rv32i: Rv64I,
     #[extension]
-    pub rv32m: Rv32M,
+    pub rv32m: Rv64M,
     #[extension]
-    pub io: Rv32Io,
+    pub io: Rv64Io,
     #[extension(generics = true)]
     pub native: Native,
     #[extension]
     pub castf: CastFExtension,
 }
 
-impl Default for Rv32WithKernelsConfig {
+impl Default for Rv64WithKernelsConfig {
     fn default() -> Self {
         Self {
             system: SystemConfig::default(),
-            rv32i: Rv32I,
-            rv32m: Rv32M::default(),
-            io: Rv32Io,
+            rv32i: Rv64I,
+            rv32m: Rv64M::default(),
+            io: Rv64Io,
             native: Native,
             castf: CastFExtension,
         }
@@ -179,24 +179,24 @@ impl Default for Rv32WithKernelsConfig {
 }
 
 // Default implementation uses no init file
-impl InitFileGenerator for Rv32WithKernelsConfig {}
+impl InitFileGenerator for Rv64WithKernelsConfig {}
 
 #[derive(Clone)]
-pub struct Rv32WithKernelsCpuBuilder;
+pub struct Rv64WithKernelsCpuBuilder;
 
-impl<E, SC> VmBuilder<E> for Rv32WithKernelsCpuBuilder
+impl<E, SC> VmBuilder<E> for Rv64WithKernelsCpuBuilder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: PrimeField32,
 {
-    type VmConfig = Rv32WithKernelsConfig;
+    type VmConfig = Rv64WithKernelsConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
     type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
-        config: &Rv32WithKernelsConfig,
+        config: &Rv64WithKernelsConfig,
         circuit: AirInventory<SC>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
@@ -205,9 +205,9 @@ where
         let mut chip_complex =
             VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32i, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv32i, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv32m, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
             &NativeCpuProverExt,
             &config.native,

@@ -21,7 +21,7 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32im_circuit::adapters::{tracing_read, tracing_write};
+use openvm_riscv_circuit::adapters::{tracing_read, tracing_write};
 use openvm_sha2_air::{Sha256Config, Sha2Variant, Sha384Config, Sha512Config};
 use openvm_stark_backend::p3_field::PrimeField32;
 

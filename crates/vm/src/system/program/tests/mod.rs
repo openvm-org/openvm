@@ -9,7 +9,7 @@ use openvm_instructions::{
 use openvm_native_compiler::{
     FieldArithmeticOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*, NativeLoadStoreOpcode::*,
 };
-use openvm_rv32im_transpiler::BranchEqualOpcode::*;
+use openvm_riscv_transpiler::BranchEqualOpcode::*;
 use openvm_stark_backend::{
     config::StarkGenericConfig,
     engine::StarkEngine,

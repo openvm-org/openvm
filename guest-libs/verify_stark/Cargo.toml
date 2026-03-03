@@ -11,7 +11,7 @@ license.workspace = true
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 openvm-native-recursion.workspace = true
-openvm-rv32im-guest.workspace = true
+openvm-riscv-guest.workspace = true
 openvm-sdk = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 

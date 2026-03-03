@@ -28,8 +28,8 @@ use openvm_mod_circuit_builder::{
     ExprBuilderConfig,
 };
 use openvm_pairing_guest::{bls12_381::BLS12_381_MODULUS, bn254::BN254_MODULUS};
+use openvm_riscv_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
 use openvm_rv32_adapters::{rv32_write_heap_default, write_ptr_reg};
-use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};

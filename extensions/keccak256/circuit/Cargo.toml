@@ -17,7 +17,7 @@ openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
-openvm-rv32im-circuit = { workspace = true }
+openvm-riscv-circuit = { workspace = true }
 openvm-keccak256-transpiler = { workspace = true }
 
 p3-keccak-air = { workspace = true }
@@ -41,8 +41,8 @@ openvm-cuda-builder = { workspace = true, optional = true }
 default = ["parallel", "jemalloc"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]
-tco = ["openvm-rv32im-circuit/tco"]
-aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot"]
+tco = ["openvm-riscv-circuit/tco"]
+aot = ["openvm-circuit/aot", "openvm-riscv-circuit/aot"]
 # performance features:
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]
@@ -54,11 +54,11 @@ cuda = [
     "dep:openvm-cuda-builder",
     "openvm-circuit-primitives/cuda",
     "openvm-circuit/cuda",
-    "openvm-rv32im-circuit/cuda",
+    "openvm-riscv-circuit/cuda",
 ]
 touchemall = [
     "cuda",
     "openvm-circuit/touchemall",
     "openvm-circuit-primitives/touchemall",
-    "openvm-rv32im-circuit/touchemall",
+    "openvm-riscv-circuit/touchemall",
 ]

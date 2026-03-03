@@ -30,11 +30,10 @@ members = [
     "crates/toolchain/tests",
     "crates/continuations",
     "crates/vm",
-    "extensions/rv32im/circuit",
-    "extensions/rv32im/transpiler",
-    "extensions/rv32im/guest",
-    "extensions/rv32im/tests",
-    "extensions/rv64im/transpiler",
+    "extensions/riscv/circuit",
+    "extensions/riscv/transpiler",
+    "extensions/riscv/guest",
+    "extensions/riscv/tests",
     "extensions/rv32-adapters",
     "extensions/native/circuit",
     "extensions/native/compiler",
@@ -144,11 +143,9 @@ openvm-continuations = { path = "crates/continuations", default-features = false
 cargo-openvm = { path = "crates/cli", default-features = false }
 
 # Extensions
-openvm-rv32im-circuit = { path = "extensions/rv32im/circuit", default-features = false }
-openvm-rv32im-transpiler = { path = "extensions/rv32im/transpiler", default-features = false }
-openvm-rv32im-guest = { path = "extensions/rv32im/guest", default-features = false }
-openvm-rv64im-transpiler = { path = "extensions/rv64im/transpiler", default-features = false }
-openvm-rv64im-guest = { path = "extensions/rv64im/guest", default-features = false }
+openvm-riscv-circuit = { path = "extensions/riscv/circuit", default-features = false }
+openvm-riscv-transpiler = { path = "extensions/riscv/transpiler", default-features = false }
+openvm-riscv-guest = { path = "extensions/riscv/guest", default-features = false }
 openvm-rv32-adapters = { path = "extensions/rv32-adapters", default-features = false }
 openvm-native-circuit = { path = "extensions/native/circuit", default-features = false }
 openvm-native-compiler = { path = "extensions/native/compiler", default-features = false }

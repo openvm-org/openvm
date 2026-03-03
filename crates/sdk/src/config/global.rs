@@ -27,11 +27,11 @@ use openvm_pairing_circuit::{
     BLS12_381_COMPLEX_STRUCT_NAME, BN254_COMPLEX_STRUCT_NAME,
 };
 use openvm_pairing_transpiler::PairingTranspilerExtension;
-use openvm_rv32im_circuit::{
-    Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
+use openvm_riscv_circuit::{
+    Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
-use openvm_rv32im_transpiler::{
-    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+use openvm_riscv_transpiler::{
+    Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
 };
 use openvm_sha2_circuit::{Sha2, Sha2CpuProverExt, Sha2Executor};
 use openvm_sha2_transpiler::Sha2TranspilerExtension;
@@ -54,7 +54,7 @@ cfg_if::cfg_if! {
         use openvm_ecc_circuit::EccProverExt;
         use openvm_keccak256_circuit::Keccak256GpuProverExt;
         use openvm_native_circuit::NativeGpuProverExt;
-        use openvm_rv32im_circuit::Rv32ImGpuProverExt;
+        use openvm_riscv_circuit::Rv64ImGpuProverExt;
         use openvm_sha2_circuit::Sha2GpuProverExt;
         pub use SdkVmGpuBuilder as SdkVmBuilder;
     } else {
@@ -88,8 +88,8 @@ pub struct SdkVmConfig {
     /// NOTE: if enabling this together with the [Int256] extension, you should set the `rv32m`
     /// field to have the same `range_tuple_checker_sizes` as the `bigint` field for best
     /// performance.
-    pub rv32m: Option<Rv32M>,
-    /// NOTE: if enabling this together with the [Rv32M] extension, you should set the `rv32m`
+    pub rv32m: Option<Rv64M>,
+    /// NOTE: if enabling this together with the [Rv64M] extension, you should set the `rv32m`
     /// field to have the same `range_tuple_checker_sizes` as the `bigint` field for best
     /// performance.
     pub bigint: Option<Int256>,
@@ -191,10 +191,10 @@ impl TranspilerConfig<F> for SdkVmConfig {
     fn transpiler(&self) -> Transpiler<F> {
         let mut transpiler = Transpiler::default();
         if self.rv32i.is_some() {
-            transpiler = transpiler.with_extension(Rv32ITranspilerExtension);
+            transpiler = transpiler.with_extension(Rv64ITranspilerExtension);
         }
         if self.io.is_some() {
-            transpiler = transpiler.with_extension(Rv32IoTranspilerExtension);
+            transpiler = transpiler.with_extension(Rv64IoTranspilerExtension);
         }
         if self.keccak.is_some() {
             transpiler = transpiler.with_extension(Keccak256TranspilerExtension);
@@ -206,7 +206,7 @@ impl TranspilerConfig<F> for SdkVmConfig {
             transpiler = transpiler.with_extension(LongFormTranspilerExtension);
         }
         if self.rv32m.is_some() {
-            transpiler = transpiler.with_extension(Rv32MTranspilerExtension);
+            transpiler = transpiler.with_extension(Rv64MTranspilerExtension);
         }
         if self.bigint.is_some() {
             transpiler = transpiler.with_extension(Int256TranspilerExtension);
@@ -266,8 +266,8 @@ impl SdkVmConfig {
     pub fn to_inner(&self) -> SdkVmConfigInner {
         let config = self.clone().optimize();
         let system = config.system.config.clone();
-        let rv32i = config.rv32i.map(|_| Rv32I);
-        let io = config.io.map(|_| Rv32Io);
+        let rv32i = config.rv32i.map(|_| Rv64I);
+        let io = config.io.map(|_| Rv64Io);
         let keccak = config.keccak.map(|_| Keccak256);
         let sha2 = config.sha2.map(|_| Sha2);
         let native = config.native.map(|_| Native);
@@ -309,10 +309,10 @@ pub struct SdkVmCpuBuilder;
 pub struct SdkVmConfigInner {
     #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
-    #[extension(executor = "Rv32IExecutor")]
-    pub rv32i: Option<Rv32I>,
-    #[extension(executor = "Rv32IoExecutor")]
-    pub io: Option<Rv32Io>,
+    #[extension(executor = "Rv64IExecutor")]
+    pub rv32i: Option<Rv64I>,
+    #[extension(executor = "Rv64IoExecutor")]
+    pub io: Option<Rv64Io>,
     #[extension(executor = "Keccak256Executor")]
     pub keccak: Option<Keccak256>,
     #[extension(executor = "Sha2Executor")]
@@ -322,8 +322,8 @@ pub struct SdkVmConfigInner {
     #[extension(executor = "CastFExtensionExecutor")]
     pub castf: Option<CastFExtension>,
 
-    #[extension(executor = "Rv32MExecutor")]
-    pub rv32m: Option<Rv32M>,
+    #[extension(executor = "Rv64MExecutor")]
+    pub rv32m: Option<Rv64M>,
     #[extension(executor = "Int256Executor")]
     pub bigint: Option<Int256>,
     #[extension(executor = "ModularExtensionExecutor")]
@@ -384,10 +384,10 @@ where
             VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
         let inventory = &mut chip_complex.inventory;
         if let Some(rv32i) = &config.rv32i {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, rv32i, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, rv32i, inventory)?;
         }
         if let Some(io) = &config.io {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, io, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, io, inventory)?;
         }
         if let Some(keccak) = &config.keccak {
             VmProverExtension::<E, _, _>::extend_prover(&Keccak256CpuProverExt, keccak, inventory)?;
@@ -402,7 +402,7 @@ where
             VmProverExtension::<E, _, _>::extend_prover(&NativeCpuProverExt, castf, inventory)?;
         }
         if let Some(rv32m) = &config.rv32m {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, rv32m, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, rv32m, inventory)?;
         }
         if let Some(bigint) = &config.bigint {
             VmProverExtension::<E, _, _>::extend_prover(&Int256CpuProverExt, bigint, inventory)?;
@@ -448,10 +448,10 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for SdkVmGpuBuilder {
             VmBuilder::<E>::create_chip_complex(&SystemGpuBuilder, &config.system, circuit)?;
         let inventory = &mut chip_complex.inventory;
         if let Some(rv32i) = &config.rv32i {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, rv32i, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, rv32i, inventory)?;
         }
         if let Some(io) = &config.io {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, io, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, io, inventory)?;
         }
         if let Some(keccak) = &config.keccak {
             VmProverExtension::<E, _, _>::extend_prover(&Keccak256GpuProverExt, keccak, inventory)?;
@@ -466,7 +466,7 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for SdkVmGpuBuilder {
             VmProverExtension::<E, _, _>::extend_prover(&NativeGpuProverExt, castf, inventory)?;
         }
         if let Some(rv32m) = &config.rv32m {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, rv32m, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, rv32m, inventory)?;
         }
         if let Some(bigint) = &config.bigint {
             VmProverExtension::<E, _, _>::extend_prover(&Int256GpuProverExt, bigint, inventory)?;
@@ -548,14 +548,14 @@ impl From<SystemConfig> for SdkSystemConfig {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct UnitStruct {}
 
-impl From<Rv32I> for UnitStruct {
-    fn from(_: Rv32I) -> Self {
+impl From<Rv64I> for UnitStruct {
+    fn from(_: Rv64I) -> Self {
         UnitStruct {}
     }
 }
 
-impl From<Rv32Io> for UnitStruct {
-    fn from(_: Rv32Io) -> Self {
+impl From<Rv64Io> for UnitStruct {
+    fn from(_: Rv64Io) -> Self {
         UnitStruct {}
     }
 }
@@ -596,7 +596,7 @@ struct SdkVmConfigWithDefaultDeser {
     pub native: Option<UnitStruct>,
     pub castf: Option<UnitStruct>,
 
-    pub rv32m: Option<Rv32M>,
+    pub rv32m: Option<Rv64M>,
     pub bigint: Option<Int256>,
     pub modular: Option<ModularExtension>,
     pub fp2: Option<Fp2Extension>,

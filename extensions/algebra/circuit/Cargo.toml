@@ -16,7 +16,7 @@ openvm-circuit = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true }
 openvm-stark-sdk = { workspace = true }
-openvm-rv32im-circuit = { workspace = true }
+openvm-riscv-circuit = { workspace = true }
 openvm-rv32-adapters = { workspace = true }
 openvm-algebra-transpiler = { workspace = true }
 openvm-cuda-backend = { workspace = true, optional = true }
@@ -48,8 +48,8 @@ openvm-cuda-builder = { workspace = true, optional = true }
 
 [features]
 default = []
-tco = ["openvm-rv32im-circuit/tco"]
-aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot", "halo2curves-axiom/asm"]
+tco = ["openvm-riscv-circuit/tco"]
+aot = ["openvm-circuit/aot", "openvm-riscv-circuit/aot", "halo2curves-axiom/asm"]
 cuda = [
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
@@ -57,7 +57,7 @@ cuda = [
     "openvm-circuit-primitives/cuda",
     "openvm-mod-circuit-builder/cuda",
     "openvm-circuit/cuda",
-    "openvm-rv32im-circuit/cuda",
+    "openvm-riscv-circuit/cuda",
 ]
 touchemall = [
     "cuda",

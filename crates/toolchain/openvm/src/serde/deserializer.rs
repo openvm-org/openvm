@@ -523,17 +523,17 @@ mod tests {
         }
 
         let words: [u64; 11] = [
-            1,                              // bool: true
-            -4_i64 as u64,                  // i8: -4
-            4,                              // u8: 4
-            -5_i64 as u64,                  // i16: -5
-            5,                              // u16: 5
-            -6_i64 as u64,                  // i32: -6
-            6,                              // u32: 6
+            1,                                    // bool: true
+            -4_i64 as u64,                        // i8: -4
+            4,                                    // u8: 4
+            -5_i64 as u64,                        // i16: -5
+            5,                                    // u16: 5
+            -6_i64 as u64,                        // i32: -6
+            6,                                    // u32: 6
             f32::to_bits(f32::consts::PI) as u64, // f32: PI
-            -7_i64 as u64,                  // i64: -7
-            7,                              // u64: 7
-            f64::to_bits(2.71),             // f64: 2.71
+            -7_i64 as u64,                        // i64: -7
+            7,                                    // u64: 7
+            f64::to_bits(2.71),                   // f64: 2.71
         ];
         let expected = Test {
             bool: true,
@@ -562,10 +562,10 @@ mod tests {
         }
 
         let words: [u64; 4] = [
-            1,                      // first len = 1
-            0x0000000000000061,     // "a" padded to 8 bytes
-            3,                      // second len = 3
-            0x0000000000636261,     // "abc" padded to 8 bytes
+            1,                  // first len = 1
+            0x0000000000000061, // "a" padded to 8 bytes
+            3,                  // second len = 3
+            0x0000000000636261, // "abc" padded to 8 bytes
         ];
         let expected = Test {
             first: "a".into(),

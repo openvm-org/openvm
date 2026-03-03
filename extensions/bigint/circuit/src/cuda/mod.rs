@@ -13,15 +13,15 @@ use openvm_cuda_backend::{
     prover_backend::GpuBackend,
 };
 use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_rv32_adapters::{
-    Rv32HeapBranchAdapterCols, Rv32HeapBranchAdapterRecord, Rv32VecHeapAdapterCols,
-    Rv32VecHeapAdapterRecord,
-};
-use openvm_rv32im_circuit::{
+use openvm_riscv_circuit::{
     adapters::{INT256_NUM_LIMBS, RV32_CELL_BITS},
     BaseAluCoreCols, BaseAluCoreRecord, BranchEqualCoreCols, BranchEqualCoreRecord,
     BranchLessThanCoreCols, BranchLessThanCoreRecord, LessThanCoreCols, LessThanCoreRecord,
     MultiplicationCoreCols, MultiplicationCoreRecord, ShiftCoreCols, ShiftCoreRecord,
+};
+use openvm_rv32_adapters::{
+    Rv32HeapBranchAdapterCols, Rv32HeapBranchAdapterRecord, Rv32VecHeapAdapterCols,
+    Rv32VecHeapAdapterRecord,
 };
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 

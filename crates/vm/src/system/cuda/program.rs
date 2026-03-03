@@ -142,7 +142,7 @@ mod tests {
         FieldArithmeticOpcode::*, NativeBranchEqualOpcode, NativeJalOpcode::*,
         NativeLoadStoreOpcode::*,
     };
-    use openvm_rv32im_transpiler::BranchEqualOpcode::*;
+    use openvm_riscv_transpiler::BranchEqualOpcode::*;
     use openvm_stark_backend::config::StarkGenericConfig;
     use openvm_stark_sdk::{
         config::{
