@@ -2,7 +2,7 @@ use core::mem::MaybeUninit;
 
 use openvm_platform::WORD_SIZE;
 #[cfg(openvm_intrinsics)]
-use openvm_rv64im_guest::hint_buffer_chunked;
+use openvm_riscv_guest::hint_buffer_chunked;
 
 use super::hint_store_word;
 use crate::serde::WordRead;

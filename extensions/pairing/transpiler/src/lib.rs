@@ -1,10 +1,10 @@
+use openvm_decoder::instruction_formats::RType;
 use openvm_instructions::{
     instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, PhantomDiscriminant,
 };
 use openvm_pairing_guest::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{TranspilerExtension, TranspilerOutput};
-use openvm_decoder::instruction_formats::RType;
 use strum::FromRepr;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, FromRepr)]

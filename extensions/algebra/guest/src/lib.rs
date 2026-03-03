@@ -59,7 +59,7 @@ pub use openvm_algebra_moduli_macros as moduli_macros;
 #[cfg(target_os = "zkvm")]
 pub use openvm_custom_insn;
 #[cfg(target_os = "zkvm")]
-pub use openvm_rv32im_guest;
+pub use openvm_riscv_guest;
 pub use serde_big_array::BigArray;
 use strum_macros::FromRepr;
 
