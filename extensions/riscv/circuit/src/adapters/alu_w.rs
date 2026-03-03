@@ -158,6 +158,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWAdapterAir {
             )
             .eval(builder, local.rs2_as);
 
+        // Sign-extend the 32-bit result to 64 bits: extract the sign bit of the
+        // most-significant limb of the 32-bit word, then fill the upper limbs with
+        // 0x00 (positive) or 0xFF (negative).
         builder.assert_bool(local.result_sign);
         let sign_mask = AB::Expr::from_canonical_u32(1 << (RV64_CELL_BITS - 1));
         let result_word_msl = ctx.writes[0][RV64_WORD_NUM_LIMBS - 1].clone();
