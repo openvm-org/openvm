@@ -19,7 +19,10 @@ use p3_field::{PrimeCharacteristicRing, PrimeField32};
 
 use crate::{
     error::VerifyStarkError,
-    pvs::{VerifierBasePvs, VmPvs, CONSTRAINT_EVAL_AIR_ID, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID},
+    pvs::{
+        VerifierBasePvs, VmPvs, CONSTRAINT_EVAL_AIR_ID, DEF_PVS_AIR_ID, VERIFIER_PVS_AIR_ID,
+        VM_PVS_AIR_ID,
+    },
     vk::NonRootStarkVerifyingKey,
 };
 
@@ -182,7 +185,8 @@ pub fn verify_vm_stark_proof_decoded(
     }
 
     // For now, deferral-enabled proofs are **not** verifiable in this crate
-    if !(verifier_def_pvs_slice.is_empty() && proof.inner.public_values[VM_PVS_AIR_ID].is_empty()) {
+    if !(verifier_def_pvs_slice.is_empty() && proof.inner.public_values[DEF_PVS_AIR_ID].is_empty())
+    {
         return Err(VerifyStarkError::DeferralNotEnabled);
     }
 
