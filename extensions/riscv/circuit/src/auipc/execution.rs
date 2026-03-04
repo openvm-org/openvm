@@ -6,11 +6,11 @@ use std::{
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS,
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{run_auipc, Rv32AuipcExecutor};
+use super::{run_auipc, Rv64AuipcExecutor};
 #[cfg(feature = "aot")]
 use crate::common::*;
 
@@ -21,7 +21,7 @@ struct AuiPcPreCompute {
     a: u8,
 }
 
-impl<A> Rv32AuipcExecutor<A> {
+impl<A> Rv64AuipcExecutor<A> {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -29,7 +29,7 @@ impl<A> Rv32AuipcExecutor<A> {
         data: &mut AuiPcPreCompute,
     ) -> Result<(), StaticProgramError> {
         let Instruction { a, c: imm, d, .. } = inst;
-        if d.as_canonical_u32() != RV32_REGISTER_AS {
+        if d.as_canonical_u32() != RV64_REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         let imm = imm.as_canonical_u32();
@@ -42,7 +42,7 @@ impl<A> Rv32AuipcExecutor<A> {
     }
 }
 
-impl<F, A> InterpreterExecutor<F> for Rv32AuipcExecutor<A>
+impl<F, A> InterpreterExecutor<F> for Rv64AuipcExecutor<A>
 where
     F: PrimeField32,
 {
@@ -120,7 +120,7 @@ where
     }
 }
 
-impl<F, A> InterpreterMeteredExecutor<F> for Rv32AuipcExecutor<A>
+impl<F, A> InterpreterMeteredExecutor<F> for Rv64AuipcExecutor<A>
 where
     F: PrimeField32,
 {
@@ -193,7 +193,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 ) {
     let pc = exec_state.pc();
     let rd = run_auipc(pc, pre_compute.imm);
-    exec_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
+    exec_state.vm_write(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
 
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }

@@ -34,41 +34,42 @@ use {
     },
 };
 
-use super::{run_jal_lui, Rv32JalLuiChip, Rv32JalLuiCoreAir, Rv32JalLuiExecutor};
+use super::{run_jal_lui, Rv64JalLuiChip, Rv64JalLuiCoreAir, Rv64JalLuiExecutor};
 use crate::{
     adapters::{
-        Rv32CondRdWriteAdapterAir, Rv32CondRdWriteAdapterCols, Rv32CondRdWriteAdapterExecutor,
-        Rv32CondRdWriteAdapterFiller, Rv32RdWriteAdapterAir, Rv32RdWriteAdapterExecutor,
-        Rv32RdWriteAdapterFiller, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS,
+        Rv64CondRdWriteAdapterAir, Rv64CondRdWriteAdapterCols, Rv64CondRdWriteAdapterExecutor,
+        Rv64CondRdWriteAdapterFiller, Rv64RdWriteAdapterAir, Rv64RdWriteAdapterExecutor,
+        Rv64RdWriteAdapterFiller, RV64_CELL_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+        RV_IS_TYPE_IMM_BITS,
     },
-    jal_lui::{Rv32JalLuiCoreCols, ADDITIONAL_BITS},
+    jal_lui::Rv64JalLuiCoreCols,
     test_utils::get_verification_error,
-    Rv32JalLuiAir, Rv32JalLuiFiller,
+    Rv64JalLuiAir, Rv64JalLuiFiller,
 };
 
 const IMM_BITS: usize = 20;
-const LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
+const LIMB_MAX: u32 = (1 << RV64_CELL_BITS) - 1;
 const MAX_INS_CAPACITY: usize = 128;
-type Harness = TestChipHarness<F, Rv32JalLuiExecutor, Rv32JalLuiAir, Rv32JalLuiChip<F>>;
+type Harness = TestChipHarness<F, Rv64JalLuiExecutor, Rv64JalLuiAir, Rv64JalLuiChip<F>>;
 
 type F = BabyBear;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
     execution_bridge: ExecutionBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_CELL_BITS>>,
     memory_helper: SharedMemoryHelper<F>,
-) -> (Rv32JalLuiAir, Rv32JalLuiExecutor, Rv32JalLuiChip<F>) {
-    let air = Rv32JalLuiAir::new(
-        Rv32CondRdWriteAdapterAir::new(Rv32RdWriteAdapterAir::new(memory_bridge, execution_bridge)),
-        Rv32JalLuiCoreAir::new(bitwise_chip.bus()),
+) -> (Rv64JalLuiAir, Rv64JalLuiExecutor, Rv64JalLuiChip<F>) {
+    let air = Rv64JalLuiAir::new(
+        Rv64CondRdWriteAdapterAir::new(Rv64RdWriteAdapterAir::new(memory_bridge, execution_bridge)),
+        Rv64JalLuiCoreAir::new(bitwise_chip.bus()),
     );
-    let executor = Rv32JalLuiExecutor::new(Rv32CondRdWriteAdapterExecutor::new(
-        Rv32RdWriteAdapterExecutor,
+    let executor = Rv64JalLuiExecutor::new(Rv64CondRdWriteAdapterExecutor::new(
+        Rv64RdWriteAdapterExecutor,
     ));
-    let chip = Rv32JalLuiChip::<F>::new(
-        Rv32JalLuiFiller::new(
-            Rv32CondRdWriteAdapterFiller::new(Rv32RdWriteAdapterFiller),
+    let chip = Rv64JalLuiChip::<F>::new(
+        Rv64JalLuiFiller::new(
+            Rv64CondRdWriteAdapterFiller::new(Rv64RdWriteAdapterFiller),
             bitwise_chip,
         ),
         memory_helper,
@@ -81,12 +82,12 @@ fn create_harness(
 ) -> (
     Harness,
     (
-        BitwiseOperationLookupAir<RV32_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_CELL_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_CELL_BITS>,
     ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_CELL_BITS>::new(
         bitwise_bus,
     ));
 
@@ -109,6 +110,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     opcode: Rv64JalLuiOpcode,
     imm: Option<i32>,
     initial_pc: Option<u32>,
+    rd_ptr: Option<usize>,
 ) {
     let imm: i32 = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS)));
     let imm = match opcode {
@@ -116,7 +118,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         LUI => imm,
     };
 
-    let a = rng.gen_range((opcode == LUI) as usize..32) << 2;
+    let a = rd_ptr.unwrap_or_else(|| rng.gen_range((opcode == LUI) as usize..32) << 3);
     let needs_write = a != 0 || opcode == LUI;
 
     tester.execute_with_pc(
@@ -138,10 +140,14 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let final_pc = tester.last_to_pc().as_canonical_u32();
 
     let (next_pc, rd_data) = run_jal_lui(opcode == JAL, initial_pc, imm);
-    let rd_data = if needs_write { rd_data } else { [0; 4] };
+    let rd_data = if needs_write {
+        rd_data
+    } else {
+        [0; RV64_REGISTER_NUM_LIMBS]
+    };
 
     assert_eq!(next_pc, final_pc);
-    assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<4>(1, a));
+    assert_eq!(rd_data.map(F::from_canonical_u8), tester.read::<8>(1, a));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -167,6 +173,7 @@ fn rand_jal_lui_test(opcode: Rv64JalLuiOpcode, num_ops: usize) {
             opcode,
             None,
             None,
+            None,
         );
     }
 
@@ -186,18 +193,21 @@ fn rand_jal_lui_test(opcode: Rv64JalLuiOpcode, num_ops: usize) {
 
 #[derive(Clone, Copy, Default, PartialEq)]
 struct JalLuiPrankValues {
-    pub rd_data: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
+    pub rd_data: Option<[u32; RV64_WORD_NUM_LIMBS]>,
     pub imm: Option<i32>,
     pub is_jal: Option<bool>,
     pub is_lui: Option<bool>,
+    pub is_sign_extend: Option<bool>,
+    pub rd_ptr: Option<u32>,
     pub needs_write: Option<bool>,
 }
 
 #[allow(clippy::too_many_arguments)]
-fn run_negative_jal_lui_test(
+fn run_negative_jal_lui_test_with_rd_ptr(
     opcode: Rv64JalLuiOpcode,
     initial_imm: Option<i32>,
     initial_pc: Option<u32>,
+    rd_ptr: Option<usize>,
     prank_vals: JalLuiPrankValues,
     interaction_error: bool,
 ) {
@@ -213,14 +223,15 @@ fn run_negative_jal_lui_test(
         opcode,
         initial_imm,
         initial_pc,
+        rd_ptr,
     );
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
         let (adapter_row, core_row) = trace_row.split_at_mut(adapter_width);
-        let adapter_cols: &mut Rv32CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
-        let core_cols: &mut Rv32JalLuiCoreCols<F> = core_row.borrow_mut();
+        let adapter_cols: &mut Rv64CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        let core_cols: &mut Rv64JalLuiCoreCols<F> = core_row.borrow_mut();
 
         if let Some(data) = prank_vals.rd_data {
             core_cols.rd_data = data.map(F::from_canonical_u32);
@@ -238,6 +249,12 @@ fn run_negative_jal_lui_test(
         if let Some(is_lui) = prank_vals.is_lui {
             core_cols.is_lui = F::from_bool(is_lui);
         }
+        if let Some(is_sign_extend) = prank_vals.is_sign_extend {
+            core_cols.is_sign_extend = F::from_bool(is_sign_extend);
+        }
+        if let Some(rd_ptr) = prank_vals.rd_ptr {
+            adapter_cols.inner.rd_ptr = F::from_canonical_u32(rd_ptr);
+        }
         if let Some(needs_write) = prank_vals.needs_write {
             adapter_cols.needs_write = F::from_bool(needs_write);
         }
@@ -252,6 +269,23 @@ fn run_negative_jal_lui_test(
         .load_periphery(bitwise)
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));
+}
+
+fn run_negative_jal_lui_test(
+    opcode: Rv64JalLuiOpcode,
+    initial_imm: Option<i32>,
+    initial_pc: Option<u32>,
+    prank_vals: JalLuiPrankValues,
+    interaction_error: bool,
+) {
+    run_negative_jal_lui_test_with_rd_ptr(
+        opcode,
+        initial_imm,
+        initial_pc,
+        None,
+        prank_vals,
+        interaction_error,
+    );
 }
 
 #[test]
@@ -293,6 +327,80 @@ fn opcode_flag_negative_test() {
 }
 
 #[test]
+fn write_suppression_boundary_negative_test() {
+    run_negative_jal_lui_test_with_rd_ptr(
+        JAL,
+        Some((1 << 19) + 2),
+        Some(28120),
+        Some(0),
+        JalLuiPrankValues {
+            rd_ptr: Some(8),
+            ..Default::default()
+        },
+        true,
+    );
+
+    run_negative_jal_lui_test_with_rd_ptr(
+        JAL,
+        Some((1 << 19) + 2),
+        Some(28120),
+        Some(8),
+        JalLuiPrankValues {
+            needs_write: Some(false),
+            ..Default::default()
+        },
+        true,
+    );
+}
+
+#[test]
+fn rd_upper_bytes_trace_tamper_negative_test() {
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    let initial_pc = 0x1234;
+    let imm = 16i32;
+    let rd_ptr = 16usize;
+    let clean_rd_prev = [9u32, 8, 7, 6, 0, 0, 0, 0];
+
+    // Seed the destination register with a known clean value.
+    tester.write(1, rd_ptr, clean_rd_prev.map(F::from_canonical_u32));
+
+    tester.execute_with_pc(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::large_from_isize(
+            LUI.global_opcode(),
+            rd_ptr as isize,
+            0,
+            imm as isize,
+            1,
+            0,
+            1,
+            0,
+        ),
+        initial_pc,
+    );
+
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut trace_row = trace.row_slice(0).to_vec();
+        let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
+        adapter_cols.inner.rd_aux_cols.prev_data[4] = F::from_canonical_u32(1);
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test_with_expected_error(get_verification_error(true));
+}
+
+#[test]
 fn overflow_negative_tests() {
     run_negative_jal_lui_test(
         JAL,
@@ -304,12 +412,13 @@ fn overflow_negative_tests() {
         },
         false,
     );
+    // Pin LUI sign bit so this case exercises bad rd arithmetic, not sign-select mismatch.
     run_negative_jal_lui_test(
         LUI,
-        None,
+        Some(1 << 19),
         None,
         JalLuiPrankValues {
-            rd_data: Some([LIMB_MAX, LIMB_MAX, LIMB_MAX, LIMB_MAX]),
+            rd_data: Some([0, LIMB_MAX, LIMB_MAX, LIMB_MAX]),
             ..Default::default()
         },
         false,
@@ -345,6 +454,16 @@ fn overflow_negative_tests() {
         false,
     );
     run_negative_jal_lui_test(
+        LUI,
+        Some(1 << 19),
+        None,
+        JalLuiPrankValues {
+            is_sign_extend: Some(false),
+            ..Default::default()
+        },
+        true,
+    );
+    run_negative_jal_lui_test(
         JAL,
         None,
         Some(251),
@@ -376,6 +495,7 @@ fn execute_roundtrip_sanity_test() {
         LUI,
         Some((1 << IMM_BITS) - 1),
         None,
+        None,
     );
     set_and_execute(
         &mut tester,
@@ -384,6 +504,7 @@ fn execute_roundtrip_sanity_test() {
         &mut rng,
         JAL,
         Some((1 << RV_IS_TYPE_IMM_BITS) - 1),
+        None,
         None,
     );
 }
@@ -394,7 +515,25 @@ fn run_jal_sanity_test() {
     let imm = -2048;
     let (next_pc, rd_data) = run_jal_lui(true, initial_pc, imm);
     assert_eq!(next_pc, 26072);
-    assert_eq!(rd_data, [220, 109, 0, 0]);
+    assert_eq!(rd_data, [220, 109, 0, 0, 0, 0, 0, 0]);
+}
+
+#[test]
+fn jal_x0_write_suppression_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, _) = create_harness(&tester);
+
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        JAL,
+        Some((1 << 19) + 2),
+        Some(28120),
+        Some(0),
+    );
 }
 
 #[test]
@@ -403,14 +542,13 @@ fn run_lui_sanity_test() {
     let imm = 853679;
     let (next_pc, rd_data) = run_jal_lui(false, initial_pc, imm);
     assert_eq!(next_pc, 456789124);
-    assert_eq!(rd_data, [0, 240, 106, 208]);
+    assert_eq!(rd_data, [0, 240, 106, 208, 255, 255, 255, 255]);
 }
 
 #[test]
-fn test_additional_bits() {
-    let last_limb_bits = PC_BITS - RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);
-    let additional_bits = (last_limb_bits..RV32_CELL_BITS).fold(0, |acc, x| acc + (1u32 << x));
-    assert_eq!(additional_bits, ADDITIONAL_BITS);
+fn run_lui_sign_extend_sanity_test() {
+    let (_, rd_data) = run_jal_lui(false, 0, 1 << 19);
+    assert_eq!(rd_data[4..], [u8::MAX; 4]);
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////
@@ -461,6 +599,7 @@ fn test_cuda_rand_jal_lui_tracegen(opcode: Rv64JalLuiOpcode, num_ops: usize) {
             &mut harness.dense_arena,
             &mut rng,
             opcode,
+            None,
             None,
             None,
         );

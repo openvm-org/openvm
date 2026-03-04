@@ -6,12 +6,15 @@ use std::{
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_REGISTER_AS, RV64_REGISTER_AS},
+    LocalOpcode,
 };
 use openvm_riscv_transpiler::Rv64JalLuiOpcode::{self, JAL};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::core::{get_signed_imm, Rv32JalLuiExecutor};
+use super::core::{get_signed_imm, run_jal_lui, Rv64JalLuiExecutor};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -20,7 +23,7 @@ struct JalLuiPreCompute {
     a: u8,
 }
 
-impl<A> Rv32JalLuiExecutor<A> {
+impl<A> Rv64JalLuiExecutor<A> {
     /// Return (IS_JAL, ENABLED)
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
@@ -54,7 +57,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> InterpreterExecutor<F> for Rv32JalLuiExecutor<A>
+impl<F, A> InterpreterExecutor<F> for Rv64JalLuiExecutor<A>
 where
     F: PrimeField32,
 {
@@ -139,7 +142,7 @@ where
     }
 }
 
-impl<F, A> InterpreterMeteredExecutor<F> for Rv32JalLuiExecutor<A>
+impl<F, A> InterpreterMeteredExecutor<F> for Rv64JalLuiExecutor<A>
 where
     F: PrimeField32,
 {
@@ -220,22 +223,10 @@ unsafe fn execute_e12_impl<
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let JalLuiPreCompute { a, signed_imm } = *pre_compute;
-    let mut pc = exec_state.pc();
-    let rd = if IS_JAL {
-        let rd_data = (pc + DEFAULT_PC_STEP).to_le_bytes();
-        let next_pc = pc as i32 + signed_imm;
-        debug_assert!(next_pc >= 0);
-        pc = next_pc as u32;
-        rd_data
-    } else {
-        let imm = signed_imm as u32;
-        let rd = imm << 12;
-        pc += DEFAULT_PC_STEP;
-        rd.to_le_bytes()
-    };
+    let (pc, rd) = run_jal_lui(IS_JAL, exec_state.pc(), signed_imm);
 
     if ENABLED {
-        exec_state.vm_write(RV32_REGISTER_AS, a as u32, &rd);
+        exec_state.vm_write(RV64_REGISTER_AS, a as u32, &rd);
     }
     exec_state.set_pc(pc);
 }
