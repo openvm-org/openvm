@@ -80,11 +80,8 @@ impl DeviceMemoryTester {
             1 << 20, // probably enough for our tests
             sbox_regs,
         ));
-        let mut inventory = MemoryInventoryGPU::persistent(
-            mem_config.clone(),
-            range_checker,
-            poseidon2_periphery.clone(),
-        );
+        let mut inventory =
+            MemoryInventoryGPU::persistent(mem_config.clone(), poseidon2_periphery.clone());
         inventory.set_initial_memory(&memory.data.memory);
         Self {
             chip_for_block,
