@@ -964,6 +964,20 @@ where
 
         // Program trace is the same for all segments
         constant_trace_heights[PROGRAM_AIR_ID] = Some(program_len);
+        // VmConnectorAir always has a constant trace height of 2
+        constant_trace_heights[CONNECTOR_AIR_ID] = Some(2);
+        // Merge in constant heights reported by chips (e.g., lookup table chips).
+        for (air_id, chip_height) in self
+            .chip_complex
+            .inventory
+            .constant_trace_heights()
+            .into_iter()
+            .enumerate()
+        {
+            if constant_trace_heights[air_id].is_none() {
+                constant_trace_heights[air_id] = chip_height;
+            }
+        }
 
         self.executor().build_metered_ctx(
             &constant_trace_heights,
