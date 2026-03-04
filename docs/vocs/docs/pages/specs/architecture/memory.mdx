@@ -1,7 +1,6 @@
 # Memory overview
 
 - [Basic performed interactions](#basic-performed-interactions)
-- [Access adapters](#access-adapters)
 - [Boundary chips](#boundary-chips)
 - [Invariants](#invariants)
 - [Soundness proof](#soundness-proof)
@@ -67,83 +66,7 @@ impl<T: PrimeCharacteristicRing, V: Copy + Into<T>, const N: usize> MemoryWriteO
 }
 ```
 
-Every instruction executor does this via the **memory controller** API. The memory controller communicates with the memory bus via the **access adapter inventory**, which consists of **access adapters**.
-
-## Access adapters
-
-Consider an example:
-
-- We write `[1, 2, 3, 4]` to `[0, 4)` of address space `2`.
-- We write `[5, 6, 7, 8]` to `[4, 8)` of address space `2`.
-- We read `[3, 4, 5, 6]` from `[2, 6)` of address space `2`.
-
-Using only interactions above, we won't be able to balance out the `[/* address */ 2, /* data */ 2, 3, 4, 5, 6, /* timestamp */3]` interaction. Access adapters are used to fix this.
-
-Formally speaking, our memory model is as follows:
-
-- Call a set of power-of-two subsegments of $[0,2^{\text{max bits}})$ _nice_. More specifically, a set $S$ of disjoint subsets of $[0,2^{\text{max bits}})$ is nice if the following holds:
-  - Every element of $S$ consists of consecutive integers (or _is a subsegment_),
-  - Every element of $S$ has a power-of-two size (hence nonempty).
-- At any point of time, for each valid address space, we store a nice set of _memory segments_, and for each of them we remember the actual values there.
-- In our memory model, the chips are allowed to perform reads and writes from/to power-of-two subsegments of memory (more specifically, subsegments with length that is a power of two not exceeding 32).
-- When we want to read from/write to a subsegment, **we transform the nice set for the corresponding address space,** so that our set contains the queried subsegment, using the following operations:
-  - _Create_ a new aligned subsegment of length `CHUNK` (which is a power of two). It must not overlap with any other subsegment.
-  - _Split_ an existing subsegment by replacing it with its halves.
-  - _Merge_ two adjacent subsegments of equal length into one.
-- It is easy to see that the set remains nice after each operation.
-
-The _split_ and _merge_ operations for a subsegment of length `N` are handled by `AccessAdapterAir<N>` (and we only have 5 of them, hence up to 32). More specifically:
-- We have a `timestamp` associated with each subsegment from our nice set -- basically the timestamp of last read/write of any part in this subsegment.
-- Of course, merging two halves creates a subsegment with the timestamp being the maximal of two timestamps for the halves.
-- Splitting, however, just makes all child timestamps equal to the former timestamp of the segment being split.
-- All these timestamp conditions are checked in the `AccessAdapterAir`.
-- When merging two segments `[l, m)` and `[m, r)`, the `AccessAdapterAir` sends to **memory bus** the information about `[l, r)` and receives the information about `[l, m)` and about `[m, r)`, all with multiplicity 1. Splitting does the same, but with multiplicity -1 (or, in other words, receives about `[l, r)` and sends about `[l, m)` and `[m, r)`).
-- The information about `[l, r)` sent to the bus is, in this order:
-  - address space,
-  - `l`,
-  - the values at `[l, r)`,
-  - the timestamp.
-
-In the example above, if, say, `CHUNK = 1`, then the following interactions are performed:
-- Write `[1, 2, 3, 4]` to `[0, 4)` of address space `2`.
-  - We _create_ subsegments `[0, 1)`, `[1, 2)`, `[2, 3)`, `[3, 4)` at time `0`:
-    - ← `[(2, 0), (0), 0]`.
-    - ← `[(2, 1), (0), 0]`.
-    - ← `[(2, 2), (0), 0]`.
-    - ← `[(2, 3), (0), 0]`.
-  - We _merge_ the first pair together and also the second pair together:
-    - → `[(2, 0), (0), 0]`, → `[(2, 1), (0), 0]`, ← `[(2, 0), (0, 0), 0]`.
-    - → `[(2, 2), (0), 0]`, → `[(2, 3), (0), 0]`, ← `[(2, 2), (0, 0), 0]`.
-  - We _merge_ the two segments we have into one:
-    - → `[(2, 0), (0, 0), 0]`, → `[(2, 2), (0, 0), 0]`, ← `[(2, 0), (0, 0, 0, 0), 0]`.
-  - _Basic interaction_: we send the old data and receive the new data.
-    - → `[(2, 0), (0, 0, 0, 0), 0]`.
-    - ← `[(2, 0), (1, 2, 3, 4), 1]`.
-- Write `[5, 6, 7, 8]` to `[4, 8)` of address space `2`.
-  - We do the same steps as above:
-    - ← `[(2, 4), (0), 0]`.
-    - ← `[(2, 5), (0), 0]`.
-    - ← `[(2, 6), (0), 0]`.
-    - ← `[(2, 7), (0), 0]`.
-    - → `[(2, 4), (0), 0]`, → `[(2, 5), (0), 0]`, ← `[(2, 4), (0, 0), 0]`.
-    - → `[(2, 6), (0), 0]`, → `[(2, 7), (0), 0]`, ← `[(2, 6), (0, 0), 0]`.
-    - → `[(2, 4), (0, 0), 0]`, → `[(2, 6), (0, 0), 0]`, ← `[(2, 4), (0, 0, 0, 0), 0]`.
-  - _Basic interaction_: we send the old data and receive the new data. Notice the new timestamp.
-    - → `[(2, 4), (0, 0, 0, 0), 0]`.
-    - ← `[(2, 4), (5, 6, 7, 8), 2]`.
-- Read `[3, 4, 5, 6]` from `[2, 6)` of address space `2`.
-  - Now we have subsegments `[0, 4)` and `[4, 8)` in our nice set. We need to split each of them in two, and then merge the middle two parts.
-  First we _split_ the left. Notice that the timestamps of the new parts are the same as the timestamp of the original segment:
-    - → `[(2, 0), (1, 2, 3, 4), 1]`, ← `[(2, 0), (1, 2), 1]`, ← `[(2, 2), (3, 4), 1]`.
-  - Then we _split_ the right:
-    - → `[(2, 4), (5, 6, 7, 8), 2]`, ← `[(2, 4), (5, 6), 2]`, ← `[(2, 6), (7, 8), 2]`.
-  - Finally, we _merge_ the middle two segments, making the new timestamp the maximum of the previous two:
-    - → `[(2, 2), (3, 4), 1]`, → `[(2, 6), (7, 8), 2]`, ← `[(2, 2), (3, 4, 5, 6), 2]`.
-  - _Basic interaction_: we send the old data and receive it again, but with the new timestamp.
-    - → `[(2, 2), (3, 4, 5, 6), 2]`.
-    - ← `[(2, 2), (3, 4, 5, 6), 3]`.
-
-One can see that the splits and merges mostly balance each other out -- more formally, each subsegment in the nice set, be it born or annihilated by split or merge, corresponds to a receive (→) interaction on birth and a send (←) interaction on death.
+Every instruction executor does this via the **memory controller** API.
 
 ## Boundary chips
 
