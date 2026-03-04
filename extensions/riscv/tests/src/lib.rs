@@ -32,7 +32,7 @@ mod tests {
     #[cfg(test)]
     fn test_rv32im_config() -> Rv64ImConfig {
         Rv64ImConfig {
-            rv32i: Rv64IConfig {
+            rv64i: Rv64IConfig {
                 system: test_system_config(),
                 ..Default::default()
             },
