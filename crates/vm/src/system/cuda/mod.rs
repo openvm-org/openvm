@@ -130,9 +130,9 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
 
     #[cfg(feature = "metrics")]
     fn finalize_trace_heights(&self, heights: &mut [usize]) {
-        use crate::system::{cuda::boundary::BoundaryFields, BOUNDARY_AIR_IDX};
+        use crate::system::{cuda::boundary::BoundaryFields, MEMORY_AIRS_START_IDX};
 
-        let boundary_idx = BOUNDARY_AIR_IDX;
+        let boundary_idx = MEMORY_AIRS_START_IDX;
         let mut access_adapter_offset = boundary_idx + 1;
         match self.memory_inventory.boundary.fields {
             BoundaryFields::Volatile(_) => {
