@@ -18,7 +18,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::LocalOpcode;
-use openvm_rv32im_circuit::{
+use openvm_riscv_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
 use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};

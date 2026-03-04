@@ -16,7 +16,7 @@ use openvm_cuda_backend::{
     prelude::F as CudaF, BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
 };
 use openvm_cuda_common::d_buffer::DeviceBuffer;
-use openvm_rv32im_circuit::Rv32ImGpuProverExt;
+use openvm_riscv_circuit::Rv32ImGpuProverExt;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use crate::{
