@@ -11,11 +11,11 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use crate::{
     Rv32AuipcAir, Rv32AuipcChipGpu, Rv32BaseAluAir, Rv32BaseAluChipGpu, Rv32BranchEqualAir,
     Rv32BranchEqualChipGpu, Rv32BranchLessThanAir, Rv32BranchLessThanChipGpu, Rv32DivRemAir,
-    Rv32DivRemChipGpu, Rv32HintStoreAir, Rv32HintStoreChipGpu, Rv64I, Rv64Io, Rv32JalLuiAir,
-    Rv32JalLuiChipGpu, Rv32JalrAir, Rv32JalrChipGpu, Rv32LessThanAir, Rv32LessThanChipGpu,
-    Rv32LoadSignExtendAir, Rv32LoadSignExtendChipGpu, Rv32LoadStoreAir, Rv32LoadStoreChipGpu,
-    Rv64M, Rv32MulHAir, Rv32MulHChipGpu, Rv32MultiplicationAir, Rv32MultiplicationChipGpu,
-    Rv32ShiftAir, Rv32ShiftChipGpu,
+    Rv32DivRemChipGpu, Rv32HintStoreAir, Rv32HintStoreChipGpu, Rv32JalLuiAir, Rv32JalLuiChipGpu,
+    Rv32JalrAir, Rv32JalrChipGpu, Rv32LessThanAir, Rv32LessThanChipGpu, Rv32LoadSignExtendAir,
+    Rv32LoadSignExtendChipGpu, Rv32LoadStoreAir, Rv32LoadStoreChipGpu, Rv32MulHAir,
+    Rv32MulHChipGpu, Rv32MultiplicationAir, Rv32MultiplicationChipGpu, Rv32ShiftAir,
+    Rv32ShiftChipGpu, Rv64I, Rv64Io, Rv64M,
 };
 
 pub struct Rv64ImGpuProverExt;

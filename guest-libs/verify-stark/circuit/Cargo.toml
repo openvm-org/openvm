@@ -38,13 +38,13 @@ bitcode = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-openvm-continuations = { path = "../../../crates/continuations", default-features = false }
-openvm-circuit = { path = "../../../crates/vm", default-features = false, features = ["parallel"] }
-openvm-riscv-circuit = { path = "../../../extensions/riscv/circuit", default-features = false, features = ["test-utils"] }
-openvm-riscv-transpiler = { path = "../../../extensions/riscv/transpiler", default-features = false }
+openvm-continuations = { workspace = true }
+openvm-circuit = { workspace = true, features = ["parallel"] }
+openvm-riscv-circuit = { workspace = true, features = ["test-utils"] }
+openvm-riscv-transpiler = { workspace = true }
 openvm-stark-sdk = { workspace = true }
-openvm-transpiler = { path = "../../../crates/toolchain/transpiler", default-features = false }
-openvm-verify-stark-host = { path = "../../../crates/verify", default-features = false }
+openvm-transpiler = { workspace = true }
+openvm-verify-stark-host = { workspace = true }
 eyre.workspace = true
 test-case.workspace = true
 
