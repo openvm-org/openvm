@@ -59,4 +59,8 @@ impl<RA, const N: usize> Chip<RA, GpuBackend> for RangeTupleCheckerChipGPU<N> {
         self.count.fill_zero().unwrap();
         AirProvingContext::simple_no_pis(trace)
     }
+
+    fn constant_trace_height(&self) -> Option<usize> {
+        Some(self.count.len())
+    }
 }
