@@ -1,14 +1,14 @@
 use openvm_circuit::arch::testing::{memory::gen_pointer, TestBuilder};
 use openvm_instructions::{instruction::Instruction, VmOpcode};
-use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use rand::{rngs::StdRng, Rng};
 
-use super::adapters::{RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS};
+use super::adapters::{RV64_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS};
 
 // Returns (instruction, rd)
 #[cfg_attr(all(feature = "test-utils", not(test)), allow(dead_code))]
-pub fn rv32_rand_write_register_or_imm<const NUM_LIMBS: usize>(
+pub fn rv64_rand_write_register_or_imm<const NUM_LIMBS: usize>(
     tester: &mut impl TestBuilder<BabyBear>,
     rs1_writes: [u8; NUM_LIMBS],
     rs2_writes: [u8; NUM_LIMBS],
@@ -22,9 +22,9 @@ pub fn rv32_rand_write_register_or_imm<const NUM_LIMBS: usize>(
     let rs2 = imm.unwrap_or_else(|| gen_pointer(rng, NUM_LIMBS));
     let rd = gen_pointer(rng, NUM_LIMBS);
 
-    tester.write::<NUM_LIMBS>(1, rs1, rs1_writes.map(BabyBear::from_u8));
+    tester.write::<NUM_LIMBS>(1, rs1, rs1_writes.map(BabyBear::from_canonical_u8));
     if !rs2_is_imm {
-        tester.write::<NUM_LIMBS>(1, rs2, rs2_writes.map(BabyBear::from_u8));
+        tester.write::<NUM_LIMBS>(1, rs2, rs2_writes.map(BabyBear::from_canonical_u8));
     }
 
     (
@@ -37,18 +37,34 @@ pub fn rv32_rand_write_register_or_imm<const NUM_LIMBS: usize>(
 }
 
 #[cfg_attr(all(feature = "test-utils", not(test)), allow(dead_code))]
-pub fn generate_rv32_is_type_immediate(rng: &mut StdRng) -> (usize, [u8; RV32_REGISTER_NUM_LIMBS]) {
-    let mut imm: u32 = rng.random_range(0..(1 << RV_IS_TYPE_IMM_BITS));
+pub fn generate_rv64_is_type_immediate(rng: &mut StdRng) -> (usize, [u8; RV64_REGISTER_NUM_LIMBS]) {
+    let mut imm: u32 = rng.gen_range(0..(1 << RV_IS_TYPE_IMM_BITS));
     if (imm & 0x800) != 0 {
         imm |= !0xFFF
     }
+    let sign_byte = (imm >> 16) as u8;
     (
         (imm & 0xFFFFFF) as usize,
         [
             imm as u8,
             (imm >> 8) as u8,
-            (imm >> 16) as u8,
-            (imm >> 16) as u8,
+            sign_byte,
+            sign_byte,
+            sign_byte,
+            sign_byte,
+            sign_byte,
+            sign_byte,
         ],
     )
+}
+
+/// Returns the corresponding verification error based on whether
+/// an interaction error or a constraint error is expected
+#[cfg_attr(all(feature = "test-utils", not(test)), allow(dead_code))]
+pub fn get_verification_error(is_interaction_error: bool) -> VerificationError {
+    if is_interaction_error {
+        VerificationError::ChallengePhaseError
+    } else {
+        VerificationError::OodEvaluationMismatch
+    }
 }
